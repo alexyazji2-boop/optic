@@ -1,0 +1,1491 @@
+/* Optic Terminal — dark theme.
+   Colours are the data-viz reference palette's dark steps against its
+   documented dark surface (#1a1a19), so its contrast and CVD guarantees hold. */
+
+/* Two themes, both selected rather than derived.
+ *
+ * The dark steps below are the data-viz reference palette's dark column against
+ * its dark surface; the light block further down is that palette's *light*
+ * column, not the same hexes on a pale background — an automatic flip would
+ * throw away the contrast and colour-vision guarantees the palette exists for.
+ *
+ * `light dark` (rather than `dark`) lets the browser follow the OS for form
+ * controls, dropdowns and scrollbars, which is what previously had to be pinned
+ * to dark to stop them rendering light against a dark page. */
+:root {
+  color-scheme: light dark;
+
+  --plane: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #201f1e;
+  --border: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.16);
+
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --ink-muted: #898781;
+  --grid: #2c2c2a;
+  --baseline: #383835;
+
+  /* categorical slots, dark steps, fixed order */
+  --s1: #3987e5;
+  --s2: #d95926;
+  --s3: #199e70;
+  --s4: #c98500;
+  --s5: #d55181;
+  --s6: #008300;
+  --s7: #9085e9;
+  --s8: #e66767;
+
+  /* diverging poles + neutral midpoint */
+  --pos: #3987e5;
+  --neg: #e66767;
+  --mid: #383835;
+
+  /* status — reserved, never used as a series */
+  --good: #0ca30c;
+  --warn: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+
+  /* Reference-line colours, deliberately outside the eight categorical slots —
+     a level is annotation, not a series. Validated against every colour that can
+     share a price chart with them: magenta for support/resistance, and a neutral
+     for the Fibonacci grid. The neutral is the important part — all eight hue
+     slots were already spoken for, and a ninth and tenth hue could not clear the
+     colour-vision floors (violet against the blue close line measured ΔE 4.7
+     under deuteranopia). Grey has no hue to confuse, so it survives every
+     simulation, and ratios are conventionally drawn neutral anyway. */
+  --ref-sr: #eb17bd;
+  --ref-fib: #c3c2b7;
+
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius: 8px;
+}
+
+/* Light theme. Selected by the data-theme attribute rather than a media query:
+   the inline script in index.html stamps it before first paint from the stored
+   choice or, absent one, from the OS setting. That keeps one light block here
+   instead of the same values in both a media query and a toggle scope. */
+:root[data-theme="light"] {
+  --plane: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-2: #f0efec;
+  --border: rgba(11, 11, 11, 0.1);
+  --border-strong: rgba(11, 11, 11, 0.16);
+
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --ink-muted: #898781;      /* the one ink that holds across both surfaces */
+  --grid: #e1e0d9;
+  --baseline: #c3c2b7;
+
+  /* The palette's light column: same eight hues, stepped for a light surface. */
+  --s1: #2a78d6;
+  --s2: #eb6834;
+  --s3: #1baf7a;
+  --s4: #eda100;
+  --s5: #e87ba4;
+  --s6: #008300;
+  --s7: #4a3aa7;
+  --s8: #e34948;
+
+  --pos: #2a78d6;
+  --neg: #e34948;
+  --mid: #f0efec;
+
+  /* Status colours are fixed across themes by design — a warning is the same
+     warning either way — so they are not re-declared here. On a light surface
+     warning and serious fall below 3:1, which is why every status in this app
+     ships with a word beside it and never relies on the colour alone. */
+
+  --ref-sr: #a10591;
+  --ref-fib: #52514e;
+}
+
+* { box-sizing: border-box; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 6px; border: 2px solid var(--surface); }
+*::-webkit-scrollbar-thumb:hover { background: var(--ink-muted); }
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+
+:focus-visible {
+  outline: 2px solid var(--s1);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--plane);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+button, input, select, textarea { font: inherit; color: inherit; }
+
+/* ------------------------------------------------------------------ chrome */
+
+header.topbar {
+  /* Promoted to its own compositing layer: a sticky bar over a long scrolling
+     document leaves stale paint artifacts in some embedded renderers otherwise. */
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 16px;
+  background: var(--plane);
+  border-bottom: 1px solid var(--border);
+  /* Single row. With eight tabs plus the search box and the assistant button,
+     wrapping used to drop Pulse onto its own line and break tab labels across
+     two — the tab strip scrolls instead. */
+  flex-wrap: nowrap;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.brand-mark { width: 22px; height: 22px; flex: none; color: var(--ink-2); }
+.brand-text span { color: var(--ink-muted); font-weight: 400; }
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+/* Pinned to the right edge so the scrolling tab strip can't displace it,
+   and sized to match the enlarged tabs beside it. */
+#chat-toggle {
+  flex: none;
+  margin-left: 6px;
+  padding: 9px 16px;
+  font-size: 15.5px;
+  font-weight: 500;
+  border-radius: 7px;
+}
+.search input {
+  width: 130px;
+  padding: 6px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+.search input:focus { outline: 2px solid var(--s1); outline-offset: 1px; }
+
+.btn {
+  padding: 6px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.12s ease, border-color 0.12s ease, filter 0.12s ease;
+}
+.btn:hover { background: var(--surface-2); }
+.btn:active { filter: brightness(0.94); }
+.btn.primary { background: var(--s1); border-color: var(--s1); color: #fff; }
+.btn.primary:hover { filter: brightness(1.1); }
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+
+.pulse-mark {
+  color: #fff;
+  font-size: 10px;
+  vertical-align: 1px;
+  display: inline-block;
+  animation: pulse-beat 1.8s ease-in-out infinite;
+}
+@keyframes pulse-beat {
+  0%, 100% { opacity: 0.55; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulse-mark { animation: none; opacity: 1; }
+}
+
+nav.tabs {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  /* min-width:0 lets the strip shrink below its content width so it scrolls
+     rather than shoving the assistant button off the row. */
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+nav.tabs::-webkit-scrollbar { display: none; }
+nav.tabs button {
+  /* Sized up from 14px/6-12px: at desktop widths the strip read as small print
+     next to the panels it navigates. */
+  padding: 9px 16px;
+  font-size: 15.5px;
+  font-weight: 500;
+  flex: none;
+  white-space: nowrap;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+nav.tabs button:hover { color: var(--ink); background: var(--surface); }
+nav.tabs button[aria-selected="true"] {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--border-strong);
+}
+
+.statusline {
+  padding: 6px 18px;
+  font-size: 12px;
+  color: var(--ink-muted);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+/* No transition on padding: animating a layout property forces full-document
+   reflow on every frame and is the usual source of ghosted repaints. */
+main { padding: 18px; isolation: isolate; }
+body.chat-open main { padding-right: 400px; }
+
+.view { display: none; }
+.view.active { display: block; }
+
+/* ------------------------------------------------------------------ panels */
+
+.grid { display: grid; gap: 14px; }
+.grid.c2 { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+.grid.c3 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.grid.c4 { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  min-width: 0;
+}
+.panel.span2 { grid-column: span 2; }
+@media (max-width: 900px) { .panel.span2 { grid-column: auto; } }
+
+/* Staggered reveal on a fresh load. The delay is set per-panel in JS, and the
+   class is only added on a foreground load — a background refresh tick must not
+   re-animate a dashboard the user is already reading. `both` fill mode holds the
+   opening state through the delay so nothing flashes in early. */
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.99); }
+  to   { opacity: 1; transform: none; }
+}
+.panel.reveal { animation: panel-in 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+
+/* The reveal reads as one motion only if the whole view starts clean. */
+@keyframes view-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.view.revealing { animation: view-in 0.25s ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .panel.reveal, .view.revealing { animation: none; }
+}
+
+/* -------------------------------------------------------------------- home */
+
+.home {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 44px 4px 60px;
+}
+
+.home-logo {
+  width: 92px; height: 92px;
+  color: var(--ink-2);
+  margin-bottom: 22px;
+}
+/* The aperture ring drifts open once on arrival — a single quiet gesture, not
+   an animation the eye has to keep tracking. */
+@keyframes iris-open {
+  from { opacity: 0; transform: scale(0.9) rotate(-12deg); }
+  to   { opacity: 1; transform: none; }
+}
+.home-logo { animation: iris-open 0.7s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+
+.home-title {
+  font-size: 42px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+  margin: 0 0 10px;
+}
+.home-title span { color: var(--ink-muted); font-weight: 400; }
+
+.home-lede {
+  font-size: 15.5px;
+  color: var(--ink-2);
+  line-height: 1.55;
+  max-width: 660px;
+  margin: 0 0 26px;
+}
+
+/* Tester onboarding notice — dismissible, and remembered once dismissed. */
+.home-notice {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--s4);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin: 0 0 24px;
+  max-width: 720px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  line-height: 1.55;
+}
+.home-notice strong { color: var(--ink); }
+.home-notice ul { margin: 8px 0 0; padding-left: 20px; }
+.home-notice li { margin-bottom: 5px; }
+.home-notice b { color: var(--ink); font-weight: 600; }
+.home-notice code {
+  background: var(--surface-2);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 12.5px;
+}
+.home-notice-foot {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.home-notice-foot button {
+  background: none;
+  border: none;
+  color: var(--s1);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 6px;
+  text-decoration: underline;
+}
+
+/* The ticker box is the one thing to do on this page, so it gets real weight. */
+.home-search { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.home-search input {
+  flex: 1 1 240px;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 17px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 13px 15px;
+}
+.home-search input::placeholder { color: var(--ink-muted); letter-spacing: 0.02em; text-transform: none; }
+.home-search input:focus { outline: none; border-color: var(--s1); }
+.home-search button { padding: 13px 24px; font-size: 15px; border-radius: 8px; }
+
+.home-quick { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-bottom: 34px; }
+.home-quick .label { font-size: 12px; color: var(--ink-muted); }
+.home-quick button {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.home-quick button:hover { color: var(--ink); border-color: var(--s1); }
+
+.home-cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(232px, 1fr)); }
+.home-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent, var(--s1));
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+.home-card:hover { background: var(--surface-2); }
+/* The heading carries the accent too. A 2px stripe alone was easy to miss, which
+   defeated the point of giving each card its own colour. */
+.home-card h3 {
+  margin: 0 0 5px;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent, var(--ink));
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.home-card h3::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--accent, var(--s1));
+  flex: none;
+}
+.home-card p { margin: 0; font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+
+.home-foot {
+  margin-top: 30px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px 20px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.home-foot .dot-sep { display: flex; align-items: center; gap: 6px; }
+
+@media (max-width: 640px) {
+  .home { padding: 28px 2px 44px; }
+  .home-logo { width: 68px; height: 68px; }
+  .home-title { font-size: 31px; }
+  .home-lede { font-size: 14.5px; }
+}
+
+/* Segmented control — chart style toggle. */
+.chart-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin: -4px 0 6px;
+  flex-wrap: wrap;
+}
+.range-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.range-pick select {
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 4px 8px;
+}
+.range-pick select:focus { outline: none; border-color: var(--s1); }
+.seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 7px; overflow: hidden; }
+.seg button {
+  background: transparent;
+  border: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.seg button + button { border-left: 1px solid var(--border-strong); }
+.seg button:hover { background: var(--surface-2); color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--s1); color: #fff; }
+
+/* Term-and-definition list used under the composite-score tables. */
+.factor-defs { margin: 10px 0 0; font-size: 12.5px; }
+.factor-defs dt {
+  color: var(--ink);
+  font-weight: 600;
+  text-transform: capitalize;
+  margin-top: 8px;
+}
+.factor-defs dd {
+  margin: 2px 0 0;
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+
+/* ------------------------------------------------------------ roth controls */
+
+.roth-controls {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  padding: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.roth-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.roth-controls textarea {
+  background: var(--plane);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13.5px;
+  padding: 8px 10px;
+  resize: vertical;
+  text-transform: none;
+  letter-spacing: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+.roth-controls textarea:focus { outline: none; border-color: var(--s1); }
+.roth-controls input,
+.roth-controls select {
+  background: var(--plane);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  padding: 7px 10px;
+  min-width: 130px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.roth-controls input:focus,
+.roth-controls select:focus { outline: none; border-color: var(--s1); }
+.roth-controls button { padding: 8px 18px; }
+
+/* Tracker action bar. The hint sits inline rather than under the buttons so the
+   "this takes a minute" warning is read before the button is pressed. */
+.tracker-bar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 10px 12px;
+  margin-top: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.tracker-bar button { padding: 8px 16px; }
+.tracker-bar button[disabled] { opacity: 0.55; cursor: progress; }
+.tracker-hint {
+  flex: 1 1 320px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+}
+
+/* Scan progress. A NASDAQ-wide scan runs for minutes, so "it's working" has to be
+   visible or the page looks broken. */
+.tracker-progress { margin-top: 10px; }
+.tracker-progress-head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--ink-2);
+  margin-bottom: 6px;
+}
+.tracker-progress-head .mono {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-muted);
+  font-size: 11.5px;
+}
+.tracker-progress-track {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.tracker-progress-fill {
+  height: 100%;
+  background: var(--s1);
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+/* Funnel: universe → gates → shortlist. Laid out horizontally because the point
+   is the drop between steps, and a vertical list hides it. */
+.funnel {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 12px 0 8px;
+}
+.funnel-step {
+  flex: 1 1 130px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.funnel-value {
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.funnel-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-2);
+}
+.funnel-note { font-size: 11px; color: var(--ink-muted); }
+.funnel-arrow {
+  align-self: center;
+  color: var(--ink-muted);
+  font-size: 15px;
+}
+@media (max-width: 720px) {
+  .funnel-arrow { display: none; }
+}
+
+/* Panels scroll their own overflow (wide tables, leg rows) rather than
+   forcing the whole page wider than the viewport. */
+.panel { overflow-x: auto; }
+table.data { min-width: 480px; }
+/* Tables sitting side-by-side in a nested grid are narrow (3-4 columns), and the
+   480px floor makes them overflow their grid cell and collide with the table
+   next to it. Inside a nested grid, let them size to their content instead. */
+.panel .grid table.data { min-width: 0; }
+/* Nested grid cells must contain their own overflow.
+   `min-width: auto` is the default for a grid item, so a table wider than its
+   column pushed the column open and painted over the table beside it — three
+   panels' worth of text stacked on top of each other. min-width:0 lets the
+   column hold its share, and overflow-x scrolls anything that still won't fit
+   instead of spilling sideways. */
+.panel .grid > * { min-width: 0; overflow-x: auto; }
+/* And let multi-word headers wrap in these narrow tables. `nowrap` is right for
+   a full-width table, but here it forced "Distance from spot" to hold a single
+   line and dragged a 320px column out to 565px. */
+.panel .grid table.data th { white-space: normal; }
+/* Same problem for a two-column table in a half-width panel: the 480px floor
+   pushed the value column off the right edge, so the readings were invisible. */
+table.data.narrow { min-width: 0; }
+.leg { min-width: 480px; }
+
+.panel > h2 {
+  margin: 0 0 2px;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.panel > .sub {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.panel h3 {
+  margin: 16px 0 6px;
+  font-size: 12px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+}
+
+/* ------------------------------------------------------- figures & tiles */
+
+.hero {
+  font-size: 52px;
+  font-weight: 650;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+.hero-label { font-size: 12px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+
+.tile { display: flex; flex-direction: column; gap: 2px; }
+.tile .label { font-size: 11px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.tile .value { font-size: 22px; font-weight: 600; }
+.tile .note { font-size: 12px; color: var(--ink-2); }
+
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 13px; }
+.kv dt { color: var(--ink-muted); }
+.kv dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+
+.up { color: var(--good); }
+.down { color: var(--critical); }
+.flat { color: var(--ink-2); }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  font-size: 12px;
+  color: var(--ink-2);
+  background: var(--surface-2);
+}
+.chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-muted); flex: none; }
+.chip.bull .dot { background: var(--good); }
+.chip.bear .dot { background: var(--critical); }
+.chip.warn .dot { background: var(--warn); }
+.chip.neutral .dot { background: var(--ink-muted); }
+
+ul.reasons { margin: 6px 0 0; padding-left: 18px; font-size: 13px; color: var(--ink-2); }
+ul.reasons li { margin-bottom: 3px; }
+
+.callout {
+  margin-top: 10px;
+  padding: 9px 11px;
+  border-left: 3px solid var(--warn);
+  background: var(--surface-2);
+  border-radius: 0 6px 6px 0;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.callout.info { border-left-color: var(--s1); }
+.callout.bad { border-left-color: var(--critical); }
+
+.caveat { margin-top: 10px; font-size: 11.5px; color: var(--ink-muted); font-style: italic; }
+
+.gloss-term {
+  font-style: normal;
+  text-decoration: underline dotted var(--ink-muted);
+  text-underline-offset: 2px;
+  cursor: help;
+  border-radius: 2px;
+}
+.gloss-term:hover, .gloss-term:focus-visible {
+  color: var(--s1);
+  text-decoration-color: var(--s1);
+  outline: none;
+}
+/* Headings are uppercase and letter-spaced, so a dotted rule sitting tight under
+   the caps reads as noise — push it further down. Colour stays at ink-muted so
+   it's clearly there against the brighter heading text without shouting. */
+h2 .gloss-term, h3 .gloss-term {
+  text-decoration-color: var(--ink-muted);
+  text-underline-offset: 4px;
+}
+h2 .gloss-term:hover, h3 .gloss-term:hover,
+h2 .gloss-term:focus-visible, h3 .gloss-term:focus-visible {
+  text-decoration-color: var(--s1);
+}
+
+/* ------------------------------------------------------------------ tables */
+
+table.data {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+table.data th {
+  text-align: right;
+  padding: 5px 8px;
+  color: var(--ink-muted);
+  font-weight: 500;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--baseline);
+  white-space: nowrap;
+}
+table.data th:first-child, table.data td:first-child { text-align: left; }
+table.data td {
+  text-align: right;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--grid);
+  white-space: nowrap;
+}
+table.data tr:last-child td { border-bottom: none; }
+table.data td { transition: background-color 0.1s ease; }
+table.data tr:hover td { background: var(--surface-2); }
+table.data td.name { color: var(--ink); font-variant-numeric: normal; }
+.scroll-y { max-height: 340px; overflow-y: auto; }
+
+/* ------------------------------------------------------------------ charts */
+
+.chart { width: 100%; display: block; overflow: visible; }
+.chart text { font-family: var(--sans); }
+.legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  margin-bottom: 8px;
+}
+.legend .key { display: inline-flex; align-items: center; gap: 5px; }
+.legend .swatch { width: 12px; height: 2px; border-radius: 1px; }
+.legend .swatch.box { height: 10px; width: 10px; border-radius: 2px; }
+
+.tooltip {
+  position: fixed;
+  z-index: 100;
+  pointer-events: none;
+  padding: 7px 9px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 0.1s;
+  max-width: 260px;
+}
+.tooltip.on { opacity: 1; }
+.tooltip .t-title { color: var(--ink); font-weight: 600; margin-bottom: 3px; }
+.tooltip .t-row { color: var(--ink-2); display: flex; justify-content: space-between; gap: 12px; }
+
+/* ------------------------------------------------------------- trade ideas */
+
+.idea {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 11px 13px;
+  margin-bottom: 10px;
+  background: var(--surface-2);
+}
+.idea .idea-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.idea .idea-name { font-weight: 600; }
+.idea .idea-why { font-size: 12.5px; color: var(--ink-2); margin: 6px 0 8px; }
+.leg {
+  display: grid;
+  grid-template-columns: 44px 52px 1fr repeat(4, auto);
+  gap: 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  padding: 3px 0;
+  border-top: 1px solid var(--grid);
+  align-items: center;
+}
+.leg .buy { color: var(--good); font-weight: 600; }
+.leg .sell { color: var(--serious); font-weight: 600; }
+.leg .muted { color: var(--ink-muted); }
+
+/* ------------------------------------------------------------------- chat */
+
+aside#chat {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 382px;
+  height: 100vh;
+  transform: translateZ(0);
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: none;
+  flex-direction: column;
+  z-index: 60;
+}
+body.chat-open aside#chat { display: flex; }
+
+#chat .chat-head {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#chat .chat-head .title { font-weight: 650; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; }
+#chat .chat-head .close { margin-left: auto; background: none; border: none; color: var(--ink-muted); cursor: pointer; font-size: 18px; }
+
+#chat .chat-log { flex: 1; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; }
+.msg { font-size: 13.5px; }
+.msg .who { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); margin-bottom: 3px; }
+.msg.user .bubble { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+.msg .bubble { white-space: pre-wrap; word-wrap: break-word; color: var(--ink-2); }
+.msg.assistant .bubble { color: var(--ink-2); }
+.msg .bubble strong { color: var(--ink); }
+.msg .bubble code { background: var(--surface-2); padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+.msg .status { font-size: 12px; color: var(--ink-muted); font-style: italic; }
+.msg .sources { margin-top: 8px; font-size: 11.5px; }
+.msg .sources a { color: var(--s1); display: block; text-decoration: none; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg .sources a:hover { text-decoration: underline; }
+.msg.err .bubble { color: var(--serious); }
+
+#chat .chat-foot { border-top: 1px solid var(--border); padding: 10px 12px; }
+#chat textarea {
+  width: 100%;
+  min-height: 62px;
+  max-height: 160px;
+  resize: vertical;
+  padding: 8px 9px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+}
+#chat textarea:focus { outline: 2px solid var(--s1); outline-offset: 1px; }
+#chat .chat-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+#chat .chat-actions label { font-size: 12px; color: var(--ink-2); display: flex; align-items: center; gap: 5px; }
+.suggest { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.suggest button {
+  font-size: 11.5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.suggest button:hover { color: var(--ink); border-color: var(--s1); }
+
+/* ------------------------------------------------------------------ misc */
+
+.loading { color: var(--ink-muted); font-size: 13px; padding: 20px 0; }
+.spinner {
+  display: inline-block;
+  width: 11px; height: 11px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--s1);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: -1px;
+  margin-right: 7px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.error-box {
+  padding: 12px 14px;
+  border: 1px solid var(--serious);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 13px;
+}
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+
+/* ---------------------------------------------------------------- phone */
+
+/* Brand + search + the tab strip + Pulse need ~1275px to sit on one line at the
+   current tab size (measured, not guessed — enlarging the tabs pushed this up
+   from ~1020px). Below that, give the tabs their own full-width row rather than
+   squeezing them into a narrow horizontal scroller — the row is still tidy, and
+   every tab stays visible and clickable. */
+@media (max-width: 1280px) {
+  header.topbar { flex-wrap: wrap; row-gap: 8px; }
+  nav.tabs { order: 3; flex: 1 0 100%; margin-left: 0; overflow-x: auto; }
+  /* The tab strip drops to its own row here, so it no longer claims the free
+     space on row one. The gear takes over that job and keeps Pulse beside it —
+     without this the gear was stranded next to the Load button. */
+  #settings-btn { margin-left: auto; }
+  #chat-toggle { margin-left: 6px; }
+}
+
+@media (max-width: 860px) {
+  /* Below this width the chat panel can't push content aside without
+     squeezing every panel unreadably narrow — let it overlay instead. */
+  body.chat-open main { padding-right: 18px; }
+  aside#chat { width: 100vw; }
+}
+
+@media (max-width: 640px) {
+  .grid.c2, .grid.c3, .grid.c4 { grid-template-columns: 1fr; }
+  main { padding: 10px; }
+  .panel { padding: 12px; }
+  header.topbar { padding: 8px 10px; gap: 8px; }
+  .brand { font-size: 13px; }
+  .search input { width: 88px; }
+  .hero { font-size: 36px; }
+  .idea .leg { font-size: 11px; }
+}
+
+/* ---------------------------------------------------------- session strip
+   Which trading session is running, the regular-hours close, and where the
+   stock is actually trading. Sits under the status line so it reads as part of
+   the header rather than as another panel competing for attention. */
+
+.sessionbar {
+  padding: 8px 18px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.ses-main {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.ses-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--ink-muted);
+}
+/* One hue per session — violet through the small hours, amber at dawn, blue for
+   the main session, orange at dusk. Declared once and shared by the dot, the
+   strip and the legend so a colour can't drift between the three. */
+.p-overnight { --ses-hue: var(--s7); }
+.p-pre       { --ses-hue: var(--s4); }
+.p-regular   { --ses-hue: var(--s1); }
+.p-after     { --ses-hue: var(--s2); }
+.p-closed    { --ses-hue: var(--ink-muted); }
+
+.ses-dot { background: var(--ses-hue, var(--ink-muted)); }
+/* Only the live session pulses, and only when the market is actually open. */
+.ses-dot.p-regular { animation: pulse-beat 1.8s ease-in-out infinite; }
+
+.ses-head { display: flex; flex-direction: column; gap: 1px; min-width: 190px; }
+.ses-phase {
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.ses-sub { font-size: 11.5px; color: var(--ink-muted); }
+
+/* The two prices sit side by side on purpose: the whole point is the comparison. */
+.ses-price { display: flex; flex-direction: column; gap: 1px; }
+.ses-plabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-muted);
+}
+.ses-pval {
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.ses-pval.up { color: var(--good); }
+.ses-pval.down { color: var(--critical); }
+.ses-pnote { font-size: 11px; }
+
+/* 24-hour strip with the four sessions laid out to scale, and a marker at now. */
+.ses-strip {
+  position: relative;
+  flex: 1 1 200px;
+  height: 6px;
+  min-width: 160px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.ses-seg {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--ses-hue, var(--border-strong));
+  /* Every session keeps its own colour; the inactive ones just recede, so the
+     day still reads as four phases rather than one block and some grey. */
+  opacity: 0.38;
+}
+.ses-seg.active {
+  opacity: 1;
+  box-shadow: 0 0 6px -1px var(--ses-hue);
+}
+.ses-now {
+  position: absolute;
+  top: -2px;
+  width: 2px;
+  height: calc(100% + 4px);
+  background: var(--ink);
+  border-radius: 1px;
+  /* A dark hairline either side keeps the white marker legible wherever it
+     lands, including on top of the pale amber and violet segments. */
+  box-shadow: 0 0 0 1px var(--plane);
+}
+
+.ses-legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.ses-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+}
+.ses-key i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--ses-hue);
+  opacity: 0.45;
+  flex: none;
+}
+.ses-key em {
+  font-style: normal;
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0.72;
+}
+/* The live session is named in the header too, but calling it out here means the
+   bar and the legend can be read in either order. */
+.ses-key.live { color: var(--ink); }
+.ses-key.live i { opacity: 1; }
+
+.ses-warn {
+  margin-top: 7px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--ink-2);
+  border-left: 2px solid var(--warn);
+  padding-left: 9px;
+}
+.ses-desc {
+  margin-top: 6px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--ink-muted);
+}
+
+@media (max-width: 900px) {
+  .ses-strip { flex-basis: 100%; order: 9; }
+}
+
+/* Company line at the top of the session strip: who this is and what they do,
+   established once per ticker rather than repeated on every tab. */
+.ses-company {
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.ses-co-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ses-co-name { font-size: 14.5px; font-weight: 650; color: var(--ink); }
+.ses-co-meta { font-size: 11.5px; color: var(--ink-muted); }
+.ses-co-link { font-size: 11px; color: var(--s1); text-decoration: none; }
+.ses-co-link:hover { text-decoration: underline; }
+
+.ses-co-sum {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-2);
+  max-width: 105ch;
+  /* Clamped rather than cut in JS: no broken sentences, and it adapts to width. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ses-co-sum.expanded { -webkit-line-clamp: unset; display: block; }
+
+.ses-co-more {
+  margin-top: 2px;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--s1);
+  font-size: 11px;
+  cursor: pointer;
+}
+.ses-co-more:hover { text-decoration: underline; }
+
+/* Level-visibility toggles. The little swatch matches the line colour on the
+   chart, so the button says which family it controls without reading the label. */
+.seg button .lvl-key {
+  display: inline-block;
+  width: 12px;
+  height: 3px;
+  border-radius: 1px;
+  margin-right: 6px;
+  vertical-align: 2px;
+}
+/* Both families share one dash rhythm; only the hue differs. */
+.seg button .lvl-key.fib {
+  background: repeating-linear-gradient(90deg, var(--ref-fib) 0 5px, transparent 5px 8px);
+}
+.seg button .lvl-key.sr {
+  background: repeating-linear-gradient(90deg, var(--ref-sr) 0 5px, transparent 5px 8px);
+}
+/* An off toggle should look off: the swatch and label both recede. */
+.seg button[aria-pressed="false"] .lvl-key { opacity: 0.35; }
+
+/* ------------------------------------------------------------------- legal
+   Always present, never dismissible. The home-page notice covers one tab and
+   can be hidden; a tool that prints strike prices and a simulated track record
+   needs the disclaimer on screen wherever those numbers are. */
+footer.legal {
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  padding: 14px 18px 20px;
+  margin-top: 8px;
+}
+body.chat-open footer.legal { padding-right: 400px; }
+.legal-line {
+  margin: 0;
+  max-width: 110ch;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--ink-muted);
+}
+.legal-line strong { color: var(--ink-2); }
+#legal-more {
+  margin-left: 4px;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--s1);
+  font-size: 11.5px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.legal-full {
+  margin-top: 10px;
+  max-width: 110ch;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.legal-full p {
+  margin: 0 0 9px;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--ink-2);
+}
+.legal-full p:last-child { margin-bottom: 0; }
+
+/* Per-tab notice, at the top of any view that emits actionable-looking output. */
+.legal-area {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+  padding: 9px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--warn);
+  border-radius: 6px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+.legal-area strong { color: var(--ink); }
+
+/* ---------------------------------------------------------------- settings */
+.settings-row {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 12px;
+  margin-top: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.settings-label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 13.5px;
+  color: var(--ink);
+  min-width: 220px;
+  flex: 1 1 260px;
+}
+.settings-hint {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--ink-muted);
+  font-weight: 400;
+}
+.settings-select {
+  flex: 0 1 340px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 13.5px;
+}
+.settings-select:focus { outline: 2px solid var(--s1); outline-offset: 1px; }
+
+/* Segmented option group, reused from the chart toolbar's look. */
+.seg-opt {
+  padding: 7px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  color: var(--ink-2);
+  font-size: 13px;
+  cursor: pointer;
+}
+.seg-opt:first-child { border-radius: 6px 0 0 6px; }
+.seg-opt:last-child { border-radius: 0 6px 6px 0; }
+.seg-opt + .seg-opt { border-left: 0; }
+.seg-opt:hover { background: var(--surface-2); color: var(--ink); }
+.seg-opt.on { background: var(--s1); border-color: var(--s1); color: #fff; }
+
+/* Zone note at the end of the session legend. */
+.ses-key.ses-zone { color: var(--ink-muted); text-transform: none; letter-spacing: 0; }
+.ses-key.ses-zone button {
+  margin-left: 5px;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--s1);
+  font-size: 10.5px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* ------------------------------------------------------------- settings gear
+   In the top bar rather than the tab strip: the strip wraps to its own row at
+   narrow widths, which would drop the gear below the bar instead of leaving it
+   beside Pulse where it belongs. */
+.icon-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  margin-left: auto;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+/* The tab strip already claims the free space with margin-left:auto; without
+   this the gear and the strip fight over it and the gear jumps. */
+nav.tabs ~ .icon-btn { margin-left: 6px; }
+.icon-btn:hover { background: var(--surface); color: var(--ink); }
+.icon-btn[aria-pressed="true"] {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--ink);
+}
+
+.gear {
+  width: 21px;
+  height: 21px;
+  /* Spun from the centre — the default transform-origin on an SVG child is the
+     viewport corner, which would swing it in an arc instead of rotating it. */
+  transform-origin: 50% 50%;
+  transition: transform 0.5s cubic-bezier(0.34, 0.9, 0.3, 1);
+}
+.icon-btn:hover .gear,
+.icon-btn:focus-visible .gear { transform: rotate(90deg); }
+/* On the settings view it keeps turning slowly, so the gear reads as "this is
+   where you are" without needing a text label beside it. */
+.icon-btn[aria-pressed="true"] .gear {
+  animation: gear-spin 9s linear infinite;
+  transition: none;
+}
+@keyframes gear-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gear, .icon-btn:hover .gear, .icon-btn:focus-visible .gear { transition: none; transform: none; }
+  .icon-btn[aria-pressed="true"] .gear { animation: none; }
+}
+
+/* ------------------------------------------------------------ symbol search
+   Typeahead for the ticker boxes. Absolute so the list overlays the page rather
+   than pushing the header taller as results arrive. */
+.combo { position: relative; display: flex; }
+.combo-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 80;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  min-width: 300px;
+  max-height: 340px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px -8px rgba(0, 0, 0, 0.55);
+}
+.combo-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.combo-list li.on,
+.combo-list li:hover { background: var(--surface-2); }
+.combo-sym {
+  flex: 0 0 auto;
+  min-width: 58px;
+  font-weight: 650;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.combo-name {
+  flex: 1 1 auto;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The matched run, so a long list can be scanned rather than read. */
+.combo-list b { color: var(--s1); font-weight: 650; }
+.combo-tag {
+  flex: 0 0 auto;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+/* The header box is narrow; give its dropdown room to show company names. */
+#ticker-results { min-width: 330px; }
+.home-search .combo { flex: 1 1 auto; }
+.home-search .combo input { width: 100%; }

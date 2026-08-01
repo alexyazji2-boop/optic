@@ -1,0 +1,9 @@
+# Secrets: the shared access password and any API keys live here.
+.env
+
+# Local runtime state — the tracker ledger is machine-local state, not source.
+data/
+.venv/
+.share/
+__pycache__/
+*.pyc

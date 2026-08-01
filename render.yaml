@@ -1,0 +1,81 @@
+# Render blueprint. In the Render dashboard: New → Blueprint → pick this repo,
+# and it reads this file instead of you filling in a form.
+#
+# Secrets are deliberately NOT in here — `sync: false` makes Render prompt for
+# each value at deploy time, so any API key stays out of the repository.
+#
+# ---------------------------------------------------------------------------
+# Why this is on a paid plan rather than the free one
+#
+# Optic's Positions only means anything if the record accumulates: it scans on a
+# schedule and re-marks open positions every 20 minutes. Two things about the
+# free plan break that, and neither is a matter of degree.
+#
+#   1. The instance sleeps after ~15 minutes idle, so the background scan loop
+#      only runs while somebody happens to be looking at the page. A track record
+#      that advances when observed isn't a track record.
+#   2. Free storage is ephemeral. The ledger is a SQLite file, so every deploy
+#      would wipe the entire history — and a persistent disk requires a paid
+#      plan regardless.
+#
+# So `plan: starter` and a disk are the minimum for the tracker to work as built.
+# If you'd rather not pay: set TRACKER_AUTO=false and TRACKER_UNIVERSE=watchlist,
+# drop back to `plan: free`, remove the disk, and treat the tracker as a
+# manual-only demo whose record resets on deploy.
+# ---------------------------------------------------------------------------
+services:
+  - type: web
+    name: optic-terminal
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+
+    # The ledger, the NASDAQ symbol directory and the screener's cached ranking
+    # all live here. 1GB is far more than needed — the ledger is measured in tens
+    # of KB and the caches in hundreds — but it's the smallest disk offered and
+    # resizing later means downtime.
+    disk:
+      name: tracker-data
+      mountPath: /app/data
+      sizeGB: 1
+
+    # ---------------------------------------------------------------------
+    # Data-feed note. Scanning the whole NASDAQ means ~3,000 symbol-downloads
+    # per screen, which the free yfinance feed answers with a temporary rate
+    # limit. The tracker detects that and refuses to trade on partial data
+    # rather than recording shares-only fills for names whose option chains
+    # simply didn't load — so a throttled scan takes fewer positions, not wrong
+    # ones. Two ways to reduce it:
+    #
+    #   TRADIER_ACCESS_TOKEN       — moves quotes and options chains onto
+    #                                Tradier so the expensive stage stops
+    #                                competing with the screen for the same free
+    #                                quota. The screen itself still uses yfinance.
+    #   TRACKER_UNIVERSE=watchlist — falls back to ten megacaps, no screen at all.
+    #
+    # Other knobs: TRACKER_SHORTLIST (30), TRACKER_MAX_POSITIONS (20),
+    # TRACKER_MAX_NEW_PER_SCAN (6), TRACKER_MAX_PORTFOLIO_RISK_PCT (15),
+    # SCREEN_CACHE_MINUTES (90), SCREEN_CHUNK_PAUSE (1.0),
+    # TRACKER_MARK_MINUTES (20), TRACKER_SCAN_MINUTES (240).
+    # ---------------------------------------------------------------------
+    envVars:
+      # Where the published track record begins. Deliberately EMPTY, which means
+      # "show every month the ledger actually has".
+      #
+      # Only set it if you copy a local database onto the disk and want the early
+      # months hidden — it excludes them from the monthly tab *and* the headline
+      # figures, so the two always reconcile. Left blank it can never silently
+      # swallow real history, which is the failure mode worth avoiding: a track
+      # record with months quietly removed is worse than one with an untidy start.
+      #
+      # A fresh Render disk starts empty anyway, so the record will begin with the
+      # first scan after deploy without this being set at all.
+      - key: TRACKER_LEDGER_START
+        value: ""
+
+      # Optional. Leave unset to keep Pulse switched off. There is no sign-in, so
+      # setting this means anyone with the URL can spend real money through the
+      # assistant — add it only when you're ready for that.
+      - key: ANTHROPIC_API_KEY
+        sync: false

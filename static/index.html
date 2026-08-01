@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- robots.txt asks crawlers not to fetch; this tells any that fetched anyway not
+     to index. The two are honoured at different stages, so both are needed to
+     keep an open, unauthenticated tool out of search results. Advisory only —
+     neither is access control. -->
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>Optic Terminal</title>
+<link rel="stylesheet" href="styles.css?v=79">
+<script>
+/* Set the theme before the stylesheet paints.
+ *
+ * Deliberately inline and blocking: doing this in app.js would paint the default
+ * theme first and then swap, which is the flash every themed site gets wrong.
+ * Because the attribute is guaranteed to exist by the time CSS applies, the
+ * stylesheet needs exactly one dark block and one light block — no duplicated
+ * prefers-color-scheme rules to keep in sync.
+ *
+ * An explicit choice wins over the OS; absent a choice, the OS decides. */
+(function () {
+  var stored = null;
+  try { stored = localStorage.getItem('optic.theme'); } catch (e) { /* private mode */ }
+  var theme = stored === 'light' || stored === 'dark' ? stored
+    : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches
+      ? 'light' : 'dark');
+  document.documentElement.dataset.theme = theme;
+})();
+</script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M2.6 16C6.3 8.9 10.9 5.4 16 5.4S25.7 8.9 29.4 16C25.7 23.1 21.1 26.6 16 26.6S6.3 23.1 2.6 16Z"
+            fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" opacity="0.8"/>
+      <path d="M7.8 20 11.6 15.6 14.6 17.8 18.6 11.8 21.6 14 23.6 11.6" fill="none" stroke="var(--s1)"
+            stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span class="brand-text">OPTIC <span>TERMINAL</span></span>
+  </div>
+
+  <form class="search" id="ticker-form">
+    <div class="combo">
+      <input id="ticker-input" placeholder="Ticker or company" spellcheck="false"
+             autocomplete="off" aria-label="Ticker symbol or company name"
+             role="combobox" aria-expanded="false" aria-autocomplete="list"
+             aria-controls="ticker-results">
+      <ul class="combo-list" id="ticker-results" role="listbox" hidden></ul>
+    </div>
+    <button class="btn primary" type="submit">Load</button>
+  </form>
+
+  <nav class="tabs" role="tablist" aria-label="Views">
+    <button role="tab" title="Home" data-view="home" aria-selected="true">Home</button>
+    <button role="tab" title="Swing trading and options analysis" data-view="swing" aria-selected="false">Swing</button>
+    <button role="tab" title="Intraday scalping" data-view="scalp" aria-selected="false">Scalps</button>
+    <button role="tab" title="Earnings analysis" data-view="earnings" aria-selected="false">Earnings</button>
+    <button role="tab" title="Macro regime and sector rotation" data-view="market" aria-selected="false">Macro</button>
+    <button role="tab" title="Major index long-run cycle" data-view="indices" aria-selected="false">Indices</button>
+    <button role="tab" title="Long-term share holdings" data-view="long" aria-selected="false">Long-Term</button>
+    <button role="tab" title="Roth IRA model allocation" data-view="roth" aria-selected="false">Roth</button>
+    <button role="tab" title="Optic's Positions — the terminal's own paper-traded record" data-view="tracker" aria-selected="false">Optic's Positions</button>
+  </nav>
+
+  <button class="icon-btn" id="settings-btn" data-view="settings"
+          aria-label="Settings" aria-pressed="false" title="Settings — appearance and time zone">
+    <svg class="gear" viewBox="0 0 24 24" aria-hidden="true">
+      <!-- Classic cog: eight teeth as a dashed ring, so the tooth count and the
+           gap are one stroke rather than eight hand-placed paths. -->
+      <circle cx="12" cy="12" r="8.4" fill="none" stroke="currentColor" stroke-width="3.2"
+              stroke-dasharray="2.6 3.99" stroke-linecap="butt"/>
+      <circle cx="12" cy="12" r="6.2" fill="none" stroke="currentColor" stroke-width="2"/>
+      <circle cx="12" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/>
+    </svg>
+  </button>
+
+  <button class="btn primary" id="chat-toggle"><span class="pulse-mark">●</span>&nbsp;Pulse</button>
+</header>
+
+<div class="statusline" id="statusline">
+  <span>Ready.</span>
+</div>
+
+<!-- Session strip. Hidden until a ticker is loaded; shows which trading session
+     is running, the regular-hours close, and where the stock is trading now. -->
+<div class="sessionbar" id="sessionbar" hidden></div>
+
+<main>
+  <section class="view active" id="view-home" role="tabpanel" aria-label="Home"></section>
+  <section class="view" id="view-swing" role="tabpanel" aria-label="Swing and options analysis"></section>
+  <section class="view" id="view-scalp" role="tabpanel" aria-label="Scalping and intraday analysis"></section>
+  <section class="view" id="view-earnings" role="tabpanel" aria-label="Earnings analysis"></section>
+  <section class="view" id="view-market" role="tabpanel" aria-label="Macro and sector analysis"></section>
+  <section class="view" id="view-indices" role="tabpanel" aria-label="Index analysis"></section>
+  <section class="view" id="view-long" role="tabpanel" aria-label="Long-term share analysis"></section>
+  <section class="view" id="view-roth" role="tabpanel" aria-label="Roth IRA model allocation"></section>
+  <section class="view" id="view-tracker" role="tabpanel" aria-label="Optic&apos;s Positions — paper-trading record"></section>
+  <section class="view" id="view-settings" role="tabpanel" aria-label="Settings"></section>
+</main>
+
+<!-- Persistent, not dismissible. The home-page notice can be hidden and only
+     appears on one tab; this has to be present wherever a number is on screen. -->
+<footer class="legal" id="legal-footer">
+  <p class="legal-line">
+    <strong>Not financial advice.</strong> Optic Terminal is an independent research tool for
+    informational and educational purposes only. Nothing here is a recommendation, solicitation or
+    offer to buy or sell any security or option. The operator is not a broker-dealer and not a
+    registered investment adviser, and no output is tailored to your circumstances. Data may be
+    delayed or wrong. Trading involves substantial risk of loss; options can expire worthless.
+    Past performance does not predict future results. Consult a licensed professional before
+    investing.
+    <button type="button" id="legal-more">Full disclaimer</button>
+  </p>
+  <div class="legal-full" id="legal-full" hidden></div>
+</footer>
+
+<aside id="chat" aria-label="Pulse assistant">
+  <div class="chat-head">
+    <span class="pulse-mark">●</span>
+    <span class="title">Pulse</span>
+    <span class="chip neutral" id="chat-ctx"><span class="dot"></span><span>No context</span></span>
+    <button class="close" id="chat-close" aria-label="Close assistant">&times;</button>
+  </div>
+
+  <div class="chat-log" id="chat-log"></div>
+
+  <div class="chat-foot">
+    <div class="suggest" id="chat-suggest"></div>
+    <textarea id="chat-input" placeholder="Ask Pulse about the loaded analysis — e.g. &quot;what does the gamma profile imply for a swing long here?&quot;"></textarea>
+    <div class="chat-actions">
+      <button class="btn primary" id="chat-send">Send</button>
+      <button class="btn" id="chat-research">Deep research</button>
+      <label><input type="checkbox" id="chat-web"> Web search</label>
+    </div>
+  </div>
+</aside>
+
+<div class="tooltip" id="tooltip" role="status" aria-live="polite"></div>
+
+<!-- Version query busts the browser cache on deploy. Without it a reloaded page
+     can pair new HTML with a stale charts.js/app.js, which surfaces as features
+     silently not working rather than as an error. -->
+<script src="charts.js?v=79"></script>
+<script src="app.js?v=79"></script>
+</body>
+</html>
