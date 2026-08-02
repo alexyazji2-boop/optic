@@ -59,21 +59,18 @@ services:
     # SCREEN_CACHE_MINUTES (90), SCREEN_CHUNK_PAUSE (1.0),
     # TRACKER_MARK_MINUTES (20), TRACKER_SCAN_MINUTES (240).
     # ---------------------------------------------------------------------
+    # TRACKER_LEDGER_START is deliberately NOT declared here.
+    #
+    # It first appeared with `value: ""`, which Render's blueprint validator
+    # rejects — an env var needs a real value or `sync: false`, not an empty
+    # string. It isn't needed anyway: the code already defaults to empty, meaning
+    # "show every month the ledger actually has", and a fresh disk starts empty so
+    # the record begins with the first scan after deploy.
+    #
+    # Set it in the dashboard only if you copy a local database onto the disk and
+    # want the earlier months hidden. It excludes them from the monthly tab *and*
+    # the headline figures, so the two always reconcile.
     envVars:
-      # Where the published track record begins. Deliberately EMPTY, which means
-      # "show every month the ledger actually has".
-      #
-      # Only set it if you copy a local database onto the disk and want the early
-      # months hidden — it excludes them from the monthly tab *and* the headline
-      # figures, so the two always reconcile. Left blank it can never silently
-      # swallow real history, which is the failure mode worth avoiding: a track
-      # record with months quietly removed is worse than one with an untidy start.
-      #
-      # A fresh Render disk starts empty anyway, so the record will begin with the
-      # first scan after deploy without this being set at all.
-      - key: TRACKER_LEDGER_START
-        value: ""
-
       # Optional. Leave unset to keep Pulse switched off. There is no sign-in, so
       # setting this means anyone with the URL can spend real money through the
       # assistant — add it only when you're ready for that.
