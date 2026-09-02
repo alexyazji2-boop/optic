@@ -37,7 +37,11 @@ mkdir -p .share
 import os, subprocess
 proc = subprocess.Popen(
     ["caffeinate", "-is", "./share.sh"],
-    stdout=open(".share/share-stdout.log", "wb"),
+    # Appended, not truncated. This log is the only record of why the
+    # supervisor did what it did, and opening it "wb" wiped the evidence for the
+    # previous incident every time the share was restarted — which is precisely
+    # when you restart, so the post-mortem was never available.
+    stdout=open(".share/share-stdout.log", "ab"),
     stderr=subprocess.STDOUT,
     stdin=subprocess.DEVNULL,
     start_new_session=True,
@@ -64,6 +68,19 @@ if [ -z "$URL" ]; then
 fi
 
 echo "$URL" > .share/url.txt
+
+# No watchdog started here, deliberately.
+#
+# share.sh already supervises its own tunnel: it probes /healthz every 60s via a
+# dig-resolved IP and rotates after three consecutive failures. tunnel-watchdog.sh
+# is the standalone alternative for when share.sh is NOT running, and it refuses
+# to start alongside it — correctly, since two supervisors racing to remint the
+# same tunnel is how you churn through hostnames.
+#
+# Tried starting it here and it declined with "share.sh is running and already
+# supervises its tunnel", which is the right answer. Leaving the note so the next
+# person does not repeat the attempt.
+
 echo
 echo "  Public link:  $URL"
 echo

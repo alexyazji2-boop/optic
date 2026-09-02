@@ -631,6 +631,15 @@ def _sector_pair_idea(
 
 
 # What each composite input actually measures, in the terms a reader needs.
+# Why an input can be missing, in the reader's terms rather than "None".
+COMPONENT_UNAVAILABLE = {
+    "technicals": "not enough daily history to compute the indicators",
+    "gamma": "the option chain did not load, so dealer gamma could not be computed",
+    "flow": "the option chain did not load, so the flow proxy has nothing to read",
+    "news": "no recent headlines were retrieved for this name",
+    "macro": "the cross-asset macro read was not available on this request",
+}
+
 COMPONENT_MEANING = {
     "technicals": "Chart structure on daily bars: moving-average stacking, price versus the "
                   "200-day, RSI regime, and whether MACD is above or below its signal line.",
@@ -710,10 +719,21 @@ def verdict(
     for name, value in components.items():
         weight = WEIGHTS[name]
         if value is None:
+            # An excluded input is reported, not hidden. The composite silently
+            # redistributed its weight, which meant a 62/100 built from three of
+            # five inputs looked identical to one built from all five. Saying
+            # which category dropped out, and what it would have been worth, is
+            # the difference between a score you can audit and one you take on
+            # trust.
             breakdown.append({
-                "component": name, "score": None, "weight_pct": round(weight * 100, 0),
+                "component": name, "score": None,
+                "weight_pct": 0.0,
+                "nominal_weight_pct": round(weight * 100, 0),
                 "contribution": None, "measures": COMPONENT_MEANING[name],
                 "unavailable": True,
+                "status": "excluded",
+                "status_reason": COMPONENT_UNAVAILABLE.get(
+                    name, "no data available for this input on this scan"),
             })
             continue
         # Weights are renormalised over available components, so the contribution
@@ -723,9 +743,15 @@ def verdict(
             "component": name,
             "score": _f(value, 1),
             "weight_pct": round(effective * 100, 0),
+            # The weight this input would have carried had everything been
+            # available. Where the two differ, another input was excluded and this
+            # one absorbed its share.
+            "nominal_weight_pct": round(weight * 100, 0),
             "contribution": _f(value * effective, 1),
             "measures": COMPONENT_MEANING[name],
             "unavailable": False,
+            "status": "included",
+            "status_reason": None,
         })
 
     return {

@@ -84,6 +84,23 @@ def _catalysts(text: str) -> List[Dict[str, str]]:
     return found
 
 
+def classify(text: str) -> Dict[str, Any]:
+    """Public seam over the lexicon and catalyst taxonomy.
+
+    The daily brief classifies headlines that never came from a per-ticker news
+    call, so it needs the tagging without the rest of `analyse`. Exposed as one
+    function rather than letting another module import the private helpers, so
+    there stays exactly one definition of what counts as a catalyst — a second
+    taxonomy disagreeing with this one on the same headline across two tabs is a
+    bug report waiting to happen.
+
+    `tone` is the raw lexicon sum, unbounded and unnormalised: it is a rough
+    signal for sorting and colour, not a score to display as a number.
+    """
+    tone, hits = _score_text(text)
+    return {"tone": tone, "terms": hits[:6], "catalysts": _catalysts(text)}
+
+
 def _age_hours(published: str) -> Optional[float]:
     if not published:
         return None

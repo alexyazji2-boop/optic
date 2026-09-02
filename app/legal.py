@@ -79,6 +79,13 @@ AREAS: Dict[str, str] = {
         "lose money even when the direction is right."
     ),
     "tracker": SIMULATED,
+    "brief": (
+        "A summary of published news and filings, not analysis of it and not a "
+        "recommendation about any security mentioned. Headlines belong to their "
+        "publishers and link to the original; filings link to EDGAR. Nothing here "
+        "has been verified independently, and a company's own filing is its "
+        "account of events."
+    ),
     "macro": (
         "A regime read on the market as a whole. It is not a view on any individual "
         "security and not a recommendation to change your positioning."

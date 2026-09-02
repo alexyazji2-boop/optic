@@ -327,6 +327,74 @@ def support_resistance_levels(
 # --------------------------------------------------------------- entry point
 
 
+# Realized-volatility windows, and whether vol is opening up or settling down.
+#
+# There was already a single 20-day figure, which the IV/realized ratio compares
+# against. One window can say implied is 1.3x realized; it cannot say whether
+# that gap is closing. A 1.3x against vol that has doubled in a fortnight is a
+# market catching up to a real move; the same 1.3x against vol drifting lower is
+# the option actually being expensive. Those call for opposite trades, so the
+# ratio is close to unusable without the trend beside it.
+#
+# Close-to-close log returns, annualised by sqrt(252). Log returns rather than
+# simple percentage changes because they are additive across days, which is the
+# assumption the sqrt-time scaling depends on.
+HV_WINDOWS = (10, 20, 30, 60)
+
+# How far apart short- and long-window vol must sit before the move is called
+# rather than treated as noise. 15% of the slower reading: below that, the two
+# windows on the same series routinely differ by more than any story explains.
+HV_TREND_BAND = 0.15
+
+
+def realised_vol(close: pd.Series, window: int) -> Optional[float]:
+    """Annualised close-to-close volatility over `window` bars, in percent."""
+    if close is None or len(close) < window + 1:
+        return None
+    rets = np.log(close / close.shift(1)).dropna()
+    if len(rets) < window:
+        return None
+    sd = float(rets.tail(window).std(ddof=0))
+    if not np.isfinite(sd):
+        return None
+    return _f(sd * np.sqrt(252) * 100.0)
+
+
+def realised_vol_windows(df: pd.DataFrame) -> Dict[str, Any]:
+    """Realized vol across several windows, plus a plain read of the direction."""
+    if df is None or df.empty or "Close" not in df:
+        return {}
+    close = df["Close"].dropna()
+    out: Dict[str, Any] = {}
+    for window in HV_WINDOWS:
+        out[f"hv_{window}d"] = realised_vol(close, window)
+
+    fast, slow = out.get("hv_10d"), out.get("hv_60d")
+    trend, note = None, ""
+    if fast is not None and slow is not None and slow > 0:
+        change = (fast - slow) / slow
+        if change > HV_TREND_BAND:
+            trend = "expanding"
+            note = (f"10-day realized vol ({fast:.1f}%) is running "
+                    f"{change * 100:.0f}% above the 60-day ({slow:.1f}%) — "
+                    "the stock has become more volatile recently.")
+        elif change < -HV_TREND_BAND:
+            trend = "contracting"
+            note = (f"10-day realized vol ({fast:.1f}%) is running "
+                    f"{abs(change) * 100:.0f}% below the 60-day ({slow:.1f}%) — "
+                    "the stock has been settling down.")
+        else:
+            trend = "steady"
+            note = (f"10-day and 60-day realized vol are within "
+                    f"{HV_TREND_BAND * 100:.0f}% of each other, so recent movement "
+                    "is in line with the last quarter.")
+        # This module's _f takes no precision argument, unlike entry.py's.
+        out["hv_fast_vs_slow_pct"] = _f(round(change * 100.0, 1))
+    out["hv_trend"] = trend
+    out["hv_trend_note"] = note
+    return out
+
+
 def analyse(df: pd.DataFrame, swing_lookback: int = 120) -> Dict[str, Any]:
     """Compute the full technical picture from a daily OHLCV frame."""
     if df is None or len(df) < 30:
@@ -475,7 +543,16 @@ def analyse(df: pd.DataFrame, swing_lookback: int = 120) -> Dict[str, Any]:
     sr_levels = support_resistance_levels(df, spot)
 
     atr_v = _last(atr14)
-    realised_vol = _f(close.pct_change().tail(20).std(ddof=0) * np.sqrt(252) * 100.0)
+    hv = realised_vol_windows(df)
+    # One definition of 20-day realized vol, not two.
+    #
+    # This was `close.pct_change()` while the window ladder below uses log
+    # returns, so the same panel showed 36.7% and 37.2% under labels a reader
+    # would take to mean the same thing. Log returns win because they are
+    # additive across days, which is the assumption the sqrt(252) annualisation
+    # already relies on. The IV/realized ratio shifts by ~1.5% of itself and no
+    # verdict band (1.35 / 1.1 / 0.9) changes hands.
+    rv20 = hv.get("hv_20d")
 
     return {
         "spot": _f(spot),
@@ -531,8 +608,9 @@ def analyse(df: pd.DataFrame, swing_lookback: int = 120) -> Dict[str, Any]:
         "volatility": {
             "atr14": atr_v,
             "atr_pct": _f(atr_v / spot * 100.0) if atr_v else None,
-            "realised_vol_20d": realised_vol,
+            "realised_vol_20d": rv20,
             "expected_2w_move_pct": _f(atr_v / spot * 100.0 * np.sqrt(10)) if atr_v else None,
+            **hv,
         },
         "swing_points": swing,
         "fibonacci": fib,
@@ -552,6 +630,12 @@ def analyse(df: pd.DataFrame, swing_lookback: int = 120) -> Dict[str, Any]:
             "sma20": [_f(v) for v in mas["sma20"]],
             "sma50": [_f(v) for v in mas["sma50"]],
             "sma200": [_f(v) for v in mas["sma200"]],
+            # All three EMAs, not just the 21. The stack reading (9/21/50) was
+            # already computed and shown as a tile, but only the 21 was ever sent
+            # as a series — so the chart could not draw the thing the tile was
+            # describing.
+            "ema9": [_f(v) for v in mas["ema9"]],
             "ema21": [_f(v) for v in mas["ema21"]],
+            "ema50": [_f(v) for v in mas["ema50"]],
         },
     }

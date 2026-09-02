@@ -1,0 +1,65 @@
+# Optic Terminal on Fly.io
+#
+# Three settings here are load-bearing and easy to get wrong. Each is explained
+# where it sits rather than in a README nobody opens.
+
+app = "optic-terminal"
+primary_region = "ewr"          # Newark — closest to the US market data feeds
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  TRACKER_DATA_DIR = "/data"
+  # The brief rebuilds at 09:00 Eastern daily, weekends included.
+  BRIEF_ANCHOR_HOUR = "9"
+
+# The SQLite databases — the paper ledger, the brief archive, the catalyst store.
+# Without this volume every deploy starts the ledger from zero, which would
+# silently reset a record that is meant to accumulate.
+[mounts]
+  source = "optic_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+
+  # LOAD-BEARING #1: never stop the machine.
+  #
+  # Fly's default is to suspend an idle machine and wake it on the next request.
+  # That breaks this app specifically: the tracker loop scans every four hours and
+  # the brief rebuilds at 09:00 ET, both on background timers inside the process.
+  # A suspended machine runs no timers, so the ledger would only ever scan when
+  # somebody happened to load the page — and the 09:00 brief would simply never
+  # fire. Cheaper, and useless.
+  auto_stop_machines = false
+  auto_start_machines = true
+
+  # LOAD-BEARING #2: exactly one machine.
+  #
+  # The ledger is SQLite on a single volume. A second machine cannot mount the
+  # same volume, and two machines with two volumes means two divergent ledgers
+  # served at random to whoever connects. The Dockerfile already pins uvicorn to
+  # one worker for the same class of reason (the yfinance rate-limit lock is
+  # in-process).
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "60s"
+    method = "GET"
+    path = "/healthz"
+
+[[vm]]
+  # LOAD-BEARING #3: memory.
+  #
+  # A scan pulls daily bars for ~3,000 symbols through pandas and numpy. Measured
+  # locally the process peaks around 700MB during a full scan, so 512MB gets
+  # OOM-killed mid-scan — which looks like a scan that "found nothing" rather
+  # than a crash, because the tracker treats a failed scan as an empty one.
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1

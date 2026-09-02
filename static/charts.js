@@ -138,22 +138,287 @@ function showTip(html, evt) {
   const tip = TIP();
   tip.innerHTML = html;
   tip.classList.add('on');
-  const pad = 14;
   const rect = tip.getBoundingClientRect();
-  let x = evt.clientX + pad;
-  let y = evt.clientY + pad;
-  if (x + rect.width > window.innerWidth - 8) x = evt.clientX - rect.width - pad;
-  if (y + rect.height > window.innerHeight - 8) y = evt.clientY - rect.height - pad;
+  const edge = 8;
+  const touch = evt.pointerType && evt.pointerType !== 'mouse';
+
+  // A finger covers roughly 40px of screen. Placing the readout below the point
+  // the way a cursor tooltip does puts it directly under the hand holding the
+  // phone, so on touch it goes above the contact point and further away.
+  const pad = touch ? 26 : 14;
+  let x = evt.clientX + (touch ? -rect.width / 2 : pad);
+  let y = touch ? evt.clientY - rect.height - pad : evt.clientY + pad;
+
+  if (!touch && x + rect.width > window.innerWidth - edge) {
+    x = evt.clientX - rect.width - pad;
+  }
+  if (!touch && y + rect.height > window.innerHeight - edge) {
+    y = evt.clientY - rect.height - pad;
+  }
+  // Clamp both axes unconditionally. The old code only flipped, which still let
+  // the box run off the top or bottom on a short viewport — at phone height the
+  // readout was partly off-screen.
+  x = Math.max(edge, Math.min(x, window.innerWidth - rect.width - edge));
+  y = Math.max(edge, Math.min(y, window.innerHeight - rect.height - edge));
+
   tip.style.left = x + 'px';
   tip.style.top = y + 'px';
 }
 
 function hideTip() { TIP().classList.remove('on'); }
 
+/* Bind chart scrubbing for mouse *and* touch.
+ *
+ * The charts only listened for mousemove, so on a phone they had no readout at
+ * all — the tooltip is the only way to get an exact value off a line, and it was
+ * desktop-only. Pointer events unify the three input types: for a mouse
+ * `pointermove` fires on hover exactly as before, and for touch it fires while a
+ * finger is down, which is the scrubbing gesture people already expect from a
+ * price chart.
+ *
+ * `touch-action: pan-y` is the important part. Without it the browser either
+ * treats the drag as a page scroll (so the chart never sees it) or, with
+ * `none`, swallows vertical scrolling so the page traps the finger inside the
+ * chart. `pan-y` gives the axis away and keeps the other: drag sideways to
+ * scrub, drag up and down to scroll past.
+ */
+function bindScrub(el, onMove, onEnd) {
+  el.style.touchAction = 'pan-y';
+  el.addEventListener('pointermove', (evt) => {
+    // A touch that isn't pressed is a stray hover event from a hybrid device.
+    if (evt.pointerType !== 'mouse' && evt.pressure === 0 && evt.buttons === 0) return;
+    onMove(evt);
+  });
+  el.addEventListener('pointerdown', (evt) => {
+    // Report immediately on tap rather than waiting for the first movement.
+    onMove(evt);
+    if (el.setPointerCapture && evt.pointerType !== 'mouse') {
+      // Keeps events coming if the finger strays outside the plot mid-drag.
+      try { el.setPointerCapture(evt.pointerId); } catch (e) { /* not critical */ }
+    }
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach((type) => {
+    el.addEventListener(type, (evt) => {
+      // A mouse leaving means "stop"; a mouse button release does not.
+      if (type === 'pointerup' && evt.pointerType === 'mouse') return;
+      onEnd();
+    });
+  });
+}
+
 function tipRows(title, rows) {
   return `<div class="t-title">${title}</div>` + rows
     .map(([k, v]) => `<div class="t-row"><span>${k}</span><span>${v}</span></div>`)
     .join('');
+}
+
+/* --------------------------------------------------------- draw-on animation
+ *
+ * The line sweeps in from the left and the axis, levels and markers fade in
+ * behind it. Done with stroke-dashoffset: a polyline's dash pattern set to its
+ * own length, offset by that length, is invisible; animating the offset to zero
+ * reveals it end to end. That traces the actual path rather than wiping a
+ * rectangle across it, so it follows the data.
+ *
+ * Two things it deliberately does NOT do.
+ *
+ * It doesn't animate on a silent refresh. The swing view re-renders every 20
+ * seconds while the market is open, and a chart that redraws itself on a timer
+ * while you're reading it is worse than one that never animates at all — so the
+ * flag is set by the loaders and only for a foreground load.
+ *
+ * It doesn't animate on resize, for the same reason: dragging a window edge
+ * would otherwise replay it on every frame.
+ */
+let animateNextChart = false;
+
+function setChartAnimation(on) { animateNextChart = on; }
+
+/* Whether the next chart's leading point should pulse.
+ *
+ * Set from the market clock, not from "a fetch happened": a dot that blinks
+ * while the market is shut is telling the reader something untrue. The pulse
+ * means "this point is still moving", which is only the case in a live session.
+ */
+let liveNextChart = false;
+
+function setChartLive(on) { liveNextChart = on; }
+
+const reducedMotion = () => window.matchMedia
+  && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const DRAW_MS = 620;
+const FADE_MS = 300;
+
+/* The primary line leads; each subsequent series follows 70ms behind, which
+ * reads as one gesture rather than several lines racing. Each chart gets its own
+ * counter, so a MACD panel doesn't inherit the price chart's ordering. */
+const DRAW_STAGGER_MS = 70;
+function makeStagger() {
+  let order = 0;
+  return () => (order++) * DRAW_STAGGER_MS;
+}
+
+/* One observer for every waiting chart. The Map is keyed by the SVG root so the
+ * callback can be recovered from entry.target, and entries are deleted as they
+ * fire so nothing accumulates across view switches. */
+const deferredDraws = new Map();
+let drawObserver = null;
+
+/* Forget charts whose DOM has been swapped out. A detached node can never
+ * intersect anything, so its entry would sit in the Map holding a reference to a
+ * dead SVG tree. Called on every queue and every pending check. */
+function pruneDeferredDraws() {
+  deferredDraws.forEach((pending, root) => {
+    if (root.isConnected) return;
+    if (drawObserver) drawObserver.unobserve(root);
+    deferredDraws.delete(root);
+  });
+}
+
+/* There is deliberately no timeout here.
+ *
+ * The first version gave a waiting chart 15 seconds and then revealed it
+ * undrawn, as insurance against IntersectionObserver never firing. That
+ * insurance was the bug: a reader who takes longer than 15 seconds to scroll
+ * down — which is most readers, on a page this long — arrived to find every
+ * chart already revealed and the animation silently cancelled. Instrumenting the
+ * page showed exactly that, six charts queued and then flushed at ~26s with the
+ * viewport still at the top.
+ *
+ * Waiting indefinitely is safe because a pre-hidden chart is by definition
+ * off-screen, so nobody is looking at the thing being withheld. Whatever makes
+ * it visible later — scrolling, a window resize, revealing the tab it sits in —
+ * fires the observer, and the absent-API case falls through to drawing at once.
+ */
+function releaseWhenVisible(root, start) {
+  const rect = root.getBoundingClientRect();
+  const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+  // Already on screen: draw now.
+  if (rect.top < vh * 0.92 && rect.bottom > 0) { start(); return; }
+  if (typeof IntersectionObserver !== 'function') { start(); return; }
+
+  if (!drawObserver) {
+    drawObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const pending = deferredDraws.get(entry.target);
+        drawObserver.unobserve(entry.target);
+        deferredDraws.delete(entry.target);
+        if (pending) pending.start();
+      });
+    // A fifth of the chart has to be on screen, and the bottom edge is pulled in
+    // so the draw doesn't start while only the top pixel row is peeking up.
+    }, { threshold: 0.2, rootMargin: '0px 0px -10% 0px' });
+  }
+
+  pruneDeferredDraws();
+  deferredDraws.set(root, { start });
+  drawObserver.observe(root);
+}
+
+/* Is any chart still waiting to be scrolled to?
+ *
+ * The silent refresh needs this. It rebuilds the view every 20 seconds with
+ * animation off, which was quietly cancelling the whole feature: a chart that
+ * had been deferred until it scrolled into view got replaced by a plain one
+ * before the reader ever got down the page, so the draw only ever appeared if
+ * you happened to scroll within the first twenty seconds. If something is still
+ * pending, the replacement keeps its tags and waits its turn too.
+ *
+ * Detached roots are dropped first — a chart whose DOM was swapped out can never
+ * intersect anything. This runs before the new render, while the outgoing chart
+ * is still connected, so a genuinely-pending draw survives the swap.
+ */
+function hasPendingDraws() {
+  pruneDeferredDraws();
+  return deferredDraws.size > 0;
+}
+
+/** Kick off the animation. Must run after the SVG is in the document —
+ *  getTotalLength() returns 0 on a detached node.
+ *
+ *  Uses element.animate() rather than a CSS transition. The transition version
+ *  silently did nothing: it depends on the browser painting the start value
+ *  before the end value is assigned, and no amount of requestAnimationFrame
+ *  nesting made that reliable — the computed stroke-dashoffset never left zero.
+ *  The Web Animations API states both keyframes explicitly, so there is no
+ *  paint-timing race to lose. It also tidies up after itself, which is what the
+ *  setTimeout cleanup was for.
+ *
+ *  Charts below the fold wait until they are scrolled to.
+ *
+ *  Without that they were animating on schedule and nobody ever saw it: the
+ *  price chart on the swing view sits several panels down, so the whole 620ms
+ *  sweep finished while the reader was still at the top of the page and the
+ *  chart was fully drawn by the time it came into view. Deferring is also just
+ *  better behaviour — every chart on a long page introduces itself as you reach
+ *  it, instead of all nineteen animating at once into an empty viewport.
+ */
+function animateChart(root) {
+  if (!root || !root.querySelectorAll) return;
+  const lines = root.querySelectorAll('[data-draw]');
+  const fades = root.querySelectorAll('[data-fade]');
+  if (!lines.length && !fades.length) return;
+  // Older Safari lacks element.animate on SVG; the chart is fully drawn either
+  // way, so the fallback is simply no animation.
+  if (typeof root.animate !== 'function') return;
+
+  // Measure now, while the node is attached and laid out — by the time a
+  // deferred chart is scrolled to, this is all still valid, and doing it here
+  // keeps the hidden state and the animation working from identical numbers.
+  const draws = [];
+  lines.forEach((el) => {
+    let len = 0;
+    try { len = el.getTotalLength(); } catch (e) { len = 0; }
+    if (!len || !isFinite(len)) return;
+    draws.push({ el, len, delay: Number(el.getAttribute('data-draw')) || 0 });
+  });
+  const fadeIns = [...fades].map((el) => ({
+    el, delay: Number(el.getAttribute('data-fade')) || 0,
+  }));
+  if (!draws.length && !fadeIns.length) return;
+
+  // Pre-hide, so a deferred chart isn't sitting there fully drawn and then
+  // blanking itself the moment it scrolls into view.
+  const hide = () => {
+    draws.forEach(({ el, len }) => {
+      el.style.strokeDasharray = `${len}`;
+      el.style.strokeDashoffset = `${len}`;
+    });
+    fadeIns.forEach(({ el }) => { el.style.opacity = '0'; });
+  };
+  const start = () => {
+    draws.forEach(({ el, len, delay }) => {
+      // dasharray has to be set for dashoffset to mean anything; the inline
+      // offset is cleared on finish or the element would snap back to hidden.
+      el.style.strokeDasharray = `${len}`;
+      el.style.strokeDashoffset = `${len}`;
+      const anim = el.animate(
+        [{ strokeDashoffset: len }, { strokeDashoffset: 0 }],
+        { duration: DRAW_MS, delay, easing: 'cubic-bezier(0.33, 1, 0.68, 1)', fill: 'backwards' },
+      );
+      anim.finished.then(() => {
+        el.style.strokeDasharray = '';
+        el.style.strokeDashoffset = '';
+      }).catch(() => {});
+    });
+
+    fadeIns.forEach(({ el, delay }) => {
+      el.style.opacity = '0';
+      // The second keyframe is deliberately empty rather than `{ opacity: 1 }`.
+      // An empty keyframe resolves to the element's own value, which matters for
+      // anything not naturally opaque: the area fill sits at 0.1, so fading it to
+      // 1 drove it to a solid block and then snapped it back to 0.1 on finish — a
+      // visible flash right as the line completed.
+      const anim = el.animate([{ opacity: 0 }, {}],
+        { duration: FADE_MS, delay, easing: 'ease-out', fill: 'backwards' });
+      anim.finished.then(() => { el.style.opacity = ''; }).catch(() => {});
+    });
+  };
+
+  hide();
+  releaseWhenVisible(root, start);
 }
 
 /* ------------------------------------------------------------- line charts */
@@ -172,11 +437,45 @@ function lineChart(opts) {
     // Folded into this chart rather than a separate function so candles inherit
     // the axis, date labels, reference-line placement and hover layer.
     candles = null,
+    // Sloped lines in (bar index, price) space — trend lines, channels, and any
+    // drawing anchored to two points. refLines cannot express these: they are
+    // horizontal by construction, which is right for a level and wrong for a
+    // trend. Each is {x1, y1, x2, y2, color, width, dash, label, extend}.
+    segments = [],
+    // Session dividers: a vertical line wherever the calendar day changes.
+    // Only meaningful intraday — on a daily chart every bar is a new day and the
+    // result is a line per bar, so the caller gates this, not the renderer.
+    sessions = null,
+    // Daily volume, drawn as a band of bars beneath the price plot. Its own
+    // scale, its own strip: sharing the price axis would either flatten the bars
+    // to nothing or crush the price into the top third. Bars are tinted by the
+    // day's direction so a high-volume down day is visually distinct from a
+    // high-volume up day, which is the whole reason to look at volume.
+    volume = null,
+    // Share of the chart height given to the volume strip.
+    volumeShare = 0.18,
+    // Volume by price: [{price, volume}] buckets drawn as horizontal bars against
+    // the right edge, sharing the PRICE axis. This is the one overlay that
+    // genuinely belongs on the price scale — it answers "how much traded here",
+    // and the answer is only meaningful next to the level it refers to.
+    volumeProfile = null,
+    // Share of the plot width the profile may occupy. Kept small: it is context
+    // behind the price, not a second chart competing with it.
+    profileShare = 0.16,
+    // Dated events to pin on the price line: [{date|index, kind, label, detail}].
+    // kind is 'buy' or 'sell'. Used for insider transactions, where the date and
+    // the direction are the whole point and the price at that date is the anchor.
+    events = null,
     // 'expand' (default) grows the y-axis to include every reference line.
     // 'clip' sizes the axis from the price data alone and drops lines that fall
     // outside it — a chart with levels 25% away otherwise compresses the actual
     // price action into a thin band in the middle.
     refLineFit = 'expand',
+    // 'right' (default) or 'left'. The labels are pills drawn inside the plot, so
+    // the side matters: on a multi-year chart the recent action is bunched at the
+    // right edge and right-aligned labels cover exactly the bars a reader is
+    // looking at. Left is emptier there.
+    refLabelSide = 'right',
     // How far past the price range a clipped reference line may still pull the
     // axis, as a fraction of the data span. A strict clip dropped the swing high
     // that sits 3% above a stock trading at its highs — which is precisely the
@@ -192,11 +491,30 @@ function lineChart(opts) {
     // Vertical event markers, given as {index, color, label}. Used for the point
     // where two series cross.
     vMarkers = [],
+    // Price bands: [{top, bottom, color, label}]. Drawn as filled rectangles
+    // spanning the plot, beneath the data. Used for supply and demand zones,
+    // which are genuinely areas rather than lines — the unfilled orders that
+    // define one sit across the range that formed it, so collapsing a zone to a
+    // single price would misrepresent what it is.
+    bands = [],
+    // Draw each series' latest value as a coloured pill on the price axis.
+    //
+    // The single biggest readability gap against a platform chart: with four
+    // lines on one plot, knowing that the 50-day sits at 215.08 meant either
+    // hovering for a tooltip or matching a legend colour against a number in a
+    // tile below the chart. The value belongs at the end of the line it describes.
+    //
+    // Off by default so the panels that are deliberately spare — sparklines,
+    // the breadth strip — do not grow a gutter they have no use for.
+    valueTags = false,
   } = opts;
 
   const W = width;
   const H = height;
-  const m = { t: 12, r: 58, b: 22, l: 8 };
+  // r was 58, sized for a bare tick label. The value tags below sit in this
+  // gutter, so it has to hold "1,234.56" plus the pill padding — otherwise the
+  // tag overhangs the viewBox and gets clipped.
+  const m = { t: 12, r: valueTags ? 74 : 58, b: 22, l: 8 };
   const plotW = W - m.l - m.r;
   const plotH = H - m.t - m.b;
 
@@ -212,6 +530,18 @@ function lineChart(opts) {
     const slack = (dHi - dLo) * refLineSlack;
     refLines.forEach((r) => {
       if (isFinite(r.value) && r.value >= dLo - slack && r.value <= dHi + slack) all.push(r.value);
+    });
+  }
+  // Bands, after the reference-line chain rather than inside it. Slotting this
+  // between the `if` and its `else if` orphaned the else and took the whole file
+  // out — every chart global went undefined at once.
+  //
+  // Under 'clip' a band is not offered to the domain at all: a zone 30% away
+  // would compress the price action into a ribbon, and the panel already reports
+  // zones that are out of reach separately.
+  if (refLineFit !== 'clip') {
+    bands.forEach((b) => {
+      if (isFinite(b.top) && isFinite(b.bottom)) all.push(b.top, b.bottom);
     });
   }
   // Wicks reach beyond the closes, so the range has to include them or the
@@ -235,17 +565,65 @@ function lineChart(opts) {
   }
 
   const n = Math.max(...series.map((se) => se.values.length), (candles && (candles.close || []).length) || 0, 1);
+
+  // Volume takes a strip off the bottom and the price plot shrinks to fit. This
+  // has to happen before Y() is defined: scaling price over the full plot height
+  // and then drawing bars into the bottom of it overlaps the two.
+  const volRows = (volume && volume.length) ? volume : null;
+  const volH = volRows ? Math.round(plotH * volumeShare) : 0;
+  const volGap = volRows ? 6 : 0;
+  const priceH = plotH - volH - volGap;
+
   const X = (i) => m.l + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW);
-  const Y = (v) => m.t + plotH - ((v - lo) / (hi - lo)) * plotH;
+  const Y = (v) => m.t + priceH - ((v - lo) / (hi - lo)) * priceH;
 
   const root = svgRoot(W, H);
+
+  // Captured once per chart so a flag flipped mid-render can't half-animate it.
+  const animating = animateNextChart && !reducedMotion();
+  const seriesDelay = makeStagger();
   // Scale gridline count with available height — a fixed 4 ticks leaves a tall
   // chart with a sparse, hard-to-read axis. ~65px per tick keeps labels legible.
-  const ticks = niceTicks(lo, hi, Math.max(3, Math.min(8, Math.round(plotH / 65))));
+  const ticks = niceTicks(lo, hi, Math.max(3, Math.min(8, Math.round(priceH / 65))));
 
   let lastTickLabel = null;
+  const gridLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.45 : null });
+  root.appendChild(gridLayer);
+
+  /* Volume by price.
+   *
+   * Horizontal bars against the right edge on the PRICE axis, so each bar sits
+   * level with the prices it describes. Drawn immediately after the grid and
+   * before anything else, because it is background: the price line should read
+   * over the profile, never the reverse.
+   *
+   * Deliberately low contrast and capped at a fraction of the width. A profile
+   * drawn boldly competes with the line it is meant to contextualise, and the
+   * useful signal is the SHAPE — where the fat nodes and the thin gaps are —
+   * not any individual bar's exact length.
+   */
+  if (volumeProfile && volumeProfile.length) {
+    const vpLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.4 : null });
+    root.appendChild(vpLayer);
+    const maxVol = Math.max(...volumeProfile.map((b) => b.volume || 0), 1);
+    const maxW = plotW * profileShare;
+    const sorted = volumeProfile.map((b) => b.price).filter(isFinite).sort((a, b) => a - b);
+    const gaps = sorted.slice(1).map((v, i) => v - sorted[i]).filter((d) => d > 0);
+    const step = gaps.length ? Math.min(...gaps) : (hi - lo) / 20;
+    const barH = Math.max(1, Math.abs(Y(lo) - Y(lo + step)) - 1);
+    volumeProfile.forEach((b) => {
+      const v = b.volume || 0;
+      if (v <= 0 || !isFinite(b.price) || b.price < lo || b.price > hi) return;
+      const w = Math.max(1, (v / maxVol) * maxW);
+      vpLayer.appendChild(s('rect', {
+        x: m.l + plotW - w, y: Y(b.price) - barH / 2, width: w, height: barH,
+        // The point-of-control bucket is the one worth finding at a glance.
+        fill: b.poc ? C.s4 : C.ink2, opacity: b.poc ? 0.34 : 0.16,
+      }));
+    });
+  }
   ticks.forEach((t) => {
-    root.appendChild(s('line', {
+    gridLayer.appendChild(s('line', {
       x1: m.l, y1: Y(t), x2: m.l + plotW, y2: Y(t), stroke: C.grid,
       'stroke-width': 1, opacity: 0.55,
     }));
@@ -254,17 +632,111 @@ function lineChart(opts) {
     const text = yFormat(t);
     if (text === lastTickLabel) return;
     lastTickLabel = text;
-    root.appendChild(s('text', {
-      x: m.l + plotW + 6, y: Y(t) + 3.5, fill: C.muted, 'font-size': 10.5,
+    gridLayer.appendChild(s('text', {
+      x: m.l + plotW + 6, y: Y(t) + 3.5, fill: C.muted, 'font-size': 10,
       'font-variant-numeric': 'tabular-nums',
     }, text));
   });
 
   if (zeroLine && lo < 0 && hi > 0) {
-    root.appendChild(s('line', {
+    gridLayer.appendChild(s('line', {
       x1: m.l, y1: Y(0), x2: m.l + plotW, y2: Y(0), stroke: C.baseline, 'stroke-width': 1,
     }));
   }
+
+  /* Volume strip.
+   *
+   * Own scale, own band beneath the price. Tinted by the day's direction, because
+   * the reason to look at volume at all is to tell a heavy up day from a heavy
+   * down day — a single-colour strip answers "how much" but not "which way", and
+   * "which way" is the half that matters.
+   */
+  // Indexed by bar so the crosshair can light the one under the cursor. A
+  // reader scrubbing the price line is asking about that day, and the volume
+  // for that day is part of the answer.
+  const volBars = [];
+  if (volRows) {
+    const volTop = m.t + priceH + volGap;
+    const volMax = Math.max(...volRows.map((v) => (v === null || !isFinite(v) ? 0 : v)), 1);
+    const volLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.5 : null });
+    root.appendChild(volLayer);
+
+    const closes = (candles && candles.close) || (series[0] && series[0].values) || [];
+    const barW = Math.max(1, (plotW / Math.max(n, 1)) - 1.5);
+    volRows.forEach((v, i) => {
+      if (v === null || !isFinite(v) || v <= 0) return;
+      const h = Math.max(1, (v / volMax) * volH);
+      // Direction from the close-to-close change, falling back to neutral on the
+      // first bar where there is no prior close to compare against.
+      const prev = closes[i - 1];
+      const cur = closes[i];
+      const up = (prev === null || prev === undefined || cur === null || cur === undefined)
+        ? null : cur >= prev;
+      const bar = s('rect', {
+        x: X(i) - barW / 2, y: volTop + volH - h, width: barW, height: h,
+        fill: up === null ? C.muted : (up ? C.pos : C.neg),
+        opacity: 0.42, rx: Math.min(1.5, barW / 2),
+      });
+      volBars[i] = bar;
+      volLayer.appendChild(bar);
+    });
+    // One quiet label so the strip is identifiable without a legend entry.
+    volLayer.appendChild(s('text', {
+      x: m.l + 2, y: volTop + 9, fill: C.muted, 'font-size': 10,
+    }, 'Volume'));
+  }
+
+  // Levels arrive last: they annotate the price, so they should appear once the
+  // price is there to annotate. Created here, ahead of the series, so everything
+  // in it still renders *underneath* the data.
+  const levelLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.8 : null });
+  root.appendChild(levelLayer);
+
+  // Bands first, so a reference line crossing a zone stays visible on top of it.
+  // Clipped to the plot rather than dropped when partly outside: half a zone at
+  // the edge of the axis is still information about where it is.
+  /* Bands: a filled price range with its edges marked.
+   *
+   * Used for three families that are all genuinely ranges rather than lines —
+   * Fibonacci intervals, support and resistance shelves, and supply/demand zones.
+   * Drawing any of them as a single hairline claimed a precision the underlying
+   * method does not have: an S/R level is a cluster with an ATR-scaled tolerance,
+   * and the interesting Fibonacci fact is which pair price sits between.
+   *
+   * Labels are placed top-down with a minimum spacing, because seven Fibonacci
+   * bands on a six-month chart put their captions within a few pixels of each
+   * other and the overlap made all of them unreadable.
+   */
+  let lastLabelY = -Infinity;
+  bands.forEach((b) => {
+    if (!isFinite(b.top) || !isFinite(b.bottom)) return;
+    if (b.bottom > hi || b.top < lo) return;          // entirely off the axis
+    const yTop = Y(Math.min(b.top, hi));
+    const yBot = Y(Math.max(b.bottom, lo));
+    const height = Math.max(1.5, yBot - yTop);
+    levelLayer.appendChild(s('rect', {
+      x: m.l, y: yTop, width: plotW, height,
+      fill: b.color || C.ink2, opacity: b.opacity == null ? 0.13 : b.opacity,
+    }));
+    if (b.edge !== false) {
+      // The edges are the prices that actually matter; at 7% fill a thin band is
+      // otherwise impossible to locate.
+      const edgeOp = b.edgeOpacity == null ? 0.55 : b.edgeOpacity;
+      [yTop, yTop + height].forEach((yy) => {
+        levelLayer.appendChild(s('line', {
+          x1: m.l, y1: yy, x2: m.l + plotW, y2: yy,
+          stroke: b.color || C.ink2, 'stroke-width': 1, opacity: edgeOp,
+        }));
+      });
+    }
+    if (b.label && yTop - lastLabelY > 12) {
+      lastLabelY = yTop;
+      levelLayer.appendChild(s('text', {
+        x: m.l + 6, y: yTop + 11, fill: b.color || C.ink2, 'font-size': 10,
+        'font-weight': 600, opacity: 0.95,
+      }, b.label));
+    }
+  });
 
   // Reference lines sit under the data: they are context, not a series. Once the
   // scale is fixed, anything outside it is dropped rather than clamped to the
@@ -273,7 +745,7 @@ function lineChart(opts) {
     (r) => isFinite(r.value) && (refLineFit !== 'clip' || (r.value >= lo && r.value <= hi)),
   );
   visibleRefs.forEach((r) => {
-    root.appendChild(s('line', {
+    levelLayer.appendChild(s('line', {
       x1: m.l, y1: Y(r.value), x2: m.l + plotW, y2: Y(r.value),
       stroke: r.color || C.baseline,
       // Thicker and brighter than before. The old 1px at 34% opacity disappeared
@@ -289,24 +761,89 @@ function lineChart(opts) {
     }));
   });
 
+  /* Session dividers.
+   *
+   * Drawn from the labels rather than from a separate array: the label already
+   * carries the timestamp, and taking the date part of it is what "a new session
+   * started here" means. Behind the price line and the drawings, in front of the
+   * grid — it is orientation, not data.
+   */
+  if (sessions && n > 1) {
+    const dayOf = (v) => String(v || '').slice(0, 10);
+    let prev = dayOf(labels[0]);
+    let drawn = 0;
+    for (let i = 1; i < n; i += 1) {
+      const day = dayOf(labels[i]);
+      if (day === prev) continue;
+      prev = day;
+      // A daily chart changes day on every bar. Bailing out is better than
+      // painting a picket fence over the price action.
+      drawn += 1;
+      if (drawn > n / 3) break;
+      levelLayer.appendChild(s('line', {
+        x1: X(i), y1: m.t, x2: X(i), y2: m.t + priceH,
+        stroke: C.baseline, 'stroke-width': 1, 'stroke-dasharray': '3 5',
+        opacity: 0.6,
+      }));
+    }
+  }
+
+  /* Sloped segments.
+   *
+   * Clipped to the plot rather than to the data range: a trend line's whole
+   * point is where it projects to, and cutting it at the last bar removes the
+   * part you were looking for. `extend` carries it to the right edge.
+   */
+  segments.forEach((sg) => {
+    if (![sg.x1, sg.y1, sg.x2, sg.y2].every((v) => isFinite(v))) return;
+    const i1 = Math.max(0, Math.min(n - 1, sg.x1));
+    const i2 = Math.max(0, Math.min(n - 1, sg.x2));
+    const px1 = X(i1);
+    const px2 = X(i2);
+    // Recompute the endpoint prices after clamping, so a clipped line keeps its
+    // slope instead of being sheared toward the clamped x.
+    const t = (i) => (sg.x2 === sg.x1 ? 0 : (i - sg.x1) / (sg.x2 - sg.x1));
+    const py1 = Y(sg.y1 + (sg.y2 - sg.y1) * t(i1));
+    const py2 = Y(sg.y1 + (sg.y2 - sg.y1) * t(i2));
+    levelLayer.appendChild(s('line', {
+      x1: px1, y1: py1, x2: px2, y2: py2,
+      stroke: sg.color || C.ink2,
+      'stroke-width': sg.width || 1.6,
+      'stroke-dasharray': sg.dash || null,
+      'stroke-linecap': 'round',
+      opacity: sg.opacity === undefined ? 0.9 : sg.opacity,
+    }));
+    if (sg.label) {
+      // At the right end, where the line is heading — which is the end a reader
+      // is asking about.
+      const atRight = px2 >= px1;
+      levelLayer.appendChild(s('text', {
+        x: (atRight ? px2 : px1) - (atRight ? 4 : -4),
+        y: (atRight ? py2 : py1) - 5,
+        'text-anchor': atRight ? 'end' : 'start',
+        fill: sg.color || C.ink2, 'font-size': 10, 'font-weight': 600,
+      }, sg.label));
+    }
+  });
+
   vMarkers.forEach((mk) => {
     if (!(mk.index >= 0 && mk.index < n)) return;
     const cx = X(mk.index);
-    root.appendChild(s('line', {
-      x1: cx, y1: m.t, x2: cx, y2: m.t + plotH, stroke: mk.color || C.ink2,
+    levelLayer.appendChild(s('line', {
+      x1: cx, y1: m.t, x2: cx, y2: m.t + priceH, stroke: mk.color || C.ink2,
       'stroke-width': 1.4, 'stroke-dasharray': '6 4', opacity: 0.75,
     }));
     if (mk.label) {
       // Flip the anchor near the right edge so the text stays inside the plot.
       const nearRight = cx > m.l + plotW * 0.62;
-      root.appendChild(s('text', {
+      levelLayer.appendChild(s('text', {
         x: nearRight ? cx - 6 : cx + 6, y: m.t + 11, fill: mk.color || C.ink2,
-        'font-size': 10.5, 'font-weight': 600,
+        'font-size': 10, 'font-weight': 600,
         'text-anchor': nearRight ? 'end' : 'start',
       }, mk.label));
     }
     if (isFinite(mk.value)) {
-      root.appendChild(s('circle', {
+      levelLayer.appendChild(s('circle', {
         cx, cy: Y(mk.value), r: 3.4, fill: mk.color || C.ink2,
         stroke: C.surface, 'stroke-width': 1.5,
       }));
@@ -332,7 +869,7 @@ function lineChart(opts) {
 
   let prevY = -Infinity;
   labeled.forEach((r) => {
-    r.y = Math.min(Math.max(r.lineY - 4, prevY + LABEL_GAP), m.t + plotH - 2);
+    r.y = Math.min(Math.max(r.lineY - 4, prevY + LABEL_GAP), m.t + priceH - 2);
     prevY = r.y;
   });
 
@@ -350,7 +887,7 @@ function lineChart(opts) {
       const up = cc >= oo;
       const colour = up ? C.s3 : C.s8;
       const x = X(i);
-      root.appendChild(s('line', {
+      levelLayer.appendChild(s('line', {
         x1: x, y1: Y(hh), x2: x, y2: Y(ll), stroke: colour, 'stroke-width': 1,
       }));
       // A doji (open === close) has zero height, which would render nothing —
@@ -360,14 +897,14 @@ function lineChart(opts) {
       // Both directions filled. Hollow-up is a real convention on some platforms,
       // but mixing it with filled-down makes the two look like different kinds of
       // mark rather than the same mark in two colours.
-      root.appendChild(s('rect', {
+      levelLayer.appendChild(s('rect', {
         x: x - body / 2, y: top, width: body, height,
         fill: colour, stroke: colour, 'stroke-width': 1,
       }));
     }
   }
 
-  series.forEach((se) => {
+  series.forEach((se, si) => {
     if (se.hidden) return;  // present for hover/tooltip only, not drawn
     const pts = [];
     se.values.forEach((v, i) => {
@@ -380,21 +917,43 @@ function lineChart(opts) {
       root.appendChild(s('path', {
         d: `M${pts[0].split(',')[0]},${base} L${pts.join(' L')} L${pts[pts.length - 1].split(',')[0]},${base} Z`,
         fill: se.color, opacity: 0.1, stroke: 'none',
+        // Fades rather than sweeps: an area clipped to a growing width reads as a
+        // curtain, and it would race the line it sits under.
+        'data-fade': animating ? DRAW_MS * 0.55 : null,
       }));
     }
     root.appendChild(s('polyline', {
       points: pts.join(' '), fill: 'none', stroke: se.color,
       'stroke-width': se.width || 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round',
       'stroke-dasharray': se.dash || null, opacity: se.opacity || 1,
+      // Already-dashed series are skipped — animating dashoffset on them would
+      // fight the pattern that carries their meaning.
+      'data-draw': animating && !se.dash ? seriesDelay(se) : null,
     }));
 
     if (markerLast && se.marker !== false) {
       const lastIdx = se.values.reduce((acc, v, i) => (v !== null && isFinite(v) ? i : acc), -1);
       if (lastIdx >= 0) {
+        // A halo behind the leading point of the primary series while the
+        // session is live. One series only: every line pulsing is noise, and the
+        // reader is being told "the newest point is still forming", which is a
+        // fact about the bar rather than about any particular average.
+        if (liveNextChart && si === 0) {
+          root.appendChild(s('circle', {
+            cx: X(lastIdx), cy: Y(se.values[lastIdx]), r: 4,
+            fill: 'none', stroke: se.color, 'stroke-width': 1.5,
+            class: 'live-halo',
+            'data-fade': animating ? DRAW_MS * 0.8 : null,
+          }));
+        }
         // 2px surface ring keeps the end dot legible where lines cross.
         root.appendChild(s('circle', {
           cx: X(lastIdx), cy: Y(se.values[lastIdx]), r: 4,
           fill: se.color, stroke: C.surface, 'stroke-width': 2,
+          class: liveNextChart && si === 0 ? 'live-dot' : null,
+          // Lands as the line reaches it, rather than sitting at the far right
+          // waiting for a line that hasn't arrived yet.
+          'data-fade': animating ? DRAW_MS * 0.8 : null,
         }));
       }
     }
@@ -403,17 +962,153 @@ function lineChart(opts) {
   /* Labels go on last, above the series: underneath, price and moving-average
    * lines ran straight through the text. Each sits on an opaque pill so it stays
    * readable wherever it lands, and takes its line's color so you can tell at a
-   * glance which level it belongs to. */
+   * glance which level it belongs to.
+   *
+   * Grouped with the axis labels so the whole textual frame — level tags and
+   * dates — resolves after the line is drawn. Reading numbers off an axis while
+   * the series is still moving is the one part of this that looked unfinished. */
+  const annotLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.85 : null });
+  root.appendChild(annotLayer);
+
+  /* Latest value per series, as a pill on the price axis in the line's colour.
+   *
+   * Two things this has to get right or it makes the chart worse, not better.
+   *
+   * Collisions. Four averages converging in a range put four tags on top of each
+   * other. Tags are laid out from the top down and pushed apart to a minimum
+   * spacing, so they stay in the same vertical order as the lines they belong to
+   * and stay individually readable. A tag pushed off its own line is still
+   * unambiguous — it keeps the line's colour, and no two share one.
+   *
+   * The tick labels underneath. A tag landing on a gridline number renders two
+   * numbers on top of each other, so any tick within a tag's band is suppressed.
+   * The tag carries strictly more information than the tick it hides. */
+  if (valueTags) {
+    const tags = series
+      .map((se, si) => {
+        if (se.tag === false || se.hidden) return null;
+        const li = se.values.reduce((acc, v, i) => (v !== null && isFinite(v) ? i : acc), -1);
+        if (li < 0) return null;
+        return { si, color: se.color, value: se.values[li], y: Y(se.values[li]) };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.y - b.y);
+
+    const TAG_H = 15;
+    const GAP = 1.5;
+    // Top-down pass, then a bottom-up correction so a stack that hits the floor
+    // does not push its last tag out of the plot entirely.
+    let cursor = m.t - Infinity;
+    tags.forEach((t) => {
+      t.ty = Math.max(t.y, cursor + TAG_H + GAP);
+      cursor = t.ty;
+    });
+    const floor = m.t + plotH;
+    if (tags.length && tags[tags.length - 1].ty > floor) {
+      let up = floor;
+      for (let i = tags.length - 1; i >= 0; i -= 1) {
+        tags[i].ty = Math.min(tags[i].ty, up);
+        up = tags[i].ty - TAG_H - GAP;
+      }
+    }
+
+    const fmtTag = valueFormat || yFormat;
+    tags.forEach((t) => {
+      const text = fmtTag(t.value);
+      const w = Math.max(30, text.length * 6.1 + 9);
+      const x = m.l + plotW + 3;
+      annotLayer.appendChild(s('rect', {
+        x, y: t.ty - TAG_H / 2, width: w, height: TAG_H, rx: 3,
+        fill: t.color, opacity: 0.92,
+      }));
+      annotLayer.appendChild(s('text', {
+        x: x + w / 2, y: t.ty + 3.7, fill: C.surface, 'font-size': 10,
+        'font-weight': 600, 'text-anchor': 'middle',
+        'font-variant-numeric': 'tabular-nums',
+      }, text));
+      // A 2px stub back to the plot edge, so a tag that had to be nudged still
+      // reads as belonging to a line rather than floating in the gutter.
+      annotLayer.appendChild(s('line', {
+        x1: m.l + plotW, y1: t.y, x2: x, y2: t.ty,
+        stroke: t.color, 'stroke-width': 1, opacity: 0.5,
+      }));
+    });
+
+    // Hide any tick label a tag now covers.
+    gridLayer.querySelectorAll('text').forEach((el) => {
+      const ty = parseFloat(el.getAttribute('y'));
+      if (tags.some((t) => Math.abs(ty - t.ty) < TAG_H)) el.setAttribute('opacity', '0');
+    });
+  }
+
+  /* Dated events pinned to the price line — insider transactions, in practice.
+   *
+   * A triangle at the price on the day, pointing the way the trade went, with a
+   * stem down to the axis so the date is findable. Buys and sells are the same
+   * shape flipped rather than two different glyphs: the direction IS the
+   * information, and a reader should not have to learn a legend to see it.
+   *
+   * Labels are only drawn for the largest few. Ten insider prints on a three-month
+   * chart, each labelled, is a wall of text over the price — so size decides who
+   * gets named, and the hover tooltip carries the rest.
+   */
+  if (events && events.length) {
+    const evLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.9 : null });
+    root.appendChild(evLayer);
+    const closes = (candles && candles.close) || (series[0] && series[0].values) || [];
+    // Label the three biggest by value; the rest are marks only.
+    const ranked = [...events]
+      .filter((e) => Number.isFinite(e.index) && e.index >= 0 && e.index < n)
+      .sort((a, b) => (b.value || 0) - (a.value || 0));
+    const named = new Set(ranked.slice(0, 3).map((e) => e.index));
+
+    ranked.forEach((e) => {
+      const price = closes[e.index];
+      if (price === null || price === undefined || !isFinite(price)) return;
+      const x = X(e.index);
+      const y = Y(price);
+      const buy = e.kind === 'buy';
+      const colour = buy ? EVENT_BUY : EVENT_SELL;
+      // Below the price for a buy, above for a sell, so the marker never sits on
+      // the line it is annotating.
+      const tip = buy ? y + 9 : y - 9;
+      const base = buy ? y + 20 : y - 20;
+      evLayer.appendChild(s('path', {
+        d: buy
+          ? `M ${x} ${tip} L ${x - 5} ${base} L ${x + 5} ${base} Z`
+          : `M ${x} ${tip} L ${x - 5} ${base} L ${x + 5} ${base} Z`,
+        fill: colour, opacity: 0.92,
+      }));
+      evLayer.appendChild(s('line', {
+        x1: x, y1: y, x2: x, y2: tip, stroke: colour, 'stroke-width': 1, opacity: 0.5,
+      }));
+      if (named.has(e.index) && e.label) {
+        const w = e.label.length * 5.4 + 10;
+        const lx = Math.min(Math.max(m.l + 2, x - w / 2), m.l + plotW - w - 2);
+        const ly = buy ? base + 13 : base - 5;
+        evLayer.appendChild(s('rect', {
+          x: lx, y: ly - 9.5, width: w, height: 13, rx: 3,
+          fill: C.surface, opacity: 0.88,
+        }));
+        evLayer.appendChild(s('text', {
+          x: lx + 5, y: ly, fill: colour, 'font-size': 10,
+        }, e.label));
+      }
+    });
+  }
+
   labeled.forEach((r) => {
     const w = r.text.length * 5.5 + 10;
-    // Anchored to the right edge of the plot: the left is where the series
-    // begins, and tags stacked there sat directly on top of the price.
-    const x = m.l + plotW - w - 2;
-    root.appendChild(s('rect', {
+    // Which edge to hug. Right by default: on a chart showing months, the left is
+    // where the series begins and tags stacked there sat on top of the price.
+    // On a multi-year chart the opposite is true — the newest bars crowd the right
+    // edge, so the labels covered exactly the part being read.
+    const x = refLabelSide === 'left' ? m.l + 2 : m.l + plotW - w - 2;
+    annotLayer.appendChild(s('rect', {
       x, y: r.y - 9.5, width: w, height: 13, rx: 3,
       fill: C.surface, opacity: 0.86,
     }));
-    root.appendChild(s('text', {
+    annotLayer.appendChild(s('text', {
       x: x + 5, y: r.y, fill: r.color, 'font-size': 10, opacity: 0.9,
       'font-variant-numeric': 'tabular-nums',
     }, r.text));
@@ -422,7 +1117,7 @@ function lineChart(opts) {
   if (labels.length) {
     const marks = [0, Math.floor((labels.length - 1) / 2), labels.length - 1];
     marks.forEach((i, k) => {
-      root.appendChild(s('text', {
+      annotLayer.appendChild(s('text', {
         x: X(i), y: H - 6, fill: C.muted, 'font-size': 10,
         'text-anchor': k === 0 ? 'start' : k === 2 ? 'end' : 'middle',
       }, labels[i]));
@@ -440,11 +1135,148 @@ function lineChart(opts) {
     return d;
   });
 
+  /* ------------------------------------------------- range measurement
+   *
+   * Drag across the plot (or put two fingers on it) to measure between two
+   * points, the way the Stocks app does: two markers, a shaded span, and the
+   * change from the first to the second in both dollars and percent.
+   *
+   * Worth having because a chart answers "what happened" but not "how much" —
+   * eyeballing a move off a y-axis is exactly the sort of estimate that turns
+   * into a wrong number in someone's head. This reads it off the data.
+   *
+   * Drawn as its own group appended before the hover layer so the crosshair and
+   * dots stay on top of the shading.
+   */
+  const measureGroup = s('g', { opacity: 0, 'pointer-events': 'none' });
+  const measureBand = s('rect', { y: m.t, height: plotH, fill: C.ink2, opacity: 0.08 });
+  const measureA = s('line', { y1: m.t, y2: m.t + plotH, stroke: C.ink2, 'stroke-width': 1.2, opacity: 0.75 });
+  const measureB = s('line', { y1: m.t, y2: m.t + plotH, stroke: C.ink2, 'stroke-width': 1.2, opacity: 0.75 });
+  const measureDotA = s('circle', { r: 4.5, stroke: C.surface, 'stroke-width': 2 });
+  const measureDotB = s('circle', { r: 4.5, stroke: C.surface, 'stroke-width': 2 });
+  const measureLabel = s('text', {
+    y: m.t + 12, 'font-size': 11, 'font-weight': 600, 'text-anchor': 'middle',
+  });
+  [measureBand, measureA, measureB, measureDotA, measureDotB, measureLabel]
+    .forEach((el) => measureGroup.appendChild(el));
+  root.appendChild(measureGroup);
+
+  // The series the measurement reads. The first one that isn't hidden — for a
+  // candle chart that's the close, which is the right thing to measure.
+  const measured = series.find((se) => !se.hidden && (se.values || []).some(
+    (v) => v !== null && v !== undefined && isFinite(v))) || series[0];
+
+  const clearMeasure = () => {
+    measureGroup.setAttribute('opacity', 0);
+    measureAnchor = null;
+  };
+
+  function drawMeasure(i, j) {
+    if (!measured || i === j) { clearMeasure(); return; }
+    const [lo, hi] = i < j ? [i, j] : [j, i];
+    const va = measured.values[lo];
+    const vb = measured.values[hi];
+    if (va === null || vb === null || !isFinite(va) || !isFinite(vb)) { clearMeasure(); return; }
+
+    const xa = X(lo);
+    const xb = X(hi);
+    measureBand.setAttribute('x', xa);
+    measureBand.setAttribute('width', Math.max(xb - xa, 1));
+    measureA.setAttribute('x1', xa); measureA.setAttribute('x2', xa);
+    measureB.setAttribute('x1', xb); measureB.setAttribute('x2', xb);
+    measureDotA.setAttribute('cx', xa); measureDotA.setAttribute('cy', Y(va));
+    measureDotB.setAttribute('cx', xb); measureDotB.setAttribute('cy', Y(vb));
+
+    const delta = vb - va;
+    const pct = va ? (delta / Math.abs(va)) * 100 : null;
+    // Direction colours the readout and both markers, so which way it went is
+    // legible without reading the sign.
+    const tone = delta > 0 ? C.good : delta < 0 ? C.critical : C.ink2;
+    [measureDotA, measureDotB].forEach((d) => d.setAttribute('fill', tone));
+    [measureA, measureB].forEach((l) => l.setAttribute('stroke', tone));
+    measureLabel.setAttribute('fill', tone);
+
+    const from = labels[lo] || `#${lo + 1}`;
+    const to = labels[hi] || `#${hi + 1}`;
+    const sign = delta > 0 ? '+' : '';
+    measureLabel.textContent = `${from} → ${to}   ${sign}${(valueFormat || yFormat)(delta)}`
+      + (pct === null ? '' : `   ${sign}${pct.toFixed(2)}%`);
+    // Keep the readout inside the plot at both extremes.
+    const mid = Math.min(Math.max((xa + xb) / 2, m.l + 90), m.l + plotW - 90);
+    measureLabel.setAttribute('x', mid);
+    measureGroup.setAttribute('opacity', 1);
+  }
+
+  let measureAnchor = null;      // index where the drag or first finger landed
+
+  const indexFromClientX = (clientX) => {
+    const box = root.getBoundingClientRect();
+    const scale = W / box.width;
+    const localX = (clientX - box.left) * scale;
+    return Math.max(0, Math.min(n - 1, Math.round(((localX - m.l) / plotW) * (n - 1))));
+  };
+
+  // Covers the whole chart, not just the plot rectangle.
+  //
+  // It used to be inset to the plot, which left three dead zones a gesture could
+  // land in and appear broken: the 58px axis gutter on the right, the date strip
+  // along the bottom, and the top margin. Nine percent of the width and a strip
+  // at each edge where nothing happened. x is clamped to a valid bar index
+  // anyway, so extending the target costs nothing and removes the guesswork
+  // about where the chart is "live".
   const overlay = s('rect', {
-    x: m.l, y: m.t, width: plotW, height: plotH, fill: 'transparent',
+    x: 0, y: 0, width: W, height: H, fill: 'transparent',
     style: 'cursor:crosshair',
   });
-  overlay.addEventListener('mousemove', (evt) => {
+
+  // Two fingers measures directly, one endpoint per finger. Handled before the
+  // scrub binding so a pinch never reaches the single-point crosshair, and
+  // preventDefault is scoped to the two-finger case so one finger still scrolls.
+  overlay.addEventListener('touchmove', (evt) => {
+    if (evt.touches.length < 2) return;
+    evt.preventDefault();
+    hideTip();
+    drawMeasure(indexFromClientX(evt.touches[0].clientX),
+                indexFromClientX(evt.touches[1].clientX));
+  }, { passive: false });
+  ['touchend', 'touchcancel'].forEach((type) => {
+    overlay.addEventListener(type, (evt) => {
+      // Lifting one of two fingers ends the measurement rather than leaving it
+      // pinned to wherever the fingers happened to be.
+      if (evt.touches.length < 2) clearMeasure();
+    });
+  });
+
+  // Mouse drag: press sets the anchor, movement extends, release clears. The
+  // measurement lives only as long as the gesture — leaving it on screen meant a
+  // stale span sat over the chart until it was dismissed, which reads as part of
+  // the drawing rather than as something you did.
+  //
+  // Both move and release are tracked on `window` for the duration of the drag,
+  // not on the chart. Listening on the element meant the measurement froze the
+  // instant the cursor drifted above or below the plot band — which happens
+  // constantly, because dragging sideways across a chart is not a straight line.
+  // The gesture now continues wherever the mouse goes and ends wherever it is
+  // released, which is what every other drag on a computer does.
+  const onDragMove = (evt) => {
+    if (measureAnchor === null) return;
+    if (evt.buttons !== 1) { endDrag(); return; }   // button released off-window
+    drawMeasure(measureAnchor, indexFromClientX(evt.clientX));
+  };
+  function endDrag() {
+    window.removeEventListener('mousemove', onDragMove);
+    window.removeEventListener('mouseup', endDrag);
+    clearMeasure();
+  }
+  overlay.addEventListener('mousedown', (evt) => {
+    if (evt.button !== 0) return;
+    evt.preventDefault();            // no text-selection drag over the chart
+    measureAnchor = indexFromClientX(evt.clientX);
+    window.addEventListener('mousemove', onDragMove);
+    window.addEventListener('mouseup', endDrag);
+  });
+
+  bindScrub(overlay, (evt) => {
     const box = root.getBoundingClientRect();
     const scale = W / box.width;
     const localX = (evt.clientX - box.left) * scale;
@@ -465,14 +1297,50 @@ function lineChart(opts) {
         (valueFormat || yFormat)(v),
       ]);
     });
+    // Volume for the same bar. Shown in full rather than abbreviated: the point
+    // of hovering a bar is to read the actual figure, and "144.3M" is what the
+    // axis already told you.
+    if (volRows) {
+      const vv = volRows[i];
+      if (vv !== null && vv !== undefined && isFinite(vv)) {
+        rows.push(['Volume', Math.round(vv).toLocaleString()]);
+      }
+      volBars.forEach((b, k) => {
+        if (!b) return;
+        b.setAttribute('opacity', k === i ? 0.95 : 0.42);
+      });
+    }
     showTip(tipRows(labels[i] || `#${i + 1}`, rows), evt);
-  });
-  overlay.addEventListener('mouseleave', () => {
+  }, () => {
     hideTip();
     cross.setAttribute('opacity', 0);
     dots.forEach((d) => d.setAttribute('opacity', 0));
+    volBars.forEach((b) => b && b.setAttribute('opacity', 0.42));
   });
   root.appendChild(overlay);
+
+  /* The coordinate frame, hung on the node.
+   *
+   * A drawing layer has to convert between screen pixels and (bar index, price),
+   * and only this function knows the margins, the plot size and the price domain
+   * it settled on. Recomputing them outside would mean duplicating the whole
+   * domain-fitting chain — including the reference-line slack and the band
+   * inclusion rules — and any drift would put every drawing slightly wrong.
+   *
+   * Exposed as a property rather than a return value so nothing that already
+   * calls lineChart has to change.
+   */
+  root.chartFrame = {
+    width, height, margin: m, plotW, priceH,
+    lo, hi, bars: n, labels,
+    // Pixel from data, and data from pixel. Kept as closures over the same
+    // scales the chart drew with, so they cannot disagree with what is on screen.
+    xOf: (i) => X(i),
+    yOf: (v) => Y(v),
+    indexAt: (px) => (n <= 1 ? 0
+      : Math.round(((px - m.l) / plotW) * (n - 1))),
+    priceAt: (py) => hi - ((py - m.t) / priceH) * (hi - lo),
+  };
 
   return root;
 }
@@ -540,14 +1408,13 @@ function divergingBars(opts) {
       ? `M${mid},${y} H${mid + Math.max(w - rx, 0)} q${rx},0 ${rx},${rx} v${barH - 2 * rx} q0,${rx} -${rx},${rx} H${mid} Z`
       : `M${mid},${y} H${x + rx} q-${rx},0 -${rx},${rx} v${barH - 2 * rx} q0,${rx} ${rx},${rx} H${mid} Z`;
     const bar = s('path', { d: w < 1 ? `M${mid},${y} h1 v${barH} h-1 Z` : path, fill: color });
-    bar.addEventListener('mousemove', (evt) => showTip(
+    bindScrub(bar, (evt) => showTip(
       tipRows(r.label, (r.detail || [['Value', format(v)]])), evt,
-    ));
-    bar.addEventListener('mouseleave', hideTip);
+    ), hideTip);
     root.appendChild(bar);
 
     root.appendChild(s('text', {
-      x: m.l - 8, y: Y(i) + 3.5, fill: C.ink2, 'font-size': 10.5, 'text-anchor': 'end',
+      x: m.l - 8, y: Y(i) + 3.5, fill: C.ink2, 'font-size': 10, 'text-anchor': 'end',
       'font-variant-numeric': 'tabular-nums',
     }, r.label));
 
@@ -564,7 +1431,7 @@ function divergingBars(opts) {
       stroke: C.warn, 'stroke-width': 1, 'stroke-dasharray': '4 3',
     }));
     root.appendChild(s('text', {
-      x: m.l - 8, y: y - 3, fill: C.warn, 'font-size': 9.5, 'text-anchor': 'end',
+      x: m.l - 8, y: y - 3, fill: C.warn, 'font-size': 10, 'text-anchor': 'end',
     }, markerLabel));
   }
 
@@ -626,6 +1493,19 @@ function sparkline(values, width = 96, height = 26, color = C.s1) {
  * one scale — the histogram is the difference of the two lines, so they share
  * an axis legitimately.
  */
+/* Histogram colours, deliberately not the MACD line's.
+ *
+ * These were C.pos and C.neg, and C.pos is the same hex as C.s1 — so the bars
+ * and the MACD line rendered identically and the legend carried two matching
+ * blue swatches. Green above zero and red below also states the sign the bars
+ * already encode, which the blue never did. */
+// Buy/sell green and red, NOT C.pos — which is blue and the same hex as C.s1.
+const EVENT_BUY = C.s3;
+const EVENT_SELL = C.neg;
+
+const MACD_HIST_POS = C.s3;
+const MACD_HIST_NEG = C.neg;
+
 function macdChart(macd, signal, hist, labels, width = 720, opts = {}) {
   // Taller than the old 150px. The panel's job is to show which side of the
   // signal line MACD is on, and at 118px of plot height two series a couple of
@@ -643,20 +1523,36 @@ function macdChart(macd, signal, hist, labels, width = 720, opts = {}) {
   const Y = (v) => m.t + plotH - ((v - lo) / (hi - lo)) * plotH;
 
   const root = svgRoot(W, H);
-  niceTicks(lo, hi, 3).forEach((t) => {
-    root.appendChild(s('line', { x1: m.l, y1: Y(t), x2: m.l + plotW, y2: Y(t), stroke: C.grid, 'stroke-width': 1 }));
-    root.appendChild(s('text', { x: m.l + plotW + 6, y: Y(t) + 3.5, fill: C.muted, 'font-size': 10 }, fmt(t, 2)));
-  });
-  root.appendChild(s('line', { x1: m.l, y1: Y(0), x2: m.l + plotW, y2: Y(0), stroke: C.baseline, 'stroke-width': 1 }));
+  // Same draw-on treatment as the price chart, and for the same reason: the two
+  // panels sit one above the other, so if only one of them animated the pair
+  // would look broken rather than restrained.
+  const animating = animateNextChart && !reducedMotion();
+  const seriesDelay = makeStagger();
 
+  const gridLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.45 : null });
+  root.appendChild(gridLayer);
+  niceTicks(lo, hi, 3).forEach((t) => {
+    gridLayer.appendChild(s('line', { x1: m.l, y1: Y(t), x2: m.l + plotW, y2: Y(t), stroke: C.grid, 'stroke-width': 1 }));
+    gridLayer.appendChild(s('text', { x: m.l + plotW + 6, y: Y(t) + 3.5, fill: C.muted, 'font-size': 10 }, fmt(t, 2)));
+  });
+  gridLayer.appendChild(s('line', { x1: m.l, y1: Y(0), x2: m.l + plotW, y2: Y(0), stroke: C.baseline, 'stroke-width': 1 }));
+
+  // The histogram is data, so it arrives with the lines rather than with the
+  // frame — one fade for the whole set, not 126 individually animated columns.
+  const histLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.55 : null });
+  root.appendChild(histLayer);
   const bw = Math.max(1.5, (plotW / n) - 2); // 2px surface gap between columns
   hist.forEach((v, i) => {
     if (v === null || !isFinite(v)) return;
     const y0 = Y(0), y1 = Y(v);
     const h = Math.abs(y1 - y0);
-    root.appendChild(s('rect', {
+    histLayer.appendChild(s('rect', {
       x: X(i) - bw / 2, y: Math.min(y0, y1), width: bw, height: Math.max(h, 1),
-      fill: v >= 0 ? C.pos : C.neg, opacity: 0.55, rx: Math.min(2, bw / 2),
+      // Green above zero rather than the MACD line's blue. The bars and the line
+      // are different quantities and must not share a hue; green/red also matches
+      // the sign convention the histogram is already encoding.
+      fill: v >= 0 ? MACD_HIST_POS : MACD_HIST_NEG, opacity: 0.5,
+      rx: Math.min(2, bw / 2),
     }));
   });
 
@@ -666,21 +1562,25 @@ function macdChart(macd, signal, hist, labels, width = 720, opts = {}) {
   if (xover && xover.index >= 0 && xover.index < n) {
     const cx = X(xover.index);
     const tone = xover.bullish ? C.good : C.critical;
-    root.appendChild(s('line', {
+    // The cross is the panel's conclusion, so it lands after the lines that
+    // justify it — the same ordering the price chart gives its levels.
+    const xoverLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.8 : null });
+    root.appendChild(xoverLayer);
+    xoverLayer.appendChild(s('line', {
       x1: cx, y1: m.t, x2: cx, y2: m.t + plotH, stroke: tone,
       'stroke-width': 1.4, 'stroke-dasharray': '6 4', opacity: 0.75,
     }));
     // A dot at the intersection itself, so the eye lands on the level too.
     if (isFinite(macd[xover.index])) {
-      root.appendChild(s('circle', {
+      xoverLayer.appendChild(s('circle', {
         cx, cy: Y(macd[xover.index]), r: 3.4, fill: tone,
         stroke: C.surface, 'stroke-width': 1.5,
       }));
     }
     // Label placed inside whichever half has room.
     const nearRight = cx > m.l + plotW * 0.62;
-    root.appendChild(s('text', {
-      x: nearRight ? cx - 6 : cx + 6, y: m.t + 11, fill: tone, 'font-size': 10.5,
+    xoverLayer.appendChild(s('text', {
+      x: nearRight ? cx - 6 : cx + 6, y: m.t + 11, fill: tone, 'font-size': 10,
       'font-weight': 600, 'text-anchor': nearRight ? 'end' : 'start',
     }, `${xover.bullish ? 'Bullish' : 'Bearish'} cross${
       xover.barsAgo
@@ -695,14 +1595,19 @@ function macdChart(macd, signal, hist, labels, width = 720, opts = {}) {
       root.appendChild(s('polyline', {
         points: pts.join(' '), fill: 'none', stroke: color, 'stroke-width': 2,
         'stroke-linejoin': 'round', 'stroke-linecap': 'round',
+        // MACD sweeps first, the signal line chases it 70ms behind — which is
+        // the relationship the panel is there to show.
+        'data-draw': animating ? seriesDelay() : null,
       }));
     }
   });
 
   if (labels && labels.length) {
+    const axisLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.85 : null });
+    root.appendChild(axisLayer);
     const marks = [0, Math.floor((labels.length - 1) / 2), labels.length - 1];
     marks.forEach((i, k) => {
-      root.appendChild(s('text', {
+      axisLayer.appendChild(s('text', {
         x: X(i), y: H - 5, fill: C.muted, 'font-size': 10,
         'text-anchor': k === 0 ? 'start' : k === 2 ? 'end' : 'middle',
       }, labels[i]));
@@ -712,7 +1617,7 @@ function macdChart(macd, signal, hist, labels, width = 720, opts = {}) {
   const cross = s('line', { y1: m.t, y2: m.t + plotH, stroke: C.ink2, 'stroke-width': 1, opacity: 0 });
   root.appendChild(cross);
   const overlay = s('rect', { x: m.l, y: m.t, width: plotW, height: plotH, fill: 'transparent', style: 'cursor:crosshair' });
-  overlay.addEventListener('mousemove', (evt) => {
+  bindScrub(overlay, (evt) => {
     const box = root.getBoundingClientRect();
     const scale = W / box.width;
     let i = Math.round((((evt.clientX - box.left) * scale) - m.l) / plotW * (n - 1));
@@ -723,8 +1628,258 @@ function macdChart(macd, signal, hist, labels, width = 720, opts = {}) {
       [`<span style="color:${C.s4}">■</span> Signal`, fmt(signal[i], 3)],
       ['Histogram', fmt(hist[i], 3)],
     ]), evt);
-  });
-  overlay.addEventListener('mouseleave', () => { hideTip(); cross.setAttribute('opacity', 0); });
+  }, () => { hideTip(); cross.setAttribute('opacity', 0); });
   root.appendChild(overlay);
+  return root;
+}
+
+/* ------------------------------------------------------ relative rotation
+ *
+ * Sectors plotted on relative strength against relative momentum, both centred
+ * on 100, with a tail behind each showing where it came from.
+ *
+ * Two decisions worth stating. The axes are drawn on a *shared, symmetric*
+ * range around 100 rather than each fitted to its own data: an asymmetric fit
+ * moves the crossing point off-centre, and the whole chart is a statement about
+ * which side of 100 things are on. And the tail is drawn as a fading polyline
+ * rather than a series of equal dots, so direction is readable without a legend
+ * — the bright end is now.
+ */
+function rotationChart(sectors, opts = {}) {
+  const width = opts.width || 720;
+  const height = opts.height || 520;
+  const m = { l: 44, r: 16, t: 16, b: 34 };
+  const plotW = width - m.l - m.r;
+  const plotH = height - m.t - m.b;
+
+  // One symmetric range for both axes, so 100 sits dead centre and a point's
+  // distance from the middle means the same horizontally as vertically.
+  let reach = 0;
+  sectors.forEach((sec) => (sec.path || []).forEach((p) => {
+    reach = Math.max(reach, Math.abs((p.strength ?? 100) - 100),
+      Math.abs((p.momentum ?? 100) - 100));
+  }));
+  reach = Math.max(reach * 1.15, 1.2);
+  const lo = 100 - reach, hi = 100 + reach;
+
+  const X = (v) => m.l + ((v - lo) / (hi - lo)) * plotW;
+  const Y = (v) => m.t + plotH - ((v - lo) / (hi - lo)) * plotH;
+
+  const root = svgRoot(width, height);
+  root.setAttribute('aria-label', 'Sector relative rotation');
+
+  const cx = X(100), cy = Y(100);
+
+  // Quadrant washes. Very low alpha — they are there to name the regions, not
+  // to compete with the data drawn on top of them.
+  const quads = [
+    { x: cx, y: m.t, w: m.l + plotW - cx, h: cy - m.t, fill: C.good, label: 'Leading', anchor: 'end' },
+    { x: m.l, y: m.t, w: cx - m.l, h: cy - m.t, fill: C.s1, label: 'Improving', anchor: 'start' },
+    { x: m.l, y: cy, w: cx - m.l, h: m.t + plotH - cy, fill: C.critical, label: 'Lagging', anchor: 'start' },
+    { x: cx, y: cy, w: m.l + plotW - cx, h: m.t + plotH - cy, fill: C.warn, label: 'Weakening', anchor: 'end' },
+  ];
+  quads.forEach((q) => {
+    if (q.w <= 0 || q.h <= 0) return;
+    root.appendChild(s('rect', { x: q.x, y: q.y, width: q.w, height: q.h,
+      fill: q.fill, opacity: 0.07 }));
+    root.appendChild(s('text', {
+      x: q.anchor === 'end' ? q.x + q.w - 8 : q.x + 8,
+      y: q.y + (q.label === 'Leading' || q.label === 'Improving' ? 18 : q.h - 8),
+      'text-anchor': q.anchor, fill: q.fill, 'font-size': 11,
+      'font-weight': 600, opacity: 0.75,
+    }, q.label));
+  });
+
+  // Grid, then the two centre lines on top of it.
+  niceTicks(lo, hi, 5).forEach((t) => {
+    if (t <= lo || t >= hi) return;
+    root.appendChild(s('line', { x1: X(t), x2: X(t), y1: m.t, y2: m.t + plotH,
+      stroke: C.grid, 'stroke-width': 1, opacity: 0.5 }));
+    root.appendChild(s('line', { x1: m.l, x2: m.l + plotW, y1: Y(t), y2: Y(t),
+      stroke: C.grid, 'stroke-width': 1, opacity: 0.5 }));
+    root.appendChild(s('text', { x: X(t), y: m.t + plotH + 16, 'text-anchor': 'middle',
+      fill: C.muted, 'font-size': 10 }, fmt(t, 0)));
+    root.appendChild(s('text', { x: m.l - 8, y: Y(t) + 3, 'text-anchor': 'end',
+      fill: C.muted, 'font-size': 10 }, fmt(t, 0)));
+  });
+  root.appendChild(s('line', { x1: cx, x2: cx, y1: m.t, y2: m.t + plotH,
+    stroke: C.baseline, 'stroke-width': 1.5 }));
+  root.appendChild(s('line', { x1: m.l, x2: m.l + plotW, y1: cy, y2: cy,
+    stroke: C.baseline, 'stroke-width': 1.5 }));
+
+  const SLOTS = [C.s1, C.s2, C.s3, C.s4, C.s5, C.s6, C.s7, C.s8, C.good, C.warn, C.refSR];
+
+  sectors.forEach((sec, i) => {
+    const colour = SLOTS[i % SLOTS.length];
+    const path = (sec.path || []).filter(
+      (p) => Number.isFinite(p.strength) && Number.isFinite(p.momentum));
+    if (!path.length) return;
+
+    // The tail as a curve, not a dogleg.
+    //
+    // Rotation is a continuous motion and straight segments between weekly
+    // samples draw it as a series of sharp turns the sector never made — with
+    // eleven of them overlapping, the chart read as a tangle of zigzags rather
+    // than as eleven arcs. A Catmull-Rom spline passes exactly through every
+    // measured point (it interpolates rather than approximates, so no reading is
+    // moved) and rounds only the path between them, which is the part that was
+    // invented by the straight line anyway.
+    //
+    // Drawn one bezier per segment rather than as a single path, so opacity can
+    // still ramp along the tail: the bright end is now. A single path would need
+    // a gradient per sector, and a linear gradient cannot follow a curve.
+    const pts = path.map((p) => [X(p.strength), Y(p.momentum)]);
+    for (let k = 0; k < pts.length - 1; k += 1) {
+      const p0 = pts[k - 1] || pts[k];
+      const p1 = pts[k];
+      const p2 = pts[k + 1];
+      const p3 = pts[k + 2] || p2;
+      // Catmull-Rom to cubic bezier. The sixth is the standard tension; higher
+      // overshoots on a tight reversal, which on this chart would draw a sector
+      // crossing a quadrant boundary it never crossed.
+      const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+      const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+      root.appendChild(s('path', {
+        d: `M${p1[0].toFixed(1)},${p1[1].toFixed(1)}`
+          + ` C${c1[0].toFixed(1)},${c1[1].toFixed(1)}`
+          + ` ${c2[0].toFixed(1)},${c2[1].toFixed(1)}`
+          + ` ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`,
+        fill: 'none', stroke: colour, 'stroke-width': 1.8,
+        'stroke-linecap': 'round',
+        opacity: 0.16 + 0.64 * ((k + 1) / (pts.length - 1 || 1)),
+      }));
+    }
+    path.slice(0, -1).forEach((p, k) => {
+      root.appendChild(s('circle', { cx: X(p.strength), cy: Y(p.momentum), r: 2,
+        fill: colour, opacity: 0.2 + 0.5 * (k / (path.length - 1 || 1)) }));
+    });
+
+    const last = path[path.length - 1];
+    const dot = s('circle', { cx: X(last.strength), cy: Y(last.momentum), r: 5.5,
+      fill: colour, stroke: C.surface, 'stroke-width': 1.5 });
+    root.appendChild(dot);
+    root.appendChild(s('text', {
+      x: X(last.strength) + 9, y: Y(last.momentum) + 4,
+      fill: colour, 'font-size': 11, 'font-weight': 600,
+    }, sec.symbol));
+
+    // The hit area is deliberately larger than the dot: eleven labelled points
+    // on a 720px square are close together, and a 5px target is a miss.
+    const hit = s('circle', { cx: X(last.strength), cy: Y(last.momentum), r: 14,
+      fill: 'transparent', style: 'cursor:pointer' });
+    hit.addEventListener('mouseenter', (evt) => showTip(tipRows(
+      `${sec.symbol} — ${sec.name}`, [
+        ['Quadrant', sec.quadrant],
+        ['Relative strength', fmt(last.strength, 2)],
+        ['Relative momentum', fmt(last.momentum, 2)],
+        ['Change on the week', `${fmt(sec.d_strength, 2)} strength, ${fmt(sec.d_momentum, 2)} momentum`],
+        ['Tail', `${path.length} weeks to ${last.date}`],
+      ]), evt));
+    hit.addEventListener('mouseleave', hideTip);
+    root.appendChild(hit);
+  });
+
+  return root;
+}
+
+/* --------------------------------------------------------- bubble chart
+ *
+ * Two measures against each other with size as a third. The shape a treemap
+ * cannot make: a treemap shows weight and a scatter shows relationship, and
+ * "are we paying more for less growth" is a relationship.
+ *
+ * Bubble AREA is proportional to the size measure, not its radius. Scaling the
+ * radius linearly is the classic error and it exaggerates the largest item by
+ * its square — a company twice the size looks four times as big.
+ */
+function bubbleChart(points, opts = {}) {
+  const width = opts.width || 720;
+  const height = opts.height || 420;
+  const m = { l: 58, r: 18, t: 16, b: 44 };
+  const plotW = width - m.l - m.r;
+  const plotH = height - m.t - m.b;
+
+  const usable = (points || []).filter(
+    (p) => Number.isFinite(p.x) && Number.isFinite(p.y));
+  const root = svgRoot(width, height);
+  if (!usable.length) return root;
+
+  const xs = usable.map((p) => p.x);
+  const ys = usable.map((p) => p.y);
+  const pad = (lo, hi) => {
+    const span = hi - lo || Math.abs(hi) || 1;
+    return [lo - span * 0.12, hi + span * 0.12];
+  };
+  const [x0, x1] = pad(Math.min(...xs), Math.max(...xs));
+  const [y0, y1] = pad(Math.min(...ys), Math.max(...ys));
+  const X = (v) => m.l + ((v - x0) / (x1 - x0)) * plotW;
+  const Y = (v) => m.t + plotH - ((v - y0) / (y1 - y0)) * plotH;
+
+  const sizes = usable.map((p) => Math.abs(p.size) || 0);
+  const maxSize = Math.max(...sizes, 1);
+  // Area proportional to the measure, so radius goes as the square root.
+  const R = (v) => 5 + Math.sqrt((Math.abs(v) || 0) / maxSize) * 22;
+
+  // Grid and axes.
+  niceTicks(x0, x1, 5).forEach((t) => {
+    root.appendChild(s('line', { x1: X(t), x2: X(t), y1: m.t, y2: m.t + plotH,
+      stroke: C.grid, 'stroke-width': 1, opacity: 0.5 }));
+    root.appendChild(s('text', { x: X(t), y: m.t + plotH + 16, 'text-anchor': 'middle',
+      fill: C.muted, 'font-size': 10 },
+    fmt(t, Math.abs(t) < 10 ? 1 : 0) + (opts.xUnit === '%' ? '%' : '')));
+  });
+  niceTicks(y0, y1, 5).forEach((t) => {
+    root.appendChild(s('line', { x1: m.l, x2: m.l + plotW, y1: Y(t), y2: Y(t),
+      stroke: C.grid, 'stroke-width': 1, opacity: 0.5 }));
+    root.appendChild(s('text', { x: m.l - 8, y: Y(t) + 3, 'text-anchor': 'end',
+      fill: C.muted, 'font-size': 10 },
+    fmt(t, Math.abs(t) < 10 ? 1 : 0) + (opts.yUnit === '%' ? '%' : '')));
+  });
+  // Zero lines, where zero is inside the range — a scatter of percentages needs
+  // to show which side of nothing each point is on.
+  if (x0 < 0 && x1 > 0) {
+    root.appendChild(s('line', { x1: X(0), x2: X(0), y1: m.t, y2: m.t + plotH,
+      stroke: C.baseline, 'stroke-width': 1.5 }));
+  }
+  if (y0 < 0 && y1 > 0) {
+    root.appendChild(s('line', { x1: m.l, x2: m.l + plotW, y1: Y(0), y2: Y(0),
+      stroke: C.baseline, 'stroke-width': 1.5 }));
+  }
+
+  if (opts.xLabel) {
+    root.appendChild(s('text', { x: m.l + plotW / 2, y: height - 6,
+      'text-anchor': 'middle', fill: C.muted, 'font-size': 11 }, opts.xLabel));
+  }
+  if (opts.yLabel) {
+    root.appendChild(s('text', {
+      x: 12, y: m.t + plotH / 2, 'text-anchor': 'middle', fill: C.muted,
+      'font-size': 11, transform: `rotate(-90 12 ${m.t + plotH / 2})`,
+    }, opts.yLabel));
+  }
+
+  // Biggest first, so a small bubble is never hidden underneath a large one.
+  [...usable].sort((a, b) => (Math.abs(b.size) || 0) - (Math.abs(a.size) || 0))
+    .forEach((p) => {
+      const cx = X(p.x); const cy = Y(p.y); const r = R(p.size);
+      const dot = s('circle', {
+        cx, cy, r, fill: p.color || C.s1, 'fill-opacity': 0.75,
+        stroke: C.surface, 'stroke-width': 1.5, style: 'cursor:pointer',
+      });
+      dot.addEventListener('mouseenter', (evt) => showTip(tipRows(
+        `${p.label}${p.name ? ' — ' + p.name : ''}`, [
+          [opts.xLabel || 'x', fmt(p.x, 2) + (opts.xUnit === '%' ? '%' : '')],
+          [opts.yLabel || 'y', fmt(p.y, 2) + (opts.yUnit === '%' ? '%' : '')],
+          ['Size', fmtCompact(p.size, 1)],
+        ]), evt));
+      dot.addEventListener('mouseleave', hideTip);
+      root.appendChild(dot);
+      if (r >= 9) {
+        root.appendChild(s('text', {
+          x: cx, y: cy + 3.5, 'text-anchor': 'middle', fill: C.ink,
+          'font-size': 10, 'font-weight': 600, 'pointer-events': 'none',
+        }, p.label));
+      }
+    });
+
   return root;
 }

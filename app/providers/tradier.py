@@ -173,7 +173,7 @@ class TradierProvider(MarketDataProvider):
 
     def intraday_history(self, ticker: str, period: str = "5d", interval: str = "1m") -> pd.DataFrame:
         """Minute bars via /markets/timesales — genuinely real-time, unlike the
-        yfinance fallback, which is why the scalping tab is worth using Tradier
+        yfinance fallback, which is why intraday work is worth using Tradier
         for specifically."""
         key = "intraday:{}:{}:{}".format(ticker, period, interval)
 
@@ -195,7 +195,7 @@ class TradierProvider(MarketDataProvider):
             )
             rows = self._as_list((data or {}).get("series", {}).get("data")) if data else []
             if not rows:
-                # Fall back to the delayed feed rather than an empty scalping tab.
+                # Fall back to the delayed feed rather than an empty intraday read.
                 return self.fallback.intraday_history(ticker, period=period, interval=interval) if self.fallback else pd.DataFrame()
 
             frame = pd.DataFrame(rows)

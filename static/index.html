@@ -2,14 +2,37 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- viewport-fit=cover lets the page paint into the safe area on a notched
+     phone. Without it iOS letterboxes the document: black bars top and bottom in
+     landscape, and the app never covers the screen no matter what the CSS says.
+     The insets are then added back as padding in styles.css, so content still
+     clears the notch and the home indicator. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Paints the browser's own chrome to match the app instead of leaving a white
+     bar above a dark page, which is the other half of "not covering the screen".
+     Both schemes are declared so a light-mode phone does not get a black bar. -->
+<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#0d0d0d">
 <!-- robots.txt asks crawlers not to fetch; this tells any that fetched anyway not
      to index. The two are honoured at different stages, so both are needed to
      keep an open, unauthenticated tool out of search results. Advisory only —
      neither is access control. -->
 <meta name="robots" content="noindex, nofollow, noarchive">
 <title>Optic Terminal</title>
-<link rel="stylesheet" href="styles.css?v=79">
+<!-- Inter, the neo-grotesque that the modern trading and prediction-market
+     interfaces are all built on. Replaces system-ui, which meant the app wore
+     SF Pro on a Mac and Segoe UI on Windows — two different faces, neither
+     chosen, and both of which read as "an OS dialog" rather than as a product.
+     Inter also carries proper tabular figures, which matters more here than the
+     look does: a column of prices in proportional numerals does not align.
+
+     Served from jsDelivr rather than Google Fonts on purpose — Google Fonts
+     sends every visitor's IP to Google, and this page is meant to be openable by
+     anyone without that. preconnect so the font request starts during HTML
+     parse rather than after the CSS resolves. -->
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/inter/index.css">
+<link rel="stylesheet" href="styles.css?v=396">
 <script>
 /* Set the theme before the stylesheet paints.
  *
@@ -33,7 +56,7 @@
 <body>
 
 <header class="topbar">
-  <div class="brand">
+  <button class="brand" id="brand-home" type="button" aria-label="Optic Terminal — go to home">
     <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
       <path d="M2.6 16C6.3 8.9 10.9 5.4 16 5.4S25.7 8.9 29.4 16C25.7 23.1 21.1 26.6 16 26.6S6.3 23.1 2.6 16Z"
             fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" opacity="0.8"/>
@@ -41,7 +64,7 @@
             stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
     <span class="brand-text">OPTIC <span>TERMINAL</span></span>
-  </div>
+  </button>
 
   <form class="search" id="ticker-form">
     <div class="combo">
@@ -54,17 +77,13 @@
     <button class="btn primary" type="submit">Load</button>
   </form>
 
-  <nav class="tabs" role="tablist" aria-label="Views">
-    <button role="tab" title="Home" data-view="home" aria-selected="true">Home</button>
-    <button role="tab" title="Swing trading and options analysis" data-view="swing" aria-selected="false">Swing</button>
-    <button role="tab" title="Intraday scalping" data-view="scalp" aria-selected="false">Scalps</button>
-    <button role="tab" title="Earnings analysis" data-view="earnings" aria-selected="false">Earnings</button>
-    <button role="tab" title="Macro regime and sector rotation" data-view="market" aria-selected="false">Macro</button>
-    <button role="tab" title="Major index long-run cycle" data-view="indices" aria-selected="false">Indices</button>
-    <button role="tab" title="Long-term share holdings" data-view="long" aria-selected="false">Long-Term</button>
-    <button role="tab" title="Roth IRA model allocation" data-view="roth" aria-selected="false">Roth</button>
-    <button role="tab" title="Optic's Positions — the terminal's own paper-traded record" data-view="tracker" aria-selected="false">Optic's Positions</button>
-  </nav>
+  <!-- Two rows. The top one is where you are working — one stock, the market,
+       the scanners, your own holdings — and the second is which page inside
+       that. Eleven peers in one row overflowed at 993px in a 780px bar, and
+       flattening them also implied they were the same kind of thing, which they
+       are not: three of them do nothing at all without a ticker loaded. -->
+  <nav class="tabs tabs-group" role="tablist" aria-label="Sections"></nav>
+  <nav class="tabs tabs-sub" role="tablist" aria-label="Pages" id="subnav"></nav>
 
   <button class="icon-btn" id="settings-btn" data-view="settings"
           aria-label="Settings" aria-pressed="false" title="Settings — appearance and time zone">
@@ -91,14 +110,25 @@
 
 <main>
   <section class="view active" id="view-home" role="tabpanel" aria-label="Home"></section>
+  <section class="view" id="view-brief" role="tabpanel" aria-label="Optic&apos;s Read — daily summary"></section>
   <section class="view" id="view-swing" role="tabpanel" aria-label="Swing and options analysis"></section>
-  <section class="view" id="view-scalp" role="tabpanel" aria-label="Scalping and intraday analysis"></section>
   <section class="view" id="view-earnings" role="tabpanel" aria-label="Earnings analysis"></section>
-  <section class="view" id="view-market" role="tabpanel" aria-label="Macro and sector analysis"></section>
-  <section class="view" id="view-indices" role="tabpanel" aria-label="Index analysis"></section>
+  <section class="view" id="view-compare" role="tabpanel" aria-label="Compare tickers"></section>
   <section class="view" id="view-long" role="tabpanel" aria-label="Long-term share analysis"></section>
-  <section class="view" id="view-roth" role="tabpanel" aria-label="Roth IRA model allocation"></section>
   <section class="view" id="view-tracker" role="tabpanel" aria-label="Optic&apos;s Positions — paper-trading record"></section>
+  <section class="view" id="view-scan" role="tabpanel" aria-label="Scanners"></section>
+  <section class="view" id="view-market" role="tabpanel" aria-label="Macro and sector analysis"></section>
+  <!-- One instrument, full chart. Shared by every cross-asset table: the
+       sub-tab is attached to whichever group opened it. -->
+  <section class="view" id="view-instrument" role="tabpanel"
+    aria-label="Single instrument chart"></section>
+  <!-- The chart workspace. Its own tab because it is a place you work rather
+       than a page you read: full viewport height, its own toolbar, drawings that
+       persist per symbol. Shares its overlay settings with the Swing chart via
+       the chart-style store, so neither can drift from the other. -->
+  <section class="view view-workspace" id="view-chart" role="tabpanel"
+    aria-label="Chart workspace"></section>
+  <section class="view" id="view-indices" role="tabpanel" aria-label="Index analysis"></section>
   <section class="view" id="view-settings" role="tabpanel" aria-label="Settings"></section>
 </main>
 
@@ -123,18 +153,42 @@
     <span class="pulse-mark">●</span>
     <span class="title">Pulse</span>
     <span class="chip neutral" id="chat-ctx"><span class="dot"></span><span>No context</span></span>
+    <button class="icon-btn" id="chat-history-btn" title="Saved conversations"
+            aria-label="Saved conversations" aria-expanded="false">&#9782;</button>
     <button class="close" id="chat-close" aria-label="Close assistant">&times;</button>
   </div>
 
+  <!-- The response lens. Changes which figures Pulse leads with and how much
+       doubt it carries; never the figures themselves. -->
+  <div class="pulse-persona" id="chat-persona"></div>
+
+  <!-- Saved conversations. Collapsed by default: it is a drawer you go to, not
+       something between you and the reply. -->
+  <div class="pulse-history" id="pulse-history" hidden></div>
+
+  <div class="legal-area" id="pulse-legal" role="note"></div>
   <div class="chat-log" id="chat-log"></div>
 
   <div class="chat-foot">
     <div class="suggest" id="chat-suggest"></div>
+    <!-- Chips for staged files, cleared once the message is sent. -->
+    <div class="chat-attachments" id="chat-attachments"></div>
     <textarea id="chat-input" placeholder="Ask Pulse about the loaded analysis — e.g. &quot;what does the gamma profile imply for a swing long here?&quot;"></textarea>
     <div class="chat-actions">
       <button class="btn primary" id="chat-send">Send</button>
       <button class="btn" id="chat-research">Deep research</button>
-      <label><input type="checkbox" id="chat-web"> Web search</label>
+      <!-- Screenshots of someone else's chart and PDF research notes are the two
+           things a reader actually has to hand, so both are accepted. -->
+      <button class="btn" id="chat-attach" title="Attach an image or PDF">Attach</button>
+      <input type="file" id="chat-file" multiple hidden
+             accept="image/png,image/jpeg,image/gif,image/webp,application/pdf">
+      <!-- Checked by default. Unchecked, the Send path had no web access at all,
+           so Pulse correctly refused anything needing a fact it had not been
+           handed — and the refusal read as the assistant being broken rather
+           than as a toggle being off. Web search costs per use, which is why it
+           was opt-in, but a research assistant that cannot look anything up is
+           the wrong default. -->
+      <label><input type="checkbox" id="chat-web" checked> Web search</label>
     </div>
   </div>
 </aside>
@@ -144,7 +198,7 @@
 <!-- Version query busts the browser cache on deploy. Without it a reloaded page
      can pair new HTML with a stale charts.js/app.js, which surfaces as features
      silently not working rather than as an error. -->
-<script src="charts.js?v=79"></script>
-<script src="app.js?v=79"></script>
+<script src="charts.js?v=396"></script>
+<script src="app.js?v=396"></script>
 </body>
 </html>

@@ -7,3 +7,10 @@ data/
 .share/
 __pycache__/
 *.pyc
+data/sec_facts/
+
+# Screen recordings and other captures. Not source, and an 8.5MB video in the
+# repo is 8.5MB every clone and every deploy build pays for.
+*.MP4
+*.mp4
+*.mov

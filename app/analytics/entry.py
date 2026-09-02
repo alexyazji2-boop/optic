@@ -22,6 +22,33 @@ from .greeks import bs_price
 
 TRADING_DAYS = 252
 
+# ---------------------------------------------------------------- affordability
+#
+# Without these the ranker recommended an $11,300 contract: a $220 put on a $130
+# stock, almost entirely intrinsic value. It scored well because the old formula
+# rewarded "return if the thesis stalls", and a contract with barely any extrinsic
+# value barely decays — so the deepest, most expensive strike always won that term.
+# There was no cost term at all to push back.
+#
+# That is a real trade, but it isn't an *option* trade: paying 87% of the share
+# price for the right to be short is buying the stock with extra steps, worse
+# spreads and an expiry date. A recommendation nobody can size is not a
+# recommendation.
+
+# Premium ceiling as a share of the underlying price. Above this you are paying
+# mostly for intrinsic value you could get by trading the shares directly.
+MAX_PREMIUM_PCT_OF_SPOT = 18.0
+
+# Soft budget per contract. Not a hard filter — a $600 stock has no cheap options
+# and refusing to quote one would be worse than quoting an expensive one — but
+# cost is scored, so a cheaper contract wins all else being equal.
+SOFT_BUDGET_PER_CONTRACT = 2500.0
+
+# Delta band. The old ceiling of 0.78 is where the deep-ITM problem lived; 0.65
+# still gives a directional contract that moves with the stock without paying for
+# a near-share-equivalent.
+MIN_DELTA, MAX_DELTA = 0.35, 0.65
+
 
 def _join(items: Any) -> str:
     """Comma-separated with a final "and". Joining three labels with " and " gave
@@ -361,10 +388,19 @@ def rank_strikes(
     # outsized move merely to break even, and ranking on percentage return will
     # always favor those lottery tickets if they are left in the pool.
     delta_abs = pool["delta"].abs()
-    banded = pool[(delta_abs >= 0.30) & (delta_abs <= 0.78)]
+    banded = pool[(delta_abs >= MIN_DELTA) & (delta_abs <= MAX_DELTA)]
     pool = banded if not banded.empty else pool
     if pool.empty:
         return []
+
+    # Drop contracts priced like the stock itself. Applied after the delta band so
+    # a genuinely expensive underlying still gets a quote — the fallback keeps the
+    # cheapest available rather than returning nothing.
+    affordable = pool[pool["mid"] <= spot * (MAX_PREMIUM_PCT_OF_SPOT / 100.0)]
+    if not affordable.empty:
+        pool = affordable
+    else:
+        pool = pool.nsmallest(max(4, top_n), "mid")
 
     rows: List[Dict[str, Any]] = []
     for _, row in pool.iterrows():
@@ -429,8 +465,27 @@ def rank_strikes(
         stall = r["return_if_flat_pct"] or 0.0
         spread = r["spread_pct"] or 0.0
         liquidity_ok = (r["open_interest"] or 0) >= 100 or (r["volume"] or 0) >= 100
+
+        # Cost penalty, so capital efficiency competes with payoff. Scaled against
+        # the soft budget rather than an absolute figure, and capped so one very
+        # expensive underlying can't swamp every other term.
+        cost = r["capital_per_contract"] or 0.0
+        cost_penalty = min(cost / SOFT_BUDGET_PER_CONTRACT, 3.0) * 12.0
+
+        # Extrinsic share of the premium: what you're actually buying when you buy
+        # an option. A contract that is 90% intrinsic is a stock substitute.
+        intrinsic = max(0.0, (spot - r["strike"]) if is_call else (r["strike"] - spot))
+        extrinsic_pct = 0.0
+        if r["entry_mid"]:
+            extrinsic_pct = max(0.0, (r["entry_mid"] - intrinsic) / r["entry_mid"]) * 100.0
+        r["extrinsic_pct"] = _f(extrinsic_pct, 1)
+
+        # Stall weight cut from 0.35: rewarding low decay is fair, but at that
+        # weight it was the single biggest term and it points straight at the
+        # deepest strike on the board.
         r["score"] = round(
-            upside * 0.5 + stall * 0.35 - spread * 1.5 + (5 if liquidity_ok else -10), 2
+            upside * 0.5 + stall * 0.20 - spread * 1.5 - cost_penalty
+            + (5 if liquidity_ok else -10), 2
         )
 
     rows.sort(key=lambda r: -r["score"])

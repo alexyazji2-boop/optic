@@ -1,0 +1,98 @@
+# Optic Terminal on Netlify — FRONTEND ONLY.
+#
+# Read this before using it. Netlify cannot host this application, and no
+# configuration file changes that. Three reasons, all structural:
+#
+#   1. app/main.py starts `asyncio.create_task(_tracker_loop())`, a `while True`
+#      loop that scans every four hours and rebuilds the morning read at 09:00
+#      Eastern. Netlify Functions are request-scoped — there is no process for a
+#      background timer to live in, so both would simply never run.
+#
+#   2. The paper ledger, the brief archive, the catalyst store and the alert inbox
+#      are four SQLite files that must accumulate across requests. Netlify's
+#      filesystem is ephemeral: every invocation starts clean, so the record would
+#      reset continuously.
+#
+#   3. A scan screens ~3,000 NASDAQ symbols and puts 30 through full analysis.
+#      That is minutes of work against a 10-second function timeout (26s on Pro).
+#
+# So this file does the one thing Netlify is genuinely good at: serving the static
+# frontend from a CDN, and proxying every /api/ call to a backend running
+# somewhere that can hold a process and a disk (Fly.io, Railway, a VPS).
+#
+# Honest trade-off: this does NOT remove the need to deploy the backend. It adds
+# a second host and a network hop in front of it. Serving static/ from the same
+# backend is simpler and, for a single-user research tool, faster in practice —
+# the CDN wins nothing when every meaningful response is an uncacheable API call.
+# Use this only if you specifically want the UI on Netlify.
+
+[build]
+  # Nothing to build. No framework, no bundler, no build step — the frontend is
+  # hand-written JS and SVG served as-is, which is why `publish` points straight
+  # at the source directory.
+  publish = "static"
+  command = "echo 'No build step — static/ is served as authored.'"
+
+# ---------------------------------------------------------------- API proxy
+#
+# Set API_ORIGIN in the Netlify UI (Site settings -> Environment variables) to
+# your backend's URL, e.g. https://optic-terminal.fly.dev — then replace the
+# placeholder below, because Netlify does NOT interpolate environment variables
+# into redirect targets. This is the one line you have to edit by hand.
+[[redirects]]
+  from = "/api/*"
+  to = "https://REPLACE-WITH-YOUR-BACKEND.fly.dev/api/:splat"
+  status = 200          # 200, not 301: a proxy, so the browser keeps this origin
+  force = true
+
+# Server-sent events for Pulse and Deep Research. Same target, listed separately
+# because streaming responses must not be buffered — a proxy that buffers turns a
+# token-by-token stream into one silent wait followed by a wall of text.
+[[redirects]]
+  from = "/api/chat"
+  to = "https://REPLACE-WITH-YOUR-BACKEND.fly.dev/api/chat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/healthz"
+  to = "https://REPLACE-WITH-YOUR-BACKEND.fly.dev/healthz"
+  status = 200
+  force = true
+
+# Single-page fallback. There is one HTML document and the views are switched
+# client-side, so any path that is not a file returns it.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# ---------------------------------------------------------------- headers
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # The app is deliberately kept out of search results — it is a personal
+    # research tool with no sign-in, not a publication. Advisory only; it is not
+    # access control, and it is not a substitute for one.
+    X-Robots-Tag = "noindex, nofollow, noarchive"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[headers]]
+  # The version query string (?v=396) is what busts the cache, so the files
+  # themselves can be cached hard.
+  for = "/*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
+
+[[headers]]
+  # The document must not be cached, or a deploy leaves readers on an old
+  # index.html pointing at asset versions that no longer exist.
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"

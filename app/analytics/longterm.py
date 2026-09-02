@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from .. import legal as legal_mod
 
+import logging
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -18,6 +19,9 @@ import pandas as pd
 
 from .series_stats import _f
 from .technicals import rsi, sma
+from . import fundamentals, valuation
+
+log = logging.getLogger(__name__)
 
 TRADING_DAYS = 252
 
@@ -191,6 +195,21 @@ def _long_trend(weekly: pd.DataFrame) -> Dict[str, Any]:
         "weekly_rsi": _f(weekly_rsi.dropna().iloc[-1], 2) if not weekly_rsi.dropna().empty else None,
         "weekly_closes": [_f(v, 4) for v in close.tail(260)],
         "weekly_dates": [str(idx.date()) for idx in close.tail(260).index],
+        # Full weekly OHLCV, not just closes. _weekly() already aggregates open,
+        # high, low and volume and the old payload threw them away — which is why
+        # this chart could only ever draw a line. Sent whole rather than tailed so
+        # the client can offer its own timeframes and roll up to monthly without a
+        # second request.
+        "series": {
+            "dates": [str(idx.date()) for idx in weekly.index],
+            "open": [_f(v, 4) for v in weekly["Open"]],
+            "high": [_f(v, 4) for v in weekly["High"]],
+            "low": [_f(v, 4) for v in weekly["Low"]],
+            "close": [_f(v, 4) for v in weekly["Close"]],
+            "volume": ([_f(v, 0) for v in weekly["Volume"]]
+                       if "Volume" in weekly else []),
+            "bars": int(len(weekly)),
+        },
     }
 
 
@@ -332,6 +351,30 @@ def _data_quality(close: pd.Series) -> Dict[str, Any]:
 
     return {"history_years": years, "reliable": reliable, "warnings": warnings}
 
+
+def _revenue_multiple(provider, ticker: str, quote: Dict[str, Any]) -> Dict[str, Any]:
+    """Revenue against the multiple the market paid, per fiscal year."""
+    try:
+        fin = fundamentals.analyse_financials(provider.financials(ticker))
+        hist = _valuation_history(provider, ticker, quote)
+        return valuation.revenue_and_multiple(fin, hist)
+    except Exception as exc:                     # noqa: BLE001
+        log.warning("revenue/multiple unavailable for %s: %s", ticker, exc)
+        return {"available": False, "reason": str(exc)[:120]}
+
+
+def _valuation_history(provider, ticker: str, quote: Dict[str, Any]) -> Dict[str, Any]:
+    """The five-year multiple band, or a reason it is unavailable.
+
+    Wrapped because it needs both the annual financials and six years of dailies,
+    and neither is guaranteed: an ETF has no EPS at all, and a recent listing has
+    no history. A missing band must not cost the reader the rest of the tab.
+    """
+    try:
+        fin = (fundamentals.analyse(provider, ticker, quote) or {}).get("financials") or {}
+        return valuation.history_band(provider, ticker, fin, quote.get("trailing_pe"))
+    except Exception as exc:
+        return {"available": False, "reason": "could not be computed: {}".format(exc)}
 
 def analyse_holding(provider, ticker: str) -> Dict[str, Any]:
     """Long-horizon read on a single ticker."""
@@ -475,6 +518,12 @@ def analyse_holding(provider, ticker: str) -> Dict[str, Any]:
         "drawdown": drawdown,
         "risk": risk,
         "valuation": valuation,
+        # Where today's multiple sits in this company's own five-year range. Kept
+        # separate from `valuation` above, which is a cross-sectional read on
+        # absolute levels — the two answer different questions and a name can
+        # easily be absolutely expensive but cheap against its own history.
+        "valuation_history": _valuation_history(provider, ticker, quote),
+        "revenue_multiple": _revenue_multiple(provider, ticker, quote),
         "accumulation_zones": zones,
         "fundamentals": {
             "sector": quote.get("sector"),

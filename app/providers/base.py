@@ -33,6 +33,10 @@ class MarketDataProvider:
     ) -> pd.DataFrame:
         raise NotImplementedError
 
+    def splits(self, ticker: str) -> List[Dict[str, Any]]:
+        """Stock splits as [{date, ratio}], oldest first. Empty when unknown."""
+        return []
+
     def news(self, ticker: str, limit: int = 12) -> List[Dict[str, Any]]:
         raise NotImplementedError
 
@@ -44,7 +48,7 @@ class MarketDataProvider:
     def intraday_history(
         self, ticker: str, period: str = "5d", interval: str = "1m"
     ) -> pd.DataFrame:
-        """Minute-resolution bars, tz-aware in US/Eastern, for the scalping tab.
+        """Minute-resolution bars, tz-aware in US/Eastern.
 
         Same OHLCV column contract as history(). ``period`` covers the last N
         calendar days (subject to the vendor's intraday lookback limit).

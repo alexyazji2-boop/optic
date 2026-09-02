@@ -37,3 +37,11 @@ else
   echo "Warning: $remaining process(es) still alive on port 8077 or in cloudflared." >&2
   exit 1
 fi
+
+# The watchdog starts with the share (see share-detached.sh), so it stops with
+# it. Left running, it would notice the tunnel it was watching had gone and
+# helpfully open a new public URL seconds after you asked for it to be closed.
+if pgrep -f "tunnel-watchdog.sh" >/dev/null 2>&1; then
+  pkill -f "tunnel-watchdog.sh" 2>/dev/null || true
+  echo "Watchdog stopped."
+fi

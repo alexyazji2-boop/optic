@@ -647,6 +647,37 @@ class YFinanceProvider(MarketDataProvider):
 
         return _cached("fin:" + ticker, 3600, build)
 
+    def splits(self, ticker: str) -> List[Dict[str, Any]]:
+        """Stock splits, oldest first, as [{date, ratio}].
+
+        Needed to reconcile two sources that disagree about share counts. SEC
+        filings report earnings per share AS REPORTED at the time, while the price
+        history here is split-adjusted. Dividing an adjusted price by an
+        unadjusted EPS produced a P/E of 1 for Apple in 2008 and a median of 4 for
+        NVIDIA, which is 40-for-one split since 2021.
+        """
+
+        def build() -> List[Dict[str, Any]]:
+            t = yf.Ticker(ticker)
+            try:
+                series = t.splits
+            except Exception:                                  # noqa: BLE001
+                return []
+            if series is None or len(series) == 0:
+                return []
+            out = []
+            for stamp, ratio in series.items():
+                try:
+                    val = float(ratio)
+                except (TypeError, ValueError):
+                    continue
+                if val and val > 0:
+                    out.append({"date": str(pd.Timestamp(stamp).date()), "ratio": val})
+            out.sort(key=lambda r: r["date"])
+            return out
+
+        return _cached("splits:" + ticker, 86400, build)
+
     def insiders(self, ticker: str, limit: int = 12) -> Dict[str, Any]:
         def build() -> Dict[str, Any]:
             t = yf.Ticker(ticker)

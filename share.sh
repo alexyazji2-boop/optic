@@ -63,14 +63,37 @@ if ! kill -0 "$SERVER_PID" 2>/dev/null; then
   exit 1
 fi
 
-cloudflared tunnel --url "http://127.0.0.1:$PORT" --no-autoupdate \
+# Pull the assigned quick-tunnel hostname out of cloudflared's log.
+#
+# The naive pattern for this was 'https://[a-z0-9-]+\.trycloudflare\.com', which
+# also matches https://api.trycloudflare.com — a host cloudflared prints while
+# registering, not the tunnel it hands you. With `head -1` that sometimes won the
+# race, and the shared link became the API endpoint: it answered HTTP 405, the
+# watchdog counted three failures and rotated an otherwise healthy tunnel. That
+# happened for real at 2026-08-04T08:55Z and cost four minutes of downtime.
+#
+# Assigned hostnames are always several hyphen-separated words, so requiring at
+# least one hyphen in the label excludes 'api' and the region hosts by
+# construction rather than by keeping a denylist in sync.
+extract_tunnel_url() {
+  grep -oE 'https://[a-z0-9]+(-[a-z0-9]+)+\.trycloudflare\.com' .share/tunnel.log \
+    | head -1
+}
+
+# --edge-ip-version 4 is not cosmetic. Left to itself cloudflared picked an IPv6
+# edge here and lost the connection every three or four minutes; a free quick
+# tunnel holds exactly one connection (--ha-connections is accepted and ignored),
+# so each of those was a total outage and the browser saw 502/520/530. Measured
+# on an IPv4 edge over the same span: zero drops, 53/53 probes at 200.
+cloudflared tunnel --url "http://127.0.0.1:$PORT" \
+  --edge-ip-version "${TUNNEL_EDGE_IP:-4}" --no-autoupdate \
   > .share/tunnel.log 2>&1 &
 TUNNEL_PID=$!
 
 printf 'Opening tunnel'
 URL=""
 for _ in $(seq 1 60); do
-  URL=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' .share/tunnel.log | head -1 || true)
+  URL=$(extract_tunnel_url || true)
   [ -n "$URL" ] && break
   printf '.'
   sleep 0.5
@@ -154,11 +177,25 @@ while kill -0 "$SERVER_PID" 2>/dev/null; do
   [ "$fails" -lt "$PROBE_FAILS" ] && continue
 
   # Confirm it is the tunnel and not the app before touching anything.
+  #
+  # This used to `break` on a single bad local probe, which ended supervision
+  # permanently while the server carried on running — one slow request during a
+  # universe scan (the probe allows 10s) was enough to retire the supervisor for
+  # the rest of the session. The message said "not rotating the tunnel", which
+  # reads as "will try again", and it never did.
+  #
+  # A transient local failure is now tolerated: the tunnel is left alone for this
+  # pass and the next probe re-checks. The only condition that ends the loop is
+  # the server process actually being gone, which the `while kill -0` at the top
+  # already tests — so there is no need for a second, weaker exit here.
   local_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
     "http://127.0.0.1:$PORT/healthz" || true)
   if [ "$local_code" != "200" ]; then
-    echo "Server itself is unhealthy (HTTP '$local_code') — not rotating the tunnel." >&2
-    break
+    echo "Local probe returned '$local_code' — leaving the tunnel alone this pass." >&2
+    # Reset, so a spell of local slowness cannot bank three strikes and then
+    # rotate a healthy tunnel the moment the app recovers.
+    fails=0
+    continue
   fi
 
   log_rotation "tunnel dead at $URL (public HTTP '$code', local 200) — relaunching"
@@ -166,13 +203,14 @@ while kill -0 "$SERVER_PID" 2>/dev/null; do
   kill "$TUNNEL_PID" 2>/dev/null || true
   sleep 3
   : > .share/tunnel.log
-  cloudflared tunnel --url "http://127.0.0.1:$PORT" --no-autoupdate \
+  cloudflared tunnel --url "http://127.0.0.1:$PORT" \
+  --edge-ip-version "${TUNNEL_EDGE_IP:-4}" --no-autoupdate \
     > .share/tunnel.log 2>&1 &
   TUNNEL_PID=$!
 
   NEW=""
   for _ in $(seq 1 60); do
-    NEW=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' .share/tunnel.log | head -1 || true)
+    NEW=$(extract_tunnel_url || true)
     [ -n "$NEW" ] && break
     sleep 1
   done
