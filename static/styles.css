@@ -547,7 +547,26 @@ body.chat-open main { padding-right: 400px; }
   margin: 0 0 var(--space-6);
 }
 
-/* Tester onboarding notice — dismissible, and remembered once dismissed. */
+/* Prototype notice. Deliberately not dismissible: it is the first thing a
+   first-time visitor needs to know about what they are looking at, and the one
+   reader who would dismiss it is the one who already knows. Follows the
+   .legal-area precedent below — a block with a bold lead-in rather than a flex
+   row, because flex items shrink to min-content and broke to one word per line
+   in narrow containers. */
+.home-proto {
+  max-width: 660px;
+  margin: 0 0 var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--warn);
+  border-radius: var(--r-md);
+  font-size: var(--t-caption);
+  line-height: 1.65;
+  color: var(--ink-2);
+}
+.home-proto strong { color: var(--ink); margin-right: var(--space-0); }
+
 
 /* The ticker box is the one thing to do on this page, so it gets real weight. */
 .home-search { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-3); }
@@ -587,7 +606,7 @@ body.chat-open main { padding-right: 400px; }
 .home-card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--accent, var(--space-1));
+  border-left: 3px solid var(--accent, var(--s1));
   border-radius: var(--radius);
   padding: var(--space-4) var(--space-4);
   transition: border-color 0.12s ease, background-color 0.12s ease;
@@ -993,7 +1012,7 @@ ul.reasons li { margin-bottom: var(--space-1); }
   font-size: var(--t-body);
   color: var(--ink-2);
 }
-.callout.info { border-left-color: var(--space-1); }
+.callout.info { border-left-color: var(--s1); }
 .callout.bad { border-left-color: var(--critical); }
 
 .caveat { margin-top: var(--space-3); font-size: var(--t-caption); color: var(--ink-muted); font-style: italic; }
@@ -1215,7 +1234,7 @@ body.chat-open aside#chat { display: flex; }
   display: inline-block;
   width: 11px; height: 11px;
   border: 2px solid var(--border-strong);
-  border-top-color: var(--space-1);
+  border-top-color: var(--s1);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
   vertical-align: -1px;
@@ -1916,7 +1935,7 @@ ul.brief-list {
   margin-bottom: var(--space-4);
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--space-1);
+  border-left: 3px solid var(--s1);
   border-radius: var(--r-lg);
 }
 .read-lead.tone-positive { border-left-color: var(--pos); }
@@ -4548,7 +4567,7 @@ button.home-card:focus-visible { outline: 2px solid var(--s1); outline-offset: 2
 /* The affordance sits on the name rather than the whole row: underlining twelve
    numbers to say "this is clickable" would compete with the data. */
 .inst-link { border-bottom: 1px dotted var(--border-strong); }
-.inst-clickable:hover .inst-link { border-bottom-color: var(--space-1); color: var(--s1); }
+.inst-clickable:hover .inst-link { border-bottom-color: var(--s1); color: var(--s1); }
 
 /* The dynamic sub-tab, and its close affordance. */
 #subnav .sub-dynamic { display: inline-flex; align-items: center; gap: var(--space-2); }

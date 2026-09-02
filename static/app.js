@@ -1837,6 +1837,13 @@ function renderHome() {
     </svg>
 
     <h1 class="home-title">Optic <span>Terminal</span></h1>
+
+    <p class="home-proto">
+      <strong>Prototype.</strong> A personal research project, still being built. Expect rough
+      edges, gaps in the data and figures that lag the market. It is a tool for forming a view,
+      not a recommendation to act on one.
+    </p>
+
     <p class="home-lede">
       A market research workbench, from a multi-week swing to a multi-year hold. Load a ticker
       and it works through the technical structure, options positioning, earnings and financial

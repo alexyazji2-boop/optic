@@ -12,8 +12,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
-from fastapi import Body, FastAPI, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi import Body, FastAPI, HTTPException, Query, Request
+from fastapi.responses import Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import (ai, brief as brief_mod, feeds as feeds_mod, legal,
@@ -1843,14 +1843,68 @@ async def personas() -> Dict[str, Any]:
     }
 
 
+# ----------------------------------------------------------------- spend guard
+#
+# /api/chat and /api/research are the only endpoints that cost money, and the
+# app is deliberately open — no accounts, no sign-in. Those two facts together
+# mean an unmetered spend endpoint on a public URL: one script in a loop could
+# drain the Anthropic balance, and the first sign of it would be the bill.
+#
+# A per-IP token bucket keeps the door open to every real visitor while capping
+# what any single caller can spend. It is not security — an attacker with many
+# addresses gets many buckets — but it turns "drain the account in a minute"
+# into "drain it slowly enough to notice", which is the actual exposure here.
+#
+# In-process and per-instance on purpose: one worker (see the Dockerfile) means
+# one bucket, and a shared store would be a database dependency for a counter.
+# The state is lost on restart, which is the safe direction to fail.
+AI_CALLS_PER_HOUR = int(os.environ.get("AI_CALLS_PER_HOUR", "30"))
+
+_ai_calls: Dict[str, List[float]] = {}
+
+
+def _spend_guard(request: Request) -> None:
+    """Raise 429 once a caller has spent its hourly allowance."""
+    if AI_CALLS_PER_HOUR <= 0:            # 0 disables the guard
+        return
+    # Behind Railway/Cloudflare the socket peer is the proxy, so prefer the
+    # forwarded chain's first hop. Spoofable, but so is any header, and the
+    # alternative is bucketing every visitor together as one proxy IP.
+    fwd = request.headers.get("x-forwarded-for", "")
+    who = fwd.split(",")[0].strip() or (request.client.host if request.client else "?")
+
+    now = time.time()
+    recent = [t for t in _ai_calls.get(who, []) if now - t < 3600]
+    if len(recent) >= AI_CALLS_PER_HOUR:
+        oldest = min(recent)
+        wait = int(3600 - (now - oldest))
+        _ai_calls[who] = recent
+        raise HTTPException(
+            status_code=429,
+            detail="This demo allows {} assistant messages an hour per visitor, "
+                   "to keep one caller from spending the whole budget. Try again "
+                   "in about {} minutes.".format(AI_CALLS_PER_HOUR, max(1, wait // 60)),
+        )
+    recent.append(now)
+    _ai_calls[who] = recent
+
+    # Keep the dict from growing without bound on a long-lived instance.
+    if len(_ai_calls) > 2048:
+        for addr in [a for a, hits in _ai_calls.items()
+                     if not any(now - t < 3600 for t in hits)]:
+            _ai_calls.pop(addr, None)
+
+
 @app.post("/api/chat")
-async def chat(payload: Dict[str, Any] = Body(...)) -> StreamingResponse:
+async def chat(request: Request,
+               payload: Dict[str, Any] = Body(...)) -> StreamingResponse:
     """Streaming assistant.
 
     Send {messages: [{role, content}], context: {...}, attachments: [...]}.
     Attachments are {name, media_type, data} with base64 data; they are passed
     straight through to the model and never written to disk.
     """
+    _spend_guard(request)
     history = payload.get("messages") or []
     context = payload.get("context")
     use_web = bool(payload.get("web"))
@@ -1866,8 +1920,10 @@ async def chat(payload: Dict[str, Any] = Body(...)) -> StreamingResponse:
 
 
 @app.post("/api/research")
-async def research(payload: Dict[str, Any] = Body(...)) -> StreamingResponse:
+async def research(request: Request,
+                   payload: Dict[str, Any] = Body(...)) -> StreamingResponse:
     """Streaming live web research for a ticker or macro question."""
+    _spend_guard(request)
     ticker = (payload.get("ticker") or "").upper()
     question = payload.get("question")
     context = payload.get("context")
@@ -1889,5 +1945,55 @@ async def research(payload: Dict[str, Any] = Body(...)) -> StreamingResponse:
 # registered: Starlette matches in registration order, and a mount at "/"
 # would otherwise shadow every /api/* route above it.
 
+# Two problems this block fixes, both of which present as "my change didn't ship":
+#
+# 1. Plain StaticFiles sends ETag and Last-Modified but no Cache-Control. With no
+#    explicit policy a browser is free to apply heuristic freshness, and Chrome
+#    caches index.html for a fraction of its age without revalidating. The
+#    ?v= query on the asset tags cannot help: it lives *inside* the HTML that is
+#    itself stale, so an old page keeps requesting the old assets and every
+#    change looks like it silently did nothing.
+#
+# 2. The ?v= number in index.html was maintained by hand, so shipping an edit
+#    meant remembering to bump it. _ASSET_V derives it from the mtimes of the
+#    three assets instead, and the "/" route below substitutes it on the way
+#    out. The literal in the file stays as the fallback for opening index.html
+#    straight from disk, where there is no server to rewrite anything.
+
+
+def _asset_version() -> str:
+    """A cache key that changes whenever any front-end asset changes."""
+    stamp = 0
+    for name in ("app.js", "charts.js", "styles.css"):
+        try:
+            stamp = max(stamp, int((STATIC_DIR / name).stat().st_mtime))
+        except OSError:
+            continue
+    return str(stamp)
+
+
+class _NoCacheHTML(StaticFiles):
+    """Revalidate HTML every time; let ETag turn that into a cheap 304.
+
+    Assets get the same treatment rather than a long max-age. A far-future
+    max-age would be safe only if the ?v= key were guaranteed correct, and
+    trusting that is what broke above."""
+
+    def file_response(self, *args: Any, **kwargs: Any) -> Any:
+        resp = super().file_response(*args, **kwargs)
+        resp.headers.setdefault("Cache-Control", "no-cache")
+        return resp
+
+
 if STATIC_DIR.exists():
-    app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
+    _INDEX = STATIC_DIR / "index.html"
+
+    @app.get("/", include_in_schema=False)
+    async def index() -> Any:
+        """index.html with the asset version stamped in from the file mtimes."""
+        html = _INDEX.read_text(encoding="utf-8")
+        html = re.sub(r"\?v=\d+", "?v=" + _asset_version(), html)
+        return Response(content=html, media_type="text/html",
+                        headers={"Cache-Control": "no-cache"})
+
+    app.mount("/", _NoCacheHTML(directory=str(STATIC_DIR), html=True), name="static")
