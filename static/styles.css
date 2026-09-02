@@ -655,17 +655,30 @@ body.chat-open main { padding-right: 400px; }
   100%     { opacity: 1; }
 }
 
+/* The delay is negative on purpose: -4.25s.
+ *
+ * The blink lives at 80-93% of the cycle, so a positive delay put the first one
+ * about 5.9s after load — long enough that most people never saw it. A negative
+ * delay starts the animation already part-way through instead of waiting: at
+ * -4.25s the clock begins at 70.8% and reaches the 80% blink 0.55s later.
+ *
+ * 0.55s rather than 0s so the blink lands just after the logo's own fade-up
+ * (0.5s) has finished. Blinking through the fade read as a glitch in the
+ * entrance rather than as a blink.
+ *
+ * All three share the same negative delay, which is what keeps the lid, the
+ * line and the dot in phase — that is also why they share one duration. */
 .home-logo-eye {
-  animation: eye-blink 6s ease-in-out 1.1s infinite;
+  animation: eye-blink 6s ease-in-out -4.25s infinite;
   /* fill-box so the origin is the eye's own centre, not the SVG viewport's. */
   transform-box: fill-box;
   transform-origin: center;
 }
 .home-logo-line {
   stroke-dasharray: 100;
-  animation: line-redraw 6s ease-in-out 1.1s infinite;
+  animation: line-redraw 6s ease-in-out -4.25s infinite;
 }
-.home-logo-dot { animation: dot-reveal 6s ease-in-out 1.1s infinite; }
+.home-logo-dot { animation: dot-reveal 6s ease-in-out -4.25s infinite; }
 
 /* Everything on the home page fades up on arrival, in reading order.
  *
