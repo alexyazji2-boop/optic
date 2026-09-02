@@ -317,14 +317,45 @@ def _swing_snapshot(
 # -------------------------------------------------------------------- routes
 
 
+# What is actually running, and since when.
+#
+# Without this there is no way to answer "did my push deploy?" from outside the
+# hosting dashboard. Trying to infer it from the asset version does not work:
+# that stamp comes from the mtimes of the files in static/, so a commit that
+# touches only Python or documentation leaves it unchanged and an unchanged
+# stamp is indistinguishable from a deploy that never happened.
+#
+# Railway injects RAILWAY_GIT_COMMIT_SHA at build time; the other platforms in
+# this repo have their own names for it. Absent all of them (a local run) this
+# reports "dev", which is the honest answer rather than a guess.
+# A function rather than a module constant so it can be tested by setting the
+# environment, without reloading app.main — reloading re-registers every startup
+# hook and floods the suite with warnings.
+def deployed_commit() -> str:
+    return (os.environ.get("RAILWAY_GIT_COMMIT_SHA")
+            or os.environ.get("SOURCE_VERSION")          # Render
+            or os.environ.get("FLY_MACHINE_VERSION")     # Fly
+            or "dev")[:12]
+
+
+_BOOTED_AT = datetime.now(timezone.utc)
+
+
 @app.get("/api/health")
 async def health() -> Dict[str, Any]:
+    now = datetime.now(timezone.utc)
     return {
         "status": "ok",
         "provider": PROVIDER.name,
         "realtime_chain": PROVIDER.name == "tradier",
         "assistant": ai.available(),
-        "server_time": datetime.now(timezone.utc).isoformat(),
+        "server_time": now.isoformat(),
+        "commit": deployed_commit(),
+        # Uptime is the other half of the question. A process that restarted
+        # minutes ago either just deployed or is crash-looping, and both are
+        # things you want to see rather than infer.
+        "booted_at": _BOOTED_AT.isoformat(),
+        "uptime_seconds": int((now - _BOOTED_AT).total_seconds()),
     }
 
 
