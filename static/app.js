@@ -837,12 +837,50 @@ function startOriginWatch() {
   originWatchTimer = setTimeout(tick, originWatchDelay);
 }
 
+/* The write token, for the few actions that change the record.
+ *
+ * Reading every panel is open to anyone. Starting a scan, re-marking positions
+ * and clearing the alert inbox are not, because the hosted ledger is the track
+ * record and a stranger appending trades to it is indistinguishable from the
+ * owner doing so.
+ *
+ * Kept in localStorage rather than a cookie: it is not a session, there is
+ * nothing to log into, and a cookie would be sent on every request including
+ * the reads that do not want it. */
+const WRITE_TOKEN_KEY = 'optic.writeToken';
+
+function writeToken() {
+  try { return localStorage.getItem(WRITE_TOKEN_KEY) || ''; } catch (e) { return ''; }
+}
+
+function setWriteToken(value) {
+  try {
+    if (value) localStorage.setItem(WRITE_TOKEN_KEY, value);
+    else localStorage.removeItem(WRITE_TOKEN_KEY);
+  } catch (e) { /* private mode: it will ask again next time */ }
+}
+
 async function postJSON(url, body) {
+  const headers = { 'Content-Type': 'application/json' };
+  const token = writeToken();
+  if (token) headers['X-Optic-Token'] = token;
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body || {}),
   });
+  // 401 means this action needs the token. Ask once, store it, and retry — so
+  // the owner is prompted at the moment it matters instead of meeting a bare
+  // "unauthorised" with no way to act on it.
+  if (res.status === 401) {
+    const supplied = window.prompt(
+      'This action changes the saved record, so it needs the write token.\n'
+      + 'Set OPTIC_WRITE_TOKEN on the server, then paste it here.');
+    if (supplied) {
+      setWriteToken(supplied.trim());
+      return postJSON(url, body);
+    }
+  }
   if (!res.ok) {
     // HTTP/2 carries no status text, so res.statusText is '' over the tunnel and
     // over any modern host — which surfaced as a bare "Could not load." with no
@@ -1512,6 +1550,64 @@ const SHOW_TRENDS_KEY = 'optic.chart.trends.v1';
 let showSessions = false;
 const SHOW_SESSIONS_KEY = 'optic.chart.sessions.v1';
 const SHOW_MA_KEY = 'optic.chart.ma.v2';
+
+/* One flag per average, not one per family.
+ *
+ * The Indicators menu shows six checkboxes — SMA 20/50/200, EMA 9/21/50 — and
+ * all six wrote to two variables, so clicking any one silently flipped its two
+ * neighbours. The code even said so: "a checkbox that silently also cleared its
+ * two neighbours would be worse than one labelled honestly", and then shipped
+ * exactly that. The stated reason — the server sends the family as a unit — is
+ * not true either: sma20, sma50 and sma200 arrive as separate arrays and always
+ * have.
+ *
+ * The family flags stay, meaning "any member of this family is on", because the
+ * Swing tab's single Moving averages checkbox and the Clear-all still want that
+ * question answered. Seeded from the family flag on first read, so an existing
+ * reader's chart looks the same after this change as before it. */
+const MA_MEMBERS = ['sma20', 'sma50', 'sma200'];
+const EMA_MEMBERS = ['ema9', 'ema21', 'ema50'];
+const seriesFlagKey = (id) => `optic.chart.series.${id}.v1`;
+const seriesOn = {};
+
+function loadSeriesFlags() {
+  const seed = (ids, family) => ids.forEach((id) => {
+    let stored = null;
+    try { stored = localStorage.getItem(seriesFlagKey(id)); } catch (e) { /* private */ }
+    seriesOn[id] = stored === null ? family : stored === 'on';
+  });
+  seed(MA_MEMBERS, showMA);
+  seed(EMA_MEMBERS, showEMA);
+}
+
+function setSeriesFlag(id, on) {
+  seriesOn[id] = !!on;
+  try { localStorage.setItem(seriesFlagKey(id), on ? 'on' : 'off'); } catch (e) { /* private */ }
+  // Keep the family flag meaning "any of these is on", so the Swing checkbox
+  // and anything else reading it stays truthful.
+  if (MA_MEMBERS.includes(id)) {
+    showMA = MA_MEMBERS.some((m) => seriesOn[m]);
+    storeFlag(SHOW_MA_KEY, showMA);
+  } else if (EMA_MEMBERS.includes(id)) {
+    showEMA = EMA_MEMBERS.some((m) => seriesOn[m]);
+    storeFlag(SHOW_EMA_KEY, showEMA);
+  }
+}
+
+/** Whether one average should be drawn: its own switch, and its family's. */
+function seriesShown(id) {
+  return !!seriesOn[id];
+}
+
+/** Turn a whole family on or off — what the Swing tab's single checkbox means. */
+function setFamily(which, on) {
+  (which === 'ema' ? EMA_MEMBERS : MA_MEMBERS).forEach((id) => {
+    seriesOn[id] = !!on;
+    try { localStorage.setItem(seriesFlagKey(id), on ? 'on' : 'off'); } catch (e) { /* private */ }
+  });
+  if (which === 'ema') { showEMA = !!on; storeFlag(SHOW_EMA_KEY, on); }
+  else { showMA = !!on; storeFlag(SHOW_MA_KEY, on); }
+}
 const SHOW_VOL_KEY = 'optic.chart.vol.v2';
 const SHOW_VBP_KEY = 'optic.chart.vbp.v2';
 const SHOW_INS_KEY = 'optic.chart.insiders.v2';
@@ -1550,6 +1646,7 @@ try {
   showInsiders = localStorage.getItem(SHOW_INS_KEY) === 'on';
   showZones = localStorage.getItem(SHOW_ZONES_KEY) === 'on';
   showEMA = localStorage.getItem(SHOW_EMA_KEY) === 'on';
+  loadSeriesFlags();
 } catch (e) { /* private mode */ }
 
 // Bars shown in the MACD panel. Capped independently of the price chart: a
@@ -1828,12 +1925,20 @@ function renderHome() {
   views.home.innerHTML = `
   <div class="home">
     <svg class="home-logo" viewBox="0 0 32 32" aria-label="Optic Terminal logo" role="img">
+      <!-- The ring stays put; only the eye blinks. A lid that took the whole
+           mark with it would read as the logo flickering rather than blinking. -->
       <circle cx="16" cy="16" r="14.2" fill="none" stroke="currentColor" stroke-width="0.8" opacity="0.28"/>
-      <path d="M2.6 16C6.3 8.9 10.9 5.4 16 5.4S25.7 8.9 29.4 16C25.7 23.1 21.1 26.6 16 26.6S6.3 23.1 2.6 16Z"
-            fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" opacity="0.7"/>
-      <path d="M7.4 20.2 11.4 15.6 14.6 17.8 18.6 11.6 21.6 14 23.9 11.4" fill="none" stroke="var(--s1)"
-            stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
-      <circle cx="23.9" cy="11.4" r="1.5" fill="var(--s1)"/>
+      <g class="home-logo-eye">
+        <path d="M2.6 16C6.3 8.9 10.9 5.4 16 5.4S25.7 8.9 29.4 16C25.7 23.1 21.1 26.6 16 26.6S6.3 23.1 2.6 16Z"
+              fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" opacity="0.7"/>
+        <!-- pathLength="100" normalises the dash maths: the redraw can then be
+             written as an offset from 0 to 100 without measuring the path. -->
+        <path class="home-logo-line" pathLength="100"
+              d="M7.4 20.2 11.4 15.6 14.6 17.8 18.6 11.6 21.6 14 23.9 11.4"
+              fill="none" stroke="var(--s1)"
+              stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle class="home-logo-dot" cx="23.9" cy="11.4" r="1.5" fill="var(--s1)"/>
+      </g>
     </svg>
 
     <h1 class="home-title">Optic <span>Terminal</span></h1>
@@ -2723,12 +2828,14 @@ function renderSwing(d) {
         ? [{ name: ps.weekly ? 'Up week' : 'Up day', color: C.s3 },
           { name: ps.weekly ? 'Down week' : 'Down day', color: C.s8 }]
         : [{ name: 'Close', color: C.s1 }]),
-      ...(ps.intraday || !showMA ? [] : ps.weekly
-        ? [{ name: '20-week SMA', color: maColors.fast },
-          { name: '50-week SMA', color: maColors.mid }]
-        : [{ name: '20-day SMA', color: maColors.fast },
-          { name: '50-day SMA', color: maColors.mid },
-          { name: '200-day SMA', color: maColors.slow }]),
+      /* Derived from the same per-average switches as the series, so the
+       * legend cannot name a line that is not on the chart. It previously
+       * dropped the 200 entry on weekly while the series still drew it. */
+      ...(ps.intraday ? [] : [
+        ['sma20', ps.weekly ? '20-week SMA' : '20-day SMA', maColors.fast],
+        ['sma50', ps.weekly ? '50-week SMA' : '50-day SMA', maColors.mid],
+        ['sma200', '200-day SMA', maColors.slow],
+      ].filter(([id]) => seriesShown(id)).map(([, name, color]) => ({ name, color }))),
       showFib && !ps.intraday ? { name: 'Fibonacci level', color: C.refFib, dash: true } : null,
       showSR && !ps.intraday ? { name: 'Support / resistance', color: C.refSR, dash: true } : null,
       showVbp ? { name: 'Volume by price', color: C.ink2, boxed: true } : null,
@@ -2739,11 +2846,11 @@ function renderSwing(d) {
       // mid / lower" would be longer than the rest of the legend combined for no
       // extra information. Six unlabelled lines on the chart is the failure this
       // avoids — the reader could see them and not know which was VWAP.
-      ...(ps.intraday || !showEMA ? [] : [
-        { name: 'EMA 9', color: emaColors.fast },
-        { name: 'EMA 21', color: emaColors.mid },
-        { name: 'EMA 50', color: emaColors.slow },
-      ]),
+      ...(ps.intraday ? [] : [
+        ['ema9', 'EMA 9', emaColors.fast],
+        ['ema21', 'EMA 21', emaColors.mid],
+        ['ema50', 'EMA 50', emaColors.slow],
+      ].filter(([id]) => seriesShown(id)).map(([, name, color]) => ({ name, color }))),
       ...(ps.intraday ? [] : indicatorOverlayLegend(overlayPalette)),
     ].filter(Boolean)));
     // Daily-derived overlays do not belong on an intraday chart: the averages
@@ -2788,27 +2895,28 @@ function renderSwing(d) {
           color: candleMode ? C.ink : C.s1,
           hidden: candleMode,
           fill: !candleMode },
-        ...(ps.intraday || !showMA ? [] : [
-          { name: ps.weekly ? '20-week SMA' : '20-day SMA', values: ps.sma20 || [],
-            color: maColors.fast, width: styleOf('sma20').width, marker: false },
-          { name: ps.weekly ? '50-week SMA' : '50-day SMA', values: ps.sma50 || [],
-            color: maColors.mid, width: styleOf('sma50').width, marker: false },
-          { name: '200-day SMA', values: ps.sma200 || [],
-            color: maColors.slow, width: styleOf('sma200').width, marker: false },
-        ]),
+        /* Per-average switches, matching the Charting tab's Indicators menu —
+         * the flags are shared, so the two tabs cannot disagree about which
+         * averages are on. Labels keep this tab's bar-unit naming. */
+        ...(ps.intraday ? [] : [
+          ['sma20', ps.weekly ? '20-week SMA' : '20-day SMA', ps.sma20, maColors.fast],
+          ['sma50', ps.weekly ? '50-week SMA' : '50-day SMA', ps.sma50, maColors.mid],
+          ['sma200', '200-day SMA', ps.sma200, maColors.slow],
+        ].filter(([id]) => seriesShown(id)).map(([id, name, values, color]) => ({
+          name, values: values || [], color, width: styleOf(id).width, marker: false,
+        }))),
         // Selected overlays, drawn on the price axis. Dashed so they read as
         // something you switched on rather than part of the base chart, and
         // excluded on intraday for the same reason the daily averages are: they
         // are computed from daily bars and would describe a different timeframe
         // from the one on screen.
-        ...(ps.intraday || !showEMA ? [] : [
-          { name: 'EMA 9', values: ps.ema9 || [], color: emaColors.fast,
-            width: styleOf('ema9').width, marker: false },
-          { name: 'EMA 21', values: ps.ema21 || [], color: emaColors.mid,
-            width: styleOf('ema21').width, marker: false },
-          { name: 'EMA 50', values: ps.ema50 || [], color: emaColors.slow,
-            width: styleOf('ema50').width, marker: false },
-        ]),
+        ...(ps.intraday ? [] : [
+          ['ema9', 'EMA 9', ps.ema9, emaColors.fast],
+          ['ema21', 'EMA 21', ps.ema21, emaColors.mid],
+          ['ema50', 'EMA 50', ps.ema50, emaColors.slow],
+        ].filter(([id]) => seriesShown(id)).map(([id, name, values, color]) => ({
+          name, values: values || [], color, width: styleOf(id).width, marker: false,
+        }))),
         ...(ps.intraday ? [] : indicatorOverlaySeries((ps.dates || []).length,
           overlayPalette)),
       ],
@@ -6047,8 +6155,10 @@ const WS_MENUS = [
 const WS_FLAGS = {
   fib: () => showFib, sr: () => showSR, zones: () => showZones,
   vbp: () => showVbp, vol: () => showVol, insiders: () => showInsiders,
-  sma20: () => showMA, sma50: () => showMA, sma200: () => showMA,
-  ema9: () => showEMA, ema21: () => showEMA, ema50: () => showEMA,
+  sma20: () => seriesShown('sma20'), sma50: () => seriesShown('sma50'),
+  sma200: () => seriesShown('sma200'),
+  ema9: () => seriesShown('ema9'), ema21: () => seriesShown('ema21'),
+  ema50: () => seriesShown('ema50'),
   trends: () => showTrends,
   sessions: () => showSessions,
 };
@@ -6255,16 +6365,15 @@ const WS_SETTERS = {
     // over a year is real work and most sessions never turn this on.
     if (on) loadTrendlines(STATE.view === 'chart' ? STATE.chartSymbol : STATE.ticker);
   },
-  // The three averages in each family share one flag, because the server sends
-  // the family as a unit. Turning off "SMA 50" alone is a per-series thing the
-  // renderer does not support yet, and a checkbox that silently also cleared its
-  // two neighbours would be worse than one labelled honestly.
-  sma20: (on) => { showMA = on; storeFlag(SHOW_MA_KEY, on); },
-  sma50: (on) => { showMA = on; storeFlag(SHOW_MA_KEY, on); },
-  sma200: (on) => { showMA = on; storeFlag(SHOW_MA_KEY, on); },
-  ema9: (on) => { showEMA = on; storeFlag(SHOW_EMA_KEY, on); },
-  ema21: (on) => { showEMA = on; storeFlag(SHOW_EMA_KEY, on); },
-  ema50: (on) => { showEMA = on; storeFlag(SHOW_EMA_KEY, on); },
+  // Each average has its own switch now. See setSeriesFlag: it also keeps the
+  // family flag in step, so anything asking "are moving averages on?" still
+  // gets a true answer.
+  sma20: (on) => setSeriesFlag('sma20', on),
+  sma50: (on) => setSeriesFlag('sma50', on),
+  sma200: (on) => setSeriesFlag('sma200', on),
+  ema9: (on) => setSeriesFlag('ema9', on),
+  ema21: (on) => setSeriesFlag('ema21', on),
+  ema50: (on) => setSeriesFlag('ema50', on),
 };
 
 function wsSetOverlay(id, on) {
@@ -6475,13 +6584,8 @@ function renderChartWorkspace(d) {
       <div class="ws-head">
         <strong>${esc(STATE.chartSymbol)}</strong>
         <span class="ws-head-name">${esc((d.profile || {}).name || '')}</span>
-        <span class="ws-ohlc">
-          <span>O <b>${fmt(bar.open, 2)}</b></span>
-          <span>H <b>${fmt(bar.high, 2)}</b></span>
-          <span>L <b>${fmt(bar.low, 2)}</b></span>
-          <span>C <b class="${signClass(bar.close - bar.open)}">${fmt(bar.close, 2)}</b></span>
-        </span>
-        <span class="${signClass(q.change_pct)}">${fmtPct(q.change_pct, 2)}</span>
+        <span class="ws-ohlc" id="ws-ohlc">${wsOhlcRow(bar)}</span>
+        <span class="${signClass(q.change_pct)}" id="ws-chg">${fmtPct(q.change_pct, 2)}</span>
         <span class="ws-head-state">${esc(cap(marketSessionET()))}</span>
       </div>
       ${wsLegend(ps)}
@@ -6497,6 +6601,75 @@ function renderChartWorkspace(d) {
     ${wsWidgetRail()}
   </div>
   ${wsManagePanel()}`;
+}
+
+/** The O/H/L/C row in the chart header.
+ *
+ * Extracted so the hover handler and the initial render produce the same markup
+ * — when they were separate the hovered version quietly lost the sign colouring
+ * on the close, and the two drifted every time one was edited. */
+function wsOhlcRow(bar, dateLabel) {
+  const chg = (bar.close !== null && bar.open !== null) ? bar.close - bar.open : null;
+  return [
+    dateLabel ? `<span class="ws-ohlc-date">${esc(dateLabel)}</span>` : '',
+    `<span>O <b>${fmt(bar.open, 2)}</b></span>`,
+    `<span>H <b>${fmt(bar.high, 2)}</b></span>`,
+    `<span>L <b>${fmt(bar.low, 2)}</b></span>`,
+    `<span>C <b class="${signClass(chg)}">${fmt(bar.close, 2)}</b></span>`,
+    bar.volume !== null && bar.volume !== undefined
+      ? `<span>V <b>${Math.round(bar.volume).toLocaleString()}</b></span>` : '',
+  ].join('');
+}
+
+/** Point the header at one bar, or back at the last bar when the cursor leaves.
+ *
+ * The header showed O/H/L/C from wsLastBar and never moved, which is worse than
+ * showing nothing: it reads as a live readout of whatever the crosshair is on,
+ * so a hovered peak was reported with the closing figures from the right-hand
+ * edge of the chart. The tooltip had the right numbers all along; the row that
+ * looks authoritative had the wrong ones.
+ *
+ * Writes innerHTML on two small spans rather than re-rendering. The header is
+ * ~8 nodes and this fires on every pointer move, so a view rebuild here is
+ * exactly the mistake that made this chart feel laggy before. */
+function wsHoverReadout(i) {
+  const row = document.getElementById('ws-ohlc');
+  if (!row) return;
+  const d = STATE.chartData;
+  if (!d || d === 'loading') return;
+  const ps = wsSeries(d);
+  const chg = document.getElementById('ws-chg');
+
+  if (i === null || i === undefined) {
+    const bar = wsLastBar(ps);
+    row.innerHTML = wsOhlcRow(bar);
+    if (chg) {
+      const pct = (d.quote || {}).change_pct;
+      chg.className = signClass(pct);
+      chg.textContent = fmtPct(pct, 2);
+    }
+    return;
+  }
+
+  const at = (arr, k) => {
+    const v = arr && arr[k === undefined ? i : k];
+    return v === undefined || v === null ? null : v;
+  };
+  const bar = {
+    open: at(ps.open), high: at(ps.high), low: at(ps.low),
+    close: at(ps.close), volume: at(ps.volume),
+  };
+  row.innerHTML = wsOhlcRow(bar, at(ps.dates));
+
+  // The percentage beside it becomes the hovered bar's own move, not the
+  // quote's day change — leaving the day change there next to another bar's
+  // prices would be two unrelated numbers reading as one.
+  if (chg) {
+    const prev = i > 0 ? at(ps.close, i - 1) : null;
+    const pct = (prev && bar.close !== null) ? ((bar.close - prev) / prev) * 100 : null;
+    chg.className = signClass(pct);
+    chg.textContent = pct === null ? '' : fmtPct(pct, 2);
+  }
 }
 
 /** The price series for the workspace, sliced to the chosen range the same way
@@ -6518,7 +6691,11 @@ function wsCandles(ps) {
 
 function wsLastBar(ps) {
   const at = (arr) => (Array.isArray(arr) && arr.length ? arr[arr.length - 1] : null);
-  return { open: at(ps.open), high: at(ps.high), low: at(ps.low), close: at(ps.close) };
+  // Volume included so the resting readout has the same columns as the hovered
+  // one. Without it the V field appeared only while the cursor was over the
+  // plot, and the header changed width as the mouse entered and left it.
+  return { open: at(ps.open), high: at(ps.high), low: at(ps.low),
+           close: at(ps.close), volume: at(ps.volume) };
 }
 
 /* ------------------------------------------------------------- the dock
@@ -7767,24 +7944,21 @@ function wsMountChart() {
       series: [
         { name: 'Close', values: ps.close, color: wsCandles(ps) ? C.ink : C.s1,
           hidden: wsCandles(ps), fill: !wsCandles(ps) },
-        ...(intraday || !showMA ? [] : [
-          { name: 'SMA 20', values: ps.sma20 || [], color: styleOf('sma20').color,
-            width: styleOf('sma20').width, marker: false },
-          { name: 'SMA 50', values: ps.sma50 || [], color: styleOf('sma50').color,
-            width: styleOf('sma50').width, marker: false },
-          { name: 'SMA 200', values: ps.sma200 || [], color: styleOf('sma200').color,
-            width: styleOf('sma200').width, marker: false },
-        ]),
-        ...(intraday || !showEMA ? [] : [
-          { name: 'EMA 9', values: ps.ema9 || [], color: styleOf('ema9').color,
-            width: styleOf('ema9').width, marker: false },
-          { name: 'EMA 21', values: ps.ema21 || [], color: styleOf('ema21').color,
-            width: styleOf('ema21').width, marker: false },
-          { name: 'EMA 50', values: ps.ema50 || [], color: styleOf('ema50').color,
-            width: styleOf('ema50').width, marker: false },
-        ]),
+        /* One entry per average, each gated on its own switch, so the six
+         * checkboxes in the Indicators menu mean what they say. Excluded
+         * wholesale on intraday, as before: these are computed from daily bars
+         * and would describe a different timeframe from the one on screen. */
+        ...(intraday ? [] : [
+          ['sma20', 'SMA 20', ps.sma20], ['sma50', 'SMA 50', ps.sma50],
+          ['sma200', 'SMA 200', ps.sma200], ['ema9', 'EMA 9', ps.ema9],
+          ['ema21', 'EMA 21', ps.ema21], ['ema50', 'EMA 50', ps.ema50],
+        ].filter(([id]) => seriesShown(id)).map(([id, name, values]) => ({
+          name, values: values || [], color: styleOf(id).color,
+          width: styleOf(id).width, marker: false,
+        }))),
       ],
       yFormat: (v) => fmt(v, 2),
+      onHover: wsHoverReadout,
       sessions: showSessions ? (ps.sessions || ps.dates || null) : null,
     });
   };
@@ -7900,20 +8074,51 @@ function wsSyncNarrow() {
     wsIsNarrow() ? !!wsNarrowWidget : wsDockOpen.length > 0);
 }
 
+/* The node currently observed, and the width last acted on.
+ *
+ * Both at module scope because they have to survive this function being called
+ * again, and that is the whole bug it used to have.
+ *
+ * wsMountChart calls wsWatchWidth on every mount. The old version disconnected
+ * and rebuilt the observer each time with `last = 0` — and a ResizeObserver
+ * always delivers one observation as soon as you observe(), so the callback ran
+ * immediately with the real width, compared it against zero, sailed past the
+ * 24px jitter guard, and scheduled a redraw 140ms later. That redraw mounted
+ * the chart, which called wsWatchWidth, which built another observer with
+ * `last = 0` again.
+ *
+ * The result was a self-sustaining loop at about 7Hz — measured at 77 redraws
+ * in 12 idle seconds. It was close to invisible because each redraw produced
+ * the same picture, but wsRedrawChart replaces the toolbar with
+ * `outerHTML = wsToolbar()`, so every 140ms every button in it was destroyed
+ * and recreated. A click needs mousedown and mouseup on the SAME element, so
+ * roughly whenever a rebuild landed mid-click the click event was never
+ * generated at all: the interval pills, the Indicators checkboxes and the
+ * range buttons all "did nothing", intermittently and unreproducibly. */
+let wsNarrowObserved = null;
+let wsNarrowLastWidth = 0;
+let wsNarrowTimer = null;
+
 function wsWatchWidth() {
   const body = views.chart && views.chart.querySelector('.ws-body');
   if (!body || typeof ResizeObserver === 'undefined') return;
+  // Already watching this exact node — re-observing it is what caused the loop.
+  // renderChartWorkspace replaces .ws-body wholesale, so a genuinely new node
+  // still gets picked up here.
+  if (wsNarrowObserver && wsNarrowObserved === body) return;
   if (wsNarrowObserver) wsNarrowObserver.disconnect();
-  let last = 0;
-  let t = null;
+  wsNarrowObserved = body;
+  // Seeded from the width the element already has, so the observer's initial
+  // observation is a no-op instead of a 693px "change" from zero.
+  wsNarrowLastWidth = Math.round(body.getBoundingClientRect().width);
   wsNarrowObserver = new ResizeObserver((entries) => {
     const w = Math.round(entries[0].contentRect.width);
     // Scrollbar-sized jitter is not a layout change worth a chart rebuild.
-    if (!w || Math.abs(w - last) < 24) return;
-    last = w;
+    if (!w || Math.abs(w - wsNarrowLastWidth) < 24) return;
+    wsNarrowLastWidth = w;
     wsSyncNarrow();
-    clearTimeout(t);
-    t = setTimeout(() => { wsSyncChromeHeight(); wsRedrawChart(); }, 140);
+    clearTimeout(wsNarrowTimer);
+    wsNarrowTimer = setTimeout(() => { wsSyncChromeHeight(); wsRedrawChart(); }, 140);
   });
   wsNarrowObserver.observe(body);
 }
@@ -11101,30 +11306,70 @@ function renderLong(d) {
       return wrap;
     });
 
+    /* The moving averages, computed here rather than read off the payload.
+     *
+     * The server sends sma_40w and sma_200w as single numbers — today's value —
+     * and this chart drew each as a horizontal line across the whole plot. On a
+     * twelve-year view that is actively misleading: it looks like the average
+     * and is really a flat line at the latest reading, so a reader comparing
+     * 2019 price against "the 40-week average" was comparing it against 2026.
+     *
+     * Periods are in BARS, taking their unit from the interval, which is what
+     * the Swing chart already does ('20-week SMA' on weekly, '20-day' on
+     * daily). A 200-bar average needs 200 bars, and on the monthly rollup of a
+     * twelve-year series there are only ~144 — so it is dropped rather than
+     * drawn as an empty line, and the legend follows the same test. */
+    const ltMa = (period) => {
+      const vals = smaSeries(ltSer.close || [], period);
+      return vals.some((v) => v !== null) ? vals : null;
+    };
+    /* Always drawn, deliberately not behind the shared Moving averages toggle.
+     *
+     * That toggle governs discretionary overlays on a daily chart, defaults to
+     * off, and this view has no control for it — gating here would have deleted
+     * the two lines this panel argues from ("price is above its 40-week
+     * average" is the phase read) for anyone who had not turned on a switch
+     * that lives on another tab. On the long-horizon view these averages are
+     * the subject, not an overlay. */
+    const ltMa40 = ltMa(40);
+    const ltMa200 = ltMa(200);
+
     mount('legend-weekly', legend([
       ...(ltCandles
         ? [{ name: `Up ${unit}`, color: C.s3 }, { name: `Down ${unit}`, color: C.s8 }]
         : [{ name: `${ltSer.monthly ? 'Monthly' : 'Weekly'} close`, color: C.s1 }]),
-      { name: '40-week average', color: C.s2, dash: true },
-      { name: '200-week average', color: C.s4, dash: true },
+      ...(ltMa40 ? [{ name: `40-${unit} average`, color: overlayStyle('sma50').color }] : []),
+      ...(ltMa200 ? [{ name: `200-${unit} average`, color: overlayStyle('sma200').color }] : []),
+      ...(showVol ? [{ name: 'Volume', color: C.ink2 }] : []),
       { name: 'Accumulation zones', color: C.refSR, dash: true },
     ]));
 
     mount('chart-weekly', (w) => lineChart({
       valueTags: true,
       width: w,
-      height: 340,
+      // Matches the Swing chart. This was 340 against Swing's 420, so the
+      // longest-horizon view on the terminal had the shortest plot.
+      height: 420,
       labels: ltSer.dates || [],
-      series: [{ name: `${ltSer.monthly ? 'Monthly' : 'Weekly'} close`,
-        values: ltSer.close, color: C.s1, hidden: ltCandles, fill: !ltCandles }],
+      // Honours the same shared Volume toggle as every other price chart. The
+      // weekly payload has carried volume all along and this chart dropped it.
+      volume: showVol ? (ltSer.volume || null) : null,
+      series: [
+        { name: `${ltSer.monthly ? 'Monthly' : 'Weekly'} close`,
+          values: ltSer.close, color: C.s1, hidden: ltCandles, fill: !ltCandles },
+        ...(ltMa40 ? [{ name: `40-${unit} average`, values: ltMa40,
+          color: overlayStyle('sma50').color, width: overlayStyle('sma50').width,
+          marker: false }] : []),
+        ...(ltMa200 ? [{ name: `200-${unit} average`, values: ltMa200,
+          color: overlayStyle('sma200').color, width: overlayStyle('sma200').width,
+          marker: false }] : []),
+      ],
       candles: ltCandles
         ? { open: ltSer.open, high: ltSer.high, low: ltSer.low, close: ltSer.close }
         : null,
-      refLines: [
-        lt.sma_40w ? { value: lt.sma_40w, label: `40-week avg ${usd(lt.sma_40w)}`, color: C.s2 } : null,
-        lt.sma_200w ? { value: lt.sma_200w, label: `200-week avg ${usd(lt.sma_200w)}`, color: C.s4 } : null,
-        ...zoneRefs,
-      ].filter(Boolean),
+      // Only the zones remain as horizontal lines, because a retracement level
+      // genuinely is one price. The averages are series now.
+      refLines: zoneRefs,
       // Labels hug the left edge here. On a twelve-year chart the newest bars are
       // crowded against the right, so right-aligned tags covered the price action
       // they were annotating — which is what made this chart hard to read.
@@ -14513,7 +14758,8 @@ document.addEventListener('click', (evt) => {
   // rather than expecting six unticks: the state that made the chart unreadable
   // took one click each to build up and should take one to undo.
   if (evt.target.closest('[data-clear-levels]')) {
-    showMA = false; showEMA = false; showFib = false; showSR = false;
+    setFamily('ma', false); setFamily('ema', false);
+    showFib = false; showSR = false;
     showVbp = false; showInsiders = false; showZones = false;
     [[SHOW_MA_KEY, false], [SHOW_EMA_KEY, false], [SHOW_FIB_KEY, false],
       [SHOW_SR_KEY, false], [SHOW_VBP_KEY, false], [SHOW_INS_KEY, false],
@@ -15098,14 +15344,14 @@ document.addEventListener('change', (evt) => {
   if (opt) {
     const on = opt.checked;
     const key = opt.dataset.levelOpt;
-    if (key === 'ma') { showMA = on; storeFlag(SHOW_MA_KEY, on); }
+    if (key === 'ma') { setFamily('ma', on); }
     else if (key === 'fib') { showFib = on; storeFlag(SHOW_FIB_KEY, on); }
     else if (key === 'sr') { showSR = on; storeFlag(SHOW_SR_KEY, on); }
     else if (key === 'vol') { showVol = on; storeFlag(SHOW_VOL_KEY, on); }
     else if (key === 'vbp') { showVbp = on; storeFlag(SHOW_VBP_KEY, on); }
     else if (key === 'insiders') { showInsiders = on; storeFlag(SHOW_INS_KEY, on); }
     else if (key === 'zones') { showZones = on; storeFlag(SHOW_ZONES_KEY, on); }
-    else if (key === 'ema') { showEMA = on; storeFlag(SHOW_EMA_KEY, on); }
+    else if (key === 'ema') { setFamily('ema', on); }
     if (STATE.swing) preserveUI(views.swing, () => renderSwing(STATE.swing));
     return;
   }

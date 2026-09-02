@@ -12,6 +12,55 @@
  * `light dark` (rather than `dark`) lets the browser follow the OS for form
  * controls, dropdowns and scrollbars, which is what previously had to be pinned
  * to dark to stop them rendering light against a dark page. */
+/* ------------------------------------------------------------------- fonts
+ *
+ * Self-hosted faces. Absent by default: see fonts/README.md.
+ *
+ * font-display: swap so a missing or slow font never blanks the text — the
+ * fallback renders immediately and is replaced if the real face arrives. On a
+ * terminal where every panel is numbers, invisible text is worse than briefly
+ * mismatched text.
+ *
+ * If the licence includes a variable font, delete the four static blocks and
+ * uncomment this one instead:
+ *
+ * @font-face {
+ *   font-family: "Capsule Sans";
+ *   src: url("fonts/CapsuleSans-Variable.woff2") format("woff2-variations");
+ *   font-weight: 100 900;
+ *   font-style: normal;
+ *   font-display: swap;
+ * }
+ */
+@font-face {
+  font-family: "Capsule Sans";
+  src: url("fonts/CapsuleSans-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Capsule Sans";
+  src: url("fonts/CapsuleSans-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Capsule Sans";
+  src: url("fonts/CapsuleSans-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Capsule Sans";
+  src: url("fonts/CapsuleSans-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   color-scheme: light dark;
 
@@ -37,6 +86,13 @@
      control per view that actually does something. */
   --accent: #00c805;
   --accent-ink: #001a00;
+  /* The filled button. Its own token rather than --s1, because --s1 also
+     colours chart lines, where nothing sits on top of it and the contrast rule
+     does not apply. Measured: white on --s1 (#3987e5) is 3.64:1, under the
+     4.5:1 normal text needs — the original blue button had that flaw. This is
+     the same hue (213 deg) walked dark enough to reach 4.72:1 on white. */
+  --btn-primary: #1c72d8;
+  --btn-primary-ink: #ffffff;
   --grid: #2c2c2a;
   --baseline: #383835;
 
@@ -93,9 +149,32 @@
      is declared per theme rather than derived from --ink. */
   --scroll-shade: rgba(0, 0, 0, 0.32);
 
-  /* Inter. The system stack is kept behind it as a fallback, so a blocked CDN
-     degrades to what the app used to look like rather than to Times New Roman. */
-  --sans: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Geist, then Capsule Sans, then Inter, then the system stack.
+   *
+   * Geist is built for interfaces and its tabular digits are narrower than
+   * Inter's — measured at 16px, 9.60px against 10.38px, about 7.5% — so the
+   * same table fits more without shrinking the type.
+   *
+   * Not because Inter lacks tabular figures. It has them: under
+   * font-variant-numeric: tabular-nums both families measure a spread of
+   * exactly 0 across the ten digits. The 45 tabular-nums rules in this file
+   * worked before this change and work after it. The gain here is density, not
+   * correctness, and it is worth being precise about which.
+   *
+   * Chosen over Capsule after reading its specimen: Capsule is a reverse-stress
+   * display face, heavier on the horizontals than the verticals and essentially
+   * all-caps. Striking on a poster, wrong for dense financial tables.
+   *
+   * "Capsule Sans" stays in the stack behind Geist rather than being deleted.
+   * The @font-face rules further down point at fonts/, which is empty; a face
+   * whose src 404s is dropped by the browser and the next family is used, so
+   * this resolves to nothing today and costs nothing. Drop licensed files in
+   * and it takes effect with no code change. See fonts/README.md.
+   *
+   * Inter and the system stack stay behind both, so a blocked or slow CDN
+   * degrades to something chosen rather than to Times New Roman. */
+  --sans: "Geist Variable", "Geist", "Capsule Sans", "Inter Variable", "Inter",
+          system-ui, -apple-system, "Segoe UI", sans-serif;
 
   /* ---------------------------------------------------------------- scale
    *
@@ -211,6 +290,10 @@
      threshold, so the claim and the colour now agree. */
   --accent: #008903;        /* white on this: 4.59:1 */
   --accent-ink: #ffffff;
+  /* Unchanged between themes on purpose: the button paints its own fill, so its
+     contrast does not depend on the page behind it. */
+  --btn-primary: #1c72d8;
+  --btn-primary-ink: #ffffff;
   --grid: #e1e0d9;
   --baseline: #c3c2b7;
 
@@ -374,8 +457,11 @@ header.topbar {
 }
 .btn:hover { background: var(--surface-2); }
 .btn:active { filter: brightness(0.94); }
-.btn.primary { background: var(--s1); border-color: var(--s1); color: #fff; }
-.btn.primary:hover { filter: brightness(1.1); }
+/* .btn.primary is defined once, further down with the other button rules.
+   It used to be declared here too, as var(--s1) with white text, and again
+   later as var(--accent) — same selector, same specificity, so the later one
+   won and this one was dead. That is why the buttons were green while the
+   stylesheet appeared to say blue in two places. */
 .btn[disabled] { opacity: 0.45; cursor: not-allowed; }
 
 .pulse-mark {
@@ -530,6 +616,112 @@ body.chat-open main { padding-right: 400px; }
 }
 .home-logo { animation: iris-open 0.7s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
 
+/* The eye blinks, and the line draws itself back on when it opens.
+ *
+ * Three animations on one 6s clock so they cannot drift apart. Written as
+ * percentages of a shared duration rather than as separate durations with
+ * delays: delays drift the moment any one of them is retimed, and a blink whose
+ * lid and contents disagree by 40ms reads as a rendering fault.
+ *
+ * 6s because that is roughly a human blink interval. Faster looked nervous.
+ *
+ * Only the eye group scales — the outer ring holds still. Scaling the whole
+ * mark read as the logo flickering rather than as something blinking.
+ *
+ * scaleY(0.06) rather than 0: an exactly-zero scale collapses the transform
+ * matrix and some engines drop the element's stroke rendering for that frame,
+ * which shows up as a flash of nothing rather than a closed lid. */
+@keyframes eye-blink {
+  0%, 80%   { transform: scaleY(1); }
+  85%, 88%  { transform: scaleY(0.06); }
+  93%, 100% { transform: scaleY(1); }
+}
+
+/* The line is offset out of sight while the lid is down, then drawn back from
+   its start once the eye is open — so the reveal is the payoff of the blink
+   rather than something happening behind a closed lid. */
+@keyframes line-redraw {
+  0%, 84%  { stroke-dashoffset: 0; }
+  85%, 91% { stroke-dashoffset: 100; }
+  100%     { stroke-dashoffset: 0; }
+}
+
+/* The dot waits for the line to reach it. Its 96% start is deliberately after
+   line-redraw is most of the way home, so it lands on the end of the stroke
+   instead of hanging in space ahead of it. */
+@keyframes dot-reveal {
+  0%, 84%  { opacity: 1; }
+  85%, 96% { opacity: 0; }
+  100%     { opacity: 1; }
+}
+
+.home-logo-eye {
+  animation: eye-blink 6s ease-in-out 1.1s infinite;
+  /* fill-box so the origin is the eye's own centre, not the SVG viewport's. */
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.home-logo-line {
+  stroke-dasharray: 100;
+  animation: line-redraw 6s ease-in-out 1.1s infinite;
+}
+.home-logo-dot { animation: dot-reveal 6s ease-in-out 1.1s infinite; }
+
+/* Everything on the home page fades up on arrival, in reading order.
+ *
+ * One shared keyframe with a per-element delay, not six keyframes: the order is
+ * the only thing that differs, and the stagger is the whole effect —
+ * simultaneous fades read as the page being slow rather than as motion.
+ *
+ * `both` holds the from-state through the delay, so nothing paints at full
+ * opacity and then jumps back to start. The last element is in by ~0.62s:
+ * renderHome runs on every visit to the tab, and an entrance you wait through
+ * stops being an entrance. */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+.home-logo,
+.home-title,
+.home-proto,
+.home-lede,
+.home-search,
+.home-quick,
+.home-cards,
+.home-foot {
+  animation: fade-up 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+.home-logo   { animation-delay: 0s; }
+.home-title  { animation-delay: 0.08s; }
+.home-proto  { animation-delay: 0.16s; }
+.home-lede   { animation-delay: 0.24s; }
+.home-search { animation-delay: 0.32s; }
+.home-quick  { animation-delay: 0.40s; }
+.home-cards  { animation-delay: 0.48s; }
+.home-foot   { animation-delay: 0.56s; }
+
+/* Every animation above is decorative — nothing in them carries information
+   that is not also in the static layout, so switching them all off costs
+   nothing. iris-open was previously unguarded and is covered here too. */
+@media (prefers-reduced-motion: reduce) {
+  .home-logo,
+  .home-logo-eye,
+  .home-logo-line,
+  .home-logo-dot,
+  .home-title,
+  .home-proto,
+  .home-lede,
+  .home-search,
+  .home-quick,
+  .home-cards,
+  .home-foot {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    stroke-dashoffset: 0;
+  }
+}
+
 .home-title {
   font-size: var(--t-d1);
   font-weight: 600;
@@ -546,6 +738,17 @@ body.chat-open main { padding-right: 400px; }
   max-width: 660px;
   margin: 0 0 var(--space-6);
 }
+
+/* The hovered bar's date, shown in the chart header only while scrubbing.
+   Tabular figures so the row does not jitter as the digits change under the
+   cursor — the whole point is to read it while moving, and a header that
+   reflows on every bar is unreadable. */
+.ws-ohlc-date {
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+  margin-right: var(--space-1);
+}
+.ws-ohlc { font-variant-numeric: tabular-nums; }
 
 /* Prototype notice. Deliberately not dismissible: it is the first thing a
    first-time visitor needs to know about what they are looking at, and the one
@@ -5059,8 +5262,8 @@ body.chat-open main { padding-right: var(--space-5); margin-right: 420px; }
 
 /* Buttons: one filled accent per view, everything else quiet. */
 .btn.primary {
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--btn-primary);
+  color: var(--btn-primary-ink);
   border-color: transparent;
   font-weight: 600;
 }

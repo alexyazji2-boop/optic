@@ -442,6 +442,11 @@ function lineChart(opts) {
     // horizontal by construction, which is right for a level and wrong for a
     // trend. Each is {x1, y1, x2, y2, color, width, dash, label, extend}.
     segments = [],
+    // Called with the index of the bar under the cursor, and with null when the
+    // cursor leaves. Lets a caller keep its own readout in step with the
+    // crosshair — the header on the Charting tab tracks it — without this
+    // function needing to know what is being displayed.
+    onHover = null,
     // Session dividers: a vertical line wherever the calendar day changes.
     // Only meaningful intraday — on a daily chart every bar is a new day and the
     // result is a line per bar, so the caller gates this, not the renderer.
@@ -1286,6 +1291,18 @@ function lineChart(opts) {
     cross.setAttribute('x2', X(i));
     cross.setAttribute('opacity', 0.45);
     const rows = [];
+    // Open, high and low first, when the caller supplied candles. The series
+    // loop below only sees closing values, so on a candle chart the readout
+    // named a single price for a bar that has four — and the range is usually
+    // the thing being hovered for.
+    if (candles && candles.open) {
+      const o = candles.open[i], h = candles.high[i], l = candles.low[i];
+      if ([o, h, l].every((v) => v !== null && v !== undefined && isFinite(v))) {
+        rows.push(['Open', yFormat(o)]);
+        rows.push(['High', yFormat(h)]);
+        rows.push(['Low', yFormat(l)]);
+      }
+    }
     series.forEach((se, k) => {
       const v = se.values[i];
       if (v === null || v === undefined || !isFinite(v)) { dots[k].setAttribute('opacity', 0); return; }
@@ -1311,11 +1328,17 @@ function lineChart(opts) {
       });
     }
     showTip(tipRows(labels[i] || `#${i + 1}`, rows), evt);
+    // Tell the caller which bar is under the cursor, so a header or legend can
+    // track it. Index only: this function knows nothing about what the caller
+    // wants to display, and passing the bar would mean guessing.
+    if (onHover) onHover(i);
   }, () => {
     hideTip();
     cross.setAttribute('opacity', 0);
     dots.forEach((d) => d.setAttribute('opacity', 0));
     volBars.forEach((b) => b && b.setAttribute('opacity', 0.42));
+    // null means "cursor gone" — distinct from bar 0, which is a real bar.
+    if (onHover) onHover(null);
   });
   root.appendChild(overlay);
 

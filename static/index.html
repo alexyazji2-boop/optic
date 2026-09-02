@@ -31,6 +31,11 @@
      anyone without that. preconnect so the font request starts during HTML
      parse rather than after the CSS resolves. -->
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<!-- Geist, variable. One file covering 100-900, so weight changes cost no extra
+     request. Inter stays loaded as the fallback: if jsDelivr is slow or blocked
+     the interface should still be set in something chosen, not in whatever the
+     OS defaults to. -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist/index.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/inter/index.css">
 <link rel="stylesheet" href="styles.css?v=397">
 <script>

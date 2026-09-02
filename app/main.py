@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 import re
+import secrets
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import (ai, brief as brief_mod, feeds as feeds_mod, legal,
                news as news_mod, paper, session as session_mod)
+from . import snapshots
 from . import universe as universe_mod
 from . import earnings_week as earnings_week_mod
 from . import priority as priority_mod
@@ -688,8 +690,9 @@ async def tracker_state(
 
 
 @app.post("/api/tracker/mark")
-async def tracker_mark() -> Dict[str, Any]:
+async def tracker_mark(request: Request) -> Dict[str, Any]:
     """Refresh marks on open positions without looking for new entries."""
+    _write_guard(request)
     async with _SCAN_LOCK:
         return await _run(paper.mark_open_positions, PROVIDER, RISK_FREE)
 
@@ -721,7 +724,8 @@ def _raise_scan_alerts(result: Dict[str, Any]) -> None:
 
 
 @app.post("/api/tracker/scan")
-async def tracker_scan(payload: Optional[Dict[str, Any]] = Body(None)) -> Dict[str, Any]:
+async def tracker_scan(request: Request,
+                       payload: Optional[Dict[str, Any]] = Body(None)) -> Dict[str, Any]:
     """Start a scan and return immediately.
 
     A NASDAQ-wide scan screens ~3,000 symbols and then puts a shortlist through
@@ -729,6 +733,7 @@ async def tracker_scan(payload: Optional[Dict[str, Any]] = Body(None)) -> Dict[s
     that long means a proxy timeout decides whether the scan is recorded, so the
     work runs as a task and the tab polls /api/tracker for progress instead.
     """
+    _write_guard(request)
     tickers = None
     if payload:
         raw = payload.get("watchlist") or payload.get("tickers")
@@ -813,6 +818,17 @@ async def _tracker_loop() -> None:
             is_open = paper.market_open_et()
             just_closed = was_open and not is_open
             was_open = is_open
+
+            # Snapshot the ledger, above the market-hours gate for the same
+            # reason as the brief: the `continue` for a closed market would
+            # otherwise skip it every evening and all weekend, and a backup that
+            # only runs while the market is open is not a backup.
+            if snapshots.due(getattr(app.state, "last_snapshot", None), now):
+                try:
+                    await _run(snapshots.take)
+                    app.state.last_snapshot = now
+                except Exception as exc:
+                    log.warning("ledger snapshot failed: %s", exc)
 
             # Keep the daily brief's archive complete — before the market-hours
             # gate below, deliberately.
@@ -1132,13 +1148,16 @@ async def catalyst_library(
 
 
 @app.post("/api/catalysts/refresh")
-async def catalyst_refresh(hours: int = Query(168, ge=24, le=720)) -> Dict[str, Any]:
+async def catalyst_refresh(request: Request,
+                           hours: int = Query(168, ge=24, le=720)) -> Dict[str, Any]:
     """Scan recent stories for new catalysts.
 
     A POST and a separate endpoint from the search above, deliberately: this one
     spends money and writes to the store, and neither of those should happen
     because somebody opened a tab.
     """
+    _write_guard(request)
+
     def build() -> Dict[str, Any]:
         out = catalysts_mod.refresh(hours=hours)
         out["generated_at"] = datetime.now(timezone.utc).isoformat()
@@ -1379,6 +1398,20 @@ async def crypto_sentiment() -> Dict[str, Any]:
     return await _run(extras_mod.crypto_sentiment)
 
 
+@app.get("/api/snapshots")
+async def list_snapshots() -> Dict[str, Any]:
+    """What ledger backups exist. Listing only — no download, because the file
+    is the whole record and this endpoint is open like every other read."""
+    rows = snapshots.existing()
+    return {
+        "snapshots": rows,
+        "keep": snapshots.KEEP,
+        "every_hours": snapshots.EVERY_HOURS,
+        "note": "Copies live beside the ledger on the same volume, so they cover "
+                "corruption and accidental wipes but not loss of the volume.",
+    }
+
+
 @app.get("/api/alerts")
 async def list_alerts(limit: int = Query(50, ge=1, le=200),
                       unseen: bool = False) -> Dict[str, Any]:
@@ -1398,7 +1431,8 @@ async def alerts_seen(payload: Dict[str, Any] = Body(default={})) -> Dict[str, A
 
 
 @app.post("/api/alerts/clear")
-async def alerts_clear() -> Dict[str, Any]:
+async def alerts_clear(request: Request) -> Dict[str, Any]:
+    _write_guard(request)
     return {"removed": alerts_mod.clear()}
 
 
@@ -1872,6 +1906,60 @@ async def personas() -> Dict[str, Any]:
             for key, val in ai.PERSONAS.items()
         ],
     }
+
+
+# ----------------------------------------------------------------- write guard
+#
+# The app has no sign-in and that is deliberate: every research endpoint should
+# answer anybody who finds the URL. But "anyone may read this" and "anyone may
+# rewrite my track record" are separable claims, and they were bundled.
+#
+# Three endpoints change state — a manual scan opens paper positions, a re-mark
+# moves their marks, and clearing the alert inbox deletes rows. On a public URL
+# that made the ledger a shared scratchpad: a stranger appending junk trades is
+# indistinguishable from the owner doing it, which quietly destroys the one
+# thing the record is for.
+#
+# So: reads stay open to everyone, writes want a token.
+#
+# Fail-closed in production, open locally. If the token is unset the guard has
+# to decide what unset means, and both answers are wrong somewhere — refusing
+# breaks a local checkout that never had a token, allowing leaves a forgotten
+# deployment wide open. Deciding by whether a hosting platform is present gets
+# both right without anyone configuring anything: Railway, Render and Fly all
+# announce themselves in the environment, and a laptop does not.
+WRITE_TOKEN = os.environ.get("OPTIC_WRITE_TOKEN", "").strip()
+
+_PLATFORM_VARS = ("RAILWAY_ENVIRONMENT", "RAILWAY_GIT_COMMIT_SHA",
+                  "RENDER", "FLY_APP_NAME")
+
+
+def is_hosted() -> bool:
+    """True when running on a hosting platform rather than a local machine."""
+    return any(os.environ.get(v) for v in _PLATFORM_VARS)
+
+
+def _write_guard(request: Request) -> None:
+    """Allow a state-changing request, or explain what it needs."""
+    if WRITE_TOKEN:
+        supplied = request.headers.get("x-optic-token", "")
+        # Constant-time: a plain == leaks the shared prefix through timing, and
+        # this token is the only thing standing in front of the ledger.
+        if secrets.compare_digest(supplied, WRITE_TOKEN):
+            return
+        raise HTTPException(
+            status_code=401,
+            detail="This action changes the record, so it needs the write token. "
+                   "Reading every panel stays open to everyone.",
+        )
+    if is_hosted():
+        raise HTTPException(
+            status_code=503,
+            detail="Writes are disabled: this deployment has no OPTIC_WRITE_TOKEN "
+                   "set, so it refuses to let anonymous callers change the ledger. "
+                   "Scheduled scans still run.",
+        )
+    # Local, no token configured: the historical behaviour.
 
 
 # ----------------------------------------------------------------- spend guard
