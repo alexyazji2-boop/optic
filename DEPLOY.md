@@ -25,6 +25,11 @@ builder cannot guess wrong).
 
 New Project → **Deploy from GitHub repo** → `alexyazji2-boop/optic`.
 
+Deployed 2026-09-02 as the service `optic-terminal`, live at
+<https://optic-terminal-production.up.railway.app>. The service name differs
+from the repository name; only the repository the service is linked to decides
+what a push deploys.
+
 ### 2. Volume — do this before the first real use
 
 Service → **Data** → add a volume mounted at **`/app/data`**.
