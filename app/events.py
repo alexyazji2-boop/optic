@@ -107,7 +107,7 @@ WHY_IT_MATTERS = {
         "The inflation print the Fed's 2% mandate is written against. Rate "
         "expectations for the next two meetings usually reset within seconds of "
         "the release, which is why it moves the whole index and not just "
-        "rate-sensitive sectors. Core — stripping food and energy — is what gets "
+        "rate-sensitive sectors. Core (stripping food and energy) is what gets "
         "traded; the headline number is noisier because of petrol."
     ),
     "producer price index": (
@@ -117,13 +117,13 @@ WHY_IT_MATTERS = {
         "margin next quarter."
     ),
     "employment situation": (
-        "Payrolls and the unemployment rate — the other half of the Fed's dual "
+        "Payrolls and the unemployment rate. The other half of the Fed's dual "
         "mandate. Average hourly earnings inside the same release is the part "
         "that ties employment back to inflation, so a strong jobs number with "
         "soft wages reads very differently from a strong one with hot wages."
     ),
     "job openings and labor turnover": (
-        "Vacancies and the quit rate. Quits are the honest signal — people leave "
+        "Vacancies and the quit rate. Quits are the honest signal. People leave "
         "jobs when they are confident of finding a better one, so the rate falls "
         "before payrolls do. Slower and less traded than the jobs report, but it "
         "turns earlier."
@@ -135,7 +135,7 @@ WHY_IT_MATTERS = {
         "three months of information."
     ),
     "real earnings": (
-        "Wages after inflation — whether pay packets actually bought more. "
+        "Wages after inflation. Whether pay packets actually bought more. "
         "Derived from CPI and the jobs report, both already released, so it very "
         "rarely moves a price. It matters for the consumer-demand story rather "
         "than for the tape."
@@ -159,8 +159,8 @@ WHY_IT_MATTERS = {
         "Included for completeness; it does not move an index."
     ),
     "fomc": (
-        "The rate decision itself, plus the statement and — at four of the eight "
-        "meetings — the projections and a press conference. The decision is "
+        "The rate decision itself, plus the statement and, at four of the eight "
+        "meetings. The projections and a press conference. The decision is "
         "usually priced well in advance, so the move tends to come from the "
         "language and the dot plot rather than the number, and often from the "
         "press conference rather than the statement."
@@ -168,7 +168,7 @@ WHY_IT_MATTERS = {
     "commitments of traders": (
         "Weekly positioning: how large speculators and commercial hedgers are "
         "actually placed across futures. It is a Tuesday snapshot published on "
-        "Friday, so it is history, not a signal — its use is spotting a crowded "
+        "Friday, so it is history, not a signal. Its use is spotting a crowded "
         "trade, where an extreme reading means the marginal buyer has already "
         "bought."
     ),
@@ -375,7 +375,7 @@ def _cot_events(now: datetime) -> Dict[str, Any]:
             "source_url": COT_URL,
             "confidence": "recurring",
             "importance": 6,
-            "note": f"Weekly schedule — positions as of {as_of:%b %-d}. "
+            "note": f"Weekly schedule. Positions as of {as_of:%b %-d}. "
                     "A federal holiday can shift the posting.",
         })
     return {"events": rows, "error": None, "stale": False}

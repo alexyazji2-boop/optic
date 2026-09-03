@@ -270,7 +270,7 @@ def search(query: str = "", status: str = "relevant", category: str = "",
             "Every catalyst here traces to a story or release this terminal "
             "fetched, and the source link is kept. Which companies are connected, "
             "how direct the link is and how strong the read-through is are "
-            "judgements, not data — every ticker is checked against EDGAR's "
+            "judgements, not data. Every ticker is checked against EDGAR's "
             "company directory and dropped if it does not resolve, but the "
             "connection itself is an inference. Research context, never a "
             "recommendation."

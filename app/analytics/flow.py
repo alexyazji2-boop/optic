@@ -107,18 +107,18 @@ def analyse(chain: pd.DataFrame, spot: float, top_n: int = 12) -> Dict[str, Any]
     if pcr_vol is not None:
         if pcr_vol < 0.6:
             score += 30
-            notes.append("Put/call volume {:.2f} — heavy call skew".format(pcr_vol))
+            notes.append("Put/call volume {:.2f}. Heavy call skew".format(pcr_vol))
         elif pcr_vol < 0.9:
             score += 15
-            notes.append("Put/call volume {:.2f} — mild call lean".format(pcr_vol))
+            notes.append("Put/call volume {:.2f}. Mild call lean".format(pcr_vol))
         elif pcr_vol > 1.4:
             score -= 30
-            notes.append("Put/call volume {:.2f} — heavy put skew".format(pcr_vol))
+            notes.append("Put/call volume {:.2f}. Heavy put skew".format(pcr_vol))
         elif pcr_vol > 1.1:
             score -= 15
-            notes.append("Put/call volume {:.2f} — mild put lean".format(pcr_vol))
+            notes.append("Put/call volume {:.2f}. Mild put lean".format(pcr_vol))
         else:
-            notes.append("Put/call volume {:.2f} — balanced".format(pcr_vol))
+            notes.append("Put/call volume {:.2f}. Balanced".format(pcr_vol))
 
     prem_share = _safe_ratio(call_prem, total_prem)
     if prem_share is not None:
@@ -170,7 +170,7 @@ def analyse(chain: pd.DataFrame, spot: float, top_n: int = 12) -> Dict[str, Any]
         stance = "neutral"
 
     return {
-        "method": "Volume/OI proxy — no trade tape on free data, side is inferred not observed",
+        "method": "Volume/OI proxy. No trade tape on free data, side is inferred not observed",
         "stance": stance,
         "flow_score": score,
         "notes": notes,

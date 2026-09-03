@@ -39,7 +39,7 @@ UNIVERSE: List[Dict[str, str]] = [
     {"symbol": "VEA", "role": "intl_dev", "name": "International developed", "note": "Europe, Japan, Canada, Australia"},
     {"symbol": "VWO", "role": "intl_em", "name": "Emerging markets", "note": "China, India, Taiwan, Brazil"},
     {"symbol": "SCHD", "role": "dividend", "name": "US dividend equity", "note": "quality screen, higher income"},
-    {"symbol": "VNQ", "role": "reit", "name": "US real estate", "note": "REITs — tax-inefficient outside a Roth"},
+    {"symbol": "VNQ", "role": "reit", "name": "US real estate", "note": "REITs. Tax-inefficient outside a Roth"},
     {"symbol": "BND", "role": "bonds", "name": "US total bond market", "note": "ballast, dampens drawdowns"},
     {"symbol": "GLD", "role": "gold", "name": "Gold", "note": "crisis hedge, no cash flow"},
 ]
@@ -262,7 +262,7 @@ def _blended(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         "max_drawdown_pct": wavg("max_drawdown_pct"),
         "caveat": (
             "Blended volatility and drawdown are weighted averages of the individual funds, so "
-            "they overstate portfolio risk — holdings that don't move together partly cancel out. "
+            "they overstate portfolio risk. Holdings that don't move together partly cancel out. "
             "Treat them as an upper bound."
         ),
     }
@@ -323,7 +323,7 @@ def _projection(annual: float, years: int, cagr_pct: Optional[float],
             "Arithmetic on past returns, not a prediction. It assumes you contribute every year "
             "without fail, never sell, and that the coming decades resemble the last one. The band "
             "is one standard error of the annualized return (σ/√years), so it shows uncertainty in "
-            "the long-run average — not the risk of a bad decade landing early. Sequence of returns "
+            "the long-run average, not the risk of a bad decade landing early. Sequence of returns "
             "matters more than the average, and this doesn't model it."
         ),
     }
@@ -452,13 +452,13 @@ def _drift(holdings: Dict[str, float], targets: Dict[str, float],
     if worst and abs(worst["drift_pct"] or 0) >= 10:
         summary = (
             f"{worst['label']} is {abs(worst['drift_pct']):.0f} points "
-            f"{'over' if worst['drift_pct'] > 0 else 'under'} target — the largest gap. "
+            f"{'over' if worst['drift_pct'] > 0 else 'under'} target. The largest gap. "
             "Worth correcting with this year's contribution."
         )
     elif worst and abs(worst["drift_pct"] or 0) >= 5:
         summary = "Moderate drift. Directing new contributions at the underweights should close it."
     else:
-        summary = "Close to target — no meaningful drift. Contribute at target weights."
+        summary = "Close to target. No meaningful drift. Contribute at target weights."
 
     return {
         "available": True,
@@ -477,8 +477,8 @@ def _rebalance_with_new_money(holdings: Dict[str, float], targets: Dict[str, flo
                               annual: float, stock_symbols: List[str]) -> Dict[str, Any]:
     """Where to point this year's contribution, buying only.
 
-    Selling to rebalance is tax-free inside a Roth, but it still isn't free —
-    it's a decision and it costs spreads. Directing new money at the underweights
+    Selling to rebalance is tax-free inside a Roth, but it still isn't free.
+    It's a decision and it costs spreads. Directing new money at the underweights
     fixes drift without touching anything, so that's the default answer here.
     """
     total = sum(holdings.values())
@@ -548,12 +548,12 @@ def _rebalance_with_new_money(holdings: Dict[str, float], targets: Dict[str, flo
         "note": (
             "This contribution closes every gap." if need_total <= annual else
             f"The total shortfall is ${need_total:,.0f}, more than one year's contribution, so this "
-            "splits it proportionally — the biggest gaps get the most. Full correction takes a "
+            "splits it proportionally. The biggest gaps get the most. Full correction takes a "
             f"few years of contributions, or one sell-and-buy rebalance."
         ),
         "overweight_roles": [ROLE_LABELS.get(r, r) for r in overweight],
         "overweight_note": (
-            "Buying alone can't fix an overweight — these sit more than 5 points above target and "
+            "Buying alone can't fix an overweight. These sit more than 5 points above target and "
             "would need a sale to correct: " + ", ".join(ROLE_LABELS.get(r, r) for r in overweight)
             + ". Selling inside a Roth triggers no tax, so the only cost is the spread."
         ) if overweight else None,
@@ -609,7 +609,7 @@ def _overlap(holdings: Dict[str, float], provider) -> Dict[str, Any]:
         "available": True,
         "pairs": pairs,
         "note": (
-            "No two holdings are more than 90% correlated — the portfolio isn't doubling up."
+            "No two holdings are more than 90% correlated. The portfolio isn't doubling up."
             if not pairs else
             f"{len(pairs)} pair{'s' if len(pairs) != 1 else ''} of holdings are 90%+ correlated."
         ),
@@ -648,7 +648,7 @@ def _stock_sleeve(provider, symbols: List[str], risk: str,
             "available": False,
             "cap_pct": _f(cap, 1),
             "note": f"No candidates entered. At this risk setting and horizon the sleeve could take "
-                    f"up to {cap:.0f}% of the portfolio — leaving it empty is a perfectly good choice.",
+                    f"up to {cap:.0f}% of the portfolio. Leaving it empty is a perfectly good choice.",
         }
 
     rows = []
@@ -699,7 +699,7 @@ def _stock_sleeve(provider, symbols: List[str], risk: str,
             continue
         if r.get("reliable") is False:
             r["reject_reason"] = (
-                "Too little price history to judge a decades-long holding — likely a recent IPO, "
+                "Too little price history to judge a decades-long holding. Likely a recent IPO, "
                 "spinoff or ticker change."
             )
         else:
@@ -720,7 +720,7 @@ def _stock_sleeve(provider, symbols: List[str], risk: str,
         ),
         "caveat": (
             "Individual stocks in retirement money are a concentration bet, and the conviction score "
-            "is a backward-looking read on trend, drawdown and valuation — not a forecast. Any single "
+            "is a backward-looking read on trend, drawdown and valuation, not a forecast. Any single "
             "company can go to zero in a way a total-market fund cannot. Treat this sleeve as the part "
             "of the portfolio you could afford to lose entirely."
         ),
@@ -754,7 +754,7 @@ def _roth_notes(alloc: Dict[str, Any], risk: str, years: int) -> List[Dict[str, 
         {
             "title": "Keep it to a handful of funds",
             "body": "The annual contribution limit is small. Splitting it across eight funds adds "
-                    "rebalancing work without adding much real diversification — two or three broad "
+                    "rebalancing work without adding much real diversification. Two or three broad "
                     "funds already hold thousands of companies.",
         },
     ]
@@ -762,7 +762,7 @@ def _roth_notes(alloc: Dict[str, Any], risk: str, years: int) -> List[Dict[str, 
         notes.append({
             "title": "Bonds in a Roth cut both ways",
             "body": f"This model holds {alloc['bond_pct']:.0f}% bonds. Bond interest is taxed as "
-                    "ordinary income, so a Roth shelters it well — but bonds also have the lowest "
+                    "ordinary income, so a Roth shelters it well. But bonds also have the lowest "
                     "expected return, so they use up tax-free space that equities would benefit "
                     "from more. Both arguments are legitimate; which wins depends on whether this "
                     "is your only account.",
@@ -770,8 +770,8 @@ def _roth_notes(alloc: Dict[str, Any], risk: str, years: int) -> List[Dict[str, 
     if years >= 25 and risk == "conservative":
         notes.append({
             "title": "Your horizon and your risk setting disagree",
-            "body": f"With {years} years to go, the main risk to a conservative mix isn't a crash — "
-                    "it's not growing enough to keep up with inflation. Worth checking whether the "
+            "body": f"With {years} years to go, the main risk to a conservative mix isn't a crash . "
+                    "It's not growing enough to keep up with inflation. Worth checking whether the "
                     "conservative setting reflects genuine risk tolerance or just discomfort with "
                     "short-term swings you won't need to act on.",
         })
@@ -865,7 +865,7 @@ def analyse(provider, years: int = 30, risk: str = "balanced",
         "stock_sleeve": sleeve,
         "roth_notes": _roth_notes(alloc, risk, years),
         "limit_note": (
-            "The contribution figure is yours to set — IRS Roth limits change annually and depend "
+            "The contribution figure is yours to set. IRS Roth limits change annually and depend "
             "on age and income, so this tool doesn't assume one. Check the current limit and the "
             "income phase-out on irs.gov before relying on the projection."
         ),

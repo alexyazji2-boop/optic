@@ -99,7 +99,7 @@ def _next_report(history: List[Dict[str, Any]], calendar: Dict[str, Any],
         spread = (out["eps_high"] - out["eps_low"]) / abs(out["eps_consensus"]) * 100.0
         out["eps_dispersion_pct"] = _f(spread, 1)
         out["dispersion_note"] = (
-            "Analysts disagree widely on this quarter — a bigger surprise either way is likely."
+            "Analysts disagree widely on this quarter. A bigger surprise either way is likely."
             if spread > 25 else
             "Analysts are tightly clustered, so a large surprise would be genuinely unexpected."
         )
@@ -198,7 +198,7 @@ def _surprise_history(history: List[Dict[str, Any]], hist: pd.DataFrame, limit: 
     on_beat = out["avg_move_on_beat_pct"]
     if on_beat is not None and out["beat_rate_pct"] and out["beat_rate_pct"] >= 70 and on_beat < 0:
         notes.append(
-            "Beats haven't been enough — the stock has averaged a decline even after beating, "
+            "Beats haven't been enough. The stock has averaged a decline even after beating, "
             "so the bar sits above consensus."
         )
     elif on_beat is not None and on_beat > 0:
@@ -298,7 +298,7 @@ def _latest_result(surprise: Dict[str, Any],
         ext = extended or {}
         out["extended"] = ext
 
-        headline = "Reported {} — EPS {} vs {} consensus, {} by {}.".format(
+        headline = "Reported {}. EPS {} vs {} consensus, {} by {}.".format(
             "today" if age_days == 0 else "{} day(s) ago".format(age_days),
             _f(row.get("eps_reported"), 2), _f(row.get("eps_estimate"), 2),
             verb, "{:.1f}%".format(abs(row.get("surprise_pct") or 0.0)),
@@ -314,7 +314,7 @@ def _latest_result(surprise: Dict[str, Any],
                 headline, direction, abs(move), ext["kind"])
             out["note"] = (
                 "The {} move is the market's first read on the print, and it's {} the "
-                "result — {} and {} {:.1f}%. The number was fine; the reaction is what "
+                "result: {} and {} {:.1f}%. The number was fine; the reaction is what "
                 "matters.".format(
                     ext["kind"],
                     "fighting" if fought else "agreeing with",
@@ -322,15 +322,15 @@ def _latest_result(surprise: Dict[str, Any],
                     direction, abs(move))
                 if fought else
                 "The {} move is the market's first read on the print and it agrees with the "
-                "result. The next regular session is what confirms it — extended-hours levels "
+                "result. The next regular session is what confirms it. Extended-hours levels "
                 "are set on thin volume and can retrace at the open.".format(ext["kind"])
             )
             out["reaction_fights_result"] = bool(fought)
         else:
             out["headline"] = headline
             out["note"] = (
-                "No extended-hours quote is available, so there's no read on the reaction yet — "
-                "the session after a print is what decides whether the result mattered, and a "
+                "No extended-hours quote is available, so there's no read on the reaction yet . "
+                "The session after a print is what decides whether the result mattered, and a "
                 "company can beat and still sell off."
             )
     return out
@@ -380,18 +380,18 @@ def _revisions(est: Dict[str, Any]) -> Dict[str, Any]:
     elif drift_90 >= 3:
         direction = "rising"
         note = (
-            f"Analysts have raised full-year EPS estimates {drift_90:+.1f}% over 90 days — "
-            "the direction of travel is positive, which usually reflects upbeat guidance."
+            f"Analysts have raised full-year EPS estimates {drift_90:+.1f}% over 90 days . "
+            "The direction of travel is positive, which usually reflects upbeat guidance."
         )
     elif drift_90 <= -3:
         direction = "falling"
         note = (
-            f"Analysts have cut full-year EPS estimates {drift_90:+.1f}% over 90 days — "
-            "estimates are moving down, which usually follows soft guidance."
+            f"Analysts have cut full-year EPS estimates {drift_90:+.1f}% over 90 days . "
+            "Estimates are moving down, which usually follows soft guidance."
         )
     else:
         direction = "flat"
-        note = f"Full-year estimates have barely moved ({drift_90:+.1f}% over 90 days) — no clear revision trend."
+        note = f"Full-year estimates have barely moved ({drift_90:+.1f}% over 90 days). No clear revision trend."
 
     return {
         "available": bool(rows),
@@ -403,7 +403,7 @@ def _revisions(est: Dict[str, Any]) -> Dict[str, Any]:
         "note": note,
         "caveat": (
             "Company guidance text isn't available in free data. This is the analyst "
-            "estimate-revision trend, which moves in response to guidance — a proxy, not the guidance itself."
+            "estimate-revision trend, which moves in response to guidance. A proxy, not the guidance itself."
         ),
     }
 
@@ -501,7 +501,7 @@ def _growth(financials: Dict[str, Any], est: Dict[str, Any]) -> Dict[str, Any]:
         if delta >= 1:
             notes.append(f"Operating margin has expanded {delta:+.1f} points versus the same quarter last year.")
         elif delta <= -1:
-            notes.append(f"Operating margin has compressed {delta:+.1f} points versus the same quarter last year — growth is costing more.")
+            notes.append(f"Operating margin has compressed {delta:+.1f} points versus the same quarter last year. Growth is costing more.")
     cy = next((f for f in forward if f["period"] == "0y"), None)
     if cy and cy.get("eps_growth_pct") is not None:
         notes.append(f"Analysts model {cy['eps_growth_pct']:+.0f}% EPS growth for the current fiscal year.")
@@ -667,7 +667,7 @@ def _event_pricing(implied: Dict[str, Any], surprise: Dict[str, Any],
 
     note = (
         f"The {dte}-day straddle prices a {imp:.1f}% move, against {baseline:.1f}% actual on average "
-        f"across {window} — about {ratio:.1f}x. {tail}"
+        f"across {window}, about {ratio:.1f}x. {tail}"
     )
 
     out = {
@@ -686,14 +686,14 @@ def _event_pricing(implied: Dict[str, Any], surprise: Dict[str, Any],
                 "This expiry sits close to the report, so the comparison is against past earnings "
                 "reactions." if kind == "event-day" else
                 "This expiry is well past the report, so the straddle covers ordinary volatility as "
-                "well as the print — it is compared against the same holding period, not the event alone."
+                "well as the print. It is compared against the same holding period, not the event alone."
             )
         ),
     }
     if kind == "same-tenor" and event_day is not None:
         out["event_day_note"] = (
-            f"For reference, the single session after a report has averaged {event_day:.1f}% — "
-            "the print's own contribution, separate from the rest of the period."
+            f"For reference, the single session after a report has averaged {event_day:.1f}% . "
+            "The print's own contribution, separate from the rest of the period."
         )
     return out
 
@@ -731,12 +731,12 @@ def _analyst(view: Dict[str, Any], spot: Optional[float]) -> Dict[str, Any]:
         notes.append(f"Mean price target implies {out['upside_pct']:+.0f}% from here.")
         if out["upside_pct"] > 40:
             notes.append(
-                "That's a wide gap — either the target is stale or the market disagrees with the "
+                "That's a wide gap. Either the target is stale or the market disagrees with the "
                 "sell side. Treat targets as sentiment, not a forecast."
             )
     if out.get("buy_share_pct") is not None and out["buy_share_pct"] >= 85:
         notes.append(
-            f"{out['buy_share_pct']:.0f}% of analysts rate it a buy — crowded positioning leaves "
+            f"{out['buy_share_pct']:.0f}% of analysts rate it a buy. Crowded positioning leaves "
             "little room for upgrades as a catalyst."
         )
     out["notes"] = notes
@@ -769,7 +769,7 @@ def _verdict(next_report: Dict[str, Any], surprise: Dict[str, Any], revisions: D
         if surprise.get("beat_rate_pct") is not None and surprise["beat_rate_pct"] >= 75:
             reasons.append(
                 "Consistent beater ({:.0f}% hit rate over {} quarters), so the beat itself was "
-                "close to the base case — the reaction is the part worth watching.".format(
+                "close to the base case. The reaction is the part worth watching.".format(
                     surprise["beat_rate_pct"], surprise.get("quarters") or 0)
             )
         reasons.extend(growth.get("notes", [])[:1])
@@ -783,22 +783,22 @@ def _verdict(next_report: Dict[str, Any], surprise: Dict[str, Any], revisions: D
     if days is None:
         headline = "No scheduled report found."
     elif days <= 7:
-        headline = f"Reports in {days} day{'s' if days != 1 else ''} — inside the event window."
+        headline = f"Reports in {days} day{'s' if days != 1 else ''}. Inside the event window."
         reasons.append(
             "Options into the print carry event premium that collapses the morning after, "
             "so a directional long here needs the move to happen almost immediately."
         )
     elif days <= 21:
-        headline = f"Reports in {days} days — premium is starting to build."
+        headline = f"Reports in {days} days. Premium is starting to build."
         reasons.append("Implied vol usually climbs into the last two weeks, which helps long premium held into the date.")
     else:
-        headline = f"Next report is {days} days out — no event premium yet."
+        headline = f"Next report is {days} days out. No event premium yet."
         reasons.append("Far enough out that earnings shouldn't drive strike selection for a normal swing.")
 
     if revisions.get("direction") == "rising":
         reasons.append("Estimate revisions are positive, which historically precedes beats more often than misses.")
     elif revisions.get("direction") == "falling":
-        reasons.append("Estimates are being cut into the date — a lower bar, but a signal of deteriorating guidance.")
+        reasons.append("Estimates are being cut into the date. A lower bar, but a signal of deteriorating guidance.")
 
     if surprise.get("beat_rate_pct") is not None and surprise["beat_rate_pct"] >= 75:
         reasons.append(f"Consistent beater ({surprise['beat_rate_pct']:.0f}% hit rate), so a beat alone is close to the base case.")
@@ -858,7 +858,7 @@ def momentum(yf_provider, ticker: str) -> Dict[str, Any]:
             "label": "Surprise history", "read": "{:.0f}% beat rate".format(beat_rate),
             "tone": tone,
             "detail": "Beat {} of the last {} quarters, averaging {}. A habitual beater makes a "
-                      "beat the base case rather than news — check the reaction column, not the "
+                      "beat the base case rather than news. Check the reaction column, not the "
                       "hit rate.".format(
                           surprise.get("beat_count"), surprise.get("quarters"),
                           "{:+.1f}%".format(surprise["avg_surprise_pct"])
@@ -913,7 +913,7 @@ def momentum(yf_provider, ticker: str) -> Dict[str, Any]:
             "This does not feed the composite score above. Revisions and surprise history do "
             "carry signal over a few weeks, but the composite is deliberately a technicals-led "
             "read, and folding fundamentals in would shift every score in the terminal. "
-            "Valuation is left out of this panel entirely — at a two-to-eight-week horizon it has "
+            "Valuation is left out of this panel entirely. At a two-to-eight-week horizon it has "
             "no directional value, and it's already the backbone of the Long-Term conviction "
             "score, where the horizon matches."
         ),
@@ -955,7 +955,7 @@ def analyse(provider, yf_provider, ticker: str, quote: Dict[str, Any], rate: flo
         pricing["stale"] = True
         pricing["stale_note"] = (
             "This compares option pricing to history for a report that has already been "
-            "released, so it no longer describes a decision — event premium collapses once the "
+            "released, so it no longer describes a decision. Event premium collapses once the "
             "numbers are out. Kept for reference on how the event was priced beforehand."
         )
     analyst = _analyst(analyst_raw, spot)
@@ -968,7 +968,7 @@ def analyse(provider, yf_provider, ticker: str, quote: Dict[str, Any], rate: flo
             "spot": _f(spot, 2),
             "not_applicable": True,
             "reason": (
-                f"{ticker} has no earnings data — no scheduled report, no reported history and no "
+                f"{ticker} has no earnings data. No scheduled report, no reported history and no "
                 "analyst estimates. That's expected for an ETF, index or trust, which holds other "
                 "assets rather than running a business. For a company ticker it can also mean the "
                 "feed has no coverage."

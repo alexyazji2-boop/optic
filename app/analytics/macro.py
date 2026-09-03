@@ -44,7 +44,7 @@ RATIOS: List[Dict[str, Any]] = [
         "numer": "HG=F",
         "denom": "GC=F",
         "risk_on_when": "rising",
-        "reads": "industrial demand vs safety bid — a growth thermometer",
+        "reads": "industrial demand vs safety bid. A growth thermometer",
     },
     {
         "name": "HYG / TLT",
@@ -58,7 +58,7 @@ RATIOS: List[Dict[str, Any]] = [
         "numer": "^RUT",
         "denom": "^GSPC",
         "risk_on_when": "rising",
-        "reads": "small-cap participation — breadth confirmation",
+        "reads": "small-cap participation. Breadth confirmation",
     },
     {
         "name": "Nasdaq / S&P",
@@ -169,19 +169,19 @@ def analyse(provider) -> Dict[str, Any]:
     if vix_level is not None:
         if vix_level < 14:
             adj, band = 18, "below 14"
-            notes.append("VIX {:.1f} — complacent tape, trend-following works, hedges are cheap".format(vix_level))
+            notes.append("VIX {:.1f}. Complacent tape, trend-following works, hedges are cheap".format(vix_level))
         elif vix_level < 18:
             adj, band = 10, "14 to 18"
-            notes.append("VIX {:.1f} — normal vol regime".format(vix_level))
+            notes.append("VIX {:.1f}. Normal vol regime".format(vix_level))
         elif vix_level < 25:
             adj, band = -8, "18 to 25"
-            notes.append("VIX {:.1f} — elevated; size down and widen stops".format(vix_level))
+            notes.append("VIX {:.1f}. Elevated; size down and widen stops".format(vix_level))
         elif vix_level < 32:
             adj, band = -20, "25 to 32"
-            notes.append("VIX {:.1f} — stressed; premium selling favored over directional longs".format(vix_level))
+            notes.append("VIX {:.1f}. Stressed; premium selling favored over directional longs".format(vix_level))
         else:
             adj, band = -30, "above 32"
-            notes.append("VIX {:.1f} — panic regime; mean-reversion bounces are violent both ways".format(vix_level))
+            notes.append("VIX {:.1f}. Panic regime; mean-reversion bounces are violent both ways".format(vix_level))
         score += adj
         # The single largest term in the score, and it was missing from the
         # decomposition entirely.
@@ -214,11 +214,11 @@ def analyse(provider) -> Dict[str, Any]:
         if jpy_5d < -2.0:
             adj, band = -15, "a fall steeper than 2% in a week"
             notes.append(
-                "USD/JPY down {:.1f}% in a week — yen-carry unwind risk, historically drags risk assets".format(abs(jpy_5d))
+                "USD/JPY down {:.1f}% in a week. Yen-carry unwind risk, historically drags risk assets".format(abs(jpy_5d))
             )
         elif jpy_5d > 1.5:
             adj, band = 6, "a rise above 1.5%"
-            notes.append("USD/JPY up {:.1f}% — carry trade supportive".format(jpy_5d))
+            notes.append("USD/JPY up {:.1f}%. Carry trade supportive".format(jpy_5d))
         else:
             adj, band = 0, "inside the -2% to +1.5% band, so no adjustment"
         score += adj
@@ -229,13 +229,13 @@ def analyse(provider) -> Dict[str, Any]:
     if oil_20 is not None:
         if oil_20 > 15:
             adj, band = -10, "up more than 15% in a month"
-            notes.append("Crude +{:.0f}% in a month — inflation/cost-shock headwind".format(oil_20))
+            notes.append("Crude +{:.0f}% in a month. Inflation/cost-shock headwind".format(oil_20))
         elif oil_20 > 3:
             adj, band = 4, "up 3% to 15%"
-            notes.append("Crude firm — consistent with demand growth")
+            notes.append("Crude firm. Consistent with demand growth")
         elif oil_20 < -15:
             adj, band = -5, "down more than 15%"
-            notes.append("Crude -{:.0f}% — demand-destruction signal".format(abs(oil_20)))
+            notes.append("Crude -{:.0f}%. Demand-destruction signal".format(abs(oil_20)))
         else:
             adj, band = 0, "inside the -15% to +3% band, so no adjustment"
         score += adj
@@ -249,7 +249,7 @@ def analyse(provider) -> Dict[str, Any]:
         curve = round(y10 - y3m, 3)
         if curve < 0:
             adj, band = -6, "inverted"
-            notes.append("3m/10y curve inverted ({:.2f}) — late-cycle backdrop".format(curve))
+            notes.append("3m/10y curve inverted ({:.2f}). Late-cycle backdrop".format(curve))
         else:
             adj, band = 0, "positive, so no adjustment"
             notes.append("3m/10y curve positive ({:.2f})".format(curve))
@@ -259,9 +259,9 @@ def analyse(provider) -> Dict[str, Any]:
     breadth_ratio = next((r for r in ratio_rows if r["name"] == "Russell / S&P"), None)
     if breadth_ratio and breadth_ratio.get("chg_20d") is not None:
         if breadth_ratio["chg_20d"] < -3:
-            notes.append("Small caps lagging badly — rally is narrow, be selective")
+            notes.append("Small caps lagging badly. Rally is narrow, be selective")
         elif breadth_ratio["chg_20d"] > 3:
-            notes.append("Small caps leading — broad participation supports breakouts")
+            notes.append("Small caps leading. Broad participation supports breakouts")
 
     score = float(np.clip(score, -100, 100))
     if score >= 35:
@@ -273,7 +273,7 @@ def analyse(provider) -> Dict[str, Any]:
     elif score <= -12:
         regime, stance = "mildly risk-off", "Defensive lean; take profits faster and cut size."
     else:
-        regime, stance = "neutral / mixed", "No macro edge — trade the setup, not the market."
+        regime, stance = "neutral / mixed", "No macro edge. Trade the setup, not the market."
 
     grouped: Dict[str, List[Dict[str, Any]]] = {}
     for item in INSTRUMENTS:

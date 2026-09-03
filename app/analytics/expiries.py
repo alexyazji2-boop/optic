@@ -103,7 +103,7 @@ def upcoming(now: Optional[datetime] = None, months: int = 4) -> List[Dict[str, 
                 "why": (
                     "VIX settles against a special opening auction of SPX options, "
                     "not against a close, and it lands on a Wednesday rather than "
-                    "with equity opex — a distinction routinely missed. Hedges "
+                    "with equity opex. A distinction routinely missed. Hedges "
                     "rolled around this date can move implied volatility without "
                     "the index itself doing much."
                 ),
@@ -133,8 +133,8 @@ def context(now: Optional[datetime] = None) -> Dict[str, Any]:
                 "largest and about to vanish, so pinning near big strikes is most "
                 "likely now and least likely next week.")
     elif days <= 7:
-        note = ("Opex is inside a week. Charm — the delta that decays with time "
-                "alone — builds fastest here, which is where the drift into an "
+        note = ("Opex is inside a week. Charm. The delta that decays with time "
+                "alone. Builds fastest here, which is where the drift into an "
                 "expiry Friday comes from.")
     else:
         note = ("Opex is still {} days out, so expiry mechanics are not yet the "

@@ -128,7 +128,7 @@ def earnings_this_week(provider, now: Optional[datetime] = None,
         "failed": failed,
         "universe": len(names),
         "note": (
-            "Scanned {} widely-followed names, not the whole market — a complete "
+            "Scanned {} widely-followed names, not the whole market. A complete "
             "earnings calendar is a licensed product, and free data gives one date "
             "per symbol at a time. Names outside this watchlist report too."
             .format(checked)

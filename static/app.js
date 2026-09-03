@@ -84,26 +84,26 @@ const views = {
 
 const GLOSSARY = {
   'liquidity': "How easily something can be bought or sold without moving its price. A stock trading a few hundred thousand dollars a day is illiquid: your own order becomes the market, and the price you get is nothing like the price you saw.",
-  'dollar volume': "Share price multiplied by shares traded — the actual money changing hands each day. A better liquidity measure than share count, since a million shares of a $2 stock is a far smaller market than a million shares of a $200 one.",
+  'dollar volume': "Share price multiplied by shares traded. The actual money changing hands each day. A better liquidity measure than share count, since a million shares of a $2 stock is a far smaller market than a million shares of a $200 one.",
   'screen': "A first-pass filter over a large list of stocks, used to decide which few deserve real analysis. A screen ranks candidates; it does not decide whether a trade is good.",
   'universe': "The full set of stocks a strategy is allowed to consider before any filtering. A strategy that only ever looks at ten names has a ten-name universe, however sophisticated the rest of it is.",
   'paper trading': "Placing trades on record without real money, so the results can be measured later. The prices are real; the positions are not.",
   'expectancy': "The average profit or loss per trade across every completed trade. Positive means the approach made money on average; negative means it lost, no matter how good the win rate looks.",
   'profit factor': "Total money made by the winners divided by total money lost by the losers. Above 1.0 is profitable; below 1.0 is not.",
-  'win rate': "The share of completed trades that made money. On its own it says very little — a 30% win rate is excellent if the winners are five times the size of the losers.",
+  'win rate': "The share of completed trades that made money. On its own it says very little. A 30% win rate is excellent if the winners are five times the size of the losers.",
   'stop loss': "A price set in advance where you exit if the trade goes against you. It defines the loss before entering, instead of deciding in the moment.",
   'time stop': "Closing a trade because it hasn't worked within a set number of days, rather than because it hit a price. Capital sitting in an idea that isn't moving has a cost.",
   'realised p&l': "Profit and loss from trades that have already closed. This is the number that is final.",
   'unrealised p&l': "Profit and loss on positions still open. It changes every time the price moves and only becomes real when the position closes.",
   'slippage': "The gap between the price you expected and the price you actually got. It always works against you, and it's why simulated results tend to beat live ones.",
-  'mid price': "The midpoint between the best buy and sell price. Filling at the mid is optimistic — in practice you usually pay closer to the worse side, especially on options.",
+  'mid price': "The midpoint between the best buy and sell price. Filling at the mid is optimistic. In practice you usually pay closer to the worse side, especially on options.",
   'risk-on': "Investors are feeling confident and buying riskier assets (stocks, crypto) instead of safe ones (bonds, cash).",
   'risk-off': "Investors are nervous and moving money into safe assets (bonds, cash, gold) instead of risky ones like stocks.",
   'gamma': "How fast an option's directional exposure (its delta) changes as the stock price moves. High gamma means the trade's behavior can flip quickly.",
   'dealer gamma': "A measure of how much stock market-maker dealers must buy or sell to stay hedged as the price moves. It hints at whether trading will feel calm or wild.",
   'gamma flip': "The price level where dealers switch from calming price swings down to amplifying them, or the reverse.",
   'flip point': "The price level where dealers switch from calming price swings down to amplifying them, or the reverse.",
-  'gex': "Gamma Exposure — an estimate of dealer hedging pressure at each price level, used to guess whether a stock will feel calm (range-bound) or wild (trending).",
+  'gex': "Gamma Exposure. An estimate of dealer hedging pressure at each price level, used to guess whether a stock will feel calm (range-bound) or wild (trending).",
   'delta': "How much an option's price moves for every $1 move in the stock. A delta of 0.50 means the option gains about $0.50 when the stock gains $1.",
   'theta': "How much value an option loses every single day just from time passing, even if the stock doesn't move. Often called ‘time decay’.",
   'theta decay': "The steady loss of an option's value simply from time passing, even if the stock price doesn't move.",
@@ -111,70 +111,70 @@ const GLOSSARY = {
   'implied volatility': "The market's guess at how much a stock will move in the future, baked into the option's price. Higher implied volatility means more expensive options.",
   'iv rank': "Where today's implied volatility sits between its own highest and lowest point over roughly the past year, on a 0-100 scale. High IV rank means options are historically expensive right now; low means they're historically cheap.",
   'iv percentile': "The percentage of days over roughly the past year where implied volatility was lower than it is today. Similar to IV rank, but counts days instead of measuring the full high-low range.",
-  'realized volatility': "How much a stock has actually moved, measured from its real price history — as opposed to implied volatility, which is a forward-looking guess baked into option prices.",
-  'open interest': "The total number of option contracts at a given strike that are currently open — bought or sold but not yet closed or expired.",
+  'realized volatility': "How much a stock has actually moved, measured from its real price history, as opposed to implied volatility, which is a forward-looking guess baked into option prices.",
+  'open interest': "The total number of option contracts at a given strike that are currently open, bought or sold but not yet closed or expired.",
   'breakeven': "The stock price an option needs to reach for you to not lose money on the trade, ignoring commissions.",
   'iron condor': "A strategy that profits if the stock stays inside a price range. You sell options on both sides of the range and buy further-out options to cap your risk.",
-  'iron butterfly': "Like an iron condor, but the options you sell are both at today's price instead of spread apart — collects more money upfront but needs the stock to stay very still.",
-  'straddle': "Buying a call and a put at the same strike price — a bet that the stock will move a lot, in either direction.",
-  'strangle': "Like a straddle, but the call and put are at different (further out) strike prices — cheaper, but needs a bigger move to make money.",
+  'iron butterfly': "Like an iron condor, but the options you sell are both at today's price instead of spread apart. Collects more money upfront but needs the stock to stay very still.",
+  'straddle': "Buying a call and a put at the same strike price. A bet that the stock will move a lot, in either direction.",
+  'strangle': "Like a straddle, but the call and put are at different (further out) strike prices. Cheaper, but needs a bigger move to make money.",
   'put/call ratio': "How many put options (bets a stock will fall) are being traded compared to call options (bets it will rise). A high ratio can mean traders are nervous.",
-  'relative strength': "How a stock or sector is performing compared to a benchmark like the S&amp;P 500 — not just whether it's up, but whether it's beating the market.",
+  'relative strength': "How a stock or sector is performing compared to a benchmark like the S&amp;P 500. Not just whether it's up, but whether it's beating the market.",
   'z-score': "A way to measure how unusual a value is compared to its recent normal range. A z-score of +2 or higher (or -2 or lower) means it's unusually stretched.",
-  'basis points': "A tiny unit for measuring rates — 100 basis points equals 1%.",
-  'rsi': "Relative Strength Index — a 0-100 gauge of whether a stock has been bought or sold too aggressively recently. Above 70 often means overbought, below 30 often means oversold.",
+  'basis points': "A tiny unit for measuring rates. 100 basis points equals 1%.",
+  'rsi': "Relative Strength Index. A 0-100 gauge of whether a stock has been bought or sold too aggressively recently. Above 70 often means overbought, below 30 often means oversold.",
   'macd': "A trend-following indicator that compares two moving averages to help spot when momentum is shifting up or down.",
-  'atr': "Average True Range — a measure of how much a stock typically moves in a single day. A higher ATR means a more volatile stock.",
+  'atr': "Average True Range. A measure of how much a stock typically moves in a single day. A higher ATR means a more volatile stock.",
   'fibonacci retracement': "A charting tool that marks likely support and resistance price levels using a mathematical ratio, meant to guess where a pullback might stop.",
   'support': "A price level where a falling stock has tended to stop falling and bounce.",
   'resistance': "A price level where a rising stock has tended to stop rising and pull back.",
-  'short interest': "The percentage of a stock's available shares that have been sold short — bet against — by traders expecting the price to fall.",
+  'short interest': "The percentage of a stock's available shares that have been sold short (bet against) by traders expecting the price to fall.",
   'days to cover': "How many days it would take, at average trading volume, for all short sellers to buy back their shares. A proxy for how ‘trapped’ short sellers might be.",
-  'pair trade': "Betting on one stock or asset relative to another — going long the one you think will do better and short the one you think will do worse.",
+  'pair trade': "Betting on one stock or asset relative to another. Going long the one you think will do better and short the one you think will do worse.",
   'moving average': "The average closing price over a set number of past days, used to smooth out day-to-day noise and show the underlying trend.",
   'overbought': "A stock has risen quickly enough that it may be due for a pause or pullback.",
   'oversold': "A stock has fallen quickly enough that it may be due for a bounce.",
   'liquidity': "How easily a stock or option can be bought or sold without moving its price much. Low liquidity means wide bid/ask spreads and harder fills.",
   'bid/ask spread': "The gap between the highest price a buyer will pay (bid) and the lowest price a seller will accept (ask). A wide spread makes a trade more expensive to enter and exit.",
-  'vwap': "Volume-Weighted Average Price — the average price paid today, weighted by how much volume traded at each price. Above VWAP is generally considered strong for the day; below is weak.",
+  'vwap': "Volume-Weighted Average Price. The average price paid today, weighted by how much volume traded at each price. Above VWAP is generally considered strong for the day; below is weak.",
   'opening range': "The high and low price set in the first few minutes after the market opens. Breaking above or below it is a common early signal of the day's direction.",
   'relative volume': "How much a stock is trading today compared to how much it normally trades at this same point in the day. Well above 1x means unusually heavy activity.",
-  'rvol': "Relative Volume — how much a stock is trading today compared to its normal volume at this same point in the day. Well above 1x means unusually heavy activity.",
+  'rvol': "Relative Volume. How much a stock is trading today compared to its normal volume at this same point in the day. Well above 1x means unusually heavy activity.",
   'pivot point': "A price level calculated from yesterday's high, low, and close, used intraday as a quick reference for where a stock might find support or resistance today.",
-  '0dte': "Zero Days to Expiry — an option expiring the same day it's traded. Its price can swing very fast since there's no time left for the bet to play out.",
+  '0dte': "Zero Days to Expiry. An option expiring the same day it's traded. Its price can swing very fast since there's no time left for the bet to play out.",
   'gamma squeeze': "A rapid, self-reinforcing price move that happens when dealers who sold options must keep buying (or selling) the stock to stay hedged as the price moves, which pushes the price further in the same direction.",
-  'short squeeze': "A rapid price rise that forces traders who bet against a stock (short sellers) to buy it back to limit their losses — and that buying pushes the price up even more.",
+  'short squeeze': "A rapid price rise that forces traders who bet against a stock (short sellers) to buy it back to limit their losses, and that buying pushes the price up even more.",
   'call wall': "The strike with the largest call open interest / gamma exposure above the price. Dealers hedging those calls tend to sell as the stock rallies into it, so it often acts like a ceiling.",
   'put wall': "The strike with the largest put open interest / gamma exposure below the price. Dealers hedging those puts tend to buy as the stock falls into it, so it often acts like a floor.",
-  'gamma pin': "The single strike with the largest gamma exposure in either direction — the level dealer hedging tends to pull price toward, especially as expiry gets close.",
-  'r1': "First resistance — a level derived from yesterday's high/low/close where an intraday rally often stalls first, before testing R2.",
-  'r2': "Second resistance — a level derived from yesterday's high/low/close, further above price than R1 and a tougher ceiling to break through.",
-  's1': "First support — a level derived from yesterday's high/low/close where an intraday decline often stalls first, before testing S2.",
-  's2': "Second support — a level derived from yesterday's high/low/close, further below price than S1 and a tougher floor to break through.",
-  'eps': "Earnings Per Share — the company's profit divided by its share count. It's the single number analysts forecast and the market judges the report against.",
-  'consensus': "The average of what analysts forecast. Beating it isn't automatically good news — what matters is whether the market had already priced in more.",
+  'gamma pin': "The single strike with the largest gamma exposure in either direction. The level dealer hedging tends to pull price toward, especially as expiry gets close.",
+  'r1': "First resistance. A level derived from yesterday's high/low/close where an intraday rally often stalls first, before testing R2.",
+  'r2': "Second resistance. A level derived from yesterday's high/low/close, further above price than R1 and a tougher ceiling to break through.",
+  's1': "First support. A level derived from yesterday's high/low/close where an intraday decline often stalls first, before testing S2.",
+  's2': "Second support. A level derived from yesterday's high/low/close, further below price than S1 and a tougher floor to break through.",
+  'eps': "Earnings Per Share. The company's profit divided by its share count. It's the single number analysts forecast and the market judges the report against.",
+  'consensus': "The average of what analysts forecast. Beating it isn't automatically good news. What matters is whether the market had already priced in more.",
   'implied move': "How big a move the options market is pricing for a stock, read from the cost of buying a call and a put at the same strike. If it costs 6% of the share price, traders expect roughly a 6% move.",
   'straddle cost': "The combined price of a call and a put at the same strike. It's what you pay to bet on a big move in either direction, and doubles as the market's estimate of that move's size.",
   'beat rate': "How often a company has reported earnings above the analyst consensus. A high rate usually means management guides conservatively, so a beat is already expected.",
   'surprise': "The gap between reported earnings and what analysts expected, in percent. Positive is a beat, negative is a miss.",
   'event premium': "The extra cost baked into option prices ahead of a known event like earnings. It evaporates the moment the event passes, which is why long options can lose money even when the stock moves your way.",
-  'price target': "Where an analyst thinks the stock will trade, usually 12 months out. Useful as a sentiment gauge, unreliable as a forecast — targets sit above the current price in almost every market.",
+  'price target': "Where an analyst thinks the stock will trade, usually 12 months out. Useful as a sentiment gauge, unreliable as a forecast. Targets sit above the current price in almost every market.",
   'gross margin': "What proportion of revenue is left after the direct cost of making the product. Rising gross margin means pricing power or cheaper inputs.",
   'operating margin': "What proportion of revenue is left after all the running costs of the business. It's the cleanest read on whether growth is actually becoming more profitable.",
-  'year over year': "Comparing a quarter with the same quarter twelve months earlier, rather than the one just before it. This strips out seasonality — most businesses aren't supposed to have equal quarters.",
+  'year over year': "Comparing a quarter with the same quarter twelve months earlier, rather than the one just before it. This strips out seasonality. Most businesses aren't supposed to have equal quarters.",
   'glidepath': "The practice of shifting from stocks toward bonds as your horizon shortens, so a crash close to when you need the money can't undo decades of growth.",
-  'expense ratio': "The annual percentage a fund charges to run it, taken automatically from your returns. 0.03% is $3 a year per $10,000; 1% is $100 — over decades the difference compounds into real money.",
-  'cagr': "Compound Annual Growth Rate — the steady yearly rate that would produce the same end result as the actual bumpy path. It smooths over crashes rather than hiding them, so read it alongside the worst drawdown.",
+  'expense ratio': "The annual percentage a fund charges to run it, taken automatically from your returns. 0.03% is $3 a year per $10,000; 1% is $100. Over decades the difference compounds into real money.",
+  'cagr': "Compound Annual Growth Rate. The steady yearly rate that would produce the same end result as the actual bumpy path. It smooths over crashes rather than hiding them, so read it alongside the worst drawdown.",
   'rebalance': "Selling some of what has grown and buying what has lagged, to return to your target weights. Inside a Roth this triggers no tax, which makes it far easier than in a taxable account.",
   'correlation': "How closely two investments move together, from -1 (opposite) to +1 (identical). Two funds with correlation near 1 are effectively the same bet.",
-  'dte': "Days to expiry — how many calendar days until the option stops trading and either pays out or expires worthless.",
-  'oi': "Open interest — the number of contracts at that strike currently held open by someone. High open interest means a lot of money is already positioned there.",
-  'itm': "In the money — the option already has real value if exercised today: a call below the stock price, or a put above it.",
-  'otm': "Out of the money — the option has no value if exercised today, and needs the stock to move before it does.",
-  'atm': "At the money — the strike sits closest to where the stock is trading right now.",
-  'sma': "Simple moving average — the plain average closing price over a number of days, used to define the trend.",
-  'ema': "Exponential moving average — like a moving average but weighted toward recent days, so it turns faster than the simple version.",
-  'yoy': "Year over year — comparing a period with the same period a year earlier, which removes seasonal distortion from the comparison.",
+  'dte': "Days to expiry. How many calendar days until the option stops trading and either pays out or expires worthless.",
+  'oi': "Open interest. The number of contracts at that strike currently held open by someone. High open interest means a lot of money is already positioned there.",
+  'itm': "In the money. The option already has real value if exercised today: a call below the stock price, or a put above it.",
+  'otm': "Out of the money. The option has no value if exercised today, and needs the stock to move before it does.",
+  'atm': "At the money. The strike sits closest to where the stock is trading right now.",
+  'sma': "Simple moving average. The plain average closing price over a number of days, used to define the trend.",
+  'ema': "Exponential moving average. Like a moving average but weighted toward recent days, so it turns faster than the simple version.",
+  'yoy': "Year over year. Comparing a period with the same period a year earlier, which removes seasonal distortion from the comparison.",
 };
 
 // Sort longest-first so multi-word terms (e.g. "put/call ratio") match
@@ -209,87 +209,87 @@ function gloss(rawText) {
 const HEADER_DEFS = {
   // ---- swing / options
   'swing verdict': "The terminal's combined read on this stock: chart signals, dealer gamma, options flow, news tone and the macro backdrop blended into one score from -100 (bearish) to +100 (bullish).",
-  'quote': "The current price and where it sits inside today's range and the past year's range — the baseline every other panel is measured against.",
+  'quote': "The current price and where it sits inside today's range and the past year's range. The baseline every other panel is measured against.",
   'options analytics': 'The options-market side of the analysis: greeks, dealer gamma exposure and call-versus-put flow.',
   'strike & entry recommendation': "Which option contract the terminal would pick given the current read, and the price level where entering makes sense instead of chasing.",
-  'price, moving averages & fibonacci': "The price history with trend lines and common pullback levels drawn on — used to judge whether the trend is intact and where a move is likely to pause.",
+  'price, moving averages & fibonacci': "The price history with trend lines and common pullback levels drawn on. Used to judge whether the trend is intact and where a move is likely to pause.",
   'rsi (14)': 'A momentum gauge from 0-100 showing whether the stock has been bought or sold too hard recently. Above 70 is stretched, below 30 is washed out.',
   'macd (12, 26, 9)': 'A trend gauge comparing two moving averages, used to spot momentum turning up or down before the price move is obvious.',
-  'delta analysis': "How much directional exposure sits in this stock's options — a read on whether the options market is positioned long or short.",
+  'delta analysis': "How much directional exposure sits in this stock's options. A read on whether the options market is positioned long or short.",
   'gamma analysis': 'Where option positions are most sensitive to price moves, which tells you which price levels are likely to attract or repel the stock.',
-  'fear & greed': "A reading of how much risk appetite is in the market right now, from 0 (extreme fear) to 100 (extreme greed). It describes positioning, not value \u2014 it says where the crowd is, never what happens next.",
+  'fear & greed': "A reading of how much risk appetite is in the market right now, from 0 (extreme fear) to 100 (extreme greed). It describes positioning, not value. It says where the crowd is, never what happens next.",
   'does the score work?': "A test of whether the screen's score actually predicts anything, measured against two controls: a random score, and the stock's own three-month return with no weighting at all.",
-  'sector confirmation': "Whether the sector around a stock agrees with it. A supportive group is a tailwind for a setup, never a reason on its own \u2014 every name still needs its own momentum and risk structure.",
+  'sector confirmation': "Whether the sector around a stock agrees with it. A supportive group is a tailwind for a setup, never a reason on its own. Every name still needs its own momentum and risk structure.",
   'sector board': "Each SPDR sector against the prior session's high and low, with a read on whether money is moving into it or out of it relative to the index.",
   '\u0394 to break': 'How far price is from the level it would have to clear for the short-term trend to turn up. Negative means it is still underneath.',
   '\u0394 to breakdown': 'How far price is above the level that would turn the short-term trend down. Negative means it has already broken.',
-  'market regime score': 'One number for what kind of market this is right now — is the tape helping a position or working against it. Built from index trend, sector breadth, the VIX, whether small caps are confirming, and how many sectors are participating.',
-  'vex — dealer vanna exposure': 'How much dealer hedging demand changes when implied volatility moves, rather than when price moves. Gamma answers "what if the stock moves"; vanna answers "what if the market re-prices risk".',
-  'cex — dealer charm exposure': 'How much dealer hedging demand changes from time passing alone, with neither price nor volatility moving. It builds into expiry, which is why the last days of an options cycle have a drift of their own.',
-  'gex — dealer gamma exposure': 'An estimate of how much stock market-makers must buy or sell to stay hedged as price moves. It hints at whether the tape will feel calm and range-bound or fast and trending.',
-  'call vs put flow': "Whether today's options activity leans toward bullish bets (calls) or bearish bets (puts) — a read on positioning, not a promise of direction.",
+  'market regime score': 'One number for what kind of market this is right now. Is the tape helping a position or working against it. Built from index trend, sector breadth, the VIX, whether small caps are confirming, and how many sectors are participating.',
+  'vex. Dealer vanna exposure': 'How much dealer hedging demand changes when implied volatility moves, rather than when price moves. Gamma answers "what if the stock moves"; vanna answers "what if the market re-prices risk".',
+  'cex. Dealer charm exposure': 'How much dealer hedging demand changes from time passing alone, with neither price nor volatility moving. It builds into expiry, which is why the last days of an options cycle have a drift of their own.',
+  'gex. Dealer gamma exposure': 'An estimate of how much stock market-makers must buy or sell to stay hedged as price moves. It hints at whether the tape will feel calm and range-bound or fast and trending.',
+  'call vs put flow': "Whether today's options activity leans toward bullish bets (calls) or bearish bets (puts). A read on positioning, not a promise of direction.",
   'net premium by strike': 'How much money is actually being spent at each strike price, showing where traders are placing real bets rather than just quoting.',
-  'buy calls / puts': 'Straightforward directional trades — buying a call to bet the stock rises, or a put to bet it falls. Simple, but all the premium is at risk.',
+  'buy calls / puts': 'Straightforward directional trades. Buying a call to bet the stock rises, or a put to bet it falls. Simple, but all the premium is at risk.',
   'options strategies': 'Multi-leg trades that profit from a price range, a change in volatility, or one asset moving relative to another, rather than pure direction.',
   'news & catalysts': 'Recent headlines scored for tone, plus scheduled events like earnings that tend to move the stock and keep options expensive.',
 
   // ---- company data
-  'company data': 'The business behind the ticker — revenue, profit, how heavily it is bet against, and who owns the shares.',
+  'company data': 'The business behind the ticker. Revenue, profit, how heavily it is bet against, and who owns the shares.',
   'short interest': 'How much of the stock has been sold short (bet against) and how long those bets would take to unwind. Heavy short interest is fuel for a squeeze.',
-  'financials': 'Revenue, profit and cash flow across recent years — whether the underlying business is growing or shrinking.',
+  'financials': 'Revenue, profit and cash flow across recent years. Whether the underlying business is growing or shrinking.',
   'earnings track record': 'How the company has done versus expectations in past quarters, which sets how much the market trusts its guidance.',
-  'insider & institutional activity': 'Whether company executives and large funds have been buying or selling — occasionally an early signal of confidence or concern.',
+  'insider & institutional activity': 'Whether company executives and large funds have been buying or selling. Occasionally an early signal of confidence or concern.',
 
-  'squeeze read': 'How likely a sharp self-reinforcing move is right now — either from dealers hedging options (gamma squeeze) or short sellers being forced to buy back (short squeeze).',
+  'squeeze read': 'How likely a sharp self-reinforcing move is right now. Either from dealers hedging options (gamma squeeze) or short sellers being forced to buy back (short squeeze).',
   'session snapshot': "Where the stock sits today against the levels intraday traders actually watch: the average price paid, the opening range, and yesterday's pivots.",
   'near-term gamma': 'Dealer hedging pressure at the nearest option expiry, which shapes how the price behaves for the rest of today.',
   'liquidity & short interest': 'Whether you can get in and out of these options cheaply, and how heavily the stock is bet against.',
 
   // ---- earnings
-  'latest result': "The quarter the company just reported: what it delivered against what analysts expected. A beat is only half the story — the session after the print is what says whether the market cared, and a company can beat and still sell off.",
+  'latest result': "The quarter the company just reported: what it delivered against what analysts expected. A beat is only half the story. The session after the print is what says whether the market cared, and a company can beat and still sell off.",
   'reported eps': "Earnings per share the company actually delivered for the quarter, next to the figure analysts had modelled. The gap between them is the surprise.",
   'next report': "When the company next reports results, what analysts expect, and how much movement the options market is charging for the event.",
   'event pricing': "Whether the options are expensive or cheap for the period they cover, measured against how far this stock has actually moved over the same span. Expensive favors selling premium; cheap favors buying it.",
   'estimate revisions': "Whether analysts have been raising or cutting their forecasts recently. Estimates move in response to company guidance, so the direction of travel is the closest public read on guidance you can get from free data.",
-  'surprise history': "How reported earnings compared with consensus in past quarters, and — more usefully — what the stock actually did the session afterwards. A company can beat every quarter and still sell off.",
+  'surprise history': "How reported earnings compared with consensus in past quarters, and (more usefully) what the stock actually did the session afterwards. A company can beat every quarter and still sell off.",
   'financial growth': "Revenue, profit and margin trends versus the same quarter a year earlier, so seasonality doesn't distort the comparison. Expanding margins mean growth is getting more profitable, not just bigger.",
   'forward estimates': "What analysts model for coming quarters and fiscal years, and how many of them are covering the name. Fewer analysts means a less reliable consensus.",
   'annual growth': "Full-year revenue, profit and margins, which show the multi-year trajectory a single quarter can easily disguise.",
-  'analyst view': "Where the sell side thinks the stock is going and how the ratings are split. Best treated as a sentiment and positioning gauge — targets sit above spot in almost every market.",
+  'analyst view': "Where the sell side thinks the stock is going and how the ratings are split. Best treated as a sentiment and positioning gauge. Targets sit above spot in almost every market.",
 
   // ---- macro & sectors
   'macro regime': 'Whether the overall market is currently rewarding risk-taking or punishing it, scored from cross-asset signals like the VIX, credit, the dollar and oil. It sets how aggressive to be, not what to buy.',
   'market breadth': 'How many parts of the market are joining a move. A rally with broad participation tends to keep going; one carried by a handful of names is fragile.',
-  'cross-asset dashboard': 'Key markets outside stocks — volatility, the dollar, bonds, commodities, credit and crypto — because these usually move before equities do.',
+  'cross-asset dashboard': 'Key markets outside stocks. Volatility, the dollar, bonds, commodities, credit and crypto. Because these usually move before equities do.',
   'cross-asset ratios': 'One market divided by another, which exposes relative shifts (like small caps versus large caps) that a single price chart hides.',
-  'sector relative strength': "Which sectors are beating or lagging the S&P 500 — showing where money is actually flowing, not just what's green today.",
+  'sector relative strength': "Which sectors are beating or lagging the S&P 500. Showing where money is actually flowing, not just what's green today.",
   'themes & sub-industries': 'Narrower baskets than sectors, like clean energy or cybersecurity, ranked against the broad market.',
   'niche industries': 'Very specific industry baskets, like semiconductors or memory chips, where strength often shows up before a broad sector average reflects it.',
-  'breakout candidates': 'Groups coiled near the top of their range with improving relative strength — statistically the most likely to break out next.',
+  'breakout candidates': 'Groups coiled near the top of their range with improving relative strength. Statistically the most likely to break out next.',
   'ratio pair trades': "Going long one thing and short another, so the profit comes from the gap between them and you're far less exposed to the market's overall direction.",
 
   // ---- long-term & indices
   // ---- roth
-  'roth ira model allocation': "A rules-based target mix built from your horizon and risk tolerance, measured against ten years of fund data. A starting point to compare your own plan against — not advice, and it knows nothing about your income, taxes or other accounts.",
+  'roth ira model allocation': "A rules-based target mix built from your horizon and risk tolerance, measured against ten years of fund data. A starting point to compare your own plan against. Not advice, and it knows nothing about your income, taxes or other accounts.",
   'target weights': "The model's suggested split, with what each fund costs to own, what it yields, and how badly it has fallen in the past. Weights are targets to rebalance toward, not prices to chase.",
-  'contribution projection': "What steady annual contributions would compound to at the blended historical return of these funds. Arithmetic on the past, not a forecast — the band shows uncertainty in the average rate, not the risk of a bad decade arriving early.",
+  'contribution projection': "What steady annual contributions would compound to at the blended historical return of these funds. Arithmetic on the past, not a forecast. The band shows uncertainty in the average rate, not the risk of a bad decade arriving early.",
   'what the roth wrapper changes': "Reasoning that applies specifically because this is a Roth: growth and distributions are never taxed, losses aren't deductible, and the annual limit is small.",
-  'fund universe': "Every candidate fund measured over its full history — return, cost, volatility and worst drawdown — so you can see why the model picked what it picked, and what it left out.",
+  'fund universe': "Every candidate fund measured over its full history (return, cost, volatility and worst drawdown) so you can see why the model picked what it picked, and what it left out.",
   'correlation': "How closely two funds move together, from -1 to +1. Near +1 means owning both adds little diversification; the low pairs are what actually reduce risk.",
-  'drift from target': "How far your actual holdings have wandered from the model weights. Markets cause this on their own — whatever grows fastest ends up overweight, quietly making the portfolio riskier than you chose.",
+  'drift from target': "How far your actual holdings have wandered from the model weights. Markets cause this on their own. Whatever grows fastest ends up overweight, quietly making the portfolio riskier than you chose.",
   "where to put this year's contribution": "A buy-only rebalancing plan: point new money at whatever is underweight and drift closes without selling anything. The simplest maintenance there is.",
-  'overlap in your holdings': "Pairs of your holdings that move almost identically. Owning both feels like diversification but isn't — it's one bet at double the size, with twice the paperwork.",
+  'overlap in your holdings': "Pairs of your holdings that move almost identically. Owning both feels like diversification but isn't. It's one bet at double the size, with twice the paperwork.",
   'individual stock sleeve': "An optional slice for single companies, capped by your risk setting and horizon, with each candidate gated on its long-run record. The concentrated part of the portfolio, sized so a single blow-up can't derail the plan.",
 
   // ---- optic's positions
-  "optic's positions": "The terminal's own simulated trading record. Whenever a scan finds a setup that clears the conviction bar, it takes the trade on paper — both as shares and as the option contract it recommended — and holds it until a stop, target, time limit or expiry closes it. It exists so the recommendations can be judged on results instead of on how confident they sound.",
-  'track record': "Results across every closed trade. Win rate on its own is close to meaningless — a strategy can win 70% of the time and still lose money if the losses are bigger. Expectancy, the average result per trade, is the number that decides whether an edge exists.",
-  'open positions': "Trades the terminal currently holds on paper, marked at the latest available price. These P&L numbers move with the market and are not final — nothing counts until the position closes.",
+  "optic's positions": "The terminal's own simulated trading record. Whenever a scan finds a setup that clears the conviction bar, it takes the trade on paper. Both as shares and as the option contract it recommended. And holds it until a stop, target, time limit or expiry closes it. It exists so the recommendations can be judged on results instead of on how confident they sound.",
+  'track record': "Results across every closed trade. Win rate on its own is close to meaningless. A strategy can win 70% of the time and still lose money if the losses are bigger. Expectancy, the average result per trade, is the number that decides whether an edge exists.",
+  'open positions': "Trades the terminal currently holds on paper, marked at the latest available price. These P&L numbers move with the market and are not final. Nothing counts until the position closes.",
   'closed trades': "Every completed trade with the reason it ended. The exit reasons are the honest part: a record full of time stops means the signals were early or wrong, not just unlucky.",
-  'scan history': "When the terminal last looked for trades, how many tickers it considered and how many it actually took. Most scans should open nothing — a system that finds a trade every time it looks isn't being selective.",
+  'scan history': "When the terminal last looked for trades, how many tickers it considered and how many it actually took. Most scans should open nothing. A system that finds a trade every time it looks isn't being selective.",
   'how the shortlist was chosen': "The funnel behind every scan. The universe is the whole NASDAQ, but running the full analysis on 3,000 stocks would take hours, so a cheap price-and-volume screen ranks them first and only the top names get the real work. This panel shows what was dropped at each step and why, so \"we scan the whole exchange\" and \"we analysed thirty names\" are both visible at once rather than one standing in for the other.",
-  'screen ranking': "The screen's own ordering — a trend and momentum score built from price and volume alone. It is not the terminal's verdict and carries no options, news or fundamental input; its only job is to choose what gets a closer look. A name at the top of this table can still be rejected outright by the full analysis.",
-  'month by month': "The record split by calendar month, so consistency is visible rather than hidden inside one all-time total. Six steady months and one lucky month can produce the same headline number and mean completely different things — and splitting by month also lines each result up against the market conditions it was trading in.",
+  'screen ranking': "The screen's own ordering. A trend and momentum score built from price and volume alone. It is not the terminal's verdict and carries no options, news or fundamental input; its only job is to choose what gets a closer look. A name at the top of this table can still be rejected outright by the full analysis.",
+  'month by month': "The record split by calendar month, so consistency is visible rather than hidden inside one all-time total. Six steady months and one lucky month can produce the same headline number and mean completely different things, and splitting by month also lines each result up against the market conditions it was trading in.",
   'consistency': "Every month since the record began, including months with no trades at all. Equity carries forward, so each month's return is measured against what the account was worth when that month started. Watch the shape of the run, not the best month.",
   'closed in this month': "Trades that finished during the selected month. These are the only results that count toward that month's realised figures.",
   'opened in this month and still held': "Positions started in the selected month that haven't closed yet. Their profit or loss is unrealised and will land in whichever month they eventually close.",
@@ -297,38 +297,38 @@ const HEADER_DEFS = {
   'position sizing': "How the size of each trade is decided. Shares are sized so that being stopped out costs a fixed fraction of the account, which means a volatile stock with a wide stop gets a smaller position. Options are sized on the whole premium, because a long option really can go to zero.",
 
   'growth vs the broad market (qqq / spy)': "Whether high-growth megacaps are leading or lagging the wider market. Rising means money favors long-duration growth; falling means it's rotating to value and cyclicals. A style-leadership read, not a direction call.",
-  'index regime': 'Where the major indices sit in their own long-run cycle — the backdrop every individual stock trades against. A great company in a falling index still usually falls.',
+  'index regime': 'Where the major indices sit in their own long-run cycle. The backdrop every individual stock trades against. A great company in a falling index still usually falls.',
   'long-term view': 'The multi-year picture for owning the shares outright: structural trend, drawdown history, and whether current prices are a reasonable place to accumulate. Options play no part at this horizon.',
   'weekly structure': 'Price history in weekly bars, which strips out daily noise so the underlying multi-year trend is visible.',
-  'drawdown': "How far below its all-time high the asset sits now, and how deep past declines went — the downside you'd have had to sit through.",
+  'drawdown': "How far below its all-time high the asset sits now, and how deep past declines went. The downside you'd have had to sit through.",
   'return & risk': 'Long-run returns alongside how much volatility you had to endure to earn them. High returns from a wild ride are not the same as steady ones.',
   'valuation & accumulation': 'Whether the stock looks expensive or cheap versus its own history, and the price zones where long-term buyers have stepped in before.',
 
   // ---- sub-sections
-  'fundamental momentum': "Which way the company's numbers are trending — whether analysts are raising or cutting forecasts, how recent quarters landed against expectations, and whether revenue and margins are expanding. It is shown next to the composite rather than inside it: revision trends do carry signal over a few weeks, but the composite is a technicals-led read and folding fundamentals in would move every score in the terminal. Valuation is left out entirely, because at a two-to-eight-week horizon it tells you nothing about direction.",
+  'fundamental momentum': "Which way the company's numbers are trending. Whether analysts are raising or cutting forecasts, how recent quarters landed against expectations, and whether revenue and margins are expanding. It is shown next to the composite rather than inside it: revision trends do carry signal over a few weeks, but the composite is a technicals-led read and folding fundamentals in would move every score in the terminal. Valuation is left out entirely, because at a two-to-eight-week horizon it tells you nothing about direction.",
   'component scores': 'The individual inputs behind the overall verdict and the weight each one carries, so you can see what is driving the number.',
   "what's driving it": 'The specific readings that pushed the score to where it is.',
-  'what makes up this score': "Every factor the model weighed and the points each contributed, so you can see where the number came from. The weightings are the author's judgement, not a fitted model \u2014 read the factors, not just the total.",
+  'what makes up this score': "Every factor the model weighed and the points each contributed, so you can see where the number came from. The weightings are the author's judgement, not a fitted model. Read the factors, not just the total.",
   'volatility context': 'Whether options are currently expensive or cheap compared with how much the stock has actually been moving. Expensive options favor selling premium over buying it.',
   'what would create a trade': 'The price levels that would turn the current no-trade read into an actionable setup.',
   'where to enter': 'The price zone the terminal considers a reasonable entry, as opposed to chasing a move already underway.',
   'entry zone levels': 'The specific prices that bound the suggested entry area.',
   'target & risk': 'Where the trade is aiming, and the level that would prove the idea wrong.',
   'candidate strikes, ranked': 'Option contracts scored against each other on cost, liquidity and probability of working out.',
-  'notable contracts': 'Individual option contracts with unusual volume or open interest relative to their own normal — often where new positioning is showing up.',
+  'notable contracts': 'Individual option contracts with unusual volume or open interest relative to their own normal. Often where new positioning is showing up.',
   'at-the-money greeks by expiry': 'How sensitive the closest-to-price options are, broken out by expiry date.',
   'gamma concentration by expiry': 'Which expiry dates hold the most dealer hedging pressure. Near-dated concentration makes price moves sharper.',
   'net gex by strike': 'Dealer hedging pressure at each individual strike price.',
-  'gamma profile across spot': 'How dealer hedging pressure would change if the stock moved up or down from here — where the tape flips from calm to fast.',
+  'gamma profile across spot': 'How dealer hedging pressure would change if the stock moved up or down from here. Where the tape flips from calm to fast.',
   'key levels': 'The strikes acting most like a ceiling or a floor because of how options are positioned there.',
   'fibonacci levels': 'Pullback prices derived from a mathematical ratio, used as rough guesses for where a move might pause. Widely watched, which is part of why they sometimes work.',
   'support & resistance': "Price levels the stock has genuinely reversed at, scored on four things: how many times price turned there, how firmly it was rejected (long wicks beat bars that closed at their extreme), how much volume traded across the level, and how recently it was last defended. Unlike Fibonacci, these come from actual candle history rather than a ratio.",
   'moving averages': 'Average prices over various periods, used to define the trend and act as moving support or resistance.',
-  'rotation': 'Which sectors money is moving into and out of right now — the shift beneath a flat-looking index.',
+  'rotation': 'Which sectors money is moving into and out of right now. The shift beneath a flat-looking index.',
   'equal-weight vs cap-weight (rsp / spy)': 'Whether the average stock is keeping up with the megacaps. When it is not, the index is being carried by a few names and the rally is narrower than it looks.',
-  'accumulation zones': 'Price areas where long-term buyers have historically stepped in — useful for staging purchases rather than buying all at once.',
+  'accumulation zones': 'Price areas where long-term buyers have historically stepped in. Useful for staging purchases rather than buying all at once.',
   'headlines': 'Recent news articles, each scored for tone.',
-  'catalyst types detected': 'The kinds of events the headlines mention — earnings, guidance, product news, legal, or M&A.',
+  'catalyst types detected': 'The kinds of events the headlines mention. Earnings, guidance, product news, legal, or M&A.',
   'next report': 'When the company next reports earnings. Options usually stay expensive into that date and cheapen sharply after it.',
   'recent insider transactions': 'Buying and selling by the company’s own executives and directors.',
   'largest reported holders': 'The biggest institutional shareholders, from their most recent filings.',
@@ -336,13 +336,13 @@ const HEADER_DEFS = {
   'why the chart reads': 'The individual technical signals behind the bias, and which way each one is pointing.',
 
   // ---- cross-asset dashboard group headings
-  'volatility': "How much movement the market expects. Rising volatility means traders are paying up for protection — usually a warning sign for stocks.",
+  'volatility': "How much movement the market expects. Rising volatility means traders are paying up for protection. Usually a warning sign for stocks.",
   'rates': 'Government bond yields. Rising yields make future company profits worth less today, which pressures growth stocks hardest.',
   'fx': 'Currencies. A strong US dollar tightens global financial conditions and squeezes overseas earnings; a fast-falling yen can force a global unwind.',
   'commodities': 'Raw materials. Oil and copper strength can signal real demand, but a spike becomes a cost shock that squeezes profit margins.',
   'credit': "Corporate bonds. Credit markets usually crack before stocks do, so weakness here is one of the earliest warnings you'll get.",
   'equity': 'The major stock indices themselves, for direct comparison against everything else on this dashboard.',
-  'crypto': 'Bitcoin and friends, treated here as a pure risk-appetite gauge — it tends to move first and hardest when speculative money shifts.',
+  'crypto': 'Bitcoin and friends, treated here as a pure risk-appetite gauge. It tends to move first and hardest when speculative money shifts.',
 };
 
 /** Wrap a section heading so hovering it explains what the section is and how
@@ -593,23 +593,23 @@ const TH_HINTS = {
   'distance': 'How far this level sits from the current price, as a percentage. Negative means the level is below the stock.',
   'strength': 'A 0-100 score for how much this level has actually mattered: how many pivots cluster there, how firmly price was rejected, how much volume traded across it, and how recently it was last defended.',
   'touches': 'How many separate times price reversed at this level, and how long ago it was last tested. More touches means more traders are watching it; a level untouched for a long time matters less.',
-  'last': 'How long ago the level was last tested, in bars — so 17w means seventeen weeks ago on a weekly chart.',
+  'last': 'How long ago the level was last tested, in bars. So 17w means seventeen weeks ago on a weekly chart.',
   'role': 'Whether this level sits below the current price (support, a potential floor) or above it (resistance, a potential ceiling).',
   'value': 'The current value of the average, in dollars.',
   'price vs': 'Where the stock is trading relative to that average, as a percentage. Positive means price is above it.',
-  '10-day slope': 'Whether the average itself is rising or falling over the last ten days — the direction of the trend, not just where price sits.',
+  '10-day slope': 'Whether the average itself is rising or falling over the last ten days. The direction of the trend, not just where price sits.',
   'level': 'The Fibonacci retracement percentage this line is drawn at.',
   'level ($)': 'The price of the level, with whether it sits below the current price (support) or above it (resistance).',
   'spread': 'The gap between the best bid and the best ask, as a percentage of the mid price. Wider spreads cost more to get in and out of.',
   'type': 'Call or put.',
   'setup': 'What the numbers suggest doing, if anything.',
-  'thesis': 'The reasoning behind the pair — why one side should outperform the other.',
+  'thesis': 'The reasoning behind the pair. Why one side should outperform the other.',
   'betting on': 'Which way the trade needs the stock to go. Bullish makes money as the stock rises, bearish as it falls. A bought put is a bearish bet even though the contract itself is owned, which is why the direction is spelled out rather than left as long or short.',
   'paid': 'The price the position was opened at, and underneath it the latest price it is marked at. For an option both are premium per share, not the share price.',
   'where it stands': 'How far the stock has travelled along the line between the stop and the target. The small tick is where the trade opened, the dot is where the stock is now, and the shaded stretch between them is the ground it has covered.',
   'up or down': 'Profit or loss at the latest mark, in dollars and as a percentage of what was paid. Nothing is settled until the position closes, so treat every figure here as provisional.',
   'if stopped': 'The loss this position was sized to take if the stop is hit. It was decided before the trade opened, which is what makes the total risk on the page a real ceiling rather than an estimate.',
-  'signal score': 'How strongly the scan rated this setup when it opened, out of 100. Shown as strength only — the direction it was rating is the Betting on column, so a bearish 44 and a bullish 44 both read as 44 here rather than one of them as minus 44. It is a record of why the trade was taken, not a live reading: it is not recalculated as the position runs.',
+  'signal score': 'How strongly the scan rated this setup when it opened, out of 100. Shown as strength only. The direction it was rating is the Betting on column, so a bearish 44 and a bullish 44 both read as 44 here rather than one of them as minus 44. It is a record of why the trade was taken, not a live reading: it is not recalculated as the position runs.',
 };
 
 /** Give table headers the same hover definitions as prose.
@@ -795,7 +795,7 @@ function errorHTML(msg, opts = {}) {
   return `<div class="error-box">
     <strong>The server is not reachable.</strong> ${esc(msg)}.
     <div class="error-note">This address is a temporary tunnel, and it changes
-      every time the server restarts — so if it has rotated, this link is dead
+      every time the server restarts. So if it has rotated, this link is dead
       and no reload will bring it back. Watching for it to return…
       <span id="origin-watch-state">checking</span>.</div>
     <div class="error-acts">
@@ -822,7 +822,7 @@ function startOriginWatch() {
     try {
       const res = await fetch('/healthz', { cache: 'no-store' });
       if (res.ok) {
-        if (label) label.textContent = 'back — reloading';
+        if (label) label.textContent = 'back. Reloading';
         // One reload, not a re-render: the origin having gone away and returned
         // means anything cached in memory may describe a server that has since
         // restarted.
@@ -891,7 +891,7 @@ async function postJSON(url, body) {
     try { detail = ((await res.json()).detail || '').toString(); } catch (e) { /* not JSON */ }
     if (!detail) {
       detail = res.status >= 502 && res.status <= 530
-        ? `the server is unreachable (HTTP ${res.status}) — the tunnel may have dropped`
+        ? `the server is unreachable (HTTP ${res.status}). The tunnel may have dropped`
         : `${res.statusText || 'request failed'} (HTTP ${res.status})`;
     }
     throw new Error(detail);
@@ -1005,10 +1005,10 @@ const TZ_KEY = 'optic.timezone';
 // missing option. "auto" resolves to whatever the browser reports.
 const TIMEZONES = [
   { id: 'auto', label: 'My device\u2019s time zone' },
-  { id: 'America/New_York', label: 'New York — Eastern (market time)' },
-  { id: 'America/Chicago', label: 'Chicago — Central' },
-  { id: 'America/Denver', label: 'Denver — Mountain' },
-  { id: 'America/Los_Angeles', label: 'Los Angeles — Pacific' },
+  { id: 'America/New_York', label: 'New York. Eastern (market time)' },
+  { id: 'America/Chicago', label: 'Chicago: Central' },
+  { id: 'America/Denver', label: 'Denver: Mountain' },
+  { id: 'America/Los_Angeles', label: 'Los Angeles. Pacific' },
   { id: 'America/Toronto', label: 'Toronto' },
   { id: 'America/Sao_Paulo', label: 'S\u00e3o Paulo' },
   { id: 'Europe/London', label: 'London' },
@@ -1145,13 +1145,13 @@ const LEGAL = {
   // Per-view notice, naming the specific way that view's output could be taken
   // for advice. Generic boilerplate gets skimmed; a specific sentence doesn't.
   areas: {
-    pulse: '<strong>Not financial advice.</strong> Pulse states which way the <em>data</em> leans and how strongly. That is a reading of numbers on this screen, not a recommendation for you: it knows nothing about your horizon, capital, tax position or other holdings, and cannot judge whether any of this suits you. It can be confidently wrong \u2014 the inputs are delayed, several are labelled proxies, and a lean is not a forecast.',
+    pulse: '<strong>Not financial advice.</strong> Pulse states which way the <em>data</em> leans and how strongly. That is a reading of numbers on this screen, not a recommendation for you: it knows nothing about your horizon, capital, tax position or other holdings, and cannot judge whether any of this suits you. It can be confidently wrong. The inputs are delayed, several are labelled proxies, and a lean is not a forecast.',
     swing: '<strong>Not a recommendation.</strong> The strikes, limit prices, stops and targets on this tab are model output, not advice to place any trade. Options can expire worthless and lose the entire premium.',
     long: '<strong>Not a recommendation.</strong> A conviction score summarises historical data. It says nothing about whether this holding suits your horizon, taxes or existing exposure.',
-    roth: '<strong>Not retirement or tax advice.</strong> A rules-based illustration to compare against your own plan. It is not tailored to your income, tax situation, other accounts or goals, and contribution limits and eligibility change — confirm current rules with the IRS and a licensed professional.',
+    roth: '<strong>Not retirement or tax advice.</strong> A rules-based illustration to compare against your own plan. It is not tailored to your income, tax situation, other accounts or goals, and contribution limits and eligibility change. Confirm current rules with the IRS and a licensed professional.',
     earnings: '<strong>Not a recommendation.</strong> Event pricing describes what the market is charging, not what you should do about it. Holding an option through a report can lose money even when the direction is right.',
     tracker: '<strong>Hypothetical performance.</strong> These positions were never placed with real money. Simulated results are prepared with the benefit of hindsight, assume fills at the mid price, and bear no commission, slippage, financing, borrow cost or tax. No real account would necessarily achieve results resembling these, and simulated performance does not indicate future results.',
-    market: '<strong>Not a recommendation.</strong> A regime read on the market as a whole — not a view on any individual security, and not advice to change your positioning.',
+    market: '<strong>Not a recommendation.</strong> A regime read on the market as a whole, not a view on any individual security, and not advice to change your positioning.',
     indices: '<strong>Not a recommendation.</strong> Long-run index context, not advice to buy, sell or hold any index fund.',
     brief: '<strong>Not a recommendation.</strong> A summary of published news, not analysis of it, and not a view on any security mentioned. Headlines belong to their publishers and link to the original, and nothing here has been verified independently. Scheduled releases are calendar dates, not forecasts.',
   },
@@ -1726,7 +1726,7 @@ function macdCrossSentence(cross, wk, dates, weekly, zoom, what = 'MACD') {
     : `${cross.barsAgo} ${unit}${cross.barsAgo === 1 ? '' : 's'} ago`;
   const date = dates[cross.index] ? ` (${esc(dates[cross.index])})` : '';
   return `<p class="caveat" style="margin:var(--space-2) 0 0">Last crossover: ${what} crossed
-    <strong>${cross.bullish ? 'above' : 'below'}</strong> its signal line ${when}${date} — a
+    <strong>${cross.bullish ? 'above' : 'below'}</strong> its signal line ${when}${date}. A
     ${cross.bullish ? 'bullish' : 'bearish'} momentum shift, marked on the chart. The gap has
     ${widening ? 'widened since' : 'narrowed since'}, meaning the shift is
     ${widening ? 'still building' : 'losing conviction and could cross back'}.</p>`;
@@ -1822,7 +1822,7 @@ const HOME_SECTIONS = [
         view: 'swing',
         color: 'var(--s1)',
         title: 'Swing / Options',
-        body: 'Composite verdict from technicals, dealer gamma, vanna and charm, flow and news — plus a strike and expiry recommendation with an entry trigger, and whether the sector agrees.',
+        body: 'Composite verdict from technicals, dealer gamma, vanna and charm, flow and news, plus a strike and expiry recommendation with an entry trigger, and whether the sector agrees.',
       },
       {
         view: 'earnings',
@@ -1853,7 +1853,7 @@ const HOME_SECTIONS = [
         view: 'market',
         color: 'var(--s3)',
         title: 'Macro & Sectors',
-        body: 'Cross-asset regime from VIX, the dollar, rates and commodities. Every sector against its overnight levels and whether money is rotating in or out, plus implied correlation — how much the market is paying for names to move together.',
+        body: 'Cross-asset regime from VIX, the dollar, rates and commodities. Every sector against its overnight levels and whether money is rotating in or out, plus implied correlation. How much the market is paying for names to move together.',
       },
       {
         view: 'indices',
@@ -1872,13 +1872,13 @@ const HOME_SECTIONS = [
         view: 'scan',
         color: 'var(--s2)',
         title: 'Scan',
-        body: 'Seven named scans over the names that clear the screen\'s liquidity and history gates — breakouts, pullbacks, unusual volume, steady trends, and the weak side too. Each one states what it cannot see.',
+        body: 'Seven named scans over the names that clear the screen\'s liquidity and history gates. Breakouts, pullbacks, unusual volume, steady trends, and the weak side too. Each one states what it cannot see.',
       },
       {
         view: 'scan',
         color: 'var(--s8)',
         title: 'Does the score work?',
-        body: 'The one panel here that tests a claim instead of making one. It replays the screen\'s score through history and reports whether it predicted anything — measured against a random score and against a single raw momentum number.',
+        body: 'The one panel here that tests a claim instead of making one. It replays the screen\'s score through history and reports whether it predicted anything, measured against a random score and against a single raw momentum number.',
       },
     ],
   },
@@ -1891,13 +1891,13 @@ const HOME_SECTIONS = [
         view: 'tracker',
         color: 'var(--s2)',
         title: "Optic's Positions",
-        body: "The terminal's own paper-traded record. When a scan finds a setup good enough it takes the trade — as shares and as the option it recommended — with a stop, a target and a size, then holds it to the exit. Book-level risk sits above it: whether those positions are separate bets or one bet with several tickets.",
+        body: "The terminal's own paper-traded record. When a scan finds a setup good enough it takes the trade. As shares and as the option it recommended, with a stop, a target and a size, then holds it to the exit. Book-level risk sits above it: whether those positions are separate bets or one bet with several tickets.",
       },
       {
         view: 'tracker',
         color: 'var(--s8)',
         title: 'Roth IRA model',
-        body: 'Inside Optic\'s Positions. A rules-based model allocation of low-cost index funds from your horizon and risk tolerance, with cost, correlation and a contribution projection. Not advice — a baseline to compare your own plan against.',
+        body: 'Inside Optic\'s Positions. A rules-based model allocation of low-cost index funds from your horizon and risk tolerance, with cost, correlation and a contribution projection. Not advice. A baseline to compare your own plan against.',
       },
     ],
   },
@@ -1952,13 +1952,13 @@ function renderHome() {
     <p class="home-lede">
       A market research workbench, from a multi-week swing to a multi-year hold. Load a ticker
       and it works through the technical structure, options positioning, earnings and financial
-      growth, analyst estimates, news tone and the macro backdrop — then puts them together into
+      growth, analyst estimates, news tone and the macro backdrop. Then puts them together into
       one read, and tells you where the inputs disagree.
     </p>
 
     <form class="home-search" id="home-form">
       <div class="combo">
-        <input id="home-input" placeholder="Search a ticker or company — e.g. NVDA or Apple"
+        <input id="home-input" placeholder="Search a ticker or company. E.g. NVDA or Apple"
                spellcheck="false" autocomplete="off"
                aria-label="Ticker symbol or company name"
                role="combobox" aria-expanded="false" aria-autocomplete="list"
@@ -2001,7 +2001,7 @@ function renderHomeStatus(health) {
       realtime ? `real-time chains via ${esc(provider)}` : `${esc(provider)} feed · quotes delayed ~15 min`}</span></span>`,
     `<span class="dot-sep"><span class="chip ${assistantOn ? 'bull' : 'neutral'}" style="padding:var(--space-0) var(--space-2)"><span class="dot"></span>${
       assistantOn ? `${ASSISTANT_NAME} ready` : `${ASSISTANT_NAME} needs an API key`}</span></span>`,
-    '<span>Greeks computed locally via Black-Scholes. Analysis only — not investment advice.</span>',
+    '<span>Greeks computed locally via Black-Scholes. Analysis only, not investment advice.</span>',
   ].join('');
 }
 
@@ -2087,7 +2087,7 @@ function renderSwing(d) {
 
   <div class="grid c2 gap">
     <div class="panel">
-      <h2>${hg('Swing verdict')} — ${esc(d.ticker)}</h2>
+      <h2>${hg('Swing verdict')} · ${esc(d.ticker)}</h2>
       <p class="sub">${gloss(v.summary || '')}</p>
       <div style="display:flex;align-items:flex-end;gap:var(--space-5);flex-wrap:wrap">
         <div>
@@ -2148,7 +2148,7 @@ function renderSwing(d) {
 
            Collapsed by default. This is the same five paragraphs of glossary on
            every ticker, and expanded it made the panel roughly three times the
-           height of the quote panel beside it — the mismatch left ~500px of dead
+           height of the quote panel beside it. The mismatch left ~500px of dead
            column to its right, and pushed the chart below the fold. What each
            input measures is worth one click when you want it and noise when you
            don't; the scores and weights it explains stay visible above. -->
@@ -2161,7 +2161,7 @@ function renderSwing(d) {
       </details>
       <!-- Conflicts used to be stacked here as callouts. Optic's Perspective now
            lists every one of them as a bear-side argument, so repeating them made
-           the same warning appear twice on one screen — and the three callouts
+           the same warning appear twice on one screen, and the three callouts
            were what pushed this panel to ~880px against the quote panel's ~390px,
            leaving a ~490px empty column beside it. -->
       <p class="caveat">${esc(d.data_caveat || '')}</p>
@@ -2187,8 +2187,8 @@ function renderSwing(d) {
         </div>` : ''}
       </div>
       ${extQ ? `<p class="caveat" style="margin:-4px 0 var(--space-3)">Extended-hours trade, on a fraction of
-        regular-session volume. Every other number in this panel — and every level on the chart —
-        is measured from the ${usd(q.price)} close, not from here.</p>` : ''}
+        regular-session volume. Every other number in this panel, and every level on the chart.
+        Is measured from the ${usd(q.price)} close, not from here.</p>` : ''}
       ${kv([
     ["Today's range", `${usd(q.day_low)} – ${usd(q.day_high)}`],
     ['52-week range', `${usd(q.fifty_two_low)} – ${usd(q.fifty_two_high)}`],
@@ -2206,7 +2206,7 @@ function renderSwing(d) {
   </div>
 
   ${cs.available ? `<div class="panel gap">
-    <h2>${hg("Optic's Perspective")} — ${esc(d.ticker)}</h2>
+    <h2>${hg("Optic's Perspective")} · ${esc(d.ticker)}</h2>
     <p class="sub">On the numbers below, ${esc(cs.balance)}. Every line cites what
       triggered it, so you can check it against the panel it came from.</p>
     <div class="grid c2">
@@ -2226,7 +2226,7 @@ function renderSwing(d) {
 
   <!-- Fundamental momentum, moved out of the swing-verdict panel.
        Its own first line says it is not part of the score above, so it was never
-       really part of that panel — and it was what made the panel 1299px tall
+       really part of that panel. And it was what made the panel 1299px tall
        against the quote panel's 500px, leaving ~800px of dead column beside it.
        Full width also suits it better: the readings and their explanations sit
        side by side here instead of stacking in a half-width column. -->
@@ -2237,7 +2237,7 @@ function renderSwing(d) {
     em.tone === 'good' ? 'bull' : em.tone === 'bad' ? 'bear' : 'neutral'}"
       style="margin-left:var(--space-2)"><span class="dot"></span>${esc(cap(em.read))}</span></h2>
     <p class="sub"><strong>Not part of the composite score.</strong> Shown because revisions and
-      surprise history do carry signal over a few weeks — read alongside the composite, not
+      surprise history do carry signal over a few weeks. Read alongside the composite, not
       folded into it.</p>
     <!-- Stacked, not two columns. The readings table is short and the definition
          list beside it is roughly twice its height, so at panel width the pair
@@ -2273,20 +2273,20 @@ function renderSwing(d) {
 
   <div class="grid c2 gap">
     <div class="panel span2">
-      <h2>${hg('Price, moving averages & Fibonacci')}${askPulse('profile')} <span class="th-plain">— ${
+      <h2>${hg('Price, moving averages & Fibonacci')}${askPulse('profile')} <span class="th-plain">· ${
   ps.intraday ? `${esc(ps.interval || '')} bars, ${ps.shown_bars} over ${
     chartRange === '1d' ? 'today' : 'five sessions'}`
     : `${ps.weekly ? 'weekly' : 'daily'} bars, ${ps.shown_bars} of ${ps.total_bars} shown`}</span></h2>
       ${ps.intraday
     ? `<p class="sub">Intraday price only. The moving averages, Fibonacci levels, RSI and
-        MACD on this tab are all computed from <strong>daily</strong> closes — drawing a
+        MACD on this tab are all computed from <strong>daily</strong> closes. Drawing a
         200-day line across six hours of trade would put a flat line on the chart and imply
         it meant something here, so they are left off rather than redrawn from the wrong
         series. The panels below still show the daily read.</p>`
-    : `<p class="sub">Bias <strong>${esc(t.bias || 'n/a')}</strong> — ${fibDirectionSentence(t)}
+    : `<p class="sub">Bias <strong>${esc(t.bias || 'n/a')}</strong>· ${fibDirectionSentence(t)}
         ${showFib || showSR
-    ? 'Levels you have switched on are drawn as shaded bands rather than lines — a Fibonacci interval and a support shelf are both ranges, and a hairline claims a precision neither has. The band price currently sits in is labelled.'
-    : 'Fibonacci and support levels are off — switch them on under <em>Technical Levels</em>. They are still listed in the tables below.'}</p>`}
+    ? 'Levels you have switched on are drawn as shaded bands rather than lines. A Fibonacci interval and a support shelf are both ranges, and a hairline claims a precision neither has. The band price currently sits in is labelled.'
+    : 'Fibonacci and support levels are off. Switch them on under <em>Technical Levels</em>. They are still listed in the tables below.'}</p>`}
       ${isIntradayRange(chartRange) && intra && intra.loading
     ? '<p class="sub">Loading intraday bars…</p>' : ''}
       ${isIntradayRange(chartRange) && intra && intra.available === false
@@ -2315,7 +2315,7 @@ function renderSwing(d) {
           </summary>
           <div class="lvl-pop wide" role="group" aria-label="Indicator visibility">
             <p class="lvl-note">Overlays draw on this chart. The rest need their own
-              scale — RSI is 0-100, on-balance volume is a share count — so they get a
+              scale. RSI is 0-100, on-balance volume is a share count. So they get a
               pane underneath rather than being squeezed onto the price axis.</p>
             ${indicatorIds.length ? `<button type="button" class="lvl-clear"
               data-clear-indicators>Clear all</button>` : ''}
@@ -2382,12 +2382,12 @@ function renderSwing(d) {
       ${sx.volume_profile && sx.volume_profile.available ? `
       <div class="grid c4" style="margin-top:var(--space-3)">
         ${tile('Value area', `${usd(sx.volume_profile.val)} – ${usd(sx.volume_profile.vah)}`,
-    `Point of control ${usd(sx.volume_profile.poc)} — price is ${esc(sx.volume_profile.location || '')}`,
+    `Point of control ${usd(sx.volume_profile.poc)}. Price is ${esc(sx.volume_profile.location || '')}`,
     sx.volume_profile.location === 'above value' ? 'up'
       : sx.volume_profile.location === 'below value' ? 'down' : '')}
         ${(sx.pivots || {}).available ? tile('Today\'s pivot',
     usd(sx.pivots.pp),
-    `R1 ${usd(sx.pivots.r1)} · S1 ${usd(sx.pivots.s1)} — ${
+    `R1 ${usd(sx.pivots.r1)} · S1 ${usd(sx.pivots.s1)} · ${
       sx.pivots.spot_above_pivot ? 'price is above it' : 'price is below it'}`,
     sx.pivots.spot_above_pivot ? 'up' : 'down') : ''}
         ${(sx.ema_stack || {}).available ? tile('EMA 9/21/50',
@@ -2396,11 +2396,11 @@ function renderSwing(d) {
     sx.ema_stack.bullish_stack ? 'up' : sx.ema_stack.bearish_stack ? 'down' : '') : ''}
         ${(sx.bandwidth || {}).available ? tile('Band width',
     `${fmt(sx.bandwidth.percentile, 0)}th pct`,
-    `${fmt(sx.bandwidth.bandwidth_pct, 1)}% wide — ${esc(sx.bandwidth.read)}`) : ''}
+    `${fmt(sx.bandwidth.bandwidth_pct, 1)}% wide: ${esc(sx.bandwidth.read)}`) : ''}
       </div>
       ${(sx.volume_profile.lvns || []).length ? `<p class="caveat">Thin traded volume near ${
     sx.volume_profile.lvns.slice(0, 3).map((n) => usd(n.price)).join(', ')
-  } — moves tend to travel quickly through prices nobody is defending.</p>` : ''}
+  }. Moves tend to travel quickly through prices nobody is defending.</p>` : ''}
       ${(sx.candles || {}).patterns && sx.candles.patterns.length ? `<p class="caveat">${
     sx.candles.patterns.map((c) => `<strong>${esc(cap(c.pattern))}</strong> (${esc(c.direction)}) ${
       esc(c.date || '')}`).join(' · ')}. ${esc(sx.candles.note)}</p>` : ''}
@@ -2416,11 +2416,11 @@ function renderSwing(d) {
         <div>
           <h3>${hg('Support & resistance')}</h3>
           <p class="sub" style="margin-bottom:var(--space-2)">From ${chartInterval} candles, matching the
-            chart above — ranked by strength, not just how often price visited.</p>
+            chart above. Ranked by strength, not just how often price visited.</p>
           <table class="data">
             <!-- Four columns, not six. This table lives in a third-width panel, and
                  role reads naturally under the price while "5 touches, last 17w ago"
-                 is one fact, not two — six columns simply could not fit and the
+                 is one fact, not two. Six columns simply could not fit and the
                  table was overflowing into the panel beside it. -->
             <thead><tr><th>Level ($)</th><th>Distance</th><th>Strength</th><th>Touches</th></tr></thead>
             <tbody>${srComputed.map((l) => `<tr>
@@ -2436,7 +2436,7 @@ function renderSwing(d) {
           <p class="caveat">Strength blends four things: how many pivots cluster there, how much
             of each pivot bar was rejection wick rather than body, the share of total volume that
             traded across the level, and how recently it was last defended. Merge width scales
-            with ATR, so a level is really a band — the table shows its midpoint. Switching the
+            with ATR, so a level is really a band. The table shows its midpoint. Switching the
             chart to weekly recomputes these from weekly bars, which surfaces bigger structural
             shelves and drops the minor daily ones.</p>
         </div>
@@ -2464,7 +2464,7 @@ function renderSwing(d) {
         </div>
         <!-- Spans the row rather than taking one cell. This grid holds three
              blocks but wraps to two columns at panel width, so the third sat
-             alone with an empty cell beside it — a 343px void inside the card's
+             alone with an empty cell beside it. A 343px void inside the card's
              border. Spanning costs no extra height: the row is as tall as this
              table either way. -->
         <div class="span-all">
@@ -2488,18 +2488,18 @@ function renderSwing(d) {
 
   <div class="grid c2 gap momentum-row">
     <div class="panel">
-      <h2>${hg('RSI (14)')} <span class="th-plain">— last ${
+      <h2>${hg('RSI (14)')} <span class="th-plain">· last ${
     ps.shown_bars || MACD_WINDOW} ${ps.weekly ? 'weeks' : 'days'}</span></h2>
-      <p class="sub">${fmt((t.rsi || {}).value, 1)} out of 100 — ${esc((t.rsi || {}).state || 'n/a')}.
+      <p class="sub">${fmt((t.rsi || {}).value, 1)} out of 100: ${esc((t.rsi || {}).state || 'n/a')}.
         Above 70 is overbought, below 30 oversold; 50 divides bullish from bearish momentum.</p>
       <div id="legend-rsi"></div>
       <div id="chart-rsi"></div>
       <div id="rsi-cross-note"></div>
     </div>
     <div class="panel">
-      <h2>${hg('MACD (12, 26, 9)')} <span class="th-plain">— last ${
+      <h2>${hg('MACD (12, 26, 9)')} <span class="th-plain">· last ${
     ps.shown_bars || MACD_WINDOW} ${ps.weekly ? 'weeks' : 'days'}</span></h2>
-      <p class="sub">MACD ${fmt((t.macd || {}).macd, 3)} vs signal ${fmt((t.macd || {}).signal, 3)} —
+      <p class="sub">MACD ${fmt((t.macd || {}).macd, 3)} vs signal ${fmt((t.macd || {}).signal, 3)}:
         ${esc((t.macd || {}).state || 'n/a')}${(t.macd || {}).event ? `, ${esc(t.macd.event)}` : ''}.</p>
       <div id="legend-macd"></div>
       <div id="chart-macd"></div>
@@ -2564,7 +2564,7 @@ function renderSwing(d) {
 
   <div class="grid c2 gap">
     <div class="panel span2">
-      <h2>${hg('GEX — dealer gamma exposure')}${askPulse('gex')}</h2>
+      <h2>${hg('GEX. Dealer gamma exposure')}${askPulse('gex')}</h2>
       <p class="sub">Net ${(gex.totals || {}).net_gex >= 0 ? '+' : ''}$${fmtCompact((gex.totals || {}).net_gex)} of dealer delta per 1% move.
         Regime: <strong>${esc((gex.regime || {}).state || '')}</strong>.
         ${(gex.regime || {}).flip_point ? `Gamma flip at <strong>${fmt(gex.regime.flip_point, 2)}</strong> (${fmtPct((gex.regime || {}).flip_distance_pct, 2)} away).` : ''}</p>
@@ -2578,7 +2578,7 @@ function renderSwing(d) {
         </div>
         <div>
           <h3>${hg('Gamma profile across spot')}${askPulse('gamma-profile')}</h3>
-          <p class="sub">Where the curve crosses zero is the flip point — above it dealers dampen moves, below it they amplify them.</p>
+          <p class="sub">Where the curve crosses zero is the flip point. Above it dealers dampen moves, below it they amplify them.</p>
           <div id="chart-gamma-profile"></div>
           <h3>${hg('Key levels')}${askPulse('levels')}</h3>
           <table class="data">
@@ -2620,7 +2620,7 @@ function renderSwing(d) {
 
     <div class="panel">
       <h2>${hg('Net premium by strike')}</h2>
-      <p class="sub">Calls positive, puts negative — where today's money actually went.</p>
+      <p class="sub">Calls positive, puts negative. Where today's money actually went.</p>
       <div id="legend-flow"></div>
       <div id="chart-flow"></div>
       <h3>${hg('Notable contracts')}</h3>
@@ -2641,22 +2641,22 @@ function renderSwing(d) {
 
   <div class="panel gap">
     <h2>${hg('Buy calls / puts')}</h2>
-    <p class="sub">Naked directional options — quick-glance card in the same format as the strategies below.
+    <p class="sub">Naked directional options. Quick-glance card in the same format as the strategies below.
       For a fully ranked set of strikes scored against a projected target, see the Strike &amp; Entry
       Recommendation panel above. Strikes and premiums are live from the chain, filtered for liquidity.
-      Not recommendations — the sizing decision is yours.</p>
+      Not recommendations. The sizing decision is yours.</p>
     ${(d.naked_ideas || []).length
     ? (d.naked_ideas || []).map(renderIdea).join('')
-    : '<div class="callout">No naked directional idea — the composite read is neutral, so buying a call or put outright has no edge. See the strategies below for range-bound or volatility-driven setups instead.</div>'}
+    : '<div class="callout">No naked directional idea. The composite read is neutral, so buying a call or put outright has no edge. See the strategies below for range-bound or volatility-driven setups instead.</div>'}
   </div>
 
   <div class="panel gap">
     <h2>${hg('Options strategies')}</h2>
-    <p class="sub">Multi-leg and cross-underlying structures — spreads, condors, straddles/strangles, and sector
-      pair trades — matched to the stance, the gamma regime, and (where relevant) implied-vol pricing.</p>
+    <p class="sub">Multi-leg and cross-underlying structures. Spreads, condors, straddles/strangles, and sector
+      pair trades. Matched to the stance, the gamma regime, and (where relevant) implied-vol pricing.</p>
     ${(d.strategy_ideas || []).length
     ? (d.strategy_ideas || []).map(renderIdea).join('')
-    : '<div class="callout">No strategy generated — the chain lacked liquid contracts at the target deltas.</div>'}
+    : '<div class="callout">No strategy generated. The chain lacked liquid contracts at the target deltas.</div>'}
   </div>
   `}
 
@@ -2757,7 +2757,7 @@ function renderSwing(d) {
       && !(showFib && fibAnchorHigh && Math.abs(fibAnchorHigh / c.price - 1) < 0.005))
       .map((c) => ({
         value: c.price,
-        label: claimLabel(c.price) ? `${c.name} · ${usd(c.price)} — nothing above this` : '',
+        label: claimLabel(c.price) ? `${c.name} · ${usd(c.price)}. Nothing above this` : '',
         color: C.refSR,
         pattern: '6 4',
       }));
@@ -2958,7 +2958,7 @@ function renderSwing(d) {
       note.innerHTML = offScale.length
         ? `<p class="caveat" style="margin:var(--space-2) 0 0">${offScale.length} level${one ? '' : 's'} ${
           one ? 'sits' : 'sit'} too far outside the price range on screen to draw, so ${
-          one ? "it isn't" : "they aren't"} shown here — ${one ? 'it is' : 'they are'} still
+          one ? "it isn't" : "they aren't"} shown here: ${one ? 'it is' : 'they are'} still
           listed in the tables below. Widen the timeframe to bring ${
           one ? 'it' : 'them'} into view.</p>`
         : '';
@@ -3183,12 +3183,12 @@ function fibDirectionSentence(t) {
     return `<strong>bearish retracement</strong>, measured swing high → swing low:
       down from ${hi}${hiDate} to ${lo}${loDate}. Price has since recovered
       ${pct}% of that fall, so these levels sit <strong>above</strong> price and act as
-      resistance — places a bounce has a reason to stall.`;
+      resistance. Places a bounce has a reason to stall.`;
   }
   return `<strong>bullish retracement</strong>, measured swing low → swing high:
     up from ${lo}${loDate} to ${hi}${hiDate}. Price has since given back
     ${pct}% of that rise, so these levels sit <strong>below</strong> price and act as
-    support — places a pullback has a reason to hold.`;
+    support. Places a pullback has a reason to hold.`;
 }
 
 function renderEntryPlan(p) {
@@ -3220,7 +3220,7 @@ function renderEntryPlan(p) {
   return `<div class="panel gap">
     <h2>${hg('Strike & entry recommendation')}</h2>
     <p class="sub">Derived from the ${esc(p.stance)} read at ${esc(p.conviction)} conviction. Candidates are repriced with
-      Black-Scholes at the projected target, so the ranking reflects payoff — not just a convenient delta.</p>
+      Black-Scholes at the projected target, so the ranking reflects payoff, not just a convenient delta.</p>
 
     <div class="callout info" style="font-size:var(--t-base);border-left-color:var(--good)">
       <strong>${esc(p.headline)}</strong>
@@ -3230,7 +3230,7 @@ function renderEntryPlan(p) {
       ${tile('Contract', `${strikeLabel(r.strike)} ${p.direction === 'long' ? 'call' : 'put'}`,
     `Expires ${esc(r.expiry || '')} · ${r.dte || 0} days left · ${
       r.moneyness === 'ITM' ? 'already in the money' : 'not yet in the money'}`)}
-      ${tile('Limit price', usd(o.limit_price), `Per share — never pay above ${
+      ${tile('Limit price', usd(o.limit_price), `Per share, never pay above ${
     usd(o.never_pay_more_than)}`)}
       ${tile('Cost per contract', usd(r.capital_per_contract, 0),
     `What one contract costs · the stock must clear ${usd(r.breakeven)} to break even`)}
@@ -3263,11 +3263,11 @@ function renderEntryPlan(p) {
       <div>
         <h3>${hg('Target & risk')}</h3>
         ${kv([
-    ['Price target', `${usd(t.target_price)} — a ${fmtPct(t.move_required_pct, 1)} move from here`],
+    ['Price target', `${usd(t.target_price)}. A ${fmtPct(t.move_required_pct, 1)} move from here`],
     ['Where that target comes from', esc(t.target_source || '')],
     ['Expected time to get there', `${t.estimated_trading_days || '?'} trading days (about ${
       t.estimated_calendar_days || '?'} calendar days)`],
-    ['Stop on the stock', `${usd(risk.underlying_stop)} — exit if the stock closes past this`],
+    ['Stop on the stock', `${usd(risk.underlying_stop)}. Exit if the stock closes past this`],
     ['How that stop was set', esc(risk.stop_basis || '')],
     ['Average daily range (14 days)', `${usd(t.atr14)} a day`],
   ])}
@@ -3278,7 +3278,7 @@ function renderEntryPlan(p) {
 
     <h3>${hg('Candidate strikes, ranked')}</h3>
     <p class="sub">Every column after the greeks is a repriced scenario at ${usd(t.target_price)} in about
-      ${t.estimated_calendar_days || '?'} days. “Flat” is what you lose if the move simply doesn't happen — the most
+      ${t.estimated_calendar_days || '?'} days. “Flat” is what you lose if the move simply doesn't happen. The most
       common outcome, and the reason deep-OTM contracts score badly here.</p>
     <table class="data">
       <thead><tr>
@@ -3309,16 +3309,16 @@ function renderEntryPlan(p) {
   </div>
   <!-- Volatility context, moved out of the entry plan's right column.
        It describes the underlying's vol, not this particular trade, and it was
-       the reason that column ran 1131px against 561px on the left — a 570px void
+       the reason that column ran 1131px against 561px on the left. A 570px void
        inside the card, which the panel border made look like a failed section
        rather than empty space. Two more rows landed here with the HV ladder,
        which is what pushed it over. -->
   ${iv.available ? `<div class="panel gap">
       <h3>${hg('Volatility context')}${askPulse('iv')}</h3>
       ${kv([
-  ['Implied volatility, at the money', fmt(iv.atm_iv_pct, 1) + '% a year — what options are pricing in'],
-  ['Realized volatility, last 20 days', fmt(iv.realised_vol_20d_pct, 1) + '% a year — what the stock actually did'],
-  ['Implied ÷ realized', fmt(iv.iv_to_realised_ratio, 2) + 'x — above 1.0 means options look expensive'],
+  ['Implied volatility, at the money', fmt(iv.atm_iv_pct, 1) + '% a year. What options are pricing in'],
+  ['Realized volatility, last 20 days', fmt(iv.realised_vol_20d_pct, 1) + '% a year. What the stock actually did'],
+  ['Implied ÷ realized', fmt(iv.iv_to_realised_ratio, 2) + 'x. Above 1.0 means options look expensive'],
   ['Read', esc(iv.verdict || '')],
   // The ladder qualifies the ratio above: 1.3x against vol that has doubled in
   // a fortnight is the market catching up, not an expensive option.
@@ -3329,10 +3329,10 @@ function renderEntryPlan(p) {
   hv.hv_trend
     ? ['Recent movement', `${esc(cap(hv.hv_trend))}${hv.hv_fast_vs_slow_pct !== null
         && hv.hv_fast_vs_slow_pct !== undefined
-        ? ` — 10-day sits ${fmt(Math.abs(hv.hv_fast_vs_slow_pct), 0)}% ${
+        ? `· 10-day sits ${fmt(Math.abs(hv.hv_fast_vs_slow_pct), 0)}% ${
             hv.hv_fast_vs_slow_pct >= 0 ? 'above' : 'below'} the 60-day` : ''}`] : null,
   iv.iv_rank_proxy !== null && iv.iv_rank_proxy !== undefined
-    ? ['IV rank (proxy)', fmt(iv.iv_rank_proxy, 0) + ' out of 100 — where today sits in the past year'] : null,
+    ? ['IV rank (proxy)', fmt(iv.iv_rank_proxy, 0) + ' out of 100. Where today sits in the past year'] : null,
   iv.realised_vol_rank_pct !== null && iv.realised_vol_rank_pct !== undefined
     ? ['Realized vol rank', fmt(iv.realised_vol_rank_pct, 0) + ' out of 100 across the last 52 weeks'] : null,
   iv.realised_vol_percentile_pct !== null && iv.realised_vol_percentile_pct !== undefined
@@ -3408,7 +3408,7 @@ function renderCompany(co) {
         </table>
         ${(eh.upcoming || []).length ? `<h3>${hg('Next report')}</h3>${kv((eh.upcoming || []).map((u) => [u.date, 'consensus EPS ' + fmt(u.eps_estimate, 2)]))}` : ''}
         <ul class="reasons">${(eh.notes || []).map((n) => `<li>${gloss(n)}</li>`).join('')}</ul>`
-    : '<div class="callout">No earnings history — typical for ETFs and index products.</div>'}
+    : '<div class="callout">No earnings history. Typical for ETFs and index products.</div>'}
     </div>
   </div>
 
@@ -3547,7 +3547,7 @@ function renderIdea(idea) {
     idea.net_theta_per_day ? ['Net theta / day', fmt(idea.net_theta_per_day, 3)] : null,
     idea.theta_pct_of_premium_daily ? ['Theta burn', fmt(idea.theta_pct_of_premium_daily, 2) + '% of premium/day'] : null,
     idea.assignment_note ? ['Assignment', esc(idea.assignment_note)] : null,
-    rp.underlying_stop ? ['Stop on the stock', `${usd(rp.underlying_stop)} — ${esc(rp.stop_basis || '')}`] : null,
+    rp.underlying_stop ? ['Stop on the stock', `${usd(rp.underlying_stop)} · ${esc(rp.stop_basis || '')}`] : null,
     rp.first_target ? ['First target', fmt(rp.first_target, 2)] : null,
   ])}</div>
     ${rp.invalidation ? `<div class="caveat">Invalidation: ${gloss(rp.invalidation)} ${gloss(rp.sizing_note || '')}</div>` : ''}
@@ -3605,13 +3605,13 @@ function renderCatalystMode(c) {
       <h2>${hg('Market catalyst')}</h2>
       <p class="sub" id="catmode-idle">${esc(c.reason || 'No catalyst release right now.')}</p>
       <p class="caveat"><button type="button" class="cat-archive-link"
-        data-goto-catalysts>Catalyst archive — every stored event, searchable</button></p>
+        data-goto-catalysts>Catalyst archive. Every stored event, searchable</button></p>
     </div>`;
   }
   const r = c.release || {};
   const rx = c.reaction || {};
   const read = c.read || {};
-  const chips = (rx.assets || []).map((a) => `<span class="rx-chip" title="${esc(a.name)} — ${esc(a.reads)}">
+  const chips = (rx.assets || []).map((a) => `<span class="rx-chip" title="${esc(a.name)} · ${esc(a.reads)}">
     <strong>${esc(a.symbol)}</strong>
     <span class="${signClass(a.change_pct)}">${a.change_pct > 0 ? '+' : ''}${fmt(a.change_pct, 2)}%</span>
   </span>`).join('');
@@ -3653,7 +3653,7 @@ function renderCatalystMode(c) {
     </div>
 
     ${chips ? `<div class="catmode-reaction">
-      <div class="idx-lbl">Market reaction <span style="text-transform:none;letter-spacing:0">— ${
+      <div class="idx-lbl">Market reaction <span style="text-transform:none;letter-spacing:0">· ${
   esc(rx.basis || '')}</span></div>
       <div class="rx-chips">${chips}</div>
     </div>` : ''}
@@ -3665,7 +3665,7 @@ function renderCatalystMode(c) {
     : '<p class="caveat" style="margin-top:var(--space-4)">No written read for this release.</p>'}
     <p class="caveat" id="catmode-method">${gloss(c.method || '')}</p>
     <p class="caveat"><button type="button" class="cat-archive-link"
-      data-goto-catalysts>Catalyst archive — every stored event, searchable</button></p>
+      data-goto-catalysts>Catalyst archive. Every stored event, searchable</button></p>
   </div>`;
 }
 
@@ -3757,7 +3757,7 @@ function catalystCard(c) {
     : '<p class="sub">No company links were stored for this catalyst.</p>'}
       ${c.source_url ? `<p class="caveat"><a href="${esc(c.source_url)}" target="_blank"
         rel="noopener noreferrer nofollow" style="color:var(--s1)">Source${
-  c.source_name ? ' — ' + esc(c.source_name) : ''}</a></p>` : ''}
+  c.source_name ? ' · ' + esc(c.source_name) : ''}</a></p>` : ''}
     </div>
   </details>`;
 }
@@ -3775,7 +3775,7 @@ function renderCatalysts(d) {
     <p class="weekly-sub">Important market events do not stop mattering the day they are
       published. Every catalyst analysed here is stored with the public companies connected
       to it, how direct that connection is, and how strong the read-through is. Research
-      context only — never a recommendation.</p>
+      context only, never a recommendation.</p>
     <div class="cat-controls">
       <div class="cat-search">
         <input type="search" id="cat-q" placeholder="Search catalysts, themes or tickers"
@@ -3813,7 +3813,7 @@ function renderCatalysts(d) {
     ${STATE.catalystScan ? `<div class="callout">${esc(STATE.catalystScan)}</div>` : ''}
     ${list.length ? `<div class="cat-list">${list.map(catalystCard).join('')}</div>`
     : `<div class="callout">Nothing matches these filters. The library only contains events
-       a scan has identified as durable — if it is empty, run a scan.</div>`}
+       a scan has identified as durable. If it is empty, run a scan.</div>`}
     <p class="caveat">${gloss(d.method || '')}</p>
   </div>`;
 }
@@ -4204,18 +4204,18 @@ function renderRevenueMultiple(rm) {
     const peUp = last.pe > first.pe;
     divergence = revUp && !peUp
       ? `Revenue grew at <strong>${fmt(rm.revenue_cagr_pct, 1)}% a year</strong> while the
-         multiple compressed from ${fmt(first.pe, 1)} to ${fmt(last.pe, 1)} — the business got
+         multiple compressed from ${fmt(first.pe, 1)} to ${fmt(last.pe, 1)}. The business got
          bigger and the market paid less for each dollar of it.`
       : revUp && peUp
-        ? `Revenue and the multiple both rose — growth of
+        ? `Revenue and the multiple both rose. Growth of
            <strong>${fmt(rm.revenue_cagr_pct, 1)}% a year</strong> plus a rerating from
            ${fmt(first.pe, 1)} to ${fmt(last.pe, 1)}. Part of the share-price move is the
            business and part is sentiment.`
         : !revUp && peUp
           ? `Revenue fell while the multiple expanded from ${fmt(first.pe, 1)} to
-             ${fmt(last.pe, 1)} — the market is paying more for less, which is a bet on
+             ${fmt(last.pe, 1)}. The market is paying more for less, which is a bet on
              something the revenue line does not yet show.`
-          : `Revenue and the multiple both fell — the business shrank and the market
+          : `Revenue and the multiple both fell. The business shrank and the market
              marked it down with it.`;
   }
 
@@ -4325,7 +4325,7 @@ function renderPriority(p) {
   return `<div class="panel span-all">
     <h2>${hg("Today's priority")}${askPulse('priority')}</h2>
     <p class="sub">The calendar, the earnings scan, the sector board and the scanners in one
-      view — ordered by published impact and how soon it lands, not by a guess at what will
+      view. Ordered by published impact and how soon it lands, not by a guess at what will
       matter most.</p>
     <div class="pri-board">${cols}</div>
     <p class="caveat">${gloss(p.method || '')}</p>
@@ -4523,7 +4523,7 @@ function renderIndicatorPanes() {
     }
     return `<div class="ind-pane">
       <div class="idx-lbl">${esc(v.name)}${v.last !== null && v.last !== undefined
-    ? ` — ${fmt(v.last, 1)}` : ''}</div>
+    ? `· ${fmt(v.last, 1)}` : ''}</div>
       ${v.reading ? `<p class="ind-reading">${esc(v.reading)}</p>` : ''}
       <div id="legend-ind-${esc(id)}"></div>
       <div id="chart-ind-${esc(id)}"></div>
@@ -4909,7 +4909,7 @@ function renderInstrument(d) {
   return `<div class="panel span-all">
     <div class="weekly-kicker">${esc(d.group || 'cross-asset')}</div>
     <h2 class="weekly-title">${esc(d.label)}${askPulse('instrument')}</h2>
-    <p class="weekly-sub">${esc(cap(d.note || ''))} — ${esc(d.symbol)},
+    <p class="weekly-sub">${esc(cap(d.note || ''))} · ${esc(d.symbol)},
       ${fmt((d.dates || []).length, 0)} daily bars.</p>
 
     <div class="inst-stats">
@@ -4935,7 +4935,7 @@ function renderInstrument(d) {
     <div id="chart-inst"></div>
     <p class="caveat">${gloss('Daily bars from the same feed the cross-asset tables read, so '
     + 'the level here and the level in the table are the same number. An index level, a '
-    + 'yield proxy and a currency cross are not tradeable instruments — this is the '
+    + 'yield proxy and a currency cross are not tradeable instruments. This is the '
     + 'reference series, not a price you could deal at.')}</p>
   </div>`;
 }
@@ -5024,7 +5024,7 @@ function renderGlobal(g) {
       data-instrument-label="${esc(r.label)}" tabindex="0" role="button"
       title="Open the full chart for ${esc(r.label)}">
     <td class="name"><span class="inst-link">${esc(r.label)}</span>
-      <span class="pat-sub">${esc(r.region)} — ${esc(r.note)}</span></td>
+      <span class="pat-sub">${esc(r.region)} · ${esc(r.note)}</span></td>
     <td class="num ${signClass(r.chg_1d)}">${fmtPct(r.chg_1d, 2)}</td>
     <td class="num ${signClass(r.chg_5d)}">${fmtPct(r.chg_5d, 2)}</td>
     <td class="num ${signClass(r.chg_20d)}">${fmtPct(r.chg_20d, 2)}</td>
@@ -5037,7 +5037,7 @@ function renderGlobal(g) {
   return `<div class="panel span-all">
     <h2>${hg('Overnight, worldwide')}${askPulse('global')}</h2>
     <p class="sub">Every market that traded before the US open, in the order it
-      traded — and how tightly each one has actually moved with the S&amp;P over the
+      traded. And how tightly each one has actually moved with the S&amp;P over the
       last ${fmt(g.corr_window, 0)} sessions.</p>
 
     ${(g.sessions || []).map((sess) => `
@@ -5062,14 +5062,14 @@ function renderGlobal(g) {
       markets have moved with the S&amp;P closely enough over the last
       ${fmt(g.corr_window, 0)} sessions to read across
       (correlation at or above ${fmt(g.corr_threshold, 1)}). For the rest, a big night
-      is a fact about that market rather than a signal about this one — which is
+      is a fact about that market rather than a signal about this one. Which is
       usually the honest answer, and the one a narrative would talk you out of.</div>
 
     <p class="caveat">${gloss(g.method || '')}</p>
     <p class="caveat">No causal claim is made here and none should be read in.
       Headlines and market moves that happen the same morning are adjacent, not
-      necessarily connected, and nothing in this panel can tell the two apart —
-      the correlation column is the closest it gets, and it is a description of the
+      necessarily connected, and nothing in this panel can tell the two apart.
+      The correlation column is the closest it gets, and it is a description of the
       past quarter rather than an explanation of today.</p>
   </div>`;
 }
@@ -5100,8 +5100,8 @@ function renderPeHistory(p) {
   return `<div class="panel span-all">
     <h2>${hg('Multiple and revenue history')}${askPulse('pehistory')}</h2>
     <p class="sub">Price divided by trailing-twelve-month diluted earnings, weekly,
-      straight from ${fmt(p.counts.eps_quarters || 0, 0)} quarters of SEC filings —
-      alongside what revenue was doing over the same stretch.</p>
+      straight from ${fmt(p.counts.eps_quarters || 0, 0)} quarters of SEC filings.
+      Alongside what revenue was doing over the same stretch.</p>
 
     <div class="pe-tiles" style="margin-top:var(--space-4)">
       <div class="tile"><span class="label">${hg('Trailing P/E now')}</span>
@@ -5201,7 +5201,7 @@ function drawPeChart(p) {
 
 const SEAS_VERDICT = {
   significant: { cls: 'up', label: 'Significant',
-    tip: 'Clears the corrected threshold — the effect is larger than the sample size can easily explain by chance.' },
+    tip: 'Clears the corrected threshold. The effect is larger than the sample size can easily explain by chance.' },
   unproven: { cls: 'warn', label: 'Unproven',
     tip: 'Would pass on its own at p<0.05, but does not survive correcting for how many buckets were tested. Suggestive, not established.' },
   noise: { cls: 'muted', label: 'Noise',
@@ -5259,7 +5259,7 @@ function renderSeasonality(s) {
 
   const headline = found
     ? `<strong>${found} effect${found === 1 ? '' : 's'} clear${found === 1 ? 's' : ''} the
-       corrected threshold.</strong> That is more than usual — check the sample size and
+       corrected threshold.</strong> That is more than usual. Check the sample size and
        whether the month is one the company reports in before treating it as real.`
     : `<strong>Nothing here clears the corrected threshold.</strong> That is the normal
        result, and it is the honest one: at this sample size the differences between months
@@ -5267,8 +5267,8 @@ function renderSeasonality(s) {
 
   return `<div class="panel span2 gap">
     <h2>${hg('Seasonality')}</h2>
-    <p class="sub">Whether the calendar itself carries information for ${esc(s.ticker)} —
-      returns sliced by month, weekday and the turn of the month, over
+    <p class="sub">Whether the calendar itself carries information for ${esc(s.ticker)}.
+      Returns sliced by month, weekday and the turn of the month, over
       ${fmt(s.years, 0)} years (${esc(s.start)} to ${esc(s.end)}). Every figure is shown
       both raw and net of ${esc(s.benchmark)} over the same period, because "December is
       strong" must not just mean "the market went up in December".</p>
@@ -5279,7 +5279,7 @@ function renderSeasonality(s) {
     <p class="caveat" style="margin-top:0">${fmt(mo.periods, 0)} months of history, so about
       ${fmt((mo.periods || 0) / 12, 0)} observations behind each row. Twelve buckets are
       tested, so the bar for significance is 0.05 ÷ 12 = <strong>p &lt;
-      ${fmt(mo.threshold, 4)}</strong>, not 0.05 — testing twelve things gives twelve
+      ${fmt(mo.threshold, 4)}</strong>, not 0.05. Testing twelve things gives twelve
       chances to get lucky once.</p>
     <table class="data">
       <thead><tr><th>Month</th><th>Years</th><th>Mean</th><th>vs ${esc(s.benchmark)}</th>
@@ -5290,7 +5290,7 @@ function renderSeasonality(s) {
       best year removed. A column that collapses when one year comes out was one year, not a
       season. ${(s.reporting_months || []).length ? `Months marked
       <span class="seas-rpt">reports</span> are when ${esc(s.ticker)} usually publishes
-      results — an effect there is most likely the earnings reaction wearing a calendar
+      results. An effect there is most likely the earnings reaction wearing a calendar
       costume.` : ''}</p>
 
     <h3 style="margin-top:18px">${hg('Day of the week')}</h3>
@@ -5307,13 +5307,13 @@ function renderSeasonality(s) {
     <p class="caveat">This table shows the median rather than the drop-the-best-one figure
       used above. Removing a single observation is a real check against 15 years; against
       700 days it moves the mean by nothing and would only look like a check. The median is
-      the honest robustness column at this sample size — far from the mean means a few large
+      the honest robustness column at this sample size. Far from the mean means a few large
       days are carrying it.</p>
 
     <h3 style="margin-top:18px">${hg('Turn of the month')}</h3>
     <p class="caveat" style="margin-top:0">The last ${fmt((tom.window || {}).before, 0)} and
       first ${fmt((tom.window || {}).after, 0)} trading days of each month against the rest
-      of it — the window fixed in advance rather than chosen for producing the best number.
+      of it. The window fixed in advance rather than chosen for producing the best number.
       One comparison, so no correction is owed and the bar is the plain p &lt; 0.05.</p>
     <table class="data">
       <thead><tr><th>Window</th><th>Days</th><th>Mean</th><th>vs ${esc(s.benchmark)}</th>
@@ -5335,7 +5335,7 @@ function renderSeasonality(s) {
     <p class="caveat" style="margin-top:14px">${gloss('Two limits worth holding on to. The '
     + 'correction above is within this ticker: check twenty tickers and you get twenty fresh '
     + 'chances at a false positive, and roughly one will land. And fifteen years is a single '
-    + 'market regime for many names — a company listed after 2010 has never seen a sustained '
+    + 'market regime for many names. A company listed after 2010 has never seen a sustained '
     + 'bear market in this sample, so a month that looks reliably strong may only have been '
     + 'tested in conditions that flattered it.')}</p>
   </div>`;
@@ -5381,7 +5381,7 @@ function renderPatterns(d) {
   const candleRows = candles.map((c) => `<tr>
     <td class="name">${esc(c.name)}
       <span class="pat-sub">${esc(c.date)}${c.bar_offset === 0 ? ' · latest bar'
-    : ` · ${fmt(c.bar_offset, 0)} bars ago`} — ${esc(c.note)}</span>
+    : ` · ${fmt(c.bar_offset, 0)} bars ago`} · ${esc(c.note)}</span>
       <span class="pat-conv">Conventionally: ${esc(c.conventional)}</span></td>
     <td><span class="pat-chip ${c.direction === 'bullish' ? 'up'
     : c.direction === 'bearish' ? 'down' : 'flat'}">${esc(c.direction)}</span></td>
@@ -5403,8 +5403,8 @@ function renderPatterns(d) {
 
   return `<div class="panel span-all">
     <h2>${hg('Chart patterns')}${askPulse('patterns')}</h2>
-    <p class="sub">Structure, candles and zones read mechanically off the daily bars —
-      then, next to each one, what actually happened afterwards across 43 names and ten
+    <p class="sub">Structure, candles and zones read mechanically off the daily bars.
+      Then, next to each one, what actually happened afterwards across 43 names and ten
       years. The two columns often disagree, and this panel deliberately does not
       resolve that for you.</p>
 
@@ -5415,7 +5415,7 @@ function renderPatterns(d) {
       <tbody>${structRows}</tbody>
     </table></div>
     <p class="caveat">A reversal pattern is only <em>confirmed</em> once a close has
-      cleared its neckline, and cleared it promptly — a crossing months later is a
+      cleared its neckline, and cleared it promptly. A crossing months later is a
       coincidence, not a resolution. Confirmation is the whole difference on this
       data: all four confirmed structures land between 51% and 55%, and all four
       unconfirmed ones at or below 50%, one of them at 31%. A pattern that fails to
@@ -5432,7 +5432,7 @@ function renderPatterns(d) {
     </table></div>
     <p class="caveat">A zone is not the same thing as support. Support is a price that
       held; a zone is a price where one side was so heavily outnumbered that price
-      could not stay there — a base no wider than ${fmt(p.tolerances.base_max_atr, 1)}×
+      could not stay there. A base no wider than ${fmt(p.tolerances.base_max_atr, 1)}×
       a typical day's range, then a departure of at least
       ${fmt(p.tolerances.departure_atr, 1)}× within ${fmt(4, 0)} bars. Both halves are
       required, so ordinary congestion does not qualify. Switch them on under
@@ -5472,7 +5472,7 @@ function renderSectorConfirm(sc) {
 
   return `<div class="panel span2">
     <h2>${hg('Sector confirmation')}${askPulse('sectorconfirm')}</h2>
-    <p class="sub">${esc(sc.ticker)} · ${esc(sc.label)} — measured over the last ${
+    <p class="sub">${esc(sc.ticker)} · ${esc(sc.label)}, measured over the last ${
   fmt(sc.window_sessions, 0)} sessions.</p>
     <div class="grid c3" style="margin-top:var(--space-3)">
       ${tile('Stock sector', esc(sc.sector || '—'))}
@@ -5527,7 +5527,7 @@ function renderEvaluation(e) {
   </tr>`).join('');
 
   const detail = (e.horizons || []).map((h) => `<details class="eval-h">
-    <summary>${fmt(h.horizon_sessions, 0)}-session horizon — IC ${
+    <summary>${fmt(h.horizon_sessions, 0)}-session horizon: IC ${
   fmt(h.information_coefficient, 4)}, positive on ${fmt(h.ic_positive_share_pct, 0)}% of ${
   fmt(h.ic_dates, 0)} dates<i class="cal-caret" aria-hidden="true"></i></summary>
     <table class="data">
@@ -5548,7 +5548,7 @@ function renderEvaluation(e) {
     <h2>${hg('Does the score work?')}${askPulse('evaluate')}</h2>
     <p class="sub">The screen's own trend-and-momentum score, replayed across
       ${fmt(e.sample_size, 0)} names of ${fmt(e.universe_total, 0)} at ${fmt(e.evaluation_dates, 0)}
-      historical dates — ${fmt(e.observations, 0)} observations. Each score is computed only from
+      historical dates: ${fmt(e.observations, 0)} observations. Each score is computed only from
       bars that existed at the time, and returns are measured against the rest of the universe on
       the same day.</p>
 
@@ -5630,11 +5630,11 @@ function renderCorrelation(c) {
       <strong>Expiry clock.</strong> ${esc(ex.note || '')}
       Next monthly expiry ${esc((ex.next_opex || {}).when_label || '')}${
   (ex.next_opex || {}).kind === 'witching' ? ' (quadruple witching)' : ''};
-      VIX settles ${esc((ex.next_vix_expiry || {}).when_label || '')} — a Wednesday
+      VIX settles ${esc((ex.next_vix_expiry || {}).when_label || '')}. A Wednesday
       morning auction, not the Friday close.</div>` : ''}
 
     <details class="eval-h" style="margin-top:var(--space-3)">
-      <summary>Components — ${fmt(c.components_used, 0)} names, weighted by ${
+      <summary>Components: ${fmt(c.components_used, 0)} names, weighted by ${
   esc(c.weighted_by)}<i class="cal-caret" aria-hidden="true"></i></summary>
       <table class="data">
         <thead><tr><th>Name</th><th class="num">ATM IV</th><th class="num">Weight</th></tr></thead>
@@ -5866,7 +5866,7 @@ function renderSectorRead(host) {
   const r = STATE.sectorRead;
   if (!r) { el.innerHTML = ''; return; }
   if (r.loading) {
-    el.innerHTML = `<div class="panel"><h2>${esc(r.symbol)} — reading the board…</h2>
+    el.innerHTML = `<div class="panel"><h2>${esc(r.symbol)}. Reading the board…</h2>
       <p class="sub">Writing from the levels and returns for ${esc(r.symbol)}.</p></div>`;
     return;
   }
@@ -5879,7 +5879,7 @@ function renderSectorRead(host) {
   const row = r.row || {};
   el.innerHTML = `<div class="panel sector-read">
     <div class="earn-brief-head">
-      <h2>${esc(r.symbol)}${row.name ? ` \u2014 ${esc(row.name)}` : ''} read</h2>
+      <h2>${esc(r.symbol)}${row.name ? ` \u00b7 ${esc(row.name)}` : ''} read</h2>
       <div style="display:flex;gap:var(--space-2);align-items:center">
         ${r.stance ? `<span class="earn-stance ${SECTOR_STANCE_CLASS[r.stance] || 'flat'}"
           >${esc(r.stance)}</span>` : ''}
@@ -5938,7 +5938,7 @@ function renderIndexBoard(b) {
   if (!cards) return '';
   return `<div class="panel span2">
     <h2>${hg('Major ETFs')}${askPulse('sectorboard')}</h2>
-    <p class="sub">Each index ETF against the prior session's high and low \u2014 the same two
+    <p class="sub">Each index ETF against the prior session's high and low. The same two
       prices the sector board uses, asked of the market as a whole.</p>
     <div class="idx-cards">${cards}</div>
     <div id="index-read-host"></div>
@@ -5984,7 +5984,7 @@ function renderSectorBoard(b) {
       <td class="name">${esc(r.name)}</td>
       <td><span class="sec-trend ${tcls}">${esc(SECTOR_TREND_LABEL[r.trend] || r.trend)}</span>${
   r.trend === 'neutral' ? ''
-    : r.intact ? '<span class="sec-note" title="Same state as the prior session — the trend has held">intact</span>'
+    : r.intact ? '<span class="sec-note" title="Same state as the prior session. The trend has held">intact</span>'
       : r.changed ? '<span class="sec-note flip" title="This state is new as of today; the prior session was different">new today</span>' : ''}</td>
       <td class="num">$${fmt(r.price, 2)}</td>
       <td class="num pos">$${fmt(r.bull_above, 2)}</td>
@@ -6000,7 +6000,7 @@ function renderSectorBoard(b) {
   return `<div class="grid c2 gap">
     <div class="panel span2">
       <h2>${hg('Sector board')}${askPulse('sectorboard')}</h2>
-      <p class="sub">Every SPDR sector against the prior session's high and low — the two
+      <p class="sub">Every SPDR sector against the prior session's high and low. The two
         prices the overnight and pre-market session traded around. Above the high is an
         uptrend, below the low a downtrend, between them undecided.
         <strong>${c.uptrend || 0}</strong> up, <strong>${c.downtrend || 0}</strong> down,
@@ -6041,7 +6041,7 @@ const ROT_QUADS = {
   lagging: { label: 'Lagging', cls: 'down',
     tip: 'Underperforming and still losing ground. The weakest quadrant.' },
   improving: { label: 'Improving', cls: 'accent',
-    tip: 'Still underperforming, but closing the gap. Sectors pass through here on the way back to Leading — or turn round and drop back to Lagging.' },
+    tip: 'Still underperforming, but closing the gap. Sectors pass through here on the way back to Leading, or turn round and drop back to Lagging.' },
 };
 
 function rotationQuadChip(q) {
@@ -6084,8 +6084,8 @@ function renderRotation(r) {
     <p class="sub">All eleven sectors against ${esc(r.benchmark)} on two axes, both centred
       on 100: <strong>relative strength</strong> across, <strong>relative momentum</strong> up.
       Each sector trails ${fmt(r.tail, 0)} weeks of history, so you can see not just where it
-      is but which way it is heading. Sectors tend to travel clockwise —
-      Improving → Leading → Weakening → Lagging — though plenty turn back
+      is but which way it is heading. Sectors tend to travel clockwise.
+      Improving → Leading → Weakening → Lagging. Though plenty turn back
       without completing the loop.</p>
 
     <div class="rot-tallies">${tally}</div>
@@ -6095,8 +6095,8 @@ function renderRotation(r) {
     ${crossed.length ? `<div class="callout" style="margin-top:12px">
       <strong>Crossed a boundary this week:</strong>
       ${crossed.map((c) => `${esc(c.symbol)} ${esc(c.from)} → ${esc(c.to)}`).join(' · ')}.
-      A crossing is the earliest thing this chart says, and also the least reliable —
-      a sector sitting near a line can cross back next week without anything having changed.
+      A crossing is the earliest thing this chart says, and also the least reliable.
+      A sector sitting near a line can cross back next week without anything having changed.
     </div>` : ''}
 
     <table class="data" style="margin-top:12px">
@@ -6113,7 +6113,7 @@ function renderRotation(r) {
     + fmt(p.norm_window, 0) + ' weeks, so 102 means "unusual for this sector recently", not '
     + '"unusual in absolute terms". A sector that has quietly outperformed for the whole '
     + 'window reads as ordinary, because the window has absorbed it. Weekly bars, because '
-    + 'daily rotation is mostly noise \u2014 the tail thrashes across the boundaries on '
+    + 'daily rotation is mostly noise. The tail thrashes across the boundaries on '
     + 'nothing.')}</p>
     <p class="caveat">This is not an RRG&reg;, and the numbers are not the JdK RS-Ratio and
       RS-Momentum. Those are Julius de Kempenaer\u2019s, trademarked, and their exact
@@ -6240,7 +6240,7 @@ function wsLegend(ps) {
   n === 1 ? '' : 's'}${draws ? ` · ${draws} drawing${draws === 1 ? '' : 's'}` : ''}</span>`}
     </button>
     ${wsLegendOpen ? `<div class="ws-leg-body">
-      ${rows.join('') || '<div class="ws-leg-empty">No overlays — add one from the toolbar</div>'}
+      ${rows.join('') || '<div class="ws-leg-empty">No overlays. Add one from the toolbar</div>'}
       <div class="ws-leg-row ws-leg-static">Drawings
         <span class="ws-leg-val" data-ws-draw-count>${draws}</span></div>
     </div>` : ''}
@@ -6476,7 +6476,7 @@ function wsManagePanel() {
       </div>
       <p class="ws-modal-foot">Colours come from the palette the charts already
         draw from, which is the set checked for separation under colour-vision
-        simulation — a free hex can land invisibly on top of a line that is
+        simulation. A free hex can land invisibly on top of a line that is
         already there. Changes apply to the Charting tab and the Swing chart
         together, and are remembered on this device.</p>
     </div>
@@ -6536,8 +6536,8 @@ function wsManageRow(def) {
     ? `<p class="ws-mnote">Length is set to ${fmt(p.length, 0)}, but the server sends
       this average at its standard ${fmt((OVERLAY_BY_ID[def.id].params || {}).length, 0)}.
       The label will say ${fmt(p.length, 0)} and the line will still be
-      ${fmt((OVERLAY_BY_ID[def.id].params || {}).length, 0)} until the recompute lands —
-      so this is recorded, not yet honoured.</p>` : ''}
+      ${fmt((OVERLAY_BY_ID[def.id].params || {}).length, 0)} until the recompute lands.
+      So this is recorded, not yet honoured.</p>` : ''}
   </div>`;
 }
 
@@ -6846,7 +6846,7 @@ function wsDock() {
       </div>
       <div class="ws-widget-body" id="ws-w-${id}">${wsWidgetBody(id)}</div>
     </div>`;
-  }).join('') || '<p class="ws-none">No widgets open — pick one from the rail.</p>'}
+  }).join('') || '<p class="ws-none">No widgets open. Pick one from the rail.</p>'}
   </div>`;
 }
 
@@ -6997,7 +6997,7 @@ function wsWidgetBody(id) {
       `<tr><td class="name">${esc(k)}</td><td>${val}</td></tr>`).join('')}</tbody></table>
     ${q.analyst_target && q.price ? `<p class="ws-leg-args">${
   fmtPct(((q.analyst_target - q.price) / q.price) * 100, 1)} to the mean target. A target
-      is a forecast, and the record of them as a group is poor — read it as
+      is a forecast, and the record of them as a group is poor. Read it as
       sentiment, not as a level.</p>` : ''}`;
   }
 
@@ -7070,7 +7070,7 @@ function wsWidgetBody(id) {
       <label><input type="checkbox" data-ws-check="${i}"${on.has(i) ? ' checked' : ''}>
         <span>${esc(q)}</span></label></li>`).join('')}</ul>
     <p class="ws-leg-args">${on.size} of ${WS_CHECKS.length} for ${esc(sym || '—')}.
-      Fixed questions on purpose — a checklist you can edit becomes a list of the
+      Fixed questions on purpose. A checklist you can edit becomes a list of the
       questions you already like the answers to.</p>`;
   }
 
@@ -7157,7 +7157,7 @@ function wsWidgetBody(id) {
     </select>
     <p style="margin-top:var(--space-2);line-height:1.5">${esc(GLOSSARY[pick])}</p>
     <p class="ws-leg-args">${terms.length} terms. The same definitions the dotted
-      underlines show, browsable — which is the only way they work on a phone,
+      underlines show, browsable. Which is the only way they work on a phone,
       where there is no hover.</p>`;
   }
 
@@ -7181,14 +7181,14 @@ function wsSeasonalityMini(sn) {
     // measures deliberately: a month can be up 9 years in 15 and still average
     // negative if the losses are bigger, and that disagreement is the useful part.
     return `<div class="ws-seas-col" title="${esc(r.label || '')}: mean ${fmt(v, 2)}% over ${
-  fmt(raw.n, 0)} years, up ${fmt(raw.hit_rate, 0)}% of them — ${esc(raw.verdict || '')}">
+  fmt(raw.n, 0)} years, up ${fmt(raw.hit_rate, 0)}% of them: ${esc(raw.verdict || '')}">
       <span class="ws-seas-pct">${fmt(raw.hit_rate, 0)}</span>
       <span class="ws-seas-bar ${v >= 0 ? 'up' : 'down'}" style="height:${h}px"></span>
       <span class="ws-seas-lab">${esc((r.short || '').slice(0, 1))}</span>
     </div>`;
   }).join('')}</div>
   <p class="ws-leg-args">Bar is the mean move, the figure above is how often it
-    was up. ${fmt(sn.years, 0)} years. Hover for the verdict — at n=${
+    was up. ${fmt(sn.years, 0)} years. Hover for the verdict, at n=${
   fmt(((rows[0] || {}).raw || {}).n, 0)} per month, most come back noise, and
     the full panel on the Swing tab shows why.</p>`;
 }
@@ -8232,12 +8232,12 @@ function renderForex(fx) {
     <p class="sub">Every pair quoted base/quote, so the price is how many units of
       the second currency buys one of the first. Which way round that is decides
       what a move means, and reading it backwards is the commonest way to
-      misinterpret an FX screen — so each row spells out what <em>up</em> means
+      misinterpret an FX screen. So each row spells out what <em>up</em> means
       rather than leaving it to be inferred.</p>
 
     <div class="tracker-bar" style="margin-bottom:12px">
       <input id="fx-q" type="search" class="settings-select" style="flex:0 1 260px"
-        placeholder="Search — a currency, a group, or a driver"
+        placeholder="Search. A currency, a group, or a driver"
         value="${esc(fx.query || '')}" aria-label="Search currency pairs">
       <span class="tracker-hint">${fmt(fx.count, 0)} of ${fmt(fx.total, 0)} pairs.
         Try <em>yen</em>, <em>carry</em> or <em>commodity</em>.</span>
@@ -8263,7 +8263,7 @@ function renderForex(fx) {
     </table>
     <p class="caveat">Nothing here forecasts. Each row describes the mechanism and
       the current reading; where a pair has no defensible read across to US
-      equities it says so rather than inventing one — EUR/GBP and USD/INR are two
+      equities it says so rather than inventing one. EUR/GBP and USD/INR are two
       that do.</p>
   </div>`;
 }
@@ -8353,8 +8353,10 @@ function renderStockMap(sm) {
     const roomy = t.w > 9 && t.h > 7;
     return `<div class="map-tile" style="left:${t.x}%;top:${t.y}%;
         width:${t.w}%;height:${t.h}%;background:${mapColour(cv, dom)}"
+        ${(sm.drillable || []).includes(t.symbol)
+    ? `data-map-sector="${esc(t.symbol)}"` : ''}
         data-instrument="${esc(t.symbol)}" data-instrument-label="${esc(t.name)}"
-        title="${esc(t.name)} (${esc(t.symbol)}) — ${esc((M[tpl.color] || {}).label)}: ${
+        title="${esc(t.name)} (${esc(t.symbol)}): ${esc((M[tpl.color] || {}).label)}: ${
   mapValue(cv, M[tpl.color])}, ${esc((M[tpl.size] || {}).label)}: ${mapValue(sv, M[tpl.size])}">
         ${roomy ? `<span class="map-tile-sym">${esc(t.symbol)}</span>
           <span class="map-tile-val">${mapValue(cv, M[tpl.color])}</span>` : ''}
@@ -8364,7 +8366,7 @@ function renderStockMap(sm) {
     <p class="map-legend">Tile size is <strong>${esc((M[tpl.size] || {}).label)}</strong>,
       colour is <strong>${esc((M[tpl.color] || {}).label)}</strong>
       (${mapValue(dom.min, M[tpl.color])} to ${mapValue(dom.max, M[tpl.color])}).
-      Colour diverges around the middle of the range, not around zero — a month
+      Colour diverges around the middle of the range, not around zero. A month
       when everything rose should not paint the whole map green.</p>`;
   } else {
     body = `<div id="map-bubbles" class="chart-host"></div>
@@ -8378,13 +8380,19 @@ function renderStockMap(sm) {
     <h2>${hg('Stock maps')}</h2>
     <p class="sub">${esc(tpl.question || '')}</p>
     ${picker}
-    <p class="map-universe">${esc(sm.universe_label || '')}${
-  sm.rows ? ` · ${fmt(sm.rows.length, 0)} shown` : ''}</p>
+    <p class="map-universe">${sm.sector
+    ? `<button type="button" class="map-crumb" data-map-sector-back>All sectors</button>
+       <span class="map-crumb-sep">\u203a</span> <strong>${esc(sm.sector)}</strong> \u00b7 `
+    : ''}${esc(sm.universe_label || '')}${
+  sm.rows ? ` \u00b7 ${fmt(sm.rows.length, 0)} shown` : ''}${
+  sm.sector ? '' : ` \u00b7 <span class="map-hint">click a sector to see the names inside it</span>`}</p>
+    ${sm.holdings_caveat ? `<p class="caveat" style="margin:0 0 var(--space-3)">${
+  esc(sm.holdings_caveat)}</p>` : ''}
     ${body}
     ${(sm.dropped || []).length ? `<div class="callout" style="margin-top:12px">
       <strong>${fmt(sm.dropped.length, 0)} dropped</strong> for missing measures:
       ${sm.dropped.map((x) => `${esc(x.symbol)} (${esc(x.missing)})`).join(', ')}.
-      Dropped rather than drawn at zero — a P/E of nothing plotted at the origin
+      Dropped rather than drawn at zero. A P/E of nothing plotted at the origin
       reads as "very cheap", which is the opposite of the truth for a company
       with no earnings.</div>` : ''}
     <table class="data" style="margin-top:12px">
@@ -8407,14 +8415,21 @@ function renderStockMap(sm) {
   </div>`;
 }
 
-async function loadStockMap(template, force) {
+async function loadStockMap(template, force, sector) {
   const t = template || STATE.stockMapTemplate || 'sector-month';
-  if (STATE.stockMap && !force && t === STATE.stockMapTemplate) return;
+  // `sector` is undefined for an ordinary load and null to climb back out, so
+  // the two cases have to be told apart rather than collapsed with `||`.
+  const s = sector === undefined ? (STATE.stockMapSector || null) : (sector || null);
+  if (STATE.stockMap && !force && t === STATE.stockMapTemplate
+      && s === (STATE.stockMapSector || null)) return;
   STATE.stockMapTemplate = t;
+  STATE.stockMapSector = s;
   const host = document.getElementById('stockmap-host');
-  if (host) host.innerHTML = `<div class="panel span2 gap">${loadingHTML('stock map')}</div>`;
+  if (host) host.innerHTML = `<div class="panel span2 gap">${loadingHTML(
+    s ? `${s} holdings` : 'stock map')}</div>`;
   try {
-    STATE.stockMap = await getJSON(`/api/stockmap?template=${encodeURIComponent(t)}`);
+    STATE.stockMap = await getJSON(`/api/stockmap?template=${encodeURIComponent(t)}${
+      s ? `&sector=${encodeURIComponent(s)}` : ''}`);
   } catch (err) {
     STATE.stockMap = { error: err.message };
   }
@@ -8476,7 +8491,7 @@ function renderExtras(x) {
       ${tile('Growth streak', `${fmt(a.growth_streak_years, 0)}y`,
     a.last_cut_year ? `last cut ${a.last_cut_year}` : 'no cut on record')}
       ${tile('Annual total', money((a.annual.slice(-1)[0] || {}).total, 2),
-    `${(a.annual.slice(-1)[0] || {}).year || ''} — last complete year`)}
+    `${(a.annual.slice(-1)[0] || {}).year || ''}. Last complete year`)}
       ${tile('Payments on record', fmt(a.dividends.length, 0), 'most recent 24 shown')}
     </div>
     <table class="data">
@@ -8520,7 +8535,7 @@ function renderExtras(x) {
     <h3 style="margin-top:var(--space-4)">${hg('Relative performance')}</h3>
     <div class="callout">${esc(rel.error)}</div>` : `
     <h3 style="margin-top:var(--space-4)">${hg('Relative performance')} <span
-      class="th-plain">— vs ${esc(rel.benchmark)}</span></h3>
+      class="th-plain">· vs ${esc(rel.benchmark)}</span></h3>
     <div class="grid c5" style="margin-bottom:10px">
       ${['5d', '20d', '60d', '120d', '252d'].map((k) => tile(k.replace('d', ' days'),
     (rel.excess || {})[k] === null || (rel.excess || {})[k] === undefined
@@ -8542,7 +8557,7 @@ function renderExtras(x) {
     ${relBlock}
     <p class="caveat">Two items from the same list are deliberately missing.
       <strong>Dark-pool volume</strong> and <strong>retail-activity percentage</strong>
-      have no free source — both are sold by vendors who aggregate broker feeds,
+      have no free source. Both are sold by vendors who aggregate broker feeds,
       and the only way to show them here would be to guess. An absent panel beats
       a fabricated one.</p>
   </div>`;
@@ -8609,7 +8624,7 @@ function renderEcon(e) {
       <span class="econ-group-lab">${esc(g.label)}</span>
       <div class="econ-pills">${g.series.map((sx) =>
     `<button type="button" class="pill${sx.code === STATE.econCode ? ' on' : ''}"
-        data-econ="${esc(sx.code)}" title="${esc(sx.label)} — ${esc(sx.form_label)}"
+        data-econ="${esc(sx.code)}" title="${esc(sx.label)} · ${esc(sx.form_label)}"
         >${esc(sx.label)}</button>`).join('')}</div>
     </div>`).join('')}</div>`;
 
@@ -8635,7 +8650,7 @@ function renderEcon(e) {
       <p class="caveat"><strong>${esc(e.label)}</strong>, ${esc(e.form_label)}.
         ${esc(e.note)}</p>
       <p class="caveat">${esc(e.source)}. No forecast column: FRED publishes what
-        was released, and consensus estimates are surveyed and licensed — so this
+        was released, and consensus estimates are surveyed and licensed. So this
         can tell you what the number was and what it was last time, and cannot
         tell you what anyone expected.</p>`;
   }
@@ -8783,7 +8798,7 @@ function renderMarket(d) {
   <div id="forex-host" class="span-all">${renderForex(STATE.forex)}</div>
 
   ${evc.note ? `<div class="panel gap">
-    <h2>${hg('Equal-weight vs cap-weight (RSP / SPY)')} <span class="th-plain">— daily bars</span></h2>
+    <h2>${hg('Equal-weight vs cap-weight (RSP / SPY)')} <span class="th-plain">· daily bars</span></h2>
     <p class="sub">${gloss(evc.note)}</p>
     <div class="grid c4">
       ${tile('RSP / SPY over 3 months', fmtPct(evc.chg_3m_pct, 1), 'equal-weight vs cap-weight', signClass(evc.chg_3m_pct))}
@@ -8793,7 +8808,7 @@ function renderMarket(d) {
   </div>` : ''}
 
   <div class="panel gap">
-    <h2>${hg('Cross-asset dashboard')} <span class="th-plain">— daily bars</span></h2>
+    <h2>${hg('Cross-asset dashboard')} <span class="th-plain">· daily bars</span></h2>
     <p class="sub">Level, momentum across three horizons, position versus the 200-day, and a 90-day trace.</p>
     ${groupOrder.filter((g) => (m.groups || {})[g]).map((g) => `
       <h3>${hg(groupLabel(g))}</h3>
@@ -8804,7 +8819,7 @@ function renderMarket(d) {
   </div>
 
   <div class="panel gap">
-    <h2>${hg('Cross-asset ratios')} <span class="th-plain">— daily bars</span></h2>
+    <h2>${hg('Cross-asset ratios')} <span class="th-plain">· daily bars</span></h2>
     <p class="sub">Ratio lines carry the regime signal that absolute levels hide.</p>
     <div class="grid c2">
       ${(m.ratios || []).map((r, i) => `<div>
@@ -8830,7 +8845,7 @@ function renderMarket(d) {
   <div class="grid c2 gap">
     <div class="panel span2">
       <h2>${hg('Sector relative strength')}</h2>
-      <p class="sub">Ranked on the ratio line against ${esc(s.benchmark || 'SPY')} — leadership, not beta. Composite blends 1-week to 6-month relative strength with trend confirmation.</p>
+      <p class="sub">Ranked on the ratio line against ${esc(s.benchmark || 'SPY')}. Leadership, not beta. Composite blends 1-week to 6-month relative strength with trend confirmation.</p>
       <table class="data">
         <thead><tr><th>#</th><th>Sector</th><th>Composite</th><th></th><th>RS 1w</th><th>RS 1m</th><th>RS 3m</th><th>RS 6m</th><th>RSI</th><th>vs 50d</th><th>vs 200d</th><th>Strength</th></tr></thead>
         <tbody>${(s.sectors || []).map((r) => `<tr>
@@ -8871,21 +8886,21 @@ function renderMarket(d) {
 
     <div class="panel">
       <h2>${hg('Breakout candidates')}</h2>
-      <p class="sub">Coiled near a range high, in a volatility squeeze, with momentum in the constructive band. All three together — any one alone is noise.</p>
+      <p class="sub">Coiled near a range high, in a volatility squeeze, with momentum in the constructive band. All three together. Any one alone is noise.</p>
       ${(s.breakout_candidates || []).map((r) => `<div style="padding:var(--space-2) 0;border-bottom:1px solid var(--grid)">
         <div style="display:flex;justify-content:space-between;gap:var(--space-3);align-items:baseline">
           <strong>${esc(r.symbol)} <span style="color:var(--ink-2);font-weight:400">${esc(r.name)}</span></strong>
           <span class="chip ${r.breakout_ready ? 'bull' : 'neutral'}"><span class="dot"></span>Score ${fmt(r.breakout_score, 0)}</span>
         </div>
         <ul class="reasons">${(r.breakout_reasons || []).map((x) => `<li>${gloss(x)}</li>`).join('')}</ul>
-      </div>`).join('') || '<div class="muted">Nothing is set up cleanly right now — that is itself information.</div>'}
+      </div>`).join('') || '<div class="muted">Nothing is set up cleanly right now. That is itself information.</div>'}
     </div>
   </div>
 
   <div class="grid c2 gap">
     <div class="panel">
       <h2>${hg('Niche industries')}</h2>
-      <p class="sub">One level narrower than the themes above — single sub-industries and thematic baskets
+      <p class="sub">One level narrower than the themes above. Single sub-industries and thematic baskets
         (memory chips, uranium, cybersecurity, rare earths...) that rotation often reaches before it shows
         up in the broader sector or theme ETFs.</p>
       <table class="data">
@@ -9060,7 +9075,7 @@ const CMP_GROUPS = [
       { key: 'vs_sma200', label: 'Above / below the 200-day', kind: 'pct',
         means: 'The dividing line between a long uptrend and a long downtrend.' },
       { key: 'vs_sma40w', label: 'Above / below the 40-week', kind: 'pct',
-        means: 'The same idea on a weekly chart — slower, and harder to whipsaw.' },
+        means: 'The same idea on a weekly chart. Slower, and harder to whipsaw.' },
     ],
   },
   {
@@ -9087,7 +9102,7 @@ const CMP_GROUPS = [
     rows: [
       { key: 'forward_pe', label: 'Forward P/E', kind: 'num1',
         means: 'Price against next year’s expected earnings. Lower is cheaper, '
-          + 'which is not the same as better — a low multiple often means low '
+          + 'which is not the same as better. A low multiple often means low '
           + 'expected growth.' },
       { key: 'pe_percentile', label: 'That multiple against its own past',
         kind: 'pctile', lead: 'low', sub: 'pe_read',
@@ -9180,7 +9195,7 @@ function cmpRankRead(hid, c) {
   const gap = first.score - second.score;
   if (gap < CMP_TIE_POINTS) {
     return `${esc(first.ticker)} and ${esc(second.ticker)} are level here `
-      + `(${fmt(first.score, 0)} against ${fmt(second.score, 0)}) — too close to separate.`;
+      + `(${fmt(first.score, 0)} against ${fmt(second.score, 0)}). Too close to separate.`;
   }
   return `${esc(first.ticker)} leads, ${fmt(gap, 0)} points clear of ${esc(second.ticker)}.`;
 }
@@ -9193,8 +9208,8 @@ function cmpSkeleton(names) {
   const cols = names.length || 2;
   return `<div class="panel span-all cmp-loading" aria-busy="true">
     <p class="loading"><span class="spinner"></span>Pulling ${
-  names.length ? names.map((n) => esc(n)).join(' and ') : 'both names'} in full —
-      the same analysis the Swing and Long-Term tabs run, for each name.</p>
+  names.length ? names.map((n) => esc(n)).join(' and ') : 'both names'} in full.
+      The same analysis the Swing and Long-Term tabs run, for each name.</p>
     <div class="cmp-skel" aria-hidden="true">
       ${Array.from({ length: 9 }, (_, row) => `<div class="cmp-skel-row"
         style="grid-template-columns:minmax(140px,2fr) repeat(${cols}, minmax(70px,1fr))">
@@ -9217,7 +9232,7 @@ function renderCompare(c) {
     <h2 class="weekly-title">Side-by-side${askPulse('compare')}</h2>
     <p class="weekly-sub">Two to four stocks or ETFs ranked across momentum, technical
       structure, volatility and longer-term value. The three horizons are scored separately,
-      so a name can lead one and trail another — that disagreement is the useful part.</p>
+      so a name can lead one and trail another. That disagreement is the useful part.</p>
     ${(c && c.horizons || []).length ? `<div class="grid c3" style="margin-top:var(--space-4)">
       ${c.horizons.map((h) => `<div class="cmp-hz">
         <div class="idx-lbl">${esc(h.name)}</div>
@@ -9244,7 +9259,7 @@ function renderCompare(c) {
       Compare. Nothing is fetched until you do.</p></div>`;
   }
   if (!c.available) {
-    const why = (c.failed || []).map((f) => `${esc(f.ticker)} — ${esc(f.reason)}`);
+    const why = (c.failed || []).map((f) => `${esc(f.ticker)} · ${esc(f.reason)}`);
     return head + `<div class="panel span-all"><div class="callout">${
   esc(c.reason || 'Not enough names loaded to compare.')}${
   why.length ? '<br>' + why.join('<br>') : ''}</div></div>`;
@@ -9301,7 +9316,7 @@ function renderCompare(c) {
     ${(c.failed || []).length ? `<div class="callout">Could not load: ${
   c.failed.map((f) => `${esc(f.ticker)} (${esc(f.reason)})`).join(', ')}.</div>` : ''}
     ${anyLead ? `<p class="caveat">A dot marks the higher or lower reading on the rows where
-      that direction means something — cheaper, less turbulent, compounded faster. Rows
+      that direction means something. Cheaper, less turbulent, compounded faster. Rows
       without one have no better end: mid-range is the good part of RSI, and a higher beta or
       a richer implied vol is a different stock, not a worse one. Marks are dropped when the
       two readings are within 2% of the row's spread.</p>` : ''}
@@ -9687,7 +9702,7 @@ function renderEarnings(d) {
   views.earnings.innerHTML = `
   <div class="panel span2 gap" id="earnBriefHost"></div>
   <div class="panel span2 gap">
-    <h2>${hg(reported ? 'Latest result' : 'Next report')} — ${esc(d.ticker || '')}</h2>
+    <h2>${hg(reported ? 'Latest result' : 'Next report')} · ${esc(d.ticker || '')}</h2>
     <p class="sub">${gloss(v.headline || '')}</p>
     <div class="hero-row" style="display:flex;align-items:baseline;gap:var(--space-4);flex-wrap:wrap;margin-bottom:var(--space-3)">
       <div>
@@ -9697,7 +9712,7 @@ function renderEarnings(d) {
         <span class="note subnote">${
   reported
     ? `Vs ${fmt(lr.eps_estimate, 2)} expected · reported ${esc(lr.date || '')}`
-    : nr.confirmed === false ? 'estimated date — not yet confirmed by the company' : 'confirmed date'}</span>
+    : nr.confirmed === false ? 'estimated date, not yet confirmed by the company' : 'confirmed date'}</span>
       </div>
       <div style="display:flex;flex-direction:column;gap:var(--space-2)">
         ${daysChip}
@@ -9734,7 +9749,7 @@ function renderEarnings(d) {
     ${reported && ext.available && lr.reaction_fights_result ? `<div class="callout bad">
       <strong>The stock is ${ext.move_pct > 0 ? 'up' : 'down'} ${fmt(Math.abs(ext.move_pct), 1)}%
       ${esc(ext.kind)} despite ${lr.beat ? 'a beat' : 'a miss'}.</strong> This is the case a beat
-      rate can't warn you about — the result was fine and the market sold it anyway. Whatever moved
+      rate can't warn you about. The result was fine and the market sold it anyway. Whatever moved
       the price is in the guidance or on the call, not in the headline number.</div>` : ''}
     <h3>${hg('Why')}</h3>
     <ul class="reasons">${(v.reasons || []).map((r) => `<li>${gloss(r)}</li>`).join('')}</ul>
@@ -9747,7 +9762,7 @@ function renderEarnings(d) {
     <div class="panel">
       <h2>${hg('Event pricing')}</h2>
       ${reported && !pr.available ? `<div class="callout">The report is out, so there's no event left
-        to price. Straddle cost only means something ahead of the print — once the numbers land the
+        to price. Straddle cost only means something ahead of the print. Once the numbers land the
         premium collapses, which is the whole reason it was expensive going in.</div>` : ''}
       ${pr.stale ? `<div class="callout">${gloss(pr.stale_note || '')}</div>` : ''}
       ${pr.available ? `
@@ -9799,7 +9814,7 @@ function renderEarnings(d) {
   </div>
 
   <div class="panel span2 gap">
-    <h2>${hg('Financial growth')} <span class="th-plain">— quarterly, year over year</span></h2>
+    <h2>${hg('Financial growth')} <span class="th-plain">· quarterly, year over year</span></h2>
     ${(gr.notes || []).map((n) => `<div class="callout info">${gloss(n)}</div>`).join('')}
     ${qRows ? `<table class="data">
       <thead><tr><th>Quarter</th><th>Revenue</th><th>YoY</th><th>Net income</th><th>YoY</th><th>Gross margin</th><th>Op margin</th></tr></thead>
@@ -9835,7 +9850,7 @@ function renderEarnings(d) {
       <thead><tr><th>Period</th><th>Strong buy</th><th>Buy</th><th>Hold</th><th>Sell</th><th>Strong sell</th></tr></thead>
       <tbody>${ratingRows}</tbody>
     </table>` : ''}
-    <p class="caveat">Price targets are sentiment, not forecasts — they cluster above spot in almost every market.</p>
+    <p class="caveat">Price targets are sentiment, not forecasts. They cluster above spot in almost every market.</p>
   </div>
   `;
 }
@@ -9856,14 +9871,14 @@ function rothHost() {
 
 function saveRothInputs() {
   try { localStorage.setItem(ROTH_STORE_KEY, JSON.stringify(STATE.rothInputs)); }
-  catch (e) { /* private mode or quota — the inputs just won't persist */ }
+  catch (e) { /* private mode or quota. The inputs just won't persist */ }
 }
 
 function loadRothInputs() {
   try {
     const saved = JSON.parse(localStorage.getItem(ROTH_STORE_KEY) || 'null');
     if (saved && typeof saved === 'object') Object.assign(STATE.rothInputs, saved);
-  } catch (e) { /* corrupt entry — fall back to defaults */ }
+  } catch (e) { /* corrupt entry. Fall back to defaults */ }
 }
 
 /* ================================================================= ROTH IRA */
@@ -9931,7 +9946,7 @@ function renderRoth(d) {
   (rothHost() || {}).innerHTML = `
   <div class="panel span2 gap">
     <h2>${hg('Roth IRA model allocation')}</h2>
-    <p class="sub">Set your horizon and risk tolerance — the model is derived from those, not assumed.</p>
+    <p class="sub">Set your horizon and risk tolerance. The model is derived from those, not assumed.</p>
 
     <form class="roth-controls" id="roth-form">
       <label>Years until you'd draw on it
@@ -9949,13 +9964,13 @@ function renderRoth(d) {
         <input type="text" id="roth-stocks" placeholder="e.g. AAPL, KO, MSFT"
                value="${esc((inp.stock_candidates || []).join(', '))}">
       </label>
-      <label style="flex:1 1 100%">Your current holdings — one per line, symbol then dollar value
+      <label style="flex:1 1 100%">Your current holdings. One per line, symbol then dollar value
         <textarea id="roth-holdings" rows="4" spellcheck="false"
           placeholder="VTI 12000&#10;VXUS 4000&#10;BND 1500">${esc(rothHoldingsText(inp.holdings))}</textarea>
       </label>
       <button class="btn primary" type="submit">Recalculate</button>
     </form>
-    <p class="caveat" style="margin-top:var(--space-2)">Holdings stay on this device — saved in your browser
+    <p class="caveat" style="margin-top:var(--space-2)">Holdings stay on this device. Saved in your browser
       and posted only to your own local server to compute the numbers. Nothing is stored server-side.</p>
     <p class="caveat" style="margin-top:var(--space-2)">${gloss(d.limit_note || '')}</p>
 
@@ -9980,7 +9995,7 @@ function renderRoth(d) {
     <h2>${hg('Contribution projection')}</h2>
     ${pr.available ? `
       <p class="sub">Contributing ${money(pr.annual_contribution)} a year for ${pr.years} years at
-        a blended ${fmt(pr.rate_pct, 1)}% — the weighted historical return of the funds above.</p>
+        a blended ${fmt(pr.rate_pct, 1)}%. The weighted historical return of the funds above.</p>
       <div class="grid c4" style="margin-bottom:var(--space-3)">
         ${tile('You put in', money(pr.total_contributed), `${pr.years} × ${money(pr.annual_contribution)}`)}
         ${tile('Lower band', money(pr.balance_low), `at ${fmt(pr.rate_low_pct, 1)}%`)}
@@ -10009,7 +10024,7 @@ function renderRoth(d) {
         <td><span data-bar="${r.drift_pct}" data-bar-max="25"></span></td>
       </tr>`).join('')}</tbody>
     </table>
-    <p class="caveat">Funds that track the same thing are counted as one exposure — holding VOO
+    <p class="caveat">Funds that track the same thing are counted as one exposure. Holding VOO
       where the model lists VTI isn't drift, it's the same bet under a different ticker.</p>
   </div>` : ''}
 
@@ -10029,7 +10044,7 @@ function renderRoth(d) {
       </table>` : ''}
       ${rb.overweight_note ? `<div class="callout">${gloss(rb.overweight_note)}</div>` : ''}
       <p class="caveat">Buy-only by design: directing new money at the underweights fixes drift
-        without selling anything. Selling inside a Roth is tax-free, so it's an option — just not
+        without selling anything. Selling inside a Roth is tax-free, so it's an option, just not
         the default.</p>
     ` : `<div class="callout">${esc(rb.note || 'Enter your holdings above.')}</div>`}
   </div>
@@ -10039,7 +10054,7 @@ function renderRoth(d) {
     <h2>${hg('Overlap in your holdings')}</h2>
     <p class="sub">${gloss(ov.note || '')}</p>
     ${(ov.pairs || []).length ? (ov.pairs.map((p) => `<div class="callout ${p.same_role ? 'bad' : ''}">
-      <strong>${esc(p.a)} + ${esc(p.b)}</strong> — correlation ${fmt(p.correlation, 2)}.
+      <strong>${esc(p.a)} + ${esc(p.b)}</strong>· correlation ${fmt(p.correlation, 2)}.
       ${gloss(p.note)}</div>`).join('')) : '<div class="callout info">Nothing is doubled up.</div>'}
   </div>` : ''}
 
@@ -10059,9 +10074,9 @@ function renderRoth(d) {
       </tr>`).join('')}</tbody>
     </table>
     ${sl.rows.filter((r) => r.reject_reason || r.error).map((r) => `<div class="callout">
-      <strong>${esc(r.symbol)}</strong> — ${esc(r.reject_reason || r.error)}</div>`).join('')}
+      <strong>${esc(r.symbol)}</strong>· ${esc(r.reject_reason || r.error)}</div>`).join('')}
     ${sl.rows.flatMap((r) => (r.warnings || []).map((w) => `<div class="callout bad">
-      <strong>${esc(r.symbol)}</strong> — ${gloss(w)}</div>`)).join('')}
+      <strong>${esc(r.symbol)}</strong>· ${gloss(w)}</div>`)).join('')}
     ` : ''}
     <div class="callout bad" style="margin-top:var(--space-2)">${gloss(sl.caveat || '')}</div>
   </div>
@@ -10139,7 +10154,7 @@ function renderSettings() {
     const resolved = z.id === 'auto' ? activeZone() : z.id;
     const now = timeIn(new Date().toISOString(), resolved);
     return `<option value="${esc(z.id)}"${SETTINGS.timezone === z.id ? ' selected' : ''}>${
-      esc(z.label)} — ${esc(now)}</option>`;
+      esc(z.label)} · ${esc(now)}</option>`;
   }).join('');
 
   // Market hours in the viewer's zone. Derived from the timestamps the server
@@ -10150,7 +10165,7 @@ function renderSettings() {
     .map((seg) => `<tr${seg.active ? ' style="background:var(--surface-2)"' : ''}>
       <td class="name"><span class="ses-dot p-${esc(seg.phase)}" style="display:inline-block;
         margin-right:var(--space-2);vertical-align:1px"></span>${esc(seg.label)}${
-    seg.active ? ' <span class="subnote">— now</span>' : ''}</td>
+    seg.active ? ' <span class="subnote">· now</span>' : ''}</td>
       <td>${esc(timeIn(seg.start_at, 'America/New_York'))} – ${
     esc(timeIn(seg.end_at, 'America/New_York'))} ET</td>
       <td>${esc(timeIn(seg.start_at, zone))} – ${esc(timeIn(seg.end_at, zone))} ${
@@ -10178,7 +10193,7 @@ function renderSettings() {
     <div class="settings-row">
       <div class="settings-label">Show times in
         <span class="settings-hint">Currently ${esc(zone)} (${esc(zoneAbbrev(zone))})${
-    onMarketTime ? ' — the same as market time, so nothing is converted.' : '.'}</span></div>
+    onMarketTime ? '. The same as market time, so nothing is converted.' : '.'}</span></div>
       <select id="tz-select" class="settings-select">${zoneOpts}</select>
     </div>
 
@@ -10189,7 +10204,7 @@ function renderSettings() {
         <tbody>${hoursRows}</tbody>
       </table>
       <p class="caveat">Overnight straddles midnight, so its two halves share one row. Daylight
-        saving shifts these by an hour on different dates in different countries — the conversion
+        saving shifts these by an hour on different dates in different countries. The conversion
         follows each zone's own calendar rather than assuming a fixed offset.</p>
     ` : `<div class="callout">Load a ticker once and the session times will appear here.</div>`}
   </div>
@@ -10197,7 +10212,7 @@ function renderSettings() {
   <div class="panel span2">
     <h2>${hg('About this build')}</h2>
     ${kv([
-    ['Data source', 'Yahoo Finance via yfinance — quotes delayed roughly 15 minutes'],
+    ['Data source', 'Yahoo Finance via yfinance. Quotes delayed roughly 15 minutes'],
     ['Assistant', 'Pulse is switched off in this build'],
     ['Optic\u2019s Positions', 'One shared simulated ledger, no real money'],
     ['Stored on this device', 'Theme, time zone, chart preferences and any Roth holdings you enter'],
@@ -10329,13 +10344,13 @@ function renderCloseDefence(cd, opts = {}) {
 
     <div class="grid c4">
       ${tile(up ? 'Must close above' : 'Must close below', usd(mh.price),
-    `${esc(mh.label)} — ${fmt(Math.abs(mh.distance_pct), 2)}% ${up ? 'below' : 'above'} here`,
+    `${esc(mh.label)} · ${fmt(Math.abs(mh.distance_pct), 2)}% ${up ? 'below' : 'above'} here`,
     up ? 'up' : 'down')}
       ${tile('Cushion', `${fmt(cd.cushion_pct, 2)}%`,
-    cd.tight ? 'Inside a normal day of noise — treat as live' : 'Room before it is tested',
+    cd.tight ? 'Inside a normal day of noise. Treat as live' : 'Room before it is tested',
     cd.tight ? 'down' : '')}
       ${cd.next_level ? tile('Next level down', usd(cd.next_level.price),
-    `${esc(cd.next_level.label)} — where price goes if the first gives`) : ''}
+    `${esc(cd.next_level.label)}. Where price goes if the first gives`) : ''}
     </div>
 
     <div class="callout ${cd.tight ? '' : 'info'}">Lose ${usd(mh.price)} on the close and
@@ -10405,7 +10420,7 @@ function travelCell(p) {
     // "this trade has no target".
     return `<div class="pos-gauge">
       <div class="pos-ends"><span>stop ${fmt(t.stop, 2)}</span><span>now ${fmt(t.now, 2)}</span></div>
-      <div class="pos-read">No reachable target — stop or time stop only.</div>
+      <div class="pos-read">No reachable target. Stop or time stop only.</div>
     </div>`;
   }
   const cls = t.ahead === null ? '' : (t.ahead ? ' up' : ' down');
@@ -10451,7 +10466,7 @@ function openStateOfPlay(open) {
     : ` Best is ${name(best)} at ${money(best.pnl, 0)}; worst is ${name(worst)} at
         ${money(worst.pnl, 0)}.`;
   return `<div class="callout" style="margin:0 0 var(--space-3)">${parts.join(', ')}.${extremes}
-    None of it is real money — the ledger records what the terminal's rules would have done, and no
+    None of it is real money. The ledger records what the terminal's rules would have done, and no
     order is ever sent to a broker.</div>`;
 }
 
@@ -10481,7 +10496,7 @@ function openPositionsPanel(open) {
       holding right now. Each row is one trade, and it will end at one of two prices decided when it
       opened: a <strong>stop</strong>, which cuts the loss if the trade is wrong, or a
       <strong>target</strong>, which takes the gain if it is right. The bar shows how far the stock
-      has travelled between the two — the small tick is where the trade opened, the dot is where the
+      has travelled between the two. The small tick is where the trade opened, the dot is where the
       stock is now, and the shaded stretch between them is the ground it has covered.</p>
 
     ${openStateOfPlay(open)}
@@ -10504,7 +10519,7 @@ function openPositionsPanel(open) {
       zero. A stock cannot trade through zero, so that position can only ever end at its stop or its
       time stop, and it was never really the 2:1 trade the rules describe. The scanner now declines
       these outright; the ones on the book were opened before it did, and they are left in place
-      rather than quietly deleted — an inconvenient record is still the record.</p>` : ''}
+      rather than quietly deleted. An inconvenient record is still the record.</p>` : ''}
   </div>`;
 }
 
@@ -10568,7 +10583,7 @@ function trackerUniverseHint(cfg) {
     return `Watchlist: ${(cfg.watchlist || []).map((x) => esc(x)).join(', ')}. A scan puts all of
       them through the full analysis.`;
   }
-  return `Universe: <strong>every NASDAQ-listed common stock</strong> — about 3,000 names, from
+  return `Universe: <strong>every NASDAQ-listed common stock</strong>· about 3,000 names, from
     NASDAQ's own daily symbol directory. A scan screens all of them on price and volume, then puts
     the top ${fmt(cfg.shortlist_size, 0)} through the full analysis, so it takes a few minutes. It
     also runs on its own every few hours while the server is up.`;
@@ -10636,7 +10651,7 @@ function funnelPanelHTML(f, gates, cfg) {
       ${fmt(gates.max_abs_1m_move_pct, 0)}% in a month.
       ${sc.already_held ? `${fmt(sc.already_held, 0)} ranked well but are already held.` : ''}</p>
     ${sc.failed_batches ? `<div class="callout">${fmt(sc.failed_batches, 0)} batch(es) of about
-      ${fmt(150, 0)} symbols each never returned data, even after a retry — almost always the free
+      ${fmt(150, 0)} symbols each never returned data, even after a retry. Almost always the free
       feed's rate limit. Those names weren't screened at all, so this ranking covers slightly less
       than the whole exchange.</div>` : ''}
     ${f.throttled_skips ? `<div class="callout">${fmt(f.throttled_skips, 0)} shortlisted name(s) were
@@ -10645,13 +10660,13 @@ function funnelPanelHTML(f, gates, cfg) {
 
     <h3>${hg('Screen ranking')}</h3>
     <p class="sub">Top ${fmt((f.shortlist || []).length, 0)} by absolute score. Greyed rows ranked
-      high enough but weren't reached — the scan stopped when a cap bound.</p>
+      high enough but weren't reached. The scan stopped when a cap bound.</p>
     <table class="data">
       <thead><tr><th>#</th><th>Symbol</th><th>Screen score</th><th>Price ($)</th>
         <th>$ volume/day</th><th>1-month</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    ${f.capped ? `<div class="callout">Stopped early — ${esc(f.capped)}.</div>` : ''}
+    ${f.capped ? `<div class="callout">Stopped early: ${esc(f.capped)}.</div>` : ''}
     <p class="caveat">${gloss(sc.caveat || '')}</p>
   </div>`;
 }
@@ -10702,7 +10717,7 @@ function renderBookSelector(d) {
     <p class="caveat">${gloss('They differ in the four things that actually change a risk '
     + 'profile: how selective the entry bar is, how much is risked per trade, which '
     + 'instruments are allowed, and how volatile a name may be. Nothing changes the '
-    + 'analysis \u2014 a setup is a setup, and these decide what to do about it. The '
+    + 'analysis. A setup is a setup, and these decide what to do about it. The '
     + 'existing record belongs to the balanced book because those are the rules that '
     + 'produced it.')}</p>
   </div>`;
@@ -10758,7 +10773,7 @@ function renderTracker(d) {
     ${esc(cap((sc.notes || []).join(' · ')) || 'Nothing cleared the bar')}
     ${(sc.funnel || {}).screen && sc.funnel.screen.ranking_reused
     ? `<div style="margin-top:var(--space-1)">Screen ranking reused from
-        ${fmt(sc.funnel.screen.ranking_age_minutes, 0)} minutes earlier — daily bars don't change
+        ${fmt(sc.funnel.screen.ranking_age_minutes, 0)} minutes earlier. Daily bars don't change
         intraday, and re-downloading the exchange is what earns a rate limit.</div>` : ''}
   </td></tr>`).join('');
 
@@ -10780,7 +10795,7 @@ function renderTracker(d) {
   const monthRows = months.slice().reverse().map((m) => `<tr${
     m.key === (t.selected_month || '') ? ' style="background:var(--surface-2)"' : ''}>
     <td class="name">${esc(m.label)}${m.key === months[months.length - 1].key
-    ? ' <span class="subnote">— in progress</span>' : ''}</td>
+    ? ' <span class="subnote">· in progress</span>' : ''}</td>
     <td>${fmt(m.opened_count, 0)}</td>
     <td>${fmt(m.closed_count, 0)}</td>
     <td class="${signClass(m.realised_pnl)}"><strong>${money(m.realised_pnl, 0)}</strong></td>
@@ -10821,7 +10836,7 @@ function renderTracker(d) {
 
   <div class="panel span2 gap">
     <h2>${hg("Optic's Positions")}</h2>
-    <p class="sub">One shared, simulated ledger — the same record for everyone who opens this page.
+    <p class="sub">One shared, simulated ledger. The same record for everyone who opens this page.
       It trades the terminal's own signals with fixed rules, in both instruments the Swing tab
       produces: the shares, and the exact option contract it recommended.</p>
 
@@ -10834,7 +10849,7 @@ function renderTracker(d) {
 
     ${marketOpen ? '' : `<div class="callout" style="margin-top:var(--space-3)">
       <strong>The market is closed.</strong> Open positions are still re-marked at the closing
-      price, but no new entries are taken while the tape is shut — a fill at a stale price isn't a
+      price, but no new entries are taken while the tape is shut. A fill at a stale price isn't a
       trade anyone could have got. Scanning resumes at the next open (9:30am ET, weekdays).</div>`}
 
     ${scanning ? progressHTML(prog) : ''}
@@ -10842,7 +10857,7 @@ function renderTracker(d) {
       <strong>The price feed is rate-limiting right now.</strong> Screening thousands of symbols on a
       free data feed earns a temporary block, and a blocked options request comes back looking like
       a stock with no options at all. Optic skips those names rather than opening a
-      shares-only trade and recording it as what was recommended — so a scan during a block will
+      shares-only trade and recording it as what was recommended. So a scan during a block will
       take fewer positions, not wrong ones. Clears in about
       ${fmt(feed.seconds_remaining, 0)}s.</div>` : ''}
 
@@ -10862,7 +10877,7 @@ function renderTracker(d) {
     </div>
     <p class="caveat">Equity counts closed trades only. Open positions are shown but deliberately kept
       out of the sizing calculation, so an unrealised run-up can't quietly increase the size of the
-      next bet. The caps exist because the universe is the whole exchange — without them one scan
+      next bet. The caps exist because the universe is the whole exchange. Without them one scan
       could find thirty qualifying setups and put a third of the account at risk in an afternoon, on
       names that are mostly the same momentum bet under different tickers.</p>
   </div>
@@ -10871,14 +10886,14 @@ function renderTracker(d) {
 
   <div class="panel span2 gap">
     <h2>${hg('Month by month')}</h2>
-    <p class="sub">Results split by the month a trade <em>closed</em> — the month the money was
+    <p class="sub">Results split by the month a trade <em>closed</em>· the month the money was
       actually made or lost. A position opened in one month and closed in the next counts toward the
       month it closed in, and appears in the earlier month's opened count.</p>
 
     <div class="tracker-bar" style="margin-bottom:var(--space-3)">
       ${monthPicker}
       <span class="tracker-hint">Showing <strong>${esc(mo.label || '—')}</strong>${
-    viewingCurrent ? ' — still in progress, so these figures are not final.' : '.'}
+    viewingCurrent ? '. Still in progress, so these figures are not final.' : '.'}
         The record runs from ${esc(months.length ? months[0].label : 'this month')} and includes
         every trade the ledger has taken, nothing excluded.</span>
     </div>
@@ -10922,10 +10937,10 @@ function renderTracker(d) {
       </table>
       <p class="caveat">${gloss('Equity after carries forward, so each month\u2019s return is '
     + 'measured against what the account was worth when that month began rather than against the '
-    + 'original stake. A month with no closed trades is still a row — taking nothing is a '
+    + 'original stake. A month with no closed trades is still a row. Taking nothing is a '
     + 'decision, and hiding it would flatter the record.')}</p>
     ` : `<p class="caveat">One month of record so far. A consistency table needs several months
-      before it says anything — treat a single month, good or bad, as noise.</p>`}
+      before it says anything. Treat a single month, good or bad, as noise.</p>`}
   </div>
 
   ${lastFunnel ? funnelPanelHTML(lastFunnel, gates, cfg) : ''}
@@ -10934,7 +10949,7 @@ function renderTracker(d) {
   <div class="panel span2 gap">
     <h2>No trades yet</h2>
     <p class="sub">The ledger is empty. It only opens a position when a setup clears a composite score
-      of ${fmt(cfg.min_composite, 0)}, and most scans find nothing — which is the intended behaviour,
+      of ${fmt(cfg.min_composite, 0)}, and most scans find nothing. Which is the intended behaviour,
       not a fault. Run a scan above, or wait for the background one.</p>
   </div>` : ''}
 
@@ -10954,7 +10969,7 @@ function renderTracker(d) {
       ${tile('Losers', fmt(s.loss_count, 0), null, 'down')}
     </div>
     <p class="caveat">${gloss('A sample this small says almost nothing yet. Win rate on its own is the '
-    + 'least useful number here — expectancy, the average result per trade, is what decides whether '
+    + 'least useful number here. Expectancy, the average result per trade, is what decides whether '
     + 'there is an edge. Treat anything under about fifty closed trades as noise.')}</p>
   </div>` : ''}
 
@@ -10967,7 +10982,7 @@ function renderTracker(d) {
   ${closed.length ? `
   <div class="panel span2 gap">
     <h2>${hg('Closed trades')}</h2>
-    <p class="sub">Most recent first. The exit reason is the honest part of the record — a table full
+    <p class="sub">Most recent first. The exit reason is the honest part of the record. A table full
       of time stops means the signals were early, not unlucky.</p>
     <table class="data">
       <thead><tr><th>Position</th><th>Side</th><th>Size</th><th>Entry</th><th>Exit</th>
@@ -10993,8 +11008,8 @@ function renderTracker(d) {
     ['Total risk deployed', 'at most ' + fmt(cfg.max_portfolio_risk_pct, 0) + '% of equity'],
     ['New positions per scan', 'at most ' + fmt(cfg.max_new_per_scan, 0)],
   ])}
-        <p class="caveat">Shares are sized so that being stopped out costs exactly the risk budget —
-          a wide stop therefore buys fewer shares, not more risk. Options are sized on the whole
+        <p class="caveat">Shares are sized so that being stopped out costs exactly the risk budget.
+          A wide stop therefore buys fewer shares, not more risk. Options are sized on the whole
           premium, because a long option can genuinely go to zero and a stop cannot prevent it.</p>
       </div>
       <div>
@@ -11004,7 +11019,7 @@ function renderTracker(d) {
     ['Screened down to', fmt(cfg.shortlist_size, 0) + ' names per scan'],
     ['Takes a trade when', 'composite score ≥ ' + fmt(cfg.min_composite, 0) + ' (either direction)'],
     ['Stop', 'Just beyond the nearest real support or resistance level, or twice the average daily range if none is close'],
-    ['Target', 'twice the risk distance — fixed, not fitted'],
+    ['Target', 'twice the risk distance. Fixed, not fitted'],
     ['Option exits', '−50% / +100% premium, underlying stop, or expiry'],
     ['Time stop', fmt(cfg.max_hold_days, 0) + ' days'],
     ['Per ticker', 'one idea at a time'],
@@ -11061,12 +11076,12 @@ function renderIndices(d) {
       </tr>`).join('')}</tbody>
     </table>
     <p class="caveat">CAGR is the annualized rate of return over the period, so a 10-year
-      figure smooths through crashes rather than hiding them — check the drawdown column alongside it.</p>
+      figure smooths through crashes rather than hiding them. Check the drawdown column alongside it.</p>
   </div>
 
   ${gvm.series ? `
   <div class="panel span2">
-    <h2>${hg('Growth vs the broad market (QQQ / SPY)')} <span class="th-plain">— daily</span></h2>
+    <h2>${hg('Growth vs the broad market (QQQ / SPY)')} <span class="th-plain">· daily</span></h2>
     <p class="sub">${gloss(gvm.note || '')}</p>
     <div class="grid c2" style="margin-bottom:var(--space-2)">
       ${tile('QQQ / SPY ratio', fmt(gvm.qqq_spy_ratio, 3), 'rising means growth is leading')}
@@ -11104,7 +11119,7 @@ function renderLong(d) {
   views.long.innerHTML = `
   <div class="grid c2 gap">
     <div class="panel">
-      <h2>${hg('Long-term view')} — ${esc(h.ticker)}</h2>
+      <h2>${hg('Long-term view')} · ${esc(h.ticker)}</h2>
       <p class="sub">${esc(h.name || '')}${(h.fundamentals || {}).sector ? ' · ' + esc(h.fundamentals.sector) : ''}</p>
       <div style="display:flex;align-items:flex-end;gap:var(--space-5);flex-wrap:wrap">
         <div>
@@ -11123,7 +11138,7 @@ function renderLong(d) {
 
       <h3>${hg('What makes up this score')}${askPulse('composite')}</h3>
       <p class="sub">Every factor the model checked and what each one contributed. Mostly price
-        behaviour — the valuation and income factors can add at most 13 of the
+        behaviour. The valuation and income factors can add at most 13 of the
         ${fmt((h.conviction_scale || {}).max_possible, 0)} available points.</p>
       <table class="data">
         <thead><tr><th>Factor</th><th>Type</th><th>Points</th><th>Why</th></tr></thead>
@@ -11142,7 +11157,7 @@ function renderLong(d) {
         </tr></tbody>
       </table>
       <p class="caveat">This is a trend-and-relative-strength model with a valuation sanity
-        check — not a fundamental analysis. A strong score means the price behaviour has been
+        check. Not a fundamental analysis. A strong score means the price behaviour has been
         strong, not that the business is cheap or high quality.</p>
       <p class="caveat">${esc(h.disclaimer || '')}</p>
     </div>
@@ -11166,7 +11181,7 @@ function renderLong(d) {
     ['Positive days', fmt(risk.pct_positive_days, 1) + '%'],
     ['Best / worst day', `${fmtPct(risk.best_day_pct, 1)} / ${fmtPct(risk.worst_day_pct, 1)}`],
   ])}
-      <p class="caveat">Return/vol and Sortino use a zero risk-free rate — a relative screen, not a performance report.</p>
+      <p class="caveat">Return/vol and Sortino use a zero risk-free rate. A relative screen, not a performance report.</p>
     </div>
   </div>
   ${renderCloseDefence(d.close_defence, { horizonWord: 'this week' })}
@@ -11174,8 +11189,8 @@ function renderLong(d) {
 
   <div class="grid c2 gap">
     <div class="panel span2">
-      <h2>${hg('Weekly structure')} <span class="th-plain">— weekly bars</span></h2>
-      <p class="sub">${gloss(lt.guidance || '')} Weekly bars with the 40-week and 200-week averages — the lines that separate secular bull from bear phases.</p>
+      <h2>${hg('Weekly structure')} <span class="th-plain">· weekly bars</span></h2>
+      <p class="sub">${gloss(lt.guidance || '')} Weekly bars with the 40-week and 200-week averages. The lines that separate secular bull from bear phases.</p>
       <div id="lt-toolbar"></div>
       <div id="legend-weekly"></div>
       <div id="chart-weekly"></div>
@@ -11189,7 +11204,7 @@ function renderLong(d) {
 
   <div class="grid c2 gap">
     <div class="panel">
-      <h2>${hg('Drawdown')} <span class="th-plain">— daily</span></h2>
+      <h2>${hg('Drawdown')} <span class="th-plain">· daily</span></h2>
       <p class="sub">Currently ${fmtPct(dd.current_drawdown_pct, 1)} from the all-time high of ${usd(dd.all_time_high)}, set on ${esc(dd.ath_date || '')}.
         Worst on record: ${fmtPct(dd.max_drawdown_pct, 1)} (${esc(dd.max_drawdown_date || '')}).</p>
       <div id="chart-drawdown"></div>
@@ -11202,7 +11217,7 @@ function renderLong(d) {
     ${vh.available ? `<div class="panel">
       <h2>${hg('Valuation vs its own history')}</h2>
       <p class="sub">A multiple only means something against a yardstick. The one that needs
-        no cross-company assumptions is the company against itself — is this expensive
+        no cross-company assumptions is the company against itself. Is this expensive
         <em>for this name</em>?</p>
       <div class="grid c4">
         ${tile('Trailing P/E now', fmt(vh.current_pe, 1) + '\u00d7',
@@ -11940,7 +11955,7 @@ const PULSE_TOPICS = {
     + 'seen one. What is the curve showing, what does the zero crossing mean, and how would I '
     + 'use it when deciding whether to trade this today?',
   vanna: 'Explain vanna and charm exposure for {t} in plain English. I understand gamma is '
-    + 'about price moving — what are these two about, why should I care, and which of the '
+    + 'about price moving. What are these two about, why should I care, and which of the '
     + 'three matters most for this name right now?',
   flow: 'Explain the call-versus-put flow panel for {t} simply. What is it actually measuring, '
     + 'why is it called a proxy, and how much weight should I put on it?',
@@ -11953,7 +11968,7 @@ const PULSE_TOPICS = {
   defence: 'Explain the "close defence" idea for {t} in plain language. Why does a closing '
     + 'price matter more than an intraday one, and what exactly has to hold?',
   feargreed: 'Explain the Fear & Greed reading in plain language. What are the five inputs, what is it actually measuring, and how much weight should I put on an extreme reading?',
-  indicators: 'Explain the optional indicators in plain language — VWAP, ADX, Keltner versus Bollinger, on-balance volume, the relative strength line. Which of these do institutions actually use, and for what?',
+  indicators: 'Explain the optional indicators in plain language. VWAP, ADX, Keltner versus Bollinger, on-balance volume, the relative strength line. Which of these do institutions actually use, and for what?',
   pehistory: 'Explain the multiple and revenue history panel. What is a trailing P/E, why does it matter that earnings are attached to the filing date rather than the quarter end, and what does it mean when revenue is growing while the multiple falls?',
   morning: 'Explain the morning desk. What period does it cover, why does the window change between a Monday and a Tuesday, and what does it deliberately not tell me about the geopolitical headlines it lists?',
   global: 'Explain the overnight worldwide panel. Why are the markets ordered by session, what does the correlation to the S&P actually tell me, and should I read across from a big move in Korea or China to the US open?',
@@ -12015,7 +12030,7 @@ function renderVanna(gex) {
 
   return `<div class="grid c2 gap">
     <div class="panel span2">
-      <h2>${hg('VEX — dealer vanna exposure')}${askPulse('vanna')}</h2>
+      <h2>${hg('VEX. Dealer vanna exposure')}${askPulse('vanna')}</h2>
       <p class="sub">Dealer hedging responds to three things, and gamma is only one.
         Delta moves when the stock moves, when implied volatility moves, and when time
         passes. These are the other two.</p>
@@ -12026,7 +12041,7 @@ function renderVanna(gex) {
           <div class="hero ${signClass(vanna)}" style="font-size:var(--t-d2)">${
   vanna >= 0 ? '+' : '−'}$${fmtCompact(Math.abs(vanna))}</div>
           <p class="sub">of dealer delta per <strong>1 point</strong> of implied volatility.</p>
-          <p class="note">Vanna is the same for a call and a put at the same strike — it is a
+          <p class="note">Vanna is the same for a call and a put at the same strike. It is a
             property of how far the strike sits from the price, not of the option type. What
             makes the total signed is the assumption about which side the dealer is on.</p>
         </div>
@@ -12044,8 +12059,8 @@ function renderVanna(gex) {
       ${dominant ? `<div class="callout info" style="margin-top:var(--space-3)">
         <strong>Right now the ${dominant} channel is larger.</strong>
         A 1% move in the stock shifts dealer delta by about $${fmtCompact(g1)};
-        a 1-point move in implied volatility shifts it by about $${fmtCompact(v1)} —
-        roughly ${fmt(ratio, 1)}× ${dominant === 'price' ? 'more from price' : 'more from volatility'}.
+        a 1-point move in implied volatility shifts it by about $${fmtCompact(v1)}.
+        Roughly ${fmt(ratio, 1)}× ${dominant === 'price' ? 'more from price' : 'more from volatility'}.
         ${dominant === 'volatility'
     ? 'When vanna dominates, a repricing of risk moves the hedge more than the tape does, '
       + 'which is how a session can drift without any obvious news in the price.'
@@ -12059,7 +12074,7 @@ function renderVanna(gex) {
       <p class="caveat">There is deliberately no vanna equivalent of the gamma flip point.
         Gamma has one because the sign of gamma exposure changes at a spot price that can be
         computed. Vanna's effect depends on the path implied volatility takes, and this
-        terminal does not forecast volatility — inventing a crossing level here would look
+        terminal does not forecast volatility. Inventing a crossing level here would look
         symmetrical and mean nothing.</p>
     </div>
   </div>
@@ -12150,7 +12165,7 @@ function briefCalendar(cal) {
     ${events.length ? `<div class="read-cal">${groups}</div>` : `
       <p class="sub" style="margin-top:var(--space-4)">Nothing in this window matches that filter.
         ${all.length} release${all.length === 1 ? '' : 's'} scheduled overall.</p>`}
-    <p class="caveat">A date here says a release is scheduled — never what it will say.
+    <p class="caveat">A date here says a release is scheduled. Never what it will say.
       ${priced ? `Prev and actual are read from FRED for the ${priced} release${
     priced === 1 ? '' : 's'} in view that map to a published series; the rest carry no
       numbers because no free series matches them cleanly.` : ''}
@@ -12259,7 +12274,7 @@ function briefSourceLine(sources) {
   if (bad.length) {
     text += ` ${bad.length} source${bad.length === 1 ? '' : 's'} unreachable on the last`
       + ` refresh (${bad.map((s) => s.name).join(', ')})`
-      + `${bad.some((s) => s.stale) ? ' — showing the last good copy' : ''}.`;
+      + `${bad.some((s) => s.stale) ? '. Showing the last good copy' : ''}.`;
   }
   return `<p class="caveat">${esc(text)}</p>`;
 }
@@ -12322,7 +12337,7 @@ function renderBrief(d) {
   <div class="panel read-hero">
     <div class="read-hero-top">
       <div>
-        <h2>Optic's Read — ${esc(d.day)}</h2>
+        <h2>Optic's Read: ${esc(d.day)}</h2>
         ${readUpdatedHTML(d.built_at)}
       </div>
       <div class="read-search">
@@ -12342,7 +12357,7 @@ function renderBrief(d) {
          weekend is in here should not have to work that out. -->
     ${(d.wires || {}).window_hours ? `<p class="brief-window">Covering the
       ${fmt(d.wires.window_hours, 0)} hours since the previous session closed${
-  d.wires.window_hours >= 48 ? ' — the full weekend' : ''}. Rebuilt at 9:00 Eastern
+  d.wires.window_hours >= 48 ? '. The full weekend' : ''}. Rebuilt at 9:00 Eastern
       every day, weekends included, so nothing that happens while the market is
       shut waits until Monday to appear.</p>` : ''}
     <div class="brief-summary">
@@ -12383,7 +12398,7 @@ function renderBrief(d) {
   <div class="panel">
     <h2>Official releases</h2>
     <p class="sub">Federal Reserve, Bureau of Labor Statistics, Bureau of Economic
-      Analysis and SEC — published releases, first-hand.</p>
+      Analysis and SEC. Published releases, first-hand.</p>
     ${macro.entries && macro.entries.length
       ? `<ul class="brief-list">${macro.entries.map(briefHeadline).join('')}</ul>`
       : '<p class="sub">Nothing published recently.</p>'}
@@ -12429,7 +12444,7 @@ async function loadBrief(force, opts = {}) {
   if (!silent) {
     views.brief.innerHTML = loadingHTML(day
       ? `Optic’s Read for ${day}`
-      : 'today’s Read — market moves, the release calendar and the wires');
+      : 'today’s Read. Market moves, the release calendar and the wires');
   }
   try {
     const qs = day ? `?day=${encodeURIComponent(day)}` : '';
@@ -12543,7 +12558,7 @@ function renderScan(cat, res) {
   cols.map((c) => `<th class="num">${esc(c.label)}</th>`).join('')}</tr></thead>
       <tbody>${rows}</tbody>
     </table>` : `<div class="callout">Nothing currently matches this scan. That is a
-      result, not a failure — these conditions are meant to be selective.</div>`}
+      result, not a failure. These conditions are meant to be selective.</div>`}
     <div class="callout scan-blind"><strong>What this scan cannot see.</strong>
       ${esc(res.blind_spot)}</div>
     <p class="caveat">${gloss(res.method || '')}</p>
@@ -12714,7 +12729,7 @@ function macroFactors(m) {
     </div>
     ${unattributed ? `<div class="callout">${fmt(unattributed, 1)} points of the score are
       not explained by the terms above. That means either the score hit its own
-      &plusmn;100 bound, or a rule was added without recording its contribution — the
+      &plusmn;100 bound, or a rule was added without recording its contribution. The
       decomposition is supposed to add up to the number it decomposes.</div>` : ''}`;
 }
 
@@ -13152,7 +13167,7 @@ function renderSessionBar() {
     </div>
     <div class="ses-legend">${legend}
       <span class="ses-key ses-zone">${onMarketTime
-    ? `Times in ${esc(zoneTag)} — market time`
+    ? `Times in ${esc(zoneTag)}. Market time`
     : `Times in ${esc(zoneTag)}; market runs on ET`}<button type="button"
         data-goto-settings>change</button></span>
     </div>
@@ -13204,7 +13219,7 @@ function updateStatus() {
   if (STATE.view === 'home') {
     setStatus([
       STATE.ticker
-        ? `${esc(STATE.ticker)} is loaded — pick a tab above, or search another symbol.`
+        ? `${esc(STATE.ticker)} is loaded. Pick a tab above, or search another symbol.`
         : 'Search a ticker or company name to begin.',
       liveIndicatorHTML(),
     ]);
@@ -13219,13 +13234,13 @@ function updateStatus() {
     setStatus(STATE.chartSymbol
       ? [`Chart: ${STATE.chartSymbol}`, `${chartInterval} · ${chartRange}`,
         `${wsDrawings().length} drawing${wsDrawings().length === 1 ? '' : 's'}`]
-      : ['Chart — pick a symbol to begin.']);
+      : ['Chart. Pick a symbol to begin.']);
     return;
   }
   if (!STATE.ticker
       && !['market', 'indices', 'roth', 'tracker', 'settings', 'brief',
         'compare', 'earnings', 'instrument'].includes(STATE.view)) {
-    setStatus(['No ticker loaded — enter a symbol to begin.']);
+    setStatus(['No ticker loaded. Enter a symbol to begin.']);
     return;
   }
 
@@ -13239,7 +13254,7 @@ function updateStatus() {
     const busy = !!(host && host.querySelector('.loading'));
     setStatus([
       STATE.ticker
-        ? `${esc(STATE.ticker)}${busy ? ' — loading…' : ''}`
+        ? `${esc(STATE.ticker)}${busy ? '. Loading…' : ''}`
         : (busy ? 'Loading…' : 'Ready.'),
       liveIndicatorHTML(),
     ]);
@@ -13565,7 +13580,7 @@ function renderPulseHistory(open) {
           title="Delete this conversation" aria-label="Delete">&times;</button>
       </div>`).join('')}</div>`
     : '<p class="sub" style="padding:var(--space-2) var(--space-0)">Nothing saved yet.</p>'}
-    <p class="caveat">Stored in this browser only — never uploaded, and not visible
+    <p class="caveat">Stored in this browser only, never uploaded, and not visible
       to anyone else using this link. Attachments are not saved: the file itself was
       never kept, only the note that one was sent. The last
       ${fmt(PULSE_MAX_CONVERSATIONS, 0)} conversations are retained.</p>`;
@@ -13712,7 +13727,7 @@ function renderPersonaPicker() {
  * produces a hedge instead of an answer.
  */
 const PULSE_STARTERS = [
-  { need: 'ticker', text: 'Walk me through the composite score on {T} — which inputs are carrying it, and where do they disagree?' },
+  { need: 'ticker', text: 'Walk me through the composite score on {T}. Which inputs are carrying it, and where do they disagree?' },
   { need: 'ticker', text: 'What is the strongest argument AGAINST the current setup on {T}?' },
   { need: 'ticker', text: 'Give me the bull and bear case for {T} over the next quarter, from the numbers on screen.' },
   { need: 'ticker', text: 'Is {T}’s seasonality real, or is the sample too small to say?' },
@@ -13733,7 +13748,7 @@ function pulseStarters(expanded) {
   return `<div class="pulse-empty">
     <h3>What would you like to look at?</h3>
     <p class="pulse-empty-sub">Pulse reads the terminal's own computed output for
-      whatever is on screen${sym ? ` — currently <strong>${esc(sym)}</strong>` : ''}.
+      whatever is on screen${sym ? `· currently <strong>${esc(sym)}</strong>` : ''}.
       Ask anything, or start with one of these.</p>
     <div class="pulse-cards">
       ${shown.map((c, i) => {
@@ -13748,7 +13763,7 @@ function pulseStarters(expanded) {
     ? '<button type="button" class="pulse-more" data-pulse-more>see more examples</button>'
     : (expanded ? '<button type="button" class="pulse-more" data-pulse-less>show fewer</button>' : '')}
     ${sym ? '' : `<p class="pulse-empty-note">Load a ticker to unlock the
-      symbol-specific prompts — everything above works without one.</p>`}
+      symbol-specific prompts. Everything above works without one.</p>`}
   </div>`;
 }
 
@@ -13929,7 +13944,7 @@ async function streamTo(url, body, node) {
       // no longer routes anywhere. The app is almost certainly running fine on a
       // new address — which is worth saying, because "HTTP 530" reads as the
       // assistant breaking rather than the link having expired.
-      detail = `This link has expired (HTTP ${res.status}) — the temporary tunnel serving `
+      detail = `This link has expired (HTTP ${res.status}). The temporary tunnel serving `
         + 'this page was replaced. The terminal is still running on a new address; '
         + 'ask for the current link and reload.';
     }
@@ -14252,16 +14267,16 @@ const SUB_LABELS = {
 };
 
 const SUB_TITLES = {
-  chart: 'Charting — full-height chart, overlays and drawings',
+  chart: 'Charting. Full-height chart, overlays and drawings',
   swing: 'Swing trading and options analysis',
   earnings: 'Earnings analysis and the pre-earnings brief',
   compare: 'Compare two to four tickers side by side',
   instrument: 'Full history for one cross-asset instrument',
   long: 'Long-term share holdings',
-  brief: "Optic's Read — the daily market, macro and world summary",
+  brief: "Optic's Read. The daily market, macro and world summary",
   market: 'Macro regime and sector rotation',
   indices: 'Major index long-run cycle',
-  tracker: "Optic's Positions — the terminal's own paper-traded record",
+  tracker: "Optic's Positions. The terminal's own paper-traded record",
 };
 
 /** Which group a view belongs to. */
@@ -14347,8 +14362,8 @@ function switchView(view, force) {
     gear.setAttribute('aria-pressed', String(open));
     gear.setAttribute('aria-label', open ? 'Close settings' : 'Settings');
     gear.title = open
-      ? `Close settings — back to ${VIEW_NAMES[viewBeforeSettings] || 'Home'}`
-      : 'Settings — appearance and time zone';
+      ? `Close settings. Back to ${VIEW_NAMES[viewBeforeSettings] || 'Home'}`
+      : 'Settings. Appearance and time zone';
   }
   // Reconcile the search box with what's actually loaded. The two had drifted —
   // the status line said MSFT while the box sat empty — and rather than hunt every
@@ -14776,6 +14791,23 @@ document.addEventListener('click', (evt) => {
     if (STATE.swing) preserveUI(views.swing, () => renderSwing(STATE.swing));
     return;
   }
+  /* Drilling into a sector map, checked BEFORE data-instrument.
+   *
+   * Every tile carries data-instrument so it can open a chart, and that handler
+   * is right below this one. A sector tile carries both, so if the instrument
+   * check ran first a click on XLE would open the XLE chart and the drill would
+   * be unreachable. Sectors drill, individual names open: one level down, the
+   * tiles are ordinary stocks with no data-map-sector, so the handler below
+   * takes them and the behaviour a reader already knows is unchanged. */
+  const drill = evt.target.closest('[data-map-sector]');
+  if (drill) {
+    loadStockMap(STATE.stockMapTemplate, true, drill.dataset.mapSector);
+    return;
+  }
+  if (evt.target.closest('[data-map-sector-back]')) {
+    loadStockMap(STATE.stockMapTemplate, true, null);
+    return;
+  }
   const instCell = evt.target.closest('[data-instrument]');
   if (instCell && instCell.dataset.instrument) {
     openInstrument(instCell.dataset.instrument,
@@ -14872,7 +14904,7 @@ document.addEventListener('click', (evt) => {
   const econBtn = evt.target.closest('[data-econ]');
   if (econBtn) { loadEcon(econBtn.dataset.econ, true); return; }
   const mapT = evt.target.closest('[data-map-template]');
-  if (mapT) { loadStockMap(mapT.dataset.mapTemplate, true); return; }
+  if (mapT) { loadStockMap(mapT.dataset.mapTemplate, true, null); return; }
   const wsLoad = evt.target.closest('[data-ws-load]');
   if (wsLoad) {
     const sym = wsLoad.dataset.wsLoad;
@@ -15463,7 +15495,7 @@ function watchColorScheme() {
       // The model id is deliberately not announced. It told the reader nothing
       // actionable, and it framed the assistant as a wrapper around a model
       // rather than as part of the terminal.
-      addMsg('assistant', `Ask me anything — about the loaded ticker's gamma regime, flow or recommended strike, about the market as a whole, or attach a chart or PDF. **Deep research** runs live web sources.`);
+      addMsg('assistant', `Ask me anything. About the loaded ticker's gamma regime, flow or recommended strike, about the market as a whole, or attach a chart or PDF. **Deep research** runs live web sources.`);
     }
   } catch (e) { /* backend health is non-fatal for the UI */ }
   startAutoRefresh();

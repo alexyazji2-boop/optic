@@ -187,7 +187,7 @@ def build(provider, scanners_mod, ranking: Dict[str, Any],
         "horizon_days": HORIZON_DAYS,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "method": (
-            "Nothing on this board is new data — it is the calendar, the earnings "
+            "Nothing on this board is new data. It is the calendar, the earnings "
             "scan, the sector board and the scanners, triaged into one view. The "
             "ordering is the calendar's own published impact band and then how soon "
             "an event lands, both facts. The scanner column ranks by how many lists "

@@ -133,24 +133,24 @@ COMPONENT_QUESTIONS = {
 # component rather than generically, because "high" means something different
 # for volatility (calm) than for momentum (trending).
 COMPONENT_READINGS = {
-    "momentum": ("Index is trending above its recent averages — uptrend intact.",
-                 "Index is near its own averages — no strong trend either way.",
-                 "Index is below its recent averages — the trend is against buyers."),
-    "breadth": ("Most sectors are above trend — broad support behind the move.",
-                "Participation is mixed — the move is not fully confirmed.",
-                "Few sectors are above trend — the market is being carried by a minority."),
-    "volatility": ("Volatility is low relative to its own recent norm — the market is calm.",
+    "momentum": ("Index is trending above its recent averages. Uptrend intact.",
+                 "Index is near its own averages. No strong trend either way.",
+                 "Index is below its recent averages. The trend is against buyers."),
+    "breadth": ("Most sectors are above trend. Broad support behind the move.",
+                "Participation is mixed. The move is not fully confirmed.",
+                "Few sectors are above trend. The market is being carried by a minority."),
+    "volatility": ("Volatility is low relative to its own recent norm. The market is calm.",
                    "Volatility is near typical levels.",
-                   "Volatility is elevated against its own norm — hedging demand has picked up."),
-    "risk_appetite": ("Offensive assets are leading defensive ones — investors are reaching for risk.",
+                   "Volatility is elevated against its own norm. Hedging demand has picked up."),
+    "risk_appetite": ("Offensive assets are leading defensive ones. Investors are reaching for risk.",
                       "No clear leadership between offense and defense.",
-                      "Defensive assets are leading — investors are protecting rather than reaching."),
-    "safe_haven": ("Stocks are well ahead of long bonds — money is leaving safety.",
-                   "Stocks and bonds are close — no strong preference.",
-                   "Long bonds are outpacing stocks — money is moving toward safety."),
-    "junk_demand": ("High-yield is beating investment-grade — credit buyers are reaching for risk.",
+                      "Defensive assets are leading. Investors are protecting rather than reaching."),
+    "safe_haven": ("Stocks are well ahead of long bonds. Money is leaving safety.",
+                   "Stocks and bonds are close. No strong preference.",
+                   "Long bonds are outpacing stocks. Money is moving toward safety."),
+    "junk_demand": ("High-yield is beating investment-grade. Credit buyers are reaching for risk.",
                     "Credit spreads are behaving normally.",
-                    "Investment-grade is beating high-yield — credit is backing away from risk."),
+                    "Investment-grade is beating high-yield. Credit is backing away from risk."),
 }
 
 COMPONENT_NOTES = {
@@ -165,7 +165,7 @@ COMPONENT_NOTES = {
     "junk_demand": "High-yield credit against investment-grade. When buyers reach for "
                    "the riskier coupon, that is greed appearing in a market usually "
                    "less sentimental than equities.",
-    "risk_appetite": "Three offense-versus-defence pairs — technology against utilities, "
+    "risk_appetite": "Three offense-versus-defence pairs. Technology against utilities, "
                      "discretionary against staples, small caps against the index. Which "
                      "kind of equity is being bought, rather than whether equities are.",
 }
@@ -440,15 +440,15 @@ def build(provider) -> Dict[str, Any]:
             else "partial" if now["inputs_used"] >= 4 else "thin"
         ),
         "method": (
-            "Optic's own reading, not CNN's. Three of CNN's seven inputs — the "
+            "Optic's own reading, not CNN's. Three of CNN's seven inputs. The "
             "McClellan volume summation, NYSE 52-week highs against lows, and a "
-            "market-wide equity put/call ratio — need exchange breadth and options "
+            "market-wide equity put/call ratio. Need exchange breadth and options "
             "data free sources do not carry, so this uses five inputs it can "
             "actually compute and names all of them. The band labels are CNN's, "
             "which are widely enough understood that inventing new ones would "
             "help nobody. Each input is scored by where it sits in its own "
             "two-year distribution rather than against a fixed width, so 50 is "
-            "the middle of this market's actual behaviour — an earlier version "
+            "the middle of this market's actual behaviour. An earlier version "
             "used constants picked by eye and sat in Greed or Extreme Greed 69% "
             "of the time, which made the midpoint meaningless. The tradeoff is "
             "that this reads sentiment relative to the last two years: a market "
@@ -460,7 +460,7 @@ def build(provider) -> Dict[str, Any]:
         "caveat": (
             "A sentiment gauge describes positioning, not value. Extreme greed has "
             "preceded both tops and long continuations, and extreme fear marks "
-            "bottoms only in hindsight — this says where the crowd is, never what "
+            "bottoms only in hindsight. This says where the crowd is, never what "
             "happens next."
         ),
     }

@@ -119,7 +119,7 @@ def corporate_actions(provider, ticker: str) -> Dict[str, Any]:
             "last_cut_year": cut or None,
             "pays_dividend": bool(div_rows),
             "note": ("Growth streak counts consecutive years the annual total rose, "
-                     "using complete calendar years only — a partial current year "
+                     "using complete calendar years only. A partial current year "
                      "is always below the last full one and would report every "
                      "dividend grower as having just broken its streak."),
             "source": "Yahoo Finance corporate actions",
@@ -189,7 +189,7 @@ def short_volume(ticker: str, days: int = 20) -> Dict[str, Any]:
             "average_pct": _f(float(np.mean(pcts)), 2) if pcts else None,
             "days": len(rows),
             "caveat": ("This is short VOLUME, not short interest, and it covers "
-                       "off-exchange trades only — roughly half the tape. A market "
+                       "off-exchange trades only, roughly half the tape. A market "
                        "maker selling short to fill someone's buy order appears "
                        "here, so a high ratio is often liquidity provision rather "
                        "than bearish positioning. Read a change against this "
@@ -234,7 +234,7 @@ def crypto_sentiment(limit: int = 30) -> Dict[str, Any]:
             "average_30d": _f(float(np.mean(vals)), 0) if vals else None,
             "note": ("0 is extreme fear, 100 extreme greed. A risk-appetite "
                      "reading on the most speculative liquid asset class, which "
-                     "is why it is here — it tends to move before equity "
+                     "is why it is here. It tends to move before equity "
                      "sentiment. It says nothing about crypto prices."),
             "source": "alternative.me",
         }
@@ -289,7 +289,7 @@ def relative_performance(provider, ticker: str, benchmark: str = "SPY",
                    "120d": excess(120), "252d": excess(252)},
         "note": ("The line is this symbol divided by {}, indexed to 100 at the "
                  "start. Rising means outperformance regardless of whether either "
-                 "went up — a stock up 20% in a year the index rose 25% "
+                 "went up. A stock up 20% in a year the index rose 25% "
                  "underperformed, and a price chart will not say so."
                  .format(benchmark)),
     }

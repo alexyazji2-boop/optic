@@ -126,8 +126,8 @@ def build(payload: Dict[str, Any]) -> Dict[str, Any]:
         if gap > 0:
             bull.append(_arg(
                 "Trading above the 200-day average",
-                f"{_usd(spot)} is {_pct(gap)} above the 200-day at {_usd(sma200)} — "
-                "the line most long-term trend followers watch.",
+                f"{_usd(spot)} is {_pct(gap)} above the 200-day at {_usd(sma200)} . "
+                "The line most long-term trend followers watch.",
                 MEDIUM, "Technicals"))
         else:
             bear.append(_arg(
@@ -141,7 +141,7 @@ def build(payload: Dict[str, Any]) -> Dict[str, Any]:
             "Fast averages are stacked bullish",
             f"Price above the 9, 21 and 50-day EMAs in order "
             f"({_usd(_num(stack.get('ema9')))} · {_usd(_num(stack.get('ema21')))} · "
-            f"{_usd(_num(stack.get('ema50')))}) — every timeframe agrees on direction.",
+            f"{_usd(_num(stack.get('ema50')))}). Every timeframe agrees on direction.",
             STRONG, "Structure"))
     elif stack.get("bearish_stack"):
         bear.append(_arg(
@@ -157,7 +157,7 @@ def build(payload: Dict[str, Any]) -> Dict[str, Any]:
         if RSI_STRONG <= rsi < RSI_OVERBOUGHT:
             bull.append(_arg(
                 "Momentum is positive without being stretched",
-                f"RSI {rsi:.0f} — above the midline with room before the "
+                f"RSI {rsi:.0f}. Above the midline with room before the "
                 f"{RSI_OVERBOUGHT:.0f} overbought marker.",
                 MEDIUM, "Technicals"))
         elif rsi >= RSI_OVERBOUGHT:
@@ -169,7 +169,7 @@ def build(payload: Dict[str, Any]) -> Dict[str, Any]:
         elif rsi <= RSI_OVERSOLD:
             bull.append(_arg(
                 "Oversold enough to bounce",
-                f"RSI {rsi:.0f} is below {RSI_OVERSOLD:.0f} — stretched to the downside, "
+                f"RSI {rsi:.0f} is below {RSI_OVERSOLD:.0f}. Stretched to the downside, "
                 "which is where reversals start (and where falling knives also live).",
                 LIGHT, "Technicals"))
 
@@ -190,8 +190,8 @@ def build(payload: Dict[str, Any]) -> Dict[str, Any]:
             bull.append(_arg(
                 "Broken above the volume shelf",
                 f"Price is above the value area "
-                f"({_usd(_num(vp.get('val')))}–{_usd(_num(vp.get('vah')))}) — "
-                "no overhead supply from recent trade.",
+                f"({_usd(_num(vp.get('val')))}–{_usd(_num(vp.get('vah')))}) . "
+                "No overhead supply from recent trade.",
                 MEDIUM, "Structure"))
         elif location == "below value":
             bear.append(_arg(
@@ -207,8 +207,8 @@ def build(payload: Dict[str, Any]) -> Dict[str, Any]:
     if band_pct is not None and band_pct >= BANDWIDTH_EXTENDED:
         bear.append(_arg(
             "Already extended, not coiled",
-            f"Band width sits in the {band_pct:.0f}th percentile of its own history — "
-            "the easy part of the move has usually happened by here.",
+            f"Band width sits in the {band_pct:.0f}th percentile of its own history . "
+            "The easy part of the move has usually happened by here.",
             MEDIUM, "Structure"))
 
     ratio = _num(iv.get("iv_to_realised_ratio"))
@@ -216,14 +216,14 @@ def build(payload: Dict[str, Any]) -> Dict[str, Any]:
         if ratio <= IV_CHEAP:
             bull.append(_arg(
                 "Options are cheap against actual movement",
-                f"Implied vol is {ratio:.2f}× realized — the market is pricing less "
+                f"Implied vol is {ratio:.2f}× realized. The market is pricing less "
                 "movement than the stock has been delivering, which favours buying "
                 "premium over selling it.",
                 MEDIUM, "Volatility"))
         elif ratio >= IV_RICH:
             bear.append(_arg(
                 "Options are expensive against actual movement",
-                f"Implied vol is {ratio:.2f}× realized — you are paying up for movement "
+                f"Implied vol is {ratio:.2f}× realized. You are paying up for movement "
                 "the stock has not been delivering, and long premium decays if it "
                 "does not arrive.",
                 MEDIUM, "Volatility"))
@@ -233,13 +233,13 @@ def build(payload: Dict[str, Any]) -> Dict[str, Any]:
     if regime == "positive":
         bear.append(_arg(
             "Dealer hedging dampens breakouts",
-            "Net gamma is positive, so market makers hedge against direction — ranges "
+            "Net gamma is positive, so market makers hedge against direction. Ranges "
             "hold and a breakout needs a catalyst to overcome the drag.",
             LIGHT, "Gamma"))
     elif regime == "negative":
         bull.append(_arg(
             "Dealer hedging amplifies moves",
-            "Net gamma is negative, so market makers hedge with direction — moves "
+            "Net gamma is negative, so market makers hedge with direction. Moves "
             "extend rather than fade. It cuts both ways.",
             LIGHT, "Gamma"))
 
@@ -275,7 +275,7 @@ def build(payload: Dict[str, Any]) -> Dict[str, Any]:
             bull.append(_arg(
                 "Crowded short base could squeeze",
                 f"{float_pct * 100:.1f}% of the float is short at {cover:.1f} days to "
-                "cover — forced buying if it turns.",
+                "cover. Forced buying if it turns.",
                 MEDIUM, "Short interest"))
 
     # -- the composite's own disagreements ----------------------------------
@@ -306,7 +306,7 @@ def build(payload: Dict[str, Any]) -> Dict[str, Any]:
         "bear_weight": bear_weight,
         "balance": balance,
         "method": (
-            "Assembled from the panels on this page — each line cites the number that "
+            "Assembled from the panels on this page. Each line cites the number that "
             "triggered it. Nothing here is written by a model, and nothing weighs the "
             "business itself: this is what the price, the chain and the filings say "
             "today, which is only part of any real argument for or against a company."

@@ -218,17 +218,17 @@ def standard_error_channel(close: pd.Series, length: int = 100,
 
 CATALOGUE: List[Dict[str, Any]] = [
     {"id": "vwap", "name": "Anchored VWAP", "pane": "price", "group": "Execution",
-     "represents": ("Every share traded since the anchor date, averaged by how much volume went through at each price. Not a moving average of closes — a moving average of transactions."),
+     "represents": ("Every share traded since the anchor date, averaged by how much volume went through at each price. Not a moving average of closes. A moving average of transactions."),
      "why": ("It is the number a desk is graded against. An institution filling a large order over days is measured on whether it beat VWAP, so the level is where a lot of real money defines success or failure. Price above it means the average buyer since the anchor is in profit; below it means they are not, and that is a fact about positioning rather than a prediction about direction."),
      "measures": "The volume-weighted average price paid since the anchor date.",
      "caveat": "An execution benchmark, not a signal. Desks are measured against "
-               "it, which is why the level attracts attention — that is a fact "
+               "it, which is why the level attracts attention. That is a fact "
                "about behaviour, not evidence that crossing it predicts anything."},
     {"id": "bollinger", "name": "Bollinger bands", "pane": "price", "group": "Volatility",
      "represents": ("A 20-day average with bands two standard deviations of the closing price either side. The band distance IS the recent volatility, restated in dollars."),
-     "why": ("The width answers a question price alone cannot: is this quiet or loud by its own standards? Volatility clusters — quiet periods tend to be followed by quiet periods until they are not — so a band width at a historic narrow tells you a move, in either direction, will look large relative to what came before. It says nothing about which direction."),
+     "why": ("The width answers a question price alone cannot: is this quiet or loud by its own standards? Volatility clusters. Quiet periods tend to be followed by quiet periods until they are not. So a band width at a historic narrow tells you a move, in either direction, will look large relative to what came before. It says nothing about which direction."),
      "measures": "A 20-day average with bands at 2 standard deviations of the close.",
-     "caveat": "The width is the whole content — the bands are a volatility "
+     "caveat": "The width is the whole content. The bands are a volatility "
                "measure wearing the costume of support and resistance. Price "
                "spends about 5% of its time outside them by construction, so a "
                "touch is not a signal; a band that has contracted to a historic "
@@ -237,15 +237,15 @@ CATALOGUE: List[Dict[str, Any]] = [
      "represents": ("The same idea as Bollinger with a different ruler: an EMA with bands at two average true ranges, so the width is built from each bar's full high-to-low travel rather than from where it closed."),
      "why": ("Worth having precisely because it disagrees with Bollinger. Closes clustering inside wide daily ranges squeeze Bollinger and not Keltner; the reverse happens when bars are narrow but drift. When one contracts and the other does not, the gap tells you whether the quiet is in the closes or in the whole session."),
      "measures": "An EMA with bands at 2x ATR.",
-     "caveat": ("The bands are a multiple of average range, so one violent session widens them for weeks afterwards and the channel keeps describing a volatility that has already passed. Price outside a band is not a signal either — it says the move is large relative to recent range, which is what a large move is.")},
+     "caveat": ("The bands are a multiple of average range, so one violent session widens them for weeks afterwards and the channel keeps describing a volatility that has already passed. Price outside a band is not a signal either. It says the move is large relative to recent range, which is what a large move is.")},
     {"id": "donchian", "name": "Donchian channel", "pane": "price", "group": "Volatility",
      "represents": ("The highest high and the lowest low of the last 20 sessions, drawn as a channel. The oldest systematic trend rule there is."),
-     "why": ("It makes the definition of a breakout explicit rather than a judgement. Price at the upper line is, by construction, at a 20-day high — no interpretation required. The channel also shows how much room the recent range has given you, which is what a stop outside it would have to respect."),
+     "why": ("It makes the definition of a breakout explicit rather than a judgement. Price at the upper line is, by construction, at a 20-day high. No interpretation required. The channel also shows how much room the recent range has given you, which is what a stop outside it would have to respect."),
      "measures": "The highest high and lowest low of the last 20 sessions.",
      "caveat": ("The channel is defined entirely by where price has already been, so the breakout level exists because of the last 20 sessions and for no other reason. It also widens after a violent move, which is when it gives the least useful stop.")},
     {"id": "sec", "name": "Regression channel", "pane": "price", "group": "Trend",
      "represents": ("A least-squares straight line through the window, with bands at two standard errors of the residuals. The line is the trend the data itself implies, not one drawn by eye."),
-     "why": ("The R-squared is the significant part and the reason to prefer this to a hand-drawn trendline. It states what share of the movement the straight line actually explains. A channel through noise looks identical to a channel through a trend until you see that the line accounts for 15% of the variance — at which point the channel is decoration."),
+     "why": ("The R-squared is the significant part and the reason to prefer this to a hand-drawn trendline. It states what share of the movement the straight line actually explains. A channel through noise looks identical to a channel through a trend until you see that the line accounts for 15% of the variance, at which point the channel is decoration."),
      "measures": "A least-squares fit over the window with bands at 2 standard "
                  "errors, reported with its slope and R².",
      "caveat": "The R² is the point. A channel drawn through noise looks the "
@@ -253,9 +253,9 @@ CATALOGUE: List[Dict[str, Any]] = [
                "variance the line explains."},
     {"id": "adx", "name": "ADX and DI", "pane": "own", "group": "Trend",
      "represents": ("Wilder's measure of how ORDERLY the movement is, on a 0-100 scale, with direction carried separately by +DI and -DI. A market can score high on ADX while falling."),
-     "why": ("It answers the question every other trend tool assumes: is there a trend here at all? Below roughly 20 the market is ranging, and tools built on trend-following — moving-average crosses, breakout rules — are being asked to work in the conditions they fail in. MACD cannot tell you this because it folds strength and direction into one signed line."),
+     "why": ("It answers the question every other trend tool assumes: is there a trend here at all? Below roughly 20 the market is ranging, and tools built on trend-following (moving-average crosses, breakout rules) are being asked to work in the conditions they fail in. MACD cannot tell you this because it folds strength and direction into one signed line."),
      "measures": "Trend strength, with direction carried separately by +DI and -DI.",
-     "caveat": ("Lagging by construction — a smoothed average of smoothed values — so it confirms a trend well after the trend began and stays elevated after one ends. On its own it says nothing about direction: a hard sell-off and a strong rally read the same.")},
+     "caveat": ("Lagging by construction (a smoothed average of smoothed values) so it confirms a trend well after the trend began and stays elevated after one ends. On its own it says nothing about direction: a hard sell-off and a strong rally read the same.")},
     {"id": "stochastic", "name": "Stochastic", "pane": "own", "group": "Momentum",
      "represents": ("Where the close sits inside the last 14 sessions' high-low range, as a percentage. At 100 it closed at the top of the range; at 0, the bottom."),
      "why": ("It is a position-in-range reading, not a momentum reading, and that distinction is where most misuse starts. In a strong trend it pins near an extreme for weeks — 'overbought' at 90 during a sustained advance has been a bad reason to sell far more often than a good one. It is most informative in a range, which is exactly when ADX is low."),
@@ -263,7 +263,7 @@ CATALOGUE: List[Dict[str, Any]] = [
      "caveat": ("In a sustained trend it pins near an extreme for weeks, so \u201coverbought\u201d here has been a bad reason to sell far more often than a good one. It reads position in a range, and a range is what a trending market does not have.")},
     {"id": "obv", "name": "On-balance volume", "pane": "own", "group": "Flow",
      "represents": ("A running total of volume, added on up days and subtracted on down days. The level is arbitrary; only its direction carries meaning."),
-     "why": ("It is a crude attempt at the question price cannot answer: is the move being paid for? The case people watch for is divergence — price making highs while the line does not, implying the advance is happening on lighter participation. Treat it as a description of where volume went, not as a leading signal."),
+     "why": ("It is a crude attempt at the question price cannot answer: is the move being paid for? The case people watch for is divergence. Price making highs while the line does not, implying the advance is happening on lighter participation. Treat it as a description of where volume went, not as a leading signal."),
      "measures": "Volume signed by the day's direction, accumulated.",
      "caveat": "Signs the whole day's volume by the close-to-close direction, so a "
                "session that round-tripped counts as fully one-sided."},
@@ -273,10 +273,10 @@ CATALOGUE: List[Dict[str, Any]] = [
      "measures": "RSI computed on price times volume rather than price alone.",
      "caveat": ("Bounded 0-100, so like every oscillator it can sit at an extreme for as long as the trend lasts. Volume weighting makes the reading better founded; it does not make an extreme a turning point.")},
     {"id": "rs", "name": "Relative strength line", "pane": "own", "group": "Trend",
-     "represents": ("This name's price divided by SPY, rebased to 100 at the start of the window. Rising means it is outperforming the index; falling means it is lagging — regardless of whether either is going up."),
+     "represents": ("This name's price divided by SPY, rebased to 100 at the start of the window. Rising means it is outperforming the index; falling means it is lagging. Regardless of whether either is going up."),
      "why": ("It separates the company from the market, which a price chart cannot. In a selloff everything falls and the price chart tells you nothing about relative demand; a rising RS line through that selloff says money is rotating in. It is the line institutional screens are built on for exactly that reason."),
      "measures": "Price divided by SPY, rebased to 100.",
-     "caveat": ("It is a ratio, so it rises whenever this name falls more slowly than the index — outperformance can mean losing less money. It says nothing about absolute return, and a rising line through a bear market has still cost you.")},
+     "caveat": ("It is a ratio, so it rises whenever this name falls more slowly than the index. Outperformance can mean losing less money. It says nothing about absolute return, and a rising line through a bear market has still cost you.")},
 ]
 
 CATALOGUE_BY_ID = {row["id"]: row for row in CATALOGUE}
@@ -355,9 +355,9 @@ def _reading(key: str, df: pd.DataFrame, payload: Dict[str, Any]) -> Optional[st
             return None
         if pct is None:
             return "Bands are {:.1f}% wide.".format(width)
-        band = ("unusually narrow — quiet by this name's own standards"
+        band = ("unusually narrow. Quiet by this name's own standards"
                 if pct <= 20 else
-                "unusually wide — this has been a loud stretch" if pct >= 80 else
+                "unusually wide. This has been a loud stretch" if pct >= 80 else
                 "middling by this name's own standards")
         return ("Bands are {:.1f}% wide, the {:.0f}th percentile of the last year: "
                 "{}.".format(width, pct, band))
@@ -395,7 +395,7 @@ def _reading(key: str, df: pd.DataFrame, payload: Dict[str, Any]) -> Optional[st
         adx_v, plus, minus = last("ADX"), last("+DI"), last("-DI")
         if adx_v is None:
             return None
-        state = ("no trend worth the name — trend-following tools are being asked "
+        state = ("no trend worth the name. Trend-following tools are being asked "
                  "to work in the conditions they fail in" if adx_v < 20 else
                  "a trend is forming but not established" if adx_v < 25 else
                  "a trend is in place" if adx_v < 40 else "a strong trend")
@@ -438,8 +438,8 @@ def _reading(key: str, df: pd.DataFrame, payload: Dict[str, Any]) -> Optional[st
             return ("Over the last 20 sessions volume flow and price moved the same "
                     "way ({}), so the move is being paid for."
                     .format("both up" if price_up else "both down"))
-        return ("Over the last 20 sessions price went {} while volume flow went {} "
-                "— a divergence, which is the case this indicator exists to show. "
+        return ("Over the last 20 sessions price went {} while volume flow went {} ."
+                "A divergence, which is the case this indicator exists to show. "
                 "It describes participation, not a coming reversal."
                 .format("up" if price_up else "down", "up" if obv_up else "down"))
 
@@ -463,7 +463,7 @@ def _reading(key: str, df: pd.DataFrame, payload: Dict[str, Any]) -> Optional[st
             return None
         now, prior = vals[-1], vals[-21]
         return ("Relative strength {:.0f} against a base of 100, and {} over the "
-                "last 20 sessions — this name has {} the index."
+                "last 20 sessions. This name has {} the index."
                 .format(now, "rising" if now > prior else "falling",
                         "been outperforming" if now > prior else "been lagging"))
     return None
@@ -524,7 +524,7 @@ def _one(df: pd.DataFrame, key: str, bench: Optional[pd.Series],
             {"name": "-DI", "values": _series(a["minus_di"], 2)}],
             "last": _f(last.iloc[-1], 1) if len(last) else None,
             # Wilder's own threshold, named as his convention rather than a finding.
-            "reference": [{"value": 25, "label": "25 — Wilder's trending threshold"}]}
+            "reference": [{"value": 25, "label": "25. Wilder's trending threshold"}]}
     if key == "stochastic":
         st = stochastic(df)
         return {**base, "lines": [
@@ -544,5 +544,5 @@ def _one(df: pd.DataFrame, key: str, bench: Optional[pd.Series],
                     "reason": "benchmark history unavailable"}
         line = relative_strength_line(df["Close"], bench).reindex(df.index).ffill()
         return {**base, "lines": [{"name": "RS vs SPY", "values": _series(line, 2)}],
-                "reference": [{"value": 100, "label": "100 — in line with SPY"}]}
+                "reference": [{"value": 100, "label": "100, in line with SPY"}]}
     raise KeyError(key)

@@ -248,7 +248,7 @@ def _attach_risk_plan(
                           "price".format(stop_distance),
             "first_target": _f(resistance if not bearish else support, 2),
             "invalidation": "A daily close beyond the stop, or dealer gamma flipping sign through "
-                            "the flip point — either one breaks the reason for the trade.",
+                            "the flip point. Either one breaks the reason for the trade.",
             "sizing_note": "Size each idea so the worst case costs a fixed fraction of the "
                            "account. The maximum loss shown above is the whole position.",
         }
@@ -263,8 +263,8 @@ def build_naked_ideas(
     """Naked long call or put — direct directional exposure, no second leg.
 
     For the fully ranked version of this same idea (multiple strikes scored
-    against a projected target), see the Strike & Entry Recommendation panel —
-    this is the quick-glance version in the same card format as the strategies
+    against a projected target), see the Strike & Entry Recommendation panel.
+    This is the quick-glance version in the same card format as the strategies
     below, so a naked option and a spread can be compared side by side.
     """
     if chain is None or chain.empty or "delta" not in chain.columns:
@@ -288,8 +288,8 @@ def build_naked_ideas(
             chain, spot, expiry, True, 0.50,
             "Long call (at-the-money)",
             "Cleanest expression of an upside swing: a ~50-delta call gives roughly half-share "
-            "participation per contract-share with risk capped at the premium. Theta is the cost — "
-            "see the daily burn rate on the leg below.",
+            "participation per contract-share with risk capped at the premium. Theta is the cost . "
+            "See the daily burn rate on the leg below.",
         )
         if idea:
             ideas.append(idea)
@@ -347,7 +347,7 @@ def build_strategy_ideas(
     if bullish:
         idea = _spread_idea(
             chain, expiry, True, 0.55, 0.25, "Bull call spread",
-            "Caps upside but cuts cost and theta bleed roughly in half — the right structure when "
+            "Caps upside but cuts cost and theta bleed roughly in half. The right structure when "
             "the target is a specific level{}.".format(
                 " like the call wall at {:.0f}".format(call_wall) if call_wall else ""
             ),
@@ -401,7 +401,7 @@ def build_strategy_ideas(
             short_put = _pick(chain, False, expiry, 0.20)
             long_put = _pick(chain, False, expiry, 0.10)
             condor_note = (
-                "No directional edge and dealers are long gamma — hedging suppresses realized vol, "
+                "No directional edge and dealers are long gamma. Hedging suppresses realized vol, "
                 "which is the condition premium selling wants."
                 if regime == "positive"
                 else "No directional edge; implied vol isn't cheap, so selling the range collects a "
@@ -456,7 +456,7 @@ def build_strategy_ideas(
                             "name": "Iron butterfly",
                             "structure": "short straddle with wings",
                             "rationale": "Same premium-selling case as the condor, but selling the ATM straddle "
-                            "collects more credit for a tighter profit zone — pays off if price truly pins "
+                            "collects more credit for a tighter profit zone. Pays off if price truly pins "
                             "near {:.0f} through expiry.".format(spot),
                             "expiry": expiry,
                             "dte": int(atm_call["dte"]),
@@ -499,7 +499,7 @@ def build_strategy_ideas(
                         {
                             "name": "Long straddle",
                             "structure": "long call + long put, same strike",
-                            "rationale": "No directional edge, but {} — a straddle profits from a big move "
+                            "rationale": "No directional edge, but {}. A straddle profits from a big move "
                             "either way and loses only if price sits still through expiry.".format(why_text),
                             "expiry": expiry,
                             "dte": int(straddle_call["dte"]),
@@ -529,7 +529,7 @@ def build_strategy_ideas(
                             "name": "Long strangle",
                             "structure": "long OTM call + long OTM put",
                             "rationale": "Cheaper than the straddle above because both legs are further "
-                            "out-of-the-money — needs a bigger move to profit, but risks less premium getting there. "
+                            "out-of-the-money. Needs a bigger move to profit, but risks less premium getting there. "
                             "Same thesis: {}.".format(why_text),
                             "expiry": expiry,
                             "dte": int(strangle_call["dte"]),
@@ -594,7 +594,7 @@ def _sector_pair_idea(
     if signal > 0:
         long_name, short_name = ticker, etf
         thesis = (
-            "{} has outpaced its own sector ETF ({}) by {:.1f}% over the past month — stock-specific "
+            "{} has outpaced its own sector ETF ({}) by {:.1f}% over the past month. Stock-specific "
             "strength, not just the sector moving. A pair trade isolates that: long calls on {}, long "
             "puts on {}, so a sector-wide reversal doesn't erase the edge.".format(
                 ticker, etf, abs(rs_1m if rs_1m is not None else rs_3m), ticker, etf
@@ -603,7 +603,7 @@ def _sector_pair_idea(
     else:
         long_name, short_name = etf, ticker
         thesis = (
-            "{} has lagged its own sector ETF ({}) by {:.1f}% over the past month — stock-specific "
+            "{} has lagged its own sector ETF ({}) by {:.1f}% over the past month. Stock-specific "
             "weakness. A pair trade isolates that: long calls on {}, long puts on {}, so a sector-wide "
             "rally doesn't mask the underperformance.".format(
                 ticker, etf, abs(rs_1m if rs_1m is not None else rs_3m), etf, ticker
@@ -611,7 +611,7 @@ def _sector_pair_idea(
         )
 
     return {
-        "name": "Sector pair trade — {} vs {}".format(ticker, etf),
+        "name": "Sector pair trade: {} vs {}".format(ticker, etf),
         "structure": "cross-underlying pair trade",
         "conceptual": True,
         "rationale": thesis,
@@ -622,7 +622,7 @@ def _sector_pair_idea(
             "rs_3m_pct": rs_3m,
             "ratio_zscore_60d": rs.get("ratio_zscore_60d"),
         },
-        "note": "Strikes aren't priced here — this terminal only loads one option chain at a time. "
+        "note": "Strikes aren't priced here. This terminal only loads one option chain at a time. "
         "Load {} directly for its own priced call/put ideas.".format(short_name if long_name == ticker else long_name),
     }
 
@@ -643,13 +643,13 @@ COMPONENT_UNAVAILABLE = {
 COMPONENT_MEANING = {
     "technicals": "Chart structure on daily bars: moving-average stacking, price versus the "
                   "200-day, RSI regime, and whether MACD is above or below its signal line.",
-    "gamma": "Dealer gamma exposure from the options chain — whether market-maker hedging is "
+    "gamma": "Dealer gamma exposure from the options chain. Whether market-maker hedging is "
              "likely to dampen moves or amplify them, and which side of the gamma flip price sits on.",
     "flow": "Call versus put activity across the chain, weighted by volume and open interest. "
-            "A positioning proxy, not real order flow — free data has no trade tape.",
+            "A positioning proxy, not real order flow. Free data has no trade tape.",
     "news": "Tone of recent headlines, scored against a keyword lexicon and weighted toward "
             "the most recent stories, plus any detected catalyst types.",
-    "macro": "The cross-asset risk regime — VIX, credit, the dollar, rates and oil — scored "
+    "macro": "The cross-asset risk regime. VIX, credit, the dollar, rates and oil. Scored "
              "risk-on to risk-off. Applies to the whole market, not this ticker specifically.",
 }
 
@@ -703,11 +703,11 @@ def verdict(
     gamma = components.get("gamma")
     if tech is not None and flow_score is not None and tech * flow_score < -200:
         conflicts.append(
-            "Technicals and options flow disagree — positioning is fighting the chart. Wait for one to break."
+            "Technicals and options flow disagree. Positioning is fighting the chart. Wait for one to break."
         )
     if tech is not None and gamma is not None and tech * gamma < -200:
         conflicts.append(
-            "Trend and dealer positioning disagree — expect chop and false starts rather than a clean trend."
+            "Trend and dealer positioning disagree. Expect chop and false starts rather than a clean trend."
         )
     if news and news.get("earnings_warning"):
         conflicts.append(news["earnings_warning"])

@@ -14,8 +14,8 @@ database, and the UI shows them. When there is a host and a key, `deliver()` is
 the single function that needs a body.
 
 **On what counts as an alert.** Deliberately not "price crossed a number". That
-is the easiest rule to write and the least useful thing this terminal knows —
-a level is one input among the fifteen the composite already weighs. The rules
+is the easiest rule to write and the least useful thing this terminal knows.
+A level is one input among the fifteen the composite already weighs. The rules
 here fire on things that took work to compute: a scored setup, a position
 closing, a pattern confirming with a measured base rate behind it.
 """
@@ -56,7 +56,7 @@ KINDS: Dict[str, Dict[str, str]] = {
     "risk": {
         "label": "Book risk",
         "urgency": "high",
-        "why": "The book reached a cap — position slots, or the portfolio risk "
+        "why": "The book reached a cap. Position slots, or the portfolio risk "
                "budget. It will stop adding, which is worth knowing before you "
                "wonder why a scan found nothing.",
     },
@@ -181,7 +181,7 @@ def from_scan(result: Dict[str, Any]) -> int:
         side = pos.get("direction", "")
         made += raise_alert(
             "idea",
-            "%s — new %s %s" % (tkr, side, instrument),
+            "%s. New %s %s" % (tkr, side, instrument),
             ticker=tkr,
             body=("Composite %s. Entry %s, stop %s, target %s. Book: %s."
                   % (pos.get("composite"), pos.get("entry_price"),
@@ -196,7 +196,7 @@ def from_scan(result: Dict[str, Any]) -> int:
         tkr = pos.get("ticker")
         made += raise_alert(
             "closed",
-            "%s closed — %s" % (tkr, pos.get("exit_reason") or "exit"),
+            "%s closed: %s" % (tkr, pos.get("exit_reason") or "exit"),
             ticker=tkr,
             body=("Exited at %s for %s. Held %s."
                   % (pos.get("exit_price"), pos.get("pnl"), pos.get("held") or "—")),
@@ -213,7 +213,7 @@ def from_capacity(book: str, capacity: Dict[str, Any], day: str) -> int:
     budget = capacity.get("risk_budget_left")
     if slots is not None and slots <= 0:
         return 1 if raise_alert(
-            "risk", "%s book is full — no position slots left" % book,
+            "risk", "%s book is full. No position slots left" % book,
             body="It will pass on every setup until something closes.",
             payload=capacity, dedupe_key="risk:slots:%s:%s" % (book, day)) else 0
     if budget is not None and budget <= 0:
@@ -250,7 +250,7 @@ def delivery_status() -> Dict[str, Any]:
             None if always_on else
             "The server is not declared always-on. Alerts fire only while this "
             "process is running, and it currently runs on a laptop behind a "
-            "temporary tunnel — so anything that happens while it sleeps is "
+            "temporary tunnel. So anything that happens while it sleeps is "
             "missed silently. Set ALERT_ALWAYS_ON=true once it is deployed "
             "somewhere that stays up.",
         ] if b],

@@ -147,7 +147,7 @@ def build(provider, basket: Optional[List[str]] = None) -> Dict[str, Any]:
 
     if clipped >= HIGH:
         band, plain = "high", ("The market is paying for these names to move together. "
-                               "That is a macro tape — index hedges are expensive "
+                               "That is a macro tape. Index hedges are expensive "
                                "relative to single-stock ones, and stock picking is "
                                "fighting a market that does not differentiate.")
     elif clipped <= LOW:
@@ -155,7 +155,7 @@ def build(provider, basket: Optional[List[str]] = None) -> Dict[str, Any]:
                               "Index vol is cheap relative to its parts, which is the "
                               "tape where single-name selection actually pays.")
     else:
-        band, plain = "normal", ("Correlation expectations are mid-range — neither a "
+        band, plain = "normal", ("Correlation expectations are mid-range. Neither a "
                                  "pure macro tape nor a stock-picker's one.")
 
     rows.sort(key=lambda r: -r["weight"])

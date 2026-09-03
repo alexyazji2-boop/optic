@@ -141,11 +141,11 @@ def build(provider, ticker: str, sector_name: Optional[str]) -> Dict[str, Any]:
     conflict = None
     if vs_spy is not None and vs_sector is not None:
         if vs_spy > 0 and vs_sector < -RS_BAND_PCT:
-            conflict = ("Ahead of the market but behind its own sector — the group "
+            conflict = ("Ahead of the market but behind its own sector. The group "
                         "carried this, not the company. Relative strength against "
                         "peers is the harder test and this name is failing it.")
         elif vs_spy < 0 and vs_sector > RS_BAND_PCT:
-            conflict = ("Behind the market but ahead of its own sector — the drag is "
+            conflict = ("Behind the market but ahead of its own sector. The drag is "
                         "the group, and this name is the better half of a weak "
                         "neighbourhood.")
 

@@ -170,10 +170,10 @@ def _long_trend(weekly: pd.DataFrame) -> Dict[str, Any]:
         guidance = "Structurally bullish. Pullbacks toward the 40-week average are accumulation, not exits."
     elif above_200w and not above_40w:
         phase = "uptrend, correcting"
-        guidance = "Long-term trend intact but under its 40-week line — a normal correction inside a bull phase. Stagger entries."
+        guidance = "Long-term trend intact but under its 40-week line. A normal correction inside a bull phase. Stagger entries."
     elif above_200w is False and above_40w:
         phase = "attempted bottom"
-        guidance = "Below the 200-week but reclaiming the 40-week — early recovery signal, not confirmation. Start small."
+        guidance = "Below the 200-week but reclaiming the 40-week. Early recovery signal, not confirmation. Start small."
     elif above_200w is False:
         phase = "secular downtrend"
         guidance = "Below both long-term averages. Capital preservation over accumulation; wait for the 40-week reclaim."
@@ -227,32 +227,32 @@ def _valuation_read(quote: Dict[str, Any]) -> Dict[str, Any]:
 
     if fwd is not None:
         if fwd < 0:
-            flags.append("Negative forward earnings — unprofitable on consensus estimates.")
+            flags.append("Negative forward earnings. Unprofitable on consensus estimates.")
         elif fwd < 15:
-            flags.append("Forward P/E {:.1f} — cheap on an absolute basis.".format(fwd))
+            flags.append("Forward P/E {:.1f}. Cheap on an absolute basis.".format(fwd))
         elif fwd < 25:
-            flags.append("Forward P/E {:.1f} — reasonable.".format(fwd))
+            flags.append("Forward P/E {:.1f}. Reasonable.".format(fwd))
         elif fwd < 40:
-            flags.append("Forward P/E {:.1f} — priced for growth; execution risk is real.".format(fwd))
+            flags.append("Forward P/E {:.1f}. Priced for growth; execution risk is real.".format(fwd))
         else:
-            flags.append("Forward P/E {:.1f} — expensive; leaves no room for disappointment.".format(fwd))
+            flags.append("Forward P/E {:.1f}. Expensive; leaves no room for disappointment.".format(fwd))
 
     if trailing is not None and fwd is not None and trailing > 0 and fwd > 0:
         if fwd < trailing * 0.85:
-            flags.append("Forward multiple well below trailing — earnings expected to grow.")
+            flags.append("Forward multiple well below trailing. Earnings expected to grow.")
         elif fwd > trailing * 1.15:
-            flags.append("Forward multiple above trailing — earnings expected to shrink.")
+            flags.append("Forward multiple above trailing. Earnings expected to shrink.")
 
     if peg is not None and 0 < peg < 1.2:
-        flags.append("PEG {:.2f} — growth is not fully priced in.".format(peg))
+        flags.append("PEG {:.2f}. Growth is not fully priced in.".format(peg))
     elif peg is not None and peg > 3:
-        flags.append("PEG {:.2f} — paying a lot per unit of growth.".format(peg))
+        flags.append("PEG {:.2f}. Paying a lot per unit of growth.".format(peg))
 
     if pb is not None and pb > 0:
         if pb < 1.5:
-            flags.append("Price/book {:.2f} — asset-backed valuation support.".format(pb))
+            flags.append("Price/book {:.2f}. Asset-backed valuation support.".format(pb))
         elif pb > 10:
-            flags.append("Price/book {:.1f} — valuation rests entirely on future earnings.".format(pb))
+            flags.append("Price/book {:.1f}. Valuation rests entirely on future earnings.".format(pb))
 
     if margin is not None:
         flags.append("Net margin {:.1f}%.".format(margin * 100))
@@ -260,7 +260,7 @@ def _valuation_read(quote: Dict[str, Any]) -> Dict[str, Any]:
         flags.append("Revenue growth {:.1f}% y/y.".format(rev_growth * 100))
 
     if not flags:
-        flags.append("Valuation metrics unavailable — typical for ETFs and index products.")
+        flags.append("Valuation metrics unavailable. Typical for ETFs and index products.")
 
     return {
         "forward_pe": fwd,
@@ -273,7 +273,7 @@ def _valuation_read(quote: Dict[str, Any]) -> Dict[str, Any]:
         "dividend_yield": quote.get("dividend_yield"),
         "market_cap": quote.get("market_cap"),
         "notes": flags,
-        "caveat": "Absolute multiples mean little without sector comparables — treat as a screen, not a verdict.",
+        "caveat": "Absolute multiples mean little without sector comparables. Treat as a screen, not a verdict.",
     }
 
 
@@ -329,12 +329,12 @@ def _data_quality(close: pd.Series) -> Dict[str, Any]:
 
     if years < 1.2:
         warnings.append(
-            "Only {:.1f} years of price history — there is no long-term record to assess yet.".format(years)
+            "Only {:.1f} years of price history. There is no long-term record to assess yet.".format(years)
         )
         reliable = False
     elif years < 3.2:
         warnings.append(
-            "Only {:.1f} years of price history — likely a recent IPO, spinoff, or ticker change. "
+            "Only {:.1f} years of price history. Likely a recent IPO, spinoff, or ticker change. "
             "Multi-year metrics are unavailable or unreliable.".format(years)
         )
         reliable = False
@@ -426,14 +426,14 @@ def analyse_holding(provider, ticker: str) -> Dict[str, Any]:
         reasons.append(detail)
 
     if trend.get("above_200w_sma"):
-        award(25, "200-week trend", "Above the 200-week average — secular trend is up.", "trend")
+        award(25, "200-week trend", "Above the 200-week average. Secular trend is up.", "trend")
     elif trend.get("above_200w_sma") is False:
-        award(-25, "200-week trend", "Below the 200-week average — secular trend is down.", "trend")
+        award(-25, "200-week trend", "Below the 200-week average. Secular trend is down.", "trend")
 
     if trend.get("above_40w_sma"):
-        award(12, "40-week trend", "Above the 40-week average — intermediate trend supportive.", "trend")
+        award(12, "40-week trend", "Above the 40-week average. Intermediate trend supportive.", "trend")
     else:
-        award(-8, "40-week trend", "Below the 40-week average — intermediate weakness.", "trend")
+        award(-8, "40-week trend", "Below the 40-week average. Intermediate weakness.", "trend")
 
     if excess_5y is not None and quality["reliable"]:
         if excess_5y > 3:
@@ -444,9 +444,9 @@ def analyse_holding(provider, ticker: str) -> Dict[str, Any]:
     sharpe = risk.get("sharpe_proxy")
     if sharpe is not None and quality["reliable"]:
         if sharpe > 1.0:
-            award(10, "Return per unit of risk", "Return/vol ratio {:.2f} over the past year — well compensated.".format(sharpe), "risk")
+            award(10, "Return per unit of risk", "Return/vol ratio {:.2f} over the past year. Well compensated.".format(sharpe), "risk")
         elif sharpe < 0:
-            award(-10, "Return per unit of risk", "Negative trailing return with full volatility — poorly compensated.", "risk")
+            award(-10, "Return per unit of risk", "Negative trailing return with full volatility. Poorly compensated.", "risk")
 
     fwd = valuation.get("forward_pe")
     if fwd is not None and 0 < fwd < 20:
@@ -458,13 +458,13 @@ def analyse_holding(provider, ticker: str) -> Dict[str, Any]:
         # honest than the factor silently not appearing.
         factors.append({
             "label": "Valuation", "points": 0.0, "kind": "valuation",
-            "detail": "Forward P/E of {:.1f} is between the 20 and 45 thresholds — no adjustment either way.".format(fwd),
+            "detail": "Forward P/E of {:.1f} is between the 20 and 45 thresholds. No adjustment either way.".format(fwd),
         })
 
     current_dd = drawdown.get("current_drawdown_pct")
     if current_dd is not None and current_dd < -25 and trend.get("above_200w_sma"):
         award(10, "Drawdown opportunity",
-              "{:.0f}% below the all-time high while the secular trend holds — historically a favorable accumulation window.".format(abs(current_dd)),
+              "{:.0f}% below the all-time high while the secular trend holds. Historically a favorable accumulation window.".format(abs(current_dd)),
               "timing")
 
     div = quote.get("dividend_yield")
@@ -590,18 +590,18 @@ def analyse_indices(provider) -> Dict[str, Any]:
             chg_3m = _f((line.iloc[-1] / line.iloc[-64] - 1.0) * 100.0, 2)
             if chg_3m is not None and chg_3m > 2:
                 gv_note = (
-                    "Growth is leading the broad market by {:.1f}% over 3 months — long-duration, "
+                    "Growth is leading the broad market by {:.1f}% over 3 months. Long-duration, "
                     "higher-multiple names are in favor, which typically needs falling or stable "
                     "rates to persist.".format(chg_3m)
                 )
             elif chg_3m is not None and chg_3m < -2:
                 gv_note = (
-                    "Growth is lagging the broad market by {:.1f}% over 3 months — leadership is "
+                    "Growth is lagging the broad market by {:.1f}% over 3 months. Leadership is "
                     "rotating toward value and cyclicals, often a sign rates or margins are the "
                     "market's main worry.".format(abs(chg_3m))
                 )
             else:
-                gv_note = "Growth and the broad market are moving together — no clear style leadership."
+                gv_note = "Growth and the broad market are moving together. No clear style leadership."
             growth_value = {
                 "qqq_spy_ratio": _f(line.iloc[-1], 5),
                 "chg_3m_pct": chg_3m,
@@ -614,11 +614,11 @@ def analyse_indices(provider) -> Dict[str, Any]:
     if rows:
         share = len(bulls) / len(rows) * 100.0
         if share >= 80:
-            regime = "Global equity regime is broadly bullish — most major indices are in secular uptrends."
+            regime = "Global equity regime is broadly bullish. Most major indices are in secular uptrends."
         elif share >= 50:
-            regime = "Mixed global regime — US and international indices are diverging. Favor the strongest."
+            regime = "Mixed global regime. US and international indices are diverging. Favor the strongest."
         else:
-            regime = "Defensive global regime — a majority of major indices sit below their 200-week averages."
+            regime = "Defensive global regime. A majority of major indices sit below their 200-week averages."
     else:
         regime = "Index data unavailable."
 

@@ -86,8 +86,8 @@ def wire_window_hours(now: Optional[datetime] = None) -> int:
 
     A fixed 36-hour window is wrong in exactly the case a pre-open read matters
     most. Friday's 16:00 close to Monday's 09:00 open is 65 hours, so on a Monday
-    morning a 36-hour window silently dropped all of Friday and most of Saturday —
-    the weekend news a reader opens this page to catch up on.
+    morning a 36-hour window silently dropped all of Friday and most of Saturday.
+    The weekend news a reader opens this page to catch up on.
 
     Measuring from the last close instead makes the window mean something: "what
     has happened since you could last trade". It is ~17-24 hours midweek and ~65
@@ -401,7 +401,7 @@ def _desks() -> Dict[str, Any]:
         "sources": status,
         "window_hours": window,
         "window_note": ("Everything published since the previous session closed"
-                        " \u2014 about {} hours.").format(window),
+                        ", about {} hours.").format(window),
     }
 
 
@@ -479,14 +479,14 @@ def _world_paragraph(wires: Dict[str, Any], window_hours: int) -> Optional[str]:
     lead = max((e for _, entries in picks for e in entries),
                key=lambda r: (r.get("published") or ""), default=None)
     where = " and ".join("{} ({})".format(label, len(entries)) for label, entries in picks)
-    line = ("Since the last close — about {}h — the {} desk{} carrying {} "
+    line = ("Since the last close (about {}h) the {} desk{} carrying {} "
             "stor{}.".format(window_hours, where,
                              "s are" if len(picks) > 1 else " is",
                              total, "ies" if total != 1 else "y"))
     if lead and lead.get("title"):
         line += (" Newest is \u201c{}\u201d from {}.".format(
             str(lead["title"]).strip()[:130], lead.get("source") or "the wire"))
-    line += (" Headlines only — nothing here reads across to a price, and this "
+    line += (" Headlines only. Nothing here reads across to a price, and this "
              "paragraph deliberately does not claim one does.")
     return line
 
@@ -521,7 +521,7 @@ def _narrative(overview: Dict[str, Any],
         phrase = _breadth_phrase(breadth)
         if phrase:
             tape += f" Underneath, {phrase}"
-            tape += f" — {breadth:.0f}% of the eleven closed up." if breadth is not None else "."
+            tape += f", {breadth:.0f}% of the eleven closed up." if breadth is not None else "."
         paragraphs.append(tape)
 
     # ---- 2. volatility and small caps, only when they say something --------
@@ -559,7 +559,7 @@ def _narrative(overview: Dict[str, Any],
         line = (f"Among the megacaps, {best['name']} was strongest at {_pct_text(best['day'])} "
                 f"and {worst['name']} weakest at {_pct_text(worst['day'])}")
         if spread >= 4:
-            line += (f" — a {spread:.1f} point spread, so the group moved on its own news "
+            line += (f". A {spread:.1f} point spread, so the group moved on its own news "
                      f"rather than together")
         elif len(winners) in (0, len(ordered)):
             line += f", and all seven finished {'higher' if winners else 'lower'}"
@@ -577,7 +577,7 @@ def _narrative(overview: Dict[str, Any],
         "headline": headline,
         "paragraphs": paragraphs,
         "method": ("Composed mechanically from the same daily closes, with fixed "
-                   "thresholds for each phrase — a description of what moved, not "
+                   "thresholds for each phrase. A description of what moved, not "
                    "a view on why it moved, and not written by a model. The wire "
                    "window runs from the previous session's close, so a Monday "
                    "read covers the whole weekend rather than a fixed 36 hours."),
@@ -661,9 +661,9 @@ def _headline(spy_day: Optional[float], breadth: Optional[float],
     else:
         base = "Higher, but narrowly" if up else "Lower, but narrowly"
     if tech_avg is not None and abs(tech_avg) > abs(spy_day) * 1.8 and tech_avg * spy_day > 0:
-        base += " — megacap technology doing the work"
+        base += ". Megacap technology doing the work"
     elif tech_avg is not None and tech_avg * spy_day < 0:
-        base += " — megacap technology going the other way"
+        base += ". Megacap technology going the other way"
     return base
 
 
@@ -713,7 +713,7 @@ def build(yf_provider, day: Optional[str] = None) -> Dict[str, Any]:
         "wires": wires,
         "degraded_sources": degraded,
         "attribution": ("Headlines link to the publisher. Optic Terminal shows the "
-                        "headline, source and time only — follow the link to read "
+                        "headline, source and time only. Follow the link to read "
                         "the article at its source."),
     }
     _save(key, payload)

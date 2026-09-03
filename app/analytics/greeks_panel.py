@@ -140,25 +140,25 @@ def analyse(frame: pd.DataFrame, spot: float, top_n: int = 16) -> Dict[str, Any]
     net_share_delta = call_share_delta + put_share_delta
     if net_share_delta > 0:
         delta_read = (
-            "Open interest carries net long delta of {:,.0f} share-equivalents — positioning leans long."
+            "Open interest carries net long delta of {:,.0f} share-equivalents. Positioning leans long."
         ).format(net_share_delta)
     else:
         delta_read = (
-            "Open interest carries net short delta of {:,.0f} share-equivalents — positioning leans short."
+            "Open interest carries net short delta of {:,.0f} share-equivalents. Positioning leans short."
         ).format(abs(net_share_delta))
 
     if near_share is not None and near_share > 35:
         gamma_read = (
-            "{:.0f}% of chain gamma sits within 2% of spot — strong pinning pressure into expiry; "
+            "{:.0f}% of chain gamma sits within 2% of spot. Strong pinning pressure into expiry; "
             "expect chop and mean reversion unless a catalyst forces the issue.".format(near_share)
         )
     elif near_share is not None and near_share < 15:
         gamma_read = (
-            "Only {:.0f}% of chain gamma is near spot — little pinning, so price can travel freely "
+            "Only {:.0f}% of chain gamma is near spot. Little pinning, so price can travel freely "
             "between levels.".format(near_share)
         )
     else:
-        gamma_read = "Gamma is moderately distributed around spot — normal hedging behavior."
+        gamma_read = "Gamma is moderately distributed around spot. Normal hedging behavior."
 
     return {
         "spot": _f(spot),
@@ -210,7 +210,7 @@ def analyse(frame: pd.DataFrame, spot: float, top_n: int = 16) -> Dict[str, Any]
         "second_order": {
             "net_vanna": _f(float((frame["vanna"] * oi * 100.0).sum()), 2),
             "net_charm": _f(float((frame["charm"] * oi * 100.0).sum()), 2),
-            "note": "Vanna links spot to IV moves; charm is delta decay into expiry — both drive "
+            "note": "Vanna links spot to IV moves; charm is delta decay into expiry. Both drive "
             "drift around monthly opex.",
         },
     }

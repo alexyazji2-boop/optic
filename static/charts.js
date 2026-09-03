@@ -1791,7 +1791,7 @@ function rotationChart(sectors, opts = {}) {
     const hit = s('circle', { cx: X(last.strength), cy: Y(last.momentum), r: 14,
       fill: 'transparent', style: 'cursor:pointer' });
     hit.addEventListener('mouseenter', (evt) => showTip(tipRows(
-      `${sec.symbol} — ${sec.name}`, [
+      `${sec.symbol} · ${sec.name}`, [
         ['Quadrant', sec.quadrant],
         ['Relative strength', fmt(last.strength, 2)],
         ['Relative momentum', fmt(last.momentum, 2)],
@@ -1889,7 +1889,7 @@ function bubbleChart(points, opts = {}) {
         stroke: C.surface, 'stroke-width': 1.5, style: 'cursor:pointer',
       });
       dot.addEventListener('mouseenter', (evt) => showTip(tipRows(
-        `${p.label}${p.name ? ' — ' + p.name : ''}`, [
+        `${p.label}${p.name ? ' · ' + p.name : ''}`, [
           [opts.xLabel || 'x', fmt(p.x, 2) + (opts.xUnit === '%' ? '%' : '')],
           [opts.yLabel || 'y', fmt(p.y, 2) + (opts.yUnit === '%' ? '%' : '')],
           ['Size', fmtCompact(p.size, 1)],

@@ -67,14 +67,14 @@ NICHE: List[Dict[str, str]] = [
 # Classic macro-expression pairs. Each is a ratio whose z-score gives both a
 # regime read and a mean-reversion entry.
 PAIRS: List[Dict[str, str]] = [
-    {"long": "XLY", "short": "XLP", "thesis": "Discretionary over staples — consumer risk appetite"},
-    {"long": "SMH", "short": "SPY", "thesis": "Semis over market — the classic tech-cycle tell"},
-    {"long": "XLF", "short": "XLU", "thesis": "Financials over utilities — rising-rate / cyclical bet"},
-    {"long": "IWM", "short": "SPY", "thesis": "Small over large — breadth and domestic growth"},
-    {"long": "XLE", "short": "XLK", "thesis": "Energy over tech — inflation / value rotation"},
-    {"long": "XLI", "short": "XLP", "thesis": "Industrials over staples — cyclical expansion"},
-    {"long": "GDX", "short": "SPY", "thesis": "Miners over market — debasement / fear hedge"},
-    {"long": "IGV", "short": "XLF", "thesis": "Software over banks — duration / disinflation bet"},
+    {"long": "XLY", "short": "XLP", "thesis": "Discretionary over staples. Consumer risk appetite"},
+    {"long": "SMH", "short": "SPY", "thesis": "Semis over market. The classic tech-cycle tell"},
+    {"long": "XLF", "short": "XLU", "thesis": "Financials over utilities. Rising-rate / cyclical bet"},
+    {"long": "IWM", "short": "SPY", "thesis": "Small over large. Breadth and domestic growth"},
+    {"long": "XLE", "short": "XLK", "thesis": "Energy over tech. Inflation / value rotation"},
+    {"long": "XLI", "short": "XLP", "thesis": "Industrials over staples. Cyclical expansion"},
+    {"long": "GDX", "short": "SPY", "thesis": "Miners over market. Debasement / fear hedge"},
+    {"long": "IGV", "short": "XLF", "thesis": "Software over banks. Duration / disinflation bet"},
 ]
 
 
@@ -139,16 +139,16 @@ def _breakout_read(snap: Dict[str, Any]) -> Dict[str, Any]:
 
     if squeeze is not None and squeeze <= 25:
         score += 25
-        reasons.append("Bollinger bandwidth in the {:.0f}th percentile — coiled".format(squeeze))
+        reasons.append("Bollinger bandwidth in the {:.0f}th percentile. Coiled".format(squeeze))
     elif squeeze is not None and squeeze <= 45:
         score += 10
 
     if rsi_v is not None and 52 <= rsi_v <= 68:
         score += 15
-        reasons.append("RSI {:.0f} — momentum without exhaustion".format(rsi_v))
+        reasons.append("RSI {:.0f}. Momentum without exhaustion".format(rsi_v))
     elif rsi_v is not None and rsi_v > 75:
         score -= 15
-        reasons.append("RSI {:.0f} already extended — chase risk".format(rsi_v))
+        reasons.append("RSI {:.0f} already extended. Chase risk".format(rsi_v))
 
     if vol_ratio is not None and vol_ratio > 1.25:
         score += 10
@@ -235,19 +235,19 @@ def _pair_rows(frames: Dict[str, pd.DataFrame]) -> List[Dict[str, Any]]:
         # Two honest ways to trade a ratio: ride the trend, or fade a stretch.
         # Say which one the current reading supports instead of picking one.
         if z >= 2:
-            setup = "stretched — mean-reversion short of the ratio (fade {} vs {})".format(
+            setup = "stretched. Mean-reversion short of the ratio (fade {} vs {})".format(
                 spec["long"], spec["short"]
             )
         elif z <= -2:
-            setup = "stretched — mean-reversion long of the ratio (buy {} vs {})".format(
+            setup = "stretched. Mean-reversion long of the ratio (buy {} vs {})".format(
                 spec["long"], spec["short"]
             )
         elif above_50 and (trend_20 or 0) > 1:
-            setup = "trending — momentum long {} / short {}".format(spec["long"], spec["short"])
+            setup = "trending. Momentum long {} / short {}".format(spec["long"], spec["short"])
         elif above_50 is False and (trend_20 or 0) < -1:
-            setup = "trending — momentum long {} / short {}".format(spec["short"], spec["long"])
+            setup = "trending. Momentum long {} / short {}".format(spec["short"], spec["long"])
         else:
-            setup = "no edge — ratio is range-bound near its mean"
+            setup = "no edge. Ratio is range-bound near its mean"
 
         rows.append(
             {
@@ -296,16 +296,16 @@ def _equal_weight_breadth(provider) -> Dict[str, Any]:
 
     if chg_63 is not None and chg_63 < -2:
         note = (
-            "Equal-weight lagging cap-weight by {:.1f}% over 3 months — the index is being carried "
+            "Equal-weight lagging cap-weight by {:.1f}% over 3 months. The index is being carried "
             "by its largest names. Concentration risk.".format(abs(chg_63))
         )
     elif chg_63 is not None and chg_63 > 2:
         note = (
-            "Equal-weight outperforming by {:.1f}% over 3 months — broad participation, "
+            "Equal-weight outperforming by {:.1f}% over 3 months. Broad participation, "
             "a healthier advance.".format(chg_63)
         )
     else:
-        note = "Equal-weight roughly tracking cap-weight — no unusual concentration."
+        note = "Equal-weight roughly tracking cap-weight. No unusual concentration."
 
     return {
         "rsp_spy_ratio": _f(line.iloc[-1], 5),
@@ -341,11 +341,11 @@ def analyse(provider) -> Dict[str, Any]:
     breadth_50 = round(len(above_50) / max(len(sector_rows), 1) * 100.0, 1)
 
     if breadth_200 >= 70:
-        breadth_note = "Broad participation — {:.0f}% of sectors above their 200-day. Breakouts have follow-through.".format(breadth_200)
+        breadth_note = "Broad participation: {:.0f}% of sectors above their 200-day. Breakouts have follow-through.".format(breadth_200)
     elif breadth_200 >= 45:
-        breadth_note = "Mixed participation ({:.0f}% above 200-day) — leadership is narrowing, be selective.".format(breadth_200)
+        breadth_note = "Mixed participation ({:.0f}% above 200-day). Leadership is narrowing, be selective.".format(breadth_200)
     else:
-        breadth_note = "Narrow tape — only {:.0f}% of sectors above their 200-day. Long setups are fighting the current.".format(breadth_200)
+        breadth_note = "Narrow tape, only {:.0f}% of sectors above their 200-day. Long setups are fighting the current.".format(breadth_200)
 
     breakouts = sorted(
         [r for r in sector_rows + theme_rows + niche_rows if r["breakout_score"] >= 45],
@@ -382,7 +382,7 @@ def analyse(provider) -> Dict[str, Any]:
             {
                 "long": strongest[0]["symbol"],
                 "short": weakest[0]["symbol"],
-                "note": "Highest-RS sector against the lowest — the cleanest expression of the current rotation.",
+                "note": "Highest-RS sector against the lowest. The cleanest expression of the current rotation.",
             }
             if strongest and weakest
             else None

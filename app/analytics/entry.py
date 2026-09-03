@@ -175,7 +175,7 @@ def iv_context(
         if premium_ratio >= 1.35:
             verdict = "rich"
             guidance = (
-                "Implied vol is {:.0f}% of realized — options are pricing more movement than the stock "
+                "Implied vol is {:.0f}% of realized. Options are pricing more movement than the stock "
                 "has been delivering. Prefer spreads or credit structures over outright long premium.".format(premium_ratio * 100)
             )
         elif premium_ratio >= 1.1:
@@ -186,11 +186,11 @@ def iv_context(
             )
         elif premium_ratio >= 0.9:
             verdict = "fair"
-            guidance = "Implied and realized vol are aligned — no vol edge either way; trade the direction."
+            guidance = "Implied and realized vol are aligned. No vol edge either way; trade the direction."
         else:
             verdict = "cheap"
             guidance = (
-                "Implied vol sits below realized — the market is underpricing recent movement. "
+                "Implied vol sits below realized. The market is underpricing recent movement. "
                 "This favors buying premium outright over selling it."
             )
 
@@ -198,12 +198,12 @@ def iv_context(
     if front is not None and back is not None:
         if front > back * 1.08:
             term = (
-                "Front-month IV ({:.1f}%) above back-month ({:.1f}%) — inverted term structure, typically an "
+                "Front-month IV ({:.1f}%) above back-month ({:.1f}%). Inverted term structure, typically an "
                 "event or earnings bid. Front-dated long premium will get crushed once it passes.".format(front * 100, back * 100)
             )
         elif back > front * 1.08:
             term = (
-                "Normal upward term structure ({:.1f}% front vs {:.1f}% back) — no event premium in the front month.".format(
+                "Normal upward term structure ({:.1f}% front vs {:.1f}% back). No event premium in the front month.".format(
                     front * 100, back * 100
                 )
             )
@@ -216,16 +216,16 @@ def iv_context(
     if proxy_rank is not None:
         if proxy_rank >= 70:
             rank_guidance = (
-                "IV rank (proxy) {:.0f} — implied vol is high versus this stock's own trailing-year vol range. "
+                "IV rank (proxy) {:.0f}. Implied vol is high versus this stock's own trailing-year vol range. "
                 "Selling premium is more favourably priced than buying it right now.".format(proxy_rank)
             )
         elif proxy_rank <= 30:
             rank_guidance = (
-                "IV rank (proxy) {:.0f} — implied vol is low versus this stock's own trailing-year vol range. "
+                "IV rank (proxy) {:.0f}. Implied vol is low versus this stock's own trailing-year vol range. "
                 "Buying premium is relatively cheap right now.".format(proxy_rank)
             )
         else:
-            rank_guidance = "IV rank (proxy) {:.0f} — implied vol sits mid-range versus this stock's own trailing-year vol history.".format(proxy_rank)
+            rank_guidance = "IV rank (proxy) {:.0f}. Implied vol sits mid-range versus this stock's own trailing-year vol history.".format(proxy_rank)
 
     return {
         "available": True,
@@ -533,7 +533,7 @@ def build_plan(
         return {
             "actionable": False,
             "stance": stance,
-            "headline": "No directional entry justified — the inputs disagree.",
+            "headline": "No directional entry justified. The inputs disagree.",
             "reasoning": [
                 "The composite sits at {:+.0f}, inside the neutral band, so a directional option is a "
                 "coin flip paying theta for the privilege.".format((verdict or {}).get("composite_score") or 0),
@@ -640,7 +640,7 @@ def build_plan(
         order = {
             "limit_price": limit,
             "never_pay_more_than": round(mid + (ask - mid) * 0.5, 2) if ask > mid else mid,
-            "note": "Place a limit order at {}, just above the mid price of {} — the midpoint "
+            "note": "Place a limit order at {}, just above the mid price of {}. The midpoint "
             "between the best bid and the best ask. The bid/ask spread is {}% of that mid, "
             "which is {}".format(
                 _usd(limit), _usd(mid), _f(best["spread_pct"], 1),
@@ -656,7 +656,7 @@ def build_plan(
     days_to_earnings = (news or {}).get("days_to_earnings")
     if days_to_earnings is not None and 0 <= days_to_earnings <= 10:
         warnings.append(
-            "Earnings in {} day{} — buying premium now means paying event vol and eating the post-print crush. "
+            "Earnings in {} day{}. Buying premium now means paying event vol and eating the post-print crush. "
             "Either size for a binary event or wait until after the report.".format(
                 days_to_earnings, "" if days_to_earnings == 1 else "s"
             )
@@ -671,7 +671,7 @@ def build_plan(
         near_flip = abs(spot / flip - 1.0) * 100.0
         if near_flip < 1.0:
             warnings.append(
-                "Spot is within {:.1f}% of the gamma flip at {} — the hedging regime can invert on a small "
+                "Spot is within {:.1f}% of the gamma flip at {}. The hedging regime can invert on a small "
                 "move, so expect whipsaw around this level.".format(near_flip, _f(flip, 2))
             )
     if best and best["dte"] and best["dte"] < 21:
@@ -735,7 +735,7 @@ def build_plan(
             "invalidation": "Close beyond the stop, loss of the entry zone on a closing basis, or a flip "
             "in the dealer gamma regime.",
             "position_sizing": "Max loss is the full premium. Size so that a total loss is a fraction of "
-            "the account you are willing to repeat — the allocation decision is yours.",
+            "the account you are willing to repeat. The allocation decision is yours.",
         },
         "warnings": warnings,
         "iv_context": ivc,

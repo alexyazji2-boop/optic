@@ -55,7 +55,7 @@ SERIES: Dict[str, Dict[str, Any]] = {
                  "note": "The Fed's actual target measure, and not the one the "
                          "headlines lead with. Excludes food and energy."},
     "PPIFIS": {"label": "PPI, final demand", "form": "yoy", "unit": "%",
-               "note": "Producer prices. Sometimes leads CPI, often does not — the "
+               "note": "Producer prices. Sometimes leads CPI, often does not. The "
                        "pass-through is weaker than it is usually claimed to be."},
     "T10YIE": {"label": "10-year breakeven", "form": "level", "unit": "%",
                "note": "What the bond market expects inflation to average over ten "
@@ -65,7 +65,7 @@ SERIES: Dict[str, Dict[str, Any]] = {
                        "the monthly change is the release."},
     "UNRATE": {"label": "Unemployment rate", "form": "level", "unit": "%",
                "note": "The level is the point. Read it with the participation "
-                       "rate — unemployment can fall because people stopped looking."},
+                       "rate. Unemployment can fall because people stopped looking."},
     "ICSA": {"label": "Initial jobless claims", "form": "level", "unit": "k",
              "note": "Weekly, so it is the highest-frequency labour reading there "
                      "is. Noisy week to week; the four-week trend is the signal."},
@@ -86,7 +86,7 @@ SERIES: Dict[str, Dict[str, Any]] = {
                       "real volumes fall."},
     "UMCSENT": {"label": "Consumer sentiment", "form": "level", "unit": "",
                 "note": "A survey. Has been a poor predictor of actual spending "
-                        "for some years — people report gloom and keep buying."},
+                        "for some years. People report gloom and keep buying."},
     "HOUST": {"label": "Housing starts", "form": "level", "unit": "k",
               "note": "Rate-sensitive and early. One of the few series that turns "
                       "before the cycle does."},
@@ -100,13 +100,13 @@ SERIES: Dict[str, Dict[str, Any]] = {
                       "multiples argue with this number more than with any other."},
     "T10Y2Y": {"label": "10y minus 2y spread", "form": "level", "unit": "%",
                "note": "The classic curve. Below zero is inversion, which has "
-                       "preceded recessions with long and inconsistent lags — the "
+                       "preceded recessions with long and inconsistent lags. The "
                        "signal is real, the timing is not."},
     "MORTGAGE30US": {"label": "30-year mortgage", "form": "level", "unit": "%",
                      "note": "Where policy meets the household."},
     "BAMLH0A0HYM2": {"label": "High-yield spread", "form": "level", "unit": "%",
                      "note": "What junk borrowers pay over Treasuries. The cleanest "
-                             "single measure of financial stress on this list — it "
+                             "single measure of financial stress on this list. It "
                              "widens before equities fall."},
     "M2SL": {"label": "M2 money supply", "form": "yoy", "unit": "%",
              "note": "Plotted year over year. The level rises forever; the growth "
@@ -253,7 +253,7 @@ def catalogue() -> Dict[str, Any]:
             for g in GROUPS
         ],
         "count": len(SERIES),
-        "note": ("Every series is plotted in the form that is actually read — CPI "
+        "note": ("Every series is plotted in the form that is actually read. CPI "
                  "year over year, payrolls as the monthly change, unemployment as "
                  "a level. Applying one rule to all of them is how an economic "
                  "chart ends up technically correct and useless."),

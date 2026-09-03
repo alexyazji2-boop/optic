@@ -105,8 +105,8 @@ def _rotation(spread_fast: Optional[float],
 
     if fast >= band and slow >= band:
         state, label = "in", "Rotating in"
-        note = ("Ahead of the index over both the past week and the past month — "
-                "money has been moving here, not just visiting.")
+        note = ("Ahead of the index over both the past week and the past month . "
+                "Money has been moving here, not just visiting.")
     elif fast <= -band and slow <= -band:
         state, label = "out", "Rotating out"
         note = ("Behind the index over both windows, which is money leaving rather "
@@ -118,7 +118,7 @@ def _rotation(spread_fast: Optional[float],
                 "week cannot tell those apart.")
     elif fast <= -band and slow >= band:
         state, label = "turning", "Turning down"
-        note = ("Behind this week after leading over the month — leadership may be "
+        note = ("Behind this week after leading over the month. Leadership may be "
                 "handing over, or this may be an ordinary pause.")
     else:
         state, label = "neutral", "In line"
@@ -136,10 +136,10 @@ def _summary(trend: str, bull_above: float, bear_below: float) -> str:
     read is still loading, or when the assistant is switched off entirely.
     """
     if trend == "uptrend":
-        return ("Above prior session high — bulls want price to hold above "
+        return ("Above prior session high. Bulls want price to hold above "
                 "{:,.2f}.".format(bull_above))
     if trend == "downtrend":
-        return ("Below prior session low — bears want price to stay under "
+        return ("Below prior session low. Bears want price to stay under "
                 "{:,.2f}.".format(bear_below))
     return "Inside prior session range ({:,.2f} – {:,.2f}).".format(bear_below, bull_above)
 
@@ -230,12 +230,12 @@ def build(provider, entries: Optional[List[Dict[str, str]]] = None) -> Dict[str,
         },
         "method": (
             "Bull above and bear below are the prior completed session's high and "
-            "low — the two prices the overnight and pre-market session traded "
+            "low. The two prices the overnight and pre-market session traded "
             "against. Above the high is an overnight uptrend, below the low a "
             "downtrend, between them undecided. There is no futures feed behind "
             "this: the levels come from regular-session daily bars, and the label "
             "describes what the level is rather than claiming to have watched the "
-            "overnight tape. Rotation is separate and relative — the sector's "
+            "overnight tape. Rotation is separate and relative. The sector's "
             "return against {}'s over {} and {} sessions, needing both windows to "
             "agree before it counts as anything.".format(
                 BENCHMARK, ROTATION_FAST, ROTATION_SLOW)

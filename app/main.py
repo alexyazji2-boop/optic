@@ -114,7 +114,7 @@ async def healthz() -> Dict[str, bool]:
 async def _warn_if_open_and_paid() -> None:
     if ai.available().get("enabled"):
         logging.getLogger("uvicorn.error").warning(
-            "Pulse is enabled and this server has no access control — anyone who "
+            "Pulse is enabled and this server has no access control. Anyone who "
             "can reach the URL can spend Anthropic credits via /api/chat and "
             "/api/research. Unset ANTHROPIC_API_KEY, or put the server behind "
             "access control, if that isn't intended."
@@ -208,7 +208,7 @@ def _swing_snapshot(
             greeks_read = greeks_panel.analyse(exposure, spot)
         flow_read = flow_mod.analyse(chain, spot)
     else:
-        note = "No options chain available for {} — equity/technical analysis only.".format(ticker)
+        note = "No options chain available for {}. Equity/technical analysis only.".format(ticker)
         gex_read = {"error": note}
         flow_read = {"error": note}
         greeks_read = {"error": note}
@@ -437,7 +437,7 @@ async def earnings_brief(ticker: str) -> Dict[str, Any]:
             status = ai.available()
             return {"available": False,
                     "reason": ("The assistant is not configured, so there is no written "
-                               "brief — every figure it would discuss is on the panel above."
+                               "brief. Every figure it would discuss is on the panel above."
                                if status.get("enabled") is not True else
                                "The brief could not be written on this attempt. The panel's "
                                "own numbers are unaffected.")}
@@ -579,8 +579,8 @@ async def symbol_search(
 
 @app.get("/api/legal")
 async def legal_notice() -> Dict[str, Any]:
-    """The disclosures. Its own endpoint so a client consuming the JSON directly —
-    which is where the strike recommendations and the simulated ledger live — can
+    """The disclosures. Its own endpoint so a client consuming the JSON directly.
+    Which is where the strike recommendations and the simulated ledger live — can
     surface them without scraping the page."""
     return legal.notice()
 
@@ -740,7 +740,7 @@ async def tracker_scan(request: Request,
         if raw:
             tickers = [str(t).upper().strip() for t in raw][:40]
     if _SCAN_LOCK.locked() or paper.progress().get("running"):
-        raise HTTPException(status_code=409, detail="A scan is already running — watch its progress above.")
+        raise HTTPException(status_code=409, detail="A scan is already running. Watch its progress above.")
 
     # Publish "running" before returning, not from inside the task: otherwise the
     # response says the scan isn't running and a UI that trusts that reply shows
@@ -990,7 +990,7 @@ async def intraday(ticker: str, range: str = Query("1d")) -> Dict[str, Any]:
     spec = INTRADAY_SPECS.get((range or "").lower())
     if not spec:
         return {"available": False,
-                "reason": "Unknown range {!r} — expected 1d or 5d.".format(range)}
+                "reason": "Unknown range {!r}. Expected 1d or 5d.".format(range)}
 
     def build() -> Dict[str, Any]:
         symbol = ticker.upper().strip()
@@ -1081,8 +1081,8 @@ async def sector_read(symbol: str) -> Dict[str, Any]:
         if not read:
             return {"available": False, "symbol": sym,
                     "summary": (facts.get("row") or {}).get("summary"),
-                    "reason": ("The assistant is not configured, so there is no written read — "
-                               "the levels and rotation on the board are unaffected."
+                    "reason": ("The assistant is not configured, so there is no written read . "
+                               "The levels and rotation on the board are unaffected."
                                if ai.available().get("enabled") is not True else
                                "The read could not be written on this attempt.")}
         read["row"] = facts.get("row")
@@ -1361,11 +1361,16 @@ async def forex_panel(q: str = Query("", max_length=40)) -> Dict[str, Any]:
 
 
 @app.get("/api/stockmap")
-async def stockmap(template: str = Query("sector-month",
-                                         max_length=40)) -> Dict[str, Any]:
-    """A screen laid out as a treemap or a bubble chart."""
+async def stockmap(template: str = Query("sector-month", max_length=40),
+                   sector: Optional[str] = Query(None, max_length=8)) -> Dict[str, Any]:
+    """A screen laid out as a treemap or a bubble chart.
+
+    `sector` drills into one fund's largest holdings, which is what clicking a
+    sector tile asks for. The template is unchanged by the drill, so whatever
+    was being measured stays measured one level down.
+    """
     def build() -> Dict[str, Any]:
-        out = stockmaps_mod.build(YF_PROVIDER, template)
+        out = stockmaps_mod.build(YF_PROVIDER, template, sector=sector)
         out["generated_at"] = datetime.now(timezone.utc).isoformat()
         return out
     return await _run(build)
@@ -1595,8 +1600,8 @@ async def pattern_base_rates(force: bool = Query(False)) -> Dict[str, Any]:
     """Measured base rates for each pattern.
 
     Cached on disk for a month. The full build walks 43 names over ten years of
-    daily bars detecting candles bar by bar, which takes about ninety seconds —
-    far too slow to sit in a page load, and the numbers move so slowly that a
+    daily bars detecting candles bar by bar, which takes about ninety seconds.
+    Far too slow to sit in a page load, and the numbers move so slowly that a
     stale month is not a meaningful staleness.
     """
     def build() -> Dict[str, Any]:
@@ -1761,11 +1766,11 @@ def _screen_candidates(limit: int = 8) -> Optional[Dict[str, Any]]:
             "date so criteria like \"small tech company reporting soon\" can actually be "
             "filtered rather than guessed. Any of those fields may be absent for a "
             "given name; absent means unknown, not zero. These are "
-            "the technical metrics the screen computed — price versus its 20/50/200-day "
+            "the technical metrics the screen computed. Price versus its 20/50/200-day "
             "averages, rate of change, where price sits in its range, volume expansion "
             "and ATR. There is NO option chain, gamma, flow or news here: those need a "
             "per-symbol fetch. Do not state contract prices, greeks, IV, gamma levels or "
-            "flow figures for these names — say the name needs loading for that."
+            "flow figures for these names. Say the name needs loading for that."
         ),
     }
 
@@ -1836,8 +1841,8 @@ async def _augment_chat_context(history: List[Dict[str, Any]],
 
     Pulse only ever saw whatever the browser happened to have on screen, so asking
     "what is NVDA's gamma saying" from the home tab shipped `{"active_view":
-    "home"}` and the honest answer was "I cannot see that". Correct, and useless —
-    the terminal *can* compute it, nobody had pressed the button.
+    "home"}` and the honest answer was "I cannot see that". Correct, and useless.
+    The terminal *can* compute it, nobody had pressed the button.
 
     So the server now fetches it. The reader asks about a ticker, the analysis is
     built server-side and handed to the model as context. Note this deliberately

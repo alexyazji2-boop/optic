@@ -153,7 +153,7 @@ def nasdaq_symbols(force: bool = False) -> Dict[str, Any]:
             if cached:
                 return {
                     **cached,
-                    "source": "NASDAQ symbol directory (stale cache from {} — refresh "
+                    "source": "NASDAQ symbol directory (stale cache from {}. Refresh "
                               "failed: {})".format(cached.get("fetched_on"), exc),
                     "stale": True,
                 }
@@ -161,7 +161,7 @@ def nasdaq_symbols(force: bool = False) -> Dict[str, Any]:
                 "symbols": list(FALLBACK_SYMBOLS),
                 "fetched_on": None,
                 "count": len(FALLBACK_SYMBOLS),
-                "source": "built-in large-cap fallback — the NASDAQ directory could not be "
+                "source": "built-in large-cap fallback. The NASDAQ directory could not be "
                           "reached ({}), so this is NOT the whole exchange".format(exc),
                 "degraded": True,
             }

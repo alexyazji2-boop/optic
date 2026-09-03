@@ -139,7 +139,7 @@ def history_band(provider, ticker: str, financials: Dict[str, Any],
             "EPS for that year against the average closing price across it. The "
             "average rather than the year-end close, because a single date makes the "
             "multiple a function of one week's price action. Loss-making years are "
-            "listed but excluded — a negative P/E is not a cheap one. Trailing only: "
+            "listed but excluded. A negative P/E is not a cheap one. Trailing only: "
             "a historical forward multiple would need the consensus estimate as it "
             "stood then, which this tool does not keep."
         ),
@@ -189,7 +189,7 @@ def revenue_and_multiple(financials: Dict[str, Any],
     rows.reverse()
     if len(rows) < 2:
         return {"available": False,
-                "reason": "Fewer than two fiscal years of revenue — nothing to compare."}
+                "reason": "Fewer than two fiscal years of revenue. Nothing to compare."}
 
     first, last = rows[0]["revenue"], rows[-1]["revenue"]
     growth = ((last / first) ** (1.0 / max(len(rows) - 1, 1)) - 1.0) * 100.0 if first > 0 else None
@@ -213,7 +213,7 @@ def revenue_and_multiple(financials: Dict[str, Any],
         "years_with_pe": len(with_pe),
         "method": (
             "Revenue is the company's own reported annual figure. The multiple is "
-            "the trailing P/E for that fiscal year — its diluted EPS against the "
+            "the trailing P/E for that fiscal year. Its diluted EPS against the "
             "average closing price across the year, not the year-end close, so one "
             "volatile December cannot define the whole year. Only {} fiscal years "
             "are available: free fundamentals stop there, and four points can show "

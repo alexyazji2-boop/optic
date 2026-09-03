@@ -18,7 +18,7 @@ from typing import Any, Dict
 
 # The one-line version, for footers and dense panels.
 SHORT = (
-    "Not financial advice. For research and education only — you are responsible "
+    "Not financial advice. For research and education only. You are responsible "
     "for your own decisions."
 )
 
@@ -68,7 +68,7 @@ AREAS: Dict[str, str] = {
         "exposure."
     ),
     "retirement": (
-        "A rules-based illustration for comparison against your own plan — not "
+        "A rules-based illustration for comparison against your own plan, not "
         "retirement, investment or tax advice. It is not tailored to your income, tax "
         "situation, other accounts or goals, and contribution limits and eligibility "
         "change. Confirm current rules with the IRS and a licensed professional."

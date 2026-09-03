@@ -16,8 +16,8 @@ reader gets it. See app/legal.py for how that's surfaced.
 
 **One dead feed must never break the brief.** Sources go down, rename their
 paths, and rate-limit. Every fetch is individually wrapped, failures are recorded
-rather than raised, and the brief renders with whatever legs are standing —
-saying which ones aren't.
+rather than raised, and the brief renders with whatever legs are standing.
+Saying which ones aren't.
 
 Parsing is stdlib ElementTree rather than feedparser, to avoid a dependency for
 what is two element names. Both dialects are handled because the sources are
@@ -255,8 +255,8 @@ def _fetch(url: str, accept: str, user_agent: Optional[str] = None) -> bytes:
 def cached_json(key: str) -> Any:
     """Any cached copy for this key, however old, or None.
 
-    For sources that fail hard and change slowly. SEC rate-limits aggressively —
-    a burst of requests earns a 403 for a while — and eighteen years of filed
+    For sources that fail hard and change slowly. SEC rate-limits aggressively.
+    A burst of requests earns a 403 for a while — and eighteen years of filed
     quarterly results do not go stale in a day. Serving the last good copy is
     strictly better than dropping the feature, provided the caller says so.
     """
@@ -497,8 +497,8 @@ def dedupe(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 """8-K item codes.
 
 This table is why company news in the brief comes from EDGAR rather than a wire.
-An item code is the filer's own statement of what the filing is about — the
-company saying "this is a results release" or "this is a merger agreement" — so
+An item code is the filer's own statement of what the filing is about. The
+company saying "this is a results release" or "this is a merger agreement". So
 categorising on it involves no guesswork about someone's headline.
 
 `weight` orders the section. 9.01 is deliberately weightless: it is the exhibit

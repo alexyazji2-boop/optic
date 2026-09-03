@@ -1,8 +1,8 @@
 """Cheap first-pass screen over a large universe.
 
 The Tracker's real verdict is the full swing composite, which needs a quote, two
-years of history, an options chain across four expiries, news and fundamentals —
-roughly four seconds a symbol. Running that over ~3,000 NASDAQ listings would
+years of history, an options chain across four expiries, news and fundamentals.
+Roughly four seconds a symbol. Running that over ~3,000 NASDAQ listings would
 take hours per scan and would get the free data feed to throttle us.
 
 So the scan is a funnel. This module is the wide end: one batched download per
@@ -353,7 +353,7 @@ def run(provider, symbols: Sequence[str], top_n: int = 30,
         "ranking_reused": bool(fresh and not force),
         "top_n": top_n,
         "caveat": "This is a price-and-volume prefilter, not the terminal's verdict. It "
-                  "sees no options positioning, no news and no fundamentals — its only job "
+                  "sees no options positioning, no news and no fundamentals. Its only job "
                   "is to choose which names get the full analysis, and a name can rank "
                   "first here and still be rejected outright by it.",
     })

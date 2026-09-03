@@ -278,7 +278,7 @@ def build(snapshot_fn, longterm_fn, tickers: List[str]) -> Dict[str, Any]:
         "failed": failed,
         "method": (
             "Every figure is computed the same way at the same moment for each "
-            "name, which is the point — comparing a number from one tab against a "
+            "name, which is the point. Comparing a number from one tab against a "
             "same-named number from another risks comparing different lookbacks. "
             "The three horizons are ranked separately because a name can be the "
             "best swing setup and the worst multi-year hold; that is not a "

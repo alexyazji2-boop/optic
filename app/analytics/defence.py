@@ -115,8 +115,8 @@ def evaluate(spot: Optional[float], direction: Optional[str],
             "direction": defending,
             "must_hold": None,
             "note": ("Price is already on the wrong side of every level that defines "
-                     "this trend, so there is nothing left to defend into the close — "
-                     "the trend read itself is what has changed."),
+                     "this trend, so there is nothing left to defend into the close . "
+                     "The trend read itself is what has changed."),
             "minutes_to_close": minutes_to_close(now),
             "levels": clean,
         }
@@ -146,7 +146,7 @@ def evaluate(spot: Optional[float], direction: Optional[str],
         "method": (
             "Moving averages, pivots and value areas are all defined on closing "
             "prices, so an intraday poke through them decides nothing. This is the "
-            "nearest level on the side price is defending — the one a closing print "
+            "nearest level on the side price is defending. The one a closing print "
             "reaches first. Levels on the other side of price are resistance, not "
             "defence, and are excluded."
         ),
@@ -237,7 +237,7 @@ def for_longterm(holding: Dict[str, Any]) -> Dict[str, Any]:
         {"label": "40-week average", "price": _num(trend.get("sma_40w")),
          "breaks": "the multi-quarter uptrend (the weekly 200-day equivalent)"},
         {"label": "200-week average", "price": _num(trend.get("sma_200w")),
-         "breaks": "the multi-year trend — the line that separates bull from bear regimes"},
+         "breaks": "the multi-year trend. The line that separates bull from bear regimes"},
     ]
     for zone in (holding.get("accumulation_zones") or []):
         candidates.append({
@@ -251,6 +251,6 @@ def for_longterm(holding: Dict[str, Any]) -> Dict[str, Any]:
     # Weekly averages move on Friday's close, not tonight's.
     out["cadence_note"] = (
         "Weekly averages are set by Friday's close, so a single day through one of "
-        "these is not yet a break — the level that matters is where the week ends."
+        "these is not yet a break. The level that matters is where the week ends."
     )
     return out

@@ -414,8 +414,8 @@ def size_option(premium: float, equity: float,
                 "risk_dollars": _f(per_contract, 2),
                 "notional": _f(per_contract, 2),
                 "reason": None,
-                "note": "one contract costs {:.1f}% of equity, above the usual {:.1f}% budget — "
-                        "taken as a single contract so the ledger doesn't silently skip "
+                "note": "one contract costs {:.1f}% of equity, above the usual {:.1f}% budget . "
+                        "Taken as a single contract so the ledger doesn't silently skip "
                         "expensive recommendations".format(
                             per_contract / equity * 100.0, budget / equity * 100.0),
             }
@@ -736,12 +736,12 @@ def consider_ticker(snapshot: Dict[str, Any], equity: float,
     # describe does not exist here.
     if not long and target <= 0:
         return [], ["{}: the stop sits {:.0f}% above the entry, so a 2:1 target lands at "
-                    "{:.2f} — below zero and unreachable. No short taken.".format(
+                    "{:.2f}. Below zero and unreachable. No short taken.".format(
                         ticker, 100 * risk_per_share / spot, target)]
 
     share_size = size_shares(spot, stop, equity, book)
     if share_size["qty"] <= 0:
-        notes.append("{}: no share leg — {}".format(ticker, share_size["reason"]))
+        notes.append("{}: no share leg: {}".format(ticker, share_size["reason"]))
     else:
         candidates.append({
             "ticker": ticker, "instrument": "shares",
@@ -766,11 +766,11 @@ def consider_ticker(snapshot: Dict[str, Any], equity: float,
     plan = snapshot.get("entry_plan") or {}
     pick = (plan.get("recommended") or {}) if plan.get("actionable") else {}
     if not pick.get("strike") or not pick.get("expiry") or not pick.get("entry_mid"):
-        notes.append("{}: no option leg — the entry plan had no quotable contract".format(ticker))
+        notes.append("{}: no option leg. The entry plan had no quotable contract".format(ticker))
     else:
         opt_size = size_option(float(pick["entry_mid"]), equity, book)
         if opt_size["qty"] <= 0:
-            notes.append("{}: no option leg — {}".format(ticker, opt_size["reason"]))
+            notes.append("{}: no option leg: {}".format(ticker, opt_size["reason"]))
         else:
             if opt_size.get("note"):
                 notes.append("{}: {}".format(ticker, opt_size["note"]))
@@ -950,7 +950,7 @@ def run_scan(snapshot_fn: Callable[[str], Dict[str, Any]], provider,
         if allow_entries is None:
             allow_entries = market_open_et()
         if not allow_entries:
-            note = ("Market is closed — positions were re-marked at the last close, but no new "
+            note = ("Market is closed. Positions were re-marked at the last close, but no new "
                     "entries were taken. A fill at a stale price isn't a trade anyone could "
                     "have got.")
             with _LOCK, _connect() as conn:
@@ -1037,7 +1037,7 @@ def run_scan(snapshot_fn: Callable[[str], Dict[str, Any]], provider,
                     notes.append("{}: snapshot failed on retry ({})".format(ticker, exc))
                     continue
             if not (snapshot.get("expiries") or {}).get("available") and _feed_throttled():
-                notes.append("{}: skipped — the data feed is still rate-limiting, so the "
+                notes.append("{}: skipped. The data feed is still rate-limiting, so the "
                              "options chain came back empty and any trade here would "
                              "misrepresent what the terminal actually recommended".format(ticker))
                 throttled_skips += 1
@@ -1081,7 +1081,7 @@ def run_scan(snapshot_fn: Callable[[str], Dict[str, Any]], provider,
                             candidate["direction"], ticker))
 
         if capped:
-            notes.append("Stopped early — {}. Remaining shortlist untouched.".format(capped))
+            notes.append("Stopped early: {}. Remaining shortlist untouched.".format(capped))
         if throttled_skips:
             notes.append("{} name(s) skipped because the data feed was rate-limiting. Nothing "
                          "was traded on incomplete data.".format(throttled_skips))
@@ -1405,7 +1405,7 @@ def state(limit: int = 60, month: Optional[str] = None,
             "Simulated trades. Fills assume the mid price, which is optimistic on a wide "
             "spread, and no commission or slippage is charged.",
             "One signal can open both a share and an option position on the same ticker. That "
-            "is deliberate — it shows how the same idea performed in each instrument — but it "
+            "is deliberate. It shows how the same idea performed in each instrument, but it "
             "means the two lines are the same bet, not two independent ones.",
             "Share stops and targets are checked against the day's high and low, so a level "
             "touched intraday counts even if price closed back inside it.",
@@ -1416,10 +1416,10 @@ def state(limit: int = 60, month: Optional[str] = None,
             "When a single recommended contract costs more than the option budget, one contract "
             "is still taken (up to {:.0f}% of equity) rather than skipping the trade. Otherwise "
             "the ledger would only ever hold cheap options and would stop matching the "
-            "recommendations it actually made — but it does mean a few positions carry more risk "
+            "recommendations it actually made. But it does mean a few positions carry more risk "
             "than the stated budget. The scan notes say which ones.".format(
                 OPTION_SINGLE_CONTRACT_CAP * 100),
-            "The screen that picks which names get analysed uses price and volume only — no "
+            "The screen that picks which names get analysed uses price and volume only. No "
             "options positioning, no news, no fundamentals. It decides what gets a closer look, "
             "not whether a trade is good. Anything it ranks first can still be rejected by the "
             "full analysis, and often is.",

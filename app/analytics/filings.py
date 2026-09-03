@@ -97,7 +97,7 @@ def recent(ticker: str, limit: int = MAX_ROWS) -> Dict[str, Any]:
     """The company's recent notable filings, newest first."""
     if not feeds.CONTACT_OK:
         return {"available": False,
-                "reason": "SEC requires a contact address — set FEED_CONTACT in .env"}
+                "reason": "SEC requires a contact address. Set FEED_CONTACT in .env"}
 
     try:
         cik = _cik_for(ticker)
@@ -105,7 +105,7 @@ def recent(ticker: str, limit: int = MAX_ROWS) -> Dict[str, Any]:
         return {"available": False, "reason": "EDGAR ticker directory unavailable: {}".format(exc)}
     if not cik:
         return {"available": False,
-                "reason": "{} is not in EDGAR's directory — foreign issuers and most "
+                "reason": "{} is not in EDGAR's directory. Foreign issuers and most "
                           "ETFs file differently or not at all".format(ticker.upper())}
 
     try:
@@ -163,7 +163,7 @@ def recent(ticker: str, limit: int = MAX_ROWS) -> Dict[str, Any]:
             "filings": rows,
             "newest_age_days": newest_age,
             "reason": (
-                "the newest notable filing is {} years old — this is normal for an "
+                "the newest notable filing is {} years old. This is normal for an "
                 "ETF or trust, which files under a different regime, so there is no "
                 "recent corporate disclosure to show".format(round(newest_age / 365.0, 1))
             ),
@@ -178,7 +178,7 @@ def recent(ticker: str, limit: int = MAX_ROWS) -> Dict[str, Any]:
         "reason": None if rows else "no notable filings in EDGAR's recent window",
         "method": (
             "Straight from EDGAR, newest first. Form 4 insider reports and 13F "
-            "holdings are excluded here — they dominate the raw feed and the insider "
+            "holdings are excluded here. They dominate the raw feed and the insider "
             "panel already summarises them. An 8-K's item code is the filer's own "
             "classification of what the filing is about, not an interpretation."
         ),

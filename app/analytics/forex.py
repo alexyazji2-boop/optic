@@ -51,8 +51,8 @@ PAIRS: List[Dict[str, Any]] = [
                     "Widening US yields relative to Bund yields pulls capital "
                     "into dollars and the pair down.",
         "equities": "A falling pair is a rising dollar, which mechanically trims "
-                    "the reported earnings of US multinationals — roughly 40% of "
-                    "S&P 500 revenue is earned abroad — and tightens conditions "
+                    "the reported earnings of US multinationals, roughly 40% of "
+                    "S&P 500 revenue is earned abroad, and tightens conditions "
                     "for anyone funding in dollars offshore.",
     },
     {
@@ -69,7 +69,7 @@ PAIRS: List[Dict[str, Any]] = [
         "equities": "The important asymmetry: a grinding rise is benign, but a "
                     "sharp FALL unwinds the carry trade, and carry unwinds force "
                     "selling of whatever the borrowed yen was funding. August "
-                    "2024 is the reference — a yen rally and a global equity "
+                    "2024 is the reference. A yen rally and a global equity "
                     "drawdown in the same week.",
     },
     {
@@ -81,7 +81,7 @@ PAIRS: List[Dict[str, Any]] = [
                 "transatlantic telegraph the rate was quoted over.",
         "moves_on": "UK inflation prints and Bank of England expectations against "
                     "the Fed. Sterling also carries a fiscal-credibility premium "
-                    "that most majors do not — gilt yields and the pound can move "
+                    "that most majors do not. Gilt yields and the pound can move "
                     "the same way, which for a developed market is a warning.",
         "equities": "Little direct read across to US equities. Matters for UK "
                     "large caps, where a weaker pound flatters the FTSE 100 "
@@ -96,7 +96,7 @@ PAIRS: List[Dict[str, Any]] = [
                 "yen and the dollar itself.",
         "moves_on": "Risk aversion, which bids the franc and pushes this pair "
                     "down, and Swiss National Bank discomfort with a strong franc.",
-        "equities": "A falling pair — franc strength — often accompanies a "
+        "equities": "A falling pair (franc strength) often accompanies a "
                     "risk-off equity tape. It reads as confirmation rather than "
                     "as a cause.",
     },
@@ -113,7 +113,7 @@ PAIRS: List[Dict[str, Any]] = [
                     "falls in a global risk-off regardless of the commodity.",
         "equities": "Rising alongside copper is a genuine growth signal. Rising "
                     "while copper falls is usually just dollar weakness wearing a "
-                    "growth costume — which is exactly the case worth catching.",
+                    "growth costume. Which is exactly the case worth catching.",
     },
     {
         "symbol": "USDCAD=X", "label": "USD/CAD", "group": "Commodity",
@@ -122,8 +122,8 @@ PAIRS: List[Dict[str, Any]] = [
         "driver": "terms of trade",
         "what": "Two closely integrated economies, so the pair is quieter than "
                 "most and mostly expresses oil and the rate gap.",
-        "moves_on": "WTI crude — Canada is a net exporter, so higher oil pushes "
-                    "this pair DOWN — plus the Bank of Canada against the Fed, and "
+        "moves_on": "WTI crude. Canada is a net exporter, so higher oil pushes "
+                    "this pair DOWN, plus the Bank of Canada against the Fed, and "
                     "tariff news, which for Canada is idiosyncratic risk.",
         "equities": "Thin read across on its own. Useful as a cross-check on an "
                     "oil move: crude up with this pair not falling suggests the "
@@ -160,7 +160,7 @@ PAIRS: List[Dict[str, Any]] = [
         "base": "British pound", "quote": "Japanese yen",
         "up_means": "pound stronger, yen weaker",
         "driver": "risk appetite",
-        "what": "The same risk trade as EUR/JPY with more leverage in it — wide "
+        "what": "The same risk trade as EUR/JPY with more leverage in it. Wide "
                 "ranges, and a long-standing nickname among traders for the size "
                 "of its moves.",
         "moves_on": "Risk appetite, amplified. It exaggerates whatever EUR/JPY is "
@@ -185,7 +185,7 @@ PAIRS: List[Dict[str, Any]] = [
         "base": "Australian dollar", "quote": "Japanese yen",
         "up_means": "Aussie stronger, yen weaker",
         "driver": "risk appetite",
-        "what": "High-yielder against the funding currency — the textbook carry "
+        "what": "High-yielder against the funding currency. The textbook carry "
                 "pair, and historically one of the tightest FX correlations to "
                 "global equities.",
         "moves_on": "Risk appetite and the rate gap together. Both legs push the "
@@ -216,7 +216,7 @@ PAIRS: List[Dict[str, Any]] = [
         "driver": "carry",
         "what": "A high-carry emerging currency with deep enough liquidity to be "
                 "used as a proxy for emerging-market risk appetite generally.",
-        "moves_on": "The carry — Mexican rates are high — plus US trade policy "
+        "moves_on": "The carry (Mexican rates are high) plus US trade policy "
                     "and nearshoring flows. Tariff news moves this first.",
         "equities": "A spike here is emerging-market risk aversion, and it "
                     "usually leads rather than follows.",
@@ -240,7 +240,7 @@ PAIRS: List[Dict[str, Any]] = [
         "up_means": "dollar stronger against a basket",
         "driver": "rate differential",
         "what": "Not a pair. A trade-weighted basket that is roughly 58% euro, "
-                "14% yen and 12% sterling — which means it is mostly EUR/USD "
+                "14% yen and 12% sterling. Which means it is mostly EUR/USD "
                 "upside down, and it says almost nothing about Asia or emerging "
                 "markets despite being read as 'the dollar'.",
         "moves_on": "Whatever moves EUR/USD, plus the Fed against everyone else.",
@@ -257,8 +257,8 @@ DRIVERS = {
                          "Watch rate decisions, inflation prints and the 2-year "
                          "yield spread.",
     "carry": "Moves on the incentive to borrow the low-yielding side and hold the "
-             "high-yielding one. Trends quietly for months, then unwinds fast — "
-             "the unwinds are what matter.",
+             "high-yielding one. Trends quietly for months, then unwinds fast . "
+             "The unwinds are what matter.",
     "terms of trade": "Moves on what the country sells. A commodity currency is "
                       "a bet on its export, so read it alongside that commodity.",
     "risk appetite": "Moves on whether money is being put to work or pulled back. "
@@ -276,7 +276,7 @@ def _reading(pair: Dict[str, Any], snap: Dict[str, Any]) -> str:
     strong = pair["up_means"].split(",")[0].strip()
     weak = pair["up_means"].split(",")[-1].strip()
     if abs(chg) < 1.0:
-        return "Broadly flat over the last month — neither side has the upper hand."
+        return "Broadly flat over the last month. Neither side has the upper hand."
     direction = strong if chg > 0 else weak
     return ("Up {:.1f}% over the last month, so {}.".format(chg, direction)
             if chg > 0
@@ -286,8 +286,8 @@ def _reading(pair: Dict[str, Any], snap: Dict[str, Any]) -> str:
 def build(provider, query: str = "") -> Dict[str, Any]:
     """Every pair, with its snapshot and its explanation.
 
-    `query` filters on the label, either currency name, the group or the driver —
-    so "yen", "carry" and "commodity" all work, which is how someone actually
+    `query` filters on the label, either currency name, the group or the driver.
+    So "yen", "carry" and "commodity" all work, which is how someone actually
     looks for a pair.
     """
     q = (query or "").strip().lower()

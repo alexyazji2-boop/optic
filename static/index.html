@@ -15,8 +15,8 @@
 <meta name="theme-color" content="#0d0d0d">
 <!-- robots.txt asks crawlers not to fetch; this tells any that fetched anyway not
      to index. The two are honoured at different stages, so both are needed to
-     keep an open, unauthenticated tool out of search results. Advisory only —
-     neither is access control. -->
+     keep an open, unauthenticated tool out of search results. Advisory only.
+     Neither is access control. -->
 <meta name="robots" content="noindex, nofollow, noarchive">
 <title>Optic Terminal</title>
 <!-- Inter, the neo-grotesque that the modern trading and prediction-market
@@ -44,7 +44,7 @@
  * Deliberately inline and blocking: doing this in app.js would paint the default
  * theme first and then swap, which is the flash every themed site gets wrong.
  * Because the attribute is guaranteed to exist by the time CSS applies, the
- * stylesheet needs exactly one dark block and one light block — no duplicated
+ * stylesheet needs exactly one dark block and one light block. No duplicated
  * prefers-color-scheme rules to keep in sync.
  *
  * An explicit choice wins over the OS; absent a choice, the OS decides. */
@@ -61,7 +61,7 @@
 <body>
 
 <header class="topbar">
-  <button class="brand" id="brand-home" type="button" aria-label="Optic Terminal — go to home">
+  <button class="brand" id="brand-home" type="button" aria-label="Optic Terminal. Go to home">
     <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
       <path d="M2.6 16C6.3 8.9 10.9 5.4 16 5.4S25.7 8.9 29.4 16C25.7 23.1 21.1 26.6 16 26.6S6.3 23.1 2.6 16Z"
             fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" opacity="0.8"/>
@@ -91,7 +91,7 @@
   <nav class="tabs tabs-sub" role="tablist" aria-label="Pages" id="subnav"></nav>
 
   <button class="icon-btn" id="settings-btn" data-view="settings"
-          aria-label="Settings" aria-pressed="false" title="Settings — appearance and time zone">
+          aria-label="Settings" aria-pressed="false" title="Settings. Appearance and time zone">
     <svg class="gear" viewBox="0 0 24 24" aria-hidden="true">
       <!-- Classic cog: eight teeth as a dashed ring, so the tooth count and the
            gap are one stroke rather than eight hand-placed paths. -->
@@ -115,12 +115,12 @@
 
 <main>
   <section class="view active" id="view-home" role="tabpanel" aria-label="Home"></section>
-  <section class="view" id="view-brief" role="tabpanel" aria-label="Optic&apos;s Read — daily summary"></section>
+  <section class="view" id="view-brief" role="tabpanel" aria-label="Optic&apos;s Read. Daily summary"></section>
   <section class="view" id="view-swing" role="tabpanel" aria-label="Swing and options analysis"></section>
   <section class="view" id="view-earnings" role="tabpanel" aria-label="Earnings analysis"></section>
   <section class="view" id="view-compare" role="tabpanel" aria-label="Compare tickers"></section>
   <section class="view" id="view-long" role="tabpanel" aria-label="Long-term share analysis"></section>
-  <section class="view" id="view-tracker" role="tabpanel" aria-label="Optic&apos;s Positions — paper-trading record"></section>
+  <section class="view" id="view-tracker" role="tabpanel" aria-label="Optic&apos;s Positions. Paper-trading record"></section>
   <section class="view" id="view-scan" role="tabpanel" aria-label="Scanners"></section>
   <section class="view" id="view-market" role="tabpanel" aria-label="Macro and sector analysis"></section>
   <!-- One instrument, full chart. Shared by every cross-asset table: the
@@ -178,7 +178,7 @@
     <div class="suggest" id="chat-suggest"></div>
     <!-- Chips for staged files, cleared once the message is sent. -->
     <div class="chat-attachments" id="chat-attachments"></div>
-    <textarea id="chat-input" placeholder="Ask Pulse about the loaded analysis — e.g. &quot;what does the gamma profile imply for a swing long here?&quot;"></textarea>
+    <textarea id="chat-input" placeholder="Ask Pulse about the loaded analysis. E.g. &quot;what does the gamma profile imply for a swing long here?&quot;"></textarea>
     <div class="chat-actions">
       <button class="btn primary" id="chat-send">Send</button>
       <button class="btn" id="chat-research">Deep research</button>

@@ -12,7 +12,7 @@ P/E series built by attaching a quarter's earnings to the quarter's end date is
 using a number that nobody had for another three to six weeks. On a name that
 gaps on results, that shifts the entire multiple history left by a month and makes
 the P/E look like it fell *before* the news that caused it. Every point here uses
-`available_from` — the SEC filing date — so the series only ever knows what was
+`available_from`· the SEC filing date — so the series only ever knows what was
 public at the time.
 """
 
@@ -292,7 +292,7 @@ def build(provider, ticker: str, years: int = 10) -> Dict[str, Any]:
         "method": (
             "Price divided by trailing-twelve-month diluted earnings, sampled "
             "weekly. Earnings are attached to the date the filing became public, "
-            "not the date the quarter ended — a multiple history built the usual "
+            "not the date the quarter ended. A multiple history built the usual "
             "way is shifted a month early and appears to move before the results "
             "that moved it. Earnings from before a stock split are restated onto "
             "today\u2019s share count first: filings report the share count of "

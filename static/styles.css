@@ -6280,6 +6280,24 @@ b, strong { font-weight: 600; }
 /* The explanation row. Its own row rather than a column, because three
    paragraphs squeezed into a cell off the right edge of a scrolling table is
    exactly where a reader stops reading. */
+/* Specificity, not inheritance, is the trap here.
+ *
+ * `table.data td` sets white-space: nowrap and scores (0,1,2). A plain
+ * `.fx-detail td` scores (0,1,1) and loses, so this row stayed nowrap: each of
+ * the three explanation paragraphs rendered as one unbroken line and painted
+ * straight over the column beside it. The labels looked fine because they sit
+ * in their own span, which made it read as a grid bug rather than a wrapping
+ * one. Same defect as the positions gauge caption.
+ *
+ * Fixed on two fronts. The selector below now outscores table.data td, and the
+ * prose elements each carry their own declaration, because a declaration on the
+ * element always beats a value inherited from an ancestor and so cannot be lost
+ * to a future specificity change. */
+table.data tr.fx-detail td,
+.fx-read,
+.fx-grid,
+.fx-grid > div { white-space: normal; }
+
 .fx-detail td {
   white-space: normal;
   text-align: left;
@@ -6779,3 +6797,21 @@ body.chat-open .ws-legend,
  * measures the available space at build time; the fix for a stale height is to
  * rebuild, not to restyle the box. */
 
+/* Sector drill-down: the breadcrumb, and the cue that a tile is clickable. */
+.map-crumb {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--s1);
+  font: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.map-crumb:hover { color: var(--ink); }
+.map-crumb-sep { color: var(--ink-muted); margin: 0 var(--space-0); }
+.map-hint { color: var(--ink-muted); font-style: italic; }
+/* Only drillable tiles advertise it. An individual stock opens its chart, which
+   is a different gesture and should not borrow the same affordance. */
+.map-tile[data-map-sector] { cursor: zoom-in; }
+.map-tile[data-map-sector]:hover { outline: 2px solid var(--ink); outline-offset: -2px; }

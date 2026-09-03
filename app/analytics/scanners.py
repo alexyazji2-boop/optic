@@ -221,7 +221,7 @@ SCANS: List[Dict[str, Any]] = [
         "id": "gainers-volume",
         "name": "Top gainers with volume",
         "looks_for": "Up meaningfully over the month with volume running above its own "
-                     "recent normal. The volume condition is the point — a rise nobody "
+                     "recent normal. The volume condition is the point. A rise nobody "
                      "traded is a different event from one the market showed up for.",
         "blind_spot": "Volume confirms that participation was real, not that it was "
                       "informed. A crowded move is still a crowded move, and this "
@@ -234,7 +234,7 @@ SCANS: List[Dict[str, Any]] = [
     {
         "id": "decliners-volume",
         "name": "Top decliners with volume",
-        "looks_for": "Down meaningfully over the month on above-average volume — the "
+        "looks_for": "Down meaningfully over the month on above-average volume. The "
                      "mirror of the gainers list, kept because a terminal that only "
                      "shows what is rising can only see half the market.",
         "blind_spot": "A falling name on heavy volume is where both bargain hunters "
@@ -274,7 +274,7 @@ SCANS: List[Dict[str, Any]] = [
     {
         "id": "high-risk-down",
         "name": "High-risk swings, downside",
-        "looks_for": "Bearish structure in names with a wide daily range — the short "
+        "looks_for": "Bearish structure in names with a wide daily range. The short "
                      "side of the same list.",
         "blind_spot": "Everything true of the upside version, plus the asymmetry of "
                       "being short: a squeeze in a high-ATR name moves faster against "
@@ -287,7 +287,7 @@ SCANS: List[Dict[str, Any]] = [
         "id": "momentum",
         "name": "Momentum leaders",
         "looks_for": "The highest-scoring names on the screen's own trend and momentum "
-                     "score — above their averages, with those averages stacked in "
+                     "score. Above their averages, with those averages stacked in "
                      "order, and returns to match.",
         "blind_spot": "Momentum scores describe what has already happened. A name is "
                       "here because it has been strong, which is not the same as a "
@@ -305,7 +305,7 @@ SCANS: List[Dict[str, Any]] = [
                      "it. Volume matters here: a high on quiet trade is a different "
                      "event from a high the market showed up for.",
         "blind_spot": "This finds the shape of a breakout, and cannot tell a breakout "
-                      "from a false one — that distinction only exists afterwards. It "
+                      "from a false one. That distinction only exists afterwards. It "
                       "also has no idea whether the move is earnings, a takeover "
                       "rumour or a short squeeze.",
         "filter": _f_breakout,
@@ -315,8 +315,8 @@ SCANS: List[Dict[str, Any]] = [
     {
         "id": "pullback",
         "name": "Pullback in an uptrend",
-        "looks_for": "The long-term trend still intact — price above a rising 200-day, "
-                     "50-day above the 200-day — but price has slipped below its "
+        "looks_for": "The long-term trend still intact. Price above a rising 200-day, "
+                     "50-day above the 200-day. But price has slipped below its "
                      "20-day while holding the 50-day. The shape of a pause inside a "
                      "trend rather than a break of one.",
         "blind_spot": "A pullback and the first leg of a real decline look identical "
@@ -331,7 +331,7 @@ SCANS: List[Dict[str, Any]] = [
         "id": "volume",
         "name": "Unusual volume",
         "looks_for": "Twenty-day average volume running at least 60% above the "
-                     "sixty-day average — the market paying markedly more attention "
+                     "sixty-day average. The market paying markedly more attention "
                      "to this name than it recently has.",
         "blind_spot": "Volume says something is happening; it never says what, or in "
                       "which direction. An index-inclusion, a secondary offering and a "
@@ -344,7 +344,7 @@ SCANS: List[Dict[str, Any]] = [
         "id": "steady",
         "name": "Steady uptrends",
         "looks_for": "Above the 20-, 50- and 200-day averages with an average true "
-                     "range under 3% of price — trends that have been grinding rather "
+                     "range under 3% of price. Trends that have been grinding rather "
                      "than lurching.",
         "blind_spot": "Low past volatility is not a promise of low future volatility. "
                       "A quiet chart going into a catalyst is quiet right up until it "
@@ -355,7 +355,7 @@ SCANS: List[Dict[str, Any]] = [
     },
     {
         "id": "extended",
-        "name": "Extended — stretched from the mean",
+        "name": "Extended. Stretched from the mean",
         "looks_for": "A one-month gain of 30% or more with price near the top of the "
                      "52-week range. The same names momentum finds, asked about from "
                      "the other side.",
@@ -370,7 +370,7 @@ SCANS: List[Dict[str, Any]] = [
         "id": "downtrend",
         "name": "Below a falling 200-day",
         "looks_for": "Price under its 200-day average with the 50-day also under the "
-                     "200-day — the mirror image of the momentum scan, for names in "
+                     "200-day. The mirror image of the momentum scan, for names in "
                      "established downtrends.",
         "blind_spot": "This is a list of weak charts, not short candidates. It carries "
                       "no borrow cost, no short interest and no view on why the name "
@@ -474,7 +474,7 @@ def run(ranking: Optional[Dict[str, Any]], scan_id: str,
         "gates": (ranking or {}).get("gates"),
         "method": (
             "Run over the {} names that cleared the screen's price, liquidity, "
-            "history and volatility gates out of a {}-symbol universe — not over "
+            "history and volatility gates out of a {}-symbol universe, not over "
             "the whole market. Everything here is computed from daily price and "
             "volume alone: no options data, no fundamentals, no news and no "
             "earnings dates. A row is a candidate for a closer look on the Swing "

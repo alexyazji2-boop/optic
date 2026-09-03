@@ -183,15 +183,15 @@ def build(provider, hours: int = MAX_AGE_HOURS) -> Dict[str, Any]:
             "reason": (
                 "Surveyed analyst estimates are a licensed product. A consensus "
                 "number quietly copied from a stale free mirror, sitting beside a "
-                "real actual, manufactures a 'surprise' that never happened — and "
+                "real actual, manufactures a 'surprise' that never happened, and "
                 "the surprise is the figure a reader would act on. The release's "
                 "own headline carries the actual; the reaction below is measured."
             ),
         },
         "method": (
             "The release is the agency's own headline, not a paraphrase. The "
-            "cross-asset reaction is computed from daily bars — the latest "
-            "completed session against the prior close — so it describes what "
+            "cross-asset reaction is computed from daily bars. The latest "
+            "completed session against the prior close. So it describes what "
             "moved, never why. Attributing a day's move to one release is an "
             "inference, and a session contains more than one piece of news."
         ),

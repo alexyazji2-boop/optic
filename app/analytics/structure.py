@@ -280,22 +280,22 @@ def ema_stack(close: pd.Series, spans=STACK_SPANS) -> Dict[str, Any]:
 
     if bullish:
         read, note = "full bullish stack", (
-            "Price is above every average and they are stacked fast-over-slow — "
-            "each timeframe agrees on the direction.")
+            "Price is above every average and they are stacked fast-over-slow . "
+            "Each timeframe agrees on the direction.")
     elif bearish:
         read, note = "full bearish stack", (
-            "Price is below every average and they are stacked slow-over-fast — "
-            "every timeframe agrees on the downside.")
+            "Price is below every average and they are stacked slow-over-fast . "
+            "Every timeframe agrees on the downside.")
     elif above_all:
         read, note = "above, not stacked", (
-            "Price is above all three averages but they are not yet in order — "
-            "the move is young and the slower averages have not caught up.")
+            "Price is above all three averages but they are not yet in order . "
+            "The move is young and the slower averages have not caught up.")
     elif below_all:
         read, note = "below, not stacked", (
             "Price is below all three averages but they are not yet in order.")
     else:
         read, note = "mixed", (
-            "Price sits between its averages — no timeframe agreement either way.")
+            "Price sits between its averages. No timeframe agreement either way.")
 
     return {"available": True, "read": read, "note": note, "spot": spot,
             "bullish_stack": bullish, "bearish_stack": bearish, **values}
@@ -323,11 +323,11 @@ def bandwidth_rank(close: pd.Series, length: int = 20, lookback: int = 252) -> D
 
     if pct >= 80:
         read = "expanded"
-        note = ("Bands are wider than most of the past year — the move is already "
+        note = ("Bands are wider than most of the past year. The move is already "
                 "running, so entries here carry a worse stop.")
     elif pct <= 20:
         read = "squeezed"
-        note = ("Bands are tighter than most of the past year — compressed ranges "
+        note = ("Bands are tighter than most of the past year. Compressed ranges "
                 "tend to resolve into a move, though they do not say which way.")
     else:
         read = "normal"
@@ -387,14 +387,14 @@ def candle_patterns(df: pd.DataFrame, bars: int = 3) -> Dict[str, Any]:
         elif body_share <= DOJI_BODY:
             found.append({
                 "pattern": "doji", "direction": "neutral", "date": date,
-                "detail": "Opened and closed at nearly the same price — the bar settled nothing.",
+                "detail": "Opened and closed at nearly the same price. The bar settled nothing.",
             })
         else:
             lower_wick = min(o, c) - l
             if lower_wick >= body * 2 and bullish:
                 found.append({
                     "pattern": "hammer", "direction": "bullish", "date": date,
-                    "detail": ("Traded well below the open and closed back up — the low was "
+                    "detail": ("Traded well below the open and closed back up. The low was "
                                "rejected within the bar."),
                 })
 
@@ -407,7 +407,7 @@ def candle_patterns(df: pd.DataFrame, bars: int = 3) -> Dict[str, Any]:
                     "pattern": "engulfing", "direction": "bullish" if bullish else "bearish",
                     "date": date,
                     "detail": (f"Today's body covers yesterday's entirely in the opposite "
-                               f"direction — {'buyers' if bullish else 'sellers'} took back the "
+                               f"direction: {'buyers' if bullish else 'sellers'} took back the "
                                "whole of the previous bar."),
                 })
 
@@ -415,6 +415,6 @@ def candle_patterns(df: pd.DataFrame, bars: int = 3) -> Dict[str, Any]:
         "available": True,
         "patterns": found[-4:],
         "note": ("Candle names describe what happened in the bar. They are not predictions, "
-                 "and on their own they have no edge — they matter only where they line up "
+                 "and on their own they have no edge. They matter only where they line up "
                  "with a level."),
     }

@@ -6,8 +6,8 @@ delayed yfinance feed. It does not, however, have equivalent coverage for
 company financials, insider/institutional filings, earnings history, news, or
 non-equity instruments (FX pairs, index tickers like ^VIX, commodity futures).
 
-So this provider handles only what genuinely benefits from being real-time —
-quote, history, expirations, options_chain — and delegates everything else
+So this provider handles only what genuinely benefits from being real-time.
+Quote, history, expirations, options_chain — and delegates everything else
 (batch_history for the macro/sector universe, news, fundamentals) to a wrapped
 yfinance instance. See app/main.py for how the two are composed: Tradier
 supplies the "current ticker" price and chain when configured; yfinance always

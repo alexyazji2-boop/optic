@@ -376,13 +376,13 @@ def realised_vol_windows(df: pd.DataFrame) -> Dict[str, Any]:
         if change > HV_TREND_BAND:
             trend = "expanding"
             note = (f"10-day realized vol ({fast:.1f}%) is running "
-                    f"{change * 100:.0f}% above the 60-day ({slow:.1f}%) — "
-                    "the stock has become more volatile recently.")
+                    f"{change * 100:.0f}% above the 60-day ({slow:.1f}%) . "
+                    "The stock has become more volatile recently.")
         elif change < -HV_TREND_BAND:
             trend = "contracting"
             note = (f"10-day realized vol ({fast:.1f}%) is running "
-                    f"{abs(change) * 100:.0f}% below the 60-day ({slow:.1f}%) — "
-                    "the stock has been settling down.")
+                    f"{abs(change) * 100:.0f}% below the 60-day ({slow:.1f}%) . "
+                    "The stock has been settling down.")
         else:
             trend = "steady"
             note = (f"10-day and 60-day realized vol are within "
@@ -486,10 +486,10 @@ def analyse(df: pd.DataFrame, swing_lookback: int = 120) -> Dict[str, Any]:
     if rsi_v is not None:
         if rsi_v >= 70:
             score -= 5
-            reasons.append("RSI {:.1f} overbought — chase risk".format(rsi_v))
+            reasons.append("RSI {:.1f} overbought. Chase risk".format(rsi_v))
         elif rsi_v <= 30:
             score += 5
-            reasons.append("RSI {:.1f} oversold — bounce candidate".format(rsi_v))
+            reasons.append("RSI {:.1f} oversold. Bounce candidate".format(rsi_v))
         elif rsi_v > 55:
             score += 10
             reasons.append("RSI {:.1f} in bullish regime".format(rsi_v))

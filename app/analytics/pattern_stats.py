@@ -238,10 +238,10 @@ def _summarise(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         "method": (
             "Every occurrence of each pattern across {n} names over {hist} of "
             "daily bars. Structural patterns are entered at the confirmation "
-            "close — the first bar a reader could have acted on — and measured "
+            "close. The first bar a reader could have acted on, and measured "
             "against {bm} over the identical dates AND against the ticker's own "
             "average bar, so a bullish pattern in a stock that outperformed for "
-            "a decade has to beat that stock's own drift to count — without that "
+            "a decade has to beat that stock's own drift to count, without that "
             "second correction every pattern here measured as bullish, bearish "
             "ones included. Unconfirmed patterns "
             "are measured separately rather than dropped, because whether the "

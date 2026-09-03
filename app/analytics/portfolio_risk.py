@@ -216,7 +216,7 @@ def build(provider, positions: List[Dict[str, Any]]) -> Dict[str, Any]:
         top = heavy[0]
         sector_warning = (
             "{} is {:.0f}% of this book. Trailing correlation between the names is "
-            "{}, so day to day they are not moving together — but a shock to the "
+            "{}, so day to day they are not moving together, but a shock to the "
             "sector itself, a regulatory decision or a rate move that repriced the "
             "whole group, would not care about that. Shared exposure and measured "
             "co-movement are different risks."
@@ -251,7 +251,7 @@ def build(provider, positions: List[Dict[str, Any]]) -> Dict[str, Any]:
         "summed_stop_risk": round(sum(s["risk_dollars"] for s in by_symbol.values()), 2),
         "summed_risk_note": (
             "This is what the ledger says, and it assumes the stops are hit "
-            "independently. They are not — correlated positions gap together, "
+            "independently. They are not. Correlated positions gap together, "
             "which is exactly the session in which several stops fill at once. "
             "Read it against the correlation above, not on its own."
         ),
@@ -260,7 +260,7 @@ def build(provider, positions: List[Dict[str, Any]]) -> Dict[str, Any]:
             "log returns and annualised. The diversification ratio is the "
             "weighted-average volatility of the holdings divided by the volatility "
             "of the portfolio holding them: 1.0 means nothing is cancelling. "
-            "Correlation is measured over a trailing window and is unstable — it "
+            "Correlation is measured over a trailing window and is unstable. It "
             "rises in the drawdowns where diversification was supposed to help, so "
             "this describes the recent past rather than forecasting the next one."
             .format(WINDOW)

@@ -52,8 +52,8 @@ DESCRIPTIONS = {
                "other price gets compared against.",
     "after": "Post-market trading. This is where a company that reports after the bell gets "
              "its first verdict, on a fraction of regular-session volume.",
-    "overnight": "The overnight session. Extremely thin, and this data feed does not carry it — "
-                 "the price shown is the last print from the after-hours session, not a live "
+    "overnight": "The overnight session. Extremely thin, and this data feed does not carry it . "
+                 "The price shown is the last print from the after-hours session, not a live "
                  "overnight quote.",
     "pre": "Pre-market trading. Volume builds toward the open, and levels set here often move "
            "again once the bell brings real liquidity.",
@@ -124,7 +124,7 @@ LABELS = {
     "after": "After hours",
     "overnight": "Overnight",
     "pre": "Pre-market",
-    "closed": "Weekend — closed",
+    "closed": "Weekend. Closed",
 }
 
 
@@ -226,7 +226,7 @@ def price_view(quote: Dict[str, Any], now: Optional[datetime] = None) -> Dict[st
         if phase == "overnight":
             out["stale_note"] = (
                 "This is the last print from the after-hours session, not a live overnight "
-                "quote — the free feed doesn't carry the overnight tape. It's the most recent "
+                "quote. The free feed doesn't carry the overnight tape. It's the most recent "
                 "price that exists here, and it may be several hours old."
             )
         elif phase == "closed":

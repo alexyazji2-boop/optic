@@ -263,8 +263,8 @@ def run(provider, symbols: Sequence[str], period: str = "2y",
              "survived by construction, which flatters any long-only result."),
             ("Overlapping windows. Evaluation dates are {} sessions apart while the "
              "longest forward window is {}, so observations share periods and are "
-             "not independent. The standard errors below are therefore optimistic — "
-             "the true intervals are wider.".format(step, max(horizons))),
+             "not independent. The standard errors below are therefore optimistic . "
+             "The true intervals are wider.".format(step, max(horizons))),
             ("No costs. Returns are close-to-close with no spread, commission or "
              "slippage. A signal with a small edge can be entirely consumed by "
              "them."),
@@ -340,7 +340,7 @@ def with_controls(provider, symbols: Sequence[str], period: str = "2y",
         "comparison": comparison,
         "verdict": verdict,
         "control_note": (
-            "Random is a score drawn from noise — it must land near zero, or the "
+            "Random is a score drawn from noise. It must land near zero, or the "
             "harness itself is manufacturing correlation. Single factor is the "
             "stock's own three-month return with no weighting scheme, which is the "
             "benchmark a hand-weighted composite has to clear to justify its "

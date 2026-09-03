@@ -171,7 +171,7 @@ def score(overview: Dict[str, Any]) -> Dict[str, Any]:
                   "own merits.")
     else:
         label, stance = "mixed", "mixed"
-        plain = "Going sideways — no clear direction either way"
+        plain = "Going sideways. No clear direction either way"
         effect = ("Neither side has the tape. Individual setups have to stand on "
                   "their own rather than on the market's direction.")
 
@@ -205,7 +205,7 @@ def score(overview: Dict[str, Any]) -> Dict[str, Any]:
         ),
         "method": (
             "Index trend, sector breadth, the VIX level and its move, whether small "
-            "caps are confirming, and how many sectors are participating today — each "
+            "caps are confirming, and how many sectors are participating today. Each "
             "scored -100 to +100 and weighted. Weights renormalise over whatever is "
             "available, so a missing input redistributes rather than counting as zero. "
             "This is an index and breadth read; the Macro tab's risk score is a "

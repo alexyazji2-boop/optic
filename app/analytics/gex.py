@@ -181,8 +181,8 @@ def analyse(
 
     if regime == "positive":
         regime_note = (
-            "Positive net GEX: dealers are long gamma and hedge against direction — "
-            "expect mean reversion, suppressed realized vol, and ranges that hold. "
+            "Positive net GEX: dealers are long gamma and hedge against direction . "
+            "Expect mean reversion, suppressed realized vol, and ranges that hold. "
             "Favours selling premium / spreads over naked directional longs."
         )
         swing_note = (
@@ -191,8 +191,8 @@ def analyse(
         )
     else:
         regime_note = (
-            "Negative net GEX: dealers are short gamma and hedge with direction — "
-            "expect vol expansion, trend continuation, and larger daily ranges. "
+            "Negative net GEX: dealers are short gamma and hedge with direction . "
+            "Expect vol expansion, trend continuation, and larger daily ranges. "
             "Favours long premium and directional swings."
         )
         swing_note = (

@@ -85,32 +85,32 @@ def analyse_short_interest(raw: Dict[str, Any], avg_volume: Optional[float]) -> 
         if pct >= 20:
             squeeze = "high"
             notes.append(
-                "{:.1f}% of float is short — crowded enough that good news forces covering. "
+                "{:.1f}% of float is short. Crowded enough that good news forces covering. "
                 "Cuts both ways: crowded shorts also mean informed scepticism.".format(pct)
             )
         elif pct >= 10:
             squeeze = "elevated"
-            notes.append("{:.1f}% of float short — meaningful bearish positioning.".format(pct))
+            notes.append("{:.1f}% of float short. Meaningful bearish positioning.".format(pct))
         elif pct >= 5:
             squeeze = "moderate"
-            notes.append("{:.1f}% of float short — normal for a liquid name.".format(pct))
+            notes.append("{:.1f}% of float short. Normal for a liquid name.".format(pct))
         else:
-            notes.append("{:.1f}% of float short — no crowding.".format(pct))
+            notes.append("{:.1f}% of float short. No crowding.".format(pct))
 
     if days_to_cover is not None:
         if days_to_cover >= 5:
             notes.append(
-                "{:.1f} days to cover at average volume — shorts cannot exit quickly, "
+                "{:.1f} days to cover at average volume. Shorts cannot exit quickly, "
                 "which is what makes squeezes violent.".format(days_to_cover)
             )
         else:
-            notes.append("{:.1f} days to cover — shorts can exit without moving price much.".format(days_to_cover))
+            notes.append("{:.1f} days to cover. Shorts can exit without moving price much.".format(days_to_cover))
 
     if change_pct is not None:
         if change_pct > 10:
-            notes.append("Short interest rose {:.0f}% versus the prior settlement — bears are adding.".format(change_pct))
+            notes.append("Short interest rose {:.0f}% versus the prior settlement. Bears are adding.".format(change_pct))
         elif change_pct < -10:
-            notes.append("Short interest fell {:.0f}% versus the prior settlement — bears are covering.".format(abs(change_pct)))
+            notes.append("Short interest fell {:.0f}% versus the prior settlement. Bears are covering.".format(abs(change_pct)))
 
     return {
         "available": True,
@@ -123,8 +123,8 @@ def analyse_short_interest(raw: Dict[str, Any], avg_volume: Optional[float]) -> 
         "settlement_date": raw.get("settlement_date"),
         "squeeze_potential": squeeze,
         "notes": notes,
-        "caveat": "Short interest is reported twice monthly and lags by roughly two weeks — "
-        "treat it as positioning background, not a live signal.",
+        "caveat": "Short interest is reported twice monthly and lags by roughly two weeks . "
+        "Treat it as positioning background, not a live signal.",
     }
 
 
@@ -141,7 +141,7 @@ def analyse_financials(raw: Dict[str, Any]) -> Dict[str, Any]:
     cash = raw.get("cashflow_annual")
 
     if not annual and not quarterly:
-        return {"available": False, "note": "No statement data — common for ETFs and index products."}
+        return {"available": False, "note": "No statement data. Common for ETFs and index products."}
 
     rev_a = _pick_row(annual, "revenue")
     ni_a = _pick_row(annual, "net_income")
@@ -200,7 +200,7 @@ def analyse_financials(raw: Dict[str, Any]) -> Dict[str, Any]:
         notes.append("{} net {} position.".format(
             "$" + _human(abs(net_cash)), "cash" if net_cash >= 0 else "debt"))
     if debt_to_equity is not None and debt_to_equity > 2:
-        notes.append("Debt/equity {:.1f} — leveraged balance sheet raises the stakes on a miss.".format(debt_to_equity))
+        notes.append("Debt/equity {:.1f}. Leveraged balance sheet raises the stakes on a miss.".format(debt_to_equity))
 
     return {
         "available": True,
@@ -264,7 +264,7 @@ def analyse_earnings_history(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
             )
         )
     if len(misses) >= 2:
-        notes.append("{} misses in the window — the beat streak is not dependable.".format(len(misses)))
+        notes.append("{} misses in the window. The beat streak is not dependable.".format(len(misses)))
     if avg_surprise is not None and avg_surprise > 5:
         notes.append(
             "A consistent large beat is usually already in the price; the reaction depends on guidance, not the print."
@@ -312,7 +312,7 @@ def analyse_ownership(insiders: Dict[str, Any], institutions: Dict[str, Any]) ->
             insider_signal = "buying"
             notes.append(
                 "Insiders were net buyers of {} shares over six months. Insider buying is the more "
-                "informative direction — there is only one reason to buy.".format(_human(net_shares))
+                "informative direction. There is only one reason to buy.".format(_human(net_shares))
             )
         elif net_shares < 0:
             insider_signal = "selling"
@@ -335,9 +335,9 @@ def analyse_ownership(insiders: Dict[str, Any], institutions: Dict[str, Any]) ->
     if inst_pct is not None:
         pct = inst_pct * 100.0
         if pct > 80:
-            notes.append("{:.0f}% institutionally held — moves are driven by fund flows and rebalancing.".format(pct))
+            notes.append("{:.0f}% institutionally held. Moves are driven by fund flows and rebalancing.".format(pct))
         elif pct < 30:
-            notes.append("Only {:.0f}% institutionally held — a more retail-driven, and typically more volatile, shareholder base.".format(pct))
+            notes.append("Only {:.0f}% institutionally held. A more retail-driven, and typically more volatile, shareholder base.".format(pct))
         else:
             notes.append("{:.0f}% institutionally held.".format(pct))
 

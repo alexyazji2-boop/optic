@@ -168,14 +168,14 @@ def build(provider, offset: int = 0, now: Optional[datetime] = None,
         "session_note": (
             "Grouped by day rather than by trading session. The provider publishes "
             "an earnings date and no before-open or after-close tag, so a session "
-            "column here would be invented — and a name filed under the wrong "
+            "column here would be invented, and a name filed under the wrong "
             "session is worse than one filed under neither."
         ),
         "method": (
             "Scanned {} widely-followed names, not the whole market: a complete "
             "earnings calendar is a licensed product and free data gives one date "
             "per symbol at a time. Consensus EPS comes from the provider's analyst "
-            "estimates — real for a company, unlike consensus for a macro release, "
+            "estimates. Real for a company, unlike consensus for a macro release, "
             "which is surveyed and licensed and is why the economic calendar has no "
             "forecast column. Dates move: companies reschedule, and an unconfirmed "
             "date is the provider's best guess."

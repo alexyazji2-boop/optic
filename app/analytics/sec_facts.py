@@ -356,7 +356,7 @@ def history(ticker: str, force: bool = False) -> Dict[str, Any]:
                           "security.".format(sym, exc)}
     if not cik:
         return {"available": False,
-                "reason": "{} is not in EDGAR's ticker directory — XBRL history "
+                "reason": "{} is not in EDGAR's ticker directory. XBRL history "
                           "exists only for US registrants, so ETFs and foreign "
                           "issuers have none.".format(sym)}
     try:
@@ -430,11 +430,11 @@ def history(ticker: str, force: bool = False) -> Dict[str, Any]:
         "source": "SEC XBRL companyfacts (CIK {})".format(cik),
         "method": (
             "Straight from the filings. Revenue is merged across every us-gaap "
-            "tag a company has used — six of them are in circulation, and a "
+            "tag a company has used. Six of them are in circulation, and a "
             "single issuer's history routinely spans three, so reading one tag "
             "truncates the series at whichever year they switched. Where the same "
             "quarter appears in several filings the most recently filed value "
-            "wins, because that is the restated truth — while the date a quarter "
+            "wins, because that is the restated truth. While the date a quarter "
             "became public is the EARLIEST filing that carried it, not the latest "
             "restatement of it. A fiscal fourth quarter is "
             "usually filed only inside the annual figure, so it is derived as the "

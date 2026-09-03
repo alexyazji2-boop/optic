@@ -46,25 +46,25 @@ MARKETS: List[Dict[str, str]] = [
     {"symbol": "^N225", "label": "Nikkei 225", "region": "Japan",
      "session": "asia", "note": "Tokyo"},
     {"symbol": "^KS11", "label": "KOSPI", "region": "South Korea",
-     "session": "asia", "note": "Seoul — semiconductor and export bellwether"},
+     "session": "asia", "note": "Seoul. Semiconductor and export bellwether"},
     {"symbol": "^HSI", "label": "Hang Seng", "region": "Hong Kong",
-     "session": "asia", "note": "Hong Kong — the offshore read on China"},
+     "session": "asia", "note": "Hong Kong. The offshore read on China"},
     {"symbol": "000001.SS", "label": "Shanghai Composite", "region": "China",
      "session": "asia", "note": "mainland, largely domestic ownership"},
     {"symbol": "^TWII", "label": "Taiwan Weighted", "region": "Taiwan",
-     "session": "asia", "note": "Taipei — the most semiconductor-heavy index"},
+     "session": "asia", "note": "Taipei. The most semiconductor-heavy index"},
     {"symbol": "^AXJO", "label": "ASX 200", "region": "Australia",
-     "session": "asia", "note": "Sydney — resources weighted"},
+     "session": "asia", "note": "Sydney. Resources weighted"},
     # --- Europe: overlaps the US morning -------------------------------------
     {"symbol": "^STOXX50E", "label": "Euro Stoxx 50", "region": "Euro area",
      "session": "europe", "note": "the euro-area blue chips"},
     {"symbol": "^GDAXI", "label": "DAX", "region": "Germany",
-     "session": "europe", "note": "Frankfurt — industrial and export heavy"},
+     "session": "europe", "note": "Frankfurt. Industrial and export heavy"},
     {"symbol": "^FTSE", "label": "FTSE 100", "region": "United Kingdom",
-     "session": "europe", "note": "London — commodity and dividend weighted"},
+     "session": "europe", "note": "London. Commodity and dividend weighted"},
     # --- Around the clock ----------------------------------------------------
     {"symbol": "BTC-USD", "label": "Bitcoin", "region": "Crypto",
-     "session": "always", "note": "trades through the night — the only live tape "
+     "session": "always", "note": "trades through the night. The only live tape "
                                   "while equities are shut"},
     {"symbol": "ETH-USD", "label": "Ethereum", "region": "Crypto",
      "session": "always", "note": "second-largest, higher beta than bitcoin"},
@@ -74,7 +74,7 @@ MARKETS: List[Dict[str, str]] = [
 CROSSES: List[Dict[str, str]] = [
     {"symbol": "USDKRW=X", "label": "USD/KRW", "note": "won weakness is the "
      "standard stress tell for Korean exporters"},
-    {"symbol": "USDCNY=X", "label": "USD/CNH", "note": "the offshore yuan — where "
+    {"symbol": "USDCNY=X", "label": "USD/CNH", "note": "the offshore yuan. Where "
      "policy pressure on China shows up first"},
     {"symbol": "USDJPY=X", "label": "USD/JPY", "note": "the carry trade funding leg"},
     {"symbol": "GC=F", "label": "Gold", "note": "the haven bid"},
@@ -82,8 +82,8 @@ CROSSES: List[Dict[str, str]] = [
 ]
 
 SESSION_LABELS = {
-    "asia": "Asia-Pacific — closed before the US open",
-    "europe": "Europe — trades into the US morning",
+    "asia": "Asia-Pacific. Closed before the US open",
+    "europe": "Europe. Trades into the US morning",
     "always": "Around the clock",
 }
 
@@ -212,7 +212,7 @@ def build(provider, news_entries: Optional[List[Dict[str, Any]]] = None) -> Dict
             "cannot: whether this market has actually been moving with the US at "
             "all. Above {t:.1f} it mostly has. Below that, a bad night there is a "
             "fact about that market and not a signal about this one. No causal "
-            "claim is made anywhere here — headlines are shown next to regions, "
+            "claim is made anywhere here. Headlines are shown next to regions, "
             "not offered as the reason a market moved."
         ).format(w=CORR_WINDOW, t=CORR_MEANINGFUL),
     }
