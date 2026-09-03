@@ -1,36 +1,44 @@
 # Self-hosted fonts
 
-Drop licensed webfont files here and they take effect with no code change —
-`@font-face` rules in `styles.css` already point at these filenames, and
-"Capsule Sans" is already first in the `--sans` stack.
+Empty by default. Drop licensed `.woff2` files here and add the family to the
+front of `--sans` in `styles.css`.
 
-## Capsule Sans
+## What the terminal uses now
 
-Capsule Sans is a **commercial** typeface. It is not on Google Fonts (that URL
-returns 400), not on Fontsource, and not on npm — all checked. Using it needs a
-purchased *webfont* licence, which is a different licence from a desktop one,
-and is usually priced by monthly pageviews.
+**Switzer**, from Fontshare, free for commercial use, loaded as a single
+variable file. **Inter** sits behind it as the fallback, from a different CDN so
+one outage cannot remove both.
 
-Buy it, then save the files here with exactly these names:
+Both are neo-grotesques, which is the genre the comparable products use.
+Verified by loading each site and reading the fonts it actually serves:
 
-    CapsuleSans-Regular.woff2     (400)
-    CapsuleSans-Medium.woff2      (500)
-    CapsuleSans-SemiBold.woff2    (600)
-    CapsuleSans-Bold.woff2        (700)
+| Product | Typeface | Available? |
+|---|---|---|
+| Robinhood | "Capsule Sans", a custom cut of Maison Neue | No, commissioned |
+| Kalshi | "Kalshi Sans" in 3 widths, plus Graphik for display | No, proprietary |
+| Polymarket | Inter | Yes, free |
 
-A variable font is better if the licence includes one — save it as:
+## Maison Neue
 
-    CapsuleSans-Variable.woff2
+The `@font-face` rules in `styles.css` name Maison Neue and expect:
 
-and uncomment the variable `@font-face` block in `styles.css`, which replaces
-all four static faces with one file.
+    MaisonNeue-Book.woff2       (400)
+    MaisonNeue-Medium.woff2     (500)
+    MaisonNeue-Demi.woff2       (600)
+    MaisonNeue-Bold.woff2       (700)
 
-Nothing breaks while the files are absent. A `@font-face` whose `src` 404s is
-ignored by the browser and the next family in `--sans` is used, so the site
-renders in Inter until the day the files appear.
+Then put `"Maison Neue"` ahead of `"Switzer"` in `--sans`.
 
-## Why not just link it from a CDN
+Maison Neue is licensable from Milieu Grotesque, and a **webfont** licence is a
+different purchase from a desktop one, usually priced by monthly pageviews.
 
-There is no licensed CDN for it. Copies float around on unofficial mirrors;
-serving one from a public domain would be redistributing a commercial font
-without a licence.
+## Why not Capsule Sans
+
+Robinhood's Capsule Sans is a custom cut of Maison Neue made for Robinhood. It
+is not sold, so there is no licence to buy and nothing to drop in here. Maison
+Neue is the drawing underneath it and is the closest a licence can get.
+
+An earlier version of this file described Capsule as a commercial display face
+sold for about $25. That was a different typeface of the same name, by Dave
+Rowland: reverse-stress, essentially all-caps, and genuinely unsuited to
+dense tables. It is unrelated to Robinhood's.

@@ -14,48 +14,48 @@
  * to dark to stop them rendering light against a dark page. */
 /* ------------------------------------------------------------------- fonts
  *
- * Self-hosted faces. Absent by default: see fonts/README.md.
+ * Self-hosted faces, none present by default. See fonts/README.md.
  *
- * font-display: swap so a missing or slow font never blanks the text — the
- * fallback renders immediately and is replaced if the real face arrives. On a
- * terminal where every panel is numbers, invisible text is worse than briefly
+ * These name Maison Neue, not Capsule Sans, and the difference matters.
+ * Robinhood's Capsule Sans is a custom cut of Maison Neue commissioned for
+ * Robinhood. It is not sold to anyone, so scaffolding pointing at it was
+ * pointing at a file that cannot be obtained. Maison Neue itself is licensable
+ * from Milieu Grotesque, and it is what Capsule Sans is drawn from, so it is
+ * the closest a licence can get to that look.
+ *
+ * Absent files cost nothing: a face whose src 404s is dropped by the browser
+ * and the next family in --sans is used, so the terminal renders in Switzer
+ * until real files appear. Installing it is then a file copy, not a code change
+ * (add "Maison Neue" ahead of "Switzer" in --sans).
+ *
+ * font-display: swap so a slow or missing font never blanks the text. On a
+ * screen that is mostly numbers, invisible text is worse than briefly
  * mismatched text.
- *
- * If the licence includes a variable font, delete the four static blocks and
- * uncomment this one instead:
- *
- * @font-face {
- *   font-family: "Capsule Sans";
- *   src: url("fonts/CapsuleSans-Variable.woff2") format("woff2-variations");
- *   font-weight: 100 900;
- *   font-style: normal;
- *   font-display: swap;
- * }
  */
 @font-face {
-  font-family: "Capsule Sans";
-  src: url("fonts/CapsuleSans-Regular.woff2") format("woff2");
+  font-family: "Maison Neue";
+  src: url("fonts/MaisonNeue-Book.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: "Capsule Sans";
-  src: url("fonts/CapsuleSans-Medium.woff2") format("woff2");
+  font-family: "Maison Neue";
+  src: url("fonts/MaisonNeue-Medium.woff2") format("woff2");
   font-weight: 500;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: "Capsule Sans";
-  src: url("fonts/CapsuleSans-SemiBold.woff2") format("woff2");
+  font-family: "Maison Neue";
+  src: url("fonts/MaisonNeue-Demi.woff2") format("woff2");
   font-weight: 600;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: "Capsule Sans";
-  src: url("fonts/CapsuleSans-Bold.woff2") format("woff2");
+  font-family: "Maison Neue";
+  src: url("fonts/MaisonNeue-Bold.woff2") format("woff2");
   font-weight: 700;
   font-style: normal;
   font-display: swap;
@@ -149,31 +149,27 @@
      is declared per theme rather than derived from --ink. */
   --scroll-shade: rgba(0, 0, 0, 0.32);
 
-  /* Geist, then Capsule Sans, then Inter, then the system stack.
+  /* Switzer, then Inter, then the system stack.
    *
-   * Geist is built for interfaces and its tabular digits are narrower than
-   * Inter's — measured at 16px, 9.60px against 10.38px, about 7.5% — so the
-   * same table fits more without shrinking the type.
+   * Chosen to sit in the same genre as the products this is measured against.
+   * Checked directly rather than from articles: Robinhood's "Capsule Sans" is a
+   * custom cut of Maison Neue, Kalshi ships a proprietary "Kalshi Sans" with
+   * Graphik for display, and Polymarket serves plain Inter. All four are
+   * neo-grotesques: neutral shapes, high x-height, tight apertures, real
+   * tabular figures. Switzer is the closest freely licensed stand-in for Maison
+   * Neue, so it lands nearest Robinhood of the free options.
    *
-   * Not because Inter lacks tabular figures. It has them: under
-   * font-variant-numeric: tabular-nums both families measure a spread of
-   * exactly 0 across the ten digits. The 45 tabular-nums rules in this file
-   * worked before this change and work after it. The gain here is density, not
-   * correctness, and it is worth being precise about which.
+   * Corrects an earlier note here. It claimed Capsule was a reverse-stress,
+   * essentially all-caps display face and therefore wrong for dense tables.
+   * That described a different typeface of the same name, by Dave Rowland.
+   * Robinhood's is a UI face and the objection did not apply.
    *
-   * Chosen over Capsule after reading its specimen: Capsule is a reverse-stress
-   * display face, heavier on the horizontals than the verticals and essentially
-   * all-caps. Striking on a poster, wrong for dense financial tables.
+   * Geist was here before this and is Vercel's: more geometric and technical,
+   * which reads as a developer tool rather than a consumer trading product.
    *
-   * "Capsule Sans" stays in the stack behind Geist rather than being deleted.
-   * The @font-face rules further down point at fonts/, which is empty; a face
-   * whose src 404s is dropped by the browser and the next family is used, so
-   * this resolves to nothing today and costs nothing. Drop licensed files in
-   * and it takes effect with no code change. See fonts/README.md.
-   *
-   * Inter and the system stack stay behind both, so a blocked or slow CDN
-   * degrades to something chosen rather than to Times New Roman. */
-  --sans: "Geist Variable", "Geist", "Capsule Sans", "Inter Variable", "Inter",
+   * Inter stays behind Switzer, loaded from a different CDN, so a Fontshare
+   * outage degrades to a chosen face rather than to Times New Roman. */
+  --sans: "Switzer", "Inter Variable", "Inter",
           system-ui, -apple-system, "Segoe UI", sans-serif;
 
   /* ---------------------------------------------------------------- scale
