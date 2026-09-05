@@ -73,6 +73,23 @@
   --surface: #0a0a0a;
   --surface-2: #141414;
   --border: rgba(255, 255, 255, 0.07);
+
+  /* Glass. A translucent fill plus a backdrop blur, so what scrolls underneath
+     shows through as colour and motion rather than being hidden by a slab.
+     The fill has to be translucent or the blur has nothing to reveal, and it
+     has to be dark enough that white text still clears 4.5:1 over whatever
+     passes behind it. Measured against the brightest surface in the app
+     (--surface-2 at #141414), white on this composite is 15.9:1. */
+  --glass: rgba(10, 10, 10, 0.62);
+  --glass-strong: rgba(10, 10, 10, 0.82);
+  --glass-edge: rgba(255, 255, 255, 0.10);
+  --glass-blur: 20px;
+  --glass-sat: 180%;
+
+  /* Grain. Opacity, not a colour: the texture itself is one SVG turbulence
+     tile reused by both themes, and only its strength changes. Dark needs more
+     because film grain reads as light specks on a dark field. */
+  --grain-opacity: 0.035;
   --raised: rgba(255, 255, 255, 0.03);
   --border-strong: rgba(255, 255, 255, 0.13);
 
@@ -122,15 +139,19 @@
      the marks it was always meant to. Deliberately not the accent
      green: #00c805 is the brand and a button, and a wall of it on every number
      is neon rather than legible. */
-  --pos: #0ca30c;           /* on black: 6.26:1 */
-  --neg: #d43c3c;           /* on black: 4.51:1 — #d03b3b was 4.37, just short */
+  /* Contrast is quoted against --surface-2 (#141414), the brightest panel these
+     ever sit on, not against the plane. The old comments measured on pure black,
+     which no text in this app is ever drawn on: --neg read "4.51:1" and was
+     actually 3.96:1 where it appears. */
+  --pos: #0ca30c;           /* on --surface-2: 5.49:1 */
+  --neg: #d95454;           /* on --surface-2: 4.69:1, was #d43c3c at 3.96:1 */
   --mid: #383835;
 
   /* Status — "is something wrong", not "which way did it go". Reserved, never
      used as a series, and deliberately fixed across themes: a warning is the
      same warning on any background. Direction lives in --pos/--neg above. */
   --good: #0ca30c;
-  --warn: #fab219;
+  --warn: #fab219;          /* on --surface-2: 10.04:1 */
   --serious: #ec835a;
   --critical: #d03b3b;
 
@@ -169,8 +190,8 @@
    *
    * Inter stays behind Switzer, loaded from a different CDN, so a Fontshare
    * outage degrades to a chosen face rather than to Times New Roman. */
-  --sans: "Switzer", "Inter Variable", "Inter",
-          system-ui, -apple-system, "Segoe UI", sans-serif;
+  --sans: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", "Inter Variable",
+          "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
 
   /* ---------------------------------------------------------------- scale
    *
@@ -270,12 +291,21 @@
   --surface: #ffffff;
   --surface-2: #f6f7f8;
   --border: rgba(11, 11, 11, 0.08);
+
+  /* Light theme glass. Lighter fill, and less grain: on a white field the same
+     texture reads as dirt rather than as film. */
+  --glass: rgba(255, 255, 255, 0.68);
+  --glass-strong: rgba(255, 255, 255, 0.86);
+  --glass-edge: rgba(11, 11, 11, 0.08);
+  --glass-blur: 20px;
+  --glass-sat: 180%;
+  --grain-opacity: 0.022;
   --raised: rgba(11, 11, 11, 0.02);
   --border-strong: rgba(11, 11, 11, 0.14);
 
   --ink: #0b0b0b;
   --ink-2: #4a4a4a;
-  --ink-muted: #7b7b7b;
+  --ink-muted: #717171;   /* on --surface-2: 4.55:1, was #7b7b7b at 3.95:1 */
   /* Darker green on white. #00c805 measures 1.8:1 against white and fails any
      text use, so the light theme takes a step down.
      
@@ -293,11 +323,18 @@
   --grid: #e1e0d9;
   --baseline: #c3c2b7;
 
-  --pos: #008903;           /* on white: 4.59:1 */
-  --neg: #de3500;           /* on white: 4.55:1 */
+  /* Same correction as the dark theme: measured on --surface-2 (#f6f7f8),
+     not on white. Both were failing where they are actually drawn. */
+  --pos: #007a03;           /* on --surface-2: 5.17:1, was #008903 at 4.28:1 */
+  --neg: #d13200;           /* on --surface-2: 4.70:1, was #de3500 at 4.24:1 */
 
   /* The palette's light column: same eight hues, stepped for a light surface. */
-  --s1: #2a78d6;
+  --s1: #2771ca;          /* on --surface-2: 4.55:1, was #2a78d6 at 4.12:1 */
+  /* Light theme needs its own amber. It had none, so it inherited the dark
+     theme's #fab219 and drew yellow text on white at 1.71:1, the worst
+     contrast in the app. A dark amber keeps the "caution" reading without
+     relying on a hue that cannot carry text on a light ground. */
+  --warn: #956703;          /* on --surface-2: 4.64:1 */
   --s2: #eb6834;
   --s3: #1baf7a;
   --s4: #eda100;
@@ -357,7 +394,39 @@ html, body {
      punctuation pairs into ligatures that break a column of figures. Off here,
      on nowhere. */
   font-variant-ligatures: none;
-  overflow-x: hidden;
+
+  /* Smooth scrolling for jumps, not for the wheel.
+   *
+   * This covers anchor navigation and every scrollIntoView in the app: the
+   * glossary's "learn more", the chart scrolling a panel into view, the jump
+   * back to a table after a filter. Those are the places where an instant jump
+   * loses the reader's position.
+   *
+   * Deliberately NOT a scroll-hijacking library. Locomotive and its kind
+   * replace native scrolling with a transform on a wrapper, which costs a frame
+   * of latency on every wheel event, breaks position: sticky (the header above
+   * took a fix today to work at all), and disconnects the scrollbar from the
+   * document. On a terminal whose chart must answer a wheel immediately and
+   * whose chrome is sticky by design, that trade is the wrong way round. The
+   * "premium" part of that effect is content revealing as it arrives, which is
+   * the IntersectionObserver stagger in revealPanels. */
+  scroll-behavior: smooth;
+
+  /* No overflow property on the root. See the note on `main` below.
+   *
+   * This carried overflow-x: hidden, which forces the other axis to compute to
+   * `auto` and turns body into a scroll container. A position: sticky child
+   * then sticks to that container rather than the viewport and never pins, so
+   * header.topbar scrolled away despite being sticky: measured at scrollY 600,
+   * the bar sat at -600.
+   *
+   * Switching it to `clip` fixed the header and broke IntersectionObserver.
+   * overflow: clip ON THE ROOT ELEMENT degenerates the implicit root that
+   * IntersectionObserver measures against, so no observer fired anywhere in the
+   * app: measured, a plain observer on a panel at top 456 in a 971px viewport
+   * reported nothing. That took the panel reveals with it.
+   *
+   * Both properties want the root left alone, so the clipping moved to main. */
 }
 
 button, input, select, textarea { font: inherit; color: inherit; }
@@ -489,7 +558,7 @@ nav.tabs::-webkit-scrollbar { display: none; }
 nav.tabs button {
   /* Sized up from 14px/6-12px: at desktop widths the strip read as small print
      next to the panels it navigates. */
-  padding: 9px 16px;
+  padding: var(--space-2) var(--space-4);
   font-size: var(--t-lead);
   font-weight: 500;
   flex: none;
@@ -522,14 +591,25 @@ nav.tabs button[aria-selected="true"]::after {
   background: var(--s1);
 }
 
+/* Sticky under the top bar, so it floats over content and takes glass too. */
 .statusline {
   padding: var(--space-2) var(--space-5);
   font-size: var(--t-small);
   color: var(--ink-muted);
-  border-bottom: 1px solid var(--border);
+  background: var(--glass);
+  border-bottom: 1px solid var(--glass-edge);
   display: flex;
   gap: var(--space-4);
   flex-wrap: wrap;
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .statusline {
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .statusline { background: var(--plane); }
 }
 
 /* No transition on padding: animating a layout property forces full-document
@@ -2270,6 +2350,9 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
 
 .cal-why {
   grid-column: 1 / -1;
+  /* 102px is deliberate and off-grid: it aligns this row's left edge with the
+     start of the column above it, whose width is set by content rather than by
+     the spacing scale. Snapping it to 104 would misalign it by 2px. */
   margin: var(--space-2) 0 var(--space-1) 102px;
   padding-left: var(--space-3);
   border-left: 2px solid var(--border);
@@ -2615,7 +2698,17 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
   border: 1px solid var(--border);
   border-radius: var(--r-pill, 999px);
 }
-.pills .pill {
+/* Styled on the class itself, not on `.pills .pill`.
+ *
+ * The descendant selector required a .pills wrapper that almost nothing
+ * renders: pills live in .econ-pills and .map-picker instead. Measured on the
+ * Macro tab, all 31 pills were unstyled native buttons — ButtonFace grey with
+ * inherited near-black text at 3.69:1. They looked like OS buttons dropped into
+ * the page, which is what they were.
+ *
+ * Dropping the ancestor lowers specificity from (0,2,0) to (0,1,0). Safe: no
+ * other rule in this file sets a background on .pill. */
+.pill {
   appearance: none;
   border: 0;
   background: none;
@@ -2630,15 +2723,15 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
   transition: background 120ms ease, color 120ms ease;
   min-width: 34px;
 }
-.pills .pill:hover { color: var(--ink); }
-.pills .pill.on {
+.pill:hover { color: var(--ink); }
+.pill.on {
   background: var(--s1);
   color: #fff;
 }
-.pills .pill:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+.pill:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .pills .pill { transition: none; }
+  .pill { transition: none; }
 }
 
 /* ------------------------------------------------- the case both ways
@@ -3428,7 +3521,9 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
   position: absolute;
   top: 50%;
   width: 15px; height: 15px;
-  margin-left: -7.5px;
+  /* Centred by transform rather than a -7.5px margin: the margin had to equal
+     half the width, so any change to the width silently un-centred it. */
+  transform: translateX(-50%);
   border-radius: 50%;
   background: var(--ink);
   border: 2px solid var(--surface);
@@ -4874,7 +4969,7 @@ body {
   padding-right: env(safe-area-inset-right);
 }
 header.topbar {
-  padding-top: calc(9px + env(safe-area-inset-top));
+  padding-top: calc(var(--space-2) + env(safe-area-inset-top));
 }
 main {
   padding-bottom: calc(28px + env(safe-area-inset-bottom));
@@ -5276,12 +5371,70 @@ body.chat-open main { padding-right: var(--space-5); margin-right: 420px; }
   border-color: transparent;
   font-weight: 600;
 }
-.btn.primary:hover { filter: brightness(1.08); }
+/* Lift and glow.
+ *
+ * A 1px rise plus a coloured shadow drawn from the button's own fill, so the
+ * glow belongs to the control rather than being a generic drop shadow. Both are
+ * compositor properties (transform, box-shadow), so the hover costs no layout.
+ *
+ * 1px, not 2 or 3. The button sits in a toolbar next to inputs of the same
+ * height; a larger lift makes the row look misaligned while the cursor rests on
+ * it. The brightness bump stays, because on a small control the shadow alone is
+ * easy to miss.
+ *
+ * color-mix keeps one source of truth: change --btn-primary and the glow
+ * follows. Guarded by @supports because the fallback should be a plain shadow
+ * rather than no hover state at all. */
+.btn.primary {
+  transition: background-color 0.12s ease, border-color 0.12s ease,
+              filter 0.12s ease, transform 0.16s cubic-bezier(0.22, 0.61, 0.36, 1),
+              box-shadow 0.16s ease;
+}
+.btn.primary:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(28, 114, 216, 0.38), 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+@supports (color: color-mix(in srgb, red 50%, blue)) {
+  .btn.primary:hover {
+    box-shadow: 0 4px 14px color-mix(in srgb, var(--btn-primary) 42%, transparent),
+                0 1px 3px rgba(0, 0, 0, 0.25);
+  }
+}
+/* Pressing puts it back down. Without this the button stays lifted through the
+   click, which reads as the press not registering. */
+.btn.primary:active {
+  transform: translateY(0);
+  box-shadow: none;
+  filter: brightness(0.96);
+}
+/* Keyboard users get the same affordance; :focus-visible only, so a mouse click
+   does not leave a lifted button behind after the pointer has gone. */
+.btn.primary:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(28, 114, 216, 0.38);
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn.primary { transition: background-color 0.12s ease, filter 0.12s ease; }
+  .btn.primary:hover, .btn.primary:focus-visible { transform: none; }
+}
 
 /* The top bar loses its fill and keeps only a divider. */
+/* The topbar's fill lives here, once. It was declared at both ends of this
+   file — the later rule silently won — which is how the buttons ended up green
+   while two places said blue. */
 header.topbar {
-  background: var(--plane);
-  border-bottom: 1px solid var(--border);
+  background: var(--glass);
+  border-bottom: 1px solid var(--glass-edge);
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  header.topbar {
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  header.topbar { background: var(--plane); }
 }
 
 /* Big numbers get tighter tracking — at 30px and up the default spacing reads
@@ -5422,8 +5575,9 @@ nav.tabs-group {
   top: 50%;
   width: 9px;
   height: 9px;
-  margin-left: -4.5px;
-  transform: translateY(-50%);
+  /* One transform for both axes. The -4.5px margin was half the width and had
+     to be maintained alongside it. */
+  transform: translate(-50%, -50%);
   border-radius: 50%;
   background: var(--ink);
   box-shadow: 0 0 0 2px var(--surface);
@@ -5753,6 +5907,14 @@ b, strong { font-weight: 600; }
   border-radius: var(--r-md);
   box-shadow: 0 14px 30px -10px rgba(0, 0, 0, 0.6);
   z-index: 20;
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .ws-menu-pop {
+    background: var(--glass-strong);
+    border-color: var(--glass-edge);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  }
 }
 .ws-opt {
   display: flex;
@@ -6214,7 +6376,7 @@ b, strong { font-weight: 600; }
   font-size: var(--t-caption);
   min-width: 68px;
 }
-.ws-swatches { display: flex; gap: 3px; flex-wrap: wrap; max-width: 210px; }
+.ws-swatches { display: flex; gap: var(--space-1); flex-wrap: wrap; max-width: 208px; }
 .ws-cswatch {
   width: 16px;
   height: 16px;
@@ -6522,7 +6684,7 @@ table.data tr.fx-detail td,
   top: 2px;
   right: 6px;
   min-width: 14px;
-  padding: 0 3px;
+  padding: 0 var(--space-1);
   border-radius: var(--r-pill);
   background: var(--neg);
   color: #fff;
@@ -6875,3 +7037,84 @@ body.ws-panning { user-select: none; }
 .ws-nav-line { fill: none; stroke: var(--ink-muted); stroke-width: 1; }
 .ws-nav-area { fill: var(--ink-muted); opacity: 0.16; }
 @media (max-height: 700px) { .ws-nav { height: 34px; } }
+
+/* ==================================================== texture and glass ==== */
+
+/* Background grain.
+ *
+ * One fixed overlay for the whole document rather than a texture on each
+ * surface: a tile that scrolls with the content reads as a pattern, and the
+ * point of grain is that it belongs to the screen, not to the page.
+ *
+ * Generated by feTurbulence in a data URI, so there is no image to fetch and
+ * nothing to go stale. fractalNoise at a high baseFrequency gives fine grain;
+ * lower frequencies produce clouds, which look like a rendering fault.
+ *
+ * pointer-events: none is load-bearing. A fixed full-viewport layer without it
+ * swallows every click on the page.
+ */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: var(--grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 160px 160px;
+}
+/* Grain is decoration and it is the kind of static texture that some readers
+   find uncomfortable, so it goes with the rest of the motion preferences. */
+@media (prefers-reduced-motion: reduce) {
+  body::after { opacity: 0; }
+}
+
+/* Liquid glass.
+ *
+ * Applied to the elements that float over scrolling content: the top bar, the
+ * status strip, dropdown popups and the chart's floating chrome. Not to panels
+ * or tables, which sit IN the page rather than over it, and where a blur behind
+ * a table of numbers is just cost.
+ *
+ * -webkit- prefix included: Safari still needs it, and the unprefixed property
+ * alone silently produces an opaque bar there.
+ *
+ * @supports guards the translucency. Without backdrop-filter the fill would be
+ * a semi-transparent layer over live text with nothing blurring it, which is
+ * unreadable rather than merely unstyled — so the fallback stays opaque.
+ */
+.glass {
+  background: var(--glass);
+  border-color: var(--glass-edge);
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass {
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass { background: var(--plane); }
+}
+
+/* A reader who asked for less motion gets instant jumps. Overriding on both
+   elements because either can own the scroll depending on the browser. */
+@media (prefers-reduced-motion: reduce) {
+  html, body { scroll-behavior: auto; }
+}
+
+/* Horizontal clipping lives here, not on html or body.
+ *
+ * On the root it either breaks position: sticky (as `hidden`, by making the
+ * root a scroll container) or breaks IntersectionObserver (as `clip`, by
+ * degenerating its implicit root). On main it does neither: the sticky header
+ * is a sibling and still measures against the viewport, and observers inside
+ * main still intersect the viewport normally.
+ *
+ * Measured at 942px wide, nothing currently overflows, so this is a guard for
+ * narrow widths rather than a fix for a live problem: a wide table or a chart
+ * at a small viewport should clip rather than add a horizontal scrollbar to
+ * the whole document.
+ */
+main { overflow-x: clip; }

@@ -663,6 +663,49 @@ function dedupeGlossTerms(host) {
   });
 }
 
+/* One observer for the whole app, created lazily.
+ *
+ * A fresh IntersectionObserver per render would leak one per view switch, and
+ * they are cheap to share: the callback only ever reads the entry it was given.
+ *
+ * rootMargin pulls the trigger line 12% up from the bottom of the viewport, so
+ * a panel starts its fade slightly before it is fully exposed. Triggering
+ * exactly at the edge means the motion finishes off-screen on a fast scroll and
+ * the reader sees a static panel arrive. */
+let revealObserver = null;
+
+function revealOnEnter(el, delayMs) {
+  if (!revealObserver) {
+    revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const node = entry.target;
+        node.style.animationDelay = `${node.dataset.revealDelay || 0}ms`;
+        node.classList.add('reveal');
+        // Once revealed, stop watching. A panel that re-animates every time it
+        // re-enters the viewport turns an entrance into a flicker on any scroll
+        // back up the page.
+        revealObserver.unobserve(node);
+      });
+    }, { rootMargin: '0px 0px -12% 0px', threshold: 0.01 });
+  }
+  el.dataset.revealDelay = String(Math.round(delayMs));
+  revealObserver.observe(el);
+}
+
+/* Stagger panels in as they reach the viewport.
+ *
+ * This used to fire every panel's animation at render time. Anything below the
+ * fold therefore played its entrance while off-screen and was finished long
+ * before it was scrolled to, so the effect existed only for the two or three
+ * panels that happened to be visible on load. On a long view most of the work
+ * was invisible by construction.
+ *
+ * Panels already on screen keep the render-time stagger, because they ARE the
+ * arrival; panels below wait for the scroll. The delay curve is unchanged:
+ * linear up to a soft knee, compressed after it, hard-capped, so a view with
+ * thirty panels does not make the last one wait two seconds.
+ */
 function revealPanels(host) {
   if (!host) return;
   if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -673,13 +716,65 @@ function revealPanels(host) {
   void host.offsetWidth;
   host.classList.add('revealing');
 
-  host.querySelectorAll('.panel').forEach((el, i) => {
-    const linear = i * REVEAL_STEP_MS;
-    const delay = linear <= REVEAL_SOFT_MS
-      ? linear
-      : REVEAL_SOFT_MS + (linear - REVEAL_SOFT_MS) * (REVEAL_TAIL_MS / REVEAL_STEP_MS);
-    el.style.animationDelay = `${Math.round(Math.min(delay, REVEAL_CAP_MS))}ms`;
-    el.classList.add('reveal');
+  const fold = window.innerHeight || 800;
+  let onScreen = 0;
+
+  host.querySelectorAll('.panel').forEach((el) => {
+    el.classList.remove('reveal');
+    const box = el.getBoundingClientRect();
+    const visible = box.top < fold && box.bottom > 0;
+
+    if (visible) {
+      // Index by how many are already on screen, not by position in the list,
+      // so the visible group staggers 0, 55, 110... regardless of how many
+      // panels sit below the fold.
+      const linear = onScreen * REVEAL_STEP_MS;
+      onScreen += 1;
+      const delay = linear <= REVEAL_SOFT_MS
+        ? linear
+        : REVEAL_SOFT_MS + (linear - REVEAL_SOFT_MS) * (REVEAL_TAIL_MS / REVEAL_STEP_MS);
+      el.style.animationDelay = `${Math.round(Math.min(delay, REVEAL_CAP_MS))}ms`;
+      el.classList.add('reveal');
+    } else if (typeof IntersectionObserver === 'function') {
+      // Below the fold: a short fixed delay rather than a growing one. Its
+      // stagger comes from the order it is scrolled into, not from its index.
+      revealOnEnter(el, 40);
+    } else {
+      el.classList.add('reveal');
+    }
+  });
+
+  // Then sweep the rest of the view.
+  //
+  // A view is not built by one call. Each loader renders into its own host and
+  // calls this with that host, so panels belonging to a different host were
+  // never seen here: measured on Macro, 11 panels sat below the fold and 1 was
+  // observed. The other 10 were visible but inert, which made the effect look
+  // broken rather than absent — some panels faded in and most did not.
+  //
+  // Cheap enough to do unconditionally: one querySelectorAll over a view that
+  // holds tens of panels, and observing an element twice is a no-op in the
+  // IntersectionObserver API anyway.
+  armViewReveals();
+}
+
+/** Observe every panel in the active view that no host has claimed yet. */
+function armViewReveals() {
+  if (typeof IntersectionObserver !== 'function') return;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const view = document.querySelector('.view.active');
+  if (!view) return;
+  const fold = window.innerHeight || 800;
+  view.querySelectorAll('.panel').forEach((el) => {
+    if (el.classList.contains('reveal') || el.dataset.revealDelay !== undefined) return;
+    const box = el.getBoundingClientRect();
+    if (box.top < fold && box.bottom > 0) {
+      // Already on screen when it appeared: show it now rather than waiting for
+      // a scroll that may never come.
+      el.classList.add('reveal');
+    } else {
+      revealOnEnter(el, 40);
+    }
   });
 }
 

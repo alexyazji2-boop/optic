@@ -36,7 +36,9 @@
      Inter stays loaded as the fallback, from a different CDN on purpose. If
      Fontshare is slow or blocked the interface still gets a chosen neo-grotesque
      rather than whatever the OS defaults to, and one outage cannot take both. -->
-<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=switzer@1&display=swap">
+<!-- Plus Jakarta Sans, variable: one file covering 200-800. Inter stays
+     behind it so a slow or blocked CDN degrades to something chosen. -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/plus-jakarta-sans/index.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/inter/index.css">
 <link rel="stylesheet" href="styles.css?v=397">
 <script>
