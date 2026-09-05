@@ -761,7 +761,7 @@ def write_earnings_brief(ticker: str, facts: Dict[str, Any]) -> Optional[Dict[st
         )
     except Exception as exc:
         log.warning("earnings brief failed for %s: %s: %s", ticker, type(exc).__name__, exc)
-        return None
+        return {"available": False, "reason": _human_error(exc)}
 
     text = "".join(getattr(b, "text", "") for b in (msg.content or []))
     truncated = getattr(msg, "stop_reason", None) == "max_tokens"
@@ -857,11 +857,21 @@ SECTOR_MAX_TOKENS = int(os.environ.get("SECTOR_READ_TOKENS", "1600"))
 
 
 def write_sector_read(symbol: str, facts: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """A short written read on one sector or index ETF, or None.
+    """A short written read on one sector or index ETF.
+
+    Returns the read, or {"available": False, "reason": ...} explaining why not.
+
+    It used to return None for all six failure modes and log the cause, so the
+    panel could only say "the read could not be written on this attempt" no
+    matter what happened. The actual reason was usually actionable and always
+    already known: _human_error below turns an SDK exception into a sentence,
+    and this function was discarding its own answer.
 
     Cached for an hour per symbol. Fifteen instruments on two tabs, each one a
-    paid call, is a bill worth thinking about — and the underlying levels only
-    change once a session, so a shorter TTL would buy nothing.
+    paid call, is a bill worth thinking about, and the underlying levels only
+    change once a session, so a shorter TTL would buy nothing. Failures are not
+    cached: a credit top-up or a capacity blip clearing should take effect on
+    the next click, not in an hour.
     """
     key = (symbol or "").upper()
     hit = _SECTOR_CACHE.get(key)
@@ -872,15 +882,18 @@ def write_sector_read(symbol: str, facts: Dict[str, Any]) -> Optional[Dict[str, 
         from anthropic import Anthropic
     except ImportError:
         log.warning("sector read skipped: anthropic package not importable")
-        return None
+        return {"available": False, "reason": "The anthropic package is not installed "
+                                              "on the server."}
     if available().get("enabled") is not True:
         log.warning("sector read skipped: assistant not enabled")
-        return None
+        return {"available": False, "reason": "The assistant is not configured, so "
+                                              "there is no written read. The levels and "
+                                              "rotation on the board are unaffected."}
     try:
         client = Anthropic(max_retries=3)
     except Exception as exc:
         log.warning("sector read skipped: client construction failed: %s", exc)
-        return None
+        return {"available": False, "reason": _human_error(exc)}
 
     body = json.dumps(_prune(facts), default=str)[:40000]
     try:
@@ -891,16 +904,19 @@ def write_sector_read(symbol: str, facts: Dict[str, Any]) -> Optional[Dict[str, 
         )
     except Exception as exc:
         log.warning("sector read failed for %s: %s: %s", key, type(exc).__name__, exc)
-        return None
+        return {"available": False, "reason": _human_error(exc)}
 
     text = "".join(getattr(b, "text", "") for b in (msg.content or []))
     parsed = _parse_brief_json(text, getattr(msg, "stop_reason", None) == "max_tokens", key)
     if parsed is None:
-        return None
+        return {"available": False,
+                "reason": "The model's reply could not be read as the expected format. "
+                          "The levels and rotation on the board are unaffected."}
     paragraphs = [str(x).strip() for x in (parsed.get("paragraphs") or []) if str(x).strip()]
     if not paragraphs:
         log.warning("sector read skipped for %s: no paragraphs", key)
-        return None
+        return {"available": False,
+                "reason": "The model returned an empty read."}
 
     stance = str(parsed.get("stance") or "").strip().lower()
     if stance not in ("constructive", "cautious", "two-sided"):
@@ -994,7 +1010,7 @@ def write_weekly_update(week_key: str, facts: Dict[str, Any]) -> Optional[Dict[s
         client = Anthropic(max_retries=3)
     except Exception as exc:
         log.warning("weekly update skipped: client construction failed: %s", exc)
-        return None
+        return {"available": False, "reason": _human_error(exc)}
 
     body = json.dumps(_prune(facts), default=str)[:80000]
     try:
@@ -1005,7 +1021,7 @@ def write_weekly_update(week_key: str, facts: Dict[str, Any]) -> Optional[Dict[s
         )
     except Exception as exc:
         log.warning("weekly update failed: %s: %s", type(exc).__name__, exc)
-        return None
+        return {"available": False, "reason": _human_error(exc)}
 
     text = "".join(getattr(b, "text", "") for b in (msg.content or []))
     parsed = _parse_brief_json(text, getattr(msg, "stop_reason", None) == "max_tokens",

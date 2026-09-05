@@ -5826,7 +5826,10 @@ b, strong { font-weight: 600; }
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  /* head, legend, plot, navigator. The plot is the only row that flexes, so the
+     navigator keeps its height as the window resizes and never squeezes the
+     chart to nothing. */
+  grid-template-rows: auto auto 1fr auto;
 }
 .ws-head {
   display: flex;
@@ -6244,7 +6247,23 @@ b, strong { font-weight: 600; }
   inset: 0;
   pointer-events: none;
 }
-.ws-draw-svg { pointer-events: auto; }
+/* The drawing canvas must NOT intercept pointer events.
+ *
+ * This was `auto`, which made the whole overlay SVG hit-testable across the
+ * entire chart. The hit stack under the cursor read: ws-draw-svg on top, then
+ * the chart's own transparent hover rect buried beneath it. So every pointermove
+ * was swallowed before the chart saw it, and the crosshair, the tooltip and the
+ * OHLC header readout all did nothing. The header still showed figures, which
+ * made it look like a formatting problem rather than a dead hover: they were
+ * the last bar, painted once at mount and never updated because onHover never
+ * fired.
+ *
+ * `none` here costs nothing, because the parts that DO need clicking declare it
+ * themselves in the rules below: a drawn line takes pointer-events on its
+ * stroke, a rectangle and a handle take all. Clicking a drawing therefore still
+ * targets that drawing. And when a tool is armed, .ws-canvas.arming turns this
+ * layer back on so a new drawing can be started anywhere on the plot. */
+.ws-draw-svg { pointer-events: none; }
 .ws-draw-svg .ws-dr { cursor: move; }
 .ws-draw-svg .ws-dr line,
 .ws-draw-svg .ws-dr rect { pointer-events: stroke; }
@@ -6253,6 +6272,11 @@ b, strong { font-weight: 600; }
 .ws-draw-svg .ws-dr.on rect { filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.35)); }
 .ws-draw-svg .ws-dr-handle { cursor: grab; pointer-events: all; }
 .ws-draw-svg .ws-dr-pending { pointer-events: none; }
+/* The invisible grab target. `stroke` rather than `visiblePainted`, because the
+   twin is transparent and visiblePainted would refuse to hit an unpainted
+   stroke. Cursor matches the visible line so the widened area does not feel
+   like a separate object. */
+.ws-draw-svg .ws-dr-hit { pointer-events: stroke; cursor: move; }
 /* A drawing tool armed means the next click on the plot places a point, so the
    cursor should say so. */
 .ws-canvas.arming .ws-draw-svg,
@@ -6811,3 +6835,43 @@ body.chat-open .ws-legend,
    is a different gesture and should not borrow the same affordance. */
 .map-tile[data-map-sector] { cursor: zoom-in; }
 .map-tile[data-map-sector]:hover { outline: 2px solid var(--ink); outline-offset: -2px; }
+
+/* The measure-gesture hint. Quieter than a live overlay row, because it is an
+   instruction rather than a reading, and it should not compete with the numbers
+   above it. */
+.ws-leg-hint { opacity: 0.7; }
+.ws-leg-hint .ws-leg-val { font-style: italic; font-variant-numeric: normal; }
+
+/* While panning the chart. `grabbing` on the body rather than the chart,
+   because the pointer routinely leaves the plot mid-drag and a cursor that
+   reverts halfway through reads as the gesture having been dropped. */
+body.ws-panning, body.ws-panning * { cursor: grabbing !important; }
+body.ws-panning { user-select: none; }
+.ws-zoom-reset { color: var(--s1); }
+
+/* ------------------------------------------------------- chart navigator
+ *
+ * A compressed view of the whole series with the visible window drawn on it.
+ * It exists so panning has somewhere to live that is not the plot: with a
+ * dedicated control, a plain drag on the chart can go back to measuring, and
+ * neither gesture needs a modifier key to disambiguate it.
+ *
+ * It also answers a question zooming otherwise leaves open, which is where in
+ * the history you currently are. */
+.ws-nav {
+  height: 46px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  position: relative;
+}
+.ws-nav.dragging { cursor: grabbing; }
+.ws-nav svg { display: block; width: 100%; height: 100%; }
+.ws-nav-window { fill: var(--s1); opacity: 0.16; }
+.ws-nav-edge { fill: var(--s1); opacity: 0.85; cursor: ew-resize; }
+.ws-nav-mask { fill: var(--plane); opacity: 0.55; }
+.ws-nav-line { fill: none; stroke: var(--ink-muted); stroke-width: 1; }
+.ws-nav-area { fill: var(--ink-muted); opacity: 0.16; }
+@media (max-height: 700px) { .ws-nav { height: 34px; } }

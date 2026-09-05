@@ -22,6 +22,17 @@ const C = {
   pos: '#3987e5', neg: '#e66767',
   good: '#0ca30c', warn: '#fab219', serious: '#ec835a', critical: '#d03b3b',
 
+  /* The default colour for a chart drawing.
+   *
+   * This slot was missing, and every new drawing is created with
+   * color: 'accent'. So `C[dr.color] || C.accent` resolved to undefined, the
+   * attribute helper skips undefined rather than writing the string
+   * "undefined", and the line was appended with no stroke at all: present in
+   * the DOM, hit-testable, selectable, draggable, and completely invisible.
+   * "2 drawings" in the status bar with an empty chart is exactly what that
+   * looks like from the outside. */
+  accent: '#00c805',
+
   /* Reference-line colours, held apart from the eight categorical slots.
    *
    * Levels are annotation, not data: they mark where something happened rather
@@ -43,6 +54,7 @@ const C_VARS = {
   s5: '--s5', s6: '--s6', s7: '--s7', s8: '--s8',
   pos: '--pos', neg: '--neg', mid: '--mid',
   good: '--good', warn: '--warn', serious: '--serious', critical: '--critical',
+  accent: '--accent',
   refSR: '--ref-sr', refFib: '--ref-fib',
 };
 
@@ -520,6 +532,15 @@ function lineChart(opts) {
   // gutter, so it has to hold "1,234.56" plus the pill padding — otherwise the
   // tag overhangs the viewBox and gets clipped.
   const m = { t: 12, r: valueTags ? 74 : 58, b: 22, l: 8 };
+
+  /* The pulsing last-price marker, kept so it can be raised above the value
+   * tags at the end.
+   *
+   * SVG paints in document order and the tags are appended after the series, so
+   * the tag's background rect and its leader line landed on top of the dot. The
+   * hit stack under the marker read rect, line, circle.live-dot: it was being
+   * drawn and then covered, which is indistinguishable from missing. */
+  const liveMarks = [];
   const plotW = W - m.l - m.r;
   const plotH = H - m.t - m.b;
 
@@ -944,22 +965,26 @@ function lineChart(opts) {
         // reader is being told "the newest point is still forming", which is a
         // fact about the bar rather than about any particular average.
         if (liveNextChart && si === 0) {
-          root.appendChild(s('circle', {
+          const halo = s('circle', {
             cx: X(lastIdx), cy: Y(se.values[lastIdx]), r: 4,
             fill: 'none', stroke: se.color, 'stroke-width': 1.5,
             class: 'live-halo',
             'data-fade': animating ? DRAW_MS * 0.8 : null,
-          }));
+          });
+          root.appendChild(halo);
+          liveMarks.push(halo);
         }
         // 2px surface ring keeps the end dot legible where lines cross.
-        root.appendChild(s('circle', {
+        const endDot = s('circle', {
           cx: X(lastIdx), cy: Y(se.values[lastIdx]), r: 4,
           fill: se.color, stroke: C.surface, 'stroke-width': 2,
           class: liveNextChart && si === 0 ? 'live-dot' : null,
           // Lands as the line reaches it, rather than sitting at the far right
           // waiting for a line that hasn't arrived yet.
           'data-fade': animating ? DRAW_MS * 0.8 : null,
-        }));
+        });
+        root.appendChild(endDot);
+        if (liveNextChart && si === 0) liveMarks.push(endDot);
       }
     }
   });
@@ -1044,6 +1069,17 @@ function lineChart(opts) {
       const ty = parseFloat(el.getAttribute('y'));
       if (tags.some((t) => Math.abs(ty - t.ty) < TAG_H)) el.setAttribute('opacity', '0');
     });
+
+    /* Raise the pulsing marker above the tag that was covering it.
+     *
+     * The tag sits 3px right of the plot edge and draws a leader line back to
+     * the price, and that line runs straight over the last point, which is
+     * exactly where the live dot is. appendChild on an existing child moves it,
+     * so this re-stacks rather than duplicating.
+     *
+     * Only when valueTags is on: with no tags there is nothing above it, and
+     * moving it would put the marker over the crosshair instead. */
+    liveMarks.forEach((el) => root.appendChild(el));
   }
 
   /* Dated events pinned to the price line — insider transactions, in practice.
@@ -1053,9 +1089,19 @@ function lineChart(opts) {
    * shape flipped rather than two different glyphs: the direction IS the
    * information, and a reader should not have to learn a legend to see it.
    *
-   * Labels are only drawn for the largest few. Ten insider prints on a three-month
-   * chart, each labelled, is a wall of text over the price — so size decides who
-   * gets named, and the hover tooltip carries the rest.
+   * Labels are only drawn for the largest few. Ten insider prints on a
+   * three-month chart, each labelled, is a wall of text over the price, so size
+   * decides who gets named.
+   *
+   * Every marker carries a <title> regardless, which is what makes the
+   * unlabelled ones readable. This comment used to claim the hover tooltip
+   * carried them and nothing did: insiderEvents built a detail string with the
+   * insider's name and position, and no code ever rendered it. An unlabelled
+   * triangle was therefore mute, which is indistinguishable from decoration.
+   *
+   * A native <title> rather than the chart's own tooltip: it needs no listener,
+   * survives every redraw, and works on a marker only a few pixels wide, where
+   * a scrub binding competes with the crosshair underneath it.
    */
   if (events && events.length) {
     const evLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.9 : null });
@@ -1078,15 +1124,29 @@ function lineChart(opts) {
       // the line it is annotating.
       const tip = buy ? y + 9 : y - 9;
       const base = buy ? y + 20 : y - 20;
-      evLayer.appendChild(s('path', {
-        d: buy
-          ? `M ${x} ${tip} L ${x - 5} ${base} L ${x + 5} ${base} Z`
-          : `M ${x} ${tip} L ${x - 5} ${base} L ${x + 5} ${base} Z`,
+      // One group per event so the triangle, its stem and the title move
+      // together, and so the hover target is the whole marker rather than five
+      // pixels of a path.
+      const mark = s('g', { style: 'cursor:help' });
+      // The shape flips through tip/base rather than through two path strings:
+      // for a buy, tip sits below base, which turns the same three points into
+      // an upward triangle.
+      mark.appendChild(s('path', {
+        d: `M ${x} ${tip} L ${x - 5} ${base} L ${x + 5} ${base} Z`,
         fill: colour, opacity: 0.92,
       }));
-      evLayer.appendChild(s('line', {
+      mark.appendChild(s('line', {
         x1: x, y1: y, x2: x, y2: tip, stroke: colour, 'stroke-width': 1, opacity: 0.5,
       }));
+      // A wider invisible target: a 10px triangle is a hard thing to hit.
+      mark.appendChild(s('rect', {
+        x: x - 8, y: Math.min(y, base) - 4, width: 16,
+        height: Math.abs(base - y) + 8, fill: 'transparent',
+      }));
+      if (e.detail || e.label) {
+        mark.appendChild(s('title', {}, e.detail || e.label));
+      }
+      evLayer.appendChild(mark);
       if (named.has(e.index) && e.label) {
         const w = e.label.length * 5.4 + 10;
         const lx = Math.min(Math.max(m.l + 2, x - w / 2), m.l + plotW - w - 2);
@@ -1154,7 +1214,14 @@ function lineChart(opts) {
    * dots stay on top of the shading.
    */
   const measureGroup = s('g', { opacity: 0, 'pointer-events': 'none' });
-  const measureBand = s('rect', { y: m.t, height: plotH, fill: C.ink2, opacity: 0.08 });
+  /* 0.14, not 0.08.
+   *
+   * At 0.08 against the plot background the shaded span was essentially
+   * invisible: the two edge markers read, but the region between them did not,
+   * so the gesture looked like two loose lines rather than one measured range.
+   * Still light enough to read the price line straight through it, which is the
+   * constraint that kept it low in the first place. */
+  const measureBand = s('rect', { y: m.t, height: plotH, fill: C.ink2, opacity: 0.14 });
   const measureA = s('line', { y1: m.t, y2: m.t + plotH, stroke: C.ink2, 'stroke-width': 1.2, opacity: 0.75 });
   const measureB = s('line', { y1: m.t, y2: m.t + plotH, stroke: C.ink2, 'stroke-width': 1.2, opacity: 0.75 });
   const measureDotA = s('circle', { r: 4.5, stroke: C.surface, 'stroke-width': 2 });
@@ -1275,6 +1342,12 @@ function lineChart(opts) {
   }
   overlay.addEventListener('mousedown', (evt) => {
     if (evt.button !== 0) return;
+    /* Plain drag, no modifier.
+     *
+     * This briefly required shift, because the Charting tab had taken the plain
+     * drag for panning. That is resolved: panning moved to the navigator strip
+     * below the chart, so each gesture has its own surface and neither needs a
+     * key held down to disambiguate it. */
     evt.preventDefault();            // no text-selection drag over the chart
     measureAnchor = indexFromClientX(evt.clientX);
     window.addEventListener('mousemove', onDragMove);

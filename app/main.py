@@ -433,14 +433,19 @@ async def earnings_brief(ticker: str) -> Dict[str, Any]:
                 "earnings brief: profile unavailable for %s: %s", ticker_u, exc)
 
         brief = ai.write_earnings_brief(ticker_u, facts)
-        if not brief:
+        # `available is not True`, not `not brief`. These writers now return a
+        # dict explaining a failure instead of None, and a dict is truthy — a
+        # falsiness check would sail past the guard and return the failure
+        # payload with a ticker and a timestamp attached to it.
+        if not brief or brief.get("available") is not True:
             status = ai.available()
             return {"available": False,
                     "reason": ("The assistant is not configured, so there is no written "
                                "brief. Every figure it would discuss is on the panel above."
                                if status.get("enabled") is not True else
-                               "The brief could not be written on this attempt. The panel's "
-                               "own numbers are unaffected.")}
+                               (brief or {}).get("reason")
+                               or "The brief could not be written on this attempt. The "
+                                  "panel's own numbers are unaffected.")}
         brief["ticker"] = ticker_u
         brief["generated_at"] = datetime.now(timezone.utc).isoformat()
         return brief
@@ -1078,13 +1083,17 @@ async def sector_read(symbol: str) -> Dict[str, Any]:
         if not facts.get("available"):
             return {"available": False, "reason": facts.get("reason", "No data for this symbol.")}
         read = ai.write_sector_read(sym, facts)
-        if not read:
+        # write_sector_read now explains its own failures, so this no longer has
+        # to guess between "not configured" and a shrug. The old branch here
+        # could only tell those two apart and reported everything else as "could
+        # not be written on this attempt", which hid the usual cause: the
+        # account being out of credit, which is both actionable and already
+        # spelled out by ai._human_error.
+        if not read or read.get("available") is not True:
             return {"available": False, "symbol": sym,
                     "summary": (facts.get("row") or {}).get("summary"),
-                    "reason": ("The assistant is not configured, so there is no written read . "
-                               "The levels and rotation on the board are unaffected."
-                               if ai.available().get("enabled") is not True else
-                               "The read could not be written on this attempt.")}
+                    "reason": ((read or {}).get("reason")
+                               or "The read could not be written on this attempt.")}
         read["row"] = facts.get("row")
         read["generated_at"] = datetime.now(timezone.utc).isoformat()
         return read
@@ -1115,12 +1124,14 @@ async def weekly_update(force: bool = False) -> Dict[str, Any]:
             ai._WEEKLY_CACHE.pop(key, None)
         facts = weekly_mod.gather(YF_PROVIDER)
         update = ai.write_weekly_update(key, facts)
-        if not update:
+        # See the earnings brief above: a failure is now a truthy dict.
+        if not update or update.get("available") is not True:
             return {"available": False, "week_key": key,
                     "reason": ("The assistant is not configured, so there is no weekly "
                                "update."
                                if ai.available().get("enabled") is not True else
-                               "The weekly update could not be written on this attempt.")}
+                               (update or {}).get("reason")
+                               or "The weekly update could not be written on this attempt.")}
         update["facts"] = {
             "earnings": facts.get("earnings"),
             "spy": facts.get("spy"),
