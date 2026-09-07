@@ -1192,6 +1192,25 @@ function lineChart(opts) {
        * feature is not adding orientation, it is adding noise — so it stands
        * down instead of capping. One line per four bars is the floor. */
       if (marks.length && marks.length <= Math.max(2, Math.floor(n / 4))) {
+        /* Labels sit at the FOOT of the price plot, not the top.
+         *
+         * At the top they ran straight through the chart legend, which is an
+         * HTML overlay pinned to the top-left corner — so the SVG cannot
+         * measure it and cannot dodge it. On an "all" range the month labels
+         * crossed six rows of legend text. The foot of the price plot is empty
+         * whatever the legend is doing, and it is above the volume strip so it
+         * does not fight the date axis either.
+         */
+        const labelY = m.t + priceH - 4;
+        /* And they are skipped when they would collide with each other.
+         *
+         * 24 dividers across a 700px plot is ~29px per label, and "Jan '25" is
+         * wider than that. The line still gets drawn — the boundary is real —
+         * but the caption is dropped rather than overprinted. Measured from an
+         * estimate rather than getComputedTextLength because the node is not in
+         * the document yet, and 5.2px per character at 9px semibold is close
+         * enough to protect a gap this size. */
+        let lastLabelRight = -Infinity;
         marks.forEach((mk) => {
           const x = X(mk.i);
           levelLayer.appendChild(s('line', {
@@ -1203,13 +1222,11 @@ function lineChart(opts) {
             'stroke-dasharray': '2 6',
             opacity: 0.7,
           }));
-          /* The label is what makes it a divider rather than a line.
-           *
-           * Sat at the top of the plot, on the right of its own line, so a
-           * reader can tell WHICH boundary they are looking at — "Sep" or
-           * "2024" — instead of only that one exists. */
+          const width = String(mk.label).length * 5.2;
+          if (x + 3 < lastLabelRight + 6) return;      // no room; line only
+          lastLabelRight = x + 3 + width;
           levelLayer.appendChild(s('text', {
-            x: x + 3, y: m.t + 9, fill: C.refSession, 'font-size': 9,
+            x: x + 3, y: labelY, fill: C.refSession, 'font-size': 9,
             'font-weight': 600, opacity: 0.85,
           }, mk.label));
         });
