@@ -343,6 +343,41 @@ def _macro_section() -> Dict[str, Any]:
     }
 
 
+def _spread(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The desk's stories, with no single source taking the whole desk.
+
+    Straight recency, which is what this was, hands a desk to whichever source
+    publishes most often. Measured on the Analysis desk the day it was added:
+    all six slots went to WSJ Opinion, whose feed is a general op-ed page — the
+    six were a piece about a daughter's last first day of school, two on court
+    packing and foreign donations, and a readers' letters column. The Economist's
+    finance feed had 300 items in the window and reached the desk zero times,
+    because every one of them was a few hours older.
+
+    So a source may hold at most half a desk. Recency still decides the order
+    and decides who fills the remainder; it just no longer decides everything.
+    """
+    if len(rows) <= DESK_LIMIT:
+        return rows
+    cap = max(1, DESK_LIMIT // 2)
+    picked: List[Dict[str, Any]] = []
+    used: Dict[str, int] = {}
+    for row in rows:
+        sid = row.get("source_id") or row.get("source") or ""
+        if used.get(sid, 0) >= cap:
+            continue
+        picked.append(row)
+        used[sid] = used.get(sid, 0) + 1
+        if len(picked) >= DESK_LIMIT:
+            return picked
+    # A desk carried by one or two prolific sources would otherwise come back
+    # short, which reads as a quiet desk rather than a capped one.
+    if len(picked) < DESK_LIMIT:
+        chosen = {id(r) for r in picked}
+        picked.extend([r for r in rows if id(r) not in chosen][:DESK_LIMIT - len(picked)])
+    return picked[:DESK_LIMIT]
+
+
 def _desks() -> Dict[str, Any]:
     """The wires, split into desks.
 
@@ -388,7 +423,7 @@ def _desks() -> Dict[str, Any]:
         desks.append({
             "id": sector,
             "label": feeds.SECTOR_LABELS.get(sector, sector.title()),
-            "entries": [_classify(e, NON_COMPANY_CATALYSTS) for e in rows[:DESK_LIMIT]],
+            "entries": [_classify(e, NON_COMPANY_CATALYSTS) for e in _spread(rows)],
             "available": len(rows),
         })
 

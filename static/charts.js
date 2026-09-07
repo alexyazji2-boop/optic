@@ -44,6 +44,15 @@ const C = {
    * two hues nothing else on a price chart uses. */
   refSR: '#eb17bd',
   refFib: '#c3c2b7',
+
+  /* Session and period dividers.
+   *
+   * Its own hue, because the old implementation drew them in C.baseline — the
+   * exact colour of the axis line — so a time boundary was indistinguishable
+   * from chart furniture. Cyan is the one family nothing else on a price chart
+   * uses: 7.87:1 on the plane and at least 81 points of RGB separation from
+   * every series slot, the two reference hues, the grid and the baseline. */
+  refSession: '#5ab7d1',
 };
 
 // Which CSS custom property backs each slot.
@@ -55,7 +64,7 @@ const C_VARS = {
   pos: '--pos', neg: '--neg', mid: '--mid',
   good: '--good', warn: '--warn', serious: '--serious', critical: '--critical',
   accent: '--accent',
-  refSR: '--ref-sr', refFib: '--ref-fib',
+  refSR: '--ref-sr', refFib: '--ref-fib', refSession: '--ref-session',
 };
 
 /** Pull the live theme into C. Called at boot and whenever the OS theme flips. */
@@ -440,6 +449,249 @@ function animateChart(root) {
  * (used for Fibonacci levels and gamma walls). Single y-scale only — two
  * measures of different magnitude get two charts, never two axes.
  */
+/* ------------------------------------------------------------- time axis
+ *
+ * Ticks chosen by calendar boundary, not by fraction of the width.
+ *
+ * The axis before this was three labels — first bar, middle bar, last bar —
+ * carrying full ISO dates. On a six-month chart that is "2026-03-09",
+ * "2026-06-05", "2026-09-04" and nothing between them, so a reader could see
+ * that a move happened and not say when. Every reference platform ticks the
+ * calendar instead: a mark where the month turns, or the week, or the day,
+ * whichever is coarse enough to fit.
+ *
+ * Fraction-based ticks cannot do that. A mark at 25% of the width lands on
+ * whatever bar happens to be there, so the labels read 14 Aug, 3 Sep, 22 Sep —
+ * evenly spaced and meaningless. Boundary ticks land on the dates a reader
+ * already thinks in.
+ *
+ * The granularity is picked by measuring: take the finest unit whose boundaries
+ * still leave `minGap` pixels between labels. That way a 5-day chart ticks
+ * hours, a 6-month chart ticks months, and a 10-year chart ticks years, with no
+ * per-range configuration to keep in step with CHART_RANGES.
+ */
+const TIME_UNITS = [
+  { id: 'hour', of: (d) => d.getHours() + d.getDate() * 24 },
+  { id: 'day', of: (d) => d.getDate() + d.getMonth() * 32 },
+  { id: 'week', of: (d) => {
+    // Monday-anchored week index. getDay() is 0 on Sunday, so shift it.
+    const t = new Date(d.getTime());
+    t.setDate(t.getDate() - ((t.getDay() + 6) % 7));
+    return Math.floor(t.getTime() / 86400000);
+  } },
+  { id: 'month', of: (d) => d.getMonth() + d.getFullYear() * 12 },
+  { id: 'year', of: (d) => d.getFullYear() },
+];
+
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function parseBarDate(label) {
+  if (!label) return null;
+  const raw = String(label);
+  // Daily labels are bare dates. Parsing "2026-03-09" as ISO makes it UTC
+  // midnight, which in a negative offset is the evening of the 8th — so the
+  // month boundary lands one bar early and December reads as November. The
+  // T00:00:00 suffix keeps it local, which is what the axis is describing.
+  const iso = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw + 'T00:00:00' : raw;
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/** Tick indices and their labels, at the finest calendar unit that fits.
+ *
+ * Two rules do the work, and both were learned by getting it wrong.
+ *
+ * **A unit finer than the bars is not a unit.** On daily bars the hour of every
+ * bar is 00, so "the hour changed" is true at every single bar. Combined with
+ * striding that unit always fitted — it just kept every Nth bar — and the axis
+ * came back reading "10 Mar, 27 Mar, 16 Apr, 5 May", thirteen trading days
+ * apart. Evenly spaced marks on arbitrary bars is precisely the fraction-based
+ * axis this replaced, wearing calendar labels.
+ *
+ * **Stride is the outer loop, not the inner one.** Searching unit-first finds
+ * week-every-third before month-every-first, and a tick on every third week is
+ * a worse label than a tick on every month even though both fit. Trying stride
+ * 1 across all units before stride 2 means the axis lands on the coarsest
+ * structure available at full density, which is what a reader is looking for.
+ */
+function timeTicks(labels, X, minGap) {
+  const dates = labels.map(parseBarDate);
+  const present = dates.filter(Boolean).length;
+  if (!present) return [];
+
+  // Boundary indices per unit, computed once.
+  const perUnit = TIME_UNITS.map((unit) => {
+    const marks = [];
+    let prev = null;
+    for (let i = 0; i < dates.length; i += 1) {
+      const d = dates[i];
+      if (!d) continue;
+      const key = unit.of(d);
+      // The first bar is only a tick if it is genuinely a boundary; a label
+      // hard against the left edge tells a reader nothing they cannot see.
+      if (prev !== null && key !== prev) marks.push(i);
+      prev = key;
+    }
+    return { unit, marks };
+  }).filter(({ marks }) => (
+    // Finer than the data: every bar is a boundary, so this unit carries no
+    // structure. 0.9 rather than 1.0 because a market week has holidays in it
+    // and a stray equal pair should not rescue an otherwise meaningless unit.
+    marks.length >= 2 && marks.length < present * 0.9
+  ));
+
+  const fits = (kept) => {
+    for (let k = 1; k < kept.length; k += 1) {
+      if (X(kept[k]) - X(kept[k - 1]) < minGap) return false;
+    }
+    return true;
+  };
+  /* Labels are built against the previous KEPT tick, not the previous bar.
+   *
+   * The year is meant to replace the month wherever the year turns, so a run
+   * reads "Oct, Dec, 2026, Apr". Comparing each tick to dates[i - 1] made that
+   * test true only on the exact bar the year changed — and with a stride of 2
+   * that bar is usually one of the marks thrown away. The result was a 2-year
+   * axis reading "Oct, Dec, Feb, Apr, Jun, Aug, Oct, Dec, Feb, Apr, Jun, Aug",
+   * with nothing anywhere to say which October was which. */
+  const build = ({ unit, marks }, stride) => {
+    const kept = marks.filter((_, k) => k % stride === 0);
+    return kept.map((i, k) => ({
+      i,
+      text: tickLabel(dates[i], unit.id, k > 0 ? dates[kept[k - 1]] : null),
+    }));
+  };
+
+  // A two-label fit is accepted only if nothing denser exists anywhere, so a
+  // 2-year chart prefers eight quarter marks over two year marks.
+  let sparse = null;
+  for (let stride = 1; stride <= 8; stride += 1) {
+    for (let u = 0; u < perUnit.length; u += 1) {
+      const kept = perUnit[u].marks.filter((_, k) => k % stride === 0);
+      if (kept.length < 2 || !fits(kept)) continue;
+      if (kept.length >= 3) return build(perUnit[u], stride);
+      if (!sparse) sparse = build(perUnit[u], stride);
+    }
+  }
+  if (sparse) return sparse;
+
+  /* Last resort. A window that crosses no boundary at all — a two-bar chart —
+   * still has a first and last date worth naming, and they are what tell a
+   * reader which period this is. Formatted through the same vocabulary so they
+   * do not appear as raw ISO next to an axis that reads "Aug" everywhere else.
+   */
+  const ends = [0, dates.length - 1].filter((i) => dates[i]);
+  if (ends.length === 2 && X(ends[1]) - X(ends[0]) >= minGap) {
+    return ends.map((i) => ({
+      i,
+      text: `${dates[i].getDate()} ${MONTH_SHORT[dates[i].getMonth()]}`,
+    }));
+  }
+  return [];
+}
+
+/* The label for one tick.
+ *
+ * Coarser than the unit being ticked wherever the coarser unit also turned, so
+ * a run of "Aug, Sep, Oct, Nov, Dec, Jan" says which January it is without
+ * repeating the year on all six. Same idea as the reference axis reading
+ * "25. Jul ... 4. Sep" and then "2027" when it crosses.
+ *
+ * `prev` is the previous tick that survived striding, not the previous bar —
+ * see build(). The first tick has no predecessor and is treated as a fresh
+ * year, so a chart always names its era once at the left.
+ */
+function tickLabel(d, unitId, prev) {
+  const newYear = !prev || prev.getFullYear() !== d.getFullYear();
+  const newMonth = newYear || !prev || prev.getMonth() !== d.getMonth();
+  if (unitId === 'year') return String(d.getFullYear());
+  if (unitId === 'month') return newYear ? String(d.getFullYear()) : MONTH_SHORT[d.getMonth()];
+  if (unitId === 'week' || unitId === 'day') {
+    /* The leftmost tick names the month, not the year.
+     *
+     * `newYear` is true for the first tick because it has no predecessor, which
+     * is right when the ticks are months — a 6-month axis reading "2026, May,
+     * Jun" is correct. It is over-specified when the ticks are days: a 1-month
+     * axis came back "2026, 17, 24, 31", where the one label that should have
+     * told you the month told you the year instead. */
+    if (newYear) return prev ? String(d.getFullYear()) : MONTH_SHORT[d.getMonth()];
+    return newMonth ? MONTH_SHORT[d.getMonth()] : String(d.getDate());
+  }
+  // Hours, on an intraday chart. A new day gets the date instead of 00:00,
+  // which is the only tick where the time is not the useful part.
+  if (newMonth || (prev && prev.getDate() !== d.getDate())) {
+    return `${d.getDate()} ${MONTH_SHORT[d.getMonth()]}`;
+  }
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+/* Which time boundary is worth drawing a line at, and how to label it.
+ *
+ * Read off the spacing of the bars rather than told by the caller. The old
+ * version always divided on the calendar day, which is correct intraday and
+ * absurd on a daily chart where every bar is a new day — and the guard against
+ * that capped the line count at a third of the bars rather than bailing, so a
+ * six-month daily chart got 42 dashed verticals.
+ *
+ * The rule is that a divider should appear often enough to orient you and
+ * rarely enough to read as punctuation: roughly between 2 and 24 of them. So
+ * the granularity steps up with the bar interval.
+ */
+function periodDividers(labels, n) {
+  const at = (i) => {
+    const raw = String(labels[i] || '');
+    const d = new Date(raw.length <= 10 ? raw + 'T00:00:00Z' : raw);
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+  const first = at(0);
+  const last = at(n - 1);
+  if (!first || !last || n < 4) return null;
+
+  // Median gap in days, which is robust to the weekend holes a mean is not.
+  const gaps = [];
+  for (let i = 1; i < n; i += 1) {
+    const a = at(i - 1);
+    const b = at(i);
+    if (a && b) gaps.push((b - a) / 86400000);
+  }
+  if (!gaps.length) return null;
+  gaps.sort((x, y) => x - y);
+  const step = gaps[Math.floor(gaps.length / 2)];
+
+  /* Granularity, and the key that changes at each boundary.
+   *
+   * `key` returns a string that is constant within a period, so a boundary is
+   * simply "the key changed" — the same test at every granularity. */
+  if (step < 0.9) {
+    return { grain: 'day', key: (d) => d.toISOString().slice(0, 10),
+      label: (d) => d.toUTCString().slice(0, 11).trim() };
+  }
+  if (step < 5) {
+    // Daily bars. Months give ~1 per 21 bars: 6 on a six-month chart, 12 on a
+    // year. Weeks would give 26 and 52, which is the fence again.
+    return { grain: 'month', key: (d) => d.toISOString().slice(0, 7),
+      label: (d) => MONTHS[d.getUTCMonth()] + (d.getUTCMonth() === 0
+        ? " '" + String(d.getUTCFullYear()).slice(2) : '') };
+  }
+  if (step < 45) {
+    // Weekly bars: quarters on a short span, years on a long one.
+    const years = (last - first) / 86400000 / 365;
+    if (years > 3) {
+      return { grain: 'year', key: (d) => String(d.getUTCFullYear()),
+        label: (d) => String(d.getUTCFullYear()) };
+    }
+    return { grain: 'quarter',
+      key: (d) => d.getUTCFullYear() + 'Q' + Math.floor(d.getUTCMonth() / 3),
+      label: (d) => 'Q' + (Math.floor(d.getUTCMonth() / 3) + 1) };
+  }
+  return { grain: 'year', key: (d) => String(d.getUTCFullYear()),
+    label: (d) => String(d.getUTCFullYear()) };
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 function lineChart(opts) {
   const {
     series = [], labels = [], height = 220, refLines = [],
@@ -459,9 +711,18 @@ function lineChart(opts) {
     // crosshair — the header on the Charting tab tracks it — without this
     // function needing to know what is being displayed.
     onHover = null,
-    // Session dividers: a vertical line wherever the calendar day changes.
-    // Only meaningful intraday — on a daily chart every bar is a new day and the
-    // result is a line per bar, so the caller gates this, not the renderer.
+    /* Period dividers: a labelled vertical line at each time boundary.
+     *
+     * Pass the label array (or a parallel array of timestamps) and the renderer
+     * works out which boundary is worth drawing from the spacing of the bars
+     * themselves — day on an intraday series, month on a daily one, year on a
+     * weekly one. See periodDividers.
+     *
+     * It used to divide on the calendar day whatever the timeframe, which on a
+     * daily chart is every single bar. Its own comment said "bailing out is
+     * better than painting a picket fence" and then the guard capped the count
+     * at a third of the bars instead of bailing: 126 daily bars produced 42
+     * dashed verticals across the plot. */
     sessions = null,
     // Daily volume, drawn as a band of bars beneath the price plot. Its own
     // scale, its own strip: sharing the price axis would either flatten the bars
@@ -514,6 +775,22 @@ function lineChart(opts) {
     // define one sit across the range that formed it, so collapsing a zone to a
     // single price would misrepresent what it is.
     bands = [],
+    /* Filled ribbons between two per-bar series, tinted by which one is on top:
+     * [{fast, slow, upColor, downColor, opacity, name}].
+     *
+     * A band is horizontal and fixed; a cloud follows the data and changes
+     * colour where the two series cross. That difference is the whole point of
+     * the shape — the question an EMA cloud answers is "which side of this pair
+     * is price on, and for how long", and a reader gets that from the colour of
+     * a filled area at a glance in a way that two lines close together never
+     * gives them.
+     *
+     * The fill is split into runs of constant sign rather than drawn as one
+     * polygon, because one polygon can only have one colour. Each run is closed
+     * at the exact interpolated crossing point, so consecutive runs share an
+     * edge and the ribbon has no gap or overlap where it flips.
+     */
+    clouds = [],
     // Draw each series' latest value as a coloured pill on the price axis.
     //
     // The single biggest readability gap against a platform chart: with four
@@ -524,6 +801,14 @@ function lineChart(opts) {
     // Off by default so the panels that are deliberately spare — sparklines,
     // the breadth strip — do not grow a gutter they have no use for.
     valueTags = false,
+    /* The caller owns the plain drag, so measuring moves to shift-drag here.
+     *
+     * Only one gesture can have an unmodified left-drag. On the Charting tab it
+     * is panning, because that is what a reader reaches for on a chart they can
+     * zoom, and the measurement has two other ways in: shift-drag, and the ruler
+     * in the tool rail, which leaves a drawing that stays put. The Swing chart
+     * has no zoom and no pan, so it leaves this off and keeps the plain drag. */
+    panDrag = false,
   } = opts;
 
   const W = width;
@@ -546,6 +831,17 @@ function lineChart(opts) {
 
   const all = [];
   series.forEach((se) => se.values.forEach((v) => { if (v !== null && isFinite(v)) all.push(v); }));
+  /* Cloud edges count towards the range, like any other data.
+   *
+   * The normal way to read an EMA cloud is with the lines themselves switched
+   * off, so the values bounding it are in no series and would not otherwise
+   * reach the axis. On a stock that has run hard away from its slow average
+   * that silently clipped the bottom edge of the ribbon at the plot floor,
+   * which reads as a cloud that stops rather than one that is off screen. */
+  clouds.forEach((cl) => {
+    (cl.fast || []).forEach((v) => { if (v !== null && isFinite(v)) all.push(v); });
+    (cl.slow || []).forEach((v) => { if (v !== null && isFinite(v)) all.push(v); });
+  });
   if (refLineFit !== 'clip') {
     refLines.forEach((r) => { if (isFinite(r.value)) all.push(r.value); });
   } else if (all.length) {
@@ -712,6 +1008,80 @@ function lineChart(opts) {
     }, 'Volume'));
   }
 
+  /* Clouds, under the levels and under the data.
+   *
+   * Order matters both ways here. Above the volume strip, because a cloud is
+   * price-axis information and the strip is not. Below the reference lines and
+   * bands, because those are annotation and have to stay readable across a
+   * filled area. Below the series themselves, because the EMA lines that bound
+   * a cloud are drawn from the same numbers — a fill painted over them would
+   * mute exactly the two lines it is describing.
+   */
+  if (clouds.length) {
+    const cloudLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.7 : null });
+    root.appendChild(cloudLayer);
+    clouds.forEach((cl) => {
+      const fastVals = cl.fast || [];
+      const slowVals = cl.slow || [];
+      const upColor = cl.upColor || C.pos;
+      const downColor = cl.downColor || C.neg;
+      const opacity = cl.opacity == null ? 0.16 : cl.opacity;
+      // A bar counts only when both sides have a number. The fast average is
+      // defined earlier in the history than the slow one, so the leading bars of
+      // any pair have one side present and the other null; filling from a null
+      // would anchor the ribbon at the bottom of the axis.
+      const ok = (i) => Number.isFinite(fastVals[i]) && Number.isFinite(slowVals[i]);
+      const diff = (i) => fastVals[i] - slowVals[i];
+      // A forced yDomain does not have to contain the cloud, and a polygon has
+      // no clip of its own — an unclamped edge would paint over the axis labels
+      // and out through the bottom of the chart.
+      const Yc = (v) => Math.max(m.t, Math.min(m.t + priceH, Y(v)));
+
+      // Points are collected as [x, yFast, ySlow] so a run can be closed by
+      // walking the same list backwards along the slow edge.
+      let run = [];
+      let runSign = 0;
+      const flush = () => {
+        if (run.length < 2) { run = []; return; }
+        const fwd = run.map((pt) => `${pt[0]},${pt[1]}`).join(' ');
+        const back = run.slice().reverse().map((pt) => `${pt[0]},${pt[2]}`).join(' ');
+        cloudLayer.appendChild(s('polygon', {
+          points: `${fwd} ${back}`,
+          fill: runSign >= 0 ? upColor : downColor,
+          opacity,
+        }));
+        run = [];
+      };
+
+      for (let i = 0; i < n; i += 1) {
+        if (!ok(i)) { flush(); runSign = 0; continue; }
+        const d = diff(i);
+        // Zero continues whatever run is open rather than starting a third
+        // state: two averages printing the same value is a touch, not a regime.
+        const sign = d > 0 ? 1 : (d < 0 ? -1 : runSign || 1);
+        if (run.length && sign !== runSign) {
+          /* The crossing sits between this bar and the previous one, not on
+           * either of them. Interpolating it and using that point to close the
+           * old run and open the new one is what makes the colour change land
+           * on the cross instead of up to a full bar late. */
+          const prev = i - 1;
+          const dPrev = diff(prev);
+          const span = dPrev - d;
+          const t = span === 0 ? 0.5 : Math.max(0, Math.min(1, dPrev / span));
+          const xC = X(prev) + t * (X(i) - X(prev));
+          const vC = fastVals[prev] + t * (fastVals[i] - fastVals[prev]);
+          const yC = Yc(vC);
+          run.push([xC, yC, yC]);
+          flush();
+          run.push([xC, yC, yC]);
+        }
+        runSign = sign;
+        run.push([X(i), Yc(fastVals[i]), Yc(slowVals[i])]);
+      }
+      flush();
+    });
+  }
+
   // Levels arrive last: they annotate the price, so they should appear once the
   // price is there to annotate. Created here, ahead of the series, so everything
   // in it still renders *underneath* the data.
@@ -795,22 +1165,55 @@ function lineChart(opts) {
    * grid — it is orientation, not data.
    */
   if (sessions && n > 1) {
-    const dayOf = (v) => String(v || '').slice(0, 10);
-    let prev = dayOf(labels[0]);
-    let drawn = 0;
-    for (let i = 1; i < n; i += 1) {
-      const day = dayOf(labels[i]);
-      if (day === prev) continue;
-      prev = day;
-      // A daily chart changes day on every bar. Bailing out is better than
-      // painting a picket fence over the price action.
-      drawn += 1;
-      if (drawn > n / 3) break;
-      levelLayer.appendChild(s('line', {
-        x1: X(i), y1: m.t, x2: X(i), y2: m.t + priceH,
-        stroke: C.baseline, 'stroke-width': 1, 'stroke-dasharray': '3 5',
-        opacity: 0.6,
-      }));
+    const spec = periodDividers(labels, n);
+    const toDate = (i) => {
+      const raw = String(labels[i] || '');
+      const d = new Date(raw.length <= 10 ? raw + 'T00:00:00Z' : raw);
+      return Number.isNaN(d.getTime()) ? null : d;
+    };
+    if (spec) {
+      // Collected first, then drawn, so the count can be checked BEFORE
+      // anything is painted. The old code decided per line and capped mid-loop,
+      // which is how it ended up drawing a fence and then stopping.
+      const marks = [];
+      let prev = null;
+      for (let i = 0; i < n; i += 1) {
+        const d = toDate(i);
+        if (!d) continue;
+        const k = spec.key(d);
+        if (prev === null) { prev = k; continue; }
+        if (k === prev) continue;
+        prev = k;
+        marks.push({ i, label: spec.label(d) });
+      }
+      /* Draw nothing rather than a fence.
+       *
+       * If the chosen granularity still produces a line every few bars the
+       * feature is not adding orientation, it is adding noise — so it stands
+       * down instead of capping. One line per four bars is the floor. */
+      if (marks.length && marks.length <= Math.max(2, Math.floor(n / 4))) {
+        marks.forEach((mk) => {
+          const x = X(mk.i);
+          levelLayer.appendChild(s('line', {
+            x1: x, y1: m.t, x2: x, y2: m.t + priceH,
+            stroke: C.refSession, 'stroke-width': 1,
+            // A long dash, distinct from the fine dots the ratio levels use and
+            // the medium dashes the structural levels use. Three dash patterns,
+            // three families.
+            'stroke-dasharray': '2 6',
+            opacity: 0.7,
+          }));
+          /* The label is what makes it a divider rather than a line.
+           *
+           * Sat at the top of the plot, on the right of its own line, so a
+           * reader can tell WHICH boundary they are looking at — "Sep" or
+           * "2024" — instead of only that one exists. */
+          levelLayer.appendChild(s('text', {
+            x: x + 3, y: m.t + 9, fill: C.refSession, 'font-size': 9,
+            'font-weight': 600, opacity: 0.85,
+          }, mk.label));
+        });
+      }
     }
   }
 
@@ -1013,7 +1416,51 @@ function lineChart(opts) {
    * The tick labels underneath. A tag landing on a gridline number renders two
    * numbers on top of each other, so any tick within a tag's band is suppressed.
    * The tag carries strictly more information than the tick it hides. */
+  /* The last price, tagged on the axis and ruled across the plot.
+   *
+   * The most conspicuous thing missing against a reference chart, and the
+   * reason it was missing is specific: in candle mode the close series is kept
+   * for the crosshair but marked `hidden`, and the tag loop skips hidden
+   * series. So every overlay got a price tag on the axis and the price itself
+   * did not — the one number a reader looks for first.
+   *
+   * The rule matters as much as the tag. A tag alone says what the price is; a
+   * line across says where it sits relative to everything drawn on the chart,
+   * which is the question being asked when someone glances at a level.
+   *
+   * Drawn before the overlay tags so those stack on top of it, and in the
+   * directional colour rather than a series hue: this is not another line on
+   * the chart, it is the price the chart is about.
+   */
   if (valueTags) {
+    let priceTag = null;
+    const priceSeries = series.find((se) => (se.values || []).some(
+      (v) => v !== null && isFinite(v),
+    ));
+    if (priceSeries) {
+      const li = priceSeries.values.reduce(
+        (acc, v, i) => (v !== null && isFinite(v) ? i : acc), -1,
+      );
+      if (li >= 0) {
+        const last = priceSeries.values[li];
+        // Direction over the visible window, so the tag agrees with the change
+        // the header reports for the same range rather than with the last bar.
+        const first = priceSeries.values.find((v) => v !== null && isFinite(v));
+        const tone = (isFinite(first) && last < first) ? C.neg : C.pos;
+        // The rule goes down now, under the data where it belongs. The TAG is
+        // deferred into the stack below: rendered here it landed on top of the
+        // fast average's tag, which sits within a couple of dollars of the
+        // price by construction — so on the one chart where a price tag matters
+        // most, the two numbers were drawn over each other.
+        levelLayer.appendChild(s('line', {
+          x1: m.l, y1: Y(last), x2: m.l + plotW, y2: Y(last),
+          stroke: tone, 'stroke-width': 1,
+          'stroke-dasharray': '3 3', opacity: 0.5,
+        }));
+        priceTag = { si: -1, color: tone, value: last, y: Y(last), isPrice: true };
+      }
+    }
+
     const tags = series
       .map((se, si) => {
         if (se.tag === false || se.hidden) return null;
@@ -1021,8 +1468,11 @@ function lineChart(opts) {
         if (li < 0) return null;
         return { si, color: se.color, value: se.values[li], y: Y(se.values[li]) };
       })
-      .filter(Boolean)
-      .sort((a, b) => a.y - b.y);
+      .filter(Boolean);
+    // Into the same list, so one collision pass positions everything and the
+    // price cannot be pushed off the axis or drawn over.
+    if (priceTag) tags.push(priceTag);
+    tags.sort((a, b) => a.y - b.y);
 
     const TAG_H = 15;
     const GAP = 1.5;
@@ -1045,15 +1495,19 @@ function lineChart(opts) {
     const fmtTag = valueFormat || yFormat;
     tags.forEach((t) => {
       const text = fmtTag(t.value);
-      const w = Math.max(30, text.length * 6.1 + 9);
+      // The price reads a shade larger and fully opaque. It is the number a
+      // reader looks for first and it should not be one of six identical pills.
+      const h = t.isPrice ? TAG_H + 2 : TAG_H;
+      const w = Math.max(30, text.length * (t.isPrice ? 6.4 : 6.1) + (t.isPrice ? 10 : 9));
       const x = m.l + plotW + 3;
       annotLayer.appendChild(s('rect', {
-        x, y: t.ty - TAG_H / 2, width: w, height: TAG_H, rx: 3,
-        fill: t.color, opacity: 0.92,
+        x, y: t.ty - h / 2, width: w, height: h, rx: 3,
+        fill: t.color, opacity: t.isPrice ? 1 : 0.92,
       }));
       annotLayer.appendChild(s('text', {
-        x: x + w / 2, y: t.ty + 3.7, fill: C.surface, 'font-size': 10,
-        'font-weight': 600, 'text-anchor': 'middle',
+        x: x + w / 2, y: t.ty + (t.isPrice ? 4 : 3.7), fill: C.surface,
+        'font-size': t.isPrice ? 10.5 : 10,
+        'font-weight': t.isPrice ? 700 : 600, 'text-anchor': 'middle',
         'font-variant-numeric': 'tabular-nums',
       }, text));
       // A 2px stub back to the plot edge, so a tag that had to be nudged still
@@ -1179,14 +1633,45 @@ function lineChart(opts) {
     }, r.text));
   });
 
+  /* The date axis, and its gridlines.
+   *
+   * The gridlines matter as much as the labels: a tick at the bottom edge tells
+   * you where a month began, a line through the plot tells you which bars are
+   * inside it. The reference draws both, and reading a candle's date off three
+   * labels 200px apart was guesswork without them.
+   *
+   * 46px minimum gap is measured, not chosen: the widest label the axis emits
+   * is a year, "2026", at about 26px in this face at 10px, and 20px of air is
+   * the point at which two labels stop reading as one string.
+   */
   if (labels.length) {
-    const marks = [0, Math.floor((labels.length - 1) / 2), labels.length - 1];
-    marks.forEach((i, k) => {
-      annotLayer.appendChild(s('text', {
-        x: X(i), y: H - 6, fill: C.muted, 'font-size': 10,
-        'text-anchor': k === 0 ? 'start' : k === 2 ? 'end' : 'middle',
-      }, labels[i]));
-    });
+    const ticks = timeTicks(labels, X, 46);
+    if (ticks.length) {
+      ticks.forEach((t) => {
+        // Into the grid layer, so a date line sits under the price with the
+        // price gridlines rather than over it with the annotations.
+        gridLayer.appendChild(s('line', {
+          x1: X(t.i), y1: m.t, x2: X(t.i), y2: m.t + plotH,
+          stroke: C.grid, 'stroke-width': 1, opacity: 0.55,
+        }));
+        annotLayer.appendChild(s('text', {
+          x: X(t.i), y: H - 6, fill: C.muted, 'font-size': 10,
+          'text-anchor': 'middle',
+        }, t.text));
+      });
+    } else {
+      /* Nothing parsed as a date — a categorical x-axis, which several panels
+       * in this app legitimately have (strike, sector, factor name). The old
+       * three-mark behaviour is exactly right for those, so it stays as the
+       * fallback rather than leaving them with no axis at all. */
+      const marks = [0, Math.floor((labels.length - 1) / 2), labels.length - 1];
+      marks.forEach((i, k) => {
+        annotLayer.appendChild(s('text', {
+          x: X(i), y: H - 6, fill: C.muted, 'font-size': 10,
+          'text-anchor': k === 0 ? 'start' : k === 2 ? 'end' : 'middle',
+        }, labels[i]));
+      });
+    }
   }
 
   // ------------------------------------------------------- hover layer
@@ -1342,12 +1827,13 @@ function lineChart(opts) {
   }
   overlay.addEventListener('mousedown', (evt) => {
     if (evt.button !== 0) return;
-    /* Plain drag, no modifier.
+    /* On a pannable chart this needs shift; everywhere else a plain drag does it.
      *
-     * This briefly required shift, because the Charting tab had taken the plain
-     * drag for panning. That is resolved: panning moved to the navigator strip
-     * below the chart, so each gesture has its own surface and neither needs a
-     * key held down to disambiguate it. */
+     * Returning without preventDefault matters as much as not measuring: the
+     * pan handler is delegated on the document, so the event still reaches it,
+     * and swallowing the default here would break the gesture it is deferring
+     * to. */
+    if (panDrag && !evt.shiftKey) return;
     evt.preventDefault();            // no text-selection drag over the chart
     measureAnchor = indexFromClientX(evt.clientX);
     window.addEventListener('mousemove', onDragMove);
@@ -1451,6 +1937,12 @@ function legend(items, boxed = false) {
     sw.className = 'swatch' + (boxed ? ' box' : '');
     sw.style.background = it.color;
     if (it.dash) sw.style.background = `repeating-linear-gradient(90deg, ${it.color} 0 3px, transparent 3px 6px)`;
+    /* Two-tone swatch, for something that is drawn in one of two colours
+     * depending on its own state — an EMA cloud is the case this exists for.
+     * A single-colour key would name the ribbon after only half of what it
+     * does, and two legend rows for one overlay is worse than one honest key.
+     * Hard stops, not a blend: the two states are discrete. */
+    if (it.split) sw.style.background = `linear-gradient(90deg, ${it.color} 0 50%, ${it.split} 50% 100%)`;
     key.appendChild(sw);
     key.appendChild(document.createTextNode(it.name));
     div.appendChild(key);

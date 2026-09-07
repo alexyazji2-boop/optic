@@ -14,15 +14,26 @@ The phases, all in New York time:
   than passing off an 8pm print as a current price.
 * **Pre-market** 4:00am–9:30am — liquidity builds toward the open.
 
-Holidays aren't modelled. On a market holiday the feed simply repeats the prior
-close, so a caller sees an unchanged price rather than a wrong one — but this
-module will still call it a regular session, which is the one case where it
-knowingly overstates what's happening.
+Holidays and early closes ARE modelled, from the NYSE rules rather than a
+hardcoded table. A per-year list is the obvious approach and it silently goes
+wrong the first January nobody updates it — the module would keep answering
+confidently with last year's calendar. Every one of the ten closures is a rule
+("first Monday in September", "the Friday before Easter"), so the rules are
+what is written down and any year can be computed.
+
+Observance follows the exchange, not the federal calendar: a holiday landing on
+Saturday is taken on the preceding Friday and one landing on Sunday on the
+following Monday, with the documented exception that New Year's Day on a
+Saturday closes nothing — the exchange does not reach back into December.
+
+Early closes are 1:00pm, with after-hours to 5:00pm: the day after
+Thanksgiving, Christmas Eve, and July 3rd when Independence Day falls on a
+weekday.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
@@ -57,9 +68,115 @@ DESCRIPTIONS = {
                  "overnight quote.",
     "pre": "Pre-market trading. Volume builds toward the open, and levels set here often move "
            "again once the bell brings real liquidity.",
+    "holiday": "A market holiday. US equities do not trade at all today, in any session, and "
+               "the last price shown is the previous session's close.",
     "closed": "The market is shut for the weekend. Nothing trades until the overnight session "
               "reopens on Sunday evening.",
 }
+
+
+EARLY_REGULAR_END = 13 * 60        # 1:00pm on a half day
+EARLY_AFTER_END = 17 * 60          # 5:00pm on a half day
+
+
+def _easter(year: int) -> date:
+    """Gregorian Easter Sunday. Needed only for Good Friday, the one closure
+    that is not a fixed date or an nth-weekday rule."""
+    a = year % 19
+    b, c = divmod(year, 100)
+    d, e = divmod(b, 4)
+    g = (8 * b + 13) // 25
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 19 * l) // 432
+    month = (h + l - 7 * m + 90) // 25
+    day = (h + l - 7 * m + 33 * month + 19) % 32
+    return date(year, month, day)
+
+
+def _nth_weekday(year: int, month: int, weekday: int, n: int) -> date:
+    """The nth given weekday of a month. n = -1 for the last one."""
+    if n > 0:
+        first = date(year, month, 1)
+        offset = (weekday - first.weekday()) % 7
+        return first + timedelta(days=offset + 7 * (n - 1))
+    nxt = date(year + (month == 12), (month % 12) + 1, 1)
+    last = nxt - timedelta(days=1)
+    return last - timedelta(days=(last.weekday() - weekday) % 7)
+
+
+def _observed(day: date) -> Optional[date]:
+    """Shift a fixed-date holiday onto a trading day, exchange-style."""
+    if day.weekday() == 5:              # Saturday -> the Friday before
+        return day - timedelta(days=1)
+    if day.weekday() == 6:              # Sunday -> the Monday after
+        return day + timedelta(days=1)
+    return day
+
+
+def market_holidays(year: int) -> Dict[date, str]:
+    """Every full NYSE/Nasdaq closure in a year, computed from the rules."""
+    out: Dict[date, str] = {}
+
+    # New Year's Day. The one case where a Saturday date closes nothing: the
+    # exchange does not observe it on the preceding 31 December.
+    ny = date(year, 1, 1)
+    if ny.weekday() != 5:
+        out[_observed(ny)] = "New Year's Day"
+
+    out[_nth_weekday(year, 1, 0, 3)] = "Martin Luther King, Jr. Day"
+    out[_nth_weekday(year, 2, 0, 3)] = "Washington's Birthday"
+    out[_easter(year) - timedelta(days=2)] = "Good Friday"
+    out[_nth_weekday(year, 5, 0, -1)] = "Memorial Day"
+    # A market holiday only from 2022, when it became a federal holiday.
+    if year >= 2022:
+        out[_observed(date(year, 6, 19))] = "Juneteenth"
+    out[_observed(date(year, 7, 4))] = "Independence Day"
+    out[_nth_weekday(year, 9, 0, 1)] = "Labor Day"
+    out[_nth_weekday(year, 11, 3, 4)] = "Thanksgiving Day"
+    out[_observed(date(year, 12, 25))] = "Christmas Day"
+    return out
+
+
+def early_closes(year: int) -> Dict[date, str]:
+    """Days the regular session ends at 1:00pm."""
+    out: Dict[date, str] = {}
+    out[_nth_weekday(year, 11, 3, 4) + timedelta(days=1)] = "the day after Thanksgiving"
+
+    # July 3rd, but only when the 4th is itself a weekday. When the 4th falls on
+    # a weekend the exchange shifts the full closure instead and there is no half
+    # day at all.
+    july4 = date(year, 7, 4)
+    if july4.weekday() < 5:
+        third = date(year, 7, 3)
+        if third.weekday() < 5:
+            out[third] = "the day before Independence Day"
+
+    eve = date(year, 12, 24)
+    if eve.weekday() < 5:
+        out[eve] = "Christmas Eve"
+    # A holiday closure outranks a half day: Christmas Eve on a Friday when the
+    # 25th is a Saturday is the observed Christmas, fully shut.
+    holidays = market_holidays(year)
+    return {d: name for d, name in out.items() if d not in holidays}
+
+
+def holiday_name(when: datetime) -> Optional[str]:
+    """The closure covering this instant's Eastern date, if any."""
+    return market_holidays(when.year).get(when.date())
+
+
+def early_close_name(when: datetime) -> Optional[str]:
+    return early_closes(when.year).get(when.date())
+
+
+def _regular_end(when: datetime) -> int:
+    return EARLY_REGULAR_END if early_close_name(when) else REGULAR_END
+
+
+def _after_end(when: datetime) -> int:
+    return EARLY_AFTER_END if early_close_name(when) else AFTER_END
 
 
 def _minutes(when: datetime) -> int:
@@ -79,17 +196,36 @@ def _weekend(when: datetime) -> bool:
     return False
 
 
+def _closed_evening(when: datetime) -> bool:
+    """After 8pm on the eve of a full closure.
+
+    The overnight session runs from 8pm into the next morning, so it only exists
+    if there is a next morning to run into. On the Sunday before a Monday
+    holiday the strip would otherwise light Overnight at 8pm for a session that
+    never opens.
+    """
+    if _minutes(when) < OVERNIGHT_START:
+        return False
+    nxt = (when + timedelta(days=1)).date()
+    return nxt in market_holidays(nxt.year)
+
+
 def _phase(when: datetime) -> str:
-    if _weekend(when):
+    # Checked before the clock. A holiday is closed at 10am as surely as at 3am,
+    # and this is the case the module used to get wrong: on Labor Day it read the
+    # clock, found 12:05pm, and reported a regular session in progress.
+    if holiday_name(when):
+        return "holiday"
+    if _weekend(when) or _closed_evening(when):
         return "closed"
     minutes = _minutes(when)
     if minutes < OVERNIGHT_END:
         return "overnight"                                  # small hours
     if minutes < REGULAR_START:
         return "pre"
-    if minutes < REGULAR_END:
+    if minutes < _regular_end(when):
         return "regular"
-    if minutes < AFTER_END:
+    if minutes < _after_end(when):
         return "after"
     return "overnight"
 
@@ -125,6 +261,7 @@ LABELS = {
     "overnight": "Overnight",
     "pre": "Pre-market",
     "closed": "Weekend. Closed",
+    "holiday": "Market holiday. Closed",
 }
 
 
@@ -152,12 +289,24 @@ def state(now: Optional[datetime] = None) -> Dict[str, Any]:
             "end_at": ends.isoformat(),
         })
 
+    holiday = holiday_name(when)
+    early = early_close_name(when)
     return {
         "phase": phase,
-        "label": LABELS[phase],
+        # The holiday's own name, so the strip reads "Labor Day" rather than
+        # asking the reader to work out which one it is.
+        "label": (f"{holiday}. Closed" if holiday else LABELS[phase]),
         "description": DESCRIPTIONS[phase],
         "is_regular": phase == "regular",
         "is_open": phase in ("regular", "after", "pre", "overnight"),
+        "holiday": holiday,
+        # Named whether or not it is in effect yet, because "the market shuts at
+        # 1pm today" is worth knowing at 9:30am.
+        "early_close": early,
+        "early_close_note": (
+            f"Half day for {early}: the regular session ends at 1:00pm ET and "
+            "after-hours trading at 5:00pm."
+        ) if early else None,
         "now_et": when.isoformat(),
         "now_et_label": when.strftime("%-I:%M %p"),
         "weekday": when.strftime("%a"),

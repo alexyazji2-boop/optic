@@ -38,6 +38,7 @@
      rather than whatever the OS defaults to, and one outage cannot take both. -->
 <!-- Plus Jakarta Sans, variable: one file covering 200-800. Inter stays
      behind it so a slow or blocked CDN degrades to something chosen. -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/space-grotesk/index.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/plus-jakarta-sans/index.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/inter/index.css">
 <link rel="stylesheet" href="styles.css?v=397">
@@ -76,7 +77,10 @@
 
   <form class="search" id="ticker-form">
     <div class="combo">
-      <input id="ticker-input" placeholder="Ticker or company" spellcheck="false"
+      <!-- Focusing this hands over to the command palette (see the focusin
+           handler in app.js). The shortcut is advertised in the placeholder
+           because a keyboard-only affordance is a feature for whoever wrote it. -->
+      <input id="ticker-input" placeholder="Search or ask  ⌘K" spellcheck="false"
              autocomplete="off" aria-label="Ticker symbol or company name"
              role="combobox" aria-expanded="false" aria-autocomplete="list"
              aria-controls="ticker-results">
@@ -124,6 +128,8 @@
   <section class="view" id="view-compare" role="tabpanel" aria-label="Compare tickers"></section>
   <section class="view" id="view-long" role="tabpanel" aria-label="Long-term share analysis"></section>
   <section class="view" id="view-tracker" role="tabpanel" aria-label="Optic&apos;s Positions. Paper-trading record"></section>
+  <section class="view" id="view-watchlist" role="tabpanel" aria-label="Watchlist"></section>
+  <section class="view" id="view-alerts" role="tabpanel" aria-label="Alerts"></section>
   <section class="view" id="view-scan" role="tabpanel" aria-label="Scanners"></section>
   <section class="view" id="view-market" role="tabpanel" aria-label="Macro and sector analysis"></section>
   <!-- One instrument, full chart. Shared by every cross-asset table: the

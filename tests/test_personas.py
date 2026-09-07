@@ -26,10 +26,32 @@ def test_every_persona_has_a_label_and_a_blurb():
         assert len(val["blurb"]) > 20, "%s: blurb too thin to be a choice" % key
 
 
+def test_no_persona_label_names_a_real_person():
+    """The labels used to borrow first names — Warren, Graham, Simon, Karen —
+    each pointing at an identifiable investor, while the prompt underneath said
+    not to impersonate any real person. The label is what a reader sees first,
+    so the menu made a claim the prompt then retracted. Labels now describe the
+    lens instead."""
+    banned = ("warren", "graham", "simon", "karen", "buffett", "munger",
+              "dalio", "soros", "lynch", "wood")
+    for key, val in ai.PERSONAS.items():
+        low = val["label"].lower()
+        for name in banned:
+            assert name not in low, "%s label names %s" % (key, name)
+
+
+def test_every_label_reads_as_a_description_not_a_persona():
+    """"Statistician" tells you what comes back. "Simon, the data guy" needs you
+    to already know who Simon is."""
+    for key, val in ai.PERSONAS.items():
+        assert "," not in val["label"], (
+            "%s still uses the 'Name, the role' form" % key)
+
+
 def test_no_persona_impersonates_a_real_person():
-    """The labels borrow first names as shorthand for a style. The prompts must
-    say explicitly that it is a style and not a person, or the model will start
-    attributing views to someone who never held them."""
+    """The prompts must still say explicitly that this is a style and not a
+    person, or the model will start attributing views to someone who never held
+    them — the labels no longer invite it, but the prompt is the backstop."""
     for key, val in ai.PERSONAS.items():
         if not val["prompt"]:
             continue

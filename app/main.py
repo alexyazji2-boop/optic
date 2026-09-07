@@ -29,6 +29,7 @@ from . import catalyst_live as catalyst_live_mod
 from .analytics import cases as cases_mod
 from .analytics import screen as screen_mod
 from .analytics import regime as regime_mod
+from .analytics import relperf as relperf_mod
 from .analytics import compare as compare_mod
 from .analytics import correlation as correlation_mod
 from .analytics import global_markets as global_mod
@@ -43,6 +44,9 @@ from .analytics import scanners as scanners_mod
 from .analytics import forex as forex_mod
 from . import alerts as alerts_mod
 from .analytics import econ as econ_mod
+from .analytics import pulse as pulse_mod
+from .analytics import watchlist as watchlist_mod
+from . import events as events_mod
 from .analytics import extras as extras_mod
 from .analytics import rotation as rotation_mod
 from .analytics import stockmaps as stockmaps_mod
@@ -313,7 +317,54 @@ def _swing_snapshot(
     except Exception as exc:
         logging.getLogger("uvicorn.error").warning(
             "sector confirmation unavailable for %s: %s", ticker, exc)
+
+    # The three answers the asset page leads with, built last from the finished
+    # payload for the same reason `cases` is: they cite other panels, so they
+    # must not be able to disagree with the numbers those panels show.
+    #
+    # No AI call in any of them. The writers are capped at thirty calls an hour
+    # and these have to render on every page load for every symbol, so all three
+    # are derived from fields already in this dict.
+    # The evaluation is a multi-symbol backtest and far too slow to run inside a
+    # ticker load, so the skill note is filled by the client from /api/evaluate
+    # when that panel's data is already in hand. Until then the note says the
+    # blend has not been measured on this run, which is true.
+    payload["pulse"] = pulse_mod.pulse(payload, None)
+    payload["why"] = pulse_mod.why(payload)
+    # The next earnings date, which is nowhere else in this payload:
+    # company.earnings_history is past prints and earnings_momentum carries no
+    # date at all. It is the largest scheduled risk a holder has, so "what
+    # matters next" without it would be missing the obvious answer. Cached by
+    # the provider and best-effort, like the calendar.
+    try:
+        payload["next_earnings_date"] = YF_PROVIDER.earnings_date(ticker)
+    except Exception as exc:
+        logging.getLogger("uvicorn.error").warning(
+            "next earnings date unavailable for %s: %s", ticker, exc)
+    payload["whats_next"] = pulse_mod.whats_next(payload, _macro_calendar_rows())
+    # The layer above the eight options panels. Same reasoning as `why`: the
+    # workings were all present and the summary was not.
+    payload["options_brief"] = pulse_mod.options_brief(payload)
     return payload
+
+
+def _macro_calendar_rows() -> List[Dict[str, Any]]:
+    """Upcoming scheduled macro releases, for "what matters next".
+
+    events.upcoming() is the same calendar the Read tab draws, already cached
+    and already filtered to a horizon, so this borrows it rather than fetching
+    the agencies again.
+
+    Best-effort by design: a missing calendar drops the macro rows from the
+    section, it does not fail the page. The section states what it found, so
+    losing a leg is visible rather than silent.
+    """
+    try:
+        data = events_mod.upcoming()
+        return (data or {}).get("events") or []
+    except Exception as exc:
+        logging.getLogger("uvicorn.error").warning("macro calendar unavailable: %s", exc)
+        return []
 
 
 # -------------------------------------------------------------------- routes
@@ -580,6 +631,88 @@ async def symbol_search(
     """Typeahead for the ticker box. Matches symbol or company name across every
     US-listed symbol, ranked so the company someone meant comes first."""
     return await _run(lambda: {"query": q, "results": universe_mod.search(q, limit)})
+
+
+@app.get("/api/watchlist")
+async def watchlist_feed(
+    symbols: str = Query("", description="Comma-separated symbols"),
+) -> Dict[str, Any]:
+    """The watchlist as a feed: price, change, what changed, and a signal.
+
+    The list itself lives in the browser. There is no sign-in — anyone can use
+    this terminal — so there is no user to hang a server-side watchlist on, and
+    localStorage is the honest place for it. The client sends what it has and
+    this endpoint enriches it.
+
+    Capped at 40 symbols. One batched history pull is fast, but the cap stops a
+    hand-crafted query from turning this into a market-wide download.
+    """
+    wanted = [s.strip().upper() for s in symbols.split(",") if s.strip()][:40]
+    return await _run(watchlist_mod.build, YF_PROVIDER, wanted)
+
+
+@app.get("/api/home")
+async def home_summary() -> Dict[str, Any]:
+    """Everything the landing page needs, in one request.
+
+    The home page was making zero calls and showing a marketing page. It now
+    opens with the market's actual state, and four requests to paint one screen
+    would make the first thing a reader sees the slowest — so the index board,
+    the macro instruments, the day's read and the alert list are assembled here.
+
+    Every leg is best-effort and reports its own absence. A landing page that
+    500s because one feed is down is worse than one that says which panel is
+    missing.
+    """
+    def build() -> Dict[str, Any]:
+        out: Dict[str, Any] = {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "degraded": [],
+        }
+
+        def leg(name: str, fn):
+            try:
+                out[name] = fn()
+            except Exception as exc:
+                logging.getLogger("uvicorn.error").warning(
+                    "home leg %s unavailable: %s", name, exc)
+                out[name] = None
+                out["degraded"].append(name)
+
+        # The same board the Indices tab draws, and the same macro read the
+        # Market tab draws. Reused rather than reimplemented so the landing page
+        # cannot disagree with the page it links to.
+        leg("indices", lambda: sector_board_mod.build(
+            YF_PROVIDER, sector_board_mod.INDEX_ETFS))
+        leg("macro", lambda: macro_mod.analyse(YF_PROVIDER))
+        leg("session", session_mod.state)
+        leg("alerts", lambda: alerts_mod.recent(limit=4))
+        # The day's read is already written and cached daily, so this costs a
+        # dictionary lookup rather than a model call.
+        leg("read", _home_read)
+        return out
+
+    return await _run(build)
+
+
+def _home_read() -> Optional[Dict[str, Any]]:
+    """The one-paragraph market narrative, from the daily brief.
+
+    Reads the brief from its store WITHOUT building it. brief_mod.state() would
+    generate today's brief on a miss — a minute of feed fetches and several AI
+    calls — and the landing page must never be the thing that triggers that. If
+    today has not been written yet the panel is simply absent, and the Read tab
+    is one click away to build it.
+    """
+    data = brief_mod._load(brief_mod.today_key())
+    if not data:
+        return None
+    return {
+        "day": data.get("day"),
+        "summary": data.get("summary"),
+        "overview": (data.get("overview") or {}).get("read")
+        or (data.get("overview") or {}).get("summary"),
+    }
 
 
 @app.get("/api/legal")
@@ -1329,6 +1462,10 @@ async def compare_tickers(
                 return {}
 
         out = compare_mod.build(snapshot, longterm_for, wanted)
+        # The read across the comparison. The tab's own subtitle said the
+        # disagreement between horizons "is the useful part" and then left the
+        # reader to find it by eye across twenty-six rows.
+        out["take"] = compare_mod.take(out)
         out["generated_at"] = datetime.now(timezone.utc).isoformat()
         return out
     return await _run(build)
@@ -1462,6 +1599,31 @@ async def econ_catalogue() -> Dict[str, Any]:
 async def econ_series(code: str, years: int = Query(12, ge=1, le=60)) -> Dict[str, Any]:
     """One FRED series, transformed into the form it is actually read in."""
     return await _run(econ_mod.series, code.strip().upper(), years)
+
+
+@app.get("/api/relperf/{ticker}")
+async def relative_performance(ticker: str,
+                               fast: str = Query("1m", max_length=4),
+                               slow: str = Query("3m", max_length=4)) -> Dict[str, Any]:
+    """Where this symbol's return ranks against its peers, over two windows.
+
+    Distinct from /api/extras' relative performance, which is a ratio line
+    against one benchmark. This is a percentile against a peer set: it answers
+    "how many of them is it beating" rather than "is it beating SPY".
+    """
+    return await _run(relperf_mod.analyse, YF_PROVIDER, ticker, fast, slow)
+
+
+@app.get("/api/relperf-scan/{kind}")
+async def relative_performance_scan(kind: str,
+                                    limit: int = Query(20, ge=1, le=100)) -> Dict[str, Any]:
+    """leaders (rank >= 95), laggards (<= 5), cross_up (through 80),
+    cross_down (through 20)."""
+    allowed = {"leaders", "laggards", "cross_up", "cross_down"}
+    if kind not in allowed:
+        raise HTTPException(status_code=400,
+                            detail="kind must be one of: " + ", ".join(sorted(allowed)))
+    return await _run(relperf_mod.scan, YF_PROVIDER, kind, limit)
 
 
 @app.get("/api/rotation")
@@ -1646,7 +1808,12 @@ async def pattern_read(ticker: str) -> Dict[str, Any]:
 async def scanner_groups() -> Dict[str, Any]:
     """The scan groups, so the tab can present a menu rather than a flat list."""
     def build() -> Dict[str, Any]:
-        return {"groups": scanners_mod.groups(),
+        return {"groups": scanners_mod.groups() + [dict(
+        relperf_mod.SCAN_GROUP,
+        count=len(relperf_mod.SCAN_DEFS),
+        scans=[{"id": d["id"], "name": d["name"], "looks_for": d["looks_for"]}
+               for d in relperf_mod.SCAN_DEFS],
+    )],
                 "note": ("Grouped by the question each scan asks. Premarket movers, "
                          "short-squeeze watch and quality screens are deliberately "
                          "absent: they need premarket quotes, short interest and "
@@ -1682,7 +1849,14 @@ async def scanner_run(scan_id: str, limit: int = Query(scanners_mod.DEFAULT_LIMI
     needing a fresh per-symbol fetch.
     """
     def build() -> Dict[str, Any]:
-        out = scanners_mod.run(_cached_ranking(), scan_id, limit=limit)
+        # Relative-performance scans rank a 143-name peer set, not the screener's
+        # cached ranking, so they cannot be expressed as a filter over it. They
+        # are shaped identically on the way out, which is what lets the Scan tab
+        # render both without knowing the difference.
+        if relperf_mod.scan_by_id(scan_id):
+            out = relperf_mod.run_scan(YF_PROVIDER, scan_id, limit=limit)
+        else:
+            out = scanners_mod.run(_cached_ranking(), scan_id, limit=limit)
         out["generated_at"] = datetime.now(timezone.utc).isoformat()
         return out
     return await _run(build)

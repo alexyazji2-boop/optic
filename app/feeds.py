@@ -103,6 +103,38 @@ SOURCES: List[Dict[str, Any]] = [
      "kind": "macro", "weight": 6,
      "url": "https://www.sec.gov/news/pressreleases.rss"},
 
+    # Added after probing, not on reputation. Every one of these was fetched
+       # and parsed with this module's own code before it went in; the twelve
+       # candidates that failed are listed under REJECTED_SOURCES below with the
+       # reason, so nobody re-adds them on the strength of the name.
+    # A speech is frequently the policy news, and the press-release feed does
+    # not carry them: the decision arrives in a statement, the reasoning and the
+    # next move arrive in a speech two days later.
+    {"id": "fed-speeches", "name": "Federal Reserve", "detail": "Speeches",
+     "kind": "macro", "weight": 9,
+     "url": "https://www.federalreserve.gov/feeds/speeches.xml"},
+    # Retail sales, durable goods, housing starts, trade balance. All of these
+    # were being read second-hand off a wire; Census publishes them itself.
+    {"id": "census-eco", "name": "Census Bureau", "detail": "Economic indicators",
+     "kind": "macro", "weight": 8,
+     "url": "https://www.census.gov/economic-indicators/indicator.xml"},
+    # The other side of the Atlantic sets the dollar as much as the Fed does.
+    {"id": "ecb-press", "name": "European Central Bank", "detail": "Press",
+     "kind": "macro", "weight": 7,
+     "url": "https://www.ecb.europa.eu/rss/press.html"},
+    # Primary energy data. OilPrice is commentary on this.
+    {"id": "eia-today", "name": "EIA", "detail": "Today in energy",
+     "kind": "macro", "weight": 7,
+     "url": "https://www.eia.gov/rss/todayinenergy.xml"},
+    # Research rather than news, and the reason it is here: it is the Fed's own
+    # staff arguing about the data in public, months before it reaches a speech.
+    {"id": "nyfed-research", "name": "New York Fed", "detail": "Liberty Street Economics",
+     "kind": "macro", "weight": 6,
+     "url": "https://libertystreeteconomics.newyorkfed.org/feed/"},
+    {"id": "cbo", "name": "Congressional Budget Office", "detail": "Publications",
+     "kind": "macro", "weight": 5,
+     "url": "https://www.cbo.gov/publications/all/rss.xml"},
+
     # -- wires, grouped into desks by `sector` ---------------------------------
     #
     # CNN is deliberately absent. Its public RSS feeds are abandoned: measured on
@@ -160,6 +192,51 @@ SOURCES: List[Dict[str, Any]] = [
      "kind": "wire", "sector": "politics", "weight": 7,
      "url": "https://www.cnbc.com/id/10000113/device/rss/rss.html"},
 
+    # Regulatory. The desk the brief had no equivalent of, and the one whose
+       # items most often ARE the move in a single name.
+       #
+       # An FDA approval or complete response letter is the entire thesis for a
+       # biotech; an FTC second request is the entire thesis for a merger arb. A
+       # wire will report both, hours later and with the document paraphrased.
+    {"id": "fda-press", "name": "FDA", "detail": "Press announcements",
+     "kind": "wire", "sector": "regulatory", "weight": 9,
+     "url": "https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds/press-releases/rss.xml"},
+    {"id": "fda-drugs", "name": "FDA", "detail": "Drug approvals and safety",
+     "kind": "wire", "sector": "regulatory", "weight": 8,
+     "url": "https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds/drugs/rss.xml"},
+    {"id": "ftc-competition", "name": "FTC", "detail": "Competition enforcement",
+     "kind": "wire", "sector": "regulatory", "weight": 7,
+     "url": "https://www.ftc.gov/feeds/press-release-competition.xml"},
+    {"id": "cftc", "name": "CFTC", "detail": "Derivatives enforcement",
+     "kind": "wire", "sector": "regulatory", "weight": 5,
+     "url": "https://www.cftc.gov/RSS/RSSGP/rssgp.xml"},
+
+    # Analysis and opinion, kept in its own desk and clearly labelled.
+       #
+       # The brief was entirely reported news, which answers "what happened" and
+       # never "what does anyone think it means". Op-eds and long-form analysis
+       # are the other half of reading a market, and mixing them into the wire
+       # desks would have blurred the one distinction that matters about them:
+       # these are arguments, not events. Headline and link only, as everywhere
+       # else in this module — the argument belongs to whoever wrote it.
+    {"id": "economist-fin", "name": "The Economist", "detail": "Finance and economics",
+     "kind": "wire", "sector": "analysis", "weight": 8,
+     "url": "https://www.economist.com/finance-and-economics/rss.xml"},
+    {"id": "ft-home", "name": "Financial Times", "detail": "Top stories",
+     "kind": "wire", "sector": "analysis", "weight": 8,
+     "url": "https://www.ft.com/rss/home"},
+    # Healthcare and pharma reporting at a depth the general wires do not reach,
+    # which matters because a third of the S&P's single-name volatility is a
+    # clinical readout or a label change.
+    {"id": "statnews", "name": "STAT", "detail": "Health and pharma",
+     "kind": "wire", "sector": "analysis", "weight": 7,
+     "url": "https://www.statnews.com/feed/"},
+
+    # WSJ markets alongside CNBC and MarketWatch on the existing desk.
+    {"id": "wsj-markets", "name": "WSJ", "detail": "Markets",
+     "kind": "wire", "sector": "markets", "weight": 9,
+     "url": "https://feeds.content.dowjones.io/public/rss/RSSMarketsMain"},
+
     {"id": "bbc-world", "name": "BBC News", "detail": "World",
      "kind": "wire", "sector": "world", "weight": 9,
      "url": "https://feeds.bbci.co.uk/news/world/rss.xml"},
@@ -170,14 +247,55 @@ SOURCES: List[Dict[str, Any]] = [
 
 # The desks, in the order they appear on the page. Kept here rather than in the
 # frontend so a new source can only ever land in a section that exists.
-SECTOR_ORDER = ["markets", "energy", "economy", "tech", "politics", "world"]
+SECTOR_ORDER = ["markets", "regulatory", "analysis", "energy", "economy",
+                "tech", "politics", "world"]
 SECTOR_LABELS = {
     "markets": "Markets",
+    "regulatory": "Regulators & Agencies",
+    "analysis": "Analysis & Opinion",
     "energy": "Energy & Commodities",
     "economy": "Economy",
     "tech": "Technology",
     "politics": "Politics",
     "world": "World",
+}
+
+# Candidates that were probed and did NOT make it, with the measured reason.
+#
+# Kept as a record for the same reason the CNN note above is kept: without it,
+# every one of these is a plausible-sounding suggestion that costs another round
+# of HTTP requests to rediscover. Re-add only against a fresh probe, never on
+# the strength of the name. Measured 2026-09-07 with this module's own fetcher.
+REJECTED_SOURCES: Dict[str, str] = {
+    "https://www.federalreserve.gov/feeds/testimony.xml":
+        "live but slow: newest item 55 days old, so it would never clear the "
+        "brief's freshness window. Testimony is episodic, not a feed.",
+    "https://home.treasury.gov/rss/press.xml": "404",
+    "https://www.bankofengland.co.uk/rss/news":
+        "50 rows, newest 11 days old. Outside the window.",
+    "https://www.justice.gov/feeds/opa/justice-news.xml": "404",
+    "https://feeds.reuters.com/reuters/businessNews":
+        "DNS does not resolve. Reuters withdrew public RSS.",
+    "https://rsshub.app/apnews/topics/business": "403",
+    "https://feeds.content.dowjones.io/public/rss/RSSBarronsTopStories": "404",
+    "https://www.piie.com/rss/research-and-analysis": "404",
+    "https://www.brookings.edu/topic/economics/feed/":
+        "returns a body that is not well-formed XML",
+    "https://cepr.org/voxeu/rss.xml": "403",
+    "https://www.imf.org/en/Blogs/rss": "403",
+    "https://www.bis.org/doclist/all_rss.rss": "404",
+    "https://feeds.content.dowjones.io/public/rss/RSSOpinion":
+        "live, fresh, and briefly shipped on the Analysis desk before being "
+        "removed. It is WSJ's general op-ed page, not a markets one: on the "
+        "day it went in it took all six desk slots with a piece on a "
+        "daughter's last first day of school, two on court packing and foreign "
+        "university donations, and a readers' letters column. Capping it to "
+        "half a desk limited the damage without fixing the source. There is no "
+        "finance-only WSJ opinion feed to point at instead.",
+    "https://seekingalpha.com/market_currents.xml":
+        "live and fresh, deliberately excluded. It is the one candidate with no "
+        "editorial accountability behind it, and this module's first rule is "
+        "primary sources.",
 }
 
 SOURCE_BY_ID = {s["id"]: s for s in SOURCES}
@@ -467,12 +585,48 @@ def load_kind(kind: str, force: bool = False, sector: Optional[str] = None
     return entries, status
 
 
+# Evergreen index pages that arrive in a news feed.
+#
+# The FDA's drug feed republishes its own navigation alongside actual
+# announcements: "What's New Related to Drugs", "Newly Added Guidance
+# Documents", "Oncology Approval Notifications". Each is a standing page with a
+# fresh timestamp, so it clears every freshness check and reads on the page as
+# though something happened. On the day the regulatory desk was added, three of
+# its six items were these — half a desk of table of contents.
+#
+# Matched on the title rather than the URL because the same page is reachable at
+# several paths. Deliberately a short, specific list: a generic "looks like an
+# index" heuristic would eventually eat a real announcement.
+EVERGREEN_TITLES = (
+    "what's new related to drugs",
+    "newly added guidance documents",
+    "approval notifications",
+    "drug safety-related labeling changes",
+    "drug shortages",
+    "recalls, market withdrawals",
+    "press announcements",
+)
+
+
+def is_evergreen(entry: Dict[str, Any]) -> bool:
+    """True for a standing page republished with a fresh date."""
+    title = (entry.get("title") or "").strip().lower()
+    if not title:
+        return False
+    return any(marker in title for marker in EVERGREEN_TITLES)
+
+
 def within_hours(entries: List[Dict[str, Any]], hours: int) -> List[Dict[str, Any]]:
     """Entries published inside a window. Undated entries are kept — a release
     with no timestamp is more likely a parsing gap than something ancient."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     out = []
     for row in entries:
+        # Dropped here rather than in the parser: an evergreen page is valid
+        # feed content, it is just not news, and this is the gate every desk
+        # already passes through.
+        if is_evergreen(row):
+            continue
         stamp = _parse_date(row.get("published"))
         if stamp is None or stamp >= cutoff:
             out.append(row)
@@ -541,12 +695,63 @@ ITEM_GROUPS: Dict[str, str] = {
 }
 
 EDGAR_SEARCH = "https://efts.sec.gov/LATEST/search-index"
-FILINGS_LIMIT = int(os.environ.get("BRIEF_FILINGS_LIMIT", "60"))
+# 60 was sized when this section pulled one form. Twelve forms need more room
+# before the per-form share is large enough to be worth reading — at 60 the
+# lightest forms were down to a floor of two rows each.
+FILINGS_LIMIT = int(os.environ.get("BRIEF_FILINGS_LIMIT", "96"))
 
 _TICKER_RE = re.compile(r"\(([A-Z][A-Z0-9.\-]{0,6})\)\s*\(CIK")
 
 
-def _filing_row(hit: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+# The filing types the brief pulls, and what each one is.
+#
+# This was `forms=8-K` and nothing else, which is material events only — a
+# terminal that could tell you a company had announced something and never that
+# an activist had taken 6% of it, that a shelf had been priced into the float,
+# or what the annual report actually said.
+#
+# `SCHEDULE 13D` is spelled out for a reason worth recording: EDGAR full-text
+# search does not recognise `SC 13D`, the name the form is universally called
+# and the one the filing index itself uses. Queried that way it returns zero
+# hits and looks like a quiet week. `SCHEDULE 13D` returns 79 in seven days.
+# The same trap applies to `SC 13D/A` — amendments come back under the spelled
+# form, so they arrive with the parent rather than needing their own query.
+#
+# Weight orders the section when several land the same day. An activist stake
+# outranks a proxy statement; a priced offering outranks a shelf registration
+# that may never be drawn on.
+FILING_FORMS: List[Dict[str, Any]] = [
+    {"form": "SCHEDULE 13D", "label": "Activist stake (13D)", "weight": 10,
+     "note": "A holder above 5% declaring intent to influence. Filed within 5 days."},
+    {"form": "8-K", "label": "Material event (8-K)", "weight": 9, "items": True,
+     "note": "The catch-all for anything material between quarterly reports."},
+    {"form": "SC 14D9", "label": "Tender offer response", "weight": 9,
+     "note": "The board's answer to a tender offer. Recommends for or against."},
+    {"form": "425", "label": "Merger communication", "weight": 8,
+     "note": "A written communication about a proposed business combination."},
+    {"form": "424B5", "label": "Offering priced", "weight": 8,
+     "note": "A takedown off a shelf, priced. This is dilution with a number on it."},
+    {"form": "10-Q", "label": "Quarterly report", "weight": 7,
+     "note": "The quarter's financials, with management's discussion."},
+    {"form": "10-K", "label": "Annual report", "weight": 7,
+     "note": "The full year, including the risk factors in the company's own words."},
+    {"form": "DEF 14A", "label": "Proxy statement", "weight": 6,
+     "note": "Pay, the board, and what shareholders are being asked to vote on."},
+    {"form": "S-1", "label": "Registration (S-1)", "weight": 6,
+     "note": "New securities registered. For an IPO this is the prospectus."},
+    {"form": "S-3", "label": "Shelf registration", "weight": 5,
+     "note": "Capacity to issue later. Not dilution yet, but permission for it."},
+    {"form": "6-K", "label": "Foreign material event", "weight": 5,
+     "note": "The 8-K equivalent for a foreign private issuer."},
+    {"form": "20-F", "label": "Foreign annual report", "weight": 5,
+     "note": "The 10-K equivalent for a foreign private issuer."},
+]
+
+FILING_FORM_BY_NAME = {f["form"]: f for f in FILING_FORMS}
+
+
+def _filing_row(hit: Dict[str, Any],
+                spec: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
     src = hit.get("_source") or {}
     names = src.get("display_names") or []
     if not names:
@@ -556,11 +761,18 @@ def _filing_row(hit: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     company = re.sub(r"\s*\((?:[A-Z][A-Z0-9.\-]{0,6}|CIK \d+)\)\s*", " ", raw)
     company = re.sub(r"\s+", " ", company).strip(" ,")
 
-    codes = [c for c in (src.get("items") or []) if c in ITEM_LABELS]
-    # Filings whose only item is the exhibit index carry no news.
-    meaningful = [c for c in codes if ITEM_LABELS[c][1] > 0]
-    if not meaningful:
-        return None
+    spec = spec or FILING_FORM_BY_NAME["8-K"]
+    # Item codes exist on 8-K and 6-K only. For every other form the form ITSELF
+    # is the news — a 13D is interesting because it is a 13D — so requiring an
+    # item code would have discarded every one of them.
+    if spec.get("items"):
+        codes = [c for c in (src.get("items") or []) if c in ITEM_LABELS]
+        # Filings whose only item is the exhibit index carry no news.
+        meaningful = [c for c in codes if ITEM_LABELS[c][1] > 0]
+        if not meaningful:
+            return None
+    else:
+        meaningful = []
 
     cik = (src.get("ciks") or [""])[0].lstrip("0")
     adsh = src.get("adsh") or ""
@@ -571,13 +783,19 @@ def _filing_row(hit: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return {
         "company": company, "ticker": ticker_match.group(1) if ticker_match else None,
         "cik": cik, "accession": adsh,
+        "form": spec["form"],
+        "form_label": spec["label"],
+        "form_note": spec.get("note", ""),
         "items": meaningful,
         "labels": [ITEM_LABELS[c][0] for c in meaningful],
         "groups": groups,
-        "weight": max(ITEM_LABELS[c][1] for c in meaningful),
+        # An item code is a finer read than the form when there is one, so it
+        # wins; otherwise the form's own weight orders the row.
+        "weight": (max(ITEM_LABELS[c][1] for c in meaningful)
+                   if meaningful else spec["weight"]),
         "filed": src.get("file_date"),
         "url": url,
-        "source": "SEC EDGAR", "source_detail": "8-K filing",
+        "source": "SEC EDGAR", "source_detail": spec["label"],
     }
 
 
@@ -596,29 +814,107 @@ def load_filings(days: int = 1, force: bool = False) -> Dict[str, Any]:
 
     today = datetime.now(timezone.utc).date()
     start = today - timedelta(days=max(0, days))
-    url = (f"{EDGAR_SEARCH}?q=&forms=8-K&dateRange=custom"
-           f"&startdt={start.isoformat()}&enddt={today.isoformat()}")
     started = time.time()
-    try:
-        payload = json.loads(_fetch(url, "application/json"))
-        hits = (payload.get("hits") or {}).get("hits") or []
-        total = ((payload.get("hits") or {}).get("total") or {}).get("value")
-        rows = [r for r in (_filing_row(h) for h in hits) if r]
-        rows.sort(key=lambda r: (r.get("filed") or "", r.get("weight", 0)), reverse=True)
-        entry = {"at": time.time(), "filings": rows[:FILINGS_LIMIT],
-                 "matched": len(rows), "total_in_window": total, "error": None,
-                 "ms": int((time.time() - started) * 1000)}
-    except (urllib.error.URLError, urllib.error.HTTPError, socket.timeout,
-            ValueError, KeyError, OSError) as exc:
+
+    # One request per form. Comma-separating them was tried and EDGAR's
+    # full-text endpoint answers a multi-form `forms=` with zero hits rather
+    # than an error, which is the worst of both — it looks like a quiet day.
+    rows: List[Dict[str, Any]] = []
+    total = 0
+    per_form: Dict[str, Any] = {}
+    failures: List[str] = []
+    for spec in FILING_FORMS:
+        quoted = spec["form"].replace(" ", "%20")
+        url = (f"{EDGAR_SEARCH}?q=&forms={quoted}&dateRange=custom"
+               f"&startdt={start.isoformat()}&enddt={today.isoformat()}")
+        try:
+            payload = json.loads(_fetch(url, "application/json"))
+            hits = (payload.get("hits") or {}).get("hits") or []
+            got = ((payload.get("hits") or {}).get("total") or {}).get("value") or 0
+            built = [r for r in (_filing_row(h, spec) for h in hits) if r]
+            rows.extend(built)
+            total += got
+            per_form[spec["form"]] = {"in_window": got, "shown": len(built)}
+        except (urllib.error.URLError, urllib.error.HTTPError, socket.timeout,
+                ValueError, KeyError, OSError) as exc:
+            # One form failing must not lose the other eleven — the same rule
+            # the wire sources have carried from the start.
+            per_form[spec["form"]] = {"in_window": None, "shown": 0,
+                                      "error": f"{type(exc).__name__}"}
+            failures.append(spec["form"])
+
+    if not rows and failures:
+        # Everything failed. Serve whatever is on disk and say it is stale,
+        # rather than presenting an empty section as a quiet day.
         stale = _MEM.get(key) or _load_disk().get(key) or {}
         entry = {"at": stale.get("at", 0), "filings": stale.get("filings", []),
                  "matched": stale.get("matched", 0),
                  "total_in_window": stale.get("total_in_window"),
-                 "error": f"{type(exc).__name__}: {str(exc)[:120]}",
+                 "per_form": stale.get("per_form", per_form),
+                 "failed_forms": failures,
+                 "error": "every form query failed: " + ", ".join(failures),
                  "ms": int((time.time() - started) * 1000)}
         with _LOCK:
             _MEM[key] = entry
         return {**entry, "cached": False, "stale": bool(stale.get("filings"))}
+
+    # Every form that had news gets into the shown set.
+     #
+     # Sorting the merged list by date and truncating to 60 was the first
+     # version and it silently undid most of the work: 369 filings came back
+     # across eleven form types, the newest day was 334 8-Ks and 191 6-Ks, and
+     # the 60 that survived were 8-K, 13D, 425 and 424B5 only. Every 10-K,
+     # 10-Q, proxy and registration was fetched, parsed and then discarded by
+     # the truncation — the section looked exactly as it had before the forms
+     # were added.
+     #
+     # So the budget is allocated per form before the merge. Each form keeps up
+     # to its share, the forms that filed nothing release theirs, and one busy
+     # form can no longer crowd out the rest. Within a form it is still newest
+     # first, then weight, which is what a reader scanning a section wants.
+     #
+    by_form: Dict[str, List[Dict[str, Any]]] = {}
+    for r in rows:
+        by_form.setdefault(r["form"], []).append(r)
+    for group in by_form.values():
+        group.sort(key=lambda r: (r.get("filed") or "", r.get("weight", 0)), reverse=True)
+
+    # Share by weight, not evenly.
+    #
+    # An equal split was the second version and it over-corrected: 8-K is 334 of
+    # the 698 filings in the window and the material-event form a reader scans
+    # first, and it was getting the same five slots as a shelf registration.
+    # Weighting the share keeps every form present while letting the important
+    # ones be present in proportion. The floor of two is what guarantees the
+    # long tail still appears at all.
+    present = [f for f in FILING_FORMS if by_form.get(f["form"])]
+    shown: List[Dict[str, Any]] = []
+    if present:
+        total_weight = sum(f["weight"] for f in present) or 1
+        for spec in present:
+            share = max(2, round(FILINGS_LIMIT * spec["weight"] / total_weight))
+            shown.extend(by_form[spec["form"]][:share])
+        # Any budget left by a thin form goes to the heaviest rows still unseen,
+        # so a quiet day does not produce a short section.
+        if len(shown) < FILINGS_LIMIT:
+            seen = {id(r) for r in shown}
+            spare = [r for r in rows if id(r) not in seen]
+            spare.sort(key=lambda r: (r.get("weight", 0), r.get("filed") or ""),
+                       reverse=True)
+            shown.extend(spare[:FILINGS_LIMIT - len(shown)])
+
+    shown.sort(key=lambda r: (r.get("filed") or "", r.get("weight", 0)), reverse=True)
+    entry = {"at": time.time(), "filings": shown[:FILINGS_LIMIT],
+             "matched": len(rows), "total_in_window": total,
+             "per_form": per_form,
+             "failed_forms": failures,
+             # Named so the reader can see the section is a selection rather
+             # than everything EDGAR received.
+             "forms_queried": [f["form"] for f in FILING_FORMS],
+             "error": None if not failures else (
+                 "%d of %d form queries failed: %s"
+                 % (len(failures), len(FILING_FORMS), ", ".join(failures))),
+             "ms": int((time.time() - started) * 1000)}
 
     _store(key, entry)
     return {**entry, "cached": False}

@@ -73,6 +73,8 @@ const views = {
   instrument: $('#view-instrument'),
   chart: $('#view-chart'),
   scan: $('#view-scan'),
+  watchlist: $('#view-watchlist'),
+  alerts: $('#view-alerts'),
   settings: $('#view-settings'),
 };
 
@@ -1611,6 +1613,21 @@ function aggregateWeekly(ps) {
   out.sma20 = smaSeries(out.close, 20);
   out.sma50 = smaSeries(out.close, 50);
   out.sma200 = new Array(out.close.length).fill(null);
+  /* The EMAs get the same treatment, and did not before.
+   *
+   * This object is built fresh rather than spread from `ps`, so anything not
+   * named here is simply absent from a weekly series. ema9/21/50 were not
+   * named: switching an EMA on and then switching to weekly produced a legend
+   * entry, a value tag slot and no line, because `values || []` turned the
+   * missing array into an empty one and the chart drew nothing. The daily
+   * values could not be reused in any case — they are indexed by session and
+   * these bars are weeks.
+   *
+   * Averaging weekly closes is the same thing the two SMAs above do, so the
+   * lengths mean weeks here and the legend already says so. */
+  out.ema9 = emaSeries(out.close, 9);
+  out.ema21 = emaSeries(out.close, 21);
+  out.ema50 = emaSeries(out.close, 50);
   out.weekly = true;
   return out;
 }
@@ -1635,6 +1652,22 @@ let showVbp = false;
 let showInsiders = false;
 let showZones = false;
 let showEMA = false;
+/* EMA clouds: the space between a pair of averages, filled and tinted by which
+ * one is on top.
+ *
+ * Separate flags from the EMA lines, because the usual way to read a cloud is
+ * with the lines themselves off. Two lines a few cents apart on a six-month
+ * chart are one thick stroke; the same pair as a filled ribbon shows the width
+ * of the gap and the moment it flips, which is the whole question. Tying the
+ * cloud to the line switches would make the useful configuration unreachable.
+ *
+ * Two pairs, from the three EMAs the server already computes: 9/21 for the
+ * current leg, 21/50 for the trend behind it. No new payload fields.
+ */
+let showCloudFast = false;
+let showCloudSlow = false;
+const SHOW_CLOUD_FAST_KEY = 'optic.chart.cloud921.v1';
+const SHOW_CLOUD_SLOW_KEY = 'optic.chart.cloud2150.v1';
 // Auto trend lines. New, and shared with the Swing chart like the rest.
 let showTrends = false;
 const SHOW_TRENDS_KEY = 'optic.chart.trends.v1';
@@ -1741,6 +1774,8 @@ try {
   showInsiders = localStorage.getItem(SHOW_INS_KEY) === 'on';
   showZones = localStorage.getItem(SHOW_ZONES_KEY) === 'on';
   showEMA = localStorage.getItem(SHOW_EMA_KEY) === 'on';
+  showCloudFast = localStorage.getItem(SHOW_CLOUD_FAST_KEY) === 'on';
+  showCloudSlow = localStorage.getItem(SHOW_CLOUD_SLOW_KEY) === 'on';
   loadSeriesFlags();
 } catch (e) { /* private mode */ }
 
@@ -1897,6 +1932,69 @@ function sliceSeries(rawPs, rangeKey, intervalKey) {
 // list, which would need its own endpoint and would be stale outside market hours.
 const HOME_QUICK_PICKS = ['SPY', 'QQQ', 'NVDA', 'AAPL', 'TSLA', 'AMD', 'MSFT', 'IWM'];
 
+/* The landing search placeholder, at two lengths.
+ *
+ * The long form is a sentence with an example in it, which is the right thing
+ * to show someone who has never used this. It is 402px wide in the app's own
+ * face, and a phone gives the input 343 at most — so on a 375px screen it was
+ * rendering as "Search a ticker or com" and the example, the only part that
+ * teaches anything, was the part cut off. Truncating a hint is worse than not
+ * writing one: it looks like a rendering fault rather than a shortened message.
+ *
+ * The accessible name is unaffected. aria-label carries the full description
+ * either way, so a screen reader hears the same thing at every width.
+ */
+/* Publish the top bar's height as --topbar-h.
+ *
+ * The phone dropdowns are position:fixed — the tab strip is a horizontal
+ * scroll container and an absolutely-positioned menu inside it gets clipped —
+ * and a fixed box cannot express "just below my parent" in CSS. It needs a
+ * length, and the bar has no fixed height: it is one row on a desktop, two
+ * below 1280px and three below 560px, and it also grows by the safe-area inset
+ * on a notched phone.
+ *
+ * ResizeObserver rather than a resize listener, because the bar's height also
+ * changes when its contents do — a longer ticker, a wrapped tab strip — with no
+ * window resize involved. The CSS carries a fallback so a browser without
+ * ResizeObserver still opens the menu somewhere sensible.
+ */
+function trackTopbarHeight() {
+  const bar = document.querySelector('header.topbar');
+  if (!bar) return;
+  const publish = () => {
+    const h = Math.round(bar.getBoundingClientRect().height);
+    // Guard against the observer firing before layout, which would pin the menu
+    // to the top of the screen until something else moved.
+    if (h > 0) document.documentElement.style.setProperty('--topbar-h', h + 'px');
+  };
+  publish();
+  if (typeof ResizeObserver === 'function') new ResizeObserver(publish).observe(bar);
+  else window.addEventListener('resize', publish);
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', trackTopbarHeight);
+} else {
+  trackTopbarHeight();
+}
+
+const HOME_SEARCH_WIDE = 'Search a ticker or company. E.g. NVDA or Apple';
+const HOME_SEARCH_NARROW = 'Ticker or company';
+const homeNarrowQuery = typeof matchMedia === 'function'
+  ? matchMedia('(max-width: 559px)') : null;
+
+function homeSearchHint() {
+  return homeNarrowQuery && homeNarrowQuery.matches ? HOME_SEARCH_NARROW : HOME_SEARCH_WIDE;
+}
+
+/* Swapped in place rather than by re-rendering the view: the home page is a
+ * form, and repainting it on a resize would discard whatever had been typed. */
+if (homeNarrowQuery && homeNarrowQuery.addEventListener) {
+  homeNarrowQuery.addEventListener('change', () => {
+    const input = document.getElementById('home-input');
+    if (input) input.placeholder = homeSearchHint();
+  });
+}
+
 /* The landing cards, grouped exactly as the navigation is.
  *
  * They drifted twice: once when the tab strip was reordered, and again when the
@@ -2039,22 +2137,15 @@ function renderHome() {
 
     <h1 class="home-title">Optic <span>Terminal</span></h1>
 
-    <p class="home-proto">
-      <strong>Prototype.</strong> A personal research project, still being built. Expect rough
-      edges, gaps in the data and figures that lag the market. It is a tool for forming a view,
-      not a recommendation to act on one.
-    </p>
-
     <p class="home-lede">
-      A market research workbench, from a multi-week swing to a multi-year hold. Load a ticker
-      and it works through the technical structure, options positioning, earnings and financial
-      growth, analyst estimates, news tone and the macro backdrop. Then puts them together into
-      one read, and tells you where the inputs disagree.
+      A market research workbench. Load a ticker and Optic works through the
+      structure, the options, the earnings and the macro, then tells you where
+      those inputs disagree.
     </p>
 
     <form class="home-search" id="home-form">
       <div class="combo">
-        <input id="home-input" placeholder="Search a ticker or company. E.g. NVDA or Apple"
+        <input id="home-input" placeholder="${esc(homeSearchHint())}"
                spellcheck="false" autocomplete="off"
                aria-label="Ticker symbol or company name"
                role="combobox" aria-expanded="false" aria-autocomplete="list"
@@ -2069,19 +2160,104 @@ function renderHome() {
       ${quick}
     </div>
 
-    <div class="home-cards">${cards}</div>
+    ${/* The market, above the product tour. Painted empty and filled by
+        * renderHomeMarket once /api/home lands — the alternative is holding the
+        * whole page back on a request that touches four feeds. */''}
+    <div id="hm-market" class="hm-market"></div>
+
+    ${/* Below the fold on purpose. These are for a first visit; the market is
+        * for every other one. */''}
+    <details class="home-tour" id="home-tour">
+      <summary>What Optic can do</summary>
+      <p class="home-proto">
+        <strong>Prototype.</strong> A personal research project, still being built.
+        Expect rough edges, gaps in the data and figures that lag the market. It is
+        a tool for forming a view, not a recommendation to act on one.
+      </p>
+      <div class="home-cards">${cards}</div>
+    </details>
 
     <div class="home-foot" id="home-foot">
       <span class="dot-sep"><span class="chip neutral" style="padding:var(--space-0) var(--space-2)"><span class="dot"></span>Checking data source…</span></span>
     </div>
   </div>`;
 
-  // Autofocus the ticker box: on this page there is exactly one thing to do.
+  // The market screen loads on its own; see loadHomeMarket.
+  loadHomeMarket();
+  // No autofocus any more. It used to be right when the page was a search box
+  // and nothing else; now there is a market summary underneath and stealing
+  // focus means a keystroke lands in a field instead of scrolling the page.
   const input = $('#home-input');
-  if (input) input.focus();
   // renderHome rebuilds this markup, so the typeahead is re-attached each time.
   attachTypeahead('home-input', 'home-results');
 }
+
+
+/* Fill the market screen once /api/home lands.
+ *
+ * Separate from renderHome so the page paints immediately: this request touches
+ * the index board, the macro instruments and the brief store, and holding the
+ * first screen back on it would make the landing page the slowest thing in the
+ * app. Each section renders only if its leg came back, so a degraded feed
+ * removes a section rather than emptying the page.
+ */
+async function loadHomeMarket() {
+  const host = document.getElementById('hm-market');
+  if (!host) return;
+  host.innerHTML = '<div class="hm-skel" aria-hidden="true"></div>';
+  let data;
+  try {
+    data = await getJSON('/api/home');
+  } catch (err) {
+    // The rest of the page still works, and the search box above is the only
+    // thing anyone strictly needs. Say what is missing rather than nothing.
+    host.innerHTML = `<p class="hm-none">The market summary is unavailable right
+      now (${esc(err.message)}). Search still works.</p>`;
+    return;
+  }
+  if (STATE.view !== 'home' && !document.getElementById('hm-market')) return;
+  STATE.home = data;
+  const session = data.session || {};
+  const holiday = session.holiday;
+  host.innerHTML = `
+    <div class="hm-greet">
+      <h2 class="hm-hello">${esc(homeGreeting())}.</h2>
+      <span class="hm-session is-${session.is_open ? 'open' : 'shut'}">
+        ${esc(holiday ? holiday + ' \u00b7 market closed' : (session.label || ''))}
+      </span>
+    </div>
+    ${homePulseStrip(data)}
+    <section class="hm-block">
+      <div class="hm-block-head">
+        <h2 class="hm-h">Your watchlist</h2>
+        ${/* The way into the full view, which has the sort control and the
+            * add form this six-row preview has no room for. It is not in the
+            * tab strip, so this link and the palette are how it is reached. */''}
+        <button type="button" class="hm-more" data-go-view="watchlist">All of it &rarr;</button>
+      </div>
+      <div id="hm-watch">${watchlistFeedHTML({ compact: true, limit: 6 })}</div>
+    </section>
+    ${homeRead(data)}
+    ${homeAlerts(data)}
+    ${(data.degraded || []).length
+    ? `<p class="hm-degraded">Unavailable right now: ${esc((data.degraded).join(', '))}.</p>`
+    : ''}`;
+  loadWatchlist();
+}
+
+/* Watchlist and home navigation clicks. */
+document.addEventListener('click', (evt) => {
+  // `closest` guard: a document-level listener can be handed an event whose
+  // target is `document` itself, which has no closest(). The rest of this file
+  // already guards the same way.
+  if (!evt.target || !evt.target.closest) return;
+  const open = evt.target.closest('[data-watch-open]');
+  if (open) { loadTicker(open.dataset.watchOpen, 'swing'); return; }
+  const rm = evt.target.closest('[data-watch-remove]');
+  if (rm) { evt.preventDefault(); evt.stopPropagation(); watchRemove(rm.dataset.watchRemove); return; }
+  const go = evt.target.closest('[data-go-view]');
+  if (go) { switchView(go.dataset.goView); }
+});
 
 /** Fill in the footer once /api/health is known — real-time vs delayed feed and
  *  whether the assistant has credentials. Written separately from renderHome so
@@ -2102,6 +2278,1263 @@ function renderHomeStatus(health) {
 }
 
 /* ==================================================================== SWING */
+
+
+
+
+
+
+
+
+
+/* ========================================================= mobile tab bar ===
+ *
+ * A phone gets its own navigation, not the desktop strip made smaller.
+ *
+ * The top strip works on a phone — it scrolls, and the earlier responsive pass
+ * made it one clean row — but it is still six destinations reached by swiping a
+ * strip at the top of the screen, which is the furthest point from the thumb.
+ * Every mobile app of this kind puts primary navigation at the bottom, and the
+ * reason is ergonomic rather than fashionable.
+ *
+ * Five items, because a sixth stops being tappable at 375px: 375 / 5 = 75px per
+ * target, comfortably over the 24px minimum with room for a label. They are the
+ * five things someone opens this on a phone to do — check the market, look at a
+ * name, see the list, check what fired, ask something. Everything else stays in
+ * the top strip, which is still there and still scrolls.
+ *
+ * Rendered once and toggled by CSS rather than rebuilt per view: it is chrome,
+ * it never changes shape, and a re-render on every navigation would fight the
+ * active-state transition.
+ */
+const MOBILE_TABS = [
+  { view: 'home', label: 'Home', icon: '&#9750;' },
+  { view: 'swing', label: 'Analyse', icon: '&#9683;' },
+  { view: 'watchlist', label: 'Watchlist', icon: '&#9776;' },
+  { view: 'alerts', label: 'Alerts', icon: '&#9873;' },
+  { view: 'ask', label: 'Ask', icon: '&#10022;' },
+];
+
+function mountMobileTabs() {
+  if (document.getElementById('mtabs')) return;
+  const nav = document.createElement('nav');
+  nav.id = 'mtabs';
+  nav.className = 'mtabs';
+  nav.setAttribute('aria-label', 'Primary');
+  nav.innerHTML = MOBILE_TABS.map((t) => `<button type="button" class="mtab"
+    data-mtab="${esc(t.view)}" aria-label="${esc(t.label)}">
+    <span class="mtab-ico" aria-hidden="true">${t.icon}</span>
+    <span class="mtab-lab">${esc(t.label)}</span>
+  </button>`).join('');
+  document.body.appendChild(nav);
+  paintMobileTabs(STATE.view);
+}
+
+function paintMobileTabs(view) {
+  const nav = document.getElementById('mtabs');
+  if (!nav) return;
+  nav.querySelectorAll('[data-mtab]').forEach((btn) => {
+    const on = btn.dataset.mtab === view;
+    btn.classList.toggle('on', on);
+    btn.setAttribute('aria-current', on ? 'page' : 'false');
+  });
+}
+
+document.addEventListener('click', (evt) => {
+  if (!evt.target || !evt.target.closest) return;
+  const tab = evt.target.closest('[data-mtab]');
+  if (!tab) return;
+  const view = tab.dataset.mtab;
+  // "Ask" is not a view. It opens the palette, which is the single entry point
+  // for asking anything — putting a chat panel behind a tab would make the
+  // assistant a destination again.
+  if (view === 'ask') { openPalette(''); return; }
+  /* Analyse with nothing loaded would land on the "No ticker loaded" panel,
+   * which is a dead end. The palette is the way in, so that is where it goes —
+   * the tab means "look at a name", and with no name yet that means pick one. */
+  if (view === 'swing' && !STATE.ticker) { openPalette(''); return; }
+  switchView(view);
+});
+
+/* ================================================= options intelligence ====
+ *
+ * The layer above the eight options panels. All eight are worth having and all
+ * open collapsed, which is the right default — but a reader who wants to know
+ * whether options are expensive and which way the flow leans had to open four
+ * of them and do the reading. This answers that in one pass and leaves the
+ * workings where they were.
+ */
+function renderOptionsBrief(d) {
+  const ob = d.options_brief;
+  if (!ob || !ob.available) return '';
+  return `<section class="ob-block span-all" aria-label="Options intelligence">
+    <div class="hm-block-head">
+      <h2 class="hm-h">Options intelligence</h2>
+      ${ob.bias ? `<span class="ob-bias is-${esc(ob.bias)}">flow reads ${esc(ob.bias)}</span>` : ''}
+    </div>
+    <div class="ob-grid">
+      ${ob.items.map((i) => `<div class="ob-item">
+        <span class="ob-label">${esc(i.label)}</span>
+        <span class="ob-value is-${esc(i.tone)}">${esc(i.value)}</span>
+        <span class="ob-note">${gloss(i.note || '')}</span>
+      </div>`).join('')}
+    </div>
+    <p class="pl-method">${gloss(ob.method || '')}</p>
+  </section>`;
+}
+
+/* ============================================================= the setup ====
+ *
+ * entry_plan, promoted. Everything here was already computed and already on the
+ * page — it sat in the twelfth panel under "Strike & entry recommendation",
+ * below eight options panels, which is the last place someone looks for the one
+ * thing that says what to actually do about any of it.
+ *
+ * The language is load-bearing. This is model output from entry.py, not advice
+ * and not an AI narrative, so it is labelled as a computed scenario with its
+ * own invalidation level in the same block. The brief asked never to render a
+ * bare "BUY NVDA" and the app's own legal banner says the same; a setup with no
+ * stated invalidation is the version of that mistake that looks responsible.
+ */
+function renderSetup(d) {
+  const ep = d.entry_plan || {};
+  if (!ep.actionable) {
+    return ep.headline ? `<section class="su-block span-all" aria-label="Setup">
+      <h2 class="hm-h">Setup</h2>
+      <p class="su-none">${gloss(ep.headline)}</p>
+    </section>` : '';
+  }
+  const rec = ep.recommended || {};
+  const zone = ep.entry_zone || {};
+  const risk = ep.risk || {};
+  const target = ep.target || {};
+  const cell = (label, value, note) => value ? `<div class="su-cell">
+    <span class="su-label">${esc(label)}</span>
+    <span class="su-value">${esc(value)}</span>
+    ${note ? `<span class="su-note">${esc(note)}</span>` : ''}
+  </div>` : '';
+  const zoneText = (zone.low && zone.high)
+    ? `${fmt(zone.low, 2)} – ${fmt(zone.high, 2)}` : null;
+  return `<section class="su-block span-all" aria-label="Setup">
+    <div class="hm-block-head">
+      <h2 class="hm-h">Setup</h2>
+      <span class="su-tag">computed scenario, not advice</span>
+    </div>
+    <div class="su-row">
+      ${cell('Bias', `${esc(ep.stance || '')} ${esc(ep.direction || '')}`.trim(),
+    ep.conviction ? `${ep.conviction} conviction` : '')}
+      ${cell('Entry', zoneText, zoneText ? 'in the stock, not the option' : '')}
+      ${cell('Contract', rec.strike
+    ? `${fmt(rec.strike, 0)} ${String(rec.expiry || '').slice(0, 10)}`
+    : null, rec.entry_mid ? `about ${fmt(rec.entry_mid, 2)} per share` : '')}
+      ${/* ep.target is an object, not a number: {target_price, target_source,
+          * move_required_pct, estimated_trading_days, ...}. Formatting it
+          * directly rendered "NaN". The source is worth showing too — "nearest
+          * Fibonacci resistance" is the difference between a level and a
+          * guess. */''}
+      ${cell('Target', target.target_price ? fmt(target.target_price, 2) : null,
+    target.move_required_pct !== null && target.move_required_pct !== undefined
+      ? `${fmtPct(target.move_required_pct, 1)} away \u00b7 ${target.target_source || ''}`
+      : (target.target_source || ''))}
+      ${/* The numeric stop leads and the sentence goes underneath: a level is
+          * actionable and a paragraph in a five-cell row is not. */''}
+      ${cell('Invalidation', risk.underlying_stop ? fmt(risk.underlying_stop, 2) : null,
+    risk.stop_basis ? 'stop basis: ' + String(risk.stop_basis).slice(0, 64) : '')}
+    </div>
+    ${ep.headline ? `<p class="su-headline">${gloss(ep.headline)}</p>` : ''}
+    ${risk.invalidation ? `<p class="su-invalid"><strong>What breaks it.</strong>
+      ${gloss(String(risk.invalidation))}</p>` : ''}
+    ${(ep.warnings || []).length ? `<ul class="su-warn">
+      ${ep.warnings.map((w) => `<li>${gloss(String(w))}</li>`).join('')}
+    </ul>` : ''}
+    <p class="pl-method">This is arithmetic over the chain and the chart, not a
+      recommendation. Options can expire worthless and lose the entire premium.
+      The invalidation level is part of the setup, not a footnote to it.</p>
+  </section>`;
+}
+
+/* ================================================================ thesis ====
+ *
+ * Your own view on a name, saved, and then checked against the data every time
+ * you come back.
+ *
+ * The feature is not the text box. Anyone can write notes. What Optic can do
+ * that a notes app cannot is tell you **what has changed since you wrote it** —
+ * so the thesis is stored with a snapshot of the readings that were on screen
+ * at the time, and the panel diffs them on every load.
+ *
+ * Stored per symbol in localStorage. There is no sign-in, so there is no
+ * server-side user to hang it on, and inventing accounts to hold four
+ * paragraphs would be the wrong trade. The consequence is stated in the panel:
+ * it lives in this browser.
+ */
+const THESIS_KEY = 'optic.thesis.v1';
+
+/* What gets snapshotted alongside the words.
+ *
+ * Chosen as the readings a thesis is actually built on, and each one is a
+ * scalar the diff can compare without ambiguity. Prose is deliberately
+ * excluded: "the tone is constructive" changing to "the tone is positive" is
+ * not a change of thesis, and diffing sentences produces noise that buries the
+ * two or three numbers that matter.
+ */
+const THESIS_FIELDS = [
+  { key: 'stance', label: 'Optic stance', get: (d) => (d.pulse || {}).stance },
+  { key: 'conviction', label: 'Conviction', get: (d) => (d.pulse || {}).conviction },
+  { key: 'price', label: 'Price', get: (d) => (d.quote || {}).price, numeric: true, pct: true },
+  { key: 'bias', label: 'Chart bias', get: (d) => (d.technicals || {}).bias },
+  { key: 'rsi', label: 'RSI', get: (d) => ((d.technicals || {}).rsi || {}).value, numeric: true },
+  { key: 'gamma', label: 'Gamma regime', get: (d) => ((d.gex || {}).regime || {}).state },
+  { key: 'flow', label: 'Options flow', get: (d) => (d.flow || {}).stance },
+  { key: 'earnings', label: 'Next earnings', get: (d) => d.next_earnings_date },
+];
+
+function thesisStore() {
+  try { return JSON.parse(localStorage.getItem(THESIS_KEY) || '{}') || {}; }
+  catch (e) { return {}; }
+}
+
+function thesisFor(symbol) {
+  return thesisStore()[String(symbol || '').toUpperCase()] || null;
+}
+
+function thesisSnapshot(d) {
+  const out = {};
+  THESIS_FIELDS.forEach((f) => {
+    let v = null;
+    try { v = f.get(d); } catch (e) { v = null; }
+    out[f.key] = (v === undefined ? null : v);
+  });
+  return out;
+}
+
+function thesisSave(symbol, fields, d) {
+  const sym = String(symbol || '').toUpperCase();
+  if (!sym) return;
+  const all = thesisStore();
+  all[sym] = {
+    ...fields,
+    saved_at: new Date().toISOString(),
+    // The readings as they stood when this was written. The whole feature.
+    snapshot: thesisSnapshot(d),
+  };
+  try { localStorage.setItem(THESIS_KEY, JSON.stringify(all)); } catch (e) { /* private */ }
+}
+
+function thesisDelete(symbol) {
+  const all = thesisStore();
+  delete all[String(symbol || '').toUpperCase()];
+  try { localStorage.setItem(THESIS_KEY, JSON.stringify(all)); } catch (e) { /* private */ }
+}
+
+/* What has moved since the thesis was written.
+ *
+ * Only fields that were captured AND are present now are compared. A reading
+ * that was missing when you saved and is available today has not changed — it
+ * has arrived — and reporting that as a change would cry wolf on the first
+ * load after any data outage.
+ */
+function thesisChanges(saved, d) {
+  if (!saved || !saved.snapshot) return [];
+  const now = thesisSnapshot(d);
+  const out = [];
+  THESIS_FIELDS.forEach((f) => {
+    const was = saved.snapshot[f.key];
+    const is = now[f.key];
+    if (was === null || was === undefined || is === null || is === undefined) return;
+    if (f.numeric) {
+      const a = Number(was);
+      const b = Number(is);
+      if (!isFinite(a) || !isFinite(b)) return;
+      // A numeric reading needs a threshold or every reload is a change. 5% for
+      // a price, 8 points for an oscillator — both large enough to mean
+      // something and small enough to catch a real move.
+      const moved = f.pct ? Math.abs(b / a - 1) >= 0.05 : Math.abs(b - a) >= 8;
+      if (!moved) return;
+      out.push({
+        label: f.label,
+        was: f.pct ? fmt(a, 2) : fmt(a, 1),
+        is: f.pct ? fmt(b, 2) : fmt(b, 1),
+        detail: f.pct ? `${fmtPct((b / a - 1) * 100, 1)} since you wrote this` : '',
+      });
+      return;
+    }
+    if (String(was) !== String(is)) {
+      out.push({ label: f.label, was: String(was), is: String(is), detail: '' });
+    }
+  });
+  return out;
+}
+
+function renderThesis(d) {
+  const sym = d.ticker;
+  const saved = thesisFor(sym);
+  const changes = thesisChanges(saved, d);
+  const val = (k) => esc((saved && saved[k]) || '');
+  return `<section class="th-panel span-all" id="thesis" aria-label="My thesis">
+    <div class="hm-block-head">
+      <h2 class="hm-h">My ${esc(sym)} thesis</h2>
+      ${saved ? `<span class="th-when">saved ${esc(shortWhen(saved.saved_at))}</span>` : ''}
+    </div>
+
+    ${saved && changes.length ? `<div class="th-changed">
+      <strong>Your thesis has something to answer for.</strong>
+      <ul>
+        ${changes.map((c) => `<li><span class="th-field">${esc(c.label)}</span>
+          <span class="th-was">${esc(c.was)}</span>
+          <span class="th-arrow" aria-hidden="true">&rarr;</span>
+          <span class="th-is">${esc(c.is)}</span>
+          ${c.detail ? `<span class="th-detail">${esc(c.detail)}</span>` : ''}</li>`).join('')}
+      </ul>
+      <p class="th-note">These are the readings that moved since you saved. Whether
+        any of them breaks your case is your call, which is the point of having
+        written it down.</p>
+    </div>` : ''}
+    ${saved && !changes.length ? `<p class="th-steady">Nothing material has moved
+      since you saved this. The stance, the chart bias, the gamma regime and the
+      flow all read the same, and price is within 5%.</p>` : ''}
+
+    <form class="th-form" data-thesis-save="${esc(sym)}">
+      <div class="grid c2">
+        <label class="th-field-wrap">
+          <span>Bull case</span>
+          <textarea name="bull" rows="3" placeholder="Why this works.">${val('bull')}</textarea>
+        </label>
+        <label class="th-field-wrap">
+          <span>Bear case</span>
+          <textarea name="bear" rows="3" placeholder="What breaks it.">${val('bear')}</textarea>
+        </label>
+        <label class="th-field-wrap">
+          <span>Catalysts</span>
+          <textarea name="catalysts" rows="2" placeholder="What has to happen, and when.">${val('catalysts')}</textarea>
+        </label>
+        <label class="th-field-wrap">
+          <span>Invalidation</span>
+          <textarea name="invalidation" rows="2"
+            placeholder="The level or event that means you were wrong.">${val('invalidation')}</textarea>
+        </label>
+      </div>
+      <div class="th-actions">
+        <button class="btn primary" type="submit">${saved ? 'Update thesis' : 'Save thesis'}</button>
+        ${saved ? `<button class="btn" type="button" data-thesis-delete="${esc(sym)}">Delete</button>` : ''}
+        <span class="th-local">Saved in this browser only. There is no account to sync it to.</span>
+      </div>
+    </form>
+  </section>`;
+}
+
+document.addEventListener('submit', (evt) => {
+  const form = evt.target.closest && evt.target.closest('[data-thesis-save]');
+  if (!form) return;
+  evt.preventDefault();
+  const sym = form.dataset.thesisSave;
+  const fields = {};
+  ['bull', 'bear', 'catalysts', 'invalidation'].forEach((k) => {
+    const box = form.querySelector(`[name="${k}"]`);
+    fields[k] = box ? box.value.trim() : '';
+  });
+  if (!Object.values(fields).some(Boolean)) return;   // nothing written
+  thesisSave(sym, fields, STATE.swing || {});
+  // Re-render so the button becomes "Update" and the diff baseline resets.
+  if (STATE.swing) preserveUI(views.swing, () => renderSwing(STATE.swing));
+});
+
+document.addEventListener('click', (evt) => {
+  if (!evt.target || !evt.target.closest) return;
+  const del = evt.target.closest('[data-thesis-delete]');
+  if (!del) return;
+  thesisDelete(del.dataset.thesisDelete);
+  if (STATE.swing) preserveUI(views.swing, () => renderSwing(STATE.swing));
+});
+
+/* ========================================================= watchlist view ===
+ *
+ * The full feed, with the sort control the home page's six-row summary has no
+ * room for. Same rows, same module, no second implementation — the home
+ * version is this one with a limit and the remove buttons off.
+ */
+function renderWatchlist() {
+  const host = views.watchlist;
+  const list = watchList();
+  host.innerHTML = `
+  <section class="wv">
+    <div class="wv-head">
+      <div>
+        <h2 class="hm-h">Watchlist</h2>
+        ${/* The count lives in its own span so the feed repaint can update it.
+            * Read once at render, it went stale the moment a row was removed —
+            * "5 names" above four rows. */''}
+        <p class="wv-sub"><span id="wv-count">${watchCountLabel()}</span>
+          Every row says what changed, or says nothing when nothing did.</p>
+      </div>
+      <form class="wv-add" id="wv-add-form">
+        <input id="wv-add" type="text" placeholder="Add a symbol" spellcheck="false"
+               autocomplete="off" aria-label="Add a symbol to the watchlist"
+               maxlength="8">
+        <button class="btn" type="submit">Add</button>
+      </form>
+    </div>
+
+    <div class="wv-sorts" role="group" aria-label="Sort the watchlist">
+      ${WATCH_SORTS.map((sp) => `<button type="button"
+        class="pill${watchSort === sp.id ? ' on' : ''}" data-watch-sort="${esc(sp.id)}"
+        aria-pressed="${watchSort === sp.id}">${esc(sp.label)}</button>`).join('')}
+    </div>
+
+    <div class="wv-cols" aria-hidden="true">
+      <span>Symbol</span><span>Price</span><span>Today</span>
+      <span>What changed</span><span>Signal</span>
+    </div>
+    <div id="wv-feed">${watchlistFeedHTML({})}</div>
+
+    <p class="wv-method">${gloss((STATE.watchlist || {}).method || '')}</p>
+  </section>`;
+  loadWatchlist();
+}
+
+/* ============================================================ alerts view ===
+ *
+ * What fired and why it was worth saying. The alert list already existed as a
+ * dock widget on the Charting tab and as a chip in the header; neither could
+ * show more than a count, so an alert that fired while you were on another tab
+ * was a number you had no way to read.
+ */
+function renderAlerts() {
+  const host = views.alerts;
+  const data = STATE.alertsFeed;
+  if (!data) { host.innerHTML = `<section class="wv">${loadingHTML('alerts')}</section>`; return; }
+  if (data.error) {
+    host.innerHTML = `<section class="wv">${errorHTML(data.error)}</section>`;
+    return;
+  }
+  const rows = data.rows || [];
+  host.innerHTML = `
+  <section class="wv">
+    <div class="wv-head">
+      <div>
+        <h2 class="hm-h">Alerts</h2>
+        <p class="wv-sub">Fired by the scheduled scan against Optic's own
+          positions and the ranked universe. Each one names the condition that
+          tripped it.</p>
+      </div>
+      ${rows.length ? `<button type="button" class="btn" data-alerts-clear>
+        Clear all</button>` : ''}
+    </div>
+    ${rows.length ? `<ul class="al-list">
+      ${rows.map((a) => `<li class="al-row${a.seen ? '' : ' is-new'}">
+        <span class="al-when">${esc(shortWhen(a.at || a.created_at))}</span>
+        <button type="button" class="al-sym" data-watch-open="${esc(a.ticker || '')}"
+          ${a.ticker ? '' : 'disabled'}>${esc(a.ticker || '—')}</button>
+        <span class="al-body">
+          <span class="al-text">${gloss(a.message || a.text || a.reason || '')}</span>
+          ${a.kind ? `<span class="al-kind">${esc(a.kind)}</span>` : ''}
+        </span>
+      </li>`).join('')}
+    </ul>` : `<p class="wv-none">Nothing has fired. Alerts come from the
+      scheduled scan, so this fills in during market hours — and an empty list
+      genuinely means nothing crossed a threshold, which is the common case.</p>`}
+  </section>`;
+}
+
+/** A short relative stamp. "3h ago" beats an ISO string in a list you scan. */
+function shortWhen(iso) {
+  if (!iso) return '';
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return '';
+  const mins = Math.max(0, Math.round((Date.now() - then.getTime()) / 60000));
+  if (mins < 1) return 'now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.round(hrs / 24)}d ago`;
+}
+
+async function loadAlertsFeed(force) {
+  if (STATE.alertsFeed && !force) { renderAlerts(); return; }
+  try {
+    const data = await getJSON('/api/alerts');
+    STATE.alertsFeed = { rows: data.alerts || data.rows || [] };
+  } catch (err) {
+    STATE.alertsFeed = { error: err.message };
+  }
+  renderAlerts();
+}
+
+/* Watchlist view interactions. */
+document.addEventListener('click', (evt) => {
+  if (!evt.target || !evt.target.closest) return;
+  const sortBtn = evt.target.closest('[data-watch-sort]');
+  if (sortBtn) {
+    watchSort = sortBtn.dataset.watchSort;
+    renderWatchlist();
+  }
+});
+
+document.addEventListener('submit', (evt) => {
+  if (evt.target.id !== 'wv-add-form') return;
+  evt.preventDefault();
+  const box = document.getElementById('wv-add');
+  const sym = (box.value || '').trim().toUpperCase();
+  if (!sym) return;
+  box.value = '';
+  watchAdd(sym);
+  renderWatchlist();
+});
+
+/* =============================================================== watchlist ===
+ *
+ * A feed, not a quote table. Every row carries what changed and a signal
+ * alongside the price, because "which of these moved and does it matter" is the
+ * question someone opens a watchlist with.
+ *
+ * The list lives in localStorage. There is no sign-in — anyone can use this
+ * terminal — so there is no user to hang a server-side list on, and pretending
+ * otherwise would mean inventing accounts to store six ticker symbols. The
+ * Charting tab already kept its own list this way; that key is reused so an
+ * existing reader's watchlist carries over rather than starting empty.
+ */
+const WATCH_KEY = 'optic.chart.watch.v1';
+const WATCH_DEFAULT = ['SPY', 'QQQ', 'NVDA', 'AMD'];
+
+function watchList() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(WATCH_KEY) || 'null');
+    if (Array.isArray(raw) && raw.length) {
+      return raw.map((s) => String(s).toUpperCase()).filter(Boolean);
+    }
+  } catch (e) { /* private mode */ }
+  return WATCH_DEFAULT.slice();
+}
+
+function watchSave(list) {
+  const clean = [...new Set(list.map((s) => String(s).toUpperCase().trim()).filter(Boolean))];
+  try { localStorage.setItem(WATCH_KEY, JSON.stringify(clean)); } catch (e) { /* private */ }
+  return clean;
+}
+
+function watchAdd(symbol) {
+  const next = watchSave([...watchList(), symbol]);
+  STATE.watchlist = null;                 // force a refetch: the row is not local
+  loadWatchlist(true);
+  return next;
+}
+
+function watchRemove(symbol) {
+  const sym = String(symbol).toUpperCase();
+  watchSave(watchList().filter((s) => s !== sym));
+  if (STATE.watchlist && STATE.watchlist.rows) {
+    // Drop it locally too so the row disappears on the click rather than after
+    // the round trip.
+    STATE.watchlist.rows = STATE.watchlist.rows.filter((r) => r.symbol !== sym);
+  }
+  renderWatchlistHost();
+  loadWatchlist(true);
+}
+
+/* How the feed can be ordered.
+ *
+ * Sorting by "what changed" is deliberately absent: it is a sentence, and
+ * alphabetising sentences ranks nothing. The orders here are the questions
+ * someone actually asks of a watchlist. */
+const WATCH_SORTS = [
+  { id: 'movers', label: 'Biggest movers',
+    cmp: (a, b) => Math.abs(b.change_pct || 0) - Math.abs(a.change_pct || 0) },
+  { id: 'gainers', label: 'Gainers', cmp: (a, b) => (b.change_pct || 0) - (a.change_pct || 0) },
+  { id: 'losers', label: 'Losers', cmp: (a, b) => (a.change_pct || 0) - (b.change_pct || 0) },
+  { id: 'changed', label: 'Something changed',
+    // Rows with a change line first, then by move size inside each group.
+    cmp: (a, b) => (b.changed ? 1 : 0) - (a.changed ? 1 : 0)
+      || Math.abs(b.change_pct || 0) - Math.abs(a.change_pct || 0) },
+  { id: 'signal', label: 'Optic signal',
+    cmp: (a, b) => WATCH_SIGNAL_RANK[b.signal] - WATCH_SIGNAL_RANK[a.signal]
+      || Math.abs(b.change_pct || 0) - Math.abs(a.change_pct || 0) },
+  { id: 'alpha', label: 'A-Z', cmp: (a, b) => a.symbol.localeCompare(b.symbol) },
+];
+const WATCH_SIGNAL_RANK = { bullish: 3, neutral: 2, bearish: 1, unknown: 0 };
+let watchSort = 'changed';
+
+/** One row. Compact enough that ten fit on a screen, which is the point. */
+function watchRow(r, opts) {
+  const o = opts || {};
+  if (!r.available) {
+    return `<li class="wl-row is-none">
+      <span class="wl-sym">${esc(r.symbol)}</span>
+      <span class="wl-none">${esc(r.reason || 'No data.')}</span>
+      ${o.removable ? watchRemoveBtn(r.symbol) : ''}
+    </li>`;
+  }
+  const changed = r.changed || null;
+  return `<li class="wl-row">
+    <button type="button" class="wl-open" data-watch-open="${esc(r.symbol)}"
+      title="Analyse ${esc(r.symbol)}">
+      <span class="wl-sym">${esc(r.symbol)}</span>
+      <span class="wl-price">${fmt(r.price, 2)}</span>
+      <span class="wl-chg ${signClass(r.change_pct)}">${fmtPct(r.change_pct, 2)}</span>
+      <span class="wl-changed">${changed
+    ? `<span class="wl-changed-text" title="${esc(changed.why)}">${esc(changed.text)}</span>`
+    : '<span class="wl-quiet">quiet</span>'}</span>
+      <span class="wl-signal is-${esc(r.signal)}" title="${esc(r.signal_why || '')}">${
+  esc(r.signal === 'unknown' ? '—' : r.signal)}</span>
+    </button>
+    ${o.removable ? watchRemoveBtn(r.symbol) : ''}
+  </li>`;
+}
+
+function watchRemoveBtn(symbol) {
+  return `<button type="button" class="wl-x" data-watch-remove="${esc(symbol)}"
+    title="Remove ${esc(symbol)} from the watchlist" aria-label="Remove ${esc(symbol)}">&times;</button>`;
+}
+
+function watchRowsSorted(rows) {
+  const spec = WATCH_SORTS.find((x) => x.id === watchSort) || WATCH_SORTS[0];
+  return [...(rows || [])].sort((a, b) => {
+    // Unavailable rows sink, whatever the order: an error is not a ranking.
+    if (a.available !== b.available) return a.available ? -1 : 1;
+    if (!a.available) return a.symbol.localeCompare(b.symbol);
+    return spec.cmp(a, b);
+  });
+}
+
+async function loadWatchlist(force) {
+  const list = watchList();
+  if (!list.length) { STATE.watchlist = { available: true, rows: [] }; renderWatchlistHost(); return; }
+  const key = list.join(',');
+  if (!force && STATE.watchlist && STATE.watchlistKey === key) return;
+  STATE.watchlistKey = key;
+  try {
+    STATE.watchlist = await getJSON(`/api/watchlist?symbols=${encodeURIComponent(key)}`);
+  } catch (err) {
+    STATE.watchlist = { available: false, error: err.message };
+  }
+  renderWatchlistHost();
+}
+
+/** Repaint wherever the feed is currently mounted, without rebuilding a view. */
+function watchCountLabel() {
+  const n = watchList().length;
+  return `${n} name${n === 1 ? '' : 's'}.`;
+}
+
+function renderWatchlistHost() {
+  // Both mounts, because the feed is shown in two places and only one of them
+  // exists at a time. Painting whichever is present avoids a view rebuild.
+  const home = document.getElementById('hm-watch');
+  if (home) home.innerHTML = watchlistFeedHTML({ compact: true, limit: 6 });
+  const full = document.getElementById('wv-feed');
+  if (full) full.innerHTML = watchlistFeedHTML({});
+  const count = document.getElementById('wv-count');
+  if (count) count.textContent = watchCountLabel();
+}
+
+function watchlistFeedHTML(opts) {
+  const o = opts || {};
+  const data = STATE.watchlist;
+  if (!data) return '<p class="wl-loading">Reading the watchlist…</p>';
+  if (data.available === false) {
+    return `<p class="wl-none">${esc(data.error || 'The watchlist could not be read.')}</p>`;
+  }
+  const rows = watchRowsSorted(data.rows);
+  if (!rows.length) {
+    return `<p class="wl-none">${esc(data.reason_none
+      || 'Nothing on the watchlist yet.')}</p>`;
+  }
+  const shown = o.limit ? rows.slice(0, o.limit) : rows;
+  return `<ul class="wl-list${o.compact ? ' is-compact' : ''}">
+    ${shown.map((r) => watchRow(r, { removable: !o.compact })).join('')}
+  </ul>
+  ${o.limit && rows.length > o.limit
+    ? `<p class="wl-more">${rows.length - o.limit} more on the watchlist.</p>` : ''}`;
+}
+
+/* ============================================================ the home page ===
+ *
+ * It was a marketing page: a 96px logo, a display title, a prototype notice, a
+ * four-line description of the product, a search box, eight quick-pick chips
+ * and six navigation cards. Every one of those is about what Optic IS. None of
+ * them told a reader anything about the market, which is the only reason to
+ * open a market app.
+ *
+ * It now opens with the market's actual state and gets to it in one screen:
+ * greeting and session, the four numbers that set the tone, the watchlist with
+ * what changed on it, and the day's read. The product description survives as
+ * one line under the title, and the navigation cards move below the fold —
+ * they are for the first visit, and the market is for every other one.
+ *
+ * One request. /api/home assembles the board, the macro instruments, the
+ * session and the day's read server-side, because four round trips to paint the
+ * first screen makes the first thing anyone sees the slowest thing.
+ */
+
+/* Time-aware, from Eastern market time rather than the reader's clock.
+ *
+ * "Good morning" at 6am in Tokyo when New York is mid-afternoon would be
+ * greeting the wrong day. The app is about one market and says so everywhere
+ * else, so the greeting follows that market too. */
+function homeGreeting() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', hour12: false, hour: '2-digit',
+  }).formatToParts(new Date());
+  const hour = Number((parts.find((p) => p.type === 'hour') || {}).value || 12);
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+/* The four numbers that set the day's tone.
+ *
+ * Two equity indices, volatility and the long end. Not eight: the brief for
+ * this page is that it reads in five to ten seconds, and a strip of eight
+ * numbers is a table nobody scans. Everything else stays on the Markets tab. */
+function homePulseStrip(data) {
+  const rows = ((data.indices || {}).rows) || [];
+  const macro = ((data.macro || {}).instruments) || {};
+  const cells = [];
+
+  const idx = (sym) => rows.find((r) => r.symbol === sym && r.available);
+  [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq 100']].forEach(([sym, label]) => {
+    const row = idx(sym);
+    if (!row) return;
+    cells.push({ label, value: fmt(row.price, 2), sub: row.trend || '', tone: row.trend });
+  });
+  [['^VIX', 'VIX'], ['^TNX', 'US 10Y']].forEach(([key, label]) => {
+    const m = macro[key];
+    if (!m) return;
+    cells.push({
+      label, value: fmt(m.last, 2),
+      sub: m.chg_1d === null || m.chg_1d === undefined ? '' : `${fmtPct(m.chg_1d, 2)} today`,
+      // VIX up is risk-off, so its colour is inverted against every other
+      // instrument here. Labelling it with the direction word as well means the
+      // colour is not carrying the meaning alone.
+      tone: m.chg_1d === null ? '' : ((key === '^VIX' ? -m.chg_1d : m.chg_1d) >= 0 ? 'up' : 'down'),
+    });
+  });
+  if (!cells.length) return '';
+  return `<div class="hm-strip">
+    ${cells.map((c) => `<div class="hm-cell">
+      <span class="hm-cell-label">${esc(c.label)}</span>
+      <span class="hm-cell-value">${esc(c.value)}</span>
+      <span class="hm-cell-sub is-${esc(c.tone || 'flat')}">${esc(c.sub)}</span>
+    </div>`).join('')}
+  </div>`;
+}
+
+/** The day's narrative, from the already-written brief. Never generated here. */
+function homeRead(data) {
+  const read = data.read;
+  const summary = read && read.summary;
+  if (!summary) return '';
+  const headline = summary.headline || '';
+  const para = (summary.paragraphs || [])[0] || '';
+  if (!headline && !para) return '';
+  return `<section class="hm-block">
+    <div class="hm-block-head">
+      <h2 class="hm-h">What's happening</h2>
+      <button type="button" class="hm-more" data-go-view="brief">Read the full brief &rarr;</button>
+    </div>
+    ${headline ? `<p class="hm-read-head">${esc(headline)}</p>` : ''}
+    ${para ? `<p class="hm-read-body">${gloss(para)}</p>` : ''}
+  </section>`;
+}
+
+function homeAlerts(data) {
+  const rows = data.alerts || [];
+  if (!rows.length) return '';
+  return `<section class="hm-block">
+    <div class="hm-block-head">
+      <h2 class="hm-h">Your alerts</h2>
+      <button type="button" class="hm-more" data-go-view="alerts">All ${rows.length} &rarr;</button>
+    </div>
+    <ul class="hm-alerts">
+      ${rows.slice(0, 4).map((a) => `<li>
+        <span class="hm-alert-sym">${esc(a.ticker || a.symbol || '—')}</span>
+        <span class="hm-alert-text">${esc(a.message || a.text || a.reason || '')}</span>
+      </li>`).join('')}
+    </ul>
+  </section>`;
+}
+
+/* ================================================== the command palette ====
+ *
+ * Cmd/Ctrl+K. One field that takes a ticker, a question, or the name of a
+ * place, and works out which of the three it got.
+ *
+ * The reason it exists: the app had a ticker box, an Ask-Pulse button on nine
+ * panels, a Deep research button, a chat panel and six navigation groups, and
+ * every one of them was a different door into the same three intentions —
+ * look at a symbol, ask something, go somewhere. A reader had to know which
+ * door before they could start. This is one door.
+ *
+ * Routing is deliberately not clever. It runs three cheap tests and always
+ * offers Ask Optic as a fallback, so nothing typed here is ever a dead end —
+ * the failure mode of a smart parser is silently doing the wrong thing, and the
+ * failure mode of this one is offering two options when it only needed one.
+ */
+
+let paletteOpen = false;
+let paletteQuery = '';
+let paletteRows = [];        // the flattened, selectable list
+let paletteIndex = 0;
+let paletteSeq = 0;          // guards against a slow search overwriting a fast one
+
+/* Places the palette can send you, with the words someone would actually type.
+ * Keyed off the same view ids switchView already understands, so this cannot
+ * offer a destination that does not exist. */
+const PALETTE_PLACES = [
+  { view: 'home', label: 'Home', terms: 'home start' },
+  { view: 'brief', label: "Optic's Read", terms: 'read brief daily market news morning' },
+  { view: 'market', label: 'Macro & sectors', terms: 'macro sectors rotation regime economy' },
+  { view: 'indices', label: 'Indices', terms: 'indices index spy qqq cycle' },
+  { view: 'scan', label: 'Scan', terms: 'scan screener find candidates momentum breakout' },
+  { view: 'watchlist', label: 'Watchlist', terms: 'watchlist watching follow list' },
+  { view: 'alerts', label: 'Alerts', terms: 'alerts alarms notifications fired' },
+  { view: 'compare', label: 'Compare', terms: 'compare versus vs side by side' },
+  { view: 'chart', label: 'Charting', terms: 'chart charting drawings indicators advanced' },
+  { view: 'tracker', label: "Optic's Positions", terms: 'positions ledger record paper trades book' },
+  { view: 'settings', label: 'Settings', terms: 'settings appearance theme timezone preferences' },
+];
+
+/* Does this look like a symbol, or like a sentence?
+ *
+ * A ticker is short, all letters, and one word. Anything with a space, a
+ * question mark or a question word is a question. The overlap — "compare" on
+ * its own — resolves as a place, which is why places are tested first. */
+const QUESTION_WORDS = /^(what|why|how|when|where|which|who|is|are|does|do|should|can|will|find|show|explain|compare)\b/i;
+
+function looksLikeTicker(text) {
+  return /^[A-Za-z][A-Za-z.-]{0,5}$/.test(text.trim());
+}
+
+function looksLikeQuestion(text) {
+  const t = text.trim();
+  if (!t) return false;
+  if (t.endsWith('?')) return true;
+  if (QUESTION_WORDS.test(t) && t.split(/\s+/).length > 1) return true;
+  return t.split(/\s+/).length >= 3;
+}
+
+function paletteHTML() {
+  if (!paletteOpen) return '';
+  const rows = paletteRows;
+  return `<div class="cp-scrim" data-cp-scrim></div>
+  <div class="cp" role="dialog" aria-modal="true" aria-label="Search or ask Optic">
+    <div class="cp-field">
+      <span class="cp-icon" aria-hidden="true">&#9906;</span>
+      <input id="cp-input" type="text" autocomplete="off" spellcheck="false"
+        placeholder="Search stocks, ETFs, markets, or ask Optic…"
+        aria-controls="cp-list" aria-expanded="true" role="combobox"
+        aria-activedescendant="${rows[paletteIndex] ? 'cp-row-' + paletteIndex : ''}"
+        value="${esc(paletteQuery)}">
+      <kbd class="cp-kbd">esc</kbd>
+    </div>
+    <div class="cp-list" id="cp-list" role="listbox"></div>
+    <div class="cp-foot">
+      <span><kbd>&#8593;</kbd><kbd>&#8595;</kbd> move</span>
+      <span><kbd>&#8629;</kbd> open</span>
+      <span><kbd>esc</kbd> close</span>
+    </div>
+  </div>`;
+}
+
+function paletteGroupsHTML(rows) {
+  let html = '';
+  let lastGroup = null;
+  rows.forEach((row, i) => {
+    if (row.group !== lastGroup) {
+      lastGroup = row.group;
+      html += `<div class="cp-group">${esc(row.group)}</div>`;
+    }
+    html += `<div class="cp-row${i === paletteIndex ? ' on' : ''}" role="option"
+      id="cp-row-${i}" aria-selected="${i === paletteIndex}" data-cp-run="${i}">
+      <span class="cp-row-lead">${esc(row.lead)}</span>
+      <span class="cp-row-main">${esc(row.label)}</span>
+      ${row.detail ? `<span class="cp-row-detail">${esc(row.detail)}</span>` : ''}
+      ${row.tag ? `<span class="cp-row-tag">${esc(row.tag)}</span>` : ''}
+    </div>`;
+  });
+  return html;
+}
+
+/* Build the row list for a query.
+ *
+ * Order is the whole design: the most likely intention first, so Enter without
+ * reading does the right thing. A bare ticker opens the symbol; a sentence asks
+ * Optic; a page name goes there. Ask Optic is appended last for anything with
+ * more than one word, which is what makes the field impossible to dead-end.
+ */
+async function paletteBuild(query) {
+  const q = (query || '').trim();
+  const rows = [];
+  if (!q) {
+    PALETTE_PLACES.slice(0, 6).forEach((p) => rows.push({
+      group: 'Go to', lead: '\u2192', label: p.label, run: () => switchView(p.view),
+    }));
+    return rows;
+  }
+
+  const upper = q.toUpperCase();
+  const lower = q.toLowerCase();
+  const isTicker = looksLikeTicker(q);
+  const isQuestion = looksLikeQuestion(q);
+
+  /* Places, and whether one of them IS the query.
+   *
+   * `scan` is four letters, so looksLikeTicker says yes and the palette offered
+   * "Open SCAN" as the Enter action — pressing it tried to load a symbol that
+   * does not exist instead of opening the Scan page. A word that exactly names
+   * a destination is a much stronger signal than a length heuristic, so an
+   * exact place match outranks the ticker guess. A partial one does not:
+   * "co" should not beat the ticker CO on its way to "Compare". */
+  const words = (text) => String(text).toLowerCase().split(/\s+/);
+  const places = PALETTE_PLACES.filter((p) =>
+    p.label.toLowerCase().includes(lower) || p.terms.includes(lower));
+  const exactPlace = places.find((p) =>
+    p.label.toLowerCase() === lower || words(p.terms).indexOf(lower) !== -1);
+
+  const placeRow = (p) => ({
+    group: 'Go to', lead: '\u2192', label: p.label,
+    tag: p === exactPlace ? 'enter' : '',
+    run: () => { closePalette(); switchView(p.view); },
+  });
+
+  if (exactPlace) rows.push(placeRow(exactPlace));
+
+  // A bare ticker leads otherwise, because that is the single most common thing
+  // typed into a box on a finance app.
+  if (isTicker) {
+    rows.push({
+      group: 'Open', lead: '\u25CE', label: upper, detail: 'Analyse this symbol',
+      tag: exactPlace ? '' : 'enter',
+      run: () => { closePalette(); loadTicker(upper, 'swing'); },
+    });
+  }
+
+  places.forEach((p) => { if (p !== exactPlace) rows.push(placeRow(p)); });
+
+  // Symbols from the live universe. Awaited after the synchronous rows are in
+  // place so the palette is never empty while the request is out.
+  const seq = ++paletteSeq;
+  let results = [];
+  try {
+    const data = await getJSON(`/api/search?q=${encodeURIComponent(q)}&limit=7`);
+    results = (data && data.results) || [];
+  } catch (err) {
+    results = [];
+  }
+  // A slower earlier query must not overwrite a faster later one.
+  if (seq !== paletteSeq) return null;
+
+  results.forEach((r) => {
+    // The exact-match row is already at the top as "Open"; do not offer it twice.
+    if (isTicker && r.symbol === upper) return;
+    rows.push({
+      group: 'Symbols', lead: r.etf ? 'ETF' : '\u25CE', label: r.symbol,
+      detail: r.name, run: () => { closePalette(); loadTicker(r.symbol, 'swing'); },
+    });
+  });
+
+  // Ask Optic. Last in the list but first in the ordering when the input reads
+  // as a question, which is handled by hoisting it below.
+  if (isQuestion || (!isTicker && q.length > 2)) {
+    const ask = {
+      group: 'Ask Optic', lead: '\u2727', label: q,
+      detail: STATE.ticker ? `With ${STATE.ticker} and everything else loaded in context`
+        : 'Optic answers from whatever is loaded',
+      tag: isQuestion ? 'enter' : '',
+      run: () => { closePalette(); openPulseWithText(q); },
+    };
+    if (isQuestion) rows.unshift(ask); else rows.push(ask);
+  }
+
+  return rows;
+}
+
+/* The shell is built once; only the list repaints.
+ *
+ * The first version rebuilt the whole palette on every keystroke, input
+ * included. That destroys and recreates the focused element mid-gesture, so it
+ * needed focus and caret restoration to work at all — and it still lost
+ * characters, because another handler (the Pulse panel's) could take focus in
+ * the gap. Measured: typing "semicon" left paletteQuery empty and the caret in
+ * #chat-input.
+ *
+ * Splitting it removes the race rather than compensating for it: the input is
+ * created once and never touched again, so nothing can be lost between frames.
+ */
+function mountPalette() {
+  let host = document.getElementById('cp-host');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'cp-host';
+    document.body.appendChild(host);
+  }
+  host.innerHTML = paletteHTML();
+}
+
+function paintPaletteList() {
+  const list = document.getElementById('cp-list');
+  if (!list) return;
+  list.innerHTML = paletteRows.length ? paletteGroupsHTML(paletteRows)
+    : `<p class="cp-hint">Type a ticker to open it, a question to ask Optic, or
+       the name of a page.</p>`;
+  const input = document.getElementById('cp-input');
+  if (input) {
+    const active = paletteRows[paletteIndex] ? 'cp-row-' + paletteIndex : '';
+    input.setAttribute('aria-activedescendant', active);
+  }
+}
+
+function openPalette(seed) {
+  paletteOpen = true;
+  paletteQuery = seed || '';
+  paletteIndex = 0;
+  paletteRows = [];
+  document.body.classList.add('cp-open');
+  mountPalette();
+  const input = document.getElementById('cp-input');
+  if (input) {
+    input.value = paletteQuery;
+    /* Focused on the next frame, and again after it.
+     *
+     * The Pulse panel focuses its own textarea when it opens, and whichever of
+     * the two runs last wins. Claiming focus after a frame puts the palette
+     * last, which is correct: it is modal and it was just summoned. */
+    requestAnimationFrame(() => {
+      if (!paletteOpen) return;
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    });
+  }
+  paletteRefresh();
+}
+
+function closePalette() {
+  if (!paletteOpen) return;
+  paletteOpen = false;
+  paletteRows = [];
+  document.body.classList.remove('cp-open');
+  const host = document.getElementById('cp-host');
+  if (host) host.innerHTML = '';
+}
+
+async function paletteRefresh() {
+  const rows = await paletteBuild(paletteQuery);
+  if (rows === null || !paletteOpen) return;      // superseded, or closed while out
+  paletteRows = rows;
+  paletteIndex = Math.max(0, Math.min(paletteIndex, rows.length - 1));
+  paintPaletteList();
+}
+
+function paletteMove(delta) {
+  if (!paletteRows.length) return;
+  paletteIndex = (paletteIndex + delta + paletteRows.length) % paletteRows.length;
+  paintPaletteList();
+  const row = document.getElementById('cp-row-' + paletteIndex);
+  // 'nearest' so moving down one row scrolls by one row rather than centring
+  // the list on every keypress.
+  if (row) row.scrollIntoView({ block: 'nearest' });
+}
+
+function paletteRun(index) {
+  const row = paletteRows[index === undefined ? paletteIndex : index];
+  if (row && typeof row.run === 'function') row.run();
+}
+
+/* Cmd/Ctrl+K from anywhere, and Escape to leave.
+ *
+ * Capture phase, because the chart workspace binds its own key handlers and a
+ * global shortcut has to win over a view-local one. Deliberately still fires
+ * while a text field has focus — someone half-way through typing a ticker in
+ * the header box and reaching for the palette means it, and the current value
+ * is carried across as the seed rather than thrown away.
+ */
+document.addEventListener('keydown', (evt) => {
+  const key = (evt.key || '').toLowerCase();
+  if ((evt.metaKey || evt.ctrlKey) && key === 'k') {
+    evt.preventDefault();
+    if (paletteOpen) { closePalette(); return; }
+    const focused = document.activeElement;
+    const seed = focused && /^(INPUT|TEXTAREA)$/.test(focused.tagName)
+      && focused.id !== 'cp-input' ? focused.value : '';
+    openPalette(seed);
+    return;
+  }
+  if (!paletteOpen) return;
+  if (key === 'escape') { evt.preventDefault(); closePalette(); return; }
+  if (key === 'arrowdown') { evt.preventDefault(); paletteMove(1); return; }
+  if (key === 'arrowup') { evt.preventDefault(); paletteMove(-1); return; }
+  if (key === 'enter') { evt.preventDefault(); paletteRun(); }
+}, true);
+
+document.addEventListener('input', (evt) => {
+  if (!paletteOpen || evt.target.id !== 'cp-input') return;
+  paletteQuery = evt.target.value;
+  paletteIndex = 0;
+  paletteRefresh();
+});
+
+document.addEventListener('click', (evt) => {
+  if (!evt.target || !evt.target.closest) return;
+  if (paletteOpen) {
+    if (evt.target.closest('[data-cp-scrim]')) { closePalette(); return; }
+    const row = evt.target.closest('[data-cp-run]');
+    if (row) { evt.preventDefault(); paletteRun(Number(row.dataset.cpRun)); }
+    return;
+  }
+  // Anything that opts in opens the palette: the header search, the landing
+  // field. The keyboard shortcut is the fast path and this is the discoverable
+  // one — a shortcut nobody is told about is a feature for one person.
+  const opener = evt.target.closest('[data-open-palette]');
+  if (opener) {
+    evt.preventDefault();
+    const seed = opener.dataset.openPalette || '';
+    openPalette(seed);
+  }
+});
+
+/* Focusing the header box opens the palette instead.
+ *
+ * The box stays in the markup — it is the thing people reach for, it holds the
+ * loaded symbol, and removing it would move the target. But typing into two
+ * different search fields that behave differently is the confusion the palette
+ * exists to end, so the narrow one hands over to the wide one on focus and
+ * passes whatever was already typed. */
+document.addEventListener('focusin', (evt) => {
+  if (paletteOpen) return;
+  const box = evt.target;
+  if (!box || box.id !== 'ticker-input') return;
+  openPalette('');
+});
+
+/* ======================================================== the Optic loop ====
+ *
+ * Three panels, in this order, above everything else on the asset page:
+ * what is the read, why is it moving, what matters next.
+ *
+ * They exist because the page answered the first question in the twelfth panel
+ * and never answered the third at all. Everything below them is evidence for
+ * the first two — which is the right place for evidence and the wrong place for
+ * a conclusion.
+ */
+
+/** A 0-100 bar. Ten cells, so the bar reads as a quantity and not a gradient. */
+function pulseBar(value, direction) {
+  if (value === null || value === undefined) {
+    return '<span class="pl-bar is-none" aria-hidden="true"></span>';
+  }
+  const filled = Math.max(0, Math.min(10, Math.round(value / 10)));
+  const tone = direction === 'up' ? 'up' : direction === 'down' ? 'down' : 'flat';
+  let cells = '';
+  for (let i = 0; i < 10; i += 1) {
+    cells += `<i class="pl-cell${i < filled ? ' on' : ''}"></i>`;
+  }
+  return `<span class="pl-bar tone-${tone}" aria-hidden="true">${cells}</span>`;
+}
+
+/* The stance panel.
+ *
+ * No 0-100 headline, deliberately. verdict.composite_score is in the payload
+ * and the app's own evaluate module reports that this blend does not beat a
+ * single momentum factor — so a big number would be the most confident thing on
+ * the page and the least supported. The stance, the conviction and the spread
+ * of the inputs all survive that finding; a total does not.
+ */
+function renderOpticPulse(d) {
+  const p = d.pulse;
+  if (!p) return '';
+  const stance = String(p.stance || 'neutral');
+  const skill = p.skill || {};
+  return `<section class="pl-hero span-all" aria-label="Optic Pulse">
+    <div class="pl-head">
+      <span class="pl-eyebrow">Optic Pulse</span>
+      <span class="pl-stance is-${esc(stance)}">${esc(p.stance_label || stance.toUpperCase())}</span>
+      ${p.conviction ? `<span class="pl-conv">${esc(p.conviction)} conviction</span>` : ''}
+      ${p.agreement_pct !== null && p.agreement_pct !== undefined
+    ? `<span class="pl-agree">${fmt(p.agreement_pct, 0)}% of inputs agree</span>` : ''}
+    </div>
+
+    <div class="pl-factors">
+      ${(p.factors || []).map((f) => `<div class="pl-factor${f.unavailable ? ' is-none' : ''}">
+        <span class="pl-flabel" title="${esc(f.measures || '')}">${esc(f.label)}</span>
+        ${pulseBar(f.bar, f.direction)}
+        <span class="pl-fval">${f.unavailable ? 'no data'
+    : (f.score > 0 ? '+' : '') + fmt(f.score, 0)}</span>
+      </div>`).join('')}
+    </div>
+
+    <p class="pl-skill">${esc(skill.text || '')}</p>
+    ${p.factors_priced < p.factors_total
+    ? `<p class="pl-caveat">${p.factors_priced} of ${p.factors_total} inputs had data.
+        A missing input redistributes its weight rather than counting as zero.</p>` : ''}
+  </section>`;
+}
+
+/* Why it's moving. Three reasons, evidence one click down.
+ *
+ * The method line is not boilerplate. These are the model's own factors ranked
+ * by strength, which is an attribution and not a cause — a stock can move on
+ * something none of these inputs can see, and the panel has to say so or it is
+ * claiming to know why when it knows what scored highly.
+ */
+function renderWhyMoving(d) {
+  const w = d.why;
+  if (!w) return '';
+  if (!w.available) {
+    return `<section class="pl-block span-all" aria-label="Why it is moving">
+      <h2 class="pl-h">Why it's moving</h2>
+      <p class="pl-empty">${esc(w.reason_none || 'No driver is reading strongly enough to name.')}</p>
+    </section>`;
+  }
+  return `<section class="pl-block span-all" aria-label="Why it is moving">
+    <h2 class="pl-h">Why it's moving${w.change_pct !== null && w.change_pct !== undefined
+    ? ` <span class="pl-h-chg ${signClass(w.change_pct)}">${fmtPct(w.change_pct, 2)}</span>` : ''}</h2>
+    <ol class="pl-why">
+      ${(w.reasons || []).map((r, i) => `<li class="pl-reason">
+        <details>
+          <summary>
+            <span class="pl-rank">${i + 1}</span>
+            <span class="pl-arrow is-${esc(r.direction)}" aria-hidden="true">${
+  r.direction === 'up' ? '&#9650;' : '&#9660;'}</span>
+            <span class="pl-rtext">${esc(r.headline)}</span>
+            <span class="pl-rtag">${esc(r.label)}</span>
+          </summary>
+          <ul class="pl-evidence">
+            ${(r.evidence || []).map((e) => `<li>${gloss(e)}</li>`).join('')}
+          </ul>
+        </details>
+      </li>`).join('')}
+    </ol>
+    <p class="pl-method">${gloss(w.method || '')}</p>
+  </section>`;
+}
+
+/** What matters next. The question the rest of the page never asked. */
+function renderWhatsNext(d) {
+  const n = d.whats_next;
+  if (!n) return '';
+  const group = (items, label) => (items && items.length ? `<div class="pl-next-col">
+    <h3 class="pl-next-h">${esc(label)}</h3>
+    <ul class="pl-next-list">
+      ${items.map((i) => `<li class="pl-next-item is-${esc(i.kind)}">
+        <span class="pl-next-label">${esc(i.label)}</span>
+        <span class="pl-next-detail">${gloss(i.detail || '')}</span>
+      </li>`).join('')}
+    </ul>
+  </div>` : '');
+  if (!n.available) {
+    return `<section class="pl-block span-all" aria-label="What matters next">
+      <h2 class="pl-h">What matters next</h2>
+      <p class="pl-empty">${esc(n.reason_none || '')}</p>
+    </section>`;
+  }
+  return `<section class="pl-block span-all" aria-label="What matters next">
+    <h2 class="pl-h">What matters next</h2>
+    <div class="pl-next">
+      ${group(n.today, 'Today')}
+      ${group(n.this_week, 'This week')}
+    </div>
+    <p class="pl-method">${gloss(n.method || '')}</p>
+  </section>`;
+}
 
 function renderSwing(d) {
   // A glossary tooltip left open over an element that's about to be replaced
@@ -2180,6 +3613,13 @@ function renderSwing(d) {
   </li>`).join('');
 
   const html = `
+
+  ${renderOpticPulse(d)}
+  ${renderWhyMoving(d)}
+  ${renderWhatsNext(d)}
+  ${renderSetup(d)}
+  ${renderOptionsBrief(d)}
+  ${renderThesis(d)}
 
   <div class="grid c2 gap">
     <div class="panel">
@@ -2361,6 +3801,7 @@ function renderSwing(d) {
 
   <div id="seasonality-host" class="span-all">${renderSeasonality(STATE.seasonality)}</div>
 
+  <div id="relperf-host" class="span-all">${renderRelPerf(STATE.relperf)}</div>
   <div id="extras-host" class="span-all">${renderExtras(STATE.extras)}</div>
 
 
@@ -2369,7 +3810,8 @@ function renderSwing(d) {
 
   <div class="grid c2 gap">
     <div class="panel span2">
-      <h2>${hg('Price, moving averages & Fibonacci')}${askPulse('profile')} <span class="th-plain">· ${
+      <h2>${hg('Price, moving averages & Fibonacci')}${chartPulse(STATE.ticker)}${
+  askPulse('profile')} <span class="th-plain">· ${
   ps.intraday ? `${esc(ps.interval || '')} bars, ${ps.shown_bars} over ${
     chartRange === '1d' ? 'today' : 'five sessions'}`
     : `${ps.weekly ? 'weekly' : 'daily'} bars, ${ps.shown_bars} of ${ps.total_bars} shown`}</span></h2>
@@ -2459,6 +3901,12 @@ function renderSwing(d) {
             <label class="lvl-opt"><input type="checkbox" data-level-opt="ema"
               ${showEMA ? 'checked' : ''} ${ps.intraday ? 'disabled' : ''}>
               <span class="lvl-key ema"></span>EMA 9 / 21 / 50</label>
+            <label class="lvl-opt"><input type="checkbox" data-level-opt="cloud921"
+              ${showCloudFast ? 'checked' : ''} ${ps.intraday ? 'disabled' : ''}>
+              <span class="lvl-key cloud"></span>EMA 9 / 21 cloud</label>
+            <label class="lvl-opt"><input type="checkbox" data-level-opt="cloud2150"
+              ${showCloudSlow ? 'checked' : ''} ${ps.intraday ? 'disabled' : ''}>
+              <span class="lvl-key cloud"></span>EMA 21 / 50 cloud</label>
             <label class="lvl-opt"><input type="checkbox" data-level-opt="zones"
               ${showZones ? 'checked' : ''} ${ps.intraday ? 'disabled' : ''}>
               <span class="lvl-key zone"></span>Supply &amp; demand</label>
@@ -2947,6 +4395,8 @@ function renderSwing(d) {
         ['ema21', 'EMA 21', emaColors.mid],
         ['ema50', 'EMA 50', emaColors.slow],
       ].filter(([id]) => seriesShown(id)).map(([, name, color]) => ({ name, color }))),
+      // One key per cloud, not one per state. See emaCloudLegend.
+      ...emaCloudLegend(ps),
       ...(ps.intraday ? [] : indicatorOverlayLegend(overlayPalette)),
     ].filter(Boolean)));
     // Daily-derived overlays do not belong on an intraday chart: the averages
@@ -3020,6 +4470,8 @@ function renderSwing(d) {
         ? { open: ps.open, high: ps.high, low: ps.low, close: ps.close }
         : null,
       refLines: overlayRefs,
+      // Under the levels and under the price, so neither is muted by the fill.
+      clouds: emaClouds(ps),
       segments: trendSegs,
       // Both computed from the visible window, so they describe what is on screen.
       volumeProfile: showVbp ? volumeByPrice(ps) : null,
@@ -4091,7 +5543,8 @@ function zoneBands(patterns) {
  * that produced an unreadable plot was invisible until you went looking. Volume is
  * excluded: it is a separate strip, not an annotation over the price. */
 function levelCount() {
-  return [showMA, showEMA, showFib, showSR, showVbp, showInsiders, showZones]
+  return [showMA, showEMA, showCloudFast, showCloudSlow, showFib, showSR,
+    showVbp, showInsiders, showZones]
     .filter(Boolean).length;
 }
 
@@ -4709,6 +6162,19 @@ const OVERLAY_DEFS = [
     width: 1.4, params: { length: 21, offset: 0, source: 'close' } },
   { id: 'ema50', label: 'EMA 50', group: 'Moving averages', color: 's6',
     width: 1.4, params: { length: 50, offset: 0, source: 'close' } },
+  /* EMA clouds.
+   *
+   * `fill: true` marks an overlay that is an area rather than a stroke, which
+   * the style dialog reads: a colour picker and a line width are both
+   * meaningless for a ribbon whose two colours are the app's directional pair,
+   * and offering them would be a control the renderer ignores.
+   *
+   * The pairs are the three EMAs the server already sends, taken adjacently.
+   * 9/21 is the current leg; 21/50 is the trend it is running inside. */
+  { id: 'cloud921', label: 'EMA 9 / 21 cloud', group: 'Moving averages',
+    color: 'pos', fill: true, width: 1 },
+  { id: 'cloud2150', label: 'EMA 21 / 50 cloud', group: 'Moving averages',
+    color: 'pos', fill: true, width: 1 },
   { id: 'fib', label: 'Fibonacci', group: 'Levels', color: 'refFib', width: 1 },
   { id: 'sr', label: 'Support & resistance', group: 'Levels', color: 'refSR', width: 1 },
   { id: 'zones', label: 'Supply & demand', group: 'Levels', color: 'neg', width: 1 },
@@ -6282,7 +7748,11 @@ function renderRotation(r) {
 const WS_MENUS = [
   { id: 'fibs', label: 'Fibs', items: ['fib'] },
   { id: 'trends', label: 'Trends', items: ['trends', 'sr', 'zones'] },
-  { id: 'indicators', label: 'Indicators', items: ['sma20', 'sma50', 'sma200', 'ema9', 'ema21', 'ema50'], manage: true },
+  { id: 'indicators',
+    label: 'Indicators',
+    items: ['sma20', 'sma50', 'sma200', 'ema9', 'ema21', 'ema50',
+      'cloud921', 'cloud2150'],
+    manage: true },
   { id: 'volume', label: 'Volume', items: ['vol', 'vbp'] },
   { id: 'events', label: 'Events', items: ['insiders', 'sessions'] },
 ];
@@ -6297,6 +7767,8 @@ const WS_FLAGS = {
   sma200: () => seriesShown('sma200'),
   ema9: () => seriesShown('ema9'), ema21: () => seriesShown('ema21'),
   ema50: () => seriesShown('ema50'),
+  cloud921: () => showCloudFast,
+  cloud2150: () => showCloudSlow,
   trends: () => showTrends,
   sessions: () => showSessions,
 };
@@ -6304,6 +7776,48 @@ const WS_FLAGS = {
 function wsOverlayOn(id) {
   const get = WS_FLAGS[id];
   return get ? !!get() : false;
+}
+
+/* The cloud payload for a price series, for whichever pairs are switched on.
+ *
+ * Blue above, red below — the same directional pair the candles, the volume
+ * bars and every percentage in the terminal already use, so a reader does not
+ * have to learn a second colour language for this one overlay. That is also
+ * why the colours are not styleable: they carry meaning here rather than
+ * identity, and a cloud recoloured to teal and orange would say nothing.
+ *
+ * Excluded on intraday for the reason the averages are: these come from daily
+ * closes and would be describing a different timeframe from the one on screen.
+ * Read live from C rather than captured, so a theme flip repaints correctly.
+ */
+function emaClouds(ps) {
+  if (!ps || ps.intraday) return [];
+  const out = [];
+  const add = (id, fast, slow) => {
+    if (!wsOverlayOn(id)) return;
+    if (!Array.isArray(fast) || !Array.isArray(slow)) return;
+    out.push({
+      name: overlayStyle(id).label,
+      fast,
+      slow,
+      upColor: C.pos,
+      downColor: C.neg,
+      // Low enough that a candle body or a support band underneath still reads
+      // through it. The ribbon is context for the price, not a block over it.
+      opacity: 0.17,
+    });
+  };
+  add('cloud921', ps.ema9, ps.ema21);
+  add('cloud2150', ps.ema21, ps.ema50);
+  return out;
+}
+
+/** Legend keys for the active clouds. Split swatches, because a cloud is drawn
+ *  in one of two colours and naming it after either alone would be wrong. */
+function emaCloudLegend(ps) {
+  return emaClouds(ps).map((cl) => ({
+    name: cl.name, color: cl.upColor, split: cl.downColor,
+  }));
 }
 
 /** The clickable legend that sits over the top-left of the chart.
@@ -6336,6 +7850,31 @@ function wsLegend(ps) {
     </div>`);
   };
 
+  const addSpread = (id, fastArr, slowArr, detail) => {
+    if (!wsOverlayOn(id)) return;
+    const f = last(fastArr);
+    const sl = last(slowArr);
+    const gap = (f === null || sl === null) ? null : f - sl;
+    const st = overlayStyle(id);
+    // Coloured by the state it is in, matching the ribbon on the chart.
+    const tone = gap === null ? C.ink2 : (gap >= 0 ? C.pos : C.neg);
+    /* No eye button on this row, unlike the ones above.
+     *
+     * data-ws-hide has no handler anywhere in the app: the eye on every other
+     * legend row is markup with nothing behind it. Rather than add two more
+     * instances of a control that does nothing, a cloud gets only the remove
+     * button, which is wired. There is nothing for "hide but keep" to preserve
+     * here in any case — a cloud carries no colour, width or length to come
+     * back to, so off and hidden would be the same state. */
+    rows.push(`<div class="ws-leg-row" data-ws-leg="${esc(id)}">
+      <span class="ws-leg-name" style="color:${tone}">${esc(st.label)}
+        <span class="ws-leg-args">(${esc(detail)})</span></span>
+      ${gap === null ? '' : `<span class="ws-leg-val">${gap >= 0 ? '+' : ''}${fmt(gap, 2)}</span>`}
+      <button type="button" class="ws-leg-btn" data-ws-off="${esc(id)}"
+        title="Remove ${esc(st.label)}">&times;</button>
+    </div>`);
+  };
+
   const p = (id) => overlayStyle(id).params || {};
   add('sma20', ps.sma20, `${p('sma20').length}, ${p('sma20').offset}, ${p('sma20').source}`);
   add('sma50', ps.sma50, `${p('sma50').length}, ${p('sma50').offset}, ${p('sma50').source}`);
@@ -6343,6 +7882,15 @@ function wsLegend(ps) {
   add('ema9', ps.ema9, `${p('ema9').length}`);
   add('ema21', ps.ema21, `${p('ema21').length}`);
   add('ema50', ps.ema50, `${p('ema50').length}`);
+  /* Clouds report the gap, not a level.
+   *
+   * The value column on every other row is "where is this line right now",
+   * which a cloud has no single answer to: it is bounded by two lines that are
+   * both already available as their own rows. What it uniquely knows is how far
+   * apart they are, and the sign of that is the state the colour is showing —
+   * so a positive number here means the fast average is on top. */
+  addSpread('cloud921', ps.ema9, ps.ema21, '9 / 21');
+  addSpread('cloud2150', ps.ema21, ps.ema50, '21 / 50');
   add('vol', ps.volume, `${p('vol').length || 20}, SMA`);
   add('fib', null, 'retracement');
   add('sr', null, 'pivots');
@@ -6514,6 +8062,8 @@ const WS_SETTERS = {
   ema9: (on) => setSeriesFlag('ema9', on),
   ema21: (on) => setSeriesFlag('ema21', on),
   ema50: (on) => setSeriesFlag('ema50', on),
+  cloud921: (on) => { showCloudFast = !!on; storeFlag(SHOW_CLOUD_FAST_KEY, on); },
+  cloud2150: (on) => { showCloudSlow = !!on; storeFlag(SHOW_CLOUD_SLOW_KEY, on); },
 };
 
 function wsSetOverlay(id, on) {
@@ -6638,7 +8188,11 @@ function wsManageRow(def) {
         style="opacity:1">reset</button>` : ''}
     </div>
     <div class="ws-mrow-controls">
-      <span class="ws-mfield">
+      ${def.fill ? `<p class="ws-mnote">Drawn as a filled area, so there is no
+        line width to set. Its two colours are the same up and down pair the
+        candles and the volume bars use, and are fixed for that reason: here the
+        colour is the reading, not a label. Blue means the faster average is on
+        top.</p>` : `<span class="ws-mfield">
         <label>Colour</label>
         <span class="ws-swatches">${COLOR_CHOICES.map((tok) => `<button type="button"
           class="ws-cswatch${tok === st.colorToken ? ' on' : ''}"
@@ -6652,7 +8206,7 @@ function wsManageRow(def) {
           ${WIDTH_CHOICES.map((w) => `<option value="${w}"${
     w === st.width ? ' selected' : ''}>${w}px</option>`).join('')}
         </select>
-      </span>
+      </span>`}
       ${p.length === undefined ? '' : `<span class="ws-mfield">
         <label>Length</label>
         <input type="number" min="2" max="400" step="1" value="${fmt(p.length, 0)}"
@@ -6717,6 +8271,19 @@ function renderChartWorkspace(d) {
   const bar = wsLastBar(ps);
 
   host.innerHTML = `
+  ${/* The loaded workspace had no heading at all.
+      *
+      * The empty state has one — <h2>Charting</h2> — and it is replaced when a
+      * symbol loads, so the view a reader actually spends time in was the one
+      * view in the app with nothing in its heading outline. On a screen reader
+      * that means jumping by heading lands nowhere, and the view announces
+      * itself only as a pile of buttons.
+      *
+      * Hidden rather than drawn, because the symbol and timeframe are already
+      * on screen twice over — in the toolbar and in the status strip — and a
+      * third copy in a visible heading would be clutter for sighted readers to
+      * buy structure for everyone else. This is what .sr-only is for. */''}
+  <h2 class="sr-only">Charting ${esc(STATE.chartSymbol)}, ${esc(chartInterval)} ${esc(chartRange)}</h2>
   ${wsToolbar()}
   <div class="ws-body">
     ${wsToolRail()}
@@ -6727,6 +8294,7 @@ function renderChartWorkspace(d) {
         <span class="ws-ohlc" id="ws-ohlc">${wsOhlcRow(bar)}</span>
         <span class="${signClass(q.change_pct)}" id="ws-chg">${fmtPct(q.change_pct, 2)}</span>
         <span class="ws-head-state">${esc(cap(marketSessionET()))}</span>
+        ${chartPulse(STATE.chartSymbol)}
       </div>
       ${wsLegend(ps)}
       <div class="ws-plot">
@@ -7070,6 +8638,22 @@ function wsWidgetRail() {
       <span class="ws-wrail-lab">${esc(w.label)}</span>
     </button>`;
   }).join('')}
+    ${/* Pulse, at the foot of the rail rather than in the widget list.
+        *
+        * It is not a widget: every button above toggles a panel in the dock,
+        * and this one opens the assistant with the chart already described. Put
+        * in the list it would inherit aria-pressed and read as a tenth panel
+        * that never appears. The rail pushes it to the bottom with margin-top:
+        * auto, which is also where the reference platforms put theirs.
+        *
+        * Same data-ask-chart hook as the button on the chart header, so there
+        * is one prompt builder and the two entry points cannot drift. */''}
+    <button type="button" class="ws-wrail-btn ws-wrail-pulse"
+      data-ask-chart="${esc(STATE.chartSymbol || '')}"
+      title="Have Pulse read this chart and summarise the big picture">
+      <span class="ws-wrail-ico" aria-hidden="true">&#9673;</span>
+      <span class="ws-wrail-lab">Pulse</span>
+    </button>
   </div>`;
 }
 
@@ -8090,6 +9674,17 @@ document.addEventListener('pointerup', () => {
  * Drag pans, and the Stocks-style measurement moves to shift-drag. Only one of
  * the two can own a plain drag, and pan is the one people reach for first on a
  * chart with a scroll wheel. Two-finger touch still measures, untouched.
+ *
+ * This went the other way for a while: the plot's drag measured and panning
+ * lived only on the navigator strip, on the theory that a gesture needing a
+ * held key is a rule you have to be told. What that missed is that a gesture
+ * on a surface you did not think to look at is a rule you have to be told
+ * twice. Drag-to-pan is what every charting tool does, so it is what a hand
+ * tries first, and finding it does something else reads as broken.
+ *
+ * Measuring keeps two ways in, which is why it can afford to give up the plain
+ * drag: shift-drag, and the ruler in the tool rail, which unlike the gesture
+ * leaves a drawing that stays on the chart. The navigator still pans too.
  */
 function wsBarUnderCursor(evt) {
   const host = document.getElementById('ws-chart');
@@ -8136,17 +9731,74 @@ document.addEventListener('wheel', (evt) => {
   if (wsApplyWindow({ from, to: from + nextSpan })) wsRedrawChart();
 }, { passive: false });
 
-/* Panning lives in the navigator, not on the plot.
+/* Dragging the plot.
  *
- * A plain drag on the chart used to pan, which meant measuring needed a shift
- * modifier to tell the two apart. That is a rule you have to be told, and it was
- * being told in a hint that had itself been collapsed out of view.
- *
- * The navigator strip fixes it by giving each gesture its own surface: you move
- * the view by dragging the window under the chart, and the plot's drag is free
- * to do the thing a price chart is expected to do, which is read the change
- * between two points. Neither needs a key held down, and both are visible.
+ * Bars per pixel comes from the frame the chart hung on its own node rather
+ * than from the range and the element width, so it cannot disagree with what
+ * was drawn — the plot is inset by the margins and the SVG is scaled to its
+ * box, and deriving this twice is how a pan ends up tracking slightly off the
+ * cursor.
  */
+function wsBarsPerPixel() {
+  const svg = document.querySelector('#ws-chart svg.chart');
+  const frame = svg && svg.chartFrame;
+  if (!frame || !frame.plotW) return null;
+  const box = svg.getBoundingClientRect();
+  if (!box.width) return null;
+  const plotPx = frame.plotW * (box.width / frame.width);
+  return frame.bars / Math.max(1, plotPx);
+}
+
+let wsPan = null;
+
+document.addEventListener('pointerdown', (evt) => {
+  if (STATE.view !== 'chart' || !STATE.chartData || STATE.chartData === 'loading') return;
+  if (evt.button !== 0) return;
+  /* Mouse and pen only.
+   *
+   * Panning has to preventDefault to stop the drag selecting text, and on a
+   * touch device that also cancels the scroll the gesture would otherwise have
+   * become — so a finger dragged down the chart would pin the page instead of
+   * moving it. Touch keeps the two-finger measurement it already had, and the
+   * navigator strip is still there to move the window. */
+  if (evt.pointerType && evt.pointerType !== 'mouse' && evt.pointerType !== 'pen') return;
+  // Shift measures, and an armed tool draws. Both are deliberate acts; panning
+  // is what is left when the reader has not asked for anything in particular.
+  if (evt.shiftKey || wsTool !== 'cursor') return;
+  // A drawing lives in #ws-draw, which is a sibling of #ws-chart — so a hit on
+  // one of its strokes fails this test and the drawing handler keeps the drag.
+  const host = evt.target.closest && evt.target.closest('#ws-chart');
+  if (!host) return;
+  const barsPerPx = wsBarsPerPixel();
+  if (barsPerPx === null) return;
+  const win = wsWindowNow(STATE.chartData);
+  // Nothing to pan when the whole history is already on screen. Returning here
+  // rather than clamping later leaves the cursor alone, so the chart does not
+  // offer a grab hand for a gesture that cannot move anything.
+  if (win.to - win.from >= win.total) return;
+  evt.preventDefault();                   // no text selection dragged over the plot
+  wsPan = { x: evt.clientX, from: win.from, to: win.to, barsPerPx, moved: false };
+  document.body.classList.add('ws-panning');
+});
+
+document.addEventListener('pointermove', (evt) => {
+  if (!wsPan) return;
+  // Positive dx drags the paper right, which shows earlier bars. Inverting this
+  // is the difference between moving the chart and moving a scrollbar, and the
+  // chart is what is under the finger.
+  const bars = Math.round((evt.clientX - wsPan.x) * wsPan.barsPerPx);
+  if (!bars && !wsPan.moved) return;
+  wsPan.moved = true;
+  if (wsApplyWindow({ from: wsPan.from - bars, to: wsPan.to - bars })) wsRedrawChart();
+});
+
+function wsEndPan() {
+  if (!wsPan) return;
+  wsPan = null;
+  document.body.classList.remove('ws-panning');
+}
+document.addEventListener('pointerup', wsEndPan);
+document.addEventListener('pointercancel', wsEndPan);
 
 function wsResetZoom() {
   if (wsWindow === null) return;
@@ -8399,6 +10051,11 @@ function wsMountChart() {
       ],
       segments: intraday || !showTrends ? []
         : trendSegments(STATE.trendlines, ps.dates || []),
+      // Same builder as the Swing chart, so the two tabs cannot disagree about
+      // where a cloud flips or how wide it is.
+      clouds: emaClouds(ps),
+      // Drag pans this chart, so the measurement takes shift. See panDrag.
+      panDrag: true,
       series: [
         { name: 'Close', values: ps.close, color: wsCandles(ps) ? C.ink : C.s1,
           hidden: wsCandles(ps), fill: !wsCandles(ps) },
@@ -9042,6 +10699,117 @@ function renderExtras(x) {
       and the only way to show them here would be to guess. An absent panel beats
       a fabricated one.</p>
   </div>`;
+}
+
+
+/* ------------------------------------------------- relative performance
+ *
+ * A percentile rank against peers, charted over two windows.
+ *
+ * Deliberately a different panel from the ratio line above it, because they
+ * answer different questions and reading one as the other is the mistake this
+ * is meant to prevent: the ratio says whether the stock is beating SPY, this
+ * says how many of its peers it is beating. A stock up 3% in a month when the
+ * median name fell 4% is a leader by rank and unremarkable by ratio.
+ *
+ * 80 and 20 are drawn as bands rather than lines because a rank is a region,
+ * not a level: 81 and 84 mean the same thing, and a hairline invites a reader
+ * to treat a single point of movement as an event.
+ */
+function rpBandColour(rank) {
+  if (rank === null || rank === undefined) return C.ink2;
+  if (rank >= 95) return C.pos;
+  if (rank <= 5) return C.neg;
+  if (rank >= 80) return C.s3;
+  if (rank <= 20) return C.s8;
+  return C.ink2;
+}
+
+function renderRelPerf(rp) {
+  if (!rp || rp === 'loading') {
+    return `<div class="panel span2 gap">${loadingHTML('relative performance')}</div>`;
+  }
+  if (rp.available !== true) {
+    return `<div class="panel span2 gap">
+      <h2>${hg('Relative performance')}</h2>
+      <p class="sub">${esc(rp.reason || 'Unavailable.')}</p></div>`;
+  }
+  const keys = Object.keys(rp.windows || {});
+  const tiles = keys.map((k) => {
+    const w = rp.windows[k];
+    if (!w || !w.available) return tile(k, '\u2014', 'no history', '');
+    return tile(`${k} rank`, fmt(w.rank, 0),
+      `${w.state}${w.change ? `, ${w.change > 0 ? '+' : ''}${fmt(w.change, 1)} on the day` : ''}`,
+      w.rank >= 80 ? 'up' : (w.rank <= 20 ? 'down' : ''));
+  }).join('');
+
+  const crosses = keys.flatMap((k) => ((rp.windows[k] || {}).crosses || [])
+    .map((c) => ({ ...c, window: k })))
+    .sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 5);
+
+  return `<div class="panel span2 gap">
+    <h2>${hg('Relative performance')} ${askPulse('relperf')}</h2>
+    <p class="sub">${esc(rp.headline || '')}</p>
+    <div class="grid c2" style="margin-bottom:var(--space-3)">${tiles}</div>
+    <div id="chart-relperf" class="chart-host"></div>
+    ${crosses.length ? `<table class="data narrow" style="margin-top:var(--space-3)">
+      <thead><tr><th>Crossed</th><th>Window</th><th>Level</th><th>Rank</th></tr></thead>
+      <tbody>${crosses.map((c) => `<tr>
+        <td>${esc(c.date)}</td><td>${esc(c.window)}</td>
+        <td class="${c.direction === 'up' ? 'up' : 'down'}">${
+  c.direction === 'up' ? 'Up through' : 'Down through'} ${fmt(c.level, 0)}</td>
+        <td>${fmt(c.rank, 0)}</td></tr>`).join('')}</tbody></table>` : ''}
+    <p class="caveat">${gloss(esc(rp.method || ''))}</p>
+  </div>`;
+}
+
+function mountRelPerfChart() {
+  const rp = STATE.relperf;
+  if (!rp || rp.available !== true) return;
+  const keys = Object.keys(rp.windows || {}).filter((k) => (rp.windows[k] || {}).available);
+  if (!keys.length) return;
+  const base = rp.windows[keys[0]];
+  mount('chart-relperf', (w) => lineChart({
+    width: w,
+    height: 240,
+    labels: base.dates || [],
+    valueTags: true,
+    series: keys.map((k, i) => ({
+      name: `${k} rank`,
+      values: rp.windows[k].series || [],
+      color: i === 0 ? C.s1 : C.s4,
+      width: i === 0 ? 1.8 : 1.3,
+      marker: false,
+    })),
+    // The two regions, not two hairlines. A rank is a band.
+    bands: [
+      { top: 100, bottom: 80, color: C.pos, label: 'Outperforming' },
+      { top: 20, bottom: 0, color: C.neg, label: 'Underperforming' },
+    ],
+    refLineFit: 'clip',
+    yFormat: (v) => fmt(v, 0),
+    valueFormat: (v) => fmt(v, 0),
+  }));
+}
+
+async function loadRelPerf(force) {
+  const sym = STATE.ticker;
+  if (!sym) return;
+  if (STATE.relperf && STATE.relperfKey === sym && !force) return;
+  STATE.relperfKey = sym;
+  STATE.relperf = 'loading';
+  const host = document.getElementById('relperf-host');
+  if (host) host.innerHTML = renderRelPerf('loading');
+  try {
+    STATE.relperf = await getJSON(`/api/relperf/${encodeURIComponent(sym)}`);
+  } catch (err) {
+    STATE.relperf = { available: false, reason: err.message };
+  }
+  const h = document.getElementById('relperf-host');
+  if (!h) return;
+  h.innerHTML = renderRelPerf(STATE.relperf);
+  mountRelPerfChart();
+  revealPanels(h);
 }
 
 async function loadExtras(force) {
@@ -9702,12 +11470,198 @@ function cmpSkeleton(names) {
   </div>`;
 }
 
+
+
+/* ========================================================== research hub ====
+ *
+ * Structured around investigations, not around the product's own vocabulary.
+ *
+ * The four ways to research something already existed — the screener, the
+ * comparison, deep research and Pulse — and a reader had to know which of those
+ * four words meant the thing they wanted. The hub asks the question instead and
+ * routes to whichever surface answers it.
+ *
+ * There is deliberately no "Trending" section. The obvious source is the wire
+ * desks, and they carry no ticker extraction: the leading Markets entries today
+ * are a MarketWatch piece on befriending older people and German state
+ * politics. Mining tickers out of that would produce a section that looks
+ * authoritative and means nothing. What IS honest about "what is the market
+ * talking about" comes from the app's own scans and sector rotation, which have
+ * their own panels — so the hub links to them rather than paraphrasing them.
+ */
+const RESEARCH_KEY = 'optic.research.v1';
+
+/* The questions, and where each one goes. Phrased as what a reader wants to
+ * know, because "Deep research" and "Compare" are names for machinery. */
+const RESEARCH_ROUTES = [
+  { q: 'Which names look strongest right now?', to: 'scan',
+    note: 'Named screens over the ranked universe. Each states what it did not search.' },
+  { q: 'How do two or three names stack up?', to: 'compare',
+    note: 'Scored across three horizons separately, so a name can lead one and trail another.' },
+  { q: 'What is going on with one company?', to: 'ask',
+    seed: '', note: 'Search a ticker to open the full read, or ask in plain language.' },
+  { q: 'I need sources and citations.', to: 'research',
+    note: 'Deep research runs live web sources and cites them. Slower, and rate limited.' },
+];
+
+function savedResearch() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(RESEARCH_KEY) || '[]');
+    return Array.isArray(raw) ? raw : [];
+  } catch (e) { return []; }
+}
+
+function saveResearch(entry) {
+  const all = savedResearch();
+  all.unshift({ ...entry, at: new Date().toISOString() });
+  // Capped. A saved list that grows without limit becomes an archive nobody
+  // reads, and localStorage has a hard quota that fails silently when hit.
+  try { localStorage.setItem(RESEARCH_KEY, JSON.stringify(all.slice(0, 40))); }
+  catch (e) { /* private mode, or quota */ }
+}
+
+function dropResearch(at) {
+  const all = savedResearch().filter((r) => r.at !== at);
+  try { localStorage.setItem(RESEARCH_KEY, JSON.stringify(all)); } catch (e) { /* private */ }
+}
+
+function renderResearchHub() {
+  const saved = savedResearch();
+  return `<section class="rh-block span-all" aria-label="Research">
+    <div class="hm-block-head">
+      <h2 class="hm-h">Start an investigation</h2>
+      <span class="rh-sub">Four questions, four surfaces.</span>
+    </div>
+    <div class="rh-routes">
+      ${RESEARCH_ROUTES.map((r) => `<button type="button" class="rh-route"
+        data-research-route="${esc(r.to)}">
+        <span class="rh-q">${esc(r.q)}</span>
+        <span class="rh-note">${esc(r.note)}</span>
+      </button>`).join('')}
+    </div>
+
+    ${saved.length ? `<div class="rh-saved">
+      <h3 class="rh-h3">Saved research <span class="rh-count">${saved.length}</span></h3>
+      <ul class="rh-list">
+        ${saved.slice(0, 8).map((r) => `<li class="rh-item">
+          <button type="button" class="rh-open" data-research-open="${esc(r.at)}">
+            <span class="rh-item-sym">${esc(r.ticker || 'market')}</span>
+            <span class="rh-item-q">${esc(String(r.question || '').slice(0, 110))}</span>
+            <span class="rh-item-when">${esc(shortWhen(r.at))}</span>
+          </button>
+          <button type="button" class="wl-x" data-research-drop="${esc(r.at)}"
+            aria-label="Forget this">&times;</button>
+        </li>`).join('')}
+      </ul>
+      ${saved.length > 8 ? `<p class="rh-more">${saved.length - 8} older, kept in this browser.</p>` : ''}
+    </div>` : `<p class="rh-empty">Nothing saved yet. Ask Pulse something and use
+      <strong>Save</strong> on the answer to keep the question here.</p>`}
+  </section>`;
+}
+
+document.addEventListener('click', (evt) => {
+  if (!evt.target || !evt.target.closest) return;
+
+  const save = evt.target.closest('[data-save-research]');
+  if (save) {
+    const msg = save.closest('.msg');
+    saveResearch({ question: msg && msg.dataset.q, ticker: STATE.ticker || null });
+    save.textContent = 'Saved';
+    save.disabled = true;
+    return;
+  }
+
+  const route = evt.target.closest('[data-research-route]');
+  if (route) {
+    const to = route.dataset.researchRoute;
+    if (to === 'ask') { openPalette(''); return; }
+    if (to === 'research') {
+      // Deep research lives in the Pulse panel and is rate limited, so this
+      // opens the panel with the field ready rather than firing a request.
+      document.body.classList.add('chat-open');
+      const box = $('#chat-input');
+      if (box) box.focus();
+      return;
+    }
+    switchView(to);
+    return;
+  }
+
+  const open = evt.target.closest('[data-research-open]');
+  if (open) {
+    const row = savedResearch().find((r) => r.at === open.dataset.researchOpen);
+    if (!row) return;
+    // Re-asking rather than replaying a stored answer. The answer was true when
+    // it was written and the market has moved since; showing it again as though
+    // it were current is the one thing a saved-research feature must not do.
+    if (row.ticker && row.ticker !== STATE.ticker) loadTicker(row.ticker, 'swing');
+    openPulseWithText(row.question || '');
+    return;
+  }
+
+  const drop = evt.target.closest('[data-research-drop]');
+  if (drop) {
+    dropResearch(drop.dataset.researchDrop);
+    if (STATE.view === 'scan') loadScan(false);
+  }
+});
+
+/* ========================================================= Optic's take ====
+ *
+ * The read across a comparison, at the top of it.
+ *
+ * The tab's own subtitle already said the three horizons are scored separately
+ * "so a name can lead one and trail another. That disagreement is the useful
+ * part" — and then presented twenty-six rows of numbers and left the reader to
+ * find the disagreement themselves. This states it in a sentence and shows the
+ * three verdicts as a row.
+ */
+function renderCompareTake(c) {
+  const t = c && c.take;
+  if (!t || !t.available) return '';
+  const winners = Object.values(t.winners || {});
+  return `<section class="ct-block span-all" aria-label="Optic's take">
+    <div class="hm-block-head">
+      <h2 class="hm-h">Optic's take</h2>
+      ${t.unanimous ? '<span class="ct-agree">all horizons agree</span>'
+    : '<span class="ct-split">horizons disagree</span>'}
+    </div>
+    <p class="ct-headline">${esc(t.headline)}</p>
+
+    <div class="ct-row">
+      ${winners.map((w) => `<div class="ct-hz${w.decisive ? '' : ' is-close'}">
+        <span class="ct-hz-name">${esc(w.name)}</span>
+        <span class="ct-hz-win">${esc(w.ticker)}</span>
+        <span class="ct-hz-gap">${w.decisive
+    ? `ahead by ${fmt(w.gap, 1)} points`
+    : `only ${fmt(w.gap, 1)} points clear &mdash; a close call, not a ranking`}</span>
+      </div>`).join('')}
+    </div>
+
+    ${(t.standouts || []).length ? `<ul class="ct-standouts">
+      ${t.standouts.map((sd) => `<li><strong>${esc(sd.ticker)}</strong>
+        has ${esc(sd.phrase)}</li>`).join('')}
+    </ul>` : ''}
+    <p class="pl-method">${gloss(t.method || '')}</p>
+  </section>`;
+}
+
 function renderCompare(c) {
   const inputs = (STATE.compareInputs || ['', '']).map((v, i) => `
     <input class="cmp-input" data-cmp-input="${i}" value="${esc(v)}"
       placeholder="TICKER ${i + 1}" spellcheck="false" autocomplete="off"
       aria-label="Ticker ${i + 1}">`).join('');
 
+  /* Controls first, then the answer.
+   *
+   * The take was rendered above this panel, which put a conclusion about three
+   * names at the top of the page and the ticker inputs — the thing you have to
+   * do before any of it means anything — in fourth place, below the title, the
+   * subtitle and three horizon explainers. From the outside it read as though
+   * the last comparison you ran had become the tab's landing content.
+   *
+   * Every other view in the app is controls-then-result. This one now is too.
+   */
   const head = `<div class="panel span-all">
     <div class="weekly-kicker">Compare tickers</div>
     <h2 class="weekly-title">Side-by-side${askPulse('compare')}</h2>
@@ -9730,6 +11684,10 @@ function renderCompare(c) {
     ? '<button type="button" class="bulk-btn" data-cmp-drop>− Remove</button>' : ''}
     </div>
   </div>`;
+
+  // The take slots between the controls and the table, so it reads as the
+  // answer to the inputs above it rather than as page furniture.
+  const take = renderCompareTake(c);
 
   if (c === 'loading') {
     return head + cmpSkeleton((STATE.compareInputs || [])
@@ -9779,7 +11737,7 @@ function renderCompare(c) {
 
   const anyLead = CMP_ROWS.some((m) => m.lead && cmpLeader(m, cols));
 
-  return head + `<div class="panel span-all">
+  return head + take + `<div class="panel span-all">
     <div class="table-scroll">
     <table class="data cmp-table">
       <thead><tr><th>Metric</th>${cols.map((r) => `<th class="num">
@@ -12068,6 +14026,7 @@ async function loadSwing(force, opts = {}) {
     loadIndicators();
     loadSeasonality();
     loadExtras();
+    loadRelPerf();
     /* Also mounted here, not only from loadExtras.
      *
      * When the payload is already in STATE — a tab switch, a silent refresh —
@@ -12471,10 +14430,134 @@ const PULSE_TOPICS = {
     + 'hedging make these act like a ceiling or a floor, and how reliable is that?',
 };
 
+/* What is actually on the chart right now, in words.
+ *
+ * The reason this exists rather than a prompt saying "look at my chart": Pulse
+ * cannot see the chart. TrendSpider's version of this button asks the model to
+ * "check the chart per se", which on any text model is a request it can only
+ * answer by guessing. The app already knows every fact a reader would want
+ * described — the timeframe, the window, which overlays are on, how many
+ * drawings — so it says them instead of asking for them.
+ */
+function chartStateWords(symbol) {
+  const bits = [];
+  const rangeLabel = (CHART_RANGES.find((r) => r.key === chartRange) || {}).label || chartRange;
+  bits.push(`${chartMode === 'candle' ? 'candlestick' : 'line'} chart`);
+  bits.push(`${chartInterval} bars`);
+  bits.push(wsWindow ? 'zoomed in from the ' + rangeLabel + ' range' : 'covering ' + rangeLabel);
+
+  // Overlays, by the label the toolbar shows, so the prompt names what the
+  // reader can see named on their own screen.
+  const seen = [];
+  WS_MENUS.forEach((m) => m.items.forEach((id) => {
+    if (wsOverlayOn(id) && seen.indexOf(id) === -1) seen.push(id);
+  }));
+  const overlays = seen.map((id) => overlayStyle(id).label);
+  /* The optional indicators are a separate list from the toolbar's own set.
+   *
+   * IND_FALLBACK_CATALOGUE is the only catalogue the client holds — the
+   * /api/indicators call returns computed series, not names, and lands in
+   * STATE.indicators. So the fallback is not a fallback here, it is the list,
+   * and test_indicators.py already asserts it matches the server's. The id is
+   * used directly if a name is ever missing, because naming nothing at all
+   * would quietly drop an overlay the reader can see. */
+  indicatorIds.forEach((id) => {
+    const row = IND_FALLBACK_CATALOGUE.find((r) => r.id === id);
+    overlays.push(row ? (row.name || row.id) : id);
+  });
+  if (overlays.length) bits.push('with ' + listWords(overlays) + ' switched on');
+  else bits.push('with no overlays on, just price');
+
+  /* Drawings are stored per symbol under the CHARTING tab's key, so they are
+   * only this chart's drawings when the caller is that chart. The Swing chart
+   * has no drawing layer at all — reporting the Charting tab's count there
+   * would describe marks the reader cannot see on the chart in front of them. */
+  const drawn = (symbol && symbol === STATE.chartSymbol) ? wsDrawings().length : 0;
+  if (drawn) bits.push(`and ${drawn} drawing${drawn === 1 ? '' : 's'} of my own`);
+  return bits.join(', ');
+}
+
+/** "a, b and c" — an Oxford-less list, because these go into a sentence. */
+function listWords(items) {
+  if (items.length <= 1) return items[0] || '';
+  return items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1];
+}
+
+/* The chart's Pulse prompt.
+ *
+ * Built rather than stored in PULSE_TOPICS because it has to name the chart's
+ * live state, and unlike every other topic it must read the CHART's symbol.
+ * STATE.ticker is the Analysis tab's symbol and the two are independent — the
+ * Charting tab can be on BSX while Analysis holds NVDA, and a prompt that said
+ * {t} would ask about the wrong company with total confidence.
+ */
+function chartPulsePrompt(symbol) {
+  const sym = symbol || STATE.chartSymbol || STATE.ticker;
+  if (!sym) return '';
+  return `Gather everything you have on ${sym} and read the chart I have open: `
+    + `a ${chartStateWords(sym)}. Give me the big picture. What is the price `
+    + `structure doing, which levels actually matter here, what are the overlays `
+    + `I have on saying, and where do any of them disagree with each other? `
+    + `Finish with what would change the read.`;
+}
+
+/* The chart's own Pulse button.
+ *
+ * Separate from askPulse because it is not a topic lookup: the text is built
+ * from live chart state at click time, not at render time, so switching an
+ * overlay on after the button was drawn still produces an accurate prompt.
+ * data-ask-chart carries the symbol so the handler cannot read the wrong one. */
+function chartPulse(symbol) {
+  if (!symbol) return '';
+  return `<button type="button" class="chart-pulse is-explain"
+    data-explain-chart="${esc(symbol)}"
+    title="Have Pulse read this chart: trend, levels, momentum, and what breaks it">
+    Explain chart</button><button type="button" class="chart-pulse" data-ask-chart="${esc(symbol)}"
+    title="Have Pulse read this chart and summarise the big picture">
+    <span class="chart-pulse-dot" aria-hidden="true"></span>Pulse</button>`;
+}
+
+/* "Explain chart", as a structured read rather than an essay.
+ *
+ * Separate from chartPulsePrompt, which asks the open question. This one names
+ * the six fields it wants back and asks for the invalidation last, because that
+ * is the part a reader skips and the part that decides position size. Asking
+ * for named fields is what keeps the answer scannable — the same reason the
+ * rest of this app leads with a stance and puts the prose underneath.
+ *
+ * It still describes the chart rather than asking the model to look at one:
+ * Pulse cannot see the canvas, and chartStateWords() knows exactly what is
+ * drawn on it.
+ */
+function explainChartPrompt(symbol) {
+  const sym = symbol || STATE.chartSymbol || STATE.ticker;
+  if (!sym) return '';
+  return `Read my ${sym} chart and answer in exactly these fields, one short `
+    + `line each, no preamble:\n\n`
+    + `Trend, Support, Resistance, Momentum, Volume, Risk.\n\n`
+    + `Then a final line headed "What would invalidate this" giving the single `
+    + `price or condition that breaks the read.\n\n`
+    + `The chart is a ${chartStateWords()}. Use the levels and indicator values `
+    + `in the data you have rather than inventing round numbers, and say "not in `
+    + `the data" for any field you cannot support.`;
+}
+
 /* The button. Small, quiet, and next to the heading it explains. */
 function askPulse(topic) {
   return `<button type="button" class="ask-pulse" data-ask="${esc(topic)}"
     title="Have Pulse explain this section in plain language">Ask Pulse</button>`;
+}
+
+/** Open Pulse with a prompt already typed, ready to send or edit. */
+function openPulseWithText(text) {
+  if (!text) return;
+  document.body.classList.add('chat-open');
+  const box = $('#chat-input');
+  if (!box) return;
+  box.value = text;
+  box.focus();
+  box.setSelectionRange(text.length, text.length);
+  box.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 function openPulseWith(topic) {
@@ -12964,7 +15047,11 @@ async function loadBrief(force, opts = {}) {
    is reading the table as a list of tips. */
 
 function scanCell(kind, value) {
-  if (value === null || value === undefined) return '—';
+  if (value === null || value === undefined) return '\u2014';
+  // A string column. The relative-performance scans report a state ("leader",
+  // "outperforming"), and without this it fell through to the numeric formatter
+  // and rendered NaN.
+  if (kind === 'text') return esc(String(value));
   if (kind === 'pct') return `<span class="${signClass(value)}">${value > 0 ? '+' : ''}${fmt(value, 1)}%</span>`;
   if (kind === 'pct_plain') return `${fmt(value, 2)}%`;
   if (kind === 'mult') return `${fmt(value, 2)}×`;
@@ -12998,7 +15085,8 @@ function renderScan(cat, res) {
     <button type="button" class="scan-pill${sc.id === STATE.scanId ? ' on' : ''}"
       data-scan="${esc(sc.id)}" title="${esc(sc.looks_for || '')}">${esc(sc.name)}</button>`).join('');
 
-  const head = `<div class="panel span-all">
+  const head = `${renderResearchHub()}
+  <div class="panel span-all">
     <h2>${hg('Scanners')}</h2>
     <p class="sub">Named scans over the ${cat.considered ? fmt(cat.considered, 0) : ''} names that
       cleared the screen's gates, out of a ${cat.universe_size ? fmt(cat.universe_size, 0) : ''}-symbol
@@ -13020,7 +15108,8 @@ function renderScan(cat, res) {
   const rows = (res.rows || []).map((r) => `<tr>
     <td class="name"><button type="button" class="tkr" data-analyse="${esc(r.symbol)}"
       >${esc(r.symbol)}</button></td>
-    <td class="num">${fmt(r.price, 2)}</td>
+    <td class="num">${r.price === null || r.price === undefined
+    ? '\u2014' : fmt(r.price, 2)}</td>
     ${cols.map((c) => `<td class="num">${scanCell(c.kind, r[c.key])}</td>`).join('')}
   </tr>`).join('');
 
@@ -13456,8 +15545,13 @@ function loadView(view, force) {
   // it must be allowed to reach its own loader instead of being intercepted here.
   // The remaining ticker-specific views send the reader back to pick one rather
   // than firing a request at /api/ticker/null.
+  // Watchlist and Alerts belong on this list: neither is about a loaded symbol.
+  // Without them the guard caught both and replaced their markup with the
+  // "No ticker loaded" panel — the view rendered correctly and was then
+  // overwritten, which from the outside looked like the render had failed.
   if (!['market', 'indices', 'roth', 'tracker', 'settings', 'brief', 'scan',
-    'earnings', 'compare', 'instrument', 'chart'].includes(view) && !STATE.ticker) {
+    'earnings', 'compare', 'instrument', 'chart',
+    'watchlist', 'alerts'].includes(view) && !STATE.ticker) {
     views[view].innerHTML = `<div class="panel"><h2>No ticker loaded</h2>
       <p class="sub">Enter a symbol in the top bar, or pick one on the
       <button class="btn" type="button" data-goto-home style="padding:var(--space-0) var(--space-2);font-size:var(--t-small)">Home</button> page.</p></div>`;
@@ -13472,6 +15566,10 @@ function loadView(view, force) {
   if (view === 'compare') return loadCompare(force);
   if (view === 'instrument') return loadInstrument(force);
   if (view === 'scan') return loadScan(force);
+  // The watchlist renders from local state and fetches its own rows, so it
+  // paints immediately rather than waiting on the feed.
+  if (view === 'watchlist') return renderWatchlist();
+  if (view === 'alerts') return loadAlertsFeed(force);
   if (view === 'market') return loadMarket(force);
   if (view === 'indices') return loadIndices(force);
   if (view === 'tracker') return loadTracker(force);
@@ -13726,7 +15824,7 @@ function updateStatus() {
       ? [`Chart: ${STATE.chartSymbol}`,
         wsWindow ? `${chartInterval} · zoomed` : `${chartInterval} · ${chartRange}`,
         `${wsDrawings().length} drawing${wsDrawings().length === 1 ? '' : 's'}`,
-        'Scroll zooms, drag the strip below to move, drag the chart to measure']
+        'Drag to pan, scroll to zoom, shift-drag to measure']
       : ['Chart. Pick a symbol to begin.']);
     return;
   }
@@ -13856,7 +15954,32 @@ let refreshTimer = null;
  * Windows are the standard US equity sessions: pre-market 04:00-09:30,
  * regular 09:30-16:00, after-hours 16:00-20:00.
  */
+/* The current session phase.
+ *
+ * The server's answer wins whenever there is one. This function is a second,
+ * independent model of the trading calendar — it reads the browser clock and
+ * knows about weekends and nothing else — and app/session.py now models the ten
+ * NYSE holidays and the three early closes from the exchange's own rules.
+ *
+ * Left as a fallback rather than deleted, because it answers before the first
+ * /api/session response lands and on any view that never loads a ticker. But
+ * the fallback is the thing that was wrong on Labor Day: it found a weekday
+ * inside 09:30-16:00 and reported a regular session, which would have kept the
+ * auto-refresh polling and let the paper book take an entry on a day nothing
+ * trades. So it now says so in its own return value rather than pretending to
+ * an authority it does not have.
+ */
 function marketSessionET() {
+  const server = ((STATE.session || {}).session || {}).phase;
+  // 'holiday' folds into 'closed' for every caller that only asks "is the tape
+  // live"; the phase itself is still available for anything that wants to name
+  // the day. Nothing downstream has to learn a new value to be correct.
+  if (server) return server === 'holiday' ? 'closed' : server;
+  return marketSessionFromClock();
+}
+
+/** Weekends and clock hours only. See marketSessionET for why this is not it. */
+function marketSessionFromClock() {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York', hour12: false,
     weekday: 'short', hour: '2-digit', minute: '2-digit',
@@ -13869,6 +15992,41 @@ function marketSessionET() {
   if (mins >= 4 * 60 && mins < 9 * 60 + 30) return 'pre';
   if (mins >= 16 * 60 && mins < 20 * 60) return 'after';
   return 'closed';
+}
+
+/** The holiday's name, when the server says today is one. */
+function marketHolidayName() {
+  return ((STATE.session || {}).session || {}).holiday || null;
+}
+
+/* Load the trading calendar at boot, before any ticker.
+ *
+ * STATE.session is populated by /api/session/{ticker}, so on the Home page and
+ * on any view before a symbol loads there was no server answer and
+ * marketSessionET fell back to the clock. On Labor Day the landing page
+ * therefore said "Live · refreshing every 20s" — the exact wrong claim, on the
+ * first screen a reader sees.
+ *
+ * /api/session takes no ticker and already existed. The shape is nested under
+ * `session` to match the per-ticker payload, so both fill the same slot and
+ * every reader of STATE.session keeps working. A per-ticker load later
+ * overwrites this with the same session plus its price pair.
+ */
+async function loadCalendarSession() {
+  if (STATE.session) return;
+  try {
+    const data = await getJSON('/api/session');
+    // Do not clobber a per-ticker payload that landed while this was in flight:
+    // that one carries the close-versus-current pair as well.
+    if (!STATE.session) STATE.session = { session: data };
+  } catch (err) {
+    // The clock fallback still answers. Weekends stay right; a holiday reverts
+    // to reading as a normal session, which is the pre-existing behaviour
+    // rather than a new failure.
+    return;
+  }
+  updateStatus();
+  renderSessionBar();
 }
 
 function isMarketOpenET() {
@@ -13892,6 +16050,13 @@ const SESSION_LABEL = {
 function liveIndicatorHTML() {
   const session = marketSessionET();
   if (session === 'closed') {
+    // Name the holiday when there is one. "Market closed" on a Monday reads as
+    // a fault; "Labor Day · market closed" reads as the reason.
+    const holiday = marketHolidayName();
+    if (holiday) {
+      return `<span class="chip neutral"><span class="dot"></span>${
+        esc(holiday)} · market closed</span>`;
+    }
     return '<span class="chip neutral"><span class="dot"></span>Market closed · auto-refresh paused</span>';
   }
   // Extended hours get the same pulse but their own label, so "live" never
@@ -14131,6 +16296,51 @@ function chatContextPayload() {
       caveats: STATE.tracker.caveats,
     };
   }
+  /* The chart, which contributed nothing here before.
+   *
+   * Everything above comes from the Analysis tab and its neighbours. The
+   * Charting tab keeps its own symbol and its own payload, so a reader looking
+   * at a BSX chart while NVDA is loaded in Analysis was asking questions about
+   * a chart Pulse could not see, against data for a different company, with
+   * nothing in the request to reveal the mismatch.
+   *
+   * `symbol` and `state` go in unconditionally, because "what am I looking at"
+   * is the question this fixes. The payload only goes in when the chart is on a
+   * DIFFERENT symbol from Analysis — when they match it is already above, and
+   * sending it twice would spend the context window on a copy.
+   */
+  if (STATE.chartSymbol && STATE.chartData && STATE.chartData !== 'loading') {
+    const cd = STATE.chartData;
+    const ps = wsSeries(cd);
+    const dates = ps.dates || [];
+    ctx.chart = {
+      symbol: STATE.chartSymbol,
+      interval: chartInterval,
+      range: chartRange,
+      manually_zoomed: !!wsWindow,
+      bars_shown: dates.length,
+      first_bar: dates[0] || null,
+      last_bar: dates[dates.length - 1] || null,
+      state: chartStateWords(STATE.chartSymbol),
+      drawings: wsDrawings().length,
+    };
+    if (String(STATE.chartSymbol) !== String(ctx.ticker || '')) {
+      ctx.chart.quote = cd.quote;
+      ctx.chart.technicals = cd.technicals;
+      ctx.chart.patterns = cd.patterns;
+      /* Named so the model cannot mistake it for the Analysis symbol's data.
+       *
+       * Two different sentences, because "NOT the symbol loaded in Analysis"
+       * asserts a conflict that does not exist when Analysis is simply empty —
+       * and a note that overstates the situation is the kind of thing a model
+       * will faithfully repeat back to the reader. */
+      ctx.chart.note = ctx.ticker
+        ? `This is ${STATE.chartSymbol}, the charted symbol. It is NOT `
+          + `${ctx.ticker}, which is what the rest of this context describes.`
+        : `This is ${STATE.chartSymbol}, the charted symbol. Nothing is loaded `
+          + `in Analysis, so this chart is the only symbol in this context.`;
+    }
+  }
   ctx.active_view = STATE.view;
   return ctx;
 }
@@ -14292,8 +16502,19 @@ function addMsg(role, text) {
   const log = $('#chat-log');
   const wrap = document.createElement('div');
   wrap.className = 'msg ' + role;
+  /* A Save affordance on your own questions, not on the answers.
+   *
+   * What is worth keeping is the question and the symbol it was asked about —
+   * the answer was true when it was written and re-showing it later as though
+   * it were current is exactly what a saved-research feature must not do. So
+   * saving stores the question and re-asks it when reopened. */
+  const savable = role === 'user' && text && text.length > 12;
   wrap.innerHTML = `<div class="who">${role === 'user' ? 'You' : role === 'err' ? 'Error' : ASSISTANT_NAME}</div>
-    <div class="bubble"></div><div class="status"></div><div class="sources"></div>`;
+    <div class="bubble"></div>${savable
+    ? `<button type="button" class="msg-save" data-save-research
+        title="Keep this question in Research">Save</button>` : ''}
+    <div class="status"></div><div class="sources"></div>`;
+  if (savable) wrap.dataset.q = text;
   wrap.querySelector('.bubble').innerHTML = role === 'user' ? esc(text) : mdLite(text || '');
   const wasPinned = isPinnedToBottom(log) || role === 'user';
   log.appendChild(wrap);
@@ -14743,6 +16964,19 @@ async function runResearch() {
  * destinations whose only content is "No ticker loaded" are three destinations
  * that waste a click.
  */
+/* The tab strip.
+ *
+ * Restored to its original six after a consolidation pass churned it. Two
+ * successive attempts moved these around — Charting folded into Analysis, Scan
+ * merged into Research, then Watchlist and Alerts added as top-level items,
+ * which took the strip to seven and made it busier than it started.
+ *
+ * Navigation is muscle memory. A reader who knows where Charting lives loses
+ * more from it moving than they gain from a tidier taxonomy, and none of the
+ * rearrangements fixed a problem anyone had reported. The two new views are
+ * reachable from the home page, which previews both, and from the command
+ * palette — see PALETTE_PLACES. No tab moved to make room for them.
+ */
 const NAV_GROUPS = [
   { id: 'home', label: 'Home', views: ['home'] },
   { id: 'chart', label: 'Charting', views: ['chart'] },
@@ -14754,12 +16988,28 @@ const NAV_GROUPS = [
   // already called it Optic's Positions in the panel heading, the status line
   // and paper.py. One name for one thing.
   { id: 'portfolio', label: "Optic's Positions", views: ['tracker'] },
+  /* Reachable, but not in the strip.
+   *
+   * groupForView has to resolve every view or switchView marks no tab active
+   * and the sub-nav empties. Watchlist and Alerts are real destinations with no
+   * tab of their own, so they get a group that the render filters out. */
+  { id: 'follow', label: 'Watchlist', views: ['watchlist', 'alerts'], offStrip: true },
 ];
+
+/** The strip shows every group except the off-strip ones. */
+function navVisibleGroups() {
+  return NAV_GROUPS.filter((g) => !g.offStrip);
+}
+
+function navGroupLabel(group) {
+  return group.label;
+}
 
 const SUB_LABELS = {
   chart: 'Charting',
   swing: 'Swing', earnings: 'Earnings', compare: 'Compare', long: 'Long-Term',
   brief: 'Read', market: 'Macro', indices: 'Indices',
+  watchlist: 'Watchlist', alerts: 'Alerts',
   tracker: "Optic's Positions",
 };
 
@@ -14773,6 +17023,8 @@ const SUB_TITLES = {
   brief: "Optic's Read. The daily market, macro and world summary",
   market: 'Macro regime and sector rotation',
   indices: 'Major index long-run cycle',
+  watchlist: 'Watchlist. What changed on the names you follow',
+  alerts: 'Alerts. What fired, and why it was worth telling you',
   tracker: "Optic's Positions. The terminal's own paper-traded record",
 };
 
@@ -14810,14 +17062,14 @@ function paintNav(view) {
       ? [{ view: 'instrument', label: STATE.instrument.label, dynamic: true }]
       : []);
 
-  nav.innerHTML = NAV_GROUPS.map((group) => {
+  nav.innerHTML = navVisibleGroups().map((group) => {
     const pages = [...group.views.map((v) => ({ view: v, label: SUB_LABELS[v] || v })),
       ...extraFor(group.id)];
     const isActive = group.id === active;
     const single = pages.length < 2;
     if (single) {
       return `<button role="tab" class="nav-top" data-group="${group.id}"
-        aria-selected="${isActive}">${esc(group.label)}</button>`;
+        aria-selected="${isActive}">${esc(navGroupLabel(group))}</button>`;
     }
     // Just the section name. The page you are on is marked inside the menu, which
     // is enough — repeating it on the button made the bar wider and said the same
@@ -14825,7 +17077,7 @@ function paintNav(view) {
     return `<div class="nav-item${isActive ? ' on' : ''}">
       <button role="tab" class="nav-top" data-group="${group.id}"
         aria-selected="${isActive}" aria-haspopup="true"
-        >${esc(group.label)}<i class="nav-caret" aria-hidden="true"></i></button>
+        >${esc(navGroupLabel(group))}<i class="nav-caret" aria-hidden="true"></i></button>
       <div class="nav-menu" role="menu">
         ${pages.map((p) => `<button role="menuitem" class="nav-page${
   p.view === view ? ' current' : ''}" data-view="${p.view}"
@@ -14851,6 +17103,7 @@ function switchView(view, force) {
   Object.entries(views).forEach(([k, node]) => node.classList.toggle('active', k === view));
   if (view !== 'settings') NAV_LAST[groupForView(view)] = view;
   paintNav(view);
+  paintMobileTabs(view);
   // The settings gear sits in the top bar, not the tab strip, so it isn't covered
   // by the loop above.
   const gear = $('#settings-btn');
@@ -15290,9 +17543,11 @@ document.addEventListener('click', (evt) => {
     setFamily('ma', false); setFamily('ema', false);
     showFib = false; showSR = false;
     showVbp = false; showInsiders = false; showZones = false;
+    showCloudFast = false; showCloudSlow = false;
     [[SHOW_MA_KEY, false], [SHOW_EMA_KEY, false], [SHOW_FIB_KEY, false],
       [SHOW_SR_KEY, false], [SHOW_VBP_KEY, false], [SHOW_INS_KEY, false],
-      [SHOW_ZONES_KEY, false]]
+      [SHOW_ZONES_KEY, false], [SHOW_CLOUD_FAST_KEY, false],
+      [SHOW_CLOUD_SLOW_KEY, false]]
       .forEach(([k, v]) => storeFlag(k, v));
     if (STATE.swing) preserveUI(views.swing, () => renderSwing(STATE.swing));
     return;
@@ -15552,6 +17807,18 @@ document.addEventListener('click', (evt) => {
     renderSectorRead('sector-read-host'); renderSectorRead('index-read-host');
     return;
   }
+  /* Checked before [data-ask] because the chart button is not a topic and the
+   * generic branch would look it up, find nothing and silently do nothing. */
+  const explain = evt.target.closest('[data-explain-chart]');
+  if (explain) {
+    openPulseWithText(explainChartPrompt(explain.dataset.explainChart));
+    return;
+  }
+  const askChart = evt.target.closest('[data-ask-chart]');
+  if (askChart) {
+    openPulseWithText(chartPulsePrompt(askChart.dataset.askChart));
+    return;
+  }
   const ask = evt.target.closest('[data-ask]');
   if (ask) { openPulseWith(ask.dataset.ask); return; }
   const analyse = evt.target.closest('[data-analyse]');
@@ -15715,10 +17982,26 @@ document.addEventListener('keydown', (evt) => {
 // Headings that stay expanded on first load, per view. Matched case-insensitively
 // on the panel's own h2 text, so a heading rename shows up as a panel that starts
 // collapsed rather than as a crash.
+/* Which panels a view opens with, by heading substring.
+ *
+ * The Swing view measures 8,974px on a 971px viewport — nine screens of scroll
+ * — and this list is most of the reason. Two entries accounted for 2,711px of
+ * it, 30% of the whole view, and neither earns a default:
+ *
+ *   * Seasonality, 1,316px. Its own output for NVDA is that none of the twelve
+ *     months clears the Bonferroni-corrected threshold, on n=15 each. A panel
+ *     whose honest and usual answer is "nothing here" should not be the thing
+ *     between a reader and the options chain.
+ *   * Corporate actions and dividends, 1,395px. Real information, and rarely
+ *     what anyone opened a swing view to find.
+ *
+ * Both are still one click away and their state is still remembered, so a
+ * reader who does want them pays the cost once rather than on every load.
+ */
 const PANELS_OPEN_BY_DEFAULT = {
   swing: [
     'swing verdict', 'quote', "optic's perspective", 'close defence',
-    'price, moving averages', 'seasonality', 'corporate actions',
+    'price, moving averages',
   ],
   earnings: ['event pricing', 'earnings verdict', 'next report'],
   long: ['long-term view', 'close defence', 'valuation vs its own history'],
@@ -15778,6 +18061,13 @@ function addBulkControl(view) {
   const host = views[view];
   if (!host || host.querySelector('.panel-bulk')) return;
   if (host.querySelectorAll('.panel[data-collapsible="1"]').length < 4) return;
+  /* Skipped when the section index is going to render them itself.
+   *
+   * Two stacked bars where only the top one is sticky: the index pinned under
+   * the chrome and this bar scrolled up underneath it, so Expand all and
+   * Collapse all crossed through the chips on their way past. Both are
+   * navigation for the same stack of panels and belong on one row. */
+  if (host.querySelectorAll('.panel[data-collapsible="1"]').length >= SECTION_INDEX_MIN) return;
   const bar = document.createElement('div');
   bar.className = 'panel-bulk span-all';
   bar.innerHTML = `<button type="button" class="bulk-btn" data-bulk="open">Expand all</button>
@@ -15787,6 +18077,237 @@ function addBulkControl(view) {
     if (b) setAllPanels(view, b.dataset.bulk === 'open');
   });
   host.insertBefore(bar, host.firstChild);
+}
+
+/* ------------------------------------------------------- section index
+ *
+ * A jump bar, because collapsing panels fixed the wrong half of the problem.
+ *
+ * The Swing view is 8,974px on a 971px viewport — nine screens — and 21 of its
+ * 29 panels already open collapsed. Collapsing cuts how much a reader READS and
+ * does nothing about how far they travel: the sections are still laid end to
+ * end, so finding the options chain means scrolling past twenty headings that
+ * are each only 57px but add to two full screens of nothing but titles.
+ *
+ * One click instead. Built from the panels themselves after render rather than
+ * from a hand-kept list, so it cannot name a section the view does not have —
+ * the same reason the desks live server-side in feeds.py.
+ */
+const SECTION_INDEX_MIN = 6;
+
+/* Where page chrome goes on a view that leads with the Optic loop.
+ *
+ * The loop answers the question; everything else on the page is evidence for
+ * it. So the jump index and the legal banner belong at the top of the evidence,
+ * not above the conclusion — inserted at firstChild they pushed OPTIC PULSE
+ * down to sixth on the page, behind the profile, the session strip, a chip row
+ * and a disclaimer.
+ *
+ * Returns the node to insert BEFORE: the first thing after the loop, or the
+ * view's first child on a view that has no loop. */
+function afterOpticLoop(host) {
+  const blocks = host.querySelectorAll(':scope > .pl-hero, :scope > .pl-block');
+  const last = blocks[blocks.length - 1];
+  return last ? last.nextSibling : host.firstChild;
+}
+
+function buildSectionIndex(view) {
+  const host = views[view];
+  if (!host) return;
+  const existing = host.querySelector('.sec-index');
+  if (existing) existing.remove();
+
+  const panels = [...host.querySelectorAll('.panel[data-collapsible="1"]')];
+  if (panels.length < SECTION_INDEX_MIN) return;
+
+  const nav = document.createElement('nav');
+  nav.className = 'sec-index span-all';
+  nav.setAttribute('aria-label', 'Jump to a section');
+  nav.innerHTML = panels.map((panel, i) => {
+    if (!panel.id) panel.id = `sec-${view}-${i}`;
+    const head = panel.querySelector(':scope > h2');
+    /* The heading minus its own chrome.
+     *
+     * A heading carries the Ask-Pulse button, the collapse chevron and often a
+     * "· daily bars, 126 of 502 shown" qualifier. Cloning and stripping is the
+     * only reliable way to get the name: textContent alone produced chips
+     * reading "GEX. Dealer gamma exposureAsk Pulse". */
+    const clone = head.cloneNode(true);
+    clone.querySelectorAll('button, .th-plain, .lvl-count, .chip').forEach((n) => n.remove());
+    let label = (clone.textContent || '').replace(/\s+/g, ' ').trim();
+    label = label.replace(/\s*[·—-]\s*$/, '');
+    if (label.length > 26) label = label.slice(0, 25).trimEnd() + '…';
+    return `<button type="button" class="sec-chip" data-sec-jump="${esc(panel.id)}"
+      title="${esc((clone.textContent || '').replace(/\s+/g, ' ').trim())}">${esc(label)}</button>`;
+  }).join('');
+
+  /* The bulk controls ride along, after the fade so they sit above it.
+   * position: sticky keeps them against the right edge while the chips scroll
+   * under them, which is the only way one row can hold both. */
+  const bulk = document.createElement('div');
+  bulk.className = 'sec-bulk';
+  bulk.innerHTML = `<button type="button" class="sec-bulk-btn" data-bulk="open">Expand all</button>
+    <button type="button" class="sec-bulk-btn" data-bulk="close">Collapse all</button>`;
+  nav.appendChild(bulk);
+
+  host.insertBefore(nav, afterOpticLoop(host));
+  armSectionIndex(view, nav, panels);
+}
+
+function armSectionIndex(view, nav, panels) {
+  /* Make the strip drivable.
+   *
+   * It was built as a one-row horizontal scroller with the scrollbar hidden,
+   * which on a desktop leaves no way to reach the far end at all: a mouse wheel
+   * sends deltaY, a horizontal container ignores it, and there was no visible
+   * bar to drag. Twelve of twenty-eight sections were simply unreachable.
+   *
+   * Wheel over the strip scrolls it sideways. preventDefault is called ONLY
+   * while the strip can still move that way — at either end the event is left
+   * alone so the page scrolls normally instead of the pointer landing in a trap
+   * that eats the gesture.
+   */
+  nav.addEventListener('wheel', (evt) => {
+    const delta = Math.abs(evt.deltaX) > Math.abs(evt.deltaY) ? evt.deltaX : evt.deltaY;
+    if (!delta) return;
+    const max = nav.scrollWidth - nav.clientWidth;
+    if (max <= 0) return;
+    const next = Math.max(0, Math.min(max, nav.scrollLeft + delta));
+    if (next === nav.scrollLeft) return;      // at an end: let the page have it
+    evt.preventDefault();
+    nav.scrollLeft = next;
+  }, { passive: false });
+
+  /* Drag to pan, for a trackpad or a touch screen where a horizontal flick is
+   * natural but the strip is too short to bounce. Pointer capture so a drag
+   * that leaves the strip keeps working. */
+  let drag = null;
+  nav.addEventListener('pointerdown', (evt) => {
+    if (evt.button !== 0 || evt.target.closest('[data-sec-jump]')) return;
+    drag = { x: evt.clientX, left: nav.scrollLeft };
+    try { nav.setPointerCapture(evt.pointerId); } catch (e) { /* not capturable */ }
+  });
+  nav.addEventListener('pointermove', (evt) => {
+    if (!drag) return;
+    nav.scrollLeft = drag.left - (evt.clientX - drag.x);
+  });
+  nav.addEventListener('pointerup', () => { drag = null; });
+  nav.addEventListener('pointercancel', () => { drag = null; });
+
+  /* Say which way there is more.
+   *
+   * The edge fades are the only cue that the row continues, and a fade at an end
+   * with nothing past it is a lie about there being more. So each side is set
+   * from the actual scroll position. */
+  const marks = () => {
+    const max = nav.scrollWidth - nav.clientWidth;
+    nav.classList.toggle('more-left', nav.scrollLeft > 2);
+    nav.classList.toggle('more-right', nav.scrollLeft < max - 2);
+  };
+  nav.addEventListener('scroll', marks, { passive: true });
+  if (typeof ResizeObserver === 'function') new ResizeObserver(marks).observe(nav);
+  marks();
+
+  nav.addEventListener('click', (evt) => {
+    const bulkBtn = evt.target.closest('[data-bulk]');
+    if (bulkBtn) { setAllPanels(view, bulkBtn.dataset.bulk === 'open'); return; }
+    const chip = evt.target.closest('[data-sec-jump]');
+    if (!chip) return;
+    const panel = document.getElementById(chip.dataset.secJump);
+    if (!panel) return;
+    /* Open it on the way. Jumping to a collapsed panel lands the reader on a
+     * title with nothing under it, which looks like the link is broken rather
+     * than like the section is closed. */
+    const wasClosed = panel.classList.contains('is-closed');
+    if (wasClosed) {
+      const head = panel.querySelector(':scope > h2.is-toggle');
+      if (head) head.click();
+    }
+    /* Scroll on the next frame when the panel had to be opened.
+     *
+     * scrollIntoView computes its target from the CURRENT layout, and expanding
+     * a section changes the height of everything below it — so scrolling in the
+     * same tick aims at where the panel was before it grew. Measured: the click
+     * opened the panel and the page did not move at all.
+     *
+     * Two frames rather than one, matching wsEnsureChart's comment: the class
+     * change has to be styled and laid out before the offset is real. */
+    /* Animate a short hop, land a long one.
+     *
+     * `scroll-behavior: smooth` on the root means even `behavior: 'auto'`
+     * animates — the option defers to the CSS. Native smooth scrolling scales
+     * its duration with distance and is not configurable, and measured on this
+     * view a jump to the gamma section covered 8,310px and took 1.75 seconds.
+     * That is not premium, it is a wait: the reader has already told you where
+     * they want to be by clicking the name of it.
+     *
+     * Two screens is the line. Below it the movement shows you how far you
+     * went, which is worth having. Above it there is nothing to see on the way.
+     */
+    const go = () => {
+      const distance = Math.abs(panel.getBoundingClientRect().top);
+      const instant = reducedMotion() || distance > window.innerHeight * 2;
+      panel.scrollIntoView({ block: 'start', behavior: instant ? 'instant' : 'smooth' });
+    };
+    if (wasClosed) requestAnimationFrame(() => requestAnimationFrame(go));
+    else go();
+  });
+
+  /* Mark which section is on screen.
+   *
+   * rootMargin's top inset is the sticky chrome: without it a panel counts as
+   * visible while it is still behind the top bar, so the highlight ran one
+   * section ahead of what the reader could see.
+   */
+  const chipFor = {};
+  nav.querySelectorAll('[data-sec-jump]').forEach((c) => { chipFor[c.dataset.secJump] = c; });
+  /* Exactly one chip lit: the last section to have STARTED above the fold.
+   *
+   * Two wrong versions before this one, both from using intersection as the
+   * test. Toggling per entry lit every panel in the observer band, and with
+   * closed panels at 57px four of them fit — "where am I" answered four ways.
+   * Taking the topmost of those was worse in a subtler way: a jump to Net
+   * premium by strike lit VEX, because VEX's tail still reached into the band
+   * and it comes first in the DOM. The highlight named the section you had just
+   * scrolled away from.
+   *
+   * "Which section have I most recently entered" is not an intersection
+   * question, it is a comparison of top edges against the chrome line. So that
+   * is what it measures: the last panel whose top is at or above the line wins,
+   * which is the heading a reader sees pinned under the bar.
+   *
+   * rAF-throttled rather than run per scroll event, because this reads layout
+   * and a scroll fires far more often than a frame paints.
+   */
+  const CHROME_LINE = 170;
+  let queued = false;
+  const mark = () => {
+    queued = false;
+    let current = panels[0];
+    panels.forEach((p) => {
+      if (p.getBoundingClientRect().top <= CHROME_LINE) current = p;
+    });
+    const id = current && current.id;
+    Object.keys(chipFor).forEach((key) => {
+      chipFor[key].classList.toggle('on', key === id);
+    });
+    // Keep the lit chip reachable without hunting for it in a 3,600px strip.
+    const chip = id && chipFor[id];
+    if (chip && nav.scrollWidth > nav.clientWidth) {
+      const c = chip.getBoundingClientRect();
+      const n = nav.getBoundingClientRect();
+      if (c.left < n.left || c.right > n.right) {
+        nav.scrollLeft += (c.left - n.left) - (n.width - c.width) / 2;
+      }
+    }
+  };
+  const onScroll = () => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(mark);
+  };
+  window.addEventListener('scroll', onScroll, { passive: true });
+  mark();
 }
 
 function makePanelsCollapsible(view) {
@@ -15929,6 +18450,9 @@ document.addEventListener('change', (evt) => {
     else if (key === 'insiders') { showInsiders = on; storeFlag(SHOW_INS_KEY, on); }
     else if (key === 'zones') { showZones = on; storeFlag(SHOW_ZONES_KEY, on); }
     else if (key === 'ema') { setFamily('ema', on); }
+    // Routed through the shared setter rather than assigned here, so this menu
+    // and the Charting toolbar cannot drift apart about what a toggle means.
+    else if (key === 'cloud921' || key === 'cloud2150') { wsSetOverlay(key, on); }
     if (STATE.swing) preserveUI(views.swing, () => renderSwing(STATE.swing));
     return;
   }
@@ -15971,13 +18495,21 @@ document.addEventListener('click', (evt) => {
     // renderer so a view physically cannot be added without it.
     const banner = legalBanner(view);
     if (banner && views[view] && !views[view].querySelector('.legal-area')) {
-      views[view].insertAdjacentHTML('afterbegin', banner);
+      // Above the evidence, below the answer. See afterOpticLoop.
+      const host = views[view];
+      const anchor = afterOpticLoop(host);
+      const holder = document.createElement('div');
+      holder.innerHTML = banner;
+      while (holder.firstChild) host.insertBefore(holder.firstChild, anchor);
     }
     glossHeaders(views[view]);
     dedupeGlossTerms(views[view]);
     // Last, so it wraps the finished DOM including anything the steps above added.
     makePanelsCollapsible(view);
     addBulkControl(view);
+    // After makePanelsCollapsible, which is what sets data-collapsible="1" —
+    // the index is built from that attribute, so ordering here is load-bearing.
+    buildSectionIndex(view);
     return result;
   };
   // Reassign the binding the rest of the file calls through.
@@ -16026,6 +18558,8 @@ function watchColorScheme() {
   // Not awaited: the picker falls back to a built-in default until the server's
   // list arrives, so nothing waits on it.
   loadPersonas();
+  loadCalendarSession();
+  mountMobileTabs();
   renderHome();
   updateStatus();
   try {

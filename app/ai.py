@@ -44,6 +44,19 @@ FALLBACK_BETA = "server-side-fallback-2026-07-01"
 # is real but it still has to cite the numbers and still carries the risk
 # warnings. A persona that dropped those would be a liability generator, and the
 # app has no sign-in.
+# Labels say what the lens does, and nothing else.
+#
+# They used to borrow first names as shorthand — "Warren, the long-term
+# investor", "Graham, the stoic", "Simon, the data guy". Every one of those
+# points at a real, identifiable investor, while the prompt directly underneath
+# it instructs the model not to impersonate any real person. The label and the
+# instruction contradicted each other, and the label is the part a reader sees
+# first, so the menu was making a claim about whose judgement was on offer that
+# the prompt then spent a sentence retracting.
+#
+# A plain description is also more useful at the point of choosing: "Statistician"
+# tells you what you will get back, where "Simon, the data guy" needs you to
+# already know who Simon is.
 PERSONAS: Dict[str, Dict[str, str]] = {
     "neutral": {
         "label": "Neutral analyst",
@@ -51,7 +64,7 @@ PERSONAS: Dict[str, Dict[str, str]] = {
         "prompt": "",
     },
     "longterm": {
-        "label": "Warren, the long-term investor",
+        "label": "Long-term investor",
         "blurb": "Business quality and price paid. Sceptical of anything that "
                  "needs a chart to justify it.",
         "prompt": (
@@ -67,7 +80,7 @@ PERSONAS: Dict[str, Dict[str, str]] = {
         ),
     },
     "stoic": {
-        "label": "Graham, the stoic",
+        "label": "Risk and process",
         "blurb": "Process over outcome. Talks about what you control, and about "
                  "position size before direction.",
         "prompt": (
@@ -80,7 +93,7 @@ PERSONAS: Dict[str, Dict[str, str]] = {
         ),
     },
     "quant": {
-        "label": "Simon, the data guy",
+        "label": "Statistician",
         "blurb": "Sample sizes, base rates and whether an edge survives a "
                  "correction for multiple testing.",
         "prompt": (
@@ -95,7 +108,7 @@ PERSONAS: Dict[str, Dict[str, str]] = {
         ),
     },
     "skeptic": {
-        "label": "Karen, the sceptic",
+        "label": "Devil's advocate",
         "blurb": "Argues the other side. Names what would have to be true for the "
                  "setup to fail.",
         "prompt": (
@@ -110,7 +123,7 @@ PERSONAS: Dict[str, Dict[str, str]] = {
         ),
     },
     "retail": {
-        "label": "The forum poster",
+        "label": "Plain English",
         "blurb": "Blunt and informal. Same numbers, same warnings, fewer "
                  "syllables.",
         "prompt": (
