@@ -7286,6 +7286,9 @@ table.data th,
 #chat-history-btn, .sec-bulk-btn, .sec-chip, .ws-wrail-btn, .ws-wrail-pulse,
 details.ind-explain > summary,
 details.read-cal-row > summary,
+.acct-btn, .acct-btn .acct-face, .acct-items button, .acct-out, .acct-warn button,
+.auth-alt button, .auth-close, .auth-link, .auth-peek, .auth-provider,
+.auth-toast-act, .chat-allow button, .set-danger .btn,
 table.data tr, *::-webkit-scrollbar-thumb {
   transition:
     color var(--dur-ui) var(--ease-ui),
@@ -8685,4 +8688,717 @@ body.cp-open { overflow: hidden; }
   .rh-routes { grid-template-columns: 1fr; }
   .rh-open { grid-template-columns: 6ch 1fr; }
   .rh-item-when { display: none; }
+}
+
+/* ==========================================================================
+   Accounts
+   ==========================================================================
+
+   Sign-in, the account menu, and the Security and Profile blocks in Settings.
+   One dialog, one dropdown, one toast stack. Tokens throughout — no hex values,
+   4px spacing grid, and motion on paint-level properties only, which is the
+   same rule the rest of this stylesheet follows.
+
+   The dialog is a centred card on a desktop and a bottom sheet on a phone. Not
+   a full-screen page: the whole point of the interruption model is that the
+   work behind it stays visible, so somebody who pressed Save on an NVDA read
+   can still see the NVDA read while they sign in. */
+
+/* ------------------------------------------------------- the topbar slot */
+
+/* Fixed 38px square whatever state it is in, so the answer arriving from
+   /api/auth/me does not move the Pulse button sideways. The loading state is a
+   dim circle rather than nothing for the same reason. */
+.account-slot {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  height: 38px;
+}
+
+.acct-wait {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-pill);
+  background: var(--raised);
+  border: 1px solid var(--border);
+}
+
+.acct-signin {
+  padding: var(--space-2) var(--space-4);
+  font: 600 var(--t-body)/1 var(--sans);
+  color: var(--ink);
+}
+
+.acct-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+}
+
+.acct-btn:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+
+.acct-face {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  object-fit: cover;
+  font: 600 var(--t-caption)/1 var(--sans);
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+
+.acct-btn:hover .acct-face { border-color: var(--s1); }
+
+/* ------------------------------------------------------ the account menu */
+
+.acct-menu {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  z-index: 80;
+  width: 248px;
+  padding: var(--space-2);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  box-shadow: 0 12px 32px var(--scroll-shade);
+}
+
+.acct-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.acct-name { font: 600 var(--t-base)/1.3 var(--sans); color: var(--ink); }
+
+/* Email addresses are long and this menu is narrow, so the address truncates
+   rather than wrapping to three lines and pushing the sign-out button off. */
+.acct-mail {
+  font: 400 var(--t-caption)/1.4 var(--sans);
+  color: var(--ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acct-plan {
+  margin-top: var(--space-1);
+  font: 600 var(--t-micro)/1 var(--sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-2);
+}
+
+.acct-warn {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--raised);
+  border-radius: var(--r-sm);
+  font: 400 var(--t-caption)/1.45 var(--sans);
+  color: var(--ink-2);
+}
+
+.acct-warn button {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: 600 var(--t-caption)/1.45 var(--sans);
+  color: var(--s1);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.acct-items { display: flex; flex-direction: column; padding: var(--space-1) 0; }
+
+.acct-items button,
+.acct-out {
+  display: block;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: none;
+  border: 0;
+  border-radius: var(--r-sm);
+  font: 500 var(--t-body)/1 var(--sans);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.acct-items button:hover, .acct-out:hover { background: var(--surface-2); }
+
+.acct-out {
+  margin-top: var(--space-1);
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--r-sm) var(--r-sm);
+  color: var(--ink-2);
+}
+
+/* ------------------------------------------------------------- the dialog */
+
+.auth-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5);
+}
+
+.auth-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--glass-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+}
+
+/* Scroll is locked while the dialog is up.
+ *
+ * `overflow: hidden` on body also disables `position: sticky` on the topbar,
+ * which is documented in CLAUDE.md as a trap. It is deliberate here and it is
+ * safe *because* it is scoped to a class that only exists while the dialog is
+ * open: the topbar is behind an opaque backdrop for exactly that long, and the
+ * declaration is gone before it is visible again. */
+body.auth-open { overflow: hidden; }
+
+.auth-card {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  max-height: calc(100vh - 2 * var(--space-5));
+  overflow-y: auto;
+  padding: var(--space-7) var(--space-6) var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  box-shadow: 0 24px 64px var(--scroll-shade);
+}
+
+.auth-close {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  width: 28px;
+  height: 28px;
+  background: none;
+  border: 0;
+  border-radius: var(--r-sm);
+  font: 400 20px/1 var(--sans);
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.auth-close:hover { background: var(--surface-2); color: var(--ink); }
+
+.auth-card h2 {
+  margin: 0 0 var(--space-2);
+  font: 600 var(--t-heading)/1.25 var(--display);
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.auth-sub {
+  margin: 0 0 var(--space-5);
+  font: 400 var(--t-body)/1.5 var(--sans);
+  color: var(--ink-muted);
+}
+
+/* Why the dialog opened, when it opened because somebody tried to keep
+   something. Left border rather than a filled panel: it is context, not an
+   alert. */
+.auth-reason {
+  margin: 0 0 var(--space-5);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--s1);
+  font: 400 var(--t-body)/1.5 var(--sans);
+  color: var(--ink-2);
+}
+
+/* ------------------------------------------------------------- providers */
+
+.auth-providers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.auth-provider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  /* 44px: a comfortable touch target, and the row these buttons form is the
+     first thing on the screen on a phone. */
+  min-height: 44px;
+  padding: 0 var(--space-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  font: 600 var(--t-body)/1 var(--sans);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.auth-provider:hover { border-color: var(--ink-muted); background: var(--raised); }
+.auth-provider:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+
+.auth-glyph { width: 17px; height: 17px; flex: none; }
+
+.auth-or {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-5) 0;
+  font: 500 var(--t-micro)/1 var(--sans);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-muted);
+}
+
+.auth-or::before, .auth-or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ----------------------------------------------------------------- fields */
+
+.auth-form { display: flex; flex-direction: column; gap: var(--space-4); }
+
+.auth-row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.auth-field { display: flex; flex-direction: column; gap: var(--space-2); }
+
+.auth-field > span {
+  font: 500 var(--t-caption)/1 var(--sans);
+  color: var(--ink-2);
+}
+
+.auth-field input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 var(--space-3);
+  background: var(--plane);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  font: 400 var(--t-base)/1 var(--sans);
+  color: var(--ink);
+}
+
+.auth-field input:focus {
+  outline: none;
+  border-color: var(--s1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--s1) 22%, transparent);
+}
+
+.auth-pw-wrap { position: relative; display: block; }
+
+/* Padded so the value never runs under the Show control. */
+.auth-pw-wrap input { padding-right: 60px; }
+
+.auth-peek {
+  position: absolute;
+  top: 50%;
+  right: var(--space-2);
+  transform: translateY(-50%);
+  min-width: 44px;
+  min-height: 30px;
+  padding: 0 var(--space-2);
+  background: none;
+  border: 0;
+  border-radius: var(--r-xs);
+  font: 600 var(--t-caption)/1 var(--sans);
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.auth-peek:hover { color: var(--ink); background: var(--surface-2); }
+
+.auth-policy {
+  margin: calc(-1 * var(--space-2)) 0 0;
+  padding: 0 0 0 var(--space-4);
+  list-style: none;
+  font: 400 var(--t-caption)/1.7 var(--sans);
+  color: var(--ink-muted);
+}
+
+/* No composition rules to tick off, so these are statements rather than a
+   checklist with live validation. NIST advises against the rules; showing
+   what is actually checked is the honest version. */
+.auth-policy li { position: relative; }
+
+.auth-policy li::before {
+  content: "";
+  position: absolute;
+  left: calc(-1 * var(--space-3));
+  top: 0.62em;
+  width: 3px;
+  height: 3px;
+  border-radius: var(--r-pill);
+  background: var(--ink-muted);
+}
+
+.auth-error,
+.auth-note {
+  padding: var(--space-3);
+  border-radius: var(--r-sm);
+  font: 400 var(--t-body)/1.5 var(--sans);
+}
+
+.auth-error {
+  background: color-mix(in srgb, var(--neg) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--neg) 34%, transparent);
+  color: var(--ink);
+}
+
+.auth-note {
+  background: var(--raised);
+  border: 1px solid var(--border);
+  color: var(--ink-2);
+}
+
+.auth-submit { min-height: 44px; font: 600 var(--t-base)/1 var(--sans); }
+.auth-submit:disabled { opacity: 0.65; cursor: progress; }
+
+.auth-link,
+.auth-alt button {
+  align-self: center;
+  background: none;
+  border: 0;
+  padding: var(--space-1);
+  font: 500 var(--t-body)/1 var(--sans);
+  color: var(--s1);
+  cursor: pointer;
+}
+
+.auth-link:hover, .auth-alt button:hover { text-decoration: underline; }
+
+.auth-alt {
+  margin: var(--space-5) 0 0;
+  text-align: center;
+  font: 400 var(--t-body)/1.5 var(--sans);
+  color: var(--ink-muted);
+}
+
+.auth-alt button { display: inline; padding: 0; }
+
+.auth-legal {
+  margin: var(--space-5) 0 0;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+  font: 400 var(--t-caption)/1.5 var(--sans);
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+/* ------------------------------------------------------------------ toasts */
+
+.auth-toasts {
+  position: fixed;
+  bottom: var(--space-5);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: min(440px, calc(100vw - 2 * var(--space-5)));
+  pointer-events: none;
+}
+
+.auth-toast {
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--s1);
+  border-radius: var(--r-sm);
+  box-shadow: 0 8px 24px var(--scroll-shade);
+  font: 400 var(--t-body)/1.5 var(--sans);
+  color: var(--ink);
+  cursor: pointer;
+  pointer-events: auto;
+  opacity: 1;
+  transition: opacity var(--dur-ui) var(--ease-ui);
+}
+
+.auth-toast.bad { border-left-color: var(--neg); }
+.auth-toast.warn { border-left-color: var(--warn); }
+.auth-toast.gone { opacity: 0; }
+
+/* --------------------------------------------------------- passkey promo */
+
+.auth-promo {
+  position: fixed;
+  bottom: var(--space-5);
+  right: var(--space-5);
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: min(340px, calc(100vw - 2 * var(--space-4)));
+  padding: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  box-shadow: 0 16px 40px var(--scroll-shade);
+}
+
+.auth-promo-copy { display: flex; flex-direction: column; gap: var(--space-2); }
+.auth-promo-copy strong { font: 600 var(--t-base)/1.3 var(--sans); color: var(--ink); }
+
+.auth-promo-copy span {
+  font: 400 var(--t-body)/1.5 var(--sans);
+  color: var(--ink-muted);
+}
+
+.auth-promo-act { display: flex; gap: var(--space-2); }
+.auth-promo-act .btn { flex: 1; min-height: 38px; }
+
+/* --------------------------------------------------- Settings: the account */
+
+.set-acct { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.set-acct-id {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.set-acct-face {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  flex: none;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  object-fit: cover;
+  font: 600 var(--t-base)/1 var(--sans);
+  color: var(--ink);
+}
+
+.set-acct-who { display: flex; flex-direction: column; gap: var(--space-0); min-width: 0; }
+.set-acct-who strong { font: 600 var(--t-base)/1.3 var(--sans); color: var(--ink); }
+
+.set-acct-who span {
+  font: 400 var(--t-caption)/1.4 var(--sans);
+  color: var(--ink-muted);
+}
+
+/* One row per thing that can be connected or revoked. The grid keeps the
+   right-hand control aligned down the column however long the label is. */
+.set-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.set-row:last-child { border-bottom: 0; }
+
+.set-row-main { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+
+.set-row-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font: 500 var(--t-body)/1.3 var(--sans);
+  color: var(--ink);
+}
+
+.set-row-note {
+  font: 400 var(--t-caption)/1.45 var(--sans);
+  color: var(--ink-muted);
+}
+
+.set-row-act { display: flex; gap: var(--space-2); }
+.set-row-act .btn { padding: var(--space-1) var(--space-3); font-size: var(--t-caption); }
+
+.set-tag {
+  padding: 2px var(--space-2);
+  border-radius: var(--r-pill);
+  font: 600 var(--t-micro)/1.6 var(--sans);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.set-tag.on {
+  background: color-mix(in srgb, var(--good) 18%, transparent);
+  color: var(--ink);
+}
+
+.set-tag.off { background: var(--raised); color: var(--ink-muted); }
+
+.set-tag.here {
+  background: color-mix(in srgb, var(--s1) 20%, transparent);
+  color: var(--ink);
+}
+
+.set-danger .btn { border-color: color-mix(in srgb, var(--neg) 45%, transparent); }
+.set-danger .btn:hover { background: color-mix(in srgb, var(--neg) 14%, transparent); }
+
+.set-guest {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+.set-guest p { margin: 0; font: 400 var(--t-body)/1.55 var(--sans); color: var(--ink-2); }
+
+/* ------------------------------------------------------------------ phone */
+
+@media (max-width: 559px) {
+  /* A bottom sheet. A centred card on a 375px screen leaves a strip of
+     backdrop above and below that does nothing except make the card smaller. */
+  .auth-modal { align-items: flex-end; padding: 0; }
+
+  .auth-card {
+    max-width: none;
+    max-height: 92vh;
+    padding: var(--space-6) var(--space-4) var(--space-5);
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    border-bottom: 0;
+    /* Clears the home indicator on a notched phone. */
+    padding-bottom: calc(var(--space-5) + env(safe-area-inset-bottom, 0px));
+  }
+
+  .auth-row2 { grid-template-columns: 1fr; }
+
+  .acct-menu {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    right: 0;
+    left: 0;
+    width: auto;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+  }
+
+  .auth-promo {
+    right: var(--space-3);
+    left: var(--space-3);
+    bottom: var(--space-3);
+    width: auto;
+  }
+
+  .set-row { grid-template-columns: 1fr; }
+  .set-row-act { justify-content: flex-start; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-toast { transition: none; }
+}
+
+/* ------------------------------------------- Settings: security sub-blocks */
+
+.set-h3 {
+  margin: var(--space-6) 0 var(--space-2);
+  font: 600 var(--t-caption)/1 var(--sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+}
+
+.set-h3:first-child { margin-top: 0; }
+
+.set-count {
+  margin-left: var(--space-1);
+  padding: 1px var(--space-2);
+  background: var(--raised);
+  border-radius: var(--r-pill);
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--ink-2);
+}
+
+.set-profile .set-row-act { flex-wrap: wrap; }
+.set-profile input { max-width: 132px; }
+
+.set-pw {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 340px;
+  margin: var(--space-3) 0 var(--space-4);
+  padding: var(--space-4);
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+/* An author `display` beats the UA stylesheet's `[hidden] { display: none }`
+   whatever the specificity, so the form rendered open on every visit to
+   Settings. Any rule that sets `display` on an element that also carries the
+   `hidden` attribute needs this pair. */
+.set-pw[hidden] { display: none; }
+
+/* --------------------------------------------------- the Pulse allowance */
+
+/* Above the input, not below the answer. The point is to say what is left
+   before somebody types, because a 429 arriving mid-answer reads as a fault. */
+.chat-allow {
+  margin: 0 0 var(--space-2);
+  font: 400 var(--t-caption)/1.5 var(--sans);
+  color: var(--ink-muted);
+}
+
+.chat-allow.spent { color: var(--ink-2); }
+
+.chat-allow button {
+  padding: 0;
+  background: none;
+  border: 0;
+  font: 600 var(--t-caption)/1.5 var(--sans);
+  color: var(--s1);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.auth-toast-act {
+  display: block;
+  margin-top: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  background: var(--btn-primary);
+  border: 0;
+  border-radius: var(--r-sm);
+  font: 600 var(--t-caption)/1.6 var(--sans);
+  color: var(--btn-primary-ink);
+  cursor: pointer;
 }

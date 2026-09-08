@@ -11,7 +11,10 @@ Live at https://theopticterminal.com (Railway, auto-deploys from `main`).
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Tests: `.venv/bin/python -m pytest -q`. There are 656 and they all pass; keep it that way.
+Tests: `.venv/bin/python -m pytest -q`. There are 961 and they all pass; keep it that way.
+
+A development account: `.venv/bin/python -m app.seed`. It prints a generated password
+once and refuses to run when a hosting platform is in the environment.
 
 There is **no JS test runner** in this project. Client-side behaviour is verified in a
 real browser, and client-side *contracts* are asserted by reading `static/*.js` as text
@@ -37,7 +40,40 @@ That bug shipped once.
 
 ## Things that will bite you
 
-**Two session models.** `app/session.py` is authoritative and models the ten NYSE
+**"Session" means two different things.** `app/session.py` is about the *market*
+session (which trading phase is open). `app/auth/` is about a *sign-in* session. They
+share a word and nothing else; a function that says "session" has to say which.
+
+**Accounts are additive and nothing gates the terminal.** Every research endpoint
+answers a guest exactly as it did before accounts existed, and that is a requirement,
+not a current state of affairs. What an account changes is where the watchlist and
+saved research are *kept*. `tests/test_auth_authorization.py` asserts the open
+surface stays open, and it is the test that will catch somebody wrapping the wrong
+router in a login check.
+
+**`PRAGMA foreign_keys=ON` is per connection.** SQLite ships it off. Without it every
+`ON DELETE CASCADE` in `app/db.py` is decoration and an orphaned session row still
+authenticates. `app/db.py:_connect()` sets it; a second connection helper anywhere
+else must too.
+
+**Saved research is at `/api/saved-research`.** `/api/research` was already taken by
+the streaming deep-research endpoint in `app/main.py`, which is registered first and
+wins. Sharing the path left GET working and POST quietly running a web search.
+`tests/test_account_data.py` has a route-collision test that reads main.py's
+decorators, because comparing router paths on the running app cannot see a collision
+at all: the two entries are the same string.
+
+**An author `display` beats the UA stylesheet's `[hidden] { display: none }`** whatever
+the specificity. `.set-pw` set `display: flex` and the password form rendered open on
+every visit to Settings. Any rule that gives an element a `display` needs a
+`[hidden]` pair beside it.
+
+**The assistant must survive the accounts database being gone.** `_spend_guard` reads
+the daily allowance out of SQLite and catches `(sqlite3.Error, OSError)` — OSError as
+well, because opening the database creates its directory first and an unmounted volume
+raises from `os.makedirs`. Catching only the sqlite family left a 500 on `/api/chat`.
+
+**Two market session models.** `app/session.py` is authoritative and models the ten NYSE
 holidays and three early closes from the exchange's rules. `static/app.js` has its own
 `marketSessionFromClock()` that knows only about weekends — it is a pre-load fallback
 only. `marketSessionET()` defers to the server. Do not add calendar logic to the client;
@@ -101,6 +137,14 @@ commit SHA to match. `DEPLOY.md` has the detail.
 
 `OPTIC_WRITE_TOKEN` must be set in Railway Variables or manual scans and alert-clearing
 return 503. Scheduled scans are unaffected.
+
+`APP_URL` must be set once a custom domain is attached. The OAuth redirect URIs, the
+WebAuthn RP id and the links inside verification emails are all derived from it, and it
+is configuration rather than a read of the Host header because a Host header is
+attacker-controlled: a reset link built from one can be aimed at another site.
+
+`.env.example` lists every variable and what each one adds. The app runs with none of
+them set.
 
 `.env` is gitignored and mode 600. `data/` and `.share/` are gitignored. Attachments are
 never written to disk — base64 passes through to the API and is discarded.

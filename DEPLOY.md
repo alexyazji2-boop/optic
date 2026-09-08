@@ -52,10 +52,54 @@ resets on every deploy — a tracker that silently forgets.
 | `LEDGER_SNAPSHOT_KEEP` | Optional | How many snapshots to retain, default 7. |
 | `PORT` | No | Railway sets it; the Dockerfile honours it. |
 
-`ANTHROPIC_API_KEY` on a public URL means visitors spend your credits. The
-per-IP cap in `_spend_guard` limits the damage but is not access control.
+`ANTHROPIC_API_KEY` on a public URL means visitors spend your credits. Accounts
+change the shape of that exposure rather than removing it: a guest now gets a small
+daily allowance and an account gets its plan's, so a stranger with the URL can spend
+a few messages instead of the balance. Still not access control.
 
-### 3b. Memory, and why the restart policy is ALWAYS
+### 3a. Variables for accounts
+
+Sign-in works with **none** of these set: email and password accounts and passkeys
+need no third party. Each provider reports what it is missing and its button stays
+hidden until it has it, the same contract `ANTHROPIC_API_KEY` already uses.
+
+| Variable | Needed? | Notes |
+|---|---|---|
+| `APP_URL` | **Yes, with a custom domain** | `https://theopticterminal.com`, no trailing slash. The OAuth redirect URIs, the WebAuthn RP id and the links inside verification emails all derive from it. Not read from the Host header on purpose: that header is attacker-controlled, and a reset link built from one can be aimed elsewhere. |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | For Google | Cloud console, OAuth client ID, Web application. Authorised redirect URI must be exactly `https://theopticterminal.com/api/auth/google/callback`. |
+| `APPLE_CLIENT_ID` / `APPLE_TEAM_ID` / `APPLE_KEY_ID` / `APPLE_PRIVATE_KEY` | For Apple | Needs a paid Apple Developer membership. `APPLE_CLIENT_ID` is the **Service ID**, not the App ID. The private key is the whole `.p8` contents; a literal `\n` from a dashboard paste is accepted and converted, which is the most common reason the token exchange fails with an unhelpful `invalid_client`. |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` / `EMAIL_FROM` | For email | Verification and reset links. Unset, they are written to the server log and the UI says so rather than claiming mail was sent. Port 465 is implicit TLS; anything else opens in the clear and upgrades with STARTTLS. |
+| `GUEST_AI_CALLS_PER_DAY` | Optional | Assistant messages a guest gets per day. Default 5. Signing in raises it to the plan's allowance. |
+| `WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGIN` | Rarely | Both derive from `APP_URL`. Set `RP_ID` only to bind passkeys to a parent domain; `WEBAUTHN_ORIGIN` takes extra comma-separated origins, which is what a DNS move needs so assertions from the old domain still verify. |
+| `SESSION_TTL_SECONDS` | Optional | Default 30 days, slid forward on use. |
+| `COOKIE_SECURE` | No | Decided by whether a hosting platform is present. Secure on the live site, not on `http://localhost` where the browser would silently drop the cookie. |
+
+Google's redirect URI has to match **character for character**, including the scheme
+and any trailing slash. A mismatch is rejected by Google before the app is reached,
+so there is nothing in the server log to find.
+
+Apple needs HTTPS and a real domain and therefore cannot be tested on localhost.
+Passkeys can, but only at `http://localhost:8000` and not at `http://127.0.0.1:8000`:
+an IP address is not a valid WebAuthn RP id and the browser rejects the ceremony with
+a `SecurityError` before any request is sent.
+
+### 3b. Migrations
+
+There is no deploy step. The schema is brought up to date by a startup handler in
+`app/main.py`, because the deploy *is* a `git push` and there is no place to run a
+command between the build finishing and the container serving traffic. The runner is
+idempotent and forward-only, and it records what it has applied in
+`schema_migrations`.
+
+To run it by hand:
+
+    .venv/bin/python -m app.db migrate
+    .venv/bin/python -m app.db status
+
+A failure is logged and does **not** take the site down: every research endpoint works
+without the accounts database, and sign-in is the only thing that stops.
+
+### 3c. Memory, and why the restart policy is ALWAYS
 
 A scan screens the NASDAQ in chunks of 150 symbols, so it does not hold every
 symbol's bars at once — `absorb()` reduces each chunk to a small metric dict and
@@ -91,8 +135,16 @@ Settings → Networking → **Generate Domain** for a `*.up.railway.app` URL, or
 
 ## Reads are open, writes are not
 
-There is no sign-in and every research endpoint answers anybody. Four endpoints
-change stored state and are gated by `OPTIC_WRITE_TOKEN`:
+Every research endpoint answers anybody, with or without an account. Accounts exist so
+a watchlist and saved research can be *kept*; they gate nothing that worked before.
+
+The one thing metered by account is the assistant, because it spends money per call:
+a guest gets `GUEST_AI_CALLS_PER_DAY` messages a day, an account gets its plan's
+allowance, and the per-address hourly cap sits over both as the burst limit.
+
+Four endpoints change the shared paper-trading record and are gated by
+`OPTIC_WRITE_TOKEN` rather than by an account, because that record belongs to the
+operator and not to any user:
 
     POST /api/tracker/scan       opens paper positions
     POST /api/tracker/mark       re-marks open positions
@@ -111,6 +163,23 @@ token; allowing outright would leave a forgotten deployment wide open.
 The browser prompts for the token once on the first 401 and keeps it in
 localStorage. Scheduled scans are unaffected — the gate is on HTTP, not on the
 background loop, so the record keeps building whether or not a token is set.
+
+## What is on the volume now
+
+    /app/data/tracker.db     the shared paper-trading ledger
+    /app/data/alerts.db      the alert inbox
+    /app/data/accounts.db    accounts, sessions, passkeys, watchlists, saved research
+    /app/data/snapshots/     dated copies of the ledger
+
+`accounts.db` is a separate file from the ledger on purpose. The ledger is the
+*system's* record, identical for every visitor; `accounts.db` is *people's* data.
+Different blast radius, different backup story, and a migration that takes a write
+lock on one must not stall the other.
+
+**The daily snapshot covers the ledger only.** `accounts.db` is not backed up, and
+that is a real gap rather than an oversight: the snapshots live on the same volume as
+the original, so they cover corruption and an accidental wipe but not loss of the
+volume. Off-host backup needs somewhere to put it and is a separate job.
 
 ## Ledger snapshots
 
@@ -135,9 +204,11 @@ build.
 
 Two things a push does *not* carry, both gitignored on purpose:
 
-- **`.env`** — set variables in the dashboard instead.
-- **`data/tracker.db`** — production keeps its own ledger on the volume. Local
-  and hosted paper trades are separate records and never merge.
+- **`.env`** — set variables in the dashboard instead. `.env.example` is committed and
+  lists every name with what it adds.
+- **`data/tracker.db`** and **`data/accounts.db`** — production keeps its own ledger and
+  its own accounts on the volume. Local and hosted records are separate and never
+  merge. There is no path that copies accounts anywhere.
 
 Returning visitors see changes immediately: `index.html` is served
 `Cache-Control: no-cache`, so the browser revalidates instead of reusing a

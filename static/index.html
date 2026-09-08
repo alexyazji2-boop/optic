@@ -109,6 +109,12 @@
     </svg>
   </button>
 
+  <!-- Accounts. Empty until /api/auth/me answers: rendering "Sign in" and then
+       swapping it for an avatar a moment later is the flash that gives away a
+       bolted-on auth layer, and auth.js has a three-state model
+       (loading / guest / user) specifically to avoid it. -->
+  <div class="account-slot" id="account-slot"></div>
+
   <button class="btn primary" id="chat-toggle"><span class="pulse-mark">●</span>&nbsp;Pulse</button>
 </header>
 
@@ -213,6 +219,10 @@
      can pair new HTML with a stale charts.js/app.js, which surfaces as features
      silently not working rather than as an error. -->
 <script src="charts.js?v=397"></script>
+<!-- Before app.js: it exposes window.OpticAuth, which app.js reads at load to
+     decide whether the watchlist and the saved research come from the account or
+     from this browser. -->
+<script src="auth.js?v=397"></script>
 <script src="app.js?v=397"></script>
 </body>
 </html>

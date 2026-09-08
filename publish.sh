@@ -42,9 +42,28 @@ echo "  $(tail -1 /tmp/optic-publish-tests.log)"
 
 # Refuse to ship secrets. .gitignore already covers these, but `git add -A` plus
 # a mistaken `git add -f` in some earlier session is all it would take.
-if git status --porcelain | grep -qE '(^|/)\.env|tracker\.db|\.share/'; then
+#
+# **The paths are extracted before matching.** `git status --porcelain` prefixes
+# every line with a two-character status field and a space, so a pattern anchored
+# with `(^|/)` can never match a file at the repository root: the previous version
+# of this check caught `app/.env` and let `.env` itself straight through, which is
+# the one file it was written to stop. Measured, not assumed — see
+# tests/test_publish_guard.py, which runs this same pattern through grep.
+#
+# The `sed` strips the status field and, for a rename, the ` -> ` original.
+# `.env.example` is excluded first because it is committed on purpose; excluding
+# it by name rather than by a cleverer pattern means `.env.local` and
+# `.env.production` are still refused.
+#
+# Any `.db`, not a list of three names. Naming them missed the ledger snapshots,
+# which are `tracker-20260908T000000Z.db` rather than `tracker.db` — caught by
+# this file's own test, not by inspection. No database belongs in this repository
+# under any name, so the rule is the extension.
+SENSITIVE='(^|/)\.env|\.db$|(^|/)\.share/'
+STAGED_PATHS=$(git status --porcelain | sed 's/^...//; s/^.* -> //' | grep -v '^\.env\.example$' || true)
+if printf '%s\n' "$STAGED_PATHS" | grep -qE "$SENSITIVE"; then
   echo "Refusing to publish: something sensitive is staged." >&2
-  git status --porcelain | grep -E '(^|/)\.env|tracker\.db|\.share/' >&2
+  printf '%s\n' "$STAGED_PATHS" | grep -E "$SENSITIVE" >&2
   exit 1
 fi
 

@@ -1,5 +1,12 @@
-# Secrets: the shared access password and any API keys live here.
+# Secrets: API keys and provider credentials live here.
+#
+# `.env.*` as well as `.env`, so a `.env.local` or `.env.production` cannot be
+# added by accident. `.env.example` is re-included: it holds no values, only the
+# list of variable names and what each one does, and it is the file somebody
+# reads to set up a deployment.
 .env
+.env.*
+!.env.example
 
 # Local runtime state — the tracker ledger is machine-local state, not source.
 data/

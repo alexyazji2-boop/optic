@@ -6,3 +6,15 @@ numpy>=1.23
 scipy>=1.9
 requests>=2.31
 anthropic>=0.60
+
+# Accounts. Three libraries, each doing cryptography that must not be hand-written.
+#
+# argon2-cffi   password hashing (Argon2id). See app/auth/passwords.py for why the
+#               parameters are OWASP's minimum rather than the library defaults.
+# PyJWT[crypto] verifies Google's and Apple's ID tokens against their published
+#               JWKS, and signs Apple's ES256 client secret. The [crypto] extra
+#               pulls in `cryptography`, which py_webauthn needs anyway.
+# webauthn      py_webauthn: attestation and assertion verification for passkeys.
+argon2-cffi>=23.1
+PyJWT[crypto]>=2.8
+webauthn>=2.0

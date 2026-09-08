@@ -2796,7 +2796,7 @@ document.addEventListener('submit', (evt) => {
 const WATCH_KEY = 'optic.chart.watch.v1';
 const WATCH_DEFAULT = ['SPY', 'QQQ', 'NVDA', 'AMD'];
 
-function watchList() {
+function localWatchList() {
   try {
     const raw = JSON.parse(localStorage.getItem(WATCH_KEY) || 'null');
     if (Array.isArray(raw) && raw.length) {
@@ -2806,22 +2806,75 @@ function watchList() {
   return WATCH_DEFAULT.slice();
 }
 
+/* Signed in, the list comes from the account; otherwise from this browser.
+ *
+ * Still synchronous. Callers all over this file render from it, and the
+ * account's copy is loaded once into ACCOUNT.watchlist by accountLoad() so this
+ * stays a read. `ACCOUNT.watchlist` being null means either not signed in or no
+ * list on the account yet, and the local list is the right answer in both. */
+function watchList() {
+  if (ACCOUNT.watchlist) return ACCOUNT.watchlist.slice();
+  return localWatchList();
+}
+
 function watchSave(list) {
   const clean = [...new Set(list.map((s) => String(s).toUpperCase().trim()).filter(Boolean))];
   try { localStorage.setItem(WATCH_KEY, JSON.stringify(clean)); } catch (e) { /* private */ }
   return clean;
 }
 
+/* Writes go to whichever store is in charge, and the local copy is kept in step
+ * either way. Somebody who signs out should find the list they were looking at,
+ * not the one they had before they signed in. */
+async function watchWrite(symbols) {
+  watchSave(symbols);
+  if (!signedIn()) return symbols;
+  try {
+    if (!ACCOUNT.listId) {
+      const made = await authApi('/api/watchlists', {
+        method: 'POST', body: { name: 'Main Watchlist', symbols: symbols },
+      });
+      ACCOUNT.listId = made.watchlist.id;
+      ACCOUNT.watchlist = made.watchlist.symbols || [];
+      return ACCOUNT.watchlist;
+    }
+    const updated = await authApi('/api/watchlists/' + ACCOUNT.listId + '/items', {
+      method: 'POST', body: { symbols: symbols },
+    });
+    ACCOUNT.watchlist = updated.watchlist.symbols || [];
+    return ACCOUNT.watchlist;
+  } catch (err) {
+    window.OpticAuth.toast(err.message, 'bad');
+    return symbols;
+  }
+}
+
 function watchAdd(symbol) {
-  const next = watchSave([...watchList(), symbol]);
-  STATE.watchlist = null;                 // force a refetch: the row is not local
+  const next = [...watchList(), String(symbol).toUpperCase().trim()];
+  const clean = [...new Set(next.filter(Boolean))];
+  if (ACCOUNT.watchlist) ACCOUNT.watchlist = clean;     // optimistic
+  watchWrite(clean).then(() => {
+    STATE.watchlist = null;               // force a refetch: the row is not local
+    loadWatchlist(true);
+  });
+  STATE.watchlist = null;
   loadWatchlist(true);
-  return next;
+  return clean;
 }
 
 function watchRemove(symbol) {
   const sym = String(symbol).toUpperCase();
-  watchSave(watchList().filter((s) => s !== sym));
+  const kept = watchList().filter((s) => s !== sym);
+  watchSave(kept);
+  if (ACCOUNT.watchlist) {
+    ACCOUNT.watchlist = kept;
+    if (ACCOUNT.listId) {
+      authApi('/api/watchlists/' + ACCOUNT.listId + '/items/' + encodeURIComponent(sym),
+        { method: 'DELETE' }).catch((err) => {
+        window.OpticAuth.toast(err.message, 'bad');
+      });
+    }
+  }
   if (STATE.watchlist && STATE.watchlist.rows) {
     // Drop it locally too so the row disappears on the click rather than after
     // the round trip.
@@ -9304,12 +9357,88 @@ function wsRenderDrawings() {
         width: Math.abs(pts[1][0] - pts[0][0]), height: Math.abs(pts[1][1] - pts[0][1]),
         fill: colour, 'fill-opacity': 0.07,
       }));
+      /* The readout, in the register the Stocks app uses.
+       *
+       * It said `0.66 (+0.31%) · 210 bars` on one cramped 10px line. Two
+       * problems with that. "210 bars" is a number nobody holds a view in —
+       * the question is which dates, and the chart already knows them. And the
+       * change was the same size as the bar count, so the figure the tool
+       * exists to produce had no more weight than its own footnote.
+       *
+       * Now two lines: the span above, the move below and larger. The dates
+       * come from the series labels, so they are the real sessions the two
+       * points landed on rather than an offset.
+       */
       const dPct = a.p ? ((b.p - a.p) / a.p) * 100 : 0;
       const bars = Math.abs(b.i - a.i);
+      /* Dates come from the series the chart is currently showing.
+       *
+       * wsRenderDrawings has `frame` but not `ps` — it runs against the mounted
+       * SVG rather than inside the render that built it. Reading STATE here is
+       * correct rather than lazy: a drawing stores bar indices, and the indices
+       * only mean anything against the window on screen right now, which is
+       * exactly what wsSeries returns. */
+      const dates = (wsSeries(STATE.chartData).dates || []);
+      const lo = a.i <= b.i ? a.i : b.i;
+      const hi = a.i <= b.i ? b.i : a.i;
+      /* The year goes on BOTH ends or neither.
+       *
+       * The first version appended it to the end date only, which produced
+       * "Nov 19 – Sep 24 2025" for a span starting in November 2024 — it reads
+       * as though both dates are 2025. A year on one end of a range is worse
+       * than none, because it looks like information.
+       *
+       * So: omit it when the span sits inside one year (the date axis under the
+       * chart already says which), and put it on both when it crosses one. */
+      const crossesYear = dates[lo] && dates[hi]
+        && String(dates[lo]).slice(0, 4) !== String(dates[hi]).slice(0, 4);
+      const stamp = (i) => {
+        const raw = String(dates[i] || '');
+        if (!raw) return null;
+        const d = new Date(raw.length <= 10 ? raw + 'T00:00:00Z' : raw);
+        if (Number.isNaN(d.getTime())) return raw.slice(0, 10);
+        return d.toLocaleDateString(undefined, {
+          day: 'numeric', month: 'short', timeZone: 'UTC',
+          ...(crossesYear ? { year: 'numeric' } : {}),
+        });
+      };
+      const from = stamp(lo);
+      const to = stamp(hi);
+      const span = (from && to) ? `${from} – ${to}`
+        // A drawing anchored outside the visible window has no dates to show:
+        // its indices only mean something against the series on screen.
+        : `${bars} bars`;
+      const midX = (pts[0][0] + pts[1][0]) / 2;
+      const topY = Math.min(pts[0][1], pts[1][1]);
+      // Direction colours the figure, so the sign is not doing the work alone.
+      const tone = (b.p - a.p) > 0 ? 'var(--pos)' : (b.p - a.p) < 0 ? 'var(--neg)' : colour;
+      /* A backing plate under the readout.
+       *
+       * The figures sit over the price action, and 14px semibold on top of
+       * candles is unreadable whichever colour it is — the reference this is
+       * modelled on gives the readout its own clear space in a header. Keeping
+       * it anchored to the measurement matters when there are two rulers on one
+       * chart, so it gets the space instead: an opaque plate the width of the
+       * wider of the two lines.
+       *
+       * Width from a character estimate rather than getComputedTextLength,
+       * because the nodes are not in the document yet and 6.4px per character
+       * at 14px semibold is close enough for a plate with padding. */
+      const figure = `${(b.p - a.p) > 0 ? '+' : ''}${fmt(b.p - a.p, 2)}  ${fmtPct(dPct, 2)}`;
+      const plateW = Math.max(span.length * 5.4, figure.length * 6.4) + 14;
+      g.appendChild(el('rect', {
+        x: midX - plateW / 2, y: topY - 34, width: plateW, height: 32, rx: 6,
+        fill: 'var(--surface)', 'fill-opacity': 0.92,
+        stroke: 'var(--border)', 'stroke-width': 1,
+      }));
       g.appendChild(el('text', {
-        x: (pts[0][0] + pts[1][0]) / 2, y: Math.min(pts[0][1], pts[1][1]) - 6,
-        'text-anchor': 'middle', fill: colour, 'font-size': 10, 'font-weight': 600,
-      }, `${fmt(b.p - a.p, 2)} (${fmtPct(dPct, 2)}) · ${bars} bars`));
+        x: midX, y: topY - 21, 'text-anchor': 'middle', fill: 'var(--ink-muted)',
+        'font-size': 10,
+      }, span));
+      g.appendChild(el('text', {
+        x: midX, y: topY - 7, 'text-anchor': 'middle', fill: tone,
+        'font-size': 14, 'font-weight': 600, 'font-variant-numeric': 'tabular-nums',
+      }, figure));
     } else if (dr.kind === 'rr' && pts.length === 3) {
       // Entry, stop, target. Drawn as two stacked boxes so the shape itself
       // shows whether the reward is bigger than the risk — which is the only
@@ -11504,24 +11633,108 @@ const RESEARCH_ROUTES = [
     note: 'Deep research runs live web sources and cites them. Slower, and rate limited.' },
 ];
 
-function savedResearch() {
+function localSavedResearch() {
   try {
     const raw = JSON.parse(localStorage.getItem(RESEARCH_KEY) || '[]');
     return Array.isArray(raw) ? raw : [];
   } catch (e) { return []; }
 }
 
+/* Signed in, this reads the account's copy, loaded once by accountLoad().
+ * Otherwise it reads this browser's. Synchronous for the same reason
+ * `watchList()` is. */
+function savedResearch() {
+  if (ACCOUNT.research) return ACCOUNT.research;
+  return localSavedResearch();
+}
+
 function saveResearch(entry) {
-  const all = savedResearch();
+  if (signedIn()) {
+    const question = entry.question || '';
+    authApi('/api/saved-research', {
+      method: 'POST',
+      body: {
+        title: question.slice(0, 200),
+        symbol: entry.ticker || null,
+        content: question,
+        research_type: 'pulse',
+      },
+    }).then((reply) => {
+      const row = researchFromRow(reply.research);
+      ACCOUNT.research = [row, ...(ACCOUNT.research || [])];
+      if (STATE.view === 'scan') loadScan(false);
+    }).catch((err) => { window.OpticAuth.toast(err.message, 'bad'); });
+    return;
+  }
+
+  const all = localSavedResearch();
   all.unshift({ ...entry, at: new Date().toISOString() });
   // Capped. A saved list that grows without limit becomes an archive nobody
   // reads, and localStorage has a hard quota that fails silently when hit.
   try { localStorage.setItem(RESEARCH_KEY, JSON.stringify(all.slice(0, 40))); }
   catch (e) { /* private mode, or quota */ }
+
+  // The conversion moment from the design, without taking anything away: the
+  // question is already saved in this browser, and the offer is to keep it
+  // somewhere that survives a cleared cache. Not a wall, and not a lost save.
+  if (window.OpticAuth && window.OpticAuth.state().status === 'guest') {
+    offerAccountForResearch();
+  }
 }
 
-function dropResearch(at) {
-  const all = savedResearch().filter((r) => r.at !== at);
+let researchOfferShown = false;
+
+function offerAccountForResearch() {
+  if (researchOfferShown) return;         // once a session, not once a click
+  researchOfferShown = true;
+  const dismiss = window.OpticAuth.toast(
+    'Saved in this browser. An account keeps it across devices.');
+  const host = document.querySelector('#auth-toasts .auth-toast:last-child');
+  if (!host) return;
+  const action = document.createElement('button');
+  action.type = 'button';
+  action.className = 'auth-toast-act';
+  action.textContent = 'Create a free account';
+  action.addEventListener('click', (evt) => {
+    evt.stopPropagation();
+    dismiss();
+    // Whatever is in this browser follows them in: accountLoad() adopts the
+    // watchlist, and the saved questions are pushed up here.
+    window.OpticAuth.require('Keep your saved questions and watchlist across devices.',
+      async () => {
+        const local = localSavedResearch();
+        for (const row of local.slice(0, 40)) {
+          try {
+            await authApi('/api/saved-research', {
+              method: 'POST',
+              body: {
+                title: (row.question || '').slice(0, 200),
+                symbol: row.ticker || null,
+                content: row.question || '',
+                research_type: 'pulse',
+              },
+            });
+          } catch (err) { /* a duplicate or a full plan should not stop the rest */ }
+        }
+        await accountLoad();
+        if (STATE.view === 'scan') loadScan(false);
+        window.OpticAuth.toast('Your saved questions are on your account.');
+      });
+  });
+  host.appendChild(action);
+}
+
+function dropResearch(key) {
+  if (ACCOUNT.research) {
+    const row = ACCOUNT.research.filter((r) => (r.id || r.at) === key)[0];
+    ACCOUNT.research = ACCOUNT.research.filter((r) => (r.id || r.at) !== key);
+    if (row && row.id) {
+      authApi('/api/saved-research/' + encodeURIComponent(row.id), { method: 'DELETE' })
+        .catch((err) => { window.OpticAuth.toast(err.message, 'bad'); });
+    }
+    return;
+  }
+  const all = localSavedResearch().filter((r) => r.at !== key);
   try { localStorage.setItem(RESEARCH_KEY, JSON.stringify(all)); } catch (e) { /* private */ }
 }
 
@@ -11544,18 +11757,20 @@ function renderResearchHub() {
       <h3 class="rh-h3">Saved research <span class="rh-count">${saved.length}</span></h3>
       <ul class="rh-list">
         ${saved.slice(0, 8).map((r) => `<li class="rh-item">
-          <button type="button" class="rh-open" data-research-open="${esc(r.at)}">
+          <button type="button" class="rh-open" data-research-open="${esc(r.id || r.at)}">
             <span class="rh-item-sym">${esc(r.ticker || 'market')}</span>
             <span class="rh-item-q">${esc(String(r.question || '').slice(0, 110))}</span>
             <span class="rh-item-when">${esc(shortWhen(r.at))}</span>
           </button>
-          <button type="button" class="wl-x" data-research-drop="${esc(r.at)}"
+          <button type="button" class="wl-x" data-research-drop="${esc(r.id || r.at)}"
             aria-label="Forget this">&times;</button>
         </li>`).join('')}
       </ul>
-      ${saved.length > 8 ? `<p class="rh-more">${saved.length - 8} older, kept in this browser.</p>` : ''}
+      ${saved.length > 8 ? `<p class="rh-more">${saved.length - 8} older, kept ${
+    signedIn() ? 'on your account' : 'in this browser'}.</p>` : ''}
     </div>` : `<p class="rh-empty">Nothing saved yet. Ask Pulse something and use
-      <strong>Save</strong> on the answer to keep the question here.</p>`}
+      <strong>Save</strong> on the answer to keep the question here.${
+    signedIn() ? '' : ' Saved questions live in this browser until you have an account.'}</p>`}
   </section>`;
 }
 
@@ -11589,7 +11804,8 @@ document.addEventListener('click', (evt) => {
 
   const open = evt.target.closest('[data-research-open]');
   if (open) {
-    const row = savedResearch().find((r) => r.at === open.dataset.researchOpen);
+    const key = open.dataset.researchOpen;
+    const row = savedResearch().find((r) => (r.id || r.at) === key);
     if (!row) return;
     // Re-asking rather than replaying a stored answer. The answer was true when
     // it was written and the market has moved since; showing it again as though
@@ -12612,6 +12828,8 @@ function renderSettings() {
     </tr>`).join('');
 
   views.settings.innerHTML = `
+  ${accountPanels()}
+
   <div class="panel span2 gap">
     <h2>${hg('Appearance')}</h2>
     <p class="sub">Both themes are hand-picked rather than one flipped into the other, so
@@ -12655,10 +12873,651 @@ function renderSettings() {
     ['Assistant', 'Pulse is switched off in this build'],
     ['Optic\u2019s Positions', 'One shared simulated ledger, no real money'],
     ['Stored on this device', 'Theme, time zone, chart preferences and any Roth holdings you enter'],
-    ['Stored on the server', 'Nothing about you'],
+    ['Stored on the server', signedIn()
+      ? 'Your account: name, email, watchlists, saved research, preferences and sessions'
+      : 'Nothing about you'],
   ])}
-    <p class="caveat">Settings live in this browser only. Clearing site data resets them.</p>
+    <p class="caveat">${signedIn()
+    ? 'Appearance and chart preferences live in this browser. Your watchlist and saved research live on your account, so clearing site data does not lose them.'
+    : 'Settings live in this browser only. Clearing site data resets them.'}</p>
   </div>`;
+
+  // Passkeys, connected providers and sessions are three more requests. Painted
+  // after, so a page that is mostly about the theme is not waiting on them.
+  if (signedIn()) paintSecurity();
+}
+
+/* ============================================================== ACCOUNTS ===
+ *
+ * The bridge between `window.OpticAuth` (see static/auth.js) and this file.
+ *
+ * **Nothing here gates anything.** Every panel, chart, screen and scan answers
+ * a guest exactly as it did before accounts existed. What an account changes is
+ * where two things are *kept*: the watchlist and saved research. Signed out,
+ * both stay in localStorage and behave as they always have.
+ *
+ * **The stores stay synchronous.** `watchList()` and `savedResearch()` are
+ * called from render paths all over this file, and making them async would mean
+ * rewriting every caller. So the account's copy is loaded once into `ACCOUNT`
+ * and read from there; writes go to the server and update the cache optimistically
+ * so a row disappears on the click rather than after the round trip. That is the
+ * same pattern `watchRemove()` already used against localStorage.
+ */
+
+const ACCOUNT = {
+  ready: false,
+  listId: null,
+  watchlist: null,      // null means "not signed in, or no list yet" — fall back to local
+  research: null,
+  allowance: null,
+};
+
+function signedIn() {
+  return !!(window.OpticAuth && window.OpticAuth.state().status === 'user');
+}
+
+function authApi(path, options) {
+  return window.OpticAuth.api(path, options);
+}
+
+/* Map a stored research row onto the shape this file already uses.
+ *
+ * `question` rather than an answer, because saving deliberately keeps the
+ * question and re-asks it: the answer was true when it was written and the
+ * market has moved. `id` is carried alongside `at` so a row can be deleted
+ * server-side while `at` stays the timestamp that gets displayed. */
+function researchFromRow(row) {
+  return {
+    id: row.id,
+    at: row.created_at,
+    ticker: row.symbol || null,
+    question: row.content || row.title || '',
+  };
+}
+
+async function accountLoad() {
+  if (!signedIn()) {
+    ACCOUNT.ready = false;
+    ACCOUNT.listId = null;
+    ACCOUNT.watchlist = null;
+    ACCOUNT.research = null;
+    return;
+  }
+  try {
+    const [lists, research] = await Promise.all([
+      authApi('/api/watchlists'),
+      authApi('/api/saved-research'),
+    ]);
+    const first = (lists.watchlists || [])[0];
+    if (first) {
+      ACCOUNT.listId = first.id;
+      ACCOUNT.watchlist = first.symbols || [];
+    } else {
+      // No list on the account yet. Bring this browser's list across rather
+      // than starting them at empty: that list is real work, and it is their
+      // own data moving into their own account, not two accounts merging.
+      const local = localWatchList();
+      if (local.length) {
+        const adopted = await authApi('/api/watchlists/adopt', {
+          method: 'POST', body: { symbols: local },
+        });
+        ACCOUNT.listId = adopted.watchlist.id;
+        ACCOUNT.watchlist = adopted.watchlist.symbols || [];
+        if (adopted.added) {
+          window.OpticAuth.toast('Brought ' + adopted.added + ' watchlist symbol'
+            + (adopted.added === 1 ? '' : 's') + ' into your account.');
+        }
+      } else {
+        ACCOUNT.listId = null;
+        ACCOUNT.watchlist = null;
+      }
+    }
+    ACCOUNT.research = (research.research || []).map(researchFromRow);
+    ACCOUNT.ready = true;
+  } catch (err) {
+    // A failed load must not take the watchlist away. Falling back to the local
+    // copy is the same answer a guest gets, which is a working page.
+    ACCOUNT.ready = false;
+    ACCOUNT.watchlist = null;
+    ACCOUNT.research = null;
+  }
+}
+
+async function loadAllowance() {
+  try {
+    const reply = await getJSON('/api/ai-allowance');
+    ACCOUNT.allowance = reply.allowance || null;
+  } catch (err) { ACCOUNT.allowance = null; }
+  renderAllowanceNote();
+}
+
+/* What is left of today's assistant allowance, stated before the click.
+ *
+ * A 429 arriving mid-answer reads as the assistant being broken; the same fact
+ * in advance reads as a limit. Hidden entirely when nothing is enforced, so an
+ * operator running this privately with AI_CALLS_PER_HOUR=0 sees no clutter. */
+function renderAllowanceNote() {
+  let host = $('#chat-allow');
+  const state = ACCOUNT.allowance;
+  if (!state || state.enforced === false || !state.allowed) {
+    if (host) host.remove();
+    return;
+  }
+  if (!host) {
+    const input = $('#chat-input');
+    if (!input || !input.parentNode) return;
+    host = document.createElement('p');
+    host.id = 'chat-allow';
+    host.className = 'chat-allow';
+    input.parentNode.insertBefore(host, input);
+  }
+  const left = state.left;
+  const plural = left === 1 ? 'message' : 'messages';
+  if (state.scope === 'guest') {
+    host.innerHTML = left > 0
+      ? `${left} of ${state.allowed} ${plural} left today.
+         <button type="button" data-auth-open="signup">Create a free account</button>
+         for ${state.signed_in_allowance} a day.`
+      : `Today's guest allowance is used up.
+         <button type="button" data-auth-open="signup">Create a free account</button>
+         for ${state.signed_in_allowance} a day. Every other panel stays open.`;
+  } else {
+    host.innerHTML = `${left} of ${state.allowed} ${plural} left today on the
+      ${esc(state.plan || 'free')} plan.`;
+  }
+  host.classList.toggle('spent', left <= 0);
+}
+
+/* ------------------------------------------------------ settings: the account */
+
+function accountFace(user, cls) {
+  const initials = ((user.first_name || '').trim()[0] || '')
+    + ((user.last_name || '').trim()[0] || '');
+  const label = (initials || (user.email || '?')[0]).toUpperCase();
+  return user.avatar_url
+    ? `<img class="${cls}" src="${esc(user.avatar_url)}" alt="">`
+    : `<span class="${cls}">${esc(label)}</span>`;
+}
+
+function accountGuestPanel() {
+  return `<div class="panel span2 gap">
+    <h2>${hg('Account')}</h2>
+    <p class="sub">Optic works without one. An account keeps your watchlist and your
+      saved research on the server instead of in this browser, so they follow you to
+      another device and survive clearing site data.</p>
+    <div class="set-guest">
+      <p><strong>Right now everything is stored in this browser.</strong> Theme, time
+        zone, chart preferences, your watchlist, your saved questions and any Roth
+        holdings you entered. Nothing about you is on the server.</p>
+      <div class="set-row-act">
+        <button type="button" class="btn primary" data-auth-open="signup">Create an account</button>
+        <button type="button" class="btn" data-auth-open="signin">Sign in</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function accountPanels() {
+  if (!window.OpticAuth) return '';
+  const state = window.OpticAuth.state();
+  if (state.status === 'loading') {
+    return `<div class="panel span2"><h2>${hg('Account')}</h2>
+      <p class="sub">Checking...</p></div>`;
+  }
+  if (state.status !== 'user') return accountGuestPanel();
+
+  const user = state.user || {};
+  const plan = state.subscription || {};
+  const verified = user.email_verified;
+  const mail = state.mail || {};
+
+  return `<div class="panel span2 gap">
+    <h2>${hg('Profile')}</h2>
+    <div class="set-acct">
+      <div class="set-acct-id">
+        ${accountFace(user, 'set-acct-face')}
+        <div class="set-acct-who">
+          <strong>${esc(user.name || user.email)}</strong>
+          <span>${esc(user.email)}</span>
+        </div>
+      </div>
+
+      <form class="set-profile" id="profile-form">
+        <div class="settings-row">
+          <div class="settings-label">Name
+            <span class="settings-hint">Used to address you, nothing else.</span></div>
+          <div class="set-row-act">
+            <input type="text" name="first_name" value="${esc(user.first_name)}"
+              class="settings-select" placeholder="First" autocomplete="given-name">
+            <input type="text" name="last_name" value="${esc(user.last_name)}"
+              class="settings-select" placeholder="Last" autocomplete="family-name">
+            <button type="submit" class="btn">Save</button>
+          </div>
+        </div>
+      </form>
+
+      <div class="set-row">
+        <div class="set-row-main">
+          <span class="set-row-title">Email address
+            <span class="set-tag ${verified ? 'on' : 'off'}">${
+    verified ? 'Confirmed' : 'Not confirmed'}</span></span>
+          <span class="set-row-note">${esc(user.email)}${verified ? ''
+    : mail.available === false
+      ? '. Email is not configured on this deployment, so the confirmation link goes to the server log rather than an inbox.'
+      : '. Check your inbox for the confirmation link.'}</span>
+        </div>
+        <div class="set-row-act">${verified ? ''
+    : '<button type="button" class="btn" data-acct-resend-settings>Resend link</button>'}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel span2 gap">
+    <h2>${hg('Security')}</h2>
+    <p class="sub">Keep more than one way in. If a device is lost, another method is
+      how you get back to this account, and Optic will not let you remove the last one.</p>
+    <div class="set-acct" id="security-blocks">
+      <p class="sub">Loading...</p>
+    </div>
+  </div>
+
+  <div class="panel span2 gap">
+    <h2>${hg('Plan')}</h2>
+    <div class="set-row">
+      <div class="set-row-main">
+        <span class="set-row-title">${esc(plan.label || 'Free')}
+          <span class="set-tag on">${esc(plan.status || 'active')}</span></span>
+        <span class="set-row-note">${
+    plan.limits ? `${plan.limits.watchlists} watchlists, ${plan.limits.saved_research}
+      saved items, ${plan.limits.ai_calls_per_day} assistant messages a day.` : ''}</span>
+      </div>
+      <div class="set-row-act"><span class="set-row-note">Plans are not on sale yet.
+        Every account is on Free.</span></div>
+    </div>
+  </div>
+
+  <div class="panel span2 gap set-danger">
+    <h2>${hg('Delete account')}</h2>
+    <p class="sub">Removes the account and everything on it: watchlists, saved research,
+      preferences, connected sign-in methods and every session. It cannot be undone, and
+      the shared paper-trading ledger is not affected because it was never yours.</p>
+    <div class="set-row-act">
+      <button type="button" class="btn" data-acct-delete>Delete this account</button>
+    </div>
+  </div>`;
+}
+
+/* The security block is a second paint, on purpose.
+ *
+ * Passkeys, connected providers and active sessions are three more requests,
+ * and blocking the whole Settings page on them would make a page that is mostly
+ * about the theme feel slow. */
+async function paintSecurity() {
+  const host = $('#security-blocks');
+  if (!host || !signedIn()) return;
+  let data;
+  try {
+    data = await authApi('/api/auth/identities');
+  } catch (err) {
+    host.innerHTML = `<p class="sub">Could not load your sign-in methods: ${esc(err.message)}</p>`;
+    return;
+  }
+  let sessions = { sessions: [] };
+  try { sessions = await authApi('/api/auth/sessions'); } catch (err) { /* below */ }
+
+  const methods = data.methods || { count: 0, providers: [], passkeys: 0 };
+  const providers = data.providers || {};
+  const last = methods.count <= 1;
+  const lastNote = 'This is the only way into this account. Add another method before removing it.';
+
+  const passkeyRows = (data.passkeys || []).map((pk) => `<div class="set-row">
+    <div class="set-row-main">
+      <span class="set-row-title">${esc(pk.name)}
+        ${pk.backed_up ? '<span class="set-tag on">Synced</span>'
+    : '<span class="set-tag off">This device</span>'}</span>
+      <span class="set-row-note">Added ${esc(shortWhen(pk.created_at))}. ${
+    pk.last_used_at ? 'Last used ' + esc(shortWhen(pk.last_used_at)) + '.'
+      : 'Not used yet.'}</span>
+    </div>
+    <div class="set-row-act">
+      <button type="button" class="btn" data-passkey-rename="${esc(pk.id)}">Rename</button>
+      <button type="button" class="btn" data-passkey-remove="${esc(pk.id)}"
+        ${last ? `disabled title="${esc(lastNote)}"` : ''}>Remove</button>
+    </div>
+  </div>`).join('');
+
+  const providerRows = ['google', 'apple'].map((name) => {
+    const label = window.OpticAuth.providerLabel(name);
+    const connected = (methods.providers || []).indexOf(name) !== -1;
+    const configured = providers[name] && providers[name].available;
+    const row = (data.identities || []).filter((i) => i.provider === name)[0];
+    let note;
+    if (connected) {
+      note = row && row.email ? esc(row.email) : 'Connected';
+      note += row ? '. Connected ' + esc(shortWhen(row.connected_at)) + '.' : '';
+    } else if (!configured) {
+      // The reason, not a dead button. This is the same contract the assistant
+      // uses: a feature that is dark because a variable is unset says so.
+      note = esc((providers[name] || {}).reason || 'Not configured on this deployment.');
+    } else {
+      note = 'Sign in with ' + esc(label) + ' as well as, or instead of, a password.';
+    }
+    return `<div class="set-row">
+      <div class="set-row-main">
+        <span class="set-row-title">${esc(label)}
+          <span class="set-tag ${connected ? 'on' : 'off'}">${
+    connected ? 'Connected' : configured ? 'Not connected' : 'Unavailable'}</span></span>
+        <span class="set-row-note">${note}</span>
+      </div>
+      <div class="set-row-act">${connected
+    ? `<button type="button" class="btn" data-provider-remove="${esc(name)}"
+        ${last ? `disabled title="${esc(lastNote)}"` : ''}>Disconnect</button>`
+    : configured
+      ? `<button type="button" class="btn" data-provider-add="${esc(name)}">Connect</button>`
+      : ''}</div>
+    </div>`;
+  }).join('');
+
+  const sessionRows = (sessions.sessions || []).map((s) => `<div class="set-row">
+    <div class="set-row-main">
+      <span class="set-row-title">${esc(s.label)}
+        ${s.current ? '<span class="set-tag here">This device</span>' : ''}</span>
+      <span class="set-row-note">Last used ${esc(shortWhen(s.last_used_at))}${
+    s.ip_address ? ' from ' + esc(s.ip_address) : ''}. Signed in ${
+    esc(shortWhen(s.created_at))}.</span>
+    </div>
+    <div class="set-row-act"><button type="button" class="btn"
+      data-session-revoke="${esc(s.id)}">${s.current ? 'Sign out' : 'Revoke'}</button></div>
+  </div>`).join('');
+
+  host.innerHTML = `
+    <h3 class="set-h3">Password</h3>
+    <div class="set-row">
+      <div class="set-row-main">
+        <span class="set-row-title">Email and password
+          <span class="set-tag ${methods.password ? 'on' : 'off'}">${
+    methods.password ? 'Set' : 'Not set'}</span></span>
+        <span class="set-row-note">${methods.password
+    ? 'Changing it signs out every other device.'
+    : 'This account signs in without one. You can add a password if you want a fallback.'}</span>
+      </div>
+      <div class="set-row-act">
+        <button type="button" class="btn" data-password-change>${
+    methods.password ? 'Change' : 'Add a password'}</button>
+        ${methods.password && !last
+    ? '<button type="button" class="btn" data-provider-remove="email">Remove</button>' : ''}
+      </div>
+    </div>
+    <form class="set-pw" id="password-form" hidden>
+      ${methods.password ? `<label class="auth-field"><span>Current password</span>
+        <input type="password" name="current_password" autocomplete="current-password"></label>` : ''}
+      <label class="auth-field"><span>New password</span>
+        <input type="password" name="new_password" autocomplete="new-password"></label>
+      <label class="auth-field"><span>Confirm new password</span>
+        <input type="password" name="confirm_password" autocomplete="new-password"></label>
+      <div class="auth-error" data-error hidden></div>
+      <div class="set-row-act">
+        <button type="submit" class="btn primary">Save password</button>
+        <button type="button" class="btn" data-password-cancel>Cancel</button>
+      </div>
+    </form>
+
+    <h3 class="set-h3">Passkeys <span class="set-count">${(data.passkeys || []).length}</span></h3>
+    <p class="sub">Face ID, Touch ID, Windows Hello, a device PIN or a hardware key.
+      Nothing to type and nothing that can be phished, because a passkey only works on
+      the site it was made for.</p>
+    ${passkeyRows || '<p class="set-row-note">None yet.</p>'}
+    <div class="set-row-act" style="padding-top:var(--space-3)">
+      <button type="button" class="btn" data-passkey-add
+        ${window.OpticAuth.passkeysSupported() ? '' : 'disabled title="This browser does not support passkeys."'}>
+        Add a passkey</button>
+    </div>
+
+    <h3 class="set-h3">Connected accounts</h3>
+    ${providerRows}
+
+    <h3 class="set-h3">Active sessions</h3>
+    ${sessionRows || '<p class="set-row-note">None.</p>'}
+    <div class="set-row-act" style="padding-top:var(--space-3)">
+      <button type="button" class="btn" data-signout-all>Sign out of all devices</button>
+    </div>`;
+}
+
+/* ---------------------------------------------------------------- handlers */
+
+document.addEventListener('submit', async (evt) => {
+  const form = evt.target;
+  if (!form || !form.id) return;
+
+  if (form.id === 'profile-form') {
+    evt.preventDefault();
+    const body = {
+      first_name: form.elements.first_name.value,
+      last_name: form.elements.last_name.value,
+    };
+    try {
+      await authApi('/api/auth/profile', { method: 'PATCH', body });
+      await window.OpticAuth.refresh();
+      window.OpticAuth.toast('Profile saved.');
+      if (STATE.view === 'settings') renderSettings();
+    } catch (err) { window.OpticAuth.toast(err.message, 'bad'); }
+    return;
+  }
+
+  if (form.id === 'password-form') {
+    evt.preventDefault();
+    const box = form.querySelector('[data-error]');
+    if (box) { box.hidden = true; box.textContent = ''; }
+    const current = form.elements.current_password;
+    try {
+      const reply = await authApi('/api/auth/change-password', {
+        method: 'POST',
+        body: {
+          current_password: current ? current.value : '',
+          new_password: form.elements.new_password.value,
+          confirm_password: form.elements.confirm_password.value,
+        },
+      });
+      window.OpticAuth.toast(reply.other_sessions_ended
+        ? 'Password changed. ' + reply.other_sessions_ended + ' other session'
+          + (reply.other_sessions_ended === 1 ? '' : 's') + ' signed out.'
+        : 'Password changed.');
+      await window.OpticAuth.refresh();
+      paintSecurity();
+    } catch (err) {
+      if (box) { box.textContent = err.message; box.hidden = false; }
+      else window.OpticAuth.toast(err.message, 'bad');
+    }
+  }
+});
+
+document.addEventListener('click', async (evt) => {
+  const target = evt.target;
+  if (!target || !target.closest || !window.OpticAuth) return;
+
+  if (target.closest('[data-password-change]')) {
+    const form = $('#password-form');
+    if (form) { form.hidden = !form.hidden; if (!form.hidden) form.querySelector('input').focus(); }
+    return;
+  }
+  if (target.closest('[data-password-cancel]')) {
+    const form = $('#password-form');
+    if (form) form.hidden = true;
+    return;
+  }
+
+  if (target.closest('[data-acct-resend-settings]')) {
+    try {
+      const reply = await authApi('/api/auth/resend-verification', { method: 'POST' });
+      window.OpticAuth.toast(reply.sent
+        ? 'A new confirmation link is on its way.'
+        : 'Email is not configured here, so the link went to the server log.',
+      reply.sent ? '' : 'warn');
+    } catch (err) { window.OpticAuth.toast(err.message, 'bad'); }
+    return;
+  }
+
+  const addPasskey = target.closest('[data-passkey-add]');
+  if (addPasskey) {
+    addPasskey.disabled = true;
+    const idle = addPasskey.textContent;
+    addPasskey.textContent = 'Waiting for your device...';
+    try {
+      const saved = await window.OpticAuth.createPasskey('');
+      window.OpticAuth.toast('Saved "' + saved.passkey.name + '".');
+      await paintSecurity();
+    } catch (err) {
+      if (!window.OpticAuth.passkeyCancelled(err)) {
+        window.OpticAuth.toast(window.OpticAuth.passkeyMessage(err), 'bad');
+      }
+      addPasskey.disabled = false;
+      addPasskey.textContent = idle;
+    }
+    return;
+  }
+
+  const rename = target.closest('[data-passkey-rename]');
+  if (rename) {
+    const next = window.prompt('What should this passkey be called?\n'
+      + 'Something you will recognise, like "MacBook Pro" or "iPhone".');
+    if (next === null) return;
+    try {
+      await authApi('/api/auth/passkeys/' + encodeURIComponent(rename.dataset.passkeyRename),
+        { method: 'PATCH', body: { name: next } });
+      await paintSecurity();
+    } catch (err) { window.OpticAuth.toast(err.message, 'bad'); }
+    return;
+  }
+
+  const removePasskey = target.closest('[data-passkey-remove]');
+  if (removePasskey) {
+    if (!window.confirm('Remove this passkey? The device it lives on will no longer '
+      + 'sign you in.')) return;
+    try {
+      await authApi('/api/auth/passkeys/' + encodeURIComponent(removePasskey.dataset.passkeyRemove),
+        { method: 'DELETE' });
+      await window.OpticAuth.refresh();
+      await paintSecurity();
+    } catch (err) { window.OpticAuth.toast(err.message, 'bad'); }
+    return;
+  }
+
+  const addProvider = target.closest('[data-provider-add]');
+  if (addProvider) {
+    // `link=1` makes the callback attach to the account in this session rather
+    // than looking for one to match. The user id comes from the session, never
+    // from this URL.
+    location.href = '/api/auth/' + addProvider.dataset.providerAdd + '/start?link=1&next='
+      + encodeURIComponent(location.pathname);
+    return;
+  }
+
+  const removeProvider = target.closest('[data-provider-remove]');
+  if (removeProvider) {
+    const name = removeProvider.dataset.providerRemove;
+    const label = name === 'email' ? 'the password' : window.OpticAuth.providerLabel(name);
+    if (!window.confirm('Disconnect ' + label + ' from this account?')) return;
+    try {
+      await authApi('/api/auth/identities/' + encodeURIComponent(name), { method: 'DELETE' });
+      await window.OpticAuth.refresh();
+      await paintSecurity();
+    } catch (err) { window.OpticAuth.toast(err.message, 'bad'); }
+    return;
+  }
+
+  const revoke = target.closest('[data-session-revoke]');
+  if (revoke) {
+    try {
+      await authApi('/api/auth/sessions/' + encodeURIComponent(revoke.dataset.sessionRevoke),
+        { method: 'DELETE' });
+      await window.OpticAuth.refresh();
+      if (signedIn()) await paintSecurity();
+      else if (STATE.view === 'settings') renderSettings();
+    } catch (err) { window.OpticAuth.toast(err.message, 'bad'); }
+    return;
+  }
+
+  if (target.closest('[data-signout-all]')) {
+    if (!window.confirm('Sign out everywhere, including here?')) return;
+    try {
+      await authApi('/api/auth/logout-all', { method: 'POST' });
+      await window.OpticAuth.refresh();
+      window.OpticAuth.toast('Signed out on every device.');
+      if (STATE.view === 'settings') renderSettings();
+    } catch (err) { window.OpticAuth.toast(err.message, 'bad'); }
+    return;
+  }
+
+  if (target.closest('[data-acct-delete]')) {
+    const state = window.OpticAuth.state();
+    const email = (state.user || {}).email || '';
+    const typed = window.prompt('This deletes the account and everything on it, and it '
+      + 'cannot be undone.\n\nType ' + email + ' to confirm.');
+    if (!typed) return;
+    let password = '';
+    if (state.methods && state.methods.password) {
+      password = window.prompt('Enter your password to confirm.') || '';
+    }
+    try {
+      await authApi('/api/auth/delete-account', {
+        method: 'POST', body: { confirm_email: typed, password: password },
+      });
+      await window.OpticAuth.refresh();
+      window.OpticAuth.toast('Account deleted. The terminal stays open.');
+      ACCOUNT.ready = false;
+      ACCOUNT.watchlist = null;
+      ACCOUNT.research = null;
+      if (STATE.view === 'settings') renderSettings();
+    } catch (err) { window.OpticAuth.toast(err.message, 'bad'); }
+    return;
+  }
+
+  // Bring this browser's watchlist into the account, from the watchlist view.
+  if (target.closest('[data-watch-import]')) {
+    try {
+      const adopted = await authApi('/api/watchlists/adopt', {
+        method: 'POST', body: { symbols: localWatchList() },
+      });
+      ACCOUNT.listId = adopted.watchlist.id;
+      ACCOUNT.watchlist = adopted.watchlist.symbols || [];
+      window.OpticAuth.toast(adopted.added
+        ? 'Added ' + adopted.added + ' symbol' + (adopted.added === 1 ? '' : 's')
+          + ' to your account.'
+        : 'Everything in this browser was already on your account.');
+      STATE.watchlist = null;
+      loadWatchlist(true);
+    } catch (err) { window.OpticAuth.toast(err.message, 'bad'); }
+  }
+});
+
+/* ------------------------------------------------------------------ wiring */
+
+if (window.OpticAuth) {
+  window.OpticAuth.onNavigate = (view) => {
+    // "Saved research" in the account menu lives on the Research hub, which is
+    // the Scan tab's home. Anything else is a view id.
+    switchView(view === 'brief' ? 'scan' : view);
+  };
+
+  window.OpticAuth.onSignOut = () => {
+    ACCOUNT.ready = false;
+    ACCOUNT.listId = null;
+    ACCOUNT.watchlist = null;
+    ACCOUNT.research = null;
+    STATE.watchlist = null;
+    if (STATE.view === 'settings') renderSettings();
+    if (STATE.view === 'watchlist') loadWatchlist(true);
+    loadAllowance();
+  };
+
+  window.OpticAuth.on((state) => {
+    if (state.status === 'loading') return;
+    accountLoad().then(() => {
+      if (STATE.view === 'settings') renderSettings();
+      if (STATE.view === 'watchlist') { STATE.watchlist = null; loadWatchlist(true); }
+      loadAllowance();
+    });
+  });
 }
 
 /* ======================================================= OPTIC'S POSITIONS */
@@ -17929,7 +18788,12 @@ document.addEventListener('submit', (evt) => {
 $('#chat-toggle').addEventListener('click', () => {
   document.body.classList.toggle('chat-open');
   wsOnChatToggle();
-  if (document.body.classList.contains('chat-open')) $('#chat-input').focus();
+  if (document.body.classList.contains('chat-open')) {
+    $('#chat-input').focus();
+    // What is left of today's allowance, before anything is typed. Refetched on
+    // each open rather than cached: another tab may have spent some of it.
+    loadAllowance();
+  }
   // Charts re-render themselves via the ResizeObserver on <main> — opening the
   // panel takes 400px off the content width.
 });

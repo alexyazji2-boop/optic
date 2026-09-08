@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import secrets
+import sqlite3
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +20,13 @@ from fastapi.staticfiles import StaticFiles
 
 from . import (ai, brief as brief_mod, feeds as feeds_mod, legal,
                news as news_mod, paper, session as session_mod)
+from . import account as account_mod
+from . import db as accounts_db
+from .auth import deps as auth_deps
+from .auth import ratelimit as auth_ratelimit
+from .auth import routes as auth_routes
+from .auth import store as auth_store
+from .runtime import is_hosted
 from . import snapshots
 from . import universe as universe_mod
 from . import earnings_week as earnings_week_mod
@@ -46,6 +54,7 @@ from . import alerts as alerts_mod
 from .analytics import econ as econ_mod
 from .analytics import pulse as pulse_mod
 from .analytics import watchlist as watchlist_mod
+from .analytics import watches as watches_mod
 from . import events as events_mod
 from .analytics import extras as extras_mod
 from .analytics import rotation as rotation_mod
@@ -97,17 +106,20 @@ _load_dotenv()
 
 app = FastAPI(title="Optic Terminal", version="1.0.0")
 
-# ------------------------------------------------------------- open access
+# ------------------------------------------------------ open, with accounts
 #
-# No authentication: anyone who can reach this server can use it. That's the
-# intended posture for an open demo — there are no accounts and nothing
-# user-specific is stored server-side (the Roth tab's holdings live in the
-# visitor's own browser and are only ever posted to be computed, never saved).
+# Every research endpoint still answers anybody. There is no wall in front of the
+# terminal: load a ticker, read the analysis, open a chart, run a screen, all
+# without an account. That was a deliberate decision and it has not changed.
 #
-# The one thing that changes this calculus is the assistant: /api/chat and
-# /api/research spend real money per call. With no gate, that spend is open to
-# anyone with the URL, so a warning is logged at startup rather than silently
-# allowing it.
+# What accounts add is *keeping* things — a watchlist, saved research,
+# preferences — which needs somewhere to put them and someone to own them. See
+# `app/auth/` and `app/db.py`. A guest loses nothing they had before.
+#
+# The one thing that is metered is the assistant: /api/chat and /api/research
+# spend real money per call. Guests get a small daily allowance, signing in
+# raises it to the account's plan, and a per-IP hourly cap sits over both as the
+# burst limit. See _spend_guard.
 @app.get("/healthz")
 async def healthz() -> Dict[str, bool]:
     """Liveness probe for hosting platforms. Deliberately says nothing else."""
@@ -633,6 +645,54 @@ async def symbol_search(
     return await _run(lambda: {"query": q, "results": universe_mod.search(q, limit)})
 
 
+@app.get("/api/watches/catalogue")
+async def watch_catalogue() -> Dict[str, Any]:
+    """The conditions a watch can be built from, and what each one reads."""
+    return watches_mod.catalogue()
+
+
+@app.post("/api/watches/check")
+async def watch_check(body: Dict[str, Any]) -> Dict[str, Any]:
+    """Evaluate a set of watches and report which have tripped.
+
+    A POST because the client sends its watch definitions in the body — there
+    is no sign-in, so there is no server-side row to look them up from, and a
+    query string long enough to hold ten conditions is not a URL.
+
+    Deliberately NOT behind the write guard: it stores nothing. It reads the
+    same panels the analysis page reads and returns a verdict per watch, so it
+    is a read that happens to need a body.
+
+    One symbol per request. The alternative is a loop over `_swing_snapshot`,
+    which is ~20 seconds each — the client checks the symbols it cares about
+    and stops when it has what it needs.
+    """
+    ticker = str(body.get("ticker") or "").upper().strip()
+    rows = body.get("watches") or []
+    if not ticker:
+        raise HTTPException(status_code=400, detail="A ticker is required.")
+    if not isinstance(rows, list) or len(rows) > 25:
+        raise HTTPException(status_code=400,
+                            detail="Send a list of at most 25 watches.")
+
+    def build() -> Dict[str, Any]:
+        payload = _swing_snapshot(ticker, None, 1, False, include_earnings=True)
+        try:
+            payload["next_earnings_date"] = YF_PROVIDER.earnings_date(ticker)
+        except Exception:
+            payload["next_earnings_date"] = None
+        results = watches_mod.check(payload, rows)
+        return {
+            "ticker": ticker,
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "results": results,
+            "met": [r for r in results if r.get("met")],
+            "price": (payload.get("quote") or {}).get("price"),
+        }
+
+    return await _run(build)
+
+
 @app.get("/api/watchlist")
 async def watchlist_feed(
     symbols: str = Query("", description="Comma-separated symbols"),
@@ -956,6 +1016,20 @@ async def _tracker_loop() -> None:
             is_open = paper.market_open_et()
             just_closed = was_open and not is_open
             was_open = is_open
+
+            # Delete expired sessions, one-time tokens and rate-limit rows.
+            # Above the market-hours gate on purpose: people sign in at the
+            # weekend, and an expired session row that is never deleted is a row
+            # standing one correct expiry check away from being a valid login.
+            # Hourly — the rows are tiny and the work is a handful of indexed
+            # DELETEs.
+            last_sweep = getattr(app.state, "last_account_sweep", None)
+            if last_sweep is None or now - last_sweep > 3600:
+                try:
+                    await _run(accounts_db.sweep)
+                    app.state.last_account_sweep = now
+                except Exception as exc:
+                    log.warning("accounts sweep failed: %s", exc)
 
             # Snapshot the ledger, above the market-hours gate for the same
             # reason as the brief: the `continue` for a closed market would
@@ -2120,13 +2194,10 @@ async def personas() -> Dict[str, Any]:
 # announce themselves in the environment, and a laptop does not.
 WRITE_TOKEN = os.environ.get("OPTIC_WRITE_TOKEN", "").strip()
 
-_PLATFORM_VARS = ("RAILWAY_ENVIRONMENT", "RAILWAY_GIT_COMMIT_SHA",
-                  "RENDER", "FLY_APP_NAME")
-
-
-def is_hosted() -> bool:
-    """True when running on a hosting platform rather than a local machine."""
-    return any(os.environ.get(v) for v in _PLATFORM_VARS)
+# `is_hosted` moved to app/runtime.py: the auth layer needs the same answer for
+# the Secure cookie flag and the OAuth redirect URI, and it cannot import this
+# module because this module imports its router. Re-exported above, so
+# `main.is_hosted()` still resolves.
 
 
 def _write_guard(request: Request) -> None:
@@ -2164,23 +2235,115 @@ def _write_guard(request: Request) -> None:
 # addresses gets many buckets — but it turns "drain the account in a minute"
 # into "drain it slowly enough to notice", which is the actual exposure here.
 #
-# In-process and per-instance on purpose: one worker (see the Dockerfile) means
-# one bucket, and a shared store would be a database dependency for a counter.
-# The state is lost on restart, which is the safe direction to fail.
+# Two limits, doing two different jobs.
+#
+# The hourly one is a *burst* cap, per address, and it is unchanged: it stops a
+# script in a loop, and it applies to guests and account holders alike. It stays
+# in memory because losing it on restart costs at most one hour of one caller's
+# burst, and a counter is not worth a database round trip.
+#
+# The daily one is an *allowance*, and it is the reason accounts exist here at
+# all. A guest gets a few messages a day so the product can be tried; signing in
+# raises it to whatever the account's plan allows. That one is in SQLite, because
+# an allowance an attacker can reset by waiting for the next OOM restart (see
+# DEPLOY.md) is not an allowance.
+#
+# **Why signing in raises it rather than verification.** With no SMTP configured
+# nobody can verify an address at all, so gating the useful allowance on a click
+# in an inbox would leave every account holder on the guest tier and look like a
+# bug. The account itself is the friction: it costs an address per allowance, and
+# the hourly burst cap still sits over the top.
 AI_CALLS_PER_HOUR = int(os.environ.get("AI_CALLS_PER_HOUR", "30"))
+GUEST_AI_CALLS_PER_DAY = int(os.environ.get("GUEST_AI_CALLS_PER_DAY", "5"))
 
 _ai_calls: Dict[str, List[float]] = {}
 
+_DAY = 86400
+
+
+# The daily allowance lives in the accounts database, and the assistant must not
+# depend on that database being reachable. If it is missing or unmigrated, the
+# daily half degrades and the hourly cap carries the load on its own; Pulse keeps
+# answering. Failing closed here would mean one broken table takes out the
+# feature people came for.
+#
+# Deliberately not silent: logged once per process, because "the allowance
+# stopped being enforced" is exactly the kind of thing that should not be
+# discovered on an invoice.
+_allowance_warned = False
+
+
+def _allowance_unavailable(exc: Exception) -> None:
+    global _allowance_warned
+    if not _allowance_warned:
+        _allowance_warned = True
+        logging.getLogger("optic").error(
+            "assistant daily allowance is not being enforced: the accounts "
+            "database is unavailable (%s). The hourly per-address cap still "
+            "applies.", exc)
+
+
+def ai_allowance(request: Request) -> Dict[str, Any]:
+    """What this caller may spend today, and how much is left.
+
+    Read by /api/ai-allowance so the assistant panel can say "2 of 5 left, sign
+    in for 25" before someone types, rather than after."""
+    try:
+        user = auth_deps.current_user(request)
+        if user:
+            plan = auth_store.subscription(user["id"])
+            allowed = int(plan["limits"].get("ai_calls_per_day") or 0)
+            bucket = auth_ratelimit.key_bucket(user["id"])
+            state = auth_ratelimit.allowance("ai_day", bucket, allowed, _DAY)
+            state["scope"] = "account"
+            state["plan"] = plan["plan"]
+            return state
+        state = auth_ratelimit.allowance("ai_day", auth_ratelimit.client_ip(request),
+                                         GUEST_AI_CALLS_PER_DAY, _DAY)
+        state["scope"] = "guest"
+        state["signed_in_allowance"] = auth_store.PLANS["free"]["ai_calls_per_day"]
+        return state
+    except (sqlite3.Error, OSError) as exc:
+        # OSError as well as sqlite3.Error: opening the database creates its
+        # directory first, and a volume that failed to mount raises from
+        # os.makedirs rather than from sqlite. Catching only the sqlite family
+        # left the realistic failure — no disk — as a 500 on /api/chat.
+        _allowance_unavailable(exc)
+        return {"scope": "guest", "used": 0, "allowed": 0, "left": 0,
+                "enforced": False,
+                "signed_in_allowance": auth_store.PLANS["free"]["ai_calls_per_day"]}
+
 
 def _spend_guard(request: Request) -> None:
-    """Raise 429 once a caller has spent its hourly allowance."""
-    if AI_CALLS_PER_HOUR <= 0:            # 0 disables the guard
+    """Raise 429 once a caller has spent an allowance, daily or hourly."""
+    try:
+        user = auth_deps.current_user(request)
+        if user:
+            limits = auth_store.subscription(user["id"])["limits"]
+            auth_ratelimit.spend(
+                "ai_day", auth_ratelimit.key_bucket(user["id"]),
+                int(limits.get("ai_calls_per_day") or 0), _DAY,
+                "That is {} assistant messages today, which is what this plan "
+                "includes. The allowance resets 24 hours after each message.".format(
+                    limits.get("ai_calls_per_day")))
+        else:
+            auth_ratelimit.spend(
+                "ai_day", auth_ratelimit.client_ip(request),
+                GUEST_AI_CALLS_PER_DAY, _DAY,
+                "Guests get {} assistant messages a day, because each one costs the "
+                "operator money. Create a free account for {} a day. Everything else "
+                "in the terminal stays open either way.".format(
+                    GUEST_AI_CALLS_PER_DAY,
+                    auth_store.PLANS["free"]["ai_calls_per_day"]))
+    except (sqlite3.Error, OSError) as exc:
+        _allowance_unavailable(exc)
+
+    if AI_CALLS_PER_HOUR <= 0:            # 0 disables the burst cap
         return
     # Behind Railway/Cloudflare the socket peer is the proxy, so prefer the
     # forwarded chain's first hop. Spoofable, but so is any header, and the
     # alternative is bucketing every visitor together as one proxy IP.
-    fwd = request.headers.get("x-forwarded-for", "")
-    who = fwd.split(",")[0].strip() or (request.client.host if request.client else "?")
+    who = auth_ratelimit.client_ip(request)
 
     now = time.time()
     recent = [t for t in _ai_calls.get(who, []) if now - t < 3600]
@@ -2190,9 +2353,9 @@ def _spend_guard(request: Request) -> None:
         _ai_calls[who] = recent
         raise HTTPException(
             status_code=429,
-            detail="This demo allows {} assistant messages an hour per visitor, "
-                   "to keep one caller from spending the whole budget. Try again "
-                   "in about {} minutes.".format(AI_CALLS_PER_HOUR, max(1, wait // 60)),
+            detail="That is {} assistant messages in an hour from this connection. "
+                   "Try again in about {} minutes.".format(
+                       AI_CALLS_PER_HOUR, max(1, wait // 60)),
         )
     recent.append(now)
     _ai_calls[who] = recent
@@ -2202,6 +2365,17 @@ def _spend_guard(request: Request) -> None:
         for addr in [a for a, hits in _ai_calls.items()
                      if not any(now - t < 3600 for t in hits)]:
             _ai_calls.pop(addr, None)
+
+
+@app.get("/api/ai-allowance")
+async def ai_allowance_state(request: Request) -> Dict[str, Any]:
+    """How many assistant messages are left, and what an account would give.
+
+    Exists so the panel can be honest before the click rather than after: a 429
+    arriving mid-answer reads as a failure, and the same fact stated in advance
+    reads as a limit."""
+    return {"allowance": ai_allowance(request),
+            "ai": ai.available()}
 
 
 @app.post("/api/chat")
@@ -2245,6 +2419,34 @@ async def research(request: Request,
     )
 
 
+# ------------------------------------------------------------------ accounts
+#
+# Registered here, above the static mount and below everything else. Starlette
+# matches routes in registration order and the mount at "/" swallows every path
+# after it, so a router added below that line answers nothing at all.
+app.include_router(auth_routes.router)
+app.include_router(account_mod.router)
+
+
+@app.on_event("startup")
+async def _migrate_accounts() -> None:
+    """Bring the accounts schema up to date on boot.
+
+    On boot rather than as a deploy step because the deploy *is* a git push:
+    there is no place to run a command between the build finishing and the
+    container serving traffic. The runner is idempotent, so this is a no-op on
+    every boot after the first."""
+    try:
+        applied = await _run(accounts_db.migrate)
+        if applied:
+            logging.getLogger("optic").info(
+                "accounts database: applied migrations %s", applied)
+    except Exception as exc:                     # a broken accounts db must not
+        # take the whole terminal down: every research endpoint works without it.
+        logging.getLogger("optic").error(
+            "accounts database unavailable, sign-in will fail: %s", exc)
+
+
 # --------------------------------------------------------------------- static
 #
 # Mounted at "/" (not "/static") so index.html's own asset references
@@ -2273,7 +2475,7 @@ async def research(request: Request,
 def _asset_version() -> str:
     """A cache key that changes whenever any front-end asset changes."""
     stamp = 0
-    for name in ("app.js", "charts.js", "styles.css"):
+    for name in ("app.js", "auth.js", "charts.js", "styles.css"):
         try:
             stamp = max(stamp, int((STATIC_DIR / name).stat().st_mtime))
         except OSError:
