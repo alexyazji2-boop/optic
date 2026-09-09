@@ -1789,6 +1789,146 @@ function setOverlayHidden(id, hidden) {
   catch (e) { /* private mode */ }
 }
 
+/* ---------------------------------------------------------- chart colours
+ *
+ * What the price mark is drawn in. Three slots: the two candle directions and
+ * the line, because line mode draws one colour and candle mode draws two, and
+ * a single setting cannot serve both.
+ *
+ * Stored as a CSS colour string, not a token name. A token would be the tidier
+ * thing to persist, but the point of the feature is a colour wheel, and the
+ * value that comes back from `<input type="color">` is a hex string that is not
+ * in the palette by construction.
+ *
+ * `null` means "whatever the theme says", and is not the same as storing the
+ * theme's current value: the app has a light and a dark theme and
+ * `syncChartTheme()` swaps C when the OS flips. A reader who never chose a
+ * colour should follow that; one who chose orange gets orange in both.
+ *
+ * Shared by the Charting tab and the Swing chart, which is the same decision
+ * WS_FLAGS already makes for the overlay toggles: the two tabs draw the same
+ * instrument and disagreeing about what a green candle means would be worse
+ * than one control reaching both.
+ */
+
+const CHART_COLORS_KEY = 'optic.chart.colors.v1';
+
+// Coalesces the colour wheel's redraw into one frame. See the `input` handler.
+let wsColorFrame = 0;
+const CHART_COLOR_SLOTS = ['up', 'down', 'line'];
+
+let chartColors = {};
+try {
+  const raw = JSON.parse(localStorage.getItem(CHART_COLORS_KEY) || '{}');
+  if (raw && typeof raw === 'object') {
+    // Only the three known slots, and only strings. Anything else in there is
+    // either a different version of this key or something that went in by hand,
+    // and a bad value reaches an SVG `fill` where it fails silently.
+    CHART_COLOR_SLOTS.forEach((k) => {
+      if (typeof raw[k] === 'string' && isColor(raw[k])) chartColors[k] = raw[k];
+    });
+  }
+} catch (e) { /* private mode */ }
+
+/* Does the browser accept this as a colour?
+ *
+ * Asked of the browser rather than matched against a hex pattern, because the
+ * stored value can legitimately be `rgb(...)` or a token's resolved value, and
+ * a regex for hex would reject those. Assigning junk to a style property leaves
+ * it empty, which is the test. */
+function isColor(value) {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  const probe = document.createElement('span').style;
+  probe.color = '';
+  probe.color = value;
+  return probe.color !== '';
+}
+
+/* The palette offered before the wheel.
+ *
+ * Token names, resolved through C at read time so they track the theme. These
+ * are the eight categorical slots plus the directional pair, which is the set
+ * already chosen for separation from each other on this surface — a reader who
+ * picks from here cannot land on something that collides with an overlay line.
+ * The wheel is there for anyone who wants to anyway. */
+const CHART_COLOR_PRESETS = [
+  // Names measured off each token's hue, not guessed from its slot number. The
+  // first pass had s5 as "Violet" (it is pink, hue 338), s6 as "Pink" (lime,
+  // 90), s7 as "Cyan" (violet, 247) and s8 as "Rust" (coral, hue 0). A tooltip
+  // that misnames the colour under the cursor is worse than no tooltip.
+  { slot: 'pos', label: 'Green' }, { slot: 'neg', label: 'Red' },
+  { slot: 's1', label: 'Blue' }, { slot: 's2', label: 'Orange' },
+  { slot: 's3', label: 'Teal' }, { slot: 's4', label: 'Amber' },
+  { slot: 's5', label: 'Pink' }, { slot: 's6', label: 'Lime' },
+  { slot: 's7', label: 'Violet' }, { slot: 's8', label: 'Coral' },
+  { slot: 'ink', label: 'White' }, { slot: 'muted', label: 'Grey' },
+];
+
+/** The theme's answer for a slot, used when the reader has not chosen one. */
+function chartColorDefault(slot) {
+  if (slot === 'up') return C.s3;
+  if (slot === 'down') return C.s8;
+  return C.s1;                       // the line, in line mode
+}
+
+/** What to draw with. The override if there is one, the theme otherwise. */
+function chartColor(slot) {
+  return chartColors[slot] || chartColorDefault(slot);
+}
+
+/** Has the reader chosen anything at all? Drives the Reset button's state. */
+function chartColorsCustom() {
+  return CHART_COLOR_SLOTS.some((k) => !!chartColors[k]);
+}
+
+function setChartColor(slot, value) {
+  if (!CHART_COLOR_SLOTS.includes(slot)) return;
+  if (value && isColor(value)) chartColors[slot] = value;
+  else delete chartColors[slot];     // falsy or junk means "back to the theme"
+  try { localStorage.setItem(CHART_COLORS_KEY, JSON.stringify(chartColors)); }
+  catch (e) { /* private mode */ }
+}
+
+function resetChartColors() {
+  chartColors = {};
+  try { localStorage.removeItem(CHART_COLORS_KEY); } catch (e) { /* private mode */ }
+}
+
+/* Contrast of a chosen colour against the chart's own background.
+ *
+ * The wheel will hand back anything, including the surface colour itself, and a
+ * candle the same colour as the plane behind it is not a bug anyone will report
+ * as one — the chart just looks empty. So the picker says so. 3:1 is the
+ * threshold for a graphical object rather than the 4.5:1 for text, which is
+ * what a candle body is.
+ *
+ * Reads the real surface through getComputedStyle rather than assuming a hex,
+ * so it stays right in both themes. */
+function colorContrast(value) {
+  const toRgb = (v) => {
+    const probe = document.createElement('span');
+    probe.style.color = v;
+    document.body.appendChild(probe);
+    const resolved = getComputedStyle(probe).color;
+    probe.remove();
+    const parts = (resolved.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+    return parts.length === 3 ? parts : null;
+  };
+  const lum = (rgb) => {
+    const [r, g, b] = rgb.map((v) => {
+      const x = v / 255;
+      return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const fg = toRgb(value);
+  const bg = toRgb(getComputedStyle(document.documentElement)
+    .getPropertyValue('--surface').trim() || '#000');
+  if (!fg || !bg) return null;
+  const a = lum(fg), b = lum(bg);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
 /** Turn a whole family on or off — what the Swing tab's single checkbox means. */
 function setFamily(which, on) {
   (which === 'ema' ? EMA_MEMBERS : MA_MEMBERS).forEach((id) => {
@@ -3626,6 +3766,23 @@ function homeGreeting() {
   return 'Good evening';
 }
 
+/* What a move in volatility or the long end actually means, in a few words.
+ *
+ * Exists so the pulse strip does not need a colour to say it. Both are
+ * deliberately plain readings of the direction rather than forecasts: a VIX
+ * 2% higher at a level of 16 is still a calm tape, and this word says which way
+ * protection got priced, not that anything is wrong.
+ *
+ * The threshold is on the *change*, not the level, and it is there because an
+ * unchanged number with a direction word beside it reads as a move. */
+function macroWord(key, change) {
+  if (change === null || change === undefined) return 'today';
+  if (Math.abs(change) < 0.05) return 'today, flat';
+  if (key === '^VIX') return change > 0 ? 'today, hedging pricier' : 'today, hedging cheaper';
+  if (key === '^TNX') return change > 0 ? 'today, yields up' : 'today, yields down';
+  return 'today';
+}
+
 /* The four numbers that set the day's tone.
  *
  * Two equity indices, volatility and the long end. Not eight: the brief for
@@ -3647,11 +3804,27 @@ function homePulseStrip(data) {
     if (!m) return;
     cells.push({
       label, value: fmt(m.last, 2),
-      sub: m.chg_1d === null || m.chg_1d === undefined ? '' : `${fmtPct(m.chg_1d, 2)} today`,
-      // VIX up is risk-off, so its colour is inverted against every other
-      // instrument here. Labelling it with the direction word as well means the
-      // colour is not carrying the meaning alone.
-      tone: m.chg_1d === null ? '' : ((key === '^VIX' ? -m.chg_1d : m.chg_1d) >= 0 ? 'up' : 'down'),
+      sub: m.chg_1d === null || m.chg_1d === undefined
+        ? '' : `${fmtPct(m.chg_1d, 2)} ${macroWord(key, m.chg_1d)}`,
+      // Neither of these two gets the directional pair, and the reason is that
+      // neither direction is good or bad on its own.
+      //
+      // This tile used to invert VIX: up painted red, because a rising fear
+      // gauge is risk-off. The comment here claimed the direction word carried
+      // the meaning alongside the colour, and it did not — there was no word,
+      // so all a reader saw was "+2.16%" in red. Red means down in every other
+      // percentage in this app, so a red plus reads as a rendering fault, and
+      // it was reported as one.
+      //
+      // Colouring by sign instead would only move the lie: green on a rising
+      // VIX says higher fear is good news. And 10Y had the same defect in the
+      // opposite direction, sitting in this same loop painting a rising yield
+      // green, which is a claim nothing here can support: whether yields up is
+      // good depends entirely on why they moved.
+      //
+      // So the number keeps its sign, which is the direction, and the word
+      // after it carries the reading. --pos/--neg stay where up really is up.
+      tone: '',
     });
   });
   if (!cells.length) return '';
@@ -5414,6 +5587,14 @@ function renderSwing(d) {
       // Volume rides under the price. The series is already sliced to the
       // selected timeframe upstream, so it lines up bar-for-bar with the dates.
       volume: showVol ? (ps.volume || null) : null,
+      // Same colours as the Charting tab, for the reason WS_FLAGS shares the
+      // overlay toggles: these two tabs draw the same instrument, and one of
+      // them showing green candles while the other shows orange would be a
+      // worse outcome than one control reaching both.
+      candleUp: chartColor('up'),
+      candleDown: chartColor('down'),
+      volUp: chartColors.up || null,
+      volDown: chartColors.down || null,
       // In candle mode the close series is kept but not stroked: the hover
       // crosshair and tooltip read from the series list, so dropping it would
       // silently disable them.
@@ -5426,7 +5607,7 @@ function renderSwing(d) {
         // candles already draw.
         { name: 'Close',
           values: ps.close,
-          color: candleMode ? C.ink : C.s1,
+          color: candleMode ? C.ink : chartColor('line'),
           hidden: candleMode,
           fill: !candleMode },
         /* Per-average switches, matching the Charting tab's Indicators menu —
@@ -9074,6 +9255,118 @@ function wsToolRail() {
   </div>`;
 }
 
+/* The colour picker for the price mark.
+ *
+ * Not folded into WS_MENUS: every entry there is a list of overlay checkboxes
+ * and the renderer is written for exactly that shape. A third kind of body in
+ * that loop would mean branching inside it on which menu is open, which is how
+ * that loop stops being readable.
+ *
+ * Three rows because candle mode draws two colours and line mode draws one.
+ * All three are always shown rather than only the ones the current mode uses:
+ * switching mode is one click away, and a control that appears and disappears
+ * under the cursor is worse than one that is briefly not in use. The row
+ * headings say which mode each applies to.
+ *
+ * The swatch buttons are the palette; `<input type="color">` is the wheel, and
+ * it is the platform's own — no dependency, and it is the picker the reader
+ * already knows from every other app on their machine.
+ */
+/* `data-ws-mark-*`, not the obvious `data-ws-color-*`.
+ *
+ * `[data-ws-color]` was already taken, by the indicator style editor's swatches,
+ * where it is paired with `data-ws-style` and names an overlay's colour. That
+ * handler sits earlier in the same click listener, so it matched these swatches
+ * first, called `setOverlayStyle(undefined, {color: 'up'})` and returned.
+ * `setOverlayStyle` rejects an unknown id, so nothing was corrupted and nothing
+ * threw: the click simply closed the menu and changed no colour, which is
+ * exactly the shape of a dead control. Found by driving it, not by reading it.
+ *
+ * "mark" because that is what these colour: the price mark, candle or line, as
+ * distinct from an overlay line. */
+const CHART_COLOR_ROWS = [
+  { slot: 'up', label: 'Candle up' },
+  { slot: 'down', label: 'Candle down' },
+  { slot: 'line', label: 'Line' },
+];
+
+/* One source for the sentence, because the popover renders it and the wheel
+ * rewrites it live; two copies drift. 3:1 is the threshold for a graphical
+ * object rather than the 4.5:1 for text, which is what a candle body is. */
+function markWarnText(contrast) {
+  return `Hard to see against the chart background at ${contrast.toFixed(1)}:1. `
+    + 'A mark needs about 3:1 to read as a shape.';
+}
+
+function wsColorPop() {
+  return `<div class="ws-menu-pop ws-colors">
+    ${CHART_COLOR_ROWS.map((row) => {
+    const current = chartColor(row.slot);
+    const chosen = !!chartColors[row.slot];
+    const contrast = colorContrast(current);
+    return `<div class="wc-row">
+      <div class="wc-head">
+        <span class="wc-label">${esc(row.label)}</span>
+        <span class="wc-now" style="background:${esc(current)}"
+          title="Currently ${esc(current)}"></span>
+        ${chosen ? `<button type="button" class="wc-clear"
+          data-ws-mark-clear="${esc(row.slot)}"
+          title="Back to the theme colour">Default</button>` : ''}
+      </div>
+      <div class="wc-swatches">
+        ${CHART_COLOR_PRESETS.map((pre) => {
+      const value = C[pre.slot];
+      if (!value) return '';
+      // aria-pressed rather than a class alone: this is a set of toggles and
+      // the current one has to be announced, not just outlined.
+      const on = current.toLowerCase() === String(value).toLowerCase();
+      return `<button type="button" class="wc-swatch${on ? ' on' : ''}"
+            style="background:${esc(value)}" aria-pressed="${on}"
+            data-ws-mark="${esc(row.slot)}" data-ws-mark-value="${esc(value)}"
+            title="${esc(pre.label)}" aria-label="${esc(pre.label)}"></button>`;
+    }).join('')}
+        <label class="wc-wheel" title="Any colour">
+          <input type="color" data-ws-mark-pick="${esc(row.slot)}"
+            value="${esc(hexish(current))}" aria-label="${esc(row.label)}: pick any colour">
+          <span aria-hidden="true">+</span>
+        </label>
+      </div>
+      <!-- Always present, hidden when the colour is fine. Rendered rather than
+           created on demand because the wheel updates it in place while it is
+           being dragged, and the alternative is inserting a node into a row
+           mid-gesture, which moves the wheel out from under the cursor. -->
+      <p class="wc-warn" data-ws-mark-warn="${esc(row.slot)}"
+        ${contrast !== null && contrast < 3 ? '' : 'hidden'}>${
+  contrast !== null && contrast < 3 ? markWarnText(contrast) : ''}</p>
+    </div>`;
+  }).join('')}
+    <button type="button" class="ws-manage" data-ws-mark-reset
+      ${chartColorsCustom() ? '' : 'disabled'}>Reset all to theme</button>
+  </div>`;
+}
+
+/* `<input type="color">` only accepts #rrggbb.
+ *
+ * The value being displayed can be an rgb() string, because that is what
+ * getComputedStyle hands back for a token. Given anything it cannot parse the
+ * input silently shows black, which would tell the reader their teal candles
+ * are black. So resolve through the browser and convert. */
+function hexish(value) {
+  // Checked first, because a probe given an unparseable value does not fail —
+  // it simply keeps the colour it inherits, so getComputedStyle returns --ink
+  // and this would answer "#f5f1ec" for the input "nonsense". Measured.
+  if (!isColor(value)) return '#000000';
+  const probe = document.createElement('span');
+  probe.style.color = value;
+  document.body.appendChild(probe);
+  const resolved = getComputedStyle(probe).color;
+  probe.remove();
+  const parts = (resolved.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+  if (parts.length !== 3) return '#000000';
+  return `#${parts.map((v) => Math.max(0, Math.min(255, Math.round(v)))
+    .toString(16).padStart(2, '0')).join('')}`;
+}
+
 function wsToolbar() {
   return `<div class="ws-toolbar">
     ${WS_MENUS.map((m) => {
@@ -9113,6 +9406,12 @@ function wsToolbar() {
     <button type="button" class="ws-menu-btn${chartMode === 'candle' ? ' on' : ''}"
       data-ws-mode="${chartMode === 'candle' ? 'line' : 'candle'}">${
   chartMode === 'candle' ? 'Candles' : 'Line'}</button>
+    <div class="ws-menu">
+      <button type="button" class="ws-menu-btn${chartColorsCustom() ? ' on' : ''}"
+        data-ws-menu="colors" aria-expanded="${wsMenuOpen === 'colors'}"
+        title="Colour of the candles and the line">Colours</button>
+      ${wsMenuOpen === 'colors' ? wsColorPop() : ''}
+    </div>
   </div>`;
 }
 
@@ -11305,6 +11604,23 @@ function wsMountChart() {
         open: ps.open || [], high: ps.high || [],
         low: ps.low || [], close: ps.close || [],
       } : null,
+      /* The reader's colours. See chartColor().
+       *
+       * Candles get an explicit value either way so the default lives in one
+       * place: charts.js has its own `|| C.s3` fallback for other callers, and
+       * if this passed nothing the picker's "default" swatch and the chart
+       * would be reading two separate copies of the same decision.
+       *
+       * Volume gets the *override only*. Passing chartColor() here would move
+       * the volume strip off pos/neg the moment this shipped, for everyone,
+       * without anyone asking: candles have always been s3/s8 and volume
+       * pos/neg. Null leaves it exactly as it was, and a chosen colour brings
+       * it along, which is what "I changed the candle colour" should mean when
+       * the bars beside it are coloured by the same up-or-down. */
+      candleUp: chartColor('up'),
+      candleDown: chartColor('down'),
+      volUp: chartColors.up || null,
+      volDown: chartColors.down || null,
       // Levels the workspace draws. Fibs as labelled lines, support and
       // resistance as bands, supply and demand as bands — same functions the
       // Swing chart uses, so the two cannot render the same level differently.
@@ -11325,7 +11641,12 @@ function wsMountChart() {
       // Drag pans this chart, so the measurement takes shift. See panDrag.
       panDrag: true,
       series: [
-        { name: 'Close', values: ps.close, color: wsCandles(ps) ? C.ink : C.s1,
+        { name: 'Close', values: ps.close,
+          // C.ink in candle mode is not a colour choice: the series is present
+          // only so the crosshair and tooltip have something to read, and it is
+          // not stroked. The reader's line colour applies to line mode, which
+          // is the mode where a line is actually drawn.
+          color: wsCandles(ps) ? C.ink : chartColor('line'),
           hidden: wsCandles(ps), fill: !wsCandles(ps) },
         /* One entry per average, each gated on its own switch, so the six
          * checkboxes in the Indicators menu mean what they say. Excluded
@@ -11570,14 +11891,23 @@ window.addEventListener('resize', () => {
  * Updating the pieces in place keeps the host alive with a real width, so the
  * build happens on the next frame instead of waiting for a poll.
  */
-function wsRedrawChart() {
+function wsRedrawChart(opts) {
   if (STATE.view !== 'chart' || !STATE.chartData || STATE.chartData === 'loading') return;
   const d = STATE.chartData;
   const ps = wsSeries(d);
 
-  // The toolbar owns which pill is lit and which menu is open.
-  const tb = views.chart.querySelector('.ws-toolbar');
-  if (tb) tb.outerHTML = wsToolbar();
+  /* The toolbar owns which pill is lit and which menu is open.
+   *
+   * `keepToolbar` exists for the colour wheel. `<input type="color">` opens the
+   * operating system's picker, and that picker belongs to *this* input element;
+   * replacing the toolbar's HTML while it is open destroys the element and the
+   * picker shuts with it. So dragging around the wheel redraws the chart and
+   * leaves the toolbar alone, and the discrete controls — swatches, Default,
+   * Reset — rebuild it because they need the pressed state to move. */
+  if (!(opts && opts.keepToolbar)) {
+    const tb = views.chart.querySelector('.ws-toolbar');
+    if (tb) tb.outerHTML = wsToolbar();
+  }
 
   // The legend's values change with the range, so it is rebuilt — but it is
   // ~12 nodes, not 430.
@@ -19938,6 +20268,26 @@ document.addEventListener('click', (evt) => {
     wsRedrawChart();
     return;
   }
+  /* Colours. Three discrete controls, all of them a full redraw including the
+   * toolbar: each one changes which swatch is pressed and whether Reset is
+   * still available, and those live in the toolbar. */
+  const wsSwatch = evt.target.closest('[data-ws-mark]');
+  if (wsSwatch) {
+    setChartColor(wsSwatch.dataset.wsMark, wsSwatch.dataset.wsMarkValue);
+    wsRedrawChart();
+    return;
+  }
+  const wsClear = evt.target.closest('[data-ws-mark-clear]');
+  if (wsClear) {
+    setChartColor(wsClear.dataset.wsMarkClear, null);
+    wsRedrawChart();
+    return;
+  }
+  if (evt.target.closest('[data-ws-mark-reset]')) {
+    resetChartColors();
+    wsRedrawChart();
+    return;
+  }
   const wsRange = evt.target.closest('[data-ws-range]');
   if (wsRange) {
     chartRange = wsRange.dataset.wsRange;
@@ -20610,6 +20960,46 @@ document.addEventListener('input', (evt) => {
       const again = views.chart.querySelector('[data-ws-manage-q]');
       if (again) { again.focus(); again.setSelectionRange(again.value.length, again.value.length); }
     }
+    return;
+  }
+  /* The colour wheel, live.
+   *
+   * `input` and not `change` so the chart follows the wheel while it is being
+   * dragged — a picker whose result only appears after you dismiss it makes
+   * choosing a colour a guessing game. The cost is that this fires on every
+   * movement, so the redraw is coalesced into one frame and the toolbar is left
+   * standing (see wsRedrawChart's keepToolbar: rebuilding it would destroy the
+   * input the OS picker is attached to and close the picker).
+   *
+   * The row's own preview square is updated directly here rather than waiting
+   * for the coalesced redraw, because it is one style write and it is the thing
+   * the eye is on. */
+  const wheel = evt.target.closest('[data-ws-mark-pick]');
+  if (wheel) {
+    const slot = wheel.dataset.wsMarkPick;
+    setChartColor(slot, wheel.value);
+    const row = wheel.closest('.wc-row');
+    const now = row.querySelector('.wc-now');
+    if (now) now.style.background = wheel.value;
+    /* And the contrast note, in place.
+     *
+     * This is the moment it is worth having: the reader is dragging around a
+     * wheel and a colour that vanishes into the background is one they are
+     * about to choose. It used to appear only on a toolbar rebuild, which the
+     * wheel skips by design, so it was absent for the whole gesture and turned
+     * up afterwards. */
+    const warn = row.querySelector('[data-ws-mark-warn]');
+    if (warn) {
+      const ratio = colorContrast(wheel.value);
+      const poor = ratio !== null && ratio < 3;
+      warn.hidden = !poor;
+      warn.textContent = poor ? markWarnText(ratio) : '';
+    }
+    if (wsColorFrame) cancelAnimationFrame(wsColorFrame);
+    wsColorFrame = requestAnimationFrame(() => {
+      wsColorFrame = 0;
+      wsRedrawChart({ keepToolbar: true });
+    });
     return;
   }
   const box = evt.target.closest('[data-cmp-input]');

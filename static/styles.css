@@ -5875,6 +5875,123 @@ b, strong { font-weight: 600; }
 }
 .ws-manage:hover { color: var(--ink); border-color: var(--ink-muted); }
 
+/* Colour picker for the price mark. Wider than the overlay menus because a row
+   of twelve swatches plus the wheel does not fit 210px, and wrapping them to
+   three ragged lines made the palette read as a list rather than a strip. */
+.ws-colors { min-width: 268px; }
+
+.wc-row + .wc-row {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.wc-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-1);
+}
+
+.wc-label { font-size: var(--t-caption); color: var(--ink-2); }
+
+/* The current colour, shown as a square rather than named. A hex string is not
+   something anyone recognises at a glance, and the token names are internal. */
+.wc-now {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--r-xs);
+  border: 1px solid var(--border-strong);
+}
+
+/* Pushed to the right so it does not sit against the preview square and read as
+   a caption for it. */
+.wc-clear {
+  margin-left: auto;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  background: none;
+  color: var(--ink-muted);
+  font-size: var(--t-micro);
+  cursor: pointer;
+  transition: color var(--dur-ui) var(--ease-ui),
+              border-color var(--dur-ui) var(--ease-ui);
+}
+.wc-clear:hover { color: var(--ink); border-color: var(--ink-muted); }
+
+.wc-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+/* 18px, not smaller: this is a touch target as well as a colour sample, and the
+   selected ring is drawn outside the box so it cannot shrink the colour. */
+.wc-swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-xs);
+  cursor: pointer;
+  transition: transform var(--dur-ui) var(--ease-ui),
+              box-shadow var(--dur-ui) var(--ease-ui);
+}
+.wc-swatch:hover { transform: scale(1.12); }
+
+/* box-shadow rather than an outline or a border: a border would eat 2px of the
+   swatch and change the colour area, and the ring needs a gap so it reads
+   against a swatch of any colour including one close to --ink. */
+.wc-swatch.on {
+  box-shadow: 0 0 0 1px var(--surface), 0 0 0 3px var(--ink);
+}
+
+/* The native picker. The input itself is the target, sized to match a swatch;
+   the "+" underneath is what the reader sees, because a bare colour input
+   renders as a filled box that looks like a thirteenth preset. */
+.wc-wheel {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border: 1px dashed var(--ink-muted);
+  border-radius: var(--r-xs);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: border-color var(--dur-ui) var(--ease-ui);
+}
+.wc-wheel input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.wc-wheel span {
+  font-size: var(--t-micro);
+  line-height: 1;
+  color: var(--ink-muted);
+  pointer-events: none;
+  transition: color var(--dur-ui) var(--ease-ui);
+}
+.wc-wheel:hover { border-color: var(--ink); }
+.wc-wheel:hover span { color: var(--ink); }
+
+/* The [hidden] pair, per the house rule: an author `display` beats the UA
+   stylesheet's [hidden] whatever the specificity, and this element is toggled
+   by the `hidden` attribute from the colour wheel's handler. There is no
+   `display` below today, so this is belt and braces rather than a fix. */
+.wc-warn[hidden] { display: none; }
+
+.wc-warn {
+  margin: var(--space-1) 0 0;
+  font-size: var(--t-micro);
+  line-height: 1.4;
+  color: var(--warn);
+}
+
 .ws-body {
   display: grid;
   /* rail · chart · dock · widget rail */

@@ -11,7 +11,7 @@ Live at https://theopticterminal.com (Railway, auto-deploys from `main`).
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Tests: `.venv/bin/python -m pytest -q`. There are 1097 and they all pass; keep it that way.
+Tests: `.venv/bin/python -m pytest -q`. There are 1123 and they all pass; keep it that way.
 
 A development account: `.venv/bin/python -m app.seed`. It prints a generated password
 once and refuses to run when a hosting platform is in the environment.
@@ -101,6 +101,29 @@ produces `rising`/`falling`, `side` read a `kind` field where the provider write
 bullish". All three stored fine, evaluated fine and never fired — and "did not fire" is
 also the correct answer most of the time, so nothing looked broken. `CONDITIONS[*]
 .param.choices` is now the single source and the UI is generated from it.
+
+**A `data-*` attribute is a namespace, and it is already crowded.** A colour
+picker for the price mark shipped rendering `data-ws-color`, which the indicator
+style editor had already claimed. Its handler sits earlier in the same click
+listener, so it matched first, called `setOverlayStyle(undefined, ...)` — which
+rejects an unknown id — and returned. Nothing threw, nothing was corrupted, the
+menu closed and no colour changed: a dead control, from a name collision that no
+tool reports. Grep for the attribute before inventing it. The price mark now
+uses `data-ws-mark-*`.
+
+**Colour cannot carry a meaning the number contradicts.** The home pulse strip
+inverted VIX so a rising fear gauge painted red, and the comment claimed a
+direction word carried the meaning alongside it. There was no word, so a reader
+saw `+2.16%` in red, and red means *down* in every other percentage in this app.
+It was reported as a rendering fault. Colouring by sign would only move the lie
+the other way: green on a rising VIX says higher fear is good news. VIX and the
+10Y now take no directional colour and say the reading in words, because neither
+direction is good or bad on its own.
+
+**`--pos`/`--neg` and the candle pair are not the same pair.** Candles have
+always been `s3`/`s8` and the volume strip `pos`/`neg`. Anything that unifies
+them restyles every chart in the app for readers who never asked. The chart
+colour override passes the reader's choice to volume *only when they made one*.
 
 **Every control needs a handler, and every handler needs a control.** `data-ws-hide`
 was markup with nothing behind it, and three `askPulse()` topics were asked for and

@@ -13,6 +13,8 @@ way in.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -359,11 +361,17 @@ def test_the_owner_marker_is_rendered_and_styled():
     assert ".acct-admin {" in open("static/styles.css").read()
 
 
-def test_assets_were_cache_busted():
-    """auth.js and app.js both changed, and index.html pins a version. A stale
-    version leaves returning readers on the old pair, where STATE.admin does
-    not exist and the marker never shows."""
+def test_assets_share_one_cache_bust_version():
+    """Not a literal version number.
+
+    The first version of this asserted `?v=398`, which meant the next asset
+    change failed a test about accounts, and the obvious repair is to bump the
+    number here, at which point the test asserts nothing. What actually matters
+    is that the tags agree: app.js and auth.js are edited together, and a reader
+    served 399 of one against 398 of the other gets a page where STATE.admin
+    does not exist and the account menu never shows the marker."""
     html = open("static/index.html").read()
-    assert "auth.js?v=398" in html
-    assert "app.js?v=398" in html
-    assert "?v=397" not in html
+    versions = set(re.findall(r"\.(?:js|css)\?v=(\d+)", html))
+    assert len(versions) == 1, versions
+    for asset in ("app.js", "auth.js", "charts.js", "styles.css"):
+        assert "%s?v=" % asset in html, asset

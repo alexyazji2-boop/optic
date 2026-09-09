@@ -701,6 +701,17 @@ function lineChart(opts) {
     // Folded into this chart rather than a separate function so candles inherit
     // the axis, date labels, reference-line placement and hover layer.
     candles = null,
+    /* The directional pair for the price mark and the volume strip.
+     *
+     * Defaulted to the slots each already used rather than to one shared pair,
+     * because they were never the same pair: candles have always been s3/s8 and
+     * volume pos/neg. Passing a default of `C.pos` here would have quietly
+     * restyled every candle in the app on the way to making them configurable.
+     *
+     * Read at call time, not captured at module scope: `syncChartTheme()`
+     * rewrites C when the OS theme flips, and a default frozen at import would
+     * keep drawing the old theme's colours. */
+    candleUp = null, candleDown = null, volUp = null, volDown = null,
     // Sloped lines in (bar index, price) space — trend lines, channels, and any
     // drawing anchored to two points. refLines cannot express these: they are
     // horizontal by construction, which is right for a level and wrong for a
@@ -1000,7 +1011,8 @@ function lineChart(opts) {
         ? null : cur >= prev;
       const bar = s('rect', {
         x: X(i) - barW / 2, y: volTop + volH - h, width: barW, height: h,
-        fill: up === null ? C.muted : (up ? C.pos : C.neg),
+        fill: up === null ? C.muted
+          : (up ? (volUp || C.pos) : (volDown || C.neg)),
         opacity: 0.42, rx: Math.min(1.5, barW / 2),
       });
       volBars[i] = bar;
@@ -1356,7 +1368,7 @@ function lineChart(opts) {
       const oo = o[i], hh = h[i], ll = l[i], cc = c[i];
       if ([oo, hh, ll, cc].some((v) => v === null || v === undefined || !isFinite(v))) continue;
       const up = cc >= oo;
-      const colour = up ? C.s3 : C.s8;
+      const colour = up ? (candleUp || C.s3) : (candleDown || C.s8);
       const x = X(i);
       levelLayer.appendChild(s('line', {
         x1: x, y1: Y(hh), x2: x, y2: Y(ll), stroke: colour, 'stroke-width': 1,
