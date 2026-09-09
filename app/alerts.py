@@ -2,12 +2,16 @@
 
 **What this is and is not.** It is a rules engine plus a stored inbox. It is not
 a delivery mechanism — nothing here sends an email or a text, and the reason is
-worth stating rather than hiding behind a TODO. Delivery needs two things this
-setup does not have: a credential (an SMTP password or a provider key, which
-belongs in .env and which the operator has to create) and, far more importantly,
-a server that is awake whenever the market is. This one runs on a laptop behind a
-temporary tunnel. An alert that silently misses the move it was created for is
-worse than no alert, because you would have stopped watching.
+worth stating rather than hiding behind a TODO. Delivery needs two things: a
+credential (an SMTP password or a provider key, which belongs in .env and which
+the operator has to create) and a server that is awake whenever the market is.
+An alert that silently misses the move it was created for is worse than no
+alert, because you would have stopped watching.
+
+The second requirement used to be the hard one: this ran on a laptop behind a
+temporary tunnel. It is on a hosting platform now, so `status()` reads where it
+is running rather than asserting it, and the remaining blocker on the deployed
+site is the credential and the `ALERT_ALWAYS_ON` acknowledgement.
 
 So: rules are evaluated whenever the ledger scans, hits are written to the
 database, and the UI shows them. When there is a host and a key, `deliver()` is
@@ -28,6 +32,8 @@ import sqlite3
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+
+from .runtime import is_hosted
 
 DB_PATH = os.path.join("data", "alerts.db")
 
@@ -247,12 +253,23 @@ def delivery_status() -> Dict[str, Any]:
             "No sending credential. Set ALERT_SMTP_URL (an SMTP app password) or "
             "ALERT_EMAIL_KEY (Resend/Postmark) in .env.",
             None if to else "No recipient. Set ALERT_EMAIL_TO in .env.",
-            None if always_on else
-            "The server is not declared always-on. Alerts fire only while this "
-            "process is running, and it currently runs on a laptop behind a "
-            "temporary tunnel. So anything that happens while it sleeps is "
-            "missed silently. Set ALERT_ALWAYS_ON=true once it is deployed "
-            "somewhere that stays up.",
+            None if always_on else (
+                # Where this is running is read, not asserted. The original text
+                # said "it currently runs on a laptop behind a temporary tunnel",
+                # which was true when it was written and is now wrong on the
+                # deployed site: it tells the operator to wait for a deployment
+                # that already happened.
+                "The server is not declared always-on. Alerts fire only while "
+                "this process is running. This one is on a hosting platform, so "
+                "it stays up between scans: set ALERT_ALWAYS_ON=true to confirm "
+                "that and let delivery enable itself."
+                if is_hosted() else
+                "The server is not declared always-on. Alerts fire only while "
+                "this process is running, and this one is a local process that "
+                "stops when you close it, so anything that happens while it is "
+                "down is missed silently. Set ALERT_ALWAYS_ON=true once it is "
+                "deployed somewhere that stays up."
+            ),
         ] if b],
     }
 
@@ -263,6 +280,8 @@ def deliver(alert: Dict[str, Any]) -> bool:
     The single function a delivery layer needs. It is left as a refusal rather
     than a half-working SMTP call because a half-working one is the dangerous
     version: it would appear to work in testing, then drop messages whenever the
-    laptop slept, and the failure would be invisible exactly when it mattered.
+    process was down, and the failure would be invisible exactly when it
+    mattered. On a hosting platform that is a restart or a redeploy rather than
+    a laptop lid, which is a shorter window and not a smaller problem.
     """
     return False

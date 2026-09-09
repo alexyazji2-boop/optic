@@ -874,26 +874,46 @@ function loadingHTML(what) {
  * later by someone who has never read this function. */
 const ORIGIN_DOWN_RE = /(server is unreachable|connection dropped).*attempts/i;
 
+/* Can the address in the bar disappear, or only stop answering?
+ *
+ * A Cloudflare quick tunnel takes a brand-new hostname every restart, so the
+ * link a reader is holding is genuinely dead and no reload can find the
+ * replacement. That was how this app was served when the copy below was
+ * written, and it is still true when someone runs it through a quick tunnel.
+ *
+ * A custom domain, Railway's generated domain and localhost all keep their name
+ * across a restart, and there the same words are wrong twice: the link is fine,
+ * and reloading is exactly what fixes it once the server answers. Telling
+ * somebody their permanent domain has rotated sends them looking for a new URL
+ * that does not exist.
+ *
+ * Matched on the hostname rather than configured, because this is a statement
+ * about the address the browser used, which is the one thing the client always
+ * knows for certain. */
+function originIsEphemeral() {
+  return /(^|\.)trycloudflare\.com$/i.test(location.hostname);
+}
+
 function errorHTML(msg, opts = {}) {
   const down = opts.originUnreachable || ORIGIN_DOWN_RE.test(String(msg || ''));
   if (!down) {
     return `<div class="error-box"><strong>Could not load.</strong> ${esc(msg)}</div>`;
   }
-  /* The tunnel case, which needs different words.
-   *
-   * This is not a bug in the request — the whole origin is gone. The address
-   * this page was opened from is a temporary Cloudflare quick tunnel, and it
-   * gets a brand-new hostname every time it restarts, so there is nothing the
-   * client can do to find the replacement. Saying so is more useful than
-   * repeating the status code, and the poller below means a short blip heals
-   * without anyone reloading.
-   */
+  /* The origin is gone, which needs different words from a failed request, and
+   * different words again depending on whether the address itself can rot.
+   * See originIsEphemeral. Either way the poller below means a blip heals
+   * without anyone reloading. */
   startOriginWatch();
+  const note = originIsEphemeral()
+    ? `This address is a temporary tunnel, and it changes every time the server
+       restarts. So if it has rotated, this link is dead and no reload will bring
+       it back.`
+    : `This address is not going to change, so this is the server rather than the
+       link: most likely a restart or a deploy in progress. It will come back on
+       its own and this page will reload itself when it does.`;
   return `<div class="error-box">
     <strong>The server is not reachable.</strong> ${esc(msg)}.
-    <div class="error-note">This address is a temporary tunnel, and it changes
-      every time the server restarts. So if it has rotated, this link is dead
-      and no reload will bring it back. Watching for it to return…
+    <div class="error-note">${note} Watching for it to return…
       <span id="origin-watch-state">checking</span>.</div>
     <div class="error-acts">
       <button type="button" class="btn" data-origin-retry>Try again now</button>
@@ -1005,7 +1025,12 @@ async function postJSON(url, body) {
     try { detail = ((await res.json()).detail || '').toString(); } catch (e) { /* not JSON */ }
     if (!detail) {
       detail = res.status >= 502 && res.status <= 530
-        ? `the server is unreachable (HTTP ${res.status}). The tunnel may have dropped`
+        // Third site with the same distinction, found by a test whose
+        // `.index()` matched this one instead of the streaming path. On a
+        // stable address a 5xx from the edge means the origin is down, not
+        // that a tunnel rotated.
+        ? `the server is unreachable (HTTP ${res.status}). ${originIsEphemeral()
+          ? 'The tunnel may have dropped' : 'It may be restarting'}`
         : `${res.statusText || 'request failed'} (HTTP ${res.status})`;
     }
     throw new Error(detail);
@@ -19678,14 +19703,19 @@ async function streamTo(url, body, node) {
     try { detail = ((await res.json()).detail || '').toString(); } catch (e) { /* not JSON */ }
     statusEl.textContent = '';
     if (!detail && res.status >= 502 && res.status <= 530) {
-      // 502-530 come from Cloudflare, not this server: the quick tunnel that was
-      // serving this page has been replaced, so the hostname in the address bar
-      // no longer routes anywhere. The app is almost certainly running fine on a
-      // new address — which is worth saying, because "HTTP 530" reads as the
-      // assistant breaking rather than the link having expired.
-      detail = `This link has expired (HTTP ${res.status}). The temporary tunnel serving `
-        + 'this page was replaced. The terminal is still running on a new address; '
-        + 'ask for the current link and reload.';
+      // 502-530 come from the edge, not from this server, so the words depend on
+      // whether the address can rot. On a quick tunnel the hostname really has
+      // been replaced and no reload will help. On a stable domain the same
+      // status means the origin is down or mid-deploy, and telling somebody
+      // their own domain has expired sends them hunting a URL that does not
+      // exist. Worth distinguishing either way, because a bare "HTTP 530" reads
+      // as the assistant breaking.
+      detail = originIsEphemeral()
+        ? `This link has expired (HTTP ${res.status}). The temporary tunnel serving `
+          + 'this page was replaced. The terminal is still running on a new address; '
+          + 'ask for the current link and reload.'
+        : `The server did not answer (HTTP ${res.status}). The address is fine, so `
+          + 'this is a restart or a deploy: wait a moment and send it again.';
     }
     throw new Error(detail || `Request failed (HTTP ${res.status})`);
   }

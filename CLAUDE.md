@@ -11,7 +11,7 @@ Live at https://theopticterminal.com (Railway, auto-deploys from `main`).
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Tests: `.venv/bin/python -m pytest -q`. There are 1172 and they all pass; keep it that way.
+Tests: `.venv/bin/python -m pytest -q`. There are 1183 and they all pass; keep it that way.
 
 A development account: `.venv/bin/python -m app.seed`. It prints a generated password
 once and refuses to run when a hosting platform is in the environment.
@@ -173,6 +173,16 @@ let a displaced average squat on a colour a later average was keeping.
 `STATE.ticker`. The Charting tab has `wsIndicators`, keyed on
 `STATE.chartSymbol`, because drawing the former on the latter puts one company's
 bands over another company's candles and labels them correctly.
+
+**Error copy that names the deployment goes stale when the deployment moves.**
+Three places told the reader "this address is a temporary tunnel and changes
+every time the server restarts", which was true on a Cloudflare quick tunnel and
+is wrong twice on a custom domain: the link is fine, and reloading is exactly
+what fixes it. `originIsEphemeral()` tests the hostname for `trycloudflare.com`
+and the copy branches on it, so both cases get true words. `app/alerts.py` had
+the same premise in prose and now reads `is_hosted()`. A test asserts no
+reader-facing string in that module asserts a laptop, scoped with `ast` so it
+does not trip over the docstring's own past-tense account.
 
 **A heading is a claim.** The factor panel was titled "Why it's moving" with
 the day's change beside it, and its body ranks the model's inputs by *absolute*
