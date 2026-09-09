@@ -5875,6 +5875,22 @@ b, strong { font-weight: 600; }
 }
 .ws-manage:hover { color: var(--ink); border-color: var(--ink-muted); }
 
+/* The studies menu. Wider than the overlay menus because these names are words
+   rather than `SMA 20`, and `Regression channel` wrapped to two lines in 210px,
+   which made a five-item list look like ten. */
+.ws-studies { min-width: 236px; }
+
+/* Same treatment as .lvl-note, which is the equivalent line on the Analysis
+   tab's indicator dropdown. Both classes shipped as markup with no rule at all
+   for one revision: the note rendered at body size and was the tallest thing in
+   the popover. */
+.ws-studies-note {
+  margin: var(--space-2) var(--space-1) 0;
+  font-size: var(--t-micro);
+  line-height: 1.5;
+  color: var(--ink-muted);
+}
+
 /* Colour picker for the price mark. Wider than the overlay menus because a row
    of twelve swatches plus the wheel does not fit 210px, and wrapping them to
    three ragged lines made the palette read as a list rather than a strip. */

@@ -11,10 +11,16 @@ Live at https://theopticterminal.com (Railway, auto-deploys from `main`).
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Tests: `.venv/bin/python -m pytest -q`. There are 1123 and they all pass; keep it that way.
+Tests: `.venv/bin/python -m pytest -q`. There are 1147 and they all pass; keep it that way.
 
 A development account: `.venv/bin/python -m app.seed`. It prints a generated password
 once and refuses to run when a hosting platform is in the environment.
+
+`tests/test_js_parses.py` evaluates `charts.js` and `app.js` under macOS's
+JavaScriptCore and asserts that the cross-panel functions exist. It skips where
+`jsc` is absent. It exists because two edits to one region deleted `maLabel`
+while twelve call sites kept referencing it, and nothing caught it: the file
+parsed, the Python suite passed, and the only symptom was an empty chart legend.
 
 There is **no JS test runner** in this project. Client-side behaviour is verified in a
 real browser, and client-side *contracts* are asserted by reading `static/*.js` as text
@@ -142,6 +148,31 @@ series.
 the daily allowance out of SQLite and catches `(sqlite3.Error, OSError)` — OSError as
 well, because opening the database creates its directory first and an unmounted volume
 raises from `os.makedirs`. Catching only the sqlite family left a 500 on `/api/chat`.
+
+**The Charting tab and the Swing chart must agree, and four things made them
+disagree.** They draw the same instrument from the same flags, so anything that
+resolves *how* a series looks has to be one function called by both. What went
+wrong: the five price-pane studies (Bollinger, Keltner, Donchian, regression,
+VWAP) drew only on Swing and were absent from the tab whose job is charting; the
+Swing tab substituted a hardcoded `s1/s2/s4` for the SMAs in candle mode, so the
+same SMA 20 was a different colour on each tab and a colour chosen in the
+indicator dialog was honoured on one and dropped on the other; the study palette
+was seeded from different sets, so `allocateOverlayColors` gave one study two
+colours; and the labels disagreed, with `200-day SMA` hardcoded on a chart that
+has a Weekly pill. `maColorsOnChart`, `chartBaseColors` and `maLabel` are now the
+single answers, and `tests/test_indicator_parity.py` holds them there.
+
+**Defaults yield to choices; choices yield to nothing; defaults do not push each
+other.** That is the whole rule in `maColorsOnChart`, and three versions of it
+were wrong: one added every resolved colour to the taken pile, so choosing SMA
+50's colour silently recoloured two other averages; one compared defaults only
+against the candle pair, leaving a chosen colour and a default drawn alike; one
+let a displaced average squat on a colour a later average was keeping.
+
+**`STATE.indicators` belongs to the Analysis tab.** It is keyed on
+`STATE.ticker`. The Charting tab has `wsIndicators`, keyed on
+`STATE.chartSymbol`, because drawing the former on the latter puts one company's
+bands over another company's candles and labels them correctly.
 
 **Two market session models.** `app/session.py` is authoritative and models the ten NYSE
 holidays and three early closes from the exchange's rules. `static/app.js` has its own

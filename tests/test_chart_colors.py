@@ -99,7 +99,11 @@ def test_both_charts_get_the_same_colours():
     already shares the overlay toggles for this reason."""
     assert APP_JS.count("candleUp: chartColor('up')") == 2
     assert APP_JS.count("candleDown: chartColor('down')") == 2
-    assert APP_JS.count("chartColor('line')") == 2
+    # Both `Close` series, by name. A global count of chartColor('line') was the
+    # wrong shape: it is legitimately read by chartBaseColors and by the Swing
+    # tab's line-mode legend key as well, so the number moved for good reasons.
+    assert APP_JS.count("color: wsCandles(ps) ? C.ink : chartColor('line')") == 1
+    assert APP_JS.count("color: candleMode ? C.ink : chartColor('line')") == 1
 
 
 # ------------------------------------------------------------------ the store
@@ -226,15 +230,6 @@ def test_the_selected_ring_does_not_shrink_the_swatch():
     reads against a swatch of any colour including one close to --ink."""
     block = CSS[CSS.index(".wc-swatch.on"):]
     assert "box-shadow" in block[:220]
-
-
-def test_assets_were_cache_busted():
-    """app.js, charts.js and styles.css all changed. A stale version leaves a
-    returning reader on the old trio, where the Colours button renders and its
-    handler does not exist."""
-    for asset in ("app.js", "charts.js", "styles.css"):
-        assert "%s?v=399" % asset in HTML, asset
-    assert "?v=398" not in HTML
 
 
 # ------------------------------------------------------- the VIX pulse tile

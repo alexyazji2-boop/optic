@@ -5498,10 +5498,12 @@ function renderSwing(d) {
      * they will see it — which is more than the old silent reassignment gave
      * anyone who disagreed with it. */
     const styleOf = (id) => overlayStyle(id);
-    const maColors = candleMode
-      ? { fast: C.s1, mid: C.s2, slow: C.s4 }
-      : { fast: styleOf('sma20').color, mid: styleOf('sma50').color,
-        slow: styleOf('sma200').color };
+    // One resolver, shared with the Charting tab. See maColorsOnChart: the
+    // hardcoded s1/s2/s4 that used to live here in candle mode is why the same
+    // SMA 20 was a different colour on the two tabs, and why a colour chosen in
+    // the dialog was honoured on one of them and dropped on the other.
+    const maOn = maColorsOnChart(candleMode);
+    const maColors = { fast: maOn.sma20, mid: maOn.sma50, slow: maOn.sma200 };
 
     // Everything the base chart is already using, so the overlays can take hues
     // nothing else on this plot has claimed. Collected here rather than assumed,
@@ -5509,19 +5511,17 @@ function renderSwing(d) {
     // The EMA fan gets its own hue family: fast-to-slow inside one colour would
     // be indistinguishable, and reusing the SMA colours makes a chart with both
     // families on unreadable.
-    const emaColors = { fast: styleOf('ema9').color, mid: styleOf('ema21').color,
-      slow: styleOf('ema50').color };
-    const baseColors = candleMode
-      ? [C.ink, C.s3, C.s8, maColors.fast, maColors.mid, maColors.slow]
-      : [C.s1, maColors.fast, maColors.mid, maColors.slow];
-    if (showFib && !ps.intraday) baseColors.push(C.refFib);
-    if (showSR && !ps.intraday) baseColors.push(C.refSR);
-    if (showVbp) baseColors.push(C.ink2);
-    if (showInsiders && !ps.intraday) baseColors.push(C.s3, C.neg);
-    if (showZones && !ps.intraday) baseColors.push(C.neg, C.s3);
-    if (showEMA && !ps.intraday) {
-      baseColors.push(emaColors.fast, emaColors.mid, emaColors.slow);
-    }
+    const emaColors = { fast: maOn.ema9, mid: maOn.ema21, slow: maOn.ema50 };
+    /* Same seed the Charting tab uses. See chartBaseColors: allocation depends
+     * on what is already taken, so two tabs seeding this differently give the
+     * same study two different colours.
+     *
+     * It also fixes a seeding bug of its own. This used to push the EMA colours
+     * only `if (showEMA)`, the family checkbox, while the series array filters
+     * on `seriesDrawn(id)` per average. With EMA 9 on and the family flag off
+     * the allocator never learned s5 was taken and handed it to Bollinger, so
+     * two overlays were drawn in one colour. */
+    const baseColors = chartBaseColors(ps, candleMode, ps.intraday);
     const overlayPalette = allocateOverlayColors(baseColors);
     // Kept on STATE so the written explanations below can show the same swatch as
     // the line on the chart. Recomputing it there would drift the moment the base
@@ -5530,17 +5530,19 @@ function renderSwing(d) {
 
     mount('legend-price', legend([
       ...(candleMode
-        ? [{ name: ps.weekly ? 'Up week' : 'Up day', color: C.s3 },
-          { name: ps.weekly ? 'Down week' : 'Down day', color: C.s8 }]
-        : [{ name: 'Close', color: C.s1 }]),
+        // The reader's own candle colours, not s3/s8: those are the defaults
+        // chartColor() returns anyway, and hardcoding them made the key lie
+        // the moment anyone used the Charting tab's colour picker.
+        ? [{ name: ps.weekly ? 'Up week' : 'Up day', color: chartColor('up') },
+          { name: ps.weekly ? 'Down week' : 'Down day', color: chartColor('down') }]
+        : [{ name: 'Close', color: chartColor('line') }]),
       /* Derived from the same per-average switches as the series, so the
        * legend cannot name a line that is not on the chart. It previously
        * dropped the 200 entry on weekly while the series still drew it. */
       ...(ps.intraday ? [] : [
-        ['sma20', ps.weekly ? '20-week SMA' : '20-day SMA', maColors.fast],
-        ['sma50', ps.weekly ? '50-week SMA' : '50-day SMA', maColors.mid],
-        ['sma200', '200-day SMA', maColors.slow],
-      ].filter(([id]) => seriesDrawn(id)).map(([, name, color]) => ({ name, color }))),
+        ['sma20', maColors.fast], ['sma50', maColors.mid], ['sma200', maColors.slow],
+      ].filter(([id]) => seriesDrawn(id))
+        .map(([id, color]) => ({ name: maLabel(id, ps), color }))),
       showFib && !ps.intraday ? { name: 'Fibonacci level', color: C.refFib, dash: true } : null,
       showSR && !ps.intraday ? { name: 'Support / resistance', color: C.refSR, dash: true } : null,
       showVbp ? { name: 'Volume by price', color: C.ink2, boxed: true } : null,
@@ -5552,10 +5554,9 @@ function renderSwing(d) {
       // extra information. Six unlabelled lines on the chart is the failure this
       // avoids — the reader could see them and not know which was VWAP.
       ...(ps.intraday ? [] : [
-        ['ema9', 'EMA 9', emaColors.fast],
-        ['ema21', 'EMA 21', emaColors.mid],
-        ['ema50', 'EMA 50', emaColors.slow],
-      ].filter(([id]) => seriesDrawn(id)).map(([, name, color]) => ({ name, color }))),
+        ['ema9', emaColors.fast], ['ema21', emaColors.mid], ['ema50', emaColors.slow],
+      ].filter(([id]) => seriesDrawn(id))
+        .map(([id, color]) => ({ name: maLabel(id, ps), color }))),
       // One key per cloud, not one per state. See emaCloudLegend.
       ...emaCloudLegend(ps),
       ...(ps.intraday ? [] : indicatorOverlayLegend(overlayPalette)),
@@ -5614,9 +5615,9 @@ function renderSwing(d) {
          * the flags are shared, so the two tabs cannot disagree about which
          * averages are on. Labels keep this tab's bar-unit naming. */
         ...(ps.intraday ? [] : [
-          ['sma20', ps.weekly ? '20-week SMA' : '20-day SMA', ps.sma20, maColors.fast],
-          ['sma50', ps.weekly ? '50-week SMA' : '50-day SMA', ps.sma50, maColors.mid],
-          ['sma200', '200-day SMA', ps.sma200, maColors.slow],
+          ['sma20', maLabel('sma20', ps), ps.sma20, maColors.fast],
+          ['sma50', maLabel('sma50', ps), ps.sma50, maColors.mid],
+          ['sma200', maLabel('sma200', ps), ps.sma200, maColors.slow],
         ].filter(([id]) => seriesDrawn(id)).map(([id, name, values, color]) => ({
           name, values: values || [], color, width: styleOf(id).width, marker: false,
         }))),
@@ -5626,9 +5627,9 @@ function renderSwing(d) {
         // are computed from daily bars and would describe a different timeframe
         // from the one on screen.
         ...(ps.intraday ? [] : [
-          ['ema9', 'EMA 9', ps.ema9, emaColors.fast],
-          ['ema21', 'EMA 21', ps.ema21, emaColors.mid],
-          ['ema50', 'EMA 50', ps.ema50, emaColors.slow],
+          ['ema9', maLabel('ema9', ps), ps.ema9, emaColors.fast],
+          ['ema21', maLabel('ema21', ps), ps.ema21, emaColors.mid],
+          ['ema50', maLabel('ema50', ps), ps.ema50, emaColors.slow],
         ].filter(([id]) => seriesDrawn(id)).map(([id, name, values, color]) => ({
           name, values: values || [], color, width: styleOf(id).width, marker: false,
         }))),
@@ -7503,6 +7504,41 @@ function resetOverlayStyle(id) {
   catch (e) { /* private mode */ }
 }
 
+/* An average's legend label, in the units of the bars on screen.
+ *
+ * `20-day SMA` on a daily chart and `20-week SMA` on a weekly one, because the
+ * length is counted in bars and the bars change. Three things were wrong before
+ * this existed and all three were on screen:
+ *
+ *   * the Charting tab said `SMA 20` whatever the interval, and it has a Weekly
+ *     pill, so a weekly chart described a 20-week average as a 20-day one;
+ *   * the Swing tab hardcoded `200-day SMA` while making its 20 and 50 unit
+ *     aware, so on a weekly chart two of its three labels were right;
+ *   * the Swing tab named its EMAs `EMA 9` and its SMAs `20-day SMA`, so one
+ *     legend used two schemes for the same kind of thing.
+ *
+ * The length comes from the overlay's own parameters rather than a literal,
+ * because the manage dialog lets it be changed and already promises exactly
+ * this: "The label will say 30 and the line will still be 20 until the
+ * recompute lands." A hardcoded 20 here would break that promise.
+ *
+ * The short forms in OVERLAY_DEFS stay as they are: those label the *picker*,
+ * where someone is choosing a length rather than reading a plot, and a menu has
+ * no series to ask about the interval.
+ */
+function maLabel(id, ps) {
+  const params = overlayStyle(id).params || {};
+  const length = params.length !== undefined ? params.length : '';
+  const kind = String(id).startsWith('ema') ? 'EMA' : 'SMA';
+  // `monthly` is here for safety rather than for a case that exists today:
+  // CHART_INTERVALS is daily and weekly only, and the monthly rollup belongs to
+  // the Long-term tab, which has its own ltMa() and never calls this. One
+  // clause now beats the bug this function was written to fix reappearing the
+  // day a Monthly pill is added.
+  const unit = (ps && ps.monthly) ? 'month' : ((ps && ps.weekly) ? 'week' : 'day');
+  return length + '-' + unit + ' ' + kind;
+}
+
 /** Has this overlay been changed from its default? Drives the "reset" affordance,
  *  which should only appear when there is something to reset. */
 function overlayStyled(id) {
@@ -7589,6 +7625,89 @@ function spareHue(taken) {
     if (!taken.has(candidate)) return candidate;
   }
   return 'hsl(0 0% 70%)';
+}
+
+/* Did the reader pick this overlay's colour, as opposed to inheriting it?
+ *
+ * Colour specifically, not `overlayStyled()`, which is also true when only the
+ * width or a parameter changed. The candle-mode rule below has to tell a
+ * default it may move from a choice it must not. */
+function overlayColorChosen(id) {
+  const saved = chartStyle[id];
+  return !!(saved && COLOR_CHOICES.includes(saved.color));
+}
+
+/* What the six averages are actually drawn in, on a chart in this mode.
+ *
+ * **One function, called by both tabs.** They disagreed before: the Charting
+ * tab read the style store directly, while the Swing tab in candle mode
+ * substituted a hardcoded s1/s2/s4 for the three SMAs. So the same SMA 20 was
+ * orange on one tab and blue on the other, and a colour picked in the indicator
+ * dialog was honoured on one and silently discarded on the other, which that
+ * code's own comment said should not happen.
+ *
+ * **Why candle mode needs a rule at all.** The candles occupy two hues and an
+ * average on its default can land on one of them: sma50's default is s3, which
+ * is also the default up-candle. A line the same colour as the bars it is drawn
+ * over is not a line anyone can read.
+ *
+ * **A choice wins; only a default moves.** That is the trade the Swing tab's
+ * comment described and its code did not implement. Someone choosing a colour
+ * in the dialog is looking at the chart while they do it, so a collision they
+ * create is one they can see. Someone who never opened the dialog cannot.
+ *
+ * **Two passes, and the order is the whole rule.** Pass one settles everything
+ * that cannot move: the price mark's colours and any average whose colour the
+ * reader chose. Pass two places the defaults, which yield to anything settled
+ * and to each other.
+ *
+ * That ordering is what stops a choice from cascading. A first version added
+ * every resolved colour to the taken pile in one pass, so choosing s7 for
+ * SMA 50 pushed EMA 21 off its own s7, which pushed EMA 50 off s6: one change
+ * silently recoloured two other averages. A second version only compared
+ * defaults against the mark colours, which fixed the cascade and left SMA 50
+ * and EMA 21 both drawn in s7. Defaults yield to choices, choices yield to
+ * nothing, and defaults do not push each other around.
+ *
+ * **Measured against the mark's real colours, not against s3/s8.** The candle
+ * pair is configurable now, so a hardcoded guard would protect the wrong two
+ * hues the moment anyone changed them. */
+const MA_CANDLE_FALLBACKS = ['s1', 's2', 's4', 's5', 's7', 's6', 'ink2', 'refSR'];
+const MA_SERIES_IDS = ['sma20', 'sma50', 'sma200', 'ema9', 'ema21', 'ema50'];
+
+function maColorsOnChart(candleMode) {
+  const lc = (c) => String(c || '').toLowerCase();
+  const out = {};
+
+  // 1. The immovable: the price mark, then every colour the reader picked.
+  const fixed = new Set(candleMode
+    ? [lc(chartColor('up')), lc(chartColor('down'))]
+    : [lc(chartColor('line'))]);
+  MA_SERIES_IDS.forEach((id) => {
+    if (!overlayColorChosen(id)) return;
+    out[id] = overlayStyle(id).color;
+    fixed.add(lc(out[id]));
+  });
+
+  // 2. Which remaining defaults collide with something immovable.
+  const rest = MA_SERIES_IDS.filter((id) => out[id] === undefined);
+  const displaced = rest.filter((id) => fixed.has(lc(overlayStyle(id).color)));
+  const keepers = rest.filter((id) => !displaced.includes(id));
+  keepers.forEach((id) => { out[id] = overlayStyle(id).color; });
+
+  // 3. Place the displaced. They avoid the immovable colours AND the defaults
+  //    the keepers are sitting on, not just what has been assigned so far.
+  //    Avoiding only the running total let a displaced average squat on a
+  //    later one's default: with the candles set to s2 and s4, SMA 200 was
+  //    pushed onto s5, which is EMA 9's own colour, so the two came out alike.
+  const avoid = new Set([...fixed, ...keepers.map((id) => lc(out[id]))]);
+  displaced.forEach((id) => {
+    const free = MA_CANDLE_FALLBACKS.map((tok) => C[tok])
+      .find((c) => c && !avoid.has(lc(c)));
+    out[id] = free || overlayStyle(id).color;
+    avoid.add(lc(out[id]));
+  });
+  return out;
 }
 
 function allocateOverlayColors(usedColors) {
@@ -9102,6 +9221,28 @@ function wsLegend(ps) {
     }
     return null;
   };
+  /* Row names for the six averages come from maLabel, so this legend and this
+   * chart's own hover tooltip agree. They did not: the legend read `SMA 20`
+   * off OVERLAY_DEFS while the series was named `20-day SMA`, which is one tab
+   * calling the same line two things. The detail in brackets drops the length
+   * for those rows, because the name now carries it. */
+  const nameOf = (id) => (MA_SERIES_IDS.includes(id)
+    ? maLabel(id, ps) : overlayStyle(id).label);
+
+  /* The averages' row colour comes from the resolver, not from the raw style.
+   *
+   * `overlayStyle(id).color` is what is *stored*; `maColorsOnChart` is what is
+   * *drawn*, and in candle mode those differ for any average displaced off a
+   * colour the candles or a chosen average took. The legend showed the stored
+   * one, so with SMA 50 set to s7 the EMA 21 line was drawn in s1 and keyed in
+   * s7: the legend named the colour of a line that was not on the chart.
+   *
+   * Recomputed here rather than passed in, because it is a pure function of
+   * state the legend already has. */
+  const legMa = maColorsOnChart(wsCandles(ps));
+  const colorOf = (id) => (MA_SERIES_IDS.includes(id)
+    ? legMa[id] : overlayStyle(id).color);
+
   const add = (id, valueSeries, detail) => {
     if (!wsOverlayOn(id)) return;
     const st = overlayStyle(id);
@@ -9109,7 +9250,7 @@ function wsLegend(ps) {
     const hidden = overlayHidden(id);
     rows.push(`<div class="ws-leg-row${hidden ? ' is-hidden' : ''}"
       data-ws-leg="${esc(id)}">
-      <span class="ws-leg-name" style="color:${st.color}">${esc(st.label)}${
+      <span class="ws-leg-name" style="color:${colorOf(id)}">${esc(nameOf(id))}${
   detail ? ` <span class="ws-leg-args">(${esc(detail)})</span>` : ''}</span>
       ${v === null ? '' : `<span class="ws-leg-val">${fmt(v, 2)}</span>`}
       <button type="button" class="ws-leg-btn${hidden ? ' is-off' : ''}"
@@ -9154,12 +9295,15 @@ function wsLegend(ps) {
   };
 
   const p = (id) => overlayStyle(id).params || {};
-  add('sma20', ps.sma20, `${p('sma20').length}, ${p('sma20').offset}, ${p('sma20').source}`);
-  add('sma50', ps.sma50, `${p('sma50').length}, ${p('sma50').offset}, ${p('sma50').source}`);
-  add('sma200', ps.sma200, `${p('sma200').length}, ${p('sma200').offset}, ${p('sma200').source}`);
-  add('ema9', ps.ema9, `${p('ema9').length}`);
-  add('ema21', ps.ema21, `${p('ema21').length}`);
-  add('ema50', ps.ema50, `${p('ema50').length}`);
+  // Offset and source only. The length moved into the row's name, and printing
+  // it twice made `SMA 20 (20, 0, close)` read as two different numbers.
+  const maDetail = (id) => `${p(id).offset}, ${p(id).source}`;
+  add('sma20', ps.sma20, maDetail('sma20'));
+  add('sma50', ps.sma50, maDetail('sma50'));
+  add('sma200', ps.sma200, maDetail('sma200'));
+  add('ema9', ps.ema9, null);
+  add('ema21', ps.ema21, null);
+  add('ema50', ps.ema50, null);
   /* Clouds report the gap, not a level.
    *
    * The value column on every other row is "where is this line right now",
@@ -9176,6 +9320,30 @@ function wsLegend(ps) {
   add('vbp', null, 'by price');
   add('insiders', null, 'form 4');
   add('trends', null, 'auto');
+
+  /* The studies, from the same palette the chart draws them with.
+   *
+   * `wsStudyPalette` rather than a second allocation, because the swatch here
+   * and the line out there have to be the same colour and allocation depends on
+   * what else is on the plot: two independent calls would agree until someone
+   * switched an average on.
+   *
+   * No eye on these rows. Hiding exists to preserve an overlay's own settings
+   * while taking it off the plot, and a study has none to preserve on this tab:
+   * its parameters come from the server. The cross removes it, which is the
+   * only state it has. */
+  if (!isIntradayRange(chartRange)) {
+    const studyColors = wsStudyPalette(ps);
+    wsStudyRows().forEach(({ id, name, value }) => {
+      const level = last((value.lines[0] || {}).values);
+      rows.push(`<div class="ws-leg-row" data-ws-leg="${esc(id)}">
+        <span class="ws-leg-name" style="color:${studyColors[id] || C.s7}">${esc(name)}</span>
+        ${level === null ? '' : `<span class="ws-leg-val">${fmt(level, 2)}</span>`}
+        <button type="button" class="ws-leg-btn" data-ws-study-off="${esc(id)}"
+          title="Remove ${esc(name)}">&times;</button>
+      </div>`);
+    });
+  }
 
   /* Collapsible.
    *
@@ -9367,6 +9535,49 @@ function hexish(value) {
     .toString(16).padStart(2, '0')).join('')}`;
 }
 
+/* The studies menu: the server-computed indicators that go on a price axis.
+ *
+ * Separate from WS_MENUS because its items come from the indicator catalogue
+ * rather than OVERLAY_DEFS, and it drives `indicatorIds` rather than the
+ * per-overlay flags. Same checkbox shape, so it reads as one of the row.
+ *
+ * **Only the five that belong on a price axis are here.** ADX is 0-100,
+ * on-balance volume is a share count and the relative strength line is rebased
+ * to 100; putting any of those on a price axis would flatten the price to a
+ * line or push the study off the top. They need a pane of their own and this
+ * tab has no pane host under the plot, so the menu names where they are instead
+ * of offering a checkbox that cannot work.
+ *
+ * The selection is the same `indicatorIds` the Analysis tab writes, so ticking
+ * Bollinger here shows it there too. That is the same decision WS_FLAGS makes
+ * for the overlay toggles.
+ */
+function wsStudiesMenu() {
+  const rows = IND_FALLBACK_CATALOGUE.filter((r) => IND_PRICE_PANE.includes(r.id));
+  const on = rows.filter((r) => indicatorIds.includes(r.id)).length;
+  const intraday = isIntradayRange(chartRange);
+  return `<div class="ws-menu">
+    <button type="button" class="ws-menu-btn${on ? ' on' : ''}"
+      data-ws-menu="studies" aria-expanded="${wsMenuOpen === 'studies'}"
+      title="Bands and channels drawn on the price axis">Studies${
+  on ? ` <span class="ws-count">${on}</span>` : ''}</button>
+    ${wsMenuOpen === 'studies' ? `<div class="ws-menu-pop ws-studies">
+      ${rows.map((r) => `<label class="ws-opt" title="${esc(r.measures)}">
+        <input type="checkbox" data-ws-study="${esc(r.id)}"
+          ${indicatorIds.includes(r.id) ? ' checked' : ''}
+          ${intraday ? 'disabled' : ''}>
+        <span>${esc(r.name)}</span>
+      </label>`).join('')}
+      ${intraday ? `<p class="ws-studies-note">Not on a ${esc(chartRange)} range:
+        these are computed from daily bars, so they would describe a different
+        timeframe from the one on screen.</p>` : ''}
+      <p class="ws-studies-note">ADX, Stochastic, on-balance volume, money flow
+        and relative strength need their own scale rather than the price axis.
+        They are on the Analysis tab, under Indicators.</p>
+    </div>` : ''}
+  </div>`;
+}
+
 function wsToolbar() {
   return `<div class="ws-toolbar">
     ${WS_MENUS.map((m) => {
@@ -9390,6 +9601,7 @@ function wsToolbar() {
       </div>` : ''}
     </div>`;
   }).join('')}
+    ${wsStudiesMenu()}
     <div class="ws-toolbar-gap"></div>
     ${isIntradayRange(chartRange)
     // Daily and Weekly are meaningless against the intraday endpoint's own
@@ -9872,7 +10084,151 @@ async function wsLoadIntraday() {
   wsRedrawChart();
 }
 
+/* The server-computed indicators, for THIS tab's symbol.
+ *
+ * A separate cache from `STATE.indicators`, and that is the whole point.
+ * `STATE.indicators` is loaded by `loadIndicators()`, which is keyed on
+ * `STATE.ticker` — the Analysis tab's symbol. This tab holds `STATE.chartSymbol`
+ * and the two are independent by design. Drawing `STATE.indicators` here would
+ * put one company's Bollinger bands over another company's candles and label
+ * them correctly, which is the failure CLAUDE.md names as the worst kind.
+ *
+ * Keyed on symbol *and* the id list, so ticking a second box refetches rather
+ * than drawing a stale payload that is missing it.
+ *
+ * Only the price-pane indicators are offered here. The other five (ADX,
+ * Stochastic, on-balance volume, money flow, relative strength) are quoted in
+ * units that are not price — 0-100, a share count, a rebased ratio — so they
+ * need their own pane, and this tab has no pane host under the plot. The menu
+ * says where they live rather than offering a control that cannot work.
+ */
+let wsIndicators = null;
+
+/** Which of the reader's selected indicators can go on a price axis.
+ *
+ * Filtered against the *payload's* `pane` field where one has arrived, and
+ * against IND_PRICE_PANE before that, because the menu has to label itself
+ * before the first fetch returns. Same two-source arrangement IND_PRICE_PANE's
+ * own comment describes. */
+function wsPriceIndicatorIds() {
+  return indicatorIds.filter((id) => IND_PRICE_PANE.includes(id));
+}
+
+async function wsLoadIndicators() {
+  const symbol = STATE.chartSymbol;
+  const ids = wsPriceIndicatorIds();
+  const key = ids.join(',');
+  if (!symbol) return;
+  if (!ids.length) {
+    // Nothing selected. Clear rather than leave the last payload, or unticking
+    // the final box would leave its lines on the chart.
+    if (wsIndicators) { wsIndicators = null; wsRedrawChart(); }
+    return;
+  }
+  if (wsIndicators && wsIndicators.symbol === symbol && wsIndicators.key === key
+      && !wsIndicators.loading) {
+    wsRedrawChart();
+    return;
+  }
+  wsIndicators = { symbol, key, loading: true };
+  wsRedrawChart();
+  try {
+    const data = await getJSON('/api/indicators/' + encodeURIComponent(symbol)
+      + '?ids=' + encodeURIComponent(key));
+    // The reader may have changed symbol or selection while this was in flight.
+    // Same guard loadIndicators() carries, and for the same measured reason:
+    // ticking four boxes quickly starts four requests that do not return in
+    // order, and without this the slowest one wins.
+    if (STATE.chartSymbol !== symbol || wsPriceIndicatorIds().join(',') !== key) return;
+    wsIndicators = { ...data, symbol, key };
+  } catch (err) {
+    wsIndicators = { symbol, key, available: false, reason: err.message };
+  }
+  wsRedrawChart();
+}
+
+/* The price-pane indicator series for this tab's chart.
+ *
+ * Takes the payload rather than reading a global, so it cannot be called with
+ * the other tab's symbol by accident. Colours come from the same allocator the
+ * Swing tab uses, seeded with what this plot has already claimed, so an overlay
+ * cannot land on the colour of a candle or an average that is already drawn. */
+/* What the base plot has already claimed, so a study can avoid it.
+ *
+ * **Shared, and it has to be.** `allocateOverlayColors` walks a pool and takes
+ * the first colour not in this set, so two tabs seeding it differently hand the
+ * same study two different colours. The Swing tab's seed counted the Fibonacci,
+ * support, volume-by-price, insider and zone colours; the Charting tab's first
+ * version counted only the price mark and the averages, so Bollinger came out
+ * one colour on one tab and another on the other.
+ *
+ * Everything here is a colour something else on the plot is currently drawn in,
+ * conditioned on the same flags that draw it.
+ */
+function chartBaseColors(ps, candleMode, intraday) {
+  const ma = maColorsOnChart(candleMode);
+  const out = candleMode
+    ? [C.ink, chartColor('up'), chartColor('down')]
+    : [chartColor('line')];
+  if (showFib && !intraday) out.push(C.refFib);
+  if (showSR && !intraday) out.push(C.refSR);
+  // Volume-by-price and the volume strip both key in ink2. The strip's bars are
+  // actually drawn in the directional pair, but its legend row is ink2, and a
+  // study allocated ink2 gives that legend two rows in one colour.
+  if (showVbp || showVol) out.push(C.ink2);
+  if (showInsiders && !intraday) out.push(C.s3, C.neg);
+  if (showZones && !intraday) out.push(C.neg, C.s3);
+  if (!intraday) MA_SERIES_IDS.filter(seriesDrawn).forEach((id) => out.push(ma[id]));
+  return out;
+}
+
+function wsStudyPalette(ps) {
+  return allocateOverlayColors(
+    chartBaseColors(ps, wsCandles(ps), isIntradayRange(chartRange)));
+}
+
+/** The payload rows that actually have data to draw, in catalogue order. */
+function wsStudyRows() {
+  const payload = wsIndicators;
+  if (!payload || payload.loading || payload.available === false) return [];
+  if (payload.symbol !== STATE.chartSymbol) return [];
+  const got = payload.indicators || {};
+  return IND_FALLBACK_CATALOGUE.filter((r) => {
+    if (!wsPriceIndicatorIds().includes(r.id)) return false;
+    const v = got[r.id];
+    if (!v || !v.available || !v.lines) return false;
+    // The server's own answer about where this belongs wins over the local
+    // list: that list exists to label the menu before the first fetch.
+    return !v.pane || v.pane === 'price';
+  }).map((r) => ({ ...r, value: got[r.id] }));
+}
+
+function wsIndicatorSeries(bars, ps) {
+  const payload = wsIndicators;
+  if (!payload || payload.loading || payload.available === false) return [];
+  if (payload.symbol !== STATE.chartSymbol) return [];
+  const got = payload.indicators || {};
+  const palette = wsStudyPalette(ps);
+  const out = [];
+  wsStudyRows().forEach(({ id, value: v }) => {
+    v.lines.forEach((line, i) => {
+      out.push({
+        name: line.name,
+        values: bars ? alignToChart(line.values, bars) : line.values,
+        color: palette[id] || C.s7,
+        width: 1.4,
+        // The middle line solid, the bands dashed, so a three-line channel
+        // reads as one overlay rather than three unrelated averages.
+        dash: i === 0 ? null : '4 3',
+        marker: false,
+      });
+    });
+  });
+  return out;
+}
+
 /** The empty series an intraday range shows while it is loading or when the
+
  *  provider has nothing. Shaped like a real one so the chart code needs no
  *  special case; `note` is what the toolbar renders instead of a plot. */
 function wsIntradayStub(note) {
@@ -11594,6 +11950,10 @@ function wsMountChart() {
           ? legend.getBoundingClientRect().height : 0))
       : 0;
     const height = Math.max(avail || 0, 360);
+    // The averages' colours, from the resolver both tabs share. Computed once
+    // per build rather than per series, because it allocates as a set: each
+    // answer has to know what the previous ones took.
+    const wsMaColors = maColorsOnChart(wsCandles(ps));
     return lineChart({
       width: w,
       height,
@@ -11653,13 +12013,28 @@ function wsMountChart() {
          * wholesale on intraday, as before: these are computed from daily bars
          * and would describe a different timeframe from the one on screen. */
         ...(intraday ? [] : [
-          ['sma20', 'SMA 20', ps.sma20], ['sma50', 'SMA 50', ps.sma50],
-          ['sma200', 'SMA 200', ps.sma200], ['ema9', 'EMA 9', ps.ema9],
-          ['ema21', 'EMA 21', ps.ema21], ['ema50', 'EMA 50', ps.ema50],
+          ['sma20', maLabel('sma20', ps), ps.sma20],
+          ['sma50', maLabel('sma50', ps), ps.sma50],
+          ['sma200', maLabel('sma200', ps), ps.sma200],
+          ['ema9', maLabel('ema9', ps), ps.ema9],
+          ['ema21', maLabel('ema21', ps), ps.ema21],
+          ['ema50', maLabel('ema50', ps), ps.ema50],
         ].filter(([id]) => seriesDrawn(id)).map(([id, name, values]) => ({
-          name, values: values || [], color: styleOf(id).color,
+          name, values: values || [], color: wsMaColors[id],
           width: styleOf(id).width, marker: false,
         }))),
+        /* The server-computed price-pane indicators, which this tab could not
+         * draw at all before: Bollinger, Keltner, Donchian, the regression
+         * channel and anchored VWAP were selectable on the Analysis tab and
+         * simply absent here, on the tab whose whole job is charting.
+         *
+         * Seeded with the colours this plot has already claimed so an overlay
+         * cannot land on a candle or an average. Excluded on intraday for the
+         * reason the averages are: they are computed from daily bars.
+         *
+         * Fed from `wsIndicators`, never `STATE.indicators` — see that store's
+         * comment. The two tabs hold different symbols. */
+        ...(intraday ? [] : wsIndicatorSeries((ps.dates || []).length, ps)),
       ],
       /* Insider markers and volume-by-price.
        *
@@ -11746,6 +12121,11 @@ async function loadChartWorkspace(symbol, force) {
   // chart is usable while it lands.
   if (wsDockOpen.includes('seasonality')) loadSeasonality(false, sym);
   if (showTrends) loadTrendlines(sym);
+  // The studies, for THIS symbol. Not awaited, for the reason above: the chart
+  // is usable while they land, and they draw on the next redraw. Guarded on a
+  // selection existing so a reader who has never opened the menu makes no
+  // request at all.
+  if (wsPriceIndicatorIds().length) wsLoadIndicators();
 }
 
 /* Redraw the workspace chart when Pulse opens or closes.
@@ -21032,6 +21412,37 @@ document.addEventListener('keydown', (evt) => {
 });
 
 document.addEventListener('change', (evt) => {
+  /* The Charting tab's Studies checkboxes.
+   *
+   * Writes the same `indicatorIds` and the same storage key as the Analysis
+   * tab's picker, so a study ticked on one tab is on for both. What differs is
+   * what has to be refreshed afterwards: this tab needs its own fetch, because
+   * `loadIndicators()` is keyed on STATE.ticker and this tab holds
+   * STATE.chartSymbol. Both are called: the reader may have both tabs' symbols
+   * loaded, and leaving the other one stale is how a checkbox appears to
+   * half-work. */
+  const studyOff = evt.target.closest('[data-ws-study-off]');
+  if (studyOff) {
+    const id = studyOff.dataset.wsStudyOff;
+    indicatorIds = indicatorIds.filter((x) => x !== id);
+    try { localStorage.setItem(IND_STATE_KEY, JSON.stringify(indicatorIds)); }
+    catch (e) { /* private mode */ }
+    wsLoadIndicators();
+    if (STATE.ticker) loadIndicators(true);
+    return;
+  }
+  const study = evt.target.closest('[data-ws-study]');
+  if (study) {
+    const id = study.dataset.wsStudy;
+    indicatorIds = study.checked
+      ? [...indicatorIds.filter((x) => x !== id), id]
+      : indicatorIds.filter((x) => x !== id);
+    try { localStorage.setItem(IND_STATE_KEY, JSON.stringify(indicatorIds)); }
+    catch (e) { /* private mode */ }
+    wsLoadIndicators();
+    if (STATE.ticker) loadIndicators(true);
+    return;
+  }
   const ind = evt.target.closest('[data-ind]');
   if (ind) {
     const id = ind.dataset.ind;
@@ -21044,6 +21455,11 @@ document.addEventListener('change', (evt) => {
     // re-render of that panel covers the checkbox, the overlays and the panes.
     if (STATE.swing) preserveUI(views.swing, () => renderSwing(STATE.swing));
     loadIndicators(true);
+    // And this tab's own copy, for the same reason the Studies handler calls
+    // both: the two tabs hold different symbols and have separate caches, so
+    // ticking a box here has to invalidate the other one or the Charting tab
+    // keeps drawing the previous selection.
+    if (STATE.chartSymbol) wsLoadIndicators();
     return;
   }
   /* The Learn widget's term picker.

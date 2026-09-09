@@ -274,7 +274,7 @@ def why(payload: Dict[str, Any]) -> Dict[str, Any]:
         "method": (
             "These are the scored inputs pulling hardest right now, ranked by "
             "strength. They are an attribution across the model's own factors, "
-            "not a causal explanation of today's move — a price can move on "
+            "not a causal explanation of today's move. A price can move on "
             "something none of these inputs can see."
         ),
         "reason_none": None if top else (
