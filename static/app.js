@@ -961,15 +961,32 @@ async function postJSON(url, body) {
   const headers = { 'Content-Type': 'application/json' };
   const token = writeToken();
   if (token) headers['X-Optic-Token'] = token;
+  // The CSRF value as well, because a signed-in admin is authorised for these
+  // by *cookie* (see _write_guard) and the server pairs that with the
+  // double-submit check. Sent whenever the cookie exists rather than only when
+  // signed in: reading it costs nothing, and a header the server ignores is
+  // cheaper than a branch that has to know which case it is in.
+  const csrf = window.OpticAuth ? window.OpticAuth.csrf() : '';
+  if (csrf) headers['X-Optic-CSRF'] = csrf;
   const res = await fetch(url, {
     method: 'POST',
     headers,
+    credentials: 'same-origin',
     body: JSON.stringify(body || {}),
   });
   // 401 means this action needs the token. Ask once, store it, and retry — so
   // the owner is prompted at the moment it matters instead of meeting a bare
   // "unauthorised" with no way to act on it.
+  //
+  // Not asked of an admin: they are already authorised and a prompt would be a
+  // dead end, because pasting a token they may not have set cannot help. A 401
+  // reaching an admin means the session lapsed, so say that instead.
   if (res.status === 401) {
+    if (window.OpticAuth && window.OpticAuth.state().admin) {
+      window.OpticAuth.toast(
+        'That did not go through. Your session may have expired: reload and try again.', 'bad');
+      throw new Error('Session expired.');
+    }
     const supplied = window.prompt(
       'This action changes the saved record, so it needs the write token.\n'
       + 'Set OPTIC_WRITE_TOKEN on the server, then paste it here.');

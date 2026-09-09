@@ -85,6 +85,7 @@
 
   var STATE = {
     status: 'loading',        // loading | guest | user
+    admin: false,             // owns this deployment: see app/auth/admin.py
     user: null,
     methods: null,
     preferences: null,
@@ -107,6 +108,11 @@
 
   function absorb(payload) {
     STATE.status = payload && payload.authenticated ? 'user' : 'guest';
+    // Server-computed, never inferred from the email on the client. A browser
+    // that set this itself would gain nothing — every admin path is re-checked
+    // server-side — but it would make the UI claim a privilege the API refuses,
+    // which is worse than showing nothing.
+    STATE.admin = !!(payload && payload.admin);
     STATE.user = (payload && payload.user) || null;
     STATE.methods = (payload && payload.methods) || null;
     STATE.preferences = (payload && payload.preferences) || null;
@@ -793,6 +799,12 @@
       + '<span class="acct-name">' + esc(user.name || user.email) + '</span>'
       + '<span class="acct-mail">' + esc(user.email) + '</span>'
       + '<span class="acct-plan">' + esc(plan) + ' plan</span>'
+      // Shown because the privilege is silent otherwise: the owner's only
+      // evidence would be that a write stopped asking for a token, which is
+      // indistinguishable from the token being cached. Rendered from STATE.admin
+      // and therefore from the server's answer, so it appears exactly when the
+      // API would actually allow it.
+      + (STATE.admin ? '<span class="acct-admin">Owner</span>' : '')
       + '</div>'
       + (unverified ? '<div class="acct-warn">Email not confirmed. '
         + '<button type="button" data-acct-resend>Resend the link</button></div>' : '')
@@ -988,6 +1000,11 @@
     passkeyMessage: passkeyMessage,
     passkeyCancelled: passkeyCancelled,
     providerLabel: label,
+    // Exposed so app.js's own postJSON can send the header on the four
+    // write-guarded endpoints. Exported rather than re-read in app.js because
+    // the cookie *name* would then live in two files, and the one that was not
+    // updated would fail silently as a missing header.
+    csrf: csrfCookie,
     esc: esc,
     onNavigate: null,          // set by app.js
     onSignOut: null,           // set by app.js

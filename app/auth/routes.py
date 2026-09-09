@@ -35,7 +35,7 @@ from starlette.concurrency import run_in_threadpool
 
 from .. import db
 from ..runtime import base_url
-from . import (config, deps, linking, mailer, oauth, passkeys as passkeys_mod,
+from . import (admin, config, deps, linking, mailer, oauth, passkeys as passkeys_mod,
                passwords as pw, ratelimit, store, tokens)
 
 log = logging.getLogger("optic.auth")
@@ -108,6 +108,12 @@ def _state_payload(request: Request) -> Dict[str, Any]:
         payload["user"] = None
         return payload
     payload["user"] = store.public_user(user)
+    # Computed, not read from the row, and deliberately not added to
+    # `public_user()`: that function is an allow-list of *columns*, and admin is
+    # not one. Only sent to an authenticated caller, and only ever as a boolean
+    # about the caller themselves, so it cannot be used to discover who the
+    # owner is. `/api/auth/providers` stays free of it for the same reason.
+    payload["admin"] = admin.is_admin(user)
     payload["methods"] = store.auth_methods(user["id"])
     payload["preferences"] = store.preferences(user["id"])
     payload["subscription"] = store.subscription(user["id"])

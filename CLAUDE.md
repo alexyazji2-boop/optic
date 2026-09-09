@@ -11,7 +11,7 @@ Live at https://theopticterminal.com (Railway, auto-deploys from `main`).
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Tests: `.venv/bin/python -m pytest -q`. There are 1068 and they all pass; keep it that way.
+Tests: `.venv/bin/python -m pytest -q`. There are 1097 and they all pass; keep it that way.
 
 A development account: `.venv/bin/python -m app.seed`. It prints a generated password
 once and refuses to run when a hosting platform is in the environment.
@@ -50,6 +50,25 @@ not a current state of affairs. What an account changes is where the watchlist a
 saved research are *kept*. `tests/test_auth_authorization.py` asserts the open
 surface stays open, and it is the test that will catch somebody wrapping the wrong
 router in a login check.
+
+**Admin is one boolean from the environment, and the second half of it is the
+security.** `ADMIN_EMAILS` names who owns the deployment, and `app/auth/admin.py`
+requires the account to have *confirmed* that address as well as be listed.
+Without the `email_verified` half this would be escalation by registration:
+anyone may type any address into the signup form, so the first stranger to sign
+up as the owner would be the owner. It is not a column on `users` on purpose, so
+a restored backup or a stray UPDATE cannot mint one. Unset, nothing changes and
+`OPTIC_WRITE_TOKEN` stays the only way past `_write_guard`.
+
+**The admin branch of `_write_guard` is authorised by a cookie, so it pairs with
+`csrf_guard`.** The token branch never needed it: a header an attacker cannot
+read is itself the proof. A cookie is sent by the browser whether or not the
+reader meant it, and SameSite=Lax is the browser's promise rather than ours.
+
+**Reading source text to prove a control-flow property is a bad test.** One here
+grepped `_spend_guard` for a `return` inside the admin branch and passed for the
+wrong reason: the word appeared in that branch's own comment. It drives
+`_spend_guard` directly now. Same lesson as the two mutation escapes below.
 
 **`PRAGMA foreign_keys=ON` is per connection.** SQLite ships it off. Without it every
 `ON DELETE CASCADE` in `app/db.py` is decoration and an orphaned session row still
@@ -165,6 +184,10 @@ commit SHA to match. `DEPLOY.md` has the detail.
 
 `OPTIC_WRITE_TOKEN` must be set in Railway Variables or manual scans and alert-clearing
 return 503. Scheduled scans are unaffected.
+
+`ADMIN_EMAILS` is what makes an account the owner. The address has to be
+confirmed before it counts, and with no SMTP configured the confirmation link is
+written to the server log (`[mail:log]`) rather than emailed.
 
 `APP_URL` must be set once a custom domain is attached. The OAuth redirect URIs, the
 WebAuthn RP id and the links inside verification emails are all derived from it, and it

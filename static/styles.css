@@ -8810,6 +8810,30 @@ body.cp-open { overflow: hidden; }
   color: var(--ink-2);
 }
 
+/* The owner marker, beside the plan chip.
+   --btn-primary on the border only, and --ink for the text. Measured against
+   the menu's own surface: the blue comes out at 4.02:1, which clears the 3:1
+   that applies to a border but not the 4.5:1 that applies to text, and this
+   chip is --t-micro. So the blue stays where it reads as a shape and the label
+   takes the ink that is legible there (16.87:1). --s1 would have passed as text
+   at 5.21:1 and was rejected on other grounds: it is a chart-series slot, and a
+   label is not a series.
+   Not a filled chip: --btn-primary is the one blue picked for white text on
+   top of it, and filling this would make a label look like the menu's primary
+   action. `align-self` because .acct-head is a flex column, where the default
+   stretch would run the border the full 230px. */
+.acct-admin {
+  align-self: flex-start;
+  margin-top: var(--space-1);
+  padding: 0 var(--space-1);
+  border: 1px solid var(--btn-primary);
+  border-radius: var(--r-sm);
+  font: 600 var(--t-micro)/1.6 var(--sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+}
+
 .acct-warn {
   margin: var(--space-2) 0 0;
   padding: var(--space-2) var(--space-3);

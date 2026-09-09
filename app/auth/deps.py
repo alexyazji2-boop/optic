@@ -21,7 +21,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from fastapi import HTTPException, Request, Response
 
-from . import config, store, tokens
+from . import admin, config, store, tokens
 from .ratelimit import client_ip
 
 
@@ -87,6 +87,16 @@ def require_verified(request: Request) -> Dict[str, Any]:
             detail="Confirm your email address first. Check your inbox, or request a "
                    "new link from Settings.")
     return user
+
+
+def is_admin(request: Request) -> bool:
+    """Does the caller own this deployment.
+
+    A predicate, not a guard: the one caller that has an answer for "no" is
+    `_write_guard`, which falls through to the write token rather than refusing.
+    A `require_admin` that nothing called would be dead code, and the shape of
+    the message on refusal belongs to whichever endpoint is refusing."""
+    return admin.is_admin(current_user(request))
 
 
 # ------------------------------------------------------------------ csrf

@@ -22,6 +22,7 @@ from . import (ai, brief as brief_mod, feeds as feeds_mod, legal,
                news as news_mod, paper, session as session_mod)
 from . import account as account_mod
 from . import db as accounts_db
+from .auth import admin as auth_admin
 from .auth import deps as auth_deps
 from .auth import ratelimit as auth_ratelimit
 from .auth import routes as auth_routes
@@ -2201,7 +2202,42 @@ WRITE_TOKEN = os.environ.get("OPTIC_WRITE_TOKEN", "").strip()
 
 
 def _write_guard(request: Request) -> None:
-    """Allow a state-changing request, or explain what it needs."""
+    """Allow a state-changing request, or explain what it needs.
+
+    The owner comes first, so a signed-in admin is never asked for the token.
+    That is the point of the admin flag rather than a convenience: the token is
+    a shared secret that has to be pasted into a browser prompt and then lives
+    in localStorage, and the person it exists to authenticate already has a
+    session that proves who they are much better than a copied string does.
+
+    Paired with `csrf_guard` because in that branch a *cookie* authorises a
+    state change, which the token branch never did. SameSite=Lax already
+    refuses to send the session cookie on a cross-site POST; this is the second
+    lock, and without it another origin could aim the owner's own browser at
+    /api/tracker/mark. The token branch does not need it — a header an attacker
+    cannot read is itself the proof."""
+    # `configured()` first, so an unset ADMIN_EMAILS costs no database read at
+    # all. The branch then catches the same two exception families the allowance
+    # guard does: resolving a session touches the accounts database, and these
+    # four endpoints ran on a token alone long before that database existed. An
+    # unmounted volume must not turn a correctly-authenticated write into a 500,
+    # so a failure here falls through to the token instead of propagating.
+    # OSError as well as sqlite3.Error for the reason given in ai_allowance:
+    # opening the database creates its directory first, and os.makedirs on a
+    # volume that failed to mount does not raise from sqlite.
+    if auth_admin.configured():
+        try:
+            if auth_deps.is_admin(request):
+                auth_deps.csrf_guard(request)
+                return
+        except (sqlite3.Error, OSError) as exc:
+            # Not _allowance_unavailable(): that one says the assistant's daily
+            # cap is not being enforced, which is a different fact and would
+            # send whoever reads the log looking in the wrong place.
+            logging.getLogger("optic").error(
+                "could not tell whether this caller is an admin: the accounts "
+                "database is unavailable (%s). Falling back to the write token.",
+                exc)
     if WRITE_TOKEN:
         supplied = request.headers.get("x-optic-token", "")
         # Constant-time: a plain == leaks the shared prefix through timing, and
@@ -2290,6 +2326,12 @@ def ai_allowance(request: Request) -> Dict[str, Any]:
     in for 25" before someone types, rather than after."""
     try:
         user = auth_deps.current_user(request)
+        if user and auth_admin.is_admin(user):
+            # Reported, not just skipped in the guard. The panel renders this
+            # number before anyone types, and showing "3 of 25 left" while
+            # nothing is enforcing 25 is the panel lying about the product.
+            return {"scope": "admin", "used": 0, "allowed": 0, "left": 0,
+                    "enforced": False, "plan": "admin"}
         if user:
             plan = auth_store.subscription(user["id"])
             allowed = int(plan["limits"].get("ai_calls_per_day") or 0)
@@ -2318,7 +2360,15 @@ def _spend_guard(request: Request) -> None:
     """Raise 429 once a caller has spent an allowance, daily or hourly."""
     try:
         user = auth_deps.current_user(request)
-        if user:
+        if user and auth_admin.is_admin(user):
+            # Skips the *daily* cap only, and does not return: the hourly
+            # per-address cap further down still applies to the owner. The
+            # daily cap exists so visitors cannot drain the operator's
+            # Anthropic balance, and metering the operator against their own
+            # key protects nobody. The hourly one is a runaway-loop guard as
+            # well, and a loop does not care whose key it is spending.
+            pass
+        elif user:
             limits = auth_store.subscription(user["id"])["limits"]
             auth_ratelimit.spend(
                 "ai_day", auth_ratelimit.key_bucket(user["id"]),
