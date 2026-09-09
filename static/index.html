@@ -41,7 +41,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/space-grotesk/index.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/plus-jakarta-sans/index.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/inter/index.css">
-<link rel="stylesheet" href="styles.css?v=430">
+<link rel="stylesheet" href="styles.css?v=436">
 <script>
 /* Set the theme before the stylesheet paints.
  *
@@ -136,6 +136,8 @@
   <section class="view" id="view-tracker" role="tabpanel" aria-label="Optic&apos;s Positions. Paper-trading record"></section>
   <section class="view" id="view-watchlist" role="tabpanel" aria-label="Watchlist"></section>
   <section class="view" id="view-alerts" role="tabpanel" aria-label="Alerts"></section>
+  <section class="view" id="view-explore" role="tabpanel"
+           aria-label="Explore. Discovery across scans, sectors and cross-asset"></section>
   <section class="view" id="view-scan" role="tabpanel" aria-label="Scanners"></section>
   <section class="view" id="view-market" role="tabpanel" aria-label="Macro and sector analysis"></section>
   <!-- One instrument, full chart. Shared by every cross-asset table: the
@@ -218,11 +220,11 @@
 <!-- Version query busts the browser cache on deploy. Without it a reloaded page
      can pair new HTML with a stale charts.js/app.js, which surfaces as features
      silently not working rather than as an error. -->
-<script src="charts.js?v=430"></script>
+<script src="charts.js?v=436"></script>
 <!-- Before app.js: it exposes window.OpticAuth, which app.js reads at load to
      decide whether the watchlist and the saved research come from the account or
      from this browser. -->
-<script src="auth.js?v=430"></script>
-<script src="app.js?v=430"></script>
+<script src="auth.js?v=436"></script>
+<script src="app.js?v=436"></script>
 </body>
 </html>

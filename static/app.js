@@ -73,6 +73,7 @@ const views = {
   instrument: $('#view-instrument'),
   chart: $('#view-chart'),
   scan: $('#view-scan'),
+  explore: $('#view-explore'),
   watchlist: $('#view-watchlist'),
   alerts: $('#view-alerts'),
   settings: $('#view-settings'),
@@ -3858,6 +3859,153 @@ function macroWord(key, change) {
   return 'today';
 }
 
+/* ------------------------------------------------------------------ explore
+ *
+ * Discovery: the page for when you do not know what you are looking for.
+ *
+ * **Assembled from three requests, all of them existing endpoints.** The
+ * scanner catalogue and its groups, the sector board, and the home payload's
+ * cross-asset instruments. Nothing here is a new feed and nothing is invented:
+ * every row either opens a scan that runs or a symbol that loads.
+ *
+ * **It does not run the scans.** Seventeen screens across six groups is
+ * seventeen requests over a three-thousand-symbol universe, and a discovery
+ * page that takes ten seconds to paint is not a discovery page. Each scan shows
+ * its own description and opens on click, which is the Scan view's job. What
+ * this page adds is the map.
+ */
+let exploreData = null;
+
+async function loadExplore(force) {
+  const host = views.explore;
+  if (!host) return;
+  if (exploreData && !force) { renderExplore(exploreData); return; }
+  host.innerHTML = `<div class="panel"><div class="hm-skel" aria-hidden="true"></div></div>`;
+  /* Three requests in parallel, and a failure in one costs its own section
+   * rather than the page. `allSettled` rather than `all` for exactly that: with
+   * `all`, a sector feed that 500s would empty a page whose other two thirds
+   * are fine. */
+  const [scans, groups, sectors, home] = await Promise.allSettled([
+    getJSON('/api/scanners'),
+    getJSON('/api/scanners/groups'),
+    getJSON('/api/sectors/board'),
+    STATE.home ? Promise.resolve(STATE.home) : getJSON('/api/home'),
+  ]);
+  const val = (r) => (r.status === 'fulfilled' ? r.value : null);
+  exploreData = { scans: val(scans), groups: val(groups),
+    sectors: val(sectors), home: val(home) };
+  if (exploreData.home) STATE.home = exploreData.home;
+  renderExplore(exploreData);
+}
+
+/** One scanner group as a card of clickable screens. */
+function exploreScanGroup(group, byId) {
+  const scans = (group.scans || []).map((s) => {
+    const full = byId[s.id] || s;
+    return `<button type="button" class="ex-scan" data-explore-scan="${esc(s.id)}">
+      <span class="ex-scan-name">${esc(full.name || s.id)}</span>
+      ${/* Clamped by CSS, not sliced here.
+          * `.slice(0, 110)` cut mid-word: "because a termi", "as ri", "of the".
+          * The same reasoning as `.ses-co-sum` in this file: splitting prose at
+          * a character count reads as a rendering fault, and the full text
+          * stays in the DOM for a screen reader. */''}
+      <span class="ex-scan-note">${esc(String(full.looks_for || ''))}</span>
+    </button>`;
+  }).join('');
+  if (!scans) return '';
+  return `<div class="ex-group">
+    <h3 class="ex-group-h">${esc(group.label || group.id)}</h3>
+    ${scans}
+  </div>`;
+}
+
+function renderExplore(data) {
+  const host = views.explore;
+  if (!host) return;
+  const scans = data.scans || {};
+  const byId = {};
+  (scans.scans || []).forEach((s) => { byId[s.id] = s; });
+  /* The grouping is its own request.
+   *
+   * A first version rebuilt it from a `group` field on each scan, on the
+   * assumption that the flat list carried one. It does not: a scan is
+   * `{id, name, looks_for, blind_spot}` and nothing else, so every screen
+   * landed in a single group called "Other". `/api/scanners/groups` publishes
+   * the real six, and it goes in the same parallel batch, so it costs no extra
+   * wait. Falls back to one ungrouped list if that leg fails, which is why the
+   * groups are read here rather than assumed. */
+  const groups = ((data.groups || {}).groups || []).length
+    ? (data.groups.groups)
+    : [{ id: 'all', label: 'Screens', scans: (scans.scans || []) }];
+
+  const sectors = ((data.sectors || {}).rows || []).filter((r) => r.available);
+  const moves = data.home ? rankedMoves(data.home) : [];
+
+  host.innerHTML = `
+  <div class="ex-wrap">
+    <section class="panel">
+      <h2>${hg('Screens')}</h2>
+      <p class="sub">${esc(scans.ready
+    ? `${scans.considered || 0} liquid names through the filters, out of a ${
+      scans.universe_size || 0}-symbol universe.`
+    : (scans.scans || []).length
+      ? 'The universe ranking is still building in the background. The screens open, and fill once it lands.'
+      : 'The scanner catalogue is unavailable right now.')}</p>
+      <div class="ex-groups">${groups.map((g) => exploreScanGroup(g, byId)).join('')}</div>
+    </section>
+
+    ${sectors.length ? `<section class="panel">
+      <h2>${hg('Sectors')}</h2>
+      <p class="sub">Every sector against ${esc((data.sectors || {}).benchmark || 'the benchmark')},
+        by its own week. Rotation is where money moved, not where it is.</p>
+      <table class="data narrow">
+        <thead><tr><th>Sector</th><th>Week</th><th>Month</th><th>Read</th></tr></thead>
+        <tbody>${sectors.map((r) => `<tr class="ex-row" data-explore-sector="${esc(r.symbol)}">
+          <td class="name">${esc(r.name)}</td>
+          <td class="${signClass(r.rel_week_pct)}">${fmtPct(r.rel_week_pct, 1)}</td>
+          <td class="${signClass(r.rel_month_pct)}">${fmtPct(r.rel_month_pct, 1)}</td>
+          <td class="name muted">${esc(String(r.rotation || r.summary || '').slice(0, 60))}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </section>` : ''}
+
+    ${moves.length ? `<section class="panel">
+      <h2>${hg('Cross-asset')}</h2>
+      <p class="sub">All ${moves.length} instruments Optic tracks, ranked by today's
+        move against each one's own average daily range.</p>
+      <div class="ex-cross">${moves.map((i) => `<button type="button" class="ex-inst"
+        data-instrument="${esc(i.symbol)}" data-instrument-label="${esc(i.label)}">
+        <span class="ex-inst-name">${esc(i.label)}</span>
+        <span class="ex-inst-chg ${signClass(i.chg_1d)}">${fmtPct(i.chg_1d, 2)}</span>
+        <span class="ex-inst-rel">${i.rel ? fmt(i.rel, 1) + '×' : ''}</span>
+      </button>`).join('')}</div>
+    </section>` : ''}
+
+    ${data.home ? marketQuestions(data.home) : ''}
+
+    ${/* What did not arrive.
+        *
+        * `allSettled` means a failed leg costs its own section rather than the
+        * page, which is right, but the first cold load of this view showed only
+        * the questions and said nothing about the three sections that were
+        * missing. A section that silently is not there reads as a product that
+        * does not have it. Named, so an empty page is legible as a feed problem
+        * rather than as the feature. */''}
+    ${(() => {
+    const missing = [
+      data.scans ? null : 'the screen catalogue',
+      data.sectors ? null : 'the sector board',
+      data.home ? null : 'the cross-asset instruments',
+    ].filter(Boolean);
+    return missing.length
+      ? `<p class="hm-none">Unavailable right now: ${esc(missing.join(', '))}.
+         Everything else on this page still works, and a reload will retry.</p>`
+      : '';
+  })()}
+  </div>`;
+  dedupeGlossTerms(host);
+}
+
 /* ------------------------------------------------- market command centre
  *
  * The homepage leads with the state of the market rather than with a product
@@ -4152,6 +4300,8 @@ const PALETTE_PLACES = [
   { view: 'brief', label: "Optic's Read", terms: 'read brief daily market news morning' },
   { view: 'market', label: 'Macro & sectors', terms: 'macro sectors rotation regime economy' },
   { view: 'indices', label: 'Indices', terms: 'indices index spy qqq cycle' },
+  { view: 'explore', label: 'Explore',
+    terms: 'explore discover browse trending ideas sectors what is happening' },
   { view: 'scan', label: 'Scan', terms: 'scan screener find candidates momentum breakout' },
   { view: 'watchlist', label: 'Watchlist', terms: 'watchlist watching follow list' },
   { view: 'alerts', label: 'Alerts', terms: 'alerts alarms notifications fired' },
@@ -19129,8 +19279,17 @@ function loadView(view, force) {
   // Without them the guard caught both and replaced their markup with the
   // "No ticker loaded" panel — the view rendered correctly and was then
   // overwritten, which from the outside looked like the render had failed.
+  //
+  // **This list is an allow-list by omission, so a new view is ticker-specific
+  // by default and breaks the moment it is added.** Explore is the third to be
+  // caught: its loader ran, its three requests never fired, and the section
+  // showed "No ticker loaded" on a page that has nothing to do with a symbol.
+  // Anything added here that is not about one loaded symbol has to be added to
+  // this array in the same commit. It is written as a whitelist because the
+  // ticker views outnumbered the others when it was first needed, which is no
+  // longer true; inverting it is a bigger change than any one view should make.
   if (!['market', 'indices', 'roth', 'tracker', 'settings', 'brief', 'scan',
-    'earnings', 'compare', 'instrument', 'chart',
+    'explore', 'earnings', 'compare', 'instrument', 'chart',
     'watchlist', 'alerts'].includes(view) && !STATE.ticker) {
     views[view].innerHTML = `<div class="panel"><h2>No ticker loaded</h2>
       <p class="sub">Enter a symbol in the top bar, or pick one on the
@@ -19145,6 +19304,7 @@ function loadView(view, force) {
   if (view === 'earnings') return loadEarnings(force);
   if (view === 'compare') return loadCompare(force);
   if (view === 'instrument') return loadInstrument(force);
+  if (view === 'explore') return loadExplore(force);
   if (view === 'scan') return loadScan(force);
   // The watchlist renders from local state and fetches its own rows, so it
   // paints immediately rather than waiting on the feed.
@@ -20615,6 +20775,10 @@ const NAV_GROUPS = [
   { id: 'chart', label: 'Charting', views: ['chart'] },
   { id: 'analyse', label: 'Analysis', views: ['swing', 'earnings', 'compare', 'long'] },
   { id: 'market', label: 'Market', views: ['brief', 'market', 'indices'] },
+  /* Explore is the index and Scan is the tool: one is a page you browse when
+   * you do not know what you are looking for, the other runs a named screen.
+   * Separate tabs because they answer different questions. */
+  { id: 'explore', label: 'Explore', views: ['explore'] },
   { id: 'scan', label: 'Scan', views: ['scan'] },
   // Named for what it is rather than what it resembles. "Portfolio" implies
   // holdings you own; this is the terminal's own simulated ledger, and the app
@@ -21359,6 +21523,32 @@ document.addEventListener('click', (evt) => {
     // The Swing chart shares these flags, so it redraws too or the two tabs
     // disagree about what is switched on.
     if (STATE.swing) preserveUI(views.swing, () => renderSwing(STATE.swing));
+    return;
+  }
+  /* Explore. A screen row opens the Scan view on that screen; a sector row
+   * loads the market view, which is where a sector read lives. Cross-asset
+   * cells reuse `data-instrument`, which already has a handler. */
+  const exScan = evt.target.closest('[data-explore-scan]');
+  if (exScan) {
+    switchView('scan');
+    runScan(exScan.dataset.exploreScan);
+    return;
+  }
+  const exSector = evt.target.closest('[data-explore-sector]');
+  if (exSector) {
+    /* Open the Market view, then that sector's own read into it.
+     *
+     * A first version only set `STATE.sectorFocus` and switched. Nothing reads
+     * that field, so the click navigated and the "focus" did nothing: a state
+     * write standing in for behaviour, which is the same dead-control class as
+     * markup with no handler. Removed rather than left as a hook.
+     *
+     * `openSectorRead` is the market view's own entry point, called with the
+     * same host id its Sector Read buttons use. Deferred a frame because the
+     * view has to exist before the panel can be written into it. */
+    const symbol = exSector.dataset.exploreSector;
+    switchView('market');
+    requestAnimationFrame(() => openSectorRead(symbol, 'sector-read-host'));
     return;
   }
   const wsMode = evt.target.closest('[data-ws-mode]');

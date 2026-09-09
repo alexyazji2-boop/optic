@@ -11,7 +11,7 @@ Live at https://theopticterminal.com (Railway, auto-deploys from `main`).
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Tests: `.venv/bin/python -m pytest -q`. There are 1245 and they all pass; keep it that way.
+Tests: `.venv/bin/python -m pytest -q`. There are 1261 and they all pass; keep it that way.
 
 A development account: `.venv/bin/python -m app.seed`. It prints a generated password
 once and refuses to run when a hosting platform is in the environment.
@@ -173,6 +173,18 @@ let a displaced average squat on a colour a later average was keeping.
 `STATE.ticker`. The Charting tab has `wsIndicators`, keyed on
 `STATE.chartSymbol`, because drawing the former on the latter puts one company's
 bands over another company's candles and labels them correctly.
+
+**The no-ticker guard in `switchView` is an allow-list by omission, so every
+new view is ticker-specific by default.** Add a view that is not about one
+loaded symbol and it renders "No ticker loaded" instead of itself: the loader
+runs, the requests never fire, and it looks like the render failed. Watchlist,
+Alerts and now Explore have each been caught. A new non-ticker view has to join
+that array in the same commit.
+
+**A new view needs registering in five places.** The section in `index.html`,
+the `views` map, `NAV_GROUPS`, the `switchView` loader dispatch, and
+`PALETTE_PLACES`. Missing any one is a different broken symptom, which is why
+`tests/test_explore.py` asserts all five.
 
 **The composite score is measured to be decoration, and three places now
 depend on that.** `/api/evaluate` reports it "does not beat a single raw

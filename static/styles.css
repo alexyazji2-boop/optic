@@ -8298,6 +8298,106 @@ body.cp-open { overflow: hidden; }
 .hm-cell-sub.is-up, .hm-cell-sub.is-uptrend { color: var(--pos); }
 .hm-cell-sub.is-down, .hm-cell-sub.is-downtrend { color: var(--neg); }
 
+/* ------------------------------------------------------------- explore */
+
+.ex-wrap { display: grid; gap: var(--space-5); }
+
+/* The screens, grouped. auto-fill rather than a fixed column count so six
+   groups become three columns on a laptop and one on a phone without a
+   breakpoint for each width. */
+.ex-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+}
+
+.ex-group-h {
+  margin: 0 0 var(--space-1);
+  font: 600 var(--t-micro)/1 var(--sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+}
+
+/* A screen. Text-first, no card: six groups of three cards each is eighteen
+   boxes on one page, which is the clutter this whole redesign is against. */
+.ex-scan {
+  display: block;
+  width: 100%;
+  margin-bottom: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-left: 2px solid var(--border);
+  border-radius: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-ui) var(--ease-ui),
+              background var(--dur-ui) var(--ease-ui);
+}
+.ex-scan:hover { border-left-color: var(--btn-primary); background: var(--raised); }
+
+.ex-scan-name { display: block; font: 500 var(--t-small)/1.3 var(--sans); color: var(--ink); }
+/* Two lines, clamped. The description is one long sentence per screen and the
+   card is a preview, not the documentation: clicking through is where the full
+   text belongs. Clamped rather than sliced in JS for the reason `.ses-co-sum`
+   gives: a character cut lands mid-word and reads as broken. */
+.ex-scan-note {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: 2px;
+  font-size: var(--t-micro);
+  line-height: 1.45;
+  color: var(--ink-muted);
+}
+
+.ex-row { cursor: pointer; transition: background var(--dur-ui) var(--ease-ui); }
+.ex-row:hover { background: var(--raised); }
+
+/* Cross-asset: a dense grid, because nineteen instruments as rows is a long
+   page and the whole value is seeing them together. */
+.ex-cross {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--space-1);
+  margin-top: var(--space-3);
+}
+
+.ex-inst {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 0 var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-ui) var(--ease-ui);
+}
+.ex-inst:hover { border-color: var(--ink-muted); }
+
+.ex-inst-name {
+  font-size: var(--t-caption);
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ex-inst-chg { font-variant-numeric: tabular-nums; font-size: var(--t-small); }
+/* The multiple, on its own line under the pair, in the muted register: it
+   explains the ordering rather than competing with the change. */
+.ex-inst-rel {
+  grid-column: 1 / -1;
+  font-size: var(--t-micro);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-muted);
+}
+
 /* ------------------------------------------------------ what changed */
 
 /* Sits between the price and the reads. Bordered rather than filled: it is
