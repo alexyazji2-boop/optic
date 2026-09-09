@@ -1783,6 +1783,33 @@ body.chat-open aside#chat { display: flex; }
   border-left: 2px solid var(--warn);
   padding-left: var(--space-2);
 }
+/* The phone disclosure for the session legend and description.
+   Hidden entirely on anything wider: the desktop has the room and the
+   information is worth having permanently there. */
+.ses-detail-btn { display: none; }
+
+@media (max-width: 719px) {
+  .ses-detail-btn {
+    display: inline-block;
+    margin-top: var(--space-2);
+    padding: var(--space-0) var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: none;
+    color: var(--ink-muted);
+    font: 400 var(--t-micro)/1.6 var(--sans);
+    cursor: pointer;
+    transition: color var(--dur-ui) var(--ease-ui),
+                border-color var(--dur-ui) var(--ease-ui);
+  }
+  .ses-detail-btn:hover { color: var(--ink); border-color: var(--ink-muted); }
+  /* Not `hidden`: this element has no author `display` of its own, but the
+     rule below gives it one, and an author display beats the UA stylesheet's
+     [hidden] whatever the specificity. A class is the honest mechanism here. */
+  .ses-detail { display: none; }
+  .ses-detail.is-open { display: block; }
+}
+
 .ses-desc {
   margin-top: var(--space-2);
   font-size: var(--t-caption);
@@ -10328,4 +10355,42 @@ body.auth-open { overflow: hidden; }
   align-items: center;
   gap: var(--space-2);
   margin: var(--space-4) 0 var(--space-1);
+}
+
+/* Placed here, not up with the other phone overrides.
+   `.hm-greet` is defined further down this file than that block was, and at
+   equal specificity the later rule wins: the early copy of this media query
+   set `display: none` and the greeting stayed on screen anyway. Measured, not
+   reasoned about. Any phone override for a command-centre class belongs after
+   the class it overrides. */
+/* Phone: three things go, and all three are duplicates of something already
+   on screen rather than information being taken away.
+   Measured at 375x812 before this: the topbar is 217px of stacked rows, the
+   session block 115, the strip 67, and then a brand row, a search form, eight
+   ticker pills and a greeting between the strip and the first market section,
+   which put "what matters now" at y=839 on an 812px screen. So the day's
+   cross-asset moves were off the first screen on the page that exists to show
+   them.
+
+   * the brand row: the page header says OPTIC TERMINAL two inches above it
+   * the greeting: the session block directly above says REGULAR SESSION and
+     the local time, which is the same fact with more in it
+   * the ticker pills: eight arbitrary symbols directly under a search box, on
+     the one screen size where vertical space is the scarce resource
+
+   The search form stays. It is the page's primary action and the brief this
+   came from is explicit that search is the central primitive. */
+@media (max-width: 719px) {
+  .home-brand { display: none; }
+  .home-quick { display: none; }
+  .hm-greet { display: none; }
+  /* And the fourth: the page's own search form.
+     The topbar carries `#ticker-input` about 250px above it, with the same
+     live results (measured: ten matches for "NV" on this viewport) and the
+     command bar behind it. Two search boxes on one 375px screen is the
+     repetition the redesign is meant to remove, and on a phone the form plus
+     its full-width Analyze button is ~180px of it. Search is still the first
+     thing on the screen, which is what the brief asks for; it is just the one
+     that is always there rather than a second copy on one view. */
+  .home-search { display: none; }
 }

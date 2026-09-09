@@ -11,7 +11,7 @@ Live at https://theopticterminal.com (Railway, auto-deploys from `main`).
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Tests: `.venv/bin/python -m pytest -q`. There are 1208 and they all pass; keep it that way.
+Tests: `.venv/bin/python -m pytest -q`. There are 1227 and they all pass; keep it that way.
 
 A development account: `.venv/bin/python -m app.seed`. It prints a generated password
 once and refuses to run when a hosting platform is in the environment.
@@ -173,6 +173,27 @@ let a displaced average squat on a colour a later average was keeping.
 `STATE.ticker`. The Charting tab has `wsIndicators`, keyed on
 `STATE.chartSymbol`, because drawing the former on the latter puts one company's
 bands over another company's candles and labels them correctly.
+
+**A phone override belongs after the rule it overrides.** `.hm-greet` is
+defined near the bottom of `styles.css`, and a `@media (max-width: 719px)` block
+placed up with the other phone rules set `display: none` on it and the greeting
+stayed on screen: equal specificity, later source order wins. The command-centre
+phone block sits at the end of the file for that reason.
+
+**Four things are hidden on a phone and all four are duplicates.** The brand row
+(the header says OPTIC TERMINAL), the greeting (the session block above says
+REGULAR SESSION and the local time), the ticker pills, and the homepage search
+form (the topbar carries `#ticker-input` with the same live results). Measured at
+375x812: those plus the session legend were the difference between the day's
+cross-asset moves being at y=839 on an 812px screen and at y=537.
+
+**Every command-bar action has to open something that exists.** The scan ids are
+checked against the catalogue `/api/scanners` publishes, and the views against
+`PALETTE_PLACES`. An action that opens a view Optic does not have reads as a
+broken feature rather than a missing one, which is worse. `runScan` is the entry
+point for a scan; a first draft of the actions list added an `openScan` wrapper
+that duplicated it, fifty lines from the comment in this file saying there is no
+`openScan`.
 
 **The homepage is a market command centre and the strip is its first element.**
 `#cc-strip` sits above the brand and the search and is filled separately from

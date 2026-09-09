@@ -4161,6 +4161,72 @@ const PALETTE_PLACES = [
   { view: 'settings', label: 'Settings', terms: 'settings appearance theme timezone preferences' },
 ];
 
+/* ------------------------------------------------------- recently viewed
+ *
+ * A symbol goes in here every time one is opened, so the command bar can offer
+ * them back. Local, not account-backed: this is a per-device convenience, the
+ * list is worthless on someone else's machine, and putting it in SQL would mean
+ * a write on every ticker open for something nobody would miss.
+ *
+ * The account-backed lists are separate and already exist. Watchlists are
+ * things a reader chose to keep; this is just where they have been.
+ */
+const RECENT_KEY = 'optic.recent.v1';
+const RECENT_MAX = 8;
+
+function recentSymbols() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
+    return Array.isArray(raw)
+      ? raw.filter((s) => typeof s === 'string' && /^[A-Z.^=-]{1,12}$/.test(s))
+      : [];
+  } catch (e) { return []; }
+}
+
+function rememberSymbol(symbol) {
+  const sym = String(symbol || '').trim().toUpperCase();
+  if (!sym) return;
+  // Moved to the front rather than appended, and de-duplicated, so opening the
+  // same name twice does not fill the list with one symbol.
+  const next = [sym, ...recentSymbols().filter((s) => s !== sym)].slice(0, RECENT_MAX);
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)); }
+  catch (e) { /* private mode: the bar just has no history */ }
+}
+
+/* ------------------------------------------------------------ quick actions
+ *
+ * Every one of these goes somewhere that already exists. That is the whole
+ * constraint: a quick action that opens a view Optic does not have is worse
+ * than no quick action, because it looks like the feature is there.
+ *
+ * `scan` targets are the ids the scanner catalogue actually publishes, checked
+ * against /api/scanners: `movers`, `volume` and `momentum` are three of the
+ * thirteen. Nothing here is aspirational.
+ *
+ * They go through `runScan`, which is the entry point the palette's screen rows
+ * already use and which sets `STATE.scanId` itself. A first draft of this added
+ * an `openScan` wrapper that did the same two things, next to a comment fifty
+ * lines away in this same file saying "there is no openScan".
+ */
+const QUICK_ACTIONS = [
+  { label: 'Market overview', detail: 'Macro, sectors and rotation',
+    run: () => switchView('market') },
+  { label: "Today's read", detail: 'The written daily brief',
+    run: () => switchView('brief') },
+  { label: 'Find movers', detail: 'Ranked on a one-month move',
+    run: () => { switchView('scan'); runScan('movers'); } },
+  { label: 'Find unusual volume', detail: 'Twenty-day volume against sixty',
+    run: () => { switchView('scan'); runScan('volume'); } },
+  { label: 'Momentum leaders', detail: 'Highest trend and momentum score',
+    run: () => { switchView('scan'); runScan('momentum'); } },
+  { label: 'Compare stocks', detail: 'Side by side on the same measures',
+    run: () => switchView('compare') },
+  { label: 'Charting', detail: 'Drawings, studies and intraday',
+    run: () => switchView('chart') },
+  { label: 'Ask Optic', detail: 'Put a question to the assistant',
+    run: () => openPulseWithText('') },
+];
+
 /* Does this look like a symbol, or like a sentence?
  *
  * A ticker is short, all letters, and one word. Anything with a space, a
@@ -4356,8 +4422,29 @@ async function paletteBuild(query) {
   const q = (query || '').trim();
   const rows = [];
   if (!q) {
+    /* Opened with nothing typed, in the order someone is most likely to want.
+     *
+     * Recents first, because the most common reason to reopen this bar is to go
+     * back to a name you were just looking at, and it is the one group that
+     * needs no typing at all. Then the actions, which are the things you cannot
+     * reach by typing a symbol. Places last: they are the least specific, and
+     * the tab strip already shows most of them.
+     *
+     * Saved research is offered per-symbol rather than as its own group here:
+     * a bare list of past questions is not what an empty command bar is for,
+     * and it appears under a ticker query where it has something to attach to.
+     */
+    recentSymbols().slice(0, 5).forEach((sym) => rows.push({
+      group: 'Recent', lead: '\u25CE', label: sym, detail: 'Open again',
+      run: () => { closePalette(); loadTicker(sym, 'swing'); },
+    }));
+    QUICK_ACTIONS.forEach((a) => rows.push({
+      group: 'Actions', lead: '\u2726', label: a.label, detail: a.detail,
+      run: () => { closePalette(); a.run(); },
+    }));
     PALETTE_PLACES.slice(0, 6).forEach((p) => rows.push({
-      group: 'Go to', lead: '\u2192', label: p.label, run: () => switchView(p.view),
+      group: 'Go to', lead: '\u2192', label: p.label,
+      run: () => { closePalette(); switchView(p.view); },
     }));
     return rows;
   }
@@ -4397,6 +4484,48 @@ async function paletteBuild(query) {
       tag: exactPlace ? '' : 'enter',
       run: () => { closePalette(); loadTicker(upper, 'swing'); },
     });
+    /* The other places that symbol goes.
+     *
+     * Every one of these is a view that already exists and already takes a
+     * ticker, which is the test each row had to pass to be here.
+     *
+     * The brief behind this also asked for "related companies" and "ETFs
+     * containing NVDA". Half of that is already here and not from this code:
+     * the `Symbols` group below comes from /api/search, and typing NVDA returns
+     * NVDB, NVDY, NVDW and the rest, because those funds carry the name. What
+     * has no feed is ETFs whose *holdings* include a symbol without naming it,
+     * and related-companies-by-sector, so neither is offered. A row that opens
+     * nothing is worse than an absent row: it reads as broken rather than
+     * missing.
+     */
+    [
+      ['Chart', 'Charting workspace', () => { loadChartWorkspace(upper); switchView('chart'); }],
+      ['News', 'Headlines for this symbol', () => loadTicker(upper, 'brief')],
+      ['Earnings', 'History, estimates and the read', () => loadTicker(upper, 'earnings')],
+      ['Long-term', 'Valuation and the decade view', () => loadTicker(upper, 'long')],
+      ['Compare', 'Put it beside other names', () => {
+        STATE.compareInputs = [upper, '', ''];
+        switchView('compare');
+      }],
+    ].forEach(([label, detail, run]) => rows.push({
+      group: upper, lead: '\u2192', label, detail,
+      run: () => { closePalette(); run(); },
+    }));
+
+    /* And anything already asked about this symbol.
+     *
+     * `savedResearch()` returns the account's list when signed in and the local
+     * one otherwise, so this works either way without asking which. Matched on
+     * the row's own ticker field rather than by searching the question text: a
+     * question about AMD that happens to mention NVDA belongs under AMD. */
+    (savedResearch() || [])
+      .filter((r) => String(r.ticker || '').toUpperCase() === upper)
+      .slice(0, 3)
+      .forEach((r) => rows.push({
+        group: upper, lead: '\u2727', label: String(r.question || '').slice(0, 60),
+        detail: 'Saved research',
+        run: () => { closePalette(); openPulseWithText(r.question || ''); },
+      }));
   }
 
   places.forEach((p) => { if (p !== exactPlace) rows.push(placeRow(p)); });
@@ -19010,16 +19139,50 @@ function renderSessionBar() {
       ${nowBlock}
       <div class="ses-strip">${segments}${marker}</div>
     </div>
-    <div class="ses-legend">${legend}
-      <span class="ses-key ses-zone">${onMarketTime
+    ${/* The legend and the description, collapsible on a phone.
+        *
+        * On a 375px screen these two took about 240px between them: the four
+        * phase keys wrap to two rows, the timezone note takes a third, and the
+        * description takes two lines. That pushed the market strip to y=534 and
+        * the day's cross-asset moves off the first screen entirely, on the page
+        * whose whole job is to show them.
+        *
+        * Collapsed rather than hidden. Nothing here is removed at any width:
+        * the toggle only exists below the phone breakpoint, and the desktop
+        * renders exactly what it did before. Which session it is, the clock and
+        * the 24-hour strip all stay visible, because those are the parts that
+        * change during a day. */''}
+    <button type="button" class="ses-detail-btn" data-ses-detail
+      aria-expanded="false" aria-controls="ses-detail">Session hours</button>
+    <div class="ses-detail" id="ses-detail">
+      <div class="ses-legend">${legend}
+        <span class="ses-key ses-zone">${onMarketTime
     ? `Times in ${esc(zoneTag)}. Market time`
     : `Times in ${esc(zoneTag)}; market runs on ET`}<button type="button"
-        data-goto-settings>change</button></span>
-    </div>
-    ${tickerRelevant && p.stale_note ? `<div class="ses-warn">${gloss(p.stale_note)}</div>` : ''}
-    <div class="ses-desc">${gloss(sess.description || '')}</div>`;
+          data-goto-settings>change</button></span>
+      </div>
+      ${tickerRelevant && p.stale_note ? `<div class="ses-warn">${gloss(p.stale_note)}</div>` : ''}
+      <div class="ses-desc">${gloss(sess.description || '')}</div>
+    </div>`;
 
   dedupeGlossTerms(host);
+
+  /* The phone disclosure.
+   *
+   * Toggles a class rather than the `open` attribute of a <details>, because
+   * `open` cannot be set by a media query: a <details> would need JS to decide
+   * its initial state per width and would then fight a resize. A class plus two
+   * CSS rules gives the desktop the old markup untouched and the phone a
+   * closed-by-default panel, with one DOM either way. */
+  const detailBtn = host.querySelector('[data-ses-detail]');
+  const detail = host.querySelector('.ses-detail');
+  if (detailBtn && detail) {
+    detailBtn.addEventListener('click', () => {
+      const open = detail.classList.toggle('is-open');
+      detailBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      detailBtn.textContent = open ? 'Hide hours' : 'Session hours';
+    });
+  }
 
   // Hide the toggle when the summary already fits — a "more" button that expands
   // nothing is worse than no button.
@@ -20700,6 +20863,11 @@ function tickerMark(symbol, size) {
 function loadTicker(raw, destination) {
   const next = (raw || '').trim().toUpperCase();
   if (!next) return;
+  // One place, because every route into a symbol comes through here: the search
+  // box, the palette, a watchlist row, a mover row, a holding in the ledger.
+  // Recording it at each call site instead would miss whichever one is added
+  // next.
+  rememberSymbol(next);
   STATE.ticker = next;
   STATE.swing = null;
   STATE.earnings = null;
