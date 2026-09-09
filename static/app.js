@@ -1650,6 +1650,7 @@ let showMA = false;
 let showVol = true;
 let showVbp = false;
 let showInsiders = false;
+let showEarnMarks = false;
 let showZones = false;
 let showEMA = false;
 /* EMA clouds: the space between a pair of averages, filled and tinted by which
@@ -1727,6 +1728,50 @@ function seriesShown(id) {
   return !!seriesOn[id];
 }
 
+/* Hidden, as distinct from off.
+ *
+ * The eye on every legend row was markup with no handler: `data-ws-hide`
+ * existed and nothing listened for it. This is what it does now.
+ *
+ * **Why the distinction is worth having.** Off forgets the overlay's settings —
+ * an SMA's length, offset and source, which the reader may have changed. Hidden
+ * keeps the row, the settings and the current value in the legend, and only
+ * stops the line being drawn. That is the "does this level still hold without
+ * the average in the way" question, and answering it by switching the overlay
+ * off costs the configuration.
+ *
+ * Shared between the Swing chart and the workspace, like every other overlay
+ * setting in this file, so neither can disagree with the other about what is
+ * on screen. */
+const WS_HIDE_KEY = 'optic.chart.hidden.v1';
+
+let seriesHidden = {};
+try {
+  const raw = JSON.parse(localStorage.getItem(WS_HIDE_KEY) || '{}');
+  if (raw && typeof raw === 'object') seriesHidden = raw;
+} catch (e) { /* private mode */ }
+
+function overlayHidden(id) {
+  return !!seriesHidden[id];
+}
+
+/* Is this overlay actually drawn? Enabled and not hidden.
+ *
+ * Kept separate from seriesShown() on purpose: the legend has to render a
+ * hidden overlay (that is the whole point of hiding rather than removing), so
+ * "is it enabled" and "is it drawn" are two different questions and one
+ * function cannot answer both. */
+function seriesDrawn(id) {
+  return seriesShown(id) && !overlayHidden(id);
+}
+
+function setOverlayHidden(id, hidden) {
+  if (hidden) seriesHidden[id] = true;
+  else delete seriesHidden[id];
+  try { localStorage.setItem(WS_HIDE_KEY, JSON.stringify(seriesHidden)); }
+  catch (e) { /* private mode */ }
+}
+
 /** Turn a whole family on or off — what the Swing tab's single checkbox means. */
 function setFamily(which, on) {
   (which === 'ema' ? EMA_MEMBERS : MA_MEMBERS).forEach((id) => {
@@ -1739,6 +1784,7 @@ function setFamily(which, on) {
 const SHOW_VOL_KEY = 'optic.chart.vol.v2';
 const SHOW_VBP_KEY = 'optic.chart.vbp.v2';
 const SHOW_INS_KEY = 'optic.chart.insiders.v2';
+const SHOW_EARN_KEY = 'optic.chart.earnmarks.v1';
 const SHOW_ZONES_KEY = 'optic.chart.zones.v2';
 const SHOW_EMA_KEY = 'optic.chart.ema.v2';
 try {
@@ -1772,6 +1818,7 @@ try {
   showVol = localStorage.getItem(SHOW_VOL_KEY) !== 'off';
   showVbp = localStorage.getItem(SHOW_VBP_KEY) === 'on';
   showInsiders = localStorage.getItem(SHOW_INS_KEY) === 'on';
+  showEarnMarks = localStorage.getItem(SHOW_EARN_KEY) === 'on';
   showZones = localStorage.getItem(SHOW_ZONES_KEY) === 'on';
   showEMA = localStorage.getItem(SHOW_EMA_KEY) === 'on';
   showCloudFast = localStorage.getItem(SHOW_CLOUD_FAST_KEY) === 'on';
@@ -2369,7 +2416,7 @@ function renderOptionsBrief(d) {
   if (!ob || !ob.available) return '';
   return `<section class="ob-block span-all" aria-label="Options intelligence">
     <div class="hm-block-head">
-      <h2 class="hm-h">Options intelligence</h2>
+      <h2 class="hm-h">Options intelligence${askPulse('optionsactivity')}</h2>
       ${ob.bias ? `<span class="ob-bias is-${esc(ob.bias)}">flow reads ${esc(ob.bias)}</span>` : ''}
     </div>
     <div class="ob-grid">
@@ -2400,7 +2447,7 @@ function renderSetup(d) {
   const ep = d.entry_plan || {};
   if (!ep.actionable) {
     return ep.headline ? `<section class="su-block span-all" aria-label="Setup">
-      <h2 class="hm-h">Setup</h2>
+      <h2 class="hm-h">Setup${askPulse('setup')}</h2>
       <p class="su-none">${gloss(ep.headline)}</p>
     </section>` : '';
   }
@@ -2573,7 +2620,7 @@ function renderThesis(d) {
   const val = (k) => esc((saved && saved[k]) || '');
   return `<section class="th-panel span-all" id="thesis" aria-label="My thesis">
     <div class="hm-block-head">
-      <h2 class="hm-h">My ${esc(sym)} thesis</h2>
+      <h2 class="hm-h">My ${esc(sym)} thesis${askPulse('invalidate')}</h2>
       ${saved ? `<span class="th-when">saved ${esc(shortWhen(saved.saved_at))}</span>` : ''}
     </div>
 
@@ -2665,7 +2712,8 @@ function renderWatchlist() {
             * Read once at render, it went stale the moment a row was removed —
             * "5 names" above four rows. */''}
         <p class="wv-sub"><span id="wv-count">${watchCountLabel()}</span>
-          Every row says what changed, or says nothing when nothing did.</p>
+          Every row says what changed, or says nothing when nothing did.
+          <span id="wv-shown" class="wv-shown">${esc(watchShownLabel())}</span></p>
       </div>
       <form class="wv-add" id="wv-add-form">
         <input id="wv-add" type="text" placeholder="Add a symbol" spellcheck="false"
@@ -2679,6 +2727,16 @@ function renderWatchlist() {
       ${WATCH_SORTS.map((sp) => `<button type="button"
         class="pill${watchSort === sp.id ? ' on' : ''}" data-watch-sort="${esc(sp.id)}"
         aria-pressed="${watchSort === sp.id}">${esc(sp.label)}</button>`).join('')}
+    </div>
+
+    ${/* Filters, separate from the sorts. A sort answers "in what order"; a
+        * filter answers "which of these at all", and the two were one row of
+        * pills where pressing one silently replaced the other. */''}
+    <div class="wv-filters" role="group" aria-label="Filter the watchlist">
+      <span class="wv-filter-label">Show</span>
+      ${WATCH_FILTERS.map((f) => `<button type="button"
+        class="pill${watchFilter === f.id ? ' on' : ''}" data-watch-filter="${esc(f.id)}"
+        aria-pressed="${watchFilter === f.id}">${esc(f.label)}</button>`).join('')}
     </div>
 
     <div class="wv-cols" aria-hidden="true">
@@ -2702,20 +2760,30 @@ function renderWatchlist() {
 function renderAlerts() {
   const host = views.alerts;
   const data = STATE.alertsFeed;
-  if (!data) { host.innerHTML = `<section class="wv">${loadingHTML('alerts')}</section>`; return; }
+  // Your watches render either way. The scan feed being unreachable is not a
+  // reason to hide the watches you set: they are checked by a different
+  // endpoint and the two have no dependency on each other.
+  if (!data) {
+    host.innerHTML = `${renderWatchesBlock()}
+      <section class="wv">${loadingHTML('scan alerts')}</section>`;
+    return;
+  }
   if (data.error) {
-    host.innerHTML = `<section class="wv">${errorHTML(data.error)}</section>`;
+    host.innerHTML = `${renderWatchesBlock()}
+      <section class="wv">${errorHTML(data.error)}</section>`;
     return;
   }
   const rows = data.rows || [];
   host.innerHTML = `
+  ${renderWatchesBlock()}
+
   <section class="wv">
     <div class="wv-head">
       <div>
-        <h2 class="hm-h">Alerts</h2>
-        <p class="wv-sub">Fired by the scheduled scan against Optic's own
-          positions and the ranked universe. Each one names the condition that
-          tripped it.</p>
+        <h2 class="hm-h">From the scheduled scan</h2>
+        <p class="wv-sub">Not yours: these fire on Optic's own positions and the
+          ranked universe, whether or not you asked. Each one names the condition
+          that tripped it.</p>
       </div>
       ${rows.length ? `<button type="button" class="btn" data-alerts-clear>
         Clear all</button>` : ''}
@@ -2736,6 +2804,440 @@ function renderAlerts() {
   </section>`;
 }
 
+/* ================================================================ WATCHES ===
+ *
+ * "Tell me when NVDA does something." The conditions and the evaluator live on
+ * the server (`app/analytics/watches.py`); this is the builder, the list and the
+ * checking loop.
+ *
+ * **What this is honest about.** A watch is evaluated when Optic checks it, and
+ * Optic checks it while the page is open. It is not a push notification, and the
+ * UI says so rather than implying otherwise — nothing here can reach a phone.
+ * `app/alerts.py` makes the same argument about delivery for the same reason: an
+ * alert that silently misses the move it was created for is worse than none,
+ * because you would have stopped watching.
+ *
+ * **Why checking is one symbol at a time.** `/api/watches/check` builds the same
+ * analysis payload the Swing tab builds, which is roughly twenty seconds of
+ * provider calls. Firing ten at once would take three minutes and hammer the
+ * upstream rate limit. So they run in sequence, the row shows which symbol is
+ * being worked on, and the first result appears while the rest are still going.
+ *
+ * **Why the last state is stored.** `signal_flip` and `analyst_revisions` report
+ * a *state*, not a transition — deliberately, because a stateless evaluator
+ * cannot see a change and claiming to would fire on every poll. The comparison
+ * against the previous state happens here, which only works because the previous
+ * state was recorded (see POST /api/watches/seen).
+ */
+
+const WATCHES_KEY = 'optic.watches.v1';
+
+// symbol -> { at, results, error, loading }
+const WATCH_CHECKS = {};
+
+let watchCatalogue = null;
+let watchBuilderKind = 'price_above';
+let watchChecking = null;        // the symbol currently being evaluated
+
+/* What is half-typed in the builder.
+ *
+ * Changing the condition re-renders the block, because the parameter field's
+ * *kind* changes with it — a number becomes a select, or disappears. That
+ * re-render destroyed the symbol somebody had already typed: enter NVDA, pick
+ * a condition, and the symbol was gone with no indication why. The draft is
+ * kept here and rendered back in.
+ *
+ * The parameter is deliberately NOT preserved across a condition change. It
+ * means something different for each one, and carrying 200 from "rises above"
+ * into "moves more than" would silently propose a 200% move. */
+const watchDraft = { symbol: '' };
+
+function localWatchDefs() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(WATCHES_KEY) || '[]');
+    return Array.isArray(raw) ? raw : [];
+  } catch (e) { return []; }
+}
+
+function saveLocalWatchDefs(list) {
+  try { localStorage.setItem(WATCHES_KEY, JSON.stringify(list.slice(0, 40))); }
+  catch (e) { /* private mode, or quota */ }
+}
+
+/* Signed in, the definitions come from the account. Synchronous, same as
+ * watchList() and savedResearch() and for the same reason. */
+function watchDefs() {
+  if (ACCOUNT.watches) return ACCOUNT.watches;
+  return localWatchDefs();
+}
+
+async function loadWatchCatalogue() {
+  if (watchCatalogue) return watchCatalogue;
+  try {
+    watchCatalogue = await getJSON('/api/watches/catalogue');
+  } catch (err) {
+    watchCatalogue = { error: err.message, conditions: [] };
+  }
+  return watchCatalogue;
+}
+
+function watchCondition(kind) {
+  return ((watchCatalogue || {}).conditions || []).find((c) => c.id === kind) || null;
+}
+
+async function addWatchDef(symbol, kind, params) {
+  if (signedIn()) {
+    const made = await authApi('/api/watches', {
+      method: 'POST', body: { symbol: symbol, kind: kind, params: params },
+    });
+    ACCOUNT.watches = [...(ACCOUNT.watches || []), made.watch];
+    return made.watch;
+  }
+  const defs = localWatchDefs();
+  const key = JSON.stringify({ symbol: symbol, kind: kind, params: params });
+  if (defs.some((d) => JSON.stringify({ symbol: d.symbol, kind: d.kind,
+    params: d.params }) === key)) {
+    throw new Error('You are already watching that on ' + symbol + '.');
+  }
+  if (defs.length >= 40) {
+    throw new Error('That is 40 watches, which is the limit. Delete one to add another.');
+  }
+  const def = {
+    // Prefixed so a local id can never be mistaken for a server UUID if the two
+    // lists are ever looked at together.
+    id: 'local-' + Math.random().toString(36).slice(2, 11),
+    symbol: symbol, kind: kind, params: params, active: true,
+    created_at: new Date().toISOString(), last_met_at: null, last_evidence: null,
+  };
+  saveLocalWatchDefs([...defs, def]);
+  return def;
+}
+
+async function dropWatchDef(id) {
+  if (ACCOUNT.watches) {
+    ACCOUNT.watches = ACCOUNT.watches.filter((w) => w.id !== id);
+    try {
+      await authApi('/api/watches/' + encodeURIComponent(id), { method: 'DELETE' });
+    } catch (err) { window.OpticAuth.toast(err.message, 'bad'); }
+    return;
+  }
+  saveLocalWatchDefs(localWatchDefs().filter((w) => w.id !== id));
+}
+
+async function toggleWatchDef(id, active) {
+  if (ACCOUNT.watches) {
+    ACCOUNT.watches = ACCOUNT.watches.map((w) => (w.id === id
+      ? { ...w, active: active } : w));
+    try {
+      await authApi('/api/watches/' + encodeURIComponent(id), {
+        method: 'PATCH', body: { active: active },
+      });
+    } catch (err) { window.OpticAuth.toast(err.message, 'bad'); }
+    return;
+  }
+  saveLocalWatchDefs(localWatchDefs().map((w) => (w.id === id
+    ? { ...w, active: active } : w)));
+}
+
+/* Evaluate every active watch on one symbol.
+ *
+ * The results are recorded afterwards for a signed-in reader, which is what
+ * makes a trip news exactly once instead of on every check. A guest gets the
+ * comparison too, held in this tab only — the honest limit of not having an
+ * account, and it is stated in the UI. */
+async function checkWatchSymbol(symbol) {
+  const defs = watchDefs().filter((w) => w.symbol === symbol && w.active !== false);
+  if (!defs.length) return;
+  WATCH_CHECKS[symbol] = { loading: true };
+  watchChecking = symbol;
+  renderAlerts();
+  try {
+    const reply = await postJSON('/api/watches/check', {
+      ticker: symbol,
+      watches: defs.map((w) => ({ id: w.id, kind: w.kind, params: w.params })),
+    });
+    const results = reply.results || [];
+    /* Is this news, or the same news as last time?
+     *
+     * Two kinds of condition, answered two ways. A state-reporting one
+     * (`signal_flip`, `analyst_revisions`) carries a `state`, so "changed" is a
+     * comparison against the state last recorded. A level or event one
+     * (`price_above`, `breakout`) carries no state, so the only question is
+     * whether it had ever been met before.
+     *
+     * Reading `state` for both put a level watch at "still met" on the very
+     * first trip it ever had, because a missing state read as "no previous
+     * state to differ from". */
+    const previous = {};
+    defs.forEach((w) => {
+      previous[w.id] = { state: (w.last_evidence || {}).state || null,
+                         metBefore: !!w.last_met_at };
+    });
+    results.forEach((r) => {
+      const was = previous[r.id] || {};
+      if (!r.met) { r.changed = false; r.first_seen = false; return; }
+      if (r.state) {
+        r.changed = !!(was.state && r.state !== was.state);
+        r.first_seen = !was.state;
+      } else {
+        r.changed = false;
+        r.first_seen = !was.metBefore;
+      }
+    });
+    WATCH_CHECKS[symbol] = {
+      at: reply.checked_at || new Date().toISOString(),
+      price: reply.price,
+      results: results,
+    };
+    if (signedIn()) {
+      try {
+        await authApi('/api/watches/seen', { method: 'POST', body: { results: results } });
+        // Reload the definitions so `last_met_at` and the stored state are the
+        // server's, not this tab's guess at them.
+        const fresh = await authApi('/api/watches');
+        ACCOUNT.watches = fresh.watches || [];
+      } catch (err) { /* the check itself succeeded; recording is best effort */ }
+    } else {
+      saveLocalWatchDefs(localWatchDefs().map((w) => {
+        const hit = results.find((r) => r.id === w.id && r.met);
+        if (!hit) return w;
+        return { ...w, last_met_at: new Date().toISOString(),
+                 last_evidence: { evidence: hit.evidence, state: hit.state } };
+      }));
+    }
+  } catch (err) {
+    WATCH_CHECKS[symbol] = { error: err.message };
+  }
+  watchChecking = null;
+  renderAlerts();
+}
+
+async function checkAllWatches() {
+  const symbols = [...new Set(watchDefs().filter((w) => w.active !== false)
+    .map((w) => w.symbol))];
+  for (const symbol of symbols) {
+    // Sequential on purpose: each one is ~20s of provider calls, and the whole
+    // point of the progress line is that the first answer arrives early.
+    await checkWatchSymbol(symbol);
+  }
+}
+
+/* ---------------------------------------------------------------- rendering */
+
+function watchParamField(cond) {
+  const p = cond && cond.param;
+  if (!p) {
+    return `<span class="wd-noparam">${esc(cond ? cond.why : '')}</span>`;
+  }
+  if (p.choices) {
+    // Built from the catalogue, never hand-listed. The evaluator compares the
+    // stored value as a string, so a UI that invents its own vocabulary
+    // produces a watch that stores fine and never fires.
+    return `<label class="wd-param"><span>${esc(p.label)}</span>
+      <select name="param">
+        ${p.choices.map((c) => `<option value="${esc(c.value)}"${
+    c.value === p.default ? ' selected' : ''}>${esc(c.label)}</option>`).join('')}
+      </select></label>`;
+  }
+  const step = p.kind === 'price' ? '0.01' : p.kind === 'days' ? '1' : '0.1';
+  return `<label class="wd-param"><span>${esc(p.label)}${
+    p.kind === 'percent' ? ' (%)' : ''}</span>
+    <input type="number" name="param" step="${step}" inputmode="decimal"
+      value="${p.default === undefined || p.default === null
+    ? '' : esc(p.default)}" placeholder="${p.kind === 'price' ? 'e.g. 200' : ''}"></label>`;
+}
+
+function watchDefLabel(w) {
+  const cond = watchCondition(w.kind);
+  if (!cond) return w.kind;
+  const p = cond.param;
+  if (!p) return cond.label;
+  const value = (w.params || {})[p.key];
+  if (value === undefined || value === null || value === '') return cond.label;
+  if (p.choices) {
+    const choice = p.choices.find((c) => String(c.value) === String(value));
+    return cond.label + ': ' + (choice ? choice.label : value);
+  }
+  if (p.kind === 'price') return cond.label + ' ' + fmt(value, 2);
+  if (p.kind === 'percent') return cond.label + ' ' + fmt(value, 1) + '%';
+  if (p.kind === 'days') return cond.label + ' ' + value + ' days';
+  return cond.label + ' ' + value;
+}
+
+function watchStateChip(w, result) {
+  if (!result) {
+    return w.last_met_at
+      ? `<span class="wd-chip was">Last met ${esc(shortWhen(w.last_met_at))}</span>`
+      : '<span class="wd-chip idle">Not checked yet</span>';
+  }
+  if (result.reason) return `<span class="wd-chip idle">${esc(result.reason)}</span>`;
+  if (!result.met) return '<span class="wd-chip no">Not met</span>';
+  if (result.changed) return '<span class="wd-chip hit">Changed</span>';
+  if (result.first_seen) return '<span class="wd-chip hit">Met</span>';
+  return '<span class="wd-chip still">Still met</span>';
+}
+
+function renderWatchesBlock() {
+  const defs = watchDefs();
+  const cond = watchCondition(watchBuilderKind);
+  const conditions = (watchCatalogue || {}).conditions || [];
+  const bySymbol = {};
+  defs.forEach((w) => {
+    if (!bySymbol[w.symbol]) bySymbol[w.symbol] = [];
+    bySymbol[w.symbol].push(w);
+  });
+  const symbols = Object.keys(bySymbol).sort();
+  const anyChecked = symbols.some((s) => WATCH_CHECKS[s] && WATCH_CHECKS[s].results);
+
+  return `<section class="wv wd-block" aria-label="Your watches">
+    <div class="wv-head">
+      <div>
+        <h2 class="hm-h">Your watches</h2>
+        <p class="wv-sub">Conditions you have set. Each one names the number that
+          tripped it, and says so when it did not.
+          <strong>Checked while Optic is open</strong>, not pushed to you: nothing
+          here can send you a notification.${signedIn() ? ' Kept on your account.'
+    : ' Kept in this browser until you have an account.'}</p>
+      </div>
+      ${symbols.length ? `<button type="button" class="btn" data-watch-check-all
+        ${watchChecking ? 'disabled' : ''}>${watchChecking
+    ? 'Checking ' + esc(watchChecking) + '...' : 'Check all'}</button>` : ''}
+    </div>
+
+    <form class="wd-new" id="wd-new-form">
+      <label class="wd-param"><span>Symbol</span>
+        <input type="text" name="symbol" spellcheck="false"
+          placeholder="NVDA" value="${esc(watchDraft.symbol || STATE.ticker || '')}"
+          data-watch-draft required></label>
+      <label class="wd-param wd-param-wide"><span>Tell me when</span>
+        <select name="kind" data-watch-kind>
+          ${conditions.map((c) => `<option value="${esc(c.id)}"${
+    c.id === watchBuilderKind ? ' selected' : ''}>${esc(c.label)}</option>`).join('')}
+        </select></label>
+      ${watchParamField(cond)}
+      <button type="submit" class="btn primary">Add watch</button>
+    </form>
+    ${cond && cond.param ? `<p class="wd-why">${esc(cond.why)}</p>` : ''}
+
+    ${symbols.length ? symbols.map((symbol) => {
+    const state = WATCH_CHECKS[symbol] || {};
+    const results = state.results || [];
+    return `<div class="wd-sym">
+        <div class="wd-sym-head">
+          <button type="button" class="al-sym" data-watch-open="${esc(symbol)}">${
+      esc(symbol)}</button>
+          ${state.price !== undefined && state.price !== null
+      ? `<span class="wd-price">${fmt(state.price, 2)}</span>` : ''}
+          <span class="wd-when">${state.loading ? 'Checking...'
+      : state.error ? 'Could not check'
+        : state.at ? 'Checked ' + esc(shortWhen(state.at)) : 'Not checked yet'}</span>
+          <button type="button" class="btn wd-check" data-watch-check="${esc(symbol)}"
+            ${watchChecking ? 'disabled' : ''}>Check</button>
+        </div>
+        ${state.error ? `<p class="wd-err">${esc(state.error)}</p>` : ''}
+        <ul class="wd-list">
+          ${bySymbol[symbol].map((w) => {
+      const result = results.find((r) => r.id === w.id);
+      return `<li class="wd-row${w.active === false ? ' is-off' : ''}">
+              <span class="wd-cond">${esc(watchDefLabel(w))}</span>
+              ${watchStateChip(w, result)}
+              <span class="wd-ev">${result && result.met
+        ? esc(result.evidence || '') : ''}</span>
+              <button type="button" class="wd-btn" data-watch-toggle="${esc(w.id)}"
+                data-watch-active="${w.active === false ? '0' : '1'}"
+                title="${w.active === false ? 'Resume this watch' : 'Pause this watch'}">${
+        w.active === false ? 'Paused' : 'Pause'}</button>
+              <button type="button" class="wl-x" data-watch-drop="${esc(w.id)}"
+                aria-label="Delete this watch">&times;</button>
+            </li>`;
+    }).join('')}
+        </ul>
+      </div>`;
+  }).join('') : `<p class="wv-none">No watches yet. A watch is the answer to
+      "what would make me look at this again" — a level, a breakout, an earnings
+      date coming up, or Optic's own stance changing on you.</p>`}
+
+    ${anyChecked ? `<p class="wd-foot">${esc((watchCatalogue || {}).method || '')}</p>` : ''}
+  </section>`;
+}
+
+document.addEventListener('input', (evt) => {
+  const field = evt.target.closest && evt.target.closest('[data-watch-draft]');
+  if (field) watchDraft.symbol = field.value;
+});
+
+document.addEventListener('change', (evt) => {
+  const kind = evt.target.closest && evt.target.closest('[data-watch-kind]');
+  if (!kind) return;
+  // Re-rendered rather than patched: the parameter field's kind changes with the
+  // condition. The symbol survives via watchDraft; see its comment.
+  const form = kind.closest('form');
+  if (form && form.elements.symbol) watchDraft.symbol = form.elements.symbol.value;
+  watchBuilderKind = kind.value;
+  renderAlerts();
+});
+
+document.addEventListener('submit', async (evt) => {
+  if (evt.target.id !== 'wd-new-form') return;
+  evt.preventDefault();
+  const form = evt.target;
+  const symbol = (form.elements.symbol.value || '').trim().toUpperCase();
+  const kind = form.elements.kind.value;
+  const cond = watchCondition(kind);
+  if (!symbol) {
+    // A silent return here is indistinguishable from the button being broken.
+    window.OpticAuth.toast('Which symbol should Optic watch?', 'bad');
+    form.elements.symbol.focus();
+    return;
+  }
+  const params = {};
+  if (cond && cond.param) {
+    const field = form.elements.param;
+    const raw = field ? field.value : '';
+    if (raw === '' || raw === null) {
+      window.OpticAuth.toast(cond.param.label + ' needs a value.', 'bad');
+      return;
+    }
+    params[cond.param.key] = cond.param.choices ? raw : Number(raw);
+  }
+  const button = form.querySelector('button[type=submit]');
+  button.disabled = true;
+  try {
+    await addWatchDef(symbol, kind, params);
+    watchDraft.symbol = '';
+    renderAlerts();
+    // Checked straight away. A watch whose state is unknown until the next
+    // manual check is a to-do item, not a watch.
+    checkWatchSymbol(symbol);
+  } catch (err) {
+    window.OpticAuth.toast(err.message, 'bad');
+  }
+  button.disabled = false;
+});
+
+document.addEventListener('click', async (evt) => {
+  if (!evt.target || !evt.target.closest) return;
+
+  const check = evt.target.closest('[data-watch-check]');
+  if (check) { checkWatchSymbol(check.dataset.watchCheck); return; }
+
+  if (evt.target.closest('[data-watch-check-all]')) { checkAllWatches(); return; }
+
+  const drop = evt.target.closest('[data-watch-drop]');
+  if (drop) {
+    await dropWatchDef(drop.dataset.watchDrop);
+    renderAlerts();
+    return;
+  }
+
+  const toggle = evt.target.closest('[data-watch-toggle]');
+  if (toggle) {
+    await toggleWatchDef(toggle.dataset.watchToggle,
+      toggle.dataset.watchActive === '0');
+    renderAlerts();
+  }
+});
+
 /** A short relative stamp. "3h ago" beats an ISO string in a list you scan. */
 function shortWhen(iso) {
   if (!iso) return '';
@@ -2750,6 +3252,11 @@ function shortWhen(iso) {
 }
 
 async function loadAlertsFeed(force) {
+  // The builder is generated from the catalogue, so it has to be in hand before
+  // the first paint. Fetched once per session and cached.
+  if (!watchCatalogue) {
+    await loadWatchCatalogue();
+  }
   if (STATE.alertsFeed && !force) { renderAlerts(); return; }
   try {
     const data = await getJSON('/api/alerts');
@@ -2766,6 +3273,12 @@ document.addEventListener('click', (evt) => {
   const sortBtn = evt.target.closest('[data-watch-sort]');
   if (sortBtn) {
     watchSort = sortBtn.dataset.watchSort;
+    renderWatchlist();
+    return;
+  }
+  const filterBtn = evt.target.closest('[data-watch-filter]');
+  if (filterBtn) {
+    watchFilter = filterBtn.dataset.watchFilter;
     renderWatchlist();
   }
 });
@@ -2906,6 +3419,38 @@ const WATCH_SORTS = [
 const WATCH_SIGNAL_RANK = { bullish: 3, neutral: 2, bearish: 1, unknown: 0 };
 let watchSort = 'changed';
 
+/* Filters, and the two the brief asked for that are not here.
+ *
+ * **Sector is not a filter on this feed.** The whole panel is one batched
+ * history call — `app/analytics/watchlist.py` says so and gives the figure: the
+ * difference between a 2-second panel and a 30-second one. Sector comes from a
+ * per-symbol profile lookup, so a sector filter over ten names means ten extra
+ * network calls on every refresh. The Scan tab already groups by sector and is
+ * built for that shape of question.
+ *
+ * **Unusual options is not a filter either**, for a bigger version of the same
+ * reason: it needs an option chain per symbol. It is a *watch* instead — one
+ * condition in the catalogue, checked on the symbols you asked about rather
+ * than on all of them speculatively. The empty state below points there.
+ *
+ * What is left is everything the rows already carry, which is enough to answer
+ * "which of these should I look at now".
+ */
+const WATCH_FILTERS = [
+  { id: 'all', label: 'All', keep: () => true },
+  { id: 'changed', label: 'Something changed', keep: (r) => !!r.changed },
+  { id: 'bullish', label: 'Bullish', keep: (r) => r.signal === 'bullish' },
+  { id: 'bearish', label: 'Bearish', keep: (r) => r.signal === 'bearish' },
+  { id: 'movers', label: 'Moved 2%+',
+    keep: (r) => Math.abs(r.change_pct || 0) >= 2 },
+];
+
+let watchFilter = 'all';
+
+function watchFilterSpec() {
+  return WATCH_FILTERS.find((f) => f.id === watchFilter) || WATCH_FILTERS[0];
+}
+
 /** One row. Compact enough that ten fit on a screen, which is the point. */
 function watchRow(r, opts) {
   const o = opts || {};
@@ -2968,6 +3513,21 @@ function watchCountLabel() {
   return `${n} name${n === 1 ? '' : 's'}.`;
 }
 
+/* How many rows the filter is showing, when it is showing fewer than all.
+ *
+ * Blank on "All", because "5 of 5" is noise. This is the difference between a
+ * short list that is short because the filter narrowed it and a short list that
+ * is short because rows went missing. */
+function watchShownLabel() {
+  const spec = watchFilterSpec();
+  if (spec.id === 'all') return '';
+  const data = STATE.watchlist;
+  const rows = (data && data.rows) ? watchRowsSorted(data.rows) : [];
+  if (!rows.length) return '';
+  const kept = rows.filter((r) => spec.keep(r)).length;
+  return `Showing ${kept} of ${rows.length}: ${spec.label.toLowerCase()}.`;
+}
+
 function renderWatchlistHost() {
   // Both mounts, because the feed is shown in two places and only one of them
   // exists at a time. Painting whichever is present avoids a view rebuild.
@@ -2977,6 +3537,8 @@ function renderWatchlistHost() {
   if (full) full.innerHTML = watchlistFeedHTML({});
   const count = document.getElementById('wv-count');
   if (count) count.textContent = watchCountLabel();
+  const shownNote = document.getElementById('wv-shown');
+  if (shownNote) shownNote.textContent = watchShownLabel();
 }
 
 function watchlistFeedHTML(opts) {
@@ -2986,10 +3548,24 @@ function watchlistFeedHTML(opts) {
   if (data.available === false) {
     return `<p class="wl-none">${esc(data.error || 'The watchlist could not be read.')}</p>`;
   }
-  const rows = watchRowsSorted(data.rows);
-  if (!rows.length) {
+  const all = watchRowsSorted(data.rows);
+  if (!all.length) {
     return `<p class="wl-none">${esc(data.reason_none
       || 'Nothing on the watchlist yet.')}</p>`;
+  }
+  /* The filter applies to the full feed only.
+   *
+   * The home page shows the same rows in a six-row summary, and a filter set on
+   * the Watchlist tab quietly emptying that summary would look like the home
+   * page was broken. A filter belongs to the view whose controls are visible. */
+  const spec = watchFilterSpec();
+  const rows = o.compact ? all : all.filter((r) => spec.keep(r));
+  if (!rows.length) {
+    // Names the filter, so an empty list reads as a filter rather than as a
+    // watchlist that has lost its rows.
+    return `<p class="wl-none">None of your ${all.length} name${
+      all.length === 1 ? '' : 's'} matches “${esc(spec.label)}” right now.
+      <button type="button" class="auth-link" data-watch-filter="all">Show all</button></p>`;
   }
   const shown = o.limit ? rows.slice(0, o.limit) : rows;
   return `<ul class="wl-list${o.compact ? ' is-compact' : ''}">
@@ -3165,6 +3741,129 @@ function looksLikeQuestion(text) {
   return t.split(/\s+/).length >= 3;
 }
 
+/* ================================================== SCREENING FROM THE BOX ===
+ *
+ * "find semiconductor stocks with strong momentum" typed into the command
+ * palette used to route to Ask Optic, which answered in prose. A screening
+ * request deserves a screen.
+ *
+ * **What this does and, more importantly, does not do.** It matches the request
+ * to Optic's named screens and offers to run them. It does not build an
+ * arbitrary screener out of the sentence, and that is a deliberate limit rather
+ * than a shortcut: there is no free-form filter endpoint behind this, so a UI
+ * that accepted any criteria would have to either invent filters that do not
+ * exist or run something adjacent and present it as what was asked. Each named
+ * screen states what it looks for and what it is blind to, and the palette
+ * carries that text through — so the reader sees what is actually about to run.
+ *
+ * **Sector is called out explicitly when the request names one.** None of the
+ * screens filter by sector: they run over the ranked universe and their rows
+ * carry no sector at all (see /api/scanners/{id}). Silently ignoring the word
+ * "semiconductor" would be the worst option, because the results would look
+ * like an answer. So the palette says so and points at the sector board, which
+ * is the surface built for that question.
+ */
+
+// The eleven GICS sectors plus the industry words people actually type. Used
+// only to notice that a sector was mentioned, never to filter anything.
+const SECTOR_WORDS = [
+  'technology', 'tech', 'semiconductor', 'semiconductors', 'semis', 'software',
+  'hardware', 'healthcare', 'health', 'biotech', 'biotechnology', 'pharma',
+  'pharmaceutical', 'financial', 'financials', 'bank', 'banks', 'banking',
+  'insurance', 'energy', 'oil', 'gas', 'utilities', 'utility', 'industrial',
+  'industrials', 'materials', 'mining', 'gold', 'consumer', 'retail',
+  'staples', 'discretionary', 'communication', 'media', 'telecom',
+  'real estate', 'reit', 'reits', 'transport', 'airlines', 'autos', 'defence',
+  'defense', 'aerospace',
+];
+
+const SCREEN_INTENT = /\b(find|show|screen|scan|list|which|what)\b/i;
+
+const SCREEN_NOUNS = /\b(stocks?|names?|tickers?|companies|equities|etfs?|setups?)\b/i;
+
+/* Does this read as a request for a list of names?
+ *
+ * Both a verb and a noun, deliberately. "find" alone matches "find me the NVDA
+ * earnings date", and "stocks" alone matches "why are stocks down" — which is a
+ * question about the market, not a request for a list. Requiring both keeps
+ * this off questions that Ask Optic answers better. */
+function looksLikeScreen(text) {
+  const t = String(text || '').trim();
+  if (t.length < 8) return false;
+  return SCREEN_INTENT.test(t) && SCREEN_NOUNS.test(t);
+}
+
+function sectorMentioned(text) {
+  const lower = ' ' + String(text || '').toLowerCase() + ' ';
+  return SECTOR_WORDS.find((w) => lower.includes(' ' + w + ' ')
+    || lower.includes(' ' + w + 's ')) || null;
+}
+
+let screenCatalogue = null;
+
+async function loadScreenCatalogue() {
+  if (screenCatalogue) return screenCatalogue;
+  // Reuse what the Scan tab already fetched rather than asking again.
+  if (STATE.scan && STATE.scan.scans) { screenCatalogue = STATE.scan; return screenCatalogue; }
+  try {
+    screenCatalogue = await getJSON('/api/scanners');
+    // Seed STATE.scan too. `runScan` renders its pill strip from it, so running
+    // a screen straight from the palette before the Scan tab has ever been
+    // opened would otherwise paint an empty strip above the results.
+    if (!STATE.scan || !(STATE.scan.scans || []).length) STATE.scan = screenCatalogue;
+  } catch (err) {
+    screenCatalogue = { scans: [], error: err.message };
+  }
+  return screenCatalogue;
+}
+
+/* Rank the named screens against the request.
+ *
+ * Word overlap against each screen's name and its own `looks_for` description,
+ * which is the text that says what it does. Stop words are dropped so "stocks"
+ * and "with" do not make everything a match, and a hit in the name counts for
+ * more than one in the body — "momentum leaders" should win "strong momentum"
+ * outright rather than tying with whichever description happens to mention the
+ * word in passing. */
+const SCREEN_STOP = new Set(['find', 'show', 'me', 'the', 'a', 'an', 'with',
+  'and', 'or', 'for', 'of', 'in', 'on', 'that', 'are', 'is', 'to', 'stocks',
+  'stock', 'names', 'name', 'tickers', 'ticker', 'companies', 'which', 'what',
+  'list', 'screen', 'scan', 'best', 'good', 'some', 'any', 'right', 'now']);
+
+function screenMatches(text, catalogue) {
+  const scans = (catalogue || {}).scans || [];
+  if (!scans.length) return [];
+  const terms = String(text || '').toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !SCREEN_STOP.has(w));
+  if (!terms.length) return [];
+
+  const scored = scans.map((s) => {
+    const name = String(s.name || '').toLowerCase();
+    // The id counts, and counts as much as the name.
+    //
+    // "show me names breaking out" reached "High-risk swings, upside" and not
+    // the screen literally called `breakout`, whose *name* is "At 52-week
+    // highs". The ids are the words the app uses for these screens internally,
+    // and they are frequently the words a reader types.
+    const id = String(s.id || '').toLowerCase().replace(/[-_]/g, ' ');
+    const body = String(s.looks_for || '').toLowerCase();
+    let score = 0;
+    terms.forEach((w) => {
+      // `startsWith` on the id as well as `includes`, so "breaking" reaches
+      // "breakout" — the stem is what people type and the suffix varies.
+      const idHit = id.includes(w) || id.split(' ').some(
+        (part) => part.startsWith(w.slice(0, 5)) && w.length >= 5);
+      if (name.includes(w) || idHit) score += 3;
+      else if (body.includes(w)) score += 1;
+    });
+    return { scan: s, score };
+  }).filter((r) => r.score > 0).sort((a, b) => b.score - a.score);
+
+  return scored.slice(0, 3).map((r) => r.scan);
+}
+
 function paletteHTML() {
   if (!paletteOpen) return '';
   const rows = paletteRows;
@@ -3296,6 +3995,67 @@ async function paletteBuild(query) {
       run: () => { closePalette(); openPulseWithText(q); },
     };
     if (isQuestion) rows.unshift(ask); else rows.push(ask);
+  }
+
+  /* Screens, hoisted above Ask Optic when the request is for a list of names.
+   *
+   * A screening request answered in prose is the wrong shape of answer: what
+   * was asked for is a list, and Optic has thirteen curated ones. See
+   * looksLikeScreen() for why this is deliberately not a free-form screener.
+   */
+  if (looksLikeScreen(q)) {
+    const catalogue = await loadScreenCatalogue();
+    if (seq !== paletteSeq) return null;
+    const matched = screenMatches(q, catalogue);
+    const sector = sectorMentioned(q);
+
+    /* The sector caveat lives in each row's own detail line, not in a row of
+     * its own.
+     *
+     * It was its own row above the screens, which put it at paletteIndex 0 —
+     * and Enter runs whatever is at paletteIndex 0. So the honest note about
+     * what the screens cannot do became the default action, and pressing Enter
+     * navigated to the Market tab instead of running the screen that was asked
+     * for. In the detail line it cannot be activated by accident and cannot be
+     * missed either, which is what it was for. */
+    const caveat = sector
+      ? `Does not filter by ${sector}: these run over the whole ranked universe. `
+      : '';
+
+    /* Ask Optic loses its `enter` hint when a screen takes the top slot.
+     *
+     * Two rows showing "enter" is a UI claiming two default actions. The badge
+     * is a hint about what the key does, and the key runs paletteIndex 0. */
+    if (matched.length) {
+      rows.forEach((r) => { if (r.group === 'Ask Optic') r.tag = ''; });
+    }
+
+    // Reverse, so unshifting leaves the best match at the top.
+    [...matched].reverse().forEach((s, i) => {
+      rows.unshift({
+        group: 'Screen', lead: '\u2261', label: s.name,
+        detail: caveat + String(s.looks_for || '').slice(0, 120),
+        tag: i === matched.length - 1 ? 'enter' : '',
+        run: () => {
+          closePalette();
+          switchView('scan');
+          // `runScan` is the entry point; there is no `openScan`. It also sets
+          // STATE.scanId, which is what the view reads to light the right tab.
+          runScan(s.id);
+        },
+      });
+    });
+
+    // Where sector work actually starts, offered after the screens rather than
+    // in front of them.
+    if (sector && matched.length) {
+      rows.push({
+        group: 'Screen', lead: '\u2192', label: 'Sector board',
+        detail: `For ${sector} specifically. The Market tab groups the whole `
+          + 'market by sector and drills into one.',
+        run: () => { closePalette(); switchView('market'); },
+      });
+    }
   }
 
   return rows;
@@ -3533,7 +4293,7 @@ function renderWhyMoving(d) {
   if (!w) return '';
   if (!w.available) {
     return `<section class="pl-block span-all" aria-label="Why it is moving">
-      <h2 class="pl-h">Why it's moving</h2>
+      <h2 class="pl-h">Why it's moving${askPulse('whymoving')}</h2>
       <p class="pl-empty">${esc(w.reason_none || 'No driver is reading strongly enough to name.')}</p>
     </section>`;
   }
@@ -3575,7 +4335,7 @@ function renderWhatsNext(d) {
   </div>` : '');
   if (!n.available) {
     return `<section class="pl-block span-all" aria-label="What matters next">
-      <h2 class="pl-h">What matters next</h2>
+      <h2 class="pl-h">What matters next${askPulse('whatsnext')}</h2>
       <p class="pl-empty">${esc(n.reason_none || '')}</p>
     </section>`;
   }
@@ -3587,6 +4347,155 @@ function renderWhatsNext(d) {
     </div>
     <p class="pl-method">${gloss(n.method || '')}</p>
   </section>`;
+}
+
+/* ============================================================ PRICE HEAD ===
+ *
+ * The one number the page is about, at the top of the page.
+ *
+ * Before this, the price lived in the thin status strip and in a cell inside
+ * the Swing verdict panel — findable, but subordinate to a composite score. The
+ * first question anyone asks of a ticker is "what is it doing", and the answer
+ * was smaller than the heading above it.
+ *
+ * **What is here and what is deliberately not.** Price, the day's change, and
+ * the extended-hours print when there is one. The day's range as a bar, because
+ * "where in today's range" is the cheapest piece of context there is and it
+ * needs no extra request. Volume against its own average, because a 2% move on
+ * a third of normal volume is a different event from the same move on double.
+ *
+ * Not here: the composite, the stance, the targets. Those are reads, and a read
+ * belongs next to its reasoning rather than in the header — that is what Optic
+ * Pulse immediately below is for.
+ *
+ * **The extended-hours row exists because of a specific failure.** Outside
+ * regular hours the "last" price is a settled close and the stock may be
+ * trading somewhere quite different. Showing only the close is how a 6%
+ * after-hours gap goes unnoticed on the very element that reports the price.
+ */
+function renderPriceHead(d, extQ) {
+  const q = d.quote || {};
+  if (q.price === null || q.price === undefined) return '';
+
+  const up = (q.change_pct || 0) >= 0;
+  const dirClass = Math.abs(q.change_pct || 0) < 0.005 ? 'flat' : (up ? 'up' : 'down');
+  const name = q.name || (d.profile || {}).name || '';
+
+  // Where today's price sits between the day's low and high. Skipped rather
+  // than shown at 50% when the two are equal, which happens on a halted or
+  // untraded symbol and would draw a marker that means nothing.
+  const lo = q.day_low;
+  const hi = q.day_high;
+  const span = (Number.isFinite(lo) && Number.isFinite(hi) && hi > lo)
+    ? Math.max(0, Math.min(100, ((q.price - lo) / (hi - lo)) * 100)) : null;
+
+  const volRatio = (Number.isFinite(q.volume) && Number.isFinite(q.avg_volume)
+    && q.avg_volume > 0) ? q.volume / q.avg_volume : null;
+
+  return `<section class="px-head" aria-label="Price">
+    <div class="px-main">
+      <div class="px-id">
+        <h1 class="px-sym">${esc(d.ticker || q.ticker || '')}</h1>
+        ${name ? `<span class="px-name">${esc(name)}</span>` : ''}
+        ${q.exchange ? `<span class="px-exch">${esc(q.exchange)}</span>` : ''}
+      </div>
+      <div class="px-now">
+        <span class="px-last ${dirClass}">${fmt(q.price, 2)}</span>
+        <span class="px-chg ${dirClass}">${up ? '+' : ''}${fmt(q.change, 2)}
+          <span class="px-chg-pct">${up ? '+' : ''}${fmt(q.change_pct, 2)}%</span></span>
+      </div>
+      ${extQ && extQ.price !== null && extQ.price !== undefined ? `
+        <div class="px-ext ${(extQ.pct || 0) >= 0 ? 'up' : 'down'}">
+          <span class="px-ext-kind">${esc(extQ.kind)}</span>
+          <span class="px-ext-px">${fmt(extQ.price, 2)}</span>
+          <span class="px-ext-pct">${(extQ.pct || 0) >= 0 ? '+' : ''}${
+    fmt(extQ.pct, 2)}%</span>
+        </div>` : ''}
+    </div>
+
+    <div class="px-facts">
+      ${span === null ? '' : `<div class="px-fact px-range">
+        <span class="px-fact-label">Day range</span>
+        <span class="px-range-bar">
+          <span class="px-range-lo">${fmt(lo, 2)}</span>
+          <span class="px-range-track">
+            <span class="px-range-dot" style="left:${span.toFixed(1)}%"></span>
+          </span>
+          <span class="px-range-hi">${fmt(hi, 2)}</span>
+        </span>
+      </div>`}
+      ${Number.isFinite(q.prev_close) ? `<div class="px-fact">
+        <span class="px-fact-label">Prev close</span>
+        <span class="px-fact-value">${fmt(q.prev_close, 2)}</span></div>` : ''}
+      ${volRatio === null ? '' : `<div class="px-fact">
+        <span class="px-fact-label">Volume</span>
+        <span class="px-fact-value">${fmtCompact(q.volume, 1)}
+          <span class="px-fact-note">${fmt(volRatio, 1)}× average</span></span></div>`}
+      ${Number.isFinite(q.fifty_two_low) && Number.isFinite(q.fifty_two_high)
+    ? `<div class="px-fact">
+        <span class="px-fact-label">52 weeks</span>
+        <span class="px-fact-value">${fmt(q.fifty_two_low, 2)} – ${
+      fmt(q.fifty_two_high, 2)}</span></div>` : ''}
+      ${Number.isFinite(q.market_cap) ? `<div class="px-fact">
+        <span class="px-fact-label">Market cap</span>
+        <span class="px-fact-value">${fmtCompact(q.market_cap, 2)}</span></div>` : ''}
+    </div>
+  </section>`;
+}
+
+/* The asset page's phone order: price, then the chart.
+ *
+ * The brief asks for price, chart, Pulse, why, what matters next, options,
+ * news, ask. Everything after the chart already reads in that order; the chart
+ * is the one thing out of place, because on a desktop it belongs below the
+ * reads and on a 375px screen that puts it five panels and about three
+ * thumb-flicks down.
+ *
+ * **Why a DOM move rather than CSS `order`.** The chart lives inside a
+ * `.grid.c2` and the panels above it are direct children of the view. `order`
+ * only sorts siblings, so it cannot lift an element out of a nested grid — the
+ * alternative was flattening the grid on mobile, which changes the desktop
+ * markup for a mobile-only problem.
+ *
+ * Idempotent: it checks where the panel already is, so running it on every
+ * repaint costs one comparison. */
+const PHONE_QUERY = '(max-width: 719px)';
+
+function orderAssetPageForPhone() {
+  const view = views.swing;
+  if (!view) return;
+  const panel = view.querySelector('#swing-chart-panel');
+  const head = view.querySelector('.px-head');
+  const grid = view.querySelector('#swing-chart-grid');
+  if (!panel || !head || !grid) return;
+
+  const phone = window.matchMedia && window.matchMedia(PHONE_QUERY).matches;
+
+  if (phone) {
+    // Already there: one comparison, so this is free on every repaint.
+    if (panel.parentElement === view && panel.previousElementSibling === head) return;
+    head.insertAdjacentElement('afterend', panel);
+    return;
+  }
+  // Back to the grid it is written into. The target is a static id in the
+  // template rather than a runtime marker, so this works whether or not the
+  // panel was ever moved and whether or not the view has been rebuilt since.
+  if (panel.parentElement !== grid) grid.insertBefore(panel, grid.firstChild);
+}
+
+/* Re-run the ordering when the breakpoint is crossed.
+ *
+ * Belt and braces with the ResizeObserver on <main>, and both earn their place.
+ * The observer re-renders the active view on a width change, which rebuilds the
+ * markup in the right order — but it deliberately ignores changes under 24px to
+ * avoid redrawing on scrollbar jitter, so dragging a window from 710px to 730px
+ * crosses the breakpoint without tripping it. This listener catches exactly
+ * that case, and costs one comparison when the observer got there first. */
+if (window.matchMedia) {
+  const mq = window.matchMedia(PHONE_QUERY);
+  const onChange = () => { if (STATE.swing) orderAssetPageForPhone(); };
+  if (mq.addEventListener) mq.addEventListener('change', onChange);
+  else if (mq.addListener) mq.addListener(onChange);
 }
 
 function renderSwing(d) {
@@ -3666,7 +4575,7 @@ function renderSwing(d) {
   </li>`).join('');
 
   const html = `
-
+  ${renderPriceHead(d, extQ)}
   ${renderOpticPulse(d)}
   ${renderWhyMoving(d)}
   ${renderWhatsNext(d)}
@@ -3861,8 +4770,16 @@ function renderSwing(d) {
 
   ${renderEntryPlan(d.entry_plan)}
 
-  <div class="grid c2 gap">
-    <div class="panel span2">
+  ${/* Both ids are in the markup on purpose, not generated at runtime.
+      *
+      * The first version stamped a random id on this grid when it moved the
+      * panel out and looked it up to move the panel back. That state does not
+      * survive a re-render, and this view re-renders on a 20-second poll — so
+      * the restore silently found nothing and the chart stayed above the reads
+      * on a desktop until the next repaint happened to rebuild it correctly.
+      * Static ids make the move stateless in both directions. */''}
+  <div class="grid c2 gap" id="swing-chart-grid">
+    <div class="panel span2" id="swing-chart-panel">
       <h2>${hg('Price, moving averages & Fibonacci')}${chartPulse(STATE.ticker)}${
   askPulse('profile')} <span class="th-plain">· ${
   ps.intraday ? `${esc(ps.interval || '')} bars, ${ps.shown_bars} over ${
@@ -4283,6 +5200,7 @@ function renderSwing(d) {
   `;
 
   views.swing.innerHTML = html;
+  orderAssetPageForPhone();
 
   // ---- charts
   views.swing.querySelectorAll('[data-bar]').forEach((host) => {
@@ -4432,7 +5350,7 @@ function renderSwing(d) {
         ['sma20', ps.weekly ? '20-week SMA' : '20-day SMA', maColors.fast],
         ['sma50', ps.weekly ? '50-week SMA' : '50-day SMA', maColors.mid],
         ['sma200', '200-day SMA', maColors.slow],
-      ].filter(([id]) => seriesShown(id)).map(([, name, color]) => ({ name, color }))),
+      ].filter(([id]) => seriesDrawn(id)).map(([, name, color]) => ({ name, color }))),
       showFib && !ps.intraday ? { name: 'Fibonacci level', color: C.refFib, dash: true } : null,
       showSR && !ps.intraday ? { name: 'Support / resistance', color: C.refSR, dash: true } : null,
       showVbp ? { name: 'Volume by price', color: C.ink2, boxed: true } : null,
@@ -4447,7 +5365,7 @@ function renderSwing(d) {
         ['ema9', 'EMA 9', emaColors.fast],
         ['ema21', 'EMA 21', emaColors.mid],
         ['ema50', 'EMA 50', emaColors.slow],
-      ].filter(([id]) => seriesShown(id)).map(([, name, color]) => ({ name, color }))),
+      ].filter(([id]) => seriesDrawn(id)).map(([, name, color]) => ({ name, color }))),
       // One key per cloud, not one per state. See emaCloudLegend.
       ...emaCloudLegend(ps),
       ...(ps.intraday ? [] : indicatorOverlayLegend(overlayPalette)),
@@ -4501,7 +5419,7 @@ function renderSwing(d) {
           ['sma20', ps.weekly ? '20-week SMA' : '20-day SMA', ps.sma20, maColors.fast],
           ['sma50', ps.weekly ? '50-week SMA' : '50-day SMA', ps.sma50, maColors.mid],
           ['sma200', '200-day SMA', ps.sma200, maColors.slow],
-        ].filter(([id]) => seriesShown(id)).map(([id, name, values, color]) => ({
+        ].filter(([id]) => seriesDrawn(id)).map(([id, name, values, color]) => ({
           name, values: values || [], color, width: styleOf(id).width, marker: false,
         }))),
         // Selected overlays, drawn on the price axis. Dashed so they read as
@@ -4513,7 +5431,7 @@ function renderSwing(d) {
           ['ema9', 'EMA 9', ps.ema9, emaColors.fast],
           ['ema21', 'EMA 21', ps.ema21, emaColors.mid],
           ['ema50', 'EMA 50', ps.ema50, emaColors.slow],
-        ].filter(([id]) => seriesShown(id)).map(([id, name, values, color]) => ({
+        ].filter(([id]) => seriesDrawn(id)).map(([id, name, values, color]) => ({
           name, values: values || [], color, width: styleOf(id).width, marker: false,
         }))),
         ...(ps.intraday ? [] : indicatorOverlaySeries((ps.dates || []).length,
@@ -4537,6 +5455,10 @@ function renderSwing(d) {
       ],
       events: (showInsiders && !ps.intraday)
         ? insiderEvents(ps, ((d.company || {}).ownership || {}).recent_transactions) : null,
+      // Report dates as dashed verticals. `vMarkers`, not `events`: an earnings
+      // date has no direction, so the triangle the insider layer draws would be
+      // claiming one. See earningsMarkers().
+      vMarkers: earningsMarkersFor(ps, STATE.ticker),
       refLineFit: 'clip',
       yFormat: (x) => fmt(x, 0),
       valueFormat: (x) => fmt(x, 2),
@@ -5729,6 +6651,92 @@ function volumeByPrice(ps) {
  * window has no position at all — both are dropped rather than clamped to the
  * edge, because a marker pinned to the first bar of the window implies the trade
  * happened then. */
+/* Snap a date to the bar whose period contains it.
+ *
+ * Lifted out of insiderEvents so the earnings markers use the same lookup
+ * rather than a second copy of it. The comment below is the reason it is worth
+ * sharing: an exact-match version silently dropped almost everything on an
+ * aggregated interval, and it did so asymmetrically, which produced a false
+ * conclusion on the chart rather than a visible gap.
+ *
+ * Returns the index of the last bar at or before `iso`, or undefined when the
+ * date falls before the first bar. */
+function barIndexForDate(keys, iso) {
+  if (!iso || !keys.length) return undefined;
+  let lo = 0;
+  let hi = keys.length - 1;
+  if (iso < keys[0]) return undefined;
+  if (iso >= keys[hi]) return hi;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (keys[mid] <= iso) lo = mid; else hi = mid - 1;
+  }
+  return lo;
+}
+
+/* Earnings report dates as vertical markers.
+ *
+ * `vMarkers` rather than the `events` layer the insider trades use. Those are
+ * triangles pinned to the price and pointing the way the trade went, because
+ * for an insider trade the *direction* is the information. An earnings date has
+ * no direction — it is a moment the whole chart pivots around — so it gets a
+ * dashed vertical line, which is also what every platform chart uses for it.
+ *
+ * The next report is included when it is inside the plotted window, which on a
+ * daily chart it almost never is: `barIndexForDate` returns undefined for a
+ * future date, and the caller drops it. It is offered anyway so a weekly or
+ * multi-year view picks it up without a second code path.
+ */
+function earningsMarkers(ps, earnings) {
+  const dates = ps.dates || [];
+  if (!dates.length || ps.intraday) return [];
+  const keys = dates.map((d) => String(d).slice(0, 10));
+  const out = [];
+  const seen = new Set();
+
+  const rows = ((earnings || {}).surprise || {}).rows || [];
+  rows.forEach((r) => {
+    const iso = String(r.date || '').slice(0, 10);
+    const i = barIndexForDate(keys, iso);
+    if (i === undefined || seen.has(i)) return;
+    seen.add(i);
+    const move = Number(r.next_day_move_pct);
+    out.push({
+      index: i,
+      color: C.s4,
+      label: 'E',
+      // The hover text carries what the marker cannot: which quarter, whether
+      // it beat, and what the tape did with it the next session. A bare "E" on
+      // a chart is a date and nothing else.
+      detail: [
+        'Earnings ' + iso,
+        r.beat === true ? 'beat' : r.beat === false ? 'missed' : null,
+        Number.isFinite(Number(r.surprise_pct))
+          ? 'EPS surprise ' + fmt(r.surprise_pct, 1) + '%' : null,
+        Number.isFinite(move)
+          ? 'next session ' + (move >= 0 ? '+' : '') + fmt(move, 1) + '%' : null,
+      ].filter(Boolean).join(' · '),
+    });
+  });
+
+  const next = ((earnings || {}).next_report || {});
+  const nextIso = String(next.date || '').slice(0, 10);
+  if (nextIso) {
+    const i = barIndexForDate(keys, nextIso);
+    // Only when it lands inside the window. A future date snapped to the last
+    // bar would draw the next report on top of today, which is a claim about
+    // when it happens rather than a marker for it.
+    if (i !== undefined && nextIso <= keys[keys.length - 1] && !seen.has(i)) {
+      out.push({
+        index: i, color: C.s4, label: 'E',
+        detail: 'Next earnings ' + nextIso
+          + (next.confirmed ? ' (confirmed)' : ' (estimated)'),
+      });
+    }
+  }
+  return out;
+}
+
 function insiderEvents(ps, transactions) {
   const dates = ps.dates || [];
   if (!dates.length || !(transactions || []).length) return null;
@@ -5751,18 +6759,7 @@ function insiderEvents(ps, transactions) {
    * The last bar at or before the date is the right target: that bar's period
    * is the one the trade happened in. Anything before the first bar is out of
    * range and stays dropped. */
-  const barFor = (iso) => {
-    if (!iso) return undefined;
-    let lo = 0;
-    let hi = keys.length - 1;
-    if (iso < keys[0]) return undefined;
-    if (iso >= keys[hi]) return hi;
-    while (lo < hi) {
-      const mid = Math.ceil((lo + hi) / 2);
-      if (keys[mid] <= iso) lo = mid; else hi = mid - 1;
-    }
-    return lo;
-  };
+  const barFor = (iso) => barIndexForDate(keys, iso);
 
   const out = [];
   (transactions || []).forEach((t) => {
@@ -6174,7 +7171,18 @@ function renderIndicatorPanes() {
       ${indicatorExplainer(v)}
     </div>`;
   });
-  return overlays + parts.join('');
+  /* The one place the `indicators` topic can honestly hang.
+   *
+   * It was defined in PULSE_TOPICS and attached to nothing — the mirror of the
+   * three topics that were attached and not defined. The panes have no heading
+   * of their own (they sit inside the chart panel deliberately, so an indicator
+   * derived from the price is not a scroll away from it), so the button gets a
+   * thin row of its own, and only when something is actually selected. */
+  const header = parts.length
+    ? `<div class="ind-ask"><span class="idx-lbl">Indicators</span>${
+      askPulse('indicators')}</div>`
+    : '';
+  return overlays + header + parts.join('');
 }
 
 /* Shown before the first fetch returns, so the picker has labels to draw. Kept in
@@ -6234,6 +7242,7 @@ const OVERLAY_DEFS = [
   { id: 'vbp', label: 'Volume by price', group: 'Volume', color: 'ink2', width: 1 },
   { id: 'vol', label: 'Volume', group: 'Volume', color: 'ink2', width: 1 },
   { id: 'insiders', label: 'Insider trades', group: 'Events', color: 's3', width: 1 },
+  { id: 'earnmarks', label: 'Earnings dates', group: 'Events', color: 's4', width: 1 },
   { id: 'sessions', label: 'Session dividers', group: 'Events', color: 'ink2', width: 1 },
   { id: 'trends', label: 'Auto trend lines', group: 'Levels', color: 'pos', width: 1.6 },
 ];
@@ -7807,7 +8816,7 @@ const WS_MENUS = [
       'cloud921', 'cloud2150'],
     manage: true },
   { id: 'volume', label: 'Volume', items: ['vol', 'vbp'] },
-  { id: 'events', label: 'Events', items: ['insiders', 'sessions'] },
+  { id: 'events', label: 'Events', items: ['insiders', 'earnmarks', 'sessions'] },
 ];
 
 /* Which global flag each toggle drives. The flags are the ones the Swing chart
@@ -7816,6 +8825,7 @@ const WS_MENUS = [
 const WS_FLAGS = {
   fib: () => showFib, sr: () => showSR, zones: () => showZones,
   vbp: () => showVbp, vol: () => showVol, insiders: () => showInsiders,
+  earnmarks: () => showEarnMarks,
   sma20: () => seriesShown('sma20'), sma50: () => seriesShown('sma50'),
   sma200: () => seriesShown('sma200'),
   ema9: () => seriesShown('ema9'), ema21: () => seriesShown('ema21'),
@@ -7829,6 +8839,11 @@ const WS_FLAGS = {
 function wsOverlayOn(id) {
   const get = WS_FLAGS[id];
   return get ? !!get() : false;
+}
+
+/** Enabled and not hidden. See overlayHidden() for why the two differ. */
+function wsOverlayDrawn(id) {
+  return wsOverlayOn(id) && !overlayHidden(id);
 }
 
 /* The cloud payload for a price series, for whichever pairs are switched on.
@@ -7847,7 +8862,8 @@ function emaClouds(ps) {
   if (!ps || ps.intraday) return [];
   const out = [];
   const add = (id, fast, slow) => {
-    if (!wsOverlayOn(id)) return;
+    // Drawn, not merely enabled: a hidden cloud keeps its legend row.
+    if (!wsOverlayDrawn(id)) return;
     if (!Array.isArray(fast) || !Array.isArray(slow)) return;
     out.push({
       name: overlayStyle(id).label,
@@ -7892,12 +8908,16 @@ function wsLegend(ps) {
     if (!wsOverlayOn(id)) return;
     const st = overlayStyle(id);
     const v = last(valueSeries);
-    rows.push(`<div class="ws-leg-row" data-ws-leg="${esc(id)}">
+    const hidden = overlayHidden(id);
+    rows.push(`<div class="ws-leg-row${hidden ? ' is-hidden' : ''}"
+      data-ws-leg="${esc(id)}">
       <span class="ws-leg-name" style="color:${st.color}">${esc(st.label)}${
   detail ? ` <span class="ws-leg-args">(${esc(detail)})</span>` : ''}</span>
       ${v === null ? '' : `<span class="ws-leg-val">${fmt(v, 2)}</span>`}
-      <button type="button" class="ws-leg-btn" data-ws-hide="${esc(id)}"
-        title="Hide ${esc(st.label)}">&#128065;</button>
+      <button type="button" class="ws-leg-btn${hidden ? ' is-off' : ''}"
+        data-ws-hide="${esc(id)}" aria-pressed="${hidden ? 'true' : 'false'}"
+        title="${hidden ? 'Show' : 'Hide'} ${esc(st.label)}. Keeps its settings">${
+  hidden ? '&#128584;' : '&#128065;'}</button>
       <button type="button" class="ws-leg-btn" data-ws-off="${esc(id)}"
         title="Remove ${esc(st.label)}">&times;</button>
     </div>`);
@@ -7911,18 +8931,25 @@ function wsLegend(ps) {
     const st = overlayStyle(id);
     // Coloured by the state it is in, matching the ribbon on the chart.
     const tone = gap === null ? C.ink2 : (gap >= 0 ? C.pos : C.neg);
-    /* No eye button on this row, unlike the ones above.
+    /* The eye is here now.
      *
-     * data-ws-hide has no handler anywhere in the app: the eye on every other
-     * legend row is markup with nothing behind it. Rather than add two more
-     * instances of a control that does nothing, a cloud gets only the remove
-     * button, which is wired. There is nothing for "hide but keep" to preserve
-     * here in any case — a cloud carries no colour, width or length to come
-     * back to, so off and hidden would be the same state. */
-    rows.push(`<div class="ws-leg-row" data-ws-leg="${esc(id)}">
+     * It was left off this row deliberately, because `data-ws-hide` had no
+     * handler anywhere and adding two more instances of a dead control was
+     * worse than the inconsistency. It has one now, and the reasoning that a
+     * cloud has nothing to preserve was only half right: it has no colour or
+     * width of its own, but it does have the gap reading in this legend, and
+     * hiding the ribbon while keeping that number visible is a real thing to
+     * want on a crowded chart. */
+    const hidden = overlayHidden(id);
+    rows.push(`<div class="ws-leg-row${hidden ? ' is-hidden' : ''}"
+      data-ws-leg="${esc(id)}">
       <span class="ws-leg-name" style="color:${tone}">${esc(st.label)}
         <span class="ws-leg-args">(${esc(detail)})</span></span>
       ${gap === null ? '' : `<span class="ws-leg-val">${gap >= 0 ? '+' : ''}${fmt(gap, 2)}</span>`}
+      <button type="button" class="ws-leg-btn${hidden ? ' is-off' : ''}"
+        data-ws-hide="${esc(id)}" aria-pressed="${hidden ? 'true' : 'false'}"
+        title="${hidden ? 'Show' : 'Hide'} ${esc(st.label)}">${
+  hidden ? '&#128584;' : '&#128065;'}</button>
       <button type="button" class="ws-leg-btn" data-ws-off="${esc(id)}"
         title="Remove ${esc(st.label)}">&times;</button>
     </div>`);
@@ -7974,7 +9001,11 @@ function wsLegend(ps) {
       title="${wsLegendOpen ? 'Collapse' : 'Expand'} the indicator list">
       <span class="ws-leg-caret">${wsLegendOpen ? '&#9662;' : '&#9656;'}</span>
       ${esc(STATE.chartSymbol || '')}
-      <span class="ws-leg-args">${esc(chartInterval)} · ${esc(chartRange)}</span>
+      <span class="ws-leg-args">${esc(isIntradayRange(chartRange)
+    // Same reason as the status line: `chartInterval` is not what these bars
+    // are. It said "daily" over five-minute data.
+    ? ((wsIntraday && wsIntraday.interval) || 'intraday')
+    : chartInterval)} · ${esc(chartRange)}</span>
       ${wsLegendOpen ? '' : `<span class="ws-leg-count">${n} overlay${
   n === 1 ? '' : 's'}${draws ? ` · ${draws} drawing${draws === 1 ? '' : 's'}` : ''}</span>`}
     </button>
@@ -8050,7 +9081,15 @@ function wsToolbar() {
     </div>`;
   }).join('')}
     <div class="ws-toolbar-gap"></div>
-    ${rangePills(CHART_INTERVALS, chartInterval, 'data-ws-interval', 'Interval')}
+    ${isIntradayRange(chartRange)
+    // Daily and Weekly are meaningless against the intraday endpoint's own
+    // resolution. Shown disabled rather than removed, so the toolbar does not
+    // change shape when a range pill is pressed.
+    ? `<div class="pills" role="group" aria-label="Interval"
+        title="1D and 5D come from the intraday feed at its own resolution">
+        <button type="button" class="pill on" disabled aria-pressed="true">${
+    esc((wsIntraday && wsIntraday.interval) || 'intraday')}</button></div>`
+    : rangePills(CHART_INTERVALS, chartInterval, 'data-ws-interval', 'Interval')}
     ${rangePills(CHART_RANGES, chartRange, 'data-ws-range', 'Range')}
     ${wsWindow ? `<button type="button" class="ws-menu-btn ws-zoom-reset"
       data-ws-zoom-reset title="Back to the ${esc(chartRange)} range">Reset zoom</button>` : ''}
@@ -8099,6 +9138,13 @@ const WS_SETTERS = {
   vbp: (on) => { showVbp = on; storeFlag(SHOW_VBP_KEY, on); },
   vol: (on) => { showVol = on; storeFlag(SHOW_VOL_KEY, on); },
   insiders: (on) => { showInsiders = on; storeFlag(SHOW_INS_KEY, on); },
+  earnmarks: (on) => {
+    showEarnMarks = on; storeFlag(SHOW_EARN_KEY, on);
+    // The report dates live in the earnings payload, which the Swing and chart
+    // views do not otherwise fetch. Loaded on demand rather than with the
+    // symbol: most sessions never switch this on and it is a live call.
+    if (on) loadEarningsForMarkers();
+  },
   sessions: (on) => { showSessions = on; storeFlag(SHOW_SESSIONS_KEY, on); },
   trends: (on) => {
     showTrends = on; storeFlag(SHOW_TRENDS_KEY, on);
@@ -8469,7 +9515,72 @@ function wsClampWindow(win, total) {
   return { from, to: from + span };
 }
 
+/* Intraday for the workspace.
+ *
+ * `loadIntraday` next door cannot be reused: it is keyed on STATE.ticker and
+ * repaints the Swing view, and this tab has its own symbol (STATE.chartSymbol)
+ * which is independent of it by design. Same endpoint, separate cache.
+ *
+ * **Why this exists at all.** The workspace offered 1D and 5D pills and then
+ * drew the full daily history for both. `sliceSeries` looks up `spec.daily`,
+ * which is `undefined` on an intraday spec, so `Math.min(undefined, total)` is
+ * NaN, `take` is NaN, and `arr.slice(total - NaN)` is `arr.slice(NaN)` — which
+ * JavaScript treats as `slice(0)` and returns everything. Two pills that
+ * silently did nothing.
+ */
+let wsIntraday = null;
+
+async function wsLoadIntraday() {
+  const symbol = STATE.chartSymbol;
+  const range = chartRange;
+  if (!symbol) return;
+  if (wsIntraday && wsIntraday.symbol === symbol && wsIntraday.range === range
+      && !wsIntraday.loading) {
+    // Cached, but still repaint. Returning without one meant switching back to
+    // a range that had already been fetched left the previous range's chart and
+    // legend on screen with the new pill lit.
+    wsRedrawChart();
+    return;
+  }
+  wsIntraday = { symbol, range, loading: true };
+  wsRedrawChart();
+  try {
+    const data = await getJSON('/api/intraday/' + encodeURIComponent(symbol)
+      + '?range=' + encodeURIComponent(range));
+    // The reader may have changed symbol or range while this was in flight.
+    if (STATE.chartSymbol !== symbol || chartRange !== range) return;
+    wsIntraday = { ...data, symbol, range };
+  } catch (err) {
+    wsIntraday = { symbol, range, available: false, reason: err.message };
+  }
+  wsRedrawChart();
+}
+
+/** The empty series an intraday range shows while it is loading or when the
+ *  provider has nothing. Shaped like a real one so the chart code needs no
+ *  special case; `note` is what the toolbar renders instead of a plot. */
+function wsIntradayStub(note) {
+  return { dates: [], open: [], high: [], low: [], close: [], volume: [],
+           shown_bars: 0, total_bars: 0, intraday: true, weekly: false,
+           note: note };
+}
+
 function wsSeries(d) {
+  // Intraday comes from its own endpoint at its own resolution, and none of the
+  // daily-derived overlays apply to it — see intradaySeries().
+  if (isIntradayRange(chartRange)) {
+    if (!wsIntraday || wsIntraday.symbol !== STATE.chartSymbol
+        || wsIntraday.range !== chartRange || wsIntraday.loading) {
+      return wsIntradayStub(wsIntraday && wsIntraday.loading
+        ? 'Loading intraday bars…' : 'Intraday bars not loaded yet.');
+    }
+    if (wsIntraday.available === false) {
+      return wsIntradayStub(wsIntraday.reason
+        || 'No intraday bars for this symbol.');
+    }
+    const intra = intradaySeries(wsIntraday);
+    return intra || wsIntradayStub('No intraday bars for this symbol.');
+  }
   const full = wsFullSeries(d);
   const total = (full.dates || []).length;
   const win = wsClampWindow(wsWindow, total);
@@ -9173,6 +10284,17 @@ function wsRenderDrawings() {
   if (!layer) return;
   const frame = svg && svg.chartFrame;
   if (!frame) { layer.innerHTML = ''; return; }
+
+  /* Nothing is drawn on an intraday range.
+   *
+   * Drawings store a bar index and a price, which is what makes them survive a
+   * resize and a range change (see the chart coordinate note in CLAUDE.md).
+   * Index 120 on a daily series and index 120 on a five-minute series are
+   * different moments in time by a factor of about eighty, so replaying a
+   * trendline onto intraday bars would put it somewhere its author never drew
+   * it — and it would look deliberate. Hidden, not deleted: switch back to a
+   * daily range and every drawing is where it was. */
+  if (isIntradayRange(chartRange)) { layer.innerHTML = ''; return; }
 
   const NS = 'http://www.w3.org/2000/svg';
   const el = (tag, attrs, text) => {
@@ -10196,7 +11318,7 @@ function wsMountChart() {
           ['sma20', 'SMA 20', ps.sma20], ['sma50', 'SMA 50', ps.sma50],
           ['sma200', 'SMA 200', ps.sma200], ['ema9', 'EMA 9', ps.ema9],
           ['ema21', 'EMA 21', ps.ema21], ['ema50', 'EMA 50', ps.ema50],
-        ].filter(([id]) => seriesShown(id)).map(([id, name, values]) => ({
+        ].filter(([id]) => seriesDrawn(id)).map(([id, name, values]) => ({
           name, values: values || [], color: styleOf(id).color,
           width: styleOf(id).width, marker: false,
         }))),
@@ -10215,6 +11337,7 @@ function wsMountChart() {
       events: (showInsiders && !intraday)
         ? insiderEvents(ps, ((d.company || {}).ownership || {}).recent_transactions)
         : null,
+      vMarkers: earningsMarkersFor(ps, STATE.chartSymbol),
       volumeProfile: showVbp ? volumeByPrice(ps) : null,
       // Drop a level that sits outside the plotted price range rather than
       // letting it compress the actual price action into a band in the middle.
@@ -10225,6 +11348,19 @@ function wsMountChart() {
       sessions: showSessions ? (ps.sessions || ps.dates || null) : null,
     });
   };
+  // An intraday range with no bars yet renders its reason instead of an empty
+  // plot. An empty plot with axes on it looks like a symbol that does not
+  // trade, which is a different and wrong claim.
+  if (ps.note && !(ps.dates || []).length) {
+    const host = document.getElementById('ws-chart');
+    if (host) {
+      host.innerHTML = '<div class="ws-chart-note">' + esc(ps.note) + '</div>';
+      const layer = document.getElementById('ws-draw');
+      if (layer) layer.innerHTML = '';
+    }
+    return;
+  }
+
   mount('ws-chart', wsChartBuilder);
   // The navigator shows the window the chart is displaying, so it has to be
   // redrawn whenever that window moves.
@@ -10442,8 +11578,14 @@ function wsRedrawChart() {
 /** Full rebuild. Only for a new symbol, where the dock's contents are stale too. */
 function wsRefresh() {
   if (STATE.view !== 'chart' || !STATE.chartData || STATE.chartData === 'loading') return;
+  // The intraday cache is keyed on the symbol, and this is the one path that
+  // means "the symbol changed". Left in place it would show the previous
+  // company's five-minute bars under the new company's name, which is the
+  // failure the STATE.ticker / STATE.chartSymbol note in CLAUDE.md is about.
+  if (wsIntraday && wsIntraday.symbol !== STATE.chartSymbol) wsIntraday = null;
   renderChartWorkspace(STATE.chartData);
   wsMountChart();
+  if (isIntradayRange(chartRange)) wsLoadIntraday();
 }
 
 
@@ -11862,6 +13004,71 @@ function renderCompareTake(c) {
   </section>`;
 }
 
+/* The three horizon scores as bars, above the table.
+ *
+ * The table already carries them as "best / #2" plus a number, which answers
+ * "who won" and not "by how much". A two-point lead and a twenty-point lead
+ * read identically in that form, and the gap is the part that decides whether
+ * the ranking is worth acting on — which is why `take` computes a `decisive`
+ * flag from it and why the bars exist.
+ *
+ * **Scores are on one scale, so the bars are comparable.** All three horizons
+ * are 0-100 composites (see the `basis` on each horizon), which is what makes
+ * a shared axis honest here. The metric rows below are not comparable that way
+ * and deliberately have no bars.
+ *
+ * Sorted within each horizon rather than keeping column order, because the
+ * question is a ranking. The ticker is on the bar, so nothing has to be
+ * cross-referenced against a header.
+ */
+function renderCompareBars(c) {
+  const rows = (c && c.rows) || [];
+  const horizons = (c && c.horizons) || [];
+  if (rows.length < 2 || !horizons.length) return '';
+
+  const groups = horizons.map((h) => {
+    const scored = rows
+      .map((r) => ({ ticker: r.ticker, score: (r.scores || {})[h.id] }))
+      .filter((r) => Number.isFinite(r.score))
+      .sort((a, b) => b.score - a.score);
+    if (scored.length < 2) return '';
+
+    const top = scored[0].score;
+    const gap = top - scored[1].score;
+    // The same threshold `compare.take` uses for `decisive`, so the wording
+    // here cannot disagree with the headline above it.
+    const decisive = gap >= 8;
+
+    return `<div class="cb-group">
+      <div class="cb-head">
+        <span class="cb-name">${esc(h.name)}</span>
+        <span class="cb-hz">${esc(h.horizon)}</span>
+        <span class="cb-gap${decisive ? ' is-clear' : ''}">${
+      gap < 0.05 ? 'level' : fmt(gap, 1) + ' point' + (gap >= 1.95 ? 's' : '') + ' clear'}</span>
+      </div>
+      ${scored.map((s, i) => `<div class="cb-row${i === 0 ? ' is-lead' : ''}">
+        <button type="button" class="cb-tkr" data-analyse="${esc(s.ticker)}">${
+      esc(s.ticker)}</button>
+        <span class="cb-track">
+          <span class="cb-fill" style="width:${Math.max(1, Math.min(100, s.score))}%"></span>
+        </span>
+        <span class="cb-score">${fmt(s.score, 0)}</span>
+      </div>`).join('')}
+    </div>`;
+  }).filter(Boolean).join('');
+
+  if (!groups) return '';
+
+  return `<div class="panel span-all">
+    <h2>${hg('Where each name leads')}</h2>
+    <p class="sub">Every bar is the same 0-100 composite, so the lengths are
+      comparable across all three. A name can lead one horizon and trail
+      another, and the width of the gap is what says whether the lead means
+      anything.</p>
+    <div class="cb-groups">${groups}</div>
+  </div>`;
+}
+
 function renderCompare(c) {
   const inputs = (STATE.compareInputs || ['', '']).map((v, i) => `
     <input class="cmp-input" data-cmp-input="${i}" value="${esc(v)}"
@@ -11953,7 +13160,7 @@ function renderCompare(c) {
 
   const anyLead = CMP_ROWS.some((m) => m.lead && cmpLeader(m, cols));
 
-  return head + take + `<div class="panel span-all">
+  return head + take + renderCompareBars(c) + `<div class="panel span-all">
     <div class="table-scroll">
     <table class="data cmp-table">
       <thead><tr><th>Metric</th>${cols.map((r) => `<th class="num">
@@ -12909,6 +14116,7 @@ const ACCOUNT = {
   listId: null,
   watchlist: null,      // null means "not signed in, or no list yet" — fall back to local
   research: null,
+  watches: null,
   allowance: null,
 };
 
@@ -12941,13 +14149,16 @@ async function accountLoad() {
     ACCOUNT.listId = null;
     ACCOUNT.watchlist = null;
     ACCOUNT.research = null;
+    ACCOUNT.watches = null;
     return;
   }
   try {
-    const [lists, research] = await Promise.all([
+    const [lists, research, watches] = await Promise.all([
       authApi('/api/watchlists'),
       authApi('/api/saved-research'),
+      authApi('/api/watches'),
     ]);
+    ACCOUNT.watches = watches.watches || [];
     const first = (lists.watchlists || [])[0];
     if (first) {
       ACCOUNT.listId = first.id;
@@ -12980,6 +14191,7 @@ async function accountLoad() {
     ACCOUNT.ready = false;
     ACCOUNT.watchlist = null;
     ACCOUNT.research = null;
+    ACCOUNT.watches = null;
   }
 }
 
@@ -13467,6 +14679,7 @@ document.addEventListener('click', async (evt) => {
       ACCOUNT.ready = false;
       ACCOUNT.watchlist = null;
       ACCOUNT.research = null;
+      ACCOUNT.watches = null;
       if (STATE.view === 'settings') renderSettings();
     } catch (err) { window.OpticAuth.toast(err.message, 'bad'); }
     return;
@@ -13504,6 +14717,7 @@ if (window.OpticAuth) {
     ACCOUNT.listId = null;
     ACCOUNT.watchlist = null;
     ACCOUNT.research = null;
+    ACCOUNT.watches = null;
     STATE.watchlist = null;
     if (STATE.view === 'settings') renderSettings();
     if (STATE.view === 'watchlist') loadWatchlist(true);
@@ -15287,6 +16501,55 @@ const PULSE_TOPICS = {
     + 'individual setups?',
   levels: 'Explain the call wall, put wall and gamma pin for {t} simply. Why would dealer '
     + 'hedging make these act like a ceiling or a floor, and how reliable is that?',
+
+  /* The five panels the product brief added, each of which shipped without an
+   * Ask Pulse. These are the "contextual AI actions" it asked for: a question
+   * about *this* panel rather than a chat box to compose one in.
+   *
+   * `{thesis}` is substituted with whatever the reader actually wrote, which is
+   * what makes the invalidation question worth asking. Without it the prompt
+   * would be "what would invalidate a thesis on NVDA", and the answer would be
+   * a general essay rather than an argument against the specific case. */
+  invalidate: 'Here is my thesis on {t}: "{thesis}"\n\nArgue against it. What would have '
+    + 'to happen for this to be wrong, which specific numbers on this page would '
+    + 'move first, and what is the single strongest counter-argument someone on the '
+    + 'other side of this trade would make? Be concrete about levels and dates '
+    + 'rather than listing generic risks.',
+  optionsactivity: 'Explain the options activity on {t} in plain language. Read the '
+    + 'unusual contracts, the volume against open interest, the put/call balance and '
+    + 'the implied move together rather than one at a time. What is the most likely '
+    + 'explanation for what is being traded, what would the opposite explanation be, '
+    + 'and which of the two does the rest of this page support?',
+  whatsnext: 'Take the "what matters next" list for {t} and tell me which single item '
+    + 'on it would change the picture most, and why. For that one, what would I '
+    + 'actually watch to know it is happening, and how far in advance would I know?',
+  setup: 'Walk through the trade setup for {t} as if you were checking my work. Where '
+    + 'is the entry, why that level rather than the current price, what invalidates it, '
+    + 'and what is the honest case that this setup is not worth taking?',
+  whymoving: 'Take the "why it is moving" read on {t} and tell me how confident I should '
+    + 'be in it. Which of the reasons given is the strongest, which is the weakest, and '
+    + 'what would a competing explanation for today\'s move look like?',
+
+  /* Three topics that were being asked for and did not exist.
+   *
+   * `askPulse('bookrisk')`, `askPulse('instrument')` and `askPulse('relperf')`
+   * were all in the markup, and `openPulseWith` returns early on an unknown
+   * topic — so those three buttons rendered, took a click and did nothing. The
+   * same dead-control class as the eye on the chart legend, and invisible for
+   * the same reason: nothing errors, the panel simply does not open.
+   *
+   * A test now asserts that every topic used is a topic defined. */
+  bookrisk: 'Explain the book-level risk panel in plain language. What is gross exposure '
+    + 'as opposed to net, why does concentration in one name or one sector matter more '
+    + 'than the size of any single position, and which number here would worry a risk '
+    + 'manager first?',
+  instrument: 'Explain what {t} actually is and what moves it. What is it a claim on, who '
+    + 'trades it and why, and what should I be watching that is not the price of the '
+    + 'thing itself?',
+  relperf: 'Explain the relative performance panel for {t} in plain language. What does it '
+    + 'mean to be outperforming the index while falling, why is relative strength measured '
+    + 'as a ratio rather than a difference in returns, and how much does it change the read '
+    + 'on this name?',
 };
 
 /* What is actually on the chart right now, in words.
@@ -15423,7 +16686,30 @@ function openPulseWith(topic) {
   const tmpl = PULSE_TOPICS[topic];
   if (!tmpl) return;
   const ticker = STATE.ticker || 'the market';
-  const text = tmpl.replace(/\{t\}/g, ticker);
+  /* {thesis} is filled from what the reader actually wrote.
+   *
+   * Four labelled fields, not one blob: the thesis form asks for the bull case,
+   * the bear case, the catalysts and the invalidation separately, and handing
+   * Pulse the labels lets it argue against the right part. Reading a single
+   * `text` key — which the store does not have — silently produced an empty
+   * string and a prompt asking for an argument against nothing.
+   *
+   * When nothing has been written the prompt says so, rather than asking for a
+   * counter-argument to an empty thesis and getting a confident essay. */
+  const saved = STATE.ticker ? (thesisFor(STATE.ticker) || {}) : {};
+  const written = [
+    ['Bull case', saved.bull],
+    ['Bear case', saved.bear],
+    ['Catalysts', saved.catalysts],
+    ['Invalidation', saved.invalidation],
+  ].filter(([, v]) => String(v || '').trim())
+    .map(([label, v]) => label + ': ' + String(v).trim())
+    .join('\n');
+  const text = tmpl
+    .replace(/\{t\}/g, ticker)
+    .replace(/\{thesis\}/g, written
+      || '(I have not written one yet, so tell me what a thesis on this name '
+         + 'would have to commit to, and what would falsify each part)');
   document.body.classList.add('chat-open');
   const box = $('#chat-input');
   if (!box) return;
@@ -16076,6 +17362,54 @@ async function loadIntraday(range) {
   if (STATE.swing) renderSwing(STATE.swing);
 }
 
+/* The earnings payload, fetched only for the chart markers.
+ *
+ * `/api/earnings/{ticker}` is the same call the Earnings tab makes and the
+ * response is small, so this reuses `STATE.earnings` rather than keeping a
+ * second copy — if the reader has already opened that tab the data is in hand
+ * and nothing is fetched.
+ *
+ * Keyed by ticker on the payload itself, because STATE.earnings from a previous
+ * symbol would otherwise mark this chart with the wrong company's report dates,
+ * which is a wrong claim rather than a missing one. */
+async function loadEarningsForMarkers() {
+  const ticker = STATE.view === 'chart' ? STATE.chartSymbol : STATE.ticker;
+  if (!ticker) return;
+  if (STATE.earnings && STATE.earnings.ticker === ticker) {
+    repaintForEarningsMarkers();
+    return;
+  }
+  try {
+    const data = await getJSON('/api/earnings/' + encodeURIComponent(ticker));
+    data.ticker = data.ticker || ticker;
+    STATE.earnings = data;
+  } catch (err) {
+    // A failed fetch leaves the toggle on and the markers absent. Better than
+    // switching the toggle back off, which would look like the click missed.
+    STATE.earnings = { ticker, available: false, reason: err.message };
+  }
+  repaintForEarningsMarkers();
+}
+
+function repaintForEarningsMarkers() {
+  if (STATE.view === 'chart') wsRedrawChart();
+  else if (STATE.swing) renderSwing(STATE.swing);
+}
+
+/* The markers for whichever chart is asking, or none.
+ *
+ * Gated on the symbol matching: STATE.earnings is shared with the Earnings tab,
+ * and that tab's data is for STATE.ticker while the workspace may be showing a
+ * different symbol entirely. See the STATE.ticker / STATE.chartSymbol note in
+ * CLAUDE.md — this is exactly the case it warns about. */
+function earningsMarkersFor(ps, symbol) {
+  if (!showEarnMarks) return [];
+  const e = STATE.earnings;
+  if (!e || e.available === false) return [];
+  if (symbol && e.ticker && e.ticker !== symbol) return [];
+  return earningsMarkers(ps, e);
+}
+
 async function loadSentiment() {
   if (STATE.sentiment) return;
   try {
@@ -16679,11 +18013,25 @@ function updateStatus() {
      * This strip is always on screen and already spent, so the line costs no
      * chart height. It also reports the zoom, so a window that no longer
      * matches the range pill says so rather than looking like a broken pill. */
+    /* The interval reported is the one on screen, not the one the pill says.
+     *
+     * On an intraday range the bars come from the intraday endpoint at its own
+     * resolution and `chartInterval` is irrelevant — the line read "daily"
+     * above a five-minute chart, which is a false claim about what is being
+     * looked at rather than a cosmetic slip. */
+    const intra = isIntradayRange(chartRange);
+    const shown = intra
+      ? ((wsIntraday && wsIntraday.interval) || 'intraday')
+      : chartInterval;
     setStatus(STATE.chartSymbol
       ? [`Chart: ${STATE.chartSymbol}`,
-        wsWindow ? `${chartInterval} · zoomed` : `${chartInterval} · ${chartRange}`,
-        `${wsDrawings().length} drawing${wsDrawings().length === 1 ? '' : 's'}`,
-        'Drag to pan, scroll to zoom, shift-drag to measure']
+        wsWindow && !intra ? `${shown} · zoomed` : `${shown} · ${chartRange}`,
+        intra
+          ? 'drawings hidden on intraday'
+          : `${wsDrawings().length} drawing${wsDrawings().length === 1 ? '' : 's'}`,
+        intra
+          ? 'Daily overlays and drawings do not apply to these bars'
+          : 'Drag to pan, scroll to zoom, shift-drag to measure']
       : ['Chart. Pick a symbol to begin.']);
     return;
   }
@@ -18578,7 +19926,10 @@ document.addEventListener('click', (evt) => {
     chartRange = wsRange.dataset.wsRange;
     wsWindow = null;   // a range pill overrides a manual zoom
     try { localStorage.setItem(CHART_RANGE_KEY, chartRange); } catch (e) { /* private mode */ }
-    wsRedrawChart();
+    // 1D and 5D come from a different endpoint. Fetched on demand rather than
+    // with the symbol: most sessions never open them, and it is a live call.
+    if (isIntradayRange(chartRange)) wsLoadIntraday();
+    else wsRedrawChart();
     return;
   }
   const wsInt = evt.target.closest('[data-ws-interval]');
@@ -18602,6 +19953,15 @@ document.addEventListener('click', (evt) => {
   }
   const wsOff = evt.target.closest('[data-ws-off]');
   if (wsOff) { wsSetOverlay(wsOff.dataset.wsOff, false); wsRedrawChart(); return; }
+  // The eye. Hidden keeps the legend row and the overlay's settings; the x
+  // beside it is what forgets them. See overlayHidden().
+  const wsHide = evt.target.closest('[data-ws-hide]');
+  if (wsHide) {
+    const id = wsHide.dataset.wsHide;
+    setOverlayHidden(id, !overlayHidden(id));
+    wsRedrawChart();
+    return;
+  }
   const wsWClose = evt.target.closest('[data-ws-widget-close]');
   if (wsWClose) { wsToggleWidget(wsWClose.dataset.wsWidgetClose, false); return; }
   const wsWTog = evt.target.closest('[data-ws-widget-toggle]');

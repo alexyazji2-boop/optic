@@ -308,3 +308,61 @@ def test_no_new_route_collides_with_one_main_already_owned():
 
     clash = added & owned
     assert not clash, "route collision with app/main.py: {}".format(sorted(clash))
+
+
+def test_no_dynamic_route_shadows_a_literal_path_main_already_owns():
+    """The other half of the collision test, and the sharper hazard.
+
+    `/api/watches/{watch_id}` and `/api/watches/catalogue` are not equal strings,
+    so the exact-match test above cannot see them. Starlette matches in
+    registration order, so a dynamic segment registered before a literal one
+    swallows it: `GET /api/watches/catalogue` would become a lookup for a watch
+    whose id is "catalogue".
+
+    As it stands nothing is shadowed, and not for the reason first assumed. The
+    dynamic watch routes are PATCH and DELETE while the literals main.py owns
+    under that prefix are GET and POST, so the two cannot meet whatever the
+    registration order is. That is a stronger guarantee than "main.py happens to
+    be registered first", and it is why this asserts an empty set.
+
+    **The positive control is the point.** An empty result is also what a broken
+    detector produces, so the detector is tested against a pair it must catch
+    before it is trusted on the real routes.
+    """
+    import re
+
+    from app import account as account_mod
+    from app.auth import routes as auth_routes
+
+    def swallows(pattern, literal):
+        """Would this route pattern match that literal path?"""
+        if "{" not in pattern:
+            return False
+        unescaped = re.escape(pattern).replace(r"\{", "{").replace(r"\}", "}")
+        regex = "^" + re.sub(r"\{[^}]+\}", "[^/]+", unescaped) + "$"
+        return re.match(regex, literal) is not None
+
+    # Positive control, then a negative one.
+    assert swallows("/api/watches/{watch_id}", "/api/watches/catalogue")
+    assert not swallows("/api/watches/{watch_id}", "/api/watches/a/b")
+    assert not swallows("/api/watches", "/api/watches/catalogue")
+
+    decorator = re.compile(r'@app\.(get|post|put|patch|delete)\(\s*"([^"]+)"')
+    literals = {(method.upper(), path)
+                for method, path in decorator.findall(open("app/main.py").read())
+                if "{" not in path}
+    assert ("GET", "/api/watches/catalogue") in literals, "sanity: main.py's literal"
+
+    added = [(method, route.path)
+             for route in list(auth_routes.router.routes) + list(account_mod.router.routes)
+             for method in (getattr(route, "methods", set()) or set())]
+    assert ("PATCH", "/api/watches/{watch_id}") in added, "sanity: the dynamic route"
+
+    shadowed = sorted({(method, pattern, literal)
+                       for method, pattern in added
+                       for literal_method, literal in literals
+                       if method == literal_method and swallows(pattern, literal)})
+    assert shadowed == [], shadowed
+
+    # And the literal still resolves to main.py's handler.
+    assert client.get("/api/watches/catalogue").status_code == 200

@@ -404,9 +404,42 @@ MIGRATION_2 = [
     "ALTER TABLE oauth_states ADD COLUMN code_verifier TEXT",
 ]
 
+# User-defined watches. The evaluator in `app/analytics/watches.py` was written
+# stateless because there was nobody to own a row; now there is, so a watch can
+# outlive the browser it was created in. Guests keep theirs in localStorage, the
+# same split as the watchlist and saved research.
+#
+# `last_met_at` and `last_evidence` are the reason this is a table rather than a
+# list of conditions. Without them a watch that has tripped trips again on every
+# check, so every page load reports the same news — which is how a notification
+# feature becomes something people switch off.
+MIGRATION_3 = [
+    """
+    CREATE TABLE IF NOT EXISTS watches (
+        id            TEXT PRIMARY KEY,
+        user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        symbol        TEXT NOT NULL,
+        kind          TEXT NOT NULL,
+        params        TEXT NOT NULL DEFAULT '{}',
+        note          TEXT,
+        active        INTEGER NOT NULL DEFAULT 1,
+        created_at    TEXT NOT NULL,
+        last_met_at   TEXT,
+        last_evidence TEXT
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_watches_user ON watches(user_id, symbol)",
+    # The same condition twice on the same symbol with the same parameters is a
+    # duplicate, not a preference. Params are compared as their stored JSON,
+    # which is why store.py serialises them with sorted keys.
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_watches_unique "
+    "ON watches(user_id, symbol, kind, params)",
+]
+
 MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (1, "accounts", MIGRATION_1),
     (2, "oauth_pkce", MIGRATION_2),
+    (3, "watches", MIGRATION_3),
 ]
 
 

@@ -766,8 +766,12 @@ function lineChart(opts) {
     // empty space — so the one thing the chart is for, how close to a band price
     // is, could not be judged.
     yDomain = null,
-    // Vertical event markers, given as {index, color, label}. Used for the point
-    // where two series cross.
+    // Vertical event markers: {index, color, label, detail, value}. A dashed
+    // line down the plot, an optional short label at the top, an optional dot
+    // on the price, and `detail` as the hover text. Used for the point where
+    // two series cross and for earnings report dates — anything that is a
+    // moment rather than a direction, which is what separates these from
+    // `events` below.
     vMarkers = [],
     // Price bands: [{top, bottom, color, label}]. Drawn as filled rectangles
     // spanning the plot, beneath the data. Used for supply and demand zones,
@@ -1275,21 +1279,42 @@ function lineChart(opts) {
   vMarkers.forEach((mk) => {
     if (!(mk.index >= 0 && mk.index < n)) return;
     const cx = X(mk.index);
-    levelLayer.appendChild(s('line', {
+    /* One group per marker, carrying a <title>.
+     *
+     * `detail` was accepted by callers and rendered by nothing, which is the
+     * same defect the events layer had: a marker labelled "E" is a date and
+     * nothing else, and the caller had already built the sentence saying which
+     * quarter it was, whether it beat and what the tape did next.
+     *
+     * A native <title> rather than the chart's own tooltip, for the reason
+     * given on the events layer: no listener, survives every redraw, and works
+     * on a target a few pixels wide where a scrub binding would compete with
+     * the crosshair underneath. */
+    const mark = s('g', mk.detail ? { style: 'cursor:help' } : {});
+    levelLayer.appendChild(mark);
+    mark.appendChild(s('line', {
       x1: cx, y1: m.t, x2: cx, y2: m.t + priceH, stroke: mk.color || C.ink2,
       'stroke-width': 1.4, 'stroke-dasharray': '6 4', opacity: 0.75,
     }));
+    if (mk.detail) {
+      // A dashed 1.4px line is not a hover target. This widens it without
+      // widening what is drawn.
+      mark.appendChild(s('rect', {
+        x: cx - 5, y: m.t, width: 10, height: priceH, fill: 'transparent',
+      }));
+      mark.appendChild(s('title', {}, mk.detail));
+    }
     if (mk.label) {
       // Flip the anchor near the right edge so the text stays inside the plot.
       const nearRight = cx > m.l + plotW * 0.62;
-      levelLayer.appendChild(s('text', {
+      mark.appendChild(s('text', {
         x: nearRight ? cx - 6 : cx + 6, y: m.t + 11, fill: mk.color || C.ink2,
         'font-size': 10, 'font-weight': 600,
         'text-anchor': nearRight ? 'end' : 'start',
       }, mk.label));
     }
     if (isFinite(mk.value)) {
-      levelLayer.appendChild(s('circle', {
+      mark.appendChild(s('circle', {
         cx, cy: Y(mk.value), r: 3.4, fill: mk.color || C.ink2,
         stroke: C.surface, 'stroke-width': 1.5,
       }));

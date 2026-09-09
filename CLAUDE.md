@@ -11,7 +11,7 @@ Live at https://theopticterminal.com (Railway, auto-deploys from `main`).
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Tests: `.venv/bin/python -m pytest -q`. There are 961 and they all pass; keep it that way.
+Tests: `.venv/bin/python -m pytest -q`. There are 1068 and they all pass; keep it that way.
 
 A development account: `.venv/bin/python -m app.seed`. It prints a generated password
 once and refuses to run when a hosting platform is in the environment.
@@ -67,6 +67,34 @@ at all: the two entries are the same string.
 the specificity. `.set-pw` set `display: flex` and the password form rendered open on
 every visit to Settings. Any rule that gives an element a `display` needs a
 `[hidden]` pair beside it.
+
+**`flex-basis` means width in a row and height in a column.** `.settings-select`
+carries `flex: 0 1 340px` for the Settings page's row layout. Reused inside a
+`flex-direction: column` label, that 340px became the *height* and every input in the
+watch builder rendered 340px tall. A control class written for one axis is not
+reusable on the other.
+
+**A parameter compared as a string needs its vocabulary written down.** Three watch
+conditions shipped comparing a stored parameter against a value produced elsewhere in
+the app: `direction` was matched against `up`/`down` where `app/analytics/earnings.py`
+produces `rising`/`falling`, `side` read a `kind` field where the provider writes
+`action`, and `to` exact-matched a stance where "bullish" has to include "leaning
+bullish". All three stored fine, evaluated fine and never fired — and "did not fire" is
+also the correct answer most of the time, so nothing looked broken. `CONDITIONS[*]
+.param.choices` is now the single source and the UI is generated from it.
+
+**Every control needs a handler, and every handler needs a control.** `data-ws-hide`
+was markup with nothing behind it, and three `askPulse()` topics were asked for and
+never defined, so `openPulseWith` returned early and the button did nothing. Both
+directions are asserted now (`tests/test_auth_client.py`). A dead control does not
+error; it takes the click and nothing happens, which reads as a slow app.
+
+**`sliceSeries` on an intraday range returns everything.** `spec.daily` is undefined
+on an intraday spec, `Math.min(undefined, total)` is NaN, and `arr.slice(NaN)` is
+`slice(0)`. The 1D and 5D pills on the Charting tab drew the full daily history for
+months. Intraday now comes from `/api/intraday` via `wsIntraday`, and drawings are
+hidden on it because a stored bar index means a different moment on a five-minute
+series.
 
 **The assistant must survive the accounts database being gone.** `_spend_guard` reads
 the daily allowance out of SQLite and catches `(sqlite3.Error, OSError)` — OSError as

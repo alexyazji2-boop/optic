@@ -26,12 +26,15 @@ POST quietly running a live web search instead of saving anything.
 
 from __future__ import annotations
 
+import json
 import re
+import sqlite3
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 
 from . import db
+from .analytics import watches as watches_mod
 from .auth import deps, store
 
 router = APIRouter(prefix="/api", tags=["account"])
@@ -348,3 +351,209 @@ async def drop_research(research_id: str, request: Request) -> Dict[str, Any]:
     if not removed:
         raise HTTPException(status_code=404, detail="That saved research is not here.")
     return {"ok": True}
+
+
+# ------------------------------------------------------------------- watches
+#
+# `app/analytics/watches.py` evaluates a watch and stays stateless; this stores
+# the definitions. The split matters: evaluation reads live market panels and
+# must not care whose watch it is, and storage cares about nothing else.
+#
+# **Params are serialised with sorted keys** so that the UNIQUE index on
+# (user_id, symbol, kind, params) actually catches a duplicate. `{"level": 100}`
+# and `{ "level" : 100 }` are the same watch, and a naive `json.dumps` of two
+# equal dicts is only guaranteed to agree if the key order does.
+
+MAX_WATCHES = 40
+
+
+def _params_key(params: Dict[str, Any]) -> str:
+    return json.dumps(params or {}, sort_keys=True, separators=(",", ":"))
+
+
+def _watch_payload(found: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        params = json.loads(found.get("params") or "{}")
+    except (TypeError, ValueError):
+        params = {}
+    try:
+        evidence = json.loads(found.get("last_evidence") or "null")
+    except (TypeError, ValueError):
+        evidence = None
+    return {
+        "id": found["id"],
+        "symbol": found["symbol"],
+        "kind": found["kind"],
+        "params": params,
+        "note": found.get("note"),
+        "active": bool(found.get("active")),
+        "created_at": found["created_at"],
+        "last_met_at": found.get("last_met_at"),
+        "last_evidence": evidence,
+    }
+
+
+@router.get("/watches")
+async def list_watches(request: Request,
+                       symbol: str = Query("", max_length=20)) -> Dict[str, Any]:
+    user = deps.require_user(request)
+    if symbol:
+        found = db.rows("SELECT * FROM watches WHERE user_id = ? AND symbol = ? "
+                        "ORDER BY created_at", (user["id"], _symbol(symbol)))
+    else:
+        found = db.rows("SELECT * FROM watches WHERE user_id = ? "
+                        "ORDER BY symbol, created_at", (user["id"],))
+    return {"watches": [_watch_payload(w) for w in found], "limit": MAX_WATCHES}
+
+
+@router.post("/watches")
+async def create_watch(request: Request,
+                       payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    user = deps.require_user(request)
+    deps.csrf_guard(request)
+
+    symbol = _symbol(payload.get("symbol"))
+    kind = str(payload.get("kind") or "").strip()
+    if kind not in watches_mod.CONDITIONS:
+        # Validated against the catalogue rather than accepted and left to fail
+        # at evaluation time, where the failure would look like the watch being
+        # broken instead of never having been valid.
+        raise HTTPException(status_code=400,
+                            detail="That is not a condition Optic can watch for.")
+
+    spec = watches_mod.CONDITIONS[kind]
+    params: Dict[str, Any] = {}
+    if spec.get("param"):
+        key = spec["param"]["key"]
+        raw = (payload.get("params") or {}).get(key, payload.get(key))
+        if raw is None or str(raw).strip() == "":
+            raise HTTPException(
+                status_code=400,
+                detail="{} needs a value for {}.".format(spec["label"],
+                                                         spec["param"]["label"]))
+        kind_of = spec["param"].get("kind")
+        if kind_of in ("price", "percent", "number", "days"):
+            try:
+                number = float(raw)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400,
+                                    detail="{} has to be a number.".format(
+                                        spec["param"]["label"]))
+            if number != number or number in (float("inf"), float("-inf")):
+                raise HTTPException(status_code=400,
+                                    detail="{} has to be a real number.".format(
+                                        spec["param"]["label"]))
+            if kind_of == "days":
+                number = max(1, min(365, int(number)))
+            params[key] = number
+        else:
+            value = str(raw).strip().lower()[:32]
+            allowed = [str(c["value"]) for c in (spec["param"].get("choices") or [])]
+            if allowed and value not in allowed:
+                # Refused rather than stored. A watch holding a value the
+                # evaluator does not recognise is silently dead, and "did not
+                # fire" is indistinguishable from the correct answer.
+                raise HTTPException(
+                    status_code=400,
+                    detail="{} has to be one of: {}.".format(
+                        spec["param"]["label"], ", ".join(allowed)))
+            params[key] = value
+
+    count = db.row("SELECT COUNT(*) AS n FROM watches WHERE user_id = ?", (user["id"],))
+    if int((count or {}).get("n") or 0) >= MAX_WATCHES:
+        raise HTTPException(
+            status_code=403,
+            detail="That is {} watches, which is the limit. Delete one to add "
+                   "another.".format(MAX_WATCHES))
+
+    now = db.utcnow()
+    wid = db.new_id()
+    try:
+        db.execute(
+            "INSERT INTO watches (id,user_id,symbol,kind,params,note,active,created_at) "
+            "VALUES (?,?,?,?,?,?,1,?)",
+            (wid, user["id"], symbol, kind, _params_key(params),
+             str(payload.get("note") or "").strip()[:200] or None, now))
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=409,
+                            detail="You are already watching that on {}.".format(symbol))
+    saved = db.row("SELECT * FROM watches WHERE id = ?", (wid,))
+    assert saved is not None
+    return {"ok": True, "watch": _watch_payload(saved)}
+
+
+@router.patch("/watches/{watch_id}")
+async def update_watch(watch_id: str, request: Request,
+                       payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    user = deps.require_user(request)
+    deps.csrf_guard(request)
+    owned = db.row("SELECT * FROM watches WHERE id = ? AND user_id = ?",
+                   (watch_id, user["id"]))
+    if not owned:
+        raise HTTPException(status_code=404, detail="That watch does not exist.")
+    if "active" in payload:
+        db.execute("UPDATE watches SET active = ? WHERE id = ? AND user_id = ?",
+                   (1 if payload.get("active") else 0, watch_id, user["id"]))
+    if "note" in payload:
+        db.execute("UPDATE watches SET note = ? WHERE id = ? AND user_id = ?",
+                   (str(payload.get("note") or "").strip()[:200] or None,
+                    watch_id, user["id"]))
+    found = db.row("SELECT * FROM watches WHERE id = ?", (watch_id,))
+    assert found is not None
+    return {"ok": True, "watch": _watch_payload(found)}
+
+
+@router.delete("/watches/{watch_id}")
+async def delete_watch(watch_id: str, request: Request) -> Dict[str, Any]:
+    user = deps.require_user(request)
+    deps.csrf_guard(request)
+    removed = db.execute("DELETE FROM watches WHERE id = ? AND user_id = ?",
+                         (watch_id, user["id"]))
+    if not removed:
+        raise HTTPException(status_code=404, detail="That watch does not exist.")
+    return {"ok": True}
+
+
+@router.post("/watches/seen")
+async def record_watch_results(request: Request,
+                               payload: Dict[str, Any] = Body(default={})
+                               ) -> Dict[str, Any]:
+    """Remember which watches have tripped, so a trip is news exactly once.
+
+    The client checks its watches and posts the outcome back here. Without this
+    step a watch that is met stays met, and every page load reports the same
+    thing as though it had just happened — which is how a notification feature
+    becomes something people turn off.
+
+    Only rows the caller owns are touched, and the id comes from the body only
+    as a *filter* alongside `user_id`; it can name another user's watch all it
+    likes and match nothing.
+    """
+    user = deps.require_user(request)
+    deps.csrf_guard(request)
+    results = payload.get("results")
+    if not isinstance(results, list):
+        raise HTTPException(status_code=400, detail="Send a list of results.")
+
+    now = db.utcnow()
+    statements = []
+    for row in results[:MAX_WATCHES]:
+        if not isinstance(row, dict) or not row.get("id"):
+            continue
+        if not row.get("met"):
+            continue
+        # `state` matters as much as `evidence`. `_signal_flip` and
+        # `_analyst_revisions` report a *state*, not a transition, by design:
+        # they are stateless, so the comparison against the previous state is
+        # the client's job and it needs the previous state to have been kept.
+        evidence = {k: row[k] for k in ("evidence", "state", "level", "value",
+                                        "detail")
+                    if k in row}
+        statements.append((
+            "UPDATE watches SET last_met_at = ?, last_evidence = ? "
+            "WHERE id = ? AND user_id = ?",
+            (now, json.dumps(evidence, sort_keys=True)[:2000],
+             str(row["id"]), user["id"])))
+    if statements:
+        db.execute_many(statements)
+    return {"ok": True, "recorded": len(statements)}
