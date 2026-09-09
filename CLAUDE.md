@@ -11,7 +11,7 @@ Live at https://theopticterminal.com (Railway, auto-deploys from `main`).
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Tests: `.venv/bin/python -m pytest -q`. There are 1147 and they all pass; keep it that way.
+Tests: `.venv/bin/python -m pytest -q`. There are 1162 and they all pass; keep it that way.
 
 A development account: `.venv/bin/python -m app.seed`. It prints a generated password
 once and refuses to run when a hosting platform is in the environment.
@@ -173,6 +173,28 @@ let a displaced average squat on a colour a later average was keeping.
 `STATE.ticker`. The Charting tab has `wsIndicators`, keyed on
 `STATE.chartSymbol`, because drawing the former on the latter puts one company's
 bands over another company's candles and labels them correctly.
+
+**An insider filing's direction is in `action`, never in the sign of
+`shares`.** `recent_transactions` carries `shares` as a positive magnitude, so
+`shares > 0 ? 'Bought' : 'Sold'` is true for every row. The dock widget did
+exactly that and rendered six green "Bought" lines on TSLA where three were
+sales and three were option conversions: not one was a purchase. `action` is
+three-way, and the third value is the absence of a direction rather than a third
+kind of it. `insiderEvents` already dropped `other` from the chart markers and
+says why; the dock widget was the surface that never got the same treatment.
+This is the third time this session a direction was read from the wrong field,
+after `watches.py` and the VIX tile.
+
+**A checkbox fires `change`; a button fires `click`.** `data-ws-opt` is handled
+in a `change` listener, which is right for the overlay checkboxes. The one-item
+menus render a button instead, and the first version reused that attribute: the
+Fibs button rendered perfectly, was correctly wired, and did nothing at all. It
+has `data-ws-toggle` and a click branch. Two shapes, two events, two names.
+
+**A menu with one option is not a menu.** `wsToolbar` renders a single-item,
+non-`manage` menu as a direct toggle. Written as a rule about the item count
+rather than a special case for `fibs`, so a menu that loses its options becomes
+a button and one that gains a second becomes a dropdown again.
 
 **Two market session models.** `app/session.py` is authoritative and models the ten NYSE
 holidays and three early closes from the exchange's rules. `static/app.js` has its own

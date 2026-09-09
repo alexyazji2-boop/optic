@@ -6182,6 +6182,41 @@ b, strong { font-weight: 600; }
 .ws-list { list-style: none; margin: 0; padding: 0; }
 .ws-list li { padding: var(--space-0) 0; }
 
+/* Insider filings: direction, who, how much, when.
+   A grid rather than inline spans so the amounts line up down the column. Read
+   left to right the row is a sentence; read down, the numbers are comparable,
+   which is the whole reason for showing them. `auto` on the name lets a long
+   one take the space it needs and truncate rather than push the amount off. */
+.ws-ins li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: 0 var(--space-1);
+}
+
+.ws-ins-act { font-weight: 600; }
+
+.ws-ins-who {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Tabular figures so the share counts and values align on the digit, and the
+   sans stack because there is no mono token in this design system. */
+.ws-ins-amt {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+
+/* Narrow dock: the date drops to a second line rather than squeezing the
+   amount, because the amount is what was asked for and the date is already
+   implied by the ordering. */
+@media (max-width: 860px) {
+  .ws-ins li { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .ws-ins li .ws-leg-args { grid-column: 2 / -1; }
+}
+
 /* The dock's compact seasonality grid. */
 .ws-seas {
   display: flex;

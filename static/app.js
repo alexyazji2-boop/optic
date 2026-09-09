@@ -9582,6 +9582,28 @@ function wsToolbar() {
   return `<div class="ws-toolbar">
     ${WS_MENUS.map((m) => {
     const activeCount = m.items.filter(wsOverlayOn).length;
+    /* A menu with one option is not a menu.
+     *
+     * Fibs held a single checkbox, so switching Fibonacci levels on took two
+     * clicks and a dropdown that existed to show one row. It toggles directly
+     * now. Written as a rule about the item count rather than a special case
+     * for `fibs`, so a menu that loses its options becomes a button and one
+     * that gains a second becomes a dropdown again, with nothing to remember.
+     *
+     * `manage` menus are excluded: the Indicators menu would still need
+     * somewhere to put "Manage indicators…" even at one item.
+     *
+     * No count badge here. `1` beside a single lit toggle says nothing the lit
+     * state does not, and aria-pressed carries it for a screen reader, which
+     * aria-expanded would have got wrong: this opens nothing. */
+    if (m.items.length === 1 && !m.manage) {
+      const id = m.items[0];
+      const on = wsOverlayOn(id);
+      const st = overlayStyle(id);
+      return `<button type="button" class="ws-menu-btn${on ? ' on' : ''}"
+        data-ws-toggle="${esc(id)}" aria-pressed="${on}"
+        title="${on ? 'Hide' : 'Show'} ${esc(st.label)}">${esc(m.label)}</button>`;
+    }
     return `<div class="ws-menu">
       <button type="button" class="ws-menu-btn${activeCount ? ' on' : ''}"
         data-ws-menu="${m.id}" aria-expanded="${wsMenuOpen === m.id}">
@@ -10563,6 +10585,59 @@ function alertsBody() {
   </div>`;
 }
 
+/* One insider filing, with the amounts on it.
+ *
+ * **Direction comes from `action`, not from the sign of `shares`.** The rows
+ * this reads carry `shares` as a positive magnitude and put the direction in a
+ * separate field, so the previous `shares > 0 ? 'Bought' : 'Sold'` was true for
+ * every row: the widget labelled sales as purchases. On TSLA it showed six
+ * consecutive "Bought" lines, three of which were sales. The Analysis tab's
+ * table has always read `action`, so the two surfaces disagreed about the same
+ * filing.
+ *
+ * **`other` is not a third direction, it is the absence of one.** The provider
+ * classifies from the filing's own text and anything that is neither a purchase
+ * nor a sale lands here, which in practice is mostly option exercises, grants
+ * and gifts. Colouring those green because they increase a holding would be the
+ * same mistake in a subtler form: Musk's 304M-share conversion is not somebody
+ * buying stock. It stays uncoloured, and the filing's text is on hover.
+ *
+ * `insiderEvents` already drew this line correctly for the chart markers, and
+ * says why in its own comment: those are compensation events rather than a view
+ * on the price, so it drops them rather than drawing a triangle. This widget is
+ * the surface that never got the same treatment.
+ *
+ * Exact counts under a million, compact above. An insider buying 2,605 shares
+ * and one buying 2,900 are different facts, and "2.6K" loses that; 303,960,630
+ * is not a number anyone reads.
+ */
+function insiderShares(n) {
+  const v = Number(n || 0);
+  return Math.abs(v) >= 1e6 ? fmtCompact(v, 1) : fmt(v, 0);
+}
+
+function insiderRow(t) {
+  const action = String(t.action || '').toLowerCase();
+  const tone = action === 'purchase' ? 'up' : action === 'sale' ? 'down' : '';
+  const word = action === 'purchase' ? 'Bought'
+    : action === 'sale' ? 'Sold' : 'Other';
+  const shares = t.shares === null || t.shares === undefined
+    ? '' : insiderShares(t.shares) + ' sh';
+  const value = t.value ? '$' + fmtCompact(t.value, 1) : '';
+  const amount = [shares, value].filter(Boolean).join(' · ');
+  /* The name truncates in a narrow dock, so the hover carries it in full along
+   * with the position and the filing's own text. `insiderEvents` builds the
+   * same three facts for its chart markers, in the same order, for the same
+   * reason: a row that reads "Other 304.0M sh" is not self-explanatory. */
+  const hover = [t.insider, t.position, t.detail].filter(Boolean).join(' · ');
+  return `<li${hover ? ` title="${esc(hover)}"` : ''}>
+    <span class="ws-ins-act ${tone}">${word}</span>
+    <span class="ws-ins-who">${esc((t.insider || '').slice(0, 24))}</span>
+    ${amount ? `<span class="ws-ins-amt">${esc(amount)}</span>` : ''}
+    <span class="ws-leg-args">${esc(t.date || '')}</span>
+  </li>`;
+}
+
 function wsWidgetBody(id) {
   const d = STATE.chartData && STATE.chartData !== 'loading' ? STATE.chartData : null;
   const sym = STATE.chartSymbol || '';
@@ -10657,13 +10732,9 @@ function wsWidgetBody(id) {
     if (!rows.length && !tx.length) return none(d ? 'No ownership data.' : 'Load a symbol.');
     return `${rows.length ? `<table class="data narrow"><tbody>${rows.map(([k, v]) =>
       `<tr><td class="name">${esc(k)}</td><td>${v}</td></tr>`).join('')}</tbody></table>` : ''}
-    ${tx.length ? `<ul class="ws-list">${tx.map((t) => {
-    const shares = Number(t.shares || 0);
-    return `<li><span class="${shares > 0 ? 'up' : 'down'}">${
-      shares > 0 ? 'Bought' : 'Sold'}</span>
-      ${esc((t.insider || '').slice(0, 24))}
-      <span class="ws-leg-args">${esc(t.date || '')}</span></li>`;
-  }).join('')}</ul>` : ''}`;
+    ${tx.length ? `<ul class="ws-list ws-ins">${tx.map(insiderRow).join('')}</ul>
+      <p class="ws-leg-args">Shares and value as filed. An exercise or conversion
+        is neither a purchase nor a sale, so it is left uncoloured.</p>` : ''}`;
   }
 
   if (id === 'reports') {
@@ -20641,6 +20712,22 @@ document.addEventListener('click', (evt) => {
     return;
   }
   if (evt.target.closest('[data-ws-zoom-reset]')) { wsResetZoom(); return; }
+  /* The one-item menus, which are buttons rather than checkboxes.
+   *
+   * A separate attribute from `data-ws-opt` on purpose. That one is handled in
+   * a `change` listener, which is right for a checkbox and never fires for a
+   * button: the first version of this reused it and the Fibs button rendered
+   * perfectly and did nothing at all. Two shapes, two events, two names. */
+  const wsToggle = evt.target.closest('[data-ws-toggle]');
+  if (wsToggle) {
+    const id = wsToggle.dataset.wsToggle;
+    wsSetOverlay(id, !wsOverlayOn(id));
+    wsRedrawChart();
+    // The Swing chart shares these flags, so it redraws too or the two tabs
+    // disagree about what is switched on.
+    if (STATE.swing) preserveUI(views.swing, () => renderSwing(STATE.swing));
+    return;
+  }
   const wsMode = evt.target.closest('[data-ws-mode]');
   if (wsMode) {
     chartMode = wsMode.dataset.wsMode;
