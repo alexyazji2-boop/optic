@@ -271,11 +271,20 @@ def why(payload: Dict[str, Any]) -> Dict[str, Any]:
         "change_pct": change,
         # Said plainly rather than implied. These are the inputs that scored
         # strongly, which is not the same claim as having identified a cause.
+        #
+        # Opens on the ranking rule rather than restating the panel's heading,
+        # which now says the same thing. The sentence it opens with is the one
+        # readers actually need: sorting on ABSOLUTE score means the three
+        # strongest factors can all read bullish on a day the price closed
+        # lower, and someone seeing three green arrows above a red number
+        # reasonably reads it as a contradiction. It is not one, and this is
+        # where that gets said.
         "method": (
-            "These are the scored inputs pulling hardest right now, ranked by "
-            "strength. They are an attribution across the model's own factors, "
-            "not a causal explanation of today's move. A price can move on "
-            "something none of these inputs can see."
+            "Ranked by how hard each input is pulling, regardless of direction, "
+            "so these can read bullish on a day the price is down. They are an "
+            "attribution across the model's own factors, not a causal "
+            "explanation of today's move. A price can move on something none of "
+            "these inputs can see."
         ),
         "reason_none": None if top else (
             "No single input is reading strongly enough to call a driver. Every "

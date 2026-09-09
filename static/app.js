@@ -4471,25 +4471,40 @@ function renderOpticPulse(d) {
   </section>`;
 }
 
-/* Why it's moving. Three reasons, evidence one click down.
+/* The three factors scoring hardest, with the evidence one click down.
  *
- * The method line is not boilerplate. These are the model's own factors ranked
- * by strength, which is an attribution and not a cause — a stock can move on
- * something none of these inputs can see, and the panel has to say so or it is
- * claiming to know why when it knows what scored highly.
+ * **Titled "What's pulling hardest", not "Why it's moving".** The old title
+ * promised a cause and the body then denied it: these are the model's own
+ * factors ranked by absolute score, so on a day when a stock is down 0.66% the
+ * three strongest can all read bullish, and they did. That was reported as a
+ * bug. Nothing about the ranking was wrong; the heading was making a claim the
+ * panel cannot support, with the day's change sitting beside it to cement the
+ * reading. The title now says what the list is, and the change is labelled
+ * `today` so it reads as context rather than as the thing being explained.
+ *
+ * The method line stays. An attribution across a model's own inputs is not a
+ * cause even when the heading no longer says it is, and a reader who assumes
+ * otherwise is making a reasonable assumption that has to be corrected.
  */
 function renderWhyMoving(d) {
   const w = d.why;
   if (!w) return '';
   if (!w.available) {
-    return `<section class="pl-block span-all" aria-label="Why it is moving">
-      <h2 class="pl-h">Why it's moving${askPulse('whymoving')}</h2>
+    return `<section class="pl-block span-all" aria-label="What is pulling hardest">
+      <h2 class="pl-h">What's pulling hardest${askPulse('whymoving')}</h2>
       <p class="pl-empty">${esc(w.reason_none || 'No driver is reading strongly enough to name.')}</p>
     </section>`;
   }
-  return `<section class="pl-block span-all" aria-label="Why it is moving">
-    <h2 class="pl-h">Why it's moving${w.change_pct !== null && w.change_pct !== undefined
-    ? ` <span class="pl-h-chg ${signClass(w.change_pct)}">${fmtPct(w.change_pct, 2)}</span>` : ''}</h2>
+  return `<section class="pl-block span-all" aria-label="What is pulling hardest">
+    ${/* `askPulse` was on the empty branch above and not on this one, so the
+        * Ask Optic button appeared only when there was nothing to ask about and
+        * vanished as soon as the panel had three factors to interrogate. The
+        * topic counted as "used" in tests/test_auth_client.py because it is
+        * referenced once, which is why that check did not catch it. */''}
+    <h2 class="pl-h">What's pulling hardest${
+  w.change_pct !== null && w.change_pct !== undefined
+    ? ` <span class="pl-h-chg ${signClass(w.change_pct)}">${
+      fmtPct(w.change_pct, 2)} today</span>` : ''}${askPulse('whymoving')}</h2>
     <ol class="pl-why">
       ${(w.reasons || []).map((r, i) => `<li class="pl-reason">
         <details>
@@ -4530,7 +4545,11 @@ function renderWhatsNext(d) {
     </section>`;
   }
   return `<section class="pl-block span-all" aria-label="What matters next">
-    <h2 class="pl-h">What matters next</h2>
+    ${/* Same defect the panel above had: `askPulse` was on the empty branch
+        * and not on this one, so the button was offered when there was nothing
+        * to ask about and withdrawn as soon as there was. Found by auditing
+        * every pl-h header for the pair, not by noticing it. */''}
+    <h2 class="pl-h">What matters next${askPulse('whatsnext')}</h2>
     <div class="pl-next">
       ${group(n.today, 'Today')}
       ${group(n.this_week, 'This week')}
@@ -17324,9 +17343,10 @@ const PULSE_TOPICS = {
   setup: 'Walk through the trade setup for {t} as if you were checking my work. Where '
     + 'is the entry, why that level rather than the current price, what invalidates it, '
     + 'and what is the honest case that this setup is not worth taking?',
-  whymoving: 'Take the "why it is moving" read on {t} and tell me how confident I should '
-    + 'be in it. Which of the reasons given is the strongest, which is the weakest, and '
-    + 'what would a competing explanation for today\'s move look like?',
+  whymoving: 'Take the "what is pulling hardest" read on {t} and tell me how confident '
+    + 'I should be in it. Which of the factors listed is the strongest, which is the '
+    + 'weakest, and given these are an attribution across the model\'s own inputs rather '
+    + 'than a cause, what could be moving the price that none of them can see?',
 
   /* Three topics that were being asked for and did not exist.
    *

@@ -11,7 +11,7 @@ Live at https://theopticterminal.com (Railway, auto-deploys from `main`).
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Tests: `.venv/bin/python -m pytest -q`. There are 1162 and they all pass; keep it that way.
+Tests: `.venv/bin/python -m pytest -q`. There are 1172 and they all pass; keep it that way.
 
 A development account: `.venv/bin/python -m app.seed`. It prints a generated password
 once and refuses to run when a hosting platform is in the environment.
@@ -173,6 +173,22 @@ let a displaced average squat on a colour a later average was keeping.
 `STATE.ticker`. The Charting tab has `wsIndicators`, keyed on
 `STATE.chartSymbol`, because drawing the former on the latter puts one company's
 bands over another company's candles and labels them correctly.
+
+**A heading is a claim.** The factor panel was titled "Why it's moving" with
+the day's change beside it, and its body ranks the model's inputs by *absolute*
+score, so the three strongest can all read bullish on a day the price closed
+lower. They did, and it was reported as a rendering bug. Nothing about the
+ranking was wrong. It is "What's pulling hardest" now, the change is labelled
+`today` so it reads as context, and the method line spends its one sentence on
+the thing readers actually trip over rather than restating the heading.
+
+**A control offered only in the empty state is worse than no control.**
+`askPulse` was on the empty branch of both the factor panel and What matters
+next and absent from their populated branches, so the Ask Pulse button appeared
+when there was nothing to ask about and vanished as soon as there was. The
+existing both-directions check could not see it: the topic *is* referenced, just
+from the wrong branch. `tests/test_why_moving.py` audits every `pl-h` header for
+the pair instead.
 
 **An insider filing's direction is in `action`, never in the sign of
 `shares`.** `recent_transactions` carries `shares` as a positive magnitude, so
