@@ -4811,6 +4811,172 @@ function pulseBar(value, direction) {
   return `<span class="pl-bar tone-${tone}" aria-hidden="true">${cells}</span>`;
 }
 
+/* ------------------------------------------------------------ what changed
+ *
+ * What moved on a symbol since the last time it was opened.
+ *
+ * **Built from a snapshot this file writes, because nothing on the server keeps
+ * one.** `/api/snapshots` is ledger backups, not per-symbol state. So on every
+ * ticker load a handful of comparable readings are stored under the symbol, and
+ * the next visit diffs against them. Local, like the recents list: it is a
+ * record of where one browser has been, it is worthless on another machine, and
+ * a server-side version means a write on every ticker open plus a migration.
+ * The shape is flat and versioned so moving it into SQL later is a copy.
+ *
+ * **What is compared, and what deliberately is not.** Price, the stance, the
+ * conviction, the chart bias and trend score, the analyst-revision direction
+ * and the earnings date. Every one is a reading the app already displays and
+ * already stands behind.
+ *
+ * `verdict.composite_score` is NOT compared, even though it is the obvious
+ * candidate and sits right beside the rest. The app's own evaluate module
+ * reports that the composite "does not beat a single raw momentum number at 3
+ * of 3 horizons", so a line reading "the score moved from 48 to 55" would be
+ * reporting movement in a number the app has measured to be decoration. The
+ * stance survives that finding; the total does not.
+ */
+const SNAP_KEY = 'optic.snapshots.v1';
+const SNAP_MAX = 40;
+// Under this, "since you last looked" is the same session and there is nothing
+// to say. Four hours rather than a day so an overnight gap counts.
+const SNAP_MIN_AGE_MS = 4 * 3600 * 1000;
+
+function snapshotStore() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SNAP_KEY) || '{}');
+    return (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
+  } catch (e) { return {}; }
+}
+
+/** The comparable readings, pulled out of a ticker payload. */
+function snapshotOf(d) {
+  const v = d.verdict || {};
+  const t = d.technicals || {};
+  const em = d.earnings_momentum || {};
+  return {
+    at: new Date().toISOString(),
+    price: (d.quote || {}).price,
+    stance: v.stance || null,
+    conviction: v.conviction || null,
+    bias: t.bias || null,
+    trend: t.trend_score,
+    revisions: em.available ? (em.read || null) : null,
+    earnings: d.next_earnings_date || null,
+  };
+}
+
+/** The snapshot from the previous visit, or null when there is nothing to say. */
+function priorSnapshot(symbol) {
+  const prev = snapshotStore()[String(symbol || '').toUpperCase()];
+  if (!prev || !prev.at) return null;
+  const age = Date.now() - Date.parse(prev.at);
+  // NaN age means a corrupted timestamp: treated as no snapshot rather than as
+  // an infinitely old one, which would report every reading as "changed".
+  if (!Number.isFinite(age) || age < SNAP_MIN_AGE_MS) return null;
+  return prev;
+}
+
+function writeSnapshot(symbol, snap) {
+  const sym = String(symbol || '').toUpperCase();
+  if (!sym || !snap) return;
+  const store = snapshotStore();
+  store[sym] = snap;
+  /* Trimmed oldest-first so the store cannot grow without bound on a machine
+   * that opens a lot of symbols. Sorted on the timestamp rather than on
+   * insertion order, because object key order is not a reliable record of it
+   * after a round trip through JSON. */
+  const keys = Object.keys(store);
+  if (keys.length > SNAP_MAX) {
+    keys.sort((a, b) => Date.parse(store[a].at || 0) - Date.parse(store[b].at || 0))
+      .slice(0, keys.length - SNAP_MAX)
+      .forEach((k) => delete store[k]);
+  }
+  try { localStorage.setItem(SNAP_KEY, JSON.stringify(store)); }
+  catch (e) { /* private mode: no history, so no what-changed block */ }
+}
+
+/* The differences worth a line, in the order they matter.
+ *
+ * Each entry decides for itself whether it changed, so a reading that was
+ * missing on either visit is skipped rather than reported as a change from
+ * nothing. That is the whole reason this is a list of small functions instead
+ * of a loop over keys: "undefined became bullish" is not news.
+ */
+function changesBetween(prev, now) {
+  const out = [];
+  const both = (a, b) => a !== null && a !== undefined && b !== null && b !== undefined;
+
+  if (both(prev.price, now.price) && prev.price) {
+    const pct = ((now.price - prev.price) / prev.price) * 100;
+    // Below a quarter of a percent this is noise and saying so is worse than
+    // saying nothing: it fills the block on a day nothing happened.
+    if (Math.abs(pct) >= 0.25) {
+      out.push({ label: 'Price', text: `${fmtPct(pct, 1)} to ${fmt(now.price, 2)}`,
+        tone: pct >= 0 ? 'up' : 'down' });
+    }
+  }
+  if (both(prev.stance, now.stance) && prev.stance !== now.stance) {
+    out.push({ label: 'Stance', text: `${prev.stance} to ${now.stance}`, tone: '' });
+  }
+  if (both(prev.conviction, now.conviction) && prev.conviction !== now.conviction) {
+    out.push({ label: 'Conviction', text: `${prev.conviction} to ${now.conviction}`, tone: '' });
+  }
+  if (both(prev.bias, now.bias) && prev.bias !== now.bias) {
+    out.push({ label: 'Chart bias', text: `${prev.bias} to ${now.bias}`, tone: '' });
+  }
+  if (both(prev.trend, now.trend) && Math.abs(now.trend - prev.trend) >= 10) {
+    out.push({ label: 'Trend score',
+      text: `${fmt(prev.trend, 0)} to ${fmt(now.trend, 0)}`,
+      tone: now.trend >= prev.trend ? 'up' : 'down' });
+  }
+  if (both(prev.revisions, now.revisions) && prev.revisions !== now.revisions) {
+    out.push({ label: 'Estimate revisions',
+      text: `${prev.revisions} to ${now.revisions}`, tone: '' });
+  }
+  if (both(prev.earnings, now.earnings) && prev.earnings !== now.earnings) {
+    out.push({ label: 'Next earnings',
+      text: `moved to ${now.earnings}`, tone: '' });
+  }
+  return out;
+}
+
+/** How long ago, in words. */
+function sinceWords(iso) {
+  const ms = Date.now() - Date.parse(iso);
+  if (!Number.isFinite(ms)) return 'earlier';
+  const hours = ms / 3600000;
+  if (hours < 36) return 'yesterday';
+  const days = Math.round(hours / 24);
+  if (days < 14) return `${days} days ago`;
+  const weeks = Math.round(days / 7);
+  return weeks < 9 ? `${weeks} weeks ago` : `${Math.round(days / 30)} months ago`;
+}
+
+/* The panel. Renders nothing at all when there is no prior visit or nothing
+ * moved, rather than an empty card saying "no changes": a block that is always
+ * there and usually empty is furniture. */
+function renderWhatChanged(d) {
+  const prev = STATE.priorSnapshot;
+  if (!prev) return '';
+  const changes = changesBetween(prev, snapshotOf(d));
+  if (!changes.length) return '';
+  return `<section class="pl-block span-all wc-block" aria-label="What changed">
+    <div class="hm-block-head">
+      <h2 class="pl-h">What changed${askPulse('whatchanged')}</h2>
+      <span class="wc-since">since you last opened ${esc(d.ticker || 'this')},
+        ${esc(sinceWords(prev.at))}</span>
+    </div>
+    <ul class="wc-list">${changes.map((c) => `<li>
+      <span class="wc-label">${esc(c.label)}</span>
+      <span class="wc-text ${esc(c.tone)}">${esc(c.text)}</span>
+    </li>`).join('')}</ul>
+    <p class="cc-method">Compared against the readings stored the last time this
+      symbol was opened in this browser, not against a fixed window. The
+      composite score is left out on purpose: Optic's own backtest reports it
+      does not beat a single momentum number, so a move in it is not news.</p>
+  </section>`;
+}
+
 /* The stance panel.
  *
  * No 0-100 headline, deliberately. verdict.composite_score is in the payload
@@ -5163,6 +5329,12 @@ function renderSwing(d) {
 
   const html = `
   ${renderPriceHead(d, extQ)}
+  ${/* Above the reads, below the price.
+      * The first question on a return visit is "what did I miss", and the
+      * answer has to arrive before the panels that would have to be re-read to
+      * work it out. Renders nothing when there is no prior visit, so a first
+      * look at a symbol is unchanged. */''}
+  ${renderWhatChanged(d)}
   ${renderOpticPulse(d)}
   ${renderWhyMoving(d)}
   ${renderWhatsNext(d)}
@@ -17281,6 +17453,16 @@ async function loadSwing(force, opts = {}) {
   try {
     const data = await getJSON(`/api/ticker/${encodeURIComponent(STATE.ticker)}?max_expiries=4&macro=true`);
     STATE.swing = data;
+    /* Read the prior snapshot BEFORE writing the new one, or the diff is
+     * always empty: writing first overwrites the thing being compared against.
+     *
+     * Held on STATE rather than passed down, because renderSwing composes a
+     * dozen panels and threading one extra argument through all of them to
+     * reach one of them is worse than a field. Re-read on every load so a
+     * silent refresh does not resurrect a diff the reader has already seen: it
+     * is set to null once the age threshold stops being met. */
+    STATE.priorSnapshot = priorSnapshot(data.ticker || STATE.ticker);
+    writeSnapshot(data.ticker || STATE.ticker, snapshotOf(data));
     if (data.macro && !data.macro.error) {
       STATE.market = STATE.market || {};
       STATE.market.macro = data.macro;
@@ -17724,6 +17906,9 @@ const PULSE_TOPICS = {
   /* The market-level counterpart to `whymoving`, for the command centre's
    * "What matters now". Asks about the cross-asset ranking that section shows
    * rather than about a single ticker, because that section has no ticker. */
+  whatchanged: 'Take what changed on {t} since I last looked at it. Which of these '
+    + 'moves actually alters the case, which is noise, and is there anything that '
+    + 'changed which this list would not have caught?',
   whatmatters: 'Look at today\'s cross-asset moves and the day\'s read. Which of these '
     + 'moves actually matters for someone holding US equities, which is noise, and what '
     + 'is the one thing on this list I should be watching tomorrow?',

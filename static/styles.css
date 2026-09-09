@@ -8298,6 +8298,48 @@ body.cp-open { overflow: hidden; }
 .hm-cell-sub.is-up, .hm-cell-sub.is-uptrend { color: var(--pos); }
 .hm-cell-sub.is-down, .hm-cell-sub.is-downtrend { color: var(--neg); }
 
+/* ------------------------------------------------------ what changed */
+
+/* Sits between the price and the reads. Bordered rather than filled: it is
+   about the page it is on rather than a separate object, and a filled card here
+   competed with the price header directly above it. */
+.wc-block {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: var(--space-3) var(--space-4);
+}
+
+.wc-since { font-size: var(--t-caption); color: var(--ink-muted); }
+
+.wc-list {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-0);
+}
+
+/* Label column fixed so the readings line up. On a phone it stacks, because a
+   14ch label plus "improving to deteriorating" does not fit 375px. */
+.wc-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 16ch) minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.wc-label {
+  font-size: var(--t-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+}
+.wc-text { font-variant-numeric: tabular-nums; color: var(--ink); }
+
+@media (max-width: 559px) {
+  .wc-list li { grid-template-columns: minmax(0, 1fr); gap: 0; }
+}
+
 /* ------------------------------------------------ market command centre */
 
 /* The strip. A band, not a row of cards.

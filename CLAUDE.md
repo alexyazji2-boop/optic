@@ -11,7 +11,7 @@ Live at https://theopticterminal.com (Railway, auto-deploys from `main`).
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Tests: `.venv/bin/python -m pytest -q`. There are 1227 and they all pass; keep it that way.
+Tests: `.venv/bin/python -m pytest -q`. There are 1245 and they all pass; keep it that way.
 
 A development account: `.venv/bin/python -m app.seed`. It prints a generated password
 once and refuses to run when a hosting platform is in the environment.
@@ -173,6 +173,23 @@ let a displaced average squat on a colour a later average was keeping.
 `STATE.ticker`. The Charting tab has `wsIndicators`, keyed on
 `STATE.chartSymbol`, because drawing the former on the latter puts one company's
 bands over another company's candles and labels them correctly.
+
+**The composite score is measured to be decoration, and three places now
+depend on that.** `/api/evaluate` reports it "does not beat a single raw
+momentum number at 3 of 3 horizons... the weights are decoration rather than
+signal". So: the stance panel has no 0-100 headline, "what changed" does not
+diff the score, and no Optic Score badge was added when a product brief asked
+for one. What survives the finding is the stance, the conviction, and the
+per-component bars with their real weights, all of which the app already shows.
+A big number would be the most confident thing on the page and the least
+supported.
+
+**"What changed" snapshots on the client because the server keeps no per-symbol
+state.** `/api/snapshots` is ledger backups. `snapshotOf()` stores seven
+readings under the symbol on each ticker load, and the next visit diffs them.
+Read the prior one *before* writing the new one or the diff is always empty.
+Each field decides for itself whether it moved, so a reading absent on either
+visit is skipped: "undefined became bullish" is not news.
 
 **A phone override belongs after the rule it overrides.** `.hm-greet` is
 defined near the bottom of `styles.css`, and a `@media (max-width: 719px)` block
