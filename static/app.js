@@ -2346,7 +2346,17 @@ function renderHome() {
 
   views.home.innerHTML = `
   <div class="home">
-    <svg class="home-logo" viewBox="0 0 32 32" aria-label="Optic Terminal logo" role="img">
+    ${/* The strip goes here, above everything.
+        *
+        * It is the first thing on the page because it is the reason anyone
+        * opens the page on the second day, and it is filled separately from
+        * `#hm-market` below so it does not have to wait behind the watchlist
+        * and the movers scan. Empty until /api/home lands; it reserves no
+        * height, so nothing below it jumps when it arrives. */''}
+    <div id="cc-strip"></div>
+
+    <div class="home-brand">
+      <svg class="home-logo" viewBox="0 0 32 32" aria-label="Optic Terminal logo" role="img">
       <!-- No outer ring. The header's brand-mark has never had one, so the two
            marks now match; the ring also boxed in a shape whose whole point is
            that it is an aperture. Only the eye group is left, which is what the
@@ -2365,12 +2375,16 @@ function renderHome() {
     </svg>
 
     <h1 class="home-title">Optic <span>Terminal</span></h1>
+    </div>
 
-    <p class="home-lede">
-      A market research workbench. Load a ticker and Optic works through the
-      structure, the options, the earnings and the macro, then tells you where
-      those inputs disagree.
-    </p>
+    ${/* The lede moved into the tour at the foot of this page.
+        *
+        * It is a good paragraph and it is the right thing to read once. It was
+        * three lines of product pitch above the fold on every single visit,
+        * which pushed the market state below it, and the market state is the
+        * reason anyone opens this page on the second day. The tour it now
+        * heads is still one click away and still open by default on a first
+        * visit. */''}
 
     <form class="home-search" id="home-form">
       <div class="combo">
@@ -2398,6 +2412,11 @@ function renderHome() {
         * for every other one. */''}
     <details class="home-tour" id="home-tour">
       <summary>What Optic can do</summary>
+      <p class="home-lede">
+        A market research workbench. Load a ticker and Optic works through the
+        structure, the options, the earnings and the macro, then tells you where
+        those inputs disagree.
+      </p>
       <p class="home-proto">
         <strong>Prototype.</strong> A personal research project, still being built.
         Expect rough edges, gaps in the data and figures that lag the market. It is
@@ -2446,8 +2465,23 @@ async function loadHomeMarket() {
   }
   if (STATE.view !== 'home' && !document.getElementById('hm-market')) return;
   STATE.home = data;
+  // The strip lives above the search, outside this host. Filled first because
+  // it is the cheapest thing to paint and the highest thing on the page.
+  const strip = document.getElementById('cc-strip');
+  if (strip) strip.innerHTML = marketStripHTML(data);
   const session = data.session || {};
   const holiday = session.holiday;
+  /* Order follows the journey this page exists for: see the market, see what
+   * moved, see your own names, then go looking. The strip is a band rather than
+   * a block so it reads as state instead of competing with the first section.
+   *
+   * A four-tile block used to sit where the strip is now. It showed four of
+   * these same instruments with the same numbers, so keeping both would have
+   * been the clutter this redesign is meant to remove. Its one piece of real
+   * value, the plain-language reading for VIX and the 10-year, moved into the
+   * strip; `macroWord` is that function and it is still the only place the
+   * wording lives.
+   */
   host.innerHTML = `
     <div class="hm-greet">
       <h2 class="hm-hello">${esc(homeGreeting())}.</h2>
@@ -2455,7 +2489,7 @@ async function loadHomeMarket() {
         ${esc(holiday ? holiday + ' \u00b7 market closed' : (session.label || ''))}
       </span>
     </div>
-    ${homePulseStrip(data)}
+    ${whatMattersNow(data)}
     <section class="hm-block">
       <div class="hm-block-head">
         <h2 class="hm-h">Your watchlist</h2>
@@ -2466,12 +2500,23 @@ async function loadHomeMarket() {
       </div>
       <div id="hm-watch">${watchlistFeedHTML({ compact: true, limit: 6 })}</div>
     </section>
+    <section class="hm-block">
+      <div class="hm-block-head">
+        <h2 class="hm-h">Moved most this month</h2>
+        <button type="button" class="hm-more" data-go-view="scan">All scans &rarr;</button>
+      </div>
+      <div id="cc-movers"><div class="hm-skel" aria-hidden="true"></div></div>
+    </section>
+    ${marketQuestions(data)}
     ${homeRead(data)}
     ${homeAlerts(data)}
     ${(data.degraded || []).length
     ? `<p class="hm-degraded">Unavailable right now: ${esc((data.degraded).join(', '))}.</p>`
     : ''}`;
   loadWatchlist();
+  // Its own request, not awaited: the universe scan is the slowest thing on
+  // this page and the rest of it is already useful without it.
+  homeMovers();
 }
 
 /* Watchlist and home navigation clicks. */
@@ -2485,7 +2530,12 @@ document.addEventListener('click', (evt) => {
   const rm = evt.target.closest('[data-watch-remove]');
   if (rm) { evt.preventDefault(); evt.stopPropagation(); watchRemove(rm.dataset.watchRemove); return; }
   const go = evt.target.closest('[data-go-view]');
-  if (go) { switchView(go.dataset.goView); }
+  if (go) { switchView(go.dataset.goView); return; }
+  /* A market question opens Pulse with the question already typed rather than
+   * sending it. Five questions on a page that answers them all on load is five
+   * API calls nobody asked for, and the assistant costs money per call. */
+  const askText = evt.target.closest('[data-ask-text]');
+  if (askText) { openPulseWithText(askText.dataset.askText); }
 });
 
 /** Fill in the footer once /api/health is known — real-time vs delayed feed and
@@ -3808,58 +3858,232 @@ function macroWord(key, change) {
   return 'today';
 }
 
-/* The four numbers that set the day's tone.
+/* ------------------------------------------------- market command centre
  *
- * Two equity indices, volatility and the long end. Not eight: the brief for
- * this page is that it reads in five to ten seconds, and a strip of eight
- * numbers is a table nobody scans. Everything else stays on the Markets tab. */
-function homePulseStrip(data) {
-  const rows = ((data.indices || {}).rows) || [];
-  const macro = ((data.macro || {}).instruments) || {};
-  const cells = [];
+ * The homepage leads with the state of the market rather than with a product
+ * pitch. Everything below is built from `/api/home`, which already carried all
+ * of it: nineteen macro instruments grouped by asset class, the index trend
+ * board, and the day's written read. None of this is new data and none of it is
+ * placeholder.
+ */
 
-  const idx = (sym) => rows.find((r) => r.symbol === sym && r.available);
-  [['SPY', 'S&P 500'], ['QQQ', 'Nasdaq 100']].forEach(([sym, label]) => {
-    const row = idx(sym);
-    if (!row) return;
-    cells.push({ label, value: fmt(row.price, 2), sub: row.trend || '', tone: row.trend });
-  });
-  [['^VIX', 'VIX'], ['^TNX', 'US 10Y']].forEach(([key, label]) => {
-    const m = macro[key];
-    if (!m) return;
-    cells.push({
-      label, value: fmt(m.last, 2),
-      sub: m.chg_1d === null || m.chg_1d === undefined
-        ? '' : `${fmtPct(m.chg_1d, 2)} ${macroWord(key, m.chg_1d)}`,
-      // Neither of these two gets the directional pair, and the reason is that
-      // neither direction is good or bad on its own.
-      //
-      // This tile used to invert VIX: up painted red, because a rising fear
-      // gauge is risk-off. The comment here claimed the direction word carried
-      // the meaning alongside the colour, and it did not — there was no word,
-      // so all a reader saw was "+2.16%" in red. Red means down in every other
-      // percentage in this app, so a red plus reads as a rendering fault, and
-      // it was reported as one.
-      //
-      // Colouring by sign instead would only move the lie: green on a rising
-      // VIX says higher fear is good news. And 10Y had the same defect in the
-      // opposite direction, sitting in this same loop painting a rising yield
-      // green, which is a claim nothing here can support: whether yields up is
-      // good depends entirely on why they moved.
-      //
-      // So the number keeps its sign, which is the direction, and the word
-      // after it carries the reading. --pos/--neg stay where up really is up.
-      tone: '',
+/* The strip, in reading order rather than payload order.
+ *
+ * A fixed list because the point of a ticker strip is that it is in the same
+ * place every morning. Each entry names the group it comes from and the label
+ * the payload uses, so a group that fails to build drops its own entries and
+ * the rest of the strip still renders.
+ */
+const MARKET_STRIP = [
+  { group: 'equity', label: 'S&P 500' },
+  { group: 'equity', label: 'Nasdaq 100' },
+  { group: 'equity', label: 'Russell 2000' },
+  { group: 'volatility', label: 'VIX' },
+  { group: 'rates', label: 'US 10Y' },
+  { group: 'commodities', label: 'WTI Crude' },
+  { group: 'commodities', label: 'Gold' },
+  { group: 'crypto', label: 'Bitcoin' },
+];
+
+/** Pull one instrument out of `macro.groups` by group and label. */
+function stripInstrument(data, group, label) {
+  const rows = (((data || {}).macro || {}).groups || {})[group] || [];
+  return rows.find((r) => r.label === label) || null;
+}
+
+/* The band across the top: what the market is doing, in one line.
+ *
+ * **Coloured by sign, uniformly.** This is the opposite of the decision the
+ * pulse tiles needed, and the difference is worth writing down. There, a
+ * heading claimed to explain a move and VIX was painted red for going *up*,
+ * so red meant "down" everywhere in the app except one tile. Here every cell
+ * is a raw quote and the colour means one thing only: this number went that
+ * way. No cell claims the move is good or bad, so there is nothing for the
+ * colour to contradict.
+ *
+ * The reading for the two instruments that have one still sits underneath,
+ * from `macroWord`, because "4.84, +0.6%" does not tell anyone that yields
+ * rose and hedging got dearer.
+ */
+function marketStripHTML(data) {
+  const cells = MARKET_STRIP.map(({ group, label }) => {
+    const inst = stripInstrument(data, group, label);
+    if (!inst || inst.last === null || inst.last === undefined) return '';
+    const chg = inst.chg_1d;
+    const word = (inst.symbol === '^VIX' || inst.symbol === '^TNX')
+      ? macroWord(inst.symbol, chg).replace(/^today,?\s*/, '') : '';
+    return `<button type="button" class="ms-cell" data-instrument="${esc(inst.symbol)}"
+      data-instrument-label="${esc(label)}"
+      title="${esc(label)}${inst.note ? ' · ' + esc(inst.note) : ''}">
+      <span class="ms-label">${esc(label)}</span>
+      <span class="ms-last">${fmt(inst.last, inst.last < 20 ? 2 : (inst.last > 1000 ? 0 : 2))}</span>
+      ${chg === null || chg === undefined ? ''
+    : `<span class="ms-chg ${signClass(chg)}">${fmtPct(chg, 2)}</span>`}
+      ${word && word !== 'flat' ? `<span class="ms-word">${esc(word)}</span>` : ''}
+    </button>`;
+  }).filter(Boolean).join('');
+  if (!cells) return '';
+  /* Scrollable rather than wrapped. Eight cells do not fit a phone, and a strip
+   * that wraps to three rows stops being a strip; `overflow-x` keeps it one
+   * band at every width and the order means the indices are the ones on screen
+   * before you scroll. */
+  return `<div class="ms-strip" role="group" aria-label="Market snapshot">${cells}</div>`;
+}
+
+/* What matters now: the day's largest cross-asset moves, ranked.
+ *
+ * **Ranked by absolute daily change across the nineteen macro instruments**,
+ * which is a real answer to "what should I know right now" and is computable
+ * from data already on the page. The alternative would have been to invent a
+ * list, and a hand-written "NVIDIA +4.2% after earnings guidance" is the kind
+ * of thing that looks finished and is a lie by the next session.
+ *
+ * The written headline above it comes from `read.summary`, which is the
+ * existing daily brief. It is the one sentence Optic already stands behind.
+ *
+ * Deliberately NOT single stocks. Ranking those by today's move needs a
+ * same-day quote for three thousand symbols and this app does not have one;
+ * see the movers block below, which says what window it actually covers.
+ */
+function rankedMoves(data) {
+  const groups = ((data.macro || {}).groups) || {};
+  const rows = [];
+  Object.entries(groups).forEach(([group, list]) => {
+    (list || []).forEach((inst) => {
+      if (inst.chg_1d === null || inst.chg_1d === undefined) return;
+      /* Ranked by the move against the instrument's OWN typical daily range,
+       * not by raw percent.
+       *
+       * Raw percent ranks by which instrument is inherently jumpiest. The first
+       * version of this block led with VVIX +6.4% and put Nat Gas -3.9% second,
+       * while the Russell was down 1.3% in fourth. But VVIX moves 4.9% on an
+       * average day and the Russell moves 1.1%, so on the day measured the
+       * Russell had moved 1.2 of its normal range and Nat Gas exactly 1.0 of
+       * its own: the raw ordering was reporting volatility, not news.
+       *
+       * `atr_pct` is on every instrument in this payload, so this needs no
+       * extra request. Guarded anyway, and an instrument without one sorts
+       * last rather than dividing by zero. */
+      const atr = Number(inst.atr_pct) || 0;
+      rows.push({ ...inst, group, rel: atr ? Math.abs(inst.chg_1d) / atr : 0 });
     });
   });
-  if (!cells.length) return '';
-  return `<div class="hm-strip">
-    ${cells.map((c) => `<div class="hm-cell">
-      <span class="hm-cell-label">${esc(c.label)}</span>
-      <span class="hm-cell-value">${esc(c.value)}</span>
-      <span class="hm-cell-sub is-${esc(c.tone || 'flat')}">${esc(c.sub)}</span>
-    </div>`).join('')}
-  </div>`;
+  rows.sort((a, b) => b.rel - a.rel);
+  return rows;
+}
+
+function whatMattersNow(data) {
+  const rows = rankedMoves(data);
+  const top = rows.slice(0, 5);
+  const read = ((data.read || {}).summary) || {};
+
+  if (!top.length && !read.headline) return '';
+  return `<section class="hm-block cc-now">
+    <div class="hm-block-head">
+      <h2 class="hm-h">What matters now</h2>
+      ${askPulse('whatmatters')}
+    </div>
+    ${read.headline ? `<p class="cc-headline">${esc(read.headline)}</p>` : ''}
+    ${top.length ? `<ul class="cc-moves">${top.map((inst) => `<li>
+      <button type="button" class="cc-move" data-instrument="${esc(inst.symbol)}"
+        data-instrument-label="${esc(inst.label)}">
+        <span class="cc-move-name">${esc(inst.label)}</span>
+        <span class="cc-move-chg ${signClass(inst.chg_1d)}">${fmtPct(inst.chg_1d, 2)}</span>
+        ${/* The multiple is why the row is on the list at all, so it is shown
+            * rather than left implicit. Without it "VVIX +6.4%" above
+            * "Russell 2000 -1.3%" looks like the list is simply sorted by the
+            * bigger number, which is the ordering this deliberately is not. */''}
+        <span class="cc-move-rel">${inst.rel ? fmt(inst.rel, 1) + '\u00d7 normal' : ''}</span>
+        <span class="cc-move-note">${esc(inst.note || inst.group)}</span>
+      </button>
+    </li>`).join('')}</ul>` : ''}
+    <p class="cc-method">Ranked across the ${rows.length} cross-asset instruments
+      Optic tracks, by today's move against each one's own average daily range
+      rather than by the raw percentage. A 6% day is ordinary for the VIX of VIX
+      and extraordinary for the S&amp;P. Single stocks are not ranked here: that
+      needs a same-day quote for the whole universe, which this feed does not
+      carry. See the month's movers below.</p>
+  </section>`;
+}
+
+/* Questions worth asking, built from what is actually happening.
+ *
+ * The first two are generated from the day's biggest mover and the volatility
+ * reading, so they name a real instrument and a real number. The rest are
+ * standing questions about the market as a whole. Both kinds open Pulse with
+ * the question already typed rather than answering inline, because the answer
+ * costs an API call and nobody should pay for five of them on page load.
+ */
+function marketQuestions(data) {
+  // Same ranking the list above uses. Two sorts would drift, and the question
+  // would name an instrument that is not the one at the top of the list.
+  const biggest = rankedMoves(data)[0];
+  const vix = stripInstrument(data, 'volatility', 'VIX');
+  const regime = (data.macro || {}).regime;
+
+  const qs = [];
+  if (biggest) {
+    qs.push(`Why is ${biggest.label} ${biggest.chg_1d >= 0 ? 'up' : 'down'} `
+      + `${Math.abs(biggest.chg_1d).toFixed(1)}% today?`);
+  }
+  if (vix && vix.last !== null && vix.last !== undefined) {
+    qs.push(`VIX is at ${vix.last.toFixed(1)}. Is the market underpricing risk?`);
+  }
+  if (regime) qs.push(`The regime reads ${regime}. What would change it?`);
+  qs.push('Is this rally broadening or narrowing?');
+  qs.push('What is the market expecting from the Fed?');
+
+  return `<section class="hm-block">
+    <div class="hm-block-head">
+      <h2 class="hm-h">Ask Optic</h2>
+    </div>
+    <ul class="cc-qs">${qs.slice(0, 5).map((q) => `<li>
+      <button type="button" class="cc-q" data-ask-text="${esc(q)}">${esc(q)}</button>
+    </li>`).join('')}</ul>
+  </section>`;
+}
+
+/* The month's movers, from the ranked universe.
+ *
+ * **Labelled for the window it actually covers.** The brief this came from asked
+ * for "today's biggest movers"; the scanners rank on twenty- and sixty-day rate
+ * of change over a universe built by a background job. Those are not the same
+ * thing, and calling a one-month leaderboard "today's movers" would be wrong on
+ * every row. So the heading says the month and the column header says roc20.
+ *
+ * The universe is built in the background over ~3000 symbols, so `available:
+ * false` is a normal state on a cold start rather than an error. It says so.
+ */
+async function homeMovers() {
+  const host = document.getElementById('cc-movers');
+  if (!host) return;
+  let data;
+  try {
+    data = await getJSON('/api/scanners/movers');
+  } catch (err) {
+    host.innerHTML = `<p class="hm-none">The movers scan is unavailable
+      (${esc(err.message)}).</p>`;
+    return;
+  }
+  if (!document.getElementById('cc-movers')) return;
+  const rows = (data.rows || []).slice(0, 8);
+  if (!rows.length) {
+    host.innerHTML = `<p class="hm-none">${esc(data.reason
+      || 'No names are through the movers filter right now.')}</p>`;
+    return;
+  }
+  host.innerHTML = `<table class="data narrow cc-movers-t">
+    <thead><tr><th>Symbol</th><th>Price</th><th>1-month</th><th>Volume</th></tr></thead>
+    <tbody>${rows.map((r) => `<tr class="cc-mover" data-watch-open="${esc(r.symbol)}">
+      <td class="name">${esc(r.symbol)}</td>
+      <td>${fmt(r.price, 2)}</td>
+      <td class="${signClass(r.roc20)}">${fmtPct(r.roc20, 1)}</td>
+      <td>${r.volume_expansion ? fmt(r.volume_expansion, 2) + '×' : '—'}</td>
+    </tr>`).join('')}</tbody>
+  </table>
+  <p class="cc-method">Twenty-day rate of change over the ${
+  data.considered || 'ranked'} liquid names the background scan reached, not
+    today's move. Volume is the twenty-day average against the sixty-day.</p>`;
 }
 
 /** The day's narrative, from the already-written brief. Never generated here. */
@@ -17368,6 +17592,12 @@ const PULSE_TOPICS = {
   setup: 'Walk through the trade setup for {t} as if you were checking my work. Where '
     + 'is the entry, why that level rather than the current price, what invalidates it, '
     + 'and what is the honest case that this setup is not worth taking?',
+  /* The market-level counterpart to `whymoving`, for the command centre's
+   * "What matters now". Asks about the cross-asset ranking that section shows
+   * rather than about a single ticker, because that section has no ticker. */
+  whatmatters: 'Look at today\'s cross-asset moves and the day\'s read. Which of these '
+    + 'moves actually matters for someone holding US equities, which is noise, and what '
+    + 'is the one thing on this list I should be watching tomorrow?',
   whymoving: 'Take the "what is pulling hardest" read on {t} and tell me how confident '
     + 'I should be in it. Which of the factors listed is the strongest, which is the '
     + 'weakest, and given these are an attribution across the model\'s own inputs rather '

@@ -235,23 +235,38 @@ def test_the_selected_ring_does_not_shrink_the_swatch():
 # ------------------------------------------------------- the VIX pulse tile
 
 
-def test_the_pulse_strip_does_not_colour_vix_by_direction():
+def test_the_vix_inversion_never_comes_back():
     """A red "+2.16%" reads as a rendering fault, and was reported as one.
-    Colouring by sign instead would only move the lie: green on a rising VIX
-    says higher fear is good news. Neither VIX nor the 10Y gets the pair."""
-    fn = _fn(APP_JS, "homePulseStrip")
-    assert "-m.chg_1d" not in fn, "the inversion is back"
-    assert "tone: ''," in fn
+
+    The four-tile block this originally guarded was replaced by the market
+    strip, which supersedes it: same instruments, more of them, one band. The
+    invariant outlives the element, so it is asserted over the whole file now
+    rather than inside one function."""
+    # The exact expression the tile used, which negated VIX before toning it.
+    assert "-m.chg_1d" not in APP_JS, "the inversion is back"
+    # And the tile itself is gone rather than merely unrendered.
+    assert "function homePulseStrip" not in APP_JS
 
 
-def test_the_pulse_strip_says_the_direction_in_words():
-    """Since the colour no longer carries it."""
+def test_the_strip_still_says_the_direction_in_words():
+    """`macroWord` was the fix for the red plus and it is still the only place
+    that wording lives. The strip is now its caller."""
     fn = _fn(APP_JS, "macroWord")
     assert "hedging pricier" in fn and "hedging cheaper" in fn
     assert "yields up" in fn and "yields down" in fn
     # An unchanged number with a direction word beside it reads as a move.
     assert "Math.abs(change) < 0.05" in fn
-    assert "macroWord(key, m.chg_1d)" in _fn(APP_JS, "homePulseStrip")
+    strip = _fn(APP_JS, "marketStripHTML")
+    assert "macroWord(inst.symbol, chg)" in strip
+    assert "'^VIX'" in strip and "'^TNX'" in strip
+
+
+def test_the_strip_colours_every_cell_by_sign():
+    """The opposite of what the tiles needed, and the reason is in the comment:
+    a raw quote strip makes no claim for the colour to contradict, so red
+    meaning "this went down" in every cell is the consistent choice."""
+    strip = _fn(APP_JS, "marketStripHTML")
+    assert "signClass(chg)" in strip
 
 
 def test_no_em_dashes_in_the_copy_a_reader_sees():

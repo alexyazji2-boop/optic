@@ -689,13 +689,30 @@ body.chat-open main { padding-right: 400px; }
 .home {
   max-width: 1000px;
   margin: 0 auto;
-  padding: var(--space-9) var(--space-1) 60px;
+  /* Was --space-9 at the top. The market strip is the first element now and it
+     wants to sit close to the session bar above it, not a screen's height
+     below it. */
+  padding: var(--space-4) var(--space-1) 60px;
+}
+
+/* The mark and the wordmark, one compact row.
+   Both were much larger and stacked: a 92px aperture, then "Optic Terminal" at
+   --t-hero, then a three-line lede. That is about 340px of branding above the
+   fold, on a page whose own header already says OPTIC TERMINAL in the top-left
+   corner, and it pushed the market state off the first screen entirely. The
+   brand still opens the page; it just no longer *is* the page. */
+.home-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-5) 0 var(--space-3);
 }
 
 .home-logo {
-  width: 92px; height: 92px;
+  width: 30px; height: 30px;
   color: var(--ink-2);
-  margin-bottom: var(--space-6);
+  margin-bottom: 0;
+  flex: 0 0 auto;
 }
 /* The aperture ring drifts open once on arrival — a single quiet gesture, not
    an animation the eye has to keep tracking. */
@@ -824,12 +841,13 @@ body.chat-open main { padding-right: 400px; }
   }
 }
 
+/* --t-lead, not --t-d1. This is a label beside a 30px mark now, not a hero. */
 .home-title {
-  font-size: var(--t-d1);
+  font-size: var(--t-lead);
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1;
-  margin: 0 0 var(--space-3);
+  margin: 0;
 }
 .home-title span { color: var(--ink-muted); font-weight: 400; }
 
@@ -952,9 +970,12 @@ body.chat-open main { padding-right: 400px; }
 .home-foot .dot-sep { display: flex; align-items: center; gap: var(--space-2); }
 
 @media (max-width: 640px) {
-  .home { padding: var(--space-7) var(--space-0) var(--space-9); }
-  .home-logo { width: 68px; height: 68px; }
-  .home-title { font-size: var(--t-d2); }
+  .home { padding: var(--space-3) var(--space-0) var(--space-9); }
+  /* The brand row is one 30px line at every width now, so the phone override
+     that shrank a 92px mark to 68px and a --t-d1 title to --t-d2 has nothing
+     left to shrink. Left as a no-op would have been worse than removed: it
+     was still setting a 68px mark, which is why the phone kept a hero long
+     after the desktop lost one. */
   .home-lede { font-size: var(--t-lead); }
 }
 
@@ -8249,6 +8270,185 @@ body.cp-open { overflow: hidden; }
 .hm-cell-sub { font-size: var(--t-caption); color: var(--ink-muted); }
 .hm-cell-sub.is-up, .hm-cell-sub.is-uptrend { color: var(--pos); }
 .hm-cell-sub.is-down, .hm-cell-sub.is-downtrend { color: var(--neg); }
+
+/* ------------------------------------------------ market command centre */
+
+/* The strip. A band, not a row of cards.
+   Scrolls horizontally rather than wrapping: eight cells do not fit a phone and
+   a strip that becomes three rows is no longer a strip. The order puts the
+   indices first so those are what is on screen before anyone scrolls.
+   `scrollbar-width: none` because the band is short enough that a visible bar
+   doubles its height on the platforms that reserve space for one. */
+.ms-strip {
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0 0 var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--raised);
+}
+.ms-strip::-webkit-scrollbar { display: none; }
+
+/* The right edge fades, because the strip scrolls and nothing else says so.
+   Eight cells need ~1050px and the scrollbar is hidden, so at any narrower
+   width the last cell is simply cut off with a hard edge that reads as a
+   layout bug rather than as more content. A mask is the cheapest honest
+   affordance: no extra element, no scroll listener, and it costs nothing when
+   the strip does fit because the cut edge is then the container edge anyway.
+
+   Guarded on `mask-image` support so browsers without it get the plain
+   overflow rather than an invisible strip.
+
+   The `#000` is not a colour and is not a missing token: a mask reads only the
+   alpha channel, so this says "fully opaque here, transparent there". A theme
+   token would be wrong, because the strip must fade the same way in both
+   themes. It is the one place in this file where a literal is the correct
+   thing. */
+@supports (mask-image: linear-gradient(#000, #000)) or
+          (-webkit-mask-image: linear-gradient(#000, #000)) {
+  .ms-strip {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+}
+
+.ms-cell {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  align-items: baseline;
+  gap: 0 var(--space-1);
+  flex: 0 0 auto;
+  min-width: 132px;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-ui) var(--ease-ui);
+}
+.ms-cell:last-child { border-right: 0; }
+.ms-cell:hover { background: var(--surface); }
+
+.ms-label {
+  grid-column: 1 / -1;
+  font-size: var(--t-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+}
+/* Tabular figures so the strip does not jitter as quotes update, and so the
+   values line up against each other when scanned. */
+.ms-last {
+  font: 600 var(--t-base)/1.2 var(--sans);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.ms-chg { font-size: var(--t-caption); font-variant-numeric: tabular-nums; }
+.ms-word {
+  grid-column: 1 / -1;
+  font-size: var(--t-micro);
+  color: var(--ink-muted);
+}
+
+/* What matters now. The first substantial block on the page, and the one the
+   whole redesign exists to put here, so its heading carries a little more
+   weight than the blocks below it. Do not make secondary information visually
+   louder than the primary information. */
+.cc-now .hm-h { font-size: var(--t-lead); }
+
+.cc-headline {
+  margin: 0 0 var(--space-3);
+  font: 500 var(--t-lead)/1.35 var(--sans);
+  color: var(--ink);
+  max-width: 60ch;
+}
+
+.cc-moves { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-0); }
+
+/* Three columns so the percentages form a column of their own: the whole point
+   of ranking these is that they are compared against each other. */
+.cc-move {
+  display: grid;
+  grid-template-columns: minmax(0, 12ch) auto auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-1) var(--space-1);
+  border: 0;
+  border-radius: var(--r-xs);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-ui) var(--ease-ui);
+}
+.cc-move:hover { background: var(--raised); }
+.cc-move-name { font-weight: 600; color: var(--ink); }
+.cc-move-chg { font-variant-numeric: tabular-nums; }
+/* The multiple, in the same muted register as the note: it explains the
+   ordering rather than being a headline number of its own. */
+.cc-move-rel {
+  font-size: var(--t-caption);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-muted);
+}
+.cc-move-note {
+  font-size: var(--t-caption);
+  color: var(--ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The line that says what a block did and did not measure. Same register as
+   .pl-method and .hm-none, which is deliberate: every panel here carries one. */
+.cc-method {
+  margin: var(--space-2) 0 0;
+  font-size: var(--t-micro);
+  line-height: 1.5;
+  color: var(--ink-muted);
+  max-width: 72ch;
+}
+
+/* Market questions. Text buttons, not cards: five cards would out-shout the
+   market data above them, which is the wrong priority for this page. */
+.cc-qs { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-0); }
+.cc-q {
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink-2);
+  font: 400 var(--t-small)/1.4 var(--sans);
+  text-align: left;
+  cursor: pointer;
+  transition: color var(--dur-ui) var(--ease-ui),
+              border-color var(--dur-ui) var(--ease-ui);
+}
+.cc-q:hover { color: var(--ink); border-color: var(--ink-muted); }
+
+.cc-movers-t { width: 100%; }
+/* Paint-level only, per the design system: animating a layout property forces a
+   full-document reflow per frame. */
+.cc-mover {
+  cursor: pointer;
+  transition: background var(--dur-ui) var(--ease-ui);
+}
+.cc-mover:hover { background: var(--raised); }
+
+/* Phone: the strip keeps its own scroll, but the move rows drop the note so the
+   name and the number stay on one line rather than truncating both. */
+/* Phone: keep the name, the change and the multiple. The note is the first
+   thing to go, because the multiple is what justifies the row's position and
+   the note only names the asset class. */
+@media (max-width: 559px) {
+  .cc-move { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .cc-move-note { display: none; }
+}
 
 .hm-block { padding-bottom: var(--space-5); margin-bottom: var(--space-5); }
 .hm-block + .hm-block { border-top: 1px solid var(--border); padding-top: var(--space-5); }

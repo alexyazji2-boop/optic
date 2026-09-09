@@ -11,7 +11,7 @@ Live at https://theopticterminal.com (Railway, auto-deploys from `main`).
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Tests: `.venv/bin/python -m pytest -q`. There are 1183 and they all pass; keep it that way.
+Tests: `.venv/bin/python -m pytest -q`. There are 1208 and they all pass; keep it that way.
 
 A development account: `.venv/bin/python -m app.seed`. It prints a generated password
 once and refuses to run when a hosting platform is in the environment.
@@ -173,6 +173,29 @@ let a displaced average squat on a colour a later average was keeping.
 `STATE.ticker`. The Charting tab has `wsIndicators`, keyed on
 `STATE.chartSymbol`, because drawing the former on the latter puts one company's
 bands over another company's candles and labels them correctly.
+
+**The homepage is a market command centre and the strip is its first element.**
+`#cc-strip` sits above the brand and the search and is filled separately from
+`#hm-market`, so it does not wait behind the watchlist and the movers scan.
+Everything on it comes from `/api/home`, which already carried nineteen macro
+instruments grouped by asset class. The brand is one 30px row because the page
+header already says OPTIC TERMINAL; the display-size wordmark and the three-line
+lede were about 340px of branding above the fold and the lede now heads the tour
+at the foot.
+
+**Rank a cross-asset list by the move against each instrument's own range, not
+by raw percent.** `atr_pct` is on every instrument in that payload. Raw percent
+ranks by which instrument is inherently jumpiest: it led with VVIX +6.4% and Nat
+Gas -3.9% while the Russell was down 1.3% in fourth, and VVIX moves 4.9% on an
+average day against the Russell's 1.1%. The multiple is displayed, because
+without it the order looks like a plain sort by the bigger number.
+
+**There is no same-day movers leaderboard in this app, and the copy says so.**
+The scanners rank on twenty- and sixty-day rate of change over a universe a
+background job builds across ~3000 symbols, and `available: false` is a normal
+cold-start state rather than an error. The block is headed "Moved most this
+month" for that reason. Ranking today's movers would need a same-day quote for
+the whole universe, which no feed here carries.
 
 **Error copy that names the deployment goes stale when the deployment moves.**
 Three places told the reader "this address is a temporary tunnel and changes
