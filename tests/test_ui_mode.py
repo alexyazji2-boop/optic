@@ -138,20 +138,28 @@ def test_there_is_no_note_when_nothing_was_hidden():
     assert "if (!hidden) return;" in body
 
 
-def test_switching_back_unhides_everything():
+def test_every_panel_is_asked_in_both_modes():
+    """An earlier version returned early in Pro and only unhid what it had
+    hidden, which was right while the preset was the only input. With the
+    reader's own choices in play a panel can be hidden in Pro too, so there is
+    no mode in which the pass can be skipped."""
     body = APP_JS.split("function applyUiMode(", 1)[1].split("\nfunction ", 1)[0]
-    assert "p.hidden = false" in body
-    assert "classList.remove('is-advanced')" in body
+    assert "panelIsHidden(view, title)" in body
+    assert "if (!simple) {" not in body, "Pro still short-circuits the pass"
 
 
-def test_both_the_attribute_and_the_class_are_set():
+def test_both_the_attribute_and_the_class_track_the_decision():
     """An author `display` beats the UA stylesheet's [hidden] { display: none }
     whatever the specificity — CLAUDE.md, after .set-pw rendered a password form
     open on every visit to Settings. The class carries the display and the
-    attribute carries the semantics."""
+    attribute carries the semantics.
+
+    Asserted as the toggle rather than as `add(...)` and `= true`: one
+    expression that sets both directions cannot leave a panel hidden after the
+    reason for hiding it has gone, which two separate branches can."""
     body = APP_JS.split("function applyUiMode(", 1)[1].split("\nfunction ", 1)[0]
-    assert "classList.add('is-advanced')" in body
-    assert "panel.hidden = true" in body
+    assert "classList.toggle('is-advanced', hide)" in body
+    assert "panel.hidden = hide" in body
 
 
 # --------------------------------------------------- panels that arrive later

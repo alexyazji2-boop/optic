@@ -20026,6 +20026,32 @@ document.addEventListener('click', (evt) => {
 document.addEventListener('change', (evt) => {
   const t = evt.target;
   if (!t || !t.dataset) return;
+
+  /* The panel chooser.
+   *
+   * Applied straight to the page rather than on closing the dialog: the whole
+   * point is seeing the tab change as you tick. applyUiMode is idempotent and
+   * reads the store, so this needs no diffing. The dialog is left open and
+   * repainted so its own "N of M shown" count keeps up. */
+  if (t.dataset.panelShow !== undefined) {
+    setPanelHidden(t.dataset.panelShow, !t.checked);
+    applyUiMode(STATE.view);
+    /* Update the count, not the dialog.
+     *
+     * Rebuilding it replaced the checkbox the reader had just clicked: focus
+     * went to the body, so a keyboard reader lost their place after every tick,
+     * and two quick clicks in a row landed the second on a detached node and
+     * did nothing. Same lesson as the watchlist search repainting only the
+     * feed. */
+    const count = document.querySelector('.pch-foot .subnote');
+    if (count) {
+      const boxes = [...document.querySelectorAll('[data-panel-show]')];
+      count.textContent = `${boxes.filter((b) => b.checked).length} of ${
+        boxes.length} shown`;
+    }
+    return;
+  }
+
   const spec = screenerSpec();
 
   if (t.dataset.scField !== undefined) {
@@ -22785,7 +22811,23 @@ document.addEventListener('click', (evt) => {
   // this same listener a dozen lines up, and a duplicate const is a parse error
   // that takes the whole file down rather than just this branch.
   const detailBtn = evt.target.closest('[data-set-mode]');
-  if (detailBtn) { setUiMode(detailBtn.dataset.setMode); return; }
+  if (detailBtn) { closePanelChooser(); setUiMode(detailBtn.dataset.setMode); return; }
+  if (evt.target.closest('[data-panels-open]')) { openPanelChooser(STATE.view); return; }
+  if (evt.target.closest('[data-panels-close]')) { closePanelChooser(); return; }
+  // Only a click on the backdrop itself, not one that bubbled up from the
+  // dialog sitting on top of it.
+  if (evt.target.matches && evt.target.matches('[data-panels-backdrop]')) {
+    closePanelChooser();
+    return;
+  }
+  const reset = evt.target.closest('[data-panels-reset]');
+  if (reset) {
+    const view = reset.dataset.panelsReset;
+    clearHiddenPanels(view);
+    closePanelChooser();
+    loadView(view, false);
+    return;
+  }
   const themeBtn = evt.target.closest('[data-set-theme]');
   if (themeBtn) {
     SETTINGS.theme = themeBtn.dataset.setTheme;
@@ -23279,6 +23321,53 @@ function setUiMode(mode) {
   else loadView(STATE.view, false);
 }
 
+/* ---- the reader's own layout -----------------------------------------------
+ *
+ * Simple and Pro are two presets. This is the third case: the reader who wants
+ * eight of the nine options panels, or who never looks at Seasonality.
+ *
+ * Deliberately the same shape as the collapse memory a few lines up, which has
+ * always worked this way: a preset decides the initial value and an explicit
+ * choice overrides it. So there is one question per panel — visible or not —
+ * rather than two overlapping states to reason about, and "reset" means
+ * forgetting the choices rather than computing an inverse.
+ *
+ * Keyed with panelId, the same id the collapse memory uses, so the two cannot
+ * disagree about which panel they are describing.
+ */
+const PANEL_HIDDEN_KEY = 'optic.panels.hidden.v1';
+
+function hiddenPanels() {
+  try { return JSON.parse(localStorage.getItem(PANEL_HIDDEN_KEY) || '{}') || {}; }
+  catch (e) { return {}; }
+}
+
+function setPanelHidden(id, hide) {
+  try {
+    const all = hiddenPanels();
+    // Deleted rather than set to false, so "no opinion" and "explicitly shown"
+    // stay distinguishable: the first follows the mode, the second does not.
+    if (hide) all[id] = true; else delete all[id];
+    localStorage.setItem(PANEL_HIDDEN_KEY, JSON.stringify(all));
+  } catch (e) { /* private mode: it works, it just forgets */ }
+}
+
+function clearHiddenPanels(view) {
+  try {
+    const all = hiddenPanels();
+    Object.keys(all).forEach((k) => { if (k.startsWith(view + '|')) delete all[k]; });
+    localStorage.setItem(PANEL_HIDDEN_KEY, JSON.stringify(all));
+  } catch (e) { /* private mode */ }
+}
+
+/** Whether this panel should be on the page: the reader's choice, else the mode. */
+function panelIsHidden(view, title) {
+  const chosen = hiddenPanels();
+  const id = panelId(view, title);
+  if (Object.prototype.hasOwnProperty.call(chosen, id)) return !!chosen[id];
+  return uiMode() === 'simple' && isAdvancedPanel(view, title);
+}
+
 /* Panels Simple mode leaves out, by heading substring, per view.
  *
  * Measured against the live DOM rather than guessed from the source: the
@@ -23330,38 +23419,129 @@ function applyUiMode(view) {
   const simple = uiMode() === 'simple';
   document.body.classList.toggle('mode-simple', simple);
   host.querySelectorAll('[data-mode-note]').forEach((n) => n.remove());
-  if (!simple) {
-    host.querySelectorAll('.panel.is-advanced').forEach((p) => {
-      p.classList.remove('is-advanced');
-      p.hidden = false;
-    });
-    return;
-  }
 
+  /* Every panel is asked, in both modes.
+   *
+   * An earlier version returned early in Pro and only unhid what it had hidden,
+   * which was right while the preset was the only input. With the reader's own
+   * choices in play a panel can be hidden in Pro too, so there is no mode in
+   * which this can skip the pass. */
   let hidden = 0;
+  let byMode = 0;
   host.querySelectorAll('.panel').forEach((panel) => {
     const head = panel.querySelector(':scope > h2');
     if (!head) return;
-    if (!isAdvancedPanel(view, head.textContent || '')) return;
-    panel.classList.add('is-advanced');
+    const title = (head.textContent || '');
+    const hide = panelIsHidden(view, title);
+    panel.classList.toggle('is-advanced', hide);
     /* `hidden` as well as the class, because an author `display` beats the UA
      * stylesheet's [hidden] rule whatever the specificity — CLAUDE.md, after
      * .set-pw rendered a password form open on every visit to Settings. The
      * class carries the display:none and the attribute carries the semantics. */
-    panel.hidden = true;
+    panel.hidden = hide;
+    if (!hide) return;
     hidden += 1;
+    if (simple && isAdvancedPanel(view, title)) byMode += 1;
   });
   if (!hidden) return;
+
+  // Names which of the two hid them, because the remedies are different: one is
+  // a mode switch and the other is a choice this reader made.
+  const mine = hidden - byMode;
+  const why = byMode && mine
+    ? `${byMode} by Simple mode and ${mine} by you`
+    : byMode ? `${byMode} ${advancedNoun(view)} panel${byMode === 1 ? '' : 's'}`
+      : `${mine} you chose to hide`;
 
   const note = document.createElement('div');
   note.className = 'panel mode-note';
   note.setAttribute('data-mode-note', '1');
-  note.innerHTML = `<p class="sub"><strong>Simple mode.</strong> ${hidden}
-    ${esc(advancedNoun(view))} panel${hidden === 1 ? '' : 's'} on this tab
-    ${hidden === 1 ? 'is' : 'are'} hidden.
-    <button type="button" class="auth-link" data-set-mode="pro">Show everything</button></p>`;
+  note.innerHTML = `<p class="sub"><strong>${hidden} panel${
+    hidden === 1 ? '' : 's'} hidden</strong> on this tab: ${esc(why)}.
+    <button type="button" class="auth-link" data-panels-open>Choose panels</button>${
+  byMode ? ` \u00b7 <button type="button" class="auth-link" data-set-mode="pro"
+      >Show everything</button>` : ''}</p>`;
   host.appendChild(note);
 }
+
+/* The chooser.
+ *
+ * One dialog per view rather than a control on each of twenty-two headings: the
+ * headings already carry a collapse toggle and an Ask-Pulse button, and a third
+ * would make the thing you click to read a panel the smallest target on it.
+ */
+function panelChooserHTML(view) {
+  const host = views[view];
+  if (!host) return '';
+  const rows = [...host.querySelectorAll('.panel')].map((panel) => {
+    const head = panel.querySelector(':scope > h2');
+    if (!head || panel.classList.contains('mode-note')) return null;
+    const clone = head.cloneNode(true);
+    clone.querySelectorAll('button, .th-plain, .lvl-count, .chip').forEach((n) => n.remove());
+    const title = (clone.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!title) return null;
+    const raw = (head.textContent || '');
+    return { title, id: panelId(view, raw), hidden: panelIsHidden(view, raw),
+             advanced: isAdvancedPanel(view, raw) };
+  }).filter(Boolean);
+  if (!rows.length) return '';
+
+  /* The backdrop closes it; the dialog does not.
+   *
+   * The first version put `onclick="event.stopPropagation()"` on the dialog to
+   * stop clicks inside it reaching the backdrop's own data-panels-close. That
+   * also stopped them reaching `document`, which is where every delegated
+   * handler in this file lives — so Reset and the × took the click and did
+   * nothing, while the checkboxes carried on working because they fire `change`
+   * rather than bubbling a click. A dead control from a name that no tool
+   * reports, again.
+   *
+   * The backdrop is identified by target instead, in the handler. */
+  return `<div class="pch-back" data-panels-backdrop>
+    <div class="pch" role="dialog" aria-label="Choose which panels to show" data-pch>
+      <div class="pch-head">
+        <h3>Panels on this tab</h3>
+        <button type="button" class="pch-x" data-panels-close
+          aria-label="Close">\u00d7</button>
+      </div>
+      <p class="sub">Unticking one hides it on this tab only, on this device, and
+        it stays hidden whichever detail mode you are in. Nothing that says what a
+        panel cannot tell you is ever hidden with it.</p>
+      <ul class="pch-list">
+        ${rows.map((r) => `<li>
+          <label>
+            <input type="checkbox" data-panel-show="${esc(r.id)}"${
+    r.hidden ? '' : ' checked'}>
+            <span>${esc(r.title)}</span>
+          </label>
+          ${r.advanced ? '<span class="pch-tag">specialist</span>' : ''}
+        </li>`).join('')}
+      </ul>
+      <div class="pch-foot">
+        <span class="subnote">${rows.filter((r) => !r.hidden).length} of ${
+  rows.length} shown</span>
+        <button type="button" class="btn" data-panels-reset="${esc(view)}"
+          >Reset to ${uiMode() === 'simple' ? 'Simple' : 'Pro'}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function openPanelChooser(view) {
+  closePanelChooser();
+  const holder = document.createElement('div');
+  holder.innerHTML = panelChooserHTML(view);
+  const node = holder.firstElementChild;
+  if (node) document.body.appendChild(node);
+}
+
+function closePanelChooser() {
+  document.querySelectorAll('.pch-back').forEach((n) => n.remove());
+}
+
+document.addEventListener('keydown', (evt) => {
+  if (evt.key === 'Escape' && document.querySelector('.pch-back')) closePanelChooser();
+});
 
 /* Panels that arrive after the render pass.
  *
@@ -23487,7 +23667,8 @@ function addBulkControl(view) {
   const bar = document.createElement('div');
   bar.className = 'panel-bulk span-all';
   bar.innerHTML = `<button type="button" class="bulk-btn" data-bulk="open">Expand all</button>
-    <button type="button" class="bulk-btn" data-bulk="close">Collapse all</button>`;
+    <button type="button" class="bulk-btn" data-bulk="close">Collapse all</button>
+    <button type="button" class="bulk-btn" data-panels-open>Panels</button>`;
   bar.addEventListener('click', (evt) => {
     const b = evt.target.closest('[data-bulk]');
     if (b) setAllPanels(view, b.dataset.bulk === 'open');
@@ -23563,7 +23744,8 @@ function buildSectionIndex(view) {
   const bulk = document.createElement('div');
   bulk.className = 'sec-bulk';
   bulk.innerHTML = `<button type="button" class="sec-bulk-btn" data-bulk="open">Expand all</button>
-    <button type="button" class="sec-bulk-btn" data-bulk="close">Collapse all</button>`;
+    <button type="button" class="sec-bulk-btn" data-bulk="close">Collapse all</button>
+    <button type="button" class="sec-bulk-btn" data-panels-open>Panels</button>`;
   nav.appendChild(bulk);
 
   host.insertBefore(nav, afterOpticLoop(host));
