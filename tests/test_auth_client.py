@@ -591,4 +591,9 @@ def test_the_sector_caveat_cannot_become_the_default_action():
     assert "const caveat = sector" in block
     assert "detail: caveat + String(s.looks_for" in block
     # Exactly one row may claim the enter hint.
-    assert "if (r.group === 'Ask Optic') r.tag = ''" in block
+    # Matched through the constant, not the literal. The group name is both a
+    # label and a comparison key, so it lives in ASK_GROUP: renaming the label
+    # alone would leave this branch reading a name nothing produces, and two
+    # rows would both claim the return key without anything throwing.
+    assert "if (r.group === ASK_GROUP) r.tag = ''" in block
+    assert "const ASK_GROUP = 'Ask Pulse';" in APP_JS

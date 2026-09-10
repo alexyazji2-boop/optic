@@ -4738,7 +4738,7 @@ function marketQuestions(data) {
 
   return `<section class="hm-block">
     <div class="hm-block-head">
-      <h2 class="hm-h">Ask Optic</h2>
+      <h2 class="hm-h">Ask Pulse</h2>
     </div>
     <ul class="cc-qs">${qs.slice(0, 5).map((q) => `<li>
       <button type="button" class="cc-q" data-ask-text="${esc(q)}">${esc(q)}</button>
@@ -4836,7 +4836,7 @@ function homeAlerts(data) {
  * door before they could start. This is one door.
  *
  * Routing is deliberately not clever. It runs three cheap tests and always
- * offers Ask Optic as a fallback, so nothing typed here is ever a dead end —
+ * offers Ask Pulse as a fallback, so nothing typed here is ever a dead end —
  * the failure mode of a smart parser is silently doing the wrong thing, and the
  * failure mode of this one is offering two options when it only needed one.
  */
@@ -4850,6 +4850,21 @@ let paletteSeq = 0;          // guards against a slow search overwriting a fast 
 /* Places the palette can send you, with the words someone would actually type.
  * Keyed off the same view ids switchView already understands, so this cannot
  * offer a destination that does not exist. */
+/* The assistant's name is Pulse, everywhere.
+ *
+ * Three places said "Ask Pulse" — the home panel's heading, a command-bar quick
+ * action, and the command bar's own group label — while the button on every
+ * panel said "Ask Pulse" and the assistant introduces itself as Pulse. Optic is
+ * the terminal; Pulse is the thing you ask.
+ *
+ * A constant because the group name is also compared against: the row that
+ * drops its `enter` badge when a screen outranks it is matched by group, so
+ * renaming the label alone would have left that branch reading a name nothing
+ * produces. It would not have thrown — two rows would simply both claim the
+ * return key, which is CLAUDE.md's own warning about a parameter compared as a
+ * string. */
+const ASK_GROUP = 'Ask Pulse';
+
 const PALETTE_PLACES = [
   { view: 'home', label: 'Home', terms: 'home start' },
   { view: 'brief', label: "Optic's Read", terms: 'read brief daily market news morning' },
@@ -4933,7 +4948,7 @@ const QUICK_ACTIONS = [
     run: () => switchView('compare') },
   { label: 'Charting', detail: 'Drawings, studies and intraday',
     run: () => switchView('chart') },
-  { label: 'Ask Optic', detail: 'Put a question to the assistant',
+  { label: 'Ask Pulse', detail: 'Put a question to the assistant',
     run: () => openPulseWithText('') },
 ];
 
@@ -4959,7 +4974,7 @@ function looksLikeQuestion(text) {
 /* ================================================== SCREENING FROM THE BOX ===
  *
  * "find semiconductor stocks with strong momentum" typed into the command
- * palette used to route to Ask Optic, which answered in prose. A screening
+ * palette used to route to Ask Pulse, which answered in prose. A screening
  * request deserves a screen.
  *
  * **What this does and, more importantly, does not do.** It matches the request
@@ -5001,7 +5016,7 @@ const SCREEN_NOUNS = /\b(stocks?|names?|tickers?|companies|equities|etfs?|setups
  * Both a verb and a noun, deliberately. "find" alone matches "find me the NVDA
  * earnings date", and "stocks" alone matches "why are stocks down" — which is a
  * question about the market, not a request for a list. Requiring both keeps
- * this off questions that Ask Optic answers better. */
+ * this off questions that Ask Pulse answers better. */
 function looksLikeScreen(text) {
   const t = String(text || '').trim();
   if (t.length < 8) return false;
@@ -5125,7 +5140,7 @@ function paletteGroupsHTML(rows) {
  *
  * Order is the whole design: the most likely intention first, so Enter without
  * reading does the right thing. A bare ticker opens the symbol; a sentence asks
- * Optic; a page name goes there. Ask Optic is appended last for anything with
+ * Optic; a page name goes there. Ask Pulse is appended last for anything with
  * more than one word, which is what makes the field impossible to dead-end.
  */
 async function paletteBuild(query) {
@@ -5262,20 +5277,20 @@ async function paletteBuild(query) {
     });
   });
 
-  // Ask Optic. Last in the list but first in the ordering when the input reads
+  // Ask Pulse. Last in the list but first in the ordering when the input reads
   // as a question, which is handled by hoisting it below.
   if (isQuestion || (!isTicker && q.length > 2)) {
     const ask = {
-      group: 'Ask Optic', lead: '\u2727', label: q,
+      group: ASK_GROUP, lead: '\u2727', label: q,
       detail: STATE.ticker ? `With ${STATE.ticker} and everything else loaded in context`
-        : 'Optic answers from whatever is loaded',
+        : 'Pulse answers from whatever is loaded',
       tag: isQuestion ? 'enter' : '',
       run: () => { closePalette(); openPulseWithText(q); },
     };
     if (isQuestion) rows.unshift(ask); else rows.push(ask);
   }
 
-  /* Screens, hoisted above Ask Optic when the request is for a list of names.
+  /* Screens, hoisted above Ask Pulse when the request is for a list of names.
    *
    * A screening request answered in prose is the wrong shape of answer: what
    * was asked for is a list, and Optic has thirteen curated ones. See
@@ -5300,12 +5315,12 @@ async function paletteBuild(query) {
       ? `Does not filter by ${sector}: these run over the whole ranked universe. `
       : '';
 
-    /* Ask Optic loses its `enter` hint when a screen takes the top slot.
+    /* Ask Pulse loses its `enter` hint when a screen takes the top slot.
      *
      * Two rows showing "enter" is a UI claiming two default actions. The badge
      * is a hint about what the key does, and the key runs paletteIndex 0. */
     if (matched.length) {
-      rows.forEach((r) => { if (r.group === 'Ask Optic') r.tag = ''; });
+      rows.forEach((r) => { if (r.group === ASK_GROUP) r.tag = ''; });
     }
 
     // Reverse, so unshifting leaves the best match at the top.
@@ -5751,7 +5766,7 @@ function renderWhyMoving(d) {
   }
   return `<section class="pl-block span-all" aria-label="What is pulling hardest">
     ${/* `askPulse` was on the empty branch above and not on this one, so the
-        * Ask Optic button appeared only when there was nothing to ask about and
+        * Ask Pulse button appeared only when there was nothing to ask about and
         * vanished as soon as the panel had three factors to interrogate. The
         * topic counted as "used" in tests/test_auth_client.py because it is
         * referenced once, which is why that check did not catch it. */''}

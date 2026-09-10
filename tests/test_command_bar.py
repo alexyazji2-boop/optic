@@ -31,6 +31,26 @@ def _fn(name: str) -> str:
 # ----------------------------------------------------------------- recents
 
 
+def test_the_assistant_is_called_pulse_everywhere():
+    """Three places said "Ask Optic" — the home panel heading, a command-bar
+    quick action and the palette's group label — while the button on every panel
+    said "Ask Pulse" and the assistant introduces itself as Pulse. Optic is the
+    terminal; Pulse is the thing you ask."""
+    assert "Ask Optic" not in APP_JS
+    assert "const ASK_GROUP = 'Ask Pulse';" in APP_JS
+
+
+def test_the_group_name_is_one_constant():
+    """It is a label AND a comparison key. Two literals would let the label be
+    renamed while the branch that clears the duplicate `enter` badge kept
+    reading the old one — silently, since nothing throws."""
+    # The quick-action label spells it too, and that is fine: it is display only.
+    # What must be single is the value the comparison reads.
+    assert APP_JS.count("group: 'Ask Pulse'") == 0, "the group name is inlined"
+    assert "group: ASK_GROUP" in APP_JS
+    assert "r.group === ASK_GROUP" in APP_JS
+
+
 def test_a_symbol_is_recorded_wherever_it_is_opened():
     """One place, because every route into a symbol goes through loadTicker:
     the search box, the palette, a watchlist row, a mover row, a holding in the
