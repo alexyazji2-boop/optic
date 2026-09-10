@@ -227,10 +227,60 @@
     return err && (err.name === 'NotAllowedError' || err.name === 'AbortError');
   }
 
+  /* Has a passkey ever been created in this browser?
+   *
+   * The one fact that makes NotAllowedError interpretable. The spec collapses
+   * three different situations into that single error on purpose, so that the
+   * site cannot learn whether a credential exists: the person dismissed the
+   * dialog, it timed out, or there is no passkey for this site on this device.
+   *
+   * Silence is right for the first two and wrong for the third — pressing "Sign
+   * in with Face ID" having never made one did nothing at all and said nothing,
+   * which is a dead control. Reproduced against the live site: the ceremony
+   * rejects with NotAllowedError and the handler returns.
+   *
+   * So rather than guessing at intent from timing, this records the one thing
+   * actually known. Local to the browser, because that is the scope of the
+   * question; a false negative only costs an extra sentence of guidance. */
+  var MADE_KEY = 'optic.auth.passkeyMade';
+
+  function passkeyMadeHere() {
+    try { return localStorage.getItem(MADE_KEY) === '1'; } catch (e) { return false; }
+  }
+
+  function rememberPasskeyMade() {
+    try { localStorage.setItem(MADE_KEY, '1'); } catch (e) { /* private mode */ }
+  }
+
+  /* What to say when the ceremony ends with nothing.
+   *
+   * Returns null where silence is right. A red banner every time somebody
+   * presses Escape is the reason this was swallowed in the first place, so the
+   * guidance is only offered where it is the likely explanation, and it covers
+   * the dismissal case too rather than accusing the reader of not having a
+   * passkey. */
+  function passkeyNothingHappened(err) {
+    if (!err || err.name === 'AbortError') return null;
+    if (err.name !== 'NotAllowedError') return null;
+    if (passkeyMadeHere()) return null;
+    return 'No passkey was offered on this device. If you have not set one up '
+      + 'yet, sign in with your email and password once, then add ' + biometricName()
+      + ' from Settings.';
+  }
+
   function passkeyMessage(err) {
     if (!err) return 'That passkey attempt did not complete.';
     if (err.name === 'InvalidStateError') {
       return 'This device already has a passkey for Optic Terminal.';
+    }
+    if (err.name === 'OperationError'
+        || /already pending/i.test(err.message || '')) {
+      // Should now be unreachable from the button, which releases the autofill
+      // request first. Kept because a browser extension or a second tab can
+      // hold the slot, and "A request is already pending" alone tells a reader
+      // nothing they can act on.
+      return 'Another sign-in prompt is already open. Close it, or reload this '
+        + 'page, and try again.';
     }
     if (err.name === 'SecurityError') {
       // The RP id has to match the site's domain. Getting it wrong fails in the
@@ -279,6 +329,7 @@
       clientExtensionResults: credential.getClientExtensionResults
         ? credential.getClientExtensionResults() : {},
     };
+    rememberPasskeyMade();
     var saved = await api('/api/auth/passkeys/register/verify', {
       method: 'POST',
       body: { credential: response, name: name || '' },
@@ -363,6 +414,9 @@
   var mode = 'signin';
   var resetToken = '';
   var conditionalAbort = null;
+  // One explicit ceremony at a time. See stopConditionalPasskey for why a
+  // second overlapping request is not merely wasteful but fails outright.
+  var passkeyBusy = false;
 
   function providerAvailable(name) {
     var providers = STATE.providers || {};
@@ -553,7 +607,8 @@
 
   function close(silent) {
     if (!modal) return;
-    if (conditionalAbort) { conditionalAbort.abort(); conditionalAbort = null; }
+    stopConditionalPasskey();
+    passkeyBusy = false;
     document.removeEventListener('keydown', onModalKey, true);
     modal.parentNode.removeChild(modal);
     modal = null;
@@ -585,12 +640,37 @@
     var box = form.querySelector('[data-error]');
     if (!box) { toast(message, 'bad'); return; }
     box.textContent = message;
+    // A real error can follow a note with no clearError between them.
+    box.classList.remove('auth-note');
+    box.classList.add('auth-error');
+    box.hidden = false;
+  }
+
+  /* Guidance, in the same slot as an error but not dressed as one.
+   *
+   * Reuses the error box, because that is where a reader is already looking
+   * after pressing the button, and swaps it to the .auth-note styling this
+   * stylesheet already defines — quiet, bordered, no red. "You may not have a
+   * passkey yet" is an instruction, not a failure. */
+  function showNote(form, message) {
+    var box = form.querySelector('[data-error]');
+    if (!box) { toast(message); return; }
+    box.textContent = message;
+    box.classList.remove('auth-error');
+    box.classList.add('auth-note');
     box.hidden = false;
   }
 
   function clearError(form) {
     var box = form.querySelector('[data-error]');
-    if (box) { box.hidden = true; box.textContent = ''; }
+    // Restored to the error styling as well: left as a note, the next genuine
+    // failure renders quiet and reads as advice.
+    if (box) {
+      box.hidden = true;
+      box.textContent = '';
+      box.classList.remove('auth-note');
+      box.classList.add('auth-error');
+    }
   }
 
   function busy(form, on, label) {
@@ -657,11 +737,32 @@
     }
 
     if (target.closest('[data-passkey-signin]')) {
+      // A second press while the first dialog is open is another pending
+      // request and the same OperationError.
+      if (passkeyBusy) return;
+      passkeyBusy = true;
       var form = modal.querySelector('.auth-form');
-      signInWithPasskey().then(function (payload) {
+      if (form) clearError(form);
+      stopConditionalPasskey().then(function () {
+        return signInWithPasskey();
+      }).then(function (payload) {
+        passkeyBusy = false;
         finish(payload);
       }).catch(function (err) {
-        if (passkeyCancelled(err)) return;
+        passkeyBusy = false;
+        // Put the autofill shortcut back: the person may have dismissed the
+        // dialog and gone to type their email instead.
+        armConditionalPasskey();
+        if (passkeyCancelled(err)) {
+          /* An explicit press that produced nothing needs an explanation, where
+           * the autofill route stays silent: one is a question the reader asked
+           * out loud, the other is a shortcut that simply was not taken. */
+          var hint = passkeyNothingHappened(err);
+          if (hint) {
+            if (form) showNote(form, hint); else toast(hint);
+          }
+          return;
+        }
         if (form) showError(form, passkeyMessage(err));
         else toast(passkeyMessage(err), 'bad');
       });
@@ -753,6 +854,29 @@
       busy(form, false);
       showError(form, err.message);
     }
+  }
+
+  /* Release the WebAuthn slot before asking for it again.
+   *
+   * A browser allows exactly one navigator.credentials.get() at a time, and
+   * paint() arms a conditional-mediation request on every render of the sign-in
+   * modal. So pressing "Sign in with Face ID" started a second call while the
+   * autofill call was still outstanding, and the browser rejected it with
+   * `OperationError: A request is already pending.` — reproduced on the live
+   * site and on localhost. The button did nothing useful, every time, on a page
+   * where a passkey would otherwise have worked.
+   *
+   * The abort existed but only ran in close(), so the collision was guaranteed
+   * for anyone who pressed the button rather than using the autofill dropdown.
+   *
+   * Awaits a macrotask after aborting: abort() is synchronous but the browser
+   * releases the slot on its own turn, and retrying in the same tick fails the
+   * same way. */
+  function stopConditionalPasskey() {
+    if (!conditionalAbort) return Promise.resolve();
+    try { conditionalAbort.abort(); } catch (e) { /* already settled */ }
+    conditionalAbort = null;
+    return new Promise(function (done) { setTimeout(done, 0); });
   }
 
   /* Conditional mediation: the browser offers a saved passkey from inside the

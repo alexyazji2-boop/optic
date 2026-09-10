@@ -110,10 +110,17 @@ def test_the_passkey_ceremony_converts_every_binary_field():
 
 def test_a_cancelled_passkey_is_not_reported_as_an_error():
     """NotAllowedError is "pressed escape" and "timed out". Neither is a fault
-    and neither deserves a red banner."""
+    and neither deserves a red banner.
+
+    Asserted as the property rather than as one line: the sign-in handler now
+    branches inside that check to offer guidance where the likely explanation is
+    "there is no passkey on this device yet", which the bare early return
+    swallowed. What must stay true is that this path never reaches showError."""
     assert "err.name === 'NotAllowedError'" in AUTH_JS
-    assert "passkeyCancelled" in AUTH_JS
-    assert "if (passkeyCancelled(err)) return;" in AUTH_JS
+    assert "if (passkeyCancelled(err)) {" in AUTH_JS or \
+        "if (passkeyCancelled(err)) return;" in AUTH_JS
+    branch = AUTH_JS.split("if (passkeyCancelled(err)) {", 1)[1].split("return;", 1)[0]
+    assert "showError" not in branch, "a cancelled ceremony is showing a red error"
 
 
 def test_the_rp_id_failure_names_the_localhost_trap():

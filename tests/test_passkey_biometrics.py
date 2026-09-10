@@ -97,6 +97,91 @@ def test_the_upgrade_swaps_the_label_not_the_row():
     assert body.index("armConditionalPasskey()") < body.index("askPlatformAuthenticator()")
 
 
+# ------------------------------------------------ the button that did nothing
+
+def test_the_autofill_request_is_released_before_an_explicit_one():
+    """The bug behind "the Face ID sign in button is not working".
+
+    A browser allows exactly one navigator.credentials.get() at a time, and
+    paint() arms a conditional-mediation request on every render of the sign-in
+    modal. Pressing the button started a second call while the first was still
+    outstanding, so the browser rejected it — reproduced on the live site and on
+    localhost as `OperationError: A request is already pending.` The abort
+    existed but only ran in close(), so the collision was guaranteed for anyone
+    who pressed the button instead of using the autofill dropdown.
+    """
+    assert "function stopConditionalPasskey()" in AUTH_JS
+    block = AUTH_JS.split("closest('[data-passkey-signin]')", 1)[1].split("\n    }", 1)[0]
+    assert "stopConditionalPasskey().then(" in block
+    assert block.index("stopConditionalPasskey") < block.index("signInWithPasskey")
+
+
+def test_the_slot_is_released_on_its_own_turn():
+    """abort() is synchronous but the browser frees the slot on its own turn.
+    Retrying in the same tick fails the same way."""
+    body = _fn("stopConditionalPasskey")
+    assert "setTimeout(done, 0)" in body
+    assert "conditionalAbort = null" in body
+
+
+def test_a_second_press_cannot_collide_with_the_first():
+    """Another pending request, and the same OperationError."""
+    assert "var passkeyBusy = false;" in AUTH_JS
+    block = AUTH_JS.split("closest('[data-passkey-signin]')", 1)[1].split("\n    }", 1)[0]
+    assert "if (passkeyBusy) return;" in block
+    assert "passkeyBusy = true;" in block
+    # And it must be cleared on both outcomes, or the button locks up for good.
+    assert block.count("passkeyBusy = false;") >= 2
+
+
+def test_the_autofill_shortcut_comes_back_after_a_failed_press():
+    """Aborted and never re-armed, the dropdown is dead for the rest of the
+    modal's life — and dismissing the dialog to type an email is the most likely
+    thing to happen next."""
+    block = AUTH_JS.split("closest('[data-passkey-signin]')", 1)[1].split("\n    }", 1)[0]
+    assert "armConditionalPasskey();" in block
+
+
+def test_the_collision_still_has_a_message():
+    """Unreachable from the button now, but an extension or a second tab can
+    hold the slot, and "A request is already pending" alone tells a reader
+    nothing they can act on."""
+    body = _fn("passkeyMessage")
+    assert "OperationError" in body
+    assert "already pending" in body
+    assert "reload this" in body
+
+
+def test_an_empty_ceremony_is_explained_rather_than_swallowed():
+    """NotAllowedError covers dismissal, timeout, and "there is no passkey on
+    this device". Silence is right for the first two and a dead control for the
+    third, so the one recorded fact — has this browser ever made a passkey —
+    decides whether to explain."""
+    assert "function passkeyNothingHappened(" in AUTH_JS
+    body = _fn("passkeyNothingHappened")
+    assert "passkeyMadeHere()" in body
+    assert "err.name === 'AbortError'" in body, "the autofill teardown must stay silent"
+    assert "biometricName()" in body, "the guidance should name what to set up"
+
+
+def test_creating_a_passkey_records_that_it_happened():
+    assert "rememberPasskeyMade();" in AUTH_JS
+    body = _fn("createPasskey")
+    assert "rememberPasskeyMade()" in body
+
+
+def test_the_guidance_is_not_dressed_as_a_failure():
+    """It reuses the error slot, where the reader is already looking, in the
+    quiet .auth-note styling the stylesheet already defines."""
+    body = _fn("showNote")
+    assert "classList.remove('auth-error')" in body
+    assert "classList.add('auth-note')" in body
+    # And the styling is restored, or the next genuine error reads as advice.
+    for name in ("showError", "clearError"):
+        restored = _fn(name)
+        assert "classList.add('auth-error')" in restored, name
+
+
 # ------------------------------------------------------------- the wording
 
 def test_no_specific_sensor_is_claimed_alone():
