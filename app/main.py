@@ -38,6 +38,7 @@ from . import catalyst_live as catalyst_live_mod
 from .analytics import cases as cases_mod
 from .analytics import screen as screen_mod
 from .analytics import screener as screener_mod
+from .analytics import segments as segments_mod
 from . import insiders as insiders_mod
 from .analytics import regime as regime_mod
 from .analytics import relperf as relperf_mod
@@ -1912,6 +1913,19 @@ async def scanner_catalogue() -> Dict[str, Any]:
             "universe_size": (ranking or {}).get("universe_size"),
         }
     return await _run(build)
+
+
+@app.get("/api/segments/{ticker}")
+async def segments_panel(ticker: str,
+                         force: bool = Query(False)) -> Dict[str, Any]:
+    """Revenue and operating income by segment, product and geography.
+
+    Read from each filing's XBRL instance document, because SEC's companyfacts
+    API is consolidated only and carries no dimensions at all. Parsing is capped
+    per call and cached per accession, so a cold panel reports what it has not
+    read rather than holding the page. See app/analytics/segments.py.
+    """
+    return await _run(segments_mod.build, ticker, force)
 
 
 @app.get("/api/insiders/latest")

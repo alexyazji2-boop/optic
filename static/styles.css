@@ -10540,7 +10540,11 @@ body.auth-open { overflow: hidden; }
   gap: var(--space-2);
   padding: var(--space-3) 0 0;
   margin-bottom: var(--space-3);
-  background: var(--bg);
+  /* --plane, which is what header.topbar uses. This said var(--bg), which is
+     not a token this stylesheet defines and has no fallback, so it resolved to
+     nothing: the sticky header was transparent and the panels scrolled through
+     it. Visible for the whole time the workspace existed. */
+  background: var(--plane);
   border-bottom: 1px solid var(--border);
 }
 .sec-id {
@@ -10973,6 +10977,15 @@ body.auth-open { overflow: hidden; }
 }
 /* The placeholder is a sentence, not a symbol, so it must not be shouted. */
 .ins-find input::placeholder { text-transform: none; }
+
+/* Segment tables. Many narrow numeric columns, one wide label column, so the
+   label is left alone and everything else is tabular and tight. */
+.seg-table { font-variant-numeric: tabular-nums; }
+.seg-table th.num, .seg-table td.num { white-space: nowrap; }
+.seg-table td.name { white-space: nowrap; }
+/* A negative segment is normal, not an error: Reality Labs has lost money every
+   quarter it has been reported. It gets the directional red and nothing louder. */
+.seg-table td.num.neg { color: var(--neg); }
 
 /* Placed here, not up with the other phone overrides.
    `.hm-greet` is defined further down this file than that block was, and at

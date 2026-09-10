@@ -61,14 +61,24 @@ def test_the_nav_group_reuses_the_facet_list_rather_than_repeating_it():
     assert "{ id: 'security', label:" in APP_JS
 
 
-def test_the_tab_is_not_labelled_security():
-    """A security is the right domain term and it is still the internal name.
-    On a tab strip in a web app it reads as passwords and sign-in, which is the
-    wrong first thought and not one a label should provoke. Same lesson as
-    renaming Portfolio to Optic's Positions: the accurate word and the
-    unambiguous word were not the same word."""
+def test_the_tab_is_named_for_its_contents():
+    """Two rejected names got here. "Security" reads as passwords on a tab strip
+    in a web app. "Ticker" fixed that and introduced a different fault: a ticker
+    is a symbol, and this tab is Overview, Chart, Analysis, Earnings, Financials,
+    News and Long-Term — price and fundamentals and news about one traded thing.
+    A label naming the key rather than the contents is vague.
+
+    "Optic" is the house prefix for the terminal's own work: Optic Pulse,
+    Optic's Positions, Optic's Read, Optic's Perspective."""
     label = re.search(r"\{ id: 'security', label: '([^']+)'", APP_JS).group(1)
-    assert label == "Ticker", label
+    assert label == "Optic Dossier", label
+    assert "Optic" in label, "the house prefix marks the terminal's own work"
+
+
+def test_the_missing_symbol_copy_is_left_alone():
+    """"No ticker loaded" is about a missing symbol rather than about this tab,
+    and it matches every other view that needs one."""
+    assert "No ticker loaded" in APP_JS
 
 
 def test_no_user_facing_copy_in_the_workspace_says_security():
@@ -76,9 +86,11 @@ def test_no_user_facing_copy_in_the_workspace_says_security():
     loaded" where the rest of the app says "No ticker loaded", and the tab strip
     announced itself to a screen reader as "Security facets"."""
     for phrase in ("No security loaded", "Security facets", "Security overview",
-                   "The whole security on one page", "The rest of this security"):
+                   "The whole security on one page", "The rest of this security",
+                   "Ticker views", "Ticker overview"):
         assert phrase not in APP_JS, phrase
     assert "aria-label=\"Security overview\"" not in INDEX
+    assert "aria-label=\"Ticker overview\"" not in INDEX
 
 
 def test_every_new_view_reaches_a_loader():

@@ -4861,8 +4861,8 @@ const PALETTE_PLACES = [
   { view: 'watchlist', label: 'Watchlist', terms: 'watchlist watching follow list' },
   { view: 'alerts', label: 'Alerts', terms: 'alerts alarms notifications fired' },
   { view: 'compare', label: 'Compare', terms: 'compare versus vs side by side' },
-  { view: 'overview', label: 'Ticker overview',
-    terms: 'overview ticker security summary company snapshot' },
+  { view: 'overview', label: 'Dossier: Overview',
+    terms: 'overview dossier ticker security summary company snapshot' },
   { view: 'chart', label: 'Chart', terms: 'chart charting drawings indicators advanced' },
   { view: 'financials', label: 'Financials',
     terms: 'financials revenue margin cash ownership short interest statements' },
@@ -7424,7 +7424,7 @@ function securityHeader(view, opts = {}) {
       ${q.exchange ? `<span class="sec-meta">${esc(q.exchange)}${
     q.sector ? ` \u00b7 ${esc(q.sector)}` : ''}</span>` : ''}
     </div>`}
-    <nav class="sec-tabs" role="tablist" aria-label="Ticker views">${tabs}</nav>
+    <nav class="sec-tabs" role="tablist" aria-label="Dossier sections">${tabs}</nav>
   </header>`;
 }
 
@@ -7514,6 +7514,104 @@ function renderNewsView() {
   revealPanels(views.news);
 }
 
+/* ---- Segments and geography ------------------------------------------------
+ *
+ * The consolidated numbers were already on this facet. This is the breakout:
+ * revenue and operating income per business segment, per product, per region,
+ * quarter by quarter.
+ *
+ * Its own request, and lazily: an XBRL instance document is about a megabyte and
+ * the last nine filings are nine of them, so parsing is capped per call
+ * server-side and the panel fills in over successive visits. Binding it into
+ * /api/ticker would have made every ticker load wait on EDGAR.
+ */
+
+function segmentQuarterLabel(iso) {
+  if (!iso || iso.length < 10) return esc(iso || '');
+  const month = Number(iso.slice(5, 7));
+  // Calendar quarters from the period end. Not fiscal: a filer whose year ends
+  // in January would be mislabelled, and the date itself is in the title.
+  const q = month <= 3 ? 1 : month <= 6 ? 2 : month <= 9 ? 3 : 4;
+  return `<span title="${esc(iso)}">Q${q} '${esc(iso.slice(2, 4))}</span>`;
+}
+
+function segmentCell(v) {
+  if (v === null || v === undefined) return '<td class="num">\u2014</td>';
+  const sign = v < 0 ? ' neg' : '';
+  return `<td class="num${sign}">${esc(fmtCompact(v, 2))}</td>`;
+}
+
+function renderSegments() {
+  const d = STATE.segments;
+  if (!d) return `<div class="panel"><h2>${hg('Segments and geography')}</h2>
+    <p class="sub">Reading the filings\u2026</p></div>`;
+  if (!d.available) {
+    return `<div class="panel"><h2>${hg('Segments and geography')}</h2>
+      <div class="callout">${esc(d.reason || 'Not available.')}</div></div>`;
+  }
+  const qs = d.quarters || [];
+  const tables = d.tables || [];
+  return `<div class="panel">
+    <h2>${hg('Segments and geography')}</h2>
+    <p class="sub">Revenue and operating income as the company itself reported
+      them, broken out by the dimensions it tagged. Quarterly, newest on the
+      right.</p>
+    <p class="note" style="color:var(--ink-muted);margin:0 0 var(--space-3)">
+      ${fmt(d.filings_read, 0)} of ${fmt(d.filings_listed, 0)} filings read${
+  d.filings_unread ? `. ${fmt(d.filings_unread, 0)} more to go: each is a
+      megabyte of XBRL, so they are read a few per visit rather than all at once
+      \u2014 come back and the history lengthens` : ''}${
+  d.q4_derived ? `. ${fmt(d.q4_derived, 0)} fourth quarter${
+    d.q4_derived === 1 ? '' : 's'} derived from the annual figure` : ''}.</p>
+    ${tables.length ? tables.map((t) => `<h3>${hg(t.metric_label)} \u00b7 ${
+    esc(t.axis_label.replace(/^By /, ''))}</h3>
+      <div class="table-scroll"><table class="data seg-table">
+        <thead><tr><th>${esc(t.axis_label.replace(/^By /, '').replace(/^\w/,
+    (c) => c.toUpperCase()))}</th>${
+    qs.map((q) => `<th class="num">${segmentQuarterLabel(q)}</th>`).join('')}</tr></thead>
+        <tbody>${t.rows.map((r) => `<tr>
+          <td class="name">${esc(r.member)}</td>
+          ${r.values.map(segmentCell).join('')}
+        </tr>`).join('')}</tbody>
+      </table></div>`).join('')
+    : `<div class="callout">Nothing broken out yet${
+  d.filings_unread ? ' \u2014 the filings above are still being read' : ''}. A
+      company that reports as a single segment has nothing to break out, and a
+      breakdown given in prose rather than tagged in XBRL is not reachable.</div>`}
+    ${d.kpi_note ? `<div class="callout"><strong>No operating metrics.</strong>
+      ${esc(d.kpi_note)}</div>` : ''}
+    <div class="callout scan-blind"><strong>What this cannot see.</strong>
+      ${esc(d.blind_spot || '')}</div>
+    <p class="caveat">${esc(d.method || '')}</p>
+  </div>`;
+}
+
+async function loadSegments(force) {
+  const sym = STATE.ticker;
+  if (!sym) return;
+  if (STATE.segmentsFor === sym && !force) return;
+  STATE.segmentsFor = sym;
+  STATE.segments = null;
+  const paint = () => {
+    const host = document.getElementById('seg-host');
+    if (host && STATE.view === 'financials') {
+      host.innerHTML = renderSegments();
+      revealPanels(host);
+    }
+  };
+  paint();
+  try {
+    STATE.segments = await getJSON(`/api/segments/${encodeURIComponent(sym)}`
+      + (force ? '?force=true' : ''));
+  } catch (err) {
+    STATE.segments = { available: false, reason: err.message };
+  }
+  // The reader may have moved on, or loaded another symbol, while EDGAR was
+  // being read: nine megabytes is not a fast request.
+  if (STATE.segmentsFor !== STATE.ticker) return;
+  paint();
+}
+
 /* ---- Financials facet -----------------------------------------------------
  *
  * The company panel and the corporate-actions panel, both of which were buried
@@ -7529,8 +7627,12 @@ function renderFinancialsView(force) {
     : '<div class="panel"><h2>Financials</h2><div class="callout">No company data '
       + 'for this ticker. Funds, indices and most ADRs do not file statements.'
       + '</div></div>'}
-    <div id="fin-extras-host">${renderExtras(STATE.extras)}</div>`;
+    <div id="fin-extras-host">${renderExtras(STATE.extras)}</div>
+    <div id="seg-host">${renderSegments()}</div>`;
   revealPanels(views.financials);
+  // Its own request, started after the paint so the statements above are
+  // readable while EDGAR is being read.
+  loadSegments(force);
   // loadExtras mounts into #extras-host on the Swing tab; this facet has its
   // own host, so it re-renders here once the request settles.
   loadExtras(force).then(() => {
@@ -22267,17 +22369,23 @@ const NAV_GROUPS = [
    *
    * Compare is deliberately not in it. It is about two to four securities at
    * once, so a header naming one of them would be wrong. */
-  /* Labelled "Ticker", not "Security".
+  /* "Optic Dossier". Two rejected names got it here.
    *
-   * A security is the correct domain term for a tradable instrument, and it is
-   * still the internal name here and in securityHeader. But on a tab strip in a
-   * web app "Security" reads as passwords and sign-in, which is the wrong first
-   * thought and not one a label should provoke. "Ticker" is also the app's own
-   * vocabulary: #ticker-input, loadTicker, STATE.ticker, "No ticker loaded".
+   * "Security" is the correct domain term and is still the internal name of the
+   * group and of securityHeader, but on a tab strip in a web app it reads as
+   * passwords and sign-in. "Ticker" fixed that and introduced a different fault:
+   * a ticker is a symbol, and this tab is not a symbol — it is Overview, Chart,
+   * Analysis, Earnings, Financials, News and Long-Term, which is price and
+   * fundamentals and news about one traded thing. A label naming the key rather
+   * than the contents is vague, which is what a reader called it.
    *
-   * Same lesson as renaming Portfolio to Optic's Positions: the accurate word
-   * and the unambiguous word were not the same word. */
-  { id: 'security', label: 'Ticker', views: SECURITY_VIEWS },
+   * A dossier is everything gathered on one subject, which is exactly the seven.
+   * The "Optic" prefix is the house convention for the terminal's own work:
+   * Optic Pulse, Optic's Positions, Optic's Read, Optic's Perspective.
+   *
+   * "No ticker loaded" stays as it is. That sentence is about a missing symbol
+   * rather than about this tab, and it matches the rest of the app. */
+  { id: 'security', label: 'Optic Dossier', views: SECURITY_VIEWS },
   { id: 'analyse', label: 'Compare', views: ['compare'] },
   { id: 'market', label: 'Market', views: ['brief', 'market', 'indices'] },
   /* Explore is the index and Scan is the tool: one is a page you browse when
@@ -22316,7 +22424,7 @@ const SUB_LABELS = {
 };
 
 const SUB_TITLES = {
-  overview: 'Overview. Everything about one ticker, on one page',
+  overview: 'Overview. The whole dossier on one page',
   chart: 'Chart. Full-height chart, overlays and drawings',
   financials: 'Financials. Revenue, margins, cash, ownership and short interest',
   news: 'News. Headlines for this company, scored and tagged',
