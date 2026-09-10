@@ -10636,6 +10636,86 @@ body.auth-open { overflow: hidden; }
 .nw-sum { color: var(--ink-2); font-size: var(--t-small); margin-top: var(--space-1); }
 .nw-tags { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-2); }
 
+/* ------------------------------------------------------ named watchlists ---
+   Chips rather than a select: the count is small and bounded, and seeing that
+   you have several lists is most of the point of having them. */
+.wl-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+.wl-chips { display: flex; gap: var(--space-1); flex-wrap: wrap; }
+.wl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+.wl-chip:hover { color: var(--ink); border-color: var(--border-strong); }
+.wl-chip.on { color: var(--ink); border-color: var(--btn-primary); background: var(--surface); }
+.wl-chip.is-new { color: var(--ink-muted); border-style: dashed; }
+.wl-chip-n {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--t-micro);
+  color: var(--ink-muted);
+}
+.wl-bar-tools { display: flex; gap: var(--space-1); margin-left: auto; }
+.wl-tool {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink-muted);
+  font-size: var(--t-small);
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.wl-tool:hover:not(:disabled) { color: var(--ink); border-color: var(--border-strong); }
+.wl-tool:disabled { opacity: 0.4; cursor: default; }
+
+.wv-search { margin: var(--space-3) 0; display: flex; align-items: center; gap: var(--space-2); }
+.wv-search input {
+  flex: 1 1 260px;
+  max-width: 340px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: var(--t-small);
+}
+
+/* Reorder handles. Shown only under "My order" with nothing filtering, so a
+   move always lands where the reader can see it. */
+.wl-move { display: inline-flex; flex-direction: column; gap: 1px; margin-right: var(--space-2); }
+.wl-move-btn {
+  width: 18px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: none;
+  color: var(--ink-muted);
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.wl-move-btn:hover:not(:disabled) { color: var(--ink); border-color: var(--border-strong); }
+.wl-move-btn:disabled { opacity: 0.3; cursor: default; }
+
 /* Placed here, not up with the other phone overrides.
    `.hm-greet` is defined further down this file than that block was, and at
    equal specificity the later rule wins: the early copy of this media query

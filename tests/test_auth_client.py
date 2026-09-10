@@ -210,8 +210,11 @@ def test_the_stores_stay_synchronous():
     account's copy is loaded once into ACCOUNT and read from there."""
     assert "function watchList() {" in APP_JS
     assert "function savedResearch() {" in APP_JS
-    assert "async function watchList" not in APP_JS
-    assert "async function savedResearch" not in APP_JS
+    # The open paren matters. Named lists brought watchListSwitch, Create,
+    # Rename, Delete and Move, all legitimately async, and a prefix match called
+    # every one of them a violation of a rule about watchList() itself.
+    assert "async function watchList(" not in APP_JS
+    assert "async function savedResearch(" not in APP_JS
     assert "if (ACCOUNT.watchlist) return ACCOUNT.watchlist.slice();" in APP_JS
     assert "if (ACCOUNT.research) return ACCOUNT.research;" in APP_JS
 
@@ -544,7 +547,11 @@ def test_the_watchlist_filter_is_scoped_to_the_view_with_the_controls():
     six-row summary would look like the home page was broken."""
     block = APP_JS[APP_JS.index("function watchlistFeedHTML(opts)"):]
     block = block[:block.index("/* ====")]
-    assert "o.compact ? all : all.filter" in block
+    # The compact branch must be the unfiltered set. Asserted as the branch
+    # rather than as one literal expression, because the full branch also picks
+    # up the in-list search and this was matching the whole line.
+    assert re.search(r"o\.compact \? all : ", block), "the compact feed is being narrowed"
+    assert "all.filter((r) => spec.keep(r))" in block
     # And an empty result names the filter rather than looking like data loss.
     assert "matches" in block and "Show all" in block
 

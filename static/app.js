@@ -2958,14 +2958,52 @@ document.addEventListener('click', (evt) => {
  * room for. Same rows, same module, no second implementation — the home
  * version is this one with a limit and the remove buttons off.
  */
+/* The bar of named lists.
+ *
+ * Chips rather than a <select>, because the count is small and bounded and the
+ * point of lists is seeing at a glance that you have them. The rename, reorder
+ * and delete controls attach to the active chip only: seven sets of three
+ * buttons is a toolbar, one set is a control. */
+function watchListsBar() {
+  const lists = watchAllLists();
+  const activeId = watchActiveId();
+  const idx = lists.findIndex((l) => l.id === activeId);
+  return `<div class="wl-bar">
+    <div class="wl-chips" role="tablist" aria-label="Watchlists">
+      ${lists.map((l) => `<button type="button" role="tab"
+        class="wl-chip${l.id === activeId ? ' on' : ''}"
+        data-watch-list="${esc(l.id)}" aria-selected="${l.id === activeId}"
+        >${esc(l.name)}<span class="wl-chip-n">${(l.symbols || []).length}</span></button>`).join('')}
+      <button type="button" class="wl-chip is-new" data-watch-list-new
+        title="Create a list">+ New list</button>
+    </div>
+    ${lists.length ? `<div class="wl-bar-tools">
+      <button type="button" class="wl-tool" data-watch-list-move="-1"
+        ${idx <= 0 ? 'disabled' : ''} title="Move this list left"
+        aria-label="Move this list left">\u2190</button>
+      <button type="button" class="wl-tool" data-watch-list-move="1"
+        ${idx < 0 || idx >= lists.length - 1 ? 'disabled' : ''}
+        title="Move this list right" aria-label="Move this list right">\u2192</button>
+      <button type="button" class="wl-tool" data-watch-list-rename
+        title="Rename this list">Rename</button>
+      <button type="button" class="wl-tool" data-watch-list-del
+        ${lists.length <= 1 ? 'disabled' : ''}
+        title="${lists.length <= 1 ? 'This is your only list'
+    : 'Delete this list'}">Delete</button>
+    </div>` : ''}
+  </div>`;
+}
+
 function renderWatchlist() {
   const host = views.watchlist;
   const list = watchList();
+  const active = watchActiveList();
   host.innerHTML = `
   <section class="wv">
+    ${watchListsBar()}
     <div class="wv-head">
       <div>
-        <h2 class="hm-h">Watchlist</h2>
+        <h2 class="hm-h">${esc((active && active.name) || 'Watchlist')}</h2>
         ${/* The count lives in its own span so the feed repaint can update it.
             * Read once at render, it went stale the moment a row was removed —
             * "5 names" above four rows. */''}
@@ -2995,6 +3033,14 @@ function renderWatchlist() {
       ${WATCH_FILTERS.map((f) => `<button type="button"
         class="pill${watchFilter === f.id ? ' on' : ''}" data-watch-filter="${esc(f.id)}"
         aria-pressed="${watchFilter === f.id}">${esc(f.label)}</button>`).join('')}
+    </div>
+
+    <div class="wv-search">
+      <input id="wv-q" type="search" placeholder="Search this list"
+        aria-label="Search this list" value="${esc(watchQuery)}"
+        spellcheck="false" autocomplete="off" maxlength="24">
+      ${watchQuery ? `<button type="button" class="auth-link" data-watch-clear-q
+        >Clear</button>` : ''}
     </div>
 
     <div class="wv-cols" aria-hidden="true">
@@ -3538,7 +3584,63 @@ document.addEventListener('click', (evt) => {
   if (filterBtn) {
     watchFilter = filterBtn.dataset.watchFilter;
     renderWatchlist();
+    return;
   }
+
+  /* ---- named lists ---- */
+  const pick = evt.target.closest('[data-watch-list]');
+  if (pick) { watchListSwitch(pick.dataset.watchList); return; }
+
+  if (evt.target.closest('[data-watch-list-new]')) {
+    const name = window.prompt('Name the list');
+    if (name) watchListCreate(name);
+    return;
+  }
+  if (evt.target.closest('[data-watch-list-rename]')) {
+    const active = watchActiveList();
+    if (!active) return;
+    const name = window.prompt('Rename this list', active.name);
+    if (name) watchListRename(active.id, name);
+    return;
+  }
+  if (evt.target.closest('[data-watch-list-del]')) {
+    const active = watchActiveList();
+    if (!active) return;
+    /* Confirmed, because it is the one destructive control on this page and the
+     * symbols go with it. The row \u00d7 next to it is not confirmed: that removes
+     * one name and re-adding it is four keystrokes. */
+    if (window.confirm(`Delete \u201c${active.name}\u201d and its ${
+      (active.symbols || []).length} symbol(s)?`)) watchListDelete(active.id);
+    return;
+  }
+  const moveList = evt.target.closest('[data-watch-list-move]');
+  if (moveList) {
+    watchListMove(watchActiveId(), Number(moveList.dataset.watchListMove));
+    return;
+  }
+
+  /* ---- symbol order within the active list ---- */
+  const up = evt.target.closest('[data-watch-up]');
+  if (up) { watchSymbolMove(up.dataset.watchUp, -1); return; }
+  const down = evt.target.closest('[data-watch-down]');
+  if (down) { watchSymbolMove(down.dataset.watchDown, 1); return; }
+
+  if (evt.target.closest('[data-watch-clear-q]')) {
+    watchQuery = '';
+    renderWatchlist();
+  }
+});
+
+/* Search is an input event, not a click. Debounce-free: it filters rows already
+ * in memory, so there is nothing to rate-limit and a delay would only make
+ * typing feel laggy. The feed alone repaints, so the box keeps focus. */
+document.addEventListener('input', (evt) => {
+  if (!evt.target || evt.target.id !== 'wv-q') return;
+  watchQuery = evt.target.value || '';
+  const feed = document.getElementById('wv-feed');
+  if (feed) feed.innerHTML = watchlistFeedHTML({});
+  const shown = document.getElementById('wv-shown');
+  if (shown) shown.textContent = watchShownLabel();
 });
 
 document.addEventListener('submit', (evt) => {
@@ -3570,7 +3672,15 @@ const WATCH_DEFAULT = ['SPY', 'QQQ', 'NVDA', 'AMD'];
 function localWatchList() {
   try {
     const raw = JSON.parse(localStorage.getItem(WATCH_KEY) || 'null');
-    if (Array.isArray(raw) && raw.length) {
+    /* An empty array is an answer, not an absent one.
+     *
+     * This used to be `Array.isArray(raw) && raw.length`, so a stored [] fell
+     * through to the starter set. With one list that was invisible — you only
+     * reach [] by removing every symbol, and getting the defaults back looked
+     * like a reset. With named lists it was a real bug: creating a list stores
+     * [], and the new empty list came up holding SPY, QQQ, NVDA and AMD, which
+     * the next add then appended to. Measured, on the second list ever made. */
+    if (Array.isArray(raw)) {
       return raw.map((s) => String(s).toUpperCase()).filter(Boolean);
     }
   } catch (e) { /* private mode */ }
@@ -3591,7 +3701,241 @@ function watchList() {
 function watchSave(list) {
   const clean = [...new Set(list.map((s) => String(s).toUpperCase().trim()).filter(Boolean))];
   try { localStorage.setItem(WATCH_KEY, JSON.stringify(clean)); } catch (e) { /* private */ }
+  // The active list is the one WATCH_KEY holds, so a write to one is a write to
+  // the other. Keeping them in step here rather than at every call site is what
+  // lets watchAdd, watchRemove and the Charting dock stay untouched by lists.
+  localListsPutActive(clean);
   return clean;
+}
+
+/* ------------------------------------------------------------- named lists
+ *
+ * One watchlist was the whole model: WATCH_KEY held a flat array of symbols and
+ * every reader in the app went through watchList(). Lists are a layer *above*
+ * that, deliberately — WATCH_KEY still holds the active list, so the Charting
+ * dock widget (which reads the same key under its own name, WS_WATCH_KEY), the
+ * feed, the home page and the alert builder all keep working with no change at
+ * all. Only this file knows there is more than one.
+ *
+ * Signed in, the account is the store and these functions proxy to
+ * /api/watchlists. Signed out they are local, because the terminal is open to
+ * everyone and inventing an account to hold six ticker symbols is the thing
+ * this app has always refused to do.
+ */
+const WATCHLISTS_KEY = 'optic.watchlists.v1';
+const WATCHLIST_LIMIT = 12;
+
+function newListId() {
+  return 'wl' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+/** The local store, migrating the flat key on first read. */
+function localLists() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(WATCHLISTS_KEY) || 'null');
+    if (raw && Array.isArray(raw.lists) && raw.lists.length) {
+      const lists = raw.lists.map((l) => ({
+        id: String(l.id || newListId()),
+        name: String(l.name || 'Watchlist').slice(0, 60),
+        symbols: (Array.isArray(l.symbols) ? l.symbols : [])
+          .map((x) => String(x).toUpperCase()).filter(Boolean),
+      }));
+      const activeId = lists.some((l) => l.id === raw.activeId) ? raw.activeId : lists[0].id;
+      return { lists, activeId };
+    }
+  } catch (e) { /* private mode */ }
+  // First run, or a reader who has only ever had the single list. Their symbols
+  // become the first named list rather than being replaced by an empty one.
+  const id = newListId();
+  return { lists: [{ id, name: 'Watchlist', symbols: localWatchList() }], activeId: id };
+}
+
+function localListsSave(state) {
+  try {
+    localStorage.setItem(WATCHLISTS_KEY, JSON.stringify(state));
+  } catch (e) { /* private mode */ }
+  return state;
+}
+
+/** Mirror the active list's symbols into the flat key every other reader uses. */
+function localListsPutActive(symbols) {
+  const state = localLists();
+  const active = state.lists.find((l) => l.id === state.activeId);
+  if (!active) return;
+  active.symbols = symbols.slice();
+  localListsSave(state);
+}
+
+/** Every list, from whichever store is in charge. */
+function watchAllLists() {
+  if (signedIn() && Array.isArray(ACCOUNT.watchlists) && ACCOUNT.watchlists.length) {
+    return ACCOUNT.watchlists.map((w) => ({
+      id: w.id, name: w.name, symbols: (w.symbols || []).slice() }));
+  }
+  return localLists().lists;
+}
+
+function watchActiveId() {
+  if (signedIn() && Array.isArray(ACCOUNT.watchlists) && ACCOUNT.watchlists.length) {
+    return ACCOUNT.listId || ACCOUNT.watchlists[0].id;
+  }
+  return localLists().activeId;
+}
+
+function watchActiveList() {
+  const id = watchActiveId();
+  return watchAllLists().find((l) => l.id === id) || null;
+}
+
+/** Refresh the account copy after any mutation, keeping the active list valid. */
+function watchAdoptAccountLists(lists, preferId) {
+  ACCOUNT.watchlists = lists || [];
+  const wanted = ACCOUNT.watchlists.find((w) => w.id === preferId)
+    || ACCOUNT.watchlists.find((w) => w.id === ACCOUNT.listId)
+    || ACCOUNT.watchlists[0] || null;
+  ACCOUNT.listId = wanted ? wanted.id : null;
+  ACCOUNT.watchlist = wanted ? (wanted.symbols || []) : null;
+  if (wanted) watchSave(wanted.symbols || []);
+}
+
+async function watchListSwitch(id) {
+  if (signedIn() && Array.isArray(ACCOUNT.watchlists)) {
+    const found = ACCOUNT.watchlists.find((w) => w.id === id);
+    if (!found) return;
+    ACCOUNT.listId = found.id;
+    ACCOUNT.watchlist = found.symbols || [];
+    watchSave(found.symbols || []);
+  } else {
+    const state = localLists();
+    if (!state.lists.some((l) => l.id === id)) return;
+    state.activeId = id;
+    localListsSave(state);
+    const active = state.lists.find((l) => l.id === id);
+    try {
+      localStorage.setItem(WATCH_KEY, JSON.stringify(active.symbols));
+    } catch (e) { /* private mode */ }
+  }
+  STATE.watchlist = null;               // the feed is about a different set now
+  renderWatchlist();
+}
+
+async function watchListCreate(name) {
+  const clean = String(name || '').trim().slice(0, 60);
+  if (!clean) return;
+  const taken = watchAllLists().some((l) => l.name.toLowerCase() === clean.toLowerCase());
+  if (taken) { window.OpticAuth.toast('You already have a list with that name.', 'bad'); return; }
+  if (watchAllLists().length >= WATCHLIST_LIMIT) {
+    window.OpticAuth.toast('Twelve lists is the limit. Rename or delete one.', 'bad');
+    return;
+  }
+  if (signedIn()) {
+    try {
+      const made = await authApi('/api/watchlists', { method: 'POST', body: { name: clean } });
+      const all = await authApi('/api/watchlists');
+      watchAdoptAccountLists(all.watchlists, made.watchlist.id);
+    } catch (err) { window.OpticAuth.toast(err.message, 'bad'); return; }
+  } else {
+    const state = localLists();
+    const id = newListId();
+    state.lists.push({ id, name: clean, symbols: [] });
+    state.activeId = id;
+    localListsSave(state);
+    try { localStorage.setItem(WATCH_KEY, '[]'); } catch (e) { /* private mode */ }
+  }
+  STATE.watchlist = null;
+  renderWatchlist();
+}
+
+async function watchListRename(id, name) {
+  const clean = String(name || '').trim().slice(0, 60);
+  if (!clean) return;
+  if (watchAllLists().some((l) => l.id !== id
+      && l.name.toLowerCase() === clean.toLowerCase())) {
+    window.OpticAuth.toast('You already have a list with that name.', 'bad');
+    return;
+  }
+  if (signedIn()) {
+    try {
+      await authApi('/api/watchlists/' + id, { method: 'PATCH', body: { name: clean } });
+      const all = await authApi('/api/watchlists');
+      watchAdoptAccountLists(all.watchlists, id);
+    } catch (err) { window.OpticAuth.toast(err.message, 'bad'); return; }
+  } else {
+    const state = localLists();
+    const found = state.lists.find((l) => l.id === id);
+    if (!found) return;
+    found.name = clean;
+    localListsSave(state);
+  }
+  renderWatchlist();
+}
+
+async function watchListDelete(id) {
+  /* The last list is not deletable.
+   *
+   * Deleting it would leave the view with nothing to render and the next add
+   * with nowhere to go, and "empty the list" is what the row × already does. */
+  if (watchAllLists().length <= 1) {
+    window.OpticAuth.toast('This is your only list. Remove the symbols instead.', 'bad');
+    return;
+  }
+  if (signedIn()) {
+    try {
+      const left = await authApi('/api/watchlists/' + id, { method: 'DELETE' });
+      watchAdoptAccountLists(left.watchlists, null);
+    } catch (err) { window.OpticAuth.toast(err.message, 'bad'); return; }
+  } else {
+    const state = localLists();
+    state.lists = state.lists.filter((l) => l.id !== id);
+    if (state.activeId === id) state.activeId = state.lists[0].id;
+    localListsSave(state);
+    const active = state.lists.find((l) => l.id === state.activeId);
+    try {
+      localStorage.setItem(WATCH_KEY, JSON.stringify((active || {}).symbols || []));
+    } catch (e) { /* private mode */ }
+  }
+  STATE.watchlist = null;
+  renderWatchlist();
+}
+
+async function watchListMove(id, delta) {
+  const lists = watchAllLists();
+  const from = lists.findIndex((l) => l.id === id);
+  const to = from + delta;
+  if (from < 0 || to < 0 || to >= lists.length) return;
+  const order = lists.map((l) => l.id);
+  order.splice(to, 0, order.splice(from, 1)[0]);
+  if (signedIn()) {
+    try {
+      const left = await authApi('/api/watchlists/order', { method: 'PUT', body: { ids: order } });
+      watchAdoptAccountLists(left.watchlists, id);
+    } catch (err) { window.OpticAuth.toast(err.message, 'bad'); return; }
+  } else {
+    const state = localLists();
+    const byId = new Map(state.lists.map((l) => [l.id, l]));
+    state.lists = order.map((x) => byId.get(x)).filter(Boolean);
+    localListsSave(state);
+  }
+  renderWatchlist();
+}
+
+/** Move one symbol within the active list. Only meaningful under "My order". */
+async function watchSymbolMove(symbol, delta) {
+  const sym = String(symbol).toUpperCase();
+  const order = watchList();
+  const from = order.indexOf(sym);
+  const to = from + delta;
+  if (from < 0 || to < 0 || to >= order.length) return;
+  order.splice(to, 0, order.splice(from, 1)[0]);
+  watchSave(order);
+  if (signedIn() && ACCOUNT.listId) {
+    ACCOUNT.watchlist = order;
+    try {
+      await authApi('/api/watchlists/' + ACCOUNT.listId + '/order',
+        { method: 'PUT', body: { symbols: order } });
+    } catch (err) { window.OpticAuth.toast(err.message, 'bad'); }
+  }
+  renderWatchlistHost();
 }
 
 /* Writes go to whichever store is in charge, and the local copy is kept in step
@@ -3673,6 +4017,13 @@ const WATCH_SORTS = [
     cmp: (a, b) => WATCH_SIGNAL_RANK[b.signal] - WATCH_SIGNAL_RANK[a.signal]
       || Math.abs(b.change_pct || 0) - Math.abs(a.change_pct || 0) },
   { id: 'alpha', label: 'A-Z', cmp: (a, b) => a.symbol.localeCompare(b.symbol) },
+  /* The order the reader put them in. `cmp: null` is the marker, not an
+   * oversight: the feed rows are already built in list order, so "my order" is
+   * the absence of a sort rather than another comparator. Reordering controls
+   * appear only under this one, because dragging a row while sorted by biggest
+   * mover changes a stored order nothing on screen reflects, which reads as a
+   * control that does not work. */
+  { id: 'custom', label: 'My order', cmp: null },
 ];
 const WATCH_SIGNAL_RANK = { bullish: 3, neutral: 2, bearish: 1, unknown: 0 };
 let watchSort = 'changed';
@@ -3704,6 +4055,11 @@ const WATCH_FILTERS = [
 ];
 
 let watchFilter = 'all';
+/* Search inside the list, which is a different question from the filters above:
+ * they ask "which of these are interesting", this asks "where is the one I am
+ * thinking of". On a twelve-name list that is a nicety; the lists feature makes
+ * hundred-name lists possible, and then it is the only way to find anything. */
+let watchQuery = '';
 
 function watchFilterSpec() {
   return WATCH_FILTERS.find((f) => f.id === watchFilter) || WATCH_FILTERS[0];
@@ -3721,6 +4077,14 @@ function watchRow(r, opts) {
   }
   const changed = r.changed || null;
   return `<li class="wl-row">
+    ${o.order ? `<span class="wl-move">
+      <button type="button" class="wl-move-btn" data-watch-up="${esc(r.symbol)}"
+        ${o.order.first ? 'disabled' : ''} aria-label="Move ${esc(r.symbol)} up"
+        title="Move up">\u2191</button>
+      <button type="button" class="wl-move-btn" data-watch-down="${esc(r.symbol)}"
+        ${o.order.last ? 'disabled' : ''} aria-label="Move ${esc(r.symbol)} down"
+        title="Move down">\u2193</button>
+    </span>` : ''}
     <button type="button" class="wl-open" data-watch-open="${esc(r.symbol)}"
       title="Analyse ${esc(r.symbol)}">
       <span class="wl-sym">${esc(r.symbol)}</span>
@@ -3743,12 +4107,29 @@ function watchRemoveBtn(symbol) {
 
 function watchRowsSorted(rows) {
   const spec = WATCH_SORTS.find((x) => x.id === watchSort) || WATCH_SORTS[0];
+  /* "My order" is the reader's own, which is the order the list is stored in.
+   * The feed comes back in whatever order the batch resolved, so it is
+   * re-seated against the list rather than left alone. */
+  if (!spec.cmp) {
+    const rank = new Map(watchList().map((sym, i) => [sym, i]));
+    return [...(rows || [])].sort(
+      (a, b) => (rank.has(a.symbol) ? rank.get(a.symbol) : 1e6)
+        - (rank.has(b.symbol) ? rank.get(b.symbol) : 1e6));
+  }
   return [...(rows || [])].sort((a, b) => {
     // Unavailable rows sink, whatever the order: an error is not a ranking.
     if (a.available !== b.available) return a.available ? -1 : 1;
     if (!a.available) return a.symbol.localeCompare(b.symbol);
     return spec.cmp(a, b);
   });
+}
+
+/** Rows matching the in-list search. Empty query keeps everything. */
+function watchRowsFound(rows) {
+  const q = watchQuery.trim().toUpperCase();
+  if (!q) return rows;
+  return rows.filter((r) => String(r.symbol || '').toUpperCase().includes(q)
+    || String(r.name || '').toUpperCase().includes(q));
 }
 
 async function loadWatchlist(force) {
@@ -3778,12 +4159,17 @@ function watchCountLabel() {
  * is short because rows went missing. */
 function watchShownLabel() {
   const spec = watchFilterSpec();
-  if (spec.id === 'all') return '';
+  const q = watchQuery.trim();
+  if (spec.id === 'all' && !q) return '';
   const data = STATE.watchlist;
   const rows = (data && data.rows) ? watchRowsSorted(data.rows) : [];
   if (!rows.length) return '';
-  const kept = rows.filter((r) => spec.keep(r)).length;
-  return `Showing ${kept} of ${rows.length}: ${spec.label.toLowerCase()}.`;
+  const kept = watchRowsFound(rows.filter((r) => spec.keep(r))).length;
+  // Names whichever narrowing is in force, and both when both are. A count with
+  // no reason beside it reads as names having gone missing.
+  const why = [spec.id === 'all' ? '' : spec.label.toLowerCase(),
+    q ? `matching \u201c${q}\u201d` : ''].filter(Boolean).join(', ');
+  return `Showing ${kept} of ${rows.length}: ${why}.`;
 }
 
 function renderWatchlistHost() {
@@ -3817,7 +4203,12 @@ function watchlistFeedHTML(opts) {
    * the Watchlist tab quietly emptying that summary would look like the home
    * page was broken. A filter belongs to the view whose controls are visible. */
   const spec = watchFilterSpec();
-  const rows = o.compact ? all : all.filter((r) => spec.keep(r));
+  const rows = o.compact ? all : watchRowsFound(all.filter((r) => spec.keep(r)));
+  if (!rows.length && !o.compact && watchQuery.trim()) {
+    return `<p class="wl-none">No name on this list matches
+      \u201c${esc(watchQuery.trim())}\u201d.
+      <button type="button" class="auth-link" data-watch-clear-q>Clear</button></p>`;
+  }
   if (!rows.length) {
     // Names the filter, so an empty list reads as a filter rather than as a
     // watchlist that has lost its rows.
@@ -3826,8 +4217,14 @@ function watchlistFeedHTML(opts) {
       <button type="button" class="auth-link" data-watch-filter="all">Show all</button></p>`;
   }
   const shown = o.limit ? rows.slice(0, o.limit) : rows;
+  /* Reorder handles only under "My order", and only when nothing is narrowing
+   * the list. Moving a row up while a filter hides the row above it would move
+   * it past something invisible. */
+  const orderable = !o.compact && watchSort === 'custom'
+    && watchFilter === 'all' && !watchQuery.trim();
   return `<ul class="wl-list${o.compact ? ' is-compact' : ''}">
-    ${shown.map((r) => watchRow(r, { removable: !o.compact })).join('')}
+    ${shown.map((r, i) => watchRow(r, { removable: !o.compact,
+    order: orderable ? { first: i === 0, last: i === shown.length - 1 } : null })).join('')}
   </ul>
   ${o.limit && rows.length > o.limit
     ? `<p class="wl-more">${rows.length - o.limit} more on the watchlist.</p>` : ''}`;
@@ -15961,6 +16358,7 @@ async function accountLoad() {
     ACCOUNT.ready = false;
     ACCOUNT.listId = null;
     ACCOUNT.watchlist = null;
+    ACCOUNT.watchlists = null;
     ACCOUNT.research = null;
     ACCOUNT.watches = null;
     return;
@@ -15972,6 +16370,11 @@ async function accountLoad() {
       authApi('/api/watches'),
     ]);
     ACCOUNT.watches = watches.watches || [];
+    // All of them, not just the first: the watchlist view offers named lists
+    // and needs the set. ACCOUNT.listId stays "the active one" and
+    // ACCOUNT.watchlist stays its symbols, so every existing reader is
+    // unchanged by there being more than one.
+    ACCOUNT.watchlists = lists.watchlists || [];
     const first = (lists.watchlists || [])[0];
     if (first) {
       ACCOUNT.listId = first.id;
@@ -15987,6 +16390,7 @@ async function accountLoad() {
         });
         ACCOUNT.listId = adopted.watchlist.id;
         ACCOUNT.watchlist = adopted.watchlist.symbols || [];
+        ACCOUNT.watchlists = [adopted.watchlist];
         if (adopted.added) {
           window.OpticAuth.toast('Brought ' + adopted.added + ' watchlist symbol'
             + (adopted.added === 1 ? '' : 's') + ' into your account.');

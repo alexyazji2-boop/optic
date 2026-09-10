@@ -159,6 +159,88 @@ async def rename_watchlist(watchlist_id: str, request: Request,
     return {"ok": True, "watchlist": _list_payload(_owned_list(user["id"], watchlist_id))}
 
 
+@router.put("/watchlists/{watchlist_id}/order")
+async def reorder_items(watchlist_id: str, request: Request,
+                        payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Set the order of the symbols already in a list.
+
+    Both tables have carried a `position` column and ordered by it since the
+    schema was written, and nothing could ever set one: `_put_symbols` appends
+    at the end and that was the only writer. So "my order" was whatever order
+    things had been added in, permanently.
+
+    Deliberately a reorder, not an upsert. It moves the symbols the list already
+    holds and ignores anything else in the payload, so a stale tab replaying an
+    old order cannot resurrect a symbol the reader has since deleted.
+    """
+    user = deps.require_user(request)
+    deps.csrf_guard(request)
+    _owned_list(user["id"], watchlist_id)
+    wanted = payload.get("symbols")
+    if not isinstance(wanted, list):
+        raise HTTPException(status_code=400, detail="Send the symbols in the order you want.")
+
+    held = {r["symbol"] for r in db.rows(
+        "SELECT symbol FROM watchlist_items WHERE watchlist_id = ?", (watchlist_id,))}
+    statements = []
+    position = 0
+    seen = set()
+    for raw in wanted[:200]:
+        try:
+            symbol = _symbol(raw)
+        except HTTPException:
+            continue
+        if symbol not in held or symbol in seen:
+            continue
+        seen.add(symbol)
+        position += 1
+        statements.append((
+            "UPDATE watchlist_items SET position = ? WHERE watchlist_id = ? AND symbol = ?",
+            (position, watchlist_id, symbol)))
+    # Anything the caller did not mention keeps its relative order, after the
+    # ones it did. A partial payload must not silently shuffle the remainder.
+    for symbol in sorted(held - seen):
+        position += 1
+        statements.append((
+            "UPDATE watchlist_items SET position = ? WHERE watchlist_id = ? AND symbol = ?",
+            (position, watchlist_id, symbol)))
+    if statements:
+        db.execute_many(statements)
+    db.execute("UPDATE watchlists SET updated_at = ? WHERE id = ?",
+               (db.utcnow(), watchlist_id))
+    return {"ok": True, "watchlist": _list_payload(_owned_list(user["id"], watchlist_id))}
+
+
+@router.put("/watchlists/order")
+async def reorder_lists(request: Request,
+                        payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Set the order of the lists themselves. Same rule as the one above."""
+    user = deps.require_user(request)
+    deps.csrf_guard(request)
+    wanted = payload.get("ids")
+    if not isinstance(wanted, list):
+        raise HTTPException(status_code=400, detail="Send the list ids in the order you want.")
+    owned = {w["id"] for w in _lists_for(user["id"])}
+    statements = []
+    position = 0
+    seen = set()
+    for wid in wanted[:50]:
+        wid = str(wid)
+        if wid not in owned or wid in seen:
+            continue
+        seen.add(wid)
+        position += 1
+        statements.append(("UPDATE watchlists SET position = ? WHERE id = ? AND user_id = ?",
+                           (position, wid, user["id"])))
+    for wid in sorted(owned - seen):
+        position += 1
+        statements.append(("UPDATE watchlists SET position = ? WHERE id = ? AND user_id = ?",
+                           (position, wid, user["id"])))
+    if statements:
+        db.execute_many(statements)
+    return {"ok": True, "watchlists": [_list_payload(w) for w in _lists_for(user["id"])]}
+
+
 @router.delete("/watchlists/{watchlist_id}")
 async def delete_watchlist(watchlist_id: str, request: Request) -> Dict[str, Any]:
     user = deps.require_user(request)
