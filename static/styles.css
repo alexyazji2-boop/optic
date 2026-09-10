@@ -10947,6 +10947,20 @@ body.auth-open { overflow: hidden; }
   border-top: 1px solid var(--border);
 }
 
+/* ---------------------------------------------------------- insider filings ---
+   The market-wide Form 4 feed. Date and time stacked in one cell: the reader
+   asked for both, and a filing at 09:31 and one at 15:58 are differently
+   interesting on the same day. */
+.ins-t { display: block; font-variant-numeric: tabular-nums; font-size: var(--t-small); }
+.ins-clock { display: block; font-size: var(--t-caption); color: var(--ink-muted); }
+.ins-role { display: block; font-size: var(--t-caption); color: var(--ink-muted); }
+/* The transaction code, in words. Coloured only where the direction is
+   unambiguous: a grant is neither a buy nor a sell, so it takes no colour, for
+   the same reason VIX takes none on the pulse strip. */
+.ins-code { font-size: var(--t-small); }
+.ins-code.up { color: var(--pos); }
+.ins-code.down { color: var(--neg); }
+
 /* Placed here, not up with the other phone overrides.
    `.hm-greet` is defined further down this file than that block was, and at
    equal specificity the later rule wins: the early copy of this media query

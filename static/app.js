@@ -7773,6 +7773,10 @@ function renderCompany(co) {
         <ul class="reasons">${(ow.notes || []).map((n) => `<li>${gloss(n)}</li>`).join('')}</ul>
         <p class="caveat">${esc(ow.caveat || '')}</p>`
     : '<div class="callout">No ownership data for this security.</div>'}
+    ${/* The market-wide version of the same question, which lives on Read
+        * because it is not about this company. */''}
+    <p class="caveat">Every Form 4 as it is filed, across the market, is on
+      <button type="button" class="auth-link" data-view="brief">Optic's Read</button>.</p>
     </div>
   </div>`;
 }
@@ -19436,6 +19440,125 @@ async function runReadSearch(query) {
   }
 }
 
+/* ====================================================== insider filings ===
+ *
+ * Form 4s across the whole market as they arrive, which is a different question
+ * from the per-ticker ownership block on the Financials facet: that answers "who
+ * has been buying this", this answers "who is buying anything".
+ *
+ * **A grant is not a purchase.** Code A is compensation, frequently at a stated
+ * price of $0.00, and presenting it as an insider buy would be the most
+ * misleading thing this panel could do — the first filing read while building it
+ * was 51,606 shares at zero, which as a "buy" reads as enormous conviction and
+ * is in fact a payslip. Open-market purchases are the default view and every
+ * other code is behind a toggle, labelled.
+ *
+ * **Two timestamps, both shown.** EDGAR's acceptance time to the second, and the
+ * transaction date the insider reported. They are different facts: a purchase
+ * made on Monday and filed on Wednesday is news on Wednesday, and the gap
+ * between them is itself worth seeing.
+ */
+
+let insiderPurchasesOnly = true;
+
+function insiderWhen(iso) {
+  if (!iso) return '<span class="ins-t">not given</span>';
+  const zone = activeZone();
+  // Date and time, because the reader asked for both and because a filing at
+  // 09:31 and one at 15:58 are differently interesting on the same day.
+  return `<span class="ins-t" title="${esc(iso)}">${esc(dayIn(iso, zone))} ${
+    esc(iso.slice(0, 10))}<span class="ins-clock">${esc(timeIn(iso, zone))} ${
+    esc(zoneAbbrev(zone))}</span></span>`;
+}
+
+function insiderFeedRow(r) {
+  const tone = r.is_purchase ? 'up' : (r.acquired ? '' : 'down');
+  const shares = r.shares === null || r.shares === undefined
+    ? '\u2014' : insiderShares(r.shares);
+  const price = r.price ? '$' + fmt(r.price, 2) : '\u2014';
+  const value = r.value ? '$' + fmtCompact(r.value, 1) : '';
+  return `<tr>
+    <td>${insiderWhen(r.filed_at)}</td>
+    <td class="name">${r.ticker
+    ? `<button type="button" class="tkr" data-analyse="${esc(r.ticker)}"
+        >${esc(r.ticker)}</button>`
+    : `<span class="subnote" title="${esc(r.issuer || '')}">no ticker</span>`}</td>
+    <td>${esc((r.insider || '').slice(0, 30))}
+      ${(r.roles || []).length
+    ? `<span class="ins-role">${esc(r.roles.join(', ').slice(0, 34))}</span>` : ''}</td>
+    <td><span class="ins-code ${tone}" title="${esc(r.code_note || '')}"
+      >${esc(r.code_label || r.code || '')}</span></td>
+    <td class="num">${shares}</td>
+    <td class="num">${price}</td>
+    <td class="num">${value}</td>
+    <td>${esc(r.date || '')}</td>
+  </tr>`;
+}
+
+function renderInsiderFeed() {
+  const d = STATE.insiders;
+  if (!d) return `<div class="panel span-all"><h2>${hg('Insider filings')}</h2>
+    <p class="sub">Reading the latest Form 4s\u2026</p></div>`;
+  if (!d.available) {
+    return `<div class="panel span-all"><h2>${hg('Insider filings')}</h2>
+      <div class="callout">${esc(d.reason || 'EDGAR did not answer.')}</div></div>`;
+  }
+  const rows = d.rows || [];
+  return `<div class="panel span-all">
+    <h2>${hg('Insider filings')}</h2>
+    <p class="sub">Form 4s across the market, newest filing first. The time is
+      EDGAR's own acceptance timestamp; the last column is the date the insider
+      says the trade happened.</p>
+    <div class="wv-filters" role="group" aria-label="Which transactions">
+      <span class="wv-filter-label">Show</span>
+      <button type="button" class="pill${insiderPurchasesOnly ? ' on' : ''}"
+        data-ins-only="1" aria-pressed="${insiderPurchasesOnly}">Open-market buys</button>
+      <button type="button" class="pill${insiderPurchasesOnly ? '' : ' on'}"
+        data-ins-only="0" aria-pressed="${!insiderPurchasesOnly}">Everything filed</button>
+      <button type="button" class="pill" data-ins-refresh>Refresh</button>
+    </div>
+    <p class="note" style="color:var(--ink-muted);margin:0 0 var(--space-2)">
+      ${fmt(d.matched, 0)} ${insiderPurchasesOnly ? 'open-market purchase' : 'transaction'}${
+  d.matched === 1 ? '' : 's'} from ${fmt(d.filings_read, 0)} filings read${
+  d.filings_unread ? `. ${fmt(d.filings_unread, 0)} more filings are listed and not
+      read yet: each one is a separate request, so they fill in as you come back
+      rather than holding this page` : ''}${
+  d.filings_failed ? `. ${fmt(d.filings_failed, 0)} could not be parsed` : ''}.</p>
+    ${/* Both wrappers. scroll-y caps the height so sixty rows do not push the
+        * caveats off the page, and table-scroll is the repo's own horizontal
+        * one — eight columns including two dates overflowed the panel and the
+        * price column was cut off mid-figure. */''}
+    ${rows.length ? `<div class="scroll-y table-scroll"><table class="data">
+      <thead><tr><th>Filed</th><th>Symbol</th><th>Insider</th><th>Transaction</th>
+        <th class="num">Shares</th><th class="num">Price</th><th class="num">Value</th>
+        <th>Trade date</th></tr></thead>
+      <tbody>${rows.map(insiderFeedRow).join('')}</tbody>
+    </table></div>` : `<div class="callout">No ${
+  insiderPurchasesOnly ? 'open-market purchases' : 'transactions'} in the filings
+      read so far. Open-market buying is genuinely rare next to grants and
+      scheduled selling, so an empty list here is usually the answer rather than
+      a fault.</div>`}
+    <div class="callout scan-blind"><strong>What this cannot see.</strong>
+      ${esc(d.blind_spot || '')}</div>
+    <p class="caveat">${esc(d.method || '')}</p>
+  </div>`;
+}
+
+async function loadInsiderFeed(force) {
+  if (STATE.insiders && !force) return;
+  try {
+    STATE.insiders = await getJSON('/api/insiders/latest?limit=60&purchases='
+      + (insiderPurchasesOnly ? 'true' : 'false') + (force ? '&force=true' : ''));
+  } catch (err) {
+    STATE.insiders = { available: false, reason: err.message };
+  }
+  const host = document.getElementById('insider-host');
+  if (host && STATE.view === 'brief') {
+    host.innerHTML = renderInsiderFeed();
+    revealPanels(host);
+  }
+}
+
 function renderBrief(d) {
   hideTip();
   if (d.missing) {
@@ -19544,7 +19667,11 @@ function renderBrief(d) {
     ${(d.degraded_sources || []).length
       ? `<p class="caveat">Degraded on this build: ${esc((d.degraded_sources || []).join(', '))}.</p>`
       : ''}
-  </div>`;
+  </div>
+  ${/* Its own host, filled by its own request. The brief is one shared build
+      * per day; this is live and arrives on a different cadence, so binding it
+      * into the brief payload would have made the day's read wait on EDGAR. */''}
+  <div id="insider-host" class="span-all">${renderInsiderFeed()}</div>`;
 
   const box = document.getElementById('read-q');
   if (box) {
@@ -20551,7 +20678,7 @@ function loadView(view, force) {
   if (view === 'market') return loadMarket(force);
   if (view === 'indices') return loadIndices(force);
   if (view === 'tracker') return loadTracker(force);
-  if (view === 'brief') return loadBrief(force);
+  if (view === 'brief') { loadInsiderFeed(force); return loadBrief(force); }
   if (view === 'settings') return renderSettings();
   if (view === 'long') return loadLong(force);
 }
@@ -22852,6 +22979,26 @@ document.addEventListener('click', (evt) => {
   const detailBtn = evt.target.closest('[data-set-mode]');
   if (detailBtn) { closePanelChooser(); setUiMode(detailBtn.dataset.setMode); return; }
   if (evt.target.closest('[data-panels-open]')) { openPanelChooser(STATE.view); return; }
+  const insOnly = evt.target.closest('[data-ins-only]');
+  if (insOnly) {
+    const want = insOnly.dataset.insOnly === '1';
+    if (want === insiderPurchasesOnly) return;
+    insiderPurchasesOnly = want;
+    // The filter is applied server-side, so switching is a refetch. Cheap: the
+    // filings are already parsed and cached, so this re-reads the cache.
+    STATE.insiders = null;
+    const host = document.getElementById('insider-host');
+    if (host) host.innerHTML = renderInsiderFeed();
+    loadInsiderFeed(false);
+    return;
+  }
+  if (evt.target.closest('[data-ins-refresh]')) {
+    STATE.insiders = null;
+    const host = document.getElementById('insider-host');
+    if (host) host.innerHTML = renderInsiderFeed();
+    loadInsiderFeed(true);
+    return;
+  }
   if (evt.target.closest('[data-panels-close]')) { closePanelChooser(); return; }
   // Only a click on the backdrop itself, not one that bubbled up from the
   // dialog sitting on top of it.

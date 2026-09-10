@@ -38,6 +38,7 @@ from . import catalyst_live as catalyst_live_mod
 from .analytics import cases as cases_mod
 from .analytics import screen as screen_mod
 from .analytics import screener as screener_mod
+from . import insiders as insiders_mod
 from .analytics import regime as regime_mod
 from .analytics import relperf as relperf_mod
 from .analytics import compare as compare_mod
@@ -1911,6 +1912,19 @@ async def scanner_catalogue() -> Dict[str, Any]:
             "universe_size": (ranking or {}).get("universe_size"),
         }
     return await _run(build)
+
+
+@app.get("/api/insiders/latest")
+async def insiders_latest(limit: int = Query(40, ge=1, le=200),
+                          purchases: bool = Query(True),
+                          force: bool = Query(False)) -> Dict[str, Any]:
+    """Form 4 transactions across the market, newest filing first.
+
+    Enrichment is capped per call and cached per accession, so a cold cache
+    returns what it managed and reports how many filings it has not read yet
+    rather than holding the page for half a minute. See app/insiders.py.
+    """
+    return await _run(insiders_mod.latest, limit, purchases, force)
 
 
 @app.get("/api/screener/fields")

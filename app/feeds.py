@@ -61,6 +61,10 @@ USER_AGENT = f"OpticTerminal/1.0 ({CONTACT})" if CONTACT else "OpticTerminal/1.0
 # missing contact shows up as configuration rather than as a broken section.
 CONTACT_OK = "@" in CONTACT
 
+# Twelve seconds suits an RSS file. Callers with a genuinely slower endpoint
+# pass their own: EDGAR's browse-edgar CGI, which app/insiders.py reads for the
+# live Form 4 index, took longer than this on its first call and the section
+# reported a timeout as though the source were down.
 TIMEOUT_SECONDS = float(os.environ.get("FEED_TIMEOUT", "12"))
 # Feeds are polled per-server, not per-visitor. Fifteen minutes is far inside
 # every source's tolerance while still being fresh enough for a daily brief.
@@ -493,7 +497,8 @@ def _parse_date(raw: Optional[str]) -> Optional[datetime]:
     return None
 
 
-def _fetch(url: str, accept: str, user_agent: Optional[str] = None) -> bytes:
+def _fetch(url: str, accept: str, user_agent: Optional[str] = None,
+           timeout: Optional[float] = None) -> bytes:
     """One HTTP GET, throttled per host.
 
     `user_agent` overrides the module default, and one caller genuinely needs it.
@@ -519,7 +524,8 @@ def _fetch(url: str, accept: str, user_agent: Optional[str] = None) -> bytes:
         headers["User-Agent"] = user_agent
     request = urllib.request.Request(url, headers=headers)
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+        with urllib.request.urlopen(
+                request, timeout=timeout or TIMEOUT_SECONDS) as response:
             return response.read()
     finally:
         with _LOCK:
@@ -538,6 +544,18 @@ def cached_json(key: str) -> Any:
     """
     hit = _MEM.get(key) or _load_disk().get(key)
     return (hit or {}).get("json")
+
+
+def store_json(key: str, value: Any) -> None:
+    """Put a computed value in the same cache `cached_json` reads.
+
+    For work that is expensive but not a fetch. app/insiders.py parses each
+    Form 4 once and keeps the result: a filing is immutable after EDGAR accepts
+    it, so re-reading one is pure waste, and the parse is the expensive half
+    rather than the download. Failures are stored too, so a malformed filing is
+    not retried on every poll.
+    """
+    _store(key, {"at": time.time(), "json": value, "error": None})
 
 
 def fetch_json(url: str, ttl_seconds: float, key: Optional[str] = None) -> Any:
@@ -565,7 +583,8 @@ def fetch_json(url: str, ttl_seconds: float, key: Optional[str] = None) -> Any:
 
 
 def fetch_text(url: str, ttl_seconds: float, key: Optional[str] = None,
-               user_agent: Optional[str] = None) -> str:
+               user_agent: Optional[str] = None,
+               timeout: Optional[float] = None) -> str:
     """Cached plain-text GET, sharing the polite fetch and the disk cache.
 
     Separate from fetch_json because FRED serves CSV: parsing it as JSON would
@@ -581,7 +600,8 @@ def fetch_text(url: str, ttl_seconds: float, key: Optional[str] = None,
     if hit and (now - float(hit.get("at", 0))) < ttl_seconds and hit.get("text") is not None:
         return hit["text"]
 
-    body = _fetch(url, "text/csv, text/plain, */*", user_agent=user_agent)
+    body = _fetch(url, "text/csv, text/plain, */*", user_agent=user_agent,
+                  timeout=timeout)
     text = body.decode("utf-8", "replace")
     _store(cache_key, {"at": now, "text": text, "error": None})
     return text
