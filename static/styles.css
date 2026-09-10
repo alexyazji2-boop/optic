@@ -2200,6 +2200,24 @@ ul.brief-list {
 .brief-tags .chip { padding: var(--space-0) var(--space-2); font-size: var(--t-micro); }
 .brief-tags .chip .dot { width: 6px; height: 6px; }
 
+/* "Subscription" on a headline whose publisher will ask for one.
+   Outlined rather than filled: it is a fact about the link, not a warning about
+   the story, and a solid chip here would read as louder than the catalyst chips
+   beside it that describe what actually happened. --ink-2 rather than
+   --ink-muted because at --t-micro this has to be legible at a glance to do its
+   job at all — 9.31:1 dark, 8.93:1 light. */
+.brief-paid {
+  flex: none;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  cursor: help;
+}
+
 /* The daily summary reads as prose, so it gets prose measure and leading rather
    than the tighter panel defaults used for label/value text. */
 .brief-summary p {

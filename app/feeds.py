@@ -76,6 +76,52 @@ _LAST_HIT: Dict[str, float] = {}
 
 # ---------------------------------------------------------------- source table
 
+# What a reader without a subscription actually gets when they click.
+#
+# A headline you cannot read is not news, it is an advertisement for news. The
+# read page links out for every story — that is the whole copyright position of
+# this module — so whether the link opens or hits a wall is a property of the
+# source, and it belongs in the source table next to the weight.
+#
+#   ACCESS_OPEN     the whole story, no account, every time.
+#   ACCESS_METERED  free until a monthly cap. Most clicks work; some won't.
+#   ACCESS_PAID     a subscription is required. Still linked, because a
+#                   subscriber wants them and they are frequently the best
+#                   reporting on the desk — just never the lead, and never the
+#                   majority of a desk. See brief._spread.
+#
+# Measured 2026-09-09 by fetching the three newest articles from each wire feed
+# with a browser User-Agent and counting the words a logged-out reader gets:
+#
+#   BBC        1551-1692w, no gate markup          -> open
+#   OilPrice   1177-1485w, no gate markup          -> open
+#   .gov/.eu   570-1056w, no gate markup           -> open (all macro sources)
+#   CNBC       350-1459w, wrapped in the class
+#              `ArticleBody-meteredPaywallPreview` on 5 of 5 articles, whose
+#              own CSS is `max-height:660px;overflow:hidden` plus a fade
+#                                                  -> metered
+#   STAT       schema.org `isAccessibleForFree: false` on 3 of 3 -> paid
+#   WSJ, MarketWatch, FT, Economist
+#              401/403 to any non-browser caller, so no server-side measurement
+#              is possible. WSJ is classified from a reader's own screenshot of
+#              https://www.wsj.com/finance/commodities-futures/ — "To continue
+#              reading, choose an option below" over the article body. The other
+#              three are their publishers' stated policy. If one of them opens
+#              up, this is the line to change.
+#
+# Every source must declare one; tests/test_source_access.py fails the build if
+# a new source arrives without it, because the safe-looking default is "open"
+# and a wrong "open" is exactly the wall this field exists to prevent.
+ACCESS_OPEN = "open"
+ACCESS_METERED = "metered"
+ACCESS_PAID = "paid"
+ACCESS_LEVELS = (ACCESS_OPEN, ACCESS_METERED, ACCESS_PAID)
+
+# Shown on the card. Metered is deliberately unlabelled: it is right most of the
+# time, and a chip on all six CNBC feeds would be noise that trains the reader to
+# ignore the one chip that matters.
+ACCESS_LABELS = {ACCESS_PAID: "Subscription"}
+
 # `kind` selects the section a source feeds; `weight` breaks ties when a section
 # has more entries than it can show, so the wire services don't crowd out the
 # central bank.
@@ -83,24 +129,31 @@ SOURCES: List[Dict[str, Any]] = [
     # -- macro: statistical agencies and the central bank, all primary ---------
     {"id": "fed-monetary", "name": "Federal Reserve", "detail": "Monetary policy",
      "kind": "macro", "weight": 10,
+     "access": ACCESS_OPEN,
      "url": "https://www.federalreserve.gov/feeds/press_monetary.xml"},
     {"id": "fed-press", "name": "Federal Reserve", "detail": "All press releases",
      "kind": "macro", "weight": 7,
+     "access": ACCESS_OPEN,
      "url": "https://www.federalreserve.gov/feeds/press_all.xml"},
     {"id": "bls-cpi", "name": "Bureau of Labor Statistics", "detail": "Consumer prices",
      "kind": "macro", "weight": 9,
+     "access": ACCESS_OPEN,
      "url": "https://www.bls.gov/feed/cpi.rss"},
     {"id": "bls-empsit", "name": "Bureau of Labor Statistics", "detail": "Employment",
      "kind": "macro", "weight": 9,
+     "access": ACCESS_OPEN,
      "url": "https://www.bls.gov/feed/empsit.rss"},
     {"id": "bls-ppi", "name": "Bureau of Labor Statistics", "detail": "Producer prices",
      "kind": "macro", "weight": 8,
+     "access": ACCESS_OPEN,
      "url": "https://www.bls.gov/feed/ppi.rss"},
     {"id": "bea", "name": "Bureau of Economic Analysis", "detail": "GDP and income",
      "kind": "macro", "weight": 8,
+     "access": ACCESS_OPEN,
      "url": "https://apps.bea.gov/rss/rss.xml"},
     {"id": "sec-press", "name": "SEC", "detail": "Press releases",
      "kind": "macro", "weight": 6,
+     "access": ACCESS_OPEN,
      "url": "https://www.sec.gov/news/pressreleases.rss"},
 
     # Added after probing, not on reputation. Every one of these was fetched
@@ -112,27 +165,33 @@ SOURCES: List[Dict[str, Any]] = [
     # next move arrive in a speech two days later.
     {"id": "fed-speeches", "name": "Federal Reserve", "detail": "Speeches",
      "kind": "macro", "weight": 9,
+     "access": ACCESS_OPEN,
      "url": "https://www.federalreserve.gov/feeds/speeches.xml"},
     # Retail sales, durable goods, housing starts, trade balance. All of these
     # were being read second-hand off a wire; Census publishes them itself.
     {"id": "census-eco", "name": "Census Bureau", "detail": "Economic indicators",
      "kind": "macro", "weight": 8,
+     "access": ACCESS_OPEN,
      "url": "https://www.census.gov/economic-indicators/indicator.xml"},
     # The other side of the Atlantic sets the dollar as much as the Fed does.
     {"id": "ecb-press", "name": "European Central Bank", "detail": "Press",
      "kind": "macro", "weight": 7,
+     "access": ACCESS_OPEN,
      "url": "https://www.ecb.europa.eu/rss/press.html"},
     # Primary energy data. OilPrice is commentary on this.
     {"id": "eia-today", "name": "EIA", "detail": "Today in energy",
      "kind": "macro", "weight": 7,
+     "access": ACCESS_OPEN,
      "url": "https://www.eia.gov/rss/todayinenergy.xml"},
     # Research rather than news, and the reason it is here: it is the Fed's own
     # staff arguing about the data in public, months before it reaches a speech.
     {"id": "nyfed-research", "name": "New York Fed", "detail": "Liberty Street Economics",
      "kind": "macro", "weight": 6,
+     "access": ACCESS_OPEN,
      "url": "https://libertystreeteconomics.newyorkfed.org/feed/"},
     {"id": "cbo", "name": "Congressional Budget Office", "detail": "Publications",
      "kind": "macro", "weight": 5,
+     "access": ACCESS_OPEN,
      "url": "https://www.cbo.gov/publications/all/rss.xml"},
 
     # -- wires, grouped into desks by `sector` ---------------------------------
@@ -146,15 +205,19 @@ SOURCES: List[Dict[str, Any]] = [
     # Reinstate only against a fresh-dates check, not on the strength of the brand.
     {"id": "cnbc-top", "name": "CNBC", "detail": "Top news",
      "kind": "wire", "sector": "markets", "weight": 9,
+     "access": ACCESS_METERED,
      "url": "https://www.cnbc.com/id/100003114/device/rss/rss.html"},
     {"id": "cnbc-markets", "name": "CNBC", "detail": "Markets",
      "kind": "wire", "sector": "markets", "weight": 9,
+     "access": ACCESS_METERED,
      "url": "https://www.cnbc.com/id/15839069/device/rss/rss.html"},
     {"id": "mw-top", "name": "MarketWatch", "detail": "Top stories",
      "kind": "wire", "sector": "markets", "weight": 8,
+     "access": ACCESS_METERED,
      "url": "https://feeds.content.dowjones.io/public/rss/mw_topstories"},
     {"id": "bbc-business", "name": "BBC News", "detail": "Business",
      "kind": "wire", "sector": "markets", "weight": 7,
+     "access": ACCESS_OPEN,
      "url": "https://feeds.bbci.co.uk/news/business/rss.xml"},
 
     # Energy and commodities. Oil is the shortest path from a geopolitical event to
@@ -163,9 +226,11 @@ SOURCES: List[Dict[str, Any]] = [
     # World alone in a two-column row with a dead cell beside it.
     {"id": "cnbc-energy", "name": "CNBC", "detail": "Energy",
      "kind": "wire", "sector": "energy", "weight": 8,
+     "access": ACCESS_METERED,
      "url": "https://www.cnbc.com/id/19836768/device/rss/rss.html"},
     {"id": "oilprice", "name": "OilPrice", "detail": "Oil, gas and metals",
      "kind": "wire", "sector": "energy", "weight": 7,
+     "access": ACCESS_OPEN,
      "url": "https://oilprice.com/rss/main"},
 
     # Two sources on this desk, not one: with a 36-hour window a single economy
@@ -173,23 +238,37 @@ SOURCES: List[Dict[str, Any]] = [
     # as a broken desk rather than a quiet one.
     {"id": "cnbc-economy", "name": "CNBC", "detail": "Economy",
      "kind": "wire", "sector": "economy", "weight": 8,
+     "access": ACCESS_METERED,
      "url": "https://www.cnbc.com/id/20910258/device/rss/rss.html"},
     {"id": "cnbc-finance", "name": "CNBC", "detail": "Finance",
      "kind": "wire", "sector": "economy", "weight": 7,
+     "access": ACCESS_METERED,
      "url": "https://www.cnbc.com/id/10000664/device/rss/rss.html"},
+    # Both sources on this desk were CNBC, which is metered, and the desk still
+    # came back two items of a possible six on a live run. NPR is free outright,
+    # has a newsroom behind it, and covers the labour and trade stories the
+    # business wires treat as second-order. Measured: 440-766 words, no gate.
+    {"id": "npr-economy", "name": "NPR", "detail": "Economy",
+     "kind": "wire", "sector": "economy", "weight": 7,
+     "access": ACCESS_OPEN,
+     "url": "https://feeds.npr.org/1017/rss.xml"},
 
     {"id": "cnbc-tech", "name": "CNBC", "detail": "Technology",
      "kind": "wire", "sector": "tech", "weight": 8,
+     "access": ACCESS_METERED,
      "url": "https://www.cnbc.com/id/19854910/device/rss/rss.html"},
     {"id": "bbc-tech", "name": "BBC News", "detail": "Technology",
      "kind": "wire", "sector": "tech", "weight": 8,
+     "access": ACCESS_OPEN,
      "url": "https://feeds.bbci.co.uk/news/technology/rss.xml"},
 
     {"id": "bbc-politics", "name": "BBC News", "detail": "Politics",
      "kind": "wire", "sector": "politics", "weight": 7,
+     "access": ACCESS_OPEN,
      "url": "https://feeds.bbci.co.uk/news/politics/rss.xml"},
     {"id": "cnbc-politics", "name": "CNBC", "detail": "Politics",
      "kind": "wire", "sector": "politics", "weight": 7,
+     "access": ACCESS_METERED,
      "url": "https://www.cnbc.com/id/10000113/device/rss/rss.html"},
 
     # Regulatory. The desk the brief had no equivalent of, and the one whose
@@ -200,15 +279,19 @@ SOURCES: List[Dict[str, Any]] = [
        # wire will report both, hours later and with the document paraphrased.
     {"id": "fda-press", "name": "FDA", "detail": "Press announcements",
      "kind": "wire", "sector": "regulatory", "weight": 9,
+     "access": ACCESS_OPEN,
      "url": "https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds/press-releases/rss.xml"},
     {"id": "fda-drugs", "name": "FDA", "detail": "Drug approvals and safety",
      "kind": "wire", "sector": "regulatory", "weight": 8,
+     "access": ACCESS_OPEN,
      "url": "https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds/drugs/rss.xml"},
     {"id": "ftc-competition", "name": "FTC", "detail": "Competition enforcement",
      "kind": "wire", "sector": "regulatory", "weight": 7,
+     "access": ACCESS_OPEN,
      "url": "https://www.ftc.gov/feeds/press-release-competition.xml"},
     {"id": "cftc", "name": "CFTC", "detail": "Derivatives enforcement",
      "kind": "wire", "sector": "regulatory", "weight": 5,
+     "access": ACCESS_OPEN,
      "url": "https://www.cftc.gov/RSS/RSSGP/rssgp.xml"},
 
     # Analysis and opinion, kept in its own desk and clearly labelled.
@@ -221,27 +304,45 @@ SOURCES: List[Dict[str, Any]] = [
        # else in this module — the argument belongs to whoever wrote it.
     {"id": "economist-fin", "name": "The Economist", "detail": "Finance and economics",
      "kind": "wire", "sector": "analysis", "weight": 8,
+     "access": ACCESS_PAID,
      "url": "https://www.economist.com/finance-and-economics/rss.xml"},
     {"id": "ft-home", "name": "Financial Times", "detail": "Top stories",
      "kind": "wire", "sector": "analysis", "weight": 8,
+     "access": ACCESS_PAID,
      "url": "https://www.ft.com/rss/home"},
     # Healthcare and pharma reporting at a depth the general wires do not reach,
     # which matters because a third of the S&P's single-name volatility is a
     # clinical readout or a label change.
     {"id": "statnews", "name": "STAT", "detail": "Health and pharma",
      "kind": "wire", "sector": "analysis", "weight": 7,
+     "access": ACCESS_PAID,
      "url": "https://www.statnews.com/feed/"},
+    # The Analysis desk was measured at six of six behind a subscription: FT,
+    # STAT and the Economist are all paid, so ranking readable stories first had
+    # nothing to rank. A desk needs at least one source a reader can open.
+    #
+    # Econbrowser is two working academic economists — Menzie Chinn and James
+    # Hamilton — arguing about the data in public, which is this desk's stated
+    # purpose ("arguments, not events") and is free. Measured: 342-429 words of
+    # article, no gate markup, newest item 5.4h old.
+    {"id": "econbrowser", "name": "Econbrowser", "detail": "Economic analysis",
+     "kind": "wire", "sector": "analysis", "weight": 6,
+     "access": ACCESS_OPEN,
+     "url": "https://econbrowser.com/feed"},
 
     # WSJ markets alongside CNBC and MarketWatch on the existing desk.
     {"id": "wsj-markets", "name": "WSJ", "detail": "Markets",
      "kind": "wire", "sector": "markets", "weight": 9,
+     "access": ACCESS_PAID,
      "url": "https://feeds.content.dowjones.io/public/rss/RSSMarketsMain"},
 
     {"id": "bbc-world", "name": "BBC News", "detail": "World",
      "kind": "wire", "sector": "world", "weight": 9,
+     "access": ACCESS_OPEN,
      "url": "https://feeds.bbci.co.uk/news/world/rss.xml"},
     {"id": "bbc-scienv", "name": "BBC News", "detail": "Science and environment",
      "kind": "wire", "sector": "world", "weight": 5,
+     "access": ACCESS_OPEN,
      "url": "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml"},
 ]
 
@@ -292,6 +393,63 @@ REJECTED_SOURCES: Dict[str, str] = {
         "university donations, and a readers' letters column. Capping it to "
         "half a desk limited the damage without fixing the source. There is no "
         "finance-only WSJ opinion feed to point at instead.",
+    # Probed 2026-09-09, hunting a free source for the all-paywalled Analysis
+    # desk. Dead or blocked:
+    "https://apnews.com/hub/business.rss": "403. AP has no open public RSS.",
+    "https://www.stlouisfed.org/on-the-economy/rss": "read timed out at 12s",
+    "https://bankunderground.co.uk/feed/":
+        "live, but newest item 157h old. Outside every window on the page.",
+    "https://www.piie.com/rss/insights": "404",
+    "https://www.chicagobooth.edu/review/rss": "404",
+    "https://api.axios.com/feed/business": "404",
+    "https://www.semafor.com/rss/business.xml": "404",
+    "https://www.kiplinger.com/feeds/all.rss.xml": "404",
+    "https://www.reutersagency.com/feed/?best-topics=business-finance": "404",
+    # A second sweep, hunting free *analysis* specifically after Econbrowser
+    # turned out to be too low-volume to hold up its half of that desk. The
+    # conclusion is the useful part: market analysis at wire volume is the thing
+    # publishers charge for, and no free feed of it exists to point at.
+    "https://www.calculatedriskblog.com/feeds/posts/default":
+        "25 rows and good ones, but the newest is 5,555h old — the blog closed. "
+        "Its final post is titled 'This is the End and a New Beginning'.",
+    "https://theconversation.com/us/topics/us-economy-1104/articles.atom":
+        "on-topic at last, and 143h stale. The topic feeds move far slower than "
+        "the section feed.",
+    "https://conversableeconomist.com/feed/": "10 rows, newest 59.7h. Too slow.",
+    "https://knowledge.wharton.upenn.edu/feed/":
+        "free and credible, 2 items inside a 36h window. Too thin to change a desk.",
+    "https://www.promarket.org/feed/": "free, 1 item inside 36h.",
+    "https://back.nber.org/rss/new.xml":
+        "34 rows all inside the window — because none of them carry a date at "
+        "all, and within_hours deliberately keeps undated entries. Working "
+        "papers would silently take the whole desk, and 'Air Pollution and "
+        "Learning' is not a markets story.",
+    "https://theconversation.com/us/topics/economy-1024/articles.atom":
+        "body is not well-formed XML",
+    "https://www.brookings.edu/topic/economics/feed": "not well-formed XML",
+    "https://www.clevelandfed.org/rss/publications": "mismatched tag",
+    "https://www.dallasfed.org/rss/economics.xml": "404",
+    "https://cepr.org/rss/voxeu.xml": "404",
+    "https://www.stlouisfed.org/rss/on-the-economy": "read timed out at 12s",
+    # Live and fresh, rejected on judgement rather than on a status code:
+    "https://marginalrevolution.com/feed":
+        "15 rows, 8.8h fresh, free. Four of the newest seven were 'Wednesday "
+        "assorted links', 'Reading sentences to ponder' and 'What should I ask "
+        "Kevin Roose?'. A link blog would hold half the Analysis desk under the "
+        "per-source cap and spend it on items that are not about markets.",
+    "https://theconversation.com/us/business/articles.atom":
+        "25 rows, 13.8h fresh, free, academics with editors behind them — the "
+        "closest miss. Roughly half its business feed is sociology rather than "
+        "markets ('American women in communities with ample broadband access "
+        "lose less time waiting for service'). Worth revisiting if The "
+        "Conversation ever splits out an economics-only feed.",
+    "https://finance.yahoo.com/news/rssindex":
+        "49 rows, 33h old at probe. Syndicated Zacks and Motley Fool copy under "
+        "a Yahoo URL, so it fails the same accountability test as Seeking Alpha "
+        "below while also being the stalest of the free candidates.",
+    "https://www.investing.com/rss/news_25.rss":
+        "10 rows and the freshest of everything probed at 0.2h, rejected for "
+        "the same reason: no named newsroom stands behind it.",
     "https://seekingalpha.com/market_currents.xml":
         "live and fresh, deliberately excluded. It is the one candidate with no "
         "editorial accountability behind it, and this module's first rule is "
@@ -574,15 +732,29 @@ def load_kind(kind: str, force: bool = False, sector: Optional[str] = None
             continue
         result = load_source(source, force=force)
         weight = source.get("weight", 5)
+        access = source.get("access", ACCESS_PAID)
         for row in result.get("entries", []):
-            entries.append({**row, "weight": weight, "sector": source.get("sector")})
+            entries.append({**row, "weight": weight, "sector": source.get("sector"),
+                            "access": access})
         status.append({
             "id": source["id"], "name": source["name"], "detail": source.get("detail", ""),
             "count": len(result.get("entries", [])), "error": result.get("error"),
             "stale": bool(result.get("stale")), "cached": bool(result.get("cached")),
+            "access": access,
         })
     entries.sort(key=lambda r: (r.get("published") or "", r.get("weight", 0)), reverse=True)
     return entries, status
+
+
+def is_reachable(entry: Dict[str, Any]) -> bool:
+    """True if a reader without a subscription can expect to read this.
+
+    Metered counts as reachable: the cap is monthly and per-reader, so treating
+    it as a wall would push CNBC — six of the eight wire desks' bulk — behind
+    the Economist. The default for an unknown level is False, so a source that
+    somehow reaches here untagged is ranked as paid rather than promoted.
+    """
+    return entry.get("access") in (ACCESS_OPEN, ACCESS_METERED)
 
 
 # Evergreen index pages that arrive in a news feed.

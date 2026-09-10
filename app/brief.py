@@ -63,6 +63,9 @@ WORLD_LIMIT = int(os.environ.get("BRIEF_WORLD_LIMIT", "14"))
 # Per-desk story count. Small on purpose: five desks of six beats one list of
 # thirty, which is the whole point of splitting them.
 DESK_LIMIT = int(os.environ.get("BRIEF_DESK_LIMIT", "6"))
+# How much of a desk subscription-only sources may hold. Two of six: present
+# for the reader who has WSJ, never the bulk of what anyone else sees.
+PAID_DESK_SLOTS = int(os.environ.get("BRIEF_PAID_SLOTS", "2"))
 
 # How far back a headline can be and still count as today's news. Macro releases
 # are sparse — a week without a Fed statement is normal — so that leg gets a
@@ -344,38 +347,77 @@ def _macro_section() -> Dict[str, Any]:
 
 
 def _spread(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """The desk's stories, with no single source taking the whole desk.
+    """The desk's stories: no one source takes it, and neither do the walls.
 
-    Straight recency, which is what this was, hands a desk to whichever source
-    publishes most often. Measured on the Analysis desk the day it was added:
-    all six slots went to WSJ Opinion, whose feed is a general op-ed page — the
-    six were a piece about a daughter's last first day of school, two on court
-    packing and foreign donations, and a readers' letters column. The Economist's
-    finance feed had 300 items in the window and reached the desk zero times,
-    because every one of them was a few hours older.
+    Two caps, for two different failure modes.
 
-    So a source may hold at most half a desk. Recency still decides the order
-    and decides who fills the remainder; it just no longer decides everything.
+    **No source holds more than half a desk.** Straight recency, which is what
+    this was, hands a desk to whichever source publishes most often. Measured on
+    the Analysis desk the day it was added: all six slots went to WSJ Opinion,
+    whose feed is a general op-ed page — the six were a piece about a daughter's
+    last first day of school, two on court packing and foreign donations, and a
+    readers' letters column. The Economist's finance feed had 300 items in the
+    window and reached the desk zero times, because every one of them was a few
+    hours older.
+
+    **Subscription-only stories take at most PAID_DESK_SLOTS of it.** A headline
+    you cannot open is not news. But deleting the paywalled sources would be the
+    wrong fix twice over: a subscriber wants them, and WSJ, the FT and the
+    Economist are frequently the best reporting on the desk. So they are ranked
+    below everything readable rather than removed, and they still get a reserved
+    couple of slots — which they keep even on a busy free-news day, and which
+    they give back when there is nothing behind a wall worth showing.
+
+    One comparator orders every desk: **readable first, then newest**. On seven
+    of the eight desks that is exactly "newest first", because they carry no
+    paywalled source at all. It matters on Analysis, where it cannot be avoided:
+    measured, that desk runs four of six behind a subscription with the four
+    newest at the top, and twelve free candidates were probed to fix it at the
+    source instead. Every one failed — dead (Calculated Risk, 5,555h since its
+    last post), too slow (The Conversation at 143h, Conversable at 60h), too thin
+    (Wharton and ProMarket, one or two items a window), or undated academic
+    papers that would flood the desk (NBER). Market analysis is the thing people
+    pay for; there is no free feed of it at wire volume.
+
+    So the two stories on that desk a reader can actually open go at the top. The
+    cost is that a desk is no longer strictly chronological, which the chip on
+    each paywalled card is there to explain.
     """
     if len(rows) <= DESK_LIMIT:
         return rows
     cap = max(1, DESK_LIMIT // 2)
+    order = {id(r): i for i, r in enumerate(rows)}
     picked: List[Dict[str, Any]] = []
     used: Dict[str, int] = {}
-    for row in rows:
-        sid = row.get("source_id") or row.get("source") or ""
-        if used.get(sid, 0) >= cap:
-            continue
-        picked.append(row)
-        used[sid] = used.get(sid, 0) + 1
-        if len(picked) >= DESK_LIMIT:
-            return picked
+    seen: set = set()
+
+    def fill(pool: List[Dict[str, Any]], limit: int) -> None:
+        for row in pool:
+            if len(picked) >= limit:
+                return
+            if id(row) in seen:
+                continue
+            sid = row.get("source_id") or row.get("source") or ""
+            if used.get(sid, 0) >= cap:
+                continue
+            picked.append(row)
+            seen.add(id(row))
+            used[sid] = used.get(sid, 0) + 1
+
+    free = [r for r in rows if feeds.is_reachable(r)]
+    paid = [r for r in rows if not feeds.is_reachable(r)]
+    fill(free, max(1, DESK_LIMIT - PAID_DESK_SLOTS))
+    fill(paid, DESK_LIMIT)
+    # Nothing behind a wall, or not enough of it: the reserve is not a quota to
+    # be met, so the slots go back to the readable pool rather than standing empty.
+    fill(free, DESK_LIMIT)
     # A desk carried by one or two prolific sources would otherwise come back
     # short, which reads as a quiet desk rather than a capped one.
     if len(picked) < DESK_LIMIT:
-        chosen = {id(r) for r in picked}
-        picked.extend([r for r in rows if id(r) not in chosen][:DESK_LIMIT - len(picked)])
-    return picked[:DESK_LIMIT]
+        picked.extend([r for r in rows if id(r) not in seen][:DESK_LIMIT - len(picked)])
+    picked = picked[:DESK_LIMIT]
+    picked.sort(key=lambda r: (not feeds.is_reachable(r), order[id(r)]))
+    return picked
 
 
 def _desks() -> Dict[str, Any]:
@@ -404,7 +446,12 @@ def _desks() -> Dict[str, Any]:
     # Markets.
     lead_row = None
     if fresh:
-        lead_row = max(fresh, key=lambda r: ((r.get("published") or ""), r.get("weight", 0)))
+        # Readable first. The lead is the one story the page presents as *the*
+        # story, given a headline three times the size of everything else; a
+        # subscription wall there is the first thing a reader meets and the least
+        # answerable. Paid sources can still lead a day nothing else covered.
+        pool = [r for r in fresh if feeds.is_reachable(r)] or fresh
+        lead_row = max(pool, key=lambda r: ((r.get("published") or ""), r.get("weight", 0)))
     lead_url = (lead_row or {}).get("url")
     lead_title = (lead_row or {}).get("title")
 

@@ -17779,6 +17779,22 @@ function briefTags(e) {
       esc(cap(c.type))}</span>`).join('');
 }
 
+/* Whether this link will open, said before the click rather than after it.
+ *
+ * A reader who clicks four headlines and hits three subscription pages learns
+ * to stop clicking, and the page has then failed at the one job a wire desk
+ * has. The chip is on paywalled sources only: metered sources let most clicks
+ * through, and a chip on all six CNBC feeds would be the noise that teaches
+ * people to ignore the chip that matters. The backend ranks these below
+ * everything readable — see brief._spread — so seeing one means the desk had
+ * nothing free left, not that it was chosen over something open. */
+function briefAccess(e) {
+  if (e.access !== 'paid') return '';
+  return `<span class="brief-paid" title="${esc(`${e.source} is subscription-only.`
+    + ' The link opens their page; you will need an account there to read it.')
+    }">Subscription</span>`;
+}
+
 function briefLink(e, text) {
   const label = text === undefined ? esc(e.title) : text;
   return e.url
@@ -17792,6 +17808,7 @@ function briefHeadline(e) {
     <div class="brief-head">${briefLink(e)}</div>
     <div class="brief-meta">
       <span class="brief-src">${esc(e.source)}${e.source_detail ? ` · ${esc(e.source_detail)}` : ''}</span>
+      ${briefAccess(e)}
       <span class="brief-dot">·</span>${briefWhen(e.published)}${
         tags ? `<span class="brief-tags">${tags}</span>` : ''}
     </div>
@@ -17808,6 +17825,7 @@ function briefLead(e) {
     ${e.summary ? `<p class="read-lead-sum">${esc(e.summary)}</p>` : ''}
     <div class="brief-meta">
       <span class="brief-src">${esc(e.source)}${e.source_detail ? ` · ${esc(e.source_detail)}` : ''}</span>
+      ${briefAccess(e)}
       <span class="brief-dot">·</span>${briefWhen(e.published)}
       <span class="brief-tags">${briefTags(e)}</span>
     </div>
@@ -18517,6 +18535,14 @@ function briefSourceLine(sources) {
   const ok = sources.filter((s) => !s.error);
   const names = [...new Set(ok.map((s) => s.name))].join(', ');
   let text = ok.length ? `Sources: ${names}.` : '';
+  /* Named here as well as chipped on the card, because the two answer different
+   * questions: the chip says "not this one", the line says which of the mastheads
+   * above you would need an account for. */
+  const paid = [...new Set(ok.filter((s) => s.access === 'paid').map((s) => s.name))];
+  if (paid.length) {
+    text += ` ${paid.join(', ')} ${paid.length === 1 ? 'requires' : 'require'} a`
+      + ` subscription to read; everything else opens free.`;
+  }
   if (bad.length) {
     text += ` ${bad.length} source${bad.length === 1 ? '' : 's'} unreachable on the last`
       + ` refresh (${bad.map((s) => s.name).join(', ')})`
@@ -19829,10 +19855,22 @@ function isTapeLiveET() {
   return marketSessionET() !== 'closed';
 }
 
+/* One entry per phase app/session.py can publish, minus the two the caller
+ * handles itself ('closed' and 'holiday', which fold together above).
+ *
+ * 'overnight' was missing, and the miss was not silent-but-harmless: the chip
+ * rendered the literal word "undefined" beside a beating dot, every night from
+ * 8pm to 4am ET. Caught on a screenshot at 10:43pm. The lesson is the same one
+ * switchView's ticker guard keeps teaching — a map keyed on a server enum needs
+ * a test against that enum, not a default that happens to look fine. That test
+ * is tests/test_session_phases.py. */
 const SESSION_LABEL = {
   regular: 'Live · refreshing every 20s',
   pre: 'Pre-market · refreshing every 20s',
   after: 'After hours · refreshing every 20s',
+  // No "refreshing" claim: yfinance carries no Blue Ocean tape, so nothing
+  // arrives to refresh. session.py publishes the same fact as feed_covers_phase.
+  overnight: 'Overnight · this feed does not carry the overnight tape',
 };
 
 function liveIndicatorHTML() {
@@ -19850,7 +19888,15 @@ function liveIndicatorHTML() {
   // Extended hours get the same pulse but their own label, so "live" never
   // implies regular-session liquidity.
   const tone = session === 'regular' ? 'bull' : 'neutral';
-  return `<span class="chip ${tone}"><span class="dot" style="animation:pulse-beat 1.8s ease-in-out infinite"></span>${SESSION_LABEL[session]}</span>`;
+  // The beat means "prices are arriving". Overnight they are not, and a pulsing
+  // dot next to a label that says the feed does not carry this session would
+  // contradict the sentence it sits beside.
+  const beat = session === 'overnight' ? ''
+    : ' style="animation:pulse-beat 1.8s ease-in-out infinite"';
+  // Falls back to the phase's own name rather than to undefined: a phase added
+  // server-side should degrade to "Overnight", never to a rendered "undefined".
+  return `<span class="chip ${tone}"><span class="dot"${beat}></span>${
+    esc(SESSION_LABEL[session] || cap(session))}</span>`;
 }
 
 function tickAutoRefresh() {
@@ -20264,7 +20310,15 @@ let pulseStartersExpanded = false;
 function renderPulseEmpty() {
   const log = document.getElementById('chat-log');
   if (!log) return;
-  const hasMsgs = !!log.querySelector('.msg');
+  /* The boot greeting is not a conversation.
+   *
+   * It arrives from the health check as a normal assistant message, so a plain
+   * `.msg` test counts it and concludes the reader is mid-conversation. The
+   * effect was that opening Pulse showed the four starter cards, and clicking
+   * "see more examples" — which re-enters this function — deleted all of them
+   * and left an empty panel. A control that destroys the thing it was supposed
+   * to expand. */
+  const hasMsgs = !!log.querySelector('.msg:not(.msg-greeting)');
   const existing = log.querySelector('.pulse-empty');
   if (hasMsgs) { if (existing) existing.remove(); return; }
   log.innerHTML = pulseStarters(pulseStartersExpanded);
@@ -22524,14 +22578,18 @@ function watchColorScheme() {
     renderHomeStatus(health);
     if (!health.assistant.enabled) {
       addMsg('assistant', `Hi, I'm ${ASSISTANT_NAME}. I'm not configured yet — ` + health.assistant.hint
-        + '\n\nEverything else in the terminal works without me.');
+        + '\n\nEverything else in the terminal works without me.')
+        .classList.add('msg-greeting');
       $('#chat-send').disabled = true;
       $('#chat-research').disabled = true;
     } else {
       // The model id is deliberately not announced. It told the reader nothing
       // actionable, and it framed the assistant as a wrapper around a model
       // rather than as part of the terminal.
-      addMsg('assistant', `Ask me anything. About the loaded ticker's gamma regime, flow or recommended strike, about the market as a whole, or attach a chart or PDF. **Deep research** runs live web sources.`);
+      // Marked as the greeting, not a reply: renderPulseEmpty must not mistake
+      // it for a conversation in progress and bin the starter cards.
+      addMsg('assistant', `Ask me anything. About the loaded ticker's gamma regime, flow or recommended strike, about the market as a whole, or attach a chart or PDF. **Deep research** runs live web sources.`)
+        .classList.add('msg-greeting');
     }
   } catch (e) { /* backend health is non-fatal for the UI */ }
   startAutoRefresh();
