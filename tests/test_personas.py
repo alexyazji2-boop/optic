@@ -98,12 +98,18 @@ def test_the_skeptic_is_not_merely_contrarian():
 # ----------------------------------------------------------- output format
 
 def test_the_format_prompt_only_suggests_things_the_app_can_do():
-    """The reference product's starter prompts include alerts and email. Pulse
-    has neither, and a suggested follow-up that cannot be honoured is worse than
-    one fewer suggestion."""
-    f = ai.FORMAT_PROMPT.lower()
-    assert "no alerts" in f
-    assert "no email" in f
+    """The reference product offers "create an alert for META if it breaks back
+    above recent highs" as a follow-up. A reader who accepts that offer here gets
+    nothing: the alerts inbox is fed by the terminal's own scans, and Pulse has
+    no way to add a rule to it. It read "no alerts" until the inbox shipped, at
+    which point the flat denial became the wrong sentence rather than a stale
+    one, because the panel is real and only the on-request half is missing."""
+    # Collapsed, because the prompt is a wrapped literal: "cannot set a price\n
+    # alert" is one phrase to the model and two lines to `in`.
+    f = " ".join(ai.FORMAT_PROMPT.lower().split())
+    assert "cannot set a price alert" in f
+    assert "cannot send email" in f
+    assert "cannot route an order" in f
 
 
 def test_the_format_prompt_exempts_short_questions():
