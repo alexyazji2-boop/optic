@@ -3061,6 +3061,86 @@ function renderWatchlist() {
  * show more than a count, so an alert that fired while you were on another tab
  * was a number you had no way to read.
  */
+/* Urgency, in the order it should be read. The field has been on every alert
+ * since alerts existed and the list showed them all alike, newest first, so a
+ * position closing sat below a pattern confirming. */
+const ALERT_URGENCY = [
+  { id: 'high', label: 'Needs attention' },
+  { id: 'normal', label: 'Worth knowing' },
+  { id: 'low', label: 'For the record' },
+];
+
+let alertKindFilter = 'all';
+let alertUnreadOnly = false;
+const alertsOpen = new Set();          // which alerts have their reasoning open
+
+/** Scalars from an alert's payload, as readings. Bounded and label-cased. */
+const ALERT_PAYLOAD_SKIP = new Set(['id', 'ticker', 'symbol', 'book', 'entry_at',
+  'exit_at', 'created_at', 'ran_at', 'dedupe_key']);
+
+function alertReadings(payload) {
+  const rows = Object.entries(payload || {})
+    .filter(([k, v]) => !ALERT_PAYLOAD_SKIP.has(k)
+      && (typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean')
+      && v !== '' && v !== null)
+    .slice(0, 8);
+  if (!rows.length) return '';
+  return `<dl class="al-readings">${rows.map(([k, v]) => `<div>
+    <dt>${esc(k.replace(/_/g, ' '))}</dt>
+    <dd>${esc(typeof v === 'number' ? fmt(v, 2) : String(v))}</dd>
+  </div>`).join('')}</dl>`;
+}
+
+/* One alert, and the reasoning behind it.
+ *
+ * "Why" is two different questions and the answer needs both. What class of
+ * thing is this — which the endpoint has always published per kind and the UI
+ * threw away — and what specifically happened, which is the alert's own body
+ * and payload. Neither is generated: they are the rule that fired and the
+ * numbers it fired on, so they can be checked rather than believed.
+ */
+function alertRow(a, kinds) {
+  const meta = (kinds || {})[a.kind] || {};
+  const open = alertsOpen.has(a.id);
+  const readings = alertReadings(a.payload);
+  const why = meta.why || '';
+  const canExplain = !!(why || readings || a.body);
+  return `<li class="al-row${a.seen ? '' : ' is-new'}">
+    <span class="al-when">${esc(shortWhen(a.at || a.created_at))}</span>
+    <button type="button" class="al-sym" data-watch-open="${esc(a.ticker || '')}"
+      ${a.ticker ? '' : 'disabled'}>${esc(a.ticker || '\u2014')}</button>
+    <span class="al-body">
+      ${/* title and body, which are the fields the record actually carries.
+          * This read `a.message || a.text || a.reason` — none of which exist on
+          * an alert — so every row rendered an empty message. */''}
+      <span class="al-text">${gloss(a.title || '')}</span>
+      ${a.body ? `<span class="al-sub">${gloss(a.body)}</span>` : ''}
+      <span class="al-tags">
+        ${a.kind ? `<span class="al-kind">${esc(a.kind_label || a.kind)}</span>` : ''}
+        ${canExplain ? `<button type="button" class="al-why" data-alert-why="${a.id}"
+          aria-expanded="${open}">${open ? 'Hide why' : 'Why this fired'}</button>` : ''}
+        ${a.seen ? '' : `<button type="button" class="al-why" data-alert-seen="${a.id}"
+          >Mark read</button>`}
+      </span>
+      ${open ? `<div class="al-explain">
+        ${why ? `<p>${gloss(why)}</p>` : ''}
+        ${readings}
+      </div>` : ''}
+    </span>
+  </li>`;
+}
+
+/** What delivery would still need, named rather than left as "not configured". */
+function alertDeliveryNote(delivery) {
+  if (!delivery || delivery.enabled) return '';
+  const blockers = delivery.blockers || [];
+  if (!blockers.length) return '';
+  return `<div class="callout"><strong>These stay in this inbox.</strong>
+    Nothing here is emailed or texted yet.
+    <ul class="al-blockers">${blockers.map((b) =>
+    `<li>${esc(b)}</li>`).join('')}</ul></div>`;
+}
+
 function renderAlerts() {
   const host = views.alerts;
   const data = STATE.alertsFeed;
@@ -3077,7 +3157,24 @@ function renderAlerts() {
       <section class="wv">${errorHTML(data.error)}</section>`;
     return;
   }
-  const rows = data.rows || [];
+  const all = data.rows || [];
+  const kinds = data.kinds || {};
+  const kindIds = [...new Set(all.map((a) => a.kind).filter(Boolean))];
+
+  const rows = all.filter((a) => (alertKindFilter === 'all' || a.kind === alertKindFilter)
+    && (!alertUnreadOnly || !a.seen));
+
+  /* Grouped by urgency rather than listed by time.
+   *
+   * Straight recency put a pattern confirming above a position closing, and the
+   * urgency that says which is which was already on every row. Time still
+   * orders each group. */
+  const groups = ALERT_URGENCY.map((u) => ({
+    ...u, rows: rows.filter((a) => (a.urgency || 'normal') === u.id),
+  })).filter((g) => g.rows.length);
+
+  const unread = all.filter((a) => !a.seen).length;
+
   host.innerHTML = `
   ${renderWatchesBlock()}
 
@@ -3086,24 +3183,37 @@ function renderAlerts() {
       <div>
         <h2 class="hm-h">From the scheduled scan</h2>
         <p class="wv-sub">Not yours: these fire on Optic's own positions and the
-          ranked universe, whether or not you asked. Each one names the condition
-          that tripped it.</p>
+          ranked universe, whether or not you asked. Each one names the rule that
+          tripped it and the readings it tripped on.
+          ${unread ? `<strong>${unread} unread.</strong>` : ''}</p>
       </div>
-      ${rows.length ? `<button type="button" class="btn" data-alerts-clear>
+      ${all.length ? `<button type="button" class="btn" data-alerts-clear>
         Clear all</button>` : ''}
     </div>
-    ${rows.length ? `<ul class="al-list">
-      ${rows.map((a) => `<li class="al-row${a.seen ? '' : ' is-new'}">
-        <span class="al-when">${esc(shortWhen(a.at || a.created_at))}</span>
-        <button type="button" class="al-sym" data-watch-open="${esc(a.ticker || '')}"
-          ${a.ticker ? '' : 'disabled'}>${esc(a.ticker || '—')}</button>
-        <span class="al-body">
-          <span class="al-text">${gloss(a.message || a.text || a.reason || '')}</span>
-          ${a.kind ? `<span class="al-kind">${esc(a.kind)}</span>` : ''}
-        </span>
-      </li>`).join('')}
-    </ul>` : `<p class="wv-none">Nothing has fired. Alerts come from the
-      scheduled scan, so this fills in during market hours — and an empty list
+
+    ${alertDeliveryNote(data.delivery)}
+
+    ${all.length ? `<div class="wv-filters" role="group" aria-label="Filter alerts">
+      <span class="wv-filter-label">Show</span>
+      <button type="button" class="pill${alertKindFilter === 'all' ? ' on' : ''}"
+        data-alert-kind="all" aria-pressed="${alertKindFilter === 'all'}">All</button>
+      ${kindIds.map((k) => `<button type="button"
+        class="pill${alertKindFilter === k ? ' on' : ''}" data-alert-kind="${esc(k)}"
+        aria-pressed="${alertKindFilter === k}">${esc((kinds[k] || {}).label || k)}</button>`).join('')}
+      <button type="button" class="pill${alertUnreadOnly ? ' on' : ''}"
+        data-alert-unread aria-pressed="${alertUnreadOnly}">Unread only</button>
+      ${unread ? '<button type="button" class="pill" data-alerts-seen>Mark all read</button>' : ''}
+    </div>` : ''}
+
+    ${groups.length ? groups.map((g) => `<div class="al-group">
+      <h3 class="al-group-h">${esc(g.label)}<span class="al-group-n">${g.rows.length}</span></h3>
+      <ul class="al-list">${g.rows.map((a) => alertRow(a, kinds)).join('')}</ul>
+    </div>`).join('')
+    : all.length ? `<p class="wv-none">None of your ${all.length} alert${
+      all.length === 1 ? '' : 's'} matches this filter.
+      <button type="button" class="auth-link" data-alert-kind="all">Show all</button></p>`
+      : `<p class="wv-none">Nothing has fired. Alerts come from the
+      scheduled scan, so this fills in during market hours \u2014 and an empty list
       genuinely means nothing crossed a threshold, which is the common case.</p>`}
   </section>`;
 }
@@ -3564,7 +3674,16 @@ async function loadAlertsFeed(force) {
   if (STATE.alertsFeed && !force) { renderAlerts(); return; }
   try {
     const data = await getJSON('/api/alerts');
-    STATE.alertsFeed = { rows: data.alerts || data.rows || [] };
+    /* Keep `kinds` and `delivery`, both of which the endpoint has always
+     * returned and this dropped on the floor. `kinds` carries the explanation
+     * of what each class of alert means, and `delivery` says precisely which
+     * of the two blockers is in the way. */
+    STATE.alertsFeed = {
+      rows: data.alerts || data.rows || [],
+      kinds: data.kinds || {},
+      delivery: data.delivery || null,
+      unseen: data.unseen || 0,
+    };
   } catch (err) {
     STATE.alertsFeed = { error: err.message };
   }
@@ -22418,12 +22537,48 @@ document.addEventListener('click', (evt) => {
     renderPulseHistory(!pulseHistoryOpen);
     return;
   }
+  /* Both feeds, not one.
+   *
+   * loadAlerts fills the header badge and the Charting dock widget; the Alerts
+   * view reads STATE.alertsFeed through loadAlertsFeed. Marking everything read
+   * refreshed only the first, so the view kept showing the same unread count
+   * until the next full reload. */
+  const refreshAlerts = () => {
+    loadAlerts(true);
+    if (STATE.view === 'alerts') loadAlertsFeed(true);
+  };
   if (evt.target.closest('[data-alerts-seen]')) {
-    postJSON('/api/alerts/seen', {}).then(() => loadAlerts(true));
+    postJSON('/api/alerts/seen', {}).then(refreshAlerts);
     return;
   }
   if (evt.target.closest('[data-alerts-clear]')) {
-    postJSON('/api/alerts/clear', {}).then(() => loadAlerts(true));
+    postJSON('/api/alerts/clear', {}).then(refreshAlerts);
+    return;
+  }
+  /* ---- one alert at a time ---- */
+  const why = evt.target.closest('[data-alert-why]');
+  if (why) {
+    const id = Number(why.dataset.alertWhy);
+    if (alertsOpen.has(id)) alertsOpen.delete(id); else alertsOpen.add(id);
+    renderAlerts();
+    return;
+  }
+  const one = evt.target.closest('[data-alert-seen]');
+  if (one) {
+    // Optimistic, so the row loses its unread marker on the click rather than
+    // after the round trip. The refetch is what makes it true.
+    const id = Number(one.dataset.alertSeen);
+    const row = ((STATE.alertsFeed || {}).rows || []).find((a) => a.id === id);
+    if (row) row.seen = 1;
+    renderAlerts();
+    postJSON('/api/alerts/seen', { ids: [id] }).then(refreshAlerts);
+    return;
+  }
+  const kind = evt.target.closest('[data-alert-kind]');
+  if (kind) { alertKindFilter = kind.dataset.alertKind; renderAlerts(); return; }
+  if (evt.target.closest('[data-alert-unread]')) {
+    alertUnreadOnly = !alertUnreadOnly;
+    renderAlerts();
     return;
   }
   if (evt.target.closest('[data-origin-retry]')) {

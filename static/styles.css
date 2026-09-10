@@ -10792,6 +10792,58 @@ body.auth-open { overflow: hidden; }
 }
 .sc-fn-n { font-variant-numeric: tabular-nums; color: var(--ink-muted); }
 
+/* -------------------------------------------------------- alerts centre ---
+   Grouped by urgency, which was on every alert and shown on none of them. */
+.al-group { margin-top: var(--space-4); }
+.al-group-h {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-1);
+  font-size: var(--t-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+}
+.al-group-n { font-variant-numeric: tabular-nums; }
+/* The alert's own body, under its title. The record has carried this since the
+   table was created and the row rendered neither. */
+.al-sub { display: block; color: var(--ink-2); font-size: var(--t-small); }
+.al-tags { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-1); }
+.al-why {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-muted);
+  font-size: var(--t-caption);
+  text-decoration: underline;
+  cursor: pointer;
+  transition: color 0.12s ease;
+}
+.al-why:hover { color: var(--ink); }
+.al-explain {
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px solid var(--border-strong);
+  background: var(--surface-2);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+.al-explain p { margin: 0 0 var(--space-2); font-size: var(--t-small); color: var(--ink-2); }
+.al-explain p:last-child { margin-bottom: 0; }
+/* The readings the rule fired on. A grid so the labels line up down the left
+   whatever the length of the value beside them. */
+.al-readings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+}
+.al-readings div { display: flex; justify-content: space-between; gap: var(--space-2); }
+.al-readings dt { font-size: var(--t-caption); color: var(--ink-muted); text-transform: capitalize; }
+.al-readings dd { margin: 0; font-size: var(--t-caption); font-variant-numeric: tabular-nums; }
+.al-blockers { margin: var(--space-2) 0 0; padding-left: var(--space-4); }
+.al-blockers li { font-size: var(--t-small); color: var(--ink-2); margin-bottom: var(--space-1); }
+
 /* Placed here, not up with the other phone overrides.
    `.hm-greet` is defined further down this file than that block was, and at
    equal specificity the later rule wins: the early copy of this media query
