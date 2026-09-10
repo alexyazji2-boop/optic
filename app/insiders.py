@@ -48,6 +48,18 @@ log = logging.getLogger(__name__)
 INDEX_URL = ("https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4"
              "&owner=only&count={count}&output=atom")
 
+# One company's Form 4 history, which is a different EDGAR action from the live
+# index. Worth having as well rather than instead: the live index is the newest
+# hundred filings across the whole market, so filtering it by symbol would find
+# nothing for almost any symbol a reader typed and read as a broken search.
+#
+# Measured: 20 entries each for AAPL and NVDA, 0 for a symbol that does not
+# exist — which EDGAR returns as an empty feed rather than an error, so "no
+# filings" and "no such company" have to be told apart by the count alone.
+# It carries the same acceptance timestamp as the live index.
+TICKER_URL = ("https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=4"
+              "&dateb=&owner=only&CIK={cik}&count={count}&output=atom")
+
 # The index moves constantly; two minutes is fresh enough for a page and far
 # inside EDGAR's tolerance.
 INDEX_TTL = 120
@@ -131,12 +143,45 @@ def _accession(url: str) -> Optional[str]:
     return hit.group(1) if hit else None
 
 
-def index(count: int = INDEX_COUNT, force: bool = False) -> Dict[str, Any]:
-    """The newest Form 4 filings: accession, issuer, and when it was accepted."""
-    url = INDEX_URL.format(count=max(10, min(int(count), 100)))
+def index(count: int = INDEX_COUNT, force: bool = False,
+          ticker: Optional[str] = None) -> Dict[str, Any]:
+    """Form 4 filings: accession, issuer, and when it was accepted.
+
+    With no ticker, the newest across the market. With one, that company's
+    history.
+    """
+    n = max(10, min(int(count), 100))
+    symbol = (ticker or "").strip().upper()
+    if symbol:
+        if not re.fullmatch(r"[A-Z][A-Z0-9.\-]{0,9}", symbol):
+            return {"available": False, "rows": [],
+                    "reason": "That does not look like a symbol."}
+        url = TICKER_URL.format(cik=symbol, count=n)
+        cache_key = "insider:index:" + symbol
+    else:
+        url = INDEX_URL.format(count=n)
+        cache_key = "insider:index"
+    # Checked before the request, not after it.
+    #
+    # SEC requires a contact address in the User-Agent and returns 403 without
+    # one, so on a deployment with no FEED_CONTACT this fails every time and
+    # "EDGAR did not answer (HTTPError)" sends the reader looking for an outage.
+    # feeds.CONTACT_OK already knows; the brief surfaces the same fact as
+    # configuration rather than as a broken section.
+    if not feeds.CONTACT_OK:
+        return {"available": False, "rows": [], "needs_contact": True,
+                "reason": ("This reads filings straight from SEC EDGAR, which "
+                           "requires a contact address in every request and "
+                           "refuses the ones without it. Set FEED_CONTACT to an "
+                           "email you are willing to be contacted on and this "
+                           "fills in. Nothing else on the terminal needs it "
+                           "except the SEC filings section of the daily read.")}
+
     try:
-        body = feeds.fetch_text(url, 0 if force else INDEX_TTL,
-                                key="insider:index", timeout=INDEX_TIMEOUT)
+        # A company's history changes when it files, not continuously, so it is
+        # cached for an hour against the live index's two minutes.
+        body = feeds.fetch_text(url, 0 if force else (3600 if symbol else INDEX_TTL),
+                                key=cache_key, timeout=INDEX_TIMEOUT)
     except Exception as exc:                                 # noqa: BLE001
         return {"available": False,
                 "reason": "EDGAR's filing index did not answer ({}).".format(
@@ -147,6 +192,17 @@ def index(count: int = INDEX_COUNT, force: bool = False) -> Dict[str, Any]:
     try:
         root = ET.fromstring(body.encode("utf-8", "replace"))
     except ET.ParseError:
+        # An unknown symbol does not come back as an empty feed. EDGAR answers
+        # with an HTML "no matching companies" page, which is not XML at all —
+        # measured on ZZZZQQ, which reported "returned something that is not a
+        # feed" and read as an outage rather than as a typo.
+        if symbol:
+            return {"available": True, "rows": [], "ticker": symbol,
+                    "note": ("EDGAR has no company indexed under {}. Check the "
+                             "symbol, or try the issuer's name on EDGAR itself: "
+                             "Form 4s are indexed by the company that issued the "
+                             "shares, so a ticker that has changed or delisted "
+                             "may not resolve.").format(symbol)}
         return {"available": False,
                 "reason": "EDGAR's filing index returned something that is not a feed.",
                 "rows": []}
@@ -178,7 +234,14 @@ def index(count: int = INDEX_COUNT, force: bool = False) -> Dict[str, Any]:
             "index_url": href,
             "title": title,
         })
-    return {"available": True, "rows": rows}
+    if symbol and not rows:
+        # EDGAR answers an unknown symbol with an empty feed, so this is the
+        # only place the two can be told apart, and only by saying both.
+        return {"available": True, "rows": [], "ticker": symbol,
+                "note": ("No Form 4 filings found for {}. Either nobody has "
+                         "filed one, or EDGAR does not index that symbol."
+                         ).format(symbol)}
+    return {"available": True, "rows": rows, "ticker": symbol or None}
 
 
 def _filing_folder(index_url: str) -> str:
@@ -265,9 +328,12 @@ def parse_filing(index_url: str, accession: str) -> Dict[str, Any]:
 
 
 def latest(limit: int = 40, only_purchases: bool = True, force: bool = False,
-           budget: int = ENRICH_BUDGET) -> Dict[str, Any]:
-    """Recent Form 4 transactions across the market, newest filing first."""
-    idx = index(force=force)
+           budget: int = ENRICH_BUDGET, ticker: Optional[str] = None) -> Dict[str, Any]:
+    """Recent Form 4 transactions, newest filing first.
+
+    Market-wide, or one company's when `ticker` is given.
+    """
+    idx = index(force=force, ticker=ticker)
     if not idx.get("available"):
         return {"available": False, "reason": idx.get("reason"), "rows": [],
                 "codes": CODES}
@@ -331,6 +397,8 @@ def latest(limit: int = 40, only_purchases: bool = True, force: bool = False,
         "filings_failed": failed,
         "fetched_now": fetched,
         "only_purchases": bool(only_purchases),
+        "ticker": idx.get("ticker"),
+        "note": idx.get("note"),
         "codes": {k: {"label": v["label"], "buy": v["buy"], "note": v["note"]}
                   for k, v in CODES.items()},
         "generated_at": datetime.now(timezone.utc).isoformat(),

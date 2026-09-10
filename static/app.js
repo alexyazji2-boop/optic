@@ -3765,6 +3765,18 @@ document.addEventListener('input', (evt) => {
 });
 
 document.addEventListener('submit', (evt) => {
+  if (evt.target.id === 'ins-find-form') {
+    evt.preventDefault();
+    const box = document.getElementById('ins-q');
+    const next = (box.value || '').trim().toUpperCase();
+    if (next === insiderTicker) return;
+    insiderTicker = next;
+    STATE.insiders = null;
+    const host = document.getElementById('insider-host');
+    if (host) host.innerHTML = renderInsiderFeed();
+    loadInsiderFeed(false);
+    return;
+  }
   if (evt.target.id !== 'wv-add-form') return;
   evt.preventDefault();
   const box = document.getElementById('wv-add');
@@ -19460,6 +19472,13 @@ async function runReadSearch(query) {
  */
 
 let insiderPurchasesOnly = true;
+/* The symbol the feed is scoped to, or '' for the whole market.
+ *
+ * Served by a different EDGAR action rather than by filtering the rows on
+ * screen: the live index is the newest hundred filings across the market, so
+ * narrowing it to a symbol would find nothing for almost anything a reader
+ * typed and read as a broken search. */
+let insiderTicker = '';
 
 function insiderWhen(iso) {
   if (!iso) return '<span class="ins-t">not given</span>';
@@ -19517,6 +19536,18 @@ function renderInsiderFeed() {
         data-ins-only="0" aria-pressed="${!insiderPurchasesOnly}">Everything filed</button>
       <button type="button" class="pill" data-ins-refresh>Refresh</button>
     </div>
+    <form class="ins-find" id="ins-find-form">
+      <input id="ins-q" type="text" placeholder="One symbol, or blank for the market"
+        aria-label="Filings for one symbol" value="${esc(insiderTicker)}"
+        spellcheck="false" autocomplete="off" maxlength="10">
+      <button class="btn" type="submit">Find</button>
+      ${insiderTicker ? `<button type="button" class="auth-link" data-ins-clear
+        >Back to the market</button>` : ''}
+    </form>
+    ${d.ticker ? `<p class="sub"><strong>${esc(d.ticker)}</strong> only, newest
+      filing first. This is that company's own Form 4 history, not a search of
+      the market-wide list above.</p>` : ''}
+    ${d.note ? `<div class="callout">${esc(d.note)}</div>` : ''}
     <p class="note" style="color:var(--ink-muted);margin:0 0 var(--space-2)">
       ${fmt(d.matched, 0)} ${insiderPurchasesOnly ? 'open-market purchase' : 'transaction'}${
   d.matched === 1 ? '' : 's'} from ${fmt(d.filings_read, 0)} filings read${
@@ -19533,11 +19564,12 @@ function renderInsiderFeed() {
         <th class="num">Shares</th><th class="num">Price</th><th class="num">Value</th>
         <th>Trade date</th></tr></thead>
       <tbody>${rows.map(insiderFeedRow).join('')}</tbody>
-    </table></div>` : `<div class="callout">No ${
-  insiderPurchasesOnly ? 'open-market purchases' : 'transactions'} in the filings
-      read so far. Open-market buying is genuinely rare next to grants and
-      scheduled selling, so an empty list here is usually the answer rather than
-      a fault.</div>`}
+    </table></div>` : d.note ? '' : `<div class="callout">No ${
+  insiderPurchasesOnly ? 'open-market purchases' : 'transactions'}${
+  d.ticker ? ` for ${esc(d.ticker)}` : ''} in the filings read so far.
+      Open-market buying is genuinely rare next to grants and scheduled selling,
+      so an empty list here is usually the answer rather than a fault${
+  insiderPurchasesOnly ? ' \u2014 try "Everything filed"' : ''}.</div>`}
     <div class="callout scan-blind"><strong>What this cannot see.</strong>
       ${esc(d.blind_spot || '')}</div>
     <p class="caveat">${esc(d.method || '')}</p>
@@ -19548,7 +19580,9 @@ async function loadInsiderFeed(force) {
   if (STATE.insiders && !force) return;
   try {
     STATE.insiders = await getJSON('/api/insiders/latest?limit=60&purchases='
-      + (insiderPurchasesOnly ? 'true' : 'false') + (force ? '&force=true' : ''));
+      + (insiderPurchasesOnly ? 'true' : 'false')
+      + (insiderTicker ? '&ticker=' + encodeURIComponent(insiderTicker) : '')
+      + (force ? '&force=true' : ''));
   } catch (err) {
     STATE.insiders = { available: false, reason: err.message };
   }
@@ -22986,6 +23020,14 @@ document.addEventListener('click', (evt) => {
     insiderPurchasesOnly = want;
     // The filter is applied server-side, so switching is a refetch. Cheap: the
     // filings are already parsed and cached, so this re-reads the cache.
+    STATE.insiders = null;
+    const host = document.getElementById('insider-host');
+    if (host) host.innerHTML = renderInsiderFeed();
+    loadInsiderFeed(false);
+    return;
+  }
+  if (evt.target.closest('[data-ins-clear]')) {
+    insiderTicker = '';
     STATE.insiders = null;
     const host = document.getElementById('insider-host');
     if (host) host.innerHTML = renderInsiderFeed();

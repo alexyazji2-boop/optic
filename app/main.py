@@ -1917,6 +1917,7 @@ async def scanner_catalogue() -> Dict[str, Any]:
 @app.get("/api/insiders/latest")
 async def insiders_latest(limit: int = Query(40, ge=1, le=200),
                           purchases: bool = Query(True),
+                          ticker: str = Query("", max_length=10),
                           force: bool = Query(False)) -> Dict[str, Any]:
     """Form 4 transactions across the market, newest filing first.
 
@@ -1924,7 +1925,8 @@ async def insiders_latest(limit: int = Query(40, ge=1, le=200),
     returns what it managed and reports how many filings it has not read yet
     rather than holding the page for half a minute. See app/insiders.py.
     """
-    return await _run(insiders_mod.latest, limit, purchases, force)
+    return await _run(insiders_mod.latest, limit, purchases, force,
+                      insiders_mod.ENRICH_BUDGET, ticker)
 
 
 @app.get("/api/screener/fields")

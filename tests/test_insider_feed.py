@@ -93,6 +93,108 @@ def test_the_index_gets_a_longer_timeout_than_a_feed():
     assert "timeout=INDEX_TIMEOUT" in src
 
 
+def test_a_missing_contact_address_is_named_as_configuration(monkeypatch):
+    """SEC requires a contact in the User-Agent and returns 403 without one, so
+    on a deployment with no FEED_CONTACT this fails every time. Measured on the
+    live site: "EDGAR's filing index did not answer (HTTPError)", which sends
+    the reader looking for an outage that is not happening. The brief already
+    surfaces the same fact as configuration rather than as a broken feed."""
+    from app import feeds as feeds_mod
+    monkeypatch.setattr(feeds_mod, "CONTACT_OK", False)
+
+    def boom(*a, **k):                    # noqa: ANN002, ANN003
+        raise AssertionError("it requested EDGAR without a contact address")
+    monkeypatch.setattr(feeds_mod, "fetch_text", boom)
+
+    out = insiders.index()
+    assert out["available"] is False
+    assert out.get("needs_contact") is True
+    assert "FEED_CONTACT" in out["reason"]
+
+
+# --------------------------------------------------------- the ticker search
+
+def test_a_symbol_uses_a_different_edgar_action():
+    """Not a filter over the rows on screen. The live index is the newest
+    hundred filings across the whole market, so narrowing it to a symbol would
+    find nothing for almost anything a reader typed and read as broken.
+    Measured: 20 entries each for AAPL and NVDA from the per-company action."""
+    assert "action=getcompany" in insiders.TICKER_URL
+    assert "CIK={cik}" in insiders.TICKER_URL
+    assert "owner=only" in insiders.TICKER_URL
+
+
+def test_a_symbol_is_validated_before_it_reaches_a_url(monkeypatch):
+    """It is interpolated into an EDGAR query string."""
+    from app import feeds as feeds_mod
+
+    def boom(*a, **k):                    # noqa: ANN002, ANN003
+        raise AssertionError("junk reached the request")
+    monkeypatch.setattr(feeds_mod, "fetch_text", boom)
+    for junk in ("../etc", "a b", "'; DROP", "toolongsymbol", ""):
+        out = insiders.index(ticker=junk)
+        if junk == "":
+            continue                       # empty means market-wide, not invalid
+        assert out["available"] is False, junk
+        assert "symbol" in out["reason"], junk
+
+
+def test_a_company_history_is_cached_longer_than_the_live_index():
+    """It changes when the company files, not continuously."""
+    src = (ROOT / "app" / "insiders.py").read_text()
+    assert "3600 if symbol else INDEX_TTL" in src
+
+
+def test_an_unknown_symbol_is_a_typo_not_an_outage():
+    """EDGAR answers an unknown company with an HTML "no matching companies"
+    page, which is not XML at all — measured on ZZZZQQ, which reported
+    "returned something that is not a feed"."""
+    src = (ROOT / "app" / "insiders.py").read_text()
+    block = src.split("except ET.ParseError:", 1)[1][:900]
+    assert "if symbol:" in block
+    assert '"available": True' in block, "a typo must not present as a broken feed"
+    assert "no company indexed under" in block
+
+
+def test_the_scoped_view_says_it_is_scoped():
+    """Otherwise a short list reads as a quiet market rather than one company."""
+    body = APP_JS.split("function renderInsiderFeed(", 1)[1].split("\nasync function ", 1)[0]
+    assert "d.ticker ?" in body
+    assert "not a search of" in body
+    assert "data-ins-clear" in body, "no way back to the market-wide feed"
+
+
+def test_an_empty_scoped_result_names_the_symbol_and_the_way_out():
+    """NVDA has 133 filed transactions and zero open-market purchases, measured.
+    "No open-market purchases" with no symbol and no hint reads as a fault."""
+    body = APP_JS.split("function renderInsiderFeed(", 1)[1].split("\nasync function ", 1)[0]
+    assert "for ${esc(d.ticker)}" in body
+    assert "Everything filed" in body.split("in the filings", 1)[1][:400]
+
+
+def test_the_two_empty_messages_do_not_both_appear():
+    """An unknown symbol has its own explanation; showing "no purchases in the
+    filings read so far" underneath it would contradict it."""
+    body = APP_JS.split("function renderInsiderFeed(", 1)[1].split("\nasync function ", 1)[0]
+    assert "d.note ? '' :" in body
+
+
+def test_the_search_is_a_form_submit_not_a_keystroke():
+    """Each search is an EDGAR request. Firing one per keystroke would be a
+    dozen requests to spell a symbol."""
+    assert "evt.target.id === 'ins-find-form'" in APP_JS
+    # Bounded by this handler's own body, not a fixed character count: the
+    # watchlist's wv-add-form handler follows immediately and also calls
+    # preventDefault, so a 600-character window passed with this one's deleted.
+    # Cut at the assignment rather than at the first `return`, which is part of
+    # the guard the second assertion is looking for.
+    block = APP_JS.split("evt.target.id === 'ins-find-form'", 1)[1]
+    block = block.split("insiderTicker = next;", 1)[0]
+    assert "evt.preventDefault()" in block
+    assert "if (next === insiderTicker) return;" in block, \
+        "re-submitting the same symbol refetches for nothing"
+
+
 # ------------------------------------------------------------- the enrichment
 
 def test_the_work_is_capped_per_call():

@@ -10960,6 +10960,19 @@ body.auth-open { overflow: hidden; }
 .ins-code { font-size: var(--t-small); }
 .ins-code.up { color: var(--pos); }
 .ins-code.down { color: var(--neg); }
+.ins-find { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-3) 0; }
+.ins-find input {
+  flex: 0 1 260px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: var(--t-small);
+  text-transform: uppercase;
+}
+/* The placeholder is a sentence, not a symbol, so it must not be shouted. */
+.ins-find input::placeholder { text-transform: none; }
 
 /* Placed here, not up with the other phone overrides.
    `.hm-greet` is defined further down this file than that block was, and at
