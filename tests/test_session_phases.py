@@ -63,6 +63,43 @@ def test_overnight_does_not_claim_to_be_refreshing():
     assert "does not carry" in label.lower()
 
 
+def test_the_live_tape_predicate_excludes_overnight():
+    """The other half of the same finding.
+
+    `isTapeLiveET` was `marketSessionET() !== 'closed'`, and overnight sits
+    between the after-hours close and the pre-market open. Two consumers, both
+    wrong the same way from 8pm to 4am Eastern: tickAutoRefresh re-requested the
+    swing payload every twenty seconds against a feed that does not carry the
+    session, and setChartLive pulsed the chart's leading dot — against the
+    argument in setChartLive's own comment, that "a dot that blinks while the
+    market is shut is telling the reader something untrue".
+    """
+    body = APP_JS.split("function isTapeLiveET() {", 1)[1].split("\n}", 1)[0]
+    assert "TAPE_LIVE_PHASES.includes" in body
+    phases = re.findall(r"'(\w+)'", APP_JS.split("const TAPE_LIVE_PHASES = [", 1)[1]
+                        .split("];", 1)[0])
+    assert phases == ["regular", "pre", "after"], phases
+    assert "overnight" not in phases
+    assert "closed" not in phases
+
+
+def test_the_live_predicate_is_an_allow_list():
+    """A phase added server-side should default to "not delivering prices". The
+    cost of that mistake is a missed refresh; the cost of the other one is a page
+    that says it is live when nothing is arriving."""
+    body = APP_JS.split("function isTapeLiveET() {", 1)[1].split("\n}", 1)[0]
+    assert "!==" not in body, "back to a deny-list, so a new phase reads as live"
+
+
+def test_the_two_consumers_share_one_predicate():
+    """setChartLive is called from a dozen sites and tickAutoRefresh from one.
+    Both are asking the same question, so a second predicate would be a second
+    thing to get wrong."""
+    assert APP_JS.count("setChartLive(isTapeLiveET())") >= 10
+    block = APP_JS.split("function tickAutoRefresh()", 1)[1][:400]
+    assert "!isTapeLiveET()" in block
+
+
 def test_only_a_covered_session_gets_the_beating_dot():
     """The pulse is the page's one animated element and it means prices are
     arriving. Overnight they are not."""

@@ -21001,9 +21001,33 @@ function isMarketOpenET() {
 /* Whether prices are still moving at all — the question the refresh and the
  * chart's live dot should actually be asking. `isMarketOpenET` answers a
  * narrower one and is kept for the places that genuinely mean regular hours,
- * like whether the paper book may take an entry. */
+ * like whether the paper book may take an entry.
+ *
+ * **Overnight is not live, and this used to say it was.** It was
+ * `!== 'closed'`, and app/session.py publishes five phases: overnight sits
+ * between the after-hours close and the pre-market open, so from 8pm to 4am
+ * Eastern both consumers of this were wrong in the same way.
+ *
+ * `tickAutoRefresh` re-requested the swing payload every twenty seconds all
+ * night, against a feed that by the app's own account does not carry that
+ * session — session.py sets `feed_covers_phase: phase != "overnight"` and its
+ * description says "this data feed does not carry it". Every one of those
+ * requests could only return the same after-hours print.
+ *
+ * `setChartLive` pulsed the chart's leading dot, and setChartLive's own comment
+ * in charts.js is the argument against it: "a dot that blinks while the market
+ * is shut is telling the reader something untrue. The pulse means this point is
+ * still moving." Overnight it is not moving; it is the last print from four
+ * hours ago.
+ *
+ * Written as an allow-list on purpose. A phase added server-side should default
+ * to "not delivering prices", because the cost of that mistake is a missed
+ * refresh and the cost of the other one is a page that lies about being live.
+ */
+const TAPE_LIVE_PHASES = ['regular', 'pre', 'after'];
+
 function isTapeLiveET() {
-  return marketSessionET() !== 'closed';
+  return TAPE_LIVE_PHASES.includes(marketSessionET());
 }
 
 /* One entry per phase app/session.py can publish, minus the two the caller
