@@ -68,11 +68,13 @@ def test_the_tab_is_named_for_its_contents():
     News and Long-Term — price and fundamentals and news about one traded thing.
     A label naming the key rather than the contents is vague.
 
-    "Optic" is the house prefix for the terminal's own work: Optic Pulse,
-    Optic's Positions, Optic's Read, Optic's Perspective."""
+    It shipped as "Optic Dossier" and the prefix came off on the reader's call.
+    Optic Pulse, Optic's Read and Optic's Perspective each name a judgement the
+    terminal is making, so the prefix says whose. A dossier is a container of
+    facts about someone else's company, so there was nothing for it to resolve,
+    and a nav strip pays for the extra word on every render."""
     label = re.search(r"\{ id: 'security', label: '([^']+)'", APP_JS).group(1)
-    assert label == "Optic Dossier", label
-    assert "Optic" in label, "the house prefix marks the terminal's own work"
+    assert label == "Dossier", label
 
 
 def test_the_missing_symbol_copy_is_left_alone():

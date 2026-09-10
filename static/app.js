@@ -22384,7 +22384,7 @@ const NAV_GROUPS = [
    *
    * Compare is deliberately not in it. It is about two to four securities at
    * once, so a header naming one of them would be wrong. */
-  /* "Optic Dossier". Two rejected names got it here.
+  /* "Dossier". Two rejected names and one dropped prefix got it here.
    *
    * "Security" is the correct domain term and is still the internal name of the
    * group and of securityHeader, but on a tab strip in a web app it reads as
@@ -22395,12 +22395,18 @@ const NAV_GROUPS = [
    * than the contents is vague, which is what a reader called it.
    *
    * A dossier is everything gathered on one subject, which is exactly the seven.
-   * The "Optic" prefix is the house convention for the terminal's own work:
-   * Optic Pulse, Optic's Positions, Optic's Read, Optic's Perspective.
+   *
+   * It shipped as "Optic Dossier" first, on the house convention for the
+   * terminal's own work: Optic Pulse, Optic's Read, Optic's Perspective. The
+   * prefix came off on the reader's call. Those three needed it because each
+   * names a judgement the terminal is making and the prefix says whose. A
+   * dossier is a container of facts about someone else's company, so there was
+   * no ambiguity for "Optic" to resolve, and a nav strip is the one place in
+   * the app where a word of prefix costs width on every render.
    *
    * "No ticker loaded" stays as it is. That sentence is about a missing symbol
    * rather than about this tab, and it matches the rest of the app. */
-  { id: 'security', label: 'Optic Dossier', views: SECURITY_VIEWS },
+  { id: 'security', label: 'Dossier', views: SECURITY_VIEWS },
   { id: 'analyse', label: 'Compare', views: ['compare'] },
   { id: 'market', label: 'Market', views: ['brief', 'market', 'indices'] },
   /* Explore is the index and Scan is the tool: one is a page you browse when
