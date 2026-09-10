@@ -166,6 +166,60 @@
       && navigator.credentials.create && window.isSecureContext);
   }
 
+  /* Whether this device can verify you with a fingerprint or a face.
+   *
+   * A passkey already IS Face ID or Touch ID — WebAuthn with a platform
+   * authenticator uses the device biometric, and that has worked here since
+   * passkeys went in. What was missing was saying so: the button read "Sign in
+   * with a passkey", a word most people have never met, next to two buttons
+   * that said Google and Apple.
+   *
+   * isUserVerifyingPlatformAuthenticatorAvailable is the only honest way to
+   * ask. It answers "this device has a built-in authenticator that will verify
+   * the person", which is exactly the claim the label needs to make. A security
+   * key or a phone-by-QR still works either way; this only decides the wording.
+   *
+   * Async, cached, and never awaited by a render: the answer arrives after the
+   * first paint, so the label starts neutral and is upgraded in place. A modal
+   * that waited on it would flash empty.
+   */
+  var platformAuth = null;          // null = not asked yet, then true/false
+
+  function askPlatformAuthenticator() {
+    if (platformAuth !== null) return Promise.resolve(platformAuth);
+    if (!passkeysSupported()
+        || !window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
+      platformAuth = false;
+      return Promise.resolve(false);
+    }
+    return window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
+      .then(function (ok) { platformAuth = !!ok; return platformAuth; })
+      .catch(function () { platformAuth = false; return false; });
+  }
+
+  /* What to call it, without claiming a sensor we cannot see.
+   *
+   * There is no API that distinguishes Face ID from Touch ID, or a Windows
+   * Hello camera from its fingerprint reader. So the platform family is named
+   * from the user agent and BOTH of that family's sensors are named, which is
+   * Apple's own convention when an app cannot tell either. Where the platform
+   * is not one of the three, the wording stays generic rather than guessing.
+   *
+   * Getting this wrong costs a slightly odd label and nothing else — the
+   * browser still offers whatever the device actually has. */
+  function biometricName() {
+    var ua = (navigator.userAgent || '');
+    if (/iPhone|iPad|iPod|Macintosh|Mac OS X/i.test(ua)) return 'Face ID or Touch ID';
+    if (/Android/i.test(ua)) return 'your fingerprint or face';
+    if (/Windows/i.test(ua)) return 'Windows Hello';
+    return 'your fingerprint or face';
+  }
+
+  /** The sign-in button's label: biometric where there is one, passkey where not. */
+  function passkeyButtonLabel() {
+    return platformAuth ? ('Sign in with ' + biometricName()) : 'Sign in with a passkey';
+  }
+
   /* A passkey ceremony that the person cancelled is not an error worth showing.
    * NotAllowedError covers both "pressed escape" and "timed out", and neither
    * deserves a red banner. AbortError is our own conditional-UI teardown. */
@@ -333,7 +387,9 @@
         + '</svg>Continue with Google</button>');
     }
     if (passkeysSupported() && providerAvailable('passkey')) {
-      buttons.push('<button type="button" class="auth-provider passkey" data-passkey-signin>'
+      buttons.push('<button type="button" class="auth-provider passkey" data-passkey-signin'
+        + ' title="Uses the passkey saved on this device. A security key or your'
+        + ' phone works too.">'
         + '<svg viewBox="0 0 24 24" aria-hidden="true" class="auth-glyph">'
         + '<circle cx="9" cy="8" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/>'
         + '<path d="M3.4 20c0-3.1 2.5-5.2 5.6-5.2 1 0 2 .2 2.8.6" fill="none" '
@@ -341,7 +397,8 @@
         + '<path d="M17 12.4v3.2m0 2.2v2.6m-1.6-1.3H17" fill="none" stroke="currentColor" '
         + 'stroke-width="1.8" stroke-linecap="round"/>'
         + '<circle cx="17" cy="10.4" r="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/>'
-        + '</svg>Sign in with a passkey</button>');
+        + '</svg><span data-passkey-label>' + esc(passkeyButtonLabel())
+        + '</span></button>');
     }
     if (!buttons.length) return '';
     return '<div class="auth-providers">' + buttons.join('') + '</div>'
@@ -451,6 +508,18 @@
     var first = modal.querySelector('input:not([type=hidden])');
     if (first) first.focus();
     armConditionalPasskey();
+    /* Upgrade the passkey label once the device has answered.
+     *
+     * The check is async and paint is not, so the button renders with the
+     * neutral wording and swaps to "Face ID or Touch ID" a frame later.
+     * Swapping the label rather than repainting the row, because a repaint
+     * would take focus off the field the person is typing in and tear down the
+     * conditional-UI request armed two lines above. */
+    askPlatformAuthenticator().then(function () {
+      if (!modal) return;
+      var label = modal.querySelector('[data-passkey-label]');
+      if (label) label.textContent = passkeyButtonLabel();
+    });
   }
 
   function open(next, options) {
@@ -723,7 +792,7 @@
     host.className = 'auth-promo';
     host.innerHTML = '<div class="auth-promo-copy">'
       + '<strong>Make sign-in faster</strong>'
-      + '<span>Set up a passkey and use Face ID, Touch ID or your device PIN '
+      + '<span>Set up a passkey and use ' + esc(biometricName()) + ' or your device PIN '
       + 'next time. No password to type or lose.</span></div>'
       + '<div class="auth-promo-act">'
       + '<button type="button" class="btn primary" data-promo-add>Set up passkey</button>'
@@ -997,6 +1066,10 @@
     createPasskey: createPasskey,
     signInWithPasskey: signInWithPasskey,
     passkeysSupported: passkeysSupported,
+    // Exported so the Settings page can label its own passkey button the same
+    // way, and so a test can assert the wording without a browser.
+    biometricName: biometricName,
+    platformAuthenticator: askPlatformAuthenticator,
     passkeyMessage: passkeyMessage,
     passkeyCancelled: passkeyCancelled,
     providerLabel: label,
