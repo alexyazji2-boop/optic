@@ -10716,6 +10716,82 @@ body.auth-open { overflow: hidden; }
 .wl-move-btn:hover:not(:disabled) { color: var(--ink); border-color: var(--border-strong); }
 .wl-move-btn:disabled { opacity: 0.3; cursor: default; }
 
+/* ------------------------------------------------------------- screener ---
+   The builder. Rows of field + bounds, which is a form, so it gets form
+   spacing rather than the panel grid. */
+.scan-modes { display: flex; gap: var(--space-2); margin-bottom: var(--space-3); }
+.sc-filters { display: flex; flex-direction: column; gap: var(--space-2); margin: var(--space-3) 0; }
+.sc-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+/* flex-basis is width in a row: this class is only ever used inside .sc-filter
+   and .sc-sort, both of them rows. See CLAUDE.md on .settings-select, which was
+   340px tall inside a column. */
+.sc-field { flex: 1 1 220px; max-width: 320px; }
+.sc-bound {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--t-small);
+  color: var(--ink-muted);
+}
+.sc-bound input { width: 92px; }
+.sc-filter select, .sc-filter input, .sc-sort select {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--t-small);
+}
+.sc-unit { font-size: var(--t-small); color: var(--ink-muted); min-width: 12px; }
+.sc-drop {
+  margin-left: auto;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.sc-drop:hover { color: var(--ink); border-color: var(--border-strong); }
+/* Full width so it sits under the row rather than squeezing the controls. */
+.sc-help { flex: 1 0 100%; margin: 0; font-size: var(--t-caption); color: var(--ink-muted); }
+.sc-actions { display: flex; gap: var(--space-2); margin-bottom: var(--space-4); }
+.sc-states { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: var(--space-2) 0 var(--space-4); }
+.sc-state { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--t-small); }
+.sc-sort { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+
+/* The funnel. Reads as a sentence per line, so a bound that emptied the screen
+   is visible without counting. */
+.sc-funnel {
+  list-style: none;
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0);
+}
+.sc-funnel li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--grid);
+  font-size: var(--t-small);
+  color: var(--ink-2);
+}
+.sc-fn-n { font-variant-numeric: tabular-nums; color: var(--ink-muted); }
+
 /* Placed here, not up with the other phone overrides.
    `.hm-greet` is defined further down this file than that block was, and at
    equal specificity the later rule wins: the early copy of this media query

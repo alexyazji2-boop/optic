@@ -37,6 +37,7 @@ from . import catalysts as catalysts_mod
 from . import catalyst_live as catalyst_live_mod
 from .analytics import cases as cases_mod
 from .analytics import screen as screen_mod
+from .analytics import screener as screener_mod
 from .analytics import regime as regime_mod
 from .analytics import relperf as relperf_mod
 from .analytics import compare as compare_mod
@@ -1909,6 +1910,40 @@ async def scanner_catalogue() -> Dict[str, Any]:
             "considered": len(rows),
             "universe_size": (ranking or {}).get("universe_size"),
         }
+    return await _run(build)
+
+
+@app.get("/api/screener/fields")
+async def screener_fields() -> Dict[str, Any]:
+    """The filter vocabulary, so the builder is generated rather than duplicated.
+
+    Same reason /api/watches/catalogue exists: three watch conditions once
+    compared a stored parameter against a vocabulary spelled somewhere else, and
+    all three stored fine, evaluated fine and never fired.
+    """
+    return screener_mod.describe()
+
+
+@app.post("/api/screener")
+async def screener_run(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Free-form screening over the cached ranking.
+
+    POST rather than GET because the body is a list of bounds, and encoding that
+    into a query string would be a second format to parse. It reads no state and
+    writes none: this is a filter over rows already on disk, so it is deliberately
+    outside _write_guard.
+    """
+    def build() -> Dict[str, Any]:
+        out = screener_mod.run(
+            _cached_ranking(),
+            filters=payload.get("filters"),
+            states=payload.get("states"),
+            sort=str(payload.get("sort") or "score"),
+            direction=str(payload.get("direction") or "desc"),
+            limit=int(payload.get("limit") or screener_mod.DEFAULT_LIMIT),
+        )
+        out["generated_at"] = datetime.now(timezone.utc).isoformat()
+        return out
     return await _run(build)
 
 

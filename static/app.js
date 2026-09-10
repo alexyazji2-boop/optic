@@ -19471,6 +19471,218 @@ function scanCell(kind, value) {
   return fmt(value, 2);
 }
 
+/* ============================================================== screener ===
+ *
+ * The thirteen named scans answer thirteen questions. This answers the
+ * fourteenth: whatever the reader actually wanted to ask.
+ *
+ * The field list is fetched from /api/screener/fields rather than written here.
+ * CLAUDE.md records why that matters: three watch conditions once compared a
+ * stored parameter against a vocabulary spelled somewhere else in the app, and
+ * all three stored fine, evaluated fine and never fired — which looks exactly
+ * like "no matches", the correct answer most of the time.
+ *
+ * It runs over the ranking the scans already share. Nothing here triggers a
+ * rank: that is three thousand downloads and it belongs in the background.
+ */
+
+let screenerFields = null;          // the catalogue, fetched once
+let screenerBusy = false;
+
+function screenerSpec() {
+  if (!STATE.screener) {
+    STATE.screener = { filters: [], states: [], sort: 'score', direction: 'desc', limit: 50 };
+  }
+  return STATE.screener;
+}
+
+async function loadScreenerFields() {
+  if (screenerFields) return screenerFields;
+  try {
+    screenerFields = await getJSON('/api/screener/fields');
+  } catch (err) {
+    screenerFields = { fields: [], states: [], error: err.message };
+  }
+  return screenerFields;
+}
+
+function screenerFieldById(id) {
+  return ((screenerFields || {}).fields || []).find((f) => f.id === id) || null;
+}
+
+/** One filter row: field, lower bound, upper bound. */
+function screenerFilterRow(spec, i) {
+  const fields = (screenerFields || {}).fields || [];
+  const field = screenerFieldById(spec.field);
+  return `<div class="sc-filter" data-sc-row="${i}">
+    <select class="sc-field" data-sc-field="${i}" aria-label="Field for filter ${i + 1}">
+      ${fields.map((f) => `<option value="${esc(f.id)}"${
+    f.id === spec.field ? ' selected' : ''}>${esc(f.label)}</option>`).join('')}
+    </select>
+    <label class="sc-bound">min
+      <input type="number" step="any" data-sc-min="${i}" value="${
+  spec.min === null || spec.min === undefined ? '' : spec.min}"
+        aria-label="Minimum"></label>
+    <label class="sc-bound">max
+      <input type="number" step="any" data-sc-max="${i}" value="${
+  spec.max === null || spec.max === undefined ? '' : spec.max}"
+        aria-label="Maximum"></label>
+    <span class="sc-unit">${esc((field || {}).unit || '')}</span>
+    <button type="button" class="sc-drop" data-sc-del="${i}"
+      aria-label="Remove this filter" title="Remove">\u00d7</button>
+    ${field && field.help ? `<p class="sc-help">${esc(field.help)}</p>` : ''}
+  </div>`;
+}
+
+function screenerBuilder() {
+  const spec = screenerSpec();
+  const cat = screenerFields || {};
+  if (cat.error) {
+    return `<div class="panel span-all"><h2>${hg('Build a screen')}</h2>
+      <div class="callout bad">Could not load the filter list. ${esc(cat.error)}</div></div>`;
+  }
+  const fields = cat.fields || [];
+  if (!fields.length) {
+    return `<div class="panel span-all"><h2>${hg('Build a screen')}</h2>
+      <p class="sub">Loading the filters\u2026</p></div>`;
+  }
+  return `<div class="panel span-all">
+    <h2>${hg('Build a screen')}</h2>
+    <p class="sub">Your own conditions over the same ranked universe the named
+      scans use. Add up to ${cat.max_filters || 8} bounds; leave either side of a
+      bound empty to make it one-sided.</p>
+
+    <div class="sc-filters">
+      ${spec.filters.length
+    ? spec.filters.map(screenerFilterRow).join('')
+    : '<p class="sub">No filters yet. Add one, or run it as-is to rank the whole '
+      + 'liquid universe by trend score.</p>'}
+    </div>
+    <div class="sc-actions">
+      <button type="button" class="btn" data-sc-add
+        ${spec.filters.length >= (cat.max_filters || 8) ? 'disabled' : ''}>+ Add filter</button>
+      ${spec.filters.length || spec.states.length
+    ? '<button type="button" class="btn" data-sc-reset>Clear all</button>' : ''}
+    </div>
+
+    <h3>${hg('Also require')}</h3>
+    <div class="sc-states">
+      ${(cat.states || []).map((st) => `<label class="sc-state">
+        <input type="checkbox" data-sc-state="${esc(st.id)}"${
+    spec.states.includes(st.id) ? ' checked' : ''}>
+        <span>${esc(st.label)}</span></label>`).join('')}
+    </div>
+
+    <div class="sc-sort">
+      <label class="sc-bound">Sort by
+        <select data-sc-sort aria-label="Sort field">
+          ${fields.map((f) => `<option value="${esc(f.id)}"${
+    f.id === spec.sort ? ' selected' : ''}>${esc(f.label)}</option>`).join('')}
+        </select></label>
+      <label class="sc-bound">Direction
+        <select data-sc-dir aria-label="Sort direction">
+          <option value="desc"${spec.direction === 'desc' ? ' selected' : ''}>Highest first</option>
+          <option value="asc"${spec.direction === 'asc' ? ' selected' : ''}>Lowest first</option>
+        </select></label>
+      <button type="button" class="btn primary" data-sc-run
+        ${screenerBusy ? 'disabled' : ''}>${screenerBusy ? 'Screening\u2026' : 'Run screen'}</button>
+    </div>
+
+    <div class="callout scan-blind"><strong>What this screen cannot see.</strong>
+      ${esc(cat.blind_spot || '')}</div>
+  </div>
+  <div id="sc-result">${screenerResultHTML()}</div>`;
+}
+
+function screenerCell(col, value) {
+  if (value === null || value === undefined) return '\u2014';
+  if (col.unit === '$' && Math.abs(value) >= 1e6) return `$${fmtCompact(value)}`;
+  const n = fmt(value, col.decimals);
+  if (col.unit === '%') return `${n}%`;
+  if (col.unit === 'x') return `${n}\u00d7`;
+  if (col.unit === '$') return `$${n}`;
+  return n;
+}
+
+function screenerResultHTML() {
+  const res = STATE.screenerResult;
+  if (!res) return '';
+  if (res === 'loading') {
+    return '<div class="panel span-all"><p class="sub">Screening\u2026</p></div>';
+  }
+  if (!res.available) {
+    return `<div class="panel span-all"><div class="callout">${
+      esc(res.reason || 'The screen could not run.')}</div></div>`;
+  }
+  const cols = res.columns || [];
+  /* The funnel, always — not only when the result is empty.
+   *
+   * The biggest cut is one the reader never set: the liquidity gates drop
+   * roughly two thousand of the three thousand symbols before any bound of
+   * theirs runs. A result of 12 out of 750 reads very differently once you can
+   * see it was 12 out of 750 out of 2,951. */
+  const funnel = (res.funnel || []).map((f) => `<li><span>${esc(f.label)}</span>
+    <span class="sc-fn-n">${fmt(f.before, 0)} \u2192 ${fmt(f.after, 0)}</span></li>`).join('');
+
+  return `<div class="panel span-all">
+    <h2>${hg('Matches')}</h2>
+    <p class="sub">${fmt(res.matched, 0)} of ${fmt(res.considered, 0)} ranked names${
+  res.universe ? `, from a ${fmt(res.universe, 0)}-symbol universe` : ''}${
+  res.matched > res.limit ? ` \u00b7 showing the first ${fmt(res.limit, 0)}` : ''}${
+  res.ranking_age_hours !== null && res.ranking_age_hours !== undefined
+    ? ` \u00b7 ranking ${fmt(res.ranking_age_hours, 1)}h old` : ''}</p>
+    ${res.stale ? `<div class="callout warn">The ranking behind this is
+      ${fmt(res.ranking_age_hours, 0)} hours old, so these are yesterday's readings.</div>` : ''}
+    ${res.gates && res.gates.min_dollar_volume ? `<p class="caveat">Before any filter
+      of yours, the ranking drops anything under $${fmt(res.gates.min_price, 0)} or
+      under $${fmtCompact(res.gates.min_dollar_volume)} a day in traded value. That cut
+      is why the ranked count is ${fmt(res.considered, 0)} and not
+      ${fmt(res.universe, 0)}.</p>` : ''}
+    ${funnel ? `<ul class="sc-funnel">${funnel}</ul>` : ''}
+    ${(res.rows || []).length ? `<table class="data">
+      <thead><tr><th>Symbol</th>${cols.map((c) =>
+    `<th class="num">${esc(c.label)}</th>`).join('')}</tr></thead>
+      <tbody>${res.rows.map((r) => `<tr>
+        <td class="name"><button type="button" class="tkr" data-analyse="${esc(r.symbol)}"
+          >${esc(r.symbol)}</button></td>
+        ${cols.map((c) => `<td class="num">${screenerCell(c, r[c.id])}</td>`).join('')}
+      </tr>`).join('')}</tbody>
+    </table>` : `<div class="callout">Nothing clears every condition. That is a
+      result rather than a failure \u2014 the funnel above says which bound emptied
+      it.</div>`}
+  </div>`;
+}
+
+/* Repaint the builder and its result, not the whole Scan view.
+ *
+ * renderScan rebuilds the named-scan panels too, which would throw away the
+ * reveal animation on twenty rows to change one table — the same reason
+ * loadPatternRates mounts into a host instead of re-rendering Swing. */
+function paintScreener() {
+  const host = document.getElementById('sc-builder');
+  if (host) host.innerHTML = screenerBuilder();
+}
+
+function paintScreenerResult() {
+  const host = document.getElementById('sc-result');
+  if (host) host.innerHTML = screenerResultHTML();
+  else paintScreener();
+}
+
+async function runScreener() {
+  if (screenerBusy) return;
+  screenerBusy = true;
+  STATE.screenerResult = 'loading';
+  paintScreenerResult();
+  try {
+    STATE.screenerResult = await postJSON('/api/screener', screenerSpec());
+  } catch (err) {
+    STATE.screenerResult = { available: false, reason: err.message };
+  }
+  screenerBusy = false;
+  paintScreener();
+}
+
 function renderScan(cat, res) {
   /* Two levels, because thirteen scans in one row is a menu nobody reads: group
    * cards for the question, then pills for the specific scan inside it. The
@@ -19493,7 +19705,23 @@ function renderScan(cat, res) {
     <button type="button" class="scan-pill${sc.id === STATE.scanId ? ' on' : ''}"
       data-scan="${esc(sc.id)}" title="${esc(sc.looks_for || '')}">${esc(sc.name)}</button>`).join('');
 
-  const head = `${renderResearchHub()}
+  /* Named scans and the builder are two answers to one question, so they are
+   * modes rather than two panels stacked. Both on screen at once meant two
+   * result tables and no way to tell which one you had just run. */
+  const mode = STATE.scanMode === 'build' ? 'build' : 'named';
+  const modeBar = `<div class="scan-modes" role="group" aria-label="How to screen">
+    <button type="button" class="pill${mode === 'named' ? ' on' : ''}"
+      data-scan-mode="named" aria-pressed="${mode === 'named'}">Named scans</button>
+    <button type="button" class="pill${mode === 'build' ? ' on' : ''}"
+      data-scan-mode="build" aria-pressed="${mode === 'build'}">Build a screen</button>
+  </div>`;
+
+  if (mode === 'build') {
+    return `${renderResearchHub()}${modeBar}
+      <div id="sc-builder" class="span-all">${screenerBuilder()}</div>`;
+  }
+
+  const head = `${renderResearchHub()}${modeBar}
   <div class="panel span-all">
     <h2>${hg('Scanners')}</h2>
     <p class="sub">Named scans over the ${cat.considered ? fmt(cat.considered, 0) : ''} names that
@@ -19574,14 +19802,102 @@ async function runScan(id) {
   try {
     const res = await getJSON(`/api/scanners/${encodeURIComponent(id)}`);
     if (STATE.scanId !== id) return;          // a faster click won
+    // Held so switching to the builder and back repaints rather than refetches.
+    STATE.scanResult = res;
     views.scan.innerHTML = renderScan(cat, res);
   } catch (err) {
-    views.scan.innerHTML = renderScan(cat, { available: false, reason: err.message });
+    STATE.scanResult = { available: false, reason: err.message };
+    views.scan.innerHTML = renderScan(cat, STATE.scanResult);
   }
   bindScanPills();
   revealPanels(views.scan);
   loadEvaluation();
 }
+
+/* The builder is delegated, not bound.
+ *
+ * bindScanPills below attaches directly after a render, which is fine for
+ * elements that only appear on a full view repaint. The builder rebuilds itself
+ * every time a filter is added or removed, so a bind-once loop would only ever
+ * reach the rows that existed when the view was painted — the same trap the nav
+ * dropdowns hit. */
+document.addEventListener('click', (evt) => {
+  if (!evt.target || !evt.target.closest) return;
+
+  const mode = evt.target.closest('[data-scan-mode]');
+  if (mode) {
+    STATE.scanMode = mode.dataset.scanMode;
+    const paint = () => {
+      views.scan.innerHTML = renderScan(STATE.scan || { scans: [] }, STATE.scanResult);
+      bindScanPills();
+      revealPanels(views.scan);
+    };
+    paint();
+    if (STATE.scanMode === 'build') {
+      // Fetched once, then painted again when it lands: the builder cannot
+      // render a field list it does not have yet.
+      loadScreenerFields().then(() => {
+        if (STATE.view === 'scan' && STATE.scanMode === 'build') paint();
+      });
+    }
+    return;
+  }
+
+  const spec = STATE.screener;
+  if (evt.target.closest('[data-sc-add]')) {
+    const cat = screenerFields || {};
+    const taken = new Set(screenerSpec().filters.map((f) => f.field));
+    const next = (cat.fields || []).find((f) => !taken.has(f.id)) || (cat.fields || [])[0];
+    if (next) screenerSpec().filters.push({ field: next.id, min: null, max: null });
+    paintScreener();
+    return;
+  }
+  const del = evt.target.closest('[data-sc-del]');
+  if (del) {
+    screenerSpec().filters.splice(Number(del.dataset.scDel), 1);
+    paintScreener();
+    return;
+  }
+  if (evt.target.closest('[data-sc-reset]')) {
+    STATE.screener = { filters: [], states: [], sort: 'score', direction: 'desc', limit: 50 };
+    STATE.screenerResult = null;
+    paintScreener();
+    return;
+  }
+  if (evt.target.closest('[data-sc-run]')) { runScreener(); return; }
+  if (!spec) return;
+});
+
+/* Bounds and selects. `change` rather than `input` on the number boxes: firing a
+ * repaint per keystroke rebuilt the row under the cursor and lost the caret
+ * halfway through typing "12.5". */
+document.addEventListener('change', (evt) => {
+  const t = evt.target;
+  if (!t || !t.dataset) return;
+  const spec = screenerSpec();
+
+  if (t.dataset.scField !== undefined) {
+    const row = spec.filters[Number(t.dataset.scField)];
+    if (row) { row.field = t.value; paintScreener(); }
+    return;
+  }
+  if (t.dataset.scMin !== undefined || t.dataset.scMax !== undefined) {
+    const which = t.dataset.scMin !== undefined ? 'min' : 'max';
+    const idx = Number(t.dataset.scMin !== undefined ? t.dataset.scMin : t.dataset.scMax);
+    const row = spec.filters[idx];
+    if (row) row[which] = t.value === '' ? null : Number(t.value);
+    return;                                  // no repaint: the caret is in here
+  }
+  if (t.dataset.scState !== undefined) {
+    const id = t.dataset.scState;
+    spec.states = t.checked
+      ? [...new Set([...spec.states, id])]
+      : spec.states.filter((x) => x !== id);
+    return;
+  }
+  if (t.hasAttribute && t.hasAttribute('data-sc-sort')) { spec.sort = t.value; return; }
+  if (t.hasAttribute && t.hasAttribute('data-sc-dir')) { spec.direction = t.value; }
+});
 
 function bindScanPills() {
   views.scan.querySelectorAll('[data-scan-group]').forEach((b) => {
