@@ -111,6 +111,8 @@ const SECURITY_OWN_SYMBOL = new Set(['chart']);
    not to table headers or labels, where it would just add visual noise. */
 
 const GLOSSARY = {
+  'auto trend lines': "Lines Optic fits to the swing highs and lows it has already found, rather than lines someone drew. A support line connects lows that held; a resistance line connects highs that capped. Each one is kept only if price actually touched it more than twice and it is still within reach of the current price, and the panel says how many candidates were rejected. They describe where price has turned before. They are not a forecast that it will turn there again.",
+  'trend line': "A straight line connecting two or more highs or lows, used to say where a trend has been respected. Its usefulness is entirely in how many times price touched it: a line through two points can be drawn through almost any chart.",
   'liquidity': "How easily something can be bought or sold without moving its price. A stock trading a few hundred thousand dollars a day is illiquid: your own order becomes the market, and the price you get is nothing like the price you saw.",
   'dollar volume': "Share price multiplied by shares traded. The actual money changing hands each day. A better liquidity measure than share count, since a million shares of a $2 stock is a far smaller market than a million shares of a $200 one.",
   'screen': "A first-pass filter over a large list of stocks, used to decide which few deserve real analysis. A screen ranks candidates; it does not decide whether a trade is good.",
@@ -21392,6 +21394,43 @@ function chatContextPayload() {
       state: chartStateWords(STATE.chartSymbol),
       drawings: wsDrawings().length,
     };
+    /* The auto trend lines, as facts rather than as a name on a list.
+     *
+     * chartStateWords already put "Auto trend lines" into the overlay list, so
+     * Pulse knew the words were on screen and nothing else: not how many lines,
+     * not their direction, not what they are fitted to, not how many candidates
+     * were rejected. Asked what they mean it would explain trend lines in
+     * general and sound entirely credible, which is worse than saying it cannot
+     * see them.
+     *
+     * Summarised, not sent whole: the payload carries a 252-date array and
+     * per-line pixel geometry, none of which a model can use. What it needs is
+     * what a reader would ask about — support or resistance, rising or falling,
+     * how many touches, and how the set was filtered. */
+    if (STATE.trendlines && STATE.trendlinesFor === STATE.chartSymbol
+        && showTrends) {
+      const t = STATE.trendlines;
+      ctx.chart.auto_trendlines = t.available === false
+        ? { available: false, reason: t.reason || 'not computed' }
+        : {
+          drawn_on_chart: true,
+          method: 'Fitted to swing pivots found by app/analytics/trendlines.py, '
+            + 'then filtered for relevance. Not drawn by hand and not a forecast.',
+          support: t.support_count,
+          resistance: t.resistance_count,
+          candidates_considered: t.candidates_considered,
+          dropped_out_of_reach: t.dropped_out_of_reach,
+          breaks: (t.breaks || []).length,
+          lines: (t.lines || []).slice(0, 6).map((l) => ({
+            kind: l.kind,
+            direction: l.direction,
+            touches: l.touches,
+            touch_dates: l.touch_dates,
+            price_now: l.price_now,
+            slope_per_bar: l.slope_per_bar,
+          })),
+        };
+    }
     if (String(STATE.chartSymbol) !== String(ctx.ticker || '')) {
       ctx.chart.quote = cd.quote;
       ctx.chart.technicals = cd.technicals;
