@@ -57,7 +57,28 @@ def test_every_new_view_is_in_the_views_map():
 def test_the_nav_group_reuses_the_facet_list_rather_than_repeating_it():
     """Two hand-maintained copies of the same seven names would drift, and the
     symptom is a tab in the strip that the nav menu cannot reach."""
-    assert "{ id: 'security', label: 'Security', views: SECURITY_VIEWS }" in APP_JS
+    assert "views: SECURITY_VIEWS }" in APP_JS
+    assert "{ id: 'security', label:" in APP_JS
+
+
+def test_the_tab_is_not_labelled_security():
+    """A security is the right domain term and it is still the internal name.
+    On a tab strip in a web app it reads as passwords and sign-in, which is the
+    wrong first thought and not one a label should provoke. Same lesson as
+    renaming Portfolio to Optic's Positions: the accurate word and the
+    unambiguous word were not the same word."""
+    label = re.search(r"\{ id: 'security', label: '([^']+)'", APP_JS).group(1)
+    assert label == "Ticker", label
+
+
+def test_no_user_facing_copy_in_the_workspace_says_security():
+    """The label was the visible half. The empty state said "No security
+    loaded" where the rest of the app says "No ticker loaded", and the tab strip
+    announced itself to a screen reader as "Security facets"."""
+    for phrase in ("No security loaded", "Security facets", "Security overview",
+                   "The whole security on one page", "The rest of this security"):
+        assert phrase not in APP_JS, phrase
+    assert "aria-label=\"Security overview\"" not in INDEX
 
 
 def test_every_new_view_reaches_a_loader():

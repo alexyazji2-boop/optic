@@ -4847,7 +4847,8 @@ const PALETTE_PLACES = [
   { view: 'watchlist', label: 'Watchlist', terms: 'watchlist watching follow list' },
   { view: 'alerts', label: 'Alerts', terms: 'alerts alarms notifications fired' },
   { view: 'compare', label: 'Compare', terms: 'compare versus vs side by side' },
-  { view: 'overview', label: 'Security overview', terms: 'overview security summary company snapshot' },
+  { view: 'overview', label: 'Ticker overview',
+    terms: 'overview ticker security summary company snapshot' },
   { view: 'chart', label: 'Chart', terms: 'chart charting drawings indicators advanced' },
   { view: 'financials', label: 'Financials',
     terms: 'financials revenue margin cash ownership short interest statements' },
@@ -7394,7 +7395,7 @@ function securityHeader(view, opts = {}) {
       ${q.exchange ? `<span class="sec-meta">${esc(q.exchange)}${
     q.sector ? ` \u00b7 ${esc(q.sector)}` : ''}</span>` : ''}
     </div>`}
-    <nav class="sec-tabs" role="tablist" aria-label="Security facets">${tabs}</nav>
+    <nav class="sec-tabs" role="tablist" aria-label="Ticker views">${tabs}</nav>
   </header>`;
 }
 
@@ -7409,7 +7410,7 @@ async function loadSecurityFacet(view, force) {
   const host = views[view];
   if (!host) return;
   if (!STATE.ticker) {
-    host.innerHTML = `<div class="panel"><h2>No security loaded</h2>
+    host.innerHTML = `<div class="panel"><h2>No ticker loaded</h2>
       <p class="sub">Enter a symbol in the top bar, or pick one on the
       <button class="btn" type="button" data-goto-home
         style="padding:var(--space-0) var(--space-2);font-size:var(--t-small)"
@@ -7497,7 +7498,7 @@ function renderFinancialsView(force) {
   views.financials.innerHTML = `${securityHeader('financials')}
     ${co ? renderCompany(co)
     : '<div class="panel"><h2>Financials</h2><div class="callout">No company data '
-      + 'for this security. Funds, indices and most ADRs do not file statements.'
+      + 'for this ticker. Funds, indices and most ADRs do not file statements.'
       + '</div></div>'}
     <div id="fin-extras-host">${renderExtras(STATE.extras)}</div>`;
   revealPanels(views.financials);
@@ -7560,7 +7561,7 @@ function renderOverviewView() {
     ${renderOpticPulse(d)}
     ${renderWhatChanged(d)}
     <div class="panel">
-      <h2>${hg('The rest of this security')}</h2>
+      <h2>${hg('The rest of this ticker')}</h2>
       <p class="sub">One reading from each facet, so the row says what is there
         rather than only where to click.</p>
       <div class="ov-cards">
@@ -22008,7 +22009,17 @@ const NAV_GROUPS = [
    *
    * Compare is deliberately not in it. It is about two to four securities at
    * once, so a header naming one of them would be wrong. */
-  { id: 'security', label: 'Security', views: SECURITY_VIEWS },
+  /* Labelled "Ticker", not "Security".
+   *
+   * A security is the correct domain term for a tradable instrument, and it is
+   * still the internal name here and in securityHeader. But on a tab strip in a
+   * web app "Security" reads as passwords and sign-in, which is the wrong first
+   * thought and not one a label should provoke. "Ticker" is also the app's own
+   * vocabulary: #ticker-input, loadTicker, STATE.ticker, "No ticker loaded".
+   *
+   * Same lesson as renaming Portfolio to Optic's Positions: the accurate word
+   * and the unambiguous word were not the same word. */
+  { id: 'security', label: 'Ticker', views: SECURITY_VIEWS },
   { id: 'analyse', label: 'Compare', views: ['compare'] },
   { id: 'market', label: 'Market', views: ['brief', 'market', 'indices'] },
   /* Explore is the index and Scan is the tool: one is a page you browse when
@@ -22047,7 +22058,7 @@ const SUB_LABELS = {
 };
 
 const SUB_TITLES = {
-  overview: 'Overview. The whole security on one page',
+  overview: 'Overview. Everything about one ticker, on one page',
   chart: 'Chart. Full-height chart, overlays and drawings',
   financials: 'Financials. Revenue, margins, cash, ownership and short interest',
   news: 'News. Headlines for this company, scored and tagged',
