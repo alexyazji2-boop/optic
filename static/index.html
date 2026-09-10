@@ -41,7 +41,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/space-grotesk/index.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/plus-jakarta-sans/index.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/inter/index.css">
-<link rel="stylesheet" href="styles.css?v=437">
+<link rel="stylesheet" href="styles.css?v=439">
 <script>
 /* Set the theme before the stylesheet paints.
  *
@@ -129,7 +129,14 @@
 <main>
   <section class="view active" id="view-home" role="tabpanel" aria-label="Home"></section>
   <section class="view" id="view-brief" role="tabpanel" aria-label="Optic&apos;s Read. Daily summary"></section>
+  <!-- The security workspace. One company, six facets, one persistent header.
+       Overview, Financials and News are new sections; swing, earnings, chart and
+       long keep their own ids so every existing loader and deep link still
+       resolves. -->
+  <section class="view" id="view-overview" role="tabpanel" aria-label="Security overview"></section>
   <section class="view" id="view-swing" role="tabpanel" aria-label="Swing and options analysis"></section>
+  <section class="view" id="view-financials" role="tabpanel" aria-label="Company financials"></section>
+  <section class="view" id="view-news" role="tabpanel" aria-label="Company news"></section>
   <section class="view" id="view-earnings" role="tabpanel" aria-label="Earnings analysis"></section>
   <section class="view" id="view-compare" role="tabpanel" aria-label="Compare tickers"></section>
   <section class="view" id="view-long" role="tabpanel" aria-label="Long-term share analysis"></section>
@@ -220,11 +227,11 @@
 <!-- Version query busts the browser cache on deploy. Without it a reloaded page
      can pair new HTML with a stale charts.js/app.js, which surfaces as features
      silently not working rather than as an error. -->
-<script src="charts.js?v=437"></script>
+<script src="charts.js?v=439"></script>
 <!-- Before app.js: it exposes window.OpticAuth, which app.js reads at load to
      decide whether the watchlist and the saved research come from the account or
      from this browser. -->
-<script src="auth.js?v=437"></script>
-<script src="app.js?v=437"></script>
+<script src="auth.js?v=439"></script>
+<script src="app.js?v=439"></script>
 </body>
 </html>

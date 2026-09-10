@@ -66,7 +66,9 @@ const STATE = {
 const $ = (sel) => document.querySelector(sel);
 const views = {
   home: $('#view-home'),
+  overview: $('#view-overview'),
   swing: $('#view-swing'), earnings: $('#view-earnings'),
+  financials: $('#view-financials'), news: $('#view-news'),
   market: $('#view-market'), indices: $('#view-indices'), long: $('#view-long'),
   tracker: $('#view-tracker'), brief: $('#view-brief'),
   compare: $('#view-compare'),
@@ -78,6 +80,29 @@ const views = {
   alerts: $('#view-alerts'),
   settings: $('#view-settings'),
 };
+
+/* The security workspace: the facets of one company, in reading order.
+ *
+ * Declared here rather than beside NAV_GROUPS because both the nav menu and the
+ * tab strip inside the workspace are generated from it, and NAV_GROUPS is a
+ * module-level const that would hit the temporal dead zone if this were
+ * declared after it. One list, so the menu and the strip cannot disagree about
+ * what the workspace contains.
+ *
+ * Compare is not a facet. It is about two to four securities at once, so a
+ * header naming one of them would be a lie about what is on screen.
+ */
+const SECURITY_VIEWS = ['overview', 'chart', 'swing', 'earnings',
+  'financials', 'news', 'long'];
+
+/* Chart is the exception in the strip.
+ *
+ * Every other facet reads STATE.ticker. The Charting workspace deliberately
+ * tracks its own STATE.chartSymbol — see CLAUDE.md, drawing one company's bands
+ * over another company's candles is the bug that independence prevents — so
+ * entering it from this strip has to carry the symbol across, or the header
+ * would name one company and the candles would be another's. */
+const SECURITY_OWN_SYMBOL = new Set(['chart']);
 
 /* ------------------------------------------------------------- glossary
    Beginner-facing jargon gets a dotted underline; hovering (or tabbing to it
@@ -2702,7 +2727,7 @@ function renderSetup(d) {
     </div>
     <div class="su-row">
       ${cell('Bias', `${esc(ep.stance || '')} ${esc(ep.direction || '')}`.trim(),
-    ep.conviction ? `${ep.conviction} conviction` : '')}
+    ep.conviction ? convictionWords(ep.conviction) : '')}
       ${cell('Entry', zoneText, zoneText ? 'in the stock, not the option' : '')}
       ${cell('Contract', rec.strike
     ? `${fmt(rec.strike, 0)} ${String(rec.expiry || '').slice(0, 10)}`
@@ -4306,7 +4331,11 @@ const PALETTE_PLACES = [
   { view: 'watchlist', label: 'Watchlist', terms: 'watchlist watching follow list' },
   { view: 'alerts', label: 'Alerts', terms: 'alerts alarms notifications fired' },
   { view: 'compare', label: 'Compare', terms: 'compare versus vs side by side' },
-  { view: 'chart', label: 'Charting', terms: 'chart charting drawings indicators advanced' },
+  { view: 'overview', label: 'Security overview', terms: 'overview security summary company snapshot' },
+  { view: 'chart', label: 'Chart', terms: 'chart charting drawings indicators advanced' },
+  { view: 'financials', label: 'Financials',
+    terms: 'financials revenue margin cash ownership short interest statements' },
+  { view: 'news', label: 'News', terms: 'news headlines catalysts sentiment company' },
   { view: 'tracker', label: "Optic's Positions", terms: 'positions ledger record paper trades book' },
   { view: 'settings', label: 'Settings', terms: 'settings appearance theme timezone preferences' },
 ];
@@ -5144,7 +5173,7 @@ function renderOpticPulse(d) {
     <div class="pl-head">
       <span class="pl-eyebrow">Optic Pulse</span>
       <span class="pl-stance is-${esc(stance)}">${esc(p.stance_label || stance.toUpperCase())}</span>
-      ${p.conviction ? `<span class="pl-conv">${esc(p.conviction)} conviction</span>` : ''}
+      ${p.conviction ? `<span class="pl-conv">${esc(convictionWords(p.conviction))}</span>` : ''}
       ${p.agreement_pct !== null && p.agreement_pct !== undefined
     ? `<span class="pl-agree">${fmt(p.agreement_pct, 0)}% of inputs agree</span>` : ''}
     </div>
@@ -5461,7 +5490,6 @@ function renderSwing(d) {
   const gex = d.gex || {};
   const gk = d.greeks || {};
   const flow = d.flow || {};
-  const news = d.news || {};
 
   const comp = v.components || {};
   const compRows = Object.entries(comp).filter(([, val]) => val !== null && val !== undefined);
@@ -6083,32 +6111,9 @@ function renderSwing(d) {
   </div>
   `}
 
-  ${renderCompany(d.company)}
-
-  <div class="panel">
-    <h2>${hg('News & catalysts')}</h2>
-    <p class="sub">${toneChip(news.overall_tone)} net sentiment ${fmt(news.net_sentiment, 2)} across ${news.article_count || 0} headlines
-      ${news.earnings_date ? `· earnings ${esc(news.earnings_date)}${news.days_to_earnings !== null ? ` (${news.days_to_earnings}d)` : ''}` : ''}</p>
-    ${news.earnings_warning ? `<div class="callout">${esc(news.earnings_warning)}</div>` : ''}
-    ${(news.catalyst_summary || []).length ? `<h3>${hg('Catalyst types detected')}</h3>
-      <div class="legend">${news.catalyst_summary.map((c) => `<span class="chip neutral"><span class="dot"></span>${esc(cap(c.type))} ×${c.mentions}</span>`).join('')}</div>` : ''}
-    <h3>${hg('Headlines')}</h3>
-    <div class="scroll-y">
-      ${(news.articles || []).map((a) => `<div style="padding:var(--space-2) 0;border-bottom:1px solid var(--grid)">
-        <div style="display:flex;gap:var(--space-3);align-items:baseline;flex-wrap:wrap">
-          ${toneChip(a.tone)}
-          <a href="${esc(a.url)}" target="_blank" rel="noopener" style="color:var(--ink);text-decoration:none;flex:1;min-width:240px">${esc(a.title)}</a>
-          <span class="subnote">${esc(a.publisher)}${a.age_hours !== null ? ` · ${fmt(a.age_hours, 0)}h ago` : ''}</span>
-        </div>
-        ${a.summary ? `<div style="color:var(--ink-2);font-size:var(--t-small);margin-top:var(--space-1)">${esc(a.summary.slice(0, 220))}</div>` : ''}
-        ${(a.catalysts || []).length ? `<div style="margin-top:var(--space-1)">${a.catalysts.map((c) => `<span class="chip neutral" style="margin-right:var(--space-1)"><span class="dot"></span>${esc(cap(c.type))}</span>`).join('')}</div>` : ''}
-      </div>`).join('') || '<div class="muted">No headlines returned for this ticker.</div>'}
-    </div>
-    <p class="caveat">${esc(news.method || '')}. Use “Deep research” in the assistant for a live, sourced brief.</p>
-  </div>
   `;
 
-  views.swing.innerHTML = html;
+  views.swing.innerHTML = securityHeader('swing') + html;
   orderAssetPageForPhone();
 
   // ---- charts
@@ -6787,6 +6792,292 @@ function renderEntryPlan(p) {
       ${iv.term_structure ? `<div class="caveat">${gloss(iv.term_structure)}</div>` : ''}
       ${iv.iv_rank_proxy !== null && iv.iv_rank_proxy !== undefined ? `<p class="caveat">${gloss(iv.method || '')}</p>` : ''}
   </div>` : ''}`;
+}
+
+/* "none conviction" is not English.
+ *
+ * The backend reports conviction as one of a small vocabulary that includes the
+ * literal string "none", and three call sites interpolated it straight into
+ * "${conviction} conviction". A neutral stance on TSLA rendered "none
+ * conviction" on the Pulse hero and again on the overview card beneath it. */
+function convictionWords(value) {
+  const word = String(value || '').trim().toLowerCase();
+  if (!word) return '';
+  return word === 'none' ? 'no conviction' : `${word} conviction`;
+}
+
+/* How far down the page a sticky element has to start to clear the top bar.
+ *
+ * The bar is `position: sticky; top: 0; z-index: 50`, so anything else that
+ * sticks at 0 is painted underneath it and simply disappears. Its height is not
+ * a constant: it is one row on a laptop and wraps to three at 645px, measured
+ * at 83px and 197px on the same page. So it is measured rather than guessed,
+ * with a ResizeObserver because it re-wraps on content as well as on viewport
+ * width and a resize listener would miss the first case.
+ */
+function syncTopbarOffset() {
+  const bar = document.querySelector('header.topbar');
+  if (!bar) return;
+  document.documentElement.style.setProperty(
+    '--topbar-h', `${Math.round(bar.getBoundingClientRect().height)}px`);
+}
+
+if (typeof ResizeObserver === 'function') {
+  const bar = document.querySelector('header.topbar');
+  if (bar) new ResizeObserver(syncTopbarOffset).observe(bar);
+}
+syncTopbarOffset();
+
+/* ------------------------------------------------------- security workspace
+ *
+ * The header that makes seven pages one workspace: which company you are
+ * looking at, what it is doing today, and the facets available on it. Rendered
+ * at the top of every facet except Chart, which has a full-height layout and
+ * its own toolbar and would be pushed off the fold by a second header.
+ *
+ * The price line reads from STATE.swing, which every facet already loads, so
+ * this costs no request of its own. Before that payload arrives it renders the
+ * symbol and the tabs without the price rather than holding the page back —
+ * a header that appears late moves everything under it.
+ */
+
+function securityHeader(view, opts = {}) {
+  /* Which company the strip is about.
+   *
+   * Usually STATE.ticker. On the Charting facet it is STATE.chartSymbol, which
+   * is deliberately independent — you can chart one name while analysing
+   * another — and the strip has to name what is actually on screen. That makes
+   * the strip bidirectional: leaving Chart for another facet carries the
+   * charted symbol with it, which is what a reader looking at TSLA candles
+   * means when they click Financials. */
+  const sym = (opts.symbol !== undefined ? opts.symbol : STATE.ticker) || '';
+  if (!sym) return '';
+  const q = (sym === STATE.ticker ? ((STATE.swing || {}).quote) : null) || {};
+  const has = q.price !== null && q.price !== undefined;
+  const pct = q.change_pct;
+  const dir = !Number.isFinite(pct) || Math.abs(pct) < 0.005
+    ? 'flat' : (pct > 0 ? 'up' : 'down');
+
+  const tabs = SECURITY_VIEWS.map((v) => {
+    const on = v === view;
+    return `<button type="button" role="tab" class="sec-tab${on ? ' on' : ''}"
+      data-sec-view="${esc(v)}" data-sec-sym="${esc(sym)}" aria-selected="${on}"
+      title="${esc(SUB_TITLES[v] || '')}">${esc(SUB_LABELS[v] || v)}</button>`;
+  }).join('');
+
+  /* Compact drops the price line. Used on Charting, where the toolbar and the
+   * status strip already carry the symbol and the last price twice over, and
+   * where a third copy would cost rows from a deliberately full-height chart. */
+  return `<header class="sec-head${opts.compact ? ' compact' : ''}">
+    ${opts.compact ? '' : `<div class="sec-id">
+      <span class="sec-sym">${esc(sym)}</span>
+      ${q.name ? `<span class="sec-name">${esc(q.name)}</span>` : ''}
+      ${has ? `<span class="sec-px">${fmt(q.price, 2)}</span>
+        <span class="sec-chg ${dir}">${Number.isFinite(pct)
+    ? `${pct >= 0 ? '+' : ''}${fmt(pct, 2)}%` : ''}</span>` : ''}
+      ${q.exchange ? `<span class="sec-meta">${esc(q.exchange)}${
+    q.sector ? ` \u00b7 ${esc(q.sector)}` : ''}</span>` : ''}
+    </div>`}
+    <nav class="sec-tabs" role="tablist" aria-label="Security facets">${tabs}</nav>
+  </header>`;
+}
+
+/* Every facet needs the same payload, so they share one loader.
+ *
+ * /api/ticker carries quote, company, news, patterns and filings in one
+ * response — the facets are different readings of it, not different requests.
+ * loadSwing owns the fetch; this waits on it and then paints whichever facet
+ * asked. Without the shared payload each tab would refetch a two-second call
+ * and the workspace would feel slower than the single page it replaced. */
+async function loadSecurityFacet(view, force) {
+  const host = views[view];
+  if (!host) return;
+  if (!STATE.ticker) {
+    host.innerHTML = `<div class="panel"><h2>No security loaded</h2>
+      <p class="sub">Enter a symbol in the top bar, or pick one on the
+      <button class="btn" type="button" data-goto-home
+        style="padding:var(--space-0) var(--space-2);font-size:var(--t-small)"
+        >Home</button> page.</p></div>`;
+    return;
+  }
+  /* loadSwing's own guard is `STATE.swing.ticker === STATE.ticker`, so that is
+   * the freshness test here too rather than a second bookkeeping field that
+   * could drift from it. Silent, because its noisy path calls beginLoad on the
+   * Swing section, which is not the section the reader is looking at. */
+  const have = STATE.swing && STATE.swing.ticker === STATE.ticker;
+  if (!have || force) {
+    host.innerHTML = `${securityHeader(view)}
+      <div class="panel"><p class="sub">Loading ${esc(STATE.ticker)}\u2026</p></div>`;
+    await loadSwing(force, { silent: true });
+  }
+  if (STATE.view !== view) return;      // the reader moved on while it loaded
+  if (view === 'news') return renderNewsView();
+  if (view === 'financials') return renderFinancialsView(force);
+  if (view === 'overview') return renderOverviewView();
+}
+
+/* ---- News facet -----------------------------------------------------------
+ *
+ * Lifted whole out of renderSwing, not rewritten. It was the last panel on a
+ * page that already ran twenty-seven of them, which is why the headlines for a
+ * company were the hardest thing on the terminal to find.
+ *
+ * The payload is the same one /api/news/{ticker} serves; /api/ticker embeds it,
+ * so this facet needs no request of its own. */
+
+function newsArticleRow(a) {
+  return `<div class="nw-row">
+    <div class="nw-line">
+      ${toneChip(a.tone)}
+      <a class="nw-title" href="${esc(a.url)}" target="_blank"
+        rel="noopener noreferrer nofollow">${esc(a.title)}</a>
+      <span class="subnote">${esc(a.publisher || '')}${
+  a.age_hours !== null && a.age_hours !== undefined
+    ? ` \u00b7 ${fmt(a.age_hours, 0)}h ago` : ''}</span>
+    </div>
+    ${a.summary ? `<p class="nw-sum">${esc(a.summary.slice(0, 220))}</p>` : ''}
+    ${(a.catalysts || []).length ? `<div class="nw-tags">${a.catalysts.map((c) =>
+    `<span class="chip neutral"><span class="dot"></span>${esc(cap(c.type))}</span>`)
+    .join('')}</div>` : ''}
+  </div>`;
+}
+
+function renderNewsView() {
+  const d = STATE.swing || {};
+  const news = d.news || {};
+  const arts = news.articles || [];
+  views.news.innerHTML = `${securityHeader('news')}
+  <div class="panel">
+    <h2>${hg('News & catalysts')}</h2>
+    <p class="sub">${toneChip(news.overall_tone)} net sentiment ${
+  fmt(news.net_sentiment, 2)} across ${news.article_count || 0} headlines${
+  news.earnings_date ? ` \u00b7 earnings ${esc(news.earnings_date)}${
+    news.days_to_earnings !== null && news.days_to_earnings !== undefined
+      ? ` (${news.days_to_earnings}d)` : ''}` : ''}</p>
+    ${news.earnings_warning ? `<div class="callout">${esc(news.earnings_warning)}</div>` : ''}
+    ${(news.catalyst_summary || []).length ? `<h3>${hg('Catalyst types detected')}</h3>
+      <div class="legend">${news.catalyst_summary.map((c) =>
+    `<span class="chip neutral"><span class="dot"></span>${esc(cap(c.type))} \u00d7${
+      c.mentions}</span>`).join('')}</div>` : ''}
+    <h3>${hg('Headlines')}</h3>
+    ${arts.length ? arts.map(newsArticleRow).join('')
+    : '<div class="callout">No headlines returned for this ticker.</div>'}
+    <p class="caveat">${esc(news.method || '')}. Use \u201cDeep research\u201d in the
+      assistant for a live, sourced brief.</p>
+  </div>`;
+  revealPanels(views.news);
+}
+
+/* ---- Financials facet -----------------------------------------------------
+ *
+ * The company panel and the corporate-actions panel, both of which were buried
+ * on the Analysis tab. Nothing here is new data: renderCompany and renderExtras
+ * are the same functions, called from the facet the reader would look for them
+ * on. Extras arrives on its own request, so the panel is mounted when it lands
+ * rather than blocking the statements above it. */
+function renderFinancialsView(force) {
+  const d = STATE.swing || {};
+  const co = d.company;
+  views.financials.innerHTML = `${securityHeader('financials')}
+    ${co ? renderCompany(co)
+    : '<div class="panel"><h2>Financials</h2><div class="callout">No company data '
+      + 'for this security. Funds, indices and most ADRs do not file statements.'
+      + '</div></div>'}
+    <div id="fin-extras-host">${renderExtras(STATE.extras)}</div>`;
+  revealPanels(views.financials);
+  // loadExtras mounts into #extras-host on the Swing tab; this facet has its
+  // own host, so it re-renders here once the request settles.
+  loadExtras(force).then(() => {
+    const host = document.getElementById('fin-extras-host');
+    if (host && STATE.view === 'financials') {
+      host.innerHTML = renderExtras(STATE.extras);
+      revealPanels(host);
+      requestAnimationFrame(() => requestAnimationFrame(mountRelativeChart));
+    }
+  });
+}
+
+/* ---- Overview facet -------------------------------------------------------
+ *
+ * The one page that answers "what is going on with this company" without
+ * reading six tabs. Deliberately a summary that points onward rather than a
+ * second copy of each facet: the stance hero and the what-changed diff in full,
+ * then one live figure per facet so the row is a dashboard rather than a menu.
+ *
+ * Every number comes out of the /api/ticker payload the workspace already has.
+ * A card whose figure is missing says so and still navigates — a facet is not
+ * absent because today's reading is.
+ */
+
+function overviewCard(view, label, value, note) {
+  return `<button type="button" class="ov-card"
+    data-sec-view="${esc(view)}" data-sec-sym="${esc(STATE.ticker || '')}">
+    <span class="ov-card-lab">${esc(label)}</span>
+    <span class="ov-card-val${value === null || value === undefined ? ' none' : ''}"
+      >${value === null || value === undefined ? 'not available' : value}</span>
+    ${note ? `<span class="ov-card-note">${esc(note)}</span>` : ''}
+  </button>`;
+}
+
+function renderOverviewView() {
+  const d = STATE.swing || {};
+  const q = d.quote || {};
+  const news = d.news || {};
+  const fin = ((d.company || {}).financials) || {};
+  const pulse = d.pulse || {};
+
+  // Where today sits in the 52-week range: the single most compact answer to
+  // "is this thing high or low", and it needs both ends to mean anything.
+  const lo = q.fifty_two_low;
+  const hi = q.fifty_two_high;
+  const band = (Number.isFinite(lo) && Number.isFinite(hi) && hi > lo
+    && Number.isFinite(q.price))
+    ? Math.round(((q.price - lo) / (hi - lo)) * 100) : null;
+
+  const days = news.days_to_earnings;
+  const growth = q.revenue_growth;
+  const margin = q.profit_margin;
+
+  const heads = (news.articles || []).slice(0, 3);
+
+  views.overview.innerHTML = `${securityHeader('overview')}
+    ${renderOpticPulse(d)}
+    ${renderWhatChanged(d)}
+    <div class="panel">
+      <h2>${hg('The rest of this security')}</h2>
+      <p class="sub">One reading from each facet, so the row says what is there
+        rather than only where to click.</p>
+      <div class="ov-cards">
+        ${overviewCard('chart', 'Chart',
+    band === null ? null : `${band}%`,
+    band === null ? '52-week range unavailable' : 'of its 52-week range')}
+        ${overviewCard('swing', 'Analysis',
+    pulse.stance ? esc(cap(String(pulse.stance))) : null,
+    pulse.conviction ? convictionWords(pulse.conviction) : 'setup, levels and options')}
+        ${overviewCard('earnings', 'Earnings',
+    news.earnings_date ? esc(news.earnings_date) : null,
+    days !== null && days !== undefined ? `in ${days} days` : 'no date published')}
+        ${overviewCard('financials', 'Financials',
+    Number.isFinite(growth) ? `${(growth * 100).toFixed(1)}%` : null,
+    Number.isFinite(margin) ? `revenue growth \u00b7 ${(margin * 100).toFixed(1)}% margin`
+      : 'revenue growth')}
+        ${overviewCard('news', 'News',
+    news.article_count ? String(news.article_count) : null,
+    news.overall_tone ? `headlines \u00b7 ${news.overall_tone}` : 'headlines')}
+        ${overviewCard('long', 'Long-term',
+    Number.isFinite(q.trailing_pe) ? fmt(q.trailing_pe, 1) : null,
+    'trailing P/E, valuation and holding case')}
+      </div>
+    </div>
+    ${heads.length ? `<div class="panel">
+      <h2>${hg('Latest headlines')}</h2>
+      ${heads.map(newsArticleRow).join('')}
+      <button type="button" class="btn ov-more" data-sec-view="news"
+        data-sec-sym="${esc(STATE.ticker || '')}">All ${
+  news.article_count || heads.length} headlines</button>
+    </div>` : ''}
+    ${fin.available === false && fin.notes ? `<p class="caveat">${esc(fin.notes)}</p>` : ''}`;
+  revealPanels(views.overview);
 }
 
 /* ------------------------------------------------------------ company panel */
@@ -10652,6 +10943,11 @@ function renderChartWorkspace(d) {
       * third copy in a visible heading would be clutter for sighted readers to
       * buy structure for everyone else. This is what .sr-only is for. */''}
   <h2 class="sr-only">Charting ${esc(STATE.chartSymbol)}, ${esc(chartInterval)} ${esc(chartRange)}</h2>
+  ${/* Without this the workspace was a one-way door: clicking Chart from the
+      * strip took the symbol across correctly and then left the reader on a
+      * page with no strip and no way back to the company they were reading.
+      * Compact, because the toolbar underneath already names the symbol. */''}
+  ${securityHeader('chart', { symbol: STATE.chartSymbol, compact: true })}
   ${wsToolbar()}
   <div class="ws-body">
     ${wsToolRail()}
@@ -14982,12 +15278,12 @@ function renderEarnings(d) {
     return;
   }
   if (d.error) {
-    views.earnings.innerHTML = `<div class="panel"><h2>${hg('Next report')}</h2>
+    views.earnings.innerHTML = securityHeader('earnings') + `<div class="panel"><h2>${hg('Next report')}</h2>
       <div class="callout bad">${esc(d.error)}</div></div>`;
     return;
   }
   if (d.not_applicable) {
-    views.earnings.innerHTML = `<div class="panel"><h2>No earnings for ${esc(d.ticker || '')}</h2>
+    views.earnings.innerHTML = securityHeader('earnings') + `<div class="panel"><h2>No earnings for ${esc(d.ticker || '')}</h2>
       <div class="callout info">${esc(d.reason)}</div>
       <p class="sub" style="margin-top:var(--space-3)">The Swing / Options and Macro tabs all work
         normally for this ticker.</p></div>`;
@@ -15078,7 +15374,7 @@ function renderEarnings(d) {
     <td>${fmt(r.hold, 0)}</td><td>${fmt(r.sell, 0)}</td><td>${fmt(r.strong_sell, 0)}</td>
   </tr>`).join('');
 
-  views.earnings.innerHTML = `
+  views.earnings.innerHTML = securityHeader('earnings') + `
   <div class="panel span2 gap" id="earnBriefHost"></div>
   <div class="panel span2 gap">
     <h2>${hg(reported ? 'Latest result' : 'Next report')} · ${esc(d.ticker || '')}</h2>
@@ -17145,7 +17441,7 @@ function renderLong(d) {
 
   if (h.error) { views.long.innerHTML = errorHTML(h.error); return; }
 
-  views.long.innerHTML = `
+  views.long.innerHTML = securityHeader('long') + `
   <div class="grid c2 gap">
     <div class="panel">
       <h2>${hg('Long-term view')} · ${esc(h.ticker)}</h2>
@@ -19314,8 +19610,13 @@ function loadView(view, force) {
   // this array in the same commit. It is written as a whitelist because the
   // ticker views outnumbered the others when it was first needed, which is no
   // longer true; inverting it is a bigger change than any one view should make.
+  // Overview, Financials and News are per-symbol, but they are listed here
+  // because loadSecurityFacet renders its own "no security loaded" panel under
+  // the workspace header — the reader keeps the tab strip and can see where
+  // they are, instead of landing on a bare dead end with no way back.
   if (!['market', 'indices', 'roth', 'tracker', 'settings', 'brief', 'scan',
     'explore', 'earnings', 'compare', 'instrument', 'chart',
+    'overview', 'financials', 'news',
     'watchlist', 'alerts'].includes(view) && !STATE.ticker) {
     views[view].innerHTML = `<div class="panel"><h2>No ticker loaded</h2>
       <p class="sub">Enter a symbol in the top bar, or pick one on the
@@ -19325,7 +19626,18 @@ function loadView(view, force) {
   // The workspace tracks its own symbol, so it neither needs STATE.ticker nor
   // follows it. With nothing chosen it shows its own picker rather than the
   // generic "no ticker loaded" dead end.
-  if (view === 'chart') return loadChartWorkspace(STATE.chartSymbol, force);
+  /* Falls back to the loaded security rather than the empty picker.
+   *
+   * Charting keeps its own symbol on purpose, but "nothing charted yet" is not
+   * a choice the reader made. Reaching Chart from the nav menu with NVDA loaded
+   * used to land on a ticker prompt, which inside a security workspace reads as
+   * the tab being broken. Once chartSymbol is set it stays independent. */
+  if (view === 'chart') return loadChartWorkspace(STATE.chartSymbol || STATE.ticker, force);
+  // The three facets that read the shared /api/ticker payload rather than
+  // fetching one of their own. See loadSecurityFacet.
+  if (view === 'overview' || view === 'financials' || view === 'news') {
+    return loadSecurityFacet(view, force);
+  }
   if (view === 'swing') return loadSwing(force);
   if (view === 'earnings') return loadEarnings(force);
   if (view === 'compare') return loadCompare(force);
@@ -20826,8 +21138,15 @@ async function runResearch() {
  */
 const NAV_GROUPS = [
   { id: 'home', label: 'Home', views: ['home'] },
-  { id: 'chart', label: 'Charting', views: ['chart'] },
-  { id: 'analyse', label: 'Analysis', views: ['swing', 'earnings', 'compare', 'long'] },
+  /* The security workspace: everything that is about one company, under one
+   * heading, instead of four unrelated top-level pages that happened to share a
+   * symbol. The tab strip inside each of these views is the workspace proper —
+   * see securityHeader — and this menu is the same list reached from the nav.
+   *
+   * Compare is deliberately not in it. It is about two to four securities at
+   * once, so a header naming one of them would be wrong. */
+  { id: 'security', label: 'Security', views: SECURITY_VIEWS },
+  { id: 'analyse', label: 'Compare', views: ['compare'] },
   { id: 'market', label: 'Market', views: ['brief', 'market', 'indices'] },
   /* Explore is the index and Scan is the tool: one is a page you browse when
    * you do not know what you are looking for, the other runs a named screen.
@@ -20857,16 +21176,19 @@ function navGroupLabel(group) {
 }
 
 const SUB_LABELS = {
-  chart: 'Charting',
-  swing: 'Swing', earnings: 'Earnings', compare: 'Compare', long: 'Long-Term',
+  overview: 'Overview', chart: 'Chart', financials: 'Financials', news: 'News',
+  swing: 'Analysis', earnings: 'Earnings', compare: 'Compare', long: 'Long-Term',
   brief: 'Read', market: 'Macro', indices: 'Indices',
   watchlist: 'Watchlist', alerts: 'Alerts',
   tracker: "Optic's Positions",
 };
 
 const SUB_TITLES = {
-  chart: 'Charting. Full-height chart, overlays and drawings',
-  swing: 'Swing trading and options analysis',
+  overview: 'Overview. The whole security on one page',
+  chart: 'Chart. Full-height chart, overlays and drawings',
+  financials: 'Financials. Revenue, margins, cash, ownership and short interest',
+  news: 'News. Headlines for this company, scored and tagged',
+  swing: 'Analysis. Swing setup, levels, options and gamma',
   earnings: 'Earnings analysis and the pre-earnings brief',
   compare: 'Compare two to four tickers side by side',
   instrument: 'Full history for one cross-asset instrument',
@@ -20999,6 +21321,31 @@ document.addEventListener('click', (evt) => {
   // `nav.tabs-sub` — the second row — so when the pages moved into dropdowns
   // inside `nav.tabs-group` nothing matched and clicking Earnings did nothing at
   // all. The menu rendered, opened, and was inert.
+  /* The whole workspace strip, and the overview cards, go through here.
+   *
+   * Two things a plain [data-view] switch cannot do. Charting keeps its own
+   * symbol, so entering it has to carry one across or the header names one
+   * company and the candles are another's. And leaving Charting for a facet of
+   * a symbol that is not the loaded one has to load it, or the reader clicks
+   * Financials under TSLA candles and gets whatever was last analysed.
+   *
+   * These buttons live inside the views, not inside nav.tabs, so the scoped
+   * rule below cannot see them at all — the same trap the nav dropdowns hit,
+   * where the markup rendered and the clicks went nowhere. */
+  const secBtn = evt.target.closest('[data-sec-view]');
+  if (secBtn) {
+    const to = secBtn.dataset.secView;
+    const sym = (secBtn.dataset.secSym || '').toUpperCase();
+    if (SECURITY_OWN_SYMBOL.has(to)) {
+      switchView('chart');
+      if (sym) loadChartWorkspace(sym);
+    } else if (sym && sym !== STATE.ticker) {
+      loadTicker(sym, to);
+    } else {
+      switchView(to);
+    }
+    return;
+  }
   const viewBtn = evt.target.closest('nav.tabs [data-view]');
   if (viewBtn && viewBtn.dataset.view) {
     switchView(viewBtn.dataset.view);
@@ -21283,7 +21630,10 @@ function loadTicker(raw, destination) {
   // `destination` is for callers that must leave their own tab. Clicking a
   // holding in Optic's Positions means "show me why", which is the swing read,
   // not a re-render of the ledger you were already looking at.
-  const target = destination || (STATE.view === 'home' ? 'swing' : STATE.view);
+  /* Overview rather than swing, now that the workspace has a front door. The
+   * analysis page is twenty-four panels deep; opening a symbol there was the
+   * app answering a question nobody had asked yet. */
+  const target = destination || (STATE.view === 'home' ? 'overview' : STATE.view);
 
   /* Landing on Charting has to move the chart's own symbol.
    *
