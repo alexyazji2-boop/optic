@@ -7763,7 +7763,9 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
  */
 .sec-index {
   position: sticky;
-  top: calc(var(--topbar-h, 106px) + var(--space-1));
+  /* Below the ticker workspace header where a view has one. --sechead-h is
+     published by trackSecurityHeader and is 0 on the views that do not. */
+  top: calc(var(--topbar-h, 106px) + var(--sechead-h, 0px) + var(--space-1));
   z-index: 20;
   display: flex;
   flex-wrap: nowrap;
@@ -7868,7 +7870,7 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
  * for: it moves the resting place, not the element. --topbar-h is measured, the
  * rest is the index's own height plus a gap. */
 .panel[data-collapsible="1"] {
-  scroll-margin-top: calc(var(--topbar-h, 106px) + 60px);
+  scroll-margin-top: calc(var(--topbar-h, 106px) + var(--sechead-h, 0px) + 60px);
 }
 
 /* Expand all / Collapse all, riding in the section index.
@@ -10524,11 +10526,15 @@ body.auth-open { overflow: hidden; }
    unrelated in the first place. */
 .sec-head {
   position: sticky;
-  /* Below the top bar, whose height is measured into --topbar-h by
-     syncTopbarOffset. At top: 0 this rendered correctly and was painted
-     underneath a z-index: 50 bar, which looks exactly like it never stuck. */
-  top: var(--topbar-h, 0px);
-  z-index: 5;
+  /* Below the top bar, whose height is published as --topbar-h by
+     trackTopbarHeight. At top: 0 this rendered correctly and was painted
+     underneath a z-index: 50 bar, which looks exactly like it never stuck.
+
+     z-index above .sec-index's 20, and the header is inserted before it, so the
+     two sticky bars stack in reading order: which ticker you are on, then which
+     section. Left at 5 the index painted over the header. */
+  top: var(--topbar-h, 106px);
+  z-index: 21;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -10843,6 +10849,20 @@ body.auth-open { overflow: hidden; }
 .al-readings dd { margin: 0; font-size: var(--t-caption); font-variant-numeric: tabular-nums; }
 .al-blockers { margin: var(--space-2) 0 0; padding-left: var(--space-4); }
 .al-blockers li { font-size: var(--t-small); color: var(--ink-2); margin-bottom: var(--space-1); }
+
+/* ------------------------------------------------------- simple / pro mode ---
+   The class carries the display and the [hidden] attribute carries the
+   semantics. Both, because an author `display` beats the UA stylesheet's
+   [hidden] { display: none } whatever the specificity — see CLAUDE.md on
+   .set-pw, which rendered a password form open on every visit to Settings. */
+.panel.is-advanced { display: none; }
+/* The note that stands where the hidden panels were. Quieter than a panel,
+   because it is a statement about the page rather than a reading. */
+.mode-note {
+  border-style: dashed;
+  background: none;
+}
+.mode-note p { margin: 0; }
 
 /* Placed here, not up with the other phone overrides.
    `.hm-greet` is defined further down this file than that block was, and at

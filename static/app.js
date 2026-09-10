@@ -7323,28 +7323,6 @@ function convictionWords(value) {
   return word === 'none' ? 'no conviction' : `${word} conviction`;
 }
 
-/* How far down the page a sticky element has to start to clear the top bar.
- *
- * The bar is `position: sticky; top: 0; z-index: 50`, so anything else that
- * sticks at 0 is painted underneath it and simply disappears. Its height is not
- * a constant: it is one row on a laptop and wraps to three at 645px, measured
- * at 83px and 197px on the same page. So it is measured rather than guessed,
- * with a ResizeObserver because it re-wraps on content as well as on viewport
- * width and a resize listener would miss the first case.
- */
-function syncTopbarOffset() {
-  const bar = document.querySelector('header.topbar');
-  if (!bar) return;
-  document.documentElement.style.setProperty(
-    '--topbar-h', `${Math.round(bar.getBoundingClientRect().height)}px`);
-}
-
-if (typeof ResizeObserver === 'function') {
-  const bar = document.querySelector('header.topbar');
-  if (bar) new ResizeObserver(syncTopbarOffset).observe(bar);
-}
-syncTopbarOffset();
-
 /* ------------------------------------------------------- security workspace
  *
  * The header that makes seven pages one workspace: which company you are
@@ -7357,6 +7335,43 @@ syncTopbarOffset();
  * symbol and the tabs without the price rather than holding the page back —
  * a header that appears late moves everything under it.
  */
+
+/* Publish the workspace header's height as --sechead-h.
+ *
+ * Same problem as the top bar and the same answer. Two sticky bars now pin on
+ * the ticker views — this header and the section index — and the second has to
+ * know how tall the first is. Measured rather than assumed: the header is one
+ * row on a laptop and two once the company name and the seven tabs stop fitting
+ * on one line, and its own price line comes and goes with the payload.
+ *
+ * Reset to 0 when no header is on screen, or the section index on Macro and
+ * Scan would pin an inch too low forever after visiting a ticker.
+ */
+function trackSecurityHeader() {
+  const publish = () => {
+    const head = document.querySelector('.view.active > .sec-head');
+    const h = head ? Math.round(head.getBoundingClientRect().height) : 0;
+    document.documentElement.style.setProperty('--sechead-h', h + 'px');
+  };
+  publish();
+  if (typeof ResizeObserver !== 'function') {
+    window.addEventListener('resize', publish);
+    return publish;
+  }
+  const obs = new ResizeObserver(publish);
+  let watched = null;
+  return () => {
+    const head = document.querySelector('.view.active > .sec-head');
+    if (head !== watched) {
+      if (watched) obs.unobserve(watched);
+      if (head) obs.observe(head);
+      watched = head;
+    }
+    publish();
+  };
+}
+
+const syncSecurityHeader = trackSecurityHeader();
 
 function securityHeader(view, opts = {}) {
   /* Which company the strip is about.
@@ -16380,6 +16395,23 @@ function renderSettings() {
   </div>
 
   <div class="panel span2 gap">
+    <h2>${hg('How much to show')}</h2>
+    <p class="sub">The Analysis tab renders twenty-two panels and nine of them are
+      derivatives positioning. Simple leaves those out; nothing else changes, and
+      every panel that says what it cannot tell you keeps saying it.</p>
+    <div class="settings-row">
+      <div class="settings-label">Detail
+        <span class="settings-hint">Pro is what the terminal has always shown.
+          Simple hides the options and positioning panels on Analysis, two dense
+          valuation panels on Long-Term and five ratio panels on Macro, and says
+          so where they were.</span></div>
+      <div class="seg">${UI_MODES.map((m) => `<button type="button"
+        class="seg-opt${uiMode() === m ? ' on' : ''}" data-set-mode="${m}"
+        aria-pressed="${uiMode() === m}">${m === 'pro' ? 'Pro' : 'Simple'}</button>`).join('')}</div>
+    </div>
+  </div>
+
+  <div class="panel span2 gap">
     <h2>${hg('Time zone')}</h2>
     <p class="sub"><strong>US market hours are defined in Eastern Time and don't move.</strong>
       This setting only changes the clock they're displayed against, so you can see when the open
@@ -22172,6 +22204,10 @@ function switchView(view, force) {
   }
 
   loadView(view, !!force);
+  // The header belongs to the view, so its height has to be re-published on
+  // every switch — including onto the views that have no header at all, where
+  // it goes back to 0.
+  syncSecurityHeader();
   // Both of these describe the active view, so they have to change with the tab
   // rather than wait for the next 20-second refresh tick.
   updateStatus();
@@ -22745,6 +22781,11 @@ document.addEventListener('click', (evt) => {
     if (STATE.long) preserveUI(views.long, () => renderLong(STATE.long));
     return;
   }
+  // Named for what it sets, not `modeBtn`: `chartMode` already claimed that in
+  // this same listener a dozen lines up, and a duplicate const is a parse error
+  // that takes the whole file down rather than just this branch.
+  const detailBtn = evt.target.closest('[data-set-mode]');
+  if (detailBtn) { setUiMode(detailBtn.dataset.setMode); return; }
   const themeBtn = evt.target.closest('[data-set-theme]');
   if (themeBtn) {
     SETTINGS.theme = themeBtn.dataset.setTheme;
@@ -23193,6 +23234,171 @@ document.addEventListener('keydown', (evt) => {
  * Both are still one click away and their state is still remembered, so a
  * reader who does want them pays the cost once rather than on every load.
  */
+/* ======================================================= simple / pro mode ===
+ *
+ * The Analysis tab renders twenty-two panels and nine of them are the options
+ * machinery: delta, gamma, GEX, VEX, call-versus-put flow, net premium by
+ * strike, buy calls/puts, strike recommendation, options strategies. Measured on
+ * AAPL, not estimated. To a reader who does not trade options, nine of every
+ * twenty-two panels are noise they have to scroll past to reach the ones they
+ * came for.
+ *
+ * Two things this deliberately does not do.
+ *
+ * **Simple is not the default.** It would silently remove nine panels from the
+ * page an existing reader already uses, and "the app lost half my tab" is a
+ * worse first impression than a long page. Pro is what the terminal has always
+ * shown; Simple is a choice.
+ *
+ * **Nothing is hidden silently.** The view says how many panels are out and
+ * offers the switch back, in place, where the panels would have been. A page
+ * that is quietly missing sections is indistinguishable from one that failed to
+ * load them — which is the whole argument the brief's own desks make.
+ *
+ * Keyed on heading text, the same mechanism PANELS_OPEN_BY_DEFAULT uses, so this
+ * costs no edit to any template and cannot drift from markup it does not touch.
+ */
+const UI_MODE_KEY = 'optic.mode.v1';
+const UI_MODES = ['pro', 'simple'];
+
+function uiMode() {
+  try {
+    const raw = localStorage.getItem(UI_MODE_KEY);
+    if (UI_MODES.includes(raw)) return raw;
+  } catch (e) { /* private mode */ }
+  return 'pro';
+}
+
+function setUiMode(mode) {
+  if (!UI_MODES.includes(mode)) return;
+  try { localStorage.setItem(UI_MODE_KEY, mode); } catch (e) { /* private mode */ }
+  document.body.classList.toggle('mode-simple', mode === 'simple');
+  // Re-render whatever is on screen: the pass runs at render time, so a mode
+  // change that only repainted Settings would leave the other tabs as they were.
+  if (STATE.view === 'settings') renderSettings();
+  else loadView(STATE.view, false);
+}
+
+/* Panels Simple mode leaves out, by heading substring, per view.
+ *
+ * Measured against the live DOM rather than guessed from the source: the
+ * headings carry appended text ("Ask Pulse", bar counts, the ticker) so a match
+ * on the whole string would silently fail and hide nothing.
+ *
+ * Conservative on purpose. Only what is unambiguously specialist: derivatives
+ * positioning, and the second denser copy of a panel that already appears in a
+ * readable form above it. A panel that is merely detailed stays. */
+const PANELS_ADVANCED = {
+  swing: [
+    'delta analysis', 'gamma analysis', 'gex.', 'vex.',
+    'call vs put flow', 'net premium by strike', 'buy calls / puts',
+    'options strategies', 'strike & entry recommendation',
+  ],
+  long: ['multiple and revenue history', 'valuation & accumulation'],
+  market: ['cross-asset ratios', 'ratio pair trades',
+    'equal-weight vs cap-weight', 'niche industries', 'themes & sub-industries'],
+  earnings: [],
+  brief: [],
+  indices: [],
+  tracker: [],
+  roth: [],
+};
+
+/* What the hidden panels are, per view. The note said "options and positioning"
+ * everywhere, which was written for Analysis and was simply untrue on Long-Term
+ * (a valuation panel) and Macro (ratio pairs). A note that misdescribes what it
+ * hid is worse than a generic one. */
+const ADVANCED_NOUN = {
+  swing: 'options and positioning',
+  long: 'dense valuation',
+  market: 'ratio and sub-industry',
+};
+
+function advancedNoun(view) {
+  return ADVANCED_NOUN[view] || 'specialist';
+}
+
+function isAdvancedPanel(view, title) {
+  const needle = String(title || '').toLowerCase();
+  return (PANELS_ADVANCED[view] || []).some((k) => needle.includes(k));
+}
+
+/** Hide the specialist panels, and say so where they were. */
+function applyUiMode(view) {
+  const host = views[view];
+  if (!host) return;
+  const simple = uiMode() === 'simple';
+  document.body.classList.toggle('mode-simple', simple);
+  host.querySelectorAll('[data-mode-note]').forEach((n) => n.remove());
+  if (!simple) {
+    host.querySelectorAll('.panel.is-advanced').forEach((p) => {
+      p.classList.remove('is-advanced');
+      p.hidden = false;
+    });
+    return;
+  }
+
+  let hidden = 0;
+  host.querySelectorAll('.panel').forEach((panel) => {
+    const head = panel.querySelector(':scope > h2');
+    if (!head) return;
+    if (!isAdvancedPanel(view, head.textContent || '')) return;
+    panel.classList.add('is-advanced');
+    /* `hidden` as well as the class, because an author `display` beats the UA
+     * stylesheet's [hidden] rule whatever the specificity — CLAUDE.md, after
+     * .set-pw rendered a password form open on every visit to Settings. The
+     * class carries the display:none and the attribute carries the semantics. */
+    panel.hidden = true;
+    hidden += 1;
+  });
+  if (!hidden) return;
+
+  const note = document.createElement('div');
+  note.className = 'panel mode-note';
+  note.setAttribute('data-mode-note', '1');
+  note.innerHTML = `<p class="sub"><strong>Simple mode.</strong> ${hidden}
+    ${esc(advancedNoun(view))} panel${hidden === 1 ? '' : 's'} on this tab
+    ${hidden === 1 ? 'is' : 'are'} hidden.
+    <button type="button" class="auth-link" data-set-mode="pro">Show everything</button></p>`;
+  host.appendChild(note);
+}
+
+/* Panels that arrive after the render pass.
+ *
+ * Several panels are mounted by their own request into a host div — the P/E
+ * history on Long-Term, corporate actions on Analysis, pattern base rates — so
+ * they do not exist when applyUiMode runs and escaped it entirely. Measured:
+ * Long-Term hid one of its two advanced panels, and the one it missed was the
+ * one behind an async fetch.
+ *
+ * An observer rather than a call added to each of those loaders, for the reason
+ * the render-pass wrapper exists a few hundred lines down: a list of loaders to
+ * remember is a list that drifts, and the next async panel would arrive without
+ * one. Coalesced into a frame so a host filling in with twenty rows re-applies
+ * the mode once rather than twenty times.
+ */
+function watchForLatePanels() {
+  if (typeof MutationObserver !== 'function') return;
+  Object.keys(views).forEach((view) => {
+    const host = views[view];
+    if (!host) return;
+    let queued = false;
+    const obs = new MutationObserver((records) => {
+      if (queued || uiMode() !== 'simple') return;
+      // Only when a panel actually appeared. Attribute churn and text updates
+      // are most of what happens in here.
+      const added = records.some((r) => [...r.addedNodes].some((n) => n.nodeType === 1
+        && (n.classList?.contains('panel') || n.querySelector?.('.panel'))));
+      if (!added) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; applyUiMode(view); });
+    });
+    obs.observe(host, { childList: true, subtree: true });
+  });
+}
+
+watchForLatePanels();
+
 const PANELS_OPEN_BY_DEFAULT = {
   swing: [
     'swing verdict', 'quote', "optic's perspective", 'close defence',
@@ -23238,7 +23444,10 @@ function panelId(view, title) {
 function setAllPanels(view, open) {
   const host = views[view];
   if (!host) return;
-  host.querySelectorAll('.panel[data-collapsible="1"]').forEach((panel) => {
+  /* "All" means all the ones this control is about. Over the bare selector,
+   * Expand all in Simple mode silently expanded nine panels the reader cannot
+   * see and recorded that state, so switching back to Pro found them open. */
+  host.querySelectorAll(REACHABLE_PANELS).forEach((panel) => {
     const btn = panel.querySelector(':scope > h2 > .panel-toggle');
     if (!btn) return;
     panel.classList.toggle('is-open', open);
@@ -23252,17 +23461,29 @@ function setAllPanels(view, open) {
   if (bar) bar.dataset.allOpen = String(open);
 }
 
+/* Panels the reader can actually reach.
+ *
+ * `[data-collapsible="1"]` alone includes the ones Simple mode has hidden: the
+ * attribute is set by makePanelsCollapsible and hiding a panel does not remove
+ * it. The section index built from the bare selector listed nine panels that
+ * were not on the page, so every one of those chips was a jump link to a
+ * hidden element — a dead control that scrolls nowhere.
+ *
+ * `:not([hidden])` rather than a mode check, so any future reason for a panel
+ * to be absent is handled by the same rule. */
+const REACHABLE_PANELS = '.panel[data-collapsible="1"]:not([hidden])';
+
 function addBulkControl(view) {
   const host = views[view];
   if (!host || host.querySelector('.panel-bulk')) return;
-  if (host.querySelectorAll('.panel[data-collapsible="1"]').length < 4) return;
+  if (host.querySelectorAll(REACHABLE_PANELS).length < 4) return;
   /* Skipped when the section index is going to render them itself.
    *
    * Two stacked bars where only the top one is sticky: the index pinned under
    * the chrome and this bar scrolled up underneath it, so Expand all and
    * Collapse all crossed through the chips on their way past. Both are
    * navigation for the same stack of panels and belong on one row. */
-  if (host.querySelectorAll('.panel[data-collapsible="1"]').length >= SECTION_INDEX_MIN) return;
+  if (host.querySelectorAll(REACHABLE_PANELS).length >= SECTION_INDEX_MIN) return;
   const bar = document.createElement('div');
   bar.className = 'panel-bulk span-all';
   bar.innerHTML = `<button type="button" class="bulk-btn" data-bulk="open">Expand all</button>
@@ -23312,7 +23533,7 @@ function buildSectionIndex(view) {
   const existing = host.querySelector('.sec-index');
   if (existing) existing.remove();
 
-  const panels = [...host.querySelectorAll('.panel[data-collapsible="1"]')];
+  const panels = [...host.querySelectorAll(REACHABLE_PANELS)];
   if (panels.length < SECTION_INDEX_MIN) return;
 
   const nav = document.createElement('nav');
@@ -23777,6 +23998,12 @@ document.addEventListener('click', (evt) => {
     dedupeGlossTerms(views[view]);
     // Last, so it wraps the finished DOM including anything the steps above added.
     makePanelsCollapsible(view);
+    /* Before addBulkControl and buildSectionIndex, both of which count panels.
+     * Run after them and the section index would list nine panels Simple mode
+     * has hidden, and "expand all" would open them. */
+    applyUiMode(view);
+    // Before the index is built: it pins below this header and needs its height.
+    syncSecurityHeader();
     addBulkControl(view);
     // After makePanelsCollapsible, which is what sets data-collapsible="1" —
     // the index is built from that attribute, so ordering here is load-bearing.

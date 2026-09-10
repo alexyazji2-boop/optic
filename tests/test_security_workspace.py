@@ -241,11 +241,50 @@ def test_the_sticky_header_clears_the_top_bar():
     painted underneath it and looks like it never stuck at all. The bar is one
     row on a laptop and three at 645px — 83px against 197px, measured — so the
     offset cannot be a constant."""
-    assert "syncTopbarOffset" in APP_JS
-    assert "'--topbar-h'" in APP_JS
-    assert "ResizeObserver" in APP_JS.split("function syncTopbarOffset", 1)[1][:700]
     rule = STYLES.split(".sec-head {", 1)[1].split("}", 1)[0]
     assert "var(--topbar-h" in rule
+
+
+def test_the_topbar_height_is_published_once():
+    """It was already published, by trackTopbarHeight, for the phone dropdowns —
+    and .sec-index and the scroll-margin rule were already reading it with a
+    106px fallback. A second observer doing the same job was added here before
+    anyone noticed the first, which is two things to keep in step for no gain."""
+    assert "function trackTopbarHeight()" in APP_JS
+    assert APP_JS.count("setProperty('--topbar-h'") == 1, \
+        "more than one place publishes --topbar-h"
+
+
+def test_the_section_index_pins_below_the_workspace_header():
+    """Two sticky bars on the ticker views. Left at the same offset the index
+    painted over the header, because the index carries z-index 20 and is
+    inserted first: the reader saw a clipped chip row on top of the strip that
+    says which company they are looking at."""
+    head = STYLES.split(".sec-head {", 1)[1].split("}", 1)[0]
+    index = STYLES.split(".sec-index {", 1)[1].split("}", 1)[0]
+    assert "var(--sechead-h" in index, "the index does not account for the header"
+    assert "z-index: 21" in head, "the header must paint above the index's 20"
+
+
+def test_the_header_height_is_measured_and_reset():
+    """One row on a laptop, two once the company name and seven tabs stop
+    fitting, and its price line comes and goes with the payload. Reset to 0 on a
+    view without a header, or Macro and Scan pin an inch too low forever after
+    visiting a ticker."""
+    body = APP_JS.split("function trackSecurityHeader()", 1)[1].split("\nfunction ", 1)[0]
+    assert "'--sechead-h'" in body
+    assert "head ? Math.round" in body and "0" in body
+    assert "ResizeObserver" in body
+    # And re-published on every view change, not only on render.
+    block = APP_JS.split("loadView(view, !!force);", 1)[1][:400]
+    assert "syncSecurityHeader()" in block
+
+
+def test_a_jump_target_clears_both_bars():
+    """scroll-margin-top moves the resting place. Accounting for only the top bar
+    landed a jumped-to panel under the workspace header."""
+    rule = STYLES.split("scroll-margin-top: calc(", 1)[1].split(";", 1)[0]
+    assert "--topbar-h" in rule and "--sechead-h" in rule
 
 
 @pytest.mark.parametrize("cls", [".sec-head", ".sec-tabs", ".sec-tab", ".sec-sym",
