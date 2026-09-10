@@ -148,6 +148,72 @@ def test_nothing_here_asks_a_model():
         assert call not in body, f"the alert explanation calls {call}"
 
 
+# ------------------------------- two defects the legible view made visible ---
+
+def test_a_missing_pnl_is_not_rendered_as_the_word_none():
+    """Measured on the live inbox: "Exited at 0.05 for None. Held \u2014." Two
+    faults in nine words. `None` interpolated as text reads as a broken template
+    rather than as missing data, and the em dash is the punctuation this codebase
+    took a deliberate pass to remove from user-facing copy."""
+    body = alerts._closed_body({"exit_price": 0.05, "pnl": None, "held": None})
+    assert "None" not in body
+    assert "\u2014" not in body
+    assert body == "Exited at 0.05."
+
+
+def test_a_full_exit_still_reads_as_a_sentence():
+    body = alerts._closed_body({"exit_price": 214.4, "pnl": "+8.2%", "held": "11 sessions"})
+    assert body == "Exited at 214.40 for +8.2%. Held 11 sessions." or \
+        body == "Exited at 214.4 for +8.2%. Held 11 sessions."
+
+
+def test_an_exit_with_nothing_recorded_says_so():
+    """An empty body is indistinguishable from the blank rows this view used to
+    render, which is the bug immediately above."""
+    assert alerts._closed_body({}).strip()
+
+
+def test_no_user_facing_alert_copy_carries_an_em_dash():
+    for kind, meta in alerts.KINDS.items():
+        assert "\u2014" not in meta["why"], kind
+        assert "\u2014" not in meta["label"], kind
+
+
+def test_the_dedupe_key_identifies_the_exit_not_the_scan():
+    """It was "closed:{id}:{exit_at or ran_at}". A position closed with neither
+    an id nor an exit timestamp fell through to ran_at, which changes on every
+    scan, so the same exit was inserted again each run. Measured on the live
+    inbox: two identical BWMN rows out of nineteen."""
+    pos = {"ticker": "BWMN", "instrument": "option",
+           "exit_reason": "Premium stop (-50%)", "exit_price": 0.05}
+    assert alerts._closed_key(pos, "scan-1") == alerts._closed_key(pos, "scan-2")
+
+
+def test_an_id_or_a_timestamp_is_preferred_when_there_is_one():
+    """The fallback is a fallback. Two genuinely different exits of the same name
+    at the same price collapse into one under it, which is the right trade
+    against duplicating on every scan but not the first choice."""
+    assert alerts._closed_key({"id": 41, "ticker": "X"}, "SCANSTAMP") == "closed:41"
+    keyed = alerts._closed_key({"ticker": "X", "exit_at": "2026-09-09T12:00:00Z"},
+                               "SCANSTAMP")
+    assert "2026-09-09T12:00:00Z" in keyed
+    # The scan's timestamp must never reach the key: that is the whole defect.
+    assert "SCANSTAMP" not in keyed
+
+
+def test_the_same_exit_cannot_be_recorded_twice(tmp_path, monkeypatch):
+    """The end-to-end version of the two tests above, through the real insert."""
+    monkeypatch.setattr(alerts, "DB_PATH", str(tmp_path / "a.db"))
+    result = {"closed_positions": [{"ticker": "BWMN", "instrument": "option",
+                                    "exit_reason": "Premium stop (-50%)",
+                                    "exit_price": 0.05}]}
+    first = alerts.from_scan(result)
+    second = alerts.from_scan(result)
+    assert first == 1
+    assert second == 0, "the same exit was recorded a second time"
+    assert len(alerts.recent()) == 1
+
+
 # ------------------------------------------------------------------ delivery
 
 def test_the_view_names_what_delivery_is_missing():

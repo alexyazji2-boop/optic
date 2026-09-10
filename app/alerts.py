@@ -204,13 +204,60 @@ def from_scan(result: Dict[str, Any]) -> int:
             "closed",
             "%s closed: %s" % (tkr, pos.get("exit_reason") or "exit"),
             ticker=tkr,
-            body=("Exited at %s for %s. Held %s."
-                  % (pos.get("exit_price"), pos.get("pnl"), pos.get("held") or "—")),
+            body=_closed_body(pos),
             payload=pos,
-            dedupe_key="closed:%s:%s" % (pos.get("id"), pos.get("exit_at") or ran_at),
+            dedupe_key=_closed_key(pos, ran_at),
         ) and 1 or 0
 
     return made
+
+
+def _closed_body(pos: Dict[str, Any]) -> str:
+    """The sentence, built from the parts that exist.
+
+    This was one %s-formatted string over three fields, and a position closed
+    without a recorded P&L rendered "Exited at 0.05 for None. Held —." on the
+    live site. Two faults in nine words: `None` interpolated as text, which
+    reads as a broken template rather than as missing data, and an em dash in
+    user-facing copy, which this codebase took a deliberate pass to remove.
+    """
+    parts = []
+    price = pos.get("exit_price")
+    if price is not None:
+        parts.append("Exited at %s" % price)
+    pnl = pos.get("pnl")
+    if pnl is not None:
+        parts.append("for %s" % pnl)
+    held = pos.get("held")
+    sentence = " ".join(parts)
+    out = (sentence + ".") if sentence else ""
+    if held:
+        out = (out + " Held %s." % held).strip()
+    # Absence stated rather than punctuated. An alert whose body is empty is
+    # indistinguishable from the blank rows the view used to render.
+    return out or "The ledger recorded the exit without a price or a duration."
+
+
+def _closed_key(pos: Dict[str, Any], ran_at: str) -> str:
+    """A key for the event, not for the moment it was noticed.
+
+    It was "closed:{id}:{exit_at or ran_at}". A position closed without an id or
+    an exit timestamp fell through to `ran_at`, which changes on every scan, so
+    the same exit was inserted again each time the ledger ran. Measured on the
+    live inbox: two identical BWMN rows out of nineteen alerts.
+
+    The exit itself is what identifies it: this ticker, this instrument, out at
+    this price for this reason. Two genuinely different exits of the same name at
+    the same price for the same reason would collapse into one, and that is the
+    right trade against duplicating every scan.
+    """
+    if pos.get("id") is not None:
+        return "closed:%s" % pos["id"]
+    if pos.get("exit_at"):
+        return "closed:%s:%s" % (pos.get("ticker") or "", pos["exit_at"])
+    return "closed:%s:%s:%s:%s" % (
+        pos.get("ticker") or "", pos.get("instrument") or "",
+        pos.get("exit_reason") or "", pos.get("exit_price"))
 
 
 def from_capacity(book: str, capacity: Dict[str, Any], day: str) -> int:
