@@ -165,3 +165,25 @@ def test_no_em_dashes_in_the_copy():
         body = re.sub(r"/\*.*?\*/", "", _fn(name), flags=re.S)
         for text in re.findall(r">([^<>{}]{16,})<", body):
             assert "—" not in text, (name, text)
+
+
+def test_the_scan_group_headings_read_the_name_not_the_id():
+    """No group has ever carried a `label`, so `group.label || group.id` fell
+    through to the id on all six and the page read MOVERS, MOMENTUM, VOLUME,
+    STRUCTURE, RISK and RELPERF, uppercased by CSS, while the catalogue had been
+    publishing "Market movers", "Momentum leaders", "Volume", "Trend structure",
+    "High risk" and "Relative performance" the whole time. A reader reported the
+    last one, which is the id you are least likely to guess the meaning of."""
+    assert "group.name || group.label || group.id" in APP_JS
+    assert "esc(group.label || group.id)" not in APP_JS
+
+
+def test_every_published_group_actually_has_the_field_the_page_reads():
+    """The other half of it. A heading that reads `name` is only right if every
+    group carries one, and this is the check that would have caught the original
+    the day `label` was written."""
+    from app.analytics import relperf, scanners
+    groups = scanners.groups() + [relperf.SCAN_GROUP]
+    assert len(groups) >= 5
+    for g in groups:
+        assert g.get("name"), g.get("id")

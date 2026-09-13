@@ -137,3 +137,34 @@ def test_no_em_dashes_in_the_copy():
                           relperf.universe()[0])
     assert "—" not in out["method"]
     assert "—" not in out["headline"]
+
+
+def test_the_scan_names_are_readable_without_the_notation():
+    """They were "RP > 95", "RP < 5", "RP 80 cross", "RP 20 cross". That reads
+    only if you already know RP is a percentile, that the numbers are ranks and
+    not prices, and that "cross" means through the line. A reader said nobody
+    understands it, and the audience this is for is people new to the market.
+    The precision stays in looks_for; the title is not where somebody should
+    have to earn it."""
+    for scan in relperf.SCAN_DEFS:
+        name = scan["name"]
+        assert not name.startswith("RP"), name
+        assert len(name.split()) >= 3, "%r is still shorthand" % name
+
+
+def test_the_scan_names_still_say_which_end_of_the_rank():
+    """Plain is not the same as vague. Each one has to say top or bottom, or the
+    four become interchangeable."""
+    ends = [s["name"].lower() for s in relperf.SCAN_DEFS]
+    assert sum("top" in n for n in ends) == 2, ends
+    assert sum("bottom" in n for n in ends) == 2, ends
+
+
+def test_the_rank_is_not_presented_as_a_return():
+    """The one genuine misreading this panel invites. 97 means it beat 97% of
+    its peers, and a reader who takes it for a 97% gain has the wrong number by
+    an order of magnitude."""
+    leaders = next(s for s in relperf.SCAN_DEFS if s["kind"] == "leaders")
+    body = leaders["looks_for"].lower()
+    assert "ranking, not a return" in body
+    assert "not the same as being up" in body

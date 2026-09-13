@@ -4474,7 +4474,14 @@ function exploreScanGroup(group, byId) {
   }).join('');
   if (!scans) return '';
   return `<div class="ex-group">
-    <h3 class="ex-group-h">${esc(group.label || group.id)}</h3>
+    ${/* `name`, not `label`. No group has ever carried a `label`, so this fell
+         through to the id on all six and the headings on the Explore page read
+         MOVERS, MOMENTUM, VOLUME, STRUCTURE, RISK and RELPERF, uppercased by
+         CSS, where the catalogue has been publishing "Market movers",
+         "Momentum leaders", "Volume", "Trend structure", "High risk" and
+         "Relative performance" the whole time. Reported as the last of those,
+         which is the one whose id is least guessable. */''}
+    <h3 class="ex-group-h">${esc(group.name || group.label || group.id)}</h3>
     ${scans}
   </div>`;
 }
@@ -4524,7 +4531,13 @@ function renderExplore(data) {
           <td class="name">${esc(r.name)}</td>
           <td class="${signClass(r.rel_week_pct)}">${fmtPct(r.rel_week_pct, 1)}</td>
           <td class="${signClass(r.rel_month_pct)}">${fmtPct(r.rel_month_pct, 1)}</td>
-          <td class="name muted">${esc(String(r.rotation || r.summary || '').slice(0, 60))}</td>
+          ${/* rotation is {state, label, note}, so String() on it rendered
+               "[object Object]" down the whole column. The sector board two
+               panels away already reads .label; this one was interpolating the
+               container. The note is the title because it is a sentence and
+               this is a narrow cell. */''}
+          <td class="name muted" title="${esc((r.rotation || {}).note || '')}">${
+  esc((r.rotation || {}).label || '')}</td>
         </tr>`).join('')}</tbody>
       </table>
     </section>` : ''}

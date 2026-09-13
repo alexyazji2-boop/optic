@@ -167,3 +167,21 @@ def test_method_note_disclaims_a_futures_feed():
     note = _board(rows)["method"]
     assert "no futures feed" in note.lower()
     assert "regular-session daily bars" in note
+
+
+def test_the_explore_sector_table_reads_the_rotation_label():
+    """`rotation` is {state, label, note}, so interpolating the container gave
+    "[object Object]" down the whole Read column. The Macro sector board two
+    panels away had always read `.label`; the Explore copy took the object."""
+    app_js = open("static/app.js", encoding="utf-8").read()
+    assert "String(r.rotation || r.summary || '')" not in app_js
+    assert "esc((r.rotation || {}).label || '')" in app_js
+
+
+def test_rotation_is_a_shape_and_not_a_string():
+    """The reason the interpolation failed, asserted at the source so a later
+    change to a bare string would fail here rather than in a table cell."""
+    rot = sb._rotation(4.0, 4.0)
+    assert isinstance(rot, dict)
+    assert set(rot) >= {"state", "label", "note"}
+    assert rot["label"] and not rot["label"].startswith("{")

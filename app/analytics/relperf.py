@@ -278,14 +278,23 @@ def scan(provider, kind: str = "leaders", limit: int = 20) -> Dict[str, Any]:
 # same "names that cleared the screen's gates" copy would be a quiet lie about
 # what was searched, so each carries its own method line and the group blurb
 # says so on the card.
+# The names say what the scan finds, in words somebody new to this can read.
+#
+# They were "RP > 95", "RP < 5", "RP 80 cross" and "RP 20 cross", which is the
+# notation someone already fluent in relative strength would write on a chart
+# and is unreadable to anyone else: it needs you to know that RP is a
+# percentile, that the numbers are ranks rather than prices, and that "cross"
+# means through the line rather than over another name. The explanation under
+# each one still carries the precision. The title is not the place to make
+# somebody earn it.
 SCAN_DEFS = [
     {
         "id": "rp-leaders",
         "kind": "leaders",
-        "name": "RP > 95",
-        "looks_for": "Names in the top 5% of their peer group by 21-day return. A rank, "
-                     "not a return: 97 means it outran 97% of the peer set, which is a "
-                     "different claim from being up a lot.",
+        "name": "Top 5% of their peers",
+        "looks_for": "The strongest 5% of their peer group over the past month. This is "
+                     "a ranking, not a return: 97 means it beat 97% of its peers, which "
+                     "is not the same as being up 97%.",
         "blind_spot": "A rank says nothing about why, or about valuation, and the top of "
                       "a rank distribution is where crowded trades live. It is also "
                       "backward-looking by exactly one window.",
@@ -293,28 +302,29 @@ SCAN_DEFS = [
     {
         "id": "rp-laggards",
         "kind": "laggards",
-        "name": "RP < 5",
-        "looks_for": "The weakest 5% of the peer group over 21 days. Useful as the short "
-                     "side of a pair, or as a list of what a rotation is leaving behind.",
+        "name": "Bottom 5% of their peers",
+        "looks_for": "The weakest 5% of the peer group over the past month. The other "
+                     "side of a pair trade, or a list of what a rotation is leaving "
+                     "behind.",
         "blind_spot": "Cheap and weak are not the same thing, and a name can sit at the "
                       "bottom of this list for a year. Nothing here indicates a turn.",
     },
     {
         "id": "rp-cross-up",
         "kind": "cross_up",
-        "name": "RP 80 cross",
-        "looks_for": "Crossed up through the 80th percentile since the previous session. "
-                     "The entry into leadership rather than the leadership itself, which "
-                     "is usually the part worth catching.",
-        "blind_spot": "One session's crossing. A name that oscillates around 80 will "
-                      "appear repeatedly without anything having changed.",
+        "name": "Just broke into the top 20%",
+        "looks_for": "Climbed into the strongest fifth of its peer group since the "
+                     "previous session. The moment a name starts leading, rather than "
+                     "the names already there.",
+        "blind_spot": "One session's crossing. A name that oscillates around the line "
+                      "will appear repeatedly without anything having changed.",
     },
     {
         "id": "rp-cross-down",
         "kind": "cross_down",
-        "name": "RP 20 cross",
-        "looks_for": "Crossed down through the 20th percentile since the previous "
-                     "session. Leadership fading, or a name entering the weak tail.",
+        "name": "Just dropped into the bottom 20%",
+        "looks_for": "Fell into the weakest fifth of its peer group since the previous "
+                     "session. Leadership fading, or a name joining the weak tail.",
         "blind_spot": "Same as the upward cross: a single session's transition, and a "
                       "name hovering on the line reappears without news.",
     },
@@ -323,8 +333,8 @@ SCAN_DEFS = [
 SCAN_GROUP = {
     "id": "relperf",
     "name": "Relative performance",
-    "blurb": "Ranked within 143 liquid names balanced across the sectors, not the "
-             "screener's universe.",
+    "blurb": "Each name ranked against 143 liquid stocks spread across the sectors, "
+             "rather than the larger universe the other screens use.",
     "scans": [d["id"] for d in SCAN_DEFS],
 }
 

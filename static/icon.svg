@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Optic Terminal">
+  <!-- A standalone tile, not the header mark with its colours swapped in.
+       The header mark is a hairline aperture over whatever the page background
+       is; at 16px in a bookmark bar that ring closes up into a grey smudge and
+       the zigzag inside it disappears. So the tile carries its own dark ground,
+       which also stops the icon inverting itself between Chrome's light and
+       dark chrome, and the two strokes are thickened to survive the downscale.
+       Same shapes, same two colours, drawn for the size it is actually seen at. -->
+  <rect width="32" height="32" rx="7" fill="#0b0a09"/>
+  <path d="M4.4 16C7.6 10.2 11.5 7.2 16 7.2S24.4 10.2 27.6 16C24.4 21.8 20.5 24.8 16 24.8S7.6 21.8 4.4 16Z"
+        fill="none" stroke="#f5f1ec" stroke-width="2.1" stroke-linejoin="round" opacity="0.85"/>
+  <path d="M9.4 19.2 12.8 15.4 15.4 17.3 18.9 12.1 21.5 14 23.2 12"
+        fill="none" stroke="#3987e5" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
