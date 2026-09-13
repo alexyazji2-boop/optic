@@ -292,6 +292,24 @@
     return err.message || 'That passkey attempt did not complete.';
   }
 
+  /* Ask for the sensor on this device first.
+   *
+   * WebAuthn L3 `hints` is a preference, not a restriction: a phone and a USB
+   * key stay reachable, they just stop being the first thing offered. Without
+   * it, a Mac with no local passkey yet opens straight onto "Use a phone or
+   * tablet" and "USB security key" under a button that says Touch ID, which is
+   * what a reader reported. An unknown hint is ignored, so this is safe on
+   * browsers that predate it.
+   *
+   * It matters most on the *create* side. Registering is where the local
+   * credential either comes into existence or does not, and a dialog that
+   * leads with the phone is how somebody ends up with a passkey that Touch ID
+   * can never satisfy. Once one exists here, signing in finds it. */
+  function preferThisDevice(publicKey) {
+    publicKey.hints = ['client-device'];
+    return publicKey;
+  }
+
   async function createPasskey(name) {
     if (!passkeysSupported()) {
       throw new Error('This browser does not support passkeys.');
@@ -314,7 +332,9 @@
         return { id: b64urlToBytes(item.id), type: item.type, transports: item.transports };
       }),
     };
-    var credential = await navigator.credentials.create({ publicKey: publicKey });
+    var credential = await navigator.credentials.create({
+      publicKey: preferThisDevice(publicKey),
+    });
     if (!credential) throw new Error('That passkey attempt did not complete.');
     var response = {
       id: credential.id,
@@ -353,7 +373,7 @@
         return { id: b64urlToBytes(item.id), type: item.type, transports: item.transports };
       }),
     };
-    var request = { publicKey: publicKey };
+    var request = { publicKey: preferThisDevice(publicKey) };
     if (mediation) request.mediation = mediation;
     if (signal) request.signal = signal;
     var credential = await navigator.credentials.get(request);
@@ -455,7 +475,25 @@
         + '</span></button>');
     }
     if (!buttons.length) return '';
-    return '<div class="auth-providers">' + buttons.join('') + '</div>'
+    /* Say where a passkey comes from, before the dialog does not offer one.
+     *
+     * A reader pressed "Sign in with Touch ID" on a laptop and got Chrome's
+     * "Use a phone or tablet / USB security key" list, because there was no
+     * passkey for this site on that Mac. Nothing was broken: the spec gives a
+     * site no way to ask whether a credential exists, deliberately, so the
+     * button cannot know before it opens the dialog. What it can do is not let
+     * that dialog be the first mention of how one gets made.
+     *
+     * Only where none has been made in this browser, and phrased as a
+     * condition rather than a claim: a passkey synced from an iPhone will show
+     * up here without ever having been created on this machine, so "you do not
+     * have one" would be wrong for exactly the people it would annoy most. */
+    var hint = (passkeysSupported() && providerAvailable('passkey')
+                && !passkeyMadeHere())
+      ? '<p class="auth-note auth-passkey-hint">First time on this device? Sign in '
+        + 'with your email, then add ' + esc(biometricName()) + ' from Settings.</p>'
+      : '';
+    return '<div class="auth-providers">' + buttons.join('') + '</div>' + hint
       + '<div class="auth-or"><span>or</span></div>';
   }
 

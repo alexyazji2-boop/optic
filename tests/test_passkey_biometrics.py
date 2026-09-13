@@ -245,3 +245,48 @@ def test_the_helpers_are_exported():
     each spelling it."""
     assert "biometricName: biometricName," in AUTH_JS
     assert "platformAuthenticator: askPlatformAuthenticator," in AUTH_JS
+
+
+def test_both_ceremonies_ask_for_the_sensor_on_this_device():
+    """A reader pressed "Sign in with Touch ID" on a laptop and Chrome opened
+    on "Use a phone or tablet" and "USB security key", because no passkey for
+    this site existed on that Mac. `hints` is a preference and not a
+    restriction, so the phone and the key stay reachable and stop being first.
+
+    It matters most on create: registering is where the local credential either
+    comes into existence or does not, and a dialog that leads with the phone is
+    how somebody ends up holding a passkey Touch ID can never satisfy."""
+    assert "publicKey.hints = ['client-device']" in AUTH_JS
+    # 3: the definition plus the two call sites.
+    assert AUTH_JS.count("preferThisDevice(publicKey)") == 3
+
+
+def test_the_hint_is_applied_to_the_create_call():
+    create = AUTH_JS.split("async function createPasskey(", 1)[1]
+    create = create.split("\n  async function ", 1)[0]
+    assert "credentials.create({" in create
+    assert "preferThisDevice(publicKey)" in create
+
+
+def test_the_hint_is_applied_to_the_get_call():
+    get = AUTH_JS.split("async function signInWithPasskey(", 1)[1]
+    get = get.split("\n  async function ", 1)[0]
+    assert "var request = { publicKey: preferThisDevice(publicKey) }" in get
+
+
+def test_the_modal_says_where_a_passkey_comes_from():
+    """The spec gives a site no way to ask whether a credential exists, so the
+    button cannot know before it opens the dialog. What it can do is not let
+    that dialog be the first mention of how one is made."""
+    assert "auth-passkey-hint" in AUTH_JS
+    assert "then add " in AUTH_JS and "from Settings" in AUTH_JS
+
+
+def test_that_standing_hint_is_conditional_not_a_claim():
+    """A passkey synced from an iPhone shows up on a Mac that never created
+    one, so "you do not have a passkey" would be wrong for exactly the people
+    it would annoy most. And it must not show once one has been made here."""
+    block = AUTH_JS.split("var hint = (passkeysSupported()", 1)[1][:400]
+    assert "!passkeyMadeHere()" in block
+    assert "First time on this device?" in block
+    assert "you do not have" not in block.lower()

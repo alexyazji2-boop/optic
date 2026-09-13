@@ -9738,6 +9738,19 @@ body.auth-open { overflow: hidden; }
   color: var(--ink-2);
 }
 
+/* Standing guidance rather than a response to something the reader did, so it
+   is quieter than the note that appears after a failed press: no box, smaller
+   type, sitting under the buttons it explains. A bordered panel here would read
+   as a warning about a button nobody has touched yet. */
+.auth-passkey-hint {
+  margin: calc(var(--space-2) * -1) 0 0;
+  padding: 0 var(--space-1);
+  background: none;
+  border: 0;
+  font-size: var(--t-small);
+  color: var(--ink-muted);
+}
+
 .auth-submit { min-height: 44px; font: 600 var(--t-base)/1 var(--sans); }
 .auth-submit:disabled { opacity: 0.65; cursor: progress; }
 
