@@ -206,7 +206,14 @@ def test_the_brand_is_one_row_not_a_hero():
     assert "display: flex" in brand
     logo = CSS[CSS.index(".home-logo {"):]
     logo = logo[:logo.index("}")]
-    assert "width: 30px" in logo
+    # A bound rather than the exact number. The property is that the mark is a
+    # row-height icon, and pinning a value made this test a second copy of the
+    # declaration: growing 30 to 38 on a reader's request failed it while the
+    # row was still one row. 48 is the ceiling because the row would then be
+    # taller than the search field's 53px box it sits above, which is the point
+    # at which the brand starts being the page again.
+    px = int(re.search(r"width: (\d+)px", logo).group(1))
+    assert px <= 48, "%dpx is a hero, not a row" % px
     title = CSS[CSS.index(".home-title {"):]
     title = title[:title.index("}")]
     assert "var(--t-lead)" in title

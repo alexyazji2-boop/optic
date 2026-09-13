@@ -709,7 +709,12 @@ body.chat-open main { padding-right: 400px; }
 }
 
 .home-logo {
-  width: 30px; height: 30px;
+  /* 38, up from 30. The row is the one place the mark is the subject rather
+     than a label on a button, and at 30 it was only 8px taller than the 22px
+     mark in the header, so the homepage read as a smaller copy of the chrome
+     above it. Nowhere near the 92px aperture this replaced: the row grows by
+     8px, against the 340px of branding that pass removed. */
+  width: 38px; height: 38px;
   color: var(--ink-2);
   margin-bottom: 0;
   flex: 0 0 auto;
