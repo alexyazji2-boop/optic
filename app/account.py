@@ -34,6 +34,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 
 from . import db
+from . import watch_runner
 from .analytics import watches as watches_mod
 from .auth import deps, store
 
@@ -486,6 +487,45 @@ async def list_watches(request: Request,
         found = db.rows("SELECT * FROM watches WHERE user_id = ? "
                         "ORDER BY symbol, created_at", (user["id"],))
     return {"watches": [_watch_payload(w) for w in found], "limit": MAX_WATCHES}
+
+
+@router.get("/watches/hits")
+async def list_watch_hits(request: Request,
+                          unseen: int = Query(0),
+                          limit: int = Query(50, ge=1, le=200)) -> Dict[str, Any]:
+    """What fired while you were away.
+
+    The point of the whole feature: a watch used to be evaluated only while the
+    page was open and only on the symbol on screen, so it could not tell you
+    about a move you were not already looking at. The runner writes here and
+    this is where the reader collects it.
+    """
+    user = deps.require_user(request)
+    return {
+        "hits": watch_runner.hits_for(user["id"], limit=limit,
+                                      unseen_only=bool(unseen)),
+        "unseen": watch_runner.unseen_count(user["id"]),
+        "method": (
+            "Your watches are evaluated on Optic's own schedule against the same "
+            "panels the analysis page shows, and anything that fired is kept here "
+            "until you read it. It is not sent to you: there is no notification "
+            "channel configured, and an alert that quietly misses its move would "
+            "be worse than none. Each watch reports at most once a day, because "
+            "most conditions describe a state that stays true rather than a "
+            "moment that passes."
+        ),
+    }
+
+
+@router.post("/watches/hits/seen")
+async def mark_watch_hits_seen(request: Request,
+                               payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    user = deps.require_user(request)
+    deps.csrf_guard(request)
+    raw = payload.get("ids")
+    ids = [str(x) for x in raw][:200] if isinstance(raw, list) else None
+    marked = watch_runner.mark_seen(user["id"], ids)
+    return {"marked": marked, "unseen": watch_runner.unseen_count(user["id"])}
 
 
 @router.post("/watches")

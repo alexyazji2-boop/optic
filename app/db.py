@@ -436,10 +436,49 @@ MIGRATION_3 = [
     "ON watches(user_id, symbol, kind, params)",
 ]
 
+# Watches that fired, waiting for the reader.
+#
+# A watch used to be checked only while the page was open and on whatever symbol
+# happened to be on screen, which meant the one thing anybody wants from an
+# alert — being told about a move you were not watching — was the one thing it
+# could not do. The runner evaluates stored watches server-side and writes the
+# hits here, so they are waiting at the next sign-in.
+#
+# Still not a push. Nothing here can send to a device or a mailbox, and an alert
+# that silently misses its move is worse than none, so what this promises is
+# precisely "it will be here when you come back" and the copy says so.
+#
+# One hit per watch per UTC day, enforced by the unique index rather than by the
+# caller remembering. Almost every condition reports a STATE rather than a
+# transition: "RSI above 50" is true for as long as it is true, so a runner on a
+# fifteen-minute loop would write the same news ninety-six times, and an inbox
+# like that is one nobody opens twice.
+MIGRATION_4 = [
+    """
+    CREATE TABLE IF NOT EXISTS watch_hits (
+        id          TEXT PRIMARY KEY,
+        user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        watch_id    TEXT NOT NULL REFERENCES watches(id) ON DELETE CASCADE,
+        symbol      TEXT NOT NULL,
+        kind        TEXT NOT NULL,
+        title       TEXT NOT NULL,
+        body        TEXT,
+        created_at  TEXT NOT NULL,
+        seen        INTEGER NOT NULL DEFAULT 0,
+        dedupe_key  TEXT NOT NULL
+    )
+    """,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_watch_hits_dedupe "
+    "ON watch_hits(user_id, dedupe_key)",
+    "CREATE INDEX IF NOT EXISTS idx_watch_hits_user "
+    "ON watch_hits(user_id, created_at DESC)",
+]
+
 MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (1, "accounts", MIGRATION_1),
     (2, "oauth_pkce", MIGRATION_2),
     (3, "watches", MIGRATION_3),
+    (4, "watch_hits", MIGRATION_4),
 ]
 
 

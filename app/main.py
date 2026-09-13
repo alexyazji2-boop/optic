@@ -58,6 +58,7 @@ from . import alerts as alerts_mod
 from .analytics import econ as econ_mod
 from .analytics import pulse as pulse_mod
 from .analytics import watchlist as watchlist_mod
+from . import watch_runner
 from .analytics import watches as watches_mod
 from . import events as events_mod
 from .analytics import extras as extras_mod
@@ -693,6 +694,37 @@ async def watch_check(body: Dict[str, Any]) -> Dict[str, Any]:
             "met": [r for r in results if r.get("met")],
             "price": (payload.get("quote") or {}).get("price"),
         }
+
+    return await _run(build)
+
+
+@app.post("/api/watches/run")
+async def watches_run(request: Request) -> Dict[str, Any]:
+    """Evaluate every stored watch and record what fired.
+
+    Behind the write guard because it writes, and because it is the expensive
+    end of the app: one snapshot per distinct symbol under watch. Meant for the
+    scheduler, and usable by hand from the same place the scans are triggered.
+
+    The snapshot function is handed in rather than imported by the runner, so
+    the runner has no dependency on this module and a test can drive it with no
+    network at all.
+    """
+    _write_guard(request)
+
+    def build() -> Dict[str, Any]:
+        def snapshot(symbol: str) -> Dict[str, Any]:
+            payload = _swing_snapshot(symbol, None, 1, False, include_earnings=True)
+            try:
+                payload["next_earnings_date"] = YF_PROVIDER.earnings_date(symbol)
+            except Exception:
+                # An earnings date that will not load costs the earnings_near
+                # condition and nothing else. Every other watch on this symbol
+                # still evaluates.
+                payload["next_earnings_date"] = None
+            return payload
+
+        return watch_runner.run_once(snapshot)
 
     return await _run(build)
 

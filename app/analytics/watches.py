@@ -51,6 +51,46 @@ CONDITIONS: Dict[str, Dict[str, Any]] = {
         "needs": "quote",
         "why": "A day out of the ordinary, in either direction.",
     },
+    # The two a reader new to this asks for by name. RSI is the first indicator
+    # anybody learns and the first one they want told about, and the request
+    # that prompted these was literally "if the RSI goes over 50 on NVDA".
+    #
+    # Defaults are 70 and 30 because those are the lines the indicator is drawn
+    # with, not because they are better numbers than 50. The level is the
+    # parameter precisely so nobody has to accept a convention they did not
+    # choose.
+    "rsi_above": {
+        "label": "RSI rises above",
+        "param": {"key": "level", "kind": "number", "label": "RSI level", "default": 70},
+        "needs": "technicals",
+        "why": "A state rather than a crossing: this is true for as long as RSI "
+               "stays above the line, so it tells you where momentum is, not the "
+               "moment it got there.",
+    },
+    "rsi_below": {
+        "label": "RSI falls below",
+        "param": {"key": "level", "kind": "number", "label": "RSI level", "default": 30},
+        "needs": "technicals",
+        "why": "The other end of the same reading. Low RSI is not a buy signal: "
+               "a name in a real downtrend can sit under 30 for weeks.",
+    },
+    "macd_cross": {
+        "label": "MACD turns",
+        # Same reason `signal_flip` carries choices: the evaluator compares the
+        # stored value against what the technicals panel publishes, and a UI
+        # offering "up" where the data says "bullish" produces a watch that
+        # never fires and looks broken rather than mismatched.
+        "param": {"key": "to", "kind": "stance", "label": "To", "default": "any",
+                  "choices": [
+                      {"value": "any", "label": "Either direction"},
+                      {"value": "bullish", "label": "Bullish"},
+                      {"value": "bearish", "label": "Bearish"},
+                  ]},
+        "needs": "technicals",
+        "why": "The MACD line relative to its signal line. Widely followed, and "
+               "late by construction: it is built from averages, so it confirms "
+               "a move rather than anticipating one.",
+    },
     "breakout": {
         "label": "Breaks its 20-day range",
         "param": None,
@@ -178,6 +218,41 @@ def _move_pct(d, p):
     if chg is None or abs(chg) < want:
         return None
     return {"evidence": "{:+.2f}% today, past the {:.1f}% you set".format(chg, want)}
+
+
+def _rsi(d):
+    return _num(((d.get("technicals") or {}).get("rsi") or {}).get("value"))
+
+
+def _rsi_above(d, p):
+    level = _num(p.get("level"))
+    value = _rsi(d)
+    if level is None or value is None or value <= level:
+        return None
+    return {"evidence": "RSI {:.1f}, above {:.0f}".format(value, level)}
+
+
+def _rsi_below(d, p):
+    level = _num(p.get("level"))
+    value = _rsi(d)
+    if level is None or value is None or value >= level:
+        return None
+    return {"evidence": "RSI {:.1f}, below {:.0f}".format(value, level)}
+
+
+def _macd_cross(d, p):
+    macd = (d.get("technicals") or {}).get("macd") or {}
+    state = str(macd.get("state") or "").strip().lower()
+    if state not in ("bullish", "bearish"):
+        return None
+    want = str(p.get("to") or "any").strip().lower()
+    if want != "any" and want != state:
+        return None
+    line, signal = _num(macd.get("macd")), _num(macd.get("signal"))
+    if line is None or signal is None:
+        return {"evidence": "MACD is {}".format(state)}
+    return {"evidence": "MACD {:.2f} against its signal {:.2f}, {}".format(
+        line, signal, state)}
 
 
 def _breakout(d, p):
@@ -325,6 +400,9 @@ EVALUATORS = {
     "price_above": _price_above,
     "price_below": _price_below,
     "move_pct": _move_pct,
+    "rsi_above": _rsi_above,
+    "rsi_below": _rsi_below,
+    "macd_cross": _macd_cross,
     "breakout": _breakout,
     "unusual_options": _unusual_options,
     "signal_flip": _signal_flip,

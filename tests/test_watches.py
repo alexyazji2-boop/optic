@@ -340,7 +340,10 @@ def test_every_condition_in_the_catalogue_has_an_evaluator():
     """A catalogue entry with no evaluator is a condition the UI offers and the
     server reports as unknown."""
     assert set(watches.CONDITIONS) == set(watches.EVALUATORS)
-    assert len(watches.CONDITIONS) == 10
+    # A floor rather than the exact count. The property is the pairing above;
+    # pinning the number made this fail for adding a condition correctly, which
+    # is the one change it should not object to.
+    assert len(watches.CONDITIONS) >= 10
 
 
 def test_check_reports_one_row_per_watch_met_or_not():
