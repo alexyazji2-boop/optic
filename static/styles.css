@@ -9257,6 +9257,34 @@ body.cp-open { overflow: hidden; }
   aside#chat { padding-bottom: calc(52px + env(safe-area-inset-bottom)); }
 }
 
+/* ------------------------------------------------- the contract cost limit
+ *
+ * Sits under the panel's own subtitle rather than in a settings page: it is
+ * read at the moment somebody is looking at a $4,000 contract, which is the
+ * moment it means anything. */
+.eb-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin: var(--space-3) 0 var(--space-4);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--grid);
+  border-bottom: 1px solid var(--grid);
+}
+.eb-label { color: var(--ink-2); font-size: var(--t-small); }
+.eb-pills { display: flex; gap: var(--space-1); flex-wrap: wrap; }
+.eb-note {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: var(--t-small);
+}
+/* The empty case is the one worth colouring. Every other note is a count; this
+   one means the panel below it has nothing in it, and a reader who misses that
+   reads an empty table as a broken chain. */
+.eb-note.is-empty { color: var(--ink-2); }
+
 /* ------------------------------------------- watches that fired, per account
  *
  * Two lines per row rather than a table. The title is the symbol and the

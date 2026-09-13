@@ -181,6 +181,7 @@ def _swing_snapshot(
     max_expiries: int,
     include_macro: bool,
     include_earnings: bool = True,
+    budget: Optional[float] = None,
 ) -> Dict[str, Any]:
     ticker = ticker.upper().strip()
 
@@ -251,7 +252,8 @@ def _swing_snapshot(
             news=news_read, quote=quote, history=hist, provider=YF_PROVIDER,
         )
         entry_plan = entry_mod.build_plan(
-            exposure, spot, call, tech, gex_read, news_read, rate=RISK_FREE, div=div, history=hist
+            exposure, spot, call, tech, gex_read, news_read, rate=RISK_FREE, div=div,
+            history=hist, budget=budget,
         )
 
     try:
@@ -435,10 +437,20 @@ async def ticker_analysis(
     expiries: Optional[str] = Query(None, description="Comma-separated YYYY-MM-DD expiries"),
     max_expiries: int = Query(4, ge=1, le=10),
     macro: bool = Query(True, description="Include the macro regime panel"),
+    budget: Optional[float] = Query(
+        None, ge=0, le=1_000_000,
+        description="Most one contract may cost, in dollars. Omitted means no filter."),
 ) -> Dict[str, Any]:
-    """Full swing-trading analysis for one ticker."""
+    """Full swing-trading analysis for one ticker.
+
+    `budget` is what the reader can place on one contract, not their account
+    size. An option is quoted per share and bought in hundreds, so the number in
+    the chain is a hundredth of what leaves the account, and that multiplication
+    is exactly the step that gets skipped. Omitted by default: the figure is the
+    reader's own business and nothing here should assume one.
+    """
     wanted = [e.strip() for e in expiries.split(",") if e.strip()] if expiries else None
-    return await _run(_swing_snapshot, ticker, wanted, max_expiries, macro)
+    return await _run(_swing_snapshot, ticker, wanted, max_expiries, macro, True, budget)
 
 
 @app.get("/api/earnings/{ticker}")

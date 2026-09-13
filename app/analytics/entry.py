@@ -444,6 +444,11 @@ def rank_strikes(
                 "breakeven": _f(
                     float(row["strike"]) + entry if is_call else float(row["strike"]) - entry, 2
                 ),
+                # An option is quoted per share and bought in hundreds, so the
+                # number in the table is a hundredth of what leaves the account.
+                # Carried on the row rather than left for the reader to multiply,
+                # because the multiplication is exactly what gets skipped.
+                "cost_per_contract": _f(entry * 100.0, 0),
                 "value_at_target": _f(base, 2),
                 "return_at_target_pct": _f(ret, 1),
                 "value_if_iv_drops_20pct": _f(crushed, 2),
@@ -497,6 +502,107 @@ def rank_strikes(
 # ------------------------------------------------------------- the entry plan
 
 
+def _apply_budget(candidates: List[Dict[str, Any]],
+                  budget: Optional[float]) -> Dict[str, Any]:
+    """Keep the contracts one account can place, and say what that cost.
+
+    Reports rather than silently shortens. A list that quietly got smaller looks
+    like a thin chain; a list that says "six of nine are above your limit, the
+    cheapest is $1,240" tells the reader whether to raise the limit or look at a
+    different name, which is the decision they are actually making.
+
+    No budget means no filtering, and that stays the default: the figure is the
+    reader's own business and nothing here should assume one.
+    """
+    if not candidates:
+        return {"candidates": [], "budget": budget, "filtered": False,
+                "hidden": 0, "cheapest": None, "note": ""}
+
+    costs = [c.get("cost_per_contract") for c in candidates]
+    cheapest = min([c for c in costs if c is not None], default=None)
+
+    if budget is None or budget <= 0:
+        return {"candidates": candidates, "budget": None, "filtered": False,
+                "hidden": 0, "cheapest": cheapest, "note": ""}
+
+    kept = [c for c in candidates
+            if c.get("cost_per_contract") is not None
+            and c["cost_per_contract"] <= budget]
+    hidden = len(candidates) - len(kept)
+
+    if not kept:
+        # Empty is the honest answer and it needs the number that makes it
+        # actionable: how far off the limit is, not merely that it was missed.
+        return {
+            "candidates": [], "budget": budget, "filtered": True,
+            "hidden": hidden, "cheapest": cheapest,
+            "note": ("Nothing on this chain fits {}. The cheapest contract that "
+                     "matches the setup is {} for one.".format(
+                         _usd(budget, 0), _usd(cheapest, 0))
+                     if cheapest else
+                     "Nothing on this chain fits {}.".format(_usd(budget, 0))),
+        }
+
+    return {
+        "candidates": kept, "budget": budget, "filtered": True,
+        "hidden": hidden, "cheapest": cheapest,
+        "note": ("{} of {} contracts cost more than {} for one and are not shown.".format(
+            hidden, hidden + len(kept), _usd(budget, 0)) if hidden else
+            "Every contract that matches the setup fits {}.".format(_usd(budget, 0))),
+    }
+
+
+def _cluster_zone(levels: List[Dict[str, Any]], spot: float, atr: float):
+    """The tightest agreement among the candidate levels, and what it left out.
+
+    Returns (low, high, used, dropped). `used` is the cluster, `dropped` is every
+    level that did not join it, each carrying how far from the zone it sat, so
+    the panel can say what it did not use rather than quietly discarding it.
+
+    **Tolerance is half the average daily range**, not a percentage of price. A
+    fixed percentage is wrong at both ends: 2% of a $600 stock is twelve points,
+    which merges levels that are genuinely separate, and 2% of an $8 stock is
+    sixteen cents, which splits levels that are the same area. ATR is the unit
+    the market itself moves in, so half of one is "close enough to be the same
+    level for today's purposes" on any instrument.
+
+    A single level is a valid zone of one. It is a line rather than a band, and
+    that is the honest answer where only one thing sits under the price.
+    """
+    if not levels:
+        return None, None, [], []
+
+    ordered = sorted(levels, key=lambda z: z["price"])
+    # Half a day's range, with a floor so a dead-quiet instrument does not get a
+    # tolerance of nearly zero and split every level into its own cluster.
+    tol = max((atr or 0.0) * 0.5, spot * 0.004)
+
+    clusters: List[List[Dict[str, Any]]] = [[ordered[0]]]
+    for item in ordered[1:]:
+        if item["price"] - clusters[-1][-1]["price"] <= tol:
+            clusters[-1].append(item)
+        else:
+            clusters.append([item])
+
+    def rank(group):
+        mid = (group[0]["price"] + group[-1]["price"]) / 2.0
+        # Most agreement first; then nearest to spot, because a zone within
+        # reach this week beats a better-supported one that needs a 20% move.
+        return (-len(group), abs(mid - spot))
+
+    best = min(clusters, key=rank)
+    used = sorted(best, key=lambda z: z["price"])
+    dropped = []
+    lo, hi = used[0]["price"], used[-1]["price"]
+    for group in clusters:
+        if group is best:
+            continue
+        for item in group:
+            gap = lo - item["price"] if item["price"] < lo else item["price"] - hi
+            dropped.append({**item, "away": _f(gap, 2)})
+    return lo, hi, used, dropped
+
+
 def build_plan(
     frame: pd.DataFrame,
     spot: float,
@@ -507,6 +613,7 @@ def build_plan(
     rate: float = 0.0,
     div: float = 0.0,
     history: Optional[pd.DataFrame] = None,
+    budget: Optional[float] = None,
 ) -> Dict[str, Any]:
     stance = (verdict or {}).get("stance") or "neutral"
     conviction = (verdict or {}).get("conviction") or "none"
@@ -551,6 +658,21 @@ def build_plan(
 
     target = project_target(spot, direction, technicals, gex)
     candidates = rank_strikes(frame, spot, direction, target, rate, div)
+    # What the account can actually place, before anything is recommended.
+    #
+    # The panel was ranking on return and reporting the best one, and the best
+    # one on a large name is routinely four thousand dollars for a single
+    # contract. A reader with five hundred was being shown a plan they could not
+    # take and no indication of which part of it was out of reach, which is a
+    # worse failure than showing them nothing: it reads as the app not knowing
+    # who it is talking to.
+    #
+    # A filter, not a warning, because `best` feeds the headline, the order
+    # ticket and the risk block, and leaving an unaffordable contract in place
+    # while noting it underneath would have three parts of the panel describing
+    # a trade the fourth says you cannot make.
+    affordability = _apply_budget(candidates, budget)
+    candidates = affordability["candidates"]
     best = candidates[0] if candidates else None
 
     # ------------------------------------------------------ entry zone
@@ -580,11 +702,27 @@ def build_plan(
 
     zone = [z for z in zone if z["price"]]
     zone.sort(key=lambda z: -z["price"] if bullish else z["price"])
-    prices = [z["price"] for z in zone]
-    zone_lo = min(prices) if prices else None
-    zone_hi = max(prices) if prices else None
 
     atr = vol.get("atr14") or 0.0
+
+    # The zone is the tightest confluence, not the outer envelope.
+    #
+    # It used to be min(prices) to max(prices) across all five candidate levels,
+    # which is the whole neighbourhood rather than an entry. Reported by a reader
+    # as reading like a guess, and they were right about the symptom: the three
+    # moving averages cluster within a point or two of each other while a dealer
+    # wall can sit 30% away, so one far level stretched the band until it said
+    # nothing. Measured on a name where it was quoted as "$40.00 - $55.96": a
+    # 16-point band on a $56 stock, which no entry rule can be written against.
+    #
+    # Clustering fixes the cause rather than clamping the width. Levels within
+    # half an average day's range of each other are one area of interest, which
+    # is what a trader means by confluence; levels further apart are separate
+    # areas and the one with the most agreement wins, ties going to whichever is
+    # nearer to spot because a zone five percent away is reachable this week and
+    # one twenty percent away is a different trade.
+    zone_lo, zone_hi, zone_used, zone_dropped = _cluster_zone(zone, spot, atr)
+
     breakout_level = (
         (fib.get("nearest_resistance") or {}).get("price") if bullish
         else (fib.get("nearest_support") or {}).get("price")
@@ -598,8 +736,12 @@ def build_plan(
                 "zone": [zone_lo, zone_hi],
                 "detail": "Wait for the stock to come back into {} – {}, where {} sit. Buying "
                 "into support means a closer stop and a cheaper option than chasing the "
-                "move.".format(
-                    _usd(zone_lo), _usd(zone_hi), _join(z["label"] for z in zone[:3]),
+                "move.{}".format(
+                    _usd(zone_lo), _usd(zone_hi), _join(z["label"] for z in zone_used),
+                    (" Not part of this zone: {}, {} away.".format(
+                        _join(z["label"] for z in zone_dropped),
+                        _usd(min(z["away"] for z in zone_dropped)))
+                     if zone_dropped else ""),
                 ),
                 "confirmation": (
                     "A reversal candle or reclaim of the 9-day EMA inside the zone, with RSI turning back above 50."
@@ -724,7 +866,25 @@ def build_plan(
         "candidates": candidates,
         "target": target,
         "entry_options": entries,
-        "entry_zone": {"low": zone_lo, "high": zone_hi, "levels": zone},
+        "affordability": affordability,
+        "entry_zone": {
+            "low": zone_lo,
+            "high": zone_hi,
+            # `levels` is what the zone is made of; `levels_all` is everything
+            # that was considered. A panel that shows only the survivors cannot
+            # be checked, and "what it did not use" is the half a reader needs
+            # to disagree with it.
+            "levels": zone_used,
+            "levels_all": zone,
+            "excluded": zone_dropped,
+            "width_pct": _f(((zone_hi - zone_lo) / spot * 100.0) if (zone_lo and zone_hi and spot) else None, 2),
+            "method": (
+                "The tightest cluster of levels rather than the range between the "
+                "furthest two. Levels within half an average daily range of each "
+                "other count as one area; the area with the most agreement wins, "
+                "ties going to whichever is nearer the current price."
+            ),
+        },
         "order_guidance": order,
         "risk": {
             "underlying_stop": stop,

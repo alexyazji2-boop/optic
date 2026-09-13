@@ -7414,6 +7414,75 @@ function fibDirectionSentence(t) {
     support. Places a pullback has a reason to hold.`;
 }
 
+/* ============================================== what one contract can cost ===
+ *
+ * The panel ranks on payoff and reports the best candidate, and the best
+ * candidate on a large name is routinely four thousand dollars for one
+ * contract. A reader with five hundred was shown a plan they could not take,
+ * with nothing saying which part was out of reach, which reads as the app not
+ * knowing who it is talking to.
+ *
+ * A limit on ONE CONTRACT, not an account size. Nothing here asks what somebody
+ * has, and the number that matters for a decision is the one that leaves the
+ * account for the trade in front of them. An option is quoted per share and
+ * bought in hundreds, so it is a hundredth of the figure in the chain, and that
+ * multiplication is exactly the step that gets skipped.
+ *
+ * Kept in this browser. It is a preference rather than a holding, and asking
+ * somebody to sign in before the app will stop showing them trades they cannot
+ * place would be the wrong gate on the wrong thing.
+ */
+const BUDGET_KEY = 'optic.entry.budget.v1';
+
+const BUDGET_STEPS = [null, 250, 500, 1000, 2500, 5000];
+
+function entryBudget() {
+  try {
+    const raw = localStorage.getItem(BUDGET_KEY);
+    if (raw === null || raw === '') return null;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch (e) { return null; }
+}
+
+function setEntryBudget(value) {
+  try {
+    if (value === null) localStorage.removeItem(BUDGET_KEY);
+    else localStorage.setItem(BUDGET_KEY, String(value));
+  } catch (e) { /* private mode */ }
+}
+
+function renderBudgetControl(aff) {
+  const current = entryBudget();
+  const a = aff || {};
+  return `<div class="eb-bar">
+    <span class="eb-label">Most one contract may cost</span>
+    <div class="eb-pills" role="group" aria-label="Cost limit for one contract">
+      ${BUDGET_STEPS.map((v) => {
+    const on = (v === null && current === null) || v === current;
+    return `<button type="button" class="pill${on ? ' on' : ''}"
+        data-entry-budget="${v === null ? '' : v}"
+        aria-pressed="${on}">${v === null ? 'No limit' : usd(v, 0)}</button>`;
+  }).join('')}
+    </div>
+    ${a.note ? `<p class="eb-note${a.candidates && !a.candidates.length ? ' is-empty' : ''}">${
+  esc(a.note)}</p>` : ''}
+  </div>`;
+}
+
+document.addEventListener('click', (evt) => {
+  if (!evt.target || !evt.target.closest) return;
+  const btn = evt.target.closest('[data-entry-budget]');
+  if (!btn) return;
+  const raw = btn.dataset.entryBudget;
+  setEntryBudget(raw === '' ? null : Number(raw));
+  /* A refetch, not a client-side filter. The limit changes which contract is
+     recommended, and `recommended` feeds the headline, the order ticket and the
+     risk block as well as the table. Filtering the rows here would leave three
+     parts of the panel describing a trade the fourth says you cannot make. */
+  if (STATE.ticker) loadSwing(true);
+});
+
 function renderEntryPlan(p) {
   if (!p) return '';
 
@@ -7444,6 +7513,8 @@ function renderEntryPlan(p) {
     <h2>${hg('Strike & entry recommendation')}</h2>
     <p class="sub">Derived from the ${esc(p.stance)} read at ${esc(p.conviction)} conviction. Candidates are repriced with
       Black-Scholes at the projected target, so the ranking reflects payoff, not just a convenient delta.</p>
+
+    ${renderBudgetControl(p.affordability)}
 
     <div class="callout info" style="font-size:var(--t-base);border-left-color:var(--good)">
       <strong>${esc(p.headline)}</strong>
@@ -18862,7 +18933,13 @@ async function loadSwing(force, opts = {}) {
   if (STATE.swing && STATE.swing.ticker === STATE.ticker && !force) { revealPanels(views.swing); return; }
   if (!silent) beginLoad(views.swing, `options analytics for ${STATE.ticker}`);
   try {
-    const data = await getJSON(`/api/ticker/${encodeURIComponent(STATE.ticker)}?max_expiries=4&macro=true`);
+    /* The cost limit rides on the request, so the server does the filtering.
+       It decides which contract is `recommended`, and that one drives the
+       headline, the order ticket and the risk block, none of which the client
+       could correct after the fact. */
+    const cap = entryBudget();
+    const data = await getJSON(`/api/ticker/${encodeURIComponent(STATE.ticker)}?max_expiries=4&macro=true${
+  cap ? `&budget=${encodeURIComponent(cap)}` : ''}`);
     STATE.swing = data;
     /* Read the prior snapshot BEFORE writing the new one, or the diff is
      * always empty: writing first overwrites the thing being compared against.
