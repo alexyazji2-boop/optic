@@ -723,15 +723,24 @@ body.chat-open main { padding-right: 400px; }
   align-items: center;
   gap: var(--space-2);
   margin: var(--space-5) 0 var(--space-3);
+  /* Centred over the search field rather than over the page: it shares that
+     field's width, so the mark sits above the middle of the box it introduces
+     instead of above the middle of a column the field does not fill. Left
+     aligned it read as a label on the field; centred it reads as the name of
+     the thing you are about to search. */
+  max-width: 860px;
+  justify-content: center;
 }
 
 .home-logo {
-  /* 38, up from 30. The row is the one place the mark is the subject rather
-     than a label on a button, and at 30 it was only 8px taller than the 22px
-     mark in the header, so the homepage read as a smaller copy of the chrome
-     above it. Nowhere near the 92px aperture this replaced: the row grows by
-     8px, against the 340px of branding that pass removed. */
-  width: 38px; height: 38px;
+  /* 52, by way of 30 and 38. The row is the one place the mark is the subject
+     rather than a label on a button, and each step was asked for after looking
+     at the last one.
+     52 is where it stops, and the number is the search field: that box is 53px
+     tall and sits directly underneath, so a mark this size reads as the pair of
+     them being one lockup. Taller and the mark is bigger than the thing the
+     page exists to use, which is where a brand starts being the page again. */
+  width: 52px; height: 52px;
   color: var(--ink-2);
   margin-bottom: 0;
   flex: 0 0 auto;
@@ -865,7 +874,12 @@ body.chat-open main { padding-right: 400px; }
 
 /* --t-lead, not --t-d1. This is a label beside a 30px mark now, not a hero. */
 .home-title {
-  font-size: var(--t-lead);
+  /* Grows with the mark. They are one lockup, and a mark enlarged on its own
+     stops reading as a logo beside a name and starts reading as a logo with a
+     caption: at 52px against 15px type the mark was three and a half times the
+     words next to it. --t-d3 holds the ratio near two, which is where it was
+     at 30 and 15. */
+  font-size: var(--t-d3);
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1;
@@ -9171,6 +9185,25 @@ body.cp-open { overflow: hidden; }
   .mtab.on { color: var(--btn-primary); }
   .mtab:focus-visible { outline: 2px solid var(--s1); outline-offset: -2px; }
 
+  /* The unseen count, pinned to the icon rather than laid out with it: the tab
+     is a grid of two fixed rows and a third item would resize every tab in the
+     bar the moment one alert fired. position:relative goes on the button above
+     so this has something to hang from. */
+  .mtab { position: relative; }
+  .mtab-badge {
+    position: absolute;
+    top: 4px;
+    left: 50%;
+    margin-left: 4px;
+    min-width: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--btn-primary);
+    color: #fff;
+    font: 600 10px/16px var(--sans);
+    text-align: center;
+  }
+
   /* Content must clear the bar, or the last panel on every page is unreachable
      behind it. 52 for the bar plus the inset plus a gap. */
   main { padding-bottom: calc(52px + var(--space-6) + env(safe-area-inset-bottom)); }
@@ -9178,6 +9211,62 @@ body.cp-open { overflow: hidden; }
   /* The command palette has to sit above the bar, and the Pulse panel must not
      be covered by it either. */
   aside#chat { padding-bottom: calc(52px + env(safe-area-inset-bottom)); }
+}
+
+/* ------------------------------------------- watches that fired, per account
+ *
+ * Two lines per row rather than a table. The title is the symbol and the
+ * condition, the body is the number it tripped on and whatever note the reader
+ * left themselves, and those are two weights of one sentence rather than
+ * columns that would need headers to be readable. */
+.wh-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-0); }
+
+.wh-row {
+  padding: var(--space-3);
+  border-radius: var(--r-sm);
+  border-left: 2px solid transparent;
+  background: var(--raised);
+}
+/* Unread is marked twice on purpose: a rule down the left edge and the word
+   "new". Colour alone would be the only signal for a reader who cannot see it,
+   and this list is the one place in the app where missing a row is the whole
+   failure. */
+.wh-row.is-new { border-left-color: var(--btn-primary); }
+
+.wh-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.wh-title { font-weight: 600; color: var(--ink); }
+.wh-when { margin-left: auto; color: var(--ink-muted); font-size: var(--t-small); }
+.wh-new {
+  padding: 1px var(--space-2);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--btn-primary) 22%, transparent);
+  color: var(--ink);
+  font: 600 var(--t-micro)/1.6 var(--sans);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.wh-body {
+  margin: var(--space-1) 0 0;
+  color: var(--ink-2);
+  font-size: var(--t-body);
+}
+/* The count beside the heading, not a floating dot: it has to say how many, and
+   next to the words it is counting is where that reads without explanation. */
+.wh-count {
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 var(--space-1);
+  border-radius: 999px;
+  background: var(--btn-primary);
+  color: #fff;
+  font: 600 var(--t-small)/20px var(--sans);
+  text-align: center;
+  vertical-align: middle;
 }
 
 /* ========================================================= Optic's take ====

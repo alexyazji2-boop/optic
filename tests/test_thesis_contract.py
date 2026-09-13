@@ -59,8 +59,17 @@ def test_an_unchanged_thesis_says_so():
 
 
 def test_the_panel_says_where_the_thesis_is_stored():
-    """There is no account. A reader who assumes this syncs will lose it."""
-    assert "Saved in this browser only" in APP
+    """A reader who assumes this syncs will lose it.
+
+    The sentence used to be "there is no account to sync it to", which was true
+    when the panel was written and stopped being true the day accounts shipped:
+    a signed-in reader was being told their account did not exist. Still local
+    either way, so the claim that matters is unchanged and only the reason
+    differs."""
+    flat = " ".join(APP.split())
+    assert "Kept in this browser" in flat
+    assert "Not synced to your account yet" in flat
+    assert "There is no account to sync it to" not in flat
 
 
 def test_the_panel_does_not_tell_the_reader_what_to_conclude():

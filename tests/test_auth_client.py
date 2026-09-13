@@ -361,11 +361,26 @@ def test_watches_are_checked_one_symbol_at_a_time():
 
 def test_the_alerts_view_says_a_watch_is_not_a_push_notification():
     """Nothing here can reach a phone, and an alert that silently misses the
-    move it was created for is worse than no alert."""
-    assert "Checked while Optic is open" in APP_JS
-    # Matched without crossing the line break the source wraps at.
-    assert "not pushed to you" in APP_JS
-    assert "can send you a notification" in APP_JS
+    move it was created for is worse than no alert.
+
+    The sentence moved when the server-side runner shipped. It used to be one
+    claim for everybody, "checked while Optic is open", which stopped being true
+    for a signed-in reader the moment a scheduled job started evaluating their
+    watches. Copy that understates what the app does is still copy that is
+    wrong, so it is two branches now: what each kind of reader actually gets,
+    and in both of them the same refusal to imply a notification."""
+    flat = " ".join(APP_JS.split())
+    # The guest: their watches live in this browser, so this browser is the only
+    # thing that can check them.
+    assert "Checked while Optic is open" in flat
+    # The account: evaluated on the schedule, which is the reason to have one.
+    assert "Checked on Optic's own schedule" in flat
+    # And neither is told anything will be sent to them.
+    assert "nothing here can reach a phone or a mailbox" in flat
+    # The old wording is gone rather than sitting alongside the new one. Two
+    # descriptions of the same behaviour is how a page comes to contradict
+    # itself one edit later.
+    assert "can send you a notification" not in flat
 
 
 def test_your_watches_render_even_when_the_scan_feed_is_unreachable():

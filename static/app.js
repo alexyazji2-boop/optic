@@ -2660,6 +2660,31 @@ function mountMobileTabs() {
 /* The dossier tab is lit for any of the seven facets, not only the one it
  * opens. It stands for "looking at a name", so going Overview to Financials
  * inside the dossier should not read on the bottom bar as leaving it. */
+/* The unseen count on the phone's Alerts tab.
+ *
+ * The bottom bar is the only route to this inbox on a phone, and a tab that
+ * looks identical whether or not something fired is a tab nobody taps. Written
+ * against the same STATE the section renders from, so the two cannot disagree.
+ *
+ * Only ever the reader's own watches. The scheduled-scan feed below it belongs
+ * to the deployment rather than to them, and counting somebody else's alerts on
+ * their tab would be the badge lying about whose news it is. */
+function paintWatchHitBadge() {
+  const tab = document.querySelector('[data-mtab="alerts"]');
+  if (!tab) return;
+  const n = (STATE.watchHits || {}).unseen || 0;
+  let dot = tab.querySelector('.mtab-badge');
+  if (!n) { if (dot) dot.remove(); return; }
+  if (!dot) {
+    dot = document.createElement('span');
+    dot.className = 'mtab-badge';
+    dot.setAttribute('aria-hidden', 'true');
+    tab.appendChild(dot);
+  }
+  dot.textContent = n > 9 ? '9+' : String(n);
+  tab.setAttribute('aria-label', 'Alerts. ' + n + ' unread');
+}
+
 function paintMobileTabs(view) {
   const nav = document.getElementById('mtabs');
   if (!nav) return;
@@ -2795,10 +2820,11 @@ function renderSetup(d) {
  * so the thesis is stored with a snapshot of the readings that were on screen
  * at the time, and the panel diffs them on every load.
  *
- * Stored per symbol in localStorage. There is no sign-in, so there is no
- * server-side user to hang it on, and inventing accounts to hold four
- * paragraphs would be the wrong trade. The consequence is stated in the panel:
- * it lives in this browser.
+ * Stored per symbol in localStorage. That was the only option when this was
+ * written, because there was no sign-in to hang it on; accounts exist now and
+ * this has not moved yet, which is a gap rather than a decision. The panel says
+ * which of the two applies rather than repeating the old reason at a reader who
+ * is signed in.
  */
 const THESIS_KEY = 'optic.thesis.v1';
 
@@ -2908,6 +2934,17 @@ function renderThesis(d) {
       <h2 class="hm-h">My ${esc(sym)} thesis${askPulse('invalidate')}</h2>
       ${saved ? `<span class="th-when">saved ${esc(shortWhen(saved.saved_at))}</span>` : ''}
     </div>
+    ${/* Until something is saved this panel is four empty boxes with nothing
+         saying why they are here, and a reader quite reasonably asked what the
+         point was. The point is not the boxes, which any notes app has. It is
+         that saving records the readings that were on screen at the time, and
+         every return visit diffs them, so the thing you get back is not your
+         own words but which of the facts under them have since moved. */''}
+    ${saved ? '' : `<p class="wv-sub th-why">Saving also records the readings on
+      screen right now: the stance, the chart bias, the gamma regime, the flow
+      and the price. Every time you come back, Optic compares them against where
+      they are then and tells you which have moved, so the thing this gives back
+      is not your own words. It is what has changed under them.</p>`}
 
     ${saved && changes.length ? `<div class="th-changed">
       <strong>Your thesis has something to answer for.</strong>
@@ -2949,7 +2986,15 @@ function renderThesis(d) {
       <div class="th-actions">
         <button class="btn primary" type="submit">${saved ? 'Update thesis' : 'Save thesis'}</button>
         ${saved ? `<button class="btn" type="button" data-thesis-delete="${esc(sym)}">Delete</button>` : ''}
-        <span class="th-local">Saved in this browser only. There is no account to sync it to.</span>
+        ${/* It read "there is no account to sync it to", which was true when the
+             panel was written and stopped being true the day accounts shipped.
+             A sentence about a missing feature has to be re-read whenever that
+             feature arrives, and this one was left describing an app that no
+             longer existed. Still local either way, and now it says which of
+             the two reasons applies. */''}
+        <span class="th-local">${signedIn()
+    ? 'Kept in this browser. Not synced to your account yet.'
+    : 'Kept in this browser. Sign in and it can follow you between them.'}</span>
       </div>
     </form>
   </section>`;
@@ -3175,12 +3220,12 @@ function renderAlerts() {
   // reason to hide the watches you set: they are checked by a different
   // endpoint and the two have no dependency on each other.
   if (!data) {
-    host.innerHTML = `${renderWatchesBlock()}
+    host.innerHTML = `${renderWatchHits()}${renderWatchesBlock()}
       <section class="wv">${loadingHTML('scan alerts')}</section>`;
     return;
   }
   if (data.error) {
-    host.innerHTML = `${renderWatchesBlock()}
+    host.innerHTML = `${renderWatchHits()}${renderWatchesBlock()}
       <section class="wv">${errorHTML(data.error)}</section>`;
     return;
   }
@@ -3203,6 +3248,7 @@ function renderAlerts() {
   const unread = all.filter((a) => !a.seen).length;
 
   host.innerHTML = `
+  ${renderWatchHits()}
   ${renderWatchesBlock()}
 
   <section class="wv">
@@ -3518,6 +3564,137 @@ function watchStateChip(w, result) {
   return '<span class="wd-chip still">Still met</span>';
 }
 
+/* =========================================== WHAT FIRED WHILE YOU WERE AWAY ==
+ *
+ * The payoff half of a watch. The builder below it is the setup: this is the
+ * only surface in the app that answers "did anything happen on the names I
+ * care about", and it is the reason the server-side runner exists at all.
+ *
+ * Account-only, and that is a property of the feature rather than a gate. A hit
+ * is written by a scheduled job against a stored watch, so there has to be a
+ * row to store it against. A guest's watches live in this browser and can only
+ * be checked while this browser is open, which is what the note says.
+ *
+ * Rendered above the builder because a reader arriving at this tab is asking
+ * what happened, not what to set up next. Empty is the normal case and reads
+ * as such, rather than as something being broken.
+ */
+
+let watchHitsBusy = false;
+
+function watchHitRow(h) {
+  /* Two lines, not a table. The title is the symbol and the condition, the body
+   * is the number it tripped on plus whatever note the reader left themselves,
+   * and those are different weights of the same sentence rather than columns
+   * that would need headers to be read. */
+  return `<li class="wh-row${h.seen ? '' : ' is-new'}">
+    <div class="wh-line">
+      <button type="button" class="al-sym" data-watch-open="${esc(h.symbol || '')}"
+        >${esc(h.symbol || '')}</button>
+      <span class="wh-title">${esc(String(h.title || '').replace(/^[A-Z.]+:\s*/, ''))}</span>
+      <span class="wh-when" title="${esc(h.created_at || '')}">${
+  esc(shortWhen(h.created_at))}</span>
+      ${h.seen ? '' : '<span class="wh-new" aria-label="Unread">new</span>'}
+    </div>
+    ${h.body ? `<p class="wh-body">${esc(h.body)}</p>` : ''}
+  </li>`;
+}
+
+function renderWatchHits() {
+  if (!signedIn()) {
+    /* Not an empty inbox, and not silence either. A guest pressing Check gets a
+       result and then wonders why nothing accumulates; this is the one sentence
+       that explains it, and it is the honest reason to make an account rather
+       than a wall in front of the terminal. */
+    return `<section class="wv wh-block" aria-label="Watches that fired">
+      <div class="wv-head"><div>
+        <h2 class="hm-h">What fired while you were away</h2>
+        <p class="wv-sub">Optic checks watches on its own schedule for people
+          with an account, and keeps what fired here until you read it. A guest's
+          watches live in this browser, so they can only be checked while it is
+          open.</p>
+      </div></div>
+    </section>`;
+  }
+
+  const state = STATE.watchHits;
+  if (!state) {
+    return `<section class="wv wh-block" aria-label="Watches that fired">
+      ${loadingHTML('what fired')}</section>`;
+  }
+  if (state.error) {
+    return `<section class="wv wh-block" aria-label="Watches that fired">
+      ${errorHTML(state.error)}</section>`;
+  }
+
+  const hits = state.hits || [];
+  const unseen = state.unseen || 0;
+
+  return `<section class="wv wh-block" aria-label="Watches that fired">
+    <div class="wv-head">
+      <div>
+        <h2 class="hm-h">What fired while you were away${
+  unseen ? ` <span class="wh-count">${unseen}</span>` : ''}</h2>
+        <p class="wv-sub">Your own watches, evaluated on Optic's schedule against
+          the same panels the analysis page shows. Each one reports at most once a
+          day, because most conditions describe a state that stays true rather
+          than a moment that passes.</p>
+      </div>
+      ${unseen ? `<button type="button" class="btn" data-hits-seen
+        ${watchHitsBusy ? 'disabled' : ''}>${
+  watchHitsBusy ? 'Marking...' : 'Mark all read'}</button>` : ''}
+    </div>
+
+    ${hits.length
+    ? `<ul class="wh-list">${hits.map(watchHitRow).join('')}</ul>`
+    : `<p class="wv-none">Nothing has fired yet. That is the ordinary state of a
+      watch: an empty list here means the conditions you set have not been met,
+      not that nothing was checked.</p>`}
+
+    ${hits.length && state.method
+    ? `<p class="wd-foot">${esc(state.method)}</p>` : ''}
+  </section>`;
+}
+
+async function loadWatchHits(force) {
+  if (!signedIn()) { STATE.watchHits = null; return; }
+  if (STATE.watchHits && !force) return;
+  try {
+    const data = await authApi('/api/watches/hits');
+    STATE.watchHits = {
+      hits: data.hits || [],
+      unseen: data.unseen || 0,
+      method: data.method || '',
+    };
+  } catch (err) {
+    STATE.watchHits = { error: err.message };
+  }
+}
+
+document.addEventListener('click', async (evt) => {
+  if (!evt.target || !evt.target.closest) return;
+  const btn = evt.target.closest('[data-hits-seen]');
+  if (!btn || watchHitsBusy) return;
+  watchHitsBusy = true;
+  renderAlerts();
+  try {
+    await authApi('/api/watches/hits/seen', { method: 'POST', body: {} });
+    /* Marked locally rather than refetched. The server is the authority and it
+       has already agreed; a second round trip would repaint the list a beat
+       later, which reads as the button having lagged. */
+    const state = STATE.watchHits;
+    if (state && state.hits) {
+      state.hits.forEach((h) => { h.seen = 1; });
+      state.unseen = 0;
+    }
+  } catch (err) {
+    if (STATE.watchHits) STATE.watchHits.error = err.message;
+  }
+  watchHitsBusy = false;
+  renderAlerts();
+  paintWatchHitBadge();
+});
+
 function renderWatchesBlock() {
   const defs = watchDefs();
   const cond = watchCondition(watchBuilderKind);
@@ -3534,11 +3711,21 @@ function renderWatchesBlock() {
     <div class="wv-head">
       <div>
         <h2 class="hm-h">Your watches</h2>
+        ${/* This paragraph described the app until the server-side runner
+             existed, and then described it wrongly: a signed-in reader's
+             watches are now evaluated on Optic's schedule whether or not any
+             page is open. Copy that undersells what the app does is still copy
+             that is not true, and the distinction between the two cases is the
+             whole reason to have an account. */''}
         <p class="wv-sub">Conditions you have set. Each one names the number that
           tripped it, and says so when it did not.
-          <strong>Checked while Optic is open</strong>, not pushed to you: nothing
-          here can send you a notification.${signedIn() ? ' Kept on your account.'
-    : ' Kept in this browser until you have an account.'}</p>
+          ${signedIn()
+    ? `<strong>Checked on Optic's own schedule</strong> as well as whenever you
+          press Check, and anything that fires waits for you above. Kept on your
+          account. Not sent to you: nothing here can reach a phone or a mailbox.`
+    : `<strong>Checked while Optic is open</strong>, because a watch kept in this
+          browser is only reachable from this browser. Make an account and Optic
+          checks them on its own schedule instead.`}</p>
       </div>
       ${symbols.length ? `<button type="button" class="btn" data-watch-check-all
         ${watchChecking ? 'disabled' : ''}>${watchChecking
@@ -3698,6 +3885,12 @@ async function loadAlertsFeed(force) {
   if (!watchCatalogue) {
     await loadWatchCatalogue();
   }
+  /* Fetched alongside, not inside, the scan feed. They are different endpoints
+     with no dependency on each other, so one being down must not blank the
+     other: a reader whose scan feed is unreachable still needs to see what
+     their own watches did. */
+  await loadWatchHits(force);
+  paintWatchHitBadge();
   if (STATE.alertsFeed && !force) { renderAlerts(); return; }
   try {
     const data = await getJSON('/api/alerts');
