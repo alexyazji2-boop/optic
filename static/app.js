@@ -2616,7 +2616,7 @@ function renderHomeStatus(health) {
  */
 const MOBILE_TABS = [
   { view: 'home', label: 'Home', icon: '&#9750;' },
-  { view: 'swing', label: 'Analyse', icon: '&#9683;' },
+  { view: 'overview', label: 'Analyse', icon: '&#9683;' },
   { view: 'watchlist', label: 'Watchlist', icon: '&#9776;' },
   { view: 'alerts', label: 'Alerts', icon: '&#9873;' },
   { view: 'ask', label: 'Ask', icon: '&#10022;' },
@@ -2637,11 +2637,16 @@ function mountMobileTabs() {
   paintMobileTabs(STATE.view);
 }
 
+/* The dossier tab is lit for any of the seven facets, not only the one it
+ * opens. It stands for "looking at a name", so going Overview to Financials
+ * inside the dossier should not read on the bottom bar as leaving it. */
 function paintMobileTabs(view) {
   const nav = document.getElementById('mtabs');
   if (!nav) return;
+  const inDossier = groupForView(view) === 'security';
   nav.querySelectorAll('[data-mtab]').forEach((btn) => {
-    const on = btn.dataset.mtab === view;
+    const on = btn.dataset.mtab === view
+      || (btn.dataset.mtab === 'overview' && inDossier);
     btn.classList.toggle('on', on);
     btn.setAttribute('aria-current', on ? 'page' : 'false');
   });
@@ -2659,7 +2664,7 @@ document.addEventListener('click', (evt) => {
   /* Analyse with nothing loaded would land on the "No ticker loaded" panel,
    * which is a dead end. The palette is the way in, so that is where it goes —
    * the tab means "look at a name", and with no name yet that means pick one. */
-  if (view === 'swing' && !STATE.ticker) { openPalette(''); return; }
+  if (view === 'overview' && !STATE.ticker) { openPalette(''); return; }
   switchView(view);
 });
 
