@@ -2396,9 +2396,9 @@ function renderHome() {
              written as an offset from 0 to 100 without measuring the path. -->
         <path class="home-logo-line" pathLength="100"
               d="M7.4 20.2 11.4 15.6 14.6 17.8 18.6 11.6 21.6 14 23.9 11.4"
-              fill="none" stroke="var(--s1)"
+              fill="none" stroke="var(--brand)"
               stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle class="home-logo-dot" cx="23.9" cy="11.4" r="1.5" fill="var(--s1)"/>
+        <circle class="home-logo-dot" cx="23.9" cy="11.4" r="1.5" fill="var(--brand)"/>
       </g>
     </svg>
 

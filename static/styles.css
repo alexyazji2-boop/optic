@@ -92,8 +92,25 @@
      does not apply. Measured: white on --s1 (#3987e5) is 3.64:1, under the
      4.5:1 normal text needs — the original blue button had that flaw. This is
      the same hue (213 deg) walked dark enough to reach 4.72:1 on white. */
-  --btn-primary: #1c72d8;
+  /* Amber, on trial. Was #1c72d8.
+   *
+   * Measured rather than picked: white on it is 4.69:1 against the blue's
+   * 4.72, and it sits 4.22:1 against the dark plane against the blue's 4.19,
+   * so neither the label nor the button's own edge lost anything.
+   *
+   * The hue is the part that took the work. Every warmer amber tested sits
+   * 6 to 30 degrees from --neg, the red every down move on this page is drawn
+   * in, and in light mode a burnt orange lands 6 degrees away: the primary
+   * action button would have been the same colour as a loss. This one is 42
+   * degrees off in dark and 27 in light, which is the most separation an amber
+   * can have while still carrying white text. The blue it replaces had 147. */
+  --btn-primary: #9a6b00;
   --btn-primary-ink: #ffffff;
+  /* The mark follows the accent, so the app has one of them rather than two.
+     Its own token and not --s1: that is a chart series colour, chosen for
+     separation from the other seven, and repainting the brand must not repaint
+     every line on every chart. */
+  --brand: var(--btn-primary);
   --grid: #2c2c2a;
   --baseline: #383835;
 
@@ -327,8 +344,25 @@
   --accent-ink: #ffffff;
   /* Unchanged between themes on purpose: the button paints its own fill, so its
      contrast does not depend on the page behind it. */
-  --btn-primary: #1c72d8;
+  /* Amber, on trial. Was #1c72d8.
+   *
+   * Measured rather than picked: white on it is 4.69:1 against the blue's
+   * 4.72, and it sits 4.22:1 against the dark plane against the blue's 4.19,
+   * so neither the label nor the button's own edge lost anything.
+   *
+   * The hue is the part that took the work. Every warmer amber tested sits
+   * 6 to 30 degrees from --neg, the red every down move on this page is drawn
+   * in, and in light mode a burnt orange lands 6 degrees away: the primary
+   * action button would have been the same colour as a loss. This one is 42
+   * degrees off in dark and 27 in light, which is the most separation an amber
+   * can have while still carrying white text. The blue it replaces had 147. */
+  --btn-primary: #9a6b00;
   --btn-primary-ink: #ffffff;
+  /* The mark follows the accent, so the app has one of them rather than two.
+     Its own token and not --s1: that is a chart series colour, chosen for
+     separation from the other seven, and repainting the brand must not repaint
+     every line on every chart. */
+  --brand: var(--btn-primary);
   --grid: #e1e0d9;
   --baseline: #c3c2b7;
 
