@@ -736,7 +736,7 @@ function revealOnEnter(el, delayMs) {
  * linear up to a soft knee, compressed after it, hard-capped, so a view with
  * thirty panels does not make the last one wait two seconds.
  */
-function revealPanels(host) {
+function revealPanels(host, sel) {
   if (!host) return;
   if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
@@ -749,7 +749,7 @@ function revealPanels(host) {
   const fold = window.innerHeight || 800;
   let onScreen = 0;
 
-  host.querySelectorAll('.panel').forEach((el) => {
+  host.querySelectorAll(sel || '.panel').forEach((el) => {
     el.classList.remove('reveal');
     const box = el.getBoundingClientRect();
     const visible = box.top < fold && box.bottom > 0;
@@ -2458,6 +2458,16 @@ function renderHome() {
     </div>
   </div>`;
 
+  /* The first screen anyone sees had no entrance of its own.
+   *
+   * revealPanels only ever looked for `.panel`, and the home page has none
+   * above its tour, so the brand, the search, the ticker pills and the market
+   * block all appeared the instant their markup was assigned. Everywhere else
+   * in the app things settle in; here they arrived, which reads as a stall
+   * followed by a jump rather than as speed. Same stagger, same curve, aimed at
+   * this page's own blocks. */
+  revealPanels(views.home, '.home > *');
+
   // The market screen loads on its own; see loadHomeMarket.
   loadHomeMarket();
   // No autofocus any more. It used to be right when the page was a search box
@@ -2496,7 +2506,13 @@ async function loadHomeMarket() {
   // The strip lives above the search, outside this host. Filled first because
   // it is the cheapest thing to paint and the highest thing on the page.
   const strip = document.getElementById('cc-strip');
-  if (strip) strip.innerHTML = marketStripHTML(data);
+  if (strip) {
+    strip.innerHTML = marketStripHTML(data);
+    // One fade for the whole band rather than a stagger per cell: it is a
+    // single reading of the market, and eight cells arriving one after another
+    // would read as eight separate updates.
+    revealPanels(strip.parentElement, '#cc-strip');
+  }
   const session = data.session || {};
   const holiday = session.holiday;
   /* Order follows the journey this page exists for: see the market, see what
@@ -2541,6 +2557,10 @@ async function loadHomeMarket() {
     ${(data.degraded || []).length
     ? `<p class="hm-degraded">Unavailable right now: ${esc((data.degraded).join(', '))}.</p>`
     : ''}`;
+  /* The block replaces a skeleton, so without this the whole market screen
+     swaps in one frame. Staggering its own sections turns that into an arrival:
+     the greeting, then what matters, then the watchlist, then the movers. */
+  revealPanels(host, ':scope > *');
   loadWatchlist();
   // Its own request, not awaited: the universe scan is the slowest thing on
   // this page and the rest of it is already useful without it.
@@ -22577,6 +22597,13 @@ function switchView(view, force) {
   }
 
   loadView(view, !!force);
+  /* Sweep the view we just switched to, rather than relying on its loader to
+     remember. Every view that calls revealPanels gets this for free; the ones
+     whose loader does not (a cached render, a view with no async leg at all)
+     were switching in with no entrance while their neighbours had one, which
+     reads as the animation being broken rather than absent. Observing an
+     element twice is a no-op, so this costs one querySelectorAll. */
+  armViewReveals();
   // The header belongs to the view, so its height has to be re-published on
   // every switch — including onto the views that have no header at all, where
   // it goes back to 0.

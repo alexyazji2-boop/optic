@@ -289,9 +289,14 @@ def test_the_header_height_is_measured_and_reset():
     assert "'--sechead-h'" in body
     assert "head ? Math.round" in body and "0" in body
     assert "ResizeObserver" in body
-    # And re-published on every view change, not only on render.
-    block = APP_JS.split("loadView(view, !!force);", 1)[1][:400]
-    assert "syncSecurityHeader()" in block
+    # And re-published on every view change, not only on render. Read from the
+    # whole of switchView rather than a fixed window after loadView: the window
+    # was 400 characters and a comment added above the call pushed the call out
+    # of it, which failed for a reason that had nothing to do with the header.
+    switch = APP_JS.split("function switchView(view, force) {", 1)[1]
+    switch = switch.split("\nfunction ", 1)[0]
+    assert "syncSecurityHeader()" in switch
+    assert switch.index("loadView(view") < switch.index("syncSecurityHeader()")
 
 
 def test_a_jump_target_clears_both_bars():

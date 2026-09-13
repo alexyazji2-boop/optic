@@ -671,7 +671,13 @@ body.chat-open main { padding-right: 400px; }
   from { opacity: 0; transform: translateY(14px) scale(0.99); }
   to   { opacity: 1; transform: none; }
 }
-.panel.reveal { animation: panel-in 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+/* Not scoped to `.panel` any more. The home page has no panels above its tour,
+   so the first screen anyone sees was the one screen with no entrance at all:
+   the shell painted, and then the strip and the market block each snapped in
+   whole the instant /api/home landed. Reported as looking laggy, which is
+   exactly what an instant state change reads as when everything around it
+   moves. Same motion, same curve, now available to any block. */
+.reveal { animation: panel-in 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
 
 /* The reveal reads as one motion only if the whole view starts clean. */
 @keyframes view-in {
@@ -681,7 +687,7 @@ body.chat-open main { padding-right: 400px; }
 .view.revealing { animation: view-in 0.25s ease-out both; }
 
 @media (prefers-reduced-motion: reduce) {
-  .panel.reveal, .view.revealing { animation: none; }
+  .reveal, .view.revealing { animation: none; }
 }
 
 /* -------------------------------------------------------------------- home */
