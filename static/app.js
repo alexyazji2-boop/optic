@@ -12019,6 +12019,25 @@ async function wsLoadIntraday() {
   wsRedrawChart();
 }
 
+/* Fetch the bars if the saved range needs them.
+ *
+ * The range is remembered in localStorage, so opening the Charting tab can land
+ * straight on 1D or 5D, and those come from a different endpoint fetched on
+ * demand. wsLoadIntraday was called from the range pills and from wsRefresh,
+ * which is the symbol-changed path, and from nowhere on the way in. So opening
+ * the tab with an intraday range saved drew nothing at all: the chart said
+ * "Intraday bars not loaded yet." and stayed there, because the only things
+ * that would have loaded them were a pill the reader had no reason to press
+ * and a symbol change they had not made.
+ *
+ * Every drawing tool went with it, which is how this was reported. wsPointAt
+ * reads svg.chartFrame, there is no svg without bars, so arming Text and
+ * clicking did nothing at all. Fifteen tools, all inert, all silent.
+ */
+function wsEnsureIntraday() {
+  if (isIntradayRange(chartRange)) wsLoadIntraday();
+}
+
 /* The server-computed indicators, for THIS tab's symbol.
  *
  * A separate cache from `STATE.indicators`, and that is the whole point.
@@ -13387,8 +13406,30 @@ function wsPointAt(evt) {
   return { i, p: frame.priceAt(py), frame, px, py };
 }
 
+/** Is there a chart to draw on at all? */
+function wsChartFrame() {
+  const host = document.getElementById('ws-chart');
+  const svg = host && host.querySelector('svg.chart');
+  return (svg && svg.chartFrame) || null;
+}
+
 function wsBeginDraw(evt) {
   if (wsTool === 'cursor') return false;
+  /* No chart, no drawing, and say so.
+   *
+   * wsPointAt returns null for two different situations: the click landed
+   * outside the plot, which needs no comment, and there is no chart at all,
+   * which does. The second is what a reader met when the bars had not loaded:
+   * the tool lit up, the cursor changed, and every click did nothing, with the
+   * app's own rule about dead controls being that they read as a slow app
+   * rather than a broken one. */
+  if (!wsChartFrame()) {
+    toast('No chart to draw on yet. The bars for this range are still loading.');
+    wsTool = 'cursor';
+    wsPending = null;
+    wsSyncDrawChrome();
+    return true;
+  }
   const at = wsPointAt(evt);
   if (!at) return false;
   const ps = wsSeries(STATE.chartData);
@@ -14087,6 +14128,7 @@ async function loadChartWorkspace(symbol, force) {
   if (sym === STATE.chartSymbol && STATE.chartData && !force) {
     renderChartWorkspace(STATE.chartData);
     wsMountChart();
+    wsEnsureIntraday();
     return;
   }
   STATE.chartSymbol = sym;
@@ -14101,6 +14143,7 @@ async function loadChartWorkspace(symbol, force) {
   if (STATE.view !== 'chart') return;
   renderChartWorkspace(STATE.chartData);
   wsMountChart();
+  wsEnsureIntraday();
   // The dock's seasonality widget needs its own request; not awaited so the
   // chart is usable while it lands.
   if (wsDockOpen.includes('seasonality')) loadSeasonality(false, sym);
