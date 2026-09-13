@@ -10,8 +10,10 @@ These are shape checks on the wiring, plus real reads of the PNG headers. A
 and it looks identical in the markup.
 """
 
+import colorsys
 import json
 import os
+import re
 import struct
 
 INDEX = open("static/index.html", encoding="utf-8").read()
@@ -86,3 +88,39 @@ def test_the_maskable_icon_is_the_large_one():
     maskable = [i for i in m["icons"] if "maskable" in (i.get("purpose") or "")]
     assert maskable, "no maskable icon"
     assert all(i["sizes"] == "512x512" for i in maskable), maskable
+
+
+def hue_of(hexs):
+    """Hue in degrees, without a colour library."""
+    import colorsys
+    h = hexs.lstrip("#")
+    r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    return colorsys.rgb_to_hls(r, g, b)[0] * 360
+
+
+def test_the_icon_accent_follows_the_brand():
+    """The drift this test exists for, which already happened once.
+
+    The app's accent is a token, so changing it repaints the buttons and the
+    in-page mark at once. The icon files are rasterised PNGs and a literal in an
+    SVG, so they do not move, and the accent went from blue to amber with the
+    bookmark icon left blue behind it. Nothing reports that: the icon renders
+    perfectly, in last season's colour.
+
+    Hue rather than the exact value, because the icon is deliberately two steps
+    brighter: the token reads 4.22:1 on the tile, which is fine for a 52px mark
+    on a page and thin at 16px where the stroke is barely one device pixel."""
+    css = open("static/styles.css", encoding="utf-8").read()
+    accent = re.search(r"--btn-primary: (#[0-9a-fA-F]{6});", css).group(1)
+    svg = open(os.path.join(STATIC, "icon.svg"), encoding="utf-8").read()
+    strokes = re.findall(r'stroke="(#[0-9a-fA-F]{6})"', svg)
+    assert strokes, "the icon draws nothing with a literal colour"
+    # The aperture is drawn in ink; the accent is the one that is not.
+    inkish = {"#f5f1ec", "#ffffff"}
+    accents = [s for s in strokes if s.lower() not in inkish]
+    assert accents, strokes
+    for got in accents:
+        gap = abs(hue_of(got) - hue_of(accent))
+        gap = min(gap, 360 - gap)
+        assert gap <= 8, "icon %s is %.0f degrees from the accent %s" % (
+            got, gap, accent)

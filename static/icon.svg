@@ -9,6 +9,11 @@
   <rect width="32" height="32" rx="7" fill="#0b0a09"/>
   <path d="M4.4 16C7.6 10.2 11.5 7.2 16 7.2S24.4 10.2 27.6 16C24.4 21.8 20.5 24.8 16 24.8S7.6 21.8 4.4 16Z"
         fill="none" stroke="#f5f1ec" stroke-width="2.1" stroke-linejoin="round" opacity="0.85"/>
+  <!-- The accent, lifted for the size. #9a6b00 is the token the app uses and
+       reads 4.22:1 on this tile, which is fine for a 52px mark on a page and
+       thin at 16px in a bookmark bar where the stroke is barely one device
+       pixel. Same hue to the degree, brighter by two steps: 5.89:1, which is
+       about where the blue it replaced sat at 5.44. -->
   <path d="M9.4 19.2 12.8 15.4 15.4 17.3 18.9 12.1 21.5 14 23.2 12"
-        fill="none" stroke="#3987e5" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+        fill="none" stroke="#b98200" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

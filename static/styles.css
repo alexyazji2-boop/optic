@@ -92,7 +92,7 @@
      does not apply. Measured: white on --s1 (#3987e5) is 3.64:1, under the
      4.5:1 normal text needs — the original blue button had that flaw. This is
      the same hue (213 deg) walked dark enough to reach 4.72:1 on white. */
-  /* Amber, on trial. Was #1c72d8.
+  /* Amber. Was #1c72d8.
    *
    * Measured rather than picked: white on it is 4.69:1 against the blue's
    * 4.72, and it sits 4.22:1 against the dark plane against the blue's 4.19,
@@ -344,7 +344,7 @@
   --accent-ink: #ffffff;
   /* Unchanged between themes on purpose: the button paints its own fill, so its
      contrast does not depend on the page behind it. */
-  /* Amber, on trial. Was #1c72d8.
+  /* Amber. Was #1c72d8.
    *
    * Measured rather than picked: white on it is 4.69:1 against the blue's
    * 4.72, and it sits 4.22:1 against the dark plane against the blue's 4.19,
