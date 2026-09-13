@@ -271,3 +271,36 @@ def test_no_em_dashes_in_the_new_copy():
         body = re.sub(r"/\*.*?\*/", "", fn, flags=re.S)
         for text in re.findall(r">([^<>{}]{16,})<", body):
             assert "—" not in text, (name, text)
+
+
+def test_the_shell_is_not_a_narrow_column_on_a_wide_screen():
+    """1120px was justified as ~90 characters of prose. The premise held and the
+    conclusion did not: almost nothing in this app is prose. It is tables,
+    charts, tile grids and option chains, and the prose that does exist already
+    carries its own cap in `ch`, so the shell was never what protected it.
+    Measured on the reader's 2560px screen: 1120 of content, 720 of empty page
+    on each side."""
+    rule = CSS[CSS.index("main {\n  max-width:"):]
+    rule = rule[:rule.index("}")]
+    px = int(re.search(r"max-width: (\d+)px", rule).group(1))
+    assert px >= 1400, "%dpx still leaves a laptop half empty" % px
+    # Not unbounded either: past this a table row puts its first and last column
+    # an arm's length apart and the eye loses the row crossing it.
+    assert px <= 1800, "%dpx is wider than a row stays readable" % px
+
+
+def test_the_home_column_clears_the_market_strip():
+    """The eight cells need 1056px. `.home` was 1000, so inside its padding the
+    strip had 990 and the last cell was cut in half, which is what the fade mask
+    was quietly covering for on every desktop as well as on a phone."""
+    rule = CSS[CSS.index(".home {"):]
+    rule = rule[:rule.index("}")]
+    px = int(re.search(r"max-width: (\d+)px", rule).group(1))
+    assert px >= 1100, "%dpx cuts the strip off" % px
+
+
+def test_the_search_field_does_not_grow_with_the_page():
+    """A search field the full width of the column reads as a URL bar rather
+    than as a place to type four letters, and the ticker pills under it would
+    spread with acres between them."""
+    assert ".home-search, .home-quick { max-width:" in CSS

@@ -687,13 +687,24 @@ body.chat-open main { padding-right: 400px; }
 /* -------------------------------------------------------------------- home */
 
 .home {
-  max-width: 1000px;
+  /* 1280, up from 1000. Wide enough for the market strip's eight cells, which
+     need 1056 and were being cut off inside a 990px column. Still narrower than
+     `main` because this page is cards and lists rather than the wide tables the
+     rest of the app has. */
+  max-width: 1280px;
   margin: 0 auto;
   /* Was --space-9 at the top. The market strip is the first element now and it
      wants to sit close to the session bar above it, not a screen's height
      below it. */
   padding: var(--space-4) var(--space-1) 60px;
 }
+
+/* The one thing on this page that must not grow with it. A search field the
+   full width of a 1280px column reads as a URL bar rather than as a place to
+   type four letters, and the ticker pills under it would spread across the
+   whole screen with acres between them. Left-aligned rather than centred so it
+   lines up with the brand above and the panels below. */
+.home-search, .home-quick { max-width: 860px; }
 
 /* The mark and the wordmark, one compact row.
    Both were much larger and stacked: a 92px aperture, then "Optic Terminal" at
@@ -5354,11 +5365,26 @@ nav.tabs-sub, #subnav { display: none !important; }
  * content, with the boxes taken off it.
  */
 
-/* A measured column. 1120px is about 90 characters at this body size, which is
-   the width prose stops being comfortable at; the grid inside still goes
-   multi-column, so tables and tiles are unaffected. */
+/* A measured column, remeasured.
+ *
+ * It was 1120px, on the grounds that this is about 90 characters at the body
+ * size and prose stops being comfortable past that. The premise was right and
+ * the conclusion was wrong for this page: almost nothing here is prose. It is
+ * tables, charts, tile grids and option chains, all of which want the width,
+ * and the prose that does exist already carries its own cap in `ch` (74, 78,
+ * 105 at various panels), so the shell was never what protected it.
+ *
+ * Measured on the reader's own screen at 2560px wide: 1120px of content and
+ * 720px of empty page on each side, with the eight-cell market strip clipped
+ * at 990px inside it because that is all the room the narrower `.home` left.
+ * The strip needs 1056.
+ *
+ * 1600 rather than the full width: past that, a table row puts its first and
+ * last column an arm's length apart and the eye loses the row on the way
+ * across. This is the width where the content fills a laptop entirely and a
+ * large monitor still frames it. */
 main {
-  max-width: 1120px;
+  max-width: 1600px;
   margin: 0 auto;
   padding: var(--space-6) var(--space-5) var(--space-8);
 }
