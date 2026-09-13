@@ -22510,7 +22510,7 @@ function paintNav(view) {
     // thing twice.
     return `<div class="nav-item${isActive ? ' on' : ''}">
       <button role="tab" class="nav-top" data-group="${group.id}"
-        aria-selected="${isActive}" aria-haspopup="true"
+        aria-selected="${isActive}" aria-haspopup="true" aria-expanded="false"
         >${esc(navGroupLabel(group))}<i class="nav-caret" aria-hidden="true"></i></button>
       <div class="nav-menu" role="menu">
         ${pages.map((p) => `<button role="menuitem" class="nav-page${
@@ -22569,6 +22569,36 @@ function switchView(view, force) {
   renderSessionBar();
 }
 
+/* A tap is not a hover, and the caret has been promising otherwise.
+ *
+ * The menu opened on :hover and :focus-within only. A phone has neither. Safari
+ * does not focus a <button> on tap, so :focus-within never matched, and the same
+ * tap ran switchView, which replaces nav.innerHTML and destroys the element any
+ * transient hover was sitting on. Measured at 375px: tapping Dossier navigated
+ * to Overview and the menu's seven pages never appeared once. With no ticker
+ * loaded that lands on "No ticker loaded" with no facet strip either, so the tap
+ * cost a page and returned nothing.
+ *
+ * So where there is no hover, the group button owns its menu instead of
+ * navigating, which is the thing the caret was drawn to mean. The group's pages
+ * are all in the menu, including the one the button used to jump to, so nothing
+ * became unreachable.
+ *
+ * Asked per click rather than cached at load: a tablet with a keyboard docked,
+ * and a desktop browser toggling device emulation, both change the answer
+ * without a reload. */
+function navMenusOpenOnTap() {
+  return !!(window.matchMedia && window.matchMedia('(hover: none)').matches);
+}
+
+function closeNavMenus() {
+  document.querySelectorAll('.nav-item.open').forEach((item) => {
+    item.classList.remove('open');
+    const btn = item.querySelector('button[data-group]');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  });
+}
+
 /* Delegated, because the second row is rebuilt on every switch — a bind-once
  * loop would only ever reach the buttons that existed at load. */
 document.addEventListener('click', (evt) => {
@@ -22576,6 +22606,18 @@ document.addEventListener('click', (evt) => {
   if (groupBtn) {
     const g = NAV_GROUPS.find((x) => x.id === groupBtn.dataset.group);
     if (!g) return;
+    // A group with one page has no .nav-item wrapper and no menu, so it keeps
+    // navigating on tap. Only the two that carry a caret change behaviour.
+    const item = groupBtn.closest('.nav-item');
+    if (item && navMenusOpenOnTap()) {
+      const wasOpen = item.classList.contains('open');
+      closeNavMenus();            // also handles tapping a second section
+      if (!wasOpen) {
+        item.classList.add('open');
+        groupBtn.setAttribute('aria-expanded', 'true');
+      }
+      return;
+    }
     // Land on the page you were last on inside this group, so switching away
     // and back does not silently reset you to its first tab.
     const remembered = NAV_LAST[g.id];
@@ -22618,7 +22660,23 @@ document.addEventListener('click', (evt) => {
     // button that keeps focus after navigating leaves the menu covering the page
     // it just took you to.
     if (viewBtn.blur) viewBtn.blur();
+    // Blur does nothing to the tapped-open class. paintNav rebuilds the strip
+    // and would drop it anyway, but only when the view actually changes, and
+    // tapping the page you are already on is the case where it does not.
+    closeNavMenus();
   }
+});
+
+/* Anything outside the strip closes a tapped-open menu. Only the tap path needs
+ * this: a hover menu closes itself when the pointer leaves. */
+document.addEventListener('click', (evt) => {
+  if (!evt.target || !evt.target.closest) return;
+  if (evt.target.closest('.nav-item')) return;
+  closeNavMenus();
+});
+
+document.addEventListener('keydown', (evt) => {
+  if (evt.key === 'Escape') closeNavMenus();
 });
 
 // Last page visited inside each group.

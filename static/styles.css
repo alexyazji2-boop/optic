@@ -5200,10 +5200,17 @@ details.ind-explain[open] > summary .cal-caret { transform: rotate(90deg); }
 
 /* =========================================================== navigation ====
  *
- * One row. Each section that has more than one page opens a menu on hover; the
- * button itself still navigates on click, so hover is an accelerator for a mouse
- * rather than the only way in — a touchscreen has no hover and a keyboard user
- * tabs straight to the pages.
+ * One row. Each section with more than one page opens a menu, by three routes
+ * that suit three input devices: hover for a mouse, :focus-within for a
+ * keyboard, and an explicit .open class for a tap.
+ *
+ * The tap route was missing, and the first two do not cover for it. A phone has
+ * no hover, and Safari does not focus a <button> when you tap it, so on a phone
+ * the caret pointed at a menu that could not be opened at all. See
+ * navMenusOpenOnTap in app.js for what the tap does instead of navigating.
+ *
+ * Hover therefore stays an accelerator for a mouse rather than the only way in,
+ * which is what the old note here claimed it already was.
  */
 .nav-item { position: relative; display: inline-flex; }
 .nav-caret {
@@ -5215,8 +5222,8 @@ details.ind-explain[open] > summary .cal-caret { transform: rotate(90deg); }
   opacity: 0.45;
   transition: transform 140ms ease, opacity 140ms ease;
 }
-.nav-item:hover .nav-caret,
-.nav-item:focus-within .nav-caret { opacity: 0.9; transform: rotate(180deg); }
+.nav-item:focus-within .nav-caret,
+.nav-item.open .nav-caret { opacity: 0.9; transform: rotate(180deg); }
 
 .nav-menu {
   position: absolute;
@@ -5232,6 +5239,18 @@ details.ind-explain[open] > summary .cal-caret { transform: rotate(90deg); }
   display: flex;
   flex-direction: column;
   gap: var(--space-0);
+  /* A menu taller than the space under the bar loses its last items, and there
+     is no scrolling out of it: the window does not scroll (the app scrolls
+     `main`, which is overflow: clip) and the phone rule below makes the menu
+     position: fixed, which the page cannot reach into either. Measured at
+     740x360, which is a phone in landscape: the seven Dossier pages ended at
+     y=433 in a 360px viewport, so News and Long-Term were off screen and
+     elementFromPoint found page content where they should have been.
+     --topbar-h is the strip's own bottom edge, so this is exactly the room
+     left under it. */
+  max-height: calc(100vh - var(--topbar-h, 106px) - var(--space-4));
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   /* Hidden by visibility rather than display:none so the transition runs and
      focus-within can still reach it from the keyboard. */
   opacity: 0;
@@ -5239,21 +5258,38 @@ details.ind-explain[open] > summary .cal-caret { transform: rotate(90deg); }
   transform: translateY(-3px);
   transition: opacity 120ms ease, transform 120ms ease, visibility 120ms;
 }
-.nav-item:hover .nav-menu,
-.nav-item:focus-within .nav-menu {
+.nav-item:focus-within .nav-menu,
+.nav-item.open .nav-menu {
   opacity: 1;
   visibility: visible;
   transform: none;
 }
-/* A gap between the button and the menu would close it as the pointer crosses,
-   so the trigger area is padded to bridge it. */
-.nav-item::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  height: 6px;
+
+/* Hover is scoped to devices that have one.
+ *
+ * Unscoped, :hover still fires on a touchscreen: a tap sets it and it sticks
+ * until you tap elsewhere. That is worse than nothing here, because the tap also
+ * navigates, so the menu appeared over the page it had just taken you to. It is
+ * also why the bridge below is in here: a 6px invisible strip under every
+ * section is a mouse affordance, and on a phone it is 6px of the page content
+ * underneath that cannot be tapped. */
+@media (hover: hover) {
+  .nav-item:hover .nav-caret { opacity: 0.9; transform: rotate(180deg); }
+  .nav-item:hover .nav-menu {
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+  }
+  /* A gap between the button and the menu would close it as the pointer crosses,
+     so the trigger area is padded to bridge it. */
+  .nav-item::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    height: 6px;
+  }
 }
 
 .nav-page {

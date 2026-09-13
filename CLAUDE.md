@@ -11,7 +11,7 @@ Live at https://theopticterminal.com (Railway, auto-deploys from `main`).
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Tests: `.venv/bin/python -m pytest -q`. There are 1261 and they all pass; keep it that way.
+Tests: `.venv/bin/python -m pytest -q`. There are 1670 and they all pass; keep it that way.
 
 A development account: `.venv/bin/python -m app.seed`. It prints a generated password
 once and refuses to run when a hosting platform is in the environment.
@@ -202,6 +202,18 @@ readings under the symbol on each ticker load, and the next visit diffs them.
 Read the prior one *before* writing the new one or the diff is always empty.
 Each field decides for itself whether it moved, so a reading absent on either
 visit is skipped: "undefined became bullish" is not news.
+
+**`:hover` is not an input method, it is a device capability.** The section
+dropdowns opened on `:hover` and `:focus-within` only, and a phone has neither:
+Safari does not focus a `<button>` when you tap it, so the caret pointed at a
+menu that could not be opened at all. Worse, the tap ran `switchView`, which
+replaces `nav.innerHTML` and destroys the element any transient hover was
+sitting on. A tap now opens the menu instead of navigating, gated on
+`(hover: none)` rather than on a width, because a 370px desktop window still has
+a mouse and a landscape iPad is 1024px wide and still has none. The `:hover`
+rules are inside `@media (hover: hover)` for the other half of it: unscoped,
+a tap sets `:hover` and it sticks, so the menu drew over the page it had just
+navigated to. Any new hover-revealed control needs all three routes.
 
 **A phone override belongs after the rule it overrides.** `.hm-greet` is
 defined near the bottom of `styles.css`, and a `@media (max-width: 719px)` block
