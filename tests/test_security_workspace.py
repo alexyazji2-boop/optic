@@ -308,3 +308,41 @@ def test_the_workspace_classes_are_styled(cls):
     repo has shipped that twice."""
     assert re.search(re.escape(cls) + r"[\s,{:]", STYLES), f"{cls} has no rule"
 
+
+
+# ---------------------------------------------------------- the two renamed
+
+
+def test_the_two_horizon_tabs_are_named_for_their_subject():
+    """Five of the seven are subject nouns: Overview, Chart, Earnings,
+    Financials, News. The other two were "Analysis", which names the category
+    every tab belongs to, and "Long-Term", an adjective with no noun. The reader
+    chose Options and Investing, which puts all seven in one grammar and names
+    the thing each tab has that no other does."""
+    labels = dict(re.findall(r"(\w+): '([^']+)'", re.search(
+        r"const SUB_LABELS = \{(.*?)\};", APP_JS, re.S).group(1)))
+    assert labels["swing"] == "Options", labels["swing"]
+    assert labels["long"] == "Investing", labels["long"]
+
+
+def test_no_reader_facing_copy_still_uses_the_old_tab_names():
+    """The labels live in six places: the strip, the nav menu, the overview
+    cards, the command bar's per-symbol rows, the gear tooltip and the tour. A
+    rename that reaches only some of them leaves two names for one page, which
+    is how the reader learns the app is inconsistent rather than that the tab
+    moved. Scoped to quoted copy so the module-level prose is not caught."""
+    for stale in ("'Analysis'", '"Analysis"', "'Long-Term'", "'Long-term'",
+                  "title: 'Long-Term Shares'", "title: 'Swing / Options'"):
+        assert stale not in APP_JS, stale
+    # The panels announce themselves to a screen reader, so they carry the tab
+    # name too. Both lead with it now; "Long-term share analysis" survives as the
+    # description after it, which is what that view is.
+    assert 'aria-label="Options.' in INDEX
+    assert 'aria-label="Investing.' in INDEX
+    assert 'aria-label="Swing and options analysis"' not in INDEX
+
+
+def test_the_panel_heading_inside_the_tab_is_left_alone():
+    """"Long-term view" is what that panel reports, and it stays true under a
+    tab called Investing. Only labels that name the *tab* moved."""
+    assert "hg('Long-term view')" in APP_JS

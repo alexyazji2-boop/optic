@@ -142,7 +142,7 @@ def test_every_empty_state_row_closes_the_palette():
 
 def test_a_ticker_offers_the_views_that_take_one():
     fn = _fn("paletteBuild")
-    for label in ("'Chart'", "'News'", "'Earnings'", "'Long-term'", "'Compare'"):
+    for label in ("'Chart'", "'News'", "'Earnings'", "'Investing'", "'Compare'"):
         assert label in fn, label
 
 

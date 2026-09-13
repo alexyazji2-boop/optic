@@ -2271,7 +2271,7 @@ const HOME_SECTIONS = [
       {
         view: 'swing',
         color: 'var(--s1)',
-        title: 'Swing / Options',
+        title: 'Options',
         body: 'Composite verdict from technicals, dealer gamma, vanna and charm, flow and news, plus a strike and expiry recommendation with an entry trigger, and whether the sector agrees.',
       },
       {
@@ -2283,7 +2283,7 @@ const HOME_SECTIONS = [
       {
         view: 'long',
         color: 'var(--s4)',
-        title: 'Long-Term Shares',
+        title: 'Investing',
         body: 'For buying and holding the shares themselves: ten-year structure, drawdown history, accumulation zones, valuation against its own history, and a conviction score. No options here.',
       },
     ],
@@ -5227,7 +5227,7 @@ async function paletteBuild(query) {
       ['Chart', 'Charting workspace', () => { loadChartWorkspace(upper); switchView('chart'); }],
       ['News', 'Headlines for this symbol', () => loadTicker(upper, 'brief')],
       ['Earnings', 'History, estimates and the read', () => loadTicker(upper, 'earnings')],
-      ['Long-term', 'Valuation and the decade view', () => loadTicker(upper, 'long')],
+      ['Investing', 'Valuation and the decade view', () => loadTicker(upper, 'long')],
       ['Compare', 'Put it beside other names', () => {
         STATE.compareInputs = [upper, '', ''];
         switchView('compare');
@@ -7714,9 +7714,9 @@ function renderOverviewView() {
         ${overviewCard('chart', 'Chart',
     band === null ? null : `${band}%`,
     band === null ? '52-week range unavailable' : 'of its 52-week range')}
-        ${overviewCard('swing', 'Analysis',
+        ${overviewCard('swing', 'Options',
     pulse.stance ? esc(cap(String(pulse.stance))) : null,
-    pulse.conviction ? convictionWords(pulse.conviction) : 'setup, levels and options')}
+    pulse.conviction ? convictionWords(pulse.conviction) : 'setup, levels and the chain')}
         ${overviewCard('earnings', 'Earnings',
     news.earnings_date ? esc(news.earnings_date) : null,
     days !== null && days !== undefined ? `in ${days} days` : 'no date published')}
@@ -7727,7 +7727,7 @@ function renderOverviewView() {
         ${overviewCard('news', 'News',
     news.article_count ? String(news.article_count) : null,
     news.overall_tone ? `headlines \u00b7 ${news.overall_tone}` : 'headlines')}
-        ${overviewCard('long', 'Long-term',
+        ${overviewCard('long', 'Investing',
     Number.isFinite(q.trailing_pe) ? fmt(q.trailing_pe, 1) : null,
     'trailing P/E, valuation and holding case')}
       </div>
@@ -9209,7 +9209,7 @@ function maLabel(id, ps) {
   const kind = String(id).startsWith('ema') ? 'EMA' : 'SMA';
   // `monthly` is here for safety rather than for a case that exists today:
   // CHART_INTERVALS is daily and weekly only, and the monthly rollup belongs to
-  // the Long-term tab, which has its own ltMa() and never calls this. One
+  // the Investing tab, which has its own ltMa() and never calls this. One
   // clause now beats the bug this function was written to fix reappearing the
   // day a Monthly pill is added.
   const unit = (ps && ps.monthly) ? 'month' : ((ps && ps.weekly) ? 'week' : 'day');
@@ -15209,7 +15209,7 @@ function cmpSkeleton(names) {
   return `<div class="panel span-all cmp-loading" aria-busy="true">
     <p class="loading"><span class="spinner"></span>Pulling ${
   names.length ? names.map((n) => esc(n)).join(' and ') : 'both names'} in full.
-      The same analysis the Swing and Long-Term tabs run, for each name.</p>
+      The same analysis the Options and Investing tabs run, for each name.</p>
     <div class="cmp-skel" aria-hidden="true">
       ${Array.from({ length: 9 }, (_, row) => `<div class="cmp-skel-row"
         style="grid-template-columns:minmax(140px,2fr) repeat(${cols}, minmax(70px,1fr))">
@@ -16537,8 +16537,8 @@ function renderSettings() {
     <div class="settings-row">
       <div class="settings-label">Detail
         <span class="settings-hint">Pro is what the terminal has always shown.
-          Simple hides the options and positioning panels on Analysis, two dense
-          valuation panels on Long-Term and five ratio panels on Macro, and says
+          Simple hides the derivatives and positioning panels on Options, two dense
+          valuation panels on Investing and five ratio panels on Macro, and says
           so where they were.</span></div>
       <div class="seg">${UI_MODES.map((m) => `<button type="button"
         class="seg-opt${uiMode() === m ? ' on' : ''}" data-set-mode="${m}"
@@ -20851,7 +20851,7 @@ function friendlyMarketState(raw) {
 /* The status line reports the *active* view, not the Swing tab.
  *
  * It used to read only STATE.swing, so opening a ticker straight onto Earnings or
- * Long-Term left it stuck on "AAPL — loading…" forever: nothing was loading, the
+ * Investing left it stuck on "AAPL — loading…" forever: nothing was loading, the
  * panel below was fully rendered, and the line was describing a fetch that had
  * never been started. It also showed swing-only fields — expiries, the swing
  * verdict — on tabs where they mean nothing. */
@@ -21158,7 +21158,7 @@ function updateStatus() {
 
   const parts = [];
   const quote = d.quote || {};
-  // Long-Term nests everything under `holding` and carries a bare `price`.
+  // Investing nests everything under `holding` and carries a bare `price`.
   const holding = d.holding || {};
   // Market-wide views aren't about the loaded symbol — Optic's Positions is one
   // shared ledger, so prefixing it with whatever ticker happens to be loaded
@@ -21418,7 +21418,7 @@ function tickAutoRefresh() {
   if (document.hidden || !isTapeLiveET()) return;
   if (STATE.view === 'swing' && STATE.swing) loadSwing(true, { silent: true });
   else if (STATE.view === 'market' && STATE.market) loadMarket(true, { silent: true });
-  // Long-term view is deliberately excluded — multi-year context doesn't
+  // The Investing view is deliberately excluded — multi-year context doesn't
   // change intraday, so there's nothing there worth re-fetching every 20s.
 }
 
@@ -22390,7 +22390,7 @@ const NAV_GROUPS = [
    * group and of securityHeader, but on a tab strip in a web app it reads as
    * passwords and sign-in. "Ticker" fixed that and introduced a different fault:
    * a ticker is a symbol, and this tab is not a symbol — it is Overview, Chart,
-   * Analysis, Earnings, Financials, News and Long-Term, which is price and
+   * Options, Earnings, Financials, News and Investing, which is price and
    * fundamentals and news about one traded thing. A label naming the key rather
    * than the contents is vague, which is what a reader called it.
    *
@@ -22438,7 +22438,7 @@ function navGroupLabel(group) {
 
 const SUB_LABELS = {
   overview: 'Overview', chart: 'Chart', financials: 'Financials', news: 'News',
-  swing: 'Analysis', earnings: 'Earnings', compare: 'Compare', long: 'Long-Term',
+  swing: 'Options', earnings: 'Earnings', compare: 'Compare', long: 'Investing',
   brief: 'Read', market: 'Macro', indices: 'Indices',
   watchlist: 'Watchlist', alerts: 'Alerts',
   tracker: "Optic's Positions",
@@ -22449,11 +22449,11 @@ const SUB_TITLES = {
   chart: 'Chart. Full-height chart, overlays and drawings',
   financials: 'Financials. Revenue, margins, cash, ownership and short interest',
   news: 'News. Headlines for this company, scored and tagged',
-  swing: 'Analysis. Swing setup, levels, options and gamma',
+  swing: 'Options. Greeks, gamma, flow and strategies, with the swing setup and levels',
   earnings: 'Earnings analysis and the pre-earnings brief',
   compare: 'Compare two to four tickers side by side',
   instrument: 'Full history for one cross-asset instrument',
-  long: 'Long-term share holdings',
+  long: 'Investing. Valuation history, drawdown, accumulation zones and conviction',
   brief: "Optic's Read. The daily market, macro and world summary",
   market: 'Macro regime and sector rotation',
   indices: 'Major index long-run cycle',
@@ -22690,7 +22690,7 @@ paintNav(STATE.view || 'home');
 const VIEW_NAMES = {
   chart: 'Charting',
   home: 'Home', swing: 'Swing', earnings: 'Earnings',
-  market: 'Macro', indices: 'Indices', long: 'Long-Term', roth: 'Roth',
+  market: 'Macro', indices: 'Indices', long: 'Investing', roth: 'Roth',
   tracker: "Optic's Positions", settings: 'Settings', brief: "Optic's Read",
 };
 
@@ -23809,7 +23809,7 @@ const PANELS_ADVANCED = {
 };
 
 /* What the hidden panels are, per view. The note said "options and positioning"
- * everywhere, which was written for Analysis and was simply untrue on Long-Term
+ * everywhere, which was written for the options tab and was untrue on Investing
  * (a valuation panel) and Macro (ratio pairs). A note that misdescribes what it
  * hid is worse than a generic one. */
 const ADVANCED_NOUN = {
@@ -23961,9 +23961,9 @@ document.addEventListener('keydown', (evt) => {
 /* Panels that arrive after the render pass.
  *
  * Several panels are mounted by their own request into a host div — the P/E
- * history on Long-Term, corporate actions on Analysis, pattern base rates — so
+ * history on Investing, corporate actions on Options, pattern base rates — so
  * they do not exist when applyUiMode runs and escaped it entirely. Measured:
- * Long-Term hid one of its two advanced panels, and the one it missed was the
+ * Investing hid one of its two advanced panels, and the one it missed was the
  * one behind an async fetch.
  *
  * An observer rather than a call added to each of those loaders, for the reason

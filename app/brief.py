@@ -15,7 +15,7 @@ Four sections, in the order a reader wants them.
 Three deliberate choices worth knowing before changing anything here.
 
 **Nothing in this module scores or ranks a security.** The brief reports; the
-Swing and Long-Term tabs judge. Mixing the two would turn a news page into an
+Options and Investing tabs judge. Mixing the two would turn a news page into an
 unlabelled recommendation, and every catalyst tag here is descriptive.
 
 **The day's snapshot is upserted, not written once.** Today's row is rebuilt as

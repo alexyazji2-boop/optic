@@ -914,7 +914,7 @@ def momentum(yf_provider, ticker: str) -> Dict[str, Any]:
             "carry signal over a few weeks, but the composite is deliberately a technicals-led "
             "read, and folding fundamentals in would shift every score in the terminal. "
             "Valuation is left out of this panel entirely. At a two-to-eight-week horizon it has "
-            "no directional value, and it's already the backbone of the Long-Term conviction "
+            "no directional value, and it's already the backbone of the Investing tab's conviction "
             "score, where the horizon matches."
         ),
     }

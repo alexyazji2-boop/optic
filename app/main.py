@@ -799,7 +799,7 @@ async def session_prices(ticker: str) -> Dict[str, Any]:
 
     Its own endpoint because every tab wants it and it has to stay cheap — a
     single quote, not the whole analysis. The strip has to be right on the
-    Earnings and Long-Term tabs too, not just Swing.
+    Earnings and Investing tabs too, not just Options.
     """
     def build() -> Dict[str, Any]:
         symbol = ticker.upper().strip()
