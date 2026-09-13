@@ -13,6 +13,20 @@
      Both schemes are declared so a light-mode phone does not get a black bar. -->
 <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#0d0d0d">
+<!-- The bookmark, tab and home-screen icon. There was none at all, so Chrome
+     drew its generic globe next to "Optic Terminal" in the bookmarks bar, which
+     is the one place the app is seen when nobody is looking at it.
+
+     The SVG is what modern browsers use and it is the mark from the header with
+     two changes: its own dark tile, and thicker strokes. Both are about the size
+     it is actually seen at. A hairline aperture over a transparent background
+     closes up into a grey smudge at 16px, and a transparent icon inverts itself
+     between light and dark browser chrome. The PNGs exist because Apple's
+     touch icon and the Android install prompt do not read SVG. -->
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
 <!-- robots.txt asks crawlers not to fetch; this tells any that fetched anyway not
      to index. The two are honoured at different stages, so both are needed to
      keep an open, unauthenticated tool out of search results. Advisory only.
@@ -41,7 +55,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/space-grotesk/index.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/plus-jakarta-sans/index.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/inter/index.css">
-<link rel="stylesheet" href="styles.css?v=458">
+<link rel="stylesheet" href="styles.css?v=459">
 <script>
 /* Set the theme before the stylesheet paints.
  *
@@ -227,11 +241,11 @@
 <!-- Version query busts the browser cache on deploy. Without it a reloaded page
      can pair new HTML with a stale charts.js/app.js, which surfaces as features
      silently not working rather than as an error. -->
-<script src="charts.js?v=458"></script>
+<script src="charts.js?v=459"></script>
 <!-- Before app.js: it exposes window.OpticAuth, which app.js reads at load to
      decide whether the watchlist and the saved research come from the account or
      from this browser. -->
-<script src="auth.js?v=458"></script>
-<script src="app.js?v=458"></script>
+<script src="auth.js?v=459"></script>
+<script src="app.js?v=459"></script>
 </body>
 </html>
