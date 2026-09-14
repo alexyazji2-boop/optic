@@ -11816,10 +11816,18 @@ function wsToggleWidget(id, on) {
     wsSaveDock();
   }
   const dock = document.getElementById('ws-dock');
+  const had = dock ? !!dock.innerHTML.trim() : false;
   if (dock) dock.innerHTML = wsDock();
   const rail = views.chart.querySelector('.ws-wrail');
   if (rail) rail.outerHTML = wsWidgetRail();
   wsSyncNarrow();
+  /* Opening the first widget or closing the last one changes the chart's width
+     by 260px, and the chart is drawn to a measured pixel size rather than laid
+     out by CSS: without this it keeps the old geometry until something else
+     redraws it, so the candles sit in the wrong place or leave a gap. Only on
+     the empty-to-occupied transition, because the other toggles change what is
+     in the dock and not how wide it is. */
+  if (dock && had !== !!dock.innerHTML.trim()) wsRedrawChart();
   // `on` is only meaningful in wide mode; narrow mode toggles, so re-read it.
   on = wsIsNarrow() ? wsNarrowWidget === id : wsDockOpen.includes(id);
   // Two widgets need data the page has not necessarily fetched yet.
@@ -12555,8 +12563,15 @@ function wsDock() {
   const showing = wsIsNarrow()
     ? (wsNarrowWidget ? [wsNarrowWidget] : [])
     : wsDockOpen;
-  return `<div class="ws-dock-panels">
-  ${showing.map((id) => {
+  /* Nothing open renders nothing at all, not a panel saying so.
+   *
+   * It used to fill a 260px column with "No widgets open. Pick one from the
+   * rail." That sentence is only readable from inside the space it is taking:
+   * the rail is right there with every widget's name on it, so the message is
+   * describing a state the reader can already see while charging them a quarter
+   * of the chart for the privilege. Empty means the dock collapses and the
+   * chart takes the width; see `.ws-dock:empty` in the stylesheet. */
+  const panels = showing.map((id) => {
     const w = WS_WIDGETS.find((x) => x.id === id);
     if (!w) return '';
     return `<div class="ws-widget" data-ws-widget="${id}">
@@ -12567,8 +12582,9 @@ function wsDock() {
       </div>
       <div class="ws-widget-body" id="ws-w-${id}">${wsWidgetBody(id)}</div>
     </div>`;
-  }).join('') || '<p class="ws-none">No widgets open. Pick one from the rail.</p>'}
-  </div>`;
+  }).join('');
+  if (!panels) return '';
+  return `<div class="ws-dock-panels">${panels}</div>`;
 }
 
 /* The icon rail. Every widget one click away and its own on/off state visible,

@@ -6377,6 +6377,12 @@ b, strong { font-weight: 600; }
 /* The dock. Fixed width so the chart's width does not change as widgets are
    added and removed — a chart that reflows every time you open a panel makes
    comparing two moments impossible. */
+/* Collapsed when it holds nothing, so the chart's 1fr column takes the space.
+   :empty rather than a class, because the one thing that decides this is
+   whether wsDock() produced any panels, and a class would be a second record of
+   that which can disagree with the first. */
+.ws-dock:empty { display: none; }
+
 .ws-dock {
   width: 260px;
   border-left: 1px solid var(--border);
