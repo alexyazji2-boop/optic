@@ -755,7 +755,6 @@ body.chat-open main { padding-right: 400px; }
      page having failed to fill rather than as a measured column.
      The search lockup is what must not grow, and it is pinned and centred
      below rather than the whole page being held in to protect it. */
-  max-width: 1600px;
   margin: 0 auto;
   /* Was --space-9 at the top. The market strip is the first element now and it
      wants to sit close to the session bar above it, not a screen's height
@@ -5467,7 +5466,15 @@ nav.tabs-sub, #subnav { display: none !important; }
  * across. This is the width where the content fills a laptop entirely and a
  * large monitor still frames it. */
 main {
-  max-width: 1600px;
+  /* No cap. The header and the session bar span the window, so a content column
+     stopped 150px short of each edge read as the page having failed to fill
+     rather than as a measured column, which is what a reader circled after the
+     third attempt at this.
+     1120 then 1600 were both attempts to protect prose by holding the whole app
+     in, and both were solving it in the wrong place: every prose block here
+     already carries its own cap in `ch` (74, 78, 105 at various panels) and the
+     home page's search lockup is pinned at 860. What was left inside the cap
+     was tables, charts and tile grids, none of which wanted protecting. */
   margin: 0 auto;
   padding: var(--space-6) var(--space-5) var(--space-8);
 }
@@ -8659,7 +8666,15 @@ body.cp-open { overflow: hidden; }
   grid-template-rows: auto auto;
   align-items: baseline;
   gap: 0 var(--space-1);
-  flex: 0 0 auto;
+  /* Grow to fill, never shrink below the reading.
+     `0 0 auto` left the eight cells at their natural width in a container that
+     is now much wider than they are: measured at 1900, the last cell ended at
+     1249 inside a box running to 1722, so 473px of bordered empty strip sat
+     after Bitcoin. Growing distributes that space between them.
+     flex-shrink stays 0, which is what keeps the horizontal scroll honest on a
+     phone: the cells hold their width and the strip scrolls, rather than eight
+     figures crushing into 375px. */
+  flex: 1 0 auto;
   min-width: 132px;
   padding: var(--space-2) var(--space-3);
   border: 0;

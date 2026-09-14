@@ -282,30 +282,46 @@ def test_no_em_dashes_in_the_new_copy():
             assert "—" not in text, (name, text)
 
 
-def test_the_shell_is_not_a_narrow_column_on_a_wide_screen():
-    """1120px was justified as ~90 characters of prose. The premise held and the
-    conclusion did not: almost nothing in this app is prose. It is tables,
-    charts, tile grids and option chains, and the prose that does exist already
-    carries its own cap in `ch`, so the shell was never what protected it.
-    Measured on the reader's 2560px screen: 1120 of content, 720 of empty page
-    on each side."""
-    rule = CSS[CSS.index("main {\n  max-width:"):]
+def test_the_shell_fills_the_window():
+    """Three attempts at this, 1120 then 1600 then none, and the first two were
+    solving it in the wrong place. Both capped the whole app to protect prose,
+    and every prose block here already carries its own cap in `ch` while the
+    home page's search lockup is pinned at 860. What was inside the cap was
+    tables, charts and tile grids, which wanted the width.
+
+    The visible symptom was that the header and the session bar span the window
+    and the content did not: measured at 1900, a 150px dead gutter down each
+    side of a page whose chrome ran edge to edge."""
+    rule = CSS[CSS.index("\nmain {") + 1:]
     rule = rule[:rule.index("}")]
-    px = int(re.search(r"max-width: (\d+)px", rule).group(1))
-    assert px >= 1400, "%dpx still leaves a laptop half empty" % px
-    # Not unbounded either: past this a table row puts its first and last column
-    # an arm's length apart and the eye loses the row crossing it.
-    assert px <= 1800, "%dpx is wider than a row stays readable" % px
+    assert "max-width" not in rule, "the shell is capped again"
+    assert "padding" in rule, "it still needs gutters, just not a column"
 
 
-def test_the_home_column_clears_the_market_strip():
-    """The eight cells need 1056px. `.home` was 1000, so inside its padding the
-    strip had 990 and the last cell was cut in half, which is what the fade mask
-    was quietly covering for on every desktop as well as on a phone."""
+def test_prose_is_capped_where_prose_lives():
+    """The other half, and the reason removing the shell cap is safe. If these
+    went, a paragraph really would run the width of a 2560px monitor."""
+    assert CSS.count("ch;") >= 5, "the per-panel prose caps have gone"
+
+
+def test_the_home_page_follows_the_shell():
+    """It was 1000, then 1280, each time narrower than the shell around it, so
+    the page sat inset inside an app that was not."""
     rule = CSS[CSS.index(".home {"):]
     rule = rule[:rule.index("}")]
-    px = int(re.search(r"max-width: (\d+)px", rule).group(1))
-    assert px >= 1100, "%dpx cuts the strip off" % px
+    assert "max-width" not in rule, rule
+
+
+def test_the_strip_cells_grow_but_never_shrink():
+    """Measured at 1900: eight cells ending at 1249 inside a bordered box
+    running to 1722, so 473px of empty strip after Bitcoin. Growing fills it.
+    Shrinking must stay off or the same eight figures crush into 375px on a
+    phone instead of scrolling, which is what the fade mask is for."""
+    rule = CSS[CSS.index(".ms-cell {"):]
+    rule = rule[:rule.index("}")]
+    grow, shrink, _ = re.search(r"flex: (\S+) (\S+) (\S+);", rule).groups()
+    assert grow != "0", "the cells still leave a tail of empty box"
+    assert shrink == "0", "shrinking crushes the readings on a phone"
 
 
 def test_the_search_field_does_not_grow_with_the_page():
