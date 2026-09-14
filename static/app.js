@@ -158,7 +158,7 @@ const GLOSSARY = {
   'fibonacci retracement': "A charting tool that marks likely support and resistance price levels using a mathematical ratio, meant to guess where a pullback might stop.",
   'support': "A price level where a falling stock has tended to stop falling and bounce.",
   'resistance': "A price level where a rising stock has tended to stop rising and pull back.",
-  'short interest': "The percentage of a stock's available shares that have been sold short (bet against) by traders expecting the price to fall.",
+  'short interest': "The percentage of a stock's available shares that have been sold short, meaning sold by traders who do not own them and expect to buy them back cheaper. High short interest cuts both ways: it is a crowd betting against the company, and it is also a crowd that has to buy if the price rises, which is what makes a squeeze possible.",
   'days to cover': "How many days it would take, at average trading volume, for all short sellers to buy back their shares. A proxy for how ‘trapped’ short sellers might be.",
   'pair trade': "Betting on one stock or asset relative to another. Going long the one you think will do better and short the one you think will do worse.",
   'moving average': "The average closing price over a set number of past days, used to smooth out day-to-day noise and show the underlying trend.",
@@ -205,6 +205,45 @@ const GLOSSARY = {
   'sma': "Simple moving average. The plain average closing price over a number of days, used to define the trend.",
   'ema': "Exponential moving average. Like a moving average but weighted toward recent days, so it turns faster than the simple version.",
   'yoy': "Year over year. Comparing a period with the same period a year earlier, which removes seasonal distortion from the comparison.",
+
+  /* The fundamentals, added because the glossary was almost entirely about
+   * options and charts.
+   *
+   * Measured against the thirty financial concepts the Financials and Investing
+   * tabs actually put on screen: four were covered. Ninety-three terms, and
+   * somebody could learn what dealer gamma and IV rank meant while revenue,
+   * free cash flow and P/E went unexplained, which is backwards for a product
+   * aimed at people new to investing.
+   *
+   * Deliberately not here: "earnings", "margin" and "cash flow" on their own.
+   * They appear in almost every sentence on these pages, and a term that marks
+   * up forty times per panel stops being an offer and becomes texture. The
+   * specific forms are what carry meaning, and the longest-first sort means
+   * "free cash flow" wins over "cash flow" anyway.
+   */
+  'revenue': "The money a company took in from selling things, before any costs come out. The top line. Growing revenue means more demand or higher prices, and it is the number every margin below is a percentage of.",
+  'gross profit': "Revenue minus what it cost to make the thing. What is left to pay for everything else: research, salespeople, offices, tax.",
+  'operating income': "Profit from actually running the business, after the cost of making the product and the cost of selling it, but before interest and tax. The cleanest read on whether the operation itself makes money.",
+  'net income': "What is left after every cost, including interest and tax. The bottom line, and the figure earnings per share is calculated from.",
+  'net margin': "Net income as a percentage of revenue. Of every dollar that came in, how many cents the company kept. A software company might keep 25 cents and a grocer two.",
+  'free cash flow': "Cash from operations minus what was spent on equipment and buildings. The money genuinely available to pay down debt, buy back shares or sit on. Harder to flatter than net income, because cash either arrived or it did not.",
+  'p/e': "Price to earnings. The share price divided by earnings per share, so it says how many dollars you pay for each dollar the company earns. A high number means the market expects growth, not that the stock is bad.",
+  'forward p/e': "The same ratio against next year's expected earnings rather than last year's actual ones. Lower than the trailing figure when earnings are expected to grow, and it relies on estimates being right.",
+  'ebitda': "Earnings before interest, tax, depreciation and amortisation. An attempt to show operating performance with financing and accounting choices stripped out. Useful for comparing two companies, and it flatters anything capital-heavy, because equipment wearing out is a real cost it ignores.",
+  'market cap': "Share price multiplied by every share outstanding. What the market says the whole company is worth. It is not the same as what the company is worth to buy, which also involves its debt.",
+  'book value': "What the balance sheet says the company's assets are worth after subtracting what it owes. An accounting figure rather than a market one, and for a business whose value is people or software it can be almost meaningless.",
+  'return on equity': "Profit as a percentage of shareholders' money in the business. How hard the company works the capital it has. Flattered by debt, because borrowing shrinks the equity the profit is measured against.",
+  'debt to equity': "How much the company has borrowed relative to shareholders' money. Higher means more leverage, which magnifies returns in a good year and losses in a bad one.",
+  'current ratio': "Assets that turn into cash within a year, divided by the bills due within a year. Under one means the company depends on new cash arriving to pay what it already owes.",
+  'dividend': "Cash paid out to shareholders, usually quarterly. Money returned rather than reinvested, which tends to mean a mature business.",
+  'payout ratio': "The share of earnings paid out as dividends. Above one means the company is paying out more than it earns, which it can do for a while and not indefinitely.",
+  'buyback': "A company buying its own shares on the market. Fewer shares means each remaining one owns a larger slice, so earnings per share rises even if profit does not.",
+  'dilution': "New shares being created, usually to pay staff or fund a deal. Each existing share ends up owning a smaller slice of the same company.",
+  'float': "The shares actually available to trade, leaving out the blocks held by founders and insiders that rarely move. A small float means a given amount of buying moves the price further.",
+  'institutional ownership': "The share of a company held by funds, pensions and other professional managers rather than individuals. High ownership means more research attention and larger positions that can be sold at once.",
+  'insider buying': "A director or officer buying their own company's shares with their own money. Worth more as a signal than insider selling, which happens for tax, a house or a divorce as often as for a view.",
+  'guidance': "The company's own forecast for its coming quarter or year. Often moves the share price more than the results themselves, because the results are about a period already priced in.",
+  'balance sheet': "The snapshot of what a company owns, what it owes and what is left for shareholders, at one moment. The other two statements cover a period; this one covers an instant.",
 };
 
 // Sort longest-first so multi-word terms (e.g. "put/call ratio") match
