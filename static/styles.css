@@ -245,16 +245,35 @@
    * --space-0 is the one sub-grid step. 2px is a real optical nudge — a caption
    * riding under a figure, a chip's inner lift — and rounding it to 4 doubles it.
    */
-  --space-0: 2px;
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-7: 32px;
-  --space-8: 40px;
-  --space-9: 48px;
+  /* ONE KNOB FOR THE WHOLE UI.
+   *
+   * Everything below is a multiple of this, so the spacing grid and the type
+   * scale move together and their relationship to each other never changes.
+   * That relationship is the design; the absolute size is a viewing preference,
+   * and the two were tangled together because both were written as literal
+   * pixels.
+   *
+   * 1.15 because 13px table body and 15px prose were measured against a modern
+   * laptop and read as a small page inside a large window rather than as a
+   * dense one. Most of this app's surface is 13px, which is where the web sat
+   * when 1280 was a big screen.
+   *
+   * The 4px grid survives as a 4.6px grid: still one rhythm, still nine steps,
+   * still every gap a multiple of one unit. Rounding each step back to a whole
+   * pixel is what would break it, because the rounding error differs per step
+   * and the rhythm is the ratio between them, not the numbers themselves. */
+  --ui-scale: 1.15;
+
+  --space-0: calc(2px * var(--ui-scale));
+  --space-1: calc(4px * var(--ui-scale));
+  --space-2: calc(8px * var(--ui-scale));
+  --space-3: calc(12px * var(--ui-scale));
+  --space-4: calc(16px * var(--ui-scale));
+  --space-5: calc(20px * var(--ui-scale));
+  --space-6: calc(24px * var(--ui-scale));
+  --space-7: calc(32px * var(--ui-scale));
+  --space-8: calc(40px * var(--ui-scale));
+  --space-9: calc(48px * var(--ui-scale));
 
   /* Seven distinct sizes, down from ten.
    *
@@ -280,16 +299,16 @@
    * slightly narrower, so 15px Inter reads at about the optical size of the 14px
    * system font it replaces; holding 14 would have made the app quietly smaller
    * than it was. */
-  --t-micro: 10px;      /* uppercase micro-labels, legends, chart ticks */
-  --t-caption: 11px;    /* captions, caveats, secondary notes */
-  --t-small: 13px;      /* dense table cells */
-  --t-body: 13px;       /* table body, key-value readings */
-  --t-base: 15px;       /* prose default */
-  --t-lead: 15px;       /* navigation, emphasised UI */
-  --t-heading: 18px;    /* sub-headings */
-  --t-d3: 24px;         /* tile values */
-  --t-d2: 32px;         /* secondary figures */
-  --t-d1: 44px;         /* the one number a panel is about */
+  --t-micro: calc(10px * var(--ui-scale));   /* uppercase micro-labels, legends, chart ticks */
+  --t-caption: calc(11px * var(--ui-scale)); /* captions, caveats, secondary notes */
+  --t-small: calc(13px * var(--ui-scale));   /* dense table cells */
+  --t-body: calc(13px * var(--ui-scale));    /* table body, key-value readings */
+  --t-base: calc(15px * var(--ui-scale));    /* prose default */
+  --t-lead: calc(15px * var(--ui-scale));    /* navigation, emphasised UI */
+  --t-heading: calc(18px * var(--ui-scale)); /* sub-headings */
+  --t-d3: calc(24px * var(--ui-scale));      /* tile values */
+  --t-d2: calc(32px * var(--ui-scale));      /* secondary figures */
+  --t-d1: calc(44px * var(--ui-scale));      /* the one number a panel is about */
 
   /* Radii, likewise collapsed from eight values to five. Panels sit at 12px:
      softer than the old 8px, which is what makes a dense dashboard read as

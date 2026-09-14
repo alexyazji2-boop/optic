@@ -1270,6 +1270,63 @@ function viewerOnMarketTime() {
   }
 }
 
+/* ================================================================= UI SIZE ===
+ *
+ * One number that scales the whole interface, type and spacing together.
+ *
+ * The stylesheet's tokens are all multiples of --ui-scale, so this changes the
+ * absolute size of everything and none of the relationships between any two
+ * things. That split is the point: the ratios are the design, the absolute size
+ * is a viewing preference, and they were tangled together because both were
+ * written as literal pixels.
+ *
+ * It exists as a control rather than as a value I picked because it is not a
+ * question with one right answer. A 13px table on a 27-inch monitor at arm's
+ * length and the same table on a 13-inch laptop are different readings of the
+ * same stylesheet, and I had guessed at it three times before writing this.
+ *
+ * Browser zoom does the same job and is not a substitute: it scales the chrome,
+ * the scrollbars and every other tab, it is per-origin rather than per-app, and
+ * nobody discovers it from inside a page that looks wrong.
+ */
+const UI_SCALE_KEY = 'optic.ui.scale.v1';
+
+const UI_SCALES = [
+  { id: 'compact', value: 1, label: 'Compact' },
+  { id: 'default', value: 1.15, label: 'Default' },
+  { id: 'large', value: 1.3, label: 'Large' },
+];
+
+const UI_SCALE_DEFAULT = 'default';
+
+function uiScale() {
+  try {
+    const saved = localStorage.getItem(UI_SCALE_KEY);
+    if (saved && UI_SCALES.some((s) => s.id === saved)) return saved;
+  } catch (e) { /* private mode */ }
+  return UI_SCALE_DEFAULT;
+}
+
+function applyUiScale() {
+  const chosen = UI_SCALES.find((s) => s.id === uiScale()) || UI_SCALES[1];
+  /* Set on the root only when it differs from the stylesheet's own value, so
+     the default ships as a plain stylesheet rather than as an inline override
+     that a reader inspecting the page would have to unpick. */
+  const root = document.documentElement;
+  if (chosen.id === UI_SCALE_DEFAULT) root.style.removeProperty('--ui-scale');
+  else root.style.setProperty('--ui-scale', String(chosen.value));
+  // The bar is one, two or three rows depending on width, and the rows just
+  // changed height. Republish before anything measures against a stale value.
+  if (typeof trackTopbarHeight === 'function') trackTopbarHeight();
+}
+
+function setUiScale(id) {
+  if (!UI_SCALES.some((s) => s.id === id)) return;
+  try { localStorage.setItem(UI_SCALE_KEY, id); } catch (e) { /* private mode */ }
+  applyUiScale();
+  if (STATE.view === 'settings') loadView('settings', true);
+}
+
 function applyTheme() {
   const resolved = SETTINGS.theme === 'system'
     ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches
@@ -16875,6 +16932,24 @@ function renderSettings() {
   </div>
 
   <div class="panel span2 gap">
+    <h2>${hg('Text size')}</h2>
+    <p class="sub">Scales the whole interface, type and spacing together, so the
+      proportions stay exactly as they are and only the size changes. This is a
+      reading preference rather than a layout setting: the same table is a
+      different read on a 13-inch laptop and a 27-inch monitor, and the
+      stylesheet cannot know which one you are at.</p>
+    <div class="settings-row">
+      <div class="settings-label">Size
+        <span class="settings-hint">Default is 15% larger than the terminal
+          shipped with. Compact is that original density, for a small screen or
+          a reader who wants more on it at once.</span></div>
+      <div class="seg">${UI_SCALES.map((sc) => `<button type="button"
+        class="seg-opt${uiScale() === sc.id ? ' on' : ''}" data-set-scale="${sc.id}"
+        aria-pressed="${uiScale() === sc.id}">${esc(sc.label)}</button>`).join('')}</div>
+    </div>
+  </div>
+
+  <div class="panel span2 gap">
     <h2>${hg('How much to show')}</h2>
     <p class="sub">The Analysis tab renders twenty-two panels and nine of them are
       derivatives positioning. Simple leaves those out; nothing else changes, and
@@ -23557,6 +23632,8 @@ document.addEventListener('click', (evt) => {
   // that takes the whole file down rather than just this branch.
   const detailBtn = evt.target.closest('[data-set-mode]');
   if (detailBtn) { closePanelChooser(); setUiMode(detailBtn.dataset.setMode); return; }
+  const scaleBtn = evt.target.closest('[data-set-scale]');
+  if (scaleBtn) { setUiScale(scaleBtn.dataset.setScale); return; }
   if (evt.target.closest('[data-panels-open]')) { openPanelChooser(STATE.view); return; }
   const insOnly = evt.target.closest('[data-ins-only]');
   if (insOnly) {

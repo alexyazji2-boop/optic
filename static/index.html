@@ -55,7 +55,21 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/space-grotesk/index.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/plus-jakarta-sans/index.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/inter/index.css">
-<link rel="stylesheet" href="styles.css?v=467">
+<link rel="stylesheet" href="styles.css?v=468">
+<!-- The reader's size preference, applied before the first paint.
+     Inline and synchronous on purpose: app.js is loaded at the end of the body,
+     so anything done there runs after the page has already been laid out once,
+     and a reader on Compact or Large would watch the whole interface resize in
+     front of them on every single load. Four lines here cost that flash. The
+     default is the stylesheet's own value and writes nothing. -->
+<script>
+  (function () {
+    try {
+      var v = { compact: 1, large: 1.3 }[localStorage.getItem('optic.ui.scale.v1')];
+      if (v) document.documentElement.style.setProperty('--ui-scale', String(v));
+    } catch (e) { /* private mode */ }
+  }());
+</script>
 <script>
 /* Set the theme before the stylesheet paints.
  *
@@ -241,11 +255,11 @@
 <!-- Version query busts the browser cache on deploy. Without it a reloaded page
      can pair new HTML with a stale charts.js/app.js, which surfaces as features
      silently not working rather than as an error. -->
-<script src="charts.js?v=467"></script>
+<script src="charts.js?v=468"></script>
 <!-- Before app.js: it exposes window.OpticAuth, which app.js reads at load to
      decide whether the watchlist and the saved research come from the account or
      from this browser. -->
-<script src="auth.js?v=467"></script>
-<script src="app.js?v=467"></script>
+<script src="auth.js?v=468"></script>
+<script src="app.js?v=468"></script>
 </body>
 </html>
