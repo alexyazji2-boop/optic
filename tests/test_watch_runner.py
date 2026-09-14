@@ -12,6 +12,7 @@ rather than reading the source, and they never touch the network.
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -267,3 +268,83 @@ def test_hits_are_only_ever_the_callers_own(account):
     watch_runner.run_once(snapshot_with(rsi=62.4))
     assert [h["symbol"] for h in watch_runner.hits_for(account)] == ["NVDA"]
     assert [h["symbol"] for h in watch_runner.hits_for(other)] == ["AMD"]
+
+
+# ------------------------------------------------------------- the schedule
+
+def test_the_runner_is_actually_called_by_something():
+    """The gap this closes. /api/watches/run existed and was tested, and the
+    only thing that ever invoked it was curl — so a watch could fire only if
+    somebody triggered a pass by hand, which is the opposite of the point of
+    evaluating server-side."""
+    main = open("app/main.py", encoding="utf-8").read()
+    loop = main[main.index("async def _tracker_loop()"):]
+    loop = loop[:loop.index("\n@app.on_event")]
+    # Through `_run`, which is the thread-pool wrapper. run_once is blocking —
+    # it makes provider calls — so calling it directly in the event loop would
+    # stall every request for the length of a pass, which is minutes.
+    assert "_run(watch_runner.run_once, _watch_snapshot)" in loop
+    assert "await" in loop[loop.index("watch_runner.run_once") - 40:
+                           loop.index("watch_runner.run_once")]
+
+
+def test_it_runs_on_its_own_interval_not_the_mark_cadence():
+    """A pass is one snapshot per distinct symbol at roughly twenty seconds
+    each, capped at sixty, so the worst case is about twenty minutes. An
+    interval shorter than that starts the next pass while the last is still
+    running."""
+    main = open("app/main.py", encoding="utf-8").read()
+    assert "WATCH_RUN_MINUTES" in main
+    default = float(re.search(r'WATCH_RUN_MINUTES", "([\d.]+)"', main).group(1))
+    assert default >= 20, "%s minutes can overlap its own pass" % default
+
+
+def test_it_is_inside_the_market_hours_gate():
+    """Every condition but earnings_near reads a price or a technical, and both
+    are the same number all weekend, so a pass then spends provider calls
+    re-reading Friday's close."""
+    main = open("app/main.py", encoding="utf-8").read()
+    loop = main[main.index("async def _tracker_loop()"):]
+    loop = loop[:loop.index("\n@app.on_event")]
+    gate = loop.index("if not is_open and not just_closed:")
+    assert loop.index("WATCH_AUTO") > gate
+    assert "if is_open and WATCH_AUTO:" in loop
+
+
+def test_a_failed_pass_does_not_kill_the_loop():
+    """It shares a loop with the ledger, the brief and the account sweep. One
+    bad provider response must not take the other three down for the lifetime
+    of the process."""
+    main = open("app/main.py", encoding="utf-8").read()
+    block = main[main.index("if is_open and WATCH_AUTO:"):]
+    block = block[:block.index("except asyncio.CancelledError")]
+    assert "except Exception" in block
+    assert "log.warning" in block
+
+
+def test_the_interval_is_recorded_before_the_pass_not_after():
+    """A pass takes minutes. Stamping the clock afterwards means the interval
+    measures from the end, so a twenty-minute pass on a thirty-minute timer
+    would run every fifty."""
+    main = open("app/main.py", encoding="utf-8").read()
+    block = main[main.index("if is_open and WATCH_AUTO:"):]
+    block = block[:block.index("except Exception")]
+    assert block.index("app.state.last_watch_run = now") < block.index("run_once")
+
+
+def test_the_endpoint_and_the_schedule_build_the_same_snapshot():
+    """Two copies of "how to build a snapshot for a watch" is how an endpoint
+    and a schedule come to evaluate different conditions from one stored row."""
+    main = open("app/main.py", encoding="utf-8").read()
+    assert main.count("def _watch_snapshot(") == 1
+    endpoint = main[main.index('@app.post("/api/watches/run")'):]
+    endpoint = endpoint[:endpoint.index("\n@app.")]
+    assert "run_once(_watch_snapshot)" in endpoint
+    assert "_swing_snapshot" not in endpoint, "the endpoint built its own"
+
+
+def test_the_schedule_can_be_turned_off():
+    """It spends provider calls on behalf of readers who are not present. A
+    deployment has to be able to say no."""
+    main = open("app/main.py", encoding="utf-8").read()
+    assert 'os.environ.get("WATCH_AUTO"' in main

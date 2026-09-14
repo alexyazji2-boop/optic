@@ -711,6 +711,24 @@ async def watch_check(body: Dict[str, Any]) -> Dict[str, Any]:
     return await _run(build)
 
 
+def _watch_snapshot(symbol: str) -> Dict[str, Any]:
+    """The payload `watches.check` reads, for one symbol.
+
+    Module-level rather than a closure inside the endpoint, because the
+    scheduled loop needs the same thing and two copies of "how to build a
+    snapshot for a watch" is how the endpoint and the schedule come to evaluate
+    different conditions from the same stored row.
+    """
+    payload = _swing_snapshot(symbol, None, 1, False, include_earnings=True)
+    try:
+        payload["next_earnings_date"] = YF_PROVIDER.earnings_date(symbol)
+    except Exception:
+        # An earnings date that will not load costs the earnings_near condition
+        # and nothing else. Every other watch on this symbol still evaluates.
+        payload["next_earnings_date"] = None
+    return payload
+
+
 @app.post("/api/watches/run")
 async def watches_run(request: Request) -> Dict[str, Any]:
     """Evaluate every stored watch and record what fired.
@@ -726,18 +744,7 @@ async def watches_run(request: Request) -> Dict[str, Any]:
     _write_guard(request)
 
     def build() -> Dict[str, Any]:
-        def snapshot(symbol: str) -> Dict[str, Any]:
-            payload = _swing_snapshot(symbol, None, 1, False, include_earnings=True)
-            try:
-                payload["next_earnings_date"] = YF_PROVIDER.earnings_date(symbol)
-            except Exception:
-                # An earnings date that will not load costs the earnings_near
-                # condition and nothing else. Every other watch on this symbol
-                # still evaluates.
-                payload["next_earnings_date"] = None
-            return payload
-
-        return watch_runner.run_once(snapshot)
+        return watch_runner.run_once(_watch_snapshot)
 
     return await _run(build)
 
@@ -1017,6 +1024,14 @@ TRACKER_SCAN_MINUTES = float(os.environ.get("TRACKER_SCAN_MINUTES", "240"))
 TRACKER_AUTO = os.environ.get("TRACKER_AUTO", "true").strip().lower() != "false"
 # The brief piggybacks on the tracker loop rather than running a second timer.
 BRIEF_AUTO = os.environ.get("BRIEF_AUTO", "true").strip().lower() != "false"
+# So do the readers' watches. A pass is one snapshot per distinct symbol under
+# watch, so the interval has to exceed the worst-case pass or the next one
+# starts while the last is still running: sixty symbols at roughly twenty
+# seconds each is about twenty minutes, and thirty leaves headroom. More
+# frequent passes would mostly write nothing anyway, since a watch reports at
+# most once a day.
+WATCH_RUN_MINUTES = float(os.environ.get("WATCH_RUN_MINUTES", "30"))
+WATCH_AUTO = os.environ.get("WATCH_AUTO", "true").strip().lower() != "false"
 # The pre-open anchor, in Eastern hours. 09:00 is half an hour before the open:
 # late enough to have the overnight wires and any 08:30 release, early enough to
 # be read before the bell.
@@ -1153,6 +1168,43 @@ async def _tracker_loop() -> None:
                     await _run(paper.mark_open_positions, PROVIDER, RISK_FREE)
                     if just_closed:
                         log.info("tracker: marked final closing prices")
+
+            # The readers' own watches, on the same clock.
+            #
+            # Without this the runner is a job nobody calls: /api/watches/run
+            # exists and is tested, and the only thing that ever invoked it was
+            # curl, so a watch could only fire if somebody happened to trigger
+            # a pass by hand. The whole point of evaluating server-side is
+            # being told about a move you were not watching.
+            #
+            # Inside the market-hours gate, deliberately. Every condition but
+            # earnings_near reads a price or a technical, and both are the same
+            # number all weekend, so a pass then spends provider calls to
+            # re-read Friday's close. The cost of that choice is a
+            # calendar-only condition landing up to a day late at a weekend,
+            # which for a seven-day earnings window is not a miss.
+            #
+            # Its own interval rather than the mark cadence. A pass is one
+            # snapshot per distinct symbol under watch at roughly twenty
+            # seconds each, capped at sixty symbols, so the worst case is about
+            # twenty minutes of provider calls: an interval shorter than that
+            # would start the next pass while the last one was still running.
+            # Thirty leaves headroom, and the once-per-day dedupe means more
+            # frequent passes would mostly write nothing anyway.
+            if is_open and WATCH_AUTO:
+                last_watch = getattr(app.state, "last_watch_run", None)
+                if last_watch is None or now - last_watch >= WATCH_RUN_MINUTES * 60:
+                    app.state.last_watch_run = now
+                    try:
+                        out = await _run(watch_runner.run_once, _watch_snapshot)
+                        if out["hits"] or out["failed_symbols"]:
+                            log.info(
+                                "watches: %s symbols, %s checked, %s fired, failed %s",
+                                out["symbols"], out["watches_checked"],
+                                out["hits"], out["failed_symbols"] or "none",
+                            )
+                    except Exception as exc:  # noqa: BLE001 - never break the loop
+                        log.warning("watch run failed: %s", exc)
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # a failed pass must not kill the loop
