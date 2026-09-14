@@ -9364,6 +9364,65 @@ body.cp-open { overflow: hidden; }
   aside#chat { padding-bottom: calc(52px + env(safe-area-inset-bottom)); }
 }
 
+/* ----------------------------------------------- the onboarding question
+ *
+ * A card on the page, not a modal over it. Nothing gates this terminal, and a
+ * wall in front of the market on a first load would be the one place that rule
+ * broke, for a preference. So it sits in the flow, above the brand and below
+ * the market strip, and scrolls away like anything else. */
+.kob {
+  margin: var(--space-5) auto var(--space-6);
+  max-width: 860px;
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.kob-head { margin-bottom: var(--space-4); }
+.kob-h {
+  margin: 0 0 var(--space-1);
+  font: 600 var(--t-heading)/1.25 var(--display);
+  color: var(--ink);
+}
+.kob-sub {
+  margin: 0;
+  max-width: 62ch;
+  font-size: var(--t-small);
+  line-height: 1.5;
+  color: var(--ink-muted);
+}
+
+/* auto-fit rather than a fixed count: five options at 150px do not fit a phone
+   and three rows of oddly-sized buttons is what a fixed grid gives you there. */
+.kob-opts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-2);
+}
+.kob-opt {
+  display: grid;
+  gap: var(--space-0);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--dur-ui) var(--ease-ui),
+              background var(--dur-ui) var(--ease-ui),
+              color var(--dur-ui) var(--ease-ui);
+}
+.kob-opt:hover { border-color: var(--brand); background: var(--raised); color: var(--ink); }
+.kob-opt:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.kob-glyph { font-size: var(--t-heading); line-height: 1; }
+.kob-label { font: 600 var(--t-body)/1.25 var(--sans); color: var(--ink); }
+.kob-tag { font-size: var(--t-small); line-height: 1.4; }
+
+/* Skip is an answer and is styled as one: quiet, but present and reachable.
+   A card with no way out is a modal wearing a card's clothes. */
+.kob-skip { margin-top: var(--space-3); align-self: start; }
+
 /* ------------------------------------------- inline term explanations (Simple)
  *
  * The clickable variant of a glossary term. It has to look like it does

@@ -2517,6 +2517,24 @@ function renderHome() {
         * height, so nothing below it jumps when it arrives. */''}
     <div id="cc-strip"></div>
 
+    ${/* Asked once, on the first visit, and never again.
+        *
+        * A card on the page rather than a modal over it. Nothing gates this
+        * terminal — every research endpoint answers a guest exactly as it did
+        * before accounts existed, and that is a requirement rather than a
+        * current state of affairs — so a wall in front of the market on the
+        * first load would be the one place the rule broke, for a preference.
+        *
+        * One question and five answers, not a quiz. The brief is explicit that
+        * nobody sits an exam to use this, and the answers are the taglines
+        * already published with each mode, so there is no second copy of them
+        * to drift.
+        *
+        * Above the brand and below the strip: the market is still the first
+        * thing on the page, which is the reason anybody opens it on the second
+        * day. */''}
+    ${knowledgeOnboardingHTML()}
+
     <div class="home-brand">
       <svg class="home-logo" viewBox="0 0 32 32" aria-label="Optic Terminal logo" role="img">
       <!-- No outer ring. The header's brand-mark has never had one, so the two
@@ -22342,6 +22360,52 @@ async function loadPersonas() {
   renderPersonaPicker();
 }
 
+/* The onboarding question. Rendered into Home, once.
+ *
+ * Reads `asked` rather than whether a mode is stored, because read() returns
+ * the default when nothing is set: a considered "Financially Literate" and
+ * never having seen the control are the same value and different states.
+ */
+function knowledgeOnboardingHTML() {
+  const K = window.OpticKnowledge;
+  if (!K || K.asked()) return '';
+  const modes = K.modes();
+  // Before the catalogue lands there is nothing to offer, and a card with five
+  // blank buttons is worse than the card arriving a beat later.
+  if (!modes.length) return '';
+  return `<section class="kob" aria-labelledby="kob-h">
+    <div class="kob-head">
+      <h2 class="kob-h" id="kob-h">How should Optic speak to you?</h2>
+      <p class="kob-sub">This sets how much financial detail Optic assumes and
+        how much it explains as it goes. It changes the wording and the density,
+        never the figures, and you can change it any time from the control in
+        Ask Pulse.</p>
+    </div>
+    <div class="kob-opts" role="group" aria-labelledby="kob-h">
+      ${modes.map((m) => `<button type="button" class="kob-opt" data-kob-pick="${esc(m.id)}">
+        <span class="kob-glyph" aria-hidden="true">${m.glyph}</span>
+        <span class="kob-label">${esc(m.label)}</span>
+        <span class="kob-tag">${esc(m.tagline)}</span>
+      </button>`).join('')}
+    </div>
+    <button type="button" class="auth-link kob-skip" data-kob-skip>Skip for now</button>
+  </section>`;
+}
+
+document.addEventListener('click', (evt) => {
+  if (!evt.target || !evt.target.closest) return;
+  const pick = evt.target.closest('[data-kob-pick]');
+  const skip = evt.target.closest('[data-kob-skip]');
+  if (!pick && !skip) return;
+  /* Skip is an answer, not a dismissal. It records that the question was asked
+     and keeps the default, so it never comes back: a prompt that returns until
+     you engage with it is a prompt that teaches people to ignore the product's
+     other questions too. */
+  window.OpticKnowledge.choose(pick ? pick.dataset.kobPick : null);
+  const card = document.querySelector('.kob');
+  if (card) card.remove();
+});
+
 /* The knowledge selector: open state, render, handlers.
  *
  * Open state is held here rather than in the component because it is UI state
@@ -25397,7 +25461,12 @@ function watchColorScheme() {
     const assumed = explainPolicy();
     window.OpticKnowledge.load().then(() => {
       repaintKnowledgeSelector();
-      if (explainPolicy() !== assumed) applyKnowledgeLevel();
+      if (explainPolicy() !== assumed) { applyKnowledgeLevel(); return; }
+      /* Home is painted before this resolves, so the onboarding card had
+         nothing to offer and returned empty. Without this it would never
+         appear at all: the one visit it is for is the one where the catalogue
+         has not landed yet. */
+      if (STATE.view === 'home' && !window.OpticKnowledge.asked()) renderHome();
       else if (STATE.view === 'settings') renderSettings();
     });
   }

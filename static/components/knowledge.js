@@ -21,6 +21,14 @@
   'use strict';
 
   var STORE_KEY = 'optic.knowledge.v1';
+  /* Chosen-nothing and chose-the-default are different states.
+   *
+   * read() returns the default when the key is absent, which is right for every
+   * caller that needs a level and wrong for the one question worth asking once:
+   * has this reader ever been offered the choice. Without a second key there is
+   * no way to tell a considered "Financially Literate" from never having seen
+   * the control, so the prompt would either never appear or appear forever. */
+  var ASKED_KEY = 'optic.knowledge.asked.v1';
   var DEFAULT_MODE = 'literate';
 
   /* The one thing duplicated from the server, and why.
@@ -83,6 +91,27 @@
   }
 
   function onChange(fn) { if (typeof fn === 'function') listeners.push(fn); }
+
+  /** Has the reader been offered the choice, whatever they did about it? */
+  function asked() {
+    try { return localStorage.getItem(ASKED_KEY) === '1'; } catch (e) { return true; }
+  }
+
+  /* Private mode returns true above, on purpose. There the flag cannot be
+   * stored, so the prompt would reappear on every navigation, and a question
+   * that will not stay answered is worse than one never asked. */
+  function markAsked() {
+    try { localStorage.setItem(ASKED_KEY, '1'); } catch (e) { /* private mode */ }
+  }
+
+  /** Answer the onboarding question. `id` may be null, meaning "keep the default". */
+  function choose(id) {
+    markAsked();
+    if (id) set(id);
+    listeners.forEach(function (fn) {
+      try { fn(mode()); } catch (e) { /* keep going */ }
+    });
+  }
 
   function modes() {
     return (catalogue && catalogue.modes) || [];
@@ -186,6 +215,9 @@
     current: current,
     selectorHTML: selectorHTML,
     menuHTML: menuHTML,
+    asked: asked,
+    markAsked: markAsked,
+    choose: choose,
     LEVELS: LEVELS,
     DEFAULT_MODE: DEFAULT_MODE,
     STORE_KEY: STORE_KEY

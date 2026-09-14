@@ -174,7 +174,9 @@ def test_the_first_paint_corrects_itself_only_when_it_has_to():
     A reader on the default sees no difference; one on Simple or Professional
     would get a single paint of the default's glosses."""
     assert "const assumed = explainPolicy();" in CODE
-    assert "if (explainPolicy() !== assumed) applyKnowledgeLevel();" in CODE
+    # Returns after re-applying, because applyKnowledgeLevel re-renders the
+    # view and the onboarding branch below it would then render a second time.
+    assert "if (explainPolicy() !== assumed) { applyKnowledgeLevel(); return; }" in CODE
 
 
 # ------------------------------------------------------------------------- CSS
