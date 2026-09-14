@@ -35,7 +35,7 @@ def png_size(path):
 
 
 def test_the_document_declares_an_icon():
-    assert 'rel="icon" href="/icon.svg" type="image/svg+xml"' in INDEX
+    assert re.search(r'rel="icon" href="/icon\.svg(\?v=\d+)?" type="image/svg\+xml"', INDEX)
     assert 'rel="apple-touch-icon"' in INDEX
     assert 'rel="manifest"' in INDEX
 
@@ -49,7 +49,9 @@ def test_every_declared_icon_exists():
     linked = ["icon.svg", "site.webmanifest", "icon-192.png", "apple-touch-icon.png"]
     for name in linked:
         assert os.path.exists(os.path.join(STATIC, name)), name
-        assert 'href="/%s"' % name in INDEX, name
+        # The ?v= is optional in the pattern and present in practice; see
+        # test_the_icon_links_are_cache_busted for why it has to be there.
+        assert re.search(r'href="/%s(\?v=\d+)?"' % re.escape(name), INDEX), name
     assert os.path.exists(os.path.join(STATIC, "icon-512.png"))
 
 
@@ -124,3 +126,17 @@ def test_the_icon_accent_follows_the_brand():
         gap = min(gap, 360 - gap)
         assert gap <= 8, "icon %s is %.0f degrees from the accent %s" % (
             got, gap, accent)
+
+
+def test_the_icon_links_are_cache_busted():
+    """Chrome keeps favicons in a store with its own lifetime and does not
+    reliably refetch them on a normal reload, so an un-versioned icon URL is an
+    icon that changes for nobody. Reported as the tab still showing the old blue
+    mark hours after the amber one shipped, and the mark on disk was already
+    amber: the bug was entirely in the URL.
+
+    The number is rewritten server-side from asset mtimes, so it only needs to
+    be present here, not correct."""
+    for name in ("icon.svg", "icon-192.png", "apple-touch-icon.png",
+                 "site.webmanifest"):
+        assert re.search(r'href="/%s\?v=\d+"' % re.escape(name), INDEX), name

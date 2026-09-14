@@ -38,12 +38,23 @@ def test_the_topbar_has_a_slot_for_the_account_control():
     assert "getElementById('account-slot')" in AUTH_JS
 
 
-def test_auth_js_is_in_the_asset_cache_key():
+def test_every_front_end_asset_is_in_the_cache_key():
     """The ?v= query is derived from asset mtimes in app/main.py. A file missing
     from that list ships new HTML paired with a stale copy of itself, which
-    presents as a feature that silently does not work."""
+    presents as a feature that silently does not work.
+
+    The icons proved it: they were outside the list, so recolouring one moved
+    the stamp not at all and Chrome went on drawing the old one, correctly,
+    because nothing it could see had changed.
+
+    Reads the list rather than a literal tuple, so adding an asset does not
+    fail a test about whether assets are covered."""
     main = open("app/main.py").read()
-    assert 'for name in ("app.js", "auth.js", "charts.js", "styles.css")' in main
+    block = main[main.index("def _asset_version()"):]
+    block = block[:block.index("return str(stamp)")]
+    for name in ("app.js", "auth.js", "charts.js", "styles.css",
+                 "icon.svg", "icon-192.png", "apple-touch-icon.png"):
+        assert '"%s"' % name in block, name
 
 
 # -------------------------------------------------------------------- session

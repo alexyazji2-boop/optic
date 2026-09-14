@@ -2632,9 +2632,23 @@ async def _migrate_accounts() -> None:
 
 
 def _asset_version() -> str:
-    """A cache key that changes whenever any front-end asset changes."""
+    """A cache key that changes whenever any front-end asset changes.
+
+    The icons are in this list and were not, which is why a recolour did not
+    reach anybody: the stamp is the newest mtime across the set, so a change to
+    a file outside it moves nothing and every cached copy stays valid. The icon
+    went from blue to amber in the repository and Chrome kept drawing blue,
+    correctly, because nothing it could see had changed.
+
+    Favicons need this more than the other assets rather than less. Chrome keeps
+    them in a separate store with its own lifetime, does not reliably refetch
+    them on a normal reload, and the one place the app is seen while nobody is
+    looking at it is the bookmarks bar.
+    """
     stamp = 0
-    for name in ("app.js", "auth.js", "charts.js", "styles.css"):
+    for name in ("app.js", "auth.js", "charts.js", "styles.css",
+                 "icon.svg", "icon-192.png", "icon-512.png",
+                 "apple-touch-icon.png", "site.webmanifest"):
         try:
             stamp = max(stamp, int((STATIC_DIR / name).stat().st_mtime))
         except OSError:
