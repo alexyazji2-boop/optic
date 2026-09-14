@@ -521,3 +521,55 @@ def test_the_symbol_is_encoded_in_the_path():
     not something to find out about later."""
     for fn in (js_body("thesisSave"), js_body("thesisDelete")):
         assert "encodeURIComponent(sym)" in fn
+
+
+# --------------------------------------------------- observing the migration
+#
+# The migration runner fires on boot inside a try/except that logs and carries
+# on. That is the right behaviour and it leaves no way to see the outcome from
+# outside: after deploying this table the only available check was that the new
+# endpoints 401'd a guest, which is `require_user` answering before any query
+# runs. It proves the route exists and says nothing about the table.
+
+def test_health_reports_whether_the_accounts_schema_is_ready():
+    body = client.get("/api/health").json()
+    assert "accounts" in body
+    acc = body["accounts"]
+    assert acc["ready"] is True, acc
+    assert 5 in acc["applied"], acc
+    assert acc["applied"] == acc["known"]
+
+
+def test_health_is_not_ready_when_a_migration_is_missing(monkeypatch):
+    """The field has to be able to say no, or it is decoration."""
+    from app import main as main_mod
+    monkeypatch.setattr(main_mod.accounts_db, "applied", lambda: [1, 2])
+    acc = main_mod._accounts_health()
+    assert acc["ready"] is False
+    assert acc["applied"] == [1, 2]
+
+
+def test_health_survives_an_unreadable_accounts_database(monkeypatch):
+    """A terminal whose research endpoints all work without an accounts
+    database must not have its health check brought down by one."""
+    from app import main as main_mod
+
+    def boom():
+        raise OSError("no such volume")
+
+    monkeypatch.setattr(main_mod.accounts_db, "applied", boom)
+    acc = main_mod._accounts_health()
+    assert acc["ready"] is False
+    assert acc["error"] == "OSError"
+    # And the endpoint itself still answers.
+    assert client.get("/api/health").status_code == 200
+
+
+def test_health_does_not_leak_the_schema():
+    """Version numbers only. A row count or a column name here would make an
+    operational probe into a schema dump."""
+    acc = client.get("/api/health").json()["accounts"]
+    flat = json.dumps(acc).lower()
+    for leak in ("theses", "users", "password", "token", "session", "email",
+                 "select", "create table"):
+        assert leak not in flat, leak

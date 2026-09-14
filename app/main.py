@@ -429,7 +429,39 @@ async def health() -> Dict[str, Any]:
         # things you want to see rather than infer.
         "booted_at": _BOOTED_AT.isoformat(),
         "uptime_seconds": int((now - _BOOTED_AT).total_seconds()),
+        "accounts": _accounts_health(),
     }
+
+
+def _accounts_health() -> Dict[str, Any]:
+    """Whether the accounts schema is where the code expects it.
+
+    Here because the migration runner fires on boot inside a try/except that
+    logs and carries on, which is right (a broken accounts database must not
+    take down a terminal whose research endpoints all work without one) and
+    leaves no way to observe the outcome from outside. Adding a table and
+    deploying it, the only available check was that the new endpoints returned
+    401 to a guest, and that is `require_user` answering before any query runs:
+    it proves the route is registered and says nothing about the table.
+
+    Same idea as `feeds.CONTACT_OK`, which exists so a missing address shows up
+    as configuration rather than as a broken section.
+
+    Version numbers only. The migration list is in a public repository already,
+    so this discloses nothing, and it stops short of any row count or column
+    name so it cannot become a schema dump.
+    """
+    try:
+        applied = accounts_db.applied()
+        return {
+            "ready": applied == [m[0] for m in accounts_db.MIGRATIONS],
+            "applied": applied,
+            "known": [m[0] for m in accounts_db.MIGRATIONS],
+        }
+    except Exception as exc:
+        # Never the reason /api/health fails. Health saying "I could not tell"
+        # is useful; health 500ing because a side question raised is not.
+        return {"ready": False, "error": type(exc).__name__}
 
 
 @app.get("/api/ticker/{ticker}")
