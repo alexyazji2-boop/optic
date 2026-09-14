@@ -106,6 +106,17 @@
    * can have while still carrying white text. The blue it replaces had 147. */
   --btn-primary: #9a6b00;
   --btn-primary-ink: #ffffff;
+  /* Text on any saturated fill, not just the primary button. Five places set
+     `color: #fff` over --btn-primary or --neg, which meant a theme could change
+     the ink on the button and miss the badges: --btn-primary-ink is the right
+     name for one of those and the wrong name for a count sitting on red. */
+  --ink-on-solid: #ffffff;
+  /* The plate behind a company logo, and the one colour in this file that is
+     deliberately identical in both themes. Most brand marks ship on white, so
+     a white plate stops a dark logo vanishing into a dark panel. A token rather
+     than a literal so it reads as a decision: as a bare #ffffff in the middle
+     of a rule it looks exactly like a token somebody forgot. */
+  --logo-plate: #ffffff;
   /* The mark follows the accent, so the app has one of them rather than two.
      Its own token and not --s1: that is a chart series colour, chosen for
      separation from the other seven, and repainting the brand must not repaint
@@ -313,6 +324,14 @@
   /* Radii, likewise collapsed from eight values to five. Panels sit at 12px:
      softer than the old 8px, which is what makes a dense dashboard read as
      calm rather than boxed-in. */
+  /* Two motion bands, not one. --dur-ui at 120ms is right for a hover, where a
+     colour change wants to feel immediate. It is too fast for something that
+     opens: at 120ms a menu reads as a jump rather than a movement, so menus,
+     panels and inline explanations get their own.
+     Measured against the spec this was built to, which asks for hover at
+     120-180ms and transitions at 180-240ms. One value was serving both. */
+  --dur-panel: 200ms;
+
   --r-xs: 4px;          /* inline marks, bars, strip segments */
   --r-sm: 8px;          /* inputs, small controls */
   --r-md: 8px;          /* buttons, selects, callouts — merged with --r-sm,
@@ -377,6 +396,17 @@
    * can have while still carrying white text. The blue it replaces had 147. */
   --btn-primary: #9a6b00;
   --btn-primary-ink: #ffffff;
+  /* Text on any saturated fill, not just the primary button. Five places set
+     `color: #fff` over --btn-primary or --neg, which meant a theme could change
+     the ink on the button and miss the badges: --btn-primary-ink is the right
+     name for one of those and the wrong name for a count sitting on red. */
+  --ink-on-solid: #ffffff;
+  /* The plate behind a company logo, and the one colour in this file that is
+     deliberately identical in both themes. Most brand marks ship on white, so
+     a white plate stops a dark logo vanishing into a dark panel. A token rather
+     than a literal so it reads as a decision: as a bare #ffffff in the middle
+     of a rule it looks exactly like a token somebody forgot. */
+  --logo-plate: #ffffff;
   /* The mark follows the accent, so the app has one of them rather than two.
      Its own token and not --s1: that is a chart series colour, chosen for
      separation from the other seven, and repainting the brand must not repaint
@@ -596,7 +626,7 @@ header.topbar {
 .btn[disabled] { opacity: 0.45; cursor: not-allowed; }
 
 .pulse-mark {
-  color: #fff;
+  color: var(--btn-primary-ink);
   font-size: var(--t-micro);
   vertical-align: 1px;
   display: inline-block;
@@ -2569,9 +2599,9 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
   font-weight: 500;
 }
 .cal-impact.high {
-  color: var(--warn, #b45309);
-  border-color: color-mix(in srgb, var(--warn, #b45309) 45%, transparent);
-  background: color-mix(in srgb, var(--warn, #b45309) 10%, transparent);
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
   font-weight: 600;
 }
 .cal-impact.medium { color: var(--ink-2); border-color: var(--border-strong); }
@@ -5358,7 +5388,9 @@ details.ind-explain[open] > summary .cal-caret { transform: rotate(90deg); }
   opacity: 0;
   visibility: hidden;
   transform: translateY(-3px);
-  transition: opacity 120ms ease, transform 120ms ease, visibility 120ms;
+  transition: opacity var(--dur-panel) var(--ease-ui),
+              transform var(--dur-panel) var(--ease-ui),
+              visibility var(--dur-panel);
 }
 .nav-item:focus-within .nav-menu,
 .nav-item.open .nav-menu {
@@ -5645,7 +5677,7 @@ nav.tabs-group {
   /* Most brand marks ship on white, so a white plate stops a dark logo
      disappearing into the dark panel behind it. No padding: these sources are
      32-48px and every pixel spent on inset is a pixel of upscaling. */
-  background: #ffffff;
+  background: var(--logo-plate);
   /* Most sources are now vector or 192px, so the box can be larger without
      upscaling. A couple of companies genuinely have nothing above 32px anywhere —
      HP is one — and those stay soft because that is the ceiling, not the setting. */
@@ -7027,7 +7059,7 @@ table.data tr.fx-detail td,
   padding: 0 var(--space-1);
   border-radius: var(--r-pill);
   background: var(--neg);
-  color: #fff;
+  color: var(--ink-on-solid);
   font-size: 9px;
   font-weight: 700;
   line-height: 14px;
@@ -9350,7 +9382,7 @@ body.cp-open { overflow: hidden; }
     padding: 0 4px;
     border-radius: 999px;
     background: var(--btn-primary);
-    color: #fff;
+    color: var(--btn-primary-ink);
     font: 600 10px/16px var(--sans);
     text-align: center;
   }
@@ -9645,7 +9677,7 @@ body.cp-open { overflow: hidden; }
   padding: 0 var(--space-1);
   border-radius: 999px;
   background: var(--btn-primary);
-  color: #fff;
+  color: var(--btn-primary-ink);
   font: 600 var(--t-small)/20px var(--sans);
   text-align: center;
   vertical-align: middle;
