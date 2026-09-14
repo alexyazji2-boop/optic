@@ -58,6 +58,223 @@ CATALYSTS: List[Tuple[str, str, str]] = [
 ]
 
 
+# --------------------------------------------------------------- the hierarchy
+#
+# A flat feed makes the reader do the triage. Twelve headlines in provider order
+# put an analyst note above an earnings miss and a week-old product launch above
+# something that landed twenty minutes ago, and the only way to tell was to read
+# all twelve.
+#
+# Three things decide a tier, and all three are already measured: how old the
+# item is, what the catalyst taxonomy makes of it, and nothing else. There is no
+# model here and no scoring of importance by tone, because a lexicon sum says
+# how *excited* a headline is, which is not the same as how much it matters:
+# "shares soar" scores higher than "SEC opens investigation".
+#
+# NOT CALLED "MARKET MOVING", which is what the brief asked for and what this
+# cannot support. To say a headline moved the market you need to show the market
+# moved *because of it*, and all that is available is whether the two happened
+# on the same day. This codebase has made that mistake once already: the factor
+# panel was titled "Why it's moving" over a list ranked by absolute score, so on
+# a down day its three strongest readings were all bullish, and it was reported
+# as a rendering fault. A tier is named for the thing that was measured.
+TIER_BREAKING = "breaking"
+TIER_MAJOR = "major"
+TIER_NOTABLE = "notable"
+TIER_BACKGROUND = "background"
+
+TIER_ORDER = [TIER_BREAKING, TIER_MAJOR, TIER_NOTABLE, TIER_BACKGROUND]
+
+# Three hours, not the more obvious twenty-four. The feed is a company news
+# feed, so "today" is most of what it returns during a session and a tier that
+# holds most of the list has sorted nothing.
+BREAKING_HOURS = 3.0
+
+_IMPORTANCE_RANK = {"high": 3, "medium": 2, "low": 1}
+
+TIERS: List[Dict[str, str]] = [
+    {
+        "id": TIER_BREAKING,
+        "label": "Breaking",
+        "rule": "Filed in the last {:.0f} hours.".format(BREAKING_HOURS),
+    },
+    {
+        "id": TIER_MAJOR,
+        "label": "Major",
+        "rule": "Carries a catalyst the taxonomy rates high: earnings, guidance, "
+                "M&A, regulatory, legal, macro or short interest.",
+    },
+    {
+        "id": TIER_NOTABLE,
+        "label": "Notable",
+        "rule": "Carries a catalyst of some kind, rated medium or low.",
+    },
+    {
+        "id": TIER_BACKGROUND,
+        "label": "Background",
+        "rule": "No catalyst matched. Coverage, opinion and repetition sit here.",
+    },
+]
+
+
+# ------------------------------------------------------- is it about this name
+#
+# The feed is not per-company, whatever the argument to it suggests. Asking for
+# NVDA returns "RF Industries Q3 2026 Earnings Call Summary", "Cisco's New
+# Splunk AI Package" and "Apple's Foldable Phone Has Arrived": market coverage
+# that happens to be served under the symbol.
+#
+# Flat feed order hid that, and ranking by tier exposed it in the worst way. RF
+# Industries' earnings is fresh and tagged "earnings", so it sorted to the top
+# of NVDA's page as "Breaking" on the strength of a different company's results.
+# Ranking made the page more wrong, which is the thing to catch before it ships
+# rather than after.
+#
+# So relevance is decided before importance, and the test is whether the item
+# names the company at all. Conservative in the direction that cannot mislead:
+# an item that does not name it is market context, which is what it is even when
+# it is genuinely relevant. Calling context "context" understates some headlines;
+# calling another company's earnings "breaking news about NVDA" is false.
+
+# Corporate-form words carry no identity, and leaving them in means the phrase
+# never matches: no headline says "NVIDIA Corporation".
+_NAME_NOISE = re.compile(
+    r"\b(?:inc|incorporated|corp|corporation|co|company|companies|ltd|limited"
+    r"|plc|llc|lp|holding|holdings|group|class\s+[a-c]|sa|nv|ag|se|ab|oyj"
+    r"|trust|the)\b\.?",
+    re.I,
+)
+
+
+# Leading words too ordinary to identify a company on their own. Dropped from
+# the one-word shortcut below, not from the full name: "Advanced Micro Devices"
+# still matches as a phrase, and AMD matches as a symbol.
+#
+# The asymmetry is what decides this list. A false positive puts another
+# company's earnings at the top of this company's page, which is the bug the
+# relevance split exists to fix. A false negative moves a real headline into
+# "Market context", where it is still on screen and still tiered. So when in
+# doubt, do not match: "General" would have claimed every headline containing
+# the word for General Motors.
+_GENERIC_HEADS = {
+    "advanced", "general", "american", "national", "international", "united",
+    "first", "global", "standard", "premier", "superior", "universal",
+    "atlantic", "pacific", "northern", "southern", "eastern", "western",
+    "central", "continental", "federal", "republic", "liberty", "capital",
+    "digital", "applied", "integrated", "dynamic", "dynamics", "enterprise",
+    "enterprises", "industries", "industrial", "consolidated", "diversified",
+    "select", "prime", "core", "summit", "sterling", "signature", "alliance",
+    "allied", "associated", "community", "regional", "commerce", "commercial",
+    "public", "service", "services", "systems", "solutions", "partners",
+    "resources", "energy", "power", "financial", "insurance", "health",
+    "healthcare", "medical", "pharmaceutical", "pharmaceuticals", "materials",
+    "products", "brands", "foods", "motors", "airlines", "banks", "bancorp",
+}
+
+
+def _match_terms(ticker: str, name: str) -> List[str]:
+    """The strings whose presence means a headline is about this company."""
+    terms = [ticker.strip().upper()] if ticker else []
+    cleaned = _NAME_NOISE.sub(" ", name or "")
+    cleaned = re.sub(r"[^\w\s&'-]", " ", cleaned)
+    cleaned = " ".join(cleaned.split()).strip()
+    if cleaned:
+        terms.append(cleaned)
+        # "Advanced Micro Devices" never appears in a headline that says AMD,
+        # but "Nvidia" does. Only the leading word, and only when it is long
+        # enough to be a name rather than an adjective.
+        head = cleaned.split()[0]
+        if (len(head) >= 5 and head.lower() != cleaned.lower()
+                and head.lower() not in _GENERIC_HEADS):
+            terms.append(head)
+    return [t for t in dict.fromkeys(terms) if len(t) >= 2]
+
+
+def mentions_company(text: str, ticker: str, name: str) -> bool:
+    """Does this headline name the company, by symbol or by name?
+
+    Word boundaries throughout, which is doing real work for the generic names:
+    `\btarget\b` does not match "Cisco's package Targets computing", because
+    the boundary after "target" needs a non-word character and "s" is not one.
+    A company genuinely called Target still collides with the ordinary English
+    word, and nothing here can fix that, so the panel says the rule out loud
+    instead of implying a precision it does not have.
+    """
+    blob = text or ""
+    for term in _match_terms(ticker, name):
+        if re.search(r"\b" + re.escape(term) + r"\b", blob, re.I):
+            return True
+    return False
+
+
+def _importance_rank(catalysts: List[Dict[str, str]]) -> int:
+    """The strongest catalyst on an item, 0 when there is none."""
+    return max((_IMPORTANCE_RANK.get(c.get("importance", ""), 0)
+                for c in catalysts), default=0)
+
+
+def tier_for(age_hours: Optional[float],
+             catalysts: List[Dict[str, str]]) -> Dict[str, Any]:
+    """Which tier an item sits in, and the reason in the reader's words.
+
+    `why` is returned rather than composed in the client because the brief's own
+    rule is that a claim has to be checkable: the tier is a judgement, so the
+    sentence that justifies it travels with it and there is one copy of the
+    wording.
+
+    A missing timestamp cannot be breaking. Some publishers in this feed return
+    none at all, and treating absent as recent would put every undated item at
+    the top of the page permanently.
+    """
+    rank = _importance_rank(catalysts)
+    fresh = age_hours is not None and age_hours <= BREAKING_HOURS
+    names = ", ".join(sorted({c.get("type", "") for c in catalysts if c.get("type")}))
+
+    if fresh and rank >= _IMPORTANCE_RANK["medium"]:
+        return {
+            "tier": TIER_BREAKING,
+            "why": "Filed {} and tagged {}.".format(_age_words(age_hours), names),
+        }
+    if rank >= _IMPORTANCE_RANK["high"]:
+        return {
+            "tier": TIER_MAJOR,
+            "why": "Tagged {}, which the taxonomy rates high.".format(names),
+        }
+    if fresh:
+        # Fresh with nothing behind it. Recency alone is not importance, so it
+        # ranks below a major catalyst rather than above it, and says so.
+        return {
+            "tier": TIER_NOTABLE,
+            "why": "Filed {}, but no catalyst of substance matched.".format(
+                _age_words(age_hours)),
+        }
+    if rank:
+        return {
+            "tier": TIER_NOTABLE,
+            "why": "Tagged {}.".format(names),
+        }
+    return {
+        "tier": TIER_BACKGROUND,
+        "why": "No catalyst matched the headline or summary.",
+    }
+
+
+def _age_words(age_hours: Optional[float]) -> str:
+    """Plain words for an age, because "0.4h ago" is not a sentence."""
+    if age_hours is None:
+        return "at an unstated time"
+    minutes = int(round(age_hours * 60))
+    if minutes < 1:
+        return "just now"
+    if minutes < 60:
+        return "{} minute{} ago".format(minutes, "" if minutes == 1 else "s")
+    hours = int(round(age_hours))
+    if hours < 24:
+        return "{} hour{} ago".format(hours, "" if hours == 1 else "s")
+    days = int(round(age_hours / 24.0))
+    return "{} day{} ago".format(days, "" if days == 1 else "s")
+
+
 def _score_text(text: str) -> Tuple[float, List[str]]:
     lowered = " " + re.sub(r"\s+", " ", text.lower()) + " "
     score = 0.0
@@ -117,6 +334,17 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
     items = provider.news(ticker, limit=limit)
     earnings = provider.earnings_date(ticker)
 
+    # For the relevance split. The quote is cached and /api/ticker has already
+    # fetched it by the time this runs, so this is a cache hit on the path that
+    # matters and one extra call on the standalone /api/news endpoint.
+    # Degrades to symbol-only matching rather than failing: a missing name makes
+    # the split coarser, not wrong.
+    company_name = ""
+    try:
+        company_name = str((provider.quote(ticker) or {}).get("name") or "")
+    except Exception:
+        company_name = ""
+
     scored: List[Dict[str, Any]] = []
     for item in items:
         blob = "{} {}".format(item.get("title", ""), item.get("summary", ""))
@@ -134,6 +362,10 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
         else:
             tone = "neutral"
 
+        cats = _catalysts(blob)
+        placed = tier_for(age, cats)
+        about = mentions_company(blob, ticker, company_name)
+
         scored.append(
             {
                 "title": item.get("title"),
@@ -145,9 +377,27 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
                 "sentiment_score": round(score, 2),
                 "tone": tone,
                 "keywords": hits[:8],
-                "catalysts": _catalysts(blob),
+                "catalysts": cats,
+                "tier": placed["tier"],
+                "tier_why": placed["why"],
+                "age_words": _age_words(age),
+                "about_company": about,
             }
         )
+
+    # Relevance first, then tier, then the strongest catalyst, then age. The
+    # feed's own order is the one thing not used: it is the publisher's, and it
+    # put a week-old analyst note above an earnings miss.
+    #
+    # Relevance outranks tier deliberately. A fresh, high-catalyst headline
+    # about a different company is still about a different company, and sorting
+    # it first is how "RF Industries Q3 Earnings" reached the top of NVDA.
+    scored.sort(key=lambda r: (
+        0 if r["about_company"] else 1,
+        TIER_ORDER.index(r["tier"]),
+        -_importance_rank(r["catalysts"]),
+        999999.0 if r["age_hours"] is None else r["age_hours"],
+    ))
 
     # Fresh news moves price; a week-old headline is already discounted.
     weighted = 0.0
@@ -198,10 +448,20 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
             )
 
     return {
-        "method": "Lexicon sentiment + regex catalyst tagging over the headline feed, recency-weighted",
+            "method": "Lexicon sentiment and regex catalyst tagging over the "
+                  "headline feed, recency-weighted. Ranked by tier, then "
+                  "catalyst, then age",
         "overall_tone": overall,
         "net_sentiment": net,
         "article_count": len(scored),
+        # Published rather than described in the client's own copy, so the tier
+        # a reader sees and the rule it claims come from one place.
+        "tiers": TIERS,
+        "tier_counts": {t: sum(1 for r in scored if r["tier"] == t)
+                        for t in TIER_ORDER},
+        "about_count": sum(1 for r in scored if r["about_company"]),
+        "context_count": sum(1 for r in scored if not r["about_company"]),
+        "matched_on": _match_terms(ticker, company_name),
         "earnings_date": earnings,
         "days_to_earnings": days_to_earnings,
         "earnings_warning": earnings_warning,

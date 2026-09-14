@@ -208,7 +208,15 @@ def test_the_facets_render_them_instead():
     fin = APP_JS.split("function renderFinancialsView(", 1)[1].split("\nfunction ", 1)[0]
     assert "renderCompany(co)" in fin and "renderExtras(" in fin
     news = APP_JS.split("function renderNewsView(", 1)[1].split("\nfunction ", 1)[0]
-    assert "News & catalysts" in news and "newsArticleRow" in news
+    assert "News & catalysts" in news
+    # The headline list moved behind `newsHeadlineSections`, which groups the
+    # items by whether they name the company and then by tier. This asserted
+    # `newsArticleRow` directly; the property it was protecting is that the news
+    # facet is what renders the headlines, so it follows the call one hop rather
+    # than pinning the shape of the body.
+    assert "newsHeadlineSections(news, arts)" in news
+    section = APP_JS.split("function newsHeadlineSections(", 1)[1].split("\nfunction ", 1)[0]
+    assert "newsArticleRow" in section
 
 
 def test_the_facets_share_one_request():

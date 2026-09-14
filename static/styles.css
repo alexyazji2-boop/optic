@@ -11252,6 +11252,57 @@ body.auth-open { overflow: hidden; }
 .nw-sum { color: var(--ink-2); font-size: var(--t-small); margin-top: var(--space-1); }
 .nw-tags { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-2); }
 
+/* ---- news tiers -----------------------------------------------------------
+   A tier says how much a headline matters, which is not a direction, so these
+   deliberately do not touch --pos/--neg. That pair means up and down in every
+   percentage, candle and volume bar in the app, and painting "Breaking" green
+   would say a fresh headline is good news before anybody has read it. The VIX
+   tile already shipped that mistake in the other direction.
+
+   --warn is the one accent that means attention without meaning direction.
+   Below it the tiers separate by ink weight rather than hue, so the ranking
+   reads as one scale instead of four unrelated labels. */
+.nw-tier {
+  flex: 0 0 auto;
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: var(--space-0) var(--space-2);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--grid);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.nw-tier.t-breaking {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.nw-tier.t-major { color: var(--ink); border-color: var(--ink-2); }
+.nw-tier.t-notable { color: var(--ink-2); }
+.nw-tier.t-background { color: var(--ink-muted); }
+
+.nw-count {
+  font-size: var(--t-micro);
+  font-weight: 600;
+  color: var(--ink-muted);
+  border: 1px solid var(--grid);
+  border-radius: var(--r-sm);
+  padding: 0 var(--space-1);
+  vertical-align: middle;
+}
+.nw-legend ul { margin: var(--space-2) 0 0; padding-left: 0; list-style: none; }
+.nw-legend li {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  margin-bottom: var(--space-1);
+  font-size: var(--t-small);
+  color: var(--ink-2);
+}
+.nw-legend p { font-size: var(--t-small); color: var(--ink-2); margin: var(--space-2) 0 0; }
+.nw-limit { color: var(--ink-muted); }
+
 /* ------------------------------------------------------ named watchlists ---
    Chips rather than a select: the count is small and bounded, and seeing that
    you have several lists is most of the point of having them. */

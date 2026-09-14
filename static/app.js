@@ -8063,20 +8063,93 @@ async function loadSecurityFacet(view, force) {
  * The payload is the same one /api/news/{ticker} serves; /api/ticker embeds it,
  * so this facet needs no request of its own. */
 
+/* The tier badge. `title` carries the server's reason for this item's tier, so
+   the badge is checkable on the item rather than only in the legend: a reader
+   who wonders why a headline is Major gets the answer on that headline. */
+function newsTierBadge(a) {
+  if (!a.tier) return '';
+  const label = (((STATE.swing || {}).news || {}).tiers || [])
+    .filter((t) => t.id === a.tier)[0];
+  // No hardcoded fallback label. The server owns the wording, and inventing
+  // "Breaking" here would be a second copy of it that drifts the day one is
+  // reworded, which is the same rule the knowledge-mode chip follows.
+  if (!label) return '';
+  return `<span class="nw-tier t-${esc(a.tier)}" title="${esc(a.tier_why || '')}">${
+    esc(label.label)}</span>`;
+}
+
 function newsArticleRow(a) {
   return `<div class="nw-row">
     <div class="nw-line">
+      ${newsTierBadge(a)}
       ${toneChip(a.tone)}
       <a class="nw-title" href="${esc(a.url)}" target="_blank"
         rel="noopener noreferrer nofollow">${esc(a.title)}</a>
       <span class="subnote">${esc(a.publisher || '')}${
-  a.age_hours !== null && a.age_hours !== undefined
-    ? ` \u00b7 ${fmt(a.age_hours, 0)}h ago` : ''}</span>
+  a.age_words ? ` \u00b7 ${esc(a.age_words)}` : ''}</span>
     </div>
     ${a.summary ? `<p class="nw-sum">${esc(a.summary.slice(0, 220))}</p>` : ''}
     ${(a.catalysts || []).length ? `<div class="nw-tags">${a.catalysts.map((c) =>
     `<span class="chip neutral"><span class="dot"></span>${esc(cap(c.type))}</span>`)
     .join('')}</div>` : ''}
+  </div>`;
+}
+
+/* Headlines in two groups, then by tier.
+ *
+ * The feed is not per-company whatever the symbol argument suggests. Asking for
+ * NVDA returns "RF Industries, Ltd. Q3 2026 Earnings Call Summary", and that
+ * item is fresh and tagged `earnings`, so ranking by tier alone sorted another
+ * company's results to the top of NVDA's page labelled Breaking. Ranking made
+ * the page more wrong than the unsorted feed was.
+ *
+ * Splitting on whether the item names the company fixes that, and the second
+ * group is kept rather than dropped: a market-wide headline is often the reason
+ * a stock moved, it is just not news about the company. Both groups are tiered.
+ */
+function newsHeadlineSections(news, arts) {
+  if (!arts.length) {
+    return `<h3>${hg('Headlines')}</h3>
+      <div class="callout">No headlines returned for this ticker.</div>`;
+  }
+  const about = arts.filter((a) => a.about_company);
+  const context = arts.filter((a) => !a.about_company);
+  const matched = (news.matched_on || []).map((t) => esc(t)).join(', ');
+  return `<h3>${hg('About this company')} <span class="nw-count">${
+    about.length}</span></h3>
+    ${about.length ? about.map(newsArticleRow).join('')
+    : `<div class="callout">Nothing in the feed names this company right now.
+        Everything it returned is market coverage, below.</div>`}
+    ${context.length ? `<h3>${hg('Market context')} <span class="nw-count">${
+    context.length}</span></h3>
+      <p class="sub">Served under this symbol, but these headlines do not name
+        the company. Often the reason a stock moved, and not news about it.</p>
+      ${context.map(newsArticleRow).join('')}` : ''}
+    ${newsTierLegend(news, matched)}`;
+}
+
+/* The rules, rendered from what the server publishes rather than restated here.
+   A legend that described the tiers in its own words would be a second record
+   of the rule, and the one that drifts is always the visible one. */
+function newsTierLegend(news, matched) {
+  const tiers = news.tiers || [];
+  if (!tiers.length) return '';
+  const counts = news.tier_counts || {};
+  return `<div class="callout nw-legend">
+    <strong>How these are ranked.</strong>
+    <ul>${tiers.map((t) => `<li><span class="nw-tier t-${esc(t.id)}">${
+    esc(t.label)}</span> ${esc(t.rule)}${
+    counts[t.id] ? ` <span class="subnote">${counts[t.id]} here</span>` : ''}</li>`)
+    .join('')}</ul>
+    <p>Grouping comes first: a fresh, major headline about a different company
+      is still about a different company.${matched ? ` Matched on ${matched}.` : ''}</p>
+    <p class="nw-limit"><strong>What this cannot do.</strong> The grouping reads
+      the headline and summary for the symbol or the company name, so a headline
+      that means this company without naming it sits under Market context, and a
+      company whose name is an ordinary English word will over-match. Tiers rank
+      what a headline is <em>about</em>, never how far the stock moved: nothing
+      here can show that a headline caused a move rather than shared a day with
+      one.</p>
   </div>`;
 }
 
@@ -8097,9 +8170,7 @@ function renderNewsView() {
       <div class="legend">${news.catalyst_summary.map((c) =>
     `<span class="chip neutral"><span class="dot"></span>${esc(cap(c.type))} \u00d7${
       c.mentions}</span>`).join('')}</div>` : ''}
-    <h3>${hg('Headlines')}</h3>
-    ${arts.length ? arts.map(newsArticleRow).join('')
-    : '<div class="callout">No headlines returned for this ticker.</div>'}
+    ${newsHeadlineSections(news, arts)}
     <p class="caveat">${esc(news.method || '')}. Use \u201cDeep research\u201d in the
       assistant for a live, sourced brief.</p>
   </div>`;
