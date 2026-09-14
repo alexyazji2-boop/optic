@@ -9364,6 +9364,43 @@ body.cp-open { overflow: hidden; }
   aside#chat { padding-bottom: calc(52px + env(safe-area-inset-bottom)); }
 }
 
+/* ------------------------------------------- inline term explanations (Simple)
+ *
+ * The clickable variant of a glossary term. It has to look like it does
+ * something, where the hover variant only has to look like it means something:
+ * a reader on Simple is the least likely to try hovering a dotted underline on
+ * the chance that it responds. */
+.gloss-term.is-inline {
+  padding: 0;
+  border: 0;
+  border-bottom: 1px dashed var(--brand);
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: help;
+  transition: border-color var(--dur-ui) var(--ease-ui),
+              color var(--dur-ui) var(--ease-ui);
+}
+.gloss-term.is-inline:hover { color: var(--ink); border-bottom-color: var(--ink); }
+.gloss-term.is-inline:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.gloss-term.is-inline[aria-expanded="true"] { border-bottom-style: solid; }
+
+/* A block rather than a floating panel. The point of this mode is that the
+   explanation stays put and can be read next to the thing it explains, which a
+   tooltip cannot do: it covers its own subject and vanishes on the way to
+   reading it. */
+.gloss-inline {
+  display: block;
+  margin: var(--space-1) 0 var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px solid var(--brand);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  background: var(--raised);
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  line-height: 1.5;
+}
+
 /* ---------------------------------------------------- the knowledge selector
  *
  * One chip, never a row of five. The brief this was built from is explicit on

@@ -222,12 +222,49 @@ const GLOSSARY_RE = new RegExp(
  * begins its own phrase (verified: none is spliced mid-sentence), so this is the
  * one place that catches all of it. Glossary matching is case-insensitive, so a
  * capitalised first word still resolves. */
+/* How a term explains itself, from the reader's knowledge mode.
+ *
+ * Until this, every term was hover-only for everybody, which is the right
+ * default for nobody in particular and wrong at both ends of the ladder. A
+ * reader on Simple cannot discover a hover, cannot perform one on a
+ * touchscreen, and is the person most likely to need the definition; a reader
+ * on Professional knows what IV rank is and was getting 94 dotted underlines
+ * decorating a page they can already read.
+ *
+ *   inline     marked, and the definition opens in place on a click
+ *   on_demand  marked, and explains itself on hover or focus  (today's)
+ *   off        plain text, no marks
+ *
+ * Read at render time, and a mode change re-renders the view, so this needs no
+ * invalidation of its own. */
+function explainPolicy() {
+  return (window.OpticKnowledge && window.OpticKnowledge.explain)
+    ? window.OpticKnowledge.explain() : 'on_demand';
+}
+
+/** The markup for one recognised term, per policy. */
+function glossTerm(text, def, policy) {
+  if (policy === 'off' || !def) return text;
+  if (policy === 'inline') {
+    /* A button, not a <dfn> with a tabindex. In this mode the term does
+       something when activated, and a thing that responds to a click has to be
+       a control or the keyboard and a screen reader never find out. The
+       definition rides along in the attribute rather than being fetched, so
+       opening one costs no request. */
+    return `<button type="button" class="gloss-term is-inline" data-gloss-open
+      aria-expanded="false" data-def="${esc(def)}">${text}</button>`;
+  }
+  return `<dfn class="gloss-term" tabindex="0" data-def="${esc(def)}">${text}</dfn>`;
+}
+
 function gloss(rawText) {
   const escaped = esc(cap(rawText));
+  const policy = explainPolicy();
+  if (policy === 'off') return escaped;
   return escaped.replace(GLOSSARY_RE, (match) => {
     const def = GLOSSARY[match.toLowerCase()];
     if (!def) return match;
-    return `<dfn class="gloss-term" tabindex="0" data-def="${esc(def)}">${match}</dfn>`;
+    return glossTerm(match, def, policy);
   });
 }
 
@@ -380,11 +417,47 @@ const HEADER_DEFS = {
 function hg(title) {
   const def = HEADER_DEFS[String(title).toLowerCase().replace(/\s+/g, ' ').trim()];
   if (!def) return esc(title);
-  return `<dfn class="gloss-term" tabindex="0" data-def="${esc(def)}">${esc(title)}</dfn>`;
+  return glossTerm(esc(title), def, explainPolicy());
 }
+
+/* The inline explanation: click a term, the definition opens under it.
+ *
+ * Delegated on the document because these are rendered into every panel on
+ * every repaint, so a bind-once loop would only reach the ones that existed at
+ * load. That is the same trap the nav dropdowns and the second tab row both
+ * hit in this file.
+ *
+ * Open state lives in the DOM rather than in a store: it is per-occurrence, it
+ * should not survive a re-render (the text may have changed underneath), and
+ * nothing else needs to ask.
+ */
+document.addEventListener('click', (evt) => {
+  if (!evt.target || !evt.target.closest) return;
+  const term = evt.target.closest('[data-gloss-open]');
+  if (!term) return;
+  const open = term.getAttribute('aria-expanded') === 'true';
+  const next = term.nextElementSibling;
+  if (open) {
+    if (next && next.classList.contains('gloss-inline')) next.remove();
+    term.setAttribute('aria-expanded', 'false');
+    return;
+  }
+  const box = document.createElement('span');
+  box.className = 'gloss-inline';
+  // textContent, not innerHTML: the definition is plain prose from a table in
+  // this file, and the day one of them contains an ampersand is not the day to
+  // find out it was being parsed as markup.
+  box.textContent = term.getAttribute('data-def') || '';
+  term.insertAdjacentElement('afterend', box);
+  term.setAttribute('aria-expanded', 'true');
+});
 
 function initGlossaryTooltips() {
   const show = (el, evt) => {
+    // The inline variant opens in place on a click. A hover tooltip on the same
+    // element would be a second way to read one definition, and it would cover
+    // the text it is explaining while the inline copy sat underneath it.
+    if (el.hasAttribute('data-gloss-open')) return;
     const def = el.getAttribute('data-def');
     if (!def) return;
     const fakeEvt = (evt && typeof evt.clientX === 'number')
@@ -655,7 +728,11 @@ function glossHeaders(host) {
     if (!text || !text.trim()) return;
     const whole = TH_HINTS[text.trim().toLowerCase()];
     if (whole) {
-      th.innerHTML = `<dfn class="gloss-term" tabindex="0" data-def="${esc(whole)}">${esc(text)}</dfn>`;
+      // Through glossTerm, not hand-rolled. Three call sites emitted this
+      // markup directly and so ignored the reader's mode: measured at 13 terms
+      // still hover-only on Simple and 13 still marked on Professional, where
+      // both should have been zero.
+      th.innerHTML = glossTerm(esc(text), whole, explainPolicy());
       return;
     }
     const marked = gloss(text);
@@ -10832,8 +10909,7 @@ function renderSentiment(f) {
     const band = t.includes('greed') ? 'up' : t.includes('fear') ? 'down' : 'flat';
     return `<div class="fg-comp">
       <div class="fg-comp-head">
-        <span class="fg-comp-name"><dfn class="gloss-term" tabindex="0"
-          data-def="${esc(c.note)}">${esc(c.label)}</dfn></span>
+        <span class="fg-comp-name">${glossTerm(esc(c.label), c.note, explainPolicy())}</span>
         <span class="fg-comp-weight">Weight ${fmt(c.weight_pct, 0)}%</span>
         <span class="fg-comp-score ${band}">${fmt(c.score, 0)}<span class="fg-of"> / 100</span></span>
       </div>
@@ -19951,8 +20027,7 @@ function briefRegime(r) {
   const rows = Object.keys(REGIME_LABELS)
     .filter((k) => comps[k] !== undefined && comps[k] !== null)
     .map((k) => `<tr>
-      <td class="name"><dfn class="gloss-term" tabindex="0"
-        data-def="${esc(REGIME_WHY[k])}">${esc(REGIME_LABELS[k])}</dfn></td>
+      <td class="name">${glossTerm(esc(REGIME_LABELS[k]), REGIME_WHY[k], explainPolicy())}</td>
       <td style="width:44%">${regimeBar(comps[k])}</td>
       <td class="num ${signClass(comps[k])}">${comps[k] > 0 ? '+' : ''}${fmt(comps[k], 0)}</td>
       <td class="num muted">${fmt(weights[k], 0)}%</td>
@@ -23266,10 +23341,10 @@ const rerenderActiveView = () => {
   // someone drags a window edge would fire it on every frame.
   setChartLive(isTapeLiveET());
   setChartAnimation(false);
-  if (STATE.view === 'home') return; // no charts to re-scale
+  if (STATE.view === 'home') return false; // no charts to re-scale
   // Settings draws from SETTINGS, not from a fetched payload, so it has no
   // STATE entry to gate on.
-  if (STATE.view === 'settings') { renderSettings(); return; }
+  if (STATE.view === 'settings') { renderSettings(); return true; }
   /* The workspace keeps its payload in STATE.chartData, not STATE.chart, so the
    * generic lookup below found nothing and returned before redrawing. That is
    * why opening Pulse left the chart drawn at its old width with the legend
@@ -23279,10 +23354,17 @@ const rerenderActiveView = () => {
     wsSyncChromeHeight();
     wsSyncNarrow();
     wsRedrawChart();
-    return;
+    return true;
   }
   const d = STATE[STATE.view];
-  if (!d) return;
+  if (!d) return false;
+  /* Returns whether it rendered.
+   *
+   * Added for the knowledge level, which has to regenerate markup rather than
+   * re-fetch data: the caller needs to know if this handled the view or if it
+   * has to fall back, and the alternative was a second copy of this dispatch
+   * list somewhere else. Two lists, one of which is a guess about the other,
+   * is how a view comes to silently not repaint. */
   if (STATE.view === 'swing') renderSwing(d);
   else if (STATE.view === 'earnings') renderEarnings(d);
   else if (STATE.view === 'market') renderMarket(d);
@@ -23291,6 +23373,8 @@ const rerenderActiveView = () => {
   else if (STATE.view === 'tracker') renderTracker(d);
   else if (STATE.view === 'settings') renderSettings();
   else if (STATE.view === 'long') renderLong(d);
+  else return false;
+  return true;
 };
 
 let resizeTimer = null;
@@ -24304,10 +24388,21 @@ function applyKnowledgeLevel() {
   document.body.classList.toggle('mode-simple', uiMode() === 'simple');
   document.body.dataset.knowledge = (window.OpticKnowledge
     ? window.OpticKnowledge.mode() : 'literate');
-  // The pass runs at render time, so a change that only repainted Settings
-  // would leave every other tab as it was.
-  if (STATE.view === 'settings') renderSettings();
-  else loadView(STATE.view, false);
+
+  /* A re-render, not a re-load, and that distinction was a bug before it was a
+     comment. `loadView(view, false)` returns early from every loader's cache
+     guard when the payload is already in STATE, which is correct for
+     navigation and wrong here: the data has not changed, the markup has.
+     Measured: switching rung left 95 hover-only terms in place at all four
+     levels, because renderSwing never ran again.
+     A forced load would work and costs a twenty-second provider call on the
+     Options tab, for a control that changes how a word is underlined. */
+  if (STATE.view === 'settings') { renderSettings(); return; }
+  if (STATE.view === 'home') { renderHome(); return; }
+  if (rerenderActiveView()) return;
+  // Views whose loader owns and caches their markup. A forced load is the only
+  // way to regenerate those, and a level change is rare enough to spend it.
+  loadView(STATE.view, true);
 }
 
 /* ---- the reader's own layout -----------------------------------------------
@@ -25291,9 +25386,19 @@ function watchColorScheme() {
   if (window.OpticKnowledge) {
     window.OpticKnowledge.onChange(applyKnowledgeLevel);
     applyKnowledgeLevel();
+    /* The explain policy comes from the catalogue, so it is not known on the
+       first paint. Density is: the component carries the five levels precisely
+       so panels do not render at the wrong one and reflow.
+       A reader on Financially Literate, the default, sees no difference either
+       way. A reader on Simple or Professional would get one paint of the
+       default's glosses, so the view is re-rendered when the policy turns out
+       to differ from what was assumed — once, on their first load, and not at
+       all for everybody else. */
+    const assumed = explainPolicy();
     window.OpticKnowledge.load().then(() => {
       repaintKnowledgeSelector();
-      if (STATE.view === 'settings') renderSettings();
+      if (explainPolicy() !== assumed) applyKnowledgeLevel();
+      else if (STATE.view === 'settings') renderSettings();
     });
   }
   loadCalendarSession();
