@@ -2689,6 +2689,43 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
  * changed by editing 48 string literals. Snapped to --s5. */
 .gap { margin-bottom: var(--space-5); }
 
+/* ------------------------------------------------------- the page rhythm ---
+ *
+ * `.gap` above is opt-in, and eighty-one blocks opt in. The defect is the ones
+ * that forget: measured across all nineteen views, sixteen boundaries had NO
+ * space at all, so a panel's closing caveat ran straight into the next heading.
+ * The daily Read was the worst, with seven flush boundaries down one page.
+ *
+ * Opt-in spacing cannot be kept consistent by hand. A new panel is correct only
+ * if whoever wrote it remembered a class that does nothing visible when it is
+ * absent, and the symptom is two blocks touching rather than anything that
+ * looks broken on its own. So the view carries a default and a block no longer
+ * has to ask.
+ *
+ * ZERO SPECIFICITY, which is the whole design. Everything sits inside
+ * `:where()`, so this rule loses every argument it has: `.gap`'s own
+ * --space-5, `.sec-head`'s --space-3, and the Read view's four --space-4
+ * boundaries (`.read-strip`, `.read-lead`, `.read-nav`, `.read-desks`) all
+ * win and keep the spacing they were given. It only fills in where nothing was
+ * declared at all, which is exactly the set that was broken: `.panel` declares
+ * no margin of its own.
+ *
+ * A first attempt used `> * + * { margin-top }` and relied on adjacent sibling
+ * margins collapsing so the eighty-one opt-ins would not double. The collapsing
+ * worked, but the rule outranked the deliberate values: measured, six chrome
+ * boundaries that were 14px and 18px by choice became 23px, including the
+ * header above every dossier page. A default has to be beatable, so it is
+ * expressed as one.
+ *
+ * `:not(:last-child)` so a view does not end on 23px of nothing.
+ */
+:where([role="tabpanel"] > *:not(:last-child)) { margin-bottom: var(--space-5); }
+
+/* The charting view is a grid: margins do not collapse in one, and its layout
+   is the dock beside the chart, spaced by the grid rather than by this. An id
+   so it beats the default outright rather than by source order. */
+#view-chart > * { margin-bottom: 0; }
+
 /* ------------------------------------------------------- scroll affordance, pt 2
  *
  * `.panel` already carries scroll shadows (see the block above). Measured on a

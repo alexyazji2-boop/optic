@@ -23,10 +23,10 @@
      closes up into a grey smudge at 16px, and a transparent icon inverts itself
      between light and dark browser chrome. The PNGs exist because Apple's
      touch icon and the Android install prompt do not read SVG. -->
-<link rel="icon" href="/icon.svg?v=485" type="image/svg+xml">
-<link rel="icon" href="/icon-192.png?v=485" sizes="192x192" type="image/png">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=485">
-<link rel="manifest" href="/site.webmanifest?v=485">
+<link rel="icon" href="/icon.svg?v=488" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png?v=488" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=488">
+<link rel="manifest" href="/site.webmanifest?v=488">
 <!-- robots.txt asks crawlers not to fetch; this tells any that fetched anyway not
      to index. The two are honoured at different stages, so both are needed to
      keep an open, unauthenticated tool out of search results. Advisory only.
@@ -55,7 +55,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/space-grotesk/index.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/plus-jakarta-sans/index.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/inter/index.css">
-<link rel="stylesheet" href="styles.css?v=485">
+<link rel="stylesheet" href="styles.css?v=488">
 <!-- The reader's size preference, applied before the first paint.
      Inline and synchronous on purpose: app.js is loaded at the end of the body,
      so anything done there runs after the page has already been laid out once,
@@ -261,12 +261,12 @@
      being global, and tests/test_js_parses.py loads it under JavaScriptCore
      with script semantics. That harness is the only thing that catches a
      deleted function with live call sites. -->
-<script src="components/knowledge.js?v=485"></script>
-<script src="charts.js?v=485"></script>
+<script src="components/knowledge.js?v=488"></script>
+<script src="charts.js?v=488"></script>
 <!-- Before app.js: it exposes window.OpticAuth, which app.js reads at load to
      decide whether the watchlist and the saved research come from the account or
      from this browser. -->
-<script src="auth.js?v=485"></script>
-<script src="app.js?v=485"></script>
+<script src="auth.js?v=488"></script>
+<script src="app.js?v=488"></script>
 </body>
 </html>

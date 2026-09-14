@@ -18608,7 +18608,11 @@ function renderBookSelector(d) {
     </button>`;
   }).join('');
 
-  return `<div class="panel span-all">
+  /* `gap` because this panel sits directly above Optic's Positions and was the
+     one block on the page without it: measured, every other sibling pair on
+     the tracker view is 23px apart and this boundary was 0, so the books
+     panel's closing caveat ran straight into the next heading. */
+  return `<div class="panel span-all gap">
     <h2>${hg('Three books')}${askPulse('books')}</h2>
     <p class="sub">The same scan run under three sets of rules. Identical candidates, so
       comparing them says what a risk tolerance costs and earns rather than comparing three
