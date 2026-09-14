@@ -2601,7 +2601,10 @@ async function loadHomeMarket() {
       </div>
       <div id="hm-watch">${watchlistFeedHTML({ compact: true, limit: 6 })}</div>
     </section>
-    <section class="hm-block">
+    ${/* Wide on purpose. Four columns of symbol, price, change and volume do
+         not fit a third of the board, and squeezing them is how a table starts
+         wrapping its own headers. */''}
+    <section class="hm-block hm-wide">
       <div class="hm-block-head">
         <h2 class="hm-h">Moved most this month</h2>
         <button type="button" class="hm-more" data-go-view="scan">All scans &rarr;</button>

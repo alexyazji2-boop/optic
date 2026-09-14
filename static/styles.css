@@ -8415,7 +8415,55 @@ body.cp-open { overflow: hidden; }
  * the page already had six navigation cards and adding four more would make the
  * market look like more product tour.
  */
-.hm-market { margin: var(--space-7) 0 var(--space-6); }
+/* A dashboard, not a stack.
+ *
+ * Every block here was a full-width row, which was survivable inside a 1000px
+ * column and fell apart the moment the page filled the window: a watchlist row
+ * put its symbol and its verdict two feet apart, and "What matters now" used
+ * the left fifth of a 1900px page with nothing in the rest. Width was being
+ * spent stretching five-item lists instead of showing more at once.
+ *
+ * Columns are the fix, and the count is set by how narrow a block can get
+ * before its own contents break rather than by the screen: these hold a symbol,
+ * a price, a change and a short verdict, which needs about 420px. So the
+ * breakpoints are 2 x 420 plus gutters, then 3. */
+.hm-market {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
+  /* Blocks are different heights and must not stretch to match the tallest in
+     their row: an eight-row table beside a three-item list would give the list
+     five rows of empty card. */
+  align-items: start;
+  /* dense, because the full-width table cannot start mid-row.
+     Without it the movers table leaves the rest of whatever row it lands in
+     empty: at three columns that was a 600px hole beside the watchlist. Dense
+     lets a later single-column block backfill it.
+     The cost is that visual order can differ from DOM order. Acceptable here
+     and only here: these are independent cards with their own headings, read in
+     any order, and the tab order stays the DOM order, which is what a keyboard
+     and a screen reader follow. */
+  grid-auto-flow: dense;
+  margin: var(--space-7) 0 var(--space-6);
+}
+
+@media (min-width: 940px) {
+  .hm-market { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1440px) {
+  .hm-market { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* The greeting introduces the whole board, and a table with four columns is a
+   different shape from a list: both take the full row rather than a third of
+   one. `1 / -1` rather than a span count, so neither needs editing when the
+   column count changes at a breakpoint. */
+.hm-greet,
+.hm-degraded { grid-column: 1 / -1; }
+
+@media (min-width: 940px) {
+  .hm-wide { grid-column: 1 / -1; }
+}
 .hm-skel {
   height: 180px;
   border-radius: 12px;
@@ -8662,8 +8710,15 @@ body.cp-open { overflow: hidden; }
 
 .ms-cell {
   display: grid;
-  grid-template-columns: auto auto;
+  /* max-content, not auto, and packed to the start.
+     An `auto` grid column absorbs free space, so once the cells were allowed to
+     grow the label and the figure were pushed to opposite ends of a 240px box:
+     "S&P 500" hard left and "+0.86%" hard right, reading as two unrelated
+     numbers rather than one quote. The cell still grows, the extra width is now
+     trailing space inside it, and the reading stays together. */
+  grid-template-columns: max-content max-content;
   grid-template-rows: auto auto;
+  justify-content: start;
   align-items: baseline;
   gap: 0 var(--space-1);
   /* Grow to fill, never shrink below the reading.
@@ -8804,8 +8859,16 @@ body.cp-open { overflow: hidden; }
   .cc-move-note { display: none; }
 }
 
-.hm-block { padding-bottom: var(--space-5); margin-bottom: var(--space-5); }
-.hm-block + .hm-block { border-top: 1px solid var(--border); padding-top: var(--space-5); }
+/* Cards, because they sit side by side now. A hairline between stacked rows
+   reads as a divider; the same hairline between two columns reads as nothing at
+   all, and the blocks ran into each other. */
+.hm-block {
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  min-width: 0;
+}
 .hm-block-head {
   display: flex;
   align-items: baseline;

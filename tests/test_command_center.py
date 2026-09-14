@@ -329,3 +329,64 @@ def test_the_search_field_does_not_grow_with_the_page():
     than as a place to type four letters, and the ticker pills under it would
     spread with acres between them."""
     assert ".home-search, .home-quick { max-width:" in CSS
+
+
+def test_the_home_page_is_a_grid_not_a_stack():
+    """Every block was a full-width row. That survived a 1000px column and fell
+    apart once the page filled the window: a watchlist row put its symbol and
+    its verdict two feet apart, and "What matters now" used the left fifth of a
+    1900px page with nothing in the rest. Width was being spent stretching
+    five-item lists rather than showing more at once."""
+    rule = CSS[CSS.index(".hm-market {"):]
+    rule = rule[:rule.index("}")]
+    assert "display: grid" in rule
+    assert "align-items: start" in rule, (
+        "blocks would stretch to the tallest in their row")
+
+
+def test_the_column_count_is_set_by_the_content_not_the_screen():
+    """A block holds a symbol, a price, a change and a short verdict, which
+    needs about 420px. The breakpoints are two of those plus gutters, then
+    three, rather than round screen sizes."""
+    block = CSS[CSS.index(".hm-market {"):]
+    block = block[:block.index(".hm-block {")]
+    # De-duplicated: the same breakpoint appears twice in this slice, once for
+    # the column count and once for the wide block's span, and they are the same
+    # decision expressed at the two places it applies.
+    widths = sorted(set(int(w) for w in
+                        re.findall(r"@media \(min-width: (\d+)px\)", block)))
+    assert len(widths) >= 2, widths
+    assert widths[0] >= 900, "two columns before there is room for two"
+    assert widths[1] >= 1400, "three columns before there is room for three"
+
+
+def test_the_wide_table_spans_and_the_hole_it_leaves_is_backfilled():
+    """Four columns of symbol, price, change and volume do not fit a third of
+    the board. A full-width item cannot start mid-row, so without dense packing
+    it leaves the rest of its row empty: at three columns that was a 600px hole
+    beside the watchlist."""
+    rule = CSS[CSS.index(".hm-market {"):]
+    rule = rule[:rule.index("}")]
+    assert "grid-auto-flow: dense" in rule
+    assert ".hm-wide" in CSS
+    assert 'class="hm-block hm-wide"' in APP_JS
+
+
+def test_the_blocks_are_cards_now_that_they_sit_side_by_side():
+    """A hairline between stacked rows reads as a divider. The same hairline
+    between two columns reads as nothing, and the blocks ran into each other."""
+    rule = CSS[CSS.index(".hm-block {"):]
+    rule = rule[:rule.index("}")]
+    assert "border:" in rule and "border-radius" in rule
+    assert "min-width: 0" in rule, "a table would refuse to shrink into its cell"
+
+
+def test_the_strip_reading_stays_together_when_the_cell_grows():
+    """An `auto` grid column absorbs free space, so once the cells were allowed
+    to grow, the label and the figure were pushed to opposite ends of a 240px
+    box: "S&P 500" hard left and "+0.86%" hard right, reading as two unrelated
+    numbers rather than one quote."""
+    rule = CSS[CSS.index(".ms-cell {"):]
+    rule = rule[:rule.index("}")]
+    assert "grid-template-columns: max-content max-content" in rule
+    assert "justify-content: start" in rule
