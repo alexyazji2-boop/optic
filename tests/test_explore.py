@@ -57,9 +57,28 @@ def test_one_failed_leg_costs_its_own_section_not_the_page():
     assert "r.status === 'fulfilled'" in fn
 
 
-def test_the_home_payload_is_reused_when_it_is_already_loaded():
-    """Arriving from the command centre, this is already in STATE."""
-    assert "STATE.home ? Promise.resolve(STATE.home) : getJSON('/api/home')" in _fn("loadExplore")
+def test_the_home_payload_is_reused_rather_than_refetched_blindly():
+    """Arriving from the command centre, this is already in STATE.
+
+    This asserted the literal `STATE.home ? Promise.resolve(STATE.home) :
+    getJSON('/api/home')`, which is the same idea as the shared `homeData()`
+    helper but a second implementation of it, and it was wrong in both
+    directions: no in-flight guard, so opening Explore mid-boot fired a second
+    /api/home; and no expiry, so Explore reused the payload for the life of the
+    page and could draw an hours-old market reading.
+
+    The property being protected is unchanged: do not refetch a payload you
+    already hold. It is now held by one function, with a freshness window, and
+    tests/test_home_fetch.py owns the details. What this keeps watching is that
+    Explore goes through it and does not grow its own copy again. `loadExplore`
+    is guarded by `exploreData && !force`, so the window costs at most one
+    request per page load.
+    """
+    fn = _fn("loadExplore")
+    assert "homeData()" in fn
+    assert "getJSON('/api/home')" not in fn
+    # A failed refresh must not empty a section that had content.
+    assert "catch(() => STATE.home || null)" in fn
 
 
 def test_the_grouping_is_fetched_not_inferred():

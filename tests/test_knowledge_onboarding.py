@@ -117,7 +117,15 @@ def test_home_is_repainted_when_the_catalogue_arrives():
     """Home is painted before the fetch resolves, so the card had nothing to
     offer and returned empty. Without this it would never appear at all: the one
     visit it is for is the visit where the catalogue has not landed yet."""
-    assert "if (STATE.view === 'home' && !window.OpticKnowledge.asked()) renderHome();" in CODE
+    assert "if (STATE.view === 'home') insertOnboardingCard();" in CODE
+    # Inserted rather than re-rendered. renderHome re-runs every loader on the
+    # page: measured, a second call cost an extra /api/home, an extra
+    # /api/scanners/movers and an extra /api/watchlist, to add one card nothing
+    # else on the page depends on.
+    fn = body_of("insertOnboardingCard")
+    assert "insertAdjacentHTML('afterend'" in fn
+    assert "renderHome" not in fn
+    assert "if (document.querySelector('.kob')) return;" in fn
 
 
 def test_it_does_not_ask_again_once_answered():

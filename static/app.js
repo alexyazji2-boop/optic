@@ -2678,21 +2678,64 @@ function renderHome() {
  * app. Each section renders only if its leg came back, so a degraded feed
  * removes a section rather than emptying the page.
  */
+/* One request per burst, however many callers ask.
+ *
+ * Measured on the live site from the browser's own timing data: three GETs of
+ * /api/home inside one second on a fresh load. renderHome calls this, and the
+ * knowledge-mode work gave renderHome two more callers at boot — the level
+ * being applied, and the catalogue landing and needing the onboarding card —
+ * so one payload was fetched three times and the first two results thrown away.
+ *
+ * A guard on the fetch rather than on the callers. Each of those calls is
+ * individually right: the level has to be applied before the first paint and
+ * the card cannot render before the catalogue exists. What is wrong is that
+ * asking twice costs twice, and any future caller would have made it four. */
+let homeDataInFlight = null;
+let homeDataAt = 0;
+
+/** The /api/home payload, fetched at most once per burst. */
+function homeData() {
+  // Fresh enough to reuse. Three callers fire inside one second at boot and the
+  // payload cannot have changed between them; the 20-second refresh tick is
+  // well outside this and still gets its own fetch.
+  if (STATE.home && Date.now() - homeDataAt < 5000) return Promise.resolve(STATE.home);
+  if (homeDataInFlight) return homeDataInFlight;
+  homeDataInFlight = getJSON('/api/home')
+    .then((d) => { STATE.home = d; homeDataAt = Date.now(); return d; })
+    .finally(() => { homeDataInFlight = null; });
+  return homeDataInFlight;
+}
+
 async function loadHomeMarket() {
-  const host = document.getElementById('hm-market');
-  if (!host) return;
-  host.innerHTML = '<div class="hm-skel" aria-hidden="true"></div>';
+  /* The dedupe covers the fetch, not the render, and the difference was a bug.
+   *
+   * A first pass shared the whole promise, so a second caller got back the
+   * first one's work — and that work had captured `#hm-market` before
+   * renderHome replaced it, so the market block filled a detached element and
+   * the page showed an empty div. Measured: 1 request and 0 rendered blocks,
+   * which is worse than the 3 requests it was fixing.
+   *
+   * So the host is read after the await, every time, by every caller. */
+  const skeleton = document.getElementById('hm-market');
+  if (!skeleton) return;
+  if (!skeleton.innerHTML.trim()) {
+    skeleton.innerHTML = '<div class="hm-skel" aria-hidden="true"></div>';
+  }
   let data;
   try {
-    data = await getJSON('/api/home');
+    data = await homeData();
   } catch (err) {
     // The rest of the page still works, and the search box above is the only
     // thing anyone strictly needs. Say what is missing rather than nothing.
-    host.innerHTML = `<p class="hm-none">The market summary is unavailable right
-      now (${esc(err.message)}). Search still works.</p>`;
+    const failed = document.getElementById('hm-market');
+    if (failed) {
+      failed.innerHTML = `<p class="hm-none">The market summary is unavailable right
+        now (${esc(err.message)}). Search still works.</p>`;
+    }
     return;
   }
-  if (STATE.view !== 'home' && !document.getElementById('hm-market')) return;
+  const host = document.getElementById('hm-market');
+  if (!host) return;
   STATE.home = data;
   // The strip lives above the search, outside this host. Filled first because
   // it is the cheapest thing to paint and the highest thing on the page.
@@ -4856,7 +4899,18 @@ async function loadExplore(force) {
     getJSON('/api/scanners'),
     getJSON('/api/scanners/groups'),
     getJSON('/api/sectors/board'),
-    STATE.home ? Promise.resolve(STATE.home) : getJSON('/api/home'),
+    /* Through homeData() rather than its own copy of the same idea. This read
+       `STATE.home ? resolve(STATE.home) : getJSON(...)`, which predates the
+       shared helper and got both halves wrong in opposite directions: no
+       in-flight guard, so opening Explore while the homepage was still loading
+       fired a second /api/home; and no freshness window, so once the payload
+       was cached Explore reused it for the life of the page and could show a
+       market reading from hours ago.
+       The catch keeps the one thing that version did do right: if the refetch
+       fails and we still hold an older payload, a stale market section beats an
+       empty one. A failure with nothing cached stays null and the section says
+       so. */
+    homeData().catch(() => STATE.home || null),
   ]);
   const val = (r) => (r.status === 'fulfilled' ? r.value : null);
   exploreData = { scans: val(scans), groups: val(groups),
@@ -22431,6 +22485,18 @@ function knowledgeOnboardingHTML() {
   </section>`;
 }
 
+/** Put the card on a page that is already painted, without repainting it. */
+function insertOnboardingCard() {
+  if (document.querySelector('.kob')) return;
+  const markup = knowledgeOnboardingHTML();
+  if (!markup) return;
+  // After the strip, which is where renderHome puts it: the market stays the
+  // first thing on the page.
+  const strip = document.getElementById('cc-strip');
+  if (!strip) return;
+  strip.insertAdjacentHTML('afterend', markup);
+}
+
 document.addEventListener('click', (evt) => {
   if (!evt.target || !evt.target.closest) return;
   const pick = evt.target.closest('[data-kob-pick]');
@@ -24486,11 +24552,17 @@ function setUiMode(mode) {
   }
 }
 
-/** Repaint for a level change. One owner, so no caller has to remember both. */
-function applyKnowledgeLevel() {
+/** The body flags the level sets. Separate because boot needs these and not a
+ *  re-render: the initial loadView is about to paint anyway. */
+function syncKnowledgeBody() {
   document.body.classList.toggle('mode-simple', uiMode() === 'simple');
   document.body.dataset.knowledge = (window.OpticKnowledge
     ? window.OpticKnowledge.mode() : 'literate');
+}
+
+/** Repaint for a level change. One owner, so no caller has to remember both. */
+function applyKnowledgeLevel() {
+  syncKnowledgeBody();
 
   /* A re-render, not a re-load, and that distinction was a bug before it was a
      comment. `loadView(view, false)` returns early from every loader's cache
@@ -25488,7 +25560,10 @@ function watchColorScheme() {
      one round trip rather than the app rendering at the wrong density. */
   if (window.OpticKnowledge) {
     window.OpticKnowledge.onChange(applyKnowledgeLevel);
-    applyKnowledgeLevel();
+    /* Classes only at boot. applyKnowledgeLevel re-renders, and the initial
+       loadView is about to render anyway, so calling it here painted Home
+       twice and fetched /api/home twice with it. */
+    syncKnowledgeBody();
     /* The explain policy comes from the catalogue, so it is not known on the
        first paint. Density is: the component carries the five levels precisely
        so panels do not render at the wrong one and reflow.
@@ -25502,10 +25577,13 @@ function watchColorScheme() {
       repaintKnowledgeSelector();
       if (explainPolicy() !== assumed) { applyKnowledgeLevel(); return; }
       /* Home is painted before this resolves, so the onboarding card had
-         nothing to offer and returned empty. Without this it would never
-         appear at all: the one visit it is for is the one where the catalogue
-         has not landed yet. */
-      if (STATE.view === 'home' && !window.OpticKnowledge.asked()) renderHome();
+         nothing to offer and returned empty. The one visit it is for is the
+         visit where the catalogue has not landed yet.
+         Inserted rather than re-rendered. renderHome re-runs every loader on
+         the page: measured, a second call cost an extra /api/home, an extra
+         /api/scanners/movers and an extra /api/watchlist, to add one card that
+         nothing else on the page depends on. */
+      if (STATE.view === 'home') insertOnboardingCard();
       else if (STATE.view === 'settings') renderSettings();
     });
   }
