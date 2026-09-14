@@ -240,25 +240,34 @@ def test_the_jargon_rule_no_longer_recommends_a_dash():
 
 # ------------------------------------------------------------------- the lens
 
-def test_the_compressed_lens_does_not_duplicate_the_base_voice():
-    """It used to differentiate on being "informal", which the base voice now is,
-    leaving a menu entry that selected nothing. It differentiates on length."""
-    lens = flat(ai.PERSONAS["retail"]["prompt"])
-    assert "what this lens changes is length" in lens
-    assert "no opening hook" in lens
-
-
-def test_the_compressed_lens_still_translates_its_terms():
-    """Compression is the one lens that could reasonably drop the in-line
-    glossing, and dropping it would make the shortest answers the least
-    readable."""
-    lens = flat(ai.PERSONAS["retail"]["prompt"])
-    assert "still translate a term" in lens
-
-
 def test_every_lens_label_is_still_a_description():
     """"Straight to it" replaced "Plain English". Same contract as before: the
     label says what comes back."""
     for key, val in ai.PERSONAS.items():
         assert val["label"], key
         assert "," not in val["label"], key
+
+
+def test_the_registers_moved_to_the_knowledge_ladder():
+    """Two tests here used to read PERSONAS["retail"], which was a register
+    control sitting among five lenses. The register is a rung of
+    app/knowledge.py now, and these are the properties those tests were
+    protecting, asserted where the behaviour lives.
+
+    The one that matters: a plainer register may not buy its plainness with the
+    facts. Simple is the rung most able to lose a caveat, because softening is
+    what "explain it simply" sounds like it licenses."""
+    from app import knowledge
+    simple = knowledge.MODES["simple"]["prompt"].lower()
+    assert "never state a number you do not have" in simple
+    assert "delayed data and inferred flow" in simple
+    assert "not that the facts are softer" in simple
+
+
+def test_every_rung_still_explains_its_own_terms_or_says_why_not():
+    """The middle rungs gloss as they go; Professional deliberately does not,
+    and has to say what it keeps instead. A rung that dropped both the glossing
+    and the labelling would read as confident about an inference."""
+    from app import knowledge
+    pro = knowledge.MODES["professional"]["prompt"].lower()
+    assert "proxy" in pro and "measured" in pro and "inferred" in pro

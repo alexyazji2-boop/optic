@@ -22267,11 +22267,72 @@ async function loadPersonas() {
   renderPersonaPicker();
 }
 
+/* The knowledge selector: open state, render, handlers.
+ *
+ * Open state is held here rather than in the component because it is UI state
+ * of one instance, not a property of the reader's level, and the component is
+ * the store. Two instances open at once would be a bug either way; there is one
+ * because the selector renders into one host.
+ */
+let kmOpen = false;
+
+function knowledgeSelectorHTML(opts) {
+  if (!window.OpticKnowledge) return '';
+  return window.OpticKnowledge.selectorHTML({ ...(opts || {}), open: kmOpen });
+}
+
+function repaintKnowledgeSelector() {
+  const root = document.querySelector('[data-km-root]');
+  if (root && window.OpticKnowledge) {
+    root.outerHTML = knowledgeSelectorHTML({ compact: false });
+  }
+}
+
+document.addEventListener('click', (evt) => {
+  if (!evt.target || !evt.target.closest) return;
+
+  const pick = evt.target.closest('[data-km-pick]');
+  if (pick) {
+    kmOpen = false;
+    // The component notifies; applyKnowledgeLevel does the repainting. This
+    // handler only records the choice, so there is one path from a click to a
+    // repaint rather than one per control.
+    window.OpticKnowledge.set(pick.dataset.kmPick);
+    repaintKnowledgeSelector();
+    return;
+  }
+
+  const toggle = evt.target.closest('[data-km-toggle]');
+  if (toggle) {
+    kmOpen = !kmOpen;
+    repaintKnowledgeSelector();
+    return;
+  }
+
+  /* Anything else closes it. A menu on a touchscreen that can only be closed
+     by the control that opened it is a trap, which is the same lesson the
+     section dropdowns taught. */
+  if (kmOpen && !evt.target.closest('[data-km-root]')) {
+    kmOpen = false;
+    repaintKnowledgeSelector();
+  }
+});
+
+document.addEventListener('keydown', (evt) => {
+  if (evt.key === 'Escape' && kmOpen) { kmOpen = false; repaintKnowledgeSelector(); }
+});
+
 function renderPersonaPicker() {
   const host = document.getElementById('chat-persona');
   if (!host) return;
   const current = PULSE_PERSONAS.find((p) => p.id === pulsePersona) || PULSE_PERSONAS[0];
-  host.innerHTML = `<label class="pulse-persona-lab" for="pulse-persona">Lens</label>
+  /* Level first, then lens. The level is the one a reader changes and the one
+     the brief is explicit must not live in Settings, so it leads; the lens is
+     the specialist control and follows. Both are here rather than one here and
+     one buried, because they compose and a reader has to see both to know what
+     they are getting. */
+  host.innerHTML = `${knowledgeSelectorHTML({ compact: false })}
+    <label class="pulse-persona-lab" for="pulse-persona">Lens</label>
     <select id="pulse-persona" class="settings-select" aria-label="Response lens">
       ${PULSE_PERSONAS.map((p) => `<option value="${esc(p.id)}"${
   p.id === pulsePersona ? ' selected' : ''}>${esc(p.label)}</option>`).join('')}
@@ -22754,6 +22815,10 @@ async function sendChat(text) {
       web: $('#chat-web').checked,
       attachments: files,
       persona: pulsePersona,
+      // Two axes, sent separately. The lens picks which figures lead; the level
+      // picks how they are worded, and only Adaptive lets the server re-read
+      // the question to decide.
+      mode: window.OpticKnowledge ? window.OpticKnowledge.mode() : 'literate',
     }, node);
     clearAttachments();
     if (reply) chatState.messages.push({ role: 'assistant', content: reply });
@@ -24199,20 +24264,48 @@ document.addEventListener('keydown', (evt) => {
 const UI_MODE_KEY = 'optic.mode.v1';
 const UI_MODES = ['pro', 'simple'];
 
+/* Density is a rung of the knowledge ladder now, not a setting of its own.
+ *
+ * There were two controls for one question. `uiMode` was Pro / Simple and hid
+ * panels; the knowledge level says how much fluency to assume and decides the
+ * wording. A reader could hold Professional and Simple at once, and the page
+ * would explain every term in a layout built for somebody who needs none
+ * explained. One control, four rungs, and `uiMode` survives only as the name
+ * the existing machinery uses.
+ *
+ * The two ends are unchanged on purpose: Professional renders exactly what Pro
+ * did and Financially Literate exactly what Simple did, so nobody's page moved
+ * under them when this shipped. Advanced and Simple are the new rungs in
+ * between and beyond. */
+function knowledgeLevel() {
+  return (window.OpticKnowledge && window.OpticKnowledge.level)
+    ? window.OpticKnowledge.level() : 1;
+}
+
 function uiMode() {
-  try {
-    const raw = localStorage.getItem(UI_MODE_KEY);
-    if (UI_MODES.includes(raw)) return raw;
-  } catch (e) { /* private mode */ }
-  return 'pro';
+  // Kept as a two-valued answer because applyUiMode, the panel chooser and the
+  // Settings copy all read it. Anything below Advanced hides the specialist
+  // panels, which is what 'simple' has always meant here.
+  return knowledgeLevel() >= 2 ? 'pro' : 'simple';
 }
 
 function setUiMode(mode) {
+  // The legacy setter maps onto the ladder rather than writing its own key, so
+  // the old Pro / Simple control in Settings still works and cannot disagree
+  // with the selector.
   if (!UI_MODES.includes(mode)) return;
-  try { localStorage.setItem(UI_MODE_KEY, mode); } catch (e) { /* private mode */ }
-  document.body.classList.toggle('mode-simple', mode === 'simple');
-  // Re-render whatever is on screen: the pass runs at render time, so a mode
-  // change that only repainted Settings would leave the other tabs as they were.
+  if (window.OpticKnowledge) {
+    window.OpticKnowledge.set(mode === 'pro' ? 'professional' : 'literate');
+  }
+}
+
+/** Repaint for a level change. One owner, so no caller has to remember both. */
+function applyKnowledgeLevel() {
+  document.body.classList.toggle('mode-simple', uiMode() === 'simple');
+  document.body.dataset.knowledge = (window.OpticKnowledge
+    ? window.OpticKnowledge.mode() : 'literate');
+  // The pass runs at render time, so a change that only repainted Settings
+  // would leave every other tab as it was.
   if (STATE.view === 'settings') renderSettings();
   else loadView(STATE.view, false);
 }
@@ -24261,7 +24354,12 @@ function panelIsHidden(view, title) {
   const chosen = hiddenPanels();
   const id = panelId(view, title);
   if (Object.prototype.hasOwnProperty.call(chosen, id)) return !!chosen[id];
-  return uiMode() === 'simple' && isAdvancedPanel(view, title);
+  /* The reader's own choice wins, and only then the level. That order is the
+     whole contract of the panel chooser: somebody who opened a panel by hand
+     keeps it when they change level, and somebody who closed one does not get
+     it back. The level decides what a view *opens with*, never what it is
+     allowed to contain. */
+  return knowledgeLevel() < panelMinLevel(view, title);
 }
 
 /* Panels Simple mode leaves out, by heading substring, per view.
@@ -24273,6 +24371,47 @@ function panelIsHidden(view, title) {
  * Conservative on purpose. Only what is unambiguously specialist: derivatives
  * positioning, and the second denser copy of a panel that already appears in a
  * readable form above it. A panel that is merely detailed stays. */
+/* The densest panels: Professional only.
+ *
+ * Carved out of PANELS_ADVANCED rather than added beside it, so Advanced is a
+ * real rung and not a synonym for Professional. These are the four where the
+ * reading is a distribution or a second-order greek: useful to somebody who
+ * came looking for them, noise to everybody else.
+ *
+ * Titles are lower-cased headings, matched by `includes` the same way
+ * PANELS_ADVANCED is, so nothing here needs an edit to any template. */
+const PANELS_DENSE = {
+  swing: ['vex.', 'net premium by strike', 'gamma concentration by expiry',
+    'at-the-money greeks by expiry'],
+  market: ['niche industries', 'themes & sub-industries'],
+  long: [],
+  earnings: [],
+  brief: [],
+  indices: [],
+  tracker: [],
+  roth: [],
+};
+
+/* What Simple hides on top of the advanced set.
+ *
+ * Indicator panels, not conclusions. Somebody at Simple still gets the verdict,
+ * the quote, the levels and the reasoning; what goes is the machinery that
+ * needs its own explanation before the number means anything. RSI and MACD are
+ * the clearest cases: a reader who does not know what a 14-period average of
+ * gains against losses is cannot use the figure, and the glossary entry does
+ * not fix that inside one panel. */
+const PANELS_SIMPLE_HIDES = {
+  swing: ['rsi (14)', 'macd (12, 26, 9)', 'fibonacci levels',
+    'moving averages'],
+  market: ['equal-weight vs cap-weight'],
+  long: ['weekly structure'],
+  earnings: [],
+  brief: [],
+  indices: [],
+  tracker: [],
+  roth: [],
+};
+
 const PANELS_ADVANCED = {
   swing: [
     'delta analysis', 'gamma analysis', 'gex.', 'vex.',
@@ -24306,6 +24445,16 @@ function advancedNoun(view) {
 function isAdvancedPanel(view, title) {
   const needle = String(title || '').toLowerCase();
   return (PANELS_ADVANCED[view] || []).some((k) => needle.includes(k));
+}
+
+/** The lowest knowledge level at which this panel appears. */
+function panelMinLevel(view, title) {
+  const needle = String(title || '').toLowerCase();
+  const hits = (table) => (table[view] || []).some((k) => needle.includes(k));
+  if (hits(PANELS_DENSE)) return 3;            // Professional only
+  if (hits(PANELS_ADVANCED)) return 2;         // Advanced and up
+  if (hits(PANELS_SIMPLE_HIDES)) return 1;     // everything except Simple
+  return 0;                                    // always
 }
 
 /** Hide the specialist panels, and say so where they were. */
@@ -25134,6 +25283,19 @@ function watchColorScheme() {
   // Not awaited: the picker falls back to a built-in default until the server's
   // list arrives, so nothing waits on it.
   loadPersonas();
+  /* The level is applied before the catalogue arrives and the selector is
+     repainted after. Density needs an integer on the first paint and the
+     component carries the five it needs for that; the labels come from the
+     server and there is one copy of them, so the chip shows its fallback for
+     one round trip rather than the app rendering at the wrong density. */
+  if (window.OpticKnowledge) {
+    window.OpticKnowledge.onChange(applyKnowledgeLevel);
+    applyKnowledgeLevel();
+    window.OpticKnowledge.load().then(() => {
+      repaintKnowledgeSelector();
+      if (STATE.view === 'settings') renderSettings();
+    });
+  }
   loadCalendarSession();
   mountMobileTabs();
   renderHome();

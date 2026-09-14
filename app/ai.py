@@ -20,6 +20,9 @@ import os
 import time
 from datetime import date
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
+
+from . import knowledge
+
 import logging
 
 log = logging.getLogger(__name__)
@@ -122,25 +125,17 @@ PERSONAS: Dict[str, Dict[str, str]] = {
             "sound say so. Do not impersonate any real person."
         ),
     },
-    "retail": {
-        "label": "Straight to it",
-        "blurb": "Blunt and short. Same numbers, same warnings, none of the "
-                 "explanation you did not ask for.",
-        "prompt": (
-            "Compress. The base voice is already warm and conversational, so "
-            "what this lens changes is length: no opening hook, no humour, no "
-            "explanatory detour, no hedging language for its own sake. The "
-            "shortest sentence that carries the figure. Every factual constraint "
-            "still applies: cite the same CONTEXT figures, keep the same caveats "
-            "about delayed data and inferred flow, and never state a number you "
-            "do not have. Still translate a term the moment you use it, in three "
-            "words rather than a sentence. Do not use hype, rocket language, or "
-            "anything that reads as encouragement to take a position, and do not "
-            "drop the risk caveats for the sake of the voice. Fewer words, "
-            "identical substance."
-        ),
-    },
 }
+
+# "Straight to it" used to be the sixth entry here and has moved to
+# `app/knowledge.py` as the Simple end of the knowledge ladder.
+#
+# It was never a lens. Every other entry answers "whose judgement do I want" and
+# changes which figures the answer leads with; that one answered "how much do I
+# already know" and changed the register. Two controls for the same question is
+# how a reader picks Professional density and a compressed voice and gets an
+# argument between them, so the levels are one control now and the lenses are
+# another, and they compose instead of competing.
 
 DEFAULT_PERSONA = "neutral"
 
@@ -1416,6 +1411,7 @@ async def stream_chat(
     use_web: bool = False,
     attachments: Optional[List[Dict[str, Any]]] = None,
     persona: str = DEFAULT_PERSONA,
+    mode: str = knowledge.DEFAULT_MODE,
 ) -> AsyncGenerator[str, None]:
     client = _client()
     if client is None:
@@ -1469,6 +1465,32 @@ async def stream_chat(
     # and a bad lens is not worth failing a request over.
     persona_prompt = (PERSONAS.get(persona) or PERSONAS[DEFAULT_PERSONA])["prompt"]
 
+    # The knowledge level, resolved against the question rather than taken as
+    # given. Only Adaptive reads the question; every other mode is returned
+    # unchanged, because a reader who picked Professional did not ask to be
+    # second-guessed by a keyword match.
+    #
+    # The last user turn, not the whole thread: the depth of the answer should
+    # follow what was just asked. A reader who opened with "what is a P/E" and
+    # has since moved on to skew is not still a beginner.
+    last_user = ""
+    for turn in reversed(messages):
+        if turn.get("role") == "user":
+            raw = turn.get("content")
+            # Content is a string on a plain turn and a list of blocks when
+            # attachments rode along, so both shapes have to be read rather
+            # than one assumed: str(list) would hand the classifier a Python
+            # repr and it would match on the punctuation.
+            if isinstance(raw, str):
+                last_user = raw
+            elif isinstance(raw, list):
+                last_user = " ".join(
+                    str(b.get("text", "")) for b in raw
+                    if isinstance(b, dict) and b.get("type") == "text")
+            break
+    level_prompt = knowledge.prompt_for(
+        knowledge.resolve_for_answer(mode, last_user))
+
     tools: List[Dict[str, Any]] = []
     if use_web:
         tools.append({"type": "web_search_20260209", "name": "web_search", "max_uses": 5})
@@ -1476,13 +1498,18 @@ async def stream_chat(
     kwargs: Dict[str, Any] = {
         "model": MODEL,
         "max_tokens": 8000,
-        # Three blocks, and the order is deliberate. The base prompt and the
+        # Four blocks, and the order is deliberate. The base prompt and the
         # format rules are identical on every request, so they carry the cache
-        # breakpoint; the persona is short and varies, so it goes last where a
-        # change does not invalidate the cached prefix.
+        # breakpoint; the level and the lens are short and vary, so they go last
+        # where a change does not invalidate the cached prefix.
+        #
+        # Level before lens. The lens decides which figures the answer leads
+        # with and the level decides how they are worded, so the lens is the
+        # more specific instruction and reads last.
         "system": [
             {"type": "text", "text": SYSTEM_PROMPT + FORMAT_PROMPT,
              "cache_control": {"type": "ephemeral"}},
+            {"type": "text", "text": level_prompt},
         ] + ([{"type": "text", "text": persona_prompt}] if persona_prompt else []),
         "messages": messages,
         "thinking": {"type": "adaptive"},

@@ -36,7 +36,9 @@ def test_a_choice_beats_the_preset():
     body = _fn("panelIsHidden")
     assert "hasOwnProperty.call(chosen, id)" in body, \
         "an explicit choice must win over the mode"
-    assert "uiMode() === 'simple'" in body and "isAdvancedPanel" in body
+    # The level decides what a view *opens with*; it never decides what the
+    # view is allowed to contain, which is why the choice is read first.
+    assert "knowledgeLevel() < panelMinLevel(view, title)" in body
 
 
 def test_no_opinion_and_explicitly_shown_stay_distinguishable():

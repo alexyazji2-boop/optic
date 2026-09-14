@@ -60,16 +60,23 @@ def test_no_persona_impersonates_a_real_person():
             "%s does not forbid impersonation" % key)
 
 
-def test_the_informal_persona_keeps_every_constraint():
-    """The one most likely to shed its caveats for the sake of the voice."""
-    p = ai.PERSONAS["retail"]["prompt"].lower()
-    assert "cite the same" in p
-    assert "caveat" in p
-    assert "never state a number you do not have" in p
-    for banned_encouragement in ("hype", "rocket"):
-        assert banned_encouragement in p, (
-            "the informal lens should explicitly rule out %s" % banned_encouragement)
+def test_no_lens_is_a_register_in_disguise():
+    """"Straight to it" used to be the sixth entry here and has moved to
+    app/knowledge.py as the Simple end of the ladder.
 
+    It was never a lens. Every other entry answers "whose judgement do I want"
+    and changes which figures the answer leads with; that one answered "how much
+    do I already know" and changed the register. Two controls for one question
+    is how a reader picks Professional density and a compressed voice and gets
+    an argument between them.
+
+    So this asserts the separation holds: a lens may not instruct on length or
+    on how much to explain, because those belong to the level."""
+    for key, val in ai.PERSONAS.items():
+        low = val["prompt"].lower()
+        for register in ("shortest sentence", "no opening hook",
+                         "fewer words", "compress"):
+            assert register not in low, "%s is setting a register" % key
 
 def test_no_persona_licenses_a_prediction():
     for key, val in ai.PERSONAS.items():

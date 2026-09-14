@@ -58,6 +58,7 @@ from . import alerts as alerts_mod
 from .analytics import econ as econ_mod
 from .analytics import pulse as pulse_mod
 from .analytics import watchlist as watchlist_mod
+from . import knowledge as knowledge_mod
 from . import watch_runner
 from .analytics import watches as watches_mod
 from . import events as events_mod
@@ -2537,6 +2538,17 @@ async def ai_allowance_state(request: Request) -> Dict[str, Any]:
             "ai": ai.available()}
 
 
+@app.get("/api/knowledge/modes")
+async def knowledge_modes() -> Dict[str, Any]:
+    """The knowledge levels, and what each one changes.
+
+    Published rather than hardcoded in the client so the selector's promise and
+    the behaviour come from one place. A menu claiming to change density while
+    the density table disagreed would be a split nothing reports.
+    """
+    return knowledge_mod.catalogue()
+
+
 @app.post("/api/chat")
 async def chat(request: Request,
                payload: Dict[str, Any] = Body(...)) -> StreamingResponse:
@@ -2552,10 +2564,14 @@ async def chat(request: Request,
     use_web = bool(payload.get("web"))
     attachments = payload.get("attachments")
     persona = str(payload.get("persona") or ai.DEFAULT_PERSONA)
+    # The level and the lens are separate axes and arrive separately. Both are
+    # normalised rather than trusted: they come from localStorage, which the
+    # reader can edit, and an unknown value has to answer with something.
+    mode = knowledge_mod.normalise(payload.get("mode"))
     context = await _augment_chat_context(history, context)
     return StreamingResponse(
         ai.stream_chat(history, context=context, use_web=use_web,
-                       attachments=attachments, persona=persona),
+                       attachments=attachments, persona=persona, mode=mode),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

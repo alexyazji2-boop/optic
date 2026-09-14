@@ -40,24 +40,47 @@ def _advanced() -> dict:
 
 # --------------------------------------------------------------- the defaults
 
-def test_pro_is_the_default():
-    """Simple as the default would remove nine panels from a page someone already
-    uses, and "the app lost half my tab" is a worse first impression than a long
-    page."""
+def test_density_is_derived_from_the_knowledge_level():
+    """There were two controls for one question. `uiMode` was Pro / Simple and
+    hid panels; the knowledge level says how much fluency to assume and decides
+    the wording. A reader could hold Professional and Simple at once and get a
+    page that explained every term in a layout built for somebody who needs
+    none explained.
+
+    `uiMode` survives as the name the existing machinery reads, and it has no
+    store of its own any more."""
     body = APP_JS.split("function uiMode() {", 1)[1].split("\n}", 1)[0]
-    assert "return 'pro';" in body
+    assert "knowledgeLevel()" in body
+    assert "localStorage" not in body, "uiMode still has its own store"
 
 
-def test_an_unknown_stored_mode_falls_back():
+def test_the_two_original_rungs_render_exactly_as_before():
+    """Nobody's page moved when this shipped: Professional renders what Pro
+    rendered and Financially Literate renders what Simple rendered. The new
+    rungs are Advanced in between and Simple beyond."""
     body = APP_JS.split("function uiMode() {", 1)[1].split("\n}", 1)[0]
-    assert "UI_MODES.includes(raw)" in body
+    assert "knowledgeLevel() >= 2 ? 'pro' : 'simple'" in body
+    levels = APP_JS.split("var LEVELS = {", 1)
+    # The level table lives in the component; app.js only compares against it.
+    comp = open("static/components/knowledge.js", encoding="utf-8").read()
+    table = comp.split("var LEVELS = {", 1)[1].split("};", 1)[0]
+    assert "professional: 3" in table and "literate: 1" in table
 
 
-def test_private_mode_does_not_break_it():
-    """localStorage throws in private browsing. Both the read and the write are
-    wrapped everywhere else in this file for the same reason."""
-    for fn in ("function uiMode()", "function setUiMode("):
-        body = APP_JS.split(fn, 1)[1].split("\n}", 1)[0]
+def test_the_legacy_setter_writes_the_ladder_not_its_own_key():
+    """The Pro / Simple toggle in Settings still exists, and two writable
+    records of one state is how a selector and a toggle come to disagree."""
+    body = APP_JS.split("function setUiMode(", 1)[1].split("\n}", 1)[0]
+    assert "OpticKnowledge.set(" in body
+    assert "localStorage" not in body
+
+
+def test_private_mode_does_not_break_the_level_store():
+    """localStorage throws in private browsing, and the component owns the only
+    read and write now."""
+    comp = open("static/components/knowledge.js", encoding="utf-8").read()
+    for fn in ("function read()", "function set(id)"):
+        body = comp.split(fn, 1)[1].split("\n  }", 1)[0]
         assert "catch" in body, fn
 
 
@@ -231,12 +254,15 @@ def test_the_handler_does_not_shadow_the_chart_mode_const():
     assert "const modeBtn = evt.target.closest('[data-set-mode]')" not in listener
 
 
-def test_changing_mode_repaints_the_view_on_screen():
-    """The pass runs at render time, so a mode change that only repainted
-    Settings would leave the other tabs as they were until the next visit."""
-    body = APP_JS.split("function setUiMode(", 1)[1].split("\n}", 1)[0]
-    assert "loadView(STATE.view" in body or "renderSettings()" in body
+def test_changing_level_repaints_the_view_on_screen():
+    """The pass runs at render time, so a change that only repainted Settings
+    would leave the other tabs as they were until the next visit.
+
+    Moved to applyKnowledgeLevel, which is the one owner: setUiMode now routes
+    through the ladder, and a repaint in both would run twice."""
+    body = APP_JS.split("function applyKnowledgeLevel() {", 1)[1].split("\n}", 1)[0]
     assert "loadView(STATE.view" in body
+    assert "renderSettings()" in body
 
 
 @pytest.mark.parametrize("cls", [".panel.is-advanced", ".mode-note"])
