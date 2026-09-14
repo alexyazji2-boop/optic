@@ -10000,8 +10000,25 @@ body.auth-open { overflow: hidden; }
    is quieter than the note that appears after a failed press: no box, smaller
    type, sitting under the buttons it explains. A bordered panel here would read
    as a warning about a button nobody has touched yet. */
+/* Hidden while the note below is showing. The standing hint and the note after
+   a failed press say the same thing in the same words, and the screenshot that
+   reported the overlap had both on screen at once, forty pixels apart. The one
+   that answers something the reader just did is the one worth keeping. */
+/* Scoped from .auth-body, because the hint is a sibling of the form rather than
+   inside it: both hang off .auth-body, so a :has() rooted at .auth-form matches
+   nothing. Checked in the DOM rather than assumed.
+   Where :has() is unsupported both simply show, which is today's behaviour. */
+.auth-body:has(.auth-form [data-error]:not([hidden])) .auth-passkey-hint {
+  display: none;
+}
+
 .auth-passkey-hint {
-  margin: calc(var(--space-2) * -1) 0 0;
+  /* A positive margin, not a negative one.
+     The negative was meant to cancel the gap inside .auth-providers, and this
+     sits *after* that block rather than in it, so there was no gap to cancel
+     and it pulled the sentence 9px up into the button: measured with the modal
+     open, the button ran 185 to 229 and the hint started at 220. */
+  margin: var(--space-2) 0 0;
   padding: 0 var(--space-1);
   background: none;
   border: 0;
