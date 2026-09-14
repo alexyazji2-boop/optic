@@ -9,9 +9,13 @@ The phases, all in New York time:
 
 * **Regular** 9:30am–4:00pm — the session everything else is measured against.
 * **After hours** 4:00pm–8:00pm — where earnings reactions actually happen.
-* **Overnight** 8:00pm–4:00am — thin, and *not carried by this data feed*
-  (yfinance has no Blue Ocean / overnight tape), so the module says so rather
-  than passing off an 8pm print as a current price.
+* **Overnight** 8:00pm–4:00am — thin, and *not carried by this feed for single
+  stocks* (yfinance has no Blue Ocean tape), so the module says so rather than
+  passing off an 8pm print as a current price. The index **futures** are carried
+  and are live right through this window, and the home strip swaps to them here.
+  Measured on a Sunday at 21:18 ET: ^GSPC last printed Friday 19:59, ES=F 21:08.
+  They are a different instrument rather than a better quote for the same one,
+  so they are labelled as futures wherever they appear.
 * **Pre-market** 4:00am–9:30am — liquidity builds toward the open.
 
 Holidays and early closes ARE modelled, from the NYSE rules rather than a
@@ -63,9 +67,11 @@ DESCRIPTIONS = {
                "other price gets compared against.",
     "after": "Post-market trading. This is where a company that reports after the bell gets "
              "its first verdict, on a fraction of regular-session volume.",
-    "overnight": "The overnight session. Extremely thin, and this data feed does not carry it . "
-                 "The price shown is the last print from the after-hours session, not a live "
-                 "overnight quote.",
+    "overnight": "The overnight session. US equities barely trade and this feed carries no "
+                 "overnight tape for them, so a single stock still shows its 4pm close. The "
+                 "index figures are the futures, which do trade right through this window and "
+                 "are live. A future is not the index: it carries basis and its own expiry, so "
+                 "read it as where the market is leaning rather than as a price.",
     "pre": "Pre-market trading. Volume builds toward the open, and levels set here often move "
            "again once the bell brings real liquidity.",
     "holiday": "A market holiday. US equities do not trade at all today, in any session, and "

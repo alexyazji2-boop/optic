@@ -4868,10 +4868,25 @@ function renderExplore(data) {
  * the payload uses, so a group that fails to build drops its own entries and
  * the rest of the strip still renders.
  */
+/* The three index cells have an overnight understudy.
+ *
+ * Between 8pm and 4am the cash indices are shut and this feed carries no
+ * overnight equity tape, so those cells were showing the 4pm close with a note
+ * explaining that it was not current. A reader watching at 9pm on a Sunday was
+ * being handed Friday's number.
+ *
+ * The futures do trade through that window and this feed does carry them.
+ * Measured on a Sunday at 21:18 ET: ^GSPC's last print was Friday 19:59, ES=F's
+ * was 21:08, ten minutes old.
+ *
+ * Substituted rather than added, and only for the hours the original is not
+ * answering: five index cells in one strip would be the same reading twice.
+ * The label changes with the instrument, because a future is not a better quote
+ * for the index, it is a different contract with its own basis and expiry. */
 const MARKET_STRIP = [
-  { group: 'equity', label: 'S&P 500' },
-  { group: 'equity', label: 'Nasdaq 100' },
-  { group: 'equity', label: 'Russell 2000' },
+  { group: 'equity', label: 'S&P 500', overnight: { group: 'futures', label: 'S&P 500 futures' } },
+  { group: 'equity', label: 'Nasdaq 100', overnight: { group: 'futures', label: 'Nasdaq 100 futures' } },
+  { group: 'equity', label: 'Russell 2000', overnight: { group: 'futures', label: 'Russell 2000 futures' } },
   { group: 'volatility', label: 'VIX' },
   { group: 'rates', label: 'US 10Y' },
   { group: 'commodities', label: 'WTI Crude' },
@@ -4899,8 +4914,20 @@ function stripInstrument(data, group, label) {
  * from `macroWord`, because "4.84, +0.6%" does not tell anyone that yields
  * rose and hedging got dearer.
  */
+/* Which of the two the strip is showing.
+ *
+ * Only `overnight`. During `closed` the futures are shut as well (Globex runs
+ * Sunday 6pm to Friday 5pm), so swapping there would trade one stale print for
+ * another and lose the cash close, which is the more meaningful reference when
+ * nothing at all is trading. Pre-market and after-hours stay on the cash
+ * indices because this feed does carry those sessions. */
+function stripRows(data) {
+  const overnight = ((data || {}).session || {}).phase === 'overnight';
+  return MARKET_STRIP.map((row) => (overnight && row.overnight ? row.overnight : row));
+}
+
 function marketStripHTML(data) {
-  const cells = MARKET_STRIP.map(({ group, label }) => {
+  const cells = stripRows(data).map(({ group, label }) => {
     const inst = stripInstrument(data, group, label);
     if (!inst || inst.last === null || inst.last === undefined) return '';
     const chg = inst.chg_1d;
@@ -21813,7 +21840,7 @@ const SESSION_LABEL = {
   after: 'After hours · refreshing every 20s',
   // No "refreshing" claim: yfinance carries no Blue Ocean tape, so nothing
   // arrives to refresh. session.py publishes the same fact as feed_covers_phase.
-  overnight: 'Overnight · this feed does not carry the overnight tape',
+  overnight: 'Overnight · index futures are live, single stocks are not',
 };
 
 function liveIndicatorHTML() {

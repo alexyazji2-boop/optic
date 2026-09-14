@@ -34,6 +34,22 @@ INSTRUMENTS: List[Dict[str, str]] = [
     {"symbol": "^GSPC", "label": "S&P 500", "group": "equity", "note": "benchmark"},
     {"symbol": "^NDX", "label": "Nasdaq 100", "group": "equity", "note": "growth"},
     {"symbol": "^RUT", "label": "Russell 2000", "group": "equity", "note": "small caps"},
+    # The index futures, which is the answer to "what is the market doing right
+    # now" for the sixteen hours a day the cash indices above are not answering
+    # it. Measured on a Sunday at 21:18 ET, with the overnight session open:
+    # ^GSPC's last print was Friday 19:59 and ES=F's was 21:08, ten minutes old.
+    #
+    # Their own group rather than folded into `equity`, because they are a
+    # different instrument and not a better quote for the same one. A future
+    # carries basis and its own expiry, so ES at 7,622 is not the S&P at 7,622,
+    # and a strip that quietly swapped one for the other would be publishing a
+    # number under a label that does not describe it.
+    {"symbol": "ES=F", "label": "S&P 500 futures", "group": "futures",
+     "note": "E-mini S&P, trades overnight"},
+    {"symbol": "NQ=F", "label": "Nasdaq 100 futures", "group": "futures",
+     "note": "E-mini Nasdaq, trades overnight"},
+    {"symbol": "RTY=F", "label": "Russell 2000 futures", "group": "futures",
+     "note": "E-mini Russell, trades overnight"},
 ]
 
 # Cross-asset ratios. Each carries the direction that means risk-on so the

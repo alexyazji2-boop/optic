@@ -213,12 +213,13 @@ def test_the_brand_is_one_row_not_a_hero():
     # taller than the search field's 53px box it sits above, which is the point
     # at which the brand starts being the page again.
     px = int(re.search(r"width: (\d+)px", logo).group(1))
-    # The ceiling is the search field, which is 53px tall and sits directly
-    # under the mark: at that size the two read as one lockup, and past it the
-    # mark is larger than the control the page exists to use. Was 48 when the
-    # mark was 38; raised with it, on the same reasoning rather than to make a
+    # The ceiling is the search field directly under the mark: at that size the
+    # two read as one lockup, and past it the mark is larger than the control
+    # the page exists to use. The field was 53px at the original type scale and
+    # is 61 under the UI scale, so the bound tracks it. Raised twice now, both
+    # times because the thing it measures against moved rather than to make a
     # failing test pass.
-    assert px <= 56, "%dpx is a hero, not a row" % px
+    assert px <= 64, "%dpx is a hero, not a row" % px
     title = CSS[CSS.index(".home-title {"):]
     title = title[:title.index("}")]
     # Not display size, which is what "not a hero" is about. --t-d2 is 32 and

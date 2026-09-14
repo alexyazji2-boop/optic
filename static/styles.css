@@ -770,7 +770,11 @@ body.chat-open main { padding-right: 400px; }
    width of the app: an 860px block pinned to the left of a 1600px page is not
    a measured element, it is an element that ran out. Centred it reads as the
    thing the page is built around, which on this page it is. */
-.home-search, .home-quick { max-width: 860px; margin-left: auto; margin-right: auto; }
+/* 720, down from 860. The field only ever holds four characters, and the width
+   it needs is set by its placeholder rather than by the page: at 860 the
+   sentence ended a third of the way across and the rest was an empty box, which
+   reads as a field waiting for a sentence rather than a ticker. */
+.home-search, .home-quick { max-width: 720px; margin-left: auto; margin-right: auto; }
 
 /* The mark and the wordmark, one compact row.
    Both were much larger and stacked: a 92px aperture, then "Optic Terminal" at
@@ -788,21 +792,21 @@ body.chat-open main { padding-right: 400px; }
      instead of above the middle of a column the field does not fill. Left
      aligned it read as a label on the field; centred it reads as the name of
      the thing you are about to search. */
-  max-width: 860px;
+  max-width: 720px;
   justify-content: center;
   margin-left: auto;
   margin-right: auto;
 }
 
 .home-logo {
-  /* 52, by way of 30 and 38. The row is the one place the mark is the subject
-     rather than a label on a button, and each step was asked for after looking
-     at the last one.
-     52 is where it stops, and the number is the search field: that box is 53px
-     tall and sits directly underneath, so a mark this size reads as the pair of
-     them being one lockup. Taller and the mark is bigger than the thing the
-     page exists to use, which is where a brand starts being the page again. */
-  width: 52px; height: 52px;
+  /* 60, by way of 30, 38 and 52, each step asked for after looking at the last.
+     The ceiling has always been the search field directly underneath, so that
+     the two read as one lockup rather than a mark floating above a control. At
+     the original type scale that field was 53px tall and the mark stopped at
+     52. The UI scale since took the field to 61, so the same rule now puts the
+     mark at 60: the number moved because the thing it is measured against did,
+     not because the rule changed. */
+  width: 60px; height: 60px;
   color: var(--ink-2);
   margin-bottom: 0;
   flex: 0 0 auto;

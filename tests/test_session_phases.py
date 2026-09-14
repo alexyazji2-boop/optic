@@ -56,11 +56,19 @@ def test_a_missing_key_can_never_render_as_undefined_again():
 
 
 def test_overnight_does_not_claim_to_be_refreshing():
-    """The feed has no Blue Ocean tape. session.py says so as feed_covers_phase;
-    the chip must not say the opposite two inches away."""
-    label = _labels()["overnight"]
-    assert "refreshing" not in label.lower()
-    assert "does not carry" in label.lower()
+    """The feed has no Blue Ocean tape for single stocks. session.py says so as
+    feed_covers_phase, and the chip must not say the opposite two inches away.
+
+    It used to read "this feed does not carry the overnight tape", which was
+    true and was the whole message. The index futures *are* carried and are live
+    through this window, so the chip names both halves now: what is live and
+    what is not. The property this protects is unchanged, that the chip never
+    implies a single stock's price is moving when it is a 4pm close."""
+    label = _labels()["overnight"].lower()
+    assert "refreshing" not in label
+    # Still says what is not live, rather than only advertising what is.
+    assert "single stocks are not" in label
+    assert "futures are live" in label
 
 
 def test_the_live_tape_predicate_excludes_overnight():
