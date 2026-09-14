@@ -6353,11 +6353,94 @@ b, strong { font-weight: 600; }
   position: relative;
   min-width: 0;
   min-height: 0;
-  display: grid;
-  /* head, legend, plot, navigator. The plot is the only row that flexes, so the
-     navigator keeps its height as the window resizes and never squeezes the
-     chart to nothing. */
-  grid-template-rows: auto auto 1fr auto;
+  /* Flex, not grid, and that is a fix rather than a preference.
+     head, legend, plot, then any oscillator panes, then the navigator. The plot
+     is the only child that flexes, so the panes and the navigator keep their
+     heights as the window resizes and never squeeze the chart to nothing.
+
+     A grid sized the rows by POSITION: `auto auto 1fr auto` meant "the third
+     child flexes". The legend renders empty on some configurations, so every
+     child shifted up one slot and the RSI pane inherited the 1fr row with no
+     free space left in it, collapsing to 1px while the MACD pane below it was
+     fine. Measured `grid-template-rows: 51px 680px 1px 157px 46px` against six
+     children. Flex attaches the flexing to the element instead of to its
+     index, so it cannot come apart when a sibling renders nothing. */
+  display: flex;
+  flex-direction: column;
+}
+.ws-canvas > * { flex: 0 0 auto; }
+.ws-plot { flex: 1 1 auto; }
+
+/* ---- oscillator panes -----------------------------------------------------
+   Stacked under the price plot, sharing its x-axis, the way a charting package
+   does it. Each carries its own legend because each has its own y-scale: "RSI
+   43.9" belongs to the RSI pane the way the OHLC row belongs to the price plot.
+
+   A top border and no card: they are part of the chart above them rather than
+   panels of their own, and a bordered box around each would read as three
+   unrelated charts. */
+.ws-pane {
+  border-top: 1px solid var(--grid);
+  min-width: 0;
+  min-height: 0;
+}
+.ws-pane-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3) 0;
+  font-size: var(--t-micro);
+  color: var(--ink-muted);
+}
+.ws-pane-legend {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.ws-pane-legend strong { color: var(--ink-2); font-weight: 600; }
+.ws-pane-val {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  margin-right: var(--space-1);
+}
+/* Inline swatches, sized to sit on a text baseline rather than as list bullets:
+   this row is read as a sentence, not as a key. */
+.ws-pane-key {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin: 0 var(--space-0) 0 var(--space-1);
+}
+.ws-pane-cross { color: var(--ink-2); }
+.ws-pane-cross.up { color: var(--pos); }
+.ws-pane-cross.down { color: var(--neg); }
+.ws-pane-close {
+  margin-left: auto;
+  flex: 0 0 auto;
+  background: none;
+  border: 0;
+  color: var(--ink-muted);
+  cursor: pointer;
+  font-size: var(--t-small);
+  line-height: 1;
+  padding: var(--space-0) var(--space-1);
+  border-radius: var(--r-sm);
+  transition: color var(--dur-ui) var(--ease-ui);
+}
+.ws-pane-close:hover,
+.ws-pane-close:focus-visible { color: var(--ink); }
+.ws-pane-plot { min-width: 0; min-height: 0; }
+
+.ws-menu-note {
+  margin: var(--space-2) 0 0;
+  padding: 0 var(--space-2) var(--space-1);
+  font-size: var(--t-micro);
+  color: var(--ink-muted);
+  max-width: 230px;
+  line-height: 1.45;
 }
 .ws-head {
   display: flex;

@@ -2152,7 +2152,11 @@ function macdChart(macd, signal, hist, labels, width = 720, opts = {}) {
   // Taller than the old 150px. The panel's job is to show which side of the
   // signal line MACD is on, and at 118px of plot height two series a couple of
   // points apart were a single thick stroke.
-  const W = width, H = 210;
+  /* 210 unless the caller asks for less. The default is the Options panel's:
+     at 118px of plot height two series a couple of points apart were a single
+     thick stroke. The charting workspace's pane asks for less because it is one
+     of a stack under a price chart rather than a panel of its own. */
+  const W = width, H = opts.height || 210;
   const m = { t: 10, r: 58, b: 22, l: 8 };  // b leaves room for the date row
   const plotW = W - m.l - m.r, plotH = H - m.t - m.b;
   const all = [...macd, ...signal, ...hist].filter((v) => v !== null && isFinite(v));

@@ -2330,10 +2330,16 @@ function intradaySeries(intra) {
 /** Tail-slice every array in a price_series to the selected range, keeping the
  *  arrays aligned. Moving averages were computed on full history upstream, so
  *  slicing here doesn't corrupt them. */
-function sliceSeries(rawPs, rangeKey, intervalKey) {
+function sliceSeries(rawPs, rangeKey, intervalKey, prepared) {
   // Aggregate first, then slice: rolling up after slicing would cut a partial
   // week at the boundary and produce a misleading first bar.
-  const ps = intervalKey === 'weekly' ? aggregateWeekly(rawPs) : rawPs;
+  //
+  // `prepared` is an already-rolled-up series to slice instead of rawPs, for a
+  // caller that had to build one anyway. The charting workspace attaches its
+  // oscillator arrays before this point, and passing the raw payload here threw
+  // them away: the panes rendered their shells and drew nothing. It cannot just
+  // hand its series in as `rawPs`, because this would aggregate a second time.
+  const ps = prepared || (intervalKey === 'weekly' ? aggregateWeekly(rawPs) : rawPs);
   const spec = CHART_RANGES.find((r) => r.key === rangeKey) || CHART_RANGES[2];
   const want = intervalKey === 'weekly' ? spec.weekly : spec.daily;
   const total = (ps.dates || []).length;
@@ -2866,8 +2872,6 @@ function renderHomeStatus(health) {
 }
 
 /* ==================================================================== SWING */
-
-
 
 
 
@@ -6900,50 +6904,30 @@ function renderSwing(d) {
     <p class="caveat">${gloss(cs.method || '')}</p>
   </div>` : ''}
 
-  <!-- Fundamental momentum, moved out of the swing-verdict panel.
-       Its own first line says it is not part of the score above, so it was never
-       really part of that panel. And it was what made the panel 1299px tall
-       against the quote panel's 500px, leaving ~800px of dead column beside it.
-       Full width also suits it better: the readings and their explanations sit
-       side by side here instead of stacking in a half-width column. -->
   ${renderCloseDefence(d.close_defence, { horizonWord: 'today' })}
 
-  ${em.available ? `<div class="panel gap">
-    <h2>${hg('Fundamental momentum')} <span class="chip ${
-    em.tone === 'good' ? 'bull' : em.tone === 'bad' ? 'bear' : 'neutral'}"
-      style="margin-left:var(--space-2)"><span class="dot"></span>${esc(cap(em.read))}</span></h2>
-    <p class="sub"><strong>Not part of the composite score.</strong> Shown because revisions and
-      surprise history do carry signal over a few weeks. Read alongside the composite, not
-      folded into it.</p>
-    <!-- Stacked, not two columns. The readings table is short and the definition
-         list beside it is roughly twice its height, so at panel width the pair
-         wrapped and left a 442x265 empty cell inside the card. -->
-    <div>
-      <table class="data narrow">
-        <thead><tr><th>Input</th><th>Reading</th></tr></thead>
-        <tbody>${(em.signals || []).map((sig) => `<tr>
-          <td class="name">${esc(sig.label)}</td>
-          <td class="${sig.tone === 'good' ? 'up' : sig.tone === 'bad' ? 'down' : ''}">${
-    esc(cap(sig.read))}</td>
-        </tr>`).join('')}</tbody>
-      </table>
-      <dl class="factor-defs">
-        ${(em.signals || []).map((sig) => `<dt>${esc(sig.label)}</dt>
-          <dd>${gloss(sig.detail)}</dd>`).join('')}
-      </dl>
-    </div>
-    <p class="caveat">${gloss(em.excluded_note || '')}</p>
-  </div>` : ''}
+  ${/* Fundamental momentum is on Financials and Earnings, which own revisions
+       and surprise history. Its own first line here said "Not part of the
+       composite score", which is a panel explaining why it is not about the
+       tab it is on. `d.earnings_momentum` still feeds the Earnings facet and
+       the dock widget. */''}
 
-  ${renderSectorConfirm(d.sector_confirm)}
+  ${/* Sector confirmation is the Market tab's "Sector relative strength",
+       asked with less behind it. `d.sector_confirm` is still computed because
+       app/analytics/compare.py reads it. */''}
 
   <div id="patterns-host" class="span-all">${renderPatterns(d)}</div>
 
   <div id="seasonality-host" class="span-all">${renderSeasonality(STATE.seasonality)}</div>
 
   <div id="relperf-host" class="span-all">${renderRelPerf(STATE.relperf)}</div>
-  <div id="extras-host" class="span-all">${renderExtras(STATE.extras)}</div>
-
+  ${/* Corporate actions & flow is on Financials only.
+       It rendered here as well, identically, and it was 2,092px of this tab:
+       a fifth of its height, on a panel whose own copy calls it "four datasets
+       that did not have a home". Dividends, splits and off-exchange short
+       volume are company events rather than a swing setup, and Financials is
+       where a reader goes for them. `#fin-extras-host` is the remaining
+       host. */''}
 
 
   ${renderEntryPlan(d.entry_plan)}
@@ -9188,18 +9172,6 @@ document.addEventListener('keydown', (evt) => {
   document.querySelectorAll('details.lvl-menu[open]').forEach((d) => d.removeAttribute('open'));
 });
 
-/* Sector confirmation.
- *
- * The weakest of the three claims this terminal makes about a setup, and shown
- * as such: a supportive group is a tailwind, never a reason. The panel states
- * that in its own words rather than leaving the reader to infer it from a green
- * badge.
- *
- * Two relative-strength numbers, not one. Beating the index while trailing every
- * peer means the sector carried the move — a reader shown only "+5% vs SPY"
- * would read that as stock selection, which is exactly backwards. */
-const SC_VERDICT_CLASS = { supportive: 'up', against: 'down', mixed: 'flat' };
-
 /* Volume by price, computed from the bars already on screen.
  *
  * Each session's volume is assigned to the bucket its CLOSE falls in. The
@@ -10964,44 +10936,6 @@ function renderPatterns(d) {
   </div>`;
 }
 
-function renderSectorConfirm(sc) {
-  if (!sc || !sc.available) return '';
-  const cls = SC_VERDICT_CLASS[sc.verdict] || 'flat';
-  const tile = (label, value, sub, tone) => `<div class="sc-tile">
-    <div class="idx-lbl">${esc(label)}</div>
-    <div class="sc-val ${tone || ''}">${value}</div>
-    ${sub ? `<div class="sc-sub">${esc(sub)}</div>` : ''}
-  </div>`;
-
-  return `<div class="panel span2">
-    <h2>${hg('Sector confirmation')}${askPulse('sectorconfirm')}</h2>
-    <p class="sub">${esc(sc.ticker)} · ${esc(sc.label)}, measured over the last ${
-  fmt(sc.window_sessions, 0)} sessions.</p>
-    <div class="grid c3" style="margin-top:var(--space-3)">
-      ${tile('Stock sector', esc(sc.sector || '—'))}
-      ${tile('Sector ETF benchmark',
-    `<button type="button" class="tkr" data-analyse="${esc(sc.etf)}">${esc(sc.etf)}</button>`,
-    sc.etf_name)}
-      ${tile('Sector ETF trend',
-    `<span class="sec-trend ${SECTOR_TREND_CLASS[sc.etf_trend] || 'flat'}">${
-  esc(SECTOR_TREND_LABEL[sc.etf_trend] || sc.etf_trend || 'unknown')}</span>`,
-    sc.etf_summary)}
-      ${tile('RS vs SPY',
-    sc.rs_vs_spy_pct === null ? '—'
-      : `${sc.rs_vs_spy_pct > 0 ? '+' : ''}${fmt(sc.rs_vs_spy_pct, 2)}%`,
-    sc.rs_vs_spy_label, signClass(sc.rs_vs_spy_pct))}
-      ${tile('RS vs sector ETF',
-    sc.rs_vs_sector_pct === null ? '—'
-      : `${sc.rs_vs_sector_pct > 0 ? '+' : ''}${fmt(sc.rs_vs_sector_pct, 2)}%`,
-    sc.rs_vs_sector_label, signClass(sc.rs_vs_sector_pct))}
-      ${tile('Confirmation', `<span class="sec-trend ${cls}">${esc(sc.label)}</span>`)}
-    </div>
-    <p class="sc-note">${esc(sc.note || '')}</p>
-    ${sc.conflict ? `<div class="callout"><strong>The two readings disagree.</strong>
-      ${esc(sc.conflict)}</div>` : ''}
-    <p class="caveat">${gloss(sc.method || '')}</p>
-  </div>`;
-}
 
 /* Signal evaluation.
  *
@@ -12170,6 +12104,26 @@ function wsToolbar() {
       <button type="button" data-ws-mode="candle"
         aria-pressed="${chartMode === 'candle'}">Candles</button>
     </div>
+    ${/* Panes, beside the other menus. Its own menu rather than an entry in
+         Indicators, because those draw ON the price plot and these are
+         separate plots under it: one is "add a line to this chart" and the
+         other is "add a chart". */''}
+    <div class="ws-menu">
+      <button type="button" class="ws-menu-btn${wsPanesOpen.length ? ' on' : ''}"
+        data-ws-menu="panes" aria-expanded="${wsMenuOpen === 'panes'}"
+        title="Oscillator panes under the chart">Panes${
+  wsPanesOpen.length ? ` <span class="ws-count">${wsPanesOpen.length}</span>` : ''}</button>
+      ${wsMenuOpen === 'panes' ? `<div class="ws-menu-pop">
+        ${WS_PANES.map((pane) => `<label class="ws-opt">
+          <input type="checkbox" data-ws-pane-opt="${esc(pane.id)}"${
+    wsPaneOpen(pane.id) ? ' checked' : ''}>
+          <span>${esc(pane.label)}</span>
+        </label>`).join('')}
+        <p class="ws-menu-note">Drawn under the price chart on the same dates.
+          Computed over the whole history and then cut to the view, so the
+          averages do not warm up on screen.</p>
+      </div>` : ''}
+    </div>
     <div class="ws-menu">
       <button type="button" class="ws-menu-btn${chartColorsCustom() ? ' on' : ''}"
         data-ws-menu="colors" aria-expanded="${wsMenuOpen === 'colors'}"
@@ -12496,6 +12450,11 @@ function renderChartWorkspace(d) {
              and dragging one should cost a setAttribute, not a chart rebuild. -->
         <div id="ws-draw" class="ws-draw"></div>
       </div>
+      ${/* Oscillator panes, under the price plot and above the navigator.
+           Inside .ws-canvas so they sit in the same column as the chart and
+           line up with it, and above the navigator because the navigator is
+           about the window rather than about the bars. */''}
+      ${wsPanesHTML()}
       <!-- The navigator. Panning gets its own visible control so the plot's
            drag is free to measure, which is the gesture people expect from a
            price chart. Dragging inside the window moves it, dragging an edge
@@ -12593,11 +12552,190 @@ function wsHoverReadout(i) {
 let wsWindow = null;
 const WS_MIN_BARS = 12;   // below this the x-axis has nothing to say
 
+/* ---- oscillator panes -------------------------------------------------------
+ *
+ * RSI and MACD as panes stacked under the price chart, sharing its x-axis, the
+ * way TradingView and Robinhood do it. They were two 447px panels on the
+ * Options tab, which is the tab about strikes and positioning; the charting
+ * workspace is where a reader goes to look at a chart, and it had moving
+ * averages and nothing else in its Indicators menu.
+ *
+ * COMPUTED OVER THE FULL HISTORY, THEN WINDOWED. They are attached to the
+ * series `wsSeries` slices rather than computed from the visible closes,
+ * because an average computed after slicing warms up *inside* the window: the
+ * Options panel had exactly that bug and its comment records it, with the
+ * signal line starting nine bars into the view. Attaching them here also means
+ * `wsSeries`'s "slice every array" rule keeps them aligned with the price bars
+ * for free, and a new pane needs nothing in the windowing code.
+ *
+ * On weekly they are recomputed from the aggregated weekly closes rather than
+ * resampled from the daily ones. A 14-week RSI is a genuinely slower measure
+ * than the 14-day one, not the same line at a different spacing, and
+ * `aggregateWeekly` builds a fresh object so an unnamed field is simply absent
+ * there, which is what forces the recompute rather than hiding it.
+ */
+const WS_PANES = [
+  { id: 'rsi', label: 'RSI', height: 132 },
+  { id: 'macd', label: 'MACD', height: 132 },
+];
+const WS_PANES_KEY = 'optic.ws.panes';
+
+let wsPanesOpen = (() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(WS_PANES_KEY) || 'null');
+    if (Array.isArray(saved)) {
+      return saved.filter((id) => WS_PANES.some((p) => p.id === id));
+    }
+  } catch (e) { /* private mode */ }
+  return [];
+})();
+
+function wsPaneOpen(id) { return wsPanesOpen.includes(id); }
+
+function wsTogglePane(id) {
+  if (!WS_PANES.some((p) => p.id === id)) return;
+  wsPanesOpen = wsPaneOpen(id)
+    ? wsPanesOpen.filter((x) => x !== id)
+    : wsPanesOpen.concat([id]);
+  try {
+    localStorage.setItem(WS_PANES_KEY, JSON.stringify(wsPanesOpen));
+  } catch (e) { /* private mode */ }
+}
+
+/** Attach the oscillator arrays to a full-length series. */
+function wsWithOscillators(base, d, weekly) {
+  if (!wsPanesOpen.length) return base;
+  const closes = base.close || [];
+  if (closes.length < 30) return base;
+  const t = (d && d.technicals) || {};
+  const out = { ...base };
+
+  if (wsPaneOpen('rsi')) {
+    /* The server's series when the bars are the server's bars, recomputed when
+       they are not. Same length as `close` either way, which is what keeps the
+       pane's x-axis identical to the chart's after windowing. */
+    const rsi = (!weekly && ((t.rsi || {}).series || []).length === closes.length)
+      ? t.rsi.series
+      : rsiSeries(closes, 14);
+    out.rsi = rsi;
+    out.rsiSignal = smaSeries(rsi, RSI_SIGNAL_PERIOD);
+  }
+  if (wsPaneOpen('macd')) {
+    const server = (t.macd || {}).series || {};
+    const useServer = !weekly && (server.macd || []).length === closes.length;
+    const m = useServer ? server : macdSeries(closes);
+    out.macd = m.macd;
+    out.macdSignal = m.signal;
+    out.macdHist = m.hist;
+  }
+  return out;
+}
+
+/* The pane legend is markup, not a chart, so it is written straight in.
+ *
+ * `mount` with a function means "chart builder": it calls it with a measured
+ * width and appendChild's what comes back. Handing it one that returns a string
+ * fails silently, which is what left the panes drawing correctly under an empty
+ * legend row. */
+function wsPaneLegend(id, html) {
+  const host = document.getElementById('ws-pane-legend-' + id);
+  if (host) host.innerHTML = html;
+}
+
+/** Repaint the workspace after a pane is added or removed. */
+function wsRepaintWithPanes() {
+  if (!STATE.chartData || STATE.chartData === 'loading') return;
+  renderChartWorkspace(STATE.chartData);
+  wsMountChart();
+}
+
+/* The pane shells. Empty hosts; wsMountPanes draws into them.
+ *
+ * A legend row per pane rather than one shared legend, because each pane has
+ * its own y-scale and its own reading: "RSI 43.9" belongs to the RSI pane the
+ * way the OHLC row belongs to the price plot. */
+function wsPanesHTML() {
+  const open = WS_PANES.filter((p) => wsPaneOpen(p.id));
+  if (!open.length) return '';
+  return open.map((p) => `<div class="ws-pane" data-ws-pane="${esc(p.id)}">
+    <div class="ws-pane-head">
+      <span class="ws-pane-legend" id="ws-pane-legend-${esc(p.id)}"></span>
+      <button type="button" class="ws-pane-close" data-ws-pane-close="${esc(p.id)}"
+        title="Hide the ${esc(p.label)} pane" aria-label="Hide the ${esc(p.label)} pane">&times;</button>
+    </div>
+    <div class="ws-pane-plot" id="ws-pane-${esc(p.id)}"></div>
+  </div>`).join('');
+}
+
+/* Draw the panes from the same windowed series the price chart used.
+ *
+ * `ps` is what wsSeries returned, so the arrays are already cut to the visible
+ * window and `ps.dates` is the chart's own x-axis. Nothing here re-slices, and
+ * nothing here recomputes: doing either is how a pane drifts a bar out of step
+ * with the candles above it.
+ */
+function wsMountPanes(ps) {
+  if (!wsPanesOpen.length) return;
+  const dates = ps.dates || [];
+  const unit = chartInterval === 'weekly' ? 'week' : 'day';
+
+  if (wsPaneOpen('rsi') && (ps.rsi || []).length) {
+    const cross = lastMacdCross(ps.rsi, ps.rsiSignal || []);
+    const last = ps.rsi[ps.rsi.length - 1];
+    wsPaneLegend('rsi', `<strong>RSI</strong> 14
+      <span class="ws-pane-val">${fmt(last, 1)}</span>
+      <span class="ws-pane-key" style="background:${C.s1}"></span>RSI
+      <span class="ws-pane-key" style="background:${C.s4}"></span>Signal ${RSI_SIGNAL_PERIOD}${
+  cross ? ` <span class="ws-pane-cross ${cross.bullish ? 'up' : 'down'}">${
+    cross.bullish ? 'bullish' : 'bearish'} cross</span>` : ''}`);
+    mount('ws-pane-rsi', (w) => lineChart({
+      width: w,
+      height: 132,
+      labels: dates,
+      series: [
+        { name: 'RSI', values: ps.rsi, color: C.s1 },
+        { name: 'Signal', values: ps.rsiSignal || [], color: C.s4, width: 1.5, marker: false },
+      ],
+      // Bounded 0-100, so the axis is fixed rather than auto-scaled: the same
+      // reason the Options panel fixed it. Auto-scaling put the overbought band
+      // on the top edge and left the oversold band in dead space, which makes
+      // "how close to a band" impossible to read.
+      yDomain: [10, 90],
+      refLines: [
+        { value: 70, label: '', color: C.refSR, emphasis: true },
+        { value: 50, label: '', color: C.muted },
+        { value: 30, label: '', color: C.refSR, emphasis: true },
+      ],
+      valueTags: true,
+    }));
+  }
+
+  if (wsPaneOpen('macd') && (ps.macd || []).length) {
+    const cross = lastMacdCross(ps.macd, ps.macdSignal || []);
+    const last = ps.macd[ps.macd.length - 1];
+    wsPaneLegend('macd', `<strong>MACD</strong> 12, 26, 9
+      <span class="ws-pane-val">${fmt(last, 2)}</span>
+      <span class="ws-pane-key" style="background:${C.s1}"></span>MACD
+      <span class="ws-pane-key" style="background:${C.s4}"></span>Signal
+      <span class="ws-pane-key" style="background:${C.s3}"></span>Histogram${
+  cross ? ` <span class="ws-pane-cross ${cross.bullish ? 'up' : 'down'}">${
+    cross.bullish ? 'bullish' : 'bearish'} cross</span>` : ''}`);
+    mount('ws-pane-macd', (w) => macdChart(
+      ps.macd, ps.macdSignal || [], ps.macdHist || [], dates, w,
+      { cross, unit, height: 132 },
+    ));
+  }
+}
+
 function wsFullSeries(d) {
   const raw = ((d.technicals || {}).price_series) || {};
   // Aggregate before windowing, for the same reason sliceSeries does: rolling
   // up after cutting produces a partial first bar.
-  return chartInterval === 'weekly' ? aggregateWeekly(raw) : raw;
+  const weekly = chartInterval === 'weekly';
+  const base = weekly ? aggregateWeekly(raw) : raw;
+  // After the roll-up and before the window: the oscillators have to be as long
+  // as the bars they annotate, and still full-length when wsSeries slices.
+  return wsWithOscillators(base, d, weekly);
 }
 
 function wsClampWindow(win, total) {
@@ -12841,11 +12979,17 @@ function wsSeries(d) {
   const total = (full.dates || []).length;
   const win = wsClampWindow(wsWindow, total);
   if (!win) {
-    // sliceSeries aggregates to weekly itself when told to, and does it BEFORE
-    // slicing so the first bar is not a partial week. Rolling up here as well
-    // would aggregate twice, so it gets the raw payload.
+    /* `full` is passed in rather than the raw payload.
+     *
+     * sliceSeries aggregates to weekly itself when told to, and does it BEFORE
+     * slicing so the first bar is not a partial week, which is why this used to
+     * hand it the raw payload: rolling up in both places aggregates twice.
+     * `full` is already rolled up AND already carries the oscillator arrays, so
+     * it goes in as `prepared` and skips the second aggregation. Handing over
+     * the raw payload here was what left the RSI and MACD panes empty on every
+     * range except a manually zoomed one. */
     const raw = ((d.technicals || {}).price_series) || {};
-    return sliceSeries(raw, chartRange, chartInterval);
+    return sliceSeries(raw, chartRange, chartInterval, full);
   }
   // Same "slice every array" rule as sliceSeries, and for the same reason: a
   // named list of fields goes stale the moment the payload gains one, and a
@@ -14738,6 +14882,10 @@ function wsMountChart() {
   }
 
   mount('ws-chart', wsChartBuilder);
+  /* The panes, from the same `ps` the chart just drew. Passing the series
+     rather than re-deriving it is what guarantees the x-axes match: two calls
+     to wsSeries either side of a window change would not. */
+  wsMountPanes(ps);
   // The navigator shows the window the chart is displaying, so it has to be
   // redrawn whenever that window moves.
   wsRenderNav();
@@ -15485,20 +15633,10 @@ async function loadExtras(force) {
   } catch (err) {
     STATE.extras = { error: err.message };
   }
-  const host = document.getElementById('extras-host');
-  if (host && STATE.view === 'swing') {
-    host.innerHTML = renderExtras(STATE.extras);
-    revealPanels(host);
-    /* Mount two frames later, not immediately.
-     *
-     * Fresh HTML in a host goes through the collapsible pass, which re-parents
-     * everything into a new .panel-body — and until that has run and laid out,
-     * the chart host measures zero width. mount() then hands it to the 350ms
-     * sweeper, which found it and settled it without drawing. The symptom was a
-     * chart host with no pending token and no SVG, which looks like the mount
-     * never happened rather than like it happened too early. */
-    requestAnimationFrame(() => requestAnimationFrame(mountRelativeChart));
-  }
+  /* No swing branch any more: `#extras-host` was removed from that tab, and a
+     refresh that re-rendered into a host which no longer exists is how a
+     loader quietly keeps costing a request for nothing. Financials has its own
+     branch in loadSecurityFacet. */
 }
 
 function mountRelativeChart() {
@@ -16132,7 +16270,6 @@ function cmpSkeleton(names) {
     </div>
   </div>`;
 }
-
 
 
 /* ========================================================== research hub ====
@@ -19139,7 +19276,9 @@ function renderLong(d) {
       <p class="caveat">Return/vol and Sortino use a zero risk-free rate. A relative screen, not a performance report.</p>
     </div>
   </div>
-  ${renderCloseDefence(d.close_defence, { horizonWord: 'this week' })}
+  ${/* Close defence is on Options only. It rendered on both, and defending a
+       level into the close is a trading question rather than a multi-month
+       one, so the tab that shows strikes keeps it. */''}
 
 
   <div class="grid c2 gap">
@@ -19971,7 +20110,6 @@ const PULSE_TOPICS = {
   revmultiple: 'Explain the revenue-and-multiple panel for {t} in plain language. What does it mean when revenue is growing but the P/E is falling, and which one should I pay more attention to?',
   impliedcorr: 'Explain implied correlation in plain language. What does it mean that index implied vol is lower than the vol of its own components, and what is a dispersion trade?',
   evaluate: 'Explain the signal evaluation panel in plain language. What is an information coefficient, why are the random and single-factor controls there, and what does it mean that the composite loses to a single momentum number?',
-  sectorconfirm: 'Explain the sector confirmation panel for {t} in plain language. What is the difference between relative strength against SPY and against the sector ETF, and why does it matter which one is stronger?',
   sectorboard: 'Explain the sector board in plain language. What are the bull-above and bear-below levels, why does the prior session\'s high and low matter, and what is the difference between a sector trending up and money rotating into it?',
   regime: 'Explain the index regime score in plain language. What kind of market is this '
     + 'right now, how is the number built, and what should it change about how I read '
@@ -24415,6 +24553,15 @@ document.addEventListener('click', (evt) => {
     if (tb2) tb2.outerHTML = wsToolbar();
     return;
   }
+  /* A button, so it is handled here rather than in the change listener above:
+     `data-ws-pane-opt` is a checkbox and fires change; this fires click. Two
+     shapes, two events, two names. */
+  const paneClose = evt.target.closest('[data-ws-pane-close]');
+  if (paneClose) {
+    wsTogglePane(paneClose.dataset.wsPaneClose);
+    wsRepaintWithPanes();
+    return;
+  }
   if (evt.target.closest('[data-ws-zoom-reset]')) { wsResetZoom(); return; }
   /* The one-item menus, which are buttons rather than checkboxes.
    *
@@ -25750,6 +25897,20 @@ document.addEventListener('change', (evt) => {
   if (wsLearn) {
     wsLearnTerm = wsLearn.value;
     wsRepaintWidget('learn');
+    return;
+  }
+  /* Panes, before the overlays. A distinct attribute because these are not
+     overlays: `data-ws-opt` draws a line ON the price plot and is shared with
+     the Swing chart, where a pane is a plot of its own and belongs to this tab.
+     Grep before inventing a `data-*` name; that namespace is crowded and a
+     collision does not error, it lets the wrong handler match first. */
+  const wsPaneOpt = evt.target.closest('[data-ws-pane-opt]');
+  if (wsPaneOpt) {
+    wsTogglePane(wsPaneOpt.dataset.wsPaneOpt);
+    // A full repaint, not wsRedrawChart: adding a pane adds markup, and the
+    // series itself changes because the oscillators are attached only for the
+    // panes that are open. The Swing chart is untouched by design.
+    wsRepaintWithPanes();
     return;
   }
   const wsOpt = evt.target.closest('[data-ws-opt]');
