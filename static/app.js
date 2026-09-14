@@ -3280,7 +3280,17 @@ function thesisChanges(saved, d) {
   return out;
 }
 
+/* Hidden for now, at the reader's request.
+ *
+ * Returns early rather than having the call site deleted, so the panel, its
+ * diff, its store and the account sync behind it all stay wired and tested:
+ * turning it back on is removing these two lines. `tests/test_thesis_sync.py`
+ * still covers the storage and the endpoints, which are what would rot if the
+ * code were carved out instead. */
+const THESIS_PANEL_HIDDEN = true;
+
 function renderThesis(d) {
+  if (THESIS_PANEL_HIDDEN) return '';
   const sym = d.ticker;
   const saved = thesisFor(sym);
   const changes = thesisChanges(saved, d);
@@ -6948,8 +6958,7 @@ function renderSwing(d) {
       * Static ids make the move stateless in both directions. */''}
   <div class="grid c2 gap" id="swing-chart-grid">
     <div class="panel span2" id="swing-chart-panel">
-      <h2>${hg('Price, moving averages & Fibonacci')}${chartPulse(STATE.ticker)}${
-  askPulse('profile')} <span class="th-plain">· ${
+      <h2>${hg('Price, moving averages & Fibonacci')}${chartPulse(STATE.ticker)} <span class="th-plain">· ${
   ps.intraday ? `${esc(ps.interval || '')} bars, ${ps.shown_bars} over ${
     chartRange === '1d' ? 'today' : 'five sessions'}`
     : `${ps.weekly ? 'weekly' : 'daily'} bars, ${ps.shown_bars} of ${ps.total_bars} shown`}</span></h2>
@@ -7086,7 +7095,14 @@ function renderSwing(d) {
       ${(sx.candles || {}).patterns && sx.candles.patterns.length ? `<p class="caveat">${
     sx.candles.patterns.map((c) => `<strong>${esc(cap(c.pattern))}</strong> (${esc(c.direction)}) ${
       esc(c.date || '')}`).join(' · ')}. ${esc(sx.candles.note)}</p>` : ''}
-      <p class="caveat">${gloss(sx.volume_profile.method || '')}</p>` : ''}
+      ${/* Moved here from the panel heading, where it was the third Pulse
+           button in a row and the odd one out: `PULSE_TOPICS.profile` asks
+           about the market profile and the value area, which is these tiles
+           rather than the price chart above them. Beside the method line it
+           explains, which is where a reader who does not know what a value
+           area is will be looking. */''}
+      <p class="caveat">${gloss(sx.volume_profile.method || '')} ${
+  askPulse('profile')}</p>` : ''}
 
       <!-- Indicator panes, in the panel they belong to. An indicator that needs its
            own scale is still about THIS chart, so putting it in a separate panel
@@ -12140,9 +12156,20 @@ function wsToolbar() {
     ${rangePills(CHART_RANGES, chartRange, 'data-ws-range', 'Range')}
     ${wsWindow ? `<button type="button" class="ws-menu-btn ws-zoom-reset"
       data-ws-zoom-reset title="Back to the ${esc(chartRange)} range">Reset zoom</button>` : ''}
-    <button type="button" class="ws-menu-btn${chartMode === 'candle' ? ' on' : ''}"
-      data-ws-mode="${chartMode === 'candle' ? 'line' : 'candle'}">${
-  chartMode === 'candle' ? 'Candles' : 'Line'}</button>
+    ${/* The same Line / Candles pair the Options chart uses, rather than one
+         button that flipped. That button was labelled with the state it was
+         in and did the opposite when clicked: in candles it read "Candles"
+         and switching to line meant pressing a button that said Candles.
+         Two buttons say what they select and which one is active, and
+         `data-ws-mode` already carried an explicit value so the handler is
+         unchanged. It stays `data-ws-mode` and does not borrow the Options
+         tab's `data-chart-mode`, whose handler re-renders the Swing view. */''}
+    <div class="seg" role="group" aria-label="Chart style">
+      <button type="button" data-ws-mode="line"
+        aria-pressed="${chartMode === 'line'}">Line</button>
+      <button type="button" data-ws-mode="candle"
+        aria-pressed="${chartMode === 'candle'}">Candles</button>
+    </div>
     <div class="ws-menu">
       <button type="button" class="ws-menu-btn${chartColorsCustom() ? ' on' : ''}"
         data-ws-menu="colors" aria-expanded="${wsMenuOpen === 'colors'}"
@@ -20089,14 +20116,24 @@ function chartPulsePrompt(symbol) {
  * from live chart state at click time, not at render time, so switching an
  * overlay on after the button was drawn still produces an accurate prompt.
  * data-ask-chart carries the symbol so the handler cannot read the wrong one. */
+/* One button, not two.
+ *
+ * This rendered "Explain chart" and "Pulse" side by side, and `askPulse` added
+ * a third beside them, so the chart header carried three controls that all open
+ * Pulse with a prompt. They also overran the "daily bars, 500 of 500 shown"
+ * caption they sit next to.
+ *
+ * "Explain chart" is the one kept, on the label: it says what comes back, where
+ * "Pulse" named the assistant and not the action, and the two prompts asked for
+ * the same thing in different words. `data-ask-chart` keeps its own control on
+ * the Charting tab, so its handler and `chartPulsePrompt` are still reachable
+ * rather than left as dead code. */
 function chartPulse(symbol) {
   if (!symbol) return '';
   return `<button type="button" class="chart-pulse is-explain"
     data-explain-chart="${esc(symbol)}"
     title="Have Pulse read this chart: trend, levels, momentum, and what breaks it">
-    Explain chart</button><button type="button" class="chart-pulse" data-ask-chart="${esc(symbol)}"
-    title="Have Pulse read this chart and summarise the big picture">
-    <span class="chart-pulse-dot" aria-hidden="true"></span>Pulse</button>`;
+    Explain chart</button>`;
 }
 
 /* "Explain chart", as a structured read rather than an essay.
@@ -25035,7 +25072,26 @@ function applyUiMode(view) {
     <button type="button" class="auth-link" data-panels-open>Choose panels</button>${
   byMode ? ` \u00b7 <button type="button" class="auth-link" data-set-mode="pro"
       >Show everything</button>` : ''}</p>`;
-  host.appendChild(note);
+  /* Above the panels, not after them.
+   *
+   * `host.appendChild` put it last, which on the Options tab is the far end of
+   * a 10,600px view. Two things were wrong with that. A reader needs to know
+   * nine panels are hidden *before* scrolling the page, not once they reach the
+   * bottom; and the buttons were effectively unclickable, because the view
+   * re-renders on the twenty-second refresh and the one place guaranteed to
+   * move under the cursor is the end of a page whose length keeps changing.
+   * Verified by clicking at measured coordinates on the live site: the click
+   * landed on a chart legend two panels away.
+   *
+   * Before the first panel rather than at the very top, so it sits under the
+   * ticker header and the section index instead of above them: those are
+   * sticky, and a banner pushed above sticky chrome scrolls away from the thing
+   * it belongs to. Falls back to appending, so a view with no panel at all
+   * still gets its note. */
+  const firstPanel = [...host.children].find(
+    (el) => el.classList.contains('panel') && el !== note);
+  if (firstPanel) host.insertBefore(note, firstPanel);
+  else host.appendChild(note);
 }
 
 /* The chooser.
@@ -25139,10 +25195,29 @@ function watchForLatePanels() {
     let queued = false;
     const obs = new MutationObserver((records) => {
       if (queued || uiMode() !== 'simple') return;
-      // Only when a panel actually appeared. Attribute churn and text updates
-      // are most of what happens in here.
-      const added = records.some((r) => [...r.addedNodes].some((n) => n.nodeType === 1
-        && (n.classList?.contains('panel') || n.querySelector?.('.panel'))));
+      /* Only when a panel actually appeared, and never the note this function
+         itself adds. Attribute churn and text updates are most of what happens
+         in here.
+         The note exclusion is the whole difference between a callback and a
+         loop. `applyUiMode` builds it as `class="panel mode-note"`, so the node
+         it inserts matched this check, retriggered the observer and ran
+         `applyUiMode` again, which removed and rebuilt the note, forever.
+         Measured at ~3Hz: the note was a different DOM node on every 350ms
+         sample, and the page scroll drifted 5169px in three seconds on its own
+         because each cycle re-inserted the note above the viewport and scroll
+         anchoring compensated.
+         The reported symptom was "Choose panels and Show everything do not
+         work". They were wired correctly the whole time: the button was
+         destroyed and rebuilt between the press and the release, so the click
+         landed on whatever had slid underneath. CLAUDE.md records the same
+         failure from a ResizeObserver that recreated itself at ~7Hz and made
+         every click on the chart toolbar a no-op. */
+      const added = records.some((r) => [...r.addedNodes].some((n) => {
+        if (n.nodeType !== 1) return false;
+        if (n.matches?.('[data-mode-note]')) return false;
+        if (n.classList?.contains('panel')) return true;
+        return !!n.querySelector?.('.panel:not([data-mode-note])');
+      }));
       if (!added) return;
       queued = true;
       requestAnimationFrame(() => { queued = false; applyUiMode(view); });
