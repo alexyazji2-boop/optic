@@ -2717,9 +2717,16 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
  * header above every dossier page. A default has to be beatable, so it is
  * expressed as one.
  *
- * `:not(:last-child)` so a view does not end on 23px of nothing.
+ * `:not(:last-child)` so a view does not end on 23px of nothing, and
+ * `:not(:empty)` so neither does a host that has not filled yet. The tracker
+ * has two of those: `#roth-host` and the portfolio-risk host are empty divs in
+ * index.html that a later fetch writes into, and spacing something with no
+ * content in it is the same 23px-of-nothing in a different place. Measured
+ * after this rule shipped: one such spacer on the tracker, which is how it was
+ * found. `:empty` stops matching the moment content lands, so the rhythm
+ * arrives with it.
  */
-:where([role="tabpanel"] > *:not(:last-child)) { margin-bottom: var(--space-5); }
+:where([role="tabpanel"] > *:not(:last-child):not(:empty)) { margin-bottom: var(--space-5); }
 
 /* The charting view is a grid: margins do not collapse in one, and its layout
    is the dock beside the chart, spaced by the grid rather than by this. An id
@@ -11593,6 +11600,31 @@ a.cc-story-t:focus-visible { color: var(--ink-2); text-decoration: underline; }
    [hidden] { display: none } whatever the specificity — see CLAUDE.md on
    .set-pw, which rendered a password form open on every visit to Settings. */
 .panel.is-advanced { display: none; }
+
+/* A wrapper holding nothing but hidden panels must not keep its own margin.
+ *
+ * `applyUiMode` hides panels and never their wrappers, because it iterates
+ * `.panel`. A hidden panel costs nothing: `display: none` generates no box, so
+ * its margin does not apply. The wrapper is the problem. It stays
+ * `display: grid` with every child hidden, which makes it a 0px-tall box still
+ * carrying `.gap`'s 23px, and 23px of nothing reads as a gap somebody forgot.
+ *
+ * Measured on the Options tab at Financially Literate: four `grid c2 gap`
+ * wrappers in that state, 92px of empty page. The three `panel gap is-advanced`
+ * siblings in the same measurement contribute nothing, which is the difference
+ * this rule is about.
+ *
+ * Requires at least one hidden panel rather than matching any childless grid.
+ * A grid with no children at all is usually an async host waiting on a fetch,
+ * and hiding one of those would fight the reveal animation that fills it. This
+ * fires only when there is content and all of it is hidden.
+ *
+ * `:has()` rather than a second pass in `applyUiMode`, so it tracks the class
+ * that function already maintains and there is no ordering to get wrong: a
+ * panel toggled from the chooser updates the wrapper in the same frame, with
+ * nothing to re-run. Unsupported `:has()` drops the rule and restores today's
+ * behaviour rather than breaking the page. */
+.grid:has(> .panel.is-advanced):not(:has(> *:not(.is-advanced))) { display: none; }
 /* The note that stands where the hidden panels were. Quieter than a panel,
    because it is a statement about the page rather than a reading. */
 .mode-note {
