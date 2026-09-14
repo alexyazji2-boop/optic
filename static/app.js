@@ -5181,6 +5181,48 @@ function rankedMoves(data) {
   return rows;
 }
 
+/* The market's top stories, three of them, above the instrument list.
+ *
+ * The homepage carried no news at all: it opened with a written headline and a
+ * ranked list of cross-asset moves, and nothing saying what happened. A reader
+ * could see the ten-year was up and had nowhere to go to find out why.
+ *
+ * Three lines, not paragraphs, and deliberately. The measured problem with this
+ * page has always been height: the brand row, the greeting, the ticker pills and
+ * the search form were all cut because they pushed the day's moves from y=537 to
+ * y=839 on an 812px screen. The brief's own summary paragraphs are one click
+ * away on the Read tab; what belongs here is the link, not the essay.
+ *
+ * Ranked server-side by `news.rank_wire`, so this and the headline panel cannot
+ * disagree about which story matters. The tier badge is the same component.
+ */
+function homeStories(data) {
+  const stories = ((data.read || {}).stories) || [];
+  if (!stories.length) return '';
+  /* Flowing inline, not nested flex. The first version made the link an
+     inline-flex row with `flex: 1 1 260px` on it, which reads fine at full
+     width and not here: this block sits in a 401px grid column, so the title
+     took the whole row and pushed the badge onto a line of its own. Measured
+     121px for one story. Inline, the badge sits at the head of the paragraph
+     the way a newspaper kicker does and the attribution trails the headline. */
+  return `<ul class="cc-stories">${stories.map((s) => `<li>
+    ${s.tier ? `<span class="nw-tier t-${esc(s.tier)}"
+      title="${esc(s.tier_why || '')}">${esc(homeTierLabel(s.tier))}</span>` : ''}
+    <a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer nofollow"
+      class="cc-story-t">${esc(s.title)}</a>
+    <span class="subnote">${esc(s.source || '')}${
+    s.age_words ? ` \u00b7 ${esc(s.age_words)}` : ''}</span>
+  </li>`).join('')}</ul>`;
+}
+
+/* The label for a tier on the home page, where the news payload that carries
+   the catalogue has not been fetched. Capitalised from the id rather than
+   hardcoded per tier, so a new tier needs nothing here and a renamed one does
+   not leave a stale string behind. */
+function homeTierLabel(id) {
+  return String(id || '').replace(/^./, (c) => c.toUpperCase());
+}
+
 function whatMattersNow(data) {
   const rows = rankedMoves(data);
   const top = rows.slice(0, 5);
@@ -5193,6 +5235,7 @@ function whatMattersNow(data) {
       ${askPulse('whatmatters')}
     </div>
     ${read.headline ? `<p class="cc-headline">${esc(read.headline)}</p>` : ''}
+    ${homeStories(data)}
     ${top.length ? `<ul class="cc-moves">${top.map((inst) => `<li>
       <button type="button" class="cc-move" data-instrument="${esc(inst.symbol)}"
         data-instrument-label="${esc(inst.label)}">

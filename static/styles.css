@@ -11282,6 +11282,34 @@ body.auth-open { overflow: hidden; }
 .nw-tier.t-notable { color: var(--ink-2); }
 .nw-tier.t-background { color: var(--ink-muted); }
 
+/* ---- home story slot ----
+   Three links above the cross-asset list. Compact by construction: this page's
+   one recurring defect is height, so a story flows as one wrapped line with the
+   tier as a kicker, rather than as a card.
+
+   Deliberately NOT a flex row. That was the first version and it cost 121px per
+   story in this column: the block lives in a 401px grid cell, the title became
+   a full-width flex item, and the badge was pushed onto its own line. */
+.cc-stories { list-style: none; margin: var(--space-3) 0 0; padding: 0; }
+.cc-stories li {
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--grid);
+  font-size: var(--t-small);
+  line-height: 1.45;
+}
+.cc-stories .nw-tier { margin-right: var(--space-1); }
+.cc-stories .subnote { margin-left: var(--space-1); }
+a.cc-story-t {
+  color: var(--ink);
+  text-decoration: none;
+  /* Colour transitions, the underline does not: the same pairing .nw-title
+     uses. A hover that only underlines snaps, and animating the decoration
+     would be animating a layout property once the line wraps. */
+  transition: color var(--dur-ui) var(--ease-ui);
+}
+a.cc-story-t:hover,
+a.cc-story-t:focus-visible { color: var(--ink-2); text-decoration: underline; }
+
 .nw-count {
   font-size: var(--t-micro);
   font-weight: 600;

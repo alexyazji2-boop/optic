@@ -54,7 +54,15 @@ CATALYSTS: List[Tuple[str, str, str]] = [
     (r"\bpartnership\b|\bcontract\b|\bdeal\b|\bagreement\b", "commercial deal", "medium"),
     (r"\bshort (?:seller|report|interest)\b|\bsqueeze\b", "short interest", "high"),
     (r"\bchip|\bsemiconductor|\btariff|\bexport control|\bsanction", "policy / supply chain", "medium"),
-    (r"\bfed\b|\brate (?:cut|hike|decision)\b|\bcpi\b|\binflation\b|\bfomc\b", "macro event", "high"),
+    # Yields and the curve belong here. Without them "Stocks Decline, 10-Year
+    # Treasury Yield Touches 5%" matched only "policy / supply chain" on the
+    # word "tariff"-adjacent stem and was rated medium, so it ranked below a
+    # corporate rebranding in the homepage story slot. A benchmark yield through
+    # a round number is a macro event by any reading.
+    (r"\bfed\b|\brate (?:cut|hike|decision)\b|\bcpi\b|\binflation\b|\bfomc\b"
+     r"|\btreasury (?:yield|note|bond)s?\b|\byield curve\b|\b10-year\b"
+     r"|\bten-year\b|\bjobs report\b|\bnonfarm\b|\bpayrolls\b|\bunemployment\b",
+     "macro event", "high"),
 ]
 
 
@@ -471,3 +479,45 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
         ),
         "articles": scored,
     }
+
+
+def rank_wire(entries: List[Dict[str, Any]], limit: int = 3) -> List[Dict[str, Any]]:
+    """The market's own top stories, ranked by what they are about.
+
+    The daily brief orders its desks by a per-source `weight`, which is an
+    editorial judgement about outlets rather than about stories. Measured on the
+    live wire, that put "Novo CEO tells CNBC why drugmaker is rebranding" at the
+    top of the Markets desk and left "Core CPI Upside Surprise and FOMC Odds"
+    fourth, because CNBC outweighs Econbrowser. For a homepage slot whose whole
+    job is what is moving markets, the catalyst matters more than the masthead.
+
+    So this reuses the tiering the headline panel uses. One rule, two surfaces:
+    a macro event ranks above a rebranding on both, and if the taxonomy is ever
+    wrong it is wrong in one place.
+
+    No relevance split here, deliberately. That test asks whether an item names
+    a particular company, and this feed is not about one: everything on it is
+    market context, which is exactly what the slot is for.
+    """
+    ranked: List[Dict[str, Any]] = []
+    for entry in entries or []:
+        blob = "{} {}".format(entry.get("title", ""), entry.get("summary", ""))
+        cats = _catalysts(blob)
+        age = _age_hours(entry.get("published", ""))
+        placed = tier_for(age, cats)
+        row = dict(entry)
+        row.update({
+            "tier": placed["tier"],
+            "tier_why": placed["why"],
+            "age_words": _age_words(age),
+            "age_hours": age,
+            "catalysts": cats,
+        })
+        ranked.append(row)
+
+    ranked.sort(key=lambda r: (
+        TIER_ORDER.index(r["tier"]),
+        -_importance_rank(r["catalysts"]),
+        999999.0 if r["age_hours"] is None else r["age_hours"],
+    ))
+    return ranked[:limit] if limit else ranked

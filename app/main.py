@@ -828,7 +828,50 @@ def _home_read() -> Optional[Dict[str, Any]]:
         "summary": data.get("summary"),
         "overview": (data.get("overview") or {}).get("read")
         or (data.get("overview") or {}).get("summary"),
+        "stories": _home_stories(data),
     }
+
+
+# Desks whose stories are about the market rather than about one company or one
+# agency. `regulatory` is excluded because it is an FDA and agency notice feed:
+# measured, its top four entries were "FDA Rare Disease Innovation Hub" and
+# three guidance agendas, which are not what is moving markets today.
+_STORY_DESKS = ("markets", "economy", "analysis", "energy")
+
+
+def _home_stories(brief: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """The market's top stories for the landing page.
+
+    Costs nothing: the brief is already loaded above, so this is a re-ranking of
+    a list in memory rather than any kind of fetch.
+
+    Ranked by `news.rank_wire` rather than taken off the top of the brief's own
+    desks, because those are ordered by a per-source weight. Measured on the
+    live wire that led with "Novo CEO tells CNBC why drugmaker is rebranding"
+    and left "Ten-year Treasury yield hits 5%" further down, because CNBC
+    outweighs Econbrowser. The slot is about what is moving markets, so the
+    catalyst has to beat the masthead.
+    """
+    wires = brief.get("wires") or {}
+    pool: List[Dict[str, Any]] = []
+    for desk in wires.get("desks") or []:
+        if desk.get("id") in _STORY_DESKS:
+            pool.extend(desk.get("entries") or [])
+    if not pool:
+        return []
+    return [
+        {
+            "title": row.get("title"),
+            "url": row.get("url"),
+            "source": row.get("source"),
+            "published": row.get("published"),
+            "tier": row.get("tier"),
+            "tier_why": row.get("tier_why"),
+            "age_words": row.get("age_words"),
+            "catalysts": [c.get("type") for c in (row.get("catalysts") or [])],
+        }
+        for row in news_mod.rank_wire(pool, limit=3)
+    ]
 
 
 @app.get("/api/legal")
