@@ -474,11 +474,53 @@ MIGRATION_4 = [
     "ON watch_hits(user_id, created_at DESC)",
 ]
 
+# A reader's own view on a name. Kept in localStorage since before there were
+# accounts, which meant it lived in exactly one browser: clearing the cache or
+# opening the app on a phone lost it, and the panel said so in as many words.
+#
+# Its own table rather than a `saved_research` row with research_type='thesis',
+# which is what the existing RESEARCH_TYPES tuple anticipated. Two reasons, both
+# behavioural. A thesis is exactly one per symbol and gets edited, and POST
+# /api/saved-research inserts a new row every time, so five edits would be five
+# rows with no way to tell which is current. And saved research is quota'd per
+# plan, so a reader who had saved forty Pulse answers could not write a thesis
+# at all. A UNIQUE index on (user_id, symbol) is the shape this data actually
+# has.
+#
+# The four prose fields are columns because the form has four boxes and that
+# shape is stable. `snapshot` stays JSON because it mirrors THESIS_FIELDS in
+# static/app.js, which is a client-side list that grows: the server round-trips
+# it and never interprets it, so adding a reading needs no migration here and
+# the server never has to know what a gamma regime is.
+MIGRATION_5 = [
+    """
+    CREATE TABLE IF NOT EXISTS theses (
+        id           TEXT PRIMARY KEY,
+        user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        symbol       TEXT NOT NULL,
+        bull         TEXT NOT NULL DEFAULT '',
+        bear         TEXT NOT NULL DEFAULT '',
+        catalysts    TEXT NOT NULL DEFAULT '',
+        invalidation TEXT NOT NULL DEFAULT '',
+        snapshot     TEXT NOT NULL DEFAULT '{}',
+        created_at   TEXT NOT NULL,
+        updated_at   TEXT NOT NULL
+    )
+    """,
+    # One thesis per symbol per reader. This is what makes the upsert an upsert
+    # rather than a hopeful INSERT.
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_theses_symbol "
+    "ON theses(user_id, symbol)",
+    "CREATE INDEX IF NOT EXISTS idx_theses_user "
+    "ON theses(user_id, updated_at DESC)",
+]
+
 MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (1, "accounts", MIGRATION_1),
     (2, "oauth_pkce", MIGRATION_2),
     (3, "watches", MIGRATION_3),
     (4, "watch_hits", MIGRATION_4),
+    (5, "theses", MIGRATION_5),
 ]
 
 

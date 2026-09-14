@@ -3057,11 +3057,15 @@ function renderSetup(d) {
  * so the thesis is stored with a snapshot of the readings that were on screen
  * at the time, and the panel diffs them on every load.
  *
- * Stored per symbol in localStorage. That was the only option when this was
- * written, because there was no sign-in to hang it on; accounts exist now and
- * this has not moved yet, which is a gap rather than a decision. The panel says
- * which of the two applies rather than repeating the old reason at a reader who
- * is signed in.
+ * WHERE IT LIVES. Signed in, the account, one row per symbol, and it follows
+ * the reader between browsers. Signed out, localStorage, exactly as before,
+ * because nothing in this terminal is gated behind an account.
+ *
+ * localStorage is written on both paths. It is a backing copy rather than a
+ * second source of truth: a failed PUT leaves the words on disk and the panel
+ * says the sync did not happen, so no path through this feature can lose what
+ * somebody typed. The snapshot is stored as opaque JSON server-side and the
+ * diff stays here, so adding a reading to THESIS_FIELDS needs no migration.
  */
 const THESIS_KEY = 'optic.thesis.v1';
 
@@ -3084,13 +3088,69 @@ const THESIS_FIELDS = [
   { key: 'earnings', label: 'Next earnings', get: (d) => d.next_earnings_date },
 ];
 
-function thesisStore() {
+function thesisLocalStore() {
   try { return JSON.parse(localStorage.getItem(THESIS_KEY) || '{}') || {}; }
   catch (e) { return {}; }
 }
 
+function thesisLocalWrite(all) {
+  try { localStorage.setItem(THESIS_KEY, JSON.stringify(all)); } catch (e) { /* private */ }
+}
+
+/* Which copy is authoritative.
+ *
+ * `ACCOUNT.theses === null` means not signed in, or signed in and the fetch has
+ * not landed: the same convention `ACCOUNT.watchlist` uses, and it falls back to
+ * this browser rather than to nothing. A signed-in reader therefore sees their
+ * local copy for the one round trip before the account's arrives, which is
+ * better than a panel that says "no thesis yet" to somebody who wrote one.
+ *
+ * localStorage keeps being written on both paths, deliberately. It is a backing
+ * copy, not a second source of truth: if a PUT fails the reader's words are
+ * still on disk, and the panel says the sync did not happen rather than
+ * pretending it did. Nothing this feature does can lose what somebody typed. */
+function thesisStore() {
+  if (signedIn() && ACCOUNT.theses) return ACCOUNT.theses;
+  return thesisLocalStore();
+}
+
 function thesisFor(symbol) {
   return thesisStore()[String(symbol || '').toUpperCase()] || null;
+}
+
+/* Bring this browser's theses into the account.
+ *
+ * Runs only when there is something the account does not already have, so a
+ * reader with everything synced makes no request. The server merges and never
+ * overwrites, and reports what it skipped, so this is safe to call twice.
+ *
+ * Unlike the watchlist adopt, this does not wait for the account to be empty.
+ * A thesis is per symbol, so "the account has NVDA and this browser has AMD" is
+ * a normal state with an obvious right answer, where two whole watchlists
+ * merging is not. */
+async function adoptLocalTheses() {
+  const local = thesisLocalStore();
+  const mine = ACCOUNT.theses || {};
+  const fresh = {};
+  Object.keys(local).forEach((sym) => {
+    if (!mine[sym]) fresh[sym] = local[sym];
+  });
+  if (!Object.keys(fresh).length) return;
+  try {
+    const out = await authApi('/api/theses/adopt', {
+      method: 'POST', body: { theses: fresh },
+    });
+    (out.adopted || []).forEach((sym) => { ACCOUNT.theses[sym] = local[sym]; });
+    if ((out.adopted || []).length) {
+      const n = out.adopted.length;
+      window.OpticAuth.toast('Brought ' + n + ' thesis' + (n === 1 ? '' : 'es')
+        + ' into your account.');
+    }
+  } catch (e) {
+    // The local copies are untouched, so nothing is lost and the next sign-in
+    // tries again. Silent because this runs at boot and a reader who never
+    // wrote a thesis should not be told about a feature failing.
+  }
 }
 
 function thesisSnapshot(d) {
@@ -3103,23 +3163,58 @@ function thesisSnapshot(d) {
   return out;
 }
 
+/* Written to both places, and the render does not wait for the network.
+ *
+ * The submit handler re-renders the panel on the next line, so the in-memory
+ * copy is updated first and the PUT follows. An await here would leave the box
+ * showing the old thesis for as long as the round trip took, on the one
+ * interaction where the reader has just typed and pressed a button.
+ *
+ * `syncFailed` is what the panel reads to tell the truth about where the words
+ * are. Set on the entry rather than globally: one symbol failing to sync says
+ * nothing about the others. */
 function thesisSave(symbol, fields, d) {
   const sym = String(symbol || '').toUpperCase();
   if (!sym) return;
-  const all = thesisStore();
-  all[sym] = {
+  const entry = {
     ...fields,
     saved_at: new Date().toISOString(),
     // The readings as they stood when this was written. The whole feature.
     snapshot: thesisSnapshot(d),
   };
-  try { localStorage.setItem(THESIS_KEY, JSON.stringify(all)); } catch (e) { /* private */ }
+
+  const local = thesisLocalStore();
+  local[sym] = entry;
+  thesisLocalWrite(local);
+
+  if (!signedIn()) return;
+  if (ACCOUNT.theses) ACCOUNT.theses[sym] = entry;
+  authApi('/api/theses/' + encodeURIComponent(sym), {
+    method: 'PUT',
+    body: { ...fields, snapshot: entry.snapshot },
+  }).then((out) => {
+    // Take the server's copy back: it owns created_at, which is when the view
+    // was first taken and is not something this browser can know.
+    if (ACCOUNT.theses && out && out.thesis) ACCOUNT.theses[sym] = out.thesis;
+  }).catch(() => {
+    if (ACCOUNT.theses && ACCOUNT.theses[sym]) {
+      ACCOUNT.theses[sym].syncFailed = true;
+    }
+    if (STATE.swing) preserveUI(views.swing, () => renderSwing(STATE.swing));
+  });
 }
 
 function thesisDelete(symbol) {
-  const all = thesisStore();
-  delete all[String(symbol || '').toUpperCase()];
-  try { localStorage.setItem(THESIS_KEY, JSON.stringify(all)); } catch (e) { /* private */ }
+  const sym = String(symbol || '').toUpperCase();
+  const local = thesisLocalStore();
+  delete local[sym];
+  thesisLocalWrite(local);
+  if (!signedIn()) return;
+  if (ACCOUNT.theses) delete ACCOUNT.theses[sym];
+  // A 404 is success here: it means the account had no copy, which is exactly
+  // the state a delete is trying to reach.
+  authApi('/api/theses/' + encodeURIComponent(sym), { method: 'DELETE' })
+    .catch(() => { /* the local copy is already gone */ });
 }
 
 /* What has moved since the thesis was written.
@@ -3223,18 +3318,35 @@ function renderThesis(d) {
       <div class="th-actions">
         <button class="btn primary" type="submit">${saved ? 'Update thesis' : 'Save thesis'}</button>
         ${saved ? `<button class="btn" type="button" data-thesis-delete="${esc(sym)}">Delete</button>` : ''}
-        ${/* It read "there is no account to sync it to", which was true when the
-             panel was written and stopped being true the day accounts shipped.
-             A sentence about a missing feature has to be re-read whenever that
-             feature arrives, and this one was left describing an app that no
-             longer existed. Still local either way, and now it says which of
-             the two reasons applies. */''}
-        <span class="th-local">${signedIn()
-    ? 'Kept in this browser. Not synced to your account yet.'
-    : 'Kept in this browser. Sign in and it can follow you between them.'}</span>
+        ${/* Where the words actually are.
+             This has been wrong twice. It first read "there is no account to
+             sync it to", which was true when the panel was written and stopped
+             being true the day accounts shipped. It then read "Not synced to
+             your account yet", which was true until this commit. A sentence
+             about a missing feature has to be re-read every time that feature
+             moves, so all three states are derived from what is true right now
+             rather than written once: no account, synced, or synced and the
+             last write did not reach the server. */''}
+        <span class="th-local">${thesisWhere(saved)}</span>
       </div>
     </form>
   </section>`;
+}
+
+/** Where this thesis is kept, in the reader's terms. */
+function thesisWhere(saved) {
+  if (!signedIn()) {
+    return 'Kept in this browser. Sign in and it follows you between them.';
+  }
+  if (saved && saved.syncFailed) {
+    /* The one state that must not be silent. The words are on disk and the
+       reader can carry on, but they are not in the account, so saying nothing
+       would be claiming a sync that did not happen. */
+    return 'Saved in this browser. It could not reach your account, so it will '
+      + 'sync next time you sign in.';
+  }
+  if (!ACCOUNT.theses) return 'Loading from your account\u2026';
+  return 'Saved to your account. It follows you between browsers.';
 }
 
 document.addEventListener('submit', (evt) => {
@@ -17381,6 +17493,7 @@ const ACCOUNT = {
   watchlist: null,      // null means "not signed in, or no list yet" — fall back to local
   research: null,
   watches: null,
+  theses: null,         // null means "not signed in, or not loaded yet" — fall back to local
   allowance: null,
 };
 
@@ -17415,14 +17528,18 @@ async function accountLoad() {
     ACCOUNT.watchlists = null;
     ACCOUNT.research = null;
     ACCOUNT.watches = null;
+    ACCOUNT.theses = null;
     return;
   }
   try {
-    const [lists, research, watches] = await Promise.all([
+    const [lists, research, watches, theses] = await Promise.all([
       authApi('/api/watchlists'),
       authApi('/api/saved-research'),
       authApi('/api/watches'),
+      authApi('/api/theses'),
     ]);
+    ACCOUNT.theses = theses.theses || {};
+    await adoptLocalTheses();
     ACCOUNT.watches = watches.watches || [];
     // All of them, not just the first: the watchlist view offers named lists
     // and needs the set. ACCOUNT.listId stays "the active one" and

@@ -436,6 +436,221 @@ async def drop_research(research_id: str, request: Request) -> Dict[str, Any]:
     return {"ok": True}
 
 
+# -------------------------------------------------------------------- theses
+#
+# A reader's own view on a name, with a snapshot of the readings it was written
+# against. The diff between that snapshot and today is the whole feature, and it
+# happens in the client: the server stores the snapshot as opaque JSON and never
+# asks what any of it means.
+#
+# Guests keep theirs in localStorage, the same split as the watchlist, saved
+# research and watches. Nothing here gates the panel.
+
+# Generous but bounded. A reader following two hundred names has a different
+# problem than storage, and a cap stops one account filling the volume. Not a
+# plan limit, deliberately: a thesis is the reader's own writing, and metering
+# it the way saved research is metered would be charging for their words.
+MAX_THESES = 200
+
+# The four boxes on the form. A fixed shape, unlike the snapshot.
+THESIS_PROSE = ("bull", "bear", "catalysts", "invalidation")
+
+# Per field. Long enough for a considered write-up, short enough that the table
+# cannot be used as a file store.
+MAX_THESIS_FIELD = 8000
+
+# The snapshot is client-defined and round-tripped, so it gets a length cap
+# rather than a schema. Eight readings is about 300 bytes today.
+MAX_SNAPSHOT = 20000
+
+
+def _thesis_payload(found: Dict[str, Any]) -> Dict[str, Any]:
+    """One thesis, in the shape the client already uses for a local one.
+
+    `snapshot` is parsed back into an object rather than handed over as a
+    string, so a synced thesis and a local one are the same shape and
+    `thesisChanges` needs no branch. A row whose JSON is unreadable returns an
+    empty snapshot rather than raising: the prose is the part the reader wrote,
+    and losing the diff is better than losing the thesis.
+    """
+    try:
+        snapshot = json.loads(found.get("snapshot") or "{}")
+    except (ValueError, TypeError):
+        snapshot = {}
+    if not isinstance(snapshot, dict):
+        snapshot = {}
+    out = {
+        "symbol": found["symbol"],
+        "snapshot": snapshot,
+        "saved_at": found["updated_at"],
+        "created_at": found["created_at"],
+    }
+    for key in THESIS_PROSE:
+        out[key] = found.get(key) or ""
+    return out
+
+
+def _thesis_fields(payload: Dict[str, Any]) -> Dict[str, str]:
+    return {k: str(payload.get(k) or "").strip()[:MAX_THESIS_FIELD]
+            for k in THESIS_PROSE}
+
+
+def _thesis_snapshot(payload: Dict[str, Any]) -> str:
+    raw = payload.get("snapshot")
+    if not isinstance(raw, dict):
+        return "{}"
+    text = json.dumps(raw, sort_keys=True, separators=(",", ":"))
+    # Over the cap, the prose is kept and the snapshot is dropped. The
+    # alternative is rejecting the write, which would lose what the reader
+    # typed to protect a field they never see.
+    return text if len(text) <= MAX_SNAPSHOT else "{}"
+
+
+@router.get("/theses")
+async def list_theses(request: Request) -> Dict[str, Any]:
+    """Every thesis this reader has, keyed by symbol.
+
+    Keyed rather than a list because that is how the client holds them and how
+    it looks one up: `thesisFor(symbol)` is a dictionary hit on both paths.
+    """
+    user = deps.require_user(request)
+    found = db.rows(
+        "SELECT * FROM theses WHERE user_id = ? ORDER BY updated_at DESC",
+        (user["id"],))
+    return {
+        "theses": {r["symbol"]: _thesis_payload(r) for r in found},
+        "count": len(found),
+        "limit": MAX_THESES,
+    }
+
+
+@router.put("/theses/{symbol}")
+async def put_thesis(symbol: str, request: Request,
+                     payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Write or rewrite the thesis for one symbol.
+
+    PUT, and an upsert, because there is exactly one per symbol and editing is
+    the normal case. POST /api/saved-research inserts every time, which is right
+    for a research note and wrong here: five edits would be five rows with
+    nothing saying which is current.
+    """
+    user = deps.require_user(request)
+    deps.csrf_guard(request)
+    sym = _symbol(symbol)
+    fields = _thesis_fields(payload)
+    if not any(fields.values()):
+        # Matches the client, which ignores a submit with every box empty. An
+        # empty thesis is a delete, and a delete has its own verb.
+        raise HTTPException(status_code=400, detail="There is nothing to save.")
+
+    now = db.utcnow()
+    existing = db.row("SELECT * FROM theses WHERE user_id = ? AND symbol = ?",
+                      (user["id"], sym))
+    if existing is None:
+        count = db.row("SELECT COUNT(*) AS n FROM theses WHERE user_id = ?",
+                       (user["id"],))
+        if int((count or {}).get("n") or 0) >= MAX_THESES:
+            raise HTTPException(
+                status_code=403,
+                detail="That is {} theses, which is the limit. Delete one to "
+                       "write another.".format(MAX_THESES))
+        db.execute(
+            "INSERT INTO theses (id,user_id,symbol,bull,bear,catalysts,"
+            "invalidation,snapshot,created_at,updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (db.new_id(), user["id"], sym, fields["bull"], fields["bear"],
+             fields["catalysts"], fields["invalidation"],
+             _thesis_snapshot(payload), now, now))
+    else:
+        # `created_at` is not touched. It is when the reader first took a view
+        # on this name, which is the more interesting of the two dates and the
+        # one an update would quietly destroy.
+        db.execute(
+            "UPDATE theses SET bull=?,bear=?,catalysts=?,invalidation=?,"
+            "snapshot=?,updated_at=? WHERE user_id=? AND symbol=?",
+            (fields["bull"], fields["bear"], fields["catalysts"],
+             fields["invalidation"], _thesis_snapshot(payload), now,
+             user["id"], sym))
+    saved = db.row("SELECT * FROM theses WHERE user_id = ? AND symbol = ?",
+                   (user["id"], sym))
+    assert saved is not None
+    return {"ok": True, "thesis": _thesis_payload(saved)}
+
+
+@router.delete("/theses/{symbol}")
+async def drop_thesis(symbol: str, request: Request) -> Dict[str, Any]:
+    user = deps.require_user(request)
+    deps.csrf_guard(request)
+    removed = db.execute("DELETE FROM theses WHERE user_id = ? AND symbol = ?",
+                         (user["id"], _symbol(symbol)))
+    if not removed:
+        raise HTTPException(status_code=404, detail="There is no thesis for that symbol.")
+    return {"ok": True}
+
+
+@router.post("/theses/adopt")
+async def adopt_theses(request: Request,
+                       payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Take over browser-held theses on first sign-in.
+
+    Merges, and never overwrites. Where the account already has a thesis for a
+    symbol the browser also has, the account's wins and the local one is
+    reported as skipped rather than silently replacing it: these are documents
+    the reader wrote, the account copy is the one that survived a cache clear,
+    and a merge that clobbers is indistinguishable from data loss.
+
+    Idempotent for the same reason. Running it twice adopts nothing the second
+    time, because everything now conflicts with what the first run wrote.
+    """
+    user = deps.require_user(request)
+    deps.csrf_guard(request)
+    incoming = payload.get("theses")
+    if not isinstance(incoming, dict) or not incoming:
+        raise HTTPException(status_code=400, detail="Nothing to import.")
+
+    mine = {r["symbol"] for r in db.rows(
+        "SELECT symbol FROM theses WHERE user_id = ?", (user["id"],))}
+    room = MAX_THESES - len(mine)
+    adopted: List[str] = []
+    skipped: List[str] = []
+    full: List[str] = []
+    now = db.utcnow()
+
+    for raw_symbol, body in incoming.items():
+        if not isinstance(body, dict):
+            continue
+        try:
+            sym = _symbol(raw_symbol)
+        except HTTPException:
+            # One unusable key must not fail the whole import. The reader's
+            # other theses are not at fault.
+            continue
+        if sym in mine:
+            skipped.append(sym)
+            continue
+        fields = _thesis_fields(body)
+        if not any(fields.values()):
+            continue
+        if len(adopted) >= room:
+            full.append(sym)
+            continue
+        db.execute(
+            "INSERT INTO theses (id,user_id,symbol,bull,bear,catalysts,"
+            "invalidation,snapshot,created_at,updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (db.new_id(), user["id"], sym, fields["bull"], fields["bear"],
+             fields["catalysts"], fields["invalidation"],
+             _thesis_snapshot(body),
+             # The local save time becomes created_at where it is usable, so
+             # adopting does not reset when the reader took the view.
+             str(body.get("saved_at") or now)[:40] or now, now))
+        adopted.append(sym)
+        mine.add(sym)
+
+    return {"ok": True, "adopted": sorted(adopted), "skipped": sorted(skipped),
+            "no_room": sorted(full)}
+
+
 # ------------------------------------------------------------------- watches
 #
 # `app/analytics/watches.py` evaluates a watch and stays stateless; this stores
