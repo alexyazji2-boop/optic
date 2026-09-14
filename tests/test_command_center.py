@@ -332,45 +332,92 @@ def test_the_search_field_does_not_grow_with_the_page():
     assert ".home-search, .home-quick { max-width:" in CSS
 
 
-def test_the_home_page_is_a_grid_not_a_stack():
+def test_the_home_page_is_a_board_not_a_stack():
     """Every block was a full-width row. That survived a 1000px column and fell
     apart once the page filled the window: a watchlist row put its symbol and
     its verdict two feet apart, and "What matters now" used the left fifth of a
     1900px page with nothing in the rest. Width was being spent stretching
-    five-item lists rather than showing more at once."""
-    rule = CSS[CSS.index(".hm-market {"):]
+    five-item lists rather than showing more at once.
+
+    The columns used to be cells of one grid over all the cards. They are two
+    containers now, for the reason in the next test, so this asserts the board
+    rather than `.hm-market`.
+    """
+    rule = CSS[CSS.index(".hm-board {"):]
     rule = rule[:rule.index("}")]
     assert "display: grid" in rule
     assert "align-items: start" in rule, (
-        "blocks would stretch to the tallest in their row")
+        "the two sides would stretch to match each other")
+
+
+def test_each_side_packs_its_own_cards():
+    """Why the cards are no longer cells of one grid.
+
+    A grid row is as tall as its tallest item. "What matters now" at 631px
+    forced 631px rows, so the watchlist beside it at 306px left 325px of empty
+    card and Ask Pulse at 254px left 377px. No ordering fixes that and
+    `grid-auto-flow: dense` cannot: the row is fully occupied and it is the
+    unused *height* that shows. Measured, the four single-column blocks came to
+    1410px of content against 1893px of capacity at three columns of 631, so
+    483px was empty whatever went where.
+
+    A flex column is as tall as its contents, so each side packs with no holes.
+    """
+    for cls in (".hm-main,", ".hm-rail {"):
+        assert cls in CSS, cls
+    rule = CSS[CSS.index(".hm-main,"):]
+    rule = rule[:rule.index("}")]
+    assert "display: flex" in rule
+    assert "flex-direction: column" in rule
+    assert "min-width: 0" in rule, (
+        "the movers table's own width would set the column width")
 
 
 def test_the_column_count_is_set_by_the_content_not_the_screen():
     """A block holds a symbol, a price, a change and a short verdict, which
-    needs about 420px. The breakpoints are two of those plus gutters, then
-    three, rather than round screen sizes."""
-    block = CSS[CSS.index(".hm-market {"):]
-    block = block[:block.index(".hm-block {")]
-    # De-duplicated: the same breakpoint appears twice in this slice, once for
-    # the column count and once for the wide block's span, and they are the same
-    # decision expressed at the two places it applies.
+    needs about 420px. The breakpoints are two of those plus gutters, then the
+    point where a narrower rail earns its keep, rather than round screen sizes.
+
+    The upper bound was 1400 when the third column was a third of the board.
+    There is no three-column state now: above 1280 the split goes 2fr/1fr, so
+    the main column gets wider rather than a new column appearing.
+    """
+    block = CSS[CSS.index(".hm-board {"):]
+    block = block[:block.index(".hm-greet,")]
     widths = sorted(set(int(w) for w in
                         re.findall(r"@media \(min-width: (\d+)px\)", block)))
     assert len(widths) >= 2, widths
     assert widths[0] >= 900, "two columns before there is room for two"
-    assert widths[1] >= 1400, "three columns before there is room for three"
+    assert widths[1] >= 1200, "a narrow rail before there is room for one"
+    assert "2fr" in block, "the main column never gets the larger share"
 
 
-def test_the_wide_table_spans_and_the_hole_it_leaves_is_backfilled():
+def test_the_movers_table_sits_in_the_main_column():
     """Four columns of symbol, price, change and volume do not fit a third of
-    the board. A full-width item cannot start mid-row, so without dense packing
-    it leaves the rest of its row empty: at three columns that was a 600px hole
-    beside the watchlist."""
-    rule = CSS[CSS.index(".hm-market {"):]
-    rule = rule[:rule.index("}")]
-    assert "grid-auto-flow: dense" in rule
-    assert ".hm-wide" in CSS
-    assert 'class="hm-block hm-wide"' in APP_JS
+    the board, which is why this used to span the full width. Spanning is what
+    left the hole: a full-width item cannot start mid-row.
+
+    In the main column it has two thirds, measured at 1022px, which is more
+    than the four columns need, and it is also what balances the two sides:
+    main 945, rail 825. `hm-wide` and its span rule are gone with it.
+    """
+    board = APP_JS[APP_JS.index('<div class="hm-board">'):]
+    board = board[:board.index('class="hm-rail"')]
+    assert "Moved most this month" in board, "the table left the main column"
+    assert "cc-movers" in board
+    assert "hm-wide" not in APP_JS, "the full-width span is back"
+    assert "grid-auto-flow: dense" not in CSS[CSS.index(".hm-board {"):
+                                              CSS.index(".hm-greet,")]
+
+
+def test_the_rail_holds_the_short_cards():
+    """The three that were leaving holes. Their order is the reading order on a
+    phone, where the board is one column."""
+    rail = APP_JS[APP_JS.index('class="hm-rail"'):]
+    rail = rail[:rail.index("</div>\n    </div>")]
+    for want in ("Your watchlist", "marketQuestions(data)", "homeRead(data)",
+                 "homeAlerts(data)"):
+        assert want in rail, want
 
 
 def test_the_blocks_are_cards_now_that_they_sit_side_by_side():

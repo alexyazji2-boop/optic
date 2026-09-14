@@ -63,7 +63,10 @@ def test_the_two_async_fills_reveal_when_they_land():
     after the shell painted."""
     fill = body_of("loadHomeMarket")
     assert "revealPanels(strip.parentElement, '#cc-strip')" in fill
-    assert "revealPanels(host, ':scope > *')" in fill
+    # The cards sit a level deeper now that the board has a main column and a
+    # rail, so the stagger has to reach into both. ':scope > *' would fade the
+    # whole board as one element and the arrival would be a single frame again.
+    assert "revealPanels(host, ':scope > .hm-greet, :scope > .hm-board > * > *')" in fill
 
 
 def test_the_strip_fades_as_one_band_not_eight_cells():

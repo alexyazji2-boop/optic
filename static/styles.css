@@ -8506,43 +8506,54 @@ body.cp-open { overflow: hidden; }
  * before its own contents break rather than by the screen: these hold a symbol,
  * a price, a change and a short verdict, which needs about 420px. So the
  * breakpoints are 2 x 420 plus gutters, then 3. */
-.hm-market {
+.hm-market { margin: var(--space-7) 0 var(--space-6); }
+
+/* ---- the board ------------------------------------------------------------
+ *
+ * Two containers, each packing its own cards, rather than one grid of equal
+ * cells. A grid row is as tall as its tallest item, so "What matters now" at
+ * 631px forced 631px rows and the watchlist beside it at 306px left 325px of
+ * empty card, with 377px under Ask Pulse. `align-items: start` is what made
+ * that visible rather than stretching the short cards, and stretching would
+ * only have moved the emptiness inside them.
+ *
+ * No ordering fixed it and `grid-auto-flow: dense` could not: the row was
+ * fully occupied and it was the unused *height* that showed. Measured, the
+ * four single-column blocks came to 1410px of content against 1893px of
+ * capacity at three columns of 631, so 483px was empty whatever went where.
+ *
+ * A flex column is as tall as its contents, so each side packs with no holes,
+ * and the only remaining imbalance is between the two sides' totals. The
+ * movers table moved from full width into the main column to balance them:
+ * main 945, rail 825.
+ */
+.hm-board {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-5);
-  /* Blocks are different heights and must not stretch to match the tallest in
-     their row: an eight-row table beside a three-item list would give the list
-     five rows of empty card. */
   align-items: start;
-  /* dense, because the full-width table cannot start mid-row.
-     Without it the movers table leaves the rest of whatever row it lands in
-     empty: at three columns that was a 600px hole beside the watchlist. Dense
-     lets a later single-column block backfill it.
-     The cost is that visual order can differ from DOM order. Acceptable here
-     and only here: these are independent cards with their own headings, read in
-     any order, and the tab order stays the DOM order, which is what a keyboard
-     and a screen reader follow. */
-  grid-auto-flow: dense;
-  margin: var(--space-7) 0 var(--space-6);
+}
+.hm-main,
+.hm-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;                 /* or the movers table's width sets the column */
 }
 
+/* One column until there is room for a rail. 940px was the old two-column
+   breakpoint and is where a 1fr/1fr split of this content stops being cramped;
+   the rail only earns its narrower third above 1280. */
 @media (min-width: 940px) {
-  .hm-market { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hm-board { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 }
-@media (min-width: 1440px) {
-  .hm-market { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (min-width: 1280px) {
+  .hm-board { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
 }
 
-/* The greeting introduces the whole board, and a table with four columns is a
-   different shape from a list: both take the full row rather than a third of
-   one. `1 / -1` rather than a span count, so neither needs editing when the
-   column count changes at a breakpoint. */
 .hm-greet,
 .hm-degraded { grid-column: 1 / -1; }
 
-@media (min-width: 940px) {
-  .hm-wide { grid-column: 1 / -1; }
-}
 .hm-skel {
   height: 180px;
   border-radius: 12px;

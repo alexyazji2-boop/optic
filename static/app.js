@@ -2767,37 +2767,61 @@ async function loadHomeMarket() {
         ${esc(holiday ? holiday + ' \u00b7 market closed' : (session.label || ''))}
       </span>
     </div>
-    ${whatMattersNow(data)}
-    <section class="hm-block">
-      <div class="hm-block-head">
-        <h2 class="hm-h">Your watchlist</h2>
-        ${/* The way into the full view, which has the sort control and the
-            * add form this six-row preview has no room for. It is not in the
-            * tab strip, so this link and the palette are how it is reached. */''}
-        <button type="button" class="hm-more" data-go-view="watchlist">All of it &rarr;</button>
+    ${/* A main column and a rail, not one grid of equal cells.
+         Three equal columns could not fill: a grid row is as tall as its
+         tallest item, so "What matters now" at 631px forced 631px rows while
+         the watchlist sat at 306 and Ask Pulse at 254, leaving 325px and 377px
+         of dead card below them. No ordering fixes that. Measured, the four
+         single-column blocks total 1410px of content against 1893px of
+         capacity at three columns of 631, so 483px was empty whatever went
+         where, and `grid-auto-flow: dense` cannot help because the row is full
+         and it is the *height* that is unused.
+         Two containers each packing independently does fill, because a flex
+         column is as tall as its contents rather than as its widest sibling.
+         The movers table moves up beside the rail instead of spanning
+         everything, which is what balances the two sides: main 945, rail 825.
+      */''}
+    <div class="hm-board">
+      <div class="hm-main">
+        ${whatMattersNow(data)}
+        ${/* Two thirds rather than full width. Four columns of symbol, price,
+             change and volume do not fit a third of the board, and squeezing
+             them is how a table starts wrapping its own headers; at two thirds
+             it has 1022px, which is more than the four columns need. */''}
+        <section class="hm-block">
+          <div class="hm-block-head">
+            <h2 class="hm-h">Moved most this month</h2>
+            <button type="button" class="hm-more" data-go-view="scan">All scans &rarr;</button>
+          </div>
+          <div id="cc-movers"><div class="hm-skel" aria-hidden="true"></div></div>
+        </section>
       </div>
-      <div id="hm-watch">${watchlistFeedHTML({ compact: true, limit: 6 })}</div>
-    </section>
-    ${/* Wide on purpose. Four columns of symbol, price, change and volume do
-         not fit a third of the board, and squeezing them is how a table starts
-         wrapping its own headers. */''}
-    <section class="hm-block hm-wide">
-      <div class="hm-block-head">
-        <h2 class="hm-h">Moved most this month</h2>
-        <button type="button" class="hm-more" data-go-view="scan">All scans &rarr;</button>
+      <div class="hm-rail">
+        <section class="hm-block">
+          <div class="hm-block-head">
+            <h2 class="hm-h">Your watchlist</h2>
+            ${/* The way into the full view, which has the sort control and the
+                * add form this preview has no room for. It is not in the tab
+                * strip, so this link and the palette are how it is reached. */''}
+            <button type="button" class="hm-more" data-go-view="watchlist">All of it &rarr;</button>
+          </div>
+          <div id="hm-watch">${watchlistFeedHTML({ compact: true, limit: 6 })}</div>
+        </section>
+        ${marketQuestions(data)}
+        ${homeRead(data)}
+        ${homeAlerts(data)}
       </div>
-      <div id="cc-movers"><div class="hm-skel" aria-hidden="true"></div></div>
-    </section>
-    ${marketQuestions(data)}
-    ${homeRead(data)}
-    ${homeAlerts(data)}
+    </div>
     ${(data.degraded || []).length
     ? `<p class="hm-degraded">Unavailable right now: ${esc((data.degraded).join(', '))}.</p>`
     : ''}`;
   /* The block replaces a skeleton, so without this the whole market screen
      swaps in one frame. Staggering its own sections turns that into an arrival:
      the greeting, then what matters, then the watchlist, then the movers. */
-  revealPanels(host, ':scope > *');
+  /* The cards are a level deeper now that the board has two columns, so the
+     stagger has to reach them: ':scope > *' would fade the whole board as one
+     element and the arrival would be a single frame again. */
+  revealPanels(host, ':scope > .hm-greet, :scope > .hm-board > * > *');
   loadWatchlist();
   // Its own request, not awaited: the universe scan is the slowest thing on
   // this page and the rest of it is already useful without it.
