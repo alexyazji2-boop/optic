@@ -130,16 +130,21 @@ def test_the_scrollable_table_rule_names_the_class_that_exists():
 
 
 def test_a_dead_class_inside_not_or_has_does_not_condemn_its_rule():
-    """`.grid.c2 > .panel:not(:has(.chart-controls))` caps the height of every
-    non-chart panel in a two-up row. A first pass at removing dead classes
-    deleted it on the strength of a name that only ever appeared as an
-    exclusion — where a dead class makes the condition vacuously true and
-    leaves the subject of the selector completely live."""
-    # The full selector, not a prefix of it: a shorter form of this also appears
-    # inside the 1080px block, so matching the prefix passed even with the rule
-    # under test deleted.
-    assert (".grid.c2 > .panel:not(.span2):not(:has(svg.chart))"
-            ":not(:has(.chart-controls))") in NO_COMMENTS
+    """A class that only ever appears as an exclusion makes its condition
+    vacuously true and leaves the subject of the selector completely live. A
+    first pass at removing dead classes deleted such a rule on the strength of
+    the name inside the `:not()`.
+
+    The example used to be the two-up height cap,
+    `.grid.c2 > .panel:not(.span2):not(:has(svg.chart)):not(:has(.chart-controls))`.
+    That rule is gone now — not because a class in it was dead, but because the
+    cap turned those panels into nested vertical scroll containers; see
+    test_no_panel_is_capped_into_a_nested_scroll_container. So the principle is
+    pinned to the rule that still has this shape: the grid that hides itself
+    when every panel in it is one Simple mode takes.
+    """
+    assert ".grid:has(> .panel.is-advanced):not(:has(> *:not(.is-advanced)))" \
+        in NO_COMMENTS
 
 
 def test_the_screen_reader_helper_is_defined_once():
@@ -410,3 +415,45 @@ def test_the_status_open_state_survives_a_repaint():
     assert "let statusOpen = false;" in APP
     fn = APP.split("function setStatus(parts) {", 1)[1].split("\nfunction ", 1)[0]
     assert "host.classList.toggle('is-open', statusOpen);" in fn
+
+
+def test_no_panel_is_capped_into_a_nested_scroll_container():
+    """Reported as "scrolling up and down is messed up", and it was.
+
+    `.grid.c2 > .panel:not(.span2):not(:has(svg.chart)):not(:has(.chart-controls))`
+    carried `max-height: 640px; overflow-y: auto` to make two-up columns end at
+    the same place. `.panel` also carries `overflow-x: auto` for wide tables,
+    and a box with one axis scrollable and the other `visible` computes the
+    visible axis to `auto` — so the cap made those panels vertical scroll
+    containers as well. Scrolling the page with the pointer over one scrolled
+    the panel instead, stopped, then chained to the document.
+
+    Measured on Investing at 720px and again at 1400px: "Long-term view"
+    clientHeight 638 of scrollHeight 754, "Valuation vs its own history" 638 of
+    850 — 116px and 212px behind an inner scrollbar on a page that already
+    scrolls. Zero after removing it, at both widths.
+
+    The phone escape hatch had never worked: `.grid.c2 > .panel:not(.span2)`
+    inside `@media (max-width: 860px)` is four classes against the capping
+    selector's six, and a media query adds no specificity.
+    """
+    for block in _blocks():
+        selector, body = block[0].strip(), block[1]
+        if ".panel" not in selector:
+            continue
+        if "max-height" in body and "overflow-y: auto" in body:
+            raise AssertionError(
+                "a panel with both a max-height and overflow-y:auto is a nested "
+                "scroll container: %s" % selector)
+
+
+def test_the_two_up_cap_is_gone_rather_than_narrowed():
+    """Kept as a comment recording why, so it does not get reintroduced as a
+    fix for uneven columns. `align-items: start` handles those, and every panel
+    with a heading is collapsible — which is a better answer to "this panel is
+    long" than a scroll box, and did not exist when the cap was written."""
+    assert ":not(:has(svg.chart))" not in NO_COMMENTS, \
+        "the capping selector is back"
+    assert "max-height: 640px" not in NO_COMMENTS
+    # The reasoning survives in the source.
+    assert "swallowed the wheel" in CSS

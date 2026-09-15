@@ -2866,33 +2866,39 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
 
 /* ------------------------------------------ balanced columns in two-up rows
  *
- * `align-items: start` stopped short panels being stretched into a bordered
- * void, but it did not stop the other half of the problem: when one panel in a
- * two-column row genuinely has five times the content, the shorter column just
- * ends and leaves several hundred pixels of empty page beside it. Measured on
- * Macro, the sector table ran ~190px against a breakout list of ~800px.
+ * There is no cap here any more. What used to be:
  *
- * So tall panels in a two-up row are capped and scroll their own overflow. Both
- * columns then end at roughly the same place, no information is removed, and the
- * scroll shadows added earlier mean the cap announces itself. It also pulls the
- * page down — these long list panels were most of the scroll depth.
+ *   .grid.c2 > .panel:not(.span2):not(:has(svg.chart)):not(:has(.chart-controls))
+ *     { max-height: 640px; overflow-y: auto; }
  *
- * Charts are exempt: an SVG in a scroll box is worse than a long page, and the
- * chart panels are `span2` (full width) anyway, so they are never half of a
- * two-up row. `:has()` covers the rest in case one is ever placed in one.
+ * capped a tall panel in a two-column row so both columns ended at roughly the
+ * same place, on the argument that "no information is removed". Two things were
+ * wrong with that.
+ *
+ * It swallowed the wheel. `.panel` carries `overflow-x: auto` for wide tables,
+ * and a box with one axis scrollable and the other `visible` computes the
+ * visible axis to `auto` — so the cap turned those panels into VERTICAL scroll
+ * containers too. Scrolling the page with the pointer over one of them scrolled
+ * the panel instead, stopped, and then chained to the document. Reported as
+ * "scrolling up and down is messed up", and measured on Investing at both
+ * 720px and 1400px: "Long-term view" 638px of 754, "Valuation vs its own
+ * history" 638px of 850 — 116px and 212px sitting behind an inner scrollbar on
+ * a page that already scrolls.
+ *
+ * And information WAS removed, in the only sense that matters: behind a
+ * scrollbar nobody expects inside a panel on a scrolling page.
+ *
+ * The phone escape hatch that was supposed to limit this had never worked. It
+ * read `.grid.c2 > .panel:not(.span2)` at max-width 860px — four classes
+ * against the six in the capping selector, and a media query adds no
+ * specificity — so the cap applied at every width from the day the `:has()`
+ * exemptions were added.
+ *
+ * Uneven columns are the honest outcome, and `align-items: start` already
+ * handles them. A reader who finds a panel too long can collapse it: every
+ * panel with a heading is collapsible, which is a better answer to "this is
+ * long" than a scroll box, and it did not exist when the cap was written.
  */
-.grid.c2 > .panel:not(.span2):not(:has(svg.chart)):not(:has(.chart-controls)) {
-  max-height: 640px;
-  overflow-y: auto;
-}
-
-/* On a phone the columns are already stacked, so a cap only hides things. */
-@media (max-width: 860px) {
-  .grid.c2 > .panel:not(.span2) {
-    max-height: none;
-    overflow-y: visible;
-  }
-}
 
 /* -------------------------------------------------- tile rows fill their width
  *
