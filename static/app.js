@@ -4785,7 +4785,20 @@ let watchSort = 'changed';
  */
 const WATCH_FILTERS = [
   { id: 'all', label: 'All', keep: () => true },
-  { id: 'changed', label: 'Something changed', keep: (r) => !!r.changed },
+  /* No "Something changed" filter.
+   *
+   * WATCH_SORTS above has an entry with that exact label, so the view rendered
+   * two controls reading "Something changed" side by side, one sorting and one
+   * filtering. Measured on the watchlist view: the label appeared on two
+   * buttons. A reader cannot tell which is which from the name, and both answer
+   * the same question.
+   *
+   * The sort is the one kept, because it is the default and because it is not
+   * destructive: changed rows go to the top and the rest stay on screen. The
+   * filter hid names the reader had explicitly chosen to watch to answer a
+   * question the default ordering already answers. `watchFilter` is not
+   * persisted and `watchFilterSpec()` falls back to WATCH_FILTERS[0], so a
+   * stale 'changed' value degrades to All rather than to nothing. */
   { id: 'bullish', label: 'Bullish', keep: (r) => r.signal === 'bullish' },
   { id: 'bearish', label: 'Bearish', keep: (r) => r.signal === 'bearish' },
   { id: 'movers', label: 'Moved 2%+',
@@ -15591,10 +15604,22 @@ function renderExtras(x) {
     <h3 style="margin-top:var(--space-4)">${hg('Off-exchange short volume')}</h3>
     <div class="callout">${esc(sv.error || 'No FINRA rows for this symbol.')}</div>`;
 
+  /* "Versus the index", not "Relative performance".
+   *
+   * There is a whole panel called "Relative performance" on the Options tab and
+   * it measures something else: a percentile against a peer set, answering how
+   * many of its peers the symbol is beating. This is excess return and a ratio
+   * line against one benchmark, answering whether it is beating SPY. Both
+   * titles were "Relative performance", which is worse than a duplicate: two
+   * different measures under one name in one app.
+   *
+   * This is the one renamed because the other title was asked for directly.
+   * The subtitle already names the benchmark, so the heading only has to say
+   * that a benchmark is what this is against. */
   const relBlock = rel.error ? `
-    <h3 style="margin-top:var(--space-4)">${hg('Relative performance')}</h3>
+    <h3 style="margin-top:var(--space-4)">${hg('Versus the index')}</h3>
     <div class="callout">${esc(rel.error)}</div>` : `
-    <h3 style="margin-top:var(--space-4)">${hg('Relative performance')} <span
+    <h3 style="margin-top:var(--space-4)">${hg('Versus the index')} <span
       class="th-plain">· vs ${esc(rel.benchmark)}</span></h3>
     <div class="grid c5" style="margin-bottom:10px">
       ${['5d', '20d', '60d', '120d', '252d'].map((k) => tile(k.replace('d', ' days'),
