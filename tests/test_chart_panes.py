@@ -340,3 +340,86 @@ def test_the_charting_view_switches_the_draw_on_animation_on():
     assert "hasPendingDraws()" in branch, (
         "a chart still waiting to be scrolled to must keep its wait")
     assert branch.index("setChartAnimation(") < branch.index("loadChartWorkspace(")
+
+
+# ------------------------------------- the style toggle replays the draw-on sweep
+#
+# Asked for directly: switching Line to Candles and back should animate. Two
+# separate places turned it off, both deliberately and both with a recorded
+# reason, so this is a narrowing of those rules rather than a reversal.
+#
+#   `preserveUI`      off for every control press on the Swing view, because it
+#                     "was replaying the draw-on animation across all nineteen
+#                     charts" on a timeframe press.
+#   `wsRedrawChart`   off immediately before mounting, because "replaying a
+#                     620ms stroke every time someone nudges the range is what
+#                     laggy actually looked like here".
+#
+# Both still hold for a range or interval press. A style change is different in
+# kind: the series is redrawn as a different mark, which is the one control
+# where the sweep shows what just happened rather than replaying an arrival.
+#
+# Measured in a browser, counting polylines carrying an inline strokeDashoffset,
+# which is what `animateChart` sets for the duration of the sweep and clears on
+# finish:
+#
+#   Charting tab   candle->line 4 marked and 4 sweeping, line->candle 3 and 3,
+#                  and 0 marked on a press of the button already lit
+#   Options tab    real change 9 polylines sweeping, no-change press 0
+#
+# `data-draw` alone is NOT a valid probe: the attribute persists after the
+# animation finishes, so a settled chart still carries it from the last real
+# change. Measured 4 marked at rest with nothing sweeping, which is what sent an
+# earlier pass of this chasing a contradiction.
+
+
+def test_the_style_toggle_opts_into_the_animation_through_the_redraw():
+    """`wsRedrawChart` sets the flag itself immediately before mounting, so a
+    `setChartAnimation(true)` in the handler was overwritten and measured no
+    effect at all. The opt-in has to travel as an argument."""
+    fn = body_of("wsRedrawChart")
+    assert "setChartAnimation(!!(opts && opts.animate));" in fn
+    ws = CODE[CODE.index("const wsMode = evt.target.closest('[data-ws-mode]')"):]
+    ws = ws[:ws.index("return;")]
+    assert "wsRedrawChart({ animate: changed })" in ws
+
+
+def test_every_other_workspace_control_still_redraws_without_animating():
+    """Range, interval, overlays, colours and the panes all call it with no
+    `animate`, and `!!(opts && opts.animate)` is false for them."""
+    for call in ("wsRedrawChart();", "wsRedrawChart({ keepToolbar: true })"):
+        assert call in CODE, call
+
+
+def test_the_swing_toggle_animates_from_inside_preserve_ui():
+    """`preserveUI` clears the flag before it runs its callback, so setting it
+    outside would be undone."""
+    at = CODE.index("const modeBtn = evt.target.closest('[data-chart-mode]')")
+    branch = CODE[at:CODE.index("return;", at)]
+    assert "preserveUI(views.swing, () => {" in branch
+    body = branch[branch.index("preserveUI(views.swing, () => {"):]
+    assert "if (changed) setChartAnimation(true);" in body
+    assert body.index("setChartAnimation(true)") < body.index("renderSwing")
+
+
+def test_both_toggles_are_gated_on_the_mode_actually_changing():
+    """Re-pressing the lit button must cost nothing. Measured: 0 sweeping on
+    both surfaces after a press that changes nothing."""
+    for anchor in ("const wsMode = evt.target.closest('[data-ws-mode]')",
+                   "const modeBtn = evt.target.closest('[data-chart-mode]')"):
+        at = CODE.index(anchor)
+        branch = CODE[at:CODE.index("return;", at)]
+        assert "changed" in branch, anchor
+        assert "!== chartMode" in branch or "want !== chartMode" in branch, anchor
+
+
+def test_preserve_ui_still_suppresses_the_animation_by_default():
+    """The narrowing must not become a reversal: every other control press on
+    the Swing view is still instant."""
+    fn = body_of("preserveUI")
+    assert "setChartAnimation(false);" in fn
+    # And it must never turn it ON. Asserting only the `false` call passed
+    # against a mutation that added a `true` beside it: the presence of one
+    # call says nothing about a second, and a `true` placed after the `false`
+    # would switch the animation on for every control press on this view.
+    assert "setChartAnimation(true)" not in fn

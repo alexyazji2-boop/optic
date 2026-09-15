@@ -171,7 +171,12 @@ def test_the_charting_tab_keeps_its_own_handler():
     already crowded."""
     ws = CODE[CODE.index("const wsMode = evt.target.closest('[data-ws-mode]')"):]
     ws = ws[:ws.index("return;") + 7]
-    assert "wsRedrawChart()" in ws
+    # `wsRedrawChart({ animate: ... })` since the style toggle opts into the
+    # draw-on sweep. Pinned as the call rather than its exact arguments: the
+    # property is that this tab redraws its own chart and does not re-render the
+    # Swing view.
+    assert "wsRedrawChart({" in ws
+    assert "renderSwing" not in ws
     assert "chartMode = wsMode.dataset.wsMode" in ws
 
 

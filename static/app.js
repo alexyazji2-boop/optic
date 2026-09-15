@@ -15211,10 +15211,17 @@ function wsRedrawChart(opts) {
   const leg = views.chart.querySelector('.ws-legend');
   if (leg) leg.outerHTML = wsLegend(ps);
 
-  // A control change is a redraw, not a reveal. The draw-on animation is for
-  // content arriving; replaying a 620ms stroke every time someone nudges the
-  // range is what "laggy" actually looked like here.
-  setChartAnimation(false);
+  /* A control change is a redraw, not a reveal. The draw-on animation is for
+     content arriving; replaying a 620ms stroke every time someone nudges the
+     range is what "laggy" actually looked like here. So it is off by default
+     and every caller that passes nothing keeps that.
+     `animate` is the one exception, for the Line / Candles pair: switching the
+     style redraws the series as a different mark, which is the one control
+     where the sweep shows the reader what just happened rather than replaying
+     an arrival. It has to be set HERE rather than by the caller, because this
+     function turned the flag off after the caller had set it: that is why a
+     `setChartAnimation(true)` in the mode handler measured no effect at all. */
+  setChartAnimation(!!(opts && opts.animate));
   wsMountChart();
   requestAnimationFrame(() => requestAnimationFrame(wsEnsureChart));
 }
@@ -24533,9 +24540,35 @@ document.addEventListener('click', (evt) => {
   }
   const modeBtn = evt.target.closest('[data-chart-mode]');
   if (modeBtn) {
-    chartMode = modeBtn.dataset.chartMode === 'candle' ? 'candle' : 'line';
+    const want = modeBtn.dataset.chartMode === 'candle' ? 'candle' : 'line';
+    /* Switching the style redraws the line, so let it draw.
+     *
+     * `preserveUI` turns the animation off for every control press, and its
+     * comment says why: it used to replay across all nineteen charts on this
+     * tab, and redrawing something the reader is already looking at should be
+     * instant. That still holds for a timeframe press, where the chart is the
+     * same shape at a different span.
+     *
+     * A style change is different in kind: the price series is drawn from
+     * scratch as a different mark, which is the one case where the sweep is
+     * showing the reader what just happened rather than replaying an arrival.
+     *
+     * Two things keep it from being the old problem. It is gated on the mode
+     * actually changing, so re-pressing the lit button costs nothing. And
+     * `animateChart` defers any chart below the fold until it is scrolled to,
+     * so what animates is what is on screen rather than all nineteen.
+     *
+     * Set INSIDE the callback: preserveUI clears the flag before it runs, so a
+     * call before it would be undone. */
+    const changed = want !== chartMode;
+    chartMode = want;
     try { localStorage.setItem(CHART_MODE_KEY, chartMode); } catch (e) { /* private mode */ }
-    if (STATE.swing) preserveUI(views.swing, () => renderSwing(STATE.swing));
+    if (STATE.swing) {
+      preserveUI(views.swing, () => {
+        if (changed) setChartAnimation(true);
+        renderSwing(STATE.swing);
+      });
+    }
     return;
   }
   const ltBtn = evt.target.closest('[data-lt-mode]');
@@ -24727,9 +24760,15 @@ document.addEventListener('click', (evt) => {
   }
   const wsMode = evt.target.closest('[data-ws-mode]');
   if (wsMode) {
+    // Same reasoning as the Options pair above, and simpler here: this path
+    // does not go through preserveUI, and the workspace has one price chart
+    // rather than nineteen, so there is nothing to defer.
+    const changed = wsMode.dataset.wsMode !== chartMode;
     chartMode = wsMode.dataset.wsMode;
     try { localStorage.setItem(CHART_MODE_KEY, chartMode); } catch (e) { /* private mode */ }
-    wsRedrawChart();
+    // Through the option, not the flag: wsRedrawChart sets the flag itself
+    // immediately before mounting, so setting it out here was overwritten.
+    wsRedrawChart({ animate: changed });
     return;
   }
   /* Colours. Three discrete controls, all of them a full redraw including the
