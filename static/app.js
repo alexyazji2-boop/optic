@@ -19333,9 +19333,18 @@ function renderIndices(d) {
 
 /* ================================================================ LONG TERM */
 
+/** How many level families are on, for the menu's badge. */
+function ltLevelCount() {
+  return [showFib, showSR, showVol].filter(Boolean).length;
+}
+
 function renderLong(d) {
   hideTip();
   const h = d.holding || {};
+  /* Computed server-side on the weekly frame and carried in the long payload.
+     Absent on an older cached response, so every read is guarded: the chart
+     draws without bands rather than throwing. */
+  const ltLevels = h.levels || {};
   const lt = h.long_trend || {};
   const dd = h.drawdown || {};
   const risk = h.risk || {};
@@ -19513,7 +19522,12 @@ function renderLong(d) {
     // their own dedicated lines below, so only the retracement-based zones
     // (support/resistance from the 3-year range) are added from this list,
     // to avoid drawing the same level twice.
-    const zoneRefs = (h.accumulation_zones || [])
+    /* Behind the Fibonacci toggle now, rather than always drawn.
+       These are retracements of the three-year range, which is what Fibonacci
+       means at this horizon, so they answer to the same flag the Options chart
+       uses for its retracement grid instead of a second one that would have to
+       be switched on separately. */
+    const zoneRefs = (showFib ? (h.accumulation_zones || []) : [])
       .filter((z) => z.price && !/average/i.test(z.label || ''))
       .map((z) => ({
         value: z.price,
@@ -19547,7 +19561,40 @@ function renderLong(d) {
         <span class="seg">
           <button type="button" data-lt-mode="line" aria-pressed="${ltMode !== 'candle'}">Line</button>
           <button type="button" data-lt-mode="candle" aria-pressed="${ltMode === 'candle'}">Candles</button>
-        </span>`;
+        </span>
+        ${/* Technical Levels, the same menu the Options chart carries.
+             Three toggles rather than the ten over there, and only these three
+             because a control has to do something: this chart can honour
+             exactly these. `data-level-opt` and the global flags are shared, so
+             switching Fibonacci on here switches it on for Options too, which
+             is the consistency this was asked for rather than a second set of
+             settings that happens to look the same.
+             Not offered: the EMA families, dealer clouds, volume-by-price and
+             insider markers, none of which this chart draws. A toggle for
+             something a chart cannot show is worse than its absence. */''}
+        <details class="lvl-menu">
+          <summary aria-label="Technical Levels">
+            <span class="lvl-icon" aria-hidden="true"></span>Technical Levels${
+        ltLevelCount() ? ` <span class="lvl-count">${ltLevelCount()}</span>` : ''}
+            <i class="cal-caret" aria-hidden="true"></i>
+          </summary>
+          <div class="lvl-pop" role="group" aria-label="Levels on the chart">
+            <label class="lvl-opt"><input type="checkbox" data-level-opt="fib"
+              ${showFib ? 'checked' : ''}>
+              ${/* `fib`, matching the toggle. `zone` is what the Options menu
+                   uses for its supply-and-demand swatch and it has no rule in
+                   the stylesheet, so it renders as an unstyled box; these are
+                   retracements answering to `data-level-opt="fib"`, and `.fib`
+                   is a real class. */''}
+              <span class="lvl-key fib"></span>Retracements</label>
+            <label class="lvl-opt"><input type="checkbox" data-level-opt="sr"
+              ${showSR ? 'checked' : ''}>
+              <span class="lvl-key sr"></span>Support &amp; resistance</label>
+            <label class="lvl-opt"><input type="checkbox" data-level-opt="vol"
+              ${showVol ? 'checked' : ''}>
+              <span class="lvl-key vol"></span>Volume</label>
+          </div>
+        </details>`;
       return wrap;
     });
 
@@ -19615,6 +19662,13 @@ function renderLong(d) {
       // Only the zones remain as horizontal lines, because a retracement level
       // genuinely is one price. The averages are series now.
       refLines: zoneRefs,
+      /* Support and resistance as shaded bands, from the same `srBands` the
+         Options chart and the charting workspace both call, so the three cannot
+         render one level three ways. The server computes these on the weekly
+         frame: a shelf found in 252 daily bars is a one-year structure and this
+         chart draws twelve years. */
+      bands: showSR ? srBands(ltLevels.support_resistance || [],
+        ltLevels.atr14, ltLevels.spot) : [],
       // Labels hug the left edge here. On a twelve-year chart the newest bars are
       // crowded against the right, so right-aligned tags covered the price action
       // they were annotating — which is what made this chart hard to read.
@@ -26121,7 +26175,13 @@ document.addEventListener('change', (evt) => {
     // Routed through the shared setter rather than assigned here, so this menu
     // and the Charting toolbar cannot drift apart about what a toggle means.
     else if (key === 'cloud921' || key === 'cloud2150') { wsSetOverlay(key, on); }
+    /* Both views, because both carry this menu now.
+       The Investing chart has its own Technical Levels dropdown, and repainting
+       only Swing would have left its checkbox ticked with nothing changing on
+       the chart underneath: a control that takes the click and does nothing,
+       which reads as a broken feature rather than a missing one. */
     if (STATE.swing) preserveUI(views.swing, () => renderSwing(STATE.swing));
+    if (STATE.long) preserveUI(views.long, () => renderLong(STATE.long));
     return;
   }
   const f = evt.target.closest('[data-cat-filter]');

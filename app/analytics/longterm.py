@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 
 from .series_stats import _f
-from .technicals import rsi, sma
+from .technicals import atr, rsi, sma, support_resistance_levels
 from . import fundamentals, valuation
 
 log = logging.getLogger(__name__)
@@ -525,6 +525,25 @@ def analyse_holding(provider, ticker: str) -> Dict[str, Any]:
         "valuation_history": _valuation_history(provider, ticker, quote),
         "revenue_multiple": _revenue_multiple(provider, ticker, quote),
         "accumulation_zones": zones,
+        # Levels for the Investing chart's Technical Levels menu.
+        #
+        # Computed on the WEEKLY frame, not the daily one, and that is the point
+        # rather than a shortcut: a support shelf found in 252 daily bars is a
+        # one-year structure, and this chart draws twelve years. On weekly bars
+        # the same lookback is about five years, which is the horizon the reader
+        # is actually looking at.
+        #
+        # Same functions the swing tab uses, so the two cannot disagree about
+        # where a level is or how strong it is. The ATR rides along because the
+        # client sizes each band from it: a shelf is a zone the width of the
+        # instrument's own noise, not a hairline.
+        "levels": {
+            "support_resistance": support_resistance_levels(
+                weekly, float(close.iloc[-1]), lookback=252),
+            "atr14": _f(atr(weekly, 14).iloc[-1]) if len(weekly) > 15 else None,
+            "spot": _f(close.iloc[-1]),
+            "unit": "week",
+        },
         "fundamentals": {
             "sector": quote.get("sector"),
             "industry": quote.get("industry"),
