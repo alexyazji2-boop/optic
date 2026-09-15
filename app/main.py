@@ -385,6 +385,11 @@ def _swing_snapshot(
     # The layer above the eight options panels. Same reasoning as `why`: the
     # workings were all present and the summary was not.
     payload["options_brief"] = pulse_mod.options_brief(payload)
+    # Last, because it reads pulse, why, news, quote, gex and technicals and
+    # turns them into the sentence the panel leads with. Ordering is load-
+    # bearing: built before `why` it would have no attribution to name, and the
+    # lede would degrade to the bare price move on every symbol.
+    payload["digest"] = pulse_mod.digest(payload)
     return payload
 
 

@@ -328,12 +328,24 @@ def test_the_age_is_shown_in_words_not_in_hours():
     assert "h ago" not in fn
 
 
+# The tier styles, sliced out of the stylesheet.
+#
+# Anchored on "\n.nw-tier {" rather than ".nw-tier {". A bare substring matches
+# inside any descendant selector that ends in this class, and one arrived:
+# `.pl-story > .nw-tier { justify-self: start; }` in the Pulse block, which sits
+# ~3,000 lines earlier in the file. The slice then started there and ran to the
+# news block, swallowing `.pl-bar.tone-up { background: var(--pos) }` on the way
+# — so both tests below failed reporting a directional colour in the tier styles
+# that was never in them. The newline pins it to a rule at top level.
+TIER_BLOCK_START = "\n.nw-tier {"
+
+
 def test_every_tier_has_a_style_and_none_of_them_is_directional():
     """--pos/--neg mean up and down in every percentage, candle and volume bar
     in this app. A tier is not a direction, and painting Breaking green would
     say a fresh headline is good news before anyone has read it. The VIX tile
     shipped that mistake in the other direction once."""
-    block = CSS[CSS.index(".nw-tier {"):CSS.index(".nw-count {")]
+    block = CSS[CSS.index(TIER_BLOCK_START):CSS.index(".nw-count {")]
     for tier in news.TIER_ORDER:
         assert ".nw-tier.t-%s" % tier in CSS or tier == "notable", tier
     assert "--pos" not in block
@@ -344,7 +356,7 @@ def test_the_tier_styles_use_tokens_only():
     """No hex literals. `--ink-3` was invented for the Major border here and
     does not exist, so the declaration was silently dropped;
     tests/test_css_variables.py caught it."""
-    block = CSS[CSS.index(".nw-tier {"):CSS.index(".nw-legend ul")]
+    block = CSS[CSS.index(TIER_BLOCK_START):CSS.index(".nw-legend ul")]
     assert "#" not in block, "hex literal in the tier styles"
     for var in re.findall(r"var\((--[a-z0-9-]+)\)", block):
         assert "  %s:" % var in CSS, var

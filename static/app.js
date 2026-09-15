@@ -6518,33 +6518,131 @@ function renderWhatChanged(d) {
  * the page and the least supported. The stance, the conviction and the spread
  * of the inputs all survive that finding; a total does not.
  */
+/** "Updated 4 minutes ago", from an ISO timestamp. Empty when there isn't one. */
+function agoWords(iso) {
+  if (!iso) return '';
+  const then = Date.parse(iso);
+  if (!Number.isFinite(then)) return '';
+  const mins = Math.max(0, Math.round((Date.now() - then) / 60000));
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'} ago`;
+  const h = Math.round(mins / 60);
+  if (h < 24) return `${h} hour${h === 1 ? '' : 's'} ago`;
+  const days = Math.round(h / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+/* The Pulse hero: a sentence first, the workings underneath.
+ *
+ * **What this replaced, and why.** It led with four labels — the eyebrow
+ * "Optic Pulse", a 32px stance word, a conviction word and "60% of inputs
+ * agree" — above five factor bars. Every part was accurate and the whole was a
+ * legend rather than an answer: a reader who has just typed a symbol has to
+ * assemble "down today but read bullish, carried by positioning, with macro
+ * against" out of a word and five bars themselves.
+ *
+ * So the lede is now the largest thing here and the bars are behind a
+ * disclosure. The stance word is not repeated as a chip beside it — the
+ * sentence contains it, and a 32px duplicate of a word already in the sentence
+ * is the same fault this session removed from the price header and the status
+ * strip. Direction is carried by the coloured rule down the left of the lede,
+ * which is where the rest of the app already puts it.
+ *
+ * The bars are collapsed, not gone. They are the measured part and the skill
+ * note beside them is the app's own finding that this blend does not beat raw
+ * momentum — which is exactly the thing that must not become harder to find.
+ */
 function renderOpticPulse(d) {
   const p = d.pulse;
   if (!p) return '';
   const stance = String(p.stance || 'neutral');
   const skill = p.skill || {};
+  const g = d.digest || {};
+  const story = g.story || null;
+  const src = g.sources || {};
+  const fresh = agoWords(g.as_of);
+
   return `<section class="pl-hero span-all" aria-label="Optic Pulse">
-    <div class="pl-head">
+    <div class="pl-top">
       <span class="pl-eyebrow">Optic Pulse</span>
-      <span class="pl-stance is-${esc(stance)}">${esc(p.stance_label || stance.toUpperCase())}</span>
+      ${fresh ? `<span class="pl-fresh">Updated ${esc(fresh)}</span>` : ''}
+    </div>
+
+    ${g.lede ? `<p class="pl-lede is-${esc(stance)}">${esc(g.lede)}</p>`
+    : `<p class="pl-lede is-${esc(stance)}">${esc(p.stance_label
+      || stance.toUpperCase())}</p>`}
+
+    ${story && story.title ? `<a class="pl-story" href="${esc(story.url || '#')}"
+      target="_blank" rel="noopener noreferrer">
+      ${newsTierBadge(story)}
+      <span class="pl-story-t">${esc(story.title)}</span>
+      <span class="pl-story-m">${esc([story.publisher, story.age_words,
+      story.catalyst].filter(Boolean).join(' \u00b7 '))}</span>
+    </a>` : ''}
+
+    <div class="pl-meta">
       ${p.conviction ? `<span class="pl-conv">${esc(convictionWords(p.conviction))}</span>` : ''}
       ${p.agreement_pct !== null && p.agreement_pct !== undefined
     ? `<span class="pl-agree">${fmt(p.agreement_pct, 0)}% of inputs agree</span>` : ''}
+      ${/* Distinct publishers, not the article count: ten stories from Reuters
+           twice and eight others is nine sources, and the larger number would
+           overstate the breadth of the wire that was read. */''}
+      ${src.count ? `<details class="pl-src">
+        <summary>${src.count} source${src.count === 1 ? '' : 's'}</summary>
+        <p class="pl-src-list">${esc((src.names || []).join(' \u00b7 '))}</p>
+      </details>` : ''}
     </div>
 
-    <div class="pl-factors">
-      ${(p.factors || []).map((f) => `<div class="pl-factor${f.unavailable ? ' is-none' : ''}">
-        <span class="pl-flabel" title="${esc(f.measures || '')}">${esc(f.label)}</span>
-        ${pulseBar(f.bar, f.direction)}
-        <span class="pl-fval">${f.unavailable ? 'no data'
+    <details class="pl-bars">
+      <summary>How the ${p.factors_total || 5} inputs scored</summary>
+      <div class="pl-factors">
+        ${(p.factors || []).map((f) => `<div class="pl-factor${f.unavailable ? ' is-none' : ''}">
+          <span class="pl-flabel" title="${esc(f.measures || '')}">${esc(f.label)}</span>
+          ${pulseBar(f.bar, f.direction)}
+          <span class="pl-fval">${f.unavailable ? 'no data'
     : (f.score > 0 ? '+' : '') + fmt(f.score, 0)}</span>
-      </div>`).join('')}
-    </div>
-
-    <p class="pl-skill">${esc(skill.text || '')}</p>
-    ${p.factors_priced < p.factors_total
+        </div>`).join('')}
+      </div>
+      <p class="pl-skill">${esc(skill.text || '')}</p>
+      ${p.factors_priced < p.factors_total
     ? `<p class="pl-caveat">${p.factors_priced} of ${p.factors_total} inputs had data.
         A missing input redistributes its weight rather than counting as zero.</p>` : ''}
+      ${g.method ? `<p class="pl-method">${gloss(g.method)}</p>` : ''}
+    </details>
+  </section>`;
+}
+
+/* Three questions the payload has earned the right to offer.
+ *
+ * **This is what the fourteen "Ask Pulse" buttons should have been.** The
+ * Options tab carried one per panel — measured at fourteen on AAPL — each
+ * reading the same two words and each opening a generic explainer for its
+ * section. Fourteen identical controls is not fourteen affordances; it is one
+ * affordance repeated until it stops being read.
+ *
+ * A question that names a number on screen is worth more than a button that
+ * says "Ask Pulse", because it tells the reader what there is to ask about.
+ * "Tell me about the options" is a question anyone could ask without opening
+ * the app; "Positioning is the strongest input at +100, how much weight should
+ * that carry?" is not.
+ *
+ * The invalidation question is always last and always present. A digest that
+ * only ever confirms itself is one nobody should trust.
+ *
+ * Reuses `cc-qs` / `cc-q` from the home page, which already had exactly this
+ * pattern — text buttons, one per line, seeded from live data. A second visual
+ * language for "a question you can ask" would be the duplicate this whole pass
+ * exists to remove.
+ */
+function renderFollowUps(d) {
+  const ups = ((d.digest || {}).follow_ups) || [];
+  if (!ups.length) return '';
+  return `<section class="pl-block span-all" aria-label="Follow up">
+    <h2 class="pl-h">Follow up</h2>
+    <ul class="cc-qs">${ups.map((f) => `<li>
+      <button type="button" class="cc-q" data-ask-text="${esc(f.prompt || f.question)}"
+        >${esc(f.question)}</button>
+    </li>`).join('')}</ul>
   </section>`;
 }
 
@@ -6872,6 +6970,7 @@ function renderSwing(d) {
   ${renderWhatsNext(d)}
   ${renderSetup(d)}
   ${renderOptionsBrief(d)}
+  ${renderFollowUps(d)}
   ${renderThesis(d)}
 
   <div class="grid c2 gap">

@@ -549,3 +549,305 @@ def options_brief(payload: Dict[str, Any]) -> Dict[str, Any]:
             "hold the workings."
         ),
     }
+
+
+# --------------------------------------------------------------------- digest
+#
+# The lede, its provenance, and three questions worth asking next.
+#
+# **Why this exists.** The panel led with four labels — "Optic Pulse", a stance
+# chip, a conviction word and "60% of inputs agree" — which is a legend, not an
+# answer. A reader who has just typed a symbol wants a sentence: what the price
+# did, what Optic makes of it, and which inputs are doing the work. The parts
+# were all in the payload already; nothing assembled them into prose.
+#
+# **The one thing this must not do.** `why()` above carries a long note about
+# why its heading is "What's pulling hardest" and not "Why it's moving": the
+# factors are an attribution across the model's own inputs, so on a day a stock
+# is down the three strongest can all read bullish, and they did. Saying "AAPL
+# rises on strong momentum" would put that exact bug back, in the largest type
+# on the page. So the lede states the move and the reading as two facts side by
+# side and never joins them with a causal verb. Where there IS a datable company
+# story it is named as the freshest news, which is a claim about the wire rather
+# than about the price.
+#
+# **Deterministic, like everything else in this module.** No model call. The
+# lede has to be on screen the moment the page paints, for every symbol, on the
+# thirty-first request of the hour.
+
+# A follow-up earns its place by naming a number the reader can see. "Tell me
+# about the options" is a question anyone could ask without opening the app.
+FOLLOW_UP_LIMIT = 3
+
+
+def _move_words(pct: Optional[float]) -> str:
+    """How the day is described. Flat gets its own word rather than "up 0.0%"."""
+    if pct is None:
+        return "has not printed a change today"
+    if abs(pct) < 0.05:
+        return "is flat today"
+    return "is {} {:.1f}% today".format("up" if pct > 0 else "down", abs(pct))
+
+
+def _subject(payload: Dict[str, Any]) -> str:
+    quote = (payload or {}).get("quote") or {}
+    name = str(quote.get("name") or "").strip()
+    ticker = str((payload or {}).get("ticker") or quote.get("ticker") or "").strip()
+    # The company name reads better in a sentence, but a 60-character legal name
+    # ("Alphabet Inc. Class A Common Stock") does not. Ticker is the fallback.
+    if name and len(name) <= 28:
+        return name
+    return ticker or "This symbol"
+
+
+def _freshest_story(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The newest article that is about this company and carries a catalyst.
+
+    `about_company` is the filter that matters. news.py sorts company stories
+    ahead of sector context precisely because an unfiltered wire put "RF
+    Industries Q3 Earnings" at the top of NVDA's page, and a lede is the worst
+    possible place for that to happen again.
+    """
+    articles = ((payload or {}).get("news") or {}).get("articles") or []
+    ranked = [a for a in articles
+              if a.get("about_company") and (a.get("catalysts") or [])
+              and str(a.get("tier") or "") in ("breaking", "major")]
+    if not ranked:
+        return None
+    return min(ranked, key=lambda a: _num(a.get("age_hours")) or 1e9)
+
+
+def _sources(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Distinct publishers behind the news factor, for one chip.
+
+    Distinct, not the article count: ten stories from Reuters twice and eight
+    others is nine sources, and "10 sources" would overstate the breadth of the
+    wire it read.
+    """
+    articles = ((payload or {}).get("news") or {}).get("articles") or []
+    seen: List[str] = []
+    for a in articles:
+        pub = str(a.get("publisher") or "").strip()
+        if pub and pub not in seen:
+            seen.append(pub)
+    return {"count": len(seen), "names": seen, "article_count": len(articles)}
+
+
+def _lede(payload: Dict[str, Any]) -> str:
+    """The sentence. Move, reading, and which inputs carry it."""
+    quote = (payload or {}).get("quote") or {}
+    pulse_read = (payload or {}).get("pulse") or {}
+    why_read = (payload or {}).get("why") or {}
+    subject = _subject(payload)
+    move = _move_words(_num(quote.get("change_pct")))
+    stance = str(pulse_read.get("stance") or "").lower()
+
+    if not stance:
+        return "{} {}.".format(subject, move)
+
+    reasons = [r for r in (why_read.get("reasons") or []) if r.get("label")]
+
+    # Which direction counts as agreeing with the stance, and the reason the
+    # pulls are filtered by it at all.
+    #
+    # `why.reasons` ranks by ABSOLUTE score regardless of direction, so taking
+    # the top two unfiltered put the same factor on both sides of the sentence:
+    # on an up day read bearish it produced "with positioning and momentum
+    # pulling hardest and momentum pulling the other way" — a clause
+    # contradicting the one before it. Filtering the pulls to the stance's own
+    # direction makes that overlap impossible rather than patching it after.
+    #
+    # Neutral has no direction, so it names the two strongest inputs without
+    # claiming either supports the reading, and `against` comes back empty.
+    with_stance = {"bullish": "up", "bearish": "down"}.get(stance)
+
+    def _label(row: Dict[str, Any]) -> str:
+        return str(row.get("label") or "").lower()
+
+    if with_stance:
+        pulls = [_label(r) for r in reasons if r.get("direction") == with_stance][:2]
+    else:
+        pulls = [_label(r) for r in reasons][:2]
+
+    # The factor pulling against the stance is the most useful half of the
+    # sentence: it is what the reader would otherwise have to find by comparing
+    # five bars. Taken from the factor list rather than the reason list, because
+    # `why` only keeps what clears WHY_FLOOR and the dissent is often quieter
+    # than that.
+    against_dir = {"up": "down", "down": "up"}.get(with_stance or "")
+    against = [_label(f) for f in (pulse_read.get("factors") or [])
+               if not f.get("unavailable")
+               and f.get("direction") == against_dir]
+
+    # "Optic reads it X", never "X because Y". See the module note above.
+    clauses: List[str] = []
+    if pulls:
+        clauses.append("{} pulling hardest".format(
+            pulls[0] if len(pulls) == 1 else "{} and {}".format(*pulls)))
+    if against:
+        clauses.append("{} pulling the other way".format(against[0]))
+
+    sentence = "{} {}. Optic reads the setup {}".format(subject, move, stance)
+    if clauses:
+        # One ", with ..." joint however many clauses there are. Appending each
+        # with its own conjunction produced "bullish and macro pulling the other
+        # way" whenever the pulls list came back empty — a dangling "and" on any
+        # symbol whose factors all sat under WHY_FLOOR.
+        sentence += ", with {}".format(" and ".join(clauses))
+    return sentence + "."
+
+
+def _candidate_follow_ups(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Questions the payload has earned the right to offer.
+
+    Each one names something on screen, and each carries the prompt it will
+    actually send. The first version routed them through PULSE_TOPICS keys
+    instead, and two of the three collided on `whymoving`: the strongest-input
+    question and the freshest-story question are different questions that would
+    have opened the identical template, so one had to be dropped and the reader
+    saw two follow-ups where three had been earned.
+
+    Sending the question itself is also the honest behaviour. Tapping a line
+    that reads "There is a legal / regulatory story from 1 hour ago. Does it
+    change the read?" should ask that, not a generic explainer about news.
+    """
+    out: List[Dict[str, Any]] = []
+    pulse_read = (payload or {}).get("pulse") or {}
+    why_read = (payload or {}).get("why") or {}
+    gex = (payload or {}).get("gex") or {}
+    tech = (payload or {}).get("technicals") or {}
+    news = (payload or {}).get("news") or {}
+
+    # 1. The strongest attribution, by name and number.
+    reasons = why_read.get("reasons") or []
+    if reasons:
+        top = reasons[0]
+        score = _num(top.get("score"))
+        if score is not None:
+            out.append({
+                "question": "{} is the strongest input at {:+.0f}. How much weight "
+                            "should that carry?".format(str(top.get("label")), score),
+                "rank": 100 + abs(score),
+            })
+
+    # 2. A disagreement, which is the question a stance conceals.
+    conflicts = pulse_read.get("conflicts") or []
+    if conflicts:
+        out.append({
+            "question": "The inputs disagree with each other here. Which one should "
+                        "I trust?",
+            "rank": 95,
+        })
+
+    # 3. The freshest company story, named.
+    story = _freshest_story(payload)
+    if story:
+        kinds = [str(c.get("type")) for c in (story.get("catalysts") or []) if c.get("type")]
+        if kinds:
+            out.append({
+                "question": "There is a {} story from {}. Does it change the "
+                            "read?".format(kinds[0], story.get("age_words") or "today"),
+                "rank": 90,
+            })
+
+    # 4. A gamma wall price is sitting near.
+    flip = _num(gex.get("flip_point"))
+    spot = _num(tech.get("spot")) or _num(((payload or {}).get("quote") or {}).get("price"))
+    if flip and spot:
+        away = abs(spot / flip - 1.0) * 100.0
+        if away <= 3.0:
+            out.append({
+                "question": "Price is {:.1f}% from the gamma flip at {:,.0f}. What does "
+                            "that do to today's range?".format(away, flip),
+                "rank": 85 - away,
+            })
+
+    # 5. Earnings, when they are close enough to dominate everything else.
+    days = _num(news.get("days_to_earnings"))
+    if days is not None and 0 <= days <= 14:
+        out.append({
+            "question": "Earnings are {} away. How should that change the "
+                        "read?".format("today" if days < 1 else "{:.0f} days".format(days)),
+            "rank": 99 - days,
+        })
+
+    return out
+
+
+# The one question that is always worth asking, and the only one that is not
+# conditional on what the payload found. Held out of the ranked pool entirely:
+# it first sat in there with rank 1, which is the opposite of guaranteeing it —
+# with three stronger candidates present it was the first thing dropped, and on
+# AAPL that is exactly what happened. Reserved a slot instead.
+#
+# A digest that only ever confirms itself is one nobody should trust.
+INVALIDATION_QUESTION = "What would have to happen for this read to be wrong?"
+
+
+def digest(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """The lede, its sources, and what to ask next.
+
+    Reads `pulse`, `why`, `news`, `quote`, `gex` and `technicals`, so it has to
+    run after those are on the payload.
+    """
+    pulse_read = (payload or {}).get("pulse") or {}
+    if not pulse_read:
+        return {"available": False, "reason_none": "The stance panel has not been built."}
+
+    ticker = str((payload or {}).get("ticker") or "").strip()
+    candidates = sorted(_candidate_follow_ups(payload),
+                        key=lambda c: -(c.get("rank") or 0))
+    # The reserved slot goes on the end, so the ranked pool fills the others.
+    # De-duplicated by question text, not by any shared route.
+    ranked = candidates[:max(0, FOLLOW_UP_LIMIT - 1)]
+    ranked.append({"question": INVALIDATION_QUESTION, "rank": 0})
+
+    picked: List[Dict[str, Any]] = []
+    seen_q: set = set()
+    for c in ranked:
+        q = c["question"]
+        if q in seen_q:
+            continue
+        seen_q.add(q)
+        picked.append({
+            "question": q,
+            # The prompt is the question plus just enough context for a model
+            # that cannot see the page: which symbol, and the house instruction
+            # that the reader may not know the vocabulary. Without the symbol,
+            # "how much weight should that carry" is unanswerable.
+            "prompt": "{} About {}. {} Answer in plain language and say what "
+                      "would change your mind.".format(
+                          q, ticker or "the loaded symbol",
+                          "Use the panels on the Options tab as your evidence."),
+        })
+        if len(picked) >= FOLLOW_UP_LIMIT:
+            break
+
+    story = _freshest_story(payload)
+    return {
+        "available": True,
+        "lede": _lede(payload),
+        "story": None if not story else {
+            "title": story.get("title"),
+            "publisher": story.get("publisher"),
+            "age_words": story.get("age_words"),
+            "tier": story.get("tier"),
+            # The client's tier badge reads the label out of news.tiers and the
+            # explanation off the row, so the row has to carry both. The server
+            # owns the wording; a hardcoded "Breaking" here would be a second
+            # copy that drifts the day one of them is reworded.
+            "tier_why": story.get("tier_why"),
+            "url": story.get("url"),
+            "catalyst": (story.get("catalysts") or [{}])[0].get("type"),
+        },
+        "sources": _sources(payload),
+        "as_of": (payload or {}).get("generated_at"),
+        "follow_ups": picked,
+        "method": (
+            "Assembled from the panels on this page rather than written by a "
+            "model, so it is the same every time for the same data and every "
+            "figure in it is one you can go and check. The move and the reading "
+            "are stated side by side and not joined: the factor scores are an "
+            "attribution across Optic's own inputs, not a cause of today's price."
+        ),
+    }

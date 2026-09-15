@@ -8309,12 +8309,12 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
   margin-bottom: var(--space-5);
 }
 
-.pl-head {
+.pl-top {
   display: flex;
   align-items: baseline;
-  flex-wrap: wrap;
+  justify-content: space-between;
   gap: var(--space-3);
-  margin-bottom: var(--space-5);
+  margin-bottom: var(--space-3);
 }
 .pl-eyebrow {
   font-size: var(--t-caption);
@@ -8323,24 +8323,99 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
   text-transform: uppercase;
   color: var(--ink-muted);
 }
-/* The stance is the largest thing on the page, which is the point: it is the
-   answer. Colour carries direction, as it does everywhere else in the app. */
-.pl-stance {
-  font-family: var(--display);
-  font-size: var(--t-d2);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1;
+.pl-fresh { font-size: var(--t-caption); color: var(--ink-muted); }
+
+/* The sentence is the largest thing here, which is the point: it is the answer.
+   A 32px stance word was the largest thing before it, and a word is not an
+   answer — the reader still had to assemble "down today but read bullish,
+   carried by positioning, with macro against" out of it and five bars.
+
+   Direction is the rule down the left, not a second copy of the stance word.
+   The sentence already contains it, and the app puts direction in colour
+   everywhere else. 46ch because a display-size line longer than that stops
+   being a sentence and becomes a paragraph. */
+.pl-lede {
+  margin: 0 0 var(--space-4);
+  padding-left: var(--space-4);
+  border-left: 3px solid var(--ink-muted);
+  font: 600 var(--t-d3)/1.35 var(--display);
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  max-width: 46ch;
+  text-wrap: pretty;
 }
-.pl-stance.is-bullish { color: var(--pos); }
-.pl-stance.is-bearish { color: var(--neg); }
-.pl-stance.is-neutral { color: var(--ink-2); }
-.pl-conv, .pl-agree {
+.pl-lede.is-bullish { border-left-color: var(--pos); }
+.pl-lede.is-bearish { border-left-color: var(--neg); }
+
+/* The freshest company story, as a link. Flat: a bordered card here would
+   out-shout the sentence above it, which is the wrong priority. */
+.pl-story {
+  display: grid;
+  gap: var(--space-0);
+  margin-bottom: var(--space-4);
+  padding-left: var(--space-4);
+  border-left: 3px solid var(--border);
+  text-decoration: none;
+  transition: border-color var(--dur-ui) var(--ease-ui);
+}
+.pl-story:hover { border-left-color: var(--ink-muted); }
+/* The tier badge is inline-block everywhere else, but as a grid item it takes
+   the column: measured at 660px in a 681px row, so "BREAKING" rendered as a
+   full-width outlined bar above the headline. Only the badge shrink-wraps —
+   `justify-items: start` on the row would also pull the title and the byline
+   off the grid's width for no reason. */
+.pl-story > .nw-tier { justify-self: start; }
+.pl-story-t {
+  font-size: var(--t-base);
+  font-weight: 500;
+  color: var(--ink);
+  max-width: 62ch;
+}
+.pl-story:hover .pl-story-t { text-decoration: underline; }
+.pl-story-m { font-size: var(--t-caption); color: var(--ink-muted); }
+
+.pl-meta {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-3);
   font-size: var(--t-small);
   color: var(--ink-muted);
 }
-.pl-conv::before { content: '· '; }
-.pl-agree::before { content: '· '; }
+.pl-src > summary {
+  cursor: pointer;
+  list-style: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color var(--dur-ui) var(--ease-ui);
+}
+.pl-src > summary::-webkit-details-marker { display: none; }
+.pl-src > summary:hover { color: var(--ink); }
+.pl-src-list {
+  margin: var(--space-1) 0 0;
+  font-size: var(--t-caption);
+  line-height: 1.5;
+  color: var(--ink-muted);
+  max-width: 64ch;
+}
+
+/* The workings, collapsed. Not gone: the bars are the measured part, and the
+   skill note beside them is this project's own finding that the blend does not
+   beat raw momentum — the one thing that must not become harder to find. */
+.pl-bars > summary {
+  cursor: pointer;
+  list-style: none;
+  margin-top: var(--space-3);
+  font-size: var(--t-small);
+  font-weight: 600;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color var(--dur-ui) var(--ease-ui);
+}
+.pl-bars > summary::-webkit-details-marker { display: none; }
+.pl-bars > summary:hover { color: var(--ink); }
+.pl-bars[open] > summary { margin-bottom: var(--space-4); }
 
 /* One row per input. A grid rather than flex so the labels, bars and values
    line up in three columns however long a label is. */
@@ -8477,7 +8552,10 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
 @media (max-width: 720px) {
   .pl-next { grid-template-columns: 1fr; gap: var(--space-5); }
   .pl-factors { max-width: none; }
-  .pl-stance { font-size: var(--t-d3, 28px); }
+  /* The lede drops a step on a phone: --t-d3 over 46ch at 375px runs to six
+     lines and stops reading as one sentence. */
+  .pl-lede { font-size: var(--t-heading); padding-left: var(--space-3); }
+  .pl-story { padding-left: var(--space-3); }
 }
 
 /* "Explain chart" sits beside the open-ended Pulse button on the chart header.
