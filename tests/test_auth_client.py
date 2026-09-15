@@ -446,6 +446,88 @@ def test_every_ask_pulse_topic_used_is_a_topic_defined():
     assert defined - used == set(), sorted(defined - used)
 
 
+def test_every_ask_pulse_topic_has_its_own_label():
+    """Nine of these on the Options tab, nine different topics, and every one
+    of them read "Ask Pulse" — measured as `new Set(labels).size === 1`.
+
+    Nine distinct actions wearing one label: nothing on screen distinguished
+    the button that explains dealer gamma from the one that explains implied
+    volatility, and a reader who pressed one generic pill and got a wall of
+    text about gamma had no reason to expect the next to differ. Same finding
+    as the Pulse follow-ups — a question tells you what there is to ask, where
+    "Ask Pulse" only says that asking is possible.
+
+    Checked in both directions, like the topics themselves. A label with no
+    topic is dead text; a topic with no label silently falls back to the
+    generic word and quietly reintroduces the problem one panel at a time.
+    """
+    def keys(marker):
+        start = APP_JS.index(marker)
+        end = APP_JS.index("\n};", start)
+        return set(re.findall(r"^\s{2}'?\"?([a-zA-Z0-9_-]+)'?\"?\s*:",
+                              APP_JS[start:end], re.M))
+
+    topics = keys("const PULSE_TOPICS = {")
+    labels = keys("const PULSE_ASK_LABELS = {")
+    assert topics and labels, "nothing parsed, so this test is checking nothing"
+    assert topics - labels == set(), sorted(topics - labels)
+    assert labels - topics == set(), sorted(labels - topics)
+
+
+def test_the_ask_pulse_labels_are_actually_different_from_each_other():
+    """Thirty-five entries that all said the same thing would pass the coverage
+    test above and change nothing on screen."""
+    start = APP_JS.index("const PULSE_ASK_LABELS = {")
+    end = APP_JS.index("\n};", start)
+    values = re.findall(r":\s*['\"](.+?)['\"],\s*$", APP_JS[start:end], re.M)
+    assert len(values) >= 30, len(values)
+    # A handful of honest repeats is fine; one label for everything is not.
+    assert len(set(values)) >= len(values) - 3, sorted(values)
+    assert "Ask Pulse" not in values, "the generic label is the fallback, not an entry"
+
+
+def test_an_unknown_topic_still_renders_a_usable_button():
+    """Adding a topic must not be able to produce an empty pill."""
+    fn = APP_JS.split("function askPulse(topic) {", 1)[1].split("\n}", 1)[0]
+    assert "PULSE_ASK_LABELS[topic] || 'Ask Pulse'" in fn
+
+
+def test_a_panels_stored_identity_does_not_include_its_buttons():
+    """This is what made relabelling dangerous, and it was already broken.
+
+    `panelId` was built from `head.textContent`, which includes the Ask-Pulse
+    button and the collapse chevron: the stored state held
+    `swing|chart patternsask pulse` and `swing|close defenceask pulse uptrend`.
+    So a reader's remembered open/closed state was keyed on the label of a
+    button inside the heading, and renaming that button would have silently
+    orphaned every preference.
+
+    buildSectionIndex had already solved this by stripping a clone — with a
+    comment describing the exact symptom — and the collapse mechanism had its
+    own, wrong, copy. There is now one helper and both call it.
+    """
+    assert "function headingName(head) {" in APP_JS
+    assert APP_JS.count("clone.querySelectorAll('button, .th-plain, .lvl-count, .chip')") == 1, \
+        "two copies of how to name a heading is how one of them goes wrong"
+    collapsible = APP_JS.split("function makePanelsCollapsible(view) {", 1)[1] \
+        .split("\n}", 1)[0]
+    assert "const title = headingName(head);" in collapsible
+    assert "(head.textContent || '').trim()" not in collapsible, \
+        "raw textContent carries the button label into the storage key"
+    index = APP_JS.split("function buildSectionIndex(view) {", 1)[1].split("\n}", 1)[0]
+    assert "headingName(head)" in index
+    # All three callers, not just the two that were obvious. panelChooserHTML
+    # stripped a clone for the label it displays and then handed the raw text to
+    # panelId, panelIsHidden and isAdvancedPanel — so the chooser and the
+    # collapse mechanism disagreed about a panel's identity the moment one of
+    # them was corrected.
+    chooser = APP_JS.split("function panelChooserHTML(view) {", 1)[1].split("\n}", 1)[0]
+    assert "const title = headingName(head);" in chooser
+    assert "panelId(view, raw)" not in APP_JS, "raw heading text is not an identity"
+    mode = APP_JS.split("function applyUiMode(view", 1)[1].split("\nfunction ", 1)[0]
+    assert "headingName(head)" in mode
+
+
 def test_the_panels_the_product_brief_added_all_have_a_contextual_action():
     """Five panels shipped from the earlier brief with no Ask Pulse at all."""
     for topic in ("invalidate", "optionsactivity", "whatsnext", "setup", "whymoving"):

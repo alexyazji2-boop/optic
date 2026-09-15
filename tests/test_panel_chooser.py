@@ -52,9 +52,21 @@ def test_no_opinion_and_explicitly_shown_stay_distinguishable():
 
 def test_the_key_is_the_one_the_collapse_memory_uses():
     """Two id schemes for the same panel would eventually disagree about which
-    panel they describe."""
+    panel they describe. They did.
+
+    This used to require `panelId(view, raw)` here — the RAW heading text,
+    button label and all. Three callers derived a panel's identity that way and
+    all three were wrong in the same manner, which is survivable until one of
+    them is corrected: the stored state held `swing|chart patternsask pulse`,
+    so a panel's identity depended on the text of a button inside its heading.
+
+    The scheme is still single, which is what this test is for. It is now the
+    stripped name, from one shared helper, in all three places.
+    """
     assert "panelId(view, title)" in _fn("panelIsHidden")
-    assert "panelId(view, raw)" in _fn("panelChooserHTML")
+    assert "panelId(view, title)" in _fn("panelChooserHTML")
+    assert "panelId(view, raw)" not in APP_JS
+    assert "const title = headingName(head);" in _fn("panelChooserHTML")
 
 
 def test_reset_is_scoped_to_one_view():
@@ -103,7 +115,10 @@ def test_it_is_one_dialog_not_a_control_per_heading():
     on it."""
     assert "function panelChooserHTML(" in APP_JS
     assert 'class="pch"' in APP_JS
-    assert "role=\"dialog\"" in APP_JS.split("function panelChooserHTML(", 1)[1][:1600]
+    # Sliced to the function, not to a character count. At [:1600] this broke
+    # when a comment was added above the markup — a window measured in
+    # characters fails on an edit that changes nothing it was testing.
+    assert "role=\"dialog\"" in _fn("panelChooserHTML")
 
 
 def test_a_panel_with_no_heading_is_not_offered():
@@ -116,10 +131,17 @@ def test_a_panel_with_no_heading_is_not_offered():
 
 def test_the_heading_is_stripped_of_its_chrome():
     """textContent alone produced "GEX. Dealer gamma exposureAsk Pulse" in the
-    section index, for the same reason."""
+    section index, for the same reason.
+
+    The stripping moved into `headingName`, which this now calls. It was
+    inlined here and in buildSectionIndex, and a third copy in
+    makePanelsCollapsible had never been written at all — so the one place that
+    most needed the name, the storage key, was the one place without it.
+    """
     body = _fn("panelChooserHTML")
-    assert "cloneNode(true)" in body
-    assert "querySelectorAll('button" in body
+    assert "headingName(head)" in body
+    assert "cloneNode(true)" in _fn("headingName")
+    assert "querySelectorAll('button" in _fn("headingName")
 
 
 def test_the_specialist_panels_are_marked():

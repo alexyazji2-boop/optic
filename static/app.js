@@ -20648,9 +20648,73 @@ function explainChartPrompt(symbol) {
 }
 
 /* The button. Small, quiet, and next to the heading it explains. */
+/* What each Ask-Pulse button actually asks, in two to four words.
+ *
+ * **Why these are not all "Ask Pulse".** Measured on the Options tab: nine of
+ * them on one page, nine different topics, and `new Set(labels).size === 1`.
+ * Nine distinct actions wearing one label, so nothing on screen distinguished
+ * the button that explains dealer gamma from the one that explains implied
+ * volatility — and a reader who has pressed one generic pill and got a wall of
+ * text about gamma has no reason to expect the next one to be different.
+ *
+ * It is the same finding as the Pulse follow-ups: a question tells you what
+ * there is to ask, where "Ask Pulse" tells you only that asking is possible.
+ * These stay short because they sit inline inside an h2 at --t-micro.
+ *
+ * The buttons themselves are NOT redundant with the follow-up block, which was
+ * the reason to look at them. Those three are situational — they name today's
+ * figures. Most of these are the teaching layer: "Explain implied volatility,
+ * IV rank and the IV/HV ratio ... Assume I have not met the term before" is a
+ * question no generated follow-up will ever ask, and it is the question a
+ * first-time reader of the IV panel has.
+ *
+ * A topic with no entry falls back to "Ask Pulse", so adding a topic cannot
+ * render an empty button.
+ */
+const PULSE_ASK_LABELS = {
+  // Concept explainers: what is this panel?
+  gex: 'What is GEX?',
+  'gamma-profile': 'Read this curve',
+  vanna: 'What is vanna?',
+  flow: 'How solid is this?',
+  iv: 'What is IV?',
+  profile: 'What is a value area?',
+  composite: 'How is this scored?',
+  defence: 'What is close defence?',
+  feargreed: 'What goes into this?',
+  indicators: 'Explain these',
+  pehistory: 'What is a trailing P/E?',
+  morning: 'What period is this?',
+  global: 'Why this order?',
+  patterns: 'How reliable are these?',
+  compare: 'Why three horizons?',
+  calendar: 'Prev vs est?',
+  books: 'What differs?',
+  priority: 'Which column matters?',
+  revmultiple: 'Why the gap?',
+  impliedcorr: 'What is implied correlation?',
+  evaluate: 'What is an IC?',
+  sectorboard: 'What are these levels?',
+  regime: 'What market is this?',
+  levels: 'What is a gamma pin?',
+  bookrisk: 'What is gross exposure?',
+  instrument: 'What is this?',
+  relperf: 'What does this compare?',
+  // Situational reads: what do today's numbers mean?
+  optionsactivity: 'What is the flow saying?',
+  whatsnext: 'Which one matters most?',
+  whatchanged: 'Which of these matters?',
+  whatmatters: 'Which move matters?',
+  whymoving: 'How confident is this?',
+  setup: 'Check my work',
+  invalidate: 'Argue against this',
+  earningsweek: "What's worth watching?",
+};
+
 function askPulse(topic) {
+  const label = PULSE_ASK_LABELS[topic] || 'Ask Pulse';
   return `<button type="button" class="ask-pulse" data-ask="${esc(topic)}"
-    title="Have Pulse explain this section in plain language">Ask Pulse</button>`;
+    title="Ask Pulse: ${esc(label)}">${esc(label)}</button>`;
 }
 
 /** Open Pulse with a prompt already typed, ready to send or edit. */
@@ -25634,7 +25698,7 @@ function applyUiMode(view) {
   host.querySelectorAll('.panel').forEach((panel) => {
     const head = panel.querySelector(':scope > h2');
     if (!head) return;
-    const title = (head.textContent || '');
+    const title = headingName(head);
     const hide = panelIsHidden(view, title);
     panel.classList.toggle('is-advanced', hide);
     /* `hidden` as well as the class, because an author `display` beats the UA
@@ -25698,13 +25762,18 @@ function panelChooserHTML(view) {
   const rows = [...host.querySelectorAll('.panel')].map((panel) => {
     const head = panel.querySelector(':scope > h2');
     if (!head || panel.classList.contains('mode-note')) return null;
-    const clone = head.cloneNode(true);
-    clone.querySelectorAll('button, .th-plain, .lvl-count, .chip').forEach((n) => n.remove());
-    const title = (clone.textContent || '').replace(/\s+/g, ' ').trim();
+    const title = headingName(head);
     if (!title) return null;
-    const raw = (head.textContent || '');
-    return { title, id: panelId(view, raw), hidden: panelIsHidden(view, raw),
-             advanced: isAdvancedPanel(view, raw) };
+    /* The same name for the label and for every lookup.
+     *
+     * This computed a clean `title` to display and then passed the RAW heading
+     * text — button label and all — to panelId, panelIsHidden and
+     * isAdvancedPanel. Consistently wrong is survivable while every caller is
+     * wrong the same way, and all three of them were. The moment the collapse
+     * mechanism started naming headings properly, this one disagreed with it
+     * about which panel a row referred to. */
+    return { title, id: panelId(view, title), hidden: panelIsHidden(view, title),
+             advanced: isAdvancedPanel(view, title) };
   }).filter(Boolean);
   if (!rows.length) return '';
 
@@ -25870,7 +25939,36 @@ function rememberCollapse(id, open) {
   } catch (e) { /* private mode: the session still works, it just forgets */ }
 }
 
-/** Stable-ish id for a panel: view plus its heading text. */
+/* A heading's name, minus its own chrome.
+ *
+ * A panel heading carries the Ask-Pulse button, the collapse chevron, and often
+ * a "· daily bars, 126 of 502 shown" qualifier. `textContent` returns all of
+ * it, so the name of the GEX panel came out as "GEX. Dealer gamma
+ * exposureAsk Pulse".
+ *
+ * buildSectionIndex had already worked this out and stripped a clone; the
+ * collapse mechanism had not, and built its storage key off the raw text. The
+ * consequence was in the stored state: `swing|chart patternsask pulse`. So a
+ * panel's remembered open/closed state was keyed on the label of a button
+ * inside its heading, and relabelling that button silently orphaned every
+ * reader's panel preferences.
+ *
+ * Three callers needed it and each had its own idea: buildSectionIndex stripped
+ * a clone, makePanelsCollapsible used the raw text, and panelChooserHTML
+ * stripped a clone for the label it displays and then passed the raw text to
+ * every lookup it made. Consistently wrong is survivable while all three are
+ * wrong the same way; the moment one was corrected the others disagreed with it
+ * about which panel a row referred to. So there is one helper and all three
+ * call it.
+ */
+function headingName(head) {
+  if (!head) return '';
+  const clone = head.cloneNode(true);
+  clone.querySelectorAll('button, .th-plain, .lvl-count, .chip').forEach((n) => n.remove());
+  return (clone.textContent || '').replace(/\s+/g, ' ').trim();
+}
+
+/** Stable-ish id for a panel: view plus its heading name. */
 function panelId(view, title) {
   return view + '|' + title.toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 48);
 }
@@ -25984,19 +26082,11 @@ function buildSectionIndex(view) {
   nav.innerHTML = panels.map((panel, i) => {
     if (!panel.id) panel.id = `sec-${view}-${i}`;
     const head = panel.querySelector(':scope > h2');
-    /* The heading minus its own chrome.
-     *
-     * A heading carries the Ask-Pulse button, the collapse chevron and often a
-     * "· daily bars, 126 of 502 shown" qualifier. Cloning and stripping is the
-     * only reliable way to get the name: textContent alone produced chips
-     * reading "GEX. Dealer gamma exposureAsk Pulse". */
-    const clone = head.cloneNode(true);
-    clone.querySelectorAll('button, .th-plain, .lvl-count, .chip').forEach((n) => n.remove());
-    let label = (clone.textContent || '').replace(/\s+/g, ' ').trim();
-    label = label.replace(/\s*[·—-]\s*$/, '');
+    const full = headingName(head);
+    let label = full.replace(/\s*[·—-]\s*$/, '');
     if (label.length > 26) label = label.slice(0, 25).trimEnd() + '…';
     return `<button type="button" class="sec-chip" data-sec-jump="${esc(panel.id)}"
-      title="${esc((clone.textContent || '').replace(/\s+/g, ' ').trim())}">${esc(label)}</button>`;
+      title="${esc(full)}">${esc(label)}</button>`;
   }).join('');
 
   /* The bulk controls ride along, after the fade so they sit above it.
@@ -26181,7 +26271,7 @@ function makePanelsCollapsible(view) {
     const head = panel.querySelector(':scope > h2');
     if (!head || panel.dataset.collapsible === '1') return;
 
-    const title = (head.textContent || '').trim();
+    const title = headingName(head);
     if (!title) return;
     const id = panelId(view, title);
     const isDefaultOpen = openByDefault.some((k) => title.toLowerCase().includes(k));
