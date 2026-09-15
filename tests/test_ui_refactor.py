@@ -293,3 +293,120 @@ def test_the_loaded_chart_view_has_a_heading():
     nothing in its heading outline."""
     block = APP[APP.index("host.innerHTML = `\n  ${/*"):][:1600]
     assert 'class="sr-only">Charting ${esc(STATE.chartSymbol)}' in block
+
+
+# ------------------------------------------------- de-cluttering the Options tab
+#
+# Measured on AAPL at 727x835 before any of this: the Options tab was 10,761px
+# for a reader with no stored panel state, and the price hero sat at y=801 in an
+# 835px viewport. Every number in these docstrings is an observation from that
+# session, not a target.
+
+
+def test_a_collapsed_momentum_panel_actually_collapses():
+    """The bug this exists for.
+
+    `.grid.momentum-row > .panel > .panel-body` carries four classes and
+    outranked the three in `.panel.is-closed > .panel-body { display: none }`,
+    so the equal-height flexing won and the collapse lost. Clicking either
+    heading rotated the chevron and set aria-expanded="false" while the panel
+    stayed 466px tall — measured on AAPL with both panels reporting is-closed
+    and their bodies computing to display:flex over a 400px box. 930px of chart
+    the reader had asked to put away, and a control that took the click and did
+    nothing.
+
+    Excluded rather than out-specified: the flexing is only meaningful between
+    two panels that are both showing a chart.
+    """
+    assert ".grid.momentum-row > .panel:not(.is-closed) > .panel-body {" in NO_COMMENTS
+    assert ".grid.momentum-row > .panel > .panel-body {" not in NO_COMMENTS, \
+        "the unqualified form outranks the collapse rule"
+
+
+def test_a_collapsed_momentum_panel_opts_out_of_the_stretch():
+    """The row is `align-items: stretch` so the two charts share a baseline.
+    With one panel closed that inflates a 66px header to its sibling's height,
+    which looks like the collapse half-worked."""
+    assert ".grid.momentum-row > .panel.is-closed { align-self: start; }" in NO_COMMENTS
+
+
+def test_every_top_level_options_panel_can_be_collapsed():
+    """makePanelsCollapsible only adopts a panel with a direct h2 — "nothing to
+    click and nothing to label the collapsed state with". Volatility context
+    was titled with an h3 and fell through it: 678px, the only panel on the tab
+    with no toggle, because of a heading level."""
+    block = APP[APP.index("Volatility context, moved out of the entry plan"):]
+    block = block[:2000]
+    assert "<h2>${hg('Volatility context')}" in block
+    assert "<h3>${hg('Volatility context')}" not in block
+
+
+def test_the_options_tab_opens_two_panels_not_five():
+    """The five that used to open came to 5,476px, and the Pulse hero plus the
+    four summary blocks above them — not collapsible, always rendered — come to
+    another 1,790px. So the tab opened with the read stated five times before
+    the reader reached anything new. Quote (404px) repeats px-head almost
+    exactly; Optic's Perspective (1,017px) is the fifth restatement; close
+    defence (449px) answers what the verdict above it already leads with."""
+    block = APP[APP.index("const PANELS_OPEN_BY_DEFAULT = {"):]
+    block = block[:block.index("};") + 2]
+    swing = block[block.index("swing:"):block.index("earnings:")]
+    assert "'swing verdict'" in swing, "the answer stays open"
+    assert "'price, moving averages'" in swing, "the chart is what the tab is for"
+    for dropped in ("'quote'", '"optic\'s perspective"', "'close defence'"):
+        assert dropped not in swing, f"{dropped} is a duplicate of something above it"
+
+
+def test_the_options_tab_has_one_price_header_not_two():
+    """securityHeader's full form and renderPriceHead both name the symbol, the
+    company, the exchange, the last price and the change. Stacked they measured
+    108px + 280px of the same four facts — and the sec-head copy showed the
+    price at var(--t-body), 13px, against px-head's display size, so the
+    smaller duplicate was also the less legible one."""
+    assert "securityHeader('swing', { compact: true })" in APP
+    body = APP.split("function securityHeader(", 1)[1].split("\nfunction ", 1)[0]
+    assert "opts.compact ? '' : `<div class=\"sec-id\">" in body, \
+        "compact is what drops the identity line"
+
+
+def test_the_status_strip_is_clamped_to_one_row():
+    """Seven items wrapping to five rows, 130px above the fold, measured on the
+    Options tab at 727px. What was in them is the argument: the price, the
+    change, the verdict and the market status were each already on that screen
+    in a larger, better-labelled form, so the strip was the fifth copy of the
+    price and the second copy of the verdict."""
+    assert ".sl-parts {" in NO_COMMENTS
+    parts = NO_COMMENTS[NO_COMMENTS.index(".sl-parts {"):]
+    parts = parts[:parts.index("}")]
+    assert "max-height: 1.6em;" in parts, "one line of the strip's own type"
+    assert "overflow: hidden;" in parts
+    assert ".statusline.is-open .sl-parts { max-height: none; overflow: visible; }" \
+        in NO_COMMENTS
+
+
+def test_the_status_strip_does_not_wrap_around_its_own_toggle():
+    """The strip clips and .sl-parts wraps inside it. If the strip itself
+    wrapped, More would drop onto a second line — restoring the height the
+    clamp exists to remove."""
+    block = NO_COMMENTS[NO_COMMENTS.index(".statusline {"):]
+    block = block[:block.index("}")]
+    assert "flex-wrap: nowrap;" in block
+
+
+def test_the_status_toggle_only_appears_when_there_is_more_to_see():
+    """A "more" that reveals nothing is the same fault as the session summary's
+    render-time fit check. Overflow is measured on the inner row, because the
+    strip is what clips and its own scrollHeight already equals its
+    clientHeight."""
+    fn = APP.split("function setStatus(parts) {", 1)[1].split("\nfunction ", 1)[0]
+    assert "inner.scrollHeight > inner.clientHeight + 1 || statusOpen" in fn
+    assert "hidden" in fn, "the button ships hidden and is revealed on measurement"
+
+
+def test_the_status_open_state_survives_a_repaint():
+    """updateStatus runs on every view change, every poll and every repaint, and
+    setStatus replaces innerHTML. State in the DOM alone would re-collapse the
+    strip under the reader."""
+    assert "let statusOpen = false;" in APP
+    fn = APP.split("function setStatus(parts) {", 1)[1].split("\nfunction ", 1)[0]
+    assert "host.classList.toggle('is-open', statusOpen);" in fn

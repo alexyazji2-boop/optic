@@ -688,6 +688,9 @@ nav.tabs button[aria-selected="true"]::after {
 }
 
 /* Sticky under the top bar, so it floats over content and takes glass too. */
+/* One row by default. See setStatus for what was in the other four.
+   The strip clips; .sl-parts is what wraps inside it, so the row height is
+   `1lh` of the strip's own type plus its padding rather than a magic number. */
 .statusline {
   padding: var(--space-2) var(--space-5);
   font-size: var(--t-small);
@@ -695,9 +698,39 @@ nav.tabs button[aria-selected="true"]::after {
   background: var(--glass);
   border-bottom: 1px solid var(--glass-edge);
   display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  /* Not `wrap`: the parts row wraps, the strip does not, so the More button
+     stays on the first line beside the content it reveals. */
+  flex-wrap: nowrap;
+}
+.sl-parts {
+  display: flex;
   gap: var(--space-4);
   flex-wrap: wrap;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  /* Exactly one line of this strip's type. */
+  max-height: 1.6em;
 }
+.statusline.is-open .sl-parts { max-height: none; overflow: visible; }
+.sl-more {
+  flex: none;
+  /* 44px would double this strip's height for a control that reveals four
+     duplicated readings, so this one is deliberately a text affordance rather
+     than a tap target — it sits in a 40px band, not a touch list. */
+  padding: 0 var(--space-2);
+  border: 0;
+  background: none;
+  color: var(--ink-muted);
+  font: 600 var(--t-caption)/1.6 var(--sans);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  transition: color var(--dur-ui) var(--ease-ui);
+}
+.sl-more:hover { color: var(--ink); }
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .statusline {
     -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
@@ -1915,32 +1948,39 @@ body.chat-open aside#chat { display: flex; }
   border-left: 2px solid var(--warn);
   padding-left: var(--space-2);
 }
-/* The phone disclosure for the session legend and description.
-   Hidden entirely on anything wider: the desktop has the room and the
-   information is worth having permanently there. */
-.ses-detail-btn { display: none; }
+/* The disclosure for the session legend and description, at every width.
+   It used to be phone-only, on the reasoning that "the desktop has the room".
+   The desktop has the room and spends it badly: measured on AAPL at 727px, the
+   four phase keys, the timezone note and the description put the company name
+   and its price at y=516 in an 835px viewport, so 62% of the first screen was
+   market-hours reference material on the page a reader opened to see a price.
 
-@media (max-width: 719px) {
-  .ses-detail-btn {
-    display: inline-block;
-    margin-top: var(--space-2);
-    padding: var(--space-0) var(--space-2);
-    border: 1px solid var(--border);
-    border-radius: var(--r-sm);
-    background: none;
-    color: var(--ink-muted);
-    font: 400 var(--t-micro)/1.6 var(--sans);
-    cursor: pointer;
-    transition: color var(--dur-ui) var(--ease-ui),
-                border-color var(--dur-ui) var(--ease-ui);
-  }
-  .ses-detail-btn:hover { color: var(--ink); border-color: var(--ink-muted); }
-  /* Not `hidden`: this element has no author `display` of its own, but the
-     rule below gives it one, and an author display beats the UA stylesheet's
-     [hidden] whatever the specificity. A class is the honest mechanism here. */
-  .ses-detail { display: none; }
-  .ses-detail.is-open { display: block; }
+   Which session is running, the clock and the 24-hour strip all stay visible
+   unconditionally — those are the parts that change during a day. What is
+   behind the button is a fixed timetable and a paragraph explaining it, which
+   is reference, not news. */
+.ses-detail-btn {
+  display: inline-block;
+  margin-top: var(--space-2);
+  /* 44px, like every other control. This was space-0 (2px) vertical, which
+     made a 17px-tall button. */
+  min-height: 44px;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink-muted);
+  font: 400 var(--t-caption)/1.6 var(--sans);
+  cursor: pointer;
+  transition: color var(--dur-ui) var(--ease-ui),
+              border-color var(--dur-ui) var(--ease-ui);
 }
+.ses-detail-btn:hover { color: var(--ink); border-color: var(--ink-muted); }
+/* Not `hidden`: this element has no author `display` of its own, but the
+   rule below gives it one, and an author display beats the UA stylesheet's
+   [hidden] whatever the specificity. A class is the honest mechanism here. */
+.ses-detail { display: none; }
+.ses-detail.is-open { display: block; }
 
 .ses-desc {
   margin-top: var(--space-2);
@@ -4096,6 +4136,9 @@ button.home-card:focus-visible { outline: 2px solid var(--s1); outline-offset: 2
  * into a mostly-empty bordered box. */
 .grid.momentum-row { align-items: stretch; }
 .grid.momentum-row > .panel { display: flex; flex-direction: column; }
+/* A collapsed panel opts out of the stretch, or the row inflates it to match
+   whichever sibling is still open — a 66px header in a 466px box. */
+.grid.momentum-row > .panel.is-closed { align-self: start; }
 
 /* Both the intro line and the legend get a consistent floor. Equal panel
  * heights alone were not enough: RSI's explanation wraps to two lines and
@@ -4104,7 +4147,23 @@ button.home-card:focus-visible { outline: 2px solid var(--s1); outline-offset: 2
 /* The panel body is wrapped by the collapse mechanism, so `.panel > .sub` never
  * matched — the intro is a child of .panel-body, not of .panel. */
 .grid.momentum-row .panel-body > .sub { min-height: 2.9em; }
-.grid.momentum-row > .panel > .panel-body { display: flex; flex-direction: column; flex: 1 1 auto; }
+/* `:not(.is-closed)` is load-bearing, not defensive.
+ *
+ * Four classes here (.grid .momentum-row .panel .panel-body) outrank the three
+ * in `.panel.is-closed > .panel-body { display: none }`, so this rule won and
+ * the collapse did nothing: clicking either heading rotated the chevron, set
+ * aria-expanded="false" and left a 466px panel on screen. Measured on AAPL —
+ * both panels reported is-closed with panel-body computing to display:flex and
+ * a 400px body. 930px of chart the reader had asked to put away.
+ *
+ * Excluding the closed state rather than raising the other rule's specificity,
+ * because the equal-height flexing this exists for is only meaningful between
+ * two panels that are actually showing a chart. */
+.grid.momentum-row > .panel:not(.is-closed) > .panel-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+}
 /* Two lines' worth, measured: RSI's five legend entries wrap to 49px at this
  * column width while MACD's four fit in one line. Reserving the taller of the
  * two is what puts both charts on the same y. */

@@ -924,8 +924,48 @@ function armViewReveals() {
   });
 }
 
+/* Whether the status strip is showing everything. Outside the render, because
+ * updateStatus runs on every view change, every poll and every repaint. */
+let statusOpen = false;
+
+/* One row, with the rest behind a disclosure.
+ *
+ * Measured on the Options tab at 727px: seven items wrapping to five rows,
+ * 130px of chrome above the fold. What was in them is the argument for hiding
+ * them — the price, the change, the verdict and the market status were each
+ * already on the same screen in a larger, better-labelled form, so the strip
+ * was spending 130px to be the fifth copy of the price and the second copy of
+ * the verdict.
+ *
+ * Clamped rather than culled per view. Callers pass whatever their view knows
+ * and there are a dozen of them; a height that holds one row is one rule, where
+ * trimming each list is a dozen edits that drift. Provenance and the live state
+ * ride at the front so the part that is not duplicated is the part that shows.
+ *
+ * The button only appears when the content actually overflows — a "more" that
+ * reveals nothing is the same fault as the session summary's. */
 function setStatus(parts) {
-  $('#statusline').innerHTML = parts.map((p) => `<span>${p}</span>`).join('');
+  const host = $('#statusline');
+  if (!host) return;
+  host.classList.toggle('is-open', statusOpen);
+  host.innerHTML = `<div class="sl-parts">${
+    parts.map((p) => `<span>${p}</span>`).join('')}</div>
+    <button type="button" class="sl-more" data-sl-more hidden
+      aria-expanded="${statusOpen ? 'true' : 'false'}"
+      aria-controls="statusline">${statusOpen ? 'Less' : 'More'}</button>`;
+
+  const inner = host.querySelector('.sl-parts');
+  const more = host.querySelector('[data-sl-more]');
+  if (!inner || !more) return;
+  /* Overflow is measured on the inner row, not the strip: the strip is what
+   * clips, so its own scrollHeight already equals its clientHeight. */
+  if (inner.scrollHeight > inner.clientHeight + 1 || statusOpen) more.hidden = false;
+  more.addEventListener('click', () => {
+    statusOpen = !statusOpen;
+    host.classList.toggle('is-open', statusOpen);
+    more.setAttribute('aria-expanded', statusOpen ? 'true' : 'false');
+    more.textContent = statusOpen ? 'Less' : 'More';
+  });
 }
 
 /* Sentence case for anything rendered as a label, value or chip.
@@ -7413,7 +7453,20 @@ function renderSwing(d) {
 
   `;
 
-  views.swing.innerHTML = securityHeader('swing') + html;
+  /* Compact, because this is the one facet that renders its own price hero.
+   *
+   * securityHeader's full form and renderPriceHead both name the symbol, the
+   * company, the exchange, the last price and the change. Measured on AAPL they
+   * stacked to 108px + 280px of the same four facts, one above the other, at
+   * the top of the page — and the sec-head copy showed the price at 13px while
+   * the px-head copy showed it at display size, so the smaller duplicate was
+   * also the less legible one.
+   *
+   * `compact` drops sec-head's identity line and keeps the sticky section tabs,
+   * which is the part that is not duplicated. Every other facet (news,
+   * financials, overview, earnings, long) has no px-head and keeps the full
+   * header, so nothing else changes. */
+  views.swing.innerHTML = securityHeader('swing', { compact: true }) + html;
   orderAssetPageForPhone();
 
   // ---- charts
@@ -8130,8 +8183,14 @@ function renderEntryPlan(p) {
        inside the card, which the panel border made look like a failed section
        rather than empty space. Two more rows landed here with the HV ladder,
        which is what pushed it over. -->
+  ${/* h2, not h3. This is a top-level panel, and makePanelsCollapsible only
+        adopts a panel with a direct h2 child — "nothing to click and nothing to
+        label the collapsed state with" is the rule, and an h3 fell through it.
+        Measured on AAPL: 678px that could not be put away, the only panel on
+        the Options tab with no toggle, because of a heading level. It is also
+        the correct outline: its siblings in this view are all h2. */''}
   ${iv.available ? `<div class="panel gap">
-      <h3>${hg('Volatility context')}${askPulse('iv')}</h3>
+      <h2>${hg('Volatility context')}${askPulse('iv')}</h2>
       ${kv([
   ['Implied volatility, at the money', fmt(iv.atm_iv_pct, 1) + '% a year. What options are pricing in'],
   ['Realized volatility, last 20 days', fmt(iv.realised_vol_20d_pct, 1) + '% a year. What the stock actually did'],
@@ -22191,6 +22250,16 @@ function humanCountdown(minutes) {
   return `${h} hour${h === 1 ? '' : 's'} and ${m} minute${m === 1 ? '' : 's'}`;
 }
 
+/* Whether the session disclosure is open, kept outside the render.
+ *
+ * `loadSession` is on a 60-second interval (the phase and the countdown have to
+ * stay honest across a session boundary) and renderSessionBar replaces the
+ * bar's innerHTML wholesale. So the open state cannot live in the DOM: open the
+ * panel, start reading the company description, and it shuts under you within
+ * the minute. Not persisted to storage — closed is the right default on a fresh
+ * load, and this only has to survive a repaint. */
+let sessionDetailOpen = false;
+
 function renderSessionBar() {
   const host = $('#sessionbar');
   if (!host) return;
@@ -22284,7 +22353,23 @@ function renderSessionBar() {
 
   host.hidden = false;
   host.innerHTML = `
-    ${companyBlock}
+    ${/* The company block used to sit here, above everything.
+        *
+        * What is in it: sector, industry, employee count, head office, a link,
+        * and a two-line business description. None of it changes during a
+        * session, and all of it was being rendered above the price. Measured on
+        * AAPL at 727px: 119px of it, and the sessionbar as a whole put the price
+        * hero at y=801 in an 835px viewport — so the number the reader searched
+        * for was the last thing on the first screen, under a paragraph
+        * explaining that Apple makes phones.
+        *
+        * It is also the third copy of the company's identity on that screen;
+        * px-head names the symbol, company and exchange directly above.
+        *
+        * Moved into the disclosure below rather than deleted. "What is this
+        * company" is a real question — it is just not the question someone has
+        * while watching a price, and it has the same shelf life as the trading
+        * timetable it now sits beside. */''}
     <div class="ses-main">
       <span class="ses-dot p-${esc(phase)}"></span>
       <div class="ses-head">
@@ -22312,8 +22397,11 @@ function renderSessionBar() {
         * the 24-hour strip all stay visible, because those are the parts that
         * change during a day. */''}
     <button type="button" class="ses-detail-btn" data-ses-detail
-      aria-expanded="false" aria-controls="ses-detail">Session hours</button>
-    <div class="ses-detail" id="ses-detail">
+      aria-expanded="${sessionDetailOpen ? 'true' : 'false'}"
+      aria-controls="ses-detail">${sessionDetailOpen
+    ? 'Hide details' : 'Hours &amp; company'}</button>
+    <div class="ses-detail${sessionDetailOpen ? ' is-open' : ''}" id="ses-detail">
+      ${companyBlock}
       <div class="ses-legend">${legend}
         <span class="ses-key ses-zone">${onMarketTime
     ? `Times in ${esc(zoneTag)}. Market time`
@@ -22335,25 +22423,45 @@ function renderSessionBar() {
    * closed-by-default panel, with one DOM either way. */
   const detailBtn = host.querySelector('[data-ses-detail]');
   const detail = host.querySelector('.ses-detail');
+
+  /* Hide the toggle when the summary already fits — a "more" button that
+   * expands nothing is worse than no button.
+   *
+   * Measured on open, not at render. The company block now lives inside the
+   * disclosure, and inside `display: none` both scrollHeight and clientHeight
+   * are 0 — so the old render-time check read `0 <= 1`, decided the text fitted
+   * and hid "More" on every symbol whose description is in fact clamped. A
+   * collapsed box reports no layout; it has to be asked once it has one. */
+  let fitChecked = false;
+  const checkSummaryFit = () => {
+    if (fitChecked) return;
+    const s = $('#ses-summary');
+    const m = $('#ses-more');
+    if (!s || !m || !s.clientHeight) return;   // still collapsed: ask again later
+    fitChecked = true;
+    if (s.scrollHeight <= s.clientHeight + 1) m.hidden = true;
+  };
+
   if (detailBtn && detail) {
     detailBtn.addEventListener('click', () => {
       const open = detail.classList.toggle('is-open');
+      sessionDetailOpen = open;
       detailBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-      detailBtn.textContent = open ? 'Hide hours' : 'Session hours';
+      detailBtn.textContent = open ? 'Hide details' : 'Hours & company';
+      if (open) checkSummaryFit();
     });
   }
 
-  // Hide the toggle when the summary already fits — a "more" button that expands
-  // nothing is worse than no button.
   const sum = $('#ses-summary');
   const more = $('#ses-more');
   if (sum && more) {
-    if (sum.scrollHeight <= sum.clientHeight + 1) more.hidden = true;
     more.addEventListener('click', () => {
       const open = sum.classList.toggle('expanded');
       more.textContent = open ? 'Less' : 'More';
     });
   }
+  // Already open (the reader left it open on a previous render): measure now.
+  if (detail && detail.classList.contains('is-open')) checkSummaryFit();
 }
 
 async function loadSession(force) {
@@ -25614,10 +25722,30 @@ function watchForLatePanels() {
 watchForLatePanels();
 
 const PANELS_OPEN_BY_DEFAULT = {
-  swing: [
-    'swing verdict', 'quote', "optic's perspective", 'close defence',
-    'price, moving averages',
-  ],
+  /* Two, not five.
+   *
+   * Measured on AAPL at the default width: the five that used to open here came
+   * to 5,476px, and the Pulse hero plus the four summary blocks above them —
+   * which are not collapsible and always render — already come to 1,790px. So
+   * the tab opened with the verdict stated five times before the reader reached
+   * anything they had not been told.
+   *
+   * What each of the three dropped ones was costing, and why it is not a loss:
+   *
+   * - `quote` (404px) repeats the price header almost exactly. px-head already
+   *   shows today's range, the 52-week range, volume against average and market
+   *   cap; the panel's only unique readings are ATR (14) and the expected
+   *   2-week range, one click away.
+   * - `optic's perspective` (1,017px) is the fifth restatement of the read, and
+   *   the first four are above it and cannot be closed.
+   * - `close defence` (449px) answers "is the trend intact", which the verdict
+   *   panel above it already leads with.
+   *
+   * The chart stays open because it is the thing the tab is for, and the swing
+   * verdict stays open because it is the answer. Everything else is evidence
+   * for an answer already on screen, which is what a closed panel is for.
+   * Collapsed, never removed: one click, and the state is remembered. */
+  swing: ['swing verdict', 'price, moving averages'],
   earnings: ['event pricing', 'earnings verdict', 'next report'],
   long: ['long-term view', 'close defence', 'valuation vs its own history'],
   market: ['macro regime', 'market breadth', 'sector rotation', 'stock maps',

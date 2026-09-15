@@ -174,15 +174,61 @@ def test_nothing_without_a_feed_is_offered():
 # ------------------------------------------------------------ phone layout
 
 
-def test_the_session_detail_collapses_only_on_a_phone():
-    """Measured at 375x812: the legend and description took ~240px and pushed
-    the day's moves off the first screen. The desktop renders what it always
-    did."""
-    assert 'class="ses-detail"' in APP_JS
+def test_the_session_detail_collapses_at_every_width():
+    """It was phone-only, on the reasoning that the desktop has the room.
+
+    The desktop has the room and spent it badly. Measured on AAPL at 727x835
+    with the strip fully expanded: the four phase keys, the timezone note and
+    the business description put the price hero at y=801 in an 835px viewport,
+    so the number the reader searched for was the last thing on the first
+    screen. The live parts — which session, the clock, the 24-hour strip — are
+    still unconditional; what is behind the button is a fixed timetable, a
+    colour legend and a company profile, none of which change during a day.
+    """
+    assert 'class="ses-detail' in APP_JS
     assert "data-ses-detail" in APP_JS
-    assert ".ses-detail-btn { display: none; }" in CSS
+    # Unconditional, so neither rule may sit inside a width query.
+    assert ".ses-detail { display: none; }" in CSS
+    assert ".ses-detail.is-open { display: block; }" in CSS
     phone = CSS[CSS.index("@media (max-width: 719px) {"):]
-    assert ".ses-detail { display: none; }" in phone
+    assert ".ses-detail { display: none; }" not in phone, \
+        "the disclosure is no longer phone-only"
+    # The button has to be reachable at every width, so it cannot be display:none.
+    assert ".ses-detail-btn { display: none; }" not in CSS
+
+
+def test_the_company_profile_sits_behind_the_session_disclosure():
+    """Sector, headcount, head office and a business description are reference:
+    they have the same shelf life as the trading timetable and none of it
+    changes during a session. It was rendering above the price, and it was the
+    third copy of the company's identity on that screen — px-head names the
+    symbol, the company and the exchange directly below it."""
+    fn = _fn("renderSessionBar")
+    detail = fn[fn.index('<div class="ses-detail'):]
+    assert "${companyBlock}" in detail, "the profile must render inside the disclosure"
+    head = fn[:fn.index('<div class="ses-detail')]
+    assert "${companyBlock}" not in head, "and must not also render above it"
+
+
+def test_the_disclosure_state_survives_the_sixty_second_repaint():
+    """loadSession is on a 60s interval and renderSessionBar replaces innerHTML
+    wholesale, so open state in the DOM alone shuts the panel under a reader
+    mid-sentence. It now holds the company description, which takes longer to
+    read than a timetable."""
+    assert "let sessionDetailOpen = false;" in APP_JS
+    fn = _fn("renderSessionBar")
+    assert "sessionDetailOpen = open;" in fn, "the toggle has to record the state"
+    assert "${sessionDetailOpen ? ' is-open' : ''}" in fn, "and the render has to read it"
+
+
+def test_the_summary_fit_is_measured_once_the_box_has_a_layout():
+    """Inside `display: none` both scrollHeight and clientHeight are 0, so a
+    render-time check reads `0 <= 1`, concludes the text fits and hides "More"
+    on every symbol whose description is in fact clamped."""
+    fn = _fn("renderSessionBar")
+    assert "if (!s || !m || !s.clientHeight) return;" in fn, \
+        "a collapsed box reports no layout and must not be believed"
+    assert "if (open) checkSummaryFit();" in fn
 
 
 def test_the_toggle_uses_a_class_not_the_details_element():

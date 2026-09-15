@@ -143,10 +143,18 @@ def test_every_facet_has_a_label_and_a_title():
 def test_the_header_renders_on_every_facet():
     """Six write their own markup and one is the chart. Missing it on any of
     them is how the workspace stops reading as one workspace."""
-    for call in ("securityHeader('swing')", "securityHeader('earnings')",
+    for call in ("securityHeader('earnings')",
                  "securityHeader('long')", "securityHeader('overview')",
                  "securityHeader('financials')", "securityHeader('news')"):
         assert call in APP_JS, f"missing {call}"
+    # Swing renders it compact. It is the one facet with its own price hero
+    # (renderPriceHead), and the full strip repeated the symbol, the company,
+    # the exchange, the price and the change directly above it — 108px + 280px
+    # of the same four facts, with the sec-head copy showing the price at 13px
+    # against the px-head copy at display size. The strip itself, which is what
+    # makes seven pages read as one workspace, is still there.
+    assert "securityHeader('swing', { compact: true })" in APP_JS, \
+        "Options still needs the section strip, just not a second price line"
     assert "securityHeader('chart', { symbol: STATE.chartSymbol, compact: true })" in APP_JS, \
         "Charting has no strip, so entering it is a one-way door out of the workspace"
 
