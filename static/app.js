@@ -13929,13 +13929,52 @@ function wsRenderDrawings() {
       }, dr.text || 'note'));
     } else if (dr.kind === 'ruler' && pts.length === 2) {
       const a = dr.points[0]; const b = dr.points[1];
-      g.appendChild(line(pts[0][0], pts[0][1], pts[1][0], pts[1][1],
-        { 'stroke-dasharray': '4 3' }));
+      /* A range across the whole plot, not a diagonal box between two points.
+       *
+       * It drew a dashed line from point to point and a rect bounded by BOTH
+       * axes at 0.07 opacity, which measures the same numbers and shows them
+       * as a thin sloped ribbon: the span was hard to see at all, and the part
+       * of it that read as a shape was the price gap rather than the period.
+       *
+       * The Stocks app's form instead, which is what a range selection looks
+       * like everywhere it is done well: a vertical boundary at each end
+       * spanning the full plot height, the period between them filled, and a
+       * dot on the series at each end. The question is "what happened between
+       * these two dates", so the dates are the edges and the fill is the
+       * interval. Direction colours all of it, so the sign is not doing the
+       * work on its own. */
+      const rLo = pts[0][0] <= pts[1][0] ? 0 : 1;
+      const rHi = rLo === 0 ? 1 : 0;
+      const xLo = pts[rLo][0];
+      const xHi = pts[rHi][0];
+      /* `priceH`, not `plotH`. The frame carries
+         {width, height, margin, plotW, priceH, lo, hi, bars, labels, xOf, yOf,
+         indexAt, priceAt} and there is no plotH on it, so the first version set
+         the band's height and both boundary lines' y2 to NaN: the attributes
+         came out null and nothing between the two edges drew at all.
+         priceH is the price pane specifically, which is the right span here.
+         `height` would include the volume strip below it. */
+      const plotTop = frame.margin.t;
+      const plotBot = frame.margin.t + frame.priceH;
+      const rTone = (b.p - a.p) > 0 ? 'var(--pos)' : (b.p - a.p) < 0 ? 'var(--neg)' : colour;
       g.appendChild(el('rect', {
-        x: Math.min(pts[0][0], pts[1][0]), y: Math.min(pts[0][1], pts[1][1]),
-        width: Math.abs(pts[1][0] - pts[0][0]), height: Math.abs(pts[1][1] - pts[0][1]),
-        fill: colour, 'fill-opacity': 0.07,
+        x: xLo, y: plotTop, width: Math.max(xHi - xLo, 1), height: plotBot - plotTop,
+        fill: rTone, 'fill-opacity': 0.12,
       }));
+      [xLo, xHi].forEach((x) => {
+        g.appendChild(el('line', {
+          x1: x, y1: plotTop, x2: x, y2: plotBot,
+          stroke: rTone, 'stroke-width': 1.5, 'stroke-opacity': 0.9,
+        }));
+      });
+      // A dot on the series at each end, so the two prices being differenced
+      // are identifiable rather than implied by the boundary.
+      pts.forEach((pt) => {
+        g.appendChild(el('circle', {
+          cx: pt[0], cy: pt[1], r: 4,
+          fill: rTone, stroke: 'var(--surface)', 'stroke-width': 2,
+        }));
+      });
       /* The readout, in the register the Stocks app uses.
        *
        * It said `0.66 (+0.31%) · 210 bars` on one cramped 10px line. Two
@@ -13987,10 +14026,19 @@ function wsRenderDrawings() {
         // A drawing anchored outside the visible window has no dates to show:
         // its indices only mean something against the series on screen.
         : `${bars} bars`;
-      const midX = (pts[0][0] + pts[1][0]) / 2;
-      const topY = Math.min(pts[0][1], pts[1][1]);
-      // Direction colours the figure, so the sign is not doing the work alone.
-      const tone = (b.p - a.p) > 0 ? 'var(--pos)' : (b.p - a.p) < 0 ? 'var(--neg)' : colour;
+      /* Centred on the range and pinned just under the top of the plot.
+       *
+       * It used to sit above the higher of the two points, which with a
+       * full-height band has no meaning: the band's top IS the plot's top, and
+       * a readout that floated at whatever height the prices happened to be
+       * moved every time the drag crossed its own start. Clamped horizontally
+       * so it stays inside the plot when the range runs to an edge. */
+      const midX = Math.min(
+        Math.max((xLo + xHi) / 2, frame.margin.l + 60),
+        frame.margin.l + frame.plotW - 60,
+      );
+      const topY = plotTop + 40;
+      const tone = rTone;
       /* A backing plate under the readout.
        *
        * The figures sit over the price action, and 14px semibold on top of
@@ -21902,7 +21950,23 @@ function loadView(view, force) {
    * a choice the reader made. Reaching Chart from the nav menu with NVDA loaded
    * used to land on a ticker prompt, which inside a security workspace reads as
    * the tab being broken. Once chartSymbol is set it stays independent. */
-  if (view === 'chart') return loadChartWorkspace(STATE.chartSymbol || STATE.ticker, force);
+  if (view === 'chart') {
+    /* The draw-on animation, which this branch never switched on.
+     *
+     * Every other loader calls setChartAnimation before it renders; this one
+     * went straight to the workspace, so the flag was whatever the last thing
+     * to touch it left behind. `preserveUI` sets it false on any control press,
+     * so in practice arriving at Charting after pressing anything meant the
+     * line appeared fully drawn. Measured: 0 elements carrying `data-draw` in
+     * the workspace against 4 charts animating on the Options tab from the same
+     * payload.
+     *
+     * `hasPendingDraws()` rather than a bare true, matching the other loaders:
+     * a chart still waiting to be scrolled to keeps its wait instead of having
+     * it cancelled. */
+    setChartAnimation(hasPendingDraws() || !STATE.chartData || STATE.chartData === 'loading');
+    return loadChartWorkspace(STATE.chartSymbol || STATE.ticker, force);
+  }
   // The three facets that read the shared /api/ticker payload rather than
   // fetching one of their own. See loadSecurityFacet.
   if (view === 'overview' || view === 'financials' || view === 'news') {

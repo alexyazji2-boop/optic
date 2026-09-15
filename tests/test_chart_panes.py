@@ -278,3 +278,65 @@ def test_every_pane_class_has_a_rule():
     fn = body_of("wsPanesHTML")
     for cls in set(re.findall(r'class="(ws-pane[a-z-]*)"', fn)):
         assert ".%s" % cls in CSS, cls
+
+
+# ------------------------------------------- the measure tool, and the animation
+
+def test_the_measure_tool_spans_the_price_pane_rather_than_the_price_gap():
+    """It drew a dashed diagonal between the two points and a rect bounded by
+    both axes at 0.07 opacity. That measures the same numbers and shows them as
+    a thin sloped ribbon: the span was hard to see, and the part that read as a
+    shape was the price gap rather than the period.
+
+    A range selection is a vertical boundary at each end, the interval between
+    them filled, and a dot on the series at each end.
+    """
+    src = CODE[CODE.index("dr.kind === 'ruler'"):]
+    src = src[:src.index("dr.kind === 'rr'")]
+    assert "stroke-dasharray" not in src, "the diagonal is back"
+    assert "frame.margin.t + frame.priceH" in src
+    # Asserted as the loop that produces them, not as the presence of a circle.
+    # Counting `el('circle'` passed against `[].forEach(...)`, which leaves the
+    # text in place and creates nothing: the dots are drawn per point, so the
+    # thing to pin is that they come from `pts`.
+    assert "pts.forEach((pt) => {" in src
+    dots = src[src.index("pts.forEach((pt) => {"):]
+    assert "el('circle'" in dots[:200], dots[:200]
+    assert "'fill-opacity': 0.12" in src
+
+
+def test_the_measure_band_uses_the_frame_field_that_exists():
+    """The frame carries {width, height, margin, plotW, priceH, lo, hi, bars,
+    labels, xOf, yOf, indexAt, priceAt}. There is no plotH on it: the first
+    version used one, so the band height and both boundary y2 attributes came
+    out NaN and nothing between the edges drew at all.
+
+    `priceH` rather than `height`, because height includes the volume strip.
+    """
+    src = CODE[CODE.index("dr.kind === 'ruler'"):]
+    src = src[:src.index("dr.kind === 'rr'")]
+    assert "frame.plotH" not in src
+    assert "frame.priceH" in src
+
+
+def test_the_measure_readout_is_direction_coloured_and_two_lines():
+    src = CODE[CODE.index("dr.kind === 'ruler'"):]
+    src = src[:src.index("dr.kind === 'rr'")]
+    assert "var(--pos)" in src and "var(--neg)" in src
+    # Dates above, the move below and larger.
+    assert "'font-size': 10" in src and "'font-size': 14" in src
+
+
+def test_the_charting_view_switches_the_draw_on_animation_on():
+    """Every other loader calls setChartAnimation before it renders; this branch
+    went straight to the workspace, so the flag was whatever the last thing to
+    touch it left behind, and `preserveUI` sets it false on any control press.
+    Measured: 0 elements carrying `data-draw` in the workspace against 4 charts
+    animating on the Options tab from the same payload. After: 4 draw elements
+    and 14 running animations."""
+    at = CODE.index("if (view === 'chart')")
+    branch = CODE[at:at + 400]
+    assert "setChartAnimation(" in branch
+    assert "hasPendingDraws()" in branch, (
+        "a chart still waiting to be scrolled to must keep its wait")
+    assert branch.index("setChartAnimation(") < branch.index("loadChartWorkspace(")
