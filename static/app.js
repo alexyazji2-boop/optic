@@ -4870,17 +4870,43 @@ function watchRowsFound(rows) {
     || String(r.name || '').toUpperCase().includes(q));
 }
 
+/* The request in flight, so two callers at boot make one.
+ *
+ * The guard below reads `STATE.watchlist`, which is only assigned AFTER the
+ * await, while `STATE.watchlistKey` is assigned before it. So a second caller
+ * arriving while the first is still waiting saw a matching key but no payload,
+ * fell through, and fetched again. Measured on production: /api/watchlist twice
+ * at boot, 889ms and 784ms, one of them pure waste.
+ *
+ * Keyed by symbol list rather than a bare boolean: a call for a different list
+ * is a different request and must not be handed this one's promise. Same shape
+ * as `homeData`, which had the identical defect for the identical reason. */
+let watchlistInFlight = null;
+let watchlistInFlightKey = null;
+
 async function loadWatchlist(force) {
   const list = watchList();
   if (!list.length) { STATE.watchlist = { available: true, rows: [] }; renderWatchlistHost(); return; }
   const key = list.join(',');
   if (!force && STATE.watchlist && STATE.watchlistKey === key) return;
-  STATE.watchlistKey = key;
-  try {
-    STATE.watchlist = await getJSON(`/api/watchlist?symbols=${encodeURIComponent(key)}`);
-  } catch (err) {
-    STATE.watchlist = { available: false, error: err.message };
+  // Join the request already running for this same list.
+  if (watchlistInFlight && watchlistInFlightKey === key) {
+    await watchlistInFlight;
+    // The host is re-read by renderWatchlistHost itself, so nothing here holds
+    // an element across the await.
+    renderWatchlistHost();
+    return;
   }
+  STATE.watchlistKey = key;
+  watchlistInFlightKey = key;
+  watchlistInFlight = getJSON(`/api/watchlist?symbols=${encodeURIComponent(key)}`)
+    .then((d) => { STATE.watchlist = d; })
+    .catch((err) => { STATE.watchlist = { available: false, error: err.message }; })
+    // `.finally` rather than `.then`: a rejected fetch that left the promise in
+    // place would serve the same failure to every later caller for the life of
+    // the page.
+    .finally(() => { watchlistInFlight = null; watchlistInFlightKey = null; });
+  await watchlistInFlight;
   renderWatchlistHost();
 }
 
@@ -5456,18 +5482,48 @@ function marketQuestions(data) {
  * The universe is built in the background over ~3000 symbols, so `available:
  * false` is a normal state on a cold start rather than an error. It says so.
  */
+/* The request in flight, so a double render makes one call.
+ *
+ * Measured on a fresh load: /api/scanners/movers twice. This has one caller, so
+ * the duplicate is the caller running twice, and the fix belongs here rather
+ * than in the render: any future second caller would make it three. Same shape
+ * as `homeData` and `loadWatchlist`, which had the identical defect.
+ *
+ * Five seconds, matching homeData: a boot burst cannot have changed the answer,
+ * and the 20-second refresh tick is well outside it. */
+let moversInFlight = null;
+let moversAt = 0;
+let moversData = null;
+
 async function homeMovers() {
-  const host = document.getElementById('cc-movers');
-  if (!host) return;
+  if (!document.getElementById('cc-movers')) return;
   let data;
   try {
-    data = await getJSON('/api/scanners/movers');
+    if (moversData && Date.now() - moversAt < 5000) {
+      data = moversData;
+    } else {
+      if (!moversInFlight) {
+        moversInFlight = getJSON('/api/scanners/movers')
+          .then((d) => { moversData = d; moversAt = Date.now(); return d; })
+          // `.finally`: a rejected fetch that left the promise in place would
+          // serve the same failure to every later caller for the life of the page.
+          .finally(() => { moversInFlight = null; });
+      }
+      data = await moversInFlight;
+    }
   } catch (err) {
-    host.innerHTML = `<p class="hm-none">The movers scan is unavailable
-      (${esc(err.message)}).</p>`;
+    // Re-read after the await. The host captured before it may have been
+    // replaced by a re-render, and writing into a detached node succeeds
+    // silently: that is how the market block came to show an empty div.
+    const failed = document.getElementById('cc-movers');
+    if (failed) {
+      failed.innerHTML = `<p class="hm-none">The movers scan is unavailable
+        (${esc(err.message)}).</p>`;
+    }
     return;
   }
-  if (!document.getElementById('cc-movers')) return;
+  const host = document.getElementById('cc-movers');
+  if (!host) return;
   const rows = (data.rows || []).slice(0, 8);
   if (!rows.length) {
     host.innerHTML = `<p class="hm-none">${esc(data.reason

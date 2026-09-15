@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 from fastapi import Body, FastAPI, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import (ai, brief as brief_mod, feeds as feeds_mod, legal,
@@ -111,6 +112,25 @@ def _load_dotenv() -> None:
 _load_dotenv()
 
 app = FastAPI(title="Optic Terminal", version="1.0.0")
+
+# ------------------------------------------------------------------ transfer
+#
+# Compress what goes over the wire. app.js is 1.2 MB of source and styles.css is
+# 408 KB, and `StaticFiles` sends both raw: measured, a local request for app.js
+# with `Accept-Encoding: gzip` came back 1,258,176 bytes with no
+# `Content-Encoding` header at all.
+#
+# Railway's edge already gzips in production, where the same three files arrive
+# as 389 KB, 38 KB and 103 KB. So this is not what makes the live site fast; it
+# is here for the two cases the edge does not cover. Local development was
+# serving 1.75 MB uncompressed, which is not the shape of the thing being
+# tested, and an edge that stops compressing should degrade the transfer rather
+# than silently quadruple it.
+#
+# 800 bytes rather than the 500-byte default: below about that, the gzip header
+# and the loss of the proxy's ability to stream cost more than the saving, and
+# every JSON payload worth compressing here is far larger.
+app.add_middleware(GZipMiddleware, minimum_size=800)
 
 # ------------------------------------------------------ open, with accounts
 #

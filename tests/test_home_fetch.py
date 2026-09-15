@@ -171,3 +171,117 @@ def test_explore_survives_one_feed_failing():
     fn = body_of("loadExplore")
     assert "Promise.allSettled([" in fn
     assert "Promise.all([" not in fn
+
+
+# ------------------------------------------------- the other two duplicates
+#
+# Measured on production: /api/watchlist twice at boot (889ms and 784ms) and
+# /api/scanners/movers twice. Both are the same defect as /api/home had, and
+# both are fixed the same way. After: 9 calls on a fresh load, zero endpoint
+# fetched more than once, and the movers table, the watchlist, the five market
+# blocks and the eight strip cells all still render.
+
+
+def test_the_watchlist_guard_cannot_be_passed_twice():
+    """Its cache guard reads `STATE.watchlist`, which is assigned AFTER the
+    await, while `STATE.watchlistKey` is assigned before it. A second caller
+    arriving mid-flight saw a matching key and no payload, fell through, and
+    fetched again."""
+    fn = body_of("loadWatchlist")
+    assert "watchlistInFlight && watchlistInFlightKey === key" in fn
+    assert "await watchlistInFlight;" in fn
+
+
+def test_the_watchlist_flight_is_keyed_by_the_symbol_list():
+    """A request for a different list is a different request and must not be
+    handed this one's promise."""
+    assert "watchlistInFlightKey = key;" in CODE
+    fn = body_of("loadWatchlist")
+    assert "watchlistInFlightKey === key" in fn
+
+
+def test_both_new_flights_clear_on_failure():
+    """`.finally`, not `.then`. A rejected fetch that left the promise in place
+    would serve the same failure to every later caller for the life of the
+    page."""
+    for name in ("loadWatchlist", "homeMovers"):
+        fn = body_of(name)
+        assert ".finally(" in fn, name
+        assert "InFlight = null" in fn, name
+
+
+def test_the_movers_fetch_is_deduped_where_the_fetch_is():
+    """It has one caller, so the duplicate was the caller running twice. The
+    guard belongs on the fetch rather than the render: a future second caller
+    would otherwise make it three."""
+    fn = body_of("homeMovers")
+    # The guard itself, not a mention of the variable. `"moversInFlight" in fn`
+    # was the first version and it survived `if (true) {`, which starts a fresh
+    # request on every call while leaving the name in place.
+    assert "if (!moversInFlight) {" in fn
+    assert "data = await moversInFlight;" in fn
+    calls = re.findall(r"getJSON\(\s*['\"]/api/scanners/movers['\"]", CODE)
+    assert len(calls) == 1, calls
+
+
+def test_the_movers_error_branch_re_reads_its_host():
+    """It wrote into a `host` captured before the await. Writing into a
+    detached node succeeds silently, which is how the market block came to show
+    an empty div."""
+    fn = body_of("homeMovers")
+    catch_at = fn.index("catch (err)")
+    branch = fn[catch_at:]
+    assert "document.getElementById('cc-movers')" in branch
+    assert "if (failed)" in branch
+
+
+def test_the_movers_reuse_window_stays_inside_the_refresh_tick():
+    fn = body_of("homeMovers")
+    window = re.search(r"Date\.now\(\)\s*-\s*moversAt\s*<\s*(\d+)", fn)
+    assert window, "no freshness comparison"
+    assert 1000 <= int(window.group(1)) < 20000, window.group(1)
+
+
+# ------------------------------------------------------------- the transfer
+
+def test_the_responses_are_compressed():
+    """app.js is 1.2 MB of source and styles.css is 408 KB, and StaticFiles
+    sends both raw: measured, a local request for app.js with
+    `Accept-Encoding: gzip` came back 1,258,176 bytes with no
+    `Content-Encoding` at all.
+
+    Railway's edge already gzips in production, where those two arrive as 389 KB
+    and 103 KB, so this does not make the live site faster. It is here so local
+    development is not testing a 1.75 MB shape the deployed app never has, and
+    so an edge that stops compressing degrades the transfer rather than silently
+    quadrupling it.
+    """
+    main = open("app/main.py", encoding="utf-8").read()
+    assert "from fastapi.middleware.gzip import GZipMiddleware" in main
+    assert "app.add_middleware(GZipMiddleware" in main
+    # Above the default 500: below roughly this size the header and the lost
+    # streaming cost more than the saving.
+    got = re.search(r"GZipMiddleware, minimum_size=(\d+)", main)
+    assert got and int(got.group(1)) >= 500, main[:0] or got
+
+
+def test_filed_fundamentals_are_not_refetched_hourly():
+    """The five calls behind `fundamentals.analyse` measured 1,555 ms together,
+    the largest single leg of a ticker load, and four of them were on the same
+    one hour as a news feed. Company financials and 13F holdings are quarterly
+    and FINRA short interest publishes twice a month, so an hour meant
+    re-fetching figures that cannot have moved.
+
+    `insiders` is deliberately excluded: Form 4s arrive continuously.
+    """
+    yf = open("app/providers/yf.py", encoding="utf-8").read()
+    got = re.search(r"TTL_FILED = (\d+) \* 3600", yf)
+    assert got, "TTL_FILED is gone"
+    hours = int(got.group(1))
+    # Bounded by the publication cadence, not chosen for speed: long enough to
+    # be worth having, far short of the fortnight that is the shortest cadence.
+    assert 2 <= hours <= 24, hours
+    for key in ("short:", "earnhist:", "fin:", "inst:"):
+        assert 'return _cached("%s" + ticker, self.TTL_FILED, build)' % key in yf, key
+    assert 'return _cached("insider:" + ticker, 3600, build)' in yf, (
+        "insider filings arrive continuously and must keep the short TTL")

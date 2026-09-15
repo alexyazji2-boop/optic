@@ -119,6 +119,23 @@ class YFinanceProvider(MarketDataProvider):
     TTL_CHAIN = 60
     TTL_HISTORY = 300
     TTL_NEWS = 600
+    # Data that publishes on a calendar rather than on the tape.
+    #
+    # These five were all on 3600, the same hour as a news feed, and they are
+    # not that kind of data: company financials and 13F institutional holdings
+    # are quarterly, FINRA short interest publishes twice a month, and the
+    # earnings history gains a row four times a year. An hour meant re-fetching
+    # all of it every hour for figures that cannot have moved, and the five
+    # calls behind `fundamentals.analyse` measured 1,555 ms together, which was
+    # the single largest leg of a ticker load.
+    #
+    # Six hours is bounded by the publication cadence rather than chosen for
+    # speed: nothing here can be more than a few hours stale in a way a reader
+    # could act on, and the shortest cadence in the set is still a fortnight.
+    #
+    # `insiders` is deliberately NOT in this group. Form 4s arrive continuously
+    # through the day, so that one keeps the hour.
+    TTL_FILED = 6 * 3600
 
     # ------------------------------------------------------------ quotes
 
@@ -427,7 +444,7 @@ class YFinanceProvider(MarketDataProvider):
                 "settlement_date": settle_date,
             }
 
-        return _cached("short:" + ticker, 3600, build)
+        return _cached("short:" + ticker, self.TTL_FILED, build)
 
     def earnings_history(self, ticker: str, limit: int = 10) -> List[Dict[str, Any]]:
         def build() -> List[Dict[str, Any]]:
@@ -449,7 +466,7 @@ class YFinanceProvider(MarketDataProvider):
                 )
             return out[: limit * 2]
 
-        return _cached("earnhist:" + ticker, 3600, build)
+        return _cached("earnhist:" + ticker, self.TTL_FILED, build)
 
     def profile(self, ticker: str) -> Dict[str, Any]:
         """What the company actually does, in its own words.
@@ -645,7 +662,7 @@ class YFinanceProvider(MarketDataProvider):
                 }
             return out
 
-        return _cached("fin:" + ticker, 3600, build)
+        return _cached("fin:" + ticker, self.TTL_FILED, build)
 
     def splits(self, ticker: str) -> List[Dict[str, Any]]:
         """Stock splits, oldest first, as [{date, ratio}].
@@ -758,7 +775,7 @@ class YFinanceProvider(MarketDataProvider):
 
             return {"breakdown": breakdown, "top_holders": holders}
 
-        return _cached("inst:" + ticker, 3600, build)
+        return _cached("inst:" + ticker, self.TTL_FILED, build)
 
     # -------------------------------------------------------------- news
 
