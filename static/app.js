@@ -92,8 +92,8 @@ const views = {
  * Compare is not a facet. It is about two to four securities at once, so a
  * header naming one of them would be a lie about what is on screen.
  */
-const SECURITY_VIEWS = ['overview', 'chart', 'swing', 'earnings',
-  'financials', 'news', 'long'];
+const SECURITY_VIEWS = ['overview', 'chart', 'swing', 'long', 'earnings',
+  'financials', 'news'];
 
 /* Chart is the exception in the strip.
  *

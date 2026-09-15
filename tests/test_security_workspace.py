@@ -28,7 +28,16 @@ APP_JS = (ROOT / "static" / "app.js").read_text()
 INDEX = (ROOT / "static" / "index.html").read_text()
 STYLES = (ROOT / "static" / "styles.css").read_text()
 
-FACETS = ["overview", "chart", "swing", "earnings", "financials", "news", "long"]
+# Investing sits directly under Options, which is where it was asked for.
+# The two are the same question over different horizons: what to do about this
+# security. Earnings, Financials and News are the inputs you read to answer it,
+# so they follow rather than separate them.
+#
+# Order matters in two places and this list is both of them: the Dossier
+# dropdown and the tab strip inside the workspace are generated from it, so a
+# second hand-maintained copy would drift and the symptom would be a tab in the
+# strip the menu cannot reach.
+FACETS = ["overview", "chart", "swing", "long", "earnings", "financials", "news"]
 NEW_VIEWS = ["overview", "financials", "news"]
 
 
