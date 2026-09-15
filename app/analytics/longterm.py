@@ -305,6 +305,19 @@ def _accumulation_zones(daily: pd.Series, weekly_trend: Dict[str, Any]) -> List[
                     "price": _f(level, 4),
                     "distance_pct": _f((level / last - 1.0) * 100.0, 2),
                     "kind": "support" if level < last else "resistance",
+                    # The ratio itself, and whether it is one of the two most
+                    # people act on. Both are for the chart, which draws these
+                    # through the same fibLines() the Options chart uses and
+                    # needs `is_golden` to decide the weight.
+                    #
+                    # Sent rather than parsed back out of `label`: fibLines
+                    # derives its ratio text by stripping non-digits from the
+                    # label, and "38.2% retracement of the 3-year range" yields
+                    # "38.23" because of the 3 in "3-year". The descriptive
+                    # label stays as it is — the zones table and defence.py
+                    # both read it.
+                    "ratio": ratio,
+                    "is_golden": ratio in (0.5, 0.618),
                 }
             )
 

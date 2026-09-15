@@ -1652,6 +1652,10 @@ function aggregateMonthly(ser) {
 }
 
 /** Slice a long-term series to the selected timeframe. */
+/* Periods for the two averages this view is about, in BARS of the chosen
+   interval — 40 and 200 weeks, or 40 and 200 months. */
+const LT_MA_PERIODS = [40, 200];
+
 function ltSlice(ser, rangeKey, intervalKey) {
   const base = intervalKey === 'monthly' ? aggregateMonthly(ser) : ser;
   const spec = LT_RANGES.find((r) => r.key === rangeKey) || LT_RANGES[2];
@@ -1659,9 +1663,37 @@ function ltSlice(ser, rangeKey, intervalKey) {
   const total = (base.dates || []).length;
   const take = want === Infinity ? total : Math.min(want, total);
   const cut = (a) => (Array.isArray(a) ? a.slice(total - take) : a);
+
+  /* The averages are computed on the FULL series and cut with everything else.
+   *
+   * They used to be computed by the caller from the already-windowed closes,
+   * which meant each one warmed up inside the view: on a 5Y weekly window
+   * (~260 bars) the 40-week average had no value for its first 39 bars and the
+   * 200-week average none for its first 199, so the green line began nine
+   * months into the chart and the orange line did not appear until the last
+   * fifth of it. Both were reported as "cut off", which is exactly what they
+   * were. A 200-week average at a given week is a fact about the 200 weeks
+   * before it, and those weeks exist in the payload — the server sends twelve
+   * years — they were just outside the window.
+   *
+   * Done here rather than in the caller because this is the only function that
+   * knows the offset. It is the same fix, for the same reason, as the
+   * `prepared` argument on sliceSeries: attach the derived series before
+   * windowing, then window both together.
+   */
+  const ma = {};
+  LT_MA_PERIODS.forEach((period) => {
+    const full = smaSeries(base.close || [], period);
+    // Dropped rather than drawn as an empty line when the history cannot
+    // support it: 200 months needs ~17 years and the payload holds twelve, so
+    // the monthly rollup has no 200-bar average and the legend has to agree.
+    ma[period] = full.some((v) => v !== null) ? cut(full) : null;
+  });
+
   return {
     dates: cut(base.dates), open: cut(base.open), high: cut(base.high),
     low: cut(base.low), close: cut(base.close), volume: cut(base.volume),
+    ma,
     shown_bars: take, total_bars: total, monthly: !!base.monthly,
   };
 }
@@ -19685,17 +19717,34 @@ function renderLong(d) {
        means at this horizon, so they answer to the same flag the Options chart
        uses for its retracement grid instead of a second one that would have to
        be switched on separately. */
-    const zoneRefs = (showFib ? (h.accumulation_zones || []) : [])
-      .filter((z) => z.price && !/average/i.test(z.label || ''))
-      .map((z) => ({
-        value: z.price,
-        // "38.2%" on its own reads like a return, not a price level.
-        // Trimmed: the long form ran to ~30 characters per pill and five of them
-        // stacked was most of what made this chart unreadable.
-        label: `${z.label.replace(' retracement of the 3-year range', '')} · ${usd(z.price)}`,
-        color: C.refSR,
-        pattern: '6 4',
-      }));
+    /* Drawn by the same fibLines() the Options chart uses, not a second
+       hand-rolled version of it.
+       This built its own refs: one flat colour, `pattern: '6 4'` so every line
+       was dashed, a `38.2% · $273.20` label, and no tooltip. fibLines draws
+       them solid, gives the golden pair the weight and dims the rest, labels
+       them `38.2 (273.20)` and carries a detail table. Two implementations of
+       "how this app draws a Fibonacci level" is how the two charts came to
+       disagree about it, and the one here had reverted to the dashed style
+       that fibLines' own comment records being told to stop using.
+
+       Filtered on `ratio` rather than on the absence of the word "average" in
+       the prose. accumulation_zones holds the 40- and 200-week averages too,
+       and those now have real series lines of their own; a regex over a label
+       is a fragile way to ask "is this a retracement" when the server sends
+       the ratio. */
+    const zoneRefs = fibLines(
+      (showFib ? (h.accumulation_zones || []) : [])
+        .filter((z) => z.price && z.ratio !== null && z.ratio !== undefined)
+        .map((z) => ({
+          price: z.price,
+          // The same "38.2%" form technicals.py sends, so fibLines produces the
+          // identical label on both charts.
+          label: `${fmt(z.ratio * 100, 1)}%`,
+          is_golden: !!z.is_golden,
+          role: z.kind,
+        })),
+      ltLevels.spot,
+    );
 
     // Twelve years of weekly OHLCV from the server, sliced and optionally rolled
     // up to months here. Falls back to the old closes-only arrays if an older
@@ -19768,11 +19817,12 @@ function renderLong(d) {
      * the Swing chart already does ('20-week SMA' on weekly, '20-day' on
      * daily). A 200-bar average needs 200 bars, and on the monthly rollup of a
      * twelve-year series there are only ~144 — so it is dropped rather than
-     * drawn as an empty line, and the legend follows the same test. */
-    const ltMa = (period) => {
-      const vals = smaSeries(ltSer.close || [], period);
-      return vals.some((v) => v !== null) ? vals : null;
-    };
+     * drawn as an empty line, and the legend follows the same test.
+     *
+     * Computed in ltSlice, over the full history, and cut with the rest of the
+     * series. Computing them here from `ltSer.close` is what made both lines
+     * start partway into the chart. */
+    const ltMa = (period) => (ltSer.ma || {})[period] || null;
     /* Always drawn, deliberately not behind the shared Moving averages toggle.
      *
      * That toggle governs discretionary overlays on a daily chart, defaults to
@@ -19791,7 +19841,21 @@ function renderLong(d) {
       ...(ltMa40 ? [{ name: `40-${unit} average`, color: overlayStyle('sma50').color }] : []),
       ...(ltMa200 ? [{ name: `200-${unit} average`, color: overlayStyle('sma200').color }] : []),
       ...(showVol ? [{ name: 'Volume', color: C.ink2 }] : []),
-      { name: 'Accumulation zones', color: C.refSR, dash: true },
+      /* Gated on the flag, and no longer dashed.
+       *
+       * This entry was unconditional and described the old look: it named
+       * "Accumulation zones" with `dash: true` when the retracement toggle was
+       * off and nothing was drawn, and it went on claiming a dashed style after
+       * fibLines started drawing them solid. A legend that names a line the
+       * chart is not drawing is worse than no legend, because it sends the
+       * reader looking for it.
+       *
+       * "Retracements" is what these are and what the toggle beside them is
+       * called; the averages in accumulation_zones have their own two entries
+       * above. The swatch takes the golden colour because that is the pair the
+       * eye lands on. */
+      ...(showFib && zoneRefs.length
+        ? [{ name: 'Retracements', color: C.refSR }] : []),
     ]));
 
     mount('chart-weekly', (w) => lineChart({

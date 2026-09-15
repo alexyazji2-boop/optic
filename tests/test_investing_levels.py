@@ -130,7 +130,105 @@ def test_the_retracements_answer_to_the_fib_flag():
     range, which is what Fibonacci means at this horizon, so they belong to the
     flag the Options chart already uses for its retracement grid."""
     fn = body_of("renderLong")
-    assert "const zoneRefs = (showFib ? (h.accumulation_zones || []) : [])" in fn
+    assert "(showFib ? (h.accumulation_zones || []) : [])" in fn
+
+
+def test_the_retracements_are_drawn_by_the_shared_fib_builder():
+    """They were not, and the two charts had drifted apart about how this app
+    draws a Fibonacci level.
+
+    This view built its own refs: one flat colour, `pattern: '6 4'` so every
+    line was dashed, a `38.2% · $273.20` label and no tooltip. fibLines — which
+    the Options chart and the charting workspace both call — draws them solid,
+    gives the golden pair the weight, dims the rest, labels them
+    `38.2 (273.20)` and carries a detail table. The local version had reverted
+    to exactly the dashed style fibLines' own comment records being told to
+    stop using.
+    """
+    fn = body_of("renderLong")
+    assert "const zoneRefs = fibLines(" in fn
+    assert "pattern: '6 4'" not in fn, "dashed ratio lines are the old look"
+    # Scoped to the refs expression. C.refSR legitimately appears in the legend
+    # swatch below, which takes the golden colour on purpose.
+    refs = fn[fn.index("const zoneRefs = fibLines("):]
+    refs = refs[:refs.index(");") + 2]
+    assert "color:" not in refs, "fibLines owns the colour, not the caller"
+
+
+def test_the_retracement_legend_matches_what_is_drawn():
+    """It was unconditional and described the old look: it named "Accumulation
+    zones" with `dash: true` when the toggle was off and nothing was drawn, and
+    kept claiming a dashed style after fibLines started drawing them solid. A
+    legend naming a line the chart is not drawing sends the reader looking for
+    it."""
+    fn = body_of("renderLong")
+    assert "...(showFib && zoneRefs.length" in fn
+    assert "{ name: 'Retracements', color: C.refSR }" in fn
+    assert "{ name: 'Accumulation zones', color: C.refSR, dash: true }" not in fn
+
+
+def test_the_retracement_filter_reads_the_ratio_not_the_prose():
+    """accumulation_zones holds the 40- and 200-week averages too, and those
+    have real series lines of their own. The filter was `!/average/i` over the
+    label — a regex on prose to answer "is this a retracement" when the server
+    can just send the ratio."""
+    fn = body_of("renderLong")
+    assert "z.ratio !== null && z.ratio !== undefined" in fn
+    assert "!/average/i.test" not in fn
+
+
+def test_the_ratio_label_is_built_from_the_number():
+    """fibLines derives its ratio text by stripping non-digits from the label,
+    and "38.2% retracement of the 3-year range" yields "38.23" because of the 3
+    in "3-year". The label handed in is the same "38.2%" form technicals.py
+    sends, so both charts produce the identical string."""
+    fn = body_of("renderLong")
+    assert "`${fmt(z.ratio * 100, 1)}%`" in fn
+
+
+# ------------------------------------------------- the averages on this chart
+
+
+def test_the_weekly_averages_are_computed_before_the_window_is_applied():
+    """Both lines started partway into the chart, and were reported as cut off.
+
+    They were computed by the caller from the already-windowed closes, so each
+    warmed up inside the view: on a 5Y weekly window (~260 bars) the 40-week
+    average had no value for its first 39 bars and the 200-week none for its
+    first 199 — so the green line began nine months in and the orange line did
+    not appear until the last fifth of the plot. Measured after the fix on
+    AAPL: 260 of 260 non-null for both, and all three polylines spanning
+    x=8 to x=877.
+
+    A 200-week average at a given week is a fact about the 200 weeks before it,
+    and those weeks are in the payload — the server sends twelve years. They
+    were just outside the window.
+    """
+    fn = body_of("ltSlice")
+    assert "smaSeries(base.close || [], period)" in fn, \
+        "the full series, not the sliced one"
+    assert "ma[period] = full.some((v) => v !== null) ? cut(full) : null;" in fn, \
+        "computed on the full series, then cut with everything else"
+    caller = body_of("renderLong")
+    assert "smaSeries(ltSer.close" not in caller, \
+        "computing from the windowed closes is what cut both lines off"
+    assert "const ltMa = (period) => (ltSer.ma || {})[period] || null;" in caller
+
+
+def test_an_average_longer_than_the_history_is_dropped_not_drawn_empty():
+    """200 months needs ~17 years and the payload holds twelve, so the monthly
+    rollup has no 200-bar average. The legend follows the same test, so a line
+    that is not drawn is not named."""
+    fn = body_of("ltSlice")
+    assert "full.some((v) => v !== null) ? cut(full) : null" in fn
+    caller = body_of("renderLong")
+    assert "...(ltMa200 ? [{ name: `200-${unit} average`" in caller
+
+
+def test_the_periods_are_named_once():
+    """40 and 200 in two places is how the legend comes to name a line the
+    chart does not draw."""
+    assert "const LT_MA_PERIODS = [40, 200];" in APP_JS
 
 
 def test_support_and_resistance_uses_the_shared_band_builder():
@@ -193,3 +291,56 @@ def test_the_indicators_menu_is_not_claimed_here():
     main = open("app/main.py", encoding="utf-8").read()
     assert 'interval="1d"' in main, (
         "if this endpoint gained an interval, the exclusion note is stale")
+
+
+# ------------------------------------------------ what the server has to send
+
+
+def test_the_retracement_zones_carry_their_ratio_and_the_golden_flag():
+    """The chart draws these through the same fibLines() the Options chart uses,
+    and it needs `is_golden` to decide the weight.
+
+    Sent rather than parsed back out of the label: fibLines derives its ratio
+    text by stripping non-digits, and "38.2% retracement of the 3-year range"
+    yields "38.23" because of the 3 in "3-year".
+    """
+    import pandas as pd
+
+    from app.analytics import longterm
+
+    daily = pd.Series([100.0 + i * 0.1 for i in range(800)])
+    zones = longterm._accumulation_zones(daily, {"sma_40w": 120.0, "sma_200w": 90.0})
+    rets = [z for z in zones if z.get("ratio") is not None]
+    assert len(rets) == 3, [z["label"] for z in zones]
+    assert sorted(z["ratio"] for z in rets) == [0.382, 0.5, 0.618]
+    golden = {z["ratio"]: z["is_golden"] for z in rets}
+    assert golden == {0.382: False, 0.5: True, 0.618: True}
+
+
+def test_the_average_zones_carry_no_ratio():
+    """They are not retracements, and the chart filters on the ratio's presence
+    to decide which zones become Fibonacci lines — the averages already have
+    real series lines of their own."""
+    import pandas as pd
+
+    from app.analytics import longterm
+
+    daily = pd.Series([100.0 + i * 0.1 for i in range(800)])
+    zones = longterm._accumulation_zones(daily, {"sma_40w": 120.0, "sma_200w": 90.0})
+    avgs = [z for z in zones if "average" in z["label"]]
+    assert len(avgs) == 2
+    for z in avgs:
+        assert z.get("ratio") is None, z
+
+
+def test_the_descriptive_label_is_left_alone():
+    """The accumulation-zones table renders it, and defence.py reads it to name
+    what a break would break."""
+    import pandas as pd
+
+    from app.analytics import longterm
+
+    daily = pd.Series([100.0 + i * 0.1 for i in range(800)])
+    zones = longterm._accumulation_zones(daily, {"sma_40w": 120.0, "sma_200w": 90.0})
+    labels = [z["label"] for z in zones]
+    assert "38.2% retracement of the 3-year range" in labels
