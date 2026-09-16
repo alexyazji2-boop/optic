@@ -54,6 +54,7 @@ from .analytics import portfolio_risk as portfolio_risk_mod
 from .analytics import evaluate as evaluate_mod
 from .analytics import expiries as expiries_mod
 from .analytics import scanners as scanners_mod
+from .analytics import series_stats as series_stats_mod
 from .analytics import forex as forex_mod
 from . import alerts as alerts_mod
 from .analytics import econ as econ_mod
@@ -1983,7 +1984,13 @@ async def instrument_chart(
             raise HTTPException(status_code=404,
                                 detail="No history for '{}'.".format(sym))
         meta = known.get(sym, {})
-        snap = macro_mod.snapshot(frame, meta.get("label") or sym)
+        # Same quote reconciliation the strip applies, and for the same reason
+        # twice over: the figure is wrong on a futures row without it, and a
+        # drill-down that recomputed it from the bars would disagree with the
+        # row the reader clicked to get here.
+        snap = series_stats_mod.apply_quote(
+            macro_mod.snapshot(frame, meta.get("label") or sym),
+            series_stats_mod.live_quotes(YF_PROVIDER, [sym]).get(sym))
         close = frame["Close"].astype(float)
         wanted = [i for i in (ids or "").replace(" ", "").split(",") if i]
         extras = {}

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+import logging
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 
 from .technicals import atr, bollinger, ema, rsi, sma
+
+log = logging.getLogger(__name__)
 
 
 def _f(value: Any, digits: int = 4) -> Optional[float]:
@@ -25,6 +28,87 @@ def pct_change_over(close: pd.Series, bars: int) -> Optional[float]:
     if prior == 0:
         return None
     return _f((close.iloc[-1] / prior - 1.0) * 100.0, 3)
+
+
+# --------------------------------------------------------- live reconciliation
+
+
+def live_quotes(provider, symbols: List[str]) -> Dict[str, Dict[str, Any]]:
+    """`provider.batch_quote` if the adapter has one, `{}` otherwise.
+
+    Duck-typed deliberately. A provider with no quote feed and a quote feed that
+    is down mean the same thing to every caller here — fall back to the bars —
+    and neither is a reason to fail a panel that has a full year of history in
+    hand.
+    """
+    fetch = getattr(provider, "batch_quote", None)
+    if not callable(fetch):
+        return {}
+    try:
+        out = fetch(list(symbols))
+    except Exception as exc:                                    # noqa: BLE001
+        log.warning("live_quotes: quote feed unavailable: %s", exc)
+        return {}
+    return out if isinstance(out, dict) else {}
+
+
+def apply_quote(snap: Dict[str, Any], quote: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Take the one-day change from the quote instead of from the bars.
+
+    `chg_1d` was the last daily close over the one before it. That is the
+    session's change for a cash index and wrong for anything trading around the
+    clock, because Yahoo's daily bars do not break where the session does.
+
+    Measured across the macro strip on 2026-09-16. ES=F's prior bar closed at
+    7589.25 against a prior settlement of 7672.50, so bar arithmetic read
+    +1.196% on a day the contract was up +0.121% — the overnight gap counted
+    twice, and an 83-point reference error. NQ=F was out by 1.28 points of
+    percentage and RTY=F by 0.93. Gold was worse than imprecise: the bars said
+    +0.413% and the quote said -0.307%, so the panel named the wrong direction
+    on a haven instrument. The cash rows agreed to within 0.14 either way, which
+    is what identifies the cause as session alignment rather than staleness.
+
+    Only the one-day figure is reconciled, and the multi-day ones are left alone
+    rather than left correct. They compare the same live last bar against an
+    older bar on the same misaligned basis, so they carry the same reference
+    error — for ES=F about 83 points, spread over a move several times larger.
+    A quote supplies exactly one authoritative prior print, the previous
+    settlement, and there is no equivalent for "five sessions ago" to reconcile
+    `chg_5d` against, so correcting it would mean inventing a basis. Bar-derived
+    at least keeps each multi-day figure consistent with the series it is drawn
+    from, and `chg_5d` and `chg_20d` are what the risk-regime score consumes —
+    worth knowing before trusting that score on a futures row.
+
+    `last` is taken from the same quote, and for one reason: the UI prints price
+    and change as a pair, so they have to be computed from the same two numbers
+    or a reader can divide one by the other and catch the panel disagreeing with
+    itself. It also drops the headline price from the five-minute history cache
+    to the thirty-second quote.
+
+    The ratio fields — `vs_sma20`, `pct_from_52w_high`, `atr_pct` and the rest —
+    stay derived from the frame's own last close, so each remains consistent
+    with the series it is measured against. At the scale that matters to them a
+    quote is not meaningfully newer than the bar: the gap is under five minutes
+    of drift against a twenty- to two-hundred-day average.
+
+    `chg_1d_source` records which arithmetic produced the number, because a
+    panel that quietly switches method between rows should say so.
+    """
+    snap["chg_1d_source"] = "bars"
+    if not quote:
+        return snap
+    last, prev = quote.get("last"), quote.get("prev_close")
+    if last is None or not prev:
+        return snap
+    change = _f((float(last) / float(prev) - 1.0) * 100.0, 3)
+    if change is None:
+        return snap
+    snap["last"] = _f(last)
+    snap["chg_1d"] = change
+    snap["prev_close"] = _f(prev)
+    snap["chg_1d_source"] = "quote"
+    snap["quote_as_of"] = quote.get("as_of")
+    return snap
 
 
 def snapshot(df: pd.DataFrame, label: str = "") -> Dict[str, Any]:

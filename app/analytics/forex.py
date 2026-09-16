@@ -28,7 +28,7 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
-from .series_stats import _f, snapshot
+from .series_stats import _f, apply_quote, live_quotes, snapshot
 
 BENCHMARK = "DX-Y.NYB"
 
@@ -303,12 +303,22 @@ def build(provider, query: str = "") -> Dict[str, Any]:
         return {"query": query, "pairs": [], "groups": [], "drivers": DRIVERS,
                 "reason": "Nothing matched. Try a currency, a group, or a driver."}
 
-    frames = provider.batch_history([p["symbol"] for p in wanted],
-                                    period="1y", interval="1d")
+    symbols = [p["symbol"] for p in wanted]
+    frames = provider.batch_history(symbols, period="1y", interval="1d")
+
+    # Every row here is an FX cross, and a cross is the case a daily frame gets
+    # wrong: Yahoo's bars do not break where the session settles, so the last
+    # close over the one before it counts the overnight move twice. USD/JPY read
+    # +0.746% that way on 2026-09-16 against +0.473% from the quote. See
+    # `series_stats.apply_quote`.
+    quotes = live_quotes(provider, symbols)
+
     rows: List[Dict[str, Any]] = []
     for p in wanted:
         df = frames.get(p["symbol"])
-        snap = snapshot(df) if df is not None and not df.empty else {}
+        snap = {}
+        if df is not None and not df.empty:
+            snap = apply_quote(snapshot(df), quotes.get(p["symbol"]))
         row = dict(p)
         row["snapshot"] = snap
         row["reading"] = _reading(p, snap)

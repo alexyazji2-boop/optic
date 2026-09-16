@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
-from .series_stats import _f, snapshot
+from .series_stats import _f, apply_quote, live_quotes, snapshot
 
 # Yahoo symbols for the macro complex. Grouped so the UI can lay them out.
 INSTRUMENTS: List[Dict[str, str]] = [
@@ -127,10 +127,19 @@ def analyse(provider) -> Dict[str, Any]:
     symbols = [item["symbol"] for item in INSTRUMENTS]
     frames = provider.batch_history(symbols, period="1y", interval="1d")
 
+    # Half this strip trades around the clock, and for those rows a daily frame
+    # cannot produce the session's change on its own — see `apply_quote`. Rows
+    # the quote feed does not cover keep the bar arithmetic.
+    quotes = live_quotes(provider, symbols)
+
     snaps: Dict[str, Dict[str, Any]] = {}
     for item in INSTRUMENTS:
         frame = frames.get(item["symbol"])
-        snap = snapshot(frame, item["label"]) if frame is not None else {"label": item["label"], "error": "no data"}
+        if frame is None:
+            snaps[item["symbol"]] = dict(item, error="no data")
+            continue
+        snap = apply_quote(snapshot(frame, item["label"]),
+                           quotes.get(item["symbol"]))
         snap["symbol"] = item["symbol"]
         snap["group"] = item["group"]
         snap["note"] = item["note"]

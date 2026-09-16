@@ -34,6 +34,8 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 
+from .series_stats import apply_quote, live_quotes
+
 log = logging.getLogger(__name__)
 
 BENCHMARK = "^GSPC"
@@ -143,6 +145,11 @@ def build(provider, news_entries: Optional[List[Dict[str, Any]]] = None) -> Dict
         log.warning("global_markets: history unavailable: %s", exc)
         return {"available": False, "reason": str(exc)[:140]}
 
+    # The crosses are FX and front-month futures and the "always" rows are
+    # crypto: none of them settle where Yahoo's daily bars break, so their
+    # one-day change comes from the quote. See `series_stats.apply_quote`.
+    quotes = live_quotes(provider, symbols)
+
     bench_frame = frames.get(BENCHMARK)
     bench = (bench_frame["Close"].astype(float)
              if bench_frame is not None and not bench_frame.empty else None)
@@ -153,7 +160,7 @@ def build(provider, news_entries: Optional[List[Dict[str, Any]]] = None) -> Dict
             return None
         close = frame["Close"].astype(float)
         corr = _correlation(close, bench) if bench is not None else None
-        return {
+        return apply_quote({
             **spec,
             "last": _f(close.iloc[-1], 2),
             "chg_1d": _pct(close, 1),
@@ -167,7 +174,7 @@ def build(provider, news_entries: Optional[List[Dict[str, Any]]] = None) -> Dict
                           "moves largely on its own" if corr > -CORR_MEANINGFUL else
                           "tends to move against the S&P"),
             "last_bar": str(close.dropna().index[-1].date()),
-        }
+        }, quotes.get(spec["symbol"]))
 
     markets = [r for r in (row(m) for m in MARKETS) if r]
     crosses = [r for r in (row(c) for c in CROSSES) if r]
