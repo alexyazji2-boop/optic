@@ -6215,18 +6215,39 @@ b, strong { font-weight: 600; }
  * grid — a chart that scrolls is a chart you cannot read against its own axis.
  */
 .view-workspace.active {
-  display: grid;
-  grid-template-rows: auto 1fr;
+  /* Flex column, not a grid with named rows.
+   *
+   * This was `grid-template-rows: auto 1fr`, written when the workspace had two
+   * children: the toolbar and the body. The Dossier section strip was added
+   * later, making three, so `1fr` landed on the TOOLBAR and the body fell into
+   * an implicit auto row that took its content height. Measured with a symbol
+   * loaded and Pulse open: rows resolved to 48.39px / 10.19px / 595.42px, so
+   * the toolbar was 10px tall against 27px of content and its labels were
+   * sliced through the middle. That is what was reported as the charting UI
+   * being broken.
+   *
+   * Adding a third row would not fix it either: securityHeader returns '' when
+   * no symbol is charted, so the child count is 2 or 3 depending on state, and
+   * a row sized by POSITION cannot follow that. Flex attaches the flexing to
+   * the element, which is the same correction `.ws-canvas` needed for the same
+   * reason.
+   */
+  display: flex;
+  flex-direction: column;
   /* The viewport minus the chrome above it. dvh rather than vh so a mobile
      browser's collapsing address bar does not leave the chart overflowing. */
   height: calc(100dvh - var(--chrome-h, 132px));
-  gap: 0;
   /* Break out of the reading measure. The workspace is the one view where more
      width is strictly better. */
   width: 100%;
   max-width: none;
   margin: 0;
 }
+/* Chrome keeps its natural height; the body takes what is left. min-height: 0
+   so it can shrink below its content, which is what lets the chart column
+   scroll its own dock instead of pushing the toolbar off the top. */
+.view-workspace.active > * { flex: 0 0 auto; }
+.view-workspace.active > .ws-body { flex: 1 1 auto; min-height: 0; }
 
 .ws-toolbar {
   display: flex;
@@ -6471,6 +6492,16 @@ b, strong { font-weight: 600; }
   overflow-y: auto;
 }
 .ws-rail-gap { flex: 1 1 auto; min-height: var(--s4); }
+
+/* A widget button that cannot act says so.
+   Not hidden: the rail is how a reader learns these panels exist, and removing
+   it with Pulse open would make the feature look absent rather than
+   unavailable. The cursor and the opacity carry it, and the title gives the
+   reason. */
+.ws-wrail-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 .ws-tool {
   width: 30px;
   height: 30px;
@@ -6838,7 +6869,7 @@ b, strong { font-weight: 600; }
   cursor: pointer;
   line-height: 1.1;
 }
-.ws-wrail-btn:hover { color: var(--ink); background: var(--surface-2); }
+.ws-wrail-btn:not(:disabled):hover { color: var(--ink); background: var(--surface-2); }
 .ws-wrail-btn.on {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
@@ -7154,13 +7185,11 @@ table.data tr.fx-detail td,
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
 }
-.pulse-persona-lab {
-  font-size: var(--t-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ink-muted);
-}
-.pulse-persona select { flex: 0 1 200px; }
+/* `.pulse-persona-lab` lived here. The label moved inside the box so both
+   controls wear the same `.oc-field`, and the class went with it. */
+/* The field, not the select: the select no longer draws its own box, so sizing
+   it would size a transparent child inside a sized parent. */
+.pulse-persona .pp-field { flex: 0 1 auto; }
 /* The blurb takes the whole next line rather than competing for width: at
    200px it truncated to three words and stopped explaining anything. */
 .pulse-persona-blurb {
@@ -7394,40 +7423,26 @@ body.chat-open .ws-body { grid-template-columns: auto 1fr auto; }
 .ws-body.narrow .ws-dock,
 body.chat-open .ws-body .ws-dock { display: none; }
 
-/* …unless the reader picked one from the rail.
+/* …unless the reader picked one from the rail, and Pulse is closed.
  *
- * The blanket hide above is right for the DEFAULT state — four widgets opened on
- * a previous visit should not eat a narrow chart. It was wrong for an explicit
- * click: the rail buttons changed state, the widget rendered, and it was behind
- * `display: none`, so from the outside every button in the rail looked dead.
+ * The blanket hide above is right for the DEFAULT state: four widgets opened on
+ * a previous visit should not eat a narrow chart. It is wrong for an explicit
+ * click, because then the rail buttons change state, the widget renders, and it
+ * sits behind `display: none` — from the outside every button in the rail looks
+ * dead.
  *
- * `.dock-open` is only set in narrow mode when exactly one widget is selected,
- * so this shows that one, floating over the chart rather than taking its width. */
-.ws-body.narrow.dock-open .ws-dock,
-body.chat-open .ws-body.dock-open .ws-dock {
-  display: block;
-  position: absolute;
-  top: 0;
-  right: 62px;
-  bottom: 0;
-  width: min(300px, 78%);
-  z-index: 6;
-  background: var(--surface);
-  border-left: 1px solid var(--border-strong);
-  box-shadow: -12px 0 28px -12px rgba(0, 0, 0, 0.6);
-  overflow-y: auto;
-  padding: var(--space-2);
-}
-/* The horizontal rail sits along the bottom below 900px, so the overlay clears
-   the bottom rather than the right. */
-@media (max-width: 900px) {
-  .ws-body.narrow.dock-open .ws-dock,
-  body.chat-open .ws-body.dock-open .ws-dock {
-    right: 0;
-    bottom: 66px;
-    width: min(320px, 92%);
-  }
-}
+ * The rule that re-showed it is BELOW, scoped to `body:not(.chat-open)`. This
+ * spot used to hold a near-identical copy that also matched `body.chat-open`,
+ * and the two contradicted each other: the comment on the scoped version
+ * records that floating the dock with Pulse open "reintroduced exactly the
+ * fault being fixed", and the unscoped copy kept doing it. Measured with Pulse
+ * at 620px on a 1142px window: the dock rendered at 300px on top of a 382px
+ * chart, covering 78% of it — three grid tracks, four visible children, and the
+ * dock auto-placed straight onto the canvas.
+ *
+ * So there is one float rule now and it lives below. With Pulse open the dock
+ * stays hidden and the widget rail is still there; the chart is what the tab is
+ * for. */
 
 /* Opening a widget while narrow floats it over the chart instead of taking the
    chart's width back — you asked to see one widget, not to lose the chart. */
@@ -7461,6 +7476,21 @@ body:not(.chat-open) .ws-body.narrow.dock-open .ws-dock {
   overflow-y: auto;
 }
 .ws-body { position: relative; }
+
+/* Below 900px the widget rail turns into a horizontal strip along the bottom,
+   so the overlay clears the bottom rather than the right.
+
+   AFTER the rule it adjusts, not before. The selector is identical, so source
+   order is the only thing deciding — placed above, its `right: 0` lost to the
+   base rule's `right: 62px` and the overlay stayed clear of a rail that was no
+   longer on that edge. */
+@media (max-width: 900px) {
+  body:not(.chat-open) .ws-body.narrow.dock-open .ws-dock {
+    right: 0;
+    bottom: 66px;
+    width: min(320px, 92%);
+  }
+}
 
 /* The tool rail loses its labels-by-title breathing room too.
  *
@@ -9819,7 +9849,20 @@ body.cp-open { overflow: hidden; }
  * would have been the second thing and not the first. */
 .km { position: relative; display: inline-flex; }
 
-.km-btn {
+/* One field box, worn by both controls beside the composer.
+ *
+ * Optic Mode and Optic Persona sit side by side and have to read as one pair.
+ * They did not: measured at 47px tall on --surface-2 with --border against 44px
+ * on --surface with --border-strong, and the label was INSIDE the first box and
+ * outside the second, so one looked like a designed control and the other like
+ * a bare form field someone had dropped next to it.
+ *
+ * Shared rather than copied, because two lookalike rules drift the first time
+ * one is touched. `.km-btn` is the knowledge component's own class and keeps
+ * only what is specific to being a button; the persona field wears `.oc-field`
+ * too and inherits the box.
+ */
+.oc-field {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -9829,15 +9872,66 @@ body.cp-open { overflow: hidden; }
   border-radius: var(--r-md);
   background: var(--surface-2);
   color: var(--ink);
-  cursor: pointer;
   text-align: left;
   transition: border-color var(--dur-ui) var(--ease-ui),
               background var(--dur-ui) var(--ease-ui);
 }
-.km-btn:hover { border-color: var(--ink-muted); background: var(--raised); }
+.oc-field:hover { border-color: var(--ink-muted); background: var(--raised); }
+.oc-field:focus-within { border-color: var(--ink-muted); }
+
+/* The persona field is a <label> wrapping a <select>, so the box belongs to the
+   label and the select has to stop drawing one of its own. The caret is on the
+   field rather than the select because an appearance:none select has none, and
+   the mode chip beside it draws its own the same way. */
+/* No extra right padding: the mode chip beside it reserves none either and
+   sits its caret at --space-1, overlapping the padding rather than adding to
+   it. Reserving space here made the two boxes 13.8px and 23px on the right,
+   which is visible when they are adjacent. */
+.pp-field { position: relative; cursor: pointer; }
+.pp-select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: 600 var(--t-body)/1.2 var(--sans);
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  max-width: 22ch;
+}
+.pp-select:focus { outline: none; }
+.pp-field::after {
+  content: '';
+  position: absolute;
+  right: var(--space-1);
+  top: 50%;
+  margin-top: -2px;
+  width: 0; height: 0;
+  border-left: 3.5px solid transparent;
+  border-right: 3.5px solid transparent;
+  border-top: 4px solid currentColor;
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* The label, inside the box, in both controls. */
+.oc-eyebrow {
+  font-size: var(--t-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.km-btn {
+  cursor: pointer;
+}
 .km-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
 
-.km-eyebrow {
+/* Kept as an alias so the component's own markup needs no second class on the
+   span. Same declarations as .oc-eyebrow; see the note on .oc-field. */
+.km-eyebrow,
+.pp-eyebrow {
   font-size: var(--t-micro);
   letter-spacing: 0.06em;
   text-transform: uppercase;

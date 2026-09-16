@@ -13745,14 +13745,33 @@ function wsDock() {
 /* The icon rail. Every widget one click away and its own on/off state visible,
  * which a dropdown of fourteen names is not. Labels under the icons because
  * fourteen unfamiliar glyphs is a memory test — the reference does the same. */
+/* Whether pressing a widget button can put anything on screen.
+ *
+ * With Pulse open the dock is hidden and does not float, so a press would flip
+ * the button's state and show nothing. That is the dead control this codebase
+ * keeps finding, and it is the same fault the float rule was written to avoid:
+ * that rule avoided it by drawing the dock over 78% of a 382px chart instead.
+ * Measured with Pulse at 620px on a 1142px window, the dock overlapped the
+ * canvas by 300px.
+ *
+ * Disabled, with the reason in the title, is the third option neither took. A
+ * disabled control is not a dead one: it says it cannot act and why.
+ */
+function wsDockReachable() {
+  return !document.body.classList.contains('chat-open');
+}
+
 function wsWidgetRail() {
+  const reachable = wsDockReachable();
   return `<div class="ws-wrail" role="toolbar" aria-label="Widgets">
     ${WS_WIDGETS.map((w) => {
     const on = wsIsNarrow() ? wsNarrowWidget === w.id : wsDockOpen.includes(w.id);
     return `<button type="button"
       class="ws-wrail-btn${on ? ' on' : ''}"
       data-ws-widget-toggle="${w.id}" aria-pressed="${on}"
-      title="${esc(w.label)}">
+      ${reachable ? '' : 'disabled'}
+      title="${reachable ? esc(w.label) : esc(w.label
+        + '. Close Pulse to open this panel: there is not room for the chart and both.')}">
       <span class="ws-wrail-ico">${w.icon}</span>
       <span class="ws-wrail-lab">${esc(w.label)}</span>
     </button>`;
@@ -15672,6 +15691,13 @@ function wsOnChatToggle() {
    */
   wsSyncChromeHeight();
   wsSyncNarrow();
+  /* Just the rail, not the chart. The comment above explains why the chart is
+     left alone; the rail is a dozen buttons and its disabled state depends on
+     `body.chat-open`, so it has to be rebuilt or it reports the state the page
+     was in when it last rendered. Same targeted-outerHTML pattern
+     wsRedrawChart uses for the toolbar and the legend. */
+  const rail = views.chart && views.chart.querySelector('.ws-wrail');
+  if (rail) rail.outerHTML = wsWidgetRail();
 }
 
 /* Narrow mode for the workspace.
@@ -24127,13 +24153,23 @@ function renderPersonaPicker() {
          code, the endpoint and the "OPTIC MODE" label beside it. The house
          convention is Optic Pulse, Optic's Read, Optic's Perspective, so this
          is Optic Persona. The lens idea survives in the blurb, where it
-         describes what the control does rather than naming it. */''}
-    <label class="pulse-persona-lab" for="pulse-persona">Optic Persona</label>
-    <select id="pulse-persona" class="settings-select"
-      aria-label="Optic Persona. The lens Pulse answers through">
-      ${PULSE_PERSONAS.map((p) => `<option value="${esc(p.id)}"${
+         describes what the control does rather than naming it.
+
+         The label sits INSIDE the box, and the box is the same `.oc-field` the
+         Optic mode chip wears. These two sit side by side and were a 47px
+         surface-2 box with the label inside next to a 44px surface box with the
+         label outside: one read as a designed control, the other as a bare
+         form field dropped beside it. `.settings-select` is also the wrong
+         class to borrow here, per its own note in CLAUDE.md about carrying a
+         flex-basis meant for a row. */''}
+    <label class="pp-field oc-field" for="pulse-persona">
+      <span class="pp-eyebrow">Optic Persona</span>
+      <select id="pulse-persona" class="pp-select"
+        aria-label="Optic Persona. The lens Pulse answers through">
+        ${PULSE_PERSONAS.map((p) => `<option value="${esc(p.id)}"${
   p.id === pulsePersona ? ' selected' : ''}>${esc(p.label)}</option>`).join('')}
-    </select>
+      </select>
+    </label>
     <span class="pulse-persona-blurb">${esc(current ? current.blurb : '')}</span>`;
 }
 

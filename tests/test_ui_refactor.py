@@ -206,6 +206,16 @@ def test_every_hover_state_transitions():
             if ":hover" not in part:
                 continue
             base = part.split(":hover")[0].strip()
+            # A functional pseudo-class in the base is not a different element.
+            # `.ws-wrail-btn:not(:disabled):hover` reduces to `.ws-wrail-btn`,
+            # which is where the transition is declared; without stripping it
+            # the check reported a rule that was already covered. Written as a
+            # loop because a selector can carry more than one.
+            while True:
+                stripped = re.sub(r":(?:not|is|where)\([^()]*\)$", "", base).strip()
+                if stripped == base:
+                    break
+                base = stripped
             if base and base not in transitioned:
                 missing.add(base)
     allowed = {".nav-item", ".panel.is-closed", "h2 .gloss-term", "h3 .gloss-term"}

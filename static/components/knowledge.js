@@ -148,7 +148,7 @@
     var now = current();
     var open = !!o.open;
     return '<div class="km" data-km-root>'
-      + '<button type="button" class="km-btn" data-km-toggle'
+      + '<button type="button" class="km-btn oc-field" data-km-toggle'
       + ' aria-haspopup="true" aria-expanded="' + (open ? 'true' : 'false') + '"'
       + ' title="How much financial detail Optic assumes">'
       + (o.compact ? '' : '<span class="km-eyebrow">Optic mode</span>')

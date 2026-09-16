@@ -25,6 +25,7 @@ from app import ai, knowledge
 APP_JS = open("static/app.js", encoding="utf-8").read()
 COMPONENT = open("static/components/knowledge.js", encoding="utf-8").read()
 INDEX = open("static/index.html", encoding="utf-8").read()
+STYLES = open("static/styles.css", encoding="utf-8").read()
 
 
 # ------------------------------------------------------------- the ladder
@@ -241,7 +242,10 @@ def test_the_selector_is_not_buried_in_settings():
     Pulse header beside the lens."""
     fn = APP_JS.split("function renderPersonaPicker() {", 1)[1].split("\n}", 1)[0]
     assert "knowledgeSelectorHTML(" in fn
-    assert fn.index("knowledgeSelectorHTML(") < fn.index("pulse-persona-lab")
+    # Mode first, then persona. The marker used to be `pulse-persona-lab`, the
+    # class on a label that sat OUTSIDE the persona box; the label moved inside
+    # so both controls wear the same `.oc-field`, and the class went with it.
+    assert fn.index("knowledgeSelectorHTML(") < fn.index("pp-field")
 
 
 def test_the_selector_is_one_chip_not_five_segments():
@@ -283,3 +287,39 @@ def test_the_chat_request_carries_the_level_and_the_lens():
 def test_the_server_normalises_what_arrives():
     src = open("app/main.py", encoding="utf-8").read()
     assert 'knowledge_mod.normalise(payload.get("mode"))' in src
+
+
+def test_the_mode_and_persona_controls_wear_one_box():
+    """They sit side by side and have to read as one pair. They did not:
+    measured at 47px tall on --surface-2 with --border next to 44px on
+    --surface with --border-strong, and the label was INSIDE the first box and
+    outside the second, so one looked like a designed control and the other like
+    a bare form field dropped beside it.
+
+    Shared rather than copied. Two lookalike rules drift the first time one is
+    touched, which is the fault behind most of this session's other fixes.
+    """
+    assert ".oc-field {" in STYLES
+    # The knowledge component's button wears it...
+    assert 'class="km-btn oc-field"' in COMPONENT
+    # ...and so does the persona field.
+    assert 'class="pp-field oc-field"' in APP_JS
+    # The box lives on .oc-field, so .km-btn must not redeclare it.
+    rule = STYLES[STYLES.index("\n.km-btn {"):]
+    rule = rule[:rule.index("}")]
+    for prop in ("background", "border-radius", "padding"):
+        assert prop not in rule, "%s belongs to .oc-field now" % prop
+
+
+def test_the_persona_label_is_inside_its_box():
+    """`.pulse-persona-lab` was a label sitting outside the box. It moved
+    inside, which is what makes the two controls match, and the class went with
+    it."""
+    # The RULE, not the bare name: the comment recording the removal names the
+    # thing removed, so a contract reading the raw file cannot tell them apart.
+    # Third time this session.
+    assert ".pulse-persona-lab {" not in STYLES
+    assert 'class="pulse-persona-lab"' not in APP_JS
+    fn = APP_JS.split("function renderPersonaPicker() {", 1)[1].split("\n}", 1)[0]
+    assert fn.index('class="pp-field oc-field"') < fn.index('class="pp-eyebrow"')
+    assert fn.index('class="pp-eyebrow"') < fn.index('id="pulse-persona"')
