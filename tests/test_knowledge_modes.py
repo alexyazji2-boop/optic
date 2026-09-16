@@ -321,5 +321,63 @@ def test_the_persona_label_is_inside_its_box():
     assert ".pulse-persona-lab {" not in STYLES
     assert 'class="pulse-persona-lab"' not in APP_JS
     fn = APP_JS.split("function renderPersonaPicker() {", 1)[1].split("\n}", 1)[0]
+    # The label comes first inside the box, then the chosen value, which is the
+    # order the mode chip uses. `id="pulse-persona"` was the marker until the
+    # <select> was replaced by a button and a menu; see
+    # test_the_persona_menu_is_the_same_menu.
     assert fn.index('class="pp-field oc-field"') < fn.index('class="pp-eyebrow"')
-    assert fn.index('class="pp-eyebrow"') < fn.index('id="pulse-persona"')
+    assert fn.index('class="pp-eyebrow"') < fn.index('class="pp-now"')
+
+
+def test_the_persona_menu_is_the_same_menu():
+    """The boxes matched; the menus did not. One was a custom list with a label,
+    a blurb and a footer stating what the setting changes; the other was
+    whatever the operating system draws for a <select>: labels only, no blurbs,
+    no promise, and no relation to the app's type or colour. Two controls side
+    by side cannot look alike closed and unlike the moment either is opened.
+
+    Aliased selectors, not a second copy of sixty lines.
+    """
+    assert "function personaMenuHTML() {" in APP_JS
+    for sel in (".oc-menu", ".oc-opt", ".oc-opt-label", ".oc-opt-blurb",
+                ".oc-foot", ".oc-foot-h"):
+        assert sel + ",\n" in STYLES or sel + " {" in STYLES, sel
+    fn = APP_JS.split("function personaMenuHTML() {", 1)[1].split("\n}", 1)[0]
+    assert "oc-opt-label" in fn and "oc-opt-blurb" in fn
+    assert "oc-foot" in fn, "the footer states what the choice changes"
+    # And it closes the way every other menu here does.
+    assert "data-pp-root" in APP_JS and "Escape" in APP_JS
+
+
+def test_choosing_a_persona_actually_changes_the_persona():
+    """It did not. `pulsePersona` was assigned in exactly two places, both at
+    load -- once from localStorage, once from the server default -- and nothing
+    read the <select>: no change listener touched it and
+    `setItem(PULSE_PERSONA_KEY, ...)` appeared nowhere in the file. The key was
+    read on every load and never written, and `persona: pulsePersona` went to
+    /api/chat as the default every time.
+
+    So picking "Devil's advocate" showed "Devil's advocate" in the box and Pulse
+    answered as the neutral analyst. It looked alive because a native <select>
+    updates its own displayed value whether or not anything is listening, which
+    is the most convincing kind of dead control.
+    """
+    assert "function setPersona(id) {" in APP_JS
+    fn = APP_JS.split("function setPersona(id) {", 1)[1].split("\n}", 1)[0]
+    assert "pulsePersona = id;" in fn
+    assert "setItem(PULSE_PERSONA_KEY, id)" in fn, "the choice has to survive a reload"
+    assert "renderPersonaPicker()" in fn
+    # The menu has to reach it.
+    assert "setPersona(pick.dataset.ppPick)" in APP_JS
+
+
+def test_the_persona_promise_comes_from_the_server():
+    """The menu's footer and the behaviour need one source. The distinction was
+    stated only in a comment in app/ai.py, where no reader of the app could see
+    it."""
+    ai = open("app/ai.py", encoding="utf-8").read()
+    main = open("app/main.py", encoding="utf-8").read()
+    assert "PERSONA_CHANGES" in ai and "PERSONA_NEVER_CHANGES" in ai
+    assert '"changes": ai.PERSONA_CHANGES' in main
+    assert '"never_changes": ai.PERSONA_NEVER_CHANGES' in main
+    assert "PULSE_PERSONA_NOTE" in APP_JS

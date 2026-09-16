@@ -24013,12 +24013,20 @@ try {
 let PULSE_PERSONAS = [
   { id: 'neutral', label: 'Neutral analyst', blurb: 'Balanced, cites the numbers.' },
 ];
+/* What choosing a persona does, and the one thing it cannot. From the server,
+   so the menu's promise and the behaviour have one source -- the same reason
+   the Optic mode menu reads its footer from the knowledge catalogue. */
+let PULSE_PERSONA_NOTE = { changes: [], never_changes: [] };
+/* Whether the persona menu is open. Outside the render, like kmOpen, because
+   renderPersonaPicker replaces the markup. */
+let ppOpen = false;
 
 async function loadPersonas() {
   try {
     const d = await getJSON('/api/personas');
     if (Array.isArray(d.personas) && d.personas.length) PULSE_PERSONAS = d.personas;
     if (!PULSE_PERSONAS.some((p) => p.id === pulsePersona)) pulsePersona = d.default;
+    PULSE_PERSONA_NOTE = { changes: d.changes || [], never_changes: d.never_changes || [] };
   } catch (e) { /* keep the built-in default */ }
   renderPersonaPicker();
 }
@@ -24162,16 +24170,103 @@ function renderPersonaPicker() {
          form field dropped beside it. `.settings-select` is also the wrong
          class to borrow here, per its own note in CLAUDE.md about carrying a
          flex-basis meant for a row. */''}
-    <label class="pp-field oc-field" for="pulse-persona">
-      <span class="pp-eyebrow">Optic Persona</span>
-      <select id="pulse-persona" class="pp-select"
-        aria-label="Optic Persona. The lens Pulse answers through">
-        ${PULSE_PERSONAS.map((p) => `<option value="${esc(p.id)}"${
-  p.id === pulsePersona ? ' selected' : ''}>${esc(p.label)}</option>`).join('')}
-      </select>
-    </label>
+    ${/* A button and a menu, not a <select>.
+         The box already matched the Optic mode chip; the MENU did not. One was
+         a custom list with a label, a blurb and a footer stating what the
+         setting changes, and the other was whatever the operating system draws
+         for a <select>: labels only, a tick, no blurbs, no promise, and no
+         relation to the app's own type or colour. Two controls side by side
+         cannot look alike in their closed state and unlike the moment either
+         is opened.
+         The markup mirrors the component's own, and the styles are the same
+         declarations under aliased selectors, so there is no second copy to
+         drift. */''}
+    <div class="pp" data-pp-root>
+      <button type="button" class="pp-field oc-field" data-pp-toggle
+        aria-haspopup="true" aria-expanded="${ppOpen ? 'true' : 'false'}"
+        title="The lens Pulse answers through">
+        <span class="pp-eyebrow">Optic Persona</span>
+        <span class="pp-now">${esc(current ? current.label : '')}</span>
+        <i class="pp-caret" aria-hidden="true"></i>
+      </button>
+      ${ppOpen ? personaMenuHTML() : ''}
+    </div>
     <span class="pulse-persona-blurb">${esc(current ? current.blurb : '')}</span>`;
 }
+
+/* Record the choice, and remember it.
+ *
+ * This did not exist. `pulsePersona` was assigned in exactly two places -- once
+ * from localStorage at load, once from the server's default -- and nothing read
+ * the <select>: no change listener anywhere touched it, and
+ * `setItem(PULSE_PERSONA_KEY, ...)` appeared nowhere in the file. So the key
+ * was read on every load and never written, and `persona: pulsePersona` went to
+ * /api/chat as the default on every request.
+ *
+ * Picking "Devil's advocate" therefore showed "Devil's advocate" in the box and
+ * Pulse carried on answering as the neutral analyst. It looked alive because a
+ * native <select> updates its own displayed value whether or not anybody is
+ * listening, which is the most convincing kind of dead control: the element
+ * gives the feedback the application never did.
+ */
+function setPersona(id) {
+  if (!id || !PULSE_PERSONAS.some((p) => p.id === id)) return;
+  pulsePersona = id;
+  try { localStorage.setItem(PULSE_PERSONA_KEY, id); } catch (e) { /* private mode */ }
+  renderPersonaPicker();
+}
+
+/* The persona menu. Same structure as the Optic mode menu, including the
+ * footer: what the choice changes, and the one thing it cannot. Both lists come
+ * from /api/personas so the promise on screen and the behaviour in ai.py have
+ * one source.
+ */
+function personaMenuHTML() {
+  const note = PULSE_PERSONA_NOTE || { changes: [], never_changes: [] };
+  const list = (rows, head) => (rows && rows.length
+    ? `<p class="oc-foot-h">${esc(head)}</p><ul>${
+      rows.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>` : '');
+  return `<div class="oc-menu" role="menu">
+    ${PULSE_PERSONAS.map((p) => {
+    const on = p.id === pulsePersona;
+    return `<button type="button" class="oc-opt${on ? ' on' : ''}"
+      role="menuitemradio" aria-checked="${on}" data-pp-pick="${esc(p.id)}">
+      <span class="oc-opt-head"><span class="oc-opt-label">${esc(p.label)}</span></span>
+      <span class="oc-opt-blurb">${esc(p.blurb || '')}</span>
+    </button>`;
+  }).join('')}
+    ${(note.changes.length || note.never_changes.length) ? `<div class="oc-foot">
+      ${list(note.changes, 'Changes')}${list(note.never_changes, 'Never changes')}
+    </div>` : ''}
+  </div>`;
+}
+
+document.addEventListener('click', (evt) => {
+  if (!evt.target || !evt.target.closest) return;
+  const pick = evt.target.closest('[data-pp-pick]');
+  if (pick) {
+    ppOpen = false;
+    setPersona(pick.dataset.ppPick);
+    return;
+  }
+  const toggle = evt.target.closest('[data-pp-toggle]');
+  if (toggle) {
+    ppOpen = !ppOpen;
+    renderPersonaPicker();
+    return;
+  }
+  /* Anything else closes it. A menu on a touchscreen that can only be closed
+     by the control that opened it is a trap, which is the lesson the section
+     dropdowns and the Optic mode menu both carry. */
+  if (ppOpen && !evt.target.closest('[data-pp-root]')) {
+    ppOpen = false;
+    renderPersonaPicker();
+  }
+});
+
+document.addEventListener('keydown', (evt) => {
+  if (evt.key === 'Escape' && ppOpen) { ppOpen = false; renderPersonaPicker(); }
+});
 
 /* The starter cards.
  *

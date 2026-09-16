@@ -60,6 +60,21 @@ FALLBACK_BETA = "server-side-fallback-2026-07-01"
 # A plain description is also more useful at the point of choosing: "Statistician"
 # tells you what you will get back, where "Simon, the data guy" needs you to
 # already know who Simon is.
+# What choosing a persona does, and the one thing it cannot.
+#
+# Served to the client so the menu's promise and the behaviour have one source,
+# exactly as the knowledge catalogue does for Optic mode. The distinction above
+# is the whole design of this module and it was only stated in a comment here,
+# where no reader of the app could see it.
+PERSONA_CHANGES: List[str] = [
+    "Which figures Pulse leads with, and how much doubt it carries.",
+    "The register it writes in.",
+]
+PERSONA_NEVER_CHANGES: List[str] = [
+    "The numbers. Every persona reads the same panels and cites the same figures.",
+    "The risk warnings, and what Pulse will not do.",
+]
+
 PERSONAS: Dict[str, Dict[str, str]] = {
     "neutral": {
         "label": "Neutral analyst",

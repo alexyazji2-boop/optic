@@ -2432,6 +2432,11 @@ async def personas() -> Dict[str, Any]:
             {"id": key, "label": val["label"], "blurb": val["blurb"]}
             for key, val in ai.PERSONAS.items()
         ],
+        # What the choice does and the one thing it cannot, so the menu's
+        # promise and the behaviour have one source. Same shape as the
+        # knowledge catalogue's, because the menu is now the same menu.
+        "changes": ai.PERSONA_CHANGES,
+        "never_changes": ai.PERSONA_NEVER_CHANGES,
     }
 
 
