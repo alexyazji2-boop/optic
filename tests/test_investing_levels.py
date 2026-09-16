@@ -59,6 +59,22 @@ def body_of(name, src=None):
     return s[start:].split("\nfunction ", 1)[0]
 
 
+def investing_chart_code():
+    """renderLong plus the block it delegates its chart to.
+
+    The legend, the toolbar, the level refs and the two average series were
+    lifted out of renderLong into `ltPriceBlock` so that a pan or a zoom can
+    redraw the chart without rebuilding the view — the chart is a function of
+    the series, so all of it has to be recomputed when the window moves.
+
+    These tests are about what the Investing chart does, not about which
+    function currently holds it, so they read both. Twelve of them broke on the
+    extraction while every behaviour they describe was intact, which is a test
+    coupled to a boundary rather than to a contract.
+    """
+    return body_of("renderLong") + "\n" + body_of("ltPriceBlock")
+
+
 # ------------------------------------------------------------- the server
 
 def test_the_long_payload_carries_the_levels():
@@ -99,7 +115,7 @@ def test_the_server_reuses_the_swing_path_functions():
 # ------------------------------------------------------------- the client
 
 def test_the_investing_toolbar_has_the_levels_menu():
-    fn = body_of("renderLong")
+    fn = investing_chart_code()
     assert 'aria-label="Technical Levels"' in fn
     for opt in ('data-level-opt="fib"', 'data-level-opt="sr"', 'data-level-opt="vol"'):
         assert opt in fn, opt
@@ -109,7 +125,7 @@ def test_it_only_offers_toggles_this_chart_can_honour():
     """A toggle for something a chart cannot show is worse than its absence.
     This chart draws no EMA families, dealer clouds, volume-by-price or insider
     markers, so none of those appear in its menu."""
-    fn = body_of("renderLong")
+    fn = investing_chart_code()
     menu = fn[fn.index('aria-label="Technical Levels"'):]
     menu = menu[:menu.index("</details>")]
     for absent in ('"ma"', '"ema"', '"vbp"', '"insiders"', '"cloud921"', '"zones"'):
@@ -119,7 +135,7 @@ def test_it_only_offers_toggles_this_chart_can_honour():
 def test_the_toggles_share_the_flags_rather_than_keeping_their_own():
     """Switching retracements on for Options switches them on here. A second
     set of state would look identical and drift on the first change."""
-    fn = body_of("renderLong")
+    fn = investing_chart_code()
     assert "showFib ? 'checked' : ''" in fn
     assert "showSR ? 'checked' : ''" in fn
     assert "showVol ? 'checked' : ''" in fn
@@ -129,7 +145,7 @@ def test_the_retracements_answer_to_the_fib_flag():
     """They were drawn unconditionally. They are retracements of the three-year
     range, which is what Fibonacci means at this horizon, so they belong to the
     flag the Options chart already uses for its retracement grid."""
-    fn = body_of("renderLong")
+    fn = investing_chart_code()
     assert "(showFib ? (h.accumulation_zones || []) : [])" in fn
 
 
@@ -145,7 +161,7 @@ def test_the_retracements_are_drawn_by_the_shared_fib_builder():
     to exactly the dashed style fibLines' own comment records being told to
     stop using.
     """
-    fn = body_of("renderLong")
+    fn = investing_chart_code()
     assert "const zoneRefs = fibLines(" in fn
     assert "pattern: '6 4'" not in fn, "dashed ratio lines are the old look"
     # Scoped to the refs expression. C.refSR legitimately appears in the legend
@@ -161,7 +177,7 @@ def test_the_retracement_legend_matches_what_is_drawn():
     kept claiming a dashed style after fibLines started drawing them solid. A
     legend naming a line the chart is not drawing sends the reader looking for
     it."""
-    fn = body_of("renderLong")
+    fn = investing_chart_code()
     assert "...(showFib && zoneRefs.length" in fn
     assert "{ name: 'Retracements', color: C.refSR }" in fn
     assert "{ name: 'Accumulation zones', color: C.refSR, dash: true }" not in fn
@@ -172,7 +188,7 @@ def test_the_retracement_filter_reads_the_ratio_not_the_prose():
     have real series lines of their own. The filter was `!/average/i` over the
     label — a regex on prose to answer "is this a retracement" when the server
     can just send the ratio."""
-    fn = body_of("renderLong")
+    fn = investing_chart_code()
     assert "z.ratio !== null && z.ratio !== undefined" in fn
     assert "!/average/i.test" not in fn
 
@@ -182,7 +198,7 @@ def test_the_ratio_label_is_built_from_the_number():
     and "38.2% retracement of the 3-year range" yields "38.23" because of the 3
     in "3-year". The label handed in is the same "38.2%" form technicals.py
     sends, so both charts produce the identical string."""
-    fn = body_of("renderLong")
+    fn = investing_chart_code()
     assert "`${fmt(z.ratio * 100, 1)}%`" in fn
 
 
@@ -209,7 +225,7 @@ def test_the_weekly_averages_are_computed_before_the_window_is_applied():
         "the full series, not the sliced one"
     assert "ma[period] = full.some((v) => v !== null) ? cut(full) : null;" in fn, \
         "computed on the full series, then cut with everything else"
-    caller = body_of("renderLong")
+    caller = investing_chart_code()
     assert "smaSeries(ltSer.close" not in caller, \
         "computing from the windowed closes is what cut both lines off"
     assert "const ltMa = (period) => (ltSer.ma || {})[period] || null;" in caller
@@ -221,7 +237,7 @@ def test_an_average_longer_than_the_history_is_dropped_not_drawn_empty():
     that is not drawn is not named."""
     fn = body_of("ltSlice")
     assert "full.some((v) => v !== null) ? cut(full) : null" in fn
-    caller = body_of("renderLong")
+    caller = investing_chart_code()
     assert "...(ltMa200 ? [{ name: `200-${unit} average`" in caller
 
 
@@ -233,7 +249,7 @@ def test_the_periods_are_named_once():
 
 def test_support_and_resistance_uses_the_shared_band_builder():
     """Same `srBands` the Options chart and the charting workspace call."""
-    fn = body_of("renderLong")
+    fn = investing_chart_code()
     assert "srBands(ltLevels.support_resistance || []" in fn
     assert "bands: showSR ?" in fn
 
@@ -241,7 +257,7 @@ def test_support_and_resistance_uses_the_shared_band_builder():
 def test_a_payload_without_levels_still_draws():
     """An older cached response has no `levels`, and the chart has to render
     without bands rather than throw."""
-    fn = body_of("renderLong")
+    fn = investing_chart_code()
     assert "const ltLevels = h.levels || {};" in fn
 
 
@@ -264,7 +280,7 @@ def test_every_swatch_class_in_the_new_menu_has_a_rule():
     """`lvl-key zone`, which the Options menu uses, has no rule in the
     stylesheet and renders as an unstyled box. The new menu uses `fib`, which
     matches its own toggle and is a real class."""
-    fn = body_of("renderLong")
+    fn = investing_chart_code()
     menu = fn[fn.index('aria-label="Technical Levels"'):]
     menu = menu[:menu.index("</details>")]
     for cls in set(re.findall(r'class="lvl-key (\w+)"', menu)):
@@ -286,7 +302,7 @@ def test_the_horizons_stay_different():
 def test_the_indicators_menu_is_not_claimed_here():
     """Its absence is deliberate and recorded: /api/indicators hardcodes
     interval="1d", so its series would not align with weekly or monthly bars."""
-    fn = body_of("renderLong")
+    fn = investing_chart_code()
     assert "IND_FALLBACK_CATALOGUE" not in fn
     main = open("app/main.py", encoding="utf-8").read()
     assert 'interval="1d"' in main, (
@@ -344,3 +360,64 @@ def test_the_descriptive_label_is_left_alone():
     zones = longterm._accumulation_zones(daily, {"sma_40w": 120.0, "sma_200w": 90.0})
     labels = [z["label"] for z in zones]
     assert "38.2% retracement of the 3-year range" in labels
+
+
+# --------------------------------------------- pan and zoom on this chart
+
+
+def test_the_investing_chart_registers_for_pan_and_zoom():
+    """It could not pan or zoom; the Charting tab could. Twelve years of weekly
+    bars is the chart on this terminal with the most to zoom into."""
+    start = APP_JS.index("registerChartZoom('chart-weekly', {")
+    reg = APP_JS[start:APP_JS.index("});", start)]
+    assert "STATE.view === 'long'" in reg
+    assert "ltWindowNow(" in reg
+    assert "ltRedrawChart()" in reg
+
+
+def test_the_investing_zoom_repaints_the_chart_not_the_view():
+    body = body_of("ltRedrawChart")
+    assert "ltPriceBlock(ltChartCtx.h, ltChartCtx.lt, ltChartCtx.ltLevels)" in body
+    assert "renderLong" not in body
+
+
+def test_the_investing_window_cannot_outlive_what_it_indexes():
+    """Keyed to symbol, range and interval rather than reset on change, so no
+    missed reset site can leave a window pointing into a different series."""
+    assert "function ltWindowKey() {" in APP_JS
+    for fn in ("ltSeries", "ltWindowNow"):
+        assert "ltWindow.key === ltWindowKey()" in body_of(fn), fn
+
+
+def test_the_window_slices_the_same_rolled_up_base_the_averages_came_from():
+    """ltSlice computes the two averages over the whole series before cutting —
+    that is what stopped them warming up inside the view. If the window sliced a
+    differently-aggregated base, a zoom would cut arrays of two different
+    lengths and the averages would come back short.
+
+    Verified in the browser at 199 of 627 bars: all three polylines carried 199
+    points and spanned the full plot width.
+    """
+    body = body_of("ltFullSeries")
+    assert "ltSlice(lt.series, 'all', ltInterval)" in body, \
+        "the base has to come from the same function that built the averages"
+
+
+def test_the_zoom_slices_the_average_arrays_too():
+    """`ma` is an object of arrays, not a top-level array, so the "slice every
+    array" loop does not reach it. Missing this would hand lineChart a 627-point
+    average against 199 dates and stretch the x-axis to fit it — the same fault
+    sliceSeries carries a comment about."""
+    body = body_of("ltSeries")
+    assert "out.ma = {};" in body
+    assert "arr.slice(win.from, win.to)" in body
+
+
+def test_the_investing_heading_states_the_window():
+    """It read a flat "· weekly bars", which said nothing about how much of the
+    history was on screen — fine when the range pills were the only control,
+    misleading once the chart can be zoomed to forty bars."""
+    assert "function ltBarCountText(ser) {" in APP_JS
+    assert 'id="lt-bar-count"' in APP_JS
+    # Written from the block, so the initial render and every redraw agree.
+    assert "ltCount.textContent = `· ${ltBarCountText(ltSer)}`;" in body_of("ltPriceBlock")

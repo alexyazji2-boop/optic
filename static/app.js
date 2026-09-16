@@ -15068,6 +15068,16 @@ registerChartZoom('chart-price', {
   apply: (win) => swingApplyWindow(win),
   redraw: () => swingRedrawChart(),
 });
+
+/* The Investing chart. Twelve years of weekly bars, which is the chart on this
+ * terminal with the most to zoom into. */
+registerChartZoom('chart-weekly', {
+  enabled: () => STATE.view === 'long'
+    && !!(((STATE.long || {}).holding || {}).long_trend || {}).series,
+  window: () => ltWindowNow(((STATE.long || {}).holding || {}).long_trend),
+  apply: (win) => ltApplyWindow(win),
+  redraw: () => ltRedrawChart(),
+});
 document.addEventListener('pointerup', wsEndPan);
 document.addEventListener('pointercancel', wsEndPan);
 
@@ -19762,184 +19772,115 @@ function ltLevelCount() {
   return [showFib, showSR, showVol].filter(Boolean).length;
 }
 
-function renderLong(d) {
-  hideTip();
-  const h = d.holding || {};
-  /* Computed server-side on the weekly frame and carried in the long payload.
-     Absent on an older cached response, so every read is guarded: the chart
-     draws without bands rather than throwing. */
-  const ltLevels = h.levels || {};
-  const lt = h.long_trend || {};
-  const dd = h.drawdown || {};
-  const risk = h.risk || {};
-  const val = h.valuation || {};
-  const vh = h.valuation_history || {};
+/* ------------------------------------ the Investing chart's own window
+ *
+ * Same shape as the Options chart's, and for the same reason: the gesture layer
+ * is shared (see registerChartZoom), so all a chart needs to join it is a
+ * window, a series function that honours one, and a redraw that does not
+ * repaint the view.
+ *
+ * Keyed to symbol, range and interval. A window is a pair of bar indices into
+ * one particular series and means nothing against a different one, so a key
+ * mismatch reads as "not zoomed" rather than relying on every place those three
+ * can change remembering to reset it.
+ */
+let ltWindow = null;
+let ltChartCtx = null;
 
-  if (h.error) { views.long.innerHTML = errorHTML(h.error); return; }
+function ltWindowKey() {
+  return `${STATE.ticker || ''}|${ltRange}|${ltInterval}`;
+}
 
-  views.long.innerHTML = securityHeader('long') + `
-  <div class="grid c2 gap">
-    <div class="panel">
-      <h2>${hg('Long-term view')} · ${esc(h.ticker)}</h2>
-      <p class="sub">${esc(h.name || '')}${(h.fundamentals || {}).sector ? ' · ' + esc(h.fundamentals.sector) : ''}</p>
-      <div style="display:flex;align-items:flex-end;gap:var(--space-5);flex-wrap:wrap">
-        <div>
-          <div class="hero-label">Conviction</div>
-          <div class="hero ${signClass(h.conviction_score)}">${h.conviction_score > 0 ? '+' : ''}${fmt(h.conviction_score, 0)}</div>
-          <div class="note subnote sm">Of a possible
-            +${fmt((h.conviction_scale || {}).max_possible, 0)}</div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:var(--space-2)">
-          ${toneChip(h.conviction)}
-          <span class="chip neutral"><span class="dot"></span>${esc(cap(lt.phase) || '')}</span>
-        </div>
-      </div>
-      <div class="callout info">${gloss(h.plan || '')}</div>
-      ${((h.data_quality || {}).warnings || []).map((w) => `<div class="callout bad">${gloss(w)}</div>`).join('')}
+/* The full series at the chosen interval, unwindowed.
+ *
+ * ltSlice already computes the two averages over the whole of this before
+ * cutting — that is what stopped them warming up inside the view — so the
+ * window has to be applied to the SAME rolled-up base, or a zoom would slice
+ * arrays of two different lengths. Asking ltSlice for the 'all' range is how
+ * this gets the base without duplicating the roll-up. */
+function ltFullSeries(lt) {
+  return ltSlice(lt.series, 'all', ltInterval);
+}
 
-      <h3>${hg('What makes up this score')}${askPulse('composite')}</h3>
-      <p class="sub">Every factor the model checked and what each one contributed. Mostly price
-        behaviour. The valuation and income factors can add at most 13 of the
-        ${fmt((h.conviction_scale || {}).max_possible, 0)} available points.</p>
-      <table class="data">
-        <thead><tr><th>Factor</th><th>Type</th><th>Points</th><th>Why</th></tr></thead>
-        <tbody>${(h.conviction_factors || []).map((f) => `<tr>
-          <td class="name">${esc(cap(f.label))}</td>
-          <td class="muted">${esc(cap(f.kind))}</td>
-          <td class="${signClass(f.points)}"><strong>${f.points > 0 ? '+' : ''}${fmt(f.points, 0)}</strong></td>
-          <td style="color:var(--ink-2);font-size:var(--t-small)">${gloss(f.detail)}</td>
-        </tr>`).join('')}
-        <tr style="border-top:1px solid var(--border-strong)">
-          <td class="name"><strong>Total</strong></td><td></td>
-          <td class="${signClass(h.conviction_score)}"><strong>${h.conviction_score > 0 ? '+' : ''}${fmt(h.conviction_score, 0)}</strong></td>
-          <td class="subnote sm">${
-  (h.conviction_scale || {}).thresholds
-    ? 'High at ' + h.conviction_scale.thresholds.high + '+, moderate at ' + h.conviction_scale.thresholds.moderate + '+' : ''}</td>
-        </tr></tbody>
-      </table>
-      <p class="caveat">This is a trend-and-relative-strength model with a valuation sanity
-        check. Not a fundamental analysis. A strong score means the price behaviour has been
-        strong, not that the business is cheap or high quality.</p>
-      <p class="caveat">${esc(h.disclaimer || '')}</p>
-    </div>
+function ltSeries(lt) {
+  if (!(lt.series && (lt.series.dates || []).length)) {
+    // Older cached payloads carry closes only. No windowing to do, and the
+    // block already handles the reduced shape.
+    return { dates: lt.weekly_dates || [], close: lt.weekly_closes || [],
+             shown_bars: (lt.weekly_dates || []).length,
+             total_bars: (lt.weekly_dates || []).length };
+  }
+  const full = ltFullSeries(lt);
+  const total = (full.dates || []).length;
+  const win = (ltWindow && ltWindow.key === ltWindowKey())
+    ? wsClampWindow(ltWindow, total) : null;
+  if (!win) return ltSlice(lt.series, ltRange, ltInterval);
+  // Slice every array, including the `ma` object's members, which are series
+  // too — a named list goes stale the moment the payload gains a field.
+  const out = { ...full };
+  Object.keys(out).forEach((k) => {
+    if (Array.isArray(out[k])) out[k] = out[k].slice(win.from, win.to);
+  });
+  out.ma = {};
+  Object.keys(full.ma || {}).forEach((period) => {
+    const arr = (full.ma || {})[period];
+    out.ma[period] = Array.isArray(arr) ? arr.slice(win.from, win.to) : arr;
+  });
+  return { ...out, shown_bars: win.to - win.from, total_bars: total,
+           monthly: !!full.monthly, zoomed: true };
+}
 
-    <div class="panel">
-      <h2>${hg('Return & risk')}</h2>
-      <p class="sub">Compound growth by horizon, against ${esc('SPY')} as the benchmark.</p>
-      <div class="grid c4" style="margin-bottom:var(--space-3)">
-        ${tile('1-year', fmtPct((h.horizons || {}).return_1y_pct, 1), null, signClass((h.horizons || {}).return_1y_pct))}
-        ${tile('3-year CAGR', fmtPct((h.horizons || {}).cagr_3y_pct, 1), null, signClass((h.horizons || {}).cagr_3y_pct))}
-        ${tile('5-year CAGR', fmtPct((h.horizons || {}).cagr_5y_pct, 1), null, signClass((h.horizons || {}).cagr_5y_pct))}
-        ${tile('vs SPY (5y)', fmtPct(h.excess_cagr_5y_pct, 1), `SPY ${fmtPct(h.benchmark_cagr_5y_pct, 1)}`, signClass(h.excess_cagr_5y_pct))}
-      </div>
-      ${kv([
-    ['Annualized volatility', fmt(risk.annualised_vol_pct, 1) + '%'],
-    ['Downside volatility', fmt(risk.downside_vol_pct, 1) + '%'],
-    ['Return / vol (1y)', fmt(risk.sharpe_proxy, 2)],
-    ['Sortino proxy', fmt(risk.sortino_proxy, 2)],
-    ['Beta vs SPY', fmt(risk.beta_vs_spy, 2)],
-    ['Correlation vs SPY', fmt(risk.correlation_vs_spy, 2)],
-    ['Positive days', fmt(risk.pct_positive_days, 1) + '%'],
-    ['Best / worst day', `${fmtPct(risk.best_day_pct, 1)} / ${fmtPct(risk.worst_day_pct, 1)}`],
-  ])}
-      <p class="caveat">Return/vol and Sortino use a zero risk-free rate. A relative screen, not a performance report.</p>
-    </div>
-  </div>
-  ${/* Close defence is on Options only. It rendered on both, and defending a
-       level into the close is a trading question rather than a multi-month
-       one, so the tab that shows strikes keeps it. */''}
+function ltWindowNow(lt) {
+  const total = ((ltFullSeries(lt).dates) || []).length;
+  const win = (ltWindow && ltWindow.key === ltWindowKey())
+    ? wsClampWindow(ltWindow, total) : null;
+  if (win) return { ...win, total };
+  const shown = (ltSeries(lt).dates || []).length;
+  return { from: Math.max(0, total - shown), to: total, total };
+}
 
+function ltApplyWindow(win) {
+  const lt = ((STATE.long || {}).holding || {}).long_trend;
+  if (!lt) return false;
+  const total = ((ltFullSeries(lt).dates) || []).length;
+  const next = wsClampWindow(win, total);
+  if (!next) return false;
+  const keyed = { ...next, key: ltWindowKey() };
+  const prev = ltWindow;
+  if (prev && prev.key === keyed.key && prev.from === keyed.from
+      && prev.to === keyed.to) return false;
+  ltWindow = keyed;
+  return true;
+}
 
-  <div class="grid c2 gap">
-    <div class="panel span2">
-      <h2>${hg('Weekly structure')} <span class="th-plain">· weekly bars</span></h2>
-      <p class="sub">${gloss(lt.guidance || '')} Weekly bars with the 40-week and 200-week averages. The lines that separate secular bull from bear phases.</p>
-      <div id="lt-toolbar"></div>
-      <div id="legend-weekly"></div>
-      <div id="chart-weekly"></div>
-      <div class="grid c3" style="margin-top:var(--space-3)">
-        ${tile('vs 40-week SMA', fmtPct(lt.vs_40w_sma, 1), `level ${fmt(lt.sma_40w, 2)}`, signClass(lt.vs_40w_sma))}
-        ${tile('vs 200-week SMA', fmtPct(lt.vs_200w_sma, 1), `level ${fmt(lt.sma_200w, 2)}`, signClass(lt.vs_200w_sma))}
-        ${tile('Weekly RSI', fmt(lt.weekly_rsi, 1), '40-week slope ' + fmtPct(lt.slope_40w_pct_3m, 1))}
-      </div>
-    </div>
-  </div>
+/* The heading states the window, so it is written from the block rather than
+ * from the template. It used to read a flat "· weekly bars", which said nothing
+ * about how much of the history was on screen — fine when the range pills were
+ * the only control, misleading once the chart can be zoomed to forty bars. */
+function ltBarCountText(ser) {
+  const unit = ser.monthly ? 'monthly' : 'weekly';
+  if (!ser.total_bars) return `${unit} bars`;
+  return `${unit} bars, ${ser.shown_bars} of ${ser.total_bars} shown`;
+}
 
-  <div class="grid c2 gap">
-    <div class="panel">
-      <h2>${hg('Drawdown')} <span class="th-plain">· daily</span></h2>
-      <p class="sub">Currently ${fmtPct(dd.current_drawdown_pct, 1)} from the all-time high of ${usd(dd.all_time_high)}, set on ${esc(dd.ath_date || '')}.
-        Worst on record: ${fmtPct(dd.max_drawdown_pct, 1)} (${esc(dd.max_drawdown_date || '')}).</p>
-      <div id="chart-drawdown"></div>
-    </div>
+function ltRedrawChart() {
+  if (STATE.view !== 'long' || !ltChartCtx) return;
+  ltPriceBlock(ltChartCtx.h, ltChartCtx.lt, ltChartCtx.ltLevels);
+}
 
-    ${renderRevenueMultiple((d.holding || {}).revenue_multiple)}
-
-    <div id="pe-host" class="span-all">${renderPeHistory(STATE.peHistory)}</div>
-
-    ${vh.available ? `<div class="panel">
-      <h2>${hg('Valuation vs its own history')}</h2>
-      <p class="sub">A multiple only means something against a yardstick. The one that needs
-        no cross-company assumptions is the company against itself. Is this expensive
-        <em>for this name</em>?</p>
-      <div class="grid c4">
-        ${tile('Trailing P/E now', fmt(vh.current_pe, 1) + '\u00d7',
-    vh.read ? cap(vh.read) : '',
-    vh.percentile >= 75 ? 'down' : vh.percentile <= 25 ? 'up' : '')}
-        ${tile('5-year median', fmt(vh.median_pe, 1) + '\u00d7',
-    `Range ${fmt(vh.low_pe, 1)}\u00d7 to ${fmt(vh.high_pe, 1)}\u00d7 over ${
-      fmt(vh.usable_years, 0)} profitable years`)}
-        ${vh.percentile !== null && vh.percentile !== undefined
-    ? tile('Where it sits', `${fmt(vh.percentile, 0)}th pct`,
-      'of its own five-year range',
-      vh.percentile >= 75 ? 'down' : vh.percentile <= 25 ? 'up' : '') : ''}
-        ${vh.premium_to_median_pct !== null && vh.premium_to_median_pct !== undefined
-    ? tile('Versus median', fmtPct(vh.premium_to_median_pct, 1),
-      vh.premium_to_median_pct >= 0 ? 'paying up against its own norm'
-        : 'below its own norm',
-      vh.premium_to_median_pct >= 0 ? 'down' : 'up') : ''}
-      </div>
-      <table class="data narrow" style="margin-top:var(--space-3)">
-        <thead><tr><th>Fiscal year</th><th>Diluted EPS</th><th>Average price</th>
-          <th>Trailing P/E</th></tr></thead>
-        <tbody>${(vh.years || []).map((y) => `<tr>
-          <td class="name">${esc(y.period)}</td>
-          <td>${fmt(y.eps, 2)}</td>
-          <td>${usd(y.avg_price)}</td>
-          <td>${y.pe !== null && y.pe !== undefined
-    ? fmt(y.pe, 1) + '\u00d7'
-    : `<span class="muted">${esc(y.note || 'n/a')}</span>`}</td>
-        </tr>`).join('')}</tbody>
-      </table>
-      <p class="caveat">${gloss(vh.method || '')}</p>
-    </div>` : ''}
-
-    <div class="panel">
-      <h2>${hg('Valuation & accumulation')}</h2>
-      <ul class="reasons">${(val.notes || []).map((n) => `<li>${gloss(n)}</li>`).join('')}</ul>
-      <p class="caveat">${esc(val.caveat || '')}</p>
-      <h3>${hg('Accumulation zones')}</h3>
-      <table class="data">
-        <thead><tr><th>Level</th><th>Price ($)</th><th>Distance</th><th>Role</th></tr></thead>
-        <tbody>${(h.accumulation_zones || []).map((z) => `<tr>
-          <td class="name" style="white-space:normal">${esc(cap(z.label))}</td>
-          <td>${fmt(z.price, 2)}</td>
-          <td class="${signClass(z.distance_pct)}">${fmtPct(z.distance_pct, 1)}</td>
-          <td class="name muted">${esc(cap(z.kind))}</td>
-        </tr>`).join('')}</tbody>
-      </table>
-      ${kv([
-    ['Dividend yield', val.dividend_yield !== null && val.dividend_yield !== undefined ? fmt(val.dividend_yield * 100, 2) + '%' : '—'],
-    ['Forward P/E', fmt(val.forward_pe, 1)],
-    ['Trailing P/E', fmt(val.trailing_pe, 1)],
-    ['Price / book', fmt(val.price_to_book, 2)],
-    ['Analyst mean target', usd((h.fundamentals || {}).analyst_target)],
-  ])}
-    </div>
-  </div>
-
-  `;
-
+/* The Investing chart, its legend and its toolbar.
+ *
+ * Lifted out of renderLong for the same reason the Options price block was:
+ * so a pan or a zoom can redraw it without rebuilding the view. Everything in
+ * here is derived from the series — candle mode reads ltSer.open, the unit word
+ * comes from ltSer.monthly, and both averages are read off ltSer.ma — so the
+ * block recomputes ltSer on every call and the redraw is simply a second call.
+ *
+ * Body is unchanged from when it lived inline, apart from the one line that
+ * takes the series: it now asks ltSeries() for the manual window rather than
+ * ltSlice() for the range.
+ */
+function ltPriceBlock(h, lt, ltLevels) {
   if (lt.weekly_closes) {
     const n = lt.weekly_closes.length;
     // Accumulation zones already include the 40w/200w averages — those get
@@ -19983,11 +19924,11 @@ function renderLong(d) {
     // Twelve years of weekly OHLCV from the server, sliced and optionally rolled
     // up to months here. Falls back to the old closes-only arrays if an older
     // response is cached.
-    const ltSer = (lt.series && (lt.series.dates || []).length)
-      ? ltSlice(lt.series, ltRange, ltInterval)
-      : { dates: lt.weekly_dates || [], close: lt.weekly_closes || [],
-          shown_bars: (lt.weekly_dates || []).length,
-          total_bars: (lt.weekly_dates || []).length };
+    // Honours a manual pan/zoom window when there is one, and falls back to the
+    // range pills when there is not. See ltSeries.
+    const ltSer = ltSeries(lt);
+    const ltCount = document.getElementById('lt-bar-count');
+    if (ltCount) ltCount.textContent = `· ${ltBarCountText(ltSer)}`;
     const ltCandles = ltMode === 'candle' && ltSer.open && ltSer.high && ltSer.low;
     const unit = ltSer.monthly ? 'month' : 'week';
 
@@ -20134,6 +20075,190 @@ function renderLong(d) {
       valueFormat: (x) => fmt(x, 2),
     }));
   }
+}
+
+function renderLong(d) {
+  hideTip();
+  const h = d.holding || {};
+  /* Computed server-side on the weekly frame and carried in the long payload.
+     Absent on an older cached response, so every read is guarded: the chart
+     draws without bands rather than throwing. */
+  const ltLevels = h.levels || {};
+  const lt = h.long_trend || {};
+  const dd = h.drawdown || {};
+  const risk = h.risk || {};
+  const val = h.valuation || {};
+  const vh = h.valuation_history || {};
+
+  if (h.error) { views.long.innerHTML = errorHTML(h.error); return; }
+
+  views.long.innerHTML = securityHeader('long') + `
+  <div class="grid c2 gap">
+    <div class="panel">
+      <h2>${hg('Long-term view')} · ${esc(h.ticker)}</h2>
+      <p class="sub">${esc(h.name || '')}${(h.fundamentals || {}).sector ? ' · ' + esc(h.fundamentals.sector) : ''}</p>
+      <div style="display:flex;align-items:flex-end;gap:var(--space-5);flex-wrap:wrap">
+        <div>
+          <div class="hero-label">Conviction</div>
+          <div class="hero ${signClass(h.conviction_score)}">${h.conviction_score > 0 ? '+' : ''}${fmt(h.conviction_score, 0)}</div>
+          <div class="note subnote sm">Of a possible
+            +${fmt((h.conviction_scale || {}).max_possible, 0)}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:var(--space-2)">
+          ${toneChip(h.conviction)}
+          <span class="chip neutral"><span class="dot"></span>${esc(cap(lt.phase) || '')}</span>
+        </div>
+      </div>
+      <div class="callout info">${gloss(h.plan || '')}</div>
+      ${((h.data_quality || {}).warnings || []).map((w) => `<div class="callout bad">${gloss(w)}</div>`).join('')}
+
+      <h3>${hg('What makes up this score')}${askPulse('composite')}</h3>
+      <p class="sub">Every factor the model checked and what each one contributed. Mostly price
+        behaviour. The valuation and income factors can add at most 13 of the
+        ${fmt((h.conviction_scale || {}).max_possible, 0)} available points.</p>
+      <table class="data">
+        <thead><tr><th>Factor</th><th>Type</th><th>Points</th><th>Why</th></tr></thead>
+        <tbody>${(h.conviction_factors || []).map((f) => `<tr>
+          <td class="name">${esc(cap(f.label))}</td>
+          <td class="muted">${esc(cap(f.kind))}</td>
+          <td class="${signClass(f.points)}"><strong>${f.points > 0 ? '+' : ''}${fmt(f.points, 0)}</strong></td>
+          <td style="color:var(--ink-2);font-size:var(--t-small)">${gloss(f.detail)}</td>
+        </tr>`).join('')}
+        <tr style="border-top:1px solid var(--border-strong)">
+          <td class="name"><strong>Total</strong></td><td></td>
+          <td class="${signClass(h.conviction_score)}"><strong>${h.conviction_score > 0 ? '+' : ''}${fmt(h.conviction_score, 0)}</strong></td>
+          <td class="subnote sm">${
+  (h.conviction_scale || {}).thresholds
+    ? 'High at ' + h.conviction_scale.thresholds.high + '+, moderate at ' + h.conviction_scale.thresholds.moderate + '+' : ''}</td>
+        </tr></tbody>
+      </table>
+      <p class="caveat">This is a trend-and-relative-strength model with a valuation sanity
+        check. Not a fundamental analysis. A strong score means the price behaviour has been
+        strong, not that the business is cheap or high quality.</p>
+      <p class="caveat">${esc(h.disclaimer || '')}</p>
+    </div>
+
+    <div class="panel">
+      <h2>${hg('Return & risk')}</h2>
+      <p class="sub">Compound growth by horizon, against ${esc('SPY')} as the benchmark.</p>
+      <div class="grid c4" style="margin-bottom:var(--space-3)">
+        ${tile('1-year', fmtPct((h.horizons || {}).return_1y_pct, 1), null, signClass((h.horizons || {}).return_1y_pct))}
+        ${tile('3-year CAGR', fmtPct((h.horizons || {}).cagr_3y_pct, 1), null, signClass((h.horizons || {}).cagr_3y_pct))}
+        ${tile('5-year CAGR', fmtPct((h.horizons || {}).cagr_5y_pct, 1), null, signClass((h.horizons || {}).cagr_5y_pct))}
+        ${tile('vs SPY (5y)', fmtPct(h.excess_cagr_5y_pct, 1), `SPY ${fmtPct(h.benchmark_cagr_5y_pct, 1)}`, signClass(h.excess_cagr_5y_pct))}
+      </div>
+      ${kv([
+    ['Annualized volatility', fmt(risk.annualised_vol_pct, 1) + '%'],
+    ['Downside volatility', fmt(risk.downside_vol_pct, 1) + '%'],
+    ['Return / vol (1y)', fmt(risk.sharpe_proxy, 2)],
+    ['Sortino proxy', fmt(risk.sortino_proxy, 2)],
+    ['Beta vs SPY', fmt(risk.beta_vs_spy, 2)],
+    ['Correlation vs SPY', fmt(risk.correlation_vs_spy, 2)],
+    ['Positive days', fmt(risk.pct_positive_days, 1) + '%'],
+    ['Best / worst day', `${fmtPct(risk.best_day_pct, 1)} / ${fmtPct(risk.worst_day_pct, 1)}`],
+  ])}
+      <p class="caveat">Return/vol and Sortino use a zero risk-free rate. A relative screen, not a performance report.</p>
+    </div>
+  </div>
+  ${/* Close defence is on Options only. It rendered on both, and defending a
+       level into the close is a trading question rather than a multi-month
+       one, so the tab that shows strikes keeps it. */''}
+
+
+  <div class="grid c2 gap">
+    <div class="panel span2">
+      <h2>${hg('Weekly structure')} <span class="th-plain" id="lt-bar-count">· ${
+  esc(ltBarCountText(ltSeries(lt)))}</span></h2>
+      <p class="sub">${gloss(lt.guidance || '')} Weekly bars with the 40-week and 200-week averages. The lines that separate secular bull from bear phases.</p>
+      <div id="lt-toolbar"></div>
+      <div id="legend-weekly"></div>
+      <div id="chart-weekly"></div>
+      <div class="grid c3" style="margin-top:var(--space-3)">
+        ${tile('vs 40-week SMA', fmtPct(lt.vs_40w_sma, 1), `level ${fmt(lt.sma_40w, 2)}`, signClass(lt.vs_40w_sma))}
+        ${tile('vs 200-week SMA', fmtPct(lt.vs_200w_sma, 1), `level ${fmt(lt.sma_200w, 2)}`, signClass(lt.vs_200w_sma))}
+        ${tile('Weekly RSI', fmt(lt.weekly_rsi, 1), '40-week slope ' + fmtPct(lt.slope_40w_pct_3m, 1))}
+      </div>
+    </div>
+  </div>
+
+  <div class="grid c2 gap">
+    <div class="panel">
+      <h2>${hg('Drawdown')} <span class="th-plain">· daily</span></h2>
+      <p class="sub">Currently ${fmtPct(dd.current_drawdown_pct, 1)} from the all-time high of ${usd(dd.all_time_high)}, set on ${esc(dd.ath_date || '')}.
+        Worst on record: ${fmtPct(dd.max_drawdown_pct, 1)} (${esc(dd.max_drawdown_date || '')}).</p>
+      <div id="chart-drawdown"></div>
+    </div>
+
+    ${renderRevenueMultiple((d.holding || {}).revenue_multiple)}
+
+    <div id="pe-host" class="span-all">${renderPeHistory(STATE.peHistory)}</div>
+
+    ${vh.available ? `<div class="panel">
+      <h2>${hg('Valuation vs its own history')}</h2>
+      <p class="sub">A multiple only means something against a yardstick. The one that needs
+        no cross-company assumptions is the company against itself. Is this expensive
+        <em>for this name</em>?</p>
+      <div class="grid c4">
+        ${tile('Trailing P/E now', fmt(vh.current_pe, 1) + '\u00d7',
+    vh.read ? cap(vh.read) : '',
+    vh.percentile >= 75 ? 'down' : vh.percentile <= 25 ? 'up' : '')}
+        ${tile('5-year median', fmt(vh.median_pe, 1) + '\u00d7',
+    `Range ${fmt(vh.low_pe, 1)}\u00d7 to ${fmt(vh.high_pe, 1)}\u00d7 over ${
+      fmt(vh.usable_years, 0)} profitable years`)}
+        ${vh.percentile !== null && vh.percentile !== undefined
+    ? tile('Where it sits', `${fmt(vh.percentile, 0)}th pct`,
+      'of its own five-year range',
+      vh.percentile >= 75 ? 'down' : vh.percentile <= 25 ? 'up' : '') : ''}
+        ${vh.premium_to_median_pct !== null && vh.premium_to_median_pct !== undefined
+    ? tile('Versus median', fmtPct(vh.premium_to_median_pct, 1),
+      vh.premium_to_median_pct >= 0 ? 'paying up against its own norm'
+        : 'below its own norm',
+      vh.premium_to_median_pct >= 0 ? 'down' : 'up') : ''}
+      </div>
+      <table class="data narrow" style="margin-top:var(--space-3)">
+        <thead><tr><th>Fiscal year</th><th>Diluted EPS</th><th>Average price</th>
+          <th>Trailing P/E</th></tr></thead>
+        <tbody>${(vh.years || []).map((y) => `<tr>
+          <td class="name">${esc(y.period)}</td>
+          <td>${fmt(y.eps, 2)}</td>
+          <td>${usd(y.avg_price)}</td>
+          <td>${y.pe !== null && y.pe !== undefined
+    ? fmt(y.pe, 1) + '\u00d7'
+    : `<span class="muted">${esc(y.note || 'n/a')}</span>`}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+      <p class="caveat">${gloss(vh.method || '')}</p>
+    </div>` : ''}
+
+    <div class="panel">
+      <h2>${hg('Valuation & accumulation')}</h2>
+      <ul class="reasons">${(val.notes || []).map((n) => `<li>${gloss(n)}</li>`).join('')}</ul>
+      <p class="caveat">${esc(val.caveat || '')}</p>
+      <h3>${hg('Accumulation zones')}</h3>
+      <table class="data">
+        <thead><tr><th>Level</th><th>Price ($)</th><th>Distance</th><th>Role</th></tr></thead>
+        <tbody>${(h.accumulation_zones || []).map((z) => `<tr>
+          <td class="name" style="white-space:normal">${esc(cap(z.label))}</td>
+          <td>${fmt(z.price, 2)}</td>
+          <td class="${signClass(z.distance_pct)}">${fmtPct(z.distance_pct, 1)}</td>
+          <td class="name muted">${esc(cap(z.kind))}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+      ${kv([
+    ['Dividend yield', val.dividend_yield !== null && val.dividend_yield !== undefined ? fmt(val.dividend_yield * 100, 2) + '%' : '—'],
+    ['Forward P/E', fmt(val.forward_pe, 1)],
+    ['Trailing P/E', fmt(val.trailing_pe, 1)],
+    ['Price / book', fmt(val.price_to_book, 2)],
+    ['Analyst mean target', usd((h.fundamentals || {}).analyst_target)],
+  ])}
+    </div>
+  </div>
+
+  `;
+
+  // See ltPriceBlock. ltRedrawChart calls it again with a new window.
+  ltChartCtx = { h, lt, ltLevels };
+  ltPriceBlock(h, lt, ltLevels);
 
   if (dd.series) {
     drawPeChart(STATE.peHistory);
