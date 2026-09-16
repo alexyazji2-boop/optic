@@ -2429,7 +2429,8 @@ async def personas() -> Dict[str, Any]:
     return {
         "default": ai.DEFAULT_PERSONA,
         "personas": [
-            {"id": key, "label": val["label"], "blurb": val["blurb"]}
+            {"id": key, "glyph": val.get("glyph", ""),
+             "label": val["label"], "blurb": val["blurb"]}
             for key, val in ai.PERSONAS.items()
         ],
         # What the choice does and the one thing it cannot, so the menu's

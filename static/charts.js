@@ -45,11 +45,11 @@ const CW = {
 };
 
 const C = {
-  ink: '#ffffff', ink2: '#c3c2b7', muted: '#898781',
-  grid: '#2c2c2a', baseline: '#383835', surface: '#1a1a19',
+  ink: '#f5f1ec', ink2: '#c4bcb2', muted: '#918879',
+  grid: '#2c2c2a', baseline: '#383835', surface: '#121010',
   s1: '#3987e5', s2: '#d95926', s3: '#199e70', s4: '#c98500',
-  s5: '#d55181', s6: '#008300', s7: '#9085e9', s8: '#e66767',
-  pos: '#3987e5', neg: '#e66767',
+  s5: '#d55181', s6: '#5fa617', s7: '#9085e9', s8: '#e66767',
+  pos: '#0ca30c', neg: '#d95656',
   good: '#0ca30c', warn: '#fab219', serious: '#ec835a', critical: '#d03b3b',
 
   /* The default colour for a chart drawing.

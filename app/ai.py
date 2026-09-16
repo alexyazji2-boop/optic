@@ -77,11 +77,13 @@ PERSONA_NEVER_CHANGES: List[str] = [
 
 PERSONAS: Dict[str, Dict[str, str]] = {
     "neutral": {
+        "glyph": "\U00002696",          # scales: balanced
         "label": "Neutral analyst",
         "blurb": "Balanced, cites the numbers, states the limits. The default.",
         "prompt": "",
     },
     "longterm": {
+        "glyph": "\U0001F333",          # tree: a long horizon
         "label": "Long-term investor",
         "blurb": "Business quality and price paid. Sceptical of anything that "
                  "needs a chart to justify it.",
@@ -98,6 +100,7 @@ PERSONAS: Dict[str, Dict[str, str]] = {
         ),
     },
     "stoic": {
+        "glyph": "\U0001F6E1",          # shield: what you control
         "label": "Risk and process",
         "blurb": "Process over outcome. Talks about what you control, and about "
                  "position size before direction.",
@@ -111,6 +114,7 @@ PERSONAS: Dict[str, Dict[str, str]] = {
         ),
     },
     "quant": {
+        "glyph": "\U0001F3B2",          # dice: base rates
         "label": "Statistician",
         "blurb": "Sample sizes, base rates and whether an edge survives a "
                  "correction for multiple testing.",
@@ -126,6 +130,7 @@ PERSONAS: Dict[str, Dict[str, str]] = {
         ),
     },
     "skeptic": {
+        "glyph": "\U0000265F",          # pawn: argues the other side
         "label": "Devil's advocate",
         "blurb": "Argues the other side. Names what would have to be true for the "
                  "setup to fail.",

@@ -92,6 +92,12 @@
      state did not follow the theme. Declared from the surface stack instead of
      a flat grey, which is what those fallbacks were approximating. */
   --bg-hover: rgba(255, 255, 255, 0.055);
+  /* One backdrop for every modal, and one ink for every shadow.
+     The backdrops were rgba(0,0,0,0.5) twice and 0.6 once for the same job, and
+     the shadows used twelve different alphas of black between them. Naming both
+     is what stops the next one being a thirteenth. */
+  --scrim: rgba(0, 0, 0, 0.55);
+  --shadow-ink: rgba(0, 0, 0, 0.25);
 
   /* The accent. Green for up, red for down, applied to numbers and to the one
      control per view that actually does something. */
@@ -381,6 +387,8 @@
   --ink-2: #4a4238;
   --ink-muted: #6e6558;   /* on --surface-2: 4.55:1, was #7b7b7b at 3.95:1 */
   --bg-hover: rgba(11, 11, 11, 0.05);
+  --scrim: rgba(11, 11, 11, 0.38);
+  --shadow-ink: rgba(11, 11, 11, 0.18);
   /* Darker green on white. #00c805 measures 1.8:1 against white and fails any
      text use, so the light theme takes a step down.
      
@@ -2674,7 +2682,7 @@ details.read-cal-row > summary {
   margin: -2px -4px;
 }
 details.read-cal-row > summary::-webkit-details-marker { display: none; }
-details.read-cal-row > summary:hover { background: var(--bg-hover, rgba(127, 127, 127, 0.08)); }
+details.read-cal-row > summary:hover { background: var(--bg-hover); }
 details.read-cal-row > summary:focus-visible {
   outline: 2px solid var(--s1);
   outline-offset: 1px;
@@ -5180,7 +5188,7 @@ button.home-card:focus-visible { outline: 2px solid var(--s1); outline-offset: 2
 /* ------------------------------------------------ clickable instrument rows ---- */
 
 .inst-clickable { cursor: pointer; }
-.inst-clickable:hover { background: var(--bg-hover, rgba(127, 127, 127, 0.08)); }
+.inst-clickable:hover { background: var(--bg-hover); }
 .inst-clickable:focus-visible { outline: 2px solid var(--s1); outline-offset: -2px; }
 /* The affordance sits on the name rather than the whole row: underlining twelve
    numbers to say "this is clickable" would compete with the data. */
@@ -5194,7 +5202,7 @@ button.home-card:focus-visible { outline: 2px solid var(--s1); outline-offset: 2
   padding: 0 var(--space-0);
   border-radius: 3px;
 }
-.sub-close:hover { opacity: 1; background: var(--bg-hover, rgba(127, 127, 127, 0.14)); }
+.sub-close:hover { opacity: 1; background: var(--bg-hover); }
 
 .inst-stats {
   display: grid;
@@ -5767,7 +5775,13 @@ body.chat-full footer.legal { margin-right: 0; }
 .btn.primary:hover {
   filter: brightness(1.08);
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(28, 114, 216, 0.38), 0 1px 3px rgba(0, 0, 0, 0.25);
+  /* Derived from --btn-primary, not a literal. This was
+     rgba(28, 114, 216, 0.38) -- #1c72d8, a blue from before the brand became
+     gold -- so every primary button in the app cast a blue glow on hover
+     against its own gold fill. Mixed from the token so it follows the brand and
+     cannot drift again. */
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--btn-primary) 38%, transparent),
+              0 1px 3px var(--shadow-ink);
 }
 @supports (color: color-mix(in srgb, red 50%, blue)) {
   .btn.primary:hover {
@@ -5786,7 +5800,7 @@ body.chat-full footer.legal { margin-right: 0; }
    does not leave a lifted button behind after the pointer has gone. */
 .btn.primary:focus-visible {
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(28, 114, 216, 0.38);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--btn-primary) 38%, transparent);
 }
 @media (prefers-reduced-motion: reduce) {
   .btn.primary { transition: background-color 0.12s ease, filter 0.12s ease; }
@@ -6936,7 +6950,7 @@ b, strong { font-weight: 600; }
   position: fixed;
   inset: 0;
   z-index: 60;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--scrim);
   display: grid;
   place-items: center;
   padding: var(--space-4);
@@ -8681,7 +8695,7 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
   position: fixed;
   inset: 0;
   z-index: 90;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--scrim);
   animation: cp-fade 120ms ease both;
 }
 .cp {
@@ -11998,7 +12012,7 @@ a.cc-story-t:focus-visible { color: var(--ink-2); text-decoration: underline; }
   align-items: flex-start;
   justify-content: center;
   padding: var(--space-5) var(--space-4);
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--scrim);
   overflow-y: auto;
 }
 .pch {

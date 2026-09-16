@@ -24011,7 +24011,8 @@ try {
 } catch (e) { /* private mode */ }
 
 let PULSE_PERSONAS = [
-  { id: 'neutral', label: 'Neutral analyst', blurb: 'Balanced, cites the numbers.' },
+  { id: 'neutral', glyph: '\u2696', label: 'Neutral analyst',
+    blurb: 'Balanced, cites the numbers.' },
 ];
 /* What choosing a persona does, and the one thing it cannot. From the server,
    so the menu's promise and the behaviour have one source -- the same reason
@@ -24186,7 +24187,8 @@ function renderPersonaPicker() {
         aria-haspopup="true" aria-expanded="${ppOpen ? 'true' : 'false'}"
         title="The lens Pulse answers through">
         <span class="pp-eyebrow">Optic Persona</span>
-        <span class="pp-now">${esc(current ? current.label : '')}</span>
+        <span class="pp-now">${current && current.glyph
+    ? esc(current.glyph) + ' ' : ''}${esc(current ? current.label : '')}</span>
         <i class="pp-caret" aria-hidden="true"></i>
       </button>
       ${ppOpen ? personaMenuHTML() : ''}
@@ -24231,7 +24233,9 @@ function personaMenuHTML() {
     const on = p.id === pulsePersona;
     return `<button type="button" class="oc-opt${on ? ' on' : ''}"
       role="menuitemradio" aria-checked="${on}" data-pp-pick="${esc(p.id)}">
-      <span class="oc-opt-head"><span class="oc-opt-label">${esc(p.label)}</span></span>
+      <span class="oc-opt-head">${p.glyph
+      ? `<span class="oc-opt-glyph" aria-hidden="true">${esc(p.glyph)}</span>` : ''}
+        <span class="oc-opt-label">${esc(p.label)}</span></span>
       <span class="oc-opt-blurb">${esc(p.blurb || '')}</span>
     </button>`;
   }).join('')}

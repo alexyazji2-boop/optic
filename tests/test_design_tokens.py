@@ -39,28 +39,56 @@ def token_block_spans():
     return spans
 
 
-def loose_colour_literals():
-    """Hex literals outside the token blocks, excluding the two honest cases.
+# Comments blanked to spaces rather than removed, so every offset and line
+# number below still points at the real file. The previous version skipped a
+# comment by testing whether its LINE started with `*` or `/*`, which misses
+# every continuation line -- and a continuation line is exactly where the
+# rationale for removing a colour ends up.
+CSS_NC = re.sub(r"/\*.*?\*/", lambda m: re.sub(r"\S", " ", m.group()), CSS, flags=re.S)
 
-    Comments are prose about colours, not colours. `#000` in a mask gradient is
-    an alpha channel: a mask reads only that, so the value is not a colour and a
-    token would be misleading rather than missing.
+
+def loose_colour_literals():
+    """Colour literals outside the token blocks, excluding the honest cases.
+
+    Two kinds are honest. `#000` in a mask gradient is an alpha channel: a mask
+    reads only that, so the value is not a colour and a token would mislead.
+    And a GREY rgb() -- r == g == b -- is a shadow or a scrim, not a hue; those
+    have their own tokens (--shadow-ink, --scrim) and the literals that remain
+    are geometry with black in them.
+
+    Saturated rgb() is checked as well as hex, which it was not before. That
+    gap is why `rgba(28, 114, 216, 0.38)` sat on `.btn.primary:hover` long
+    after the brand went gold: this test's own docstring says it exists because
+    literals stayed blue, and the one that stayed was not written in hex.
     """
     spans = token_block_spans()
     out = []
-    for m in re.finditer(r"#[0-9a-fA-F]{3,8}\b", CSS):
-        if any(a <= m.start() < b for a, b in spans):
+
+    def outside(pos):
+        return not any(a <= pos < b for a, b in spans)
+
+    def line_at(pos):
+        start = CSS_NC.rfind("\n", 0, pos) + 1
+        end = CSS_NC.find("\n", pos)
+        return CSS_NC[start:end if end != -1 else len(CSS_NC)]
+
+    for m in re.finditer(r"#[0-9a-fA-F]{3,8}\b", CSS_NC):
+        if not outside(m.start()):
             continue
-        start = CSS.rfind("\n", 0, m.start()) + 1
-        line = CSS[start:CSS.find("\n", m.start())]
-        stripped = line.strip()
-        if stripped.startswith("*") or stripped.startswith("/*"):
-            continue
+        line = line_at(m.start())
         if "mask" in line:
             continue
-        if "documented dark surface" in line:      # prose, mid-comment
+        out.append((CSS_NC.count("\n", 0, m.start()) + 1, m.group(), line.strip()[:60]))
+
+    for m in re.finditer(r"rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)", CSS_NC):
+        if not outside(m.start()):
             continue
-        out.append((CSS.count("\n", 0, m.start()) + 1, m.group(), stripped[:60]))
+        r, g, b = (int(x) for x in m.groups())
+        if r == g == b:                 # grey: a shadow or a scrim, not a hue
+            continue
+        line = line_at(m.start())
+        out.append((CSS_NC.count("\n", 0, m.start()) + 1, m.group() + ")",
+                    line.strip()[:60]))
     return out
 
 
@@ -120,3 +148,58 @@ def test_financial_figures_use_tabular_numerals():
     """A column of prices that shifts by a pixel per digit is a column that
     cannot be scanned."""
     assert CSS.count("tabular-nums") >= 70
+
+
+def test_the_chart_palette_fallbacks_match_their_tokens():
+    """charts.js resolves its palette from the custom properties at boot, with
+    literals as the fallback for a stylesheet that has not loaded. Seven of
+    twenty-four had drifted as the theme moved.
+
+    The worst was `pos: '#3987e5'`: the POSITIVE colour fell back to blue while
+    --pos is green, so until syncChartTheme ran, every up-candle, up-volume bar
+    and positive figure on a chart drew in the wrong hue. Also #ffffff against a
+    warm --ink #f5f1ec, and a --surface two shades out.
+
+    Compared against the dark defaults, which is the first :root block: the
+    fallbacks stand in for that theme, and the light values live in
+    :root[data-theme="light"] further down.
+    """
+    js = open("static/charts.js", encoding="utf-8").read()
+    js_nc = re.sub(r"/\*.*?\*/", " ", js, flags=re.S)
+    dark_start = CSS.index(":root {")
+    dark = CSS[dark_start:CSS.index(':root[data-theme="light"]')]
+    tokens = dict(re.findall(r"(--[a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{3,8})\s*;", dark))
+    var_of = dict(re.findall(r"(\w+)\s*:\s*'(--[a-z0-9-]+)'", js_nc))
+    literal_of = dict(re.findall(r"(\w+)\s*:\s*'(#[0-9a-fA-F]{3,8})'", js_nc))
+    checked, bad = 0, []
+    for slot, var in var_of.items():
+        if slot not in literal_of or var not in tokens:
+            continue
+        checked += 1
+        if literal_of[slot].lower() != tokens[var].lower():
+            bad.append((slot, literal_of[slot], var, tokens[var]))
+    assert checked >= 20, "only %d slots compared; the parse is wrong" % checked
+    assert bad == [], bad
+
+
+def test_the_primary_button_glow_follows_the_brand():
+    """It was `rgba(28, 114, 216, 0.38)` -- #1c72d8, a blue from before the
+    brand became gold -- so every primary button cast a blue glow against its
+    own gold fill. Mixed from the token, so it cannot drift again."""
+    assert "rgba(28, 114, 216" not in CSS_NC
+    assert CSS.count("color-mix(in srgb, var(--btn-primary) 38%, transparent)") == 2
+
+
+def test_one_scrim_and_one_shadow_ink():
+    """The modal backdrops were rgba(0,0,0,0.5) twice and 0.6 once for the same
+    job. Naming them is what stops the next one being a fourth value."""
+    assert CSS.count("--scrim:") == 2, "both themes"
+    assert CSS.count("--shadow-ink:") == 2
+    assert "background: rgba(0, 0, 0, 0." not in CSS_NC
+
+
+def test_the_dead_bg_hover_fallbacks_are_gone():
+    """--bg-hover is declared in both themes now, so `var(--bg-hover, rgba(...))`
+    can never reach its fallback. Two of the three fallbacks disagreed with each
+    other anyway."""
+    assert "var(--bg-hover, " not in CSS_NC
