@@ -2929,6 +2929,11 @@ document.addEventListener('click', (evt) => {
  *  whether the assistant has credentials. Written separately from renderHome so
  *  the page paints immediately and doesn't wait on a request. */
 function renderHomeStatus(health) {
+  /* Kept for the rest of the app. Settings used to hardcode "Pulse is switched
+     off in this build", which was simply false wherever a key was configured:
+     the About table told a reader the assistant was off while the composer
+     beside it answered. One read of /api/health, one place to ask. */
+  STATE.health = health || null;
   const foot = $('#home-foot');
   if (!foot) return;
   const realtime = health && health.realtime_chain;
@@ -2940,6 +2945,9 @@ function renderHomeStatus(health) {
     `<span class="dot-sep"><span class="chip ${assistantOn ? 'bull' : 'neutral'}" style="padding:var(--space-0) var(--space-2)"><span class="dot"></span>${
       assistantOn ? `${ASSISTANT_NAME} ready` : `${ASSISTANT_NAME} needs an API key`}</span></span>`,
     '<span>Greeks computed locally via Black-Scholes. Analysis only, not investment advice.</span>',
+    /* A pointer to the control in Settings, not a second copy of it. The gear is
+       on every view, so one destination stays one destination. */
+    '<span class="dot-sep"><button type="button" class="foot-link" data-goto-settings>Report an issue</button></span>',
   ].join('');
 }
 
@@ -18100,6 +18108,41 @@ function renderRoth(d) {
 
 /* ================================================================= SETTINGS */
 
+/* Report an issue.
+ *
+ * A prefilled GitHub issue rather than a form that posts somewhere. There is no
+ * mail sender configured in this build, and a stored-feedback table would be an
+ * unauthenticated free-text write with no rate limiting behind it, which is a
+ * spam surface rather than a feature. This has no backend, no storage and no
+ * new attack surface, and the reader sees exactly what they are sending before
+ * they send it.
+ *
+ * The diagnostics are the four things that make a report actionable and that
+ * nobody thinks to include: which build, which page, which symbol, how wide the
+ * window was. Deliberately NOT the user agent or anything identifying; the
+ * three lines below are enough to reproduce most of what gets reported here.
+ */
+const REPORT_REPO = 'alexyazji2-boop/optic';
+
+function reportIssueUrl() {
+  const build = ((STATE.health || {}).commit) || 'unknown';
+  const body = [
+    '### What happened', '', '', '',
+    '### What you expected instead', '', '', '',
+    '---',
+    '_Filled in automatically:_', '',
+    '- Build: `' + build + '`',
+    '- Page: `' + (STATE.view || 'unknown') + '`',
+    '- Symbol: `' + (STATE.ticker || 'none loaded') + '`',
+    '- Window: `' + (typeof window !== 'undefined'
+      ? window.innerWidth + 'x' + window.innerHeight : 'unknown') + '`',
+  ].join('\n');
+  return 'https://github.com/' + REPORT_REPO + '/issues/new'
+    + '?labels=' + encodeURIComponent('from the app')
+    + '&title=' + encodeURIComponent('')
+    + '&body=' + encodeURIComponent(body);
+}
+
 function renderSettings() {
   hideTip();
   const zone = activeZone();
@@ -18211,7 +18254,13 @@ function renderSettings() {
     <h2>${hg('About this build')}</h2>
     ${kv([
     ['Data source', 'Yahoo Finance via yfinance. Quotes delayed roughly 15 minutes'],
-    ['Assistant', 'Pulse is switched off in this build'],
+    ['Assistant', (() => {
+      const a = (STATE.health || {}).assistant;
+      if (!a) return 'Checking\u2026';
+      return a.enabled
+        ? ASSISTANT_NAME + ' is configured and answering'
+        : ASSISTANT_NAME + ' is switched off in this build';
+    })()],
     ['Optic\u2019s Positions', 'One shared simulated ledger, no real money'],
     ['Stored on this device', 'Theme, time zone, chart preferences and any Roth holdings you enter'],
     ['Stored on the server', signedIn()
@@ -18221,6 +18270,21 @@ function renderSettings() {
     <p class="caveat">${signedIn()
     ? 'Appearance and chart preferences live in this browser. Your watchlist and saved research live on your account, so clearing site data does not lose them.'
     : 'Settings live in this browser only. Clearing site data resets them.'}</p>
+  </div>
+
+  <div class="panel gap">
+    <h2>${hg('Report an issue')}</h2>
+    <p class="sub">Found something wrong, confusing, or missing? Tell us and it
+      gets looked at. The report opens on GitHub with the build number and the
+      page you were on already filled in, so you do not have to describe your
+      setup. You can read and edit all of it before sending.</p>
+    <p>
+      <a class="btn primary" id="report-issue" href="${esc(reportIssueUrl())}"
+        target="_blank" rel="noopener noreferrer">Report an issue</a>
+    </p>
+    <p class="caveat">Opens a public issue on the project's repository, so do
+      not include anything private. Nothing is sent from this page: GitHub shows
+      you the form first and you choose whether to submit it.</p>
   </div>`;
 
   // Passkeys, connected providers and sessions are three more requests. Painted
@@ -23904,14 +23968,23 @@ function renderPersonaPicker() {
   const host = document.getElementById('chat-persona');
   if (!host) return;
   const current = PULSE_PERSONAS.find((p) => p.id === pulsePersona) || PULSE_PERSONAS[0];
-  /* Level first, then lens. The level is the one a reader changes and the one
-     the brief is explicit must not live in Settings, so it leads; the lens is
-     the specialist control and follows. Both are here rather than one here and
+  /* Mode first, then persona. The mode is the one a reader changes and the one
+     the brief is explicit must not live in Settings, so it leads; the persona
+     is the specialist control and follows. Both are here rather than one here and
      one buried, because they compose and a reader has to see both to know what
      they are getting. */
   host.innerHTML = `${knowledgeSelectorHTML({ compact: false })}
-    <label class="pulse-persona-lab" for="pulse-persona">Lens</label>
-    <select id="pulse-persona" class="settings-select" aria-label="Response lens">
+    ${/* "Optic Persona", not "Lens".
+         The control is the persona picker everywhere else: PULSE_PERSONAS,
+         pulsePersona, /api/personas, #pulse-persona. Only the visible label
+         said Lens, which left the one word a reader sees disagreeing with the
+         code, the endpoint and the "OPTIC MODE" label beside it. The house
+         convention is Optic Pulse, Optic's Read, Optic's Perspective, so this
+         is Optic Persona. The lens idea survives in the blurb, where it
+         describes what the control does rather than naming it. */''}
+    <label class="pulse-persona-lab" for="pulse-persona">Optic Persona</label>
+    <select id="pulse-persona" class="settings-select"
+      aria-label="Optic Persona. The lens Pulse answers through">
       ${PULSE_PERSONAS.map((p) => `<option value="${esc(p.id)}"${
   p.id === pulsePersona ? ' selected' : ''}>${esc(p.label)}</option>`).join('')}
     </select>

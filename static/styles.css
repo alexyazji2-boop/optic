@@ -1134,6 +1134,24 @@ body.chat-open main { padding-right: 400px; }
 }
 .home-foot .dot-sep { display: flex; align-items: center; gap: var(--space-2); }
 
+/* A button that reads as the footer's own text, because that is what it is:
+   navigation to the control in Settings, at the footer's weight. Left as a bare
+   <button> it took the UA's grey box and 13px system font, which in a row of
+   11px muted chips looked like a rendering fault rather than a link. */
+.foot-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  transition: color var(--dur-ui) var(--ease-ui);
+}
+.foot-link:hover { color: var(--ink); }
+.foot-link:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+
 @media (max-width: 640px) {
   .home { padding: var(--space-3) var(--space-0) var(--space-9); }
   /* The brand row is one 30px line at every width now, so the phone override

@@ -14,6 +14,36 @@ const TIP = () => document.getElementById('tooltip');
  * matter what the stylesheet said. The object below is now a cache that
  * `syncChartTheme()` refills from the computed custom properties, with these
  * values as the fallback for a stylesheet that hasn't loaded yet. */
+/* Chart typography.
+ *
+ * Everything drawn on a chart used to be 10px, with weight left unset on the
+ * labels that most needed it: a Fibonacci level rendered "23.6 (321.19)" at
+ * 10px, weight 400, opacity 0.9, in a colour measuring 5.42:1 against the
+ * surface. That is legible in the sense of passing a contrast check at normal
+ * size and illegible in the sense that a reader has to lean in, which is what
+ * was reported.
+ *
+ * So the sizes are named and raised, and the labels a reader actually reads --
+ * axis ticks, level labels, event markers -- take a weight. Weight buys more
+ * legibility per pixel than size at this scale, because the failure is stroke
+ * thinness rather than glyph height.
+ *
+ * `tick` stays a step below `label`: the axis is orientation and the labels are
+ * content, and flattening them would leave the plot with no hierarchy at all.
+ */
+const CF = {
+  micro: 10.5,   // session dividers, the densest annotation on the plot
+  tick: 11.5,    // axis ticks
+  label: 12,     // level labels, event markers, band labels
+  tag: 12.5,     // the value tags at the end of each series
+  title: 12,     // axis titles
+};
+const CW = {
+  tick: 500,
+  label: 600,
+  tag: 700,
+};
+
 const C = {
   ink: '#ffffff', ink2: '#c3c2b7', muted: '#898781',
   grid: '#2c2c2a', baseline: '#383835', surface: '#1a1a19',
@@ -970,7 +1000,7 @@ function lineChart(opts) {
     if (text === lastTickLabel) return;
     lastTickLabel = text;
     gridLayer.appendChild(s('text', {
-      x: m.l + plotW + 6, y: Y(t) + 3.5, fill: C.muted, 'font-size': 10,
+      x: m.l + plotW + 6, y: Y(t) + 3.5, fill: C.ink2, 'font-size': CF.tick, 'font-weight': CW.tick,
       'font-variant-numeric': 'tabular-nums',
     }, text));
   });
@@ -1020,7 +1050,8 @@ function lineChart(opts) {
     });
     // One quiet label so the strip is identifiable without a legend entry.
     volLayer.appendChild(s('text', {
-      x: m.l + 2, y: volTop + 9, fill: C.muted, 'font-size': 10,
+      x: m.l + 2, y: volTop + 9, fill: C.ink2, 'font-size': CF.tick,
+      'font-weight': CW.tick,
     }, 'Volume'));
   }
 
@@ -1144,7 +1175,7 @@ function lineChart(opts) {
     if (b.label && yTop - lastLabelY > 12) {
       lastLabelY = yTop;
       levelLayer.appendChild(s('text', {
-        x: m.l + 6, y: yTop + 11, fill: b.color || C.ink2, 'font-size': 10,
+        x: m.l + 6, y: yTop + 11, fill: b.color || C.ink2, 'font-size': CF.tick,
         'font-weight': 600, opacity: 0.95,
       }, b.label));
     }
@@ -1242,7 +1273,7 @@ function lineChart(opts) {
           if (x + 3 < lastLabelRight + 6) return;      // no room; line only
           lastLabelRight = x + 3 + width;
           levelLayer.appendChild(s('text', {
-            x: x + 3, y: labelY, fill: C.refSession, 'font-size': 9,
+            x: x + 3, y: labelY, fill: C.refSession, 'font-size': CF.micro,
             'font-weight': 600, opacity: 0.85,
           }, mk.label));
         });
@@ -1283,7 +1314,7 @@ function lineChart(opts) {
         x: (atRight ? px2 : px1) - (atRight ? 4 : -4),
         y: (atRight ? py2 : py1) - 5,
         'text-anchor': atRight ? 'end' : 'start',
-        fill: sg.color || C.ink2, 'font-size': 10, 'font-weight': 600,
+        fill: sg.color || C.ink2, 'font-size': CF.tick, 'font-weight': 600,
       }, sg.label));
     }
   });
@@ -1321,7 +1352,7 @@ function lineChart(opts) {
       const nearRight = cx > m.l + plotW * 0.62;
       mark.appendChild(s('text', {
         x: nearRight ? cx - 6 : cx + 6, y: m.t + 11, fill: mk.color || C.ink2,
-        'font-size': 10, 'font-weight': 600,
+        'font-size': CF.tick, 'font-weight': 600,
         'text-anchor': nearRight ? 'end' : 'start',
       }, mk.label));
     }
@@ -1560,7 +1591,7 @@ function lineChart(opts) {
       }));
       annotLayer.appendChild(s('text', {
         x: x + w / 2, y: t.ty + (t.isPrice ? 4 : 3.7), fill: C.surface,
-        'font-size': t.isPrice ? 10.5 : 10,
+        'font-size': t.isPrice ? CF.tag : CF.label,
         'font-weight': t.isPrice ? 700 : 600, 'text-anchor': 'middle',
         'font-variant-numeric': 'tabular-nums',
       }, text));
@@ -1664,7 +1695,8 @@ function lineChart(opts) {
           fill: C.surface, opacity: 0.88,
         }));
         evLayer.appendChild(s('text', {
-          x: lx + 5, y: ly, fill: colour, 'font-size': 10,
+          x: lx + 5, y: ly, fill: colour, 'font-size': CF.label,
+          'font-weight': CW.label,
         }, e.label));
       }
     });
@@ -1682,7 +1714,8 @@ function lineChart(opts) {
       fill: C.surface, opacity: 0.86,
     }));
     annotLayer.appendChild(s('text', {
-      x: x + 5, y: r.y, fill: r.color, 'font-size': 10, opacity: 0.9,
+      x: x + 5, y: r.y, fill: r.color, 'font-size': CF.label,
+      'font-weight': CW.label, opacity: 1,
       'font-variant-numeric': 'tabular-nums',
     }, r.text));
   });
@@ -1709,7 +1742,7 @@ function lineChart(opts) {
           stroke: C.grid, 'stroke-width': 1, opacity: 0.55,
         }));
         annotLayer.appendChild(s('text', {
-          x: X(t.i), y: H - 6, fill: C.muted, 'font-size': 10,
+          x: X(t.i), y: H - 6, fill: C.ink2, 'font-size': CF.tick, 'font-weight': CW.tick,
           'text-anchor': 'middle',
         }, t.text));
       });
@@ -1721,7 +1754,7 @@ function lineChart(opts) {
       const marks = [0, Math.floor((labels.length - 1) / 2), labels.length - 1];
       marks.forEach((i, k) => {
         annotLayer.appendChild(s('text', {
-          x: X(i), y: H - 6, fill: C.muted, 'font-size': 10,
+          x: X(i), y: H - 6, fill: C.ink2, 'font-size': CF.tick, 'font-weight': CW.tick,
           'text-anchor': k === 0 ? 'start' : k === 2 ? 'end' : 'middle',
         }, labels[i]));
       });
@@ -1766,7 +1799,7 @@ function lineChart(opts) {
   const measureDotA = s('circle', { r: 4.5, stroke: C.surface, 'stroke-width': 2 });
   const measureDotB = s('circle', { r: 4.5, stroke: C.surface, 'stroke-width': 2 });
   const measureLabel = s('text', {
-    y: m.t + 12, 'font-size': 11, 'font-weight': 600, 'text-anchor': 'middle',
+    y: m.t + 12, 'font-size': CF.label, 'font-weight': 600, 'text-anchor': 'middle',
   });
   [measureBand, measureA, measureB, measureDotA, measureDotB, measureLabel]
     .forEach((el) => measureGroup.appendChild(el));
@@ -2056,13 +2089,13 @@ function divergingBars(opts) {
     root.appendChild(bar);
 
     root.appendChild(s('text', {
-      x: m.l - 8, y: Y(i) + 3.5, fill: C.ink2, 'font-size': 10, 'text-anchor': 'end',
+      x: m.l - 8, y: Y(i) + 3.5, fill: C.ink2, 'font-size': CF.tick, 'text-anchor': 'end',
       'font-variant-numeric': 'tabular-nums',
     }, r.label));
 
     root.appendChild(s('text', {
       x: v >= 0 ? m.l + plotW + 6 : m.l + plotW + 6,
-      y: Y(i) + 3.5, fill: C.muted, 'font-size': 10, 'font-variant-numeric': 'tabular-nums',
+      y: Y(i) + 3.5, fill: C.muted, 'font-size': CF.tick, 'font-variant-numeric': 'tabular-nums',
     }, format(v)));
   });
 
@@ -2073,13 +2106,13 @@ function divergingBars(opts) {
       stroke: C.warn, 'stroke-width': 1, 'stroke-dasharray': '4 3',
     }));
     root.appendChild(s('text', {
-      x: m.l - 8, y: y - 3, fill: C.warn, 'font-size': 10, 'text-anchor': 'end',
+      x: m.l - 8, y: y - 3, fill: C.warn, 'font-size': CF.tick, 'text-anchor': 'end',
     }, markerLabel));
   }
 
   if (axisLabel) {
     root.appendChild(s('text', {
-      x: mid, y: H - 5, fill: C.muted, 'font-size': 10, 'text-anchor': 'middle',
+      x: mid, y: H - 5, fill: C.muted, 'font-size': CF.tick, 'text-anchor': 'middle',
     }, axisLabel));
   }
 
@@ -2179,7 +2212,7 @@ function macdChart(macd, signal, hist, labels, width = 720, opts = {}) {
   root.appendChild(gridLayer);
   niceTicks(lo, hi, 3).forEach((t) => {
     gridLayer.appendChild(s('line', { x1: m.l, y1: Y(t), x2: m.l + plotW, y2: Y(t), stroke: C.grid, 'stroke-width': 1 }));
-    gridLayer.appendChild(s('text', { x: m.l + plotW + 6, y: Y(t) + 3.5, fill: C.muted, 'font-size': 10 }, fmt(t, 2)));
+    gridLayer.appendChild(s('text', { x: m.l + plotW + 6, y: Y(t) + 3.5, fill: C.ink2, 'font-size': CF.tick, 'font-weight': CW.tick }, fmt(t, 2)));
   });
   gridLayer.appendChild(s('line', { x1: m.l, y1: Y(0), x2: m.l + plotW, y2: Y(0), stroke: C.baseline, 'stroke-width': 1 }));
 
@@ -2226,7 +2259,7 @@ function macdChart(macd, signal, hist, labels, width = 720, opts = {}) {
     // Label placed inside whichever half has room.
     const nearRight = cx > m.l + plotW * 0.62;
     xoverLayer.appendChild(s('text', {
-      x: nearRight ? cx - 6 : cx + 6, y: m.t + 11, fill: tone, 'font-size': 10,
+      x: nearRight ? cx - 6 : cx + 6, y: m.t + 11, fill: tone, 'font-size': CF.tick,
       'font-weight': 600, 'text-anchor': nearRight ? 'end' : 'start',
     }, `${xover.bullish ? 'Bullish' : 'Bearish'} cross${
       xover.barsAgo
@@ -2254,7 +2287,7 @@ function macdChart(macd, signal, hist, labels, width = 720, opts = {}) {
     const marks = [0, Math.floor((labels.length - 1) / 2), labels.length - 1];
     marks.forEach((i, k) => {
       axisLayer.appendChild(s('text', {
-        x: X(i), y: H - 5, fill: C.muted, 'font-size': 10,
+        x: X(i), y: H - 5, fill: C.muted, 'font-size': CF.tick,
         'text-anchor': k === 0 ? 'start' : k === 2 ? 'end' : 'middle',
       }, labels[i]));
     });
@@ -2331,7 +2364,7 @@ function rotationChart(sectors, opts = {}) {
     root.appendChild(s('text', {
       x: q.anchor === 'end' ? q.x + q.w - 8 : q.x + 8,
       y: q.y + (q.label === 'Leading' || q.label === 'Improving' ? 18 : q.h - 8),
-      'text-anchor': q.anchor, fill: q.fill, 'font-size': 11,
+      'text-anchor': q.anchor, fill: q.fill, 'font-size': CF.label,
       'font-weight': 600, opacity: 0.75,
     }, q.label));
   });
@@ -2344,9 +2377,9 @@ function rotationChart(sectors, opts = {}) {
     root.appendChild(s('line', { x1: m.l, x2: m.l + plotW, y1: Y(t), y2: Y(t),
       stroke: C.grid, 'stroke-width': 1, opacity: 0.5 }));
     root.appendChild(s('text', { x: X(t), y: m.t + plotH + 16, 'text-anchor': 'middle',
-      fill: C.muted, 'font-size': 10 }, fmt(t, 0)));
+      fill: C.muted, 'font-size': CF.tick }, fmt(t, 0)));
     root.appendChild(s('text', { x: m.l - 8, y: Y(t) + 3, 'text-anchor': 'end',
-      fill: C.muted, 'font-size': 10 }, fmt(t, 0)));
+      fill: C.muted, 'font-size': CF.tick }, fmt(t, 0)));
   });
   root.appendChild(s('line', { x1: cx, x2: cx, y1: m.t, y2: m.t + plotH,
     stroke: C.baseline, 'stroke-width': 1.5 }));
@@ -2406,7 +2439,7 @@ function rotationChart(sectors, opts = {}) {
     root.appendChild(dot);
     root.appendChild(s('text', {
       x: X(last.strength) + 9, y: Y(last.momentum) + 4,
-      fill: colour, 'font-size': 11, 'font-weight': 600,
+      fill: colour, 'font-size': CF.label, 'font-weight': 600,
     }, sec.symbol));
 
     // The hit area is deliberately larger than the dot: eleven labelled points
@@ -2471,14 +2504,14 @@ function bubbleChart(points, opts = {}) {
     root.appendChild(s('line', { x1: X(t), x2: X(t), y1: m.t, y2: m.t + plotH,
       stroke: C.grid, 'stroke-width': 1, opacity: 0.5 }));
     root.appendChild(s('text', { x: X(t), y: m.t + plotH + 16, 'text-anchor': 'middle',
-      fill: C.muted, 'font-size': 10 },
+      fill: C.muted, 'font-size': CF.tick },
     fmt(t, Math.abs(t) < 10 ? 1 : 0) + (opts.xUnit === '%' ? '%' : '')));
   });
   niceTicks(y0, y1, 5).forEach((t) => {
     root.appendChild(s('line', { x1: m.l, x2: m.l + plotW, y1: Y(t), y2: Y(t),
       stroke: C.grid, 'stroke-width': 1, opacity: 0.5 }));
     root.appendChild(s('text', { x: m.l - 8, y: Y(t) + 3, 'text-anchor': 'end',
-      fill: C.muted, 'font-size': 10 },
+      fill: C.muted, 'font-size': CF.tick },
     fmt(t, Math.abs(t) < 10 ? 1 : 0) + (opts.yUnit === '%' ? '%' : '')));
   });
   // Zero lines, where zero is inside the range — a scatter of percentages needs
@@ -2494,12 +2527,12 @@ function bubbleChart(points, opts = {}) {
 
   if (opts.xLabel) {
     root.appendChild(s('text', { x: m.l + plotW / 2, y: height - 6,
-      'text-anchor': 'middle', fill: C.muted, 'font-size': 11 }, opts.xLabel));
+      'text-anchor': 'middle', fill: C.muted, 'font-size': CF.label }, opts.xLabel));
   }
   if (opts.yLabel) {
     root.appendChild(s('text', {
       x: 12, y: m.t + plotH / 2, 'text-anchor': 'middle', fill: C.muted,
-      'font-size': 11, transform: `rotate(-90 12 ${m.t + plotH / 2})`,
+      'font-size': CF.label, transform: `rotate(-90 12 ${m.t + plotH / 2})`,
     }, opts.yLabel));
   }
 
@@ -2522,7 +2555,7 @@ function bubbleChart(points, opts = {}) {
       if (r >= 9) {
         root.appendChild(s('text', {
           x: cx, y: cy + 3.5, 'text-anchor': 'middle', fill: C.ink,
-          'font-size': 10, 'font-weight': 600, 'pointer-events': 'none',
+          'font-size': CF.tick, 'font-weight': 600, 'pointer-events': 'none',
         }, p.label));
       }
     });
