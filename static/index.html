@@ -206,6 +206,12 @@
 </footer>
 
 <aside id="chat" aria-label="Pulse assistant">
+  <!-- Drag to resize, like a browser's split. A separator rather than a button:
+       it has an orientation and a value, and the arrow keys move it. See
+       installChatResize in app.js for the clamp and why full width overlays. -->
+  <div class="chat-grip" id="chat-grip" role="separator" aria-orientation="vertical"
+       tabindex="0" aria-label="Resize Pulse. Arrow keys to adjust, Home for narrow, End to cover the screen"
+       title="Drag to resize"></div>
   <div class="chat-head">
     <span class="pulse-mark">●</span>
     <span class="title">Pulse</span>

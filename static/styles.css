@@ -82,6 +82,11 @@
      against a pure black plane reads as slightly dirty. */
   --ink-2: #c4bcb2;
   --ink-muted: #918879;
+  /* Pulse's width, and the space the page reserves for it. One variable because
+     there were three numbers: the panel was 382px, main reserved 420px and the
+     footer reserved 400px, so the page held open a 38px strip of nothing beside
+     an already-narrow panel. Draggable at runtime; see the grip in app.js. */
+  --chat-w: 382px;
   /* The hover wash. Three rules reached for var(--bg-hover, rgba(...)) and it
      was never declared, so every one of them took its fallback and the hover
      state did not follow the theme. Declared from the surface stack instead of
@@ -750,7 +755,9 @@ nav.tabs button[aria-selected="true"]::after {
 /* No transition on padding: animating a layout property forces full-document
    reflow on every frame and is the usual source of ghosted repaints. */
 main { padding: var(--space-6) var(--space-6) var(--space-8); isolation: isolate; }
-body.chat-open main { padding-right: 400px; }
+/* The reserve is a margin set further down, from --chat-w. This rule used to
+   set padding-right: 400px and was already overridden there, so the number was
+   decoration. */
 
 .view { display: none; }
 .view.active { display: block; }
@@ -1704,7 +1711,7 @@ aside#chat {
   position: fixed;
   top: 0;
   right: 0;
-  width: 382px;
+  width: var(--chat-w);
   height: 100vh;
   transform: translateZ(0);
   background: var(--surface);
@@ -1714,6 +1721,43 @@ aside#chat {
   z-index: 60;
 }
 body.chat-open aside#chat { display: flex; }
+
+
+/* The drag handle. A separator, not a button: it has an orientation and a
+   value, and a reader on a keyboard resizes it with the arrow keys. */
+.chat-grip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 10px;
+  height: 100%;
+  margin-left: -5px;          /* straddles the border, so the target is 10px */
+  cursor: col-resize;
+  background: none;
+  border: 0;
+  padding: 0;
+  z-index: 2;
+  touch-action: none;         /* the drag must not become a page scroll */
+  /* The affordance is the element's own background, not a pseudo-element.
+     A 2px stripe painted with a gradient means the thing that transitions is
+     the thing whose :hover fires it -- with the stripe on ::after, the hover
+     state had no transition of its own, which is the rule the stylesheet holds
+     everywhere else and a test asserts. */
+  background-image: linear-gradient(to right,
+    transparent 4px, var(--s1) 4px, var(--s1) 6px, transparent 6px);
+  opacity: 0;
+  transition: opacity var(--dur-ui) var(--ease-ui);
+}
+.chat-grip:hover,
+.chat-grip:focus-visible,
+body.chat-resizing .chat-grip { opacity: 0.9; }
+/* Invisible at rest but never unreachable: opacity does not remove the target,
+   so the 10px strip still takes the pointer and the keyboard. */
+.chat-grip:focus-visible { outline: none; }
+/* While dragging, nothing else should take the pointer or select text. */
+body.chat-resizing { cursor: col-resize; user-select: none; }
+body.chat-resizing iframe,
+body.chat-resizing svg { pointer-events: none; }
 
 #chat .chat-head {
   padding: var(--space-3) var(--space-4);
@@ -1843,6 +1887,8 @@ body.chat-open aside#chat { display: flex; }
      squeezing every panel unreadably narrow — let it overlay instead. */
   body.chat-open main { padding-right: var(--space-5); }
   aside#chat { width: 100vw; }
+  /* No split to resize when the panel is the window. */
+  .chat-grip { display: none; }
 }
 
 @media (max-width: 640px) {
@@ -2116,7 +2162,7 @@ footer.legal {
   padding: var(--space-4) var(--space-5) var(--space-5);
   margin-top: var(--space-2);
 }
-body.chat-open footer.legal { padding-right: 400px; }
+body.chat-open footer.legal { padding-right: var(--chat-w); }
 .legal-line {
   margin: 0;
   max-width: 110ch;
@@ -5657,7 +5703,22 @@ main {
   margin: 0 auto;
   padding: var(--space-6) var(--space-5) var(--space-8);
 }
-body.chat-open main { padding-right: var(--space-5); margin-right: 420px; }
+body.chat-open main { padding-right: var(--space-5); margin-right: var(--chat-w); }
+
+/* Dragged wide enough, the panel covers rather than splits.
+ *
+ * Without this, reserving the full width leaves `main` zero pixels across, and
+ * a zero-width main is not merely invisible: every chart measures its host
+ * before building, so they all resolve to 0 and the page has to be resized to
+ * recover. Past the threshold the page keeps its layout and the panel sits over
+ * it, which is what a browser does when a split is dragged to the edge.
+ *
+ * Directly after the rule above, not up with the panel's own styles. Both
+ * selectors are (0,1,2), so source order decides and nothing else does -- this
+ * first sat ~3,900 lines earlier and lost silently, leaving main 46px wide at
+ * full cover. */
+body.chat-full main,
+body.chat-full footer.legal { margin-right: 0; }
 
 .grid { gap: var(--space-4) var(--space-5); }
 

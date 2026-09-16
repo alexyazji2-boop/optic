@@ -2466,6 +2466,138 @@ const HOME_QUICK_PICKS = ['SPY', 'QQQ', 'NVDA', 'AAPL', 'TSLA', 'AMD', 'MSFT', '
  * window resize involved. The CSS carries a fallback so a browser without
  * ResizeObserver still opens the menu somewhere sensible.
  */
+/* ------------------------------------------------- resizing Pulse
+ *
+ * Drag the panel's left edge to split the window, the way a browser does.
+ *
+ * The width lives in one custom property. Before this there were three numbers
+ * for it -- the panel was 382px, main reserved 420px, the footer reserved 400px
+ * -- so the page held a 38px strip of nothing open beside an already-narrow
+ * panel. Everything reads --chat-w now, so they cannot disagree.
+ *
+ * Once the page would drop below CHAT_MIN_PAGE the panel stops splitting and
+ * covers instead. Reserving the full width would leave `main` zero pixels
+ * across, and a zero-width main is not merely invisible: every chart measures
+ * its host before building, so they would all resolve to 0 and the window would
+ * have to be resized to recover.
+ *
+ * Written to documentElement rather than to the element, because `main` and the
+ * legal footer read the same variable and an inline style on the panel would
+ * only move the panel.
+ */
+const CHAT_W_KEY = 'optic.chat.width.v1';
+const CHAT_W_DEFAULT = 382;
+const CHAT_W_MIN = 320;          // below this the composer and its four buttons wrap
+/* The PAGE's minimum, which is what decides when the split becomes a cover.
+ *
+ * This was a fraction of the window (0.92) and that left a dead band: at 1153px
+ * wide, dragging to 1057 gave the page an 85px sliver -- too narrow to read,
+ * too wide to be ignored, and not covering either. A split has a minimum for
+ * both panes, not just the one being dragged, so the rule is stated as the
+ * page's floor and the threshold follows from it at any window size. */
+const CHAT_MIN_PAGE = 240;
+
+function chatMaxWidth() {
+  return Math.max(CHAT_W_MIN, window.innerWidth);
+}
+
+function applyChatWidth(px, opts) {
+  const w = Math.round(Math.min(Math.max(px, CHAT_W_MIN), chatMaxWidth()));
+  document.documentElement.style.setProperty('--chat-w', w + 'px');
+  // Covering rather than splitting, once the page would be too narrow to use.
+  document.body.classList.toggle('chat-full',
+    window.innerWidth - w < CHAT_MIN_PAGE);
+  const grip = document.getElementById('chat-grip');
+  if (grip) {
+    grip.setAttribute('aria-valuenow', String(w));
+    grip.setAttribute('aria-valuemin', String(CHAT_W_MIN));
+    grip.setAttribute('aria-valuemax', String(chatMaxWidth()));
+  }
+  if (!(opts && opts.transient)) {
+    try { localStorage.setItem(CHAT_W_KEY, String(w)); } catch (e) { /* private mode */ }
+  }
+  return w;
+}
+
+function storedChatWidth() {
+  try {
+    const n = parseInt(localStorage.getItem(CHAT_W_KEY) || '', 10);
+    if (Number.isFinite(n) && n >= CHAT_W_MIN) return n;
+  } catch (e) { /* private mode */ }
+  return CHAT_W_DEFAULT;
+}
+
+function installChatResize() {
+  const grip = document.getElementById('chat-grip');
+  if (!grip) return;
+  applyChatWidth(storedChatWidth());
+
+  let dragging = false;
+  /* Pointer capture, so the drag survives the cursor leaving the 10px handle.
+   * Without it a fast drag loses the pointer over the chart and the panel
+   * stops following, which reads as the handle being sticky. */
+  grip.addEventListener('pointerdown', (evt) => {
+    if (evt.button !== 0) return;
+    dragging = true;
+    grip.setPointerCapture(evt.pointerId);
+    document.body.classList.add('chat-resizing');
+    evt.preventDefault();
+  });
+  grip.addEventListener('pointermove', (evt) => {
+    if (!dragging) return;
+    // The panel is pinned right, so its width is the distance from the pointer
+    // to the right edge of the window.
+    applyChatWidth(window.innerWidth - evt.clientX, { transient: true });
+  });
+  const end = (evt) => {
+    if (!dragging) return;
+    dragging = false;
+    if (evt && evt.pointerId !== undefined && grip.hasPointerCapture(evt.pointerId)) {
+      grip.releasePointerCapture(evt.pointerId);
+    }
+    document.body.classList.remove('chat-resizing');
+    // Persist once, at the end, rather than on every frame of the drag.
+    applyChatWidth(parseInt(
+      getComputedStyle(document.documentElement).getPropertyValue('--chat-w'), 10)
+      || CHAT_W_DEFAULT);
+  };
+  grip.addEventListener('pointerup', end);
+  grip.addEventListener('pointercancel', end);
+
+  // Keyboard, because a 10px drag target is not an input method for everyone.
+  grip.addEventListener('keydown', (evt) => {
+    const cur = parseInt(
+      getComputedStyle(document.documentElement).getPropertyValue('--chat-w'), 10)
+      || CHAT_W_DEFAULT;
+    const step = evt.shiftKey ? 96 : 24;
+    if (evt.key === 'ArrowLeft') applyChatWidth(cur + step);
+    else if (evt.key === 'ArrowRight') applyChatWidth(cur - step);
+    else if (evt.key === 'Home') applyChatWidth(CHAT_W_MIN);
+    else if (evt.key === 'End') applyChatWidth(chatMaxWidth());
+    else return;
+    evt.preventDefault();
+  });
+
+  // Double-click the handle to go back to the default, the way a split does.
+  grip.addEventListener('dblclick', () => applyChatWidth(CHAT_W_DEFAULT));
+
+  /* A window that shrinks below the stored width has to re-clamp, or the panel
+   * is wider than the screen and the page is unreachable. `transient` so a
+   * temporary narrow window does not overwrite the chosen width. */
+  window.addEventListener('resize', () => {
+    const cur = parseInt(
+      getComputedStyle(document.documentElement).getPropertyValue('--chat-w'), 10)
+      || CHAT_W_DEFAULT;
+    applyChatWidth(Math.min(cur, chatMaxWidth()), { transient: true });
+  });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', installChatResize);
+} else {
+  installChatResize();
+}
+
 function trackTopbarHeight() {
   const bar = document.querySelector('header.topbar');
   if (!bar) return;

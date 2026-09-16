@@ -531,3 +531,75 @@ def test_every_css_variable_used_is_declared():
     used = set(re.findall(r'var\((--[a-z0-9-]+)', NO_COMMENTS))
     missing = sorted(used - declared - from_js)
     assert not missing, "used but never declared: %s" % missing
+
+
+# ------------------------------------------------------- resizing Pulse
+
+
+def test_the_chat_width_has_one_source():
+    """There were three numbers for one panel: it was 382px wide, main reserved
+    420px and the legal footer reserved 400px, so the page held a 38px strip of
+    nothing open beside an already-narrow panel. Everything reads --chat-w."""
+    assert "--chat-w: 382px;" in CSS
+    block = NO_COMMENTS[NO_COMMENTS.index("aside#chat {"):]
+    block = block[:block.index("}")]
+    assert "width: var(--chat-w)" in block
+    for hardcoded in ("margin-right: 420px", "padding-right: 400px"):
+        assert hardcoded not in NO_COMMENTS, hardcoded
+
+
+def test_the_cover_override_sits_after_the_rule_it_overrides():
+    """`body.chat-open main` and `body.chat-full main` are both (0,1,2), so
+    source order is the whole of it. Placed with the panel's own styles the
+    override sat ~3,900 lines earlier and lost silently: at full cover main
+    still reserved the panel's full width and rendered 46px wide."""
+    split = NO_COMMENTS.index("body.chat-open main { padding-right: var(--space-5)")
+    cover = NO_COMMENTS.index("body.chat-full main,")
+    assert cover > split, "the override has to come after what it overrides"
+
+
+def test_the_split_has_a_minimum_for_both_panes():
+    """The trigger was a fraction of the window (0.92) and left a dead band: at
+    1153px, dragging to 1057 gave the page an 85px sliver, too narrow to read
+    and not covering either. Stated as the page's floor so it holds at any
+    window size."""
+    assert "const CHAT_MIN_PAGE = 240;" in APP
+    assert "window.innerWidth - w < CHAT_MIN_PAGE" in APP
+    assert "CHAT_FULL_AT" not in APP, "the fraction is gone, not shadowed"
+
+
+def test_a_zero_width_main_is_never_reserved():
+    """Every chart measures its host before building, so a zero-width main
+    resolves them all to 0 and the window has to be resized to recover. That is
+    what the cover mode exists to prevent."""
+    assert "body.chat-full main," in NO_COMMENTS
+    block = NO_COMMENTS[NO_COMMENTS.index("body.chat-full main,"):]
+    block = block[:block.index("}")]
+    assert "margin-right: 0" in block
+
+
+def test_the_grip_is_reachable_without_a_mouse():
+    """A 10px drag target is not an input method for everyone."""
+    assert 'role="separator"' in HTML and 'id="chat-grip"' in HTML
+    assert 'aria-orientation="vertical"' in HTML
+    fn = APP.split("function installChatResize() {", 1)[1].split("\nfunction ", 1)[0]
+    for key in ("ArrowLeft", "ArrowRight", "Home", "End"):
+        assert key in fn, key
+    # And the value is announced, not just changed.
+    assert "aria-valuenow" in APP
+
+
+def test_the_drag_survives_leaving_the_handle():
+    """Ten pixels is narrow enough that a fast drag leaves it. Without pointer
+    capture the panel stops following, which reads as a sticky handle."""
+    fn = APP.split("function installChatResize() {", 1)[1].split("\nfunction ", 1)[0]
+    assert "setPointerCapture" in fn and "releasePointerCapture" in fn
+
+
+def test_a_shrinking_window_reclamps_without_forgetting_the_choice():
+    """A stored width wider than the window puts the panel off-screen and makes
+    the page unreachable. Re-clamped transiently, so a temporarily narrow window
+    does not overwrite what the reader chose."""
+    fn = APP.split("function installChatResize() {", 1)[1].split("\nfunction ", 1)[0]
+    assert "addEventListener('resize'" in fn
+    assert "{ transient: true }" in fn
