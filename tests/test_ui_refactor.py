@@ -70,7 +70,12 @@ def test_the_phone_dropdown_opens_below_the_bar_not_across_it():
     # ...and something has to actually set it, with a fallback in the CSS for
     # browsers that never run the observer.
     assert "setProperty('--topbar-h'" in APP
-    assert "ResizeObserver" in APP[APP.index("function trackTopbarHeight"):][:1200]
+    # Sliced to the function, not to a character count. At [:1200] this broke
+    # when a comment was added inside it — a window measured in characters
+    # fails on an edit that changes nothing it was testing. Same fault as the
+    # [:1600] slice in tests/test_panel_chooser.py.
+    fn = APP.split("function trackTopbarHeight() {", 1)[1].split("\nfunction ", 1)[0]
+    assert "ResizeObserver" in fn
 
 
 def test_a_menu_may_never_be_wider_than_the_window():
@@ -457,3 +462,72 @@ def test_the_two_up_cap_is_gone_rather_than_narrowed():
     assert "max-height: 640px" not in NO_COMMENTS
     # The reasoning survives in the source.
     assert "swallowed the wheel" in CSS
+
+
+# ------------------------------------------------- one rule per thing
+
+
+def test_the_panel_is_declared_once():
+    """It was declared five times at top level, and the duplication was not
+    harmless. With equal specificity the last declaration won, which killed
+    three things their authors meant to happen: the scroll shadows, the 640px
+    phone padding, and any hope of predicting a panel's box by reading one
+    rule. Two paddings and three border-radii were declared; one of each
+    applied."""
+    assert len(re.findall(r'^\.panel \{', NO_COMMENTS, re.M)) == 1
+
+
+def test_the_panel_sets_background_color_not_the_shorthand():
+    """`background: var(--surface)` is a SHORTHAND and resets every background-*
+    longhand. A later .panel rule used it, so background-image, -repeat, -size,
+    -position and -attachment all reverted to their defaults and the scroll
+    shadows were dead. Measured on a live panel: `background-image: none`,
+    `background-repeat: repeat`, `background-size: auto`."""
+    rule = NO_COMMENTS[NO_COMMENTS.index("\n.panel {"):]
+    rule = rule[:rule.index("}")]
+    assert "background-color: var(--surface)" in rule
+    assert "background:" not in rule, "the shorthand resets the gradients below it"
+    assert "background-image:" in rule and "linear-gradient" in rule
+
+
+def test_the_chrome_height_has_exactly_one_publisher():
+    """--chrome-h is owned by wsSyncChromeHeight, and only it.
+
+    An audit pass added a second publisher in trackTopbarHeight, on the strength
+    of reading `var(--chrome-h, 132px)` in the stylesheet, finding no CSS
+    declaration, and reading the property off documentElement while a different
+    view was active. All three observations were true and the conclusion was
+    false: wsSyncChromeHeight sets it, from the chart VIEW's own offset, and
+    only while that view is active, which is the only place the CSS uses it.
+
+    Measuring from `main` instead comes out 24px short, because main carries
+    24px of padding above its first child -- that is recorded in
+    wsSyncChromeHeight's own comment, from when it was measured that way. So a
+    second publisher is not a redundancy, it is a wrong number racing a right
+    one on every resize.
+    """
+    assert APP.count("setProperty('--chrome-h'") == 1
+    owner = APP.split("function wsSyncChromeHeight() {", 1)[1].split("\n}", 1)[0]
+    assert "setProperty('--chrome-h'" in owner
+    assert "view.getBoundingClientRect().top" in owner, "the view's offset, not main's"
+    assert "classList.contains('active')" in owner, "only while that view is up"
+
+
+def test_every_css_variable_used_is_declared():
+    """`--bg-hover` was reached for by three rules and never declared, so all
+    three silently took their fallback and the hover wash did not follow the
+    theme. `--chrome-h` was the same fault with a layout consequence.
+
+    Variables set from JS are declared there, so they are exempt by name."""
+    # Declarations found ANYWHERE, not anchored to the start of a line, and read
+    # from the comment-stripped source. Both matter: `.p-regular { --ses-hue:
+    # var(--s1); }` is a single-line rule, and `var(--bg)` appears only inside a
+    # comment describing a bug. An earlier version of this check reported five
+    # false positives for exactly those two reasons.
+    declared = set(re.findall(r'(--[a-z0-9-]+)\s*:', NO_COMMENTS))
+    # Variables JS sets, either inline in a template or via setProperty.
+    from_js = (set(re.findall(r'(--[a-z0-9-]+)\s*:', APP))
+               | set(re.findall(r"setProperty\('(--[a-z0-9-]+)'", APP)))
+    used = set(re.findall(r'var\((--[a-z0-9-]+)', NO_COMMENTS))
+    missing = sorted(used - declared - from_js)
+    assert not missing, "used but never declared: %s" % missing

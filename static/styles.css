@@ -82,6 +82,11 @@
      against a pure black plane reads as slightly dirty. */
   --ink-2: #c4bcb2;
   --ink-muted: #918879;
+  /* The hover wash. Three rules reached for var(--bg-hover, rgba(...)) and it
+     was never declared, so every one of them took its fallback and the hover
+     state did not follow the theme. Declared from the surface stack instead of
+     a flat grey, which is what those fallbacks were approximating. */
+  --bg-hover: rgba(255, 255, 255, 0.055);
 
   /* The accent. Green for up, red for down, applied to numbers and to the one
      control per view that actually does something. */
@@ -370,6 +375,7 @@
   --ink: #14110e;
   --ink-2: #4a4238;
   --ink-muted: #6e6558;   /* on --surface-2: 4.55:1, was #7b7b7b at 3.95:1 */
+  --bg-hover: rgba(11, 11, 11, 0.05);
   /* Darker green on white. #00c805 measures 1.8:1 against white and fails any
      text use, so the light theme takes a step down.
      
@@ -769,12 +775,61 @@ body.chat-open main { padding-right: 400px; }
 .grid.c3 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
 .grid.c4 { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
 
+/* ------------------------------------------------------------------ panel ---
+ *
+ * One rule. This was declared FIVE times at top level, and the duplication was
+ * not harmless: with equal specificity the last declaration won, which killed
+ * three things their authors meant to happen.
+ *
+ * - The scroll shadows below were dead. A later rule used the `background`
+ *   SHORTHAND, which resets every background-* longhand, so background-image,
+ *   -repeat, -size, -position and -attachment all reverted to their defaults.
+ *   Measured: a panel computed `background-image: none`. `background-color` is
+ *   used here for exactly that reason.
+ * - `@media (max-width: 640px) { .panel { padding: var(--space-3) } }` was dead
+ *   for the same reason, the later rule sitting after it in the file. Measured
+ *   at 375px: 23px of padding where 13.8px was intended.
+ * - Of two paddings and three border-radii declared, one of each applied and
+ *   the rest were decoration. Nobody could predict a panel's box by reading any
+ *   single rule.
+ *
+ * Borders, and the author was right to put them back: most panels here are
+ * collapsible, and a collapsed panel with no border is a floating heading with
+ * no visible extent, so you cannot see what you are about to open. Contained,
+ * not boxed-in.
+ *
+ * The asymmetric radius is deliberate. Equal corners read as a box; a slightly
+ * longer top-left reads as a card that was placed rather than generated. Two
+ * pixels, not ten. The curve lives on things you touch and stops at things you
+ * read, which is why tiles, cells and candles stay square.
+ *
+ * Panels scroll their own overflow (wide tables, leg rows) rather than forcing
+ * the page wider than the viewport, and the scroll was invisible: the
+ * candidate-strikes table is 1035px inside an 804px panel and nothing said so.
+ * Two gradients pinned `local` move with the content and vanish at each end;
+ * two pinned `scroll` cast a soft edge that shows only while there is more to
+ * reach. No measurement, and nothing on panels that do not overflow.
+ *
+ * Hover outlines the whole card rather than the heading, because the whole card
+ * is the target.
+ */
 .panel {
-  background: var(--surface);
+  background-color: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: var(--space-5) var(--space-6);
+  border-radius: 18px 16px 16px 16px;
+  padding: var(--space-5) var(--space-5);
   min-width: 0;
+  overflow-x: auto;
+  background-image:
+    linear-gradient(to right, var(--surface) 40%, transparent),
+    linear-gradient(to left, var(--surface) 40%, transparent),
+    linear-gradient(to right, var(--scroll-shade), transparent),
+    linear-gradient(to left, var(--scroll-shade), transparent);
+  background-repeat: no-repeat;
+  background-size: 34px 100%, 34px 100%, 16px 100%, 16px 100%;
+  background-position: 0 0, 100% 0, 0 0, 100% 0;
+  background-attachment: local, local, scroll, scroll;
+  transition: border-color 140ms ease;
 }
 .panel.span2 { grid-column: span 2; }
 @media (max-width: 900px) { .panel.span2 { grid-column: auto; } }
@@ -1381,29 +1436,6 @@ body.chat-open main { padding-right: 400px; }
   .funnel-arrow { display: none; }
 }
 
-/* Panels scroll their own overflow (wide tables, leg rows) rather than
-   forcing the whole page wider than the viewport.
- *
- * The scroll was invisible: the candidate-strikes table is 1035px inside an 804px
- * panel, and nothing on screen said so — the last visible column just looked like
- * the last column. These are scroll shadows: two gradients pinned to the panel
- * (`local`, so they move with the content and disappear at each end) mask the
- * edge, and two more (`scroll`, so they stay put) cast a soft shadow that only
- * shows while there is more to reach. Pure CSS, no measurement, and it costs
- * nothing on panels that don't overflow.
- */
-.panel {
-  overflow-x: auto;
-  background-image:
-    linear-gradient(to right, var(--surface) 40%, transparent),
-    linear-gradient(to left, var(--surface) 40%, transparent),
-    linear-gradient(to right, var(--scroll-shade), transparent),
-    linear-gradient(to left, var(--scroll-shade), transparent);
-  background-repeat: no-repeat;
-  background-size: 34px 100%, 34px 100%, 16px 100%, 16px 100%;
-  background-position: 0 0, 100% 0, 0 0, 100% 0;
-  background-attachment: local, local, scroll, scroll;
-}
 table.data { min-width: 480px; }
 /* Tables sitting side-by-side in a nested grid are narrow (3-4 columns), and the
    480px floor makes them overflow their grid cell and collide with the table
@@ -3955,25 +3987,15 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
 .lvl-opt .lvl-key.sr {
   background: repeating-linear-gradient(90deg, var(--ref-sr) 0 5px, transparent 5px 8px);
 }
-.lvl-opt .lvl-key.ma { background: var(--ma-mid, var(--s1)); }
+/* --s1 directly. This read var(--ma-mid, var(--s1)) and --ma-mid was never
+   declared anywhere, so the fallback was the value every time. The real SMA 50
+   colour comes from the style store at runtime and CSS cannot read it; --s1 is
+   that store's default, so this swatch matches an untouched chart. */
+.lvl-opt .lvl-key.ma { background: var(--s1); }
 .lvl-opt .lvl-key.vol { background: var(--ink-muted); height: 7px; border-radius: 1px; }
 
 /* ------------------------------------------------ sector confirmation ---- */
 
-.sc-tile {
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md, 10px);
-  background: var(--surface-2);
-}
-.sc-val {
-  margin-top: var(--space-1);
-  font-size: var(--t-heading);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.sc-val.up { color: var(--pos); }
-.sc-val.down { color: var(--neg); }
 .sc-sub { margin-top: var(--space-1); font-size: var(--t-micro); color: var(--ink-muted); line-height: 1.5; }
 .sc-note {
   margin: var(--space-4) 0 0;
@@ -4283,12 +4305,6 @@ button.home-card:focus-visible { outline: 2px solid var(--s1); outline-offset: 2
 
 /* --------------------------------------------------- panel hover accent -- */
 
-/* A panel is a card you can act on — collapse it, read it, ask Pulse about it —
- * and until now nothing indicated that on hover. The outline is the whole card
- * rather than the heading, because the whole card is the target. */
-.panel {
-  transition: border-color 140ms ease;
-}
 .panel:hover {
   border-color: color-mix(in srgb, var(--s1) 45%, var(--border));
 }
@@ -5643,25 +5659,6 @@ main {
 }
 body.chat-open main { padding-right: var(--space-5); margin-right: 420px; }
 
-/* Borders restored, and I was wrong to take them off.
- *
- * The flat version replaced each card with a hairline above it. That reads fine
- * for a page of prose, and badly for this one: most panels here are COLLAPSIBLE,
- * and a collapsed panel with no border is a floating heading with no visible
- * extent — you cannot see what you are about to open, or that there is anything
- * to open at all. Four collapsed panels in a row became four rules and four bits
- * of text.
- *
- * So the container is back, but lighter than the original: the near-flat surface
- * stack and the wider spacing rhythm stay, which is where most of the calm came
- * from. Contained, not boxed-in.
- */
-.panel {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: var(--space-5) var(--space-5);
-}
 .grid { gap: var(--space-4) var(--space-5); }
 
 /* Headings carry the hierarchy now that the box is gone. */
@@ -7717,9 +7714,6 @@ h1 .num, h2 .num, h3 .num,
  * box, a slightly longer top-left reads as a card that was placed rather than
  * generated. Two pixels of difference, not ten.
  */
-.panel {
-  border-radius: 18px 16px 16px 16px;
-}
 .btn, .pill, .ws-menu-btn {
   border-radius: 10px;
 }
@@ -8041,14 +8035,6 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
 .chart-pulse:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
 /* The same live dot the top-bar Pulse button uses, so the two read as one
    feature in two places rather than as two different buttons. */
-.chart-pulse-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--btn-primary);
-  flex: none;
-}
-.chart-pulse:hover .chart-pulse-dot { background: var(--btn-primary-ink); }
 
 /* Beside a panel heading it is one control among several, so it drops the
    auto margin that pushes it to the far corner on the chart itself. */
@@ -8837,32 +8823,6 @@ body.cp-open { overflow: hidden; }
 .hm-session.is-open { color: var(--pos); }
 
 /* Four numbers, not eight. A strip anyone can read in one pass. */
-.hm-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-4);
-  padding: var(--space-4) 0 var(--space-5);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  margin-bottom: var(--space-6);
-}
-.hm-cell { display: grid; gap: 2px; min-width: 0; }
-.hm-cell-label {
-  font-size: var(--t-micro);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-muted);
-}
-.hm-cell-value {
-  font-family: var(--display);
-  font-size: var(--t-lead);
-  font-variant-numeric: tabular-nums;
-  color: var(--ink);
-}
-.hm-cell-sub { font-size: var(--t-caption); color: var(--ink-muted); }
-.hm-cell-sub.is-up, .hm-cell-sub.is-uptrend { color: var(--pos); }
-.hm-cell-sub.is-down, .hm-cell-sub.is-downtrend { color: var(--neg); }
 
 /* ------------------------------------------------------------- explore */
 
@@ -9334,7 +9294,6 @@ body.cp-open { overflow: hidden; }
 /* On a phone the change and signal columns drop under the symbol rather than
    compressing five columns into 343px. */
 @media (max-width: 559px) {
-  .hm-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
   .wl-open {
     grid-template-columns: 4.25rem 1fr auto;
     grid-template-areas: 'sym price chg' 'sym changed signal';

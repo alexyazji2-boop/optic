@@ -2469,6 +2469,20 @@ const HOME_QUICK_PICKS = ['SPY', 'QQQ', 'NVDA', 'AAPL', 'TSLA', 'AMD', 'MSFT', '
 function trackTopbarHeight() {
   const bar = document.querySelector('header.topbar');
   if (!bar) return;
+  /* `--chrome-h` is deliberately NOT published here.
+   *
+   * It looks like it belongs beside --topbar-h and it does not.
+   * wsSyncChromeHeight owns it, measures it from the chart VIEW's own offset,
+   * and only while that view is active — which is the only place the CSS uses
+   * it. Measuring from `main` instead comes out 24px short, because main
+   * carries 24px of padding above its first child, and a publisher running on
+   * every resize regardless of view would overwrite the correct value with
+   * that one.
+   *
+   * An audit pass read var(--chrome-h, 132px) in the stylesheet, found no
+   * declaration in the CSS, read the property off documentElement while a
+   * different view was active, and concluded nothing set it. Three true
+   * observations and a false conclusion. */
   const publish = () => {
     const h = Math.round(bar.getBoundingClientRect().height);
     // Guard against the observer firing before layout, which would pin the menu
