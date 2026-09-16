@@ -558,7 +558,10 @@ header.topbar {
   backface-visibility: hidden;
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  /* space-2 rather than space-4 between the blocks. Six gaps at 18.4px spent
+     110px of the row on separation alone, and the strip beside them was folding
+     for want of rather less than that. */
+  gap: var(--space-2);
   padding: var(--space-2) var(--space-4);
   background: var(--plane);
   border-bottom: 1px solid var(--border);
@@ -592,7 +595,10 @@ header.topbar {
    reads as decoration and nobody tries. */
 .brand:hover { background: var(--surface); border-color: var(--border); }
 .brand:hover .brand-mark { color: var(--ink); }
-.brand-mark { width: 22px; height: 22px; flex: none; color: var(--ink-2); }
+/* 28px, up from 22. At 22 the mark was the smallest thing in the bar and read
+   as an icon next to the wordmark rather than as the logo; the row has the
+   height for more, since the buttons beside it stand 40px tall. */
+.brand-mark { width: 28px; height: 28px; flex: none; color: var(--ink-2); }
 .brand-text span { color: var(--ink-muted); font-weight: 400; }
 
 .search {
@@ -606,16 +612,21 @@ header.topbar {
 #chat-toggle {
   flex: none;
   margin-left: var(--space-2);
-  padding: var(--space-2) var(--space-4);
+  padding: var(--space-2) var(--space-3);
   font-size: var(--t-lead);
   font-weight: 500;
   border-radius: var(--r-md);
 }
 .search input {
-  /* Widened from 130px: the placeholder now mentions company names, and at the old
-     width it truncated mid-word to "TICKER OR COI" — advertising a capability
-     while visibly failing to fit the sentence describing it. */
-  width: 210px;
+  /* Widened from 130px once, because the placeholder then named company names
+     and truncated mid-word to "TICKER OR COI" — advertising a capability while
+     visibly failing to fit the sentence describing it. That placeholder is now
+     "Search or ask  ⌘K", which measures 189px in this font at this tracking, so
+     210 was 21px of slack behind a shorter string. 195 keeps six of them and
+     returns the rest to the row, which needed it to hold one line. Re-measure
+     before shortening this again: under 189 the rule above starts being true
+     once more. */
+  width: 195px;
   padding: var(--space-2) var(--space-3);
   background: var(--surface);
   border: 1px solid var(--border-strong);
@@ -661,7 +672,11 @@ header.topbar {
 
 nav.tabs {
   display: flex;
-  gap: var(--space-0);
+  /* No gap between tabs: each button carries its own horizontal padding, so
+     the labels are already 18.4px apart and the gap was only ever separating
+     two transparent backgrounds. Worth 14px across seven groups, which is the
+     difference between this row fitting a 1440 screen and not. */
+  gap: 0;
   margin-left: auto;
   /* min-width:0 lets the strip shrink below its content width so it scrolls
      rather than shoving the assistant button off the row. */
@@ -671,9 +686,19 @@ nav.tabs {
 }
 nav.tabs::-webkit-scrollbar { display: none; }
 nav.tabs button {
-  /* Sized up from 14px/6-12px: at desktop widths the strip read as small print
-     next to the panels it navigates. */
-  padding: var(--space-2) var(--space-4);
+  /* Sized up from 14px/6-12px once, because at desktop widths the strip read as
+     small print next to the panels it navigates. Both halves of that came back
+     down when a seventh group arrived and the strip started folding.
+     Measured as the width the whole header needs to stay on one line:
+     1653px as it stood, 1538 on padding alone, 1451 with the header gap too,
+     and 1408 here. A 1440 laptop is the case that matters and only the last
+     number clears it.
+     The padding went first and further — seven groups at 18.4px a side spent
+     258px of the row on empty space inside the buttons, which is the single
+     largest thing that was pushing the last group onto a second line. t-body is
+     the same size the panel headings use, so the strip is no longer small print
+     against them; it is simply no longer larger than them. */
+  padding: var(--space-2) var(--space-2);
   font-size: var(--t-lead);
   font-weight: 500;
   flex: none;
@@ -1880,7 +1905,12 @@ body.chat-resizing svg { pointer-events: none; }
    from ~1020px). Below that, give the tabs their own full-width row rather than
    squeezing them into a narrow horizontal scroller — the row is still tidy, and
    every tab stays visible and clickable. */
-@media (max-width: 1280px) {
+/* Below this the strip takes a row of its own, because it no longer fits beside
+   the brand, the search box and the three controls on the right. Raised from
+   1280 when the strip was changed to nowrap: it has no wrap left to fall back
+   on, so this number is the only thing standing between a slightly wider label
+   and the tabs running underneath Pulse. The inline row measures 1408px. */
+@media (max-width: 1430px) {
   header.topbar { flex-wrap: wrap; row-gap: var(--space-2); }
   nav.tabs { order: 3; flex: 1 0 100%; margin-left: 0; overflow-x: auto; }
   /* The tab strip drops to its own row here, so it no longer claims the free
@@ -5838,8 +5868,30 @@ header.topbar {
    wraps if it ever needs to and the menus can escape. */
 nav.tabs-group {
   overflow: visible;
-  flex-wrap: wrap;
-  row-gap: var(--space-0);
+  /* One row, and it claims the width it needs to stay that way.
+   *
+   * `wrap` was the answer when the comment above was written and there were
+   * five sections. At seven it stopped being a safety valve and became the
+   * normal case: measured at 1440, six groups sat on row one and "Optic's
+   * Positions" alone on row two — a 114px header where 66px does the job.
+   *
+   * `flex: none; min-width: auto` is the half that matters, and it is undoing
+   * the base rule rather than adding to it. `nav.tabs` sets `min-width: 0` so
+   * the strip can shrink and scroll, and a shrinkable box whose content is
+   * allowed to wrap will always wrap before anything else on the row gives up
+   * a pixel. Refusing to shrink is what makes the row honest about its width:
+   * either the strip fits beside everything else or it does not, and when it
+   * does not the 1320px rule below moves it to a full-width row of its own.
+   *
+   * The two must stay in step. There is no wrap left to absorb an overflow
+   * here, so if the strip ever grows past what that breakpoint reserves for it
+   * the tabs run under Pulse instead of folding. Measured after the type and
+   * padding came down: the inline row needs 1408px, so the breakpoint sits at
+   * 1420 for a little slack against a font that renders wider than it does
+   * here. Change either number and re-measure the other. */
+  flex: none;
+  min-width: auto;
+  flex-wrap: nowrap;
 }
 
 /* ------------------------------------------------------- company marks ---- */
