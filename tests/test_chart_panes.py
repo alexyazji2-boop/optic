@@ -140,8 +140,53 @@ def test_slice_series_takes_a_prepared_series_without_aggregating_twice():
     assert "prepared || (intervalKey === 'weekly' ? aggregateWeekly(rawPs) : rawPs)" in fn
     # Existing callers pass three arguments and must be unaffected: `prepared`
     # is undefined for them, so the aggregate-or-not branch runs as before.
-    three_arg = re.findall(r"sliceSeries\(\s*[^;]*?\)", CODE)
-    assert any("chartInterval)" in c and "full" not in c for c in three_arg), three_arg
+    #
+    # Arguments are counted rather than matched as a string. The old check
+    # looked for a call ending in "chartInterval)", which the surviving
+    # three-argument caller (srSource) does not — it is formatted across four
+    # lines with a trailing comma — so the test failed the moment the one
+    # single-line caller gained a fourth argument.
+    def arity(call):
+        """Top-level argument count, ignoring a trailing comma.
+
+        `srSource` is written across four lines and ends `chartInterval,\n  )`,
+        so counting commas and adding one reported four arguments for a
+        three-argument call — which is exactly the thing this test exists to
+        find."""
+        depth, parts, buf = 0, [], ""
+        for ch in call[1:-1]:
+            if ch in "([{":
+                depth += 1
+            elif ch in ")]}":
+                depth -= 1
+            if ch == "," and depth == 0:
+                parts.append(buf)
+                buf = ""
+                continue
+            buf += ch
+        parts.append(buf)
+        while parts and not parts[-1].strip():
+            parts.pop()
+        return len(parts)
+
+    calls = []
+    for m in re.finditer(r"sliceSeries\(", CODE):
+        if CODE[:m.start()].rstrip().endswith("function"):
+            continue
+        depth, i = 0, m.end() - 1
+        while i < len(CODE):
+            if CODE[i] in "([{":
+                depth += 1
+            elif CODE[i] in ")]}":
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        calls.append(CODE[m.end() - 1:i + 1])
+    arities = sorted({arity(c) for c in calls})
+    assert 3 in arities, ("no three-argument caller left, so `prepared` being "
+                          "optional is untested: %s" % arities)
+    assert 4 in arities, arities
 
 
 def test_weekly_recomputes_rather_than_resampling():

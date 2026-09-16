@@ -6914,6 +6914,427 @@ if (window.matchMedia) {
   else if (mq.addListener) mq.addListener(onChange);
 }
 
+/* ------------------------------------- the Options price chart's own window
+ *
+ * The Charting tab could pan and zoom; this chart and the Investing one could
+ * not, and the wheel over them did nothing. The gesture layer is shared (see
+ * registerChartZoom), so what was actually missing per chart was three things:
+ * somewhere to keep the window, a series function that honours it, and a
+ * redraw that does not repaint twenty panels.
+ *
+ * Keyed to the symbol, range and interval it was made on. A window is a pair of
+ * bar indices into one particular series, so it means nothing against a
+ * different one — and rather than hunting for every place those three can
+ * change (the range pills and the interval select are SHARED with the Charting
+ * tab, and the ticker changes from four places), a key mismatch simply reads as
+ * "not zoomed". Self-healing beats a list of reset sites that drifts.
+ */
+let swingWindow = null;
+
+/* Everything the price block needs except the series, captured at render time.
+ * None of it moves when the window does: `srComputed` is deliberately built
+ * from the full history at this interval so zooming never changes which levels
+ * exist, and recomputing it per wheel notch would be the expensive part. */
+let swingChartCtx = null;
+
+function swingWindowKey() {
+  return `${STATE.ticker || ''}|${chartRange}|${chartInterval}`;
+}
+
+function swingFullSeries(d) {
+  const raw = ((d.technicals || {}).price_series) || {};
+  // Aggregate before windowing, for the same reason sliceSeries does: rolling
+  // up after cutting produces a partial first bar.
+  return chartInterval === 'weekly' ? aggregateWeekly(raw) : raw;
+}
+
+/** The series the chart draws: the manual window if there is one, else the range. */
+function swingSeries(d) {
+  /* Intraday is not windowed here. It arrives from its own endpoint already
+   * scoped to the session, and `swingWindow` indexes the daily/weekly series —
+   * applying one to the other would slice the wrong array. The adapter declines
+   * intraday for the same reason, so the wheel does nothing rather than
+   * appearing to do nothing. */
+  if (isIntradayRange(chartRange)) {
+    const intra = (STATE.intraday && STATE.intraday.ticker === STATE.ticker
+      && STATE.intraday.range === chartRange) ? STATE.intraday : null;
+    return intradaySeries(intra);
+  }
+  const raw = ((d.technicals || {}).price_series) || {};
+  const full = swingFullSeries(d);
+  const total = (full.dates || []).length;
+  const win = (swingWindow && swingWindow.key === swingWindowKey())
+    ? wsClampWindow(swingWindow, total) : null;
+  // `full` goes in as `prepared` so sliceSeries does not aggregate a second
+  // time — the same trap wsSeries carries a comment about.
+  if (!win) return sliceSeries(raw, chartRange, chartInterval, full);
+  // Slice every array rather than a named list: a named list goes stale the
+  // moment the payload gains a field, and a series left at full length
+  // stretches lineChart's x-axis to fit it.
+  const out = { ...full };
+  Object.keys(out).forEach((k) => {
+    if (Array.isArray(out[k])) out[k] = out[k].slice(win.from, win.to);
+  });
+  return { ...out, shown_bars: win.to - win.from, total_bars: total,
+           weekly: !!full.weekly, zoomed: true };
+}
+
+/** Current window as concrete indices, whatever set it. */
+function swingWindowNow(d) {
+  const total = ((swingFullSeries(d).dates) || []).length;
+  const win = (swingWindow && swingWindow.key === swingWindowKey())
+    ? wsClampWindow(swingWindow, total) : null;
+  if (win) return { ...win, total };
+  const shown = (swingSeries(d).dates || []).length;
+  return { from: Math.max(0, total - shown), to: total, total };
+}
+
+function swingApplyWindow(win) {
+  if (!STATE.swing) return false;
+  const total = ((swingFullSeries(STATE.swing).dates) || []).length;
+  const next = wsClampWindow(win, total);
+  if (!next) return false;
+  const keyed = { ...next, key: swingWindowKey() };
+  const prev = swingWindow;
+  // Nothing moved: skip the redraw rather than repaint an identical chart at
+  // the edge of the data, which is where a wheel gesture spends its last turns.
+  if (prev && prev.key === keyed.key && prev.from === keyed.from
+      && prev.to === keyed.to) return false;
+  swingWindow = keyed;
+  return true;
+}
+
+/* The heading states the window, so it is built once and used by both the
+ * template and the redraw. Two copies would disagree the first time one of
+ * them was edited — which is the fault this session removed from the heading
+ * name, the Fibonacci lines and the panel identity. */
+function swingBarCountText(ps) {
+  if (ps.intraday) {
+    return `${ps.interval || ''} bars, ${ps.shown_bars} over ${
+      chartRange === '1d' ? 'today' : 'five sessions'}`;
+  }
+  return `${ps.weekly ? 'weekly' : 'daily'} bars, ${ps.shown_bars} of ${
+    ps.total_bars} shown`;
+}
+
+/* Repaint the chart alone. renderSwing builds twenty panels and three thousand
+ * nodes; doing that per wheel notch is what a zoom must not cost. */
+function swingRedrawChart() {
+  if (STATE.view !== 'swing' || !STATE.swing || !swingChartCtx) return;
+  const ps = swingSeries(STATE.swing);
+  const head = views.swing.querySelector('#swing-chart-panel h2 .th-plain');
+  if (head) head.textContent = `· ${swingBarCountText(ps)}`;
+  swingPriceBlock(STATE.swing, ps, swingChartCtx);
+}
+
+/* The price chart, its legend and its off-scale note.
+ *
+ * Lifted out of renderSwing so it can be redrawn on its own. Every derivation
+ * in here is a function of the SERIES — candle mode reads ps.open, the colour
+ * allocator seeds from what the base chart occupies, the trend segments map
+ * onto ps.dates, and the off-scale note measures the levels against the
+ * plotted price range. Panning or zooming changes the series, so all of it has
+ * to be recomputed, which is why the block moved whole rather than just the
+ * mount: leaving the refs and the legend behind in the caller would have
+ * redrawn a zoomed chart with the previous window's labels.
+ *
+ * Body is unchanged from when it lived inline. `ctx` carries the four locals it
+ * borrowed from renderSwing (t, q, srComputed) plus the payload.
+ */
+function swingPriceBlock(d, ps, ctx) {
+  const { t, q, srComputed } = ctx;
+
+  if (ps.close && ps.close.length) {
+    // Drop near-duplicate labels (levels within 1.2% are the same shelf as far
+    // as the eye is concerned); lineChart handles the remaining pixel-level
+    // collisions itself, since only it knows how tall the chart ended up.
+    const labeledPrices = [];
+    const claimLabel = (price) => {
+      if (!isFinite(price)) return false;
+      if (labeledPrices.some((p) => Math.abs(price / p - 1.0) * 100.0 < 1.2)) return false;
+      labeledPrices.push(price);
+      return true;
+    };
+    // The whole 0-100% retracement grid between the swing low and the swing high,
+    // plus the extensions above it. The extensions used to be dropped, which meant
+    // a stock at its highs showed no ceiling at all — those projected levels are
+    // the only resistance that exists once price has cleared every historical
+    // pivot, so they're drawn and labelled as projections.
+    // Every ratio gets a line; only some get text. Labelling all nine turned the
+    // right-hand side into a wall of type — the lines themselves plus the table
+    // below already carry the full grid.
+    let fibResistanceLabels = 0;
+    const fibLabelBudget = (l) => {
+      if (l.is_golden || l.role === 'target') return true;      // always worth naming
+      if (l.role !== 'resistance') return false;
+      // The two nearest ceilings, which is what a reader actually trades against.
+      if (fibResistanceLabels >= 2) return false;
+      fibResistanceLabels += 1;
+      return true;
+    };
+    const fibRefs = !showFib ? [] : ((t.fibonacci || {}).levels || [])
+      .filter((l) => l.price !== null)
+      // Nearest-first, so the budget above spends itself on the closest ceilings.
+      .sort((a, b) => Math.abs(a.price - (t.spot || 0)) - Math.abs(b.price - (t.spot || 0)))
+      .map((l) => ({
+        value: l.price,
+        label: fibLabelBudget(l) && claimLabel(l.price)
+          ? `Fib ${l.label}${l.role === 'target' ? ' projected' : ''}${
+            l.role === 'resistance' ? ' resistance' : ''} · ${usd(l.price)}` : '',
+        color: C.refFib,
+        // Same dash as support/resistance — colour carries the distinction, weight
+        // doesn't. Projections keep a looser dash because they haven't happened yet.
+        pattern: l.role === 'target' ? '2 5' : '6 4',
+        emphasis: !!l.is_golden,
+        // Non-golden ratios are drawn dimmer via the shared opacity rule rather
+        // than in structural grey, which made them read as gridlines.
+        dim: !l.is_golden && l.role !== 'target' && l.role !== 'resistance',
+      }));
+    // Touch count first, so the strongest levels win a label when space is tight.
+    // Spelled out with the price: "S (3x)" told you nothing about where the level
+    // actually was, or what S stood for.
+    const srLevels = srComputed.slice();
+    // When price is at or near its highs, every detected pivot sits below it and
+    // the chart shows nothing but support. The 52-week and all-time highs are the
+    // only real ceilings left, so they're added as resistance rather than leaving
+    // the reader to conclude there is none.
+    const hasResistance = srLevels.some((l) => l.price > (t.spot || 0));
+    const fibAnchorHigh = (t.fibonacci || {}).anchor_high;
+    const ceilingRefs = (!showSR || hasResistance) ? [] : [
+      { price: q.fifty_two_high, name: '52-week high' },
+    ].filter((c) => c.price && c.price > (t.spot || 0)
+      // Don't double-draw a level another family already covers: the 52-week high
+      // is often the same print as the Fibonacci swing high.
+      && !srLevels.some((l) => Math.abs(l.price / c.price - 1) < 0.005)
+      && !(showFib && fibAnchorHigh && Math.abs(fibAnchorHigh / c.price - 1) < 0.005))
+      .map((c) => ({
+        value: c.price,
+        label: claimLabel(c.price) ? `${c.name} · ${usd(c.price)}. Nothing above this` : '',
+        color: C.refSR,
+        pattern: '6 4',
+      }));
+    let srLabelled = 0;
+    const srRefs = (!showSR ? [] : srLevels).map((l) => {
+      const shouldLabel = srLabelled < 3 && claimLabel(l.price);
+      if (shouldLabel) srLabelled += 1;
+      const role = l.role === 'support' ? 'Support' : 'Resistance';
+      return {
+        value: l.price,
+        label: shouldLabel ? `${role} ${usd(l.price)} · strength ${fmt(l.strength, 0)}` : '',
+        color: C.refSR,
+        pattern: '6 4',
+        emphasis: srLabelled === 1,
+      };
+    });
+    const candleMode = chartMode === 'candle' && ps.open && ps.high && ps.low;
+    // Candles own green and red; in candle mode the averages take hues that
+    // can't be mistaken for a bar's direction.
+    // Candle mode reassigns the averages because the candles themselves own the
+    // aqua/red pair. The mid average used to take violet, which sat ΔE 7 from the
+    // Fibonacci lines — indistinguishable, and worse under colour-vision
+    // simulation. Orange is free in candle mode, so it takes that instead.
+    /* Averages now take their colour and width from the shared style store, so a
+     * change made in the Chart tab's indicator dialog shows up here too.
+     *
+     * That store's DEFAULTS are the collision-checked ones below; a colour the
+     * user picked deliberately wins over them. This is a real trade and worth
+     * naming: the automatic reassignment existed because in candle mode the
+     * candles own the aqua/red pair and the mid average used to land ΔE 7 from
+     * the Fibonacci lines. A hand-picked colour can walk back into that. The
+     * dialog is the place someone is looking at the chart while choosing, so
+     * they will see it — which is more than the old silent reassignment gave
+     * anyone who disagreed with it. */
+    const styleOf = (id) => overlayStyle(id);
+    // One resolver, shared with the Charting tab. See maColorsOnChart: the
+    // hardcoded s1/s2/s4 that used to live here in candle mode is why the same
+    // SMA 20 was a different colour on the two tabs, and why a colour chosen in
+    // the dialog was honoured on one of them and dropped on the other.
+    const maOn = maColorsOnChart(candleMode);
+    const maColors = { fast: maOn.sma20, mid: maOn.sma50, slow: maOn.sma200 };
+
+    // Everything the base chart is already using, so the overlays can take hues
+    // nothing else on this plot has claimed. Collected here rather than assumed,
+    // because candle mode and line mode occupy different slots.
+    // The EMA fan gets its own hue family: fast-to-slow inside one colour would
+    // be indistinguishable, and reusing the SMA colours makes a chart with both
+    // families on unreadable.
+    const emaColors = { fast: maOn.ema9, mid: maOn.ema21, slow: maOn.ema50 };
+    /* Same seed the Charting tab uses. See chartBaseColors: allocation depends
+     * on what is already taken, so two tabs seeding this differently give the
+     * same study two different colours.
+     *
+     * It also fixes a seeding bug of its own. This used to push the EMA colours
+     * only `if (showEMA)`, the family checkbox, while the series array filters
+     * on `seriesDrawn(id)` per average. With EMA 9 on and the family flag off
+     * the allocator never learned s5 was taken and handed it to Bollinger, so
+     * two overlays were drawn in one colour. */
+    const baseColors = chartBaseColors(ps, candleMode, ps.intraday);
+    const overlayPalette = allocateOverlayColors(baseColors);
+    // Kept on STATE so the written explanations below can show the same swatch as
+    // the line on the chart. Recomputing it there would drift the moment the base
+    // colours differ — which they do between line and candle mode.
+    STATE.overlayPalette = overlayPalette;
+
+    mount('legend-price', legend([
+      ...(candleMode
+        // The reader's own candle colours, not s3/s8: those are the defaults
+        // chartColor() returns anyway, and hardcoding them made the key lie
+        // the moment anyone used the Charting tab's colour picker.
+        ? [{ name: ps.weekly ? 'Up week' : 'Up day', color: chartColor('up') },
+          { name: ps.weekly ? 'Down week' : 'Down day', color: chartColor('down') }]
+        : [{ name: 'Close', color: chartColor('line') }]),
+      /* Derived from the same per-average switches as the series, so the
+       * legend cannot name a line that is not on the chart. It previously
+       * dropped the 200 entry on weekly while the series still drew it. */
+      ...(ps.intraday ? [] : [
+        ['sma20', maColors.fast], ['sma50', maColors.mid], ['sma200', maColors.slow],
+      ].filter(([id]) => seriesDrawn(id))
+        .map(([id, color]) => ({ name: maLabel(id, ps), color }))),
+      showFib && !ps.intraday ? { name: 'Fibonacci level', color: C.refFib, dash: true } : null,
+      showSR && !ps.intraday ? { name: 'Support / resistance', color: C.refSR, dash: true } : null,
+      showVbp ? { name: 'Volume by price', color: C.ink2, boxed: true } : null,
+      showInsiders && !ps.intraday ? { name: 'Insider buy', color: C.s3, boxed: true } : null,
+      showInsiders && !ps.intraday ? { name: 'Insider sell', color: C.neg, boxed: true } : null,
+      // One entry per indicator, not per line. Keltner and Donchian each draw
+      // several lines in one colour, and three legend rows reading "Keltner upper /
+      // mid / lower" would be longer than the rest of the legend combined for no
+      // extra information. Six unlabelled lines on the chart is the failure this
+      // avoids — the reader could see them and not know which was VWAP.
+      ...(ps.intraday ? [] : [
+        ['ema9', emaColors.fast], ['ema21', emaColors.mid], ['ema50', emaColors.slow],
+      ].filter(([id]) => seriesDrawn(id))
+        .map(([id, color]) => ({ name: maLabel(id, ps), color }))),
+      // One key per cloud, not one per state. See emaCloudLegend.
+      ...emaCloudLegend(ps),
+      ...(ps.intraday ? [] : indicatorOverlayLegend(overlayPalette)),
+    ].filter(Boolean)));
+    // Daily-derived overlays do not belong on an intraday chart: the averages
+    // are not in the intraday series at all, and the Fib and support levels are
+    // anchored to daily swings. Drawing them here would put lines on the chart
+    // that describe a different timeframe from the one on screen.
+    // Fibonacci and support/resistance are drawn as bands now; only the
+    // resistance ceilings stay as lines, because a 52-week high is a single print
+    // rather than a zone.
+    const overlayRefs = ps.intraday ? [] : [
+      ...ceilingRefs,
+      // Fibs are lines again, not bands — see fibLines for why.
+      ...(showFib ? fibLines((t.fibonacci || {}).levels, t.spot) : []),
+    ];
+    const levelBands = ps.intraday ? [] : [
+      ...(showSR ? srBands(srLevels, (t.volatility || {}).atr14, t.spot) : []),
+    ];
+    const trendSegs = ps.intraday || !showTrends ? []
+      : trendSegments(STATE.trendlines, ps.dates || []);
+    mount('chart-price', (w) => lineChart({
+      width: w,
+      height: 420,
+      // Four lines converge here; the value at the end of each is what a reader
+      // was previously hovering or cross-referencing a tile to find.
+      valueTags: true,
+      labels: ps.dates || [],
+      // Volume rides under the price. The series is already sliced to the
+      // selected timeframe upstream, so it lines up bar-for-bar with the dates.
+      volume: showVol ? (ps.volume || null) : null,
+      // Same colours as the Charting tab, for the reason WS_FLAGS shares the
+      // overlay toggles: these two tabs draw the same instrument, and one of
+      // them showing green candles while the other shows orange would be a
+      // worse outcome than one control reaching both.
+      candleUp: chartColor('up'),
+      candleDown: chartColor('down'),
+      volUp: chartColors.up || null,
+      volDown: chartColors.down || null,
+      // In candle mode the close series is kept but not stroked: the hover
+      // crosshair and tooltip read from the series list, so dropping it would
+      // silently disable them.
+      series: [
+        // In candle mode this series is not stroked — it exists so the crosshair
+        // and tooltip have something to read. It took s1, which the 20-day average
+        // also takes in candle mode, so the tooltip showed two rows with one
+        // swatch. C.ink is outside the categorical slots entirely, which is right
+        // for it: in candle mode it is not another line, it is the price the
+        // candles already draw.
+        { name: 'Close',
+          values: ps.close,
+          color: candleMode ? C.ink : chartColor('line'),
+          hidden: candleMode,
+          fill: !candleMode },
+        /* Per-average switches, matching the Charting tab's Indicators menu —
+         * the flags are shared, so the two tabs cannot disagree about which
+         * averages are on. Labels keep this tab's bar-unit naming. */
+        ...(ps.intraday ? [] : [
+          ['sma20', maLabel('sma20', ps), ps.sma20, maColors.fast],
+          ['sma50', maLabel('sma50', ps), ps.sma50, maColors.mid],
+          ['sma200', maLabel('sma200', ps), ps.sma200, maColors.slow],
+        ].filter(([id]) => seriesDrawn(id)).map(([id, name, values, color]) => ({
+          name, values: values || [], color, width: styleOf(id).width, marker: false,
+        }))),
+        // Selected overlays, drawn on the price axis. Dashed so they read as
+        // something you switched on rather than part of the base chart, and
+        // excluded on intraday for the same reason the daily averages are: they
+        // are computed from daily bars and would describe a different timeframe
+        // from the one on screen.
+        ...(ps.intraday ? [] : [
+          ['ema9', maLabel('ema9', ps), ps.ema9, emaColors.fast],
+          ['ema21', maLabel('ema21', ps), ps.ema21, emaColors.mid],
+          ['ema50', maLabel('ema50', ps), ps.ema50, emaColors.slow],
+        ].filter(([id]) => seriesDrawn(id)).map(([id, name, values, color]) => ({
+          name, values: values || [], color, width: styleOf(id).width, marker: false,
+        }))),
+        ...(ps.intraday ? [] : indicatorOverlaySeries((ps.dates || []).length,
+          overlayPalette)),
+      ],
+      candles: candleMode
+        ? { open: ps.open, high: ps.high, low: ps.low, close: ps.close }
+        : null,
+      refLines: overlayRefs,
+      // Under the levels and under the price, so neither is muted by the fill.
+      clouds: emaClouds(ps),
+      segments: trendSegs,
+      // Both computed from the visible window, so they describe what is on screen.
+      volumeProfile: showVbp ? volumeByPrice(ps) : null,
+      // Supply above, demand below, in the sign colours already used everywhere
+      // else for "sellers waiting" and "buyers waiting". Intraday is excluded for
+      // the same reason the averages are: the zones are derived from daily bases.
+      bands: [
+        ...levelBands,
+        ...(showZones && !ps.intraday ? zoneBands(d.patterns) : []),
+      ],
+      events: (showInsiders && !ps.intraday)
+        ? insiderEvents(ps, ((d.company || {}).ownership || {}).recent_transactions) : null,
+      // Report dates as dashed verticals. `vMarkers`, not `events`: an earnings
+      // date has no direction, so the triangle the insider layer draws would be
+      // claiming one. See earningsMarkers().
+      vMarkers: earningsMarkersFor(ps, STATE.ticker),
+      refLineFit: 'clip',
+      yFormat: (x) => fmt(x, 0),
+      valueFormat: (x) => fmt(x, 2),
+    }));
+
+    // 'clip' drops levels outside the plotted price range — without that, a level
+    // 25% away compresses the actual price action into a band in the middle. But
+    // a silently missing line looks like a bug, so the count is reported.
+    // Mirrors lineChart's own rule (data span plus 16% slack) so the count can't
+    // disagree with what actually got drawn.
+    const priced = (ps.close || []).filter((v) => v !== null && isFinite(v));
+    const dLo = Math.min(...priced);
+    const dHi = Math.max(...priced);
+    const slack = (dHi - dLo) * 0.16;
+    const offScale = overlayRefs.filter(
+      (r) => isFinite(r.value) && (r.value < dLo - slack || r.value > dHi + slack));
+    const note = document.getElementById('chart-price-note');
+    if (note) {
+      const one = offScale.length === 1;
+      note.innerHTML = offScale.length
+        ? `<p class="caveat" style="margin:var(--space-2) 0 0">${offScale.length} level${one ? '' : 's'} ${
+          one ? 'sits' : 'sit'} too far outside the price range on screen to draw, so ${
+          one ? "it isn't" : "they aren't"} shown here: ${one ? 'it is' : 'they are'} still
+          listed in the tables below. Widen the timeframe to bring ${
+          one ? 'it' : 'them'} into view.</p>`
+        : '';
+    }
+  }
+}
+
 function renderSwing(d) {
   // A glossary tooltip left open over an element that's about to be replaced
   // never gets its mouseout — the browser doesn't fire one when the hovered
@@ -6949,8 +7370,9 @@ function renderSwing(d) {
   // daily-derived overlays — see intradaySeries().
   const intra = (STATE.intraday && STATE.intraday.ticker === STATE.ticker
     && STATE.intraday.range === chartRange) ? STATE.intraday : null;
-  const psIntra = isIntradayRange(chartRange) ? intradaySeries(intra) : null;
-  const ps = psIntra || sliceSeries(d.technicals && d.technicals.price_series ? d.technicals.price_series : {}, chartRange, chartInterval);
+  // Honours a manual pan/zoom window when there is one, and falls back to the
+  // range pills when there is not. See swingSeries.
+  const ps = swingSeries(d);
   // Full weekly aggregate, unsliced. The oscillators need more history than the
   // window shows so their warm-up happens off-screen instead of leaving a gap at
   // the left edge of the chart.
@@ -7183,9 +7605,7 @@ function renderSwing(d) {
   <div class="grid c2 gap" id="swing-chart-grid">
     <div class="panel span2" id="swing-chart-panel">
       <h2>${hg('Price, moving averages & Fibonacci')}${chartPulse(STATE.ticker)} <span class="th-plain">· ${
-  ps.intraday ? `${esc(ps.interval || '')} bars, ${ps.shown_bars} over ${
-    chartRange === '1d' ? 'today' : 'five sessions'}`
-    : `${ps.weekly ? 'weekly' : 'daily'} bars, ${ps.shown_bars} of ${ps.total_bars} shown`}</span></h2>
+  esc(swingBarCountText(ps))}</span></h2>
       ${ps.intraday
     ? `<p class="sub">Intraday price only. The moving averages, Fibonacci levels, RSI and
         MACD on this tab are all computed from <strong>daily</strong> closes. Drawing a
@@ -7605,295 +8025,9 @@ function renderSwing(d) {
     host.appendChild(inlineBar(Number(host.dataset.bar), maxComp, 70, 9));
   });
 
-  if (ps.close && ps.close.length) {
-    // Drop near-duplicate labels (levels within 1.2% are the same shelf as far
-    // as the eye is concerned); lineChart handles the remaining pixel-level
-    // collisions itself, since only it knows how tall the chart ended up.
-    const labeledPrices = [];
-    const claimLabel = (price) => {
-      if (!isFinite(price)) return false;
-      if (labeledPrices.some((p) => Math.abs(price / p - 1.0) * 100.0 < 1.2)) return false;
-      labeledPrices.push(price);
-      return true;
-    };
-    // The whole 0-100% retracement grid between the swing low and the swing high,
-    // plus the extensions above it. The extensions used to be dropped, which meant
-    // a stock at its highs showed no ceiling at all — those projected levels are
-    // the only resistance that exists once price has cleared every historical
-    // pivot, so they're drawn and labelled as projections.
-    // Every ratio gets a line; only some get text. Labelling all nine turned the
-    // right-hand side into a wall of type — the lines themselves plus the table
-    // below already carry the full grid.
-    let fibResistanceLabels = 0;
-    const fibLabelBudget = (l) => {
-      if (l.is_golden || l.role === 'target') return true;      // always worth naming
-      if (l.role !== 'resistance') return false;
-      // The two nearest ceilings, which is what a reader actually trades against.
-      if (fibResistanceLabels >= 2) return false;
-      fibResistanceLabels += 1;
-      return true;
-    };
-    const fibRefs = !showFib ? [] : ((t.fibonacci || {}).levels || [])
-      .filter((l) => l.price !== null)
-      // Nearest-first, so the budget above spends itself on the closest ceilings.
-      .sort((a, b) => Math.abs(a.price - (t.spot || 0)) - Math.abs(b.price - (t.spot || 0)))
-      .map((l) => ({
-        value: l.price,
-        label: fibLabelBudget(l) && claimLabel(l.price)
-          ? `Fib ${l.label}${l.role === 'target' ? ' projected' : ''}${
-            l.role === 'resistance' ? ' resistance' : ''} · ${usd(l.price)}` : '',
-        color: C.refFib,
-        // Same dash as support/resistance — colour carries the distinction, weight
-        // doesn't. Projections keep a looser dash because they haven't happened yet.
-        pattern: l.role === 'target' ? '2 5' : '6 4',
-        emphasis: !!l.is_golden,
-        // Non-golden ratios are drawn dimmer via the shared opacity rule rather
-        // than in structural grey, which made them read as gridlines.
-        dim: !l.is_golden && l.role !== 'target' && l.role !== 'resistance',
-      }));
-    // Touch count first, so the strongest levels win a label when space is tight.
-    // Spelled out with the price: "S (3x)" told you nothing about where the level
-    // actually was, or what S stood for.
-    const srLevels = srComputed.slice();
-    // When price is at or near its highs, every detected pivot sits below it and
-    // the chart shows nothing but support. The 52-week and all-time highs are the
-    // only real ceilings left, so they're added as resistance rather than leaving
-    // the reader to conclude there is none.
-    const hasResistance = srLevels.some((l) => l.price > (t.spot || 0));
-    const fibAnchorHigh = (t.fibonacci || {}).anchor_high;
-    const ceilingRefs = (!showSR || hasResistance) ? [] : [
-      { price: q.fifty_two_high, name: '52-week high' },
-    ].filter((c) => c.price && c.price > (t.spot || 0)
-      // Don't double-draw a level another family already covers: the 52-week high
-      // is often the same print as the Fibonacci swing high.
-      && !srLevels.some((l) => Math.abs(l.price / c.price - 1) < 0.005)
-      && !(showFib && fibAnchorHigh && Math.abs(fibAnchorHigh / c.price - 1) < 0.005))
-      .map((c) => ({
-        value: c.price,
-        label: claimLabel(c.price) ? `${c.name} · ${usd(c.price)}. Nothing above this` : '',
-        color: C.refSR,
-        pattern: '6 4',
-      }));
-    let srLabelled = 0;
-    const srRefs = (!showSR ? [] : srLevels).map((l) => {
-      const shouldLabel = srLabelled < 3 && claimLabel(l.price);
-      if (shouldLabel) srLabelled += 1;
-      const role = l.role === 'support' ? 'Support' : 'Resistance';
-      return {
-        value: l.price,
-        label: shouldLabel ? `${role} ${usd(l.price)} · strength ${fmt(l.strength, 0)}` : '',
-        color: C.refSR,
-        pattern: '6 4',
-        emphasis: srLabelled === 1,
-      };
-    });
-    const candleMode = chartMode === 'candle' && ps.open && ps.high && ps.low;
-    // Candles own green and red; in candle mode the averages take hues that
-    // can't be mistaken for a bar's direction.
-    // Candle mode reassigns the averages because the candles themselves own the
-    // aqua/red pair. The mid average used to take violet, which sat ΔE 7 from the
-    // Fibonacci lines — indistinguishable, and worse under colour-vision
-    // simulation. Orange is free in candle mode, so it takes that instead.
-    /* Averages now take their colour and width from the shared style store, so a
-     * change made in the Chart tab's indicator dialog shows up here too.
-     *
-     * That store's DEFAULTS are the collision-checked ones below; a colour the
-     * user picked deliberately wins over them. This is a real trade and worth
-     * naming: the automatic reassignment existed because in candle mode the
-     * candles own the aqua/red pair and the mid average used to land ΔE 7 from
-     * the Fibonacci lines. A hand-picked colour can walk back into that. The
-     * dialog is the place someone is looking at the chart while choosing, so
-     * they will see it — which is more than the old silent reassignment gave
-     * anyone who disagreed with it. */
-    const styleOf = (id) => overlayStyle(id);
-    // One resolver, shared with the Charting tab. See maColorsOnChart: the
-    // hardcoded s1/s2/s4 that used to live here in candle mode is why the same
-    // SMA 20 was a different colour on the two tabs, and why a colour chosen in
-    // the dialog was honoured on one of them and dropped on the other.
-    const maOn = maColorsOnChart(candleMode);
-    const maColors = { fast: maOn.sma20, mid: maOn.sma50, slow: maOn.sma200 };
-
-    // Everything the base chart is already using, so the overlays can take hues
-    // nothing else on this plot has claimed. Collected here rather than assumed,
-    // because candle mode and line mode occupy different slots.
-    // The EMA fan gets its own hue family: fast-to-slow inside one colour would
-    // be indistinguishable, and reusing the SMA colours makes a chart with both
-    // families on unreadable.
-    const emaColors = { fast: maOn.ema9, mid: maOn.ema21, slow: maOn.ema50 };
-    /* Same seed the Charting tab uses. See chartBaseColors: allocation depends
-     * on what is already taken, so two tabs seeding this differently give the
-     * same study two different colours.
-     *
-     * It also fixes a seeding bug of its own. This used to push the EMA colours
-     * only `if (showEMA)`, the family checkbox, while the series array filters
-     * on `seriesDrawn(id)` per average. With EMA 9 on and the family flag off
-     * the allocator never learned s5 was taken and handed it to Bollinger, so
-     * two overlays were drawn in one colour. */
-    const baseColors = chartBaseColors(ps, candleMode, ps.intraday);
-    const overlayPalette = allocateOverlayColors(baseColors);
-    // Kept on STATE so the written explanations below can show the same swatch as
-    // the line on the chart. Recomputing it there would drift the moment the base
-    // colours differ — which they do between line and candle mode.
-    STATE.overlayPalette = overlayPalette;
-
-    mount('legend-price', legend([
-      ...(candleMode
-        // The reader's own candle colours, not s3/s8: those are the defaults
-        // chartColor() returns anyway, and hardcoding them made the key lie
-        // the moment anyone used the Charting tab's colour picker.
-        ? [{ name: ps.weekly ? 'Up week' : 'Up day', color: chartColor('up') },
-          { name: ps.weekly ? 'Down week' : 'Down day', color: chartColor('down') }]
-        : [{ name: 'Close', color: chartColor('line') }]),
-      /* Derived from the same per-average switches as the series, so the
-       * legend cannot name a line that is not on the chart. It previously
-       * dropped the 200 entry on weekly while the series still drew it. */
-      ...(ps.intraday ? [] : [
-        ['sma20', maColors.fast], ['sma50', maColors.mid], ['sma200', maColors.slow],
-      ].filter(([id]) => seriesDrawn(id))
-        .map(([id, color]) => ({ name: maLabel(id, ps), color }))),
-      showFib && !ps.intraday ? { name: 'Fibonacci level', color: C.refFib, dash: true } : null,
-      showSR && !ps.intraday ? { name: 'Support / resistance', color: C.refSR, dash: true } : null,
-      showVbp ? { name: 'Volume by price', color: C.ink2, boxed: true } : null,
-      showInsiders && !ps.intraday ? { name: 'Insider buy', color: C.s3, boxed: true } : null,
-      showInsiders && !ps.intraday ? { name: 'Insider sell', color: C.neg, boxed: true } : null,
-      // One entry per indicator, not per line. Keltner and Donchian each draw
-      // several lines in one colour, and three legend rows reading "Keltner upper /
-      // mid / lower" would be longer than the rest of the legend combined for no
-      // extra information. Six unlabelled lines on the chart is the failure this
-      // avoids — the reader could see them and not know which was VWAP.
-      ...(ps.intraday ? [] : [
-        ['ema9', emaColors.fast], ['ema21', emaColors.mid], ['ema50', emaColors.slow],
-      ].filter(([id]) => seriesDrawn(id))
-        .map(([id, color]) => ({ name: maLabel(id, ps), color }))),
-      // One key per cloud, not one per state. See emaCloudLegend.
-      ...emaCloudLegend(ps),
-      ...(ps.intraday ? [] : indicatorOverlayLegend(overlayPalette)),
-    ].filter(Boolean)));
-    // Daily-derived overlays do not belong on an intraday chart: the averages
-    // are not in the intraday series at all, and the Fib and support levels are
-    // anchored to daily swings. Drawing them here would put lines on the chart
-    // that describe a different timeframe from the one on screen.
-    // Fibonacci and support/resistance are drawn as bands now; only the
-    // resistance ceilings stay as lines, because a 52-week high is a single print
-    // rather than a zone.
-    const overlayRefs = ps.intraday ? [] : [
-      ...ceilingRefs,
-      // Fibs are lines again, not bands — see fibLines for why.
-      ...(showFib ? fibLines((t.fibonacci || {}).levels, t.spot) : []),
-    ];
-    const levelBands = ps.intraday ? [] : [
-      ...(showSR ? srBands(srLevels, (t.volatility || {}).atr14, t.spot) : []),
-    ];
-    const trendSegs = ps.intraday || !showTrends ? []
-      : trendSegments(STATE.trendlines, ps.dates || []);
-    mount('chart-price', (w) => lineChart({
-      width: w,
-      height: 420,
-      // Four lines converge here; the value at the end of each is what a reader
-      // was previously hovering or cross-referencing a tile to find.
-      valueTags: true,
-      labels: ps.dates || [],
-      // Volume rides under the price. The series is already sliced to the
-      // selected timeframe upstream, so it lines up bar-for-bar with the dates.
-      volume: showVol ? (ps.volume || null) : null,
-      // Same colours as the Charting tab, for the reason WS_FLAGS shares the
-      // overlay toggles: these two tabs draw the same instrument, and one of
-      // them showing green candles while the other shows orange would be a
-      // worse outcome than one control reaching both.
-      candleUp: chartColor('up'),
-      candleDown: chartColor('down'),
-      volUp: chartColors.up || null,
-      volDown: chartColors.down || null,
-      // In candle mode the close series is kept but not stroked: the hover
-      // crosshair and tooltip read from the series list, so dropping it would
-      // silently disable them.
-      series: [
-        // In candle mode this series is not stroked — it exists so the crosshair
-        // and tooltip have something to read. It took s1, which the 20-day average
-        // also takes in candle mode, so the tooltip showed two rows with one
-        // swatch. C.ink is outside the categorical slots entirely, which is right
-        // for it: in candle mode it is not another line, it is the price the
-        // candles already draw.
-        { name: 'Close',
-          values: ps.close,
-          color: candleMode ? C.ink : chartColor('line'),
-          hidden: candleMode,
-          fill: !candleMode },
-        /* Per-average switches, matching the Charting tab's Indicators menu —
-         * the flags are shared, so the two tabs cannot disagree about which
-         * averages are on. Labels keep this tab's bar-unit naming. */
-        ...(ps.intraday ? [] : [
-          ['sma20', maLabel('sma20', ps), ps.sma20, maColors.fast],
-          ['sma50', maLabel('sma50', ps), ps.sma50, maColors.mid],
-          ['sma200', maLabel('sma200', ps), ps.sma200, maColors.slow],
-        ].filter(([id]) => seriesDrawn(id)).map(([id, name, values, color]) => ({
-          name, values: values || [], color, width: styleOf(id).width, marker: false,
-        }))),
-        // Selected overlays, drawn on the price axis. Dashed so they read as
-        // something you switched on rather than part of the base chart, and
-        // excluded on intraday for the same reason the daily averages are: they
-        // are computed from daily bars and would describe a different timeframe
-        // from the one on screen.
-        ...(ps.intraday ? [] : [
-          ['ema9', maLabel('ema9', ps), ps.ema9, emaColors.fast],
-          ['ema21', maLabel('ema21', ps), ps.ema21, emaColors.mid],
-          ['ema50', maLabel('ema50', ps), ps.ema50, emaColors.slow],
-        ].filter(([id]) => seriesDrawn(id)).map(([id, name, values, color]) => ({
-          name, values: values || [], color, width: styleOf(id).width, marker: false,
-        }))),
-        ...(ps.intraday ? [] : indicatorOverlaySeries((ps.dates || []).length,
-          overlayPalette)),
-      ],
-      candles: candleMode
-        ? { open: ps.open, high: ps.high, low: ps.low, close: ps.close }
-        : null,
-      refLines: overlayRefs,
-      // Under the levels and under the price, so neither is muted by the fill.
-      clouds: emaClouds(ps),
-      segments: trendSegs,
-      // Both computed from the visible window, so they describe what is on screen.
-      volumeProfile: showVbp ? volumeByPrice(ps) : null,
-      // Supply above, demand below, in the sign colours already used everywhere
-      // else for "sellers waiting" and "buyers waiting". Intraday is excluded for
-      // the same reason the averages are: the zones are derived from daily bases.
-      bands: [
-        ...levelBands,
-        ...(showZones && !ps.intraday ? zoneBands(d.patterns) : []),
-      ],
-      events: (showInsiders && !ps.intraday)
-        ? insiderEvents(ps, ((d.company || {}).ownership || {}).recent_transactions) : null,
-      // Report dates as dashed verticals. `vMarkers`, not `events`: an earnings
-      // date has no direction, so the triangle the insider layer draws would be
-      // claiming one. See earningsMarkers().
-      vMarkers: earningsMarkersFor(ps, STATE.ticker),
-      refLineFit: 'clip',
-      yFormat: (x) => fmt(x, 0),
-      valueFormat: (x) => fmt(x, 2),
-    }));
-
-    // 'clip' drops levels outside the plotted price range — without that, a level
-    // 25% away compresses the actual price action into a band in the middle. But
-    // a silently missing line looks like a bug, so the count is reported.
-    // Mirrors lineChart's own rule (data span plus 16% slack) so the count can't
-    // disagree with what actually got drawn.
-    const priced = (ps.close || []).filter((v) => v !== null && isFinite(v));
-    const dLo = Math.min(...priced);
-    const dHi = Math.max(...priced);
-    const slack = (dHi - dLo) * 0.16;
-    const offScale = overlayRefs.filter(
-      (r) => isFinite(r.value) && (r.value < dLo - slack || r.value > dHi + slack));
-    const note = document.getElementById('chart-price-note');
-    if (note) {
-      const one = offScale.length === 1;
-      note.innerHTML = offScale.length
-        ? `<p class="caveat" style="margin:var(--space-2) 0 0">${offScale.length} level${one ? '' : 's'} ${
-          one ? 'sits' : 'sit'} too far outside the price range on screen to draw, so ${
-          one ? "it isn't" : "they aren't"} shown here: ${one ? 'it is' : 'they are'} still
-          listed in the tables below. Widen the timeframe to bring ${
-          one ? 'it' : 'them'} into view.</p>`
-        : '';
-    }
-  }
+  // See swingPriceBlock. swingRedrawChart calls it again with a new window.
+  swingChartCtx = { t, q, srComputed };
+  swingPriceBlock(d, ps, swingChartCtx);
 
   if ((t.rsi || {}).series) {
     // Same window as the MACD beside it. Two oscillators side by side read as one
@@ -14747,15 +14881,77 @@ function wsApplyWindow(win) {
   return true;
 }
 
+/* ------------------------------------------------- pan and zoom, shared
+ *
+ * One implementation for every chart that wants it, rather than a copy per
+ * view. Three of the four things this session fixed were two implementations of
+ * one idea drifting apart — the Fibonacci lines, the heading name, the panel
+ * identity — so the wheel and the drag resolve their target from a registry
+ * instead of naming `#ws-chart`.
+ *
+ * An adapter is the five things a chart has to be able to answer:
+ *
+ *   enabled()   is this chart interactive right now (right view, data loaded,
+ *               no drawing tool armed, not an intraday series)
+ *   window()    the current window as concrete bar indices, plus the total
+ *   apply(win)  clamp and store it; true when something actually moved
+ *   redraw()    repaint the chart, and anything whose text states the window
+ *
+ * The geometry comes from `svg.chartFrame`, which every chart hangs on its own
+ * node, so pan distance and the zoom anchor cannot disagree with what was
+ * drawn.
+ */
+const CHART_ZOOM = new Map();
+
+function registerChartZoom(hostId, adapter) {
+  CHART_ZOOM.set(hostId, adapter);
+}
+
+function chartZoomTarget(evt) {
+  if (!evt.target || !evt.target.closest) return null;
+  for (const [hostId, adapter] of CHART_ZOOM) {
+    const host = evt.target.closest('#' + hostId);
+    if (!host) continue;
+    if (adapter.enabled && !adapter.enabled()) return null;
+    const svg = host.querySelector('svg.chart');
+    const frame = svg && svg.chartFrame;
+    if (!frame) return null;
+    return { host, svg, frame, adapter };
+  }
+  return null;
+}
+
+/** The bar under the pointer, or null when the pointer is outside the plot. */
+function chartBarUnderCursor(target, evt) {
+  const { svg, frame } = target;
+  const box = svg.getBoundingClientRect();
+  if (!box.width) return null;
+  const scale = box.width / frame.width;
+  const px = (evt.clientX - box.left) / scale;
+  if (px < frame.margin.l || px > frame.margin.l + frame.plotW) return null;
+  return Math.max(0, Math.min(frame.bars - 1, frame.indexAt(px)));
+}
+
+/* Bars per pixel, from the frame rather than from the range and the element
+ * width. The plot is inset by the margins and the SVG is scaled to its box, and
+ * deriving this twice is how a pan ends up tracking slightly off the cursor. */
+function chartBarsPerPixel(target) {
+  const { svg, frame } = target;
+  if (!frame.plotW) return null;
+  const box = svg.getBoundingClientRect();
+  if (!box.width) return null;
+  const plotPx = frame.plotW * (box.width / frame.width);
+  return frame.bars / Math.max(1, plotPx);
+}
+
 document.addEventListener('wheel', (evt) => {
-  if (STATE.view !== 'chart' || !STATE.chartData || STATE.chartData === 'loading') return;
-  const host = evt.target.closest && evt.target.closest('#ws-chart');
-  if (!host) return;
-  const bar = wsBarUnderCursor(evt);
+  const target = chartZoomTarget(evt);
+  if (!target) return;
+  const bar = chartBarUnderCursor(target, evt);
   if (bar === null) return;
   evt.preventDefault();          // the page must not scroll while zooming
 
-  const cur = wsWindowNow(STATE.chartData);
+  const cur = target.adapter.window();
   const span = cur.to - cur.from;
   // 1.15 per notch. Measured against 1.5, which crossed a year of daily bars
   // in three clicks and overshot constantly.
@@ -14765,7 +14961,7 @@ document.addEventListener('wheel', (evt) => {
   const anchorIdx = cur.from + bar;
   const frac = span > 1 ? bar / (span - 1) : 0.5;
   const from = Math.round(anchorIdx - frac * (nextSpan - 1));
-  if (wsApplyWindow({ from, to: from + nextSpan })) wsRedrawChart();
+  if (target.adapter.apply({ from, to: from + nextSpan })) target.adapter.redraw();
 }, { passive: false });
 
 /* Dragging the plot.
@@ -14789,7 +14985,6 @@ function wsBarsPerPixel() {
 let wsPan = null;
 
 document.addEventListener('pointerdown', (evt) => {
-  if (STATE.view !== 'chart' || !STATE.chartData || STATE.chartData === 'loading') return;
   if (evt.button !== 0) return;
   /* Mouse and pen only.
    *
@@ -14799,22 +14994,25 @@ document.addEventListener('pointerdown', (evt) => {
    * moving it. Touch keeps the two-finger measurement it already had, and the
    * navigator strip is still there to move the window. */
   if (evt.pointerType && evt.pointerType !== 'mouse' && evt.pointerType !== 'pen') return;
-  // Shift measures, and an armed tool draws. Both are deliberate acts; panning
-  // is what is left when the reader has not asked for anything in particular.
-  if (evt.shiftKey || wsTool !== 'cursor') return;
-  // A drawing lives in #ws-draw, which is a sibling of #ws-chart — so a hit on
-  // one of its strokes fails this test and the drawing handler keeps the drag.
-  const host = evt.target.closest && evt.target.closest('#ws-chart');
-  if (!host) return;
-  const barsPerPx = wsBarsPerPixel();
+  // Shift measures. An armed drawing tool draws, which each adapter reports
+  // through `enabled`. Both are deliberate acts; panning is what is left when
+  // the reader has not asked for anything in particular.
+  if (evt.shiftKey) return;
+  /* A drawing lives in #ws-draw, a SIBLING of #ws-chart, so a hit on one of its
+   * strokes resolves no zoom target here and the drawing handler keeps the
+   * drag. That is a property of the markup, not of this test. */
+  const target = chartZoomTarget(evt);
+  if (!target) return;
+  const barsPerPx = chartBarsPerPixel(target);
   if (barsPerPx === null) return;
-  const win = wsWindowNow(STATE.chartData);
+  const win = target.adapter.window();
   // Nothing to pan when the whole history is already on screen. Returning here
   // rather than clamping later leaves the cursor alone, so the chart does not
   // offer a grab hand for a gesture that cannot move anything.
   if (win.to - win.from >= win.total) return;
   evt.preventDefault();                   // no text selection dragged over the plot
-  wsPan = { x: evt.clientX, from: win.from, to: win.to, barsPerPx, moved: false };
+  wsPan = { x: evt.clientX, from: win.from, to: win.to, barsPerPx,
+            moved: false, adapter: target.adapter };
   document.body.classList.add('ws-panning');
 });
 
@@ -14826,7 +15024,9 @@ document.addEventListener('pointermove', (evt) => {
   const bars = Math.round((evt.clientX - wsPan.x) * wsPan.barsPerPx);
   if (!bars && !wsPan.moved) return;
   wsPan.moved = true;
-  if (wsApplyWindow({ from: wsPan.from - bars, to: wsPan.to - bars })) wsRedrawChart();
+  if (wsPan.adapter.apply({ from: wsPan.from - bars, to: wsPan.to - bars })) {
+    wsPan.adapter.redraw();
+  }
 });
 
 function wsEndPan() {
@@ -14834,6 +15034,40 @@ function wsEndPan() {
   wsPan = null;
   document.body.classList.remove('ws-panning');
 }
+
+/* The charting workspace as a client of the shared layer. Its own behaviour is
+ * unchanged: the checks that used to sit inline in both handlers are the ones
+ * `enabled` now answers. */
+/* Every chart that pans and zooms, registered in one place.
+ *
+ * Down here, not beside each chart's own code, because `CHART_ZOOM` is a
+ * top-level `const` and these calls run at parse time. Registering from further
+ * up the file threw "Cannot access 'CHART_ZOOM' before initialization" — the
+ * temporal dead zone — which killed the rest of the script and left every view
+ * blank. The functions each adapter calls are function DECLARATIONS, so those
+ * hoist and can live next to the chart they belong to.
+ *
+ * It also reads better as a list: this is the answer to "which charts respond
+ * to the wheel".
+ */
+registerChartZoom('ws-chart', {
+  enabled: () => STATE.view === 'chart' && !!STATE.chartData
+    && STATE.chartData !== 'loading' && wsTool === 'cursor',
+  window: () => wsWindowNow(STATE.chartData),
+  apply: (win) => wsApplyWindow(win),
+  redraw: () => wsRedrawChart(),
+});
+
+/* The Options price chart. Declines intraday: that series arrives from its own
+ * endpoint already scoped to the session, and swingWindow indexes the
+ * daily/weekly one, so the wheel does nothing rather than appearing to. */
+registerChartZoom('chart-price', {
+  enabled: () => STATE.view === 'swing' && !!STATE.swing
+    && !isIntradayRange(chartRange),
+  window: () => swingWindowNow(STATE.swing),
+  apply: (win) => swingApplyWindow(win),
+  redraw: () => swingRedrawChart(),
+});
 document.addEventListener('pointerup', wsEndPan);
 document.addEventListener('pointercancel', wsEndPan);
 
