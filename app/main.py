@@ -875,6 +875,38 @@ async def home_summary() -> Dict[str, Any]:
     return await _run(build)
 
 
+# Today's desk prose, written once and shared. Keyed on the Eastern date, which
+# is what makes an AI-written note affordable at all: the home page is the most
+# requested endpoint in the app, and a call per view would be a call per reader.
+_DESK_PROSE: Dict[str, Any] = {}
+
+
+def _desk_prose(desk: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The written voice for today, or None to keep the deterministic one.
+
+    Cached on the date and nothing else, including the failure: if the model is
+    unavailable at 9am the page does not retry it on every request for the rest
+    of the day. `None` is a legitimate answer here rather than an error, because
+    `morning_desk.build` has already written a correct note.
+    """
+    day = desk.get("date")
+    if not day:
+        return None
+    if day in _DESK_PROSE:
+        return _DESK_PROSE[day]
+    try:
+        prose = ai.write_morning_desk(desk)
+    except Exception as exc:                                    # noqa: BLE001
+        logging.getLogger("uvicorn.error").warning(
+            "morning desk prose unavailable: %s", exc)
+        prose = None
+    # One day at a time. Yesterday's note is of no use to anyone and holding it
+    # would grow this dict for the life of the process.
+    _DESK_PROSE.clear()
+    _DESK_PROSE[day] = prose
+    return prose
+
+
 def _morning_desk(macro: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """Today's desk, from panels already built plus the rate path.
 
@@ -917,8 +949,22 @@ def _morning_desk(macro: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     except Exception:                                           # noqa: BLE001
         stories = None
 
-    return morning_desk_mod.build(macro=macro, events=events_out, rate=rate,
+    desk = morning_desk_mod.build(macro=macro, events=events_out, rate=rate,
                                   stories=stories)
+
+    # The prose is an overlay, never a replacement. Every figure in `desk` stays
+    # exactly as assembled, so the note and the strip above it cannot disagree,
+    # and a section the model declines to write keeps the deterministic one.
+    desk["voice"] = "mechanical"
+    prose = _desk_prose(desk)
+    if prose:
+        desk["voice"] = "written"
+        desk["written_by"] = prose.get("written_by")
+        desk["lead"] = prose["lead"]
+        for key in ("scenarios", "note", "overall"):
+            if prose.get(key):
+                desk[key] = prose[key]
+    return desk
 
 
 def _home_read() -> Optional[Dict[str, Any]]:

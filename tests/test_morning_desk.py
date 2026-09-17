@@ -312,3 +312,73 @@ def test_the_prose_has_a_measure():
     """A paragraph across the full 908px block is about 160 characters a line."""
     assert "--md-measure" in CSS
     assert ".md-p" in CSS and "max-width: var(--md-measure)" in CSS
+
+
+# ------------------------------------------------------------- written voice
+
+
+def test_the_prose_writer_declines_without_credentials():
+    """None is a legitimate answer, not an error: `build` has already written a
+    correct note and this only replaces the prose."""
+    from app import ai
+    assert ai.write_morning_desk({"date": "2026-09-17"}) is None
+
+
+def test_the_prompt_forbids_the_figures_this_terminal_does_not_have():
+    """The desk's whole claim is that a release is compared against its own
+    prior print, because surveyed expectations are licensed and absent here. A
+    model given a rate figure will reach for "expected" unless told not to."""
+    from app.ai import DESK_PROMPT
+    low = DESK_PROMPT.lower()
+    assert "only the figures in the data block" in low
+    assert "consensus" in low and "do not invent" in low
+    assert "no em dashes" in low
+    for banned in ("price target", "when to enter"):
+        assert banned in low
+    # And it must not promote basis points priced into a month into odds.
+    assert "do not promote it to a probability" in low
+
+
+def test_the_prompt_asks_for_the_samples_five_moves():
+    from app.ai import DESK_PROMPT
+    low = DESK_PROMPT.lower()
+    for section in ("setting the tone", "branches", "note:", "releases", "synthesis"):
+        assert section in low
+    assert '"lead"' in DESK_PROMPT and '"scenarios"' in DESK_PROMPT
+
+
+def test_the_prose_is_an_overlay_and_never_touches_a_figure():
+    """So the desk and the strip above it cannot disagree. The model is given
+    the assembled payload and may rewrite four prose keys; everything else,
+    including `rate_path` and `tape`, stays exactly as built."""
+    main_src = open("app/main.py").read()
+    block = main_src[main_src.index("def _morning_desk("):]
+    block = block[:block.index("\ndef _home_read")]
+    code = _code(block)
+    assert 'desk["voice"] = "mechanical"' in code, "the default is the safe one"
+    assert 'for key in ("scenarios", "note", "overall"):' in code
+    assert 'desk["lead"] = prose["lead"]' in code
+    for untouchable in ("rate_path", "tape", "limits", "calendar"):
+        assert 'desk["{}"] = prose'.format(untouchable) not in code
+
+
+def test_the_prose_is_written_once_a_day_and_the_failure_is_cached_too():
+    """The home page is the most requested endpoint here, so a call per view
+    would be a call per reader. Caching the failure matters as much: an
+    unavailable model at 9am must not be retried on every request all day."""
+    main_src = open("app/main.py").read()
+    block = main_src[main_src.index("def _desk_prose("):]
+    block = block[:block.index("\ndef _morning_desk")]
+    code = _code(block)
+    assert "if day in _DESK_PROSE:" in code
+    assert "_DESK_PROSE[day] = prose" in code
+    assert "_DESK_PROSE.clear()" in code, "one day at a time, or it grows forever"
+
+
+def test_the_reader_is_told_which_voice_wrote_it():
+    fn = APP_JS[APP_JS.index("function morningDesk(data)"):]
+    fn = fn[:fn.index("\nfunction whatMattersNow")]
+    assert "d.voice === 'written'" in fn
+    assert "Written for today by" in fn
+    assert "not configured on this deployment" in fn
+    assert ".md-voice" in CSS

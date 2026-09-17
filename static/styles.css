@@ -12481,3 +12481,13 @@ body.chat-full .rp { display: none; }
   color: var(--ink-muted);
   margin-bottom: var(--space-1);
 }
+
+/* Which voice wrote the desk. Sits with the limits because that is the same
+   kind of fact: not a caveat about the numbers, which are identical either way,
+   but about how the sentences around them were produced. */
+.md-voice {
+  margin: var(--space-2) 0 0;
+  font-size: var(--t-caption);
+  line-height: 1.6;
+  color: var(--ink-muted);
+}

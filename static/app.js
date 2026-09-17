@@ -5700,6 +5700,15 @@ function morningDesk(data) {
       ${(d.limits || []).length ? `<div class="md-limits">
         <span class="md-limits-h">What this does not tell you</span>
         <ul>${(d.limits || []).map((l) => `<li>${gloss(l)}</li>`).join('')}</ul>
+        ${/* Which voice wrote it, stated rather than left to be guessed.
+             The figures are identical either way: the prose is an overlay and
+             the numbers come from the same payload as the strip above. What
+             differs is whether the sentences were written for today or assembled
+             from templates that branch on it, and a reader deciding how much to
+             read into the phrasing should know which. */''}
+        <p class="md-voice">${d.voice === 'written'
+    ? `Written for today by ${esc(d.written_by || 'the assistant')} from the figures above and nothing else.`
+    : 'Assembled from the figures above. The written version needs the assistant, which is not configured on this deployment.'}</p>
       </div>` : ''}
     </section>`;
 }

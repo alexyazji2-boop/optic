@@ -1347,6 +1347,127 @@ short clause, sentence case, no markdown. Paragraphs may use **bold** for a figu
 "## Heading" lines for the sections."""
 
 
+DESK_PROMPT = """You write the morning desk note for a self-directed trader who \
+reads it in two minutes before the open.
+
+Voice: a person talking, not a report generating. Lead with what actually happened \
+and why it matters, in that order. Connect the dots: a rate market that has already \
+priced a move plus a tape that has not reacted is one story, and saying so is the \
+whole point. Occasional ellipses for pacing are fine. Plain words over desk jargon.
+
+Structure, in this order, and every section is optional if the data does not support it:
+- Two or three short paragraphs on the one thing setting the tone, and where the tape \
+stands against it.
+- The branches that thing could take, as labelled conditions. Two or three of them. \
+Write them as "if X, then Y could" and never as a prediction of which happens.
+- One "Note:" paragraph correcting whatever those branches invite a reader to get \
+wrong. The DATA block's own `note` field is the correction to make.
+- The releases, each against its own previous print.
+- One closing paragraph of synthesis that says which part of the day to distrust.
+
+Hard rules, because this is published unedited:
+- Use ONLY the figures in the DATA block. Every number you write must appear there.
+- Do not invent a consensus estimate, a forecast, an analyst view or a Fed comment. \
+This terminal carries no surveyed expectations, so a release is compared against its \
+own prior print and never against what anyone expected.
+- If the DATA block says a figure is basis points priced into a month rather than the \
+odds on a meeting, say it that way. Do not promote it to a probability.
+- No price targets, no telling the reader what to buy, sell, size or when to enter. \
+Describe what a level means and stop.
+- No em dashes.
+- If the data is thin, write a shorter note. Do not pad a quiet day into a busy one.
+- No preamble and no sign-off.
+
+Return JSON only:
+{"lead": ["...", "..."], "scenarios": [{"label": "...", "text": "..."}],
+ "note": "...", "overall": "..."}
+The lead is two or three paragraphs. Scenarios may be an empty list. Plain text, no \
+markdown."""
+
+
+def write_morning_desk(facts: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The desk note in prose, or None to keep the deterministic one.
+
+    Same economics as `write_morning_read`: one call per Eastern day, shared by
+    every reader, because the desk is assembled server-side and cached.
+
+    The fallback is not a degraded mode. `morning_desk.build` already writes the
+    whole note from templates that branch on what is actually happening, and it
+    is correct if drier; this only replaces the prose. So None is returned for
+    anything that would put an untrustworthy sentence on the home page: no
+    credentials, a refused call, malformed JSON, or an empty lead.
+
+    What it is NOT allowed to do is change a figure. The prompt forbids inventing
+    one and the caller keeps every number in `facts` alongside the prose, so a
+    reader compares them and the panel cannot quietly disagree with the strip
+    above it.
+    """
+    try:
+        from anthropic import Anthropic
+    except ImportError:
+        log.warning("morning desk prose skipped: anthropic package not importable")
+        return None
+    status = available()
+    if status.get("enabled") is not True:
+        log.warning("morning desk prose skipped: assistant not enabled (source=%s)",
+                    status.get("credential_source"))
+        return None
+    try:
+        client = Anthropic(max_retries=3)
+    except Exception as exc:                                    # noqa: BLE001
+        log.warning("morning desk prose skipped: client construction failed: %s: %s",
+                    type(exc).__name__, exc)
+        return None
+
+    body = json.dumps(_prune(facts), default=str)[:60000]
+    try:
+        msg = client.messages.create(
+            model=MODEL,
+            max_tokens=1600,
+            system=[{"type": "text", "text": DESK_PROMPT}],
+            messages=[{"role": "user", "content": "DATA:\n" + body}],
+        )
+    except Exception as exc:                                    # noqa: BLE001
+        log.warning("morning desk prose failed: %s: %s", type(exc).__name__, exc)
+        return None
+
+    text = "".join(getattr(b, "text", "") for b in (msg.content or []))
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end <= start:
+        log.warning("morning desk prose skipped: no JSON in %d chars", len(text))
+        return None
+    try:
+        # strict=False for the same reason as the morning note: the model writes
+        # multi-line paragraphs and the strict parser rejects the raw newlines
+        # inside them, which failed silently on otherwise well-formed JSON.
+        parsed = json.loads(text[start:end + 1], strict=False)
+    except ValueError as exc:
+        log.warning("morning desk prose unparseable: %s", exc)
+        return None
+
+    lead = [str(x).strip() for x in (parsed.get("lead") or []) if str(x).strip()]
+    if not lead:
+        log.warning("morning desk prose skipped: parsed but lead empty")
+        return None
+
+    scenarios = []
+    for row in (parsed.get("scenarios") or []):
+        if not isinstance(row, dict):
+            continue
+        label = str(row.get("label") or "").strip()
+        body_text = str(row.get("text") or "").strip()
+        if label and body_text:
+            scenarios.append({"label": label, "text": body_text})
+
+    return {
+        "lead": lead,
+        "scenarios": scenarios,
+        "note": str(parsed.get("note") or "").strip() or None,
+        "overall": str(parsed.get("overall") or "").strip() or None,
+        "written_by": MODEL,
+    }
+
+
 def write_morning_read(facts: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """A written morning note from the brief's own numbers, or None.
 
