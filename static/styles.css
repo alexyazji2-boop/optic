@@ -1953,10 +1953,21 @@ body.chat-resizing svg { pointer-events: none; }
    the brand, the search box and the three controls on the right. Raised from
    1280 when the strip was changed to nowrap: it has no wrap left to fall back
    on, so this number is the only thing standing between a slightly wider label
-   and the tabs running underneath Pulse. The inline row measures 1433px. */
-@media (max-width: 1435px) {
+   and the tabs running underneath Pulse. The inline row measures 1400px. */
+@media (max-width: 1410px) {
   header.topbar { flex-wrap: wrap; row-gap: var(--space-2); }
   nav.tabs { order: 3; flex: 1 0 100%; margin-left: 0; overflow-x: auto; }
+  /* Re-asserted at higher specificity, and it is not the duplicate it looks
+     like. `nav.tabs-group { flex: none; min-width: auto }` fires unconditionally
+     further down the file to hold the strip on one row, and against
+     `nav.tabs` it is equal specificity and later source, so it wins here too.
+     What that produced: `order: 3` still applied, so the strip moved to the end
+     of the row, but `flex: 1 0 100%` did not, so it never took a line of its
+     own. Measured at 1410 with the whole row needing 1400: everything fitted,
+     nothing wrapped, and the tabs rendered to the right of Pulse.
+     `nav.tabs.tabs-group` is two classes to one and wins on specificity rather
+     than on position. */
+  nav.tabs.tabs-group { flex: 1 0 100%; min-width: 0; }
   /* The tab strip drops to its own row here, so it no longer claims the free
      space on row one. The gear takes over that job and keeps Pulse beside it —
      without this the gear was stranded next to the Load button. */
@@ -5618,9 +5629,25 @@ details.ind-explain[open] > summary .cal-caret { transform: rotate(90deg); }
  * which is what the old note here claimed it already was.
  */
 .nav-item { position: relative; display: inline-flex; }
+/* Out of the flow, in the corner it already appeared in.
+ *
+ * It was inline with `margin-left: var(--space-2)`, so a tab with a menu was
+ * 16px wider than one without and the strip's rhythm alternated: measured at
+ * 1500, the ink gap ran 20px between Home and Dossier, 37px between Dossier and
+ * Compare, 20px, then 37px again after Market. Two of seven tabs carrying a
+ * caret is what made it read as uneven spacing rather than as a wider button.
+ *
+ * Absolute against the button, which `nav.tabs button { position: relative }`
+ * already sets up. The caret sits in the top-right padding corner, which is
+ * where the old inline box ended up anyway once the flex row placed a 7x4
+ * element in a 40px-tall button. Nothing moves visually; the 16px it used to
+ * claim in the layout goes back to the row, so every gap is the two buttons'
+ * padding and nothing else. */
 .nav-caret {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
   width: 0; height: 0;
-  margin-left: var(--space-2);
   border-left: 3.5px solid transparent;
   border-right: 3.5px solid transparent;
   border-top: 4px solid currentColor;

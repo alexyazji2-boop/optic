@@ -296,3 +296,68 @@ def test_statistical_notation_keeps_its_case():
     # the newline lands on a rule whose whole body is `white-space: normal`.
     rule = CSS[CSS.index("\ntable.data th {"):]
     assert "text-transform: uppercase" in rule[:rule.index("}")]
+
+
+def test_the_tab_strip_spaces_its_labels_evenly():
+    """Two of the seven tabs carry a dropdown caret, and the caret used to be
+    inline with `margin-left: var(--space-2)`. So a tab with a menu was 16px
+    wider than one without and the rhythm alternated: measured at 1500, the ink
+    gap ran 20px between Home and Dossier, 37px between Dossier and Compare,
+    then 20px and 37px again. It read as uneven spacing rather than as a wider
+    button, which is what it was.
+
+    Absolute against the button, which `nav.tabs button { position: relative }`
+    already sets up, and in the top-right corner the inline box ended up in
+    anyway. Nothing moves visually and every gap becomes the two buttons'
+    padding and nothing else.
+    """
+    rule = CSS[CSS.index("\n.nav-caret {"):]
+    rule = rule[:rule.index("}")]
+    assert "position: absolute" in rule
+    assert "margin-left" not in rule, \
+        "an inline caret is 16px of width on two tabs out of seven"
+    # The positioned ancestor has to exist, or absolute resolves to the page.
+    assert "nav.tabs button { position: relative; }" in CSS
+
+
+def test_the_strip_padding_is_the_only_thing_between_labels():
+    """Which is what makes the gaps equal: one padding value, no per-tab extras,
+    and no flex gap doubling up on it."""
+    rule = CSS[CSS.index("\nnav.tabs button {"):]
+    rule = rule[:rule.index("}")]
+    assert "padding: var(--space-2) var(--space-2);" in rule
+    nav = CSS[CSS.index("\nnav.tabs {"):]
+    nav = nav[:nav.index("}")]
+    assert "gap: 0;" in nav
+
+
+def test_the_own_row_rule_outranks_the_one_row_rule():
+    """Specificity, not source order, and that is the whole point.
+
+    `nav.tabs-group { flex: none; min-width: auto }` fires unconditionally to
+    hold the strip on one row. Against the width query's `nav.tabs { flex: 1 0
+    100% }` it is equal specificity and later in the file, so it won there too:
+    `order: 3` still moved the strip to the end of the row, `flex: 1 0 100%`
+    never applied, and it therefore never took a line of its own. Measured at
+    1410 with the row needing 1400, everything fitted, nothing wrapped, and the
+    tabs rendered to the right of Pulse.
+
+    `nav.tabs.tabs-group` is two classes to one, so it wins wherever it applies
+    regardless of position. Anything that re-broadens that selector brings the
+    bug back.
+    """
+    block = CSS[CSS.index("@media (max-width: 1410px) {"):]
+    block = block[:block.index("\n}")]
+    assert "nav.tabs.tabs-group { flex: 1 0 100%; min-width: 0; }" in block
+    assert "order: 3" in block, "and it still has to move to the end of the row"
+
+
+def test_the_breakpoint_covers_what_the_inline_row_needs():
+    """The two numbers have to stay in step: the strip has no wrap left to
+    absorb an overflow, so below the breakpoint it must take its own row and
+    above it the row must actually fit. Re-measure both together."""
+    assert "@media (max-width: 1410px) {" in CSS
+    # The measurement is recorded next to the rule so it can be checked.
+    marker = CSS[CSS.index("@media (max-width: 1410px) {") - 700:
+                 CSS.index("@media (max-width: 1410px) {")]
+    assert "1400px" in marker, "the measured requirement has to be written down"

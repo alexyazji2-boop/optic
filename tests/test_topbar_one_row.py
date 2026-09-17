@@ -22,10 +22,17 @@ import re
 
 CSS = open("static/styles.css", encoding="utf-8").read()
 
-# The width the inline header measured, in the browser, after this change. The
-# breakpoint has to be at least this or there is a band of viewports where the
-# strip is inline and does not fit.
-MEASURED_INLINE_WIDTH = 1428
+# The width the inline header measured, in the browser, after the last change to
+# it. The breakpoint has to be at least this or there is a band of viewports
+# where the strip is inline and does not fit.
+#
+# 1653 as it shipped, 1428 once the padding, gaps and search box came down, and
+# 1400 after the dropdown carets were taken out of the layout flow to even up
+# the spacing between tabs. This assertion caught that last one: the
+# requirement dropped and this number did not, which is the drift it exists for.
+# Re-measure in a browser rather than adjusting it to whatever makes the test
+# pass; the sum of the header's children plus its gaps and padding is the figure.
+MEASURED_INLINE_WIDTH = 1400
 
 # What the placeholder "Search or ask  ⌘K" measures in this font at this
 # tracking, plus the input's own padding and border. Below it the field starts
