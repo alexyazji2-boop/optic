@@ -888,6 +888,43 @@ def _capacity(equity: float, book: Optional[str] = None) -> Dict[str, Any]:
     }
 
 
+def reset(clear_scans: bool = True) -> Dict[str, Any]:
+    """Wipe every book back to its starting capital. Irreversible.
+
+    `equity_for` is `START_EQUITY + realised P&L`, with no equity table behind
+    it, so removing the rows *is* the reset: each book returns to exactly
+    $100,000 with nothing open and nothing closed.
+
+    Why this exists at all. The three books are presented as the same scan under
+    three sets of rules, so that comparing them says what a risk tolerance costs.
+    That claim needs a common start date, and for twelve scans it did not have
+    one: the capacity gates measured the balanced book and ended the candidate
+    loop for everyone, so conservative was never offered a name while the other
+    two built positions. Fixing the gate does not fix the record, because
+    conservative would still be starting from today against two books holding
+    a fortnight of trades.
+
+    The scans table goes too by default. It is the audit trail of what the
+    scanner did, and keeping it across a reset leaves scan records whose
+    positions no longer exist, which reads as data loss rather than as a reset.
+    """
+    before = {
+        "positions": len(_rows("SELECT id FROM positions")),
+        "scans": len(_rows("SELECT id FROM scans")),
+    }
+    with _LOCK, _connect() as conn:
+        conn.execute("DELETE FROM positions")
+        if clear_scans:
+            conn.execute("DELETE FROM scans")
+    return {
+        "reset": True,
+        "removed": {"positions": before["positions"],
+                    "scans": before["scans"] if clear_scans else 0},
+        "start_equity": _f(START_EQUITY, 2),
+        "books": {b: _f(equity_for(b), 2) for b in BOOK_IDS},
+    }
+
+
 def _books_with_room(opened_by_book: Optional[Dict[str, int]] = None):
     """`(books that can still take a position, reason if none can)`.
 
