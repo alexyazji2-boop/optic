@@ -618,15 +618,24 @@ header.topbar {
   border-radius: var(--r-md);
 }
 .search input {
-  /* Widened from 130px once, because the placeholder then named company names
-     and truncated mid-word to "TICKER OR COI" — advertising a capability while
-     visibly failing to fit the sentence describing it. That placeholder is now
-     "Search or ask  ⌘K", which measures 189px in this font at this tracking, so
-     210 was 21px of slack behind a shorter string. 195 keeps six of them and
-     returns the rest to the row, which needed it to hold one line. Re-measure
-     before shortening this again: under 189 the rule above starts being true
-     once more. */
-  width: 195px;
+  /* Width and type size are one decision here, because the thing being fitted is
+     a fixed string in a tracked uppercase face.
+     "SEARCH OR ASK  ⌘K" renders 186px at the inherited 17.25px, and 30px of
+     padding and border puts the box at 216px to show it. So 210 never did: it
+     clipped the K, and 195 — picked off a measurement taken before
+     `text-transform` was applied, which is the mistake — clipped 21px and lost
+     the shortcut hint entirely.
+     Dropping to the body size needs 191px instead of 216, which is what lets
+     this box both hold its own placeholder and leave the row enough width to
+     stay on one line. A search field is the one control here that gains nothing
+     from being the largest type in the bar.
+     Re-measure if the placeholder or the face changes, and measure it by
+     putting the placeholder in as a *value* and comparing scrollWidth to
+     clientWidth. Measuring a probe span is what produced both wrong numbers
+     here: once by forgetting `text-transform`, once by trusting the `font`
+     shorthand. The real minimum at this size is 191px; 200 leaves nine. */
+  width: 200px;
+  font-size: var(--t-body);
   padding: var(--space-2) var(--space-3);
   background: var(--surface);
   border: 1px solid var(--border-strong);
@@ -1909,8 +1918,8 @@ body.chat-resizing svg { pointer-events: none; }
    the brand, the search box and the three controls on the right. Raised from
    1280 when the strip was changed to nowrap: it has no wrap left to fall back
    on, so this number is the only thing standing between a slightly wider label
-   and the tabs running underneath Pulse. The inline row measures 1408px. */
-@media (max-width: 1430px) {
+   and the tabs running underneath Pulse. The inline row measures 1433px. */
+@media (max-width: 1435px) {
   header.topbar { flex-wrap: wrap; row-gap: var(--space-2); }
   nav.tabs { order: 3; flex: 1 0 100%; margin-left: 0; overflow-x: auto; }
   /* The tab strip drops to its own row here, so it no longer claims the free
@@ -2093,28 +2102,6 @@ body.chat-resizing svg { pointer-events: none; }
    unconditionally — those are the parts that change during a day. What is
    behind the button is a fixed timetable and a paragraph explaining it, which
    is reference, not news. */
-.ses-detail-btn {
-  display: inline-block;
-  margin-top: var(--space-2);
-  /* 44px, like every other control. This was space-0 (2px) vertical, which
-     made a 17px-tall button. */
-  min-height: 44px;
-  padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  background: none;
-  color: var(--ink-muted);
-  font: 400 var(--t-caption)/1.6 var(--sans);
-  cursor: pointer;
-  transition: color var(--dur-ui) var(--ease-ui),
-              border-color var(--dur-ui) var(--ease-ui);
-}
-.ses-detail-btn:hover { color: var(--ink); border-color: var(--ink-muted); }
-/* Not `hidden`: this element has no author `display` of its own, but the
-   rule below gives it one, and an author display beats the UA stylesheet's
-   [hidden] whatever the specificity. A class is the honest mechanism here. */
-.ses-detail { display: none; }
-.ses-detail.is-open { display: block; }
 
 .ses-desc {
   margin-top: var(--space-2);
@@ -12207,4 +12194,125 @@ a.cc-story-t:focus-visible { color: var(--ink-2); text-decoration: underline; }
      thing on the screen, which is what the brief asks for; it is just the one
      that is always there rather than a second copy on one view. */
   .home-search { display: none; }
+}
+
+/* ===================================================== report a problem ====
+ *
+ * Fixed bottom right on every view. It replaced a link that opened a prefilled
+ * GitHub issue, which meant a reader had to hold a GitHub account and sign in
+ * to it before they could say a chart was wrong. Almost nobody will, and the
+ * readers whose problems most need hearing are exactly the ones who will not.
+ *
+ * Small on purpose. This sits over the page permanently, so it is a pill and a
+ * four-row textarea rather than a modal: a dialog that dims the terminal to ask
+ * one question is louder than the question.
+ */
+.rp {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: 45;                    /* under the topbar (50) and Pulse (60) */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+/* Out of Pulse's way when it is docked, rather than underneath it. `--chat-w`
+   is published by installChatResize, so this tracks a drag in real time. */
+body.chat-open .rp { right: calc(var(--chat-w, 382px) + var(--space-4)); }
+/* Pulse covering the screen leaves nowhere to sit, so it stands down. */
+body.chat-full .rp { display: none; }
+
+.rp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  color: var(--ink-2);
+  font: 500 var(--t-body)/1 var(--sans);
+  cursor: pointer;
+  box-shadow: 0 6px 20px var(--shadow-ink);
+  transition: color var(--dur-ui) var(--ease-ui),
+              border-color var(--dur-ui) var(--ease-ui),
+              background-color var(--dur-ui) var(--ease-ui);
+}
+.rp-btn:hover {
+  color: var(--ink);
+  border-color: var(--ink-muted);
+  background: var(--bg-hover);
+}
+.rp-icon { width: 17px; height: 17px; flex: none; }
+
+.rp-panel {
+  width: 310px;
+  padding: var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: 0 16px 40px var(--shadow-ink);
+}
+/* An author `display` beats the UA stylesheet's [hidden], whatever the
+   specificity, so the pair is mandatory. `.set-pw` shipped without it once and
+   rendered its password form open on every visit to Settings. */
+.rp-panel[hidden] { display: none; }
+
+.rp-title {
+  margin: 0 0 var(--space-2);
+  font: 600 var(--t-lead)/1.3 var(--sans);
+  color: var(--ink);
+}
+.rp-label {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-size: var(--t-caption);
+  color: var(--ink-muted);
+}
+.rp-text {
+  width: 100%;
+  padding: var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--plane);
+  color: var(--ink);
+  font: 400 var(--t-body)/1.5 var(--sans);
+  resize: vertical;
+}
+.rp-text:focus { outline: 2px solid var(--s1); outline-offset: 1px; }
+
+.rp-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+/* The count takes the slack so the two buttons stay together on the right. */
+.rp-count { flex: 1 1 auto; font-size: var(--t-caption); color: var(--ink-muted); }
+
+.rp-note {
+  margin: var(--space-2) 0 0;
+  font-size: var(--t-caption);
+  line-height: 1.5;
+}
+.rp-note.is-ok { color: var(--pos); }
+.rp-note.is-bad { color: var(--neg); }
+.rp-note:empty { display: none; }
+
+.rp-caveat {
+  margin: var(--space-2) 0 0;
+  font-size: var(--t-caption);
+  line-height: 1.5;
+  color: var(--ink-muted);
+}
+
+/* A phone has no room for a 310px card beside the page, so it spans the width
+   it has. Still not a modal: the page behind it is untouched. */
+@media (max-width: 559px) {
+  .rp { left: var(--space-3); right: var(--space-3); bottom: var(--space-3); }
+  body.chat-open .rp { right: var(--space-3); }
+  .rp-panel { width: auto; }
 }

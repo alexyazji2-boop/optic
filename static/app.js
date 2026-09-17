@@ -2592,10 +2592,15 @@ function installChatResize() {
   });
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', installChatResize);
-} else {
+function installFixedChrome() {
   installChatResize();
+  installReportPanel();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', installFixedChrome);
+} else {
+  installFixedChrome();
 }
 
 function trackTopbarHeight() {
@@ -3093,7 +3098,7 @@ function renderHomeStatus(health) {
     '<span>Greeks computed locally via Black-Scholes. Analysis only, not investment advice.</span>',
     /* A pointer to the control in Settings, not a second copy of it. The gear is
        on every view, so one destination stays one destination. */
-    '<span class="dot-sep"><button type="button" class="foot-link" data-goto-settings>Report an issue</button></span>',
+    '<span class="dot-sep"><button type="button" class="foot-link" data-open-report>Report a problem</button></span>',
   ].join('');
 }
 
@@ -18280,39 +18285,135 @@ function renderRoth(d) {
 
 /* ================================================================= SETTINGS */
 
-/* Report an issue.
+/* Report a problem.
  *
- * A prefilled GitHub issue rather than a form that posts somewhere. There is no
- * mail sender configured in this build, and a stored-feedback table would be an
- * unauthenticated free-text write with no rate limiting behind it, which is a
- * spam surface rather than a feature. This has no backend, no storage and no
- * new attack surface, and the reader sees exactly what they are sending before
- * they send it.
+ * This was a link that opened a prefilled GitHub issue. The argument for it was
+ * that there was no mail sender in this build and that a stored-feedback table
+ * would be an unauthenticated free-text write with no rate limiting behind it.
+ * The first half was simply wrong: `app/auth/mailer.py` has sent the
+ * verification and reset mail all along. The second half was a real objection
+ * and is answered rather than dodged, on the server: a length cap, ten reports
+ * an hour per address, and a row that no reader can read back.
  *
- * The diagnostics are the four things that make a report actionable and that
- * nobody thinks to include: which build, which page, which symbol, how wide the
- * window was. Deliberately NOT the user agent or anything identifying; the
- * three lines below are enough to reproduce most of what gets reported here.
+ * What it cost was the only thing that mattered. A reader who has just watched
+ * a chart draw the wrong average had to hold a GitHub account, sign in to it,
+ * and post in public before they could say so. That is not a feedback channel,
+ * it is a filter that passes contributors and stops readers.
+ *
+ * The context line is the four things that make a report reproducible and that
+ * nobody thinks to include: build, page, symbol, window size. It goes in the
+ * message body where the reader can see it, because the alternative is a hidden
+ * payload attached to something they wrote.
  */
-const REPORT_REPO = 'alexyazji2-boop/optic';
-
-function reportIssueUrl() {
+function reportContextLine() {
   const build = ((STATE.health || {}).commit) || 'unknown';
-  const body = [
-    '### What happened', '', '', '',
-    '### What you expected instead', '', '', '',
-    '---',
-    '_Filled in automatically:_', '',
-    '- Build: `' + build + '`',
-    '- Page: `' + (STATE.view || 'unknown') + '`',
-    '- Symbol: `' + (STATE.ticker || 'none loaded') + '`',
-    '- Window: `' + (typeof window !== 'undefined'
-      ? window.innerWidth + 'x' + window.innerHeight : 'unknown') + '`',
-  ].join('\n');
-  return 'https://github.com/' + REPORT_REPO + '/issues/new'
-    + '?labels=' + encodeURIComponent('from the app')
-    + '&title=' + encodeURIComponent('')
-    + '&body=' + encodeURIComponent(body);
+  const size = typeof window !== 'undefined'
+    ? window.innerWidth + 'x' + window.innerHeight : 'unknown';
+  return ['Build: ' + build,
+    'Page: ' + (STATE.view || 'unknown'),
+    'Symbol: ' + (STATE.ticker || 'none loaded'),
+    'Window: ' + size].join(' | ');
+}
+
+/* Opened from the pill, from Settings and from the footer, so the three cannot
+ * drift into three different forms. */
+function openReportPanel() {
+  const panel = $('#rp-panel');
+  const btn = $('#rp-open');
+  if (!panel || !btn) return;
+  panel.hidden = false;
+  btn.setAttribute('aria-expanded', 'true');
+  const box = $('#rp-text');
+  if (box) box.focus();
+  reportCount();
+}
+
+function closeReportPanel() {
+  const panel = $('#rp-panel');
+  const btn = $('#rp-open');
+  if (!panel || !btn) return;
+  panel.hidden = true;
+  btn.setAttribute('aria-expanded', 'false');
+}
+
+function reportCount() {
+  const box = $('#rp-text');
+  const out = $('#rp-count');
+  if (!box || !out) return;
+  const left = 2000 - box.value.length;
+  /* Silent until it is nearly a problem. A counter that watches you type from
+     the first character is noise on a box almost nobody fills. */
+  out.textContent = left <= 300 ? left + ' left' : '';
+}
+
+async function sendReport() {
+  const box = $('#rp-text');
+  const note = $('#rp-note');
+  const send = $('#rp-send');
+  if (!box || !note || !send) return;
+
+  const text = (box.value || '').trim();
+  if (!text) {
+    note.className = 'rp-note is-bad';
+    note.textContent = 'Type what went wrong first.';
+    box.focus();
+    return;
+  }
+
+  send.disabled = true;
+  note.className = 'rp-note';
+  note.textContent = 'Sending.';
+  try {
+    const res = await fetch('/api/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: text + '\n\n' + reportContextLine(),
+        page: STATE.view || '',
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || ('HTTP ' + res.status));
+
+    /* `stored` and `emailed` are separate, and the copy says which happened.
+       "Thanks, we got it" over a report that went nowhere is the same lie the
+       mailer refuses to tell about a verification link. Stored is still a win
+       for the reader: it is kept and goes out with the next batch. */
+    note.className = 'rp-note is-ok';
+    note.textContent = data.emailed
+      ? 'Sent. Thank you.'
+      : 'Saved. It is on the server and will be passed on.';
+    box.value = '';
+    reportCount();
+  } catch (err) {
+    note.className = 'rp-note is-bad';
+    note.textContent = 'That did not send. ' + (err.message || 'Try again shortly.');
+  } finally {
+    send.disabled = false;
+  }
+}
+
+function installReportPanel() {
+  const btn = $('#rp-open');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const panel = $('#rp-panel');
+    if (panel && panel.hidden) openReportPanel(); else closeReportPanel();
+  });
+  const cancel = $('#rp-cancel');
+  if (cancel) cancel.addEventListener('click', closeReportPanel);
+  const send = $('#rp-send');
+  if (send) send.addEventListener('click', sendReport);
+  const box = $('#rp-text');
+  if (box) {
+    box.addEventListener('input', reportCount);
+    // Escape closes it; Cmd/Ctrl+Enter sends. Enter alone must not, because
+    // this is a multi-line box and a report is usually more than one line.
+    box.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { closeReportPanel(); btn.focus(); }
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) sendReport();
+    });
+  }
 }
 
 function renderSettings() {
@@ -18445,18 +18546,17 @@ function renderSettings() {
   </div>
 
   <div class="panel gap">
-    <h2>${hg('Report an issue')}</h2>
+    <h2>${hg('Report a problem')}</h2>
     <p class="sub">Found something wrong, confusing, or missing? Tell us and it
-      gets looked at. The report opens on GitHub with the build number and the
-      page you were on already filled in, so you do not have to describe your
-      setup. You can read and edit all of it before sending.</p>
+      gets looked at. The build number, the page you were on and your window
+      size are attached, so you do not have to describe your setup.</p>
     <p>
-      <a class="btn primary" id="report-issue" href="${esc(reportIssueUrl())}"
-        target="_blank" rel="noopener noreferrer">Report an issue</a>
+      <button type="button" class="btn primary" id="report-issue"
+        data-open-report>Report a problem</button>
     </p>
-    <p class="caveat">Opens a public issue on the project's repository, so do
-      not include anything private. Nothing is sent from this page: GitHub shows
-      you the form first and you choose whether to submit it.</p>
+    <p class="caveat">Goes to the person who maintains the terminal and nowhere
+      public. The button at the bottom right of every page opens the same
+      form.</p>
   </div>`;
 
   // Passkeys, connected providers and sessions are three more requests. Painted
@@ -23072,16 +23172,6 @@ function humanCountdown(minutes) {
   return `${h} hour${h === 1 ? '' : 's'} and ${m} minute${m === 1 ? '' : 's'}`;
 }
 
-/* Whether the session disclosure is open, kept outside the render.
- *
- * `loadSession` is on a 60-second interval (the phase and the countdown have to
- * stay honest across a session boundary) and renderSessionBar replaces the
- * bar's innerHTML wholesale. So the open state cannot live in the DOM: open the
- * panel, start reading the company description, and it shuts under you within
- * the minute. Not persisted to storage — closed is the right default on a fresh
- * load, and this only has to survive a repaint. */
-let sessionDetailOpen = false;
-
 function renderSessionBar() {
   const host = $('#sessionbar');
   if (!host) return;
@@ -23205,24 +23295,24 @@ function renderSessionBar() {
       ${nowBlock}
       <div class="ses-strip">${segments}${marker}</div>
     </div>
-    ${/* The legend and the description, collapsible on a phone.
+    ${/* The legend, the company and the description — shown, not disclosed.
         *
-        * On a 375px screen these two took about 240px between them: the four
-        * phase keys wrap to two rows, the timezone note takes a third, and the
-        * description takes two lines. That pushed the market strip to y=534 and
-        * the day's cross-asset moves off the first screen entirely, on the page
-        * whose whole job is to show them.
+        * These sat behind an "Hours & company" button for a phone-height
+        * reason that was real: on a 375px screen the four phase keys, the
+        * timezone note and the description took about 240px between them and
+        * pushed the day's cross-asset moves off the first screen.
         *
-        * Collapsed rather than hidden. Nothing here is removed at any width:
-        * the toggle only exists below the phone breakpoint, and the desktop
-        * renders exactly what it did before. Which session it is, the clock and
-        * the 24-hour strip all stay visible, because those are the parts that
-        * change during a day. */''}
-    <button type="button" class="ses-detail-btn" data-ses-detail
-      aria-expanded="${sessionDetailOpen ? 'true' : 'false'}"
-      aria-controls="ses-detail">${sessionDetailOpen
-    ? 'Hide details' : 'Hours &amp; company'}</button>
-    <div class="ses-detail${sessionDetailOpen ? ' is-open' : ''}" id="ses-detail">
+        * The button went because the fix was aimed at a phone and landed on
+        * everything. Its two rules were written for the 640px block and ended
+        * up at the top of the file outside it, so `display: none` applied at
+        * every width and the desktop — which has the room, and whose comment
+        * claimed it "renders exactly what it did before" — hid the company
+        * details behind a click for no reason at all.
+        *
+        * The phone cost is back and is the accepted price of the details being
+        * visible without being asked for. If it needs paying down again, pay
+        * it inside a width query and verify the rule is actually in one. */''}
+    <div class="ses-detail" id="ses-detail">
       ${companyBlock}
       <div class="ses-legend">${legend}
         <span class="ses-key ses-zone">${onMarketTime
@@ -23236,43 +23326,21 @@ function renderSessionBar() {
 
   dedupeGlossTerms(host);
 
-  /* The phone disclosure.
-   *
-   * Toggles a class rather than the `open` attribute of a <details>, because
-   * `open` cannot be set by a media query: a <details> would need JS to decide
-   * its initial state per width and would then fight a resize. A class plus two
-   * CSS rules gives the desktop the old markup untouched and the phone a
-   * closed-by-default panel, with one DOM either way. */
-  const detailBtn = host.querySelector('[data-ses-detail]');
-  const detail = host.querySelector('.ses-detail');
-
-  /* Hide the toggle when the summary already fits — a "more" button that
+  /* Hide the "More" on the description when it already fits — a button that
    * expands nothing is worse than no button.
    *
-   * Measured on open, not at render. The company block now lives inside the
-   * disclosure, and inside `display: none` both scrollHeight and clientHeight
-   * are 0 — so the old render-time check read `0 <= 1`, decided the text fitted
-   * and hid "More" on every symbol whose description is in fact clamped. A
-   * collapsed box reports no layout; it has to be asked once it has one. */
-  let fitChecked = false;
+   * This used to have to wait for the disclosure to open, because inside
+   * `display: none` both scrollHeight and clientHeight are 0 and the check read
+   * `0 <= 1` — deciding the text fitted on every symbol whose description is in
+   * fact clamped. With the panel always rendered it has layout at render and can
+   * simply be asked, so the deferral and its `fitChecked` latch are gone. */
   const checkSummaryFit = () => {
-    if (fitChecked) return;
-    const s = $('#ses-summary');
-    const m = $('#ses-more');
-    if (!s || !m || !s.clientHeight) return;   // still collapsed: ask again later
-    fitChecked = true;
-    if (s.scrollHeight <= s.clientHeight + 1) m.hidden = true;
+    const sEl = $('#ses-summary');
+    const mEl = $('#ses-more');
+    if (!sEl || !mEl || !sEl.clientHeight) return;
+    if (sEl.scrollHeight <= sEl.clientHeight + 1) mEl.hidden = true;
   };
-
-  if (detailBtn && detail) {
-    detailBtn.addEventListener('click', () => {
-      const open = detail.classList.toggle('is-open');
-      sessionDetailOpen = open;
-      detailBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-      detailBtn.textContent = open ? 'Hide details' : 'Hours & company';
-      if (open) checkSummaryFit();
-    });
-  }
+  checkSummaryFit();
 
   const sum = $('#ses-summary');
   const more = $('#ses-more');
@@ -23282,8 +23350,6 @@ function renderSessionBar() {
       more.textContent = open ? 'Less' : 'More';
     });
   }
-  // Already open (the reader left it open on a previous render): measure now.
-  if (detail && detail.classList.contains('is-open')) checkSummaryFit();
 }
 
 async function loadSession(force) {
@@ -26100,6 +26166,10 @@ document.addEventListener('click', (evt) => {
   if (gotoView) { switchView(gotoView.dataset.gotoView); return; }
   if (evt.target.closest('[data-goto-home]')) switchView('home');
   if (evt.target.closest('[data-goto-settings]')) switchView('settings');
+  /* Delegated because Settings and the footer are re-rendered, so a listener
+     bound to either button dies with the next paint. The pill in index.html is
+     static and binds directly in installReportPanel. */
+  if (evt.target.closest('[data-open-report]')) openReportPanel();
 });
 
 /* The chart note saves when you leave the box, not per keystroke: localStorage

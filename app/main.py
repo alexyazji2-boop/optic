@@ -26,6 +26,7 @@ from . import db as accounts_db
 from .auth import admin as auth_admin
 from .auth import deps as auth_deps
 from .auth import ratelimit as auth_ratelimit
+from . import feedback as feedback_mod
 from .auth import routes as auth_routes
 from .auth import store as auth_store
 from .runtime import is_hosted
@@ -1863,6 +1864,36 @@ async def alerts_seen(payload: Dict[str, Any] = Body(default={})) -> Dict[str, A
 async def alerts_clear(request: Request) -> Dict[str, Any]:
     _write_guard(request)
     return {"removed": alerts_mod.clear()}
+
+
+@app.post("/api/feedback")
+async def submit_feedback(request: Request,
+                          payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """One reader-reported problem.
+
+    No `_write_guard`. That guard protects the terminal's own state, and this
+    writes nothing a reader can read back: it appends to a table only the
+    operator sees. Requiring the write token would put the report button behind
+    a credential and leave it doing nothing for every actual reader, which is
+    the failure this endpoint exists to fix.
+
+    Rate limited by address instead, and the send runs off the event loop
+    because it opens an SMTP connection.
+    """
+    auth_ratelimit.guard(request, "feedback", auth_ratelimit.client_ip(request))
+    message = payload.get("message")
+    if not isinstance(message, str) or not message.strip():
+        raise HTTPException(status_code=400, detail="A report needs a message.")
+
+    page = payload.get("page") if isinstance(payload.get("page"), str) else ""
+    reply = payload.get("reply_to") if isinstance(payload.get("reply_to"), str) else ""
+    # Taken from the request, not from the body: a client-supplied User-Agent is
+    # just another string the reporter typed.
+    agent = request.headers.get("user-agent") or ""
+
+    out = await _run(feedback_mod.submit, message, page, reply, agent)
+    auth_ratelimit.record("feedback", auth_ratelimit.client_ip(request))
+    return out
 
 
 @app.get("/api/econ")

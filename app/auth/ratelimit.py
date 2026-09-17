@@ -43,6 +43,9 @@ LIMITS: Dict[str, Tuple[int, int]] = {
     "oauth_start": (30, 900),
     "oauth_callback": (30, 900),
     "password_change": (10, 3600),
+    # Ten reports an hour from one address. A reader who hits a real bug
+    # files one and maybe a correction; a hundred is a script.
+    "feedback": (10, 3600),
 }
 
 FRIENDLY = {
@@ -56,6 +59,7 @@ FRIENDLY = {
     "oauth_start": "sign-in attempts",
     "oauth_callback": "sign-in attempts",
     "password_change": "password changes",
+    "feedback": "problem reports",
 }
 
 

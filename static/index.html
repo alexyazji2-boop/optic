@@ -205,6 +205,37 @@
   <div class="legal-full" id="legal-full" hidden></div>
 </footer>
 
+<!-- Report a problem.
+     Fixed and present on every view, because the reader who has just hit
+     something wrong is not going to go looking for Settings for it. Replaced a
+     prefilled GitHub issue link, which asked for a GitHub account first. -->
+<div class="rp" id="report-problem">
+  <div class="rp-panel" id="rp-panel" hidden role="dialog"
+       aria-labelledby="rp-title">
+    <h2 class="rp-title" id="rp-title">Report a problem</h2>
+    <label class="rp-label" for="rp-text">What went wrong?</label>
+    <textarea id="rp-text" class="rp-text" rows="4" maxlength="2000"
+      placeholder="What you saw, and what you expected instead."></textarea>
+    <div class="rp-row">
+      <span class="rp-count" id="rp-count" aria-live="polite"></span>
+      <button type="button" class="btn" id="rp-cancel">Cancel</button>
+      <button type="button" class="btn primary" id="rp-send">Send</button>
+    </div>
+    <p class="rp-note" id="rp-note" role="status"></p>
+    <p class="rp-caveat">The page you are on and your browser version are
+      attached so the problem can be reproduced. Nothing else about you is
+      sent, and this does not go anywhere public.</p>
+  </div>
+  <button type="button" class="rp-btn" id="rp-open"
+    aria-expanded="false" aria-controls="rp-panel">
+    <svg class="rp-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none"
+      stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+      <circle cx="12" cy="12" r="9"></circle>
+      <circle cx="12" cy="12" r="3.4"></circle>
+      <path d="M12 2.9v5.7M12 15.4v5.7M2.9 12h5.7M15.4 12h5.7"></path>
+    </svg>Report a Problem</button>
+</div>
+
 <aside id="chat" aria-label="Pulse assistant">
   <!-- Drag to resize, like a browser's split. A separator rather than a button:
        it has an orientation and a value, and the arrow keys move it. See

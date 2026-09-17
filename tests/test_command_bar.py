@@ -186,15 +186,20 @@ def test_the_session_detail_collapses_at_every_width():
     colour legend and a company profile, none of which change during a day.
     """
     assert 'class="ses-detail' in APP_JS
-    assert "data-ses-detail" in APP_JS
-    # Unconditional, so neither rule may sit inside a width query.
-    assert ".ses-detail { display: none; }" in CSS
-    assert ".ses-detail.is-open { display: block; }" in CSS
-    phone = CSS[CSS.index("@media (max-width: 719px) {"):]
-    assert ".ses-detail { display: none; }" not in phone, \
-        "the disclosure is no longer phone-only"
-    # The button has to be reachable at every width, so it cannot be display:none.
-    assert ".ses-detail-btn { display: none; }" not in CSS
+    # The disclosure is gone. It was introduced for a phone-height measurement
+    # that was real, and its two rules were written for the 640px block and
+    # ended up at the top of the file outside it — so `display: none` applied at
+    # every width and the desktop hid the company details behind a click for no
+    # reason. The name of this test was the only thing in the repository that
+    # said so; the code comment beside it claimed the desktop "renders exactly
+    # what it did before".
+    assert "data-ses-detail" not in APP_JS, "the toggle button is gone"
+    assert ".ses-detail-btn" not in CSS, "and so are its styles"
+    assert ".ses-detail { display: none; }" not in CSS, \
+        "the details render unconditionally now"
+    assert ".ses-detail.is-open" not in CSS
+    assert "is-open" not in _fn("renderSessionBar"), \
+        "and nothing gates them on an open class"
 
 
 def test_the_company_profile_sits_behind_the_session_disclosure():
@@ -210,33 +215,37 @@ def test_the_company_profile_sits_behind_the_session_disclosure():
     assert "${companyBlock}" not in head, "and must not also render above it"
 
 
-def test_the_disclosure_state_survives_the_sixty_second_repaint():
-    """loadSession is on a 60s interval and renderSessionBar replaces innerHTML
-    wholesale, so open state in the DOM alone shuts the panel under a reader
-    mid-sentence. It now holds the company description, which takes longer to
-    read than a timetable."""
-    assert "let sessionDetailOpen = false;" in APP_JS
+def test_no_disclosure_state_is_kept_across_the_sixty_second_repaint():
+    """There is nothing left to keep.
+
+    `loadSession` is on a 60s interval and renderSessionBar replaces innerHTML
+    wholesale, so while the panel was collapsible its open state had to live in
+    a module flag or it shut under a reader mid-sentence. With the panel always
+    rendered the flag is dead weight, and a flag nothing reads is the kind of
+    thing that gets wired back up by mistake.
+    """
+    assert "sessionDetailOpen" not in APP_JS
+
+
+def test_the_summary_fit_is_measured_at_render():
+    """Now that the box always has a layout, it can simply be asked.
+
+    This used to have to wait for the disclosure to open: inside `display: none`
+    both scrollHeight and clientHeight are 0, so a render-time check read
+    `0 <= 1`, concluded the text fitted and hid "More" on every symbol whose
+    description is in fact clamped. The `clientHeight` guard stays as the cheap
+    proof the box is laid out before it is believed.
+    """
     fn = _fn("renderSessionBar")
-    assert "sessionDetailOpen = open;" in fn, "the toggle has to record the state"
-    assert "${sessionDetailOpen ? ' is-open' : ''}" in fn, "and the render has to read it"
-
-
-def test_the_summary_fit_is_measured_once_the_box_has_a_layout():
-    """Inside `display: none` both scrollHeight and clientHeight are 0, so a
-    render-time check reads `0 <= 1`, concludes the text fits and hides "More"
-    on every symbol whose description is in fact clamped."""
-    fn = _fn("renderSessionBar")
-    assert "if (!s || !m || !s.clientHeight) return;" in fn, \
-        "a collapsed box reports no layout and must not be believed"
-    assert "if (open) checkSummaryFit();" in fn
-
-
-def test_the_toggle_uses_a_class_not_the_details_element():
-    """`open` cannot be set by a media query, so a <details> would need JS to
-    pick its initial state per width and would then fight a resize."""
-    fn = _fn("renderSessionBar")
-    assert "classList.toggle('is-open')" in fn
-    assert "aria-expanded" in fn
+    assert "if (!sEl || !mEl || !sEl.clientHeight) return;" in fn
+    assert "checkSummaryFit();" in fn
+    # Comments stripped first. The comment above the function records what was
+    # removed and therefore names it, which is the trap CLAUDE.md describes and
+    # which caught this assertion on its first run.
+    code = re.sub(r"/\*.*?\*/", " ", fn, flags=re.S)
+    code = re.sub(r"^\s*//.*$", " ", code, flags=re.M)
+    assert "if (open) checkSummaryFit();" not in code, "no open state to wait on"
+    assert "fitChecked" not in code, "and no latch, because it runs once per render"
 
 
 def test_the_phone_hides_only_duplicates():

@@ -515,12 +515,42 @@ MIGRATION_5 = [
     "ON theses(user_id, updated_at DESC)",
 ]
 
+# Reader-reported problems. Stored before anything is emailed, and stored even
+# when nothing can be: the destination address is an environment variable, so
+# for any period where it is unset the alternative is losing the reports.
+#
+# No `user_id` and no foreign key. Reporting a problem does not require an
+# account, which is the whole point of replacing the old GitHub issue link, and
+# a nullable reference to a table that cascades on delete would take the report
+# down with the account.
+MIGRATION_6 = [
+    """
+    CREATE TABLE IF NOT EXISTS feedback (
+        id         TEXT PRIMARY KEY,
+        message    TEXT NOT NULL,
+        page       TEXT NOT NULL DEFAULT '',
+        reply_to   TEXT NOT NULL DEFAULT '',
+        user_agent TEXT NOT NULL DEFAULT '',
+        emailed    INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_feedback_created "
+    "ON feedback(created_at DESC)",
+    # Partial index: the query that matters is "what has not gone out yet",
+    # which is what gets replayed once an address exists.
+    "CREATE INDEX IF NOT EXISTS idx_feedback_unsent "
+    "ON feedback(created_at) WHERE emailed = 0",
+]
+
+
 MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (1, "accounts", MIGRATION_1),
     (2, "oauth_pkce", MIGRATION_2),
     (3, "watches", MIGRATION_3),
     (4, "watch_hits", MIGRATION_4),
     (5, "theses", MIGRATION_5),
+    (6, "feedback", MIGRATION_6),
 ]
 
 
