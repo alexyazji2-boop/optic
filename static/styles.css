@@ -4658,16 +4658,40 @@ button.home-card:focus-visible { outline: 2px solid var(--s1); outline-offset: 2
   gap: var(--space-2);
   margin: var(--space-3) 0 var(--space-2);
 }
-.bk-figs > span { display: flex; flex-direction: column; gap: var(--space-0); }
+/* Centred, like every other figure in a row of equal boxes. Safe because the
+   values below are tabular: the digits are one width, so a number does not
+   shift sideways as it ticks. */
+.bk-figs > span {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0);
+  text-align: center;
+}
 .bk-figs i {
   font-style: normal;
   font-size: var(--t-micro);
+  /* One line reserved, as on `.tile`: "Closed" is one word and "Return" is one
+     word, but a narrow card wraps whichever is longest and then the values in
+     that row sit at two different heights. */
+  line-height: 1.4;
+  min-height: calc(1.4 * var(--t-micro));
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--ink-muted);
 }
 .bk-figs b, .bk-figs > span { font-variant-numeric: tabular-nums; }
 .bk-figs > span { font-size: var(--t-small); color: var(--ink); font-weight: 600; }
+
+/* Two cells, not four, because there is no record to lay out. Sized to the
+   content so "No trades yet" is not stretched across a four-column grid with
+   two of the columns empty. */
+.bk-figs-empty { grid-template-columns: max-content max-content; }
+.bk-untraded {
+  font-weight: 500 !important;
+  color: var(--ink-muted) !important;
+  /* Not tabular and not signed: it is a sentence, not a figure. */
+  font-variant-numeric: normal;
+}
 .bk-rules, .bk-blurb {
   display: block;
   font-size: var(--t-micro);

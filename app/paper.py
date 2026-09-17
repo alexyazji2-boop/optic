@@ -888,6 +888,53 @@ def _capacity(equity: float, book: Optional[str] = None) -> Dict[str, Any]:
     }
 
 
+def _books_with_room(opened_by_book: Optional[Dict[str, int]] = None):
+    """`(books that can still take a position, reason if none can)`.
+
+    This is the fix for a bug that quietly emptied a whole book. The scan loop
+    used to check capacity once per candidate as `_capacity(equity)` with no
+    book argument, which resolves to `book_config(None)` and therefore to the
+    *balanced* book, and then `break` out of the candidate loop entirely. Three
+    lines further down sits the comment saying every book sees the same
+    candidate, which is the design those breaks prevented.
+
+    What it looked like in production: balanced filled its 15% risk budget, and
+    the next ten scans stopped on their first candidate with "portfolio risk
+    budget of 15% is used up". Considered counts ran `[4, 0, 0, 0, 0, 0, 2, 0,
+    0, 0, 0, 0]`. The conservative book holds nothing, so its own 6% budget was
+    entirely free the whole time and it was never offered a single name. Its
+    $100,000 and 0.00% return read as a risk tolerance earning nothing, when it
+    had not been asked a question.
+
+    So capacity is asked of every book and the pass stops only when none of them
+    can act. A book that is full is dropped from the round rather than ending it.
+    """
+    opened_by_book = opened_by_book or {}
+    live: List[str] = []
+    reasons: List[str] = []
+    for book_id in BOOK_IDS:
+        cfg = book_config(book_id)
+        cap = _capacity(equity_for(book_id), book_id)
+        if cap["position_slots_left"] <= 0:
+            reasons.append("{} is full at {} open positions".format(
+                cfg["label"].lower(), cfg["max_positions"]))
+            continue
+        if (cap["risk_budget_left"] or 0) <= 0:
+            reasons.append("{} has used its {:.0f}% risk budget".format(
+                cfg["label"].lower(), cfg["max_portfolio_risk"] * 100))
+            continue
+        if opened_by_book.get(book_id, 0) >= cfg["max_new_per_scan"]:
+            reasons.append("{} hit its {}-position limit for this scan".format(
+                cfg["label"].lower(), cfg["max_new_per_scan"]))
+            continue
+        live.append(book_id)
+    if live:
+        return live, None
+    # Named per book, because "the budget is used up" without saying whose is
+    # what sent this bug unnoticed for twelve scans.
+    return [], "; ".join(reasons) or "no book has capacity"
+
+
 # --------------------------------------------------------------- scan progress
 #
 # A NASDAQ-wide scan takes minutes, not seconds, so the request that starts it
@@ -990,27 +1037,20 @@ def run_scan(snapshot_fn: Callable[[str], Dict[str, Any]], provider,
         _set_progress(stage="analysing shortlist", done=0, total=len(candidates_in))
 
         opened, considered, notes = 0, 0, []
-        # `opened` is also the loop's stop condition against MAX_NEW_PER_SCAN, and
-        # it counts the default book only. Widening it to all three would cut every
-        # scan short by roughly a factor of three, so the tally for REPORTING is
-        # kept separately — the scans table was recording four when sixteen
-        # positions had been opened, understating the ledger's activity by exactly
-        # the factor the three-book split introduced.
+        # `opened` counts the default book, for reporting only. The scans table was
+        # recording four when sixteen positions had been opened, understating the
+        # ledger's activity by exactly the factor the three-book split introduced,
+        # so the per-book tally is kept beside it.
+        #
+        # It is no longer the loop's stop condition. That is the fix described on
+        # `_books_with_room`.
         opened_by_book: Dict[str, int] = {}
         opened_positions: List[Dict[str, Any]] = []
         capped = None
         throttled_skips = 0
         for index, ticker in enumerate(candidates_in):
-            cap = _capacity(equity)
-            if cap["position_slots_left"] <= 0:
-                capped = "book full at {} open positions".format(MAX_OPEN_POSITIONS)
-                break
-            if cap["risk_budget_left"] <= 0:
-                capped = "portfolio risk budget of {:.0f}% is used up".format(
-                    MAX_PORTFOLIO_RISK * 100)
-                break
-            if opened >= MAX_NEW_PER_SCAN:
-                capped = "hit the {}-position limit for a single scan".format(MAX_NEW_PER_SCAN)
+            live, capped = _books_with_room(opened_by_book)
+            if not live:
                 break
 
             considered += 1
@@ -1051,10 +1091,12 @@ def run_scan(snapshot_fn: Callable[[str], Dict[str, Any]], provider,
                     break
                 continue
 
-            # Every book sees the same candidate. That is the design: identical
-            # opportunities under different rules, so comparing the three says
-            # what a risk tolerance costs rather than comparing three signals.
-            for book_id in BOOK_IDS:
+            # Every book with room sees the same candidate. That is the design:
+            # identical opportunities under different rules, so comparing the
+            # three says what a risk tolerance costs rather than comparing three
+            # signals. `live` rather than BOOK_IDS so a full book is skipped
+            # without ending the pass for the others.
+            for book_id in live:
                 cfg = book_config(book_id)
                 book_equity = equity_for(book_id)
                 found, why = consider_ticker(snapshot, book_equity, book_id)
@@ -1065,6 +1107,11 @@ def run_scan(snapshot_fn: Callable[[str], Dict[str, Any]], provider,
                     cost = candidate.get("risk_dollars") or 0.0
                     slots = _capacity(book_equity, book_id)["position_slots_left"]
                     if slots <= 0 or cost > room:
+                        continue
+                    # Each book's own per-scan limit, which is 3, 6 and 8. The
+                    # global MAX_NEW_PER_SCAN used to stand in for all three and
+                    # was counted against the default book only.
+                    if opened_by_book.get(book_id, 0) >= cfg["max_new_per_scan"]:
                         continue
                     open_position(candidate)
                     opened_by_book[book_id] = opened_by_book.get(book_id, 0) + 1

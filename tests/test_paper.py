@@ -307,8 +307,13 @@ def test_scan_reports_positions_opened_across_all_books():
     assert "opened_by_book" in src
     # The stored figure must be the total, not the default book's counter.
     assert "sum(opened_by_book.values())" in src
-    # And the cap must still be driven by the original per-default counter.
-    assert "if opened >= MAX_NEW_PER_SCAN" in src
+    # The per-scan cap is each book's own, and this assertion used to require the
+    # opposite: "the cap must still be driven by the original per-default
+    # counter". That global counter was one of three gates that ended the whole
+    # candidate loop on the balanced book's limits, which left the conservative
+    # book unoffered for twelve consecutive scans. See `_books_with_room`.
+    assert 'opened_by_book.get(book_id, 0) >= cfg["max_new_per_scan"]' in src
+    assert "if opened >= MAX_NEW_PER_SCAN" not in src
 
 
 # --------------------------------------------- shorts with unreachable targets

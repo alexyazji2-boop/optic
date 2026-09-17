@@ -19728,7 +19728,16 @@ function funnelPanelHTML(f, gates, cfg) {
  * means anything. Sharing one equity pool would have let the aggressive book's
  * losses shrink the conservative book's position sizes and turned three
  * independent records into one entangled one. */
-const BOOK_TONE = { conservative: 'flat', balanced: 'up', aggressive: 'warn' };
+/* No tone. The taglines used to be `flat`, `up` and `warn`, which painted
+ * "medium risk, medium reward" in `--pos` — the same green that means the price
+ * went up on every other percentage in this terminal — and left "high risk" on
+ * a `warn` class that has no rule at all, so it rendered as the default and the
+ * scheme was really "one of these is good". A risk tolerance is not good or
+ * bad, and recommending the middle one in colour is both an editorial
+ * judgement and the kind of nudge this app does not make. The words already say
+ * low, medium and high; the ordering carries it. Same argument as the VIX tile,
+ * which was reported as a rendering fault for colouring a non-directional
+ * reading with a directional pair. */
 
 function renderBookSelector(d) {
   const books = d.books || [];
@@ -19741,15 +19750,28 @@ function renderBookSelector(d) {
       data-book="${esc(b.id)}">
       <span class="bk-top">
         <span class="bk-name">${esc(b.label)}</span>
-        <span class="cat-tag ${BOOK_TONE[b.id] || 'flat'}">${esc(b.tagline)}</span>
+        <span class="cat-tag flat">${esc(b.tagline)}</span>
       </span>
+      ${/* A book that has never traded is not a book that returned nothing.
+           This read "$100.0K / 0.00% / 0 / 0", which looks like a flat month and
+           was in fact a book the scan loop had stopped offering candidates to:
+           the capacity gates measured the balanced book and broke the whole
+           candidate loop, so the conservative book sat unasked through ten
+           consecutive scans. That is fixed in paper.py, but the display was
+           the half of it that made the bug invisible. A return needs a trade
+           behind it before it means anything. */''}
+      ${(su.open_count || 0) + (su.closed_count || 0) === 0 ? `
+      <span class="bk-figs bk-figs-empty">
+        <span><i>Equity</i>$${fmtCompact(b.equity)}</span>
+        <span class="bk-untraded"><i>Record</i>No trades yet</span>
+      </span>` : `
       <span class="bk-figs">
         <span><i>Equity</i>$${fmtCompact(b.equity)}</span>
         <span><i>Return</i><b class="${signClass(ret)}">${ret === null || ret === undefined
     ? '\u2014' : (ret > 0 ? '+' : '') + fmt(ret, 2) + '%'}</b></span>
         <span><i>Open</i>${fmt(su.open_count, 0)}</span>
         <span><i>Closed</i>${fmt(su.closed_count, 0)}</span>
-      </span>
+      </span>`}
       <span class="bk-rules">${fmt(b.risk_per_trade * 100, 1)}% per trade ·
         score bar ${fmt(b.min_composite, 0)} ·
         ${b.allow_options ? (b.prefer_options ? 'options preferred' : 'shares + options')
