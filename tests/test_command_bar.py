@@ -361,3 +361,68 @@ def test_the_breakpoint_covers_what_the_inline_row_needs():
     marker = CSS[CSS.index("@media (max-width: 1410px) {") - 700:
                  CSS.index("@media (max-width: 1410px) {")]
     assert "1400px" in marker, "the measured requirement has to be written down"
+
+
+def test_every_class_hidden_by_attribute_has_a_display_pair():
+    """An author `display` beats the UA stylesheet's `[hidden] { display: none }`
+    whatever the specificity, so a class that sets one and is toggled by the
+    attribute stays on screen.
+
+    `.range-pick` was the live case: `swingPriceBlock` renders it
+    `<label class="range-pick" hidden>` on an intraday range, because there is
+    no interval to choose on a one-minute series, and it kept its 62px and went
+    on offering the choice. Measured with the attribute set, it computed
+    `inline-flex`. CLAUDE.md records the same fault against `.set-pw`.
+    """
+    code = re.sub(r"/\*.*?\*/", " ", CSS, flags=re.S)
+    carried = set()
+    for m in re.finditer(r'class="([^"$]*)"[^>]{0,120}?\shidden(?=[\s>])', APP_JS):
+        carried.update(m.group(1).split())
+    for m in re.finditer(r'class="([^"$]*)"[^>]{0,160}?\$\{[^}]*\?\s*\'\s*hidden', APP_JS):
+        carried.update(m.group(1).split())
+
+    def body_of(cls):
+        """Rules where the class is the *subject*, not an ancestor of it.
+
+        A first version took every rule whose selector mentioned the class, and
+        flagged `.combo-list` because `.combo-list li { display: flex }` sets a
+        display on the child. The parent declares no display at all, so
+        `[hidden]` works on it: verified in a browser, the real element computes
+        `display: none` and zero width. Only a display on the element that
+        carries the attribute can defeat the UA rule.
+        """
+        out = []
+        for m in re.finditer(r"(?:^|[{}])\s*([^{}]*?)\{", code, re.S):
+            selectors = [x.strip() for x in m.group(1).split(",")]
+            subject = False
+            for sel in selectors:
+                last = sel.split()[-1] if sel.split() else ""
+                # Strip pseudo-classes and states; `.x:hover` still has .x as subject.
+                last = re.split(r"[:\[]", last)[0]
+                if last.split(">")[-1] == "." + cls or last == "." + cls:
+                    subject = True
+            if not subject:
+                continue
+            start = m.end() - 1
+            depth, j = 0, start
+            while j < len(code):
+                if code[j] == "{":
+                    depth += 1
+                elif code[j] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                j += 1
+            out.append(code[start:j])
+        return " ".join(out)
+
+    offenders = []
+    for cls in sorted(c for c in carried if c and "$" not in c):
+        if not re.search(r"display:\s*(flex|block|grid|inline-flex|inline-block|inline-grid)",
+                         body_of(cls)):
+            continue
+        if re.search(r"\." + re.escape(cls) + r"\[hidden\]", code):
+            continue
+        offenders.append(cls)
+    assert offenders == [], \
+        "these set a display and are toggled by [hidden], with no pair: {}".format(offenders)

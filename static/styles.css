@@ -1275,6 +1275,19 @@ main { padding: var(--space-6) var(--space-6) var(--space-8); isolation: isolate
   margin: -4px 0 var(--space-2);
   flex-wrap: wrap;
 }
+/* The pair is mandatory, and this one was missing.
+ *
+ * `swingPriceBlock` renders this label as `<label class="range-pick" hidden>`
+ * whenever the range is intraday, because there is no interval to choose on a
+ * one-minute series. An author `display` beats the UA stylesheet's
+ * `[hidden] { display: none }` whatever the specificity, so the picker kept its
+ * 62px and stayed on screen offering a choice that does not apply. Measured
+ * with the attribute set: computed display `inline-flex`, width 62px.
+ *
+ * Same fault CLAUDE.md records against `.set-pw`, which rendered its password
+ * form open on every visit to Settings. Any rule that gives an element a
+ * display needs this line beside it. */
+.range-pick[hidden] { display: none; }
 .range-pick {
   display: inline-flex;
   align-items: center;
