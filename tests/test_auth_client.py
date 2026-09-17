@@ -549,7 +549,16 @@ def test_the_invalidation_prompt_carries_the_thesis_that_was_written():
 
 
 def test_the_price_head_is_the_first_thing_on_the_asset_page():
-    block = APP_JS[APP_JS.index("  const html = `"):]
+    """Anchored to `renderSwing`, not to the first `const html` in the file.
+
+    It was the latter, which is a bare-substring anchor over 27,000 lines: a
+    second template assigning `const html` appeared earlier in `loadHomeMarket`
+    and the slice silently moved to it, so the assertion raised "substring not
+    found" on a page whose ordering had not changed at all. The property is
+    about the asset page, so the slice has to name it.
+    """
+    block = APP_JS[APP_JS.index("function renderSwing(d) {"):]
+    block = block[block.index("  const html = `"):]
     block = block[:block.index("</div>`")]
     assert block.index("renderPriceHead") < block.index("renderOpticPulse")
 

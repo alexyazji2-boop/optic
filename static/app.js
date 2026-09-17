@@ -2935,7 +2935,7 @@ function homeData() {
   return homeDataInFlight;
 }
 
-async function loadHomeMarket() {
+async function loadHomeMarket(opts = {}) {
   /* The dedupe covers the fetch, not the render, and the difference was a bug.
    *
    * A first pass shared the whole promise, so a second caller got back the
@@ -2954,6 +2954,7 @@ async function loadHomeMarket() {
   try {
     data = await homeData();
   } catch (err) {
+    if (opts.silent && STATE.home) return;
     // The rest of the page still works, and the search box above is the only
     // thing anyone strictly needs. Say what is missing rather than nothing.
     const failed = document.getElementById('hm-market');
@@ -2970,11 +2971,13 @@ async function loadHomeMarket() {
   // it is the cheapest thing to paint and the highest thing on the page.
   const strip = document.getElementById('cc-strip');
   if (strip) {
+    const scrollLeft = strip.firstElementChild ? strip.firstElementChild.scrollLeft : 0;
     strip.innerHTML = marketStripHTML(data);
+    if (strip.firstElementChild) strip.firstElementChild.scrollLeft = scrollLeft;
     // One fade for the whole band rather than a stagger per cell: it is a
     // single reading of the market, and eight cells arriving one after another
     // would read as eight separate updates.
-    revealPanels(strip.parentElement, '#cc-strip');
+    if (!opts.silent) revealPanels(strip.parentElement, '#cc-strip');
   }
   const session = data.session || {};
   const holiday = session.holiday;
@@ -2989,7 +2992,7 @@ async function loadHomeMarket() {
    * strip; `macroWord` is that function and it is still the only place the
    * wording lives.
    */
-  host.innerHTML = `
+  const html = `
     <div class="hm-greet">
       <h2 class="hm-hello">${esc(homeGreeting())}.</h2>
       <span class="hm-session is-${session.is_open ? 'open' : 'shut'}">
@@ -3051,7 +3054,9 @@ async function loadHomeMarket() {
   /* The cards are a level deeper now that the board has two columns, so the
      stagger has to reach them: ':scope > *' would fade the whole board as one
      element and the arrival would be a single frame again. */
-  revealPanels(host, ':scope > .hm-greet, :scope > .hm-board > * > *');
+  if (opts.silent) preserveUI(host, () => { host.innerHTML = html; });
+  else host.innerHTML = html;
+  if (!opts.silent) revealPanels(host, ':scope > .hm-greet, :scope > .hm-board > * > *');
   loadWatchlist();
   // Its own request, not awaited: the universe scan is the slowest thing on
   // this page and the rest of it is already useful without it.
@@ -8814,9 +8819,10 @@ function securityHeader(view, opts = {}) {
  * loadSwing owns the fetch; this waits on it and then paints whichever facet
  * asked. Without the shared payload each tab would refetch a two-second call
  * and the workspace would feel slower than the single page it replaced. */
-async function loadSecurityFacet(view, force) {
+async function loadSecurityFacet(view, force, opts = {}) {
   const host = views[view];
   if (!host) return;
+  const ticker = STATE.ticker;
   if (!STATE.ticker) {
     host.innerHTML = `<div class="panel"><h2>No ticker loaded</h2>
       <p class="sub">Enter a symbol in the top bar, or pick one on the
@@ -8831,14 +8837,33 @@ async function loadSecurityFacet(view, force) {
    * Swing section, which is not the section the reader is looking at. */
   const have = STATE.swing && STATE.swing.ticker === STATE.ticker;
   if (!have || force) {
-    host.innerHTML = `${securityHeader(view)}
-      <div class="panel"><p class="sub">Loading ${esc(STATE.ticker)}\u2026</p></div>`;
-    await loadSwing(force, { silent: true });
+    if (!opts.silent) {
+      host.innerHTML = `${securityHeader(view)}
+        <div class="panel"><p class="sub">Loading ${esc(ticker)}\u2026</p></div>`;
+    }
+    try {
+      const data = await loadSwing(force, { silent: true, propagateError: true });
+      if (!data) return; // a newer request owns the screen
+    } catch (err) {
+      if (STATE.view !== view || STATE.ticker !== ticker) return;
+      // A failed refresh keeps the last useful reading. A first load must
+      // explain the failure instead of turning it into "not available" data.
+      if (opts.silent && have) return;
+      host.innerHTML = `${securityHeader(view)}${errorHTML(err.message,
+        { originUnreachable: err.originUnreachable })}
+        <button type="button" class="btn" data-retry-security>Try again</button>`;
+      return;
+    }
   }
   if (STATE.view !== view) return;      // the reader moved on while it loaded
-  if (view === 'news') return renderNewsView();
-  if (view === 'financials') return renderFinancialsView(force);
-  if (view === 'overview') return renderOverviewView();
+  if (STATE.ticker !== ticker) return;
+  const render = () => {
+    if (view === 'news') return renderNewsView();
+    if (view === 'financials') return renderFinancialsView(force);
+    if (view === 'overview') return renderOverviewView();
+  };
+  if (opts.silent) preserveUI(host, render);
+  else render();
 }
 
 /* ---- News facet -----------------------------------------------------------
@@ -12934,7 +12959,7 @@ function wsManageRow(def) {
       </label>
       ${overlayStyled(def.id) ? `<button type="button" class="ws-leg-btn"
         data-ws-style-reset="${esc(def.id)}" title="Back to the default"
-        style="opacity:1">reset</button>` : ''}
+        style="opacity:1">Reset</button>` : ''}
     </div>
     <div class="ws-mrow-controls">
       ${def.fill ? `<p class="ws-mnote">Drawn as a filled area, so there is no
@@ -15505,43 +15530,11 @@ function wsMountChart() {
   // is superseded. Reassigned on every call, so it always closes over the
   // current payload rather than a stale one.
   wsChartBuilder = (w) => {
-    /* The chart takes the height the layout actually has, not a constant. This
-     * is the point of the tab: on a 900px window the Swing chart gets 420px and
-     * this gets ~600, which is the difference between reading a trend and
-     * squinting at one.
-     *
-     * Measured from the CANVAS minus the header, not from the chart host itself.
-     * mount() empties the host before calling this builder, so at this moment
-     * the host has no content and reports a height of zero — measuring it gave
-     * 0 every time and the chart silently fell back to the 360px floor. The
-     * canvas is the grid cell and its height is real whether or not the chart
-     * inside it has been drawn yet. */
-    /* Measure the PLOT, which is exactly the box the chart is meant to fill.
-     *
-     * This used to be canvas-height minus head-height, which was wrong twice
-     * over: it forgot the legend, and it forgot that the layout can change shape
-     * after the mount. On a narrow column — where the rail moves to a row along
-     * the bottom — the numbers disagreed badly: the plot had 570px and the chart
-     * was drawn at 160, because the builder measured mid-reflow and baked that
-     * into the SVG's height attribute, and nothing re-measured afterwards.
-     *
-     * The plot's height is right whether or not anything has been drawn into it,
-     * so there is no ordering problem to get wrong. The old calculation is kept
-     * as a fallback for the case where the plot is not laid out yet. */
-    const canvas = document.querySelector('.ws-canvas');
-    const head = document.querySelector('.ws-head');
-    const legend = document.querySelector('.ws-legend');
-    /* The legend is subtracted only when it is in normal flow. At full width it
-     * is absolutely positioned over the chart and costs no height; in a narrow
-     * column it becomes a real row above it. The old version never subtracted it
-     * and overran by however tall it was. */
-    const avail = canvas
-      ? Math.round(canvas.getBoundingClientRect().height
-        - (head ? head.getBoundingClientRect().height : 0)
-        - (legend && getComputedStyle(legend).position === 'static'
-          ? legend.getBoundingClientRect().height : 0))
-      : 0;
-    const height = Math.max(avail || 0, 360);
+    // At 1280x800 the plot had 242px but the SVG's 360px floor covered the
+    // navigator. Measure the flexed plot, which already excludes the header,
+    // legend, oscillator panes and navigator. CSS owns its minimum height.
+    const plot = views.chart.querySelector('.ws-plot');
+    const height = Math.max(1, Math.floor(plot ? plot.getBoundingClientRect().height : 180));
     // The averages' colours, from the resolver both tabs share. Computed once
     // per build rather than per series, because it allocates as a set: each
     // answer has to know what the previous ones took.
@@ -15693,22 +15686,27 @@ function wsMountChart() {
  * Uses the same /api/ticker payload the Swing tab does, so a symbol already
  * loaded there costs nothing extra — the provider cache serves it.
  */
+let chartRequestId = 0;
+
 async function loadChartWorkspace(symbol, force) {
   const sym = String(symbol || STATE.chartSymbol || '').trim().toUpperCase();
-  if (!sym) { STATE.chartSymbol = ''; renderChartWorkspace(null); return; }
-  if (sym === STATE.chartSymbol && STATE.chartData && !force) {
+  if (!sym) { ++chartRequestId; STATE.chartSymbol = ''; renderChartWorkspace(null); return; }
+  if (sym === STATE.chartSymbol && STATE.chartData && STATE.chartData.ticker === sym && !force) {
     renderChartWorkspace(STATE.chartData);
     wsMountChart();
     wsEnsureIntraday();
     return;
   }
+  const requestId = ++chartRequestId;
   STATE.chartSymbol = sym;
   STATE.chartData = 'loading';
   renderChartWorkspace('loading');
   try {
     const data = await getJSON(`/api/ticker/${encodeURIComponent(sym)}`);
+    if (requestId !== chartRequestId || STATE.chartSymbol !== sym) return;
     STATE.chartData = data;
   } catch (err) {
+    if (requestId !== chartRequestId || STATE.chartSymbol !== sym) return;
     STATE.chartData = { error: err.message };
   }
   if (STATE.view !== 'chart') return;
@@ -20846,9 +20844,18 @@ async function loadPatternRates() {
   }
 }
 
+let swingRequestId = 0;
+let swingLoading = false;
+
 async function loadSwing(force, opts = {}) {
   const silent = !!opts.silent;
-  if (STATE.swing && STATE.swing.ticker === STATE.ticker && !force) { revealPanels(views.swing); return; }
+  if (STATE.swing && STATE.swing.ticker === STATE.ticker && !force) {
+    if (!silent) revealPanels(views.swing);
+    return STATE.swing;
+  }
+  const ticker = STATE.ticker;
+  const requestId = ++swingRequestId;
+  swingLoading = true;
   if (!silent) beginLoad(views.swing, `options analytics for ${STATE.ticker}`);
   try {
     /* The cost limit rides on the request, so the server does the filtering.
@@ -20856,8 +20863,11 @@ async function loadSwing(force, opts = {}) {
        headline, the order ticket and the risk block, none of which the client
        could correct after the fact. */
     const cap = entryBudget();
-    const data = await getJSON(`/api/ticker/${encodeURIComponent(STATE.ticker)}?max_expiries=4&macro=true${
+    const data = await getJSON(`/api/ticker/${encodeURIComponent(ticker)}?max_expiries=4&macro=true${
   cap ? `&budget=${encodeURIComponent(cap)}` : ''}`);
+    // AAPL can finish after MSFT. Neither its data nor its failure may replace
+    // the newer request, including two overlapping refreshes of one symbol.
+    if (requestId !== swingRequestId || STATE.ticker !== ticker) return null;
     STATE.swing = data;
     /* Read the prior snapshot BEFORE writing the new one, or the diff is
      * always empty: writing first overwrites the thing being compared against.
@@ -20893,7 +20903,10 @@ async function loadSwing(force, opts = {}) {
     requestAnimationFrame(() => requestAnimationFrame(mountRelativeChart));
     updateStatus();
     updateChatContext();
+    return data;
   } catch (err) {
+    if (requestId !== swingRequestId || STATE.ticker !== ticker) return null;
+    if (opts.propagateError) throw err;
     // A background refresh tick shouldn't wipe out a perfectly good dashboard
     // over one transient network blip — only a manual/foreground load does.
     if (!silent) {
@@ -20902,6 +20915,9 @@ async function loadSwing(force, opts = {}) {
         { originUnreachable: err.originUnreachable });
     }
     else console.warn('Silent swing refresh failed:', err.message);
+    return null;
+  } finally {
+    if (requestId === swingRequestId) swingLoading = false;
   }
 }
 
@@ -23398,7 +23414,7 @@ function renderSessionBar() {
         <span class="ses-key ses-zone">${onMarketTime
     ? `Times in ${esc(zoneTag)}. Market time`
     : `Times in ${esc(zoneTag)}; market runs on ET`}<button type="button"
-          data-goto-settings>change</button></span>
+          data-goto-settings>Change</button></span>
       </div>
       ${tickerRelevant && p.stale_note ? `<div class="ses-warn">${gloss(p.stale_note)}</div>` : ''}
       <div class="ses-desc">${gloss(sess.description || '')}</div>
@@ -23753,13 +23769,16 @@ function isTapeLiveET() {
  * a test against that enum, not a default that happens to look fine. That test
  * is tests/test_session_phases.py. */
 const SESSION_LABEL = {
-  regular: 'Live · refreshing every 20s',
+  regular: 'Market open · refreshing every 20s',
   pre: 'Pre-market · refreshing every 20s',
   after: 'After hours · refreshing every 20s',
   // No "refreshing" claim: yfinance carries no Blue Ocean tape, so nothing
   // arrives to refresh. session.py publishes the same fact as feed_covers_phase.
   overnight: 'Overnight · index futures are live, single stocks are not',
 };
+
+const AUTO_REFRESH_VIEWS = ['home', 'overview', 'swing', 'market'];
+let autoRefreshPending = false;
 
 function liveIndicatorHTML() {
   const session = marketSessionET();
@@ -23775,25 +23794,37 @@ function liveIndicatorHTML() {
   }
   // Extended hours get the same pulse but their own label, so "live" never
   // implies regular-session liquidity.
-  const tone = session === 'regular' ? 'bull' : 'neutral';
+  const refreshing = AUTO_REFRESH_VIEWS.includes(STATE.view);
+  const tone = session === 'regular' && refreshing ? 'bull' : 'neutral';
   // The beat means "prices are arriving". Overnight they are not, and a pulsing
   // dot next to a label that says the feed does not carry this session would
   // contradict the sentence it sits beside.
   const beat = session === 'overnight' ? ''
-    : ' style="animation:pulse-beat 1.8s ease-in-out infinite"';
+    : refreshing ? ' style="animation:pulse-beat 1.8s ease-in-out infinite"' : '';
+  const label = session === 'overnight' || refreshing
+    ? (SESSION_LABEL[session] || cap(session))
+    : `${(SESSION_LABEL[session] || cap(session)).split(' · ')[0]} · snapshot`;
   // Falls back to the phase's own name rather than to undefined: a phase added
   // server-side should degrade to "Overnight", never to a rendered "undefined".
   return `<span class="chip ${tone}"><span class="dot"${beat}></span>${
-    esc(SESSION_LABEL[session] || cap(session))}</span>`;
+    esc(label)}</span>`;
 }
 
-function tickAutoRefresh() {
+async function tickAutoRefresh() {
   updateStatus(); // keep the live/closed chip accurate even off the swing tab
   if (document.hidden || !isTapeLiveET()) return;
-  if (STATE.view === 'swing' && STATE.swing) loadSwing(true, { silent: true });
-  else if (STATE.view === 'market' && STATE.market) loadMarket(true, { silent: true });
-  // The Investing view is deliberately excluded — multi-year context doesn't
-  // change intraday, so there's nothing there worth re-fetching every 20s.
+  if (autoRefreshPending || swingLoading) return;
+  autoRefreshPending = true;
+  try {
+    if (STATE.view === 'home') await loadHomeMarket({ silent: true });
+    else if (STATE.view === 'overview' && STATE.swing) {
+      await loadSecurityFacet('overview', true, { silent: true });
+    } else if (STATE.view === 'swing' && STATE.swing) await loadSwing(true, { silent: true });
+    else if (STATE.view === 'market' && STATE.market) await loadMarket(true, { silent: true });
+  } finally {
+    autoRefreshPending = false;
+  }
+  // The other views are snapshots and say so in the status strip.
 }
 
 
@@ -24459,8 +24490,8 @@ function pulseStarters(expanded) {
   }).join('')}
     </div>
     ${usable.length > shown.length
-    ? '<button type="button" class="pulse-more" data-pulse-more>see more examples</button>'
-    : (expanded ? '<button type="button" class="pulse-more" data-pulse-less>show fewer</button>' : '')}
+    ? '<button type="button" class="pulse-more" data-pulse-more>See more examples</button>'
+    : (expanded ? '<button type="button" class="pulse-more" data-pulse-less>Show fewer</button>' : '')}
     ${sym ? '' : `<p class="pulse-empty-note">Load a ticker to unlock the
       symbol-specific prompts. Everything above works without one.</p>`}
   </div>`;
@@ -25572,6 +25603,8 @@ function loadTicker(raw, destination) {
   // Recording it at each call site instead would miss whichever one is added
   // next.
   rememberSymbol(next);
+  ++swingRequestId;
+  swingLoading = false;
   STATE.ticker = next;
   STATE.swing = null;
   STATE.earnings = null;
@@ -25648,6 +25681,10 @@ document.addEventListener('click', (evt) => {
   // Closing the instrument tab. Checked before the row handler so the little x
   // does not also re-open the chart it is dismissing.
   // Pulse conversation history.
+  if (evt.target.closest('[data-retry-security]')) {
+    loadSecurityFacet(STATE.view, true);
+    return;
+  }
   if (evt.target.closest('#chat-history-btn')) {
     renderPulseHistory(!pulseHistoryOpen);
     return;

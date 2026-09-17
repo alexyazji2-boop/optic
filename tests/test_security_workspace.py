@@ -242,7 +242,7 @@ def test_the_facets_share_one_request():
     body = APP_JS.split("async function loadSecurityFacet(", 1)[1].split("\nfunction ", 1)[0]
     assert "STATE.swing && STATE.swing.ticker === STATE.ticker" in body, \
         "the freshness test must match loadSwing's own guard, not a second field"
-    assert "loadSwing(force, { silent: true })" in body
+    assert "loadSwing(force, { silent: true, propagateError: true })" in body
     assert "if (STATE.view !== view) return;" in body, \
         "no guard against the reader switching tabs mid-load"
 

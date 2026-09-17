@@ -6628,6 +6628,9 @@ b, strong { font-weight: 600; }
   position: relative;
   min-width: 0;
   min-height: 0;
+  /* Extra panes scroll together rather than painting over the navigator when
+     their combined minimum height exceeds the available workspace. */
+  overflow-y: auto;
   /* Flex, not grid, and that is a fix rather than a preference.
      head, legend, plot, then any oscillator panes, then the navigator. The plot
      is the only child that flexes, so the panes and the navigator keep their
@@ -7157,7 +7160,7 @@ b, strong { font-weight: 600; }
 }
 
 /* ---- the drawing layer ------------------------------------------------- */
-.ws-plot { position: relative; min-height: 0; min-width: 0; }
+.ws-plot { position: relative; min-height: 180px; min-width: 0; }
 .ws-chart { min-height: 0; min-width: 0; }
 /* Over the chart, same box. `pointer-events: none` on the wrapper and `auto` on
    the SVG inside it, so the chart's own crosshair still works everywhere the
@@ -7993,6 +7996,10 @@ table.data th,
    * from that block; only the wrap behaviour changes here. */
   nav.tabs,
   nav.tabs-group {
+    /* The desktop strip's flex:none/min-width:auto made this 732px wide on a
+       390px phone, so overflow:auto had nothing inside its own box to scroll. */
+    flex: 1 1 100%;
+    min-width: 0;
     flex-wrap: nowrap;
     /* overflow-x IS needed here, and is not the duplicate it looks like.
      *

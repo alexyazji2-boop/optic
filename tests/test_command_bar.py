@@ -268,3 +268,31 @@ def test_the_phone_block_sits_after_the_rules_it_overrides():
 def test_the_topbar_search_is_what_the_phone_relies_on():
     """Verified live on a 375px viewport: ten matches for "NV"."""
     assert 'id="ticker-input"' in open("static/index.html").read()
+
+
+def test_control_labels_start_with_a_capital():
+    """Reported from the session bar, where the timezone line ended in a link
+    reading "change".
+
+    Scoped to buttons and links, which are labels. It deliberately does not
+    sweep every lowercase string in the file: most are sentence fragments inside
+    a span, where a capital would be the grammatical error rather than the fix,
+    and the status chips are uppercased by CSS so their source case never
+    reaches a reader. Table headers are the same, via `table.data th`.
+    """
+    pat = re.compile(r">\s*([a-z][A-Za-z0-9 '&/.\-]{0,38})\s*<\s*/\s*(button|a|summary|label)\s*>")
+    found = [m.group(1) for m in pat.finditer(APP_JS) if "${" not in m.group(1)]
+    assert found == [], "control labels must be capitalised: {}".format(found)
+
+
+def test_statistical_notation_keeps_its_case():
+    """`p` is a p-value and `n` is a sample size. Lowercase is the convention,
+    so the capitalisation pass above must not reach them. They render uppercase
+    anyway through `table.data th`, which is a separate question from what the
+    source says."""
+    assert "<th>p</th>" in APP_JS
+    # Anchored with a leading newline. `.panel .grid table.data th {` contains
+    # the bare substring and sits earlier in the file, so indexing on it without
+    # the newline lands on a rule whose whole body is `white-space: normal`.
+    rule = CSS[CSS.index("\ntable.data th {"):]
+    assert "text-transform: uppercase" in rule[:rule.index("}")]
