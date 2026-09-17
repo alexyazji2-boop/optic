@@ -1556,17 +1556,44 @@ table.data.narrow { min-width: 0; }
  * The label keeps its uppercase micro-treatment: at 11.5px it functions as a
  * legend for the number below, not as prose, which is the one place caps earn
  * their keep. */
+/* One reading, framed, and centred.
+ *
+ * A tile IS a box, so it keeps a surface; softer and flatter than the original
+ * so a row of them reads as a set rather than as four separate panels.
+ *
+ * Consolidated from two rules 4,200 lines apart. The second declared only
+ * background, border and padding and therefore silently owned all three, so the
+ * values here are the ones that were actually rendering. Two declarations of
+ * one class is the last-declaration-wins trap this file has been caught by more
+ * than once; `.panel` was five of them.
+ *
+ * Centred rather than left-aligned. These are single figures under short
+ * uppercase captions, and ragged-left numbers of different widths in a row of
+ * equal boxes read as a column of accidents. `tabular-nums` on the value is
+ * what makes centring safe: the digits are the same width, so a figure does not
+ * shift sideways as it ticks.
+ */
 .tile {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  padding: var(--space-3) var(--space-3);
-  background: var(--raised);
-  border: 1px solid var(--border);
+  padding: var(--space-4) var(--space-5);
+  background: var(--surface-2);
+  border: 0;
   border-radius: var(--r-md);
+  text-align: center;
 }
+/* Two lines' worth, whether it uses them or not.
+ *
+ * `FROM 52-WEEK HIGH` wraps and `RSI` does not, so in a row of six the values
+ * sat at two different heights and the row read as broken. Reserving the second
+ * line costs about 16px on the short captions and buys one baseline across the
+ * whole row. `line-height` is declared here because the reservation is computed
+ * from it. */
 .tile .label {
   font-size: var(--t-micro);
+  line-height: 1.4;
+  min-height: calc(2 * 1.4 * var(--t-micro));
   color: var(--ink-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -1578,7 +1605,15 @@ table.data.narrow { min-width: 0; }
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
-.tile .note { font-size: var(--t-caption); color: var(--ink-2); line-height: 1.5; }
+/* Pushed to the bottom so the notes line up too. Only some tiles carry one, and
+   a note that floats directly under a short value while its neighbour's sits
+   lower is the same raggedness one row down. */
+.tile .note {
+  margin-top: auto;
+  font-size: var(--t-caption);
+  color: var(--ink-2);
+  line-height: 1.5;
+}
 
 .kv { display: grid; grid-template-columns: auto 1fr; gap: var(--space-1) var(--space-4); font-size: var(--t-body); }
 .kv dt { color: var(--ink-muted); }
@@ -5754,15 +5789,6 @@ body.chat-full footer.legal { margin-right: 0; }
   letter-spacing: -0.01em;
 }
 
-/* Tiles keep a surface, because a tile IS a box — it is one reading, framed.
-   Softer and flatter than before so a row of four reads as a set. */
-.tile {
-  background: var(--surface-2);
-  border: 0;
-  border-radius: var(--r-md);
-  padding: var(--space-4) var(--space-5);
-}
-
 /* Buttons: one filled accent per view, everything else quiet. */
 .btn.primary {
   background: var(--btn-primary);
@@ -9163,7 +9189,13 @@ body.cp-open { overflow: hidden; }
      trailing space inside it, and the reading stays together. */
   grid-template-columns: max-content max-content;
   grid-template-rows: auto auto;
-  justify-content: start;
+  /* Centred in the cell, not packed to its left edge.
+     The columns stay `max-content`, which is what stops the label and the
+     figure drifting to opposite ends of a grown cell: this moves the pair as a
+     unit and leaves the trailing space split either side instead of all after
+     it. Same decision as `.tile`, and for the same reason: a row of equal boxes
+     with ragged-left contents reads as a column of accidents. */
+  justify-content: center;
   align-items: baseline;
   gap: 0 var(--space-1);
   /* Grow to fill, never shrink below the reading.
@@ -9180,7 +9212,7 @@ body.cp-open { overflow: hidden; }
   border: 0;
   border-right: 1px solid var(--border);
   background: none;
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   transition: background var(--dur-ui) var(--ease-ui);
 }

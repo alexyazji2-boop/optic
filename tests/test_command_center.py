@@ -433,8 +433,17 @@ def test_the_strip_reading_stays_together_when_the_cell_grows():
     """An `auto` grid column absorbs free space, so once the cells were allowed
     to grow, the label and the figure were pushed to opposite ends of a 240px
     box: "S&P 500" hard left and "+0.86%" hard right, reading as two unrelated
-    numbers rather than one quote."""
+    numbers rather than one quote.
+
+    `max-content` is the whole of that fix, and it is what this asserts. It used
+    to also pin `justify-content: start`, which was never the mechanism: where
+    the group sits in the cell is a separate decision from whether the group
+    holds together, and the cells are centred now. What must not come back is a
+    packing value that puts the free space *between* the columns.
+    """
     rule = CSS[CSS.index(".ms-cell {"):]
     rule = rule[:rule.index("}")]
     assert "grid-template-columns: max-content max-content" in rule
-    assert "justify-content: start" in rule
+    for spreading in ("space-between", "space-around", "space-evenly", "stretch"):
+        assert "justify-content: " + spreading not in rule, \
+            "that would reopen the gap between the label and the figure"
