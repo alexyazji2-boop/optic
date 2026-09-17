@@ -12348,3 +12348,105 @@ body.chat-full .rp { display: none; }
   body.chat-open .rp { right: var(--space-3); }
   .rp-panel { width: auto; }
 }
+
+/* ========================================================= morning desk ====
+ *
+ * Prose in a terminal, which needs a different measure from its neighbours. The
+ * blocks beside this are tables and figures at full column width, and a
+ * paragraph across 945px is about 160 characters a line, which nobody reads.
+ * The text is capped and the headings are quiet, so it reads as a note rather
+ * than as another dashboard tile.
+ */
+/* 54ch, and the unit is why it is not 70.
+   `ch` is the width of the "0" glyph, and Inter sets digits much wider than its
+   average lowercase: measured here, 1ch is 12.63px against a mean character
+   nearer 9.9px. So 74ch computed to 934px, which is wider than the 908px block
+   this sits in, and the cap never bound at all. 54ch lands at 682px, which
+   counts 80 characters on a rendered line at this size: inside the 45 to 90 a
+   reader tracks comfortably, and a third of the way back from where it was.
+   Re-measure by counting characters on a line with a Range, not by converting
+   ch to characters in your head, which is the error above. */
+.hm-block.md { --md-measure: 54ch; }
+.md-p {
+  max-width: var(--md-measure);
+  margin: 0 0 var(--space-3);
+  font-size: var(--t-base);
+  line-height: 1.65;
+  color: var(--ink-2);
+}
+.md-p:last-of-type { margin-bottom: 0; }
+/* The synthesis, the one paragraph carrying a conclusion. */
+.md-overall { color: var(--ink); }
+
+/* The branches. A label and its consequence rather than a bulleted list: the
+   label is a condition and has to read as one, so it takes the emphasis and the
+   consequence stays quiet beside it. */
+.md-branches {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: var(--md-measure);
+  margin: 0 0 var(--space-3);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--border-strong);
+}
+.md-branch { font-size: var(--t-body); line-height: 1.6; }
+.md-branch-label { color: var(--ink); font-weight: 600; }
+.md-branch-label::after { content: ": "; }
+.md-branch-text { color: var(--ink-2); }
+
+.md-note {
+  max-width: var(--md-measure);
+  margin: 0 0 var(--space-3);
+  font-size: var(--t-body);
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+.md-note strong { color: var(--ink); }
+
+.md-h3 {
+  margin: var(--space-4) 0 var(--space-2);
+  font: 600 var(--t-lead)/1.3 var(--sans);
+  color: var(--ink);
+}
+.md-rel { margin-bottom: var(--space-3); max-width: var(--md-measure); }
+.md-rel-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.md-rel-title { font-weight: 600; color: var(--ink); font-size: var(--t-body); }
+.md-rel-time { font-size: var(--t-caption); color: var(--ink-muted); }
+.md-rel-detail {
+  margin: var(--space-1) 0 0;
+  font-size: var(--t-body);
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+
+/* What it cannot tell you. Every panel here carries one; on this one it matters
+   more than most, because "no consensus estimates" is the thing a reader is
+   likeliest to read as an omission rather than as a refusal to invent a
+   number. */
+.md-limits {
+  max-width: var(--md-measure);
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+.md-limits-h {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-size: var(--t-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-muted);
+}
+.md-limits ul { margin: 0; padding-left: var(--space-4); }
+.md-limits li {
+  font-size: var(--t-caption);
+  line-height: 1.6;
+  color: var(--ink-muted);
+  margin-bottom: var(--space-1);
+}

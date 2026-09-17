@@ -8,11 +8,12 @@ Everything is cached briefly so a dashboard refresh doesn't re-hammer Yahoo.
 from __future__ import annotations
 
 import math
+import re
 import threading
 import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -60,6 +61,13 @@ def _cached(key: str, ttl: float, producer):
 # stock has no listed options" — a false statement about the security rather than
 # a true one about the feed. Scanning ~3,000 symbols makes hitting the limit
 # routine, so the distinction has to be recorded rather than inferred.
+
+# CME delivery-month codes. I and L are deliberately absent from the standard
+# set, which is why this is a table rather than an alphabet offset.
+FUTURES_MONTHS: Dict[str, int] = {
+    "F": 1, "G": 2, "H": 3, "J": 4, "K": 5, "M": 6,
+    "N": 7, "Q": 8, "U": 9, "V": 10, "X": 11, "Z": 12,
+}
 
 _THROTTLE: Dict[str, Any] = {"until": 0.0, "hits": 0, "last_seen": None}
 
@@ -294,6 +302,47 @@ class YFinanceProvider(MarketDataProvider):
             if hit and quote:
                 out[sym] = quote
         return out
+
+    def contract_month(self, ticker: str) -> Optional[str]:
+        """The delivery month of a continuous futures symbol, as `YYYY-MM-01`.
+
+        `ZQ=F` is a *rolling* front-month alias, and assuming it means the
+        current calendar month is wrong for most of any month. Measured on
+        2026-09-17 it resolved to `ZQV26.CBT`, the October contract, expiring
+        2026-11-02 — so a fed funds calculation weighted against September's
+        days would have been arithmetic on the wrong month, and produced a
+        101bp implied move where 27bp was priced.
+
+        Read from the resolved contract's own month code, not from the expiry
+        date. The expiry was the first thing tried and it is not reliable for
+        this: Yahoo reported 2026-11-02 for a contract whose code says October,
+        because a 30-day fed funds contract settles on a business day *after*
+        its delivery month, and by how much depends on where the weekend falls.
+        Backing a month out of that date produced November for the October
+        contract. The code cannot be ambiguous in that way.
+
+        Cached for six hours, because this changes on a roll and not on a tick.
+        """
+        def build() -> Optional[str]:
+            try:
+                info = dict(yf.Ticker(ticker).info or {})
+            except Exception as exc:                            # noqa: BLE001
+                if _is_rate_limit(exc):
+                    note_throttle(exc)
+                return None
+            code = str(info.get("underlyingSymbol") or "")
+            # e.g. ZQV26.CBT -> V (October), 26 (2026). The month letter is the
+            # character before the two year digits.
+            match = re.search(r"([FGHJKMNQUVXZ])(\d{2})\b", code)
+            if not match:
+                return None
+            month = FUTURES_MONTHS.get(match.group(1))
+            if not month:
+                return None
+            year = 2000 + int(match.group(2))
+            return "{:04d}-{:02d}-01".format(year, month)
+
+        return _cached("cmonth:" + ticker, self.TTL_FILED, build)
 
     def earnings_date(self, ticker: str) -> Optional[str]:
         def build() -> Optional[str]:

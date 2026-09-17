@@ -3012,6 +3012,7 @@ async function loadHomeMarket() {
       */''}
     <div class="hm-board">
       <div class="hm-main">
+        ${morningDesk(data)}
         ${whatMattersNow(data)}
         ${/* Two thirds rather than full width. Four columns of symbol, price,
              change and volume do not fit a third of the board, and squeezing
@@ -5641,6 +5642,61 @@ function homeStories(data) {
    not leave a stale string behind. */
 function homeTierLabel(id) {
   return String(id || '').replace(/^./, (c) => c.toUpperCase());
+}
+
+/* The morning desk.
+ *
+ * Fixed shape, because the shape is the argument: the one thing setting the
+ * tone, the branches it could take, a factual correction of whatever those
+ * branches invite people to get wrong, the releases with their numbers, and a
+ * synthesis saying what to distrust. A reader who opens this daily finds the
+ * same five moves in the same order.
+ *
+ * Every section is conditional on having something to say. A quiet calendar
+ * renders a shorter desk rather than the same desk with empty headings, which
+ * is the one thing that would make it stop being read.
+ *
+ * `limits` is not decoration. It is where "no consensus estimates" lives, and
+ * that absence is the single most likely thing for a reader to mistake for an
+ * omission rather than a deliberate refusal to invent a number.
+ */
+function morningDesk(data) {
+  const d = (data || {}).morning_desk;
+  if (!d || d.available !== true) return '';
+  const lead = (d.lead || []).map((p) => `<p class="md-p">${gloss(p)}</p>`).join('');
+  const scenarios = (d.scenarios || []).length ? `
+    <div class="md-branches">
+      ${(d.scenarios || []).map((s) => `<div class="md-branch">
+        <span class="md-branch-label">${esc(s.label)}</span>
+        <span class="md-branch-text">${gloss(s.text)}</span>
+      </div>`).join('')}
+    </div>` : '';
+  const cal = (d.calendar || []).length ? `
+    <h3 class="md-h3">Economic calendar</h3>
+    ${(d.calendar || []).map((r) => `<div class="md-rel">
+      <div class="md-rel-head">
+        <span class="md-rel-title">${esc(r.title)}</span>
+        ${r.time ? `<span class="md-rel-time">${esc(r.time)}</span>` : ''}
+        ${r.impact ? `<span class="t-${esc(r.impact)}">${esc(r.impact)}</span>` : ''}
+      </div>
+      ${r.detail ? `<p class="md-rel-detail">${gloss(r.detail)}</p>` : ''}
+    </div>`).join('')}` : '';
+  return `
+    <section class="hm-block md">
+      <div class="hm-block-head">
+        <h2 class="hm-h">Morning desk</h2>
+        ${askPulse('morning_desk')}
+      </div>
+      ${lead}
+      ${scenarios}
+      ${d.note ? `<p class="md-note"><strong>Note:</strong> ${gloss(d.note)}</p>` : ''}
+      ${cal}
+      ${d.overall ? `<p class="md-p md-overall">${gloss(d.overall)}</p>` : ''}
+      ${(d.limits || []).length ? `<div class="md-limits">
+        <span class="md-limits-h">What this does not tell you</span>
+        <ul>${(d.limits || []).map((l) => `<li>${gloss(l)}</li>`).join('')}</ul>
+      </div>` : ''}
+    </section>`;
 }
 
 function whatMattersNow(data) {
@@ -21207,6 +21263,7 @@ const PULSE_TOPICS = {
   indicators: 'Explain the optional indicators in plain language. VWAP, ADX, Keltner versus Bollinger, on-balance volume, the relative strength line. Which of these do institutions actually use, and for what?',
   pehistory: 'Explain the multiple and revenue history panel. What is a trailing P/E, why does it matter that earnings are attached to the filing date rather than the quarter end, and what does it mean when revenue is growing while the multiple falls?',
   morning: 'Explain the morning desk. What period does it cover, why does the window change between a Monday and a Tuesday, and what does it deliberately not tell me about the geopolitical headlines it lists?',
+  morning_desk: 'Walk me through this morning desk. What is the fed funds figure actually measuring, why is it basis points priced into a month rather than the odds on a meeting, and why does this compare releases to their own previous print instead of to what was expected?',
   global: 'Explain the overnight worldwide panel. Why are the markets ordered by session, what does the correlation to the S&P actually tell me, and should I read across from a big move in Korea or China to the US open?',
   patterns: 'Explain the chart patterns panel in plain language. What does it mean that a pattern is confirmed or not, what is a supply or demand zone as opposed to support, and how should I read the fact that most of these patterns measure close to a coin toss?',
   compare: 'Explain the side-by-side comparison. Why are the three horizons ranked separately, and what does it mean when a name is best on one and worst on another?',
@@ -21441,6 +21498,7 @@ const PULSE_ASK_LABELS = {
   composite: 'How is this scored?',
   defence: 'What is close defence?',
   feargreed: 'What goes into this?',
+  morning_desk: 'Explain this desk',
   indicators: 'Explain these',
   pehistory: 'What is a trailing P/E?',
   morning: 'What period is this?',

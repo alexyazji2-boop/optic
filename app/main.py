@@ -56,6 +56,7 @@ from .analytics import evaluate as evaluate_mod
 from .analytics import expiries as expiries_mod
 from .analytics import scanners as scanners_mod
 from .analytics import series_stats as series_stats_mod
+from .analytics import morning_desk as morning_desk_mod
 from .analytics import forex as forex_mod
 from . import alerts as alerts_mod
 from .analytics import econ as econ_mod
@@ -865,9 +866,59 @@ async def home_summary() -> Dict[str, Any]:
         # The day's read is already written and cached daily, so this costs a
         # dictionary lookup rather than a model call.
         leg("read", _home_read)
+        # The desk is assembled from legs already fetched above, so it adds one
+        # small quote and one FRED series rather than another pass over the
+        # market. Placed last because it reads `out["macro"]`.
+        leg("morning_desk", lambda: _morning_desk(out.get("macro")))
         return out
 
     return await _run(build)
+
+
+def _morning_desk(macro: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Today's desk, from panels already built plus the rate path.
+
+    The macro strip is passed in rather than refetched: the desk quotes the same
+    figures the strip above it shows, and two fetches would let them disagree.
+
+    Every input is optional. A desk with no calendar still has a tape, and one
+    with no rate quote still has a calendar, so each leg fails to None rather
+    than failing the panel.
+    """
+    events_out = None
+    try:
+        events_out = events_mod.upcoming()
+    except Exception as exc:                                    # noqa: BLE001
+        logging.getLogger("uvicorn.error").warning(
+            "morning desk: calendar unavailable: %s", exc)
+
+    rate = {"available": False, "reason": "The rate path could not be built."}
+    try:
+        quotes = YF_PROVIDER.batch_quote([morning_desk_mod.RATE_SYMBOL])
+        month = YF_PROVIDER.contract_month(morning_desk_mod.RATE_SYMBOL)
+        dff = econ_mod.series("DFF", years=1)
+        effective = ((dff or {}).get("latest") or {}).get("value")
+        meeting = None
+        for row in ((events_out or {}).get("events") or []):
+            title = (row.get("title") or "").lower()
+            if "fomc" in title or "federal open market" in title:
+                meeting = row.get("at")
+                break
+        rate = morning_desk_mod.rate_path(
+            quotes.get(morning_desk_mod.RATE_SYMBOL), effective, month, meeting)
+    except Exception as exc:                                    # noqa: BLE001
+        logging.getLogger("uvicorn.error").warning(
+            "morning desk: rate path unavailable: %s", exc)
+
+    stories = None
+    try:
+        read = _home_read()
+        stories = (read or {}).get("stories")
+    except Exception:                                           # noqa: BLE001
+        stories = None
+
+    return morning_desk_mod.build(macro=macro, events=events_out, rate=rate,
+                                  stories=stories)
 
 
 def _home_read() -> Optional[Dict[str, Any]]:
