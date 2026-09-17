@@ -271,7 +271,7 @@ def test_the_untraded_card_does_not_stretch_across_four_columns():
     assert ".bk-figs-empty { grid-template-columns: max-content max-content; }" in CSS
 
 
-# ------------------------------------------------------------------- reset
+# ------------------------------------------------- the record is the backtest
 
 
 @pytest.fixture()
@@ -282,7 +282,7 @@ def ledger(tmp_path, monkeypatch):
     return paper
 
 
-def _seed(p, book, status="closed", pnl=-250.0):
+def _seed(book, entry_at, status="closed", pnl=-250.0):
     """One row, with every NOT NULL column the real schema declares."""
     with paper._LOCK, paper._connect() as conn:
         conn.execute(
@@ -290,64 +290,56 @@ def _seed(p, book, status="closed", pnl=-250.0):
             "entry_price,entry_spot,entry_at,status,pnl,risk_dollars) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (book, "TEST", "shares", "long", 10, 100.0, 100.0,
-             "2026-09-01T14:00:00Z", status, pnl, 500.0))
+             entry_at, status, pnl, 500.0))
 
 
-def test_reset_returns_every_book_to_its_starting_capital(ledger):
-    for book in paper.BOOK_IDS:
-        _seed(ledger, book)
-    assert paper.equity_for("balanced") != paper.START_EQUITY
-
-    out = paper.reset()
-    assert out["reset"] is True
-    assert out["removed"]["positions"] == 3
-    for book in paper.BOOK_IDS:
-        assert paper.equity_for(book) == paper.START_EQUITY
-
-
-def test_reset_is_what_makes_the_comparison_honest(ledger):
-    """The panel's claim is that the three books see identical candidates, so
-    comparing them says what a risk tolerance costs. That needs a common start
-    date, and for twelve scans it did not have one: the capacity gates measured
-    the balanced book and ended the candidate loop for all three, so
-    conservative was never offered a name while the others built positions."""
-    _seed(ledger, "balanced")
-    _seed(ledger, "aggressive")
-    paper.reset()
-    equities = {b: paper.equity_for(b) for b in paper.BOOK_IDS}
-    assert len(set(equities.values())) == 1, "one start, or the comparison is not one"
-
-
-def test_reset_clears_the_scan_trail_by_default(ledger):
-    with paper._LOCK, paper._connect() as conn:
-        conn.execute("INSERT INTO scans (ran_at,trigger,considered,opened) "
-                     "VALUES ('2026-09-01','scheduled',4,4)")
-    out = paper.reset()
-    assert out["removed"]["scans"] == 1
-    assert paper._rows("SELECT id FROM scans") == []
-
-
-def test_reset_can_keep_the_scan_trail(ledger):
-    with paper._LOCK, paper._connect() as conn:
-        conn.execute("INSERT INTO scans (ran_at,trigger,considered,opened) "
-                     "VALUES ('2026-09-01','scheduled',4,4)")
-    out = paper.reset(clear_scans=False)
-    assert out["removed"]["scans"] == 0
-    assert len(paper._rows("SELECT id FROM scans")) == 1
-
-
-def test_reset_on_an_empty_ledger_is_harmless(ledger):
-    out = paper.reset()
-    assert out["removed"] == {"positions": 0, "scans": 0}
-    assert all(v == paper.START_EQUITY for v in out["books"].values())
-
-
-def test_the_reset_endpoint_is_behind_the_write_guard():
-    """The most destructive write in the app: no undo, and the record cannot be
-    regenerated because it logs decisions at prices that have since moved."""
+def test_there_is_no_way_to_wipe_the_ledger():
+    """The record is the only backtest this app has, and it accumulates. A reset
+    was built when the three books turned out not to share a start date, and
+    then removed: erasing the durable thing to make a presentable comparison is
+    the wrong trade, and an endpoint that does it becomes callable the moment
+    OPTIC_WRITE_TOKEN is set."""
+    assert not hasattr(paper, "reset")
+    src = open("app/paper.py").read()
+    assert "DELETE FROM positions" not in src
     main_src = open("app/main.py").read()
-    route = main_src[main_src.index('@app.post("/api/tracker/reset")'):]
-    route = route[:route.index("\n@app.")]
-    code = _re.sub(r'""".*?"""', " ", route, flags=_re.S)
-    assert "_write_guard(request)" in code
-    assert "paper.reset" in code
+    assert "/api/tracker/reset" not in main_src
+
+
+def test_a_books_record_start_is_published(ledger):
+    _seed("balanced", "2026-09-03T14:00:00Z")
+    _seed("balanced", "2026-09-11T14:00:00Z")
+    assert paper.first_entry("balanced") == "2026-09-03", "the earliest, not the latest"
+
+
+def test_an_untraded_book_has_no_start(ledger):
+    assert paper.first_entry("conservative") is None
+
+
+def test_the_start_date_rides_on_the_books_payload(ledger):
+    _seed("aggressive", "2026-09-10T14:00:00Z")
+    payload = paper.state()
+    rows = {b["id"]: b for b in payload["books"]}
+    assert rows["aggressive"]["since"] == "2026-09-10"
+    assert rows["conservative"]["since"] is None
+
+
+def test_the_panel_says_the_comparison_is_not_from_a_common_start():
+    """The claim above the cards is that identical candidates under different
+    rules say what a risk tolerance costs. That holds only where every book was
+    offered the same candidates, and for twelve scans they were not."""
+    fn = APP_JS[APP_JS.index("function renderBookSelector("):]
+    fn = fn[:fn.index("\nfunction renderTracker")]
+    code = _code(fn)
+    assert "only like for like from" in code
+    assert "b.since" in code, "the dates come from the payload, not from a guess"
+    # It must not cry wolf: aligned starts print no warning.
+    assert "if (latest === dated[0]) return '';" in code
+    assert "if (dated.length < 2) return '';" in code
+
+
+def test_each_card_prints_when_its_record_begins():
+    fn = APP_JS[APP_JS.index("function renderBookSelector("):]
+    fn = fn[:fn.index("\nfunction renderTracker")]
+    assert "Record from ${esc(b.since)}" in fn
+    assert ".bk-since" in CSS

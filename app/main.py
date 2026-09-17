@@ -1176,25 +1176,6 @@ def _raise_scan_alerts(result: Dict[str, Any]) -> None:
         logging.getLogger("uvicorn.error").warning("alerts failed: %s", exc)
 
 
-@app.post("/api/tracker/reset")
-async def tracker_reset(request: Request) -> Dict[str, Any]:
-    """Every book back to its starting capital. Irreversible.
-
-    Behind `_write_guard` like the other ledger writes, and it is the most
-    destructive of them: there is no undo and the record cannot be regenerated,
-    because it is a log of decisions taken at prices that have since moved.
-
-    It exists because the three-book comparison needs a common start date. The
-    capacity gates used to measure the balanced book and end the candidate loop
-    for all three, so the conservative book went twelve scans without being
-    offered a name while the other two built positions. The gate is fixed; a
-    record that began under the broken one is not comparable to one that did
-    not, which is the whole claim the panel makes.
-    """
-    _write_guard(request)
-    return await _run(paper.reset)
-
-
 @app.post("/api/tracker/scan")
 async def tracker_scan(request: Request,
                        payload: Optional[Dict[str, Any]] = Body(None)) -> Dict[str, Any]:

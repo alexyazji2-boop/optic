@@ -19779,6 +19779,15 @@ function renderBookSelector(d) {
         <span><i>Open</i>${fmt(su.open_count, 0)}</span>
         <span><i>Closed</i>${fmt(su.closed_count, 0)}</span>
       </span>`}
+      ${/* When this book's record begins. The three are presented as one scan
+           under three sets of rules, so a reader compares the returns directly,
+           and for twelve scans they did not start together: the capacity gates
+           measured the balanced book and ended the candidate loop for all
+           three, so conservative was never offered a name while the others
+           built positions. The gate is fixed and the record is kept, because it
+           is the only backtest this app has. So the start date is printed
+           instead of erased. */''}
+      ${b.since ? `<span class="bk-since">Record from ${esc(b.since)}</span>` : ''}
       <span class="bk-rules">${fmt(b.risk_per_trade * 100, 1)}% per trade ·
         score bar ${fmt(b.min_composite, 0)} ·
         ${b.allow_options ? (b.prefer_options ? 'options preferred' : 'shares + options')
@@ -19797,6 +19806,22 @@ function renderBookSelector(d) {
       comparing them says what a risk tolerance costs and earns rather than comparing three
       different signals. Each book has its own $100,000 and its own record.</p>
     <div class="book-cards">${cards}</div>
+    ${/* The honest version of the comparison, which needed saying.
+         The panel above claims that identical candidates under different rules
+         say what a risk tolerance costs. That holds only where the books were
+         all actually offered the same candidates, and for twelve scans they
+         were not. Stating the later start beats wiping the record to make the
+         sentence true, because the record is the backtest. */''}
+    ${(() => {
+    const dated = (books || []).filter((b) => b.since).map((b) => b.since).sort();
+    if (dated.length < 2) return '';
+    const latest = dated[dated.length - 1];
+    if (latest === dated[0]) return '';
+    return `<p class="caveat">Their records do not begin on the same day, so the
+      returns above are only like for like from ${esc(latest)} onward. Before
+      that a scan could fill one book's risk budget and stop before the others
+      were offered the same candidate, which is fixed but not retrospective.</p>`;
+  })()}
     <p class="caveat">${gloss('They differ in the four things that actually change a risk '
     + 'profile: how selective the entry bar is, how much is risked per trade, which '
     + 'instruments are allowed, and how volatile a name may be. Nothing changes the '

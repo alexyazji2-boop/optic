@@ -888,41 +888,27 @@ def _capacity(equity: float, book: Optional[str] = None) -> Dict[str, Any]:
     }
 
 
-def reset(clear_scans: bool = True) -> Dict[str, Any]:
-    """Wipe every book back to its starting capital. Irreversible.
+def first_entry(book: str) -> Optional[str]:
+    """The date this book's record begins, or None if it has never traded.
 
-    `equity_for` is `START_EQUITY + realised P&L`, with no equity table behind
-    it, so removing the rows *is* the reset: each book returns to exactly
-    $100,000 with nothing open and nothing closed.
+    The three books are presented as one scan under three sets of rules, so that
+    comparing them says what a risk tolerance costs. That needs a common start
+    and for twelve scans it did not have one: the capacity gates measured the
+    balanced book and ended the candidate loop for all three, so conservative
+    was never offered a name while the others built positions.
 
-    Why this exists at all. The three books are presented as the same scan under
-    three sets of rules, so that comparing them says what a risk tolerance costs.
-    That claim needs a common start date, and for twelve scans it did not have
-    one: the capacity gates measured the balanced book and ended the candidate
-    loop for everyone, so conservative was never offered a name while the other
-    two built positions. Fixing the gate does not fix the record, because
-    conservative would still be starting from today against two books holding
-    a fortnight of trades.
-
-    The scans table goes too by default. It is the audit trail of what the
-    scanner did, and keeping it across a reset leaves scan records whose
-    positions no longer exist, which reads as data loss rather than as a reset.
+    The gate is fixed. The record is not, and deliberately: it is the only
+    backtest this app has and wiping it to buy a tidy comparison would trade
+    the durable thing for the presentable one. So the differing start dates are
+    published instead, and the panel says the comparison is only like for like
+    from the latest of them.
     """
-    before = {
-        "positions": len(_rows("SELECT id FROM positions")),
-        "scans": len(_rows("SELECT id FROM scans")),
-    }
-    with _LOCK, _connect() as conn:
-        conn.execute("DELETE FROM positions")
-        if clear_scans:
-            conn.execute("DELETE FROM scans")
-    return {
-        "reset": True,
-        "removed": {"positions": before["positions"],
-                    "scans": before["scans"] if clear_scans else 0},
-        "start_equity": _f(START_EQUITY, 2),
-        "books": {b: _f(equity_for(b), 2) for b in BOOK_IDS},
-    }
+    rows = _rows(
+        "SELECT entry_at FROM positions WHERE book=? ORDER BY entry_at LIMIT 1",
+        (book,))
+    if not rows or not rows[0].get("entry_at"):
+        return None
+    return str(rows[0]["entry_at"])[:10]
 
 
 def _books_with_room(opened_by_book: Optional[Dict[str, int]] = None):
@@ -1451,6 +1437,7 @@ def state(limit: int = 60, month: Optional[str] = None,
             {**book_config(b),
              "equity": _f(equity_for(b), 2),
              "summary": summary(b),
+             "since": first_entry(b),
              "capacity": _capacity(equity_for(b), b)}
             for b in BOOK_IDS
         ],

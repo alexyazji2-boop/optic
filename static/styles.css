@@ -12491,3 +12491,17 @@ body.chat-full .rp { display: none; }
   line-height: 1.6;
   color: var(--ink-muted);
 }
+
+/* When a book's record begins. Printed because the three do not begin together:
+   a scan used to fill the balanced book's risk budget and stop before the
+   others were offered the same candidate, so their returns are only comparable
+   from the latest start onward. The record is kept rather than reset, because
+   it is the only backtest this app has. */
+.bk-since {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-size: var(--t-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-muted);
+}
