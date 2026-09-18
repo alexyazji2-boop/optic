@@ -615,8 +615,18 @@ header.topbar {
 /* 28px, up from 22. At 22 the mark was the smallest thing in the bar and read
    as an icon next to the wordmark rather than as the logo; the row has the
    height for more, since the buttons beside it stand 40px tall. */
-.brand-mark { width: 28px; height: 28px; flex: none; color: var(--ink-2); }
-.brand-text span { color: var(--ink-muted); font-weight: 400; }
+/* The mark alone, at 34px.
+ *
+ * "OPTIC TERMINAL" beside it was about 115px of the top row restating what the
+ * mark and the browser tab already say, on every render and at every width.
+ * The button keeps `aria-label="Optic Terminal. Go to home"`, so the name is
+ * still there for a screen reader and only the duplicate pixels are gone.
+ *
+ * Resolution is not a consideration: the mark is an inline SVG on a 32-unit
+ * viewBox, so it is resampled by the renderer at whatever size and pixel ratio
+ * it lands on. Growing it costs nothing and loses nothing. */
+.brand-mark { width: 34px; height: 34px; flex: none; color: var(--ink-2); }
+.brand-text { display: none; }
 
 .search {
   display: flex;
@@ -2021,6 +2031,13 @@ body.chat-resizing svg { pointer-events: none; }
      `nav.tabs.tabs-group` is two classes to one and wins on specificity rather
      than on position. */
   nav.tabs.tabs-group { flex: 1 0 100%; min-width: 0; }
+  /* Spread across the row rather than bunched at its left edge.
+     Above this width the strip is inline beside the search and every pixel is
+     contested, which is why the buttons carry no gap at all. On its own row
+     the opposite is true: there is width going spare and seven tabs huddled in
+     the first two thirds of it. `space-between` only distributes when the
+     content fits, so a phone that scrolls the strip is unaffected. */
+  nav.tabs.tabs-group { justify-content: space-between; }
   /* The tab strip drops to its own row here, so it no longer claims the free
      space on row one. The gear takes over that job and keeps Pulse beside it —
      without this the gear was stranded next to the Load button. */
@@ -12697,11 +12714,8 @@ main { padding-top: var(--space-7); }
      spent on chrome before a single reading. Pulse had been pushed onto a row
      of its own, which is the worst of it, because the row above it was one
      word too wide.
-     Dropping "TERMINAL" from the wordmark is what buys that word back. The
-     mark plus OPTIC still identifies the app, the full name is one tap away in
-     the title bar, and it is the same argument the nav strip already makes
-     about a prefix costing width on every render. */
-  .brand-text span { display: none; }
+     The wordmark going entirely is what buys that word back; see `.brand-mark`
+     for why the name is not lost with it. */
   .brand { gap: var(--space-1); padding: var(--space-1) var(--space-2); }
   #chat-toggle { padding: var(--space-2) var(--space-3); margin-left: var(--space-1); }
   .search input { width: 100%; min-width: 0; }

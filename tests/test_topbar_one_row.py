@@ -26,13 +26,17 @@ CSS = open("static/styles.css", encoding="utf-8").read()
 # it. The breakpoint has to be at least this or there is a band of viewports
 # where the strip is inline and does not fit.
 #
-# 1653 as it shipped, 1428 once the padding, gaps and search box came down, and
-# 1400 after the dropdown carets were taken out of the layout flow to even up
-# the spacing between tabs. This assertion caught that last one: the
+# 1653 as it shipped, 1428 once the padding, gaps and search box came down,
+# 1400 after the dropdown carets left the layout flow, and 1227 once the
+# wordmark went and left only the mark. The breakpoint stays at 1410 rather
+# than following it down: below that width the strip takes its own row and
+# spreads across it, which is the arrangement that was asked for, and dropping
+# the breakpoint to 1240 would quietly hand those viewports the inline row
+# instead. This assertion caught that last one: the
 # requirement dropped and this number did not, which is the drift it exists for.
 # Re-measure in a browser rather than adjusting it to whatever makes the test
 # pass; the sum of the header's children plus its gaps and padding is the figure.
-MEASURED_INLINE_WIDTH = 1400
+MEASURED_INLINE_WIDTH = 1227
 
 # What the placeholder "Search or ask  ⌘K" measures in this font at this
 # tracking, plus the input's own padding and border. Below it the field starts

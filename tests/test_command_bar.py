@@ -460,5 +460,33 @@ def test_the_phone_header_does_not_strand_the_assistant_on_its_own_row():
     chrome before a single reading, with Pulse pushed onto a row of its own
     because the row above was one word too wide. Dropping TERMINAL from the
     wordmark buys that word back; the mark plus OPTIC still identifies it."""
-    block = CSS[CSS.index("/* ---- Asset restyle: the phone"):]
-    assert ".brand-text span { display: none; }" in block
+    # The wordmark is now hidden at every width, not just here: it was about
+    # 115px of the top row restating what the mark and the browser tab already
+    # say. The phone rule that hid only its second word is gone with it.
+    assert ".brand-text { display: none; }" in CSS
+    assert ".brand-text span { display: none; }" not in CSS
+    # The name still has to reach a screen reader.
+    assert 'aria-label="Optic Terminal. Go to home"' in open("static/index.html").read()
+
+
+def test_the_tabs_spread_across_the_row_they_own():
+    """Above the breakpoint the strip is inline beside the search and every
+    pixel is contested, which is why its buttons carry no gap at all. On its
+    own row the opposite is true: measured at 1200, seven tabs were huddled in
+    the first two thirds of a 1163px row. `space-between` distributes them to
+    94px apart and only acts when the content fits, so a phone that scrolls the
+    strip is unaffected."""
+    block = CSS[CSS.index("@media (max-width: 1410px) {"):]
+    block = block[:block.index("\n}")]
+    assert "nav.tabs.tabs-group { justify-content: space-between; }" in block
+    # And the inline case must stay tight, or the one-row fit goes.
+    nav = CSS[CSS.index("\nnav.tabs {"):]
+    assert "gap: 0;" in nav[:nav.index("}")]
+
+
+def test_the_mark_carries_the_brand_alone():
+    """Resolution is not a consideration: it is an inline SVG on a 32-unit
+    viewBox, resampled by the renderer at whatever size and pixel ratio it
+    lands on."""
+    assert ".brand-mark { width: 34px; height: 34px;" in CSS
+    assert 'viewBox="0 0 32 32"' in open("static/index.html").read()
