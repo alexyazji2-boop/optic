@@ -339,3 +339,72 @@ def test_both_tabs_share_one_detector():
     assert "material_catalyst(news)" in sw
     assert "def material_catalyst(" in open("app/news.py").read()
     assert "def material_catalyst(" not in lt and "def material_catalyst(" not in sw
+
+
+# ============================================ the dossier overview =========
+#
+# That tab renders Optic Pulse and nothing else about the judgement, and Pulse
+# does not render conflicts. So on the morning RARE's approval landed it showed
+# "neutral" over a Momentum bar at -75 with nothing saying the chart was
+# measuring the week before the approval. The stance was right and
+# unexplained, which is the combination that reads as the panel being broken.
+
+APP_JS = open("static/app.js").read()
+CSS = open("static/styles.css").read()
+
+
+def test_pulse_carries_the_catalyst_as_its_own_field():
+    """Not left inside `conflicts`, so a caller can render one line from it
+    without parsing prose out of an array."""
+    from app.analytics import pulse
+    read = pulse.pulse({"verdict": {
+        "stance": "neutral", "catalyst": {"material": True, "kinds": ["M&A"]},
+        "conflicts": [],
+    }})
+    assert read["catalyst"]["material"] is True
+    assert read["catalyst"]["kinds"] == ["M&A"]
+
+
+def test_pulse_defaults_the_catalyst_rather_than_omitting_it():
+    """A missing key and "no catalyst" must not be the same shape to a client."""
+    from app.analytics import pulse
+    read = pulse.pulse({"verdict": {"stance": "neutral"}})
+    assert read["catalyst"] == {"material": False}
+
+
+def test_the_overview_renders_the_catalyst_above_the_bars():
+    """A caveat printed after the thing it qualifies is a footnote. This one
+    changes how the bars are read, so it goes before the disclosure."""
+    fn = APP_JS[APP_JS.index("function renderOpticPulse(d) {"):]
+    fn = fn[:fn.index("\n/* ") if "\n/* " in fn else len(fn)]
+    assert "pulseCatalystLine(p.catalyst)" in fn
+    assert fn.index("pulseCatalystLine") < fn.index("pl-bars"), \
+        "it has to come before the factor bars it explains"
+
+
+def test_the_catalyst_line_is_absent_when_there_is_none():
+    fn = APP_JS[APP_JS.index("function pulseCatalystLine(cat) {"):]
+    fn = fn[:fn.index("\nfunction renderOpticPulse")]
+    assert "cat.material !== true) return ''" in fn
+
+
+def test_the_catalyst_line_agrees_with_its_own_count():
+    """"One headline ... the freshest" has nothing to be freshest of."""
+    fn = APP_JS[APP_JS.index("function pulseCatalystLine(cat) {"):]
+    fn = fn[:fn.index("\nfunction renderOpticPulse")]
+    assert "'One headline'" in fn and "headlines`" in fn
+    assert "'filed'" in fn and "'the freshest'" in fn
+
+
+def test_the_overview_line_does_not_repeat_the_weighting_arithmetic():
+    """The Options tab prints the reweighting next to the weights, where it
+    belongs. Here the reader needs only that a catalyst landed and the chart
+    predates it."""
+    fn = APP_JS[APP_JS.index("function pulseCatalystLine(cat) {"):]
+    fn = fn[:fn.index("\nfunction renderOpticPulse")]
+    assert "half its usual weight" not in fn
+    assert "predate it" in fn
+
+
+def test_the_catalyst_line_is_styled():
+    assert ".pl-catalyst {" in CSS

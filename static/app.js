@@ -6813,6 +6813,30 @@ function agoWords(iso) {
  * note beside them is the app's own finding that this blend does not beat raw
  * momentum — which is exactly the thing that must not become harder to find.
  */
+/* One line on a resolved catalyst, or nothing.
+ *
+ * Deliberately not the full conflict text the Options tab prints. That version
+ * explains the reweighting arithmetic, which belongs next to the weights; here
+ * the reader needs only to know a catalyst landed and that the chart predates
+ * it. */
+function pulseCatalystLine(cat) {
+  if (!cat || cat.material !== true) return '';
+  const kinds = (cat.kinds || []).join(' and ');
+  const when = cat.freshest_hours === null || cat.freshest_hours === undefined
+    ? 'recently'
+    : cat.freshest_hours < 1.5 ? 'an hour ago'
+      : cat.freshest_hours < 24 ? `${Math.round(cat.freshest_hours)} hours ago`
+        : cat.freshest_hours < 42 ? 'a day ago'
+          : `${Math.round(cat.freshest_hours / 24)} days ago`;
+  const n = cat.count || 1;
+  // "the freshest" needs something to be freshest of. One headline is "filed".
+  return `<p class="pl-catalyst">
+    <strong>${n === 1 ? 'One headline' : `${n} headlines`} tagged ${esc(kinds)}</strong>,
+    ${n === 1 ? 'filed' : 'the freshest'} ${esc(when)}. The chart readings below
+    are measured over windows that mostly predate it, so momentum carries less
+    weight here than usual.</p>`;
+}
+
 function renderOpticPulse(d) {
   const p = d.pulse;
   if (!p) return '';
@@ -6832,6 +6856,16 @@ function renderOpticPulse(d) {
     ${g.lede ? `<p class="pl-lede is-${esc(stance)}">${esc(g.lede)}</p>`
     : `<p class="pl-lede is-${esc(stance)}">${esc(p.stance_label
       || stance.toUpperCase())}</p>`}
+    ${/* A resolved catalyst, above the bars rather than below them.
+         This panel is the whole of the judgement on the Dossier overview, and
+         it does not render conflicts. So on the morning RARE's approval landed
+         the tab showed "neutral" over a Momentum bar at -75, with nothing
+         saying the chart was measuring the week before the approval. The bars
+         are unreadable without it: a reader seeing momentum hard down and a
+         neutral stance concludes the stance is broken.
+         Placed before the disclosure because it changes how the bars below are
+         read, and a caveat after the thing it qualifies is a footnote. */''}
+    ${pulseCatalystLine(p.catalyst)}
 
     ${story && story.title ? `<a class="pl-story" href="${esc(story.url || '#')}"
       target="_blank" rel="noopener noreferrer">

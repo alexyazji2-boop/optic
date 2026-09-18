@@ -12545,3 +12545,17 @@ body.chat-full .rp { display: none; }
   letter-spacing: 0.05em;
   color: var(--ink-muted);
 }
+
+/* The resolved-catalyst line in the Pulse hero. Sits between the stance and the
+   factor bars because it changes how those bars read: momentum hard down under
+   a neutral stance looks like a contradiction until you know the chart is
+   measuring the week before the catalyst. */
+.pl-catalyst {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px solid var(--border-strong);
+  font-size: var(--t-body);
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+.pl-catalyst strong { color: var(--ink); font-weight: 600; }

@@ -143,6 +143,18 @@ def pulse(payload: Dict[str, Any], evaluation: Optional[Dict[str, Any]] = None) 
         "factors_priced": len(priced),
         "factors_total": len(rows),
         "agreement_pct": verdict.get("signal_agreement_pct"),
+        # Passed through as its own field rather than left inside `conflicts`.
+        #
+        # The Dossier overview renders this panel and nothing else about the
+        # judgement, and it does not render conflicts at all. So on the morning
+        # RARE's FDA approval landed, that tab showed "neutral" over a Momentum
+        # bar reading -75 with no way to know the chart was measuring the week
+        # before the approval. The stance was right and unexplained, which is
+        # the combination that reads as the panel being broken.
+        #
+        # A caller can render one line from this without parsing prose out of a
+        # conflicts array.
+        "catalyst": verdict.get("catalyst") or {"material": False},
         "conflicts": verdict.get("conflicts") or [],
         "skill": skill_note(evaluation),
         # Kept in the payload, deliberately not the headline. Anything that wants
