@@ -248,14 +248,24 @@ def test_the_summary_fit_is_measured_at_render():
     assert "fitChecked" not in code, "and no latch, because it runs once per render"
 
 
-def test_the_phone_hides_only_duplicates():
-    """Each of the four is a copy of something else on the same screen. The
-    search form goes because the topbar carries #ticker-input with the same
-    live results."""
+def test_the_phone_hides_only_what_is_still_a_duplicate():
+    """Four things were hidden here as copies of something else on screen. One
+    of those premises has since stopped being true.
+
+    `.home-brand` went because the topbar said OPTIC TERMINAL. The topbar is
+    now the mark alone, so a phone had no brand anywhere on it, and the pills
+    and the search form came back with it on the reader's call. The greeting
+    stays hidden: the session block directly above it says the phase and the
+    local time, which is the same fact with more in it, and that has not
+    changed.
+    """
     block = CSS[CSS.index("/* Phone: three things go"):]
     block = block[:block.index("\n}") + 2]
-    for cls in (".home-brand", ".home-quick", ".hm-greet", ".home-search"):
-        assert cls in block, cls
+    assert ".hm-greet" in block
+    for restored in (".home-brand", ".home-quick", ".home-search"):
+        assert restored + " { display: none; }" not in block, restored
+    # And the premise that justified hiding the brand has to stay retired.
+    assert ".brand-text { display: none; }" in CSS
 
 
 def test_the_phone_block_sits_after_the_rules_it_overrides():

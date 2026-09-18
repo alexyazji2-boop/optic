@@ -535,7 +535,7 @@ def build(macro: Optional[Dict[str, Any]] = None,
     return {
         "available": True,
         "date": today.isoformat(),
-        "title": "Morning desk",
+        "title": "Optic Desk",
         "lead": _lead(tape, rate, catalyst, releases),
         "scenarios": _scenarios(rate, catalyst),
         "note": _note(rate, catalyst),

@@ -12330,8 +12330,9 @@ a.cc-story-t:focus-visible { color: var(--ink-2); text-decoration: underline; }
    The search form stays. It is the page's primary action and the brief this
    came from is explicit that search is the central primitive. */
 @media (max-width: 719px) {
-  .home-brand { display: none; }
-  .home-quick { display: none; }
+  /* The greeting stays hidden. The session block directly above it says
+     AFTER HOURS and the local time, which is the same fact with more in it,
+     and that has not changed. */
   .hm-greet { display: none; }
   /* And the fourth: the page's own search form.
      The topbar carries `#ticker-input` about 250px above it, with the same
@@ -12341,7 +12342,15 @@ a.cc-story-t:focus-visible { color: var(--ink-2); text-decoration: underline; }
      its full-width Analyze button is ~180px of it. Search is still the first
      thing on the screen, which is what the brief asks for; it is just the one
      that is always there rather than a second copy on one view. */
-  .home-search { display: none; }
+  /* The brand row, the pills and the search form are back, and the reason the
+     first of them was hidden no longer holds: it was a duplicate of a topbar
+     that said OPTIC TERMINAL, and the topbar is now the mark alone. A phone
+     had no brand on it at all.
+     The search form is a genuine duplicate of `#ticker-input` and is restored
+     anyway, on the call that a page whose primary action is search should
+     show it where the eye lands rather than only in the chrome. It costs
+     about 180px with its Analyze button, which on a phone is the real price
+     of this and is worth re-checking if the page starts feeling long. */
 }
 
 /* ===================================================== report a problem ====

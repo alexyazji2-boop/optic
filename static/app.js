@@ -5689,7 +5689,7 @@ function morningDesk(data) {
   return `
     <section class="hm-block md">
       <div class="hm-block-head">
-        <h2 class="hm-h">Morning desk</h2>
+        <h2 class="hm-h">Optic Desk</h2>
         ${askPulse('morning_desk')}
       </div>
       ${lead}
