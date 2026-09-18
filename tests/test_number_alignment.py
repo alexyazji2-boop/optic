@@ -66,7 +66,11 @@ def test_the_tile_label_reserves_two_lines():
     declared on the same rule."""
     body = _rule(".tile .label")
     assert "line-height: 1.4" in body
-    assert "min-height: calc(2 * 1.4 * var(--t-micro))" in body
+    # Caption, not micro: the label moved up a step when it stopped being
+    # uppercase. The reservation is computed from whichever size is in use, so
+    # the two have to name the same token.
+    assert "min-height: calc(2 * 1.4 * var(--t-caption))" in body
+    assert "font-size: var(--t-caption)" in body
 
 
 def test_the_tile_note_is_pushed_to_the_bottom():

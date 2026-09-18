@@ -11069,9 +11069,13 @@ function renderInstrument(d) {
   const s = d.snapshot || {};
   const decimals = Math.abs(s.last || 0) < 10 ? 4 : 2;
 
-  const stat = (label, value, cls, note) => `<div class="tile">
+  /* label / value / delta, which is the shape both reference dashboards use
+     and this had as label / value. Tremor's KPI card is "Unique visitors /
+     10,450 / -12.5%"; the delta is what turns a reading into a change. */
+  const stat = (label, value, cls, note, delta) => `<div class="tile">
     <span class="label">${hg(label)}</span>
     <span class="value ${cls || ''}">${value}</span>
+    ${delta ? `<span class="delta ${esc(delta.dir)}">${esc(delta.text)}</span>` : ''}
     ${note ? `<span class="note">${esc(note)}</span>` : ''}</div>`;
 
   return `<div class="panel span-all">
@@ -11081,8 +11085,14 @@ function renderInstrument(d) {
       ${fmt((d.dates || []).length, 0)} daily bars.</p>
 
     <div class="inst-stats">
-      ${stat('Last', fmt(s.last, decimals))}
-      ${stat('1 day', fmtPct(s.chg_1d, 2), signClass(s.chg_1d))}
+      ${/* The day's change rides on the price rather than taking a tile of its
+           own. That is the references' pattern and it removes a duplicate:
+           "Last 2,890.51" beside "1 day +1.10%" is one reading split across
+           two boxes, and the anchor tile was the only one in the row with
+           nothing under its figure. */''}
+      ${stat('Last', fmt(s.last, decimals), '', null,
+    s.chg_1d === null || s.chg_1d === undefined ? null
+      : { dir: signClass(s.chg_1d) || 'flat', text: fmtPct(s.chg_1d, 2) + ' today' })}
       ${stat('20 days', fmtPct(s.chg_20d, 2), signClass(s.chg_20d))}
       ${stat('vs 200-day', fmtPct(s.vs_sma200, 1), signClass(s.vs_sma200))}
       ${stat('RSI', fmt(s.rsi, 0), '',

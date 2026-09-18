@@ -120,16 +120,6 @@
    * action button would have been the same colour as a loss. This one is 42
    * degrees off in dark and 27 in light, which is the most separation an amber
    * can have while still carrying white text. The blue it replaces had 147. */
-  /* The Asset trial palette. Declared here because every colour literal in
-     this stylesheet lives in a token block, and a scoped override is still a
-     declaration: the accent change is why that rule exists, where one token
-     moved the buttons and the mark together and anything holding a literal
-     stayed blue. Referenced only by the `#view-home` block far below, so
-     nothing outside that subtree can pick them up by accident. */
-  --trial-surface: #131517;
-  --trial-surface-2: #16181b;
-  --trial-brand: #d4b144;
-  --trial-brand-ink: #1a1400;
   --btn-primary: #9a6b00;
   --btn-primary-ink: #ffffff;
   /* Text on any saturated fill, not just the primary button. Five places set
@@ -1494,8 +1484,7 @@ main { padding: var(--space-6) var(--space-6) var(--space-8); isolation: isolate
 }
 .funnel-label {
   font-size: var(--t-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.01em;
   color: var(--ink-2);
 }
 .funnel-note { font-size: var(--t-caption); color: var(--ink-muted); }
@@ -1614,14 +1603,34 @@ table.data.narrow { min-width: 0; }
  * whole row. `line-height` is declared here because the reservation is computed
  * from it. */
 .tile .label {
-  font-size: var(--t-micro);
+  /* Sentence case at the caption size. Same argument as the table header:
+     a label over a figure is read, not shouted, and both references put these
+     in plain sentence case. The two-line reservation stays, for the reason
+     recorded on it. */
+  font-size: var(--t-caption);
   line-height: 1.4;
-  min-height: calc(2 * 1.4 * var(--t-micro));
+  min-height: calc(2 * 1.4 * var(--t-caption));
   color: var(--ink-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   font-weight: 500;
 }
+
+/* The delta, which the tile did not have.
+ *
+ * Both references carry label / value / delta where this carried label /
+ * value: Tremor's KPI card is "Unique visitors / 10,450 / -12.5%", and
+ * shadcn's adds a trend caption under it. The figure was already in the
+ * payload on every tile that wants one, so this was a missing component
+ * rather than a restyle. Directional colour, because on a delta the sign is
+ * the content. */
+.tile .delta {
+  font-size: var(--t-caption);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.tile .delta.up { color: var(--pos); }
+.tile .delta.down { color: var(--neg); }
+.tile .delta.flat { color: var(--ink-muted); }
 .tile .value {
   font-size: var(--t-d3);
   font-weight: 600;
@@ -1723,11 +1732,15 @@ table.data tbody tr:hover { background: var(--raised); }
 table.data th {
   text-align: right;
   padding: var(--space-1) var(--space-2);
-  color: var(--ink-muted);
+  /* Sentence case, at the small size, in secondary rather than muted ink.
+     It was 12.65px uppercase with 0.04em tracking in --ink-muted, which made
+     the row you scan to find a column the least legible text in the table.
+     Measured against the two references that do this well: shadcn's dashboard
+     runs 14px sentence case at near-full ink and Tremor the same. Neither
+     uppercases anything. */
+  color: var(--ink-2);
   font-weight: 500;
-  font-size: var(--t-caption);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-size: var(--t-small);
   border-bottom: 1px solid var(--baseline);
   white-space: nowrap;
 }
@@ -2674,8 +2687,7 @@ ul.brief-list {
 .read-lead.tone-negative { border-left-color: var(--neg); }
 .read-lead-kicker {
   font-size: var(--t-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
   margin-bottom: var(--space-2);
 }
@@ -3664,8 +3676,7 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
 .idx-nums > div { display: flex; flex-direction: column; gap: var(--space-0); }
 .idx-lbl {
   font-size: var(--t-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 .idx-val { font-size: var(--t-body); font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -3697,8 +3708,7 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
 .fg-label {
   margin-top: var(--space-1);
   font-size: var(--t-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.01em;
   font-weight: 600;
 }
 
@@ -3727,8 +3737,7 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
 
 .weekly-kicker {
   font-size: var(--t-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
   margin-bottom: var(--space-2);
 }
@@ -3864,8 +3873,7 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
 .catmode-head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); }
 .catmode-kicker {
   font-size: var(--t-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.01em;
   color: var(--s1);
   font-weight: 600;
 }
@@ -4001,8 +4009,7 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
 .fg-comp-name { font-size: var(--t-body); font-weight: 600; }
 .fg-comp-weight {
   font-size: var(--t-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 .fg-comp-score { margin-left: auto; font-size: var(--t-heading); font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -4201,8 +4208,7 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
 .home-sec { margin-top: var(--space-6); }
 .home-sec-title {
   font-size: var(--t-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.01em;
   color: var(--ink);
   font-weight: 600;
   margin: 0;
@@ -4529,8 +4535,7 @@ button.home-card:focus-visible { outline: 2px solid var(--s1); outline-offset: 2
 }
 .pri-col-title {
   font-size: var(--t-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.01em;
   color: var(--ink);
   font-weight: 600;
   margin: 0;
@@ -4604,8 +4609,7 @@ button.home-card:focus-visible { outline: 2px solid var(--s1); outline-offset: 2
 }
 .ex-kicker {
   font-size: var(--t-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.01em;
   color: var(--s1);
   font-weight: 600;
 }
@@ -4709,8 +4713,7 @@ button.home-card:focus-visible { outline: 2px solid var(--s1); outline-offset: 2
      that row sit at two different heights. */
   line-height: 1.4;
   min-height: calc(1.4 * var(--t-micro));
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 .bk-figs b, .bk-figs > span { font-variant-numeric: tabular-nums; }
@@ -4935,8 +4938,7 @@ button.home-card:focus-visible { outline: 2px solid var(--s1); outline-offset: 2
 .cal-num { display: flex; flex-direction: column; gap: var(--space-0); text-align: right; }
 .cal-num-lbl {
   font-size: var(--t-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
   font-weight: 400;
 }
@@ -4963,8 +4965,7 @@ button.home-card:focus-visible { outline: 2px solid var(--s1); outline-offset: 2
 .cal-detail-lbl {
   display: block;
   font-size: var(--t-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 .cal-detail-val {
@@ -5141,8 +5142,7 @@ button.home-card:focus-visible { outline: 2px solid var(--s1); outline-offset: 2
   margin: var(--space-5) 0 var(--space-2);
   font-size: var(--t-micro);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 .pat-table td { vertical-align: top; }
@@ -5591,8 +5591,7 @@ details.ind-explain[open] > summary .cal-caret { transform: rotate(90deg); }
   display: block;
   font-size: var(--t-micro);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 
@@ -6893,8 +6892,7 @@ b, strong { font-weight: 600; }
   padding: var(--space-1) var(--space-2);
   border-bottom: 1px solid var(--border);
   font-size: var(--t-caption);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 .ws-widget:hover .ws-leg-btn { opacity: 1; }
@@ -7147,8 +7145,7 @@ b, strong { font-weight: 600; }
 .ws-mgroup h4 {
   margin: 0 0 var(--space-2);
   font-size: var(--t-caption);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 .ws-mrow {
@@ -7327,8 +7324,7 @@ table.data tr.fx-detail td,
   display: block;
   color: var(--ink-muted);
   font-size: var(--t-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.01em;
   margin-bottom: 2px;
 }
 
@@ -7493,8 +7489,7 @@ table.data tr.fx-detail td,
 .econ-group-lab {
   flex: 0 0 130px;
   font-size: var(--t-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 .econ-pills { display: flex; flex-wrap: wrap; gap: var(--space-1); flex: 1 1 auto; }
@@ -8581,7 +8576,6 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
   font-size: var(--t-caption);
   font-weight: 600;
   letter-spacing: 0.1em;
-  text-transform: uppercase;
   color: var(--ink-muted);
 }
 .pl-fresh { font-size: var(--t-caption); color: var(--ink-muted); }
@@ -8800,8 +8794,7 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
 .pl-next-h {
   font-size: var(--t-caption);
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
   margin: 0 0 var(--space-3);
 }
@@ -8905,7 +8898,6 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
   font-size: var(--t-micro);
   font-weight: 600;
   letter-spacing: 0.1em;
-  text-transform: uppercase;
   color: var(--ink-muted);
 }
 .cp-row {
@@ -9092,8 +9084,7 @@ body.cp-open { overflow: hidden; }
 .ex-group-h {
   margin: 0 0 var(--space-1);
   font: 600 var(--t-micro)/1 var(--sans);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 
@@ -9303,8 +9294,7 @@ body.cp-open { overflow: hidden; }
 .ms-label {
   grid-column: 1 / -1;
   font-size: var(--t-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 /* Tabular figures so the strip does not jitter as quotes update, and so the
@@ -9773,8 +9763,7 @@ body.cp-open { overflow: hidden; }
 .ob-label, .su-label {
   font-size: var(--t-micro);
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 .ob-value {
@@ -10065,8 +10054,7 @@ body.cp-open { overflow: hidden; }
 /* The label, inside the box, in both controls. */
 .oc-eyebrow {
   font-size: var(--t-micro);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 
@@ -10080,8 +10068,7 @@ body.cp-open { overflow: hidden; }
 .km-eyebrow,
 .pp-eyebrow {
   font-size: var(--t-micro);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 .km-now { font: 600 var(--t-body)/1.2 var(--sans); }
@@ -10160,8 +10147,7 @@ body.cp-open { overflow: hidden; }
 .oc-foot-h {
   margin: 0 0 var(--space-0);
   font-size: var(--t-micro);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 .km-foot ul,
@@ -10291,8 +10277,7 @@ body.cp-open { overflow: hidden; }
 .ct-hz-name {
   font-size: var(--t-micro);
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 .ct-hz-win {
@@ -11500,8 +11485,7 @@ body.auth-open { overflow: hidden; }
 
 .px-fact-label {
   font: 500 var(--t-micro)/1 var(--sans);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 
@@ -11608,8 +11592,7 @@ body.auth-open { overflow: hidden; }
    for `decisive`, so the two cannot disagree. */
 .cb-gap {
   font: 500 var(--t-micro)/1.4 var(--sans);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 
@@ -11680,8 +11663,7 @@ body.auth-open { overflow: hidden; }
 
 .wv-filter-label {
   font: 500 var(--t-micro)/1 var(--sans);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 
@@ -11792,8 +11774,7 @@ body.auth-open { overflow: hidden; }
 .ov-card:hover { border-color: var(--border-strong); background: var(--surface); }
 .ov-card-lab {
   font-size: var(--t-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 .ov-card-val { font-size: var(--t-d3); font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -12070,8 +12051,7 @@ a.cc-story-t:focus-visible { color: var(--ink-2); text-decoration: underline; }
   gap: var(--space-2);
   margin: 0 0 var(--space-1);
   font-size: var(--t-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 .al-group-n { font-variant-numeric: tabular-nums; }
@@ -12520,8 +12500,7 @@ body.chat-full .rp { display: none; }
   display: block;
   margin-bottom: var(--space-1);
   font-size: var(--t-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 .md-limits ul { margin: 0; padding-left: var(--space-4); }
@@ -12551,8 +12530,7 @@ body.chat-full .rp { display: none; }
   display: block;
   margin-bottom: var(--space-1);
   font-size: var(--t-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 
@@ -12576,74 +12554,3 @@ body.chat-full .rp { display: none; }
    a second decision after a first one landed. */
 .pl-catalyst.is-pending { border-left-style: dashed; }
 
-/* ================================= Asset tone, scoped to Home =============
- *
- * A trial of the Framer "Asset" template's visual language on the least dense
- * view, so it can be compared against a tab that has not been touched. Scoped
- * to `#view-home` rather than applied to the tokens themselves: redefining a
- * custom property on an ancestor cascades to its subtree and nothing else, so
- * Options and Charting keep the current treatment while this is judged.
- *
- * Measured off https://asset.framer.ai at 1440: page `rgb(8,10,9)`, dominant
- * surface `rgb(19,21,23)`, raised `rgb(35,35,38)`, accent `rgb(212,177,68)`,
- * Host Grotesk with h1 at 48px and weight 400.
- *
- * What is NOT copied, and why.
- *
- * Its spacing. Asset is a marketing page and can afford 200px between
- * sections; this terminal has had dead space removed from it tab by tab on
- * request, and the header was held to one row for the same reason. Section
- * rhythm here opens a little, nowhere near that far.
- *
- * Its greens and cyans. `--pos` and `--neg` carry meaning and their contrast
- * is measured (5.49:1 and 4.69:1 on `--surface-2`). Asset's are decorative.
- * Swapping them would be the VIX-tile mistake again: colour contradicting the
- * number it sits on.
- */
-#view-home {
-  /* Cooler surfaces. The current pair is warm (18,16,16 / 28,25,23); Asset's
-     are neutral-to-cool. The page plane itself is left alone: at (11,10,9)
-     against Asset's (8,10,9) the difference is not visible. */
-  --surface: var(--trial-surface);
-  /* Cool, but NOT Asset's `rgb(35,35,38)`, and the difference is measured.
-     `--neg` sits at 4.51:1 on the current warm `#1c1917`, which is barely over
-     the 4.5 line, and the stylesheet records that it was already moved once to
-     get there: `#d43c3c` at 3.96 to `#d95656` at 4.69. Asset's lighter raised
-     tone drops it to 4.04, back under AA and undoing that fix. This is the same
-     hue shift at slightly lower luminance, which reads cool and lifts the pair
-     to 5.30 and 4.59. */
-  --surface-2: var(--trial-surface-2);
-  --raised: rgba(255, 255, 255, 0.035);
-  /* Lighter gold. `#9a6b00` is a deeper cut of the same hue; this is Asset's,
-     which reads as brass rather than bronze on a near-black plane. */
-  --btn-primary: var(--trial-brand);
-  --btn-primary-ink: var(--trial-brand-ink);
-}
-
-/* Light and large, which is the single biggest driver of the reference's feel:
-   48px at weight 400 rather than 18px at 600. Applied to the block headings and
-   the stance lede, not to table headers or figures, where weight is doing
-   legibility work rather than tone. */
-#view-home .hm-h {
-  font-size: var(--t-d3);
-  font-weight: 400;
-  letter-spacing: -0.02em;
-}
-#view-home .pl-lede {
-  font-weight: 400;
-  font-size: var(--t-d2);
-  letter-spacing: -0.02em;
-}
-/* The eyebrow carries more tracking and less weight, so it reads as a label
-   above the heading rather than as a small heading of its own. */
-#view-home .pl-eyebrow,
-#view-home .md-limits-h {
-  font-weight: 500;
-  letter-spacing: 0.14em;
-}
-
-/* Section rhythm. One step of air between blocks and a little more inside
-   them. Deliberately one step, not the reference's four. */
-#view-home .hm-board { gap: var(--space-6); }
-#view-home .hm-block { padding: var(--space-5) var(--space-6) var(--space-6); }
-#view-home .hm-block-head { margin-bottom: var(--space-4); }

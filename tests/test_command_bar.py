@@ -291,11 +291,19 @@ def test_statistical_notation_keeps_its_case():
     anyway through `table.data th`, which is a separate question from what the
     source says."""
     assert "<th>p</th>" in APP_JS
-    # Anchored with a leading newline. `.panel .grid table.data th {` contains
-    # the bare substring and sits earlier in the file, so indexing on it without
-    # the newline lands on a rule whose whole body is `white-space: normal`.
+    # It now renders lowercase too, and that is an improvement rather than a
+    # regression. This used to assert `table.data th { text-transform:
+    # uppercase }` and note that p and n were being shouted as P and N despite
+    # the source being right. Sentence-case headers put the rendered form back
+    # in agreement with the convention.
+    #
+    # Anchored with a leading newline: `.panel .grid table.data th {` contains
+    # the bare substring and sits earlier in the file, so indexing without it
+    # lands on a rule whose whole body is `white-space: normal`.
     rule = CSS[CSS.index("\ntable.data th {"):]
-    assert "text-transform: uppercase" in rule[:rule.index("}")]
+    body = rule[:rule.index("}")]
+    assert "text-transform: uppercase" not in body
+    assert "font-size: var(--t-small)" in body
 
 
 def test_the_tab_strip_spaces_its_labels_evenly():
