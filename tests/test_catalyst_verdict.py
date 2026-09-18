@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import pytest
 
+from app import news as news_mod
 from app.analytics import swing
 
 
@@ -38,7 +39,7 @@ def _article(tier="breaking", importance="high", kind="regulatory / clinical",
 
 
 def test_a_fresh_major_company_catalyst_is_material():
-    read = swing._catalyst_read({"articles": [_article()]})
+    read = news_mod.material_catalyst({"articles": [_article()]})
     assert read["material"] is True
     assert read["kinds"] == ["regulatory / clinical"]
     assert read["count"] == 1
@@ -53,19 +54,19 @@ def test_a_fresh_major_company_catalyst_is_material():
     ({"importance": "medium"}, "an analyst note is not either"),
 ])
 def test_what_does_not_count_as_material(kwargs, why):
-    read = swing._catalyst_read({"articles": [_article(**kwargs)]})
+    read = news_mod.material_catalyst({"articles": [_article(**kwargs)]})
     assert read["material"] is False, why
 
 
 def test_no_news_at_all_is_not_material():
-    assert swing._catalyst_read({})["material"] is False
-    assert swing._catalyst_read({"articles": []})["material"] is False
+    assert news_mod.material_catalyst({})["material"] is False
+    assert news_mod.material_catalyst({"articles": []})["material"] is False
 
 
 def test_direction_comes_from_the_material_headlines_only():
     """The overall net sentiment averages them with background coverage, which
     is how a resolved binary ends up reading like a mildly positive week."""
-    read = swing._catalyst_read({"articles": [
+    read = news_mod.material_catalyst({"articles": [
         _article(sentiment=10.0),
         _article(sentiment=8.0, age=3.0),
         _article(tier="background", importance="low", sentiment=-9.0),
@@ -75,7 +76,7 @@ def test_direction_comes_from_the_material_headlines_only():
 
 
 def test_the_freshest_is_the_one_reported():
-    read = swing._catalyst_read({"articles": [
+    read = news_mod.material_catalyst({"articles": [
         _article(age=40.0, title="old"), _article(age=2.0, title="new")]})
     assert read["freshest_hours"] == 2.0
     assert read["headline"] == "new"
@@ -203,9 +204,138 @@ def test_the_age_reads_as_english(hours, expected):
     """Two bugs here. The first version printed "1 hours ago", and its bands
     met at the same boundary from both sides, so "a day ago" was unreachable:
     anything at or above 36 hours was also at least 1.5 days."""
-    assert swing._age_phrase(hours) == expected
+    assert news_mod.age_phrase(hours) == expected
 
 
 def test_the_headline_count_agrees_with_its_noun():
-    assert swing._count_words(1, "headline") == "One headline"
-    assert swing._count_words(6, "headline") == "6 headlines"
+    assert news_mod.count_words(1, "headline") == "One headline"
+    assert news_mod.count_words(6, "headline") == "6 headlines"
+
+
+# ================================================ the investing tab =========
+#
+# Same detector, deliberately applied a different way. The swing verdict dampens
+# its trend input because a `trend_score` read the morning after a binary
+# resolves is mostly pre-event bars. That argument does not transfer to a
+# 200-week average, which is *supposed* to ignore one day: damping it because
+# something happened on Tuesday would defeat the instrument. So the long-run
+# factors are left alone and the catalyst is added as a factor of its own.
+
+from app.analytics import longterm
+
+
+class _P:
+    """Enough provider for analyse_holding, with a falling 12-year history."""
+
+    def __init__(self, n=3200):
+        import numpy as np
+        import pandas as pd
+        idx = pd.date_range("2014-01-01", periods=n, freq="B")
+        fall = np.linspace(120.0, 15.0, n)
+        self._df = pd.DataFrame({"Close": fall, "High": fall * 1.01,
+                                 "Low": fall * 0.99, "Open": fall,
+                                 "Volume": [1e6] * n}, index=idx)
+
+    def history(self, ticker, period="2y", interval="1d"):
+        return self._df
+
+    def quote(self, ticker):
+        return {"name": "Test", "price": 15.0, "forward_pe": 72.8,
+                "dividend_yield": 0.0}
+
+
+def _holding(articles):
+    return longterm.analyse_holding(
+        _P(), "RARE", {"net_sentiment": 5.27, "articles": articles})
+
+
+def test_the_investing_tab_records_a_resolved_catalyst():
+    """RARE scored -66 and "avoid new capital until the trend repairs" on the
+    day the FDA approved its first therapy, with no way to say so at all."""
+    out = _holding([_article()])
+    labels = [f["label"] for f in out["conviction_factors"]]
+    assert "Resolved catalyst" in labels
+    row = next(f for f in out["conviction_factors"] if f["label"] == "Resolved catalyst")
+    assert row["points"] == 12.0
+    assert row["kind"] == "catalyst"
+
+
+def test_a_negative_catalyst_counts_against():
+    out = _holding([_article(sentiment=-9.0, kind="legal / regulatory")])
+    row = next(f for f in out["conviction_factors"] if f["label"] == "Resolved catalyst")
+    assert row["points"] == -12.0
+
+
+def test_a_directionless_catalyst_is_recorded_at_zero():
+    """Like valuation between its thresholds: "the model looked and shrugged"
+    beats the factor silently vanishing."""
+    out = _holding([_article(sentiment=0.0)])
+    row = next(f for f in out["conviction_factors"] if f["label"] == "Resolved catalyst")
+    assert row["points"] == 0.0
+    assert "no clear direction" in row["detail"]
+
+
+def test_no_catalyst_adds_no_factor():
+    out = _holding([_article(tier="background", importance="low")])
+    assert not any(f["label"] == "Resolved catalyst" for f in out["conviction_factors"])
+
+
+def test_the_panel_still_works_with_no_news_at_all():
+    """Twelve years of prices must not fail because a headline feed is down."""
+    out = longterm.analyse_holding(_P(), "RARE", None)
+    assert out["conviction_score"] is not None
+    assert out["catalyst"]["material"] is False
+
+
+def test_the_secular_trend_is_not_damped_by_a_catalyst():
+    """The opposite of the swing treatment, and on purpose. A 200-week average
+    that flinches at one day is not a 200-week average."""
+    with_cat = _holding([_article()])
+    without = _holding([_article(tier="background", importance="low")])
+    def trend(out):
+        return {f["label"]: f["points"] for f in out["conviction_factors"]
+                if f["label"] in ("200-week trend", "40-week trend")}
+    assert trend(with_cat) == trend(without)
+    # And pinned to the documented weights, because comparing the two sides
+    # only catches a *conditional* change: damping the trend unconditionally
+    # moves both and slips through. That mutation did.
+    assert trend(with_cat)["200-week trend"] == -25.0
+    assert trend(with_cat)["40-week trend"] == -8.0
+
+
+def test_the_catalyst_cannot_outweigh_the_multi_year_record():
+    """One approval does not erase five years.
+
+    Stated as the arithmetic rather than as a label, because the label depends
+    on where the rest of the score lands and this fixture is not RARE. What
+    holds either way: the catalyst moves the score by exactly its own twelve
+    points and leaves a deeply negative long-run record negative. Measured on
+    the real symbol, RARE went from -66 to -54 and stayed "low" conviction,
+    which is the honest answer for a long-horizon read on a company
+    underperforming SPY by 43%/yr at a 72.8 forward P/E.
+    """
+    with_cat = _holding([_article()])
+    without = _holding([_article(tier="background", importance="low")])
+    assert with_cat["conviction_score"] == without["conviction_score"] + 12.0
+    assert with_cat["conviction_score"] < 0, "one headline does not rescue the record"
+
+
+def test_the_scale_admits_the_new_factor():
+    """`max_possible` is the sum of the best case for every factor. Leaving it
+    at 85 with a twelve-point factor in play would misreport how close to
+    "perfect" a score is."""
+    out = _holding([_article()])
+    scale = out["conviction_scale"]
+    assert scale["max_possible"] == 97
+    assert scale["min_possible"] == -86
+
+
+def test_both_tabs_share_one_detector():
+    """Two copies would drift, and the swing one already carries the measured
+    reasoning for every condition."""
+    lt = open("app/analytics/longterm.py").read()
+    sw = open("app/analytics/swing.py").read()
+    assert "news_mod.material_catalyst(" in lt
+    assert "material_catalyst(news)" in sw
+    assert "def material_catalyst(" in open("app/news.py").read()
+    assert "def material_catalyst(" not in lt and "def material_catalyst(" not in sw

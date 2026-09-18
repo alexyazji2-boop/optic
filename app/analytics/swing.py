@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 
-from ..news import TIER_BREAKING, TIER_MAJOR
+from ..news import age_phrase, count_words, material_catalyst
 from .entry import iv_context
 from .series_stats import relative_strength
 
@@ -101,97 +101,11 @@ def _gamma_score(gex: Dict[str, Any], spot: float) -> Optional[float]:
     return float(np.clip(score, -100, 100))
 
 
-# How recent a catalyst has to be for the chart to be measuring the world before
-# it. Three days: long enough to cover a Friday event read on a Monday, short
-# enough that it is still the most recent thing the tape has priced.
-CATALYST_WINDOW_HOURS = 72.0
-
 # What the technicals weight is multiplied by once such a catalyst has landed.
 # Not zero. Where price sits against its levels still matters, and the levels
 # themselves are unchanged; what stops being informative is the *trend* through
 # them, which is the bulk of what `trend_score` measures.
 CATALYST_TECH_DAMPING = 0.5
-
-
-def _age_phrase(hours: Optional[float]) -> str:
-    """"an hour ago", "3 hours ago", "2 days ago". Plural agreement included,
-    because "1 hours ago" was what the first version printed."""
-    if hours is None:
-        return "recently"
-    if hours < 1.5:
-        return "an hour ago"
-    if hours < 24:
-        return "{:.0f} hours ago".format(hours)
-    # The bands have to meet without overlapping or leaving a hole. A first
-    # version ran hours to 36 and then asked whether days < 1.5, which is the
-    # same boundary from both sides: every value at or above 36 hours was at
-    # least 1.5 days, so "a day ago" could not be reached at all.
-    if hours < 42:
-        return "a day ago"
-    return "{:.0f} days ago".format(hours / 24.0)
-
-
-def _count_words(n: int, noun: str) -> str:
-    return "One {}".format(noun) if n == 1 else "{} {}s".format(n, noun)
-
-
-def _catalyst_read(news: Dict[str, Any]) -> Dict[str, Any]:
-    """A material, company-specific catalyst inside the recent window.
-
-    `news.py` already does this classification and the verdict was throwing it
-    away. Its own comment explains why that matters: "a lexicon sum says how
-    *excited* a headline is, which is not the same as how much it matters:
-    'shares soar' scores higher than 'SEC opens investigation'." The tiers exist
-    precisely because tone is not importance, and `_news_score` was reading
-    tone alone.
-
-    Four conditions, all from fields the feed already carries. The headline has
-    to be about this company rather than the market, inside the window, in the
-    breaking or major tier, and tagged with a catalyst the taxonomy rates high.
-    An analyst note on a quiet week clears none of them.
-    """
-    articles = (news or {}).get("articles") or []
-    hits: List[Dict[str, Any]] = []
-    for row in articles:
-        if not row.get("about_company"):
-            continue
-        age = row.get("age_hours")
-        if age is None or age > CATALYST_WINDOW_HOURS:
-            continue
-        if row.get("tier") not in (TIER_BREAKING, TIER_MAJOR):
-            continue
-        kinds = [c.get("type") for c in (row.get("catalysts") or [])
-                 if c.get("importance") == "high" and c.get("type")]
-        if not kinds:
-            continue
-        hits.append({"title": row.get("title"), "tier": row.get("tier"),
-                     "age_hours": age, "kinds": kinds,
-                     "tone": row.get("tone"),
-                     "sentiment": row.get("sentiment_score")})
-
-    if not hits:
-        return {"material": False}
-
-    # Direction from the material headlines only. The overall net sentiment
-    # averages them with background coverage, which is how a resolved binary
-    # event ends up reading like a mildly positive week.
-    tones = [h["sentiment"] for h in hits if h.get("sentiment") is not None]
-    lean = sum(tones) / len(tones) if tones else 0.0
-    kinds: List[str] = []
-    for h in hits:
-        for k in h["kinds"]:
-            if k not in kinds:
-                kinds.append(k)
-    freshest = min(h["age_hours"] for h in hits)
-    return {
-        "material": True,
-        "count": len(hits),
-        "kinds": kinds,
-        "lean": _f(lean, 2),
-        "freshest_hours": _f(freshest, 1),
-        "headline": sorted(hits, key=lambda h: h["age_hours"])[0]["title"],
-        "window_hours": CATALYST_WINDOW_HOURS,
-    }
 
 
 def _news_score(news: Dict[str, Any], catalyst: Optional[Dict[str, Any]] = None
@@ -763,7 +677,7 @@ def verdict(
     macro: Optional[Dict[str, Any]],
     spot: float,
 ) -> Dict[str, Any]:
-    catalyst = _catalyst_read(news)
+    catalyst = material_catalyst(news)
     components: Dict[str, Optional[float]] = {
         "technicals": (technicals or {}).get("trend_score"),
         "gamma": _gamma_score(gex, spot),
@@ -848,8 +762,8 @@ def verdict(
             "{} tagged {}{}, the freshest {}, so the chart is mostly measuring "
             "the period before it. The trend reading carries half its usual "
             "weight here and the news reading carries the difference."
-            .format(_count_words(catalyst.get("count") or 1, "headline"),
-                    lead, extra, _age_phrase(catalyst.get("freshest_hours"))))
+            .format(count_words(catalyst.get("count") or 1, "headline"),
+                    lead, extra, age_phrase(catalyst.get("freshest_hours"))))
         lean = catalyst.get("lean") or 0.0
         if tech is not None and lean and tech * lean < 0:
             conflicts.append(

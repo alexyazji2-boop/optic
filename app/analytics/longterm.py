@@ -17,6 +17,8 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 
+from .. import news as news_mod
+
 from .series_stats import _f
 from .technicals import atr, rsi, sma, support_resistance_levels
 from . import fundamentals, valuation
@@ -389,7 +391,8 @@ def _valuation_history(provider, ticker: str, quote: Dict[str, Any]) -> Dict[str
     except Exception as exc:
         return {"available": False, "reason": "could not be computed: {}".format(exc)}
 
-def analyse_holding(provider, ticker: str) -> Dict[str, Any]:
+def analyse_holding(provider, ticker: str,
+                    news: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Long-horizon read on a single ticker."""
     daily = provider.history(ticker, period="12y", interval="1d")
     if daily is None or daily.empty:
@@ -484,6 +487,55 @@ def analyse_holding(provider, ticker: str) -> Dict[str, Any]:
     if div is not None and div > 0.025:
         award(5, "Dividend", "{:.2f}% dividend yield contributes to total return.".format(div * 100), "income")
 
+    # ------------------------------------------------- resolved catalyst
+    #
+    # The same detector the swing verdict uses, deliberately applied a different
+    # way, because the two panels measure different things.
+    #
+    # On the swing side a fresh catalyst dampens the trend input, because a
+    # `trend_score` computed the morning after a binary resolves is mostly
+    # pre-event bars and is describing a regime that has ended. None of that
+    # argument transfers here. A 200-week average is *supposed* to ignore one
+    # day: that is the entire reason to look at one, and damping it because
+    # something happened on Tuesday would defeat the instrument. The multi-year
+    # factors above stay exactly as they are.
+    #
+    # What was missing is that a resolved high-importance catalyst can change
+    # the business rather than the tape, and this panel had no way to say so.
+    # RARE was the case: below its 200-week average, underperforming SPY by
+    # 43%/yr, scored -66 and "avoid new capital" on the day the FDA approved its
+    # first therapy. The five-year record is real and the approval does not
+    # erase it, so this is worth 12 points and not 30 - more than valuation,
+    # less than the secular trend or the five-year record it sits beside.
+    catalyst = news_mod.material_catalyst(news) if news else {"material": False}
+    if catalyst.get("material"):
+        lean = catalyst.get("lean") or 0.0
+        kinds = " and ".join(catalyst["kinds"])
+        when = news_mod.age_phrase(catalyst.get("freshest_hours"))
+        if lean > 0:
+            award(12, "Resolved catalyst",
+                  "{} tagged {}, {}. A resolved catalyst of this kind changes the "
+                  "business, not only the tape. The multi-year factors above are "
+                  "measured over windows that mostly predate it.".format(
+                      news_mod.count_words(catalyst.get("count") or 1, "headline"),
+                      kinds, when), "catalyst")
+        elif lean < 0:
+            award(-12, "Resolved catalyst",
+                  "{} tagged {}, {}, reading negative. The multi-year factors "
+                  "above are measured over windows that mostly predate it.".format(
+                      news_mod.count_words(catalyst.get("count") or 1, "headline"),
+                      kinds, when), "catalyst")
+        else:
+            # Recorded at zero, like valuation between its thresholds: "the
+            # model looked and shrugged" beats the factor silently vanishing.
+            factors.append({
+                "label": "Resolved catalyst", "points": 0.0, "kind": "catalyst",
+                "detail": "{} tagged {}, {}, with no clear direction in the "
+                          "coverage. No adjustment either way.".format(
+                              news_mod.count_words(catalyst.get("count") or 1, "headline"),
+                              kinds, when),
+            })
+
     score = float(np.clip(score, -100, 100))
 
     # A thin or distorted history can't support a confident verdict, whatever the
@@ -514,11 +566,13 @@ def analyse_holding(provider, ticker: str) -> Dict[str, Any]:
         "conviction": conviction,
         "conviction_score": round(score, 1),
         "conviction_factors": factors,
+        "catalyst": catalyst,
         "conviction_scale": {
             # Sum of the best case for every factor. The score is not out of 100:
             # printing it against ±100 overstates how close to "perfect" a result is.
-            "max_possible": 85,
-            "min_possible": -74,
+            # 85 before the catalyst factor, which can add or remove 12.
+            "max_possible": 97,
+            "min_possible": -86,
             "thresholds": {"high": 40, "moderate": 15, "cautious": -15, "low": -40},
         },
         "plan": plan,

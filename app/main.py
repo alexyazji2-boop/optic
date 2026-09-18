@@ -665,7 +665,19 @@ async def longterm_panel(ticker: str, indices: bool = Query(False)) -> Dict[str,
     ten-year pull is slow and has nothing to do with the loaded ticker, so it
     defaults off rather than riding along with every share request.
     """
-    holding = await _run(longterm.analyse_holding, PROVIDER, ticker.upper())
+    # News rides along so the conviction can see a resolved catalyst. Best
+    # effort: the long-run read is built from twelve years of prices and must
+    # not fail because a headline feed is down. `news_mod.analyse` is cached for
+    # ten minutes and the swing tab usually warmed it for the same symbol.
+    news_read: Optional[Dict[str, Any]] = None
+    try:
+        news_read = await _run(news_mod.analyse, YF_PROVIDER, ticker.upper())
+    except Exception as exc:                                    # noqa: BLE001
+        logging.getLogger("uvicorn.error").warning(
+            "longterm: news unavailable for %s: %s", ticker.upper(), exc)
+
+    holding = await _run(longterm.analyse_holding, PROVIDER, ticker.upper(),
+                         news_read)
     payload: Dict[str, Any] = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "holding": holding,

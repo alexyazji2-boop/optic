@@ -298,6 +298,101 @@ def _score_text(text: str) -> Tuple[float, List[str]]:
     return score, hits
 
 
+
+def _num(value: Any, digits: int = 4) -> Optional[float]:
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return None
+    return round(out, digits)
+
+
+# How recent a catalyst has to be for the chart to be measuring the world before
+# it. Three days: long enough to cover a Friday event read on a Monday, short
+# enough that it is still the most recent thing the tape has priced.
+CATALYST_WINDOW_HOURS = 72.0
+
+def age_phrase(hours: Optional[float]) -> str:
+    """"an hour ago", "3 hours ago", "2 days ago". Plural agreement included,
+    because "1 hours ago" was what the first version printed."""
+    if hours is None:
+        return "recently"
+    if hours < 1.5:
+        return "an hour ago"
+    if hours < 24:
+        return "{:.0f} hours ago".format(hours)
+    # The bands have to meet without overlapping or leaving a hole. A first
+    # version ran hours to 36 and then asked whether days < 1.5, which is the
+    # same boundary from both sides: every value at or above 36 hours was at
+    # least 1.5 days, so "a day ago" could not be reached at all.
+    if hours < 42:
+        return "a day ago"
+    return "{:.0f} days ago".format(hours / 24.0)
+
+
+def count_words(n: int, noun: str) -> str:
+    return "One {}".format(noun) if n == 1 else "{} {}s".format(n, noun)
+
+
+def material_catalyst(news: Dict[str, Any]) -> Dict[str, Any]:
+    """A material, company-specific catalyst inside the recent window.
+
+    `news.py` already does this classification and the verdict was throwing it
+    away. Its own comment explains why that matters: "a lexicon sum says how
+    *excited* a headline is, which is not the same as how much it matters:
+    'shares soar' scores higher than 'SEC opens investigation'." The tiers exist
+    precisely because tone is not importance, and `_news_score` was reading
+    tone alone.
+
+    Four conditions, all from fields the feed already carries. The headline has
+    to be about this company rather than the market, inside the window, in the
+    breaking or major tier, and tagged with a catalyst the taxonomy rates high.
+    An analyst note on a quiet week clears none of them.
+    """
+    articles = (news or {}).get("articles") or []
+    hits: List[Dict[str, Any]] = []
+    for row in articles:
+        if not row.get("about_company"):
+            continue
+        age = row.get("age_hours")
+        if age is None or age > CATALYST_WINDOW_HOURS:
+            continue
+        if row.get("tier") not in (TIER_BREAKING, TIER_MAJOR):
+            continue
+        kinds = [c.get("type") for c in (row.get("catalysts") or [])
+                 if c.get("importance") == "high" and c.get("type")]
+        if not kinds:
+            continue
+        hits.append({"title": row.get("title"), "tier": row.get("tier"),
+                     "age_hours": age, "kinds": kinds,
+                     "tone": row.get("tone"),
+                     "sentiment": row.get("sentiment_score")})
+
+    if not hits:
+        return {"material": False}
+
+    # Direction from the material headlines only. The overall net sentiment
+    # averages them with background coverage, which is how a resolved binary
+    # event ends up reading like a mildly positive week.
+    tones = [h["sentiment"] for h in hits if h.get("sentiment") is not None]
+    lean = sum(tones) / len(tones) if tones else 0.0
+    kinds: List[str] = []
+    for h in hits:
+        for k in h["kinds"]:
+            if k not in kinds:
+                kinds.append(k)
+    freshest = min(h["age_hours"] for h in hits)
+    return {
+        "material": True,
+        "count": len(hits),
+        "kinds": kinds,
+        "lean": _num(lean, 2),
+        "freshest_hours": _num(freshest, 1),
+        "headline": sorted(hits, key=lambda h: h["age_hours"])[0]["title"],
+        "window_hours": CATALYST_WINDOW_HOURS,
+    }
+
+
 def _catalysts(text: str) -> List[Dict[str, str]]:
     lowered = text.lower()
     found: List[Dict[str, str]] = []
