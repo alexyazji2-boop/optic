@@ -1145,7 +1145,17 @@ main { padding: var(--space-6) var(--space-6) var(--space-8); isolation: isolate
   line-height: 1;
   margin: 0;
 }
-.home-title span { color: var(--ink-muted); font-weight: 400; }
+/* One colour across the whole wordmark.
+ *
+ * "Terminal" was set in --ink-muted against --ink on "Optic", which reads as
+ * two words in two voices rather than one name. It was inherited from the
+ * topbar's `.brand-text span`, where the same two-tone treatment had the same
+ * problem and where the wordmark is now hidden entirely.
+ *
+ * The weight stays lighter. That is the part of the original that was doing
+ * real work: it separates the two words without breaking the name into two
+ * colours. */
+.home-title span { font-weight: 400; }
 
 .home-lede {
   font-size: var(--t-lead);
