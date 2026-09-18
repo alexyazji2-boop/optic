@@ -12653,3 +12653,57 @@ main { padding-top: var(--space-7); }
   border-radius: 14px;
   border-color: rgba(255, 255, 255, 0.08);
 }
+
+/* ---- Asset restyle: the phone -------------------------------------------
+ *
+ * This block sits at the foot of the file, so every rule in it beats the
+ * responsive rules written earlier at equal specificity. That is exactly the
+ * trap it walked into: `.hm-block` had a 559px rule at line 9437 and the
+ * restyle's unscoped `padding: var(--space-6) var(--space-7)` silently won,
+ * which measured 74px of horizontal padding on a 390px screen. Nineteen per
+ * cent of the viewport, leaving 275px of content.
+ *
+ * So the restyle has to carry its own phone behaviour rather than assume the
+ * earlier rules still apply. The reference's spacing is for a brochure read on
+ * a desktop; none of it survives contact with a 390px screen.
+ */
+@media (max-width: 559px) {
+  /* Padding back to something a phone can afford. 18.4px a side is 9% of a
+     390px screen against the restyle's 19%. */
+  .panel { padding: var(--space-3) var(--space-4); }
+  .hm-block { padding: var(--space-3) var(--space-4); }
+  .grid { gap: var(--space-3); }
+  .hm-board { gap: var(--space-4); }
+  main { padding-top: var(--space-4); }
+
+  /* 32px headings are a desktop measurement. At 390px they take three words a
+     line and push the reading they head off the screen. */
+  h1, .hero, .home-title { font-size: 26px; line-height: 1.15; }
+  h2, .panel > h2, .hm-h, .home-sec-title, .md-h3 { font-size: 21px; }
+  .pl-lede { font-size: 21px; line-height: 1.3; }
+
+  /* The measure cap is wider than the screen here, so it does nothing but
+     stop the text using the width it has. */
+  .panel > p.sub, .hm-block > p, .md-p, .home-sec-note, .brief-summary p {
+    max-width: none;
+  }
+
+  /* The session legend wrapped to one key per line, four lines for what is a
+     colour key. Tighter gaps let two sit together. */
+  .ses-legend { gap: var(--space-2) var(--space-3); }
+  .ses-key { font-size: var(--t-caption); }
+
+  /* The header was six rows and 234px on an 844px screen: 28% of the phone
+     spent on chrome before a single reading. Pulse had been pushed onto a row
+     of its own, which is the worst of it, because the row above it was one
+     word too wide.
+     Dropping "TERMINAL" from the wordmark is what buys that word back. The
+     mark plus OPTIC still identifies the app, the full name is one tap away in
+     the title bar, and it is the same argument the nav strip already makes
+     about a prefix costing width on every render. */
+  .brand-text span { display: none; }
+  .brand { gap: var(--space-1); padding: var(--space-1) var(--space-2); }
+  #chat-toggle { padding: var(--space-2) var(--space-3); margin-left: var(--space-1); }
+  .search input { width: 100%; min-width: 0; }
+  .search { flex: 1 1 auto; min-width: 0; }
+}

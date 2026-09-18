@@ -434,3 +434,31 @@ def test_every_class_hidden_by_attribute_has_a_display_pair():
         offenders.append(cls)
     assert offenders == [], \
         "these set a display and are toggled by [hidden], with no pair: {}".format(offenders)
+
+
+def test_the_restyle_carries_its_own_phone_rules():
+    """A block at the foot of the stylesheet beats every responsive rule written
+    above it at equal specificity, so it has to restate them.
+
+    The Asset restyle set `.hm-block { padding: var(--space-6) var(--space-7) }`
+    unscoped, which silently beat that class's own 559px rule at line 9437.
+    Measured on a 390px screen: 74px of horizontal padding, 19% of the
+    viewport, leaving 275px of content. The reference's spacing is a desktop
+    brochure measurement and none of it survives a phone.
+    """
+    block = CSS[CSS.index("/* ---- Asset restyle: the phone"):]
+    for rule in (".panel { padding: var(--space-3) var(--space-4); }",
+                 ".hm-block { padding: var(--space-3) var(--space-4); }"):
+        assert rule in block, rule
+    # And it must be inside a width query, or it is the same bug pointed the
+    # other way.
+    assert "@media (max-width: 559px)" in block
+
+
+def test_the_phone_header_does_not_strand_the_assistant_on_its_own_row():
+    """It was six rows and 234px on an 844px screen, 28% of the phone spent on
+    chrome before a single reading, with Pulse pushed onto a row of its own
+    because the row above was one word too wide. Dropping TERMINAL from the
+    wordmark buys that word back; the mark plus OPTIC still identifies it."""
+    block = CSS[CSS.index("/* ---- Asset restyle: the phone"):]
+    assert ".brand-text span { display: none; }" in block
