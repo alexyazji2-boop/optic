@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 
+from ..news import material_catalyst
 from .greeks import bs_price
 
 TRADING_DAYS = 252
@@ -808,6 +809,36 @@ def build_plan(
             "IV is rich versus realized: a debit spread or a lower-delta long caps the vol risk that an "
             "outright long option carries here."
         )
+
+    # A resolved catalyst changes what this plan is built on, twice over.
+    #
+    # The trigger levels come from Fibonacci structure and the gamma walls, both
+    # read off price history that mostly predates the event. The stop is
+    # 1.5 x ATR, and ATR is inflated by the gap day itself, so the stop sits
+    # wider and the size lands smaller than the pre-event chart implied. Neither
+    # is wrong, and both are easy to use without noticing.
+    #
+    # The premium point is the mirror of the earnings warning above. That one
+    # says do not buy vol into a print. This one says the print has happened:
+    # event premium is usually already deflating, so a long option bought now
+    # is fighting that rather than being paid for it.
+    catalyst = material_catalyst(news)
+    if catalyst.get("material"):
+        kinds = " and ".join(catalyst["kinds"])
+        warnings.append(
+            "A {} catalyst resolved {}. The trigger levels below are read off "
+            "price history that mostly predates it, and the stop widens with an "
+            "ATR the gap itself inflated. Check both against the move before "
+            "using them.".format(
+                kinds,
+                "in the last day" if (catalyst.get("freshest_hours") or 0) < 24
+                else "in the last few days"))
+        if ivc.get("verdict") == "rich":
+            warnings.append(
+                "That premium is rich after the event, not before it. The usual "
+                "direction from here is down as the event vol comes out, which "
+                "a long option pays for twice."
+            )
     flip = ((gex or {}).get("regime") or {}).get("flip_point")
     if flip:
         near_flip = abs(spot / flip - 1.0) * 100.0

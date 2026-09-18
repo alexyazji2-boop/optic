@@ -408,3 +408,87 @@ def test_the_overview_line_does_not_repeat_the_weighting_arithmetic():
 
 def test_the_catalyst_line_is_styled():
     assert ".pl-catalyst {" in CSS
+
+
+# =============================================== the entry plan ============
+#
+# A resolved catalyst changes what the plan is built on, twice over. The
+# trigger levels come from Fibonacci structure and the gamma walls, both read
+# off price history that mostly predates the event. The stop is 1.5 x ATR, and
+# ATR is inflated by the gap day itself, so the stop sits wider and the size
+# lands smaller than the pre-event chart implied.
+#
+# The premium warning is the mirror of the earnings one already there. That
+# says do not buy vol into a print; this says the print has happened.
+
+import numpy as np
+import pandas as pd
+
+from app.analytics import entry as entry_mod
+
+
+def _chain(spot=15.0):
+    """A minimal chain with the columns rank_strikes actually reads."""
+    rows = []
+    for strike in (12.0, 14.0, 15.0, 16.0, 18.0):
+        for is_call in (True, False):
+            moneyness = (spot - strike) / spot if is_call else (strike - spot) / spot
+            delta = float(np.clip(0.5 + moneyness * 2.0, 0.05, 0.95))
+            rows.append({
+                "contract": "X", "expiry": "2026-12-18", "dte": 60, "tau": 60 / 365.0,
+                "strike": strike, "is_call": is_call, "last": 1.0,
+                "bid": 0.95, "ask": 1.05, "mid": 1.0, "volume": 500,
+                "open_interest": 2000, "iv": 0.8, "in_the_money": False,
+                "delta": delta if is_call else -delta,
+                "gamma": 0.05, "theta": -0.02, "vega": 0.03,
+                "spread_pct": 5.0, "break_even": strike + 1.0,
+            })
+    return pd.DataFrame(rows)
+
+
+def _frame(n=320, spot=15.0):
+    idx = pd.date_range("2025-01-01", periods=n, freq="B")
+    close = np.linspace(spot * 1.6, spot, n)
+    return pd.DataFrame({"Close": close, "High": close * 1.02, "Low": close * 0.98,
+                         "Open": close, "Volume": [1e6] * n}, index=idx)
+
+
+def _plan(articles, stance="bullish"):
+    from app.analytics import technicals as tech_mod
+    frame = _frame()
+    return entry_mod.build_plan(
+        _chain(), 15.0, {"stance": stance, "conviction": "moderate"},
+        tech_mod.analyse(frame), {},
+        {"days_to_earnings": 46, "net_sentiment": 5.0, "articles": articles},
+        rate=0.04, div=0.0, history=frame)
+
+
+def test_the_entry_plan_warns_that_its_levels_predate_the_catalyst():
+    plan = _plan([_article()])
+    joined = " ".join(plan.get("warnings") or [])
+    assert "catalyst resolved" in joined
+    assert "predates it" in joined
+    assert "ATR the gap itself inflated" in joined
+
+
+def test_no_catalyst_leaves_the_plan_warnings_alone():
+    plan = _plan([_article(tier="background", importance="low")])
+    joined = " ".join(plan.get("warnings") or [])
+    assert "catalyst resolved" not in joined
+
+
+def test_the_premium_warning_is_the_mirror_of_the_earnings_one():
+    """The earnings warning says do not buy vol into a print. After a resolved
+    binary the event premium is usually already deflating, which a long option
+    pays for twice. It only fires when IV is actually rich."""
+    src = open("app/analytics/entry.py").read()
+    block = src[src.index("    catalyst = material_catalyst(news)"):]
+    block = block[:block.index("\n    flip =")]
+    assert 'ivc.get("verdict") == "rich"' in block
+    assert "rich after the event, not before it" in block
+
+
+def test_the_entry_plan_uses_the_shared_detector():
+    src = open("app/analytics/entry.py").read()
+    assert "from ..news import material_catalyst" in src
+    assert "def material_catalyst(" not in src
