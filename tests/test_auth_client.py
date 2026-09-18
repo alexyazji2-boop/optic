@@ -313,7 +313,14 @@ def test_no_hex_colours_were_introduced_in_the_accounts_stylesheet():
     """Tokens only, per the design system. The one exception is the Google mark,
     whose four brand colours are part of the logo and are not Optic's to
     re-theme."""
-    block = CSS[CSS.index("   Accounts"):]
+    # Comments stripped first. This slice runs from the Accounts marker to the
+    # end of the file, so everything appended later lands in it, and a comment
+    # recording a contrast measurement necessarily quotes the colours it
+    # measured: "#d43c3c at 3.96 to #d95656 at 4.69" is the history of a fix,
+    # not a literal anyone can style with. The file-wide guard in
+    # test_design_tokens.loose_colour_literals() works on a comment-stripped
+    # copy for the same reason and is the stricter of the two.
+    block = re.sub(r"/\*.*?\*/", " ", CSS[CSS.index("   Accounts"):], flags=re.S)
     hexes = set(re.findall(r"#[0-9a-fA-F]{3,8}\b", block))
     assert not hexes, hexes
     brand = set(re.findall(r"#[0-9a-fA-F]{6}", AUTH_JS))

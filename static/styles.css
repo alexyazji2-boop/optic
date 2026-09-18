@@ -120,6 +120,16 @@
    * action button would have been the same colour as a loss. This one is 42
    * degrees off in dark and 27 in light, which is the most separation an amber
    * can have while still carrying white text. The blue it replaces had 147. */
+  /* The Asset trial palette. Declared here because every colour literal in
+     this stylesheet lives in a token block, and a scoped override is still a
+     declaration: the accent change is why that rule exists, where one token
+     moved the buttons and the mark together and anything holding a literal
+     stayed blue. Referenced only by the `#view-home` block far below, so
+     nothing outside that subtree can pick them up by accident. */
+  --trial-surface: #131517;
+  --trial-surface-2: #16181b;
+  --trial-brand: #d4b144;
+  --trial-brand-ink: #1a1400;
   --btn-primary: #9a6b00;
   --btn-primary-ink: #ffffff;
   /* Text on any saturated fill, not just the primary button. Five places set
@@ -12565,3 +12575,75 @@ body.chat-full .rp { display: none; }
    something outstanding, and the two sit next to each other on a name awaiting
    a second decision after a first one landed. */
 .pl-catalyst.is-pending { border-left-style: dashed; }
+
+/* ================================= Asset tone, scoped to Home =============
+ *
+ * A trial of the Framer "Asset" template's visual language on the least dense
+ * view, so it can be compared against a tab that has not been touched. Scoped
+ * to `#view-home` rather than applied to the tokens themselves: redefining a
+ * custom property on an ancestor cascades to its subtree and nothing else, so
+ * Options and Charting keep the current treatment while this is judged.
+ *
+ * Measured off https://asset.framer.ai at 1440: page `rgb(8,10,9)`, dominant
+ * surface `rgb(19,21,23)`, raised `rgb(35,35,38)`, accent `rgb(212,177,68)`,
+ * Host Grotesk with h1 at 48px and weight 400.
+ *
+ * What is NOT copied, and why.
+ *
+ * Its spacing. Asset is a marketing page and can afford 200px between
+ * sections; this terminal has had dead space removed from it tab by tab on
+ * request, and the header was held to one row for the same reason. Section
+ * rhythm here opens a little, nowhere near that far.
+ *
+ * Its greens and cyans. `--pos` and `--neg` carry meaning and their contrast
+ * is measured (5.49:1 and 4.69:1 on `--surface-2`). Asset's are decorative.
+ * Swapping them would be the VIX-tile mistake again: colour contradicting the
+ * number it sits on.
+ */
+#view-home {
+  /* Cooler surfaces. The current pair is warm (18,16,16 / 28,25,23); Asset's
+     are neutral-to-cool. The page plane itself is left alone: at (11,10,9)
+     against Asset's (8,10,9) the difference is not visible. */
+  --surface: var(--trial-surface);
+  /* Cool, but NOT Asset's `rgb(35,35,38)`, and the difference is measured.
+     `--neg` sits at 4.51:1 on the current warm `#1c1917`, which is barely over
+     the 4.5 line, and the stylesheet records that it was already moved once to
+     get there: `#d43c3c` at 3.96 to `#d95656` at 4.69. Asset's lighter raised
+     tone drops it to 4.04, back under AA and undoing that fix. This is the same
+     hue shift at slightly lower luminance, which reads cool and lifts the pair
+     to 5.30 and 4.59. */
+  --surface-2: var(--trial-surface-2);
+  --raised: rgba(255, 255, 255, 0.035);
+  /* Lighter gold. `#9a6b00` is a deeper cut of the same hue; this is Asset's,
+     which reads as brass rather than bronze on a near-black plane. */
+  --btn-primary: var(--trial-brand);
+  --btn-primary-ink: var(--trial-brand-ink);
+}
+
+/* Light and large, which is the single biggest driver of the reference's feel:
+   48px at weight 400 rather than 18px at 600. Applied to the block headings and
+   the stance lede, not to table headers or figures, where weight is doing
+   legibility work rather than tone. */
+#view-home .hm-h {
+  font-size: var(--t-d3);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+#view-home .pl-lede {
+  font-weight: 400;
+  font-size: var(--t-d2);
+  letter-spacing: -0.02em;
+}
+/* The eyebrow carries more tracking and less weight, so it reads as a label
+   above the heading rather than as a small heading of its own. */
+#view-home .pl-eyebrow,
+#view-home .md-limits-h {
+  font-weight: 500;
+  letter-spacing: 0.14em;
+}
+
+/* Section rhythm. One step of air between blocks and a little more inside
+   them. Deliberately one step, not the reference's four. */
+#view-home .hm-board { gap: var(--space-6); }
+#view-home .hm-block { padding: var(--space-5) var(--space-6) var(--space-6); }
+#view-home .hm-block-head { margin-bottom: var(--space-4); }
