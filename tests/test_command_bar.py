@@ -470,15 +470,23 @@ def test_the_phone_header_does_not_strand_the_assistant_on_its_own_row():
 
 
 def test_the_tabs_spread_across_the_row_they_own():
-    """Above the breakpoint the strip is inline beside the search and every
-    pixel is contested, which is why its buttons carry no gap at all. On its
-    own row the opposite is true: measured at 1200, seven tabs were huddled in
-    the first two thirds of a 1163px row. `space-between` distributes them to
-    94px apart and only acts when the content fits, so a phone that scrolls the
-    strip is unaffected."""
+    """Given room, but not the whole row.
+
+    Above the breakpoint the strip is inline beside the search and every pixel
+    is contested, which is why its buttons carry no gap at all. On its own row
+    seven tabs were huddled in the first two thirds of a 1163px one.
+
+    `space-between` was the first answer and it overcorrected: 93px between
+    every label, which stops reading as one strip of navigation and starts
+    reading as seven separate things. A fixed gap measures 53px between labels
+    and leaves the group spanning 743px of the row, left-aligned with the
+    content beneath it rather than stretched to meet the far edge.
+    """
     block = CSS[CSS.index("@media (max-width: 1410px) {"):]
     block = block[:block.index("\n}")]
-    assert "nav.tabs.tabs-group { justify-content: space-between; }" in block
+    assert "justify-content: flex-start; gap: var(--space-5);" in block
+    assert "justify-content: space-between" not in block, \
+        "that spaced them to 93px, which reads as seven separate things"
     # And the inline case must stay tight, or the one-row fit goes.
     nav = CSS[CSS.index("\nnav.tabs {"):]
     assert "gap: 0;" in nav[:nav.index("}")]

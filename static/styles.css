@@ -2031,13 +2031,17 @@ body.chat-resizing svg { pointer-events: none; }
      `nav.tabs.tabs-group` is two classes to one and wins on specificity rather
      than on position. */
   nav.tabs.tabs-group { flex: 1 0 100%; min-width: 0; }
-  /* Spread across the row rather than bunched at its left edge.
+  /* Given room, but not the whole row.
      Above this width the strip is inline beside the search and every pixel is
      contested, which is why the buttons carry no gap at all. On its own row
-     the opposite is true: there is width going spare and seven tabs huddled in
-     the first two thirds of it. `space-between` only distributes when the
-     content fits, so a phone that scrolls the strip is unaffected. */
-  nav.tabs.tabs-group { justify-content: space-between; }
+     there is width going spare, and the tabs were huddled in the first two
+     thirds of it.
+     `space-between` was the first answer and it overcorrected: measured at
+     1200 it put 93px between every label, which stops reading as one strip of
+     navigation and starts reading as seven separate things. A fixed gap gives
+     about 41px, roughly halfway, and keeps the group left-aligned with the
+     content beneath it rather than stretched to meet the far edge. */
+  nav.tabs.tabs-group { justify-content: flex-start; gap: var(--space-5); }
   /* The tab strip drops to its own row here, so it no longer claims the free
      space on row one. The gear takes over that job and keeps Pulse beside it —
      without this the gear was stranded next to the Load button. */
