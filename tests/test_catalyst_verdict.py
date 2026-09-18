@@ -556,7 +556,24 @@ def test_legislation_is_in_the_taxonomy():
     for title in ("Senate to vote on CLARITY Act for crypto market structure",
                   "House panel advances stablecoin legislation",
                   "Congress weighs crypto regulatory framework bill"):
-        assert [c["type"] for c in news_mod._catalysts(title)] == ["legislation"], title
+        tags = news_mod._catalysts(title)
+        assert [c["type"] for c in tags] == ["legislation"], title
+        # Rated high, and the rating is the load-bearing half: `pending_catalyst`
+        # and `material_catalyst` both filter on it, so a legislation tag rated
+        # medium or low is the same as no tag at all to either of them.
+        assert [c["importance"] for c in tags] == ["high"], title
+
+
+def test_the_clarity_act_survives_the_whole_pipeline():
+    """End to end with no hand-supplied tags, because that is the case that was
+    reported: a crypto bill invisible to every catalyst reader in the app."""
+    title = "Senate to vote on CLARITY Act for crypto market structure"
+    article = {"title": title, "summary": "", "age_hours": 6.0, "tier": "major",
+               "about_company": False, "sentiment_score": 1.0,
+               "catalysts": news_mod._catalysts(title)}
+    out = news_mod.pending_catalyst({"articles": [article]})
+    assert out["pending"] is True
+    assert out["kinds"] == ["legislation"]
 
 
 @pytest.mark.parametrize("title", [
@@ -582,11 +599,19 @@ def test_a_scheduled_event_is_not_counted_as_resolved():
     assert news_mod.pending_catalyst({"articles": arts})["pending"] is True
 
 
-def _v(articles, trend=70.0):
-    return swing.verdict({"trend_score": trend}, {}, {"flow_score": 55.0},
+def _v(articles, trend=100.0):
+    """Inputs chosen so the conviction cap is the only thing that can act.
+
+    At trend 70 / flow 55 the pending halving of the news input alone dropped
+    the composite from 59.5 to 53.9, which is still "high" - but a first
+    version of the cap test used those numbers and passed with the cap deleted,
+    because the halving had already done the work. Here the composite lands at
+    87.1 with the halving applied, so anything reading "moderate" is the cap.
+    """
+    return swing.verdict({"trend_score": trend}, {}, {"flow_score": 100.0},
                          {"net_sentiment": 6.0, "days_to_earnings": 46,
                           "articles": articles},
-                         {"risk_score": 20.0}, 100.0)
+                         {"risk_score": 80.0}, 100.0)
 
 
 def test_a_pending_event_caps_conviction_without_moving_the_stance():
