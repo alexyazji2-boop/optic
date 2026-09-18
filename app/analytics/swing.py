@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 
+from ..news import TIER_BREAKING, TIER_MAJOR
 from .entry import iv_context
 from .series_stats import relative_strength
 
@@ -100,7 +101,101 @@ def _gamma_score(gex: Dict[str, Any], spot: float) -> Optional[float]:
     return float(np.clip(score, -100, 100))
 
 
-def _news_score(news: Dict[str, Any]) -> Optional[float]:
+# How recent a catalyst has to be for the chart to be measuring the world before
+# it. Three days: long enough to cover a Friday event read on a Monday, short
+# enough that it is still the most recent thing the tape has priced.
+CATALYST_WINDOW_HOURS = 72.0
+
+# What the technicals weight is multiplied by once such a catalyst has landed.
+# Not zero. Where price sits against its levels still matters, and the levels
+# themselves are unchanged; what stops being informative is the *trend* through
+# them, which is the bulk of what `trend_score` measures.
+CATALYST_TECH_DAMPING = 0.5
+
+
+def _age_phrase(hours: Optional[float]) -> str:
+    """"an hour ago", "3 hours ago", "2 days ago". Plural agreement included,
+    because "1 hours ago" was what the first version printed."""
+    if hours is None:
+        return "recently"
+    if hours < 1.5:
+        return "an hour ago"
+    if hours < 24:
+        return "{:.0f} hours ago".format(hours)
+    # The bands have to meet without overlapping or leaving a hole. A first
+    # version ran hours to 36 and then asked whether days < 1.5, which is the
+    # same boundary from both sides: every value at or above 36 hours was at
+    # least 1.5 days, so "a day ago" could not be reached at all.
+    if hours < 42:
+        return "a day ago"
+    return "{:.0f} days ago".format(hours / 24.0)
+
+
+def _count_words(n: int, noun: str) -> str:
+    return "One {}".format(noun) if n == 1 else "{} {}s".format(n, noun)
+
+
+def _catalyst_read(news: Dict[str, Any]) -> Dict[str, Any]:
+    """A material, company-specific catalyst inside the recent window.
+
+    `news.py` already does this classification and the verdict was throwing it
+    away. Its own comment explains why that matters: "a lexicon sum says how
+    *excited* a headline is, which is not the same as how much it matters:
+    'shares soar' scores higher than 'SEC opens investigation'." The tiers exist
+    precisely because tone is not importance, and `_news_score` was reading
+    tone alone.
+
+    Four conditions, all from fields the feed already carries. The headline has
+    to be about this company rather than the market, inside the window, in the
+    breaking or major tier, and tagged with a catalyst the taxonomy rates high.
+    An analyst note on a quiet week clears none of them.
+    """
+    articles = (news or {}).get("articles") or []
+    hits: List[Dict[str, Any]] = []
+    for row in articles:
+        if not row.get("about_company"):
+            continue
+        age = row.get("age_hours")
+        if age is None or age > CATALYST_WINDOW_HOURS:
+            continue
+        if row.get("tier") not in (TIER_BREAKING, TIER_MAJOR):
+            continue
+        kinds = [c.get("type") for c in (row.get("catalysts") or [])
+                 if c.get("importance") == "high" and c.get("type")]
+        if not kinds:
+            continue
+        hits.append({"title": row.get("title"), "tier": row.get("tier"),
+                     "age_hours": age, "kinds": kinds,
+                     "tone": row.get("tone"),
+                     "sentiment": row.get("sentiment_score")})
+
+    if not hits:
+        return {"material": False}
+
+    # Direction from the material headlines only. The overall net sentiment
+    # averages them with background coverage, which is how a resolved binary
+    # event ends up reading like a mildly positive week.
+    tones = [h["sentiment"] for h in hits if h.get("sentiment") is not None]
+    lean = sum(tones) / len(tones) if tones else 0.0
+    kinds: List[str] = []
+    for h in hits:
+        for k in h["kinds"]:
+            if k not in kinds:
+                kinds.append(k)
+    freshest = min(h["age_hours"] for h in hits)
+    return {
+        "material": True,
+        "count": len(hits),
+        "kinds": kinds,
+        "lean": _f(lean, 2),
+        "freshest_hours": _f(freshest, 1),
+        "headline": sorted(hits, key=lambda h: h["age_hours"])[0]["title"],
+        "window_hours": CATALYST_WINDOW_HOURS,
+    }
+
+
+def _news_score(news: Dict[str, Any], catalyst: Optional[Dict[str, Any]] = None
+                ) -> Optional[float]:
     if not news:
         return None
     net = news.get("net_sentiment")
@@ -108,8 +203,14 @@ def _news_score(news: Dict[str, Any]) -> Optional[float]:
         return None
     score = float(np.clip(net * 12.0, -70, 70))
     # An imminent print is a reason to size down, not a directional signal.
+    #
+    # Suppressed when a material catalyst has already landed: the halving is
+    # there because an unresolved earnings date makes tone unreliable, and a
+    # resolved approval is the opposite situation. Reading RARE the morning
+    # after its FDA clearance, earnings were 46 days out so this did not fire
+    # anyway, but a company reporting in a week can also get approved in a week.
     days = news.get("days_to_earnings")
-    if days is not None and 0 <= days <= 7:
+    if days is not None and 0 <= days <= 7 and not (catalyst or {}).get("material"):
         score *= 0.5
     return score
 
@@ -662,18 +763,42 @@ def verdict(
     macro: Optional[Dict[str, Any]],
     spot: float,
 ) -> Dict[str, Any]:
+    catalyst = _catalyst_read(news)
     components: Dict[str, Optional[float]] = {
         "technicals": (technicals or {}).get("trend_score"),
         "gamma": _gamma_score(gex, spot),
         "flow": (flow or {}).get("flow_score"),
-        "news": _news_score(news),
+        "news": _news_score(news, catalyst),
         "macro": _macro_score(macro),
     }
 
+    # A resolved catalyst reweights the read, because it has changed what the
+    # chart is describing.
+    #
+    # `trend_score` is computed over a window that, the day after an event, is
+    # almost entirely pre-event bars. On RARE the morning after its FDA approval
+    # the technicals read -75 and one of the six major headlines was "RARE Stock
+    # Hits Fresh 52-Week Low As Sanfilippo Drug Ruling Nears": the chart was
+    # measuring the drift into a binary, forty-eight hours after the binary
+    # resolved and the stock gapped 14%. At the nominal weights that produced
+    # -25.5 from technicals against +7.6 from news, and a verdict of "leaning
+    # bearish" on an approved drug.
+    #
+    # So the technicals weight is damped and the freed share goes to news, which
+    # is the input that actually knows what happened. Both numbers are published
+    # in the breakdown as `weight_pct` against `nominal_weight_pct`, the same
+    # shape an excluded input already used, so the reweighting is auditable
+    # rather than hidden. Nothing is redirected when no catalyst clears the bar.
+    weights = dict(WEIGHTS)
+    if catalyst.get("material") and components.get("technicals") is not None:
+        freed = WEIGHTS["technicals"] * (1.0 - CATALYST_TECH_DAMPING)
+        weights["technicals"] = WEIGHTS["technicals"] - freed
+        weights["news"] = WEIGHTS["news"] + freed
+
     used = {k: v for k, v in components.items() if v is not None}
-    weight_sum = sum(WEIGHTS[k] for k in used) or 1.0
+    weight_sum = sum(weights[k] for k in used) or 1.0
     if used:
-        composite = sum(v * WEIGHTS[k] for k, v in used.items()) / weight_sum
+        composite = sum(v * weights[k] for k, v in used.items()) / weight_sum
     else:
         composite = 0.0
 
@@ -711,13 +836,33 @@ def verdict(
         )
     if news and news.get("earnings_warning"):
         conflicts.append(news["earnings_warning"])
+    if catalyst.get("material"):
+        # The lead kind, not every tag that fired across six headlines. Listing
+        # them reads as one headline carrying both: RARE's approval coverage
+        # also tripped the earnings regex on a broker note, which turned a clean
+        # "regulatory / clinical" into "regulatory / clinical and earnings".
+        kinds = catalyst["kinds"]
+        lead = kinds[0]
+        extra = " and {}".format(" and ".join(kinds[1:])) if len(kinds) > 1 else ""
+        conflicts.append(
+            "{} tagged {}{}, the freshest {}, so the chart is mostly measuring "
+            "the period before it. The trend reading carries half its usual "
+            "weight here and the news reading carries the difference."
+            .format(_count_words(catalyst.get("count") or 1, "headline"),
+                    lead, extra, _age_phrase(catalyst.get("freshest_hours"))))
+        lean = catalyst.get("lean") or 0.0
+        if tech is not None and lean and tech * lean < 0:
+            conflicts.append(
+                "The catalyst and the chart point opposite ways. That is the "
+                "normal shape of a resolved binary: the drift into it is what "
+                "the averages are still holding.")
 
     # What each component actually measures, and its arithmetic contribution to
     # the composite. Without this the five weighted numbers are unexplained: a
     # reader can see "gamma -13, weight 24%" and still not know what was measured.
     breakdown = []
     for name, value in components.items():
-        weight = WEIGHTS[name]
+        weight = weights[name]
         if value is None:
             # An excluded input is reported, not hidden. The composite silently
             # redistributed its weight, which meant a 62/100 built from three of
@@ -728,7 +873,7 @@ def verdict(
             breakdown.append({
                 "component": name, "score": None,
                 "weight_pct": 0.0,
-                "nominal_weight_pct": round(weight * 100, 0),
+                "nominal_weight_pct": round(WEIGHTS[name] * 100, 0),
                 "contribution": None, "measures": COMPONENT_MEANING[name],
                 "unavailable": True,
                 "status": "excluded",
@@ -743,10 +888,11 @@ def verdict(
             "component": name,
             "score": _f(value, 1),
             "weight_pct": round(effective * 100, 0),
-            # The weight this input would have carried had everything been
-            # available. Where the two differ, another input was excluded and this
-            # one absorbed its share.
-            "nominal_weight_pct": round(weight * 100, 0),
+            # The weight this input would have carried with everything available
+            # and no catalyst. Where the two differ, either another input was
+            # excluded and this one absorbed its share, or a material catalyst
+            # moved weight off the chart and onto the news.
+            "nominal_weight_pct": round(WEIGHTS[name] * 100, 0),
             "contribution": _f(value * effective, 1),
             "measures": COMPONENT_MEANING[name],
             "unavailable": False,
@@ -767,6 +913,8 @@ def verdict(
             "redistributes rather than counting as zero."
         ),
         "signal_agreement_pct": agreement,
+        "catalyst": catalyst,
+        "effective_weights": weights,
         "conflicts": conflicts,
         "summary": _summary(stance, composite, technicals, gex, flow, news),
     }
