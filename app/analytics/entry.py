@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 
-from ..news import material_catalyst
+from ..news import material_catalyst, pending_catalyst
 from .greeks import bs_price
 
 TRADING_DAYS = 252
@@ -822,6 +822,19 @@ def build_plan(
     # says do not buy vol into a print. This one says the print has happened:
     # event premium is usually already deflating, so a long option bought now
     # is fighting that rather than being paid for it.
+    # A scheduled binary ahead is the same warning the earnings branch above
+    # gives, for the same reason: buying premium into an unresolved event means
+    # paying event vol and eating the crush whichever way it lands. The earnings
+    # version only knows about earnings.
+    upcoming = pending_catalyst(news)
+    if upcoming.get("pending"):
+        warnings.append(
+            "A {} event is still ahead: \u201c{}\u201d. Nothing in this plan "
+            "predicts which way it resolves, so size it as a binary or wait for "
+            "the outcome. Long premium held through it pays event vol both "
+            "ways.".format(" and ".join(upcoming["kinds"]),
+                           (upcoming.get("headline") or "").strip()[:90]))
+
     catalyst = material_catalyst(news)
     if catalyst.get("material"):
         kinds = " and ".join(catalyst["kinds"])

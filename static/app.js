@@ -6837,6 +6837,22 @@ function pulseCatalystLine(cat) {
     weight here than usual.</p>`;
 }
 
+/* One line on a scheduled event still ahead.
+ *
+ * Separate from the resolved line because they say opposite things. A resolved
+ * catalyst explains why momentum is being discounted; a pending one explains
+ * why the conviction is held down. Both can be true at once, and on a name
+ * awaiting a second decision after a first one landed, both should show. */
+function pulsePendingLine(pend) {
+  if (!pend || pend.pending !== true) return '';
+  const kinds = (pend.kinds || []).join(' and ');
+  const n = pend.count || 1;
+  return `<p class="pl-catalyst is-pending">
+    <strong>A ${esc(kinds)} event is still ahead</strong>, flagged by
+    ${n === 1 ? 'one headline' : `${n} headlines`}. Nothing below predicts which
+    way it resolves, so conviction is held short of high until it does.</p>`;
+}
+
 function renderOpticPulse(d) {
   const p = d.pulse;
   if (!p) return '';
@@ -6866,6 +6882,7 @@ function renderOpticPulse(d) {
          Placed before the disclosure because it changes how the bars below are
          read, and a caveat after the thing it qualifies is a footnote. */''}
     ${pulseCatalystLine(p.catalyst)}
+    ${pulsePendingLine(p.pending_catalyst)}
 
     ${story && story.title ? `<a class="pl-story" href="${esc(story.url || '#')}"
       target="_blank" rel="noopener noreferrer">

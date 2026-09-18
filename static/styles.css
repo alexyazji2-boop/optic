@@ -12559,3 +12559,9 @@ body.chat-full .rp { display: none; }
   color: var(--ink-2);
 }
 .pl-catalyst strong { color: var(--ink); font-weight: 600; }
+
+/* The pending variant of the catalyst line. A dashed edge rather than solid:
+   the resolved line reports something that happened, this one reports
+   something outstanding, and the two sit next to each other on a name awaiting
+   a second decision after a first one landed. */
+.pl-catalyst.is-pending { border-left-style: dashed; }

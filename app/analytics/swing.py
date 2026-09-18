@@ -13,7 +13,8 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 
-from ..news import age_phrase, count_words, material_catalyst
+from ..news import (age_phrase, count_words, material_catalyst,
+                    pending_catalyst)
 from .entry import iv_context
 from .series_stats import relative_strength
 
@@ -108,8 +109,8 @@ def _gamma_score(gex: Dict[str, Any], spot: float) -> Optional[float]:
 CATALYST_TECH_DAMPING = 0.5
 
 
-def _news_score(news: Dict[str, Any], catalyst: Optional[Dict[str, Any]] = None
-                ) -> Optional[float]:
+def _news_score(news: Dict[str, Any], catalyst: Optional[Dict[str, Any]] = None,
+                pending: Optional[Dict[str, Any]] = None) -> Optional[float]:
     if not news:
         return None
     net = news.get("net_sentiment")
@@ -124,7 +125,13 @@ def _news_score(news: Dict[str, Any], catalyst: Optional[Dict[str, Any]] = None
     # after its FDA clearance, earnings were 46 days out so this did not fire
     # anyway, but a company reporting in a week can also get approved in a week.
     days = news.get("days_to_earnings")
-    if days is not None and 0 <= days <= 7 and not (catalyst or {}).get("material"):
+    imminent = days is not None and 0 <= days <= 7
+    # Generalised from earnings to any unresolved binary. The reason the
+    # earnings halving exists is that tone ahead of an event does not predict
+    # the event, and that is just as true of a scheduled vote or an FDA decision
+    # date. A model reading "FDA decision expected" as bullish is inventing the
+    # outcome.
+    if (imminent or (pending or {}).get("pending")) and not (catalyst or {}).get("material"):
         score *= 0.5
     return score
 
@@ -678,11 +685,12 @@ def verdict(
     spot: float,
 ) -> Dict[str, Any]:
     catalyst = material_catalyst(news)
+    pending = pending_catalyst(news)
     components: Dict[str, Optional[float]] = {
         "technicals": (technicals or {}).get("trend_score"),
         "gamma": _gamma_score(gex, spot),
         "flow": (flow or {}).get("flow_score"),
-        "news": _news_score(news, catalyst),
+        "news": _news_score(news, catalyst, pending),
         "macro": _macro_score(macro),
     }
 
@@ -729,6 +737,18 @@ def verdict(
     else:
         stance, conviction = "neutral", "none"
 
+    # An unresolved binary caps conviction, and changes nothing else.
+    #
+    # This is the opposite of the resolved case and deliberately so. A resolved
+    # catalyst is information: it moves weight off a chart that has gone stale.
+    # A scheduled one is the absence of information. Nobody knows how a vote
+    # goes, so nothing here may push the stance either way; what it can say is
+    # that a high-conviction read is not available while the outcome is
+    # outstanding. Same instinct as the earnings halving above, applied to the
+    # conclusion rather than to one input.
+    if pending.get("pending") and conviction == "high":
+        conviction = "moderate"
+
     # Disagreement between independent reads is itself information.
     signs = [np.sign(v) for v in used.values() if abs(v) > 8]
     agreement = None
@@ -750,6 +770,14 @@ def verdict(
         )
     if news and news.get("earnings_warning"):
         conflicts.append(news["earnings_warning"])
+    if pending.get("pending"):
+        conflicts.append(
+            "{} {} a {} event still ahead. Nothing here predicts which way it "
+            "resolves, so the stance reads everything else and conviction is "
+            "held below high until it does.".format(
+                count_words(pending.get("count") or 1, "headline"),
+                "flags" if (pending.get("count") or 1) == 1 else "flag",
+                " and ".join(pending["kinds"])))
     if catalyst.get("material"):
         # The lead kind, not every tag that fired across six headlines. Listing
         # them reads as one headline carrying both: RARE's approval coverage
@@ -828,6 +856,7 @@ def verdict(
         ),
         "signal_agreement_pct": agreement,
         "catalyst": catalyst,
+        "pending_catalyst": pending,
         "effective_weights": weights,
         "conflicts": conflicts,
         "summary": _summary(stance, composite, technicals, gex, flow, news),

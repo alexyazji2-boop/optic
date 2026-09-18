@@ -492,3 +492,147 @@ def test_the_entry_plan_uses_the_shared_detector():
     src = open("app/analytics/entry.py").read()
     assert "from ..news import material_catalyst" in src
     assert "def material_catalyst(" not in src
+
+
+# ============================================ upcoming catalysts ==========
+#
+# The opposite case, and it needs the opposite treatment. A resolved catalyst
+# is information: it moves weight off a chart that has gone stale. A scheduled
+# one is the absence of information. Nobody knows how a vote goes, so nothing
+# may push the stance either way; what it can say is that a high-conviction
+# read is not available while the outcome is outstanding.
+
+def _pending(title, kind="regulatory / clinical", age=5.0, importance="high"):
+    return {"title": title, "summary": "", "age_hours": age, "tier": "major",
+            "about_company": True, "sentiment_score": 2.0,
+            "catalysts": [{"type": kind, "importance": importance}]}
+
+
+@pytest.mark.parametrize("title,kind", [
+    ("FDA sets PDUFA date of March 12 for the peptide therapy", "regulatory / clinical"),
+    ("Senate to vote on CLARITY Act for crypto market structure", "legislation"),
+    ("Sanfilippo Drug Ruling Nears", "regulatory / clinical"),
+    ("Decision expected in the antitrust case", "legal / regulatory"),
+])
+def test_scheduled_events_are_detected(title, kind):
+    out = news_mod.pending_catalyst({"articles": [_pending(title, kind)]})
+    assert out["pending"] is True, title
+    assert kind in out["kinds"]
+
+
+@pytest.mark.parametrize("title", [
+    "Shares slip ahead of the open",
+    "Company unveils new product",
+    "Analyst raises price target ahead of the print",
+])
+def test_forward_language_alone_is_not_a_catalyst(title):
+    """Both halves are required: a forward marker AND a catalyst the taxonomy
+    rates high. "ahead of the open" carries the first and none of the second.
+
+    Classified for real rather than handed a tag. A first version passed
+    `importance="high"` into the fixture for "Shares slip ahead of the open",
+    which is not what the taxonomy does with it, and then asserted the detector
+    should ignore it. The detector was right and the fixture was lying.
+    """
+    tags = news_mod._catalysts(title)
+    article = {"title": title, "summary": "", "age_hours": 5.0, "tier": "major",
+               "about_company": True, "sentiment_score": 1.0, "catalysts": tags}
+    assert news_mod.pending_catalyst({"articles": [article]})["pending"] is False
+
+
+def test_a_real_pending_headline_still_fires_through_the_real_classifier():
+    """The other side of the same check: end to end, no hand-supplied tags."""
+    title = "FDA decision expected in March for the peptide therapy"
+    article = {"title": title, "summary": "", "age_hours": 5.0, "tier": "major",
+               "about_company": True, "sentiment_score": 1.0,
+               "catalysts": news_mod._catalysts(title)}
+    assert news_mod.pending_catalyst({"articles": [article]})["pending"] is True
+
+
+def test_legislation_is_in_the_taxonomy():
+    """It was not, so every one of these classified as `[]`, landed in the
+    background tier and was invisible to anything reading catalysts. A bill
+    deciding whether an asset class is legal to custody is not background."""
+    for title in ("Senate to vote on CLARITY Act for crypto market structure",
+                  "House panel advances stablecoin legislation",
+                  "Congress weighs crypto regulatory framework bill"):
+        assert [c["type"] for c in news_mod._catalysts(title)] == ["legislation"], title
+
+
+@pytest.mark.parametrize("title", [
+    "Bill Ackman raises stake in the company",
+    "The board did not act on the offer",
+    "Company billings rose 12% in the quarter",
+])
+def test_the_legislation_pattern_does_not_over_match(title):
+    """Anchored on the legislative body rather than on "act" or "bill" alone:
+    lowercased text makes `\\w+ act` match "did not act" and `\\bbill\\b` match a
+    person called Bill."""
+    assert "legislation" not in [c["type"] for c in news_mod._catalysts(title)]
+
+
+def test_a_scheduled_event_is_not_counted_as_resolved():
+    """The two detectors have to be mutually exclusive or the pending case
+    silently becomes the resolved one. "Senate to vote on CLARITY Act" landed in
+    the major tier with a high tag and was damping the chart for an event that
+    had not happened. RARE's own "Sanfilippo Drug Ruling Nears" would have done
+    the same two days before the approval it was anticipating."""
+    arts = [_pending("Senate to vote on CLARITY Act", "legislation")]
+    assert news_mod.material_catalyst({"articles": arts})["material"] is False
+    assert news_mod.pending_catalyst({"articles": arts})["pending"] is True
+
+
+def _v(articles, trend=70.0):
+    return swing.verdict({"trend_score": trend}, {}, {"flow_score": 55.0},
+                         {"net_sentiment": 6.0, "days_to_earnings": 46,
+                          "articles": articles},
+                         {"risk_score": 20.0}, 100.0)
+
+
+def test_a_pending_event_caps_conviction_without_moving_the_stance():
+    quiet = _v([_pending("Company unveils new product", "product news", importance="low")])
+    ahead = _v([_pending("Senate to vote on CLARITY Act", "legislation")])
+    assert quiet["conviction"] == "high"
+    assert ahead["conviction"] == "moderate", "an outstanding binary caps it"
+    assert ahead["stance"] == quiet["stance"], "and must not move the direction"
+
+
+def test_a_pending_event_does_not_reweight_the_chart():
+    """Only a resolved catalyst makes the chart stale."""
+    ahead = _v([_pending("Senate to vote on CLARITY Act", "legislation")])
+    assert ahead["effective_weights"] == swing.WEIGHTS
+
+
+def test_the_pending_event_is_named_in_the_conflicts():
+    out = _v([_pending("Senate to vote on CLARITY Act", "legislation")])
+    line = next(c for c in out["conflicts"] if "still ahead" in c)
+    assert "predicts which way it resolves" in line
+    assert line.startswith("One headline flags"), "subject and verb have to agree"
+
+
+def test_the_news_halving_generalises_beyond_earnings():
+    """The earnings halving exists because tone ahead of an event does not
+    predict the event. That is just as true of a scheduled vote."""
+    plain = swing._news_score({"net_sentiment": 5.0, "days_to_earnings": 46}, None, None)
+    ahead = swing._news_score({"net_sentiment": 5.0, "days_to_earnings": 46},
+                              None, {"pending": True})
+    assert plain == pytest.approx(60.0, abs=0.01)
+    assert ahead == pytest.approx(30.0, abs=0.01)
+
+
+def test_the_entry_plan_warns_about_an_unresolved_binary():
+    plan = _plan([_pending("FDA sets PDUFA date for the peptide therapy")])
+    joined = " ".join(plan.get("warnings") or [])
+    assert "still ahead" in joined
+    assert "size it as a binary or wait" in joined
+
+
+def test_the_overview_shows_pending_separately_from_resolved():
+    """They say opposite things, and on a name awaiting a second decision after
+    a first one landed, both should show."""
+    fn = APP_JS[APP_JS.index("function pulsePendingLine(pend) {"):]
+    fn = fn[:fn.index("\nfunction renderOpticPulse")]
+    assert "pend.pending !== true) return ''" in fn
+    assert "still ahead" in fn
+    assert "pulsePendingLine(p.pending_catalyst)" in APP_JS
+    assert ".pl-catalyst.is-pending" in CSS

@@ -155,6 +155,7 @@ def pulse(payload: Dict[str, Any], evaluation: Optional[Dict[str, Any]] = None) 
         # A caller can render one line from this without parsing prose out of a
         # conflicts array.
         "catalyst": verdict.get("catalyst") or {"material": False},
+        "pending_catalyst": verdict.get("pending_catalyst") or {"pending": False},
         "conflicts": verdict.get("conflicts") or [],
         "skill": skill_note(evaluation),
         # Kept in the payload, deliberately not the headline. Anything that wants

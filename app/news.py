@@ -54,6 +54,23 @@ CATALYSTS: List[Tuple[str, str, str]] = [
     (r"\bpartnership\b|\bcontract\b|\bdeal\b|\bagreement\b", "commercial deal", "medium"),
     (r"\bshort (?:seller|report|interest)\b|\bsqueeze\b", "short interest", "high"),
     (r"\bchip|\bsemiconductor|\btariff|\bexport control|\bsanction", "policy / supply chain", "medium"),
+    # Legislation, which the taxonomy had no pattern for at all.
+    #
+    # Measured: "Senate to vote on CLARITY Act for crypto market structure",
+    # "House panel advances stablecoin legislation" and "Congress weighs crypto
+    # regulatory framework bill" all classified as `[]`, which puts them in the
+    # background tier and makes them invisible to anything reading catalysts. A
+    # bill that decides whether an asset class is legal to custody is not
+    # background for the companies holding it.
+    #
+    # Anchored on the legislative body or on the word legislation rather than on
+    # "act" or "bill" alone: lowercased text makes `\w+ act` match "did not act"
+    # and `\bbill\b` match a person called Bill.
+    (r"\blegislation\b|\blawmakers?\b|\bsenate\b|\bcongress\b"
+     r"|\bhouse (?:panel|committee|bill|vote|passes|advances)\b"
+     r"|\bregulatory framework\b|\bmarket structure bill\b"
+     r"|\b(?:passes|advances|introduces?|vote on) (?:the )?[a-z]+ act\b",
+     "legislation", "high"),
     # Yields and the curve belong here. Without them "Stocks Decline, 10-Year
     # Treasury Yield Touches 5%" matched only "policy / supply chain" on the
     # word "tariff"-adjacent stem and was rated medium, so it ranked below a
@@ -359,6 +376,17 @@ def material_catalyst(news: Dict[str, Any]) -> Dict[str, Any]:
             continue
         if row.get("tier") not in (TIER_BREAKING, TIER_MAJOR):
             continue
+        # A headline announcing a future event is not evidence it happened.
+        # "Senate to vote on CLARITY Act" and RARE's own "Sanfilippo Drug Ruling
+        # Nears" both land in the major tier with a high-importance tag, and
+        # both were being counted here as resolved: the first damped the chart
+        # for an event that had not occurred, and the second would have done the
+        # same two days before the approval it was anticipating. The two
+        # detectors have to be mutually exclusive or the pending case silently
+        # becomes the resolved one.
+        text = " ".join(str(row.get(k) or "") for k in ("title", "summary"))
+        if PENDING_MARKERS.search(text):
+            continue
         kinds = [c.get("type") for c in (row.get("catalysts") or [])
                  if c.get("importance") == "high" and c.get("type")]
         if not kinds:
@@ -390,6 +418,81 @@ def material_catalyst(news: Dict[str, Any]) -> Dict[str, Any]:
         "freshest_hours": _num(freshest, 1),
         "headline": sorted(hits, key=lambda h: h["age_hours"])[0]["title"],
         "window_hours": CATALYST_WINDOW_HOURS,
+    }
+
+
+# Language that puts a catalyst in the future rather than the past.
+#
+# Both halves are required: a forward marker AND a catalyst the taxonomy rates
+# high. "Shares slip ahead of the open" carries the first and none of the
+# second. The markers are the phrasings a wire actually uses for a scheduled
+# binary: a PDUFA date, a scheduled vote, a decision expected in a window.
+PENDING_MARKERS = re.compile(
+    r"\bpdufa\b|\bdecision (?:date|expected|due)\b|\bexpected (?:in|by|on|this|next)\b"
+    r"|\bscheduled (?:for|to)\b|\bset (?:for|to (?:vote|decide|rule))\b"
+    r"|\bawait(?:s|ing)\b|\bto vote\b|\bvote on\b|\bdeadline\b|\bslated\b"
+    r"|\bdue (?:in|on|by)\b|\bahead of\b|\bnears?\b|\bupcoming\b"
+    r"|\bwill (?:decide|rule|vote)\b|\blooms?\b",
+    re.I)
+
+# A scheduled event can be announced weeks out, so this window is far wider than
+# the three days a resolved catalyst gets. What matters for a resolved one is
+# that the chart has not absorbed it yet; what matters here is only that the
+# event is still ahead.
+PENDING_WINDOW_HOURS = 24.0 * 30
+
+
+def pending_catalyst(news: Dict[str, Any]) -> Dict[str, Any]:
+    """A scheduled, unresolved binary ahead of this ticker.
+
+    The opposite case to `material_catalyst`, and it needs the opposite
+    treatment. A resolved catalyst makes the chart stale, so weight moves off
+    the chart and onto the news. An unresolved one says nothing about direction
+    at all: the market cannot know which way a vote or a decision goes, and a
+    model that reads "FDA decision expected" as bullish is inventing the
+    outcome. It is a reason to size down, which is the same instinct the
+    earnings halving in `swing._news_score` already encodes.
+
+    `about_company` is deliberately NOT required here. A CLARITY Act vote is not
+    "about" any one crypto holding and is a real pending catalyst for all of
+    them; the feed is already scoped to this ticker, so a policy story arriving
+    in it is a story about this ticker's world. Company relevance is enforced by
+    the feed rather than by the flag.
+    """
+    articles = (news or {}).get("articles") or []
+    hits: List[Dict[str, Any]] = []
+    for row in articles:
+        age = row.get("age_hours")
+        if age is None or age > PENDING_WINDOW_HOURS:
+            continue
+        text = " ".join(str(row.get(k) or "") for k in ("title", "summary"))
+        if not PENDING_MARKERS.search(text):
+            continue
+        kinds = [c.get("type") for c in (row.get("catalysts") or [])
+                 if c.get("importance") == "high" and c.get("type")]
+        if not kinds:
+            continue
+        hits.append({"title": row.get("title"), "kinds": kinds,
+                     "age_hours": age, "url": row.get("url")})
+    if not hits:
+        return {"pending": False}
+
+    kinds: List[str] = []
+    for h in hits:
+        for k in h["kinds"]:
+            if k not in kinds:
+                kinds.append(k)
+    newest = sorted(hits, key=lambda h: h["age_hours"])[0]
+    return {
+        "pending": True,
+        "count": len(hits),
+        "kinds": kinds,
+        "headline": newest["title"],
+        "url": newest.get("url"),
+        # No date. The headline says an event is scheduled; it does not give a
+        # parseable date, and inventing one would be the worst kind of precision.
+        "dated": False,
+        "window_hours": PENDING_WINDOW_HOURS,
     }
 
 
