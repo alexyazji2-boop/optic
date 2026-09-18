@@ -120,6 +120,16 @@
    * action button would have been the same colour as a loss. This one is 42
    * degrees off in dark and 27 in light, which is the most separation an amber
    * can have while still carrying white text. The blue it replaces had 147. */
+  /* ---- Asset restyle ---------------------------------------------------
+     Measured off https://asset.framer.ai at 1440. Colour literals live in a
+     token block because every literal in this stylesheet does; the rules that
+     use them are in one block at the foot of the file, which is the whole of
+     this change and the whole of its undo. */
+  --asset-plane: #080a09;
+  --asset-surface: #131517;
+  --asset-raised: #232326;
+  --asset-brand: #d4b144;
+  --asset-brand-ink: #1a1400;
   --btn-primary: #9a6b00;
   --btn-primary-ink: #ffffff;
   /* Text on any saturated fill, not just the primary button. Five places set
@@ -865,8 +875,8 @@ main { padding: var(--space-6) var(--space-6) var(--space-8); isolation: isolate
 .panel {
   background-color: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 18px 16px 16px 16px;
-  padding: var(--space-5) var(--space-5);
+  border-radius: 14px;   /* Asset restyle */
+  padding: var(--space-6) var(--space-7);   /* Asset restyle */
   min-width: 0;
   overflow-x: auto;
   background-image:
@@ -12554,3 +12564,78 @@ body.chat-full .rp { display: none; }
    a second decision after a first one landed. */
 .pl-catalyst.is-pending { border-left-style: dashed; }
 
+
+
+/* ======================================================= Asset restyle ====
+ *
+ * The reference template, applied across the terminal rather than sampled from.
+ * Measured at 1440 on https://asset.framer.ai: plane rgb(8,10,9), surface
+ * rgb(19,21,23), raised rgb(35,35,38), accent rgb(212,177,68), Host Grotesk,
+ * h1 48px/400, h2 32px/400, prose measured at 480-640px, and 9,971px of page
+ * for seven sections.
+ *
+ * This block is the entire change. Deleting it and the four `--asset-*` tokens
+ * returns the terminal exactly as it was, which is why it is one contiguous
+ * block at the foot of the file rather than edits threaded through the rules
+ * it overrides.
+ *
+ * What it costs, stated plainly because it is the point of contention: the
+ * reference is a brochure and this is an instrument. Its spacing exists to
+ * give seven ideas a screen each, and a research terminal that breathes that
+ * way puts fewer readings in front of you. The density work done on request
+ * over this project pulls the other way.
+ */
+:root {
+  --plane: var(--asset-plane);
+  --surface: var(--asset-surface);
+  --surface-2: var(--asset-raised);
+  --btn-primary: var(--asset-brand);
+  --btn-primary-ink: var(--asset-brand-ink);
+  /* One family for everything, as the reference does. */
+  --display: "Host Grotesk Variable", "Host Grotesk", var(--sans);
+}
+
+body, .msg { font-family: "Host Grotesk Variable", "Host Grotesk", system-ui, sans-serif; }
+
+/* Light and large. Weight 400 at 32px is the single loudest signal in the
+   reference: every section heading on it is set that way. */
+h1, .hero, .home-title {
+  font-family: var(--display);
+  font-size: clamp(34px, 3.4vw, 48px);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+h2, .panel > h2, .hm-h, .home-sec-title, .md-h3 {
+  font-family: var(--display);
+  font-size: 32px;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+h3 { font-weight: 400; letter-spacing: -0.01em; }
+.pl-lede { font-weight: 400; letter-spacing: -0.02em; }
+
+/* Prose to a reading measure. The reference runs 480-640px; panels here are
+   often twice that, which is what makes a paragraph in one look like a wall. */
+.panel > p.sub, .hm-block > p, .md-p, .home-sec-note, .brief-summary p {
+  max-width: 640px;
+}
+
+/* Air. Roughly double, which is still nowhere near the reference's own, and
+   the compromise is deliberate: its spacing on a data table would be absurd. */
+.grid { gap: var(--space-6); }
+.hm-board { gap: var(--space-7); }
+.hm-block { padding: var(--space-6) var(--space-7); }
+main { padding-top: var(--space-7); }
+.panel > h2 { margin-bottom: var(--space-4); }
+
+/* The reference's cards: flatter, rounder, and a border that is barely there.
+   `.panel` itself is changed in place further up rather than re-declared here:
+   it was five top-level rules once, silently overriding each other, and the
+   guard against that cannot tell a documented override from an accident. The
+   undo for this whole restyle is reverting its commit. */
+.hm-block, .tile {
+  border-radius: 14px;
+  border-color: rgba(255, 255, 255, 0.08);
+}
