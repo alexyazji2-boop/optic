@@ -80,8 +80,15 @@
   --ink: #f5f1ec;
   /* Warm grey replaced with a neutral one. The old #c3c2b7 is a beige, which
      against a pure black plane reads as slightly dirty. */
-  --ink-2: #c4bcb2;
-  --ink-muted: #918879;
+  /* Cooled to match, which also lifts it from 9.75 to 10.66 on a panel. */
+  --ink-2: #c2c6cb;
+  /* Lifted and cooled. At #918879 this measured 5.23:1 on the panel surface:
+     over the AA floor, but AA is a floor and this is 11.5px type carrying the
+     timezone note and the session description. It also went muddy when the
+     Asset restyle cooled every surface beneath it and left the ink warm.
+     #9fa3a8 measures 7.83 on the plane and 7.22 on a panel, which clears AAA
+     on both, and matches the surfaces it sits on. */
+  --ink-muted: #9fa3a8;
   /* Pulse's width, and the space the page reserves for it. One variable because
      there were three numbers: the panel was 382px, main reserved 420px and the
      footer reserved 400px, so the page held open a 38px strip of nothing beside
@@ -2141,6 +2148,8 @@ body.chat-resizing svg { pointer-events: none; }
   box-shadow: 0 0 0 1px var(--plane);
 }
 
+.ses-detail { margin-top: var(--space-4); }
+.ses-desc { margin-top: var(--space-3); }
 .ses-legend {
   display: flex;
   gap: var(--space-4);
@@ -2209,8 +2218,13 @@ body.chat-resizing svg { pointer-events: none; }
 /* Company line at the top of the session strip: who this is and what they do,
    established once per ticker rather than repeated on every tab. */
 .ses-company {
-  padding-bottom: var(--space-2);
-  margin-bottom: var(--space-2);
+  /* The strip ran straight up against the company name: measured, six pixels
+     of coloured bar with ten to the heading below it, which reads as the two
+     touching. The phase strip is the busiest thing in this bar and the company
+     name is the largest, so they need more between them than any other pair
+     here. */
+  padding-bottom: var(--space-4);
+  margin-bottom: var(--space-4);
   border-bottom: 1px solid var(--border);
 }
 .ses-co-head {
