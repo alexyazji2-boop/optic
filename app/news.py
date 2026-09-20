@@ -232,6 +232,144 @@ def mentions_company(text: str, ticker: str, name: str) -> bool:
     return False
 
 
+# --------------------------------------------------------------- the filter
+#
+# Yahoo's per-ticker feed is not a per-ticker feed. Measured on AAPL, ten
+# headlines came back and five of them named no company at all:
+#
+#     If You Had Invested $500 a Month in VOO Since Its 2010 Launch...
+#     Turning 73 Forces a Withdrawal From This Stock Whether the Owner...
+#     Cramer strongly recommends buying beaten-down 90s tech legend
+#     Why India's Big Tech Companies Are Betting on Hyderabad
+#     Taiwan Semiconductor Manufacturing's Foundry Market Share...
+#
+# The relevance split already knew none of those were about Apple and filed
+# them under Market context, which is honest labelling and not enough: a
+# dollar-cost-averaging explainer about an index fund is not context for a
+# company, it is filler that arrived on the same wire.
+#
+# **It was also moving the numbers.** `net_sentiment` is weighted over every
+# scored row, so the VOO piece — scored bearish by the lexicon, on the strength
+# of "crashes" and "pandemics" — was pulling Apple's news factor down. That is
+# the part that made this worth fixing rather than tidying: a headline about a
+# different instrument was changing a reading about this one.
+
+# Never news about a company, whoever it names.
+#
+# Tight on purpose, and every pattern here is a *shape* rather than a topic. A
+# topic list would take "retirement" and drop "Apple CFO announces retirement",
+# which is real news; the retirement terms below are account mechanics that do
+# not appear in corporate copy. The cost of a false positive is a real headline
+# silently gone, which is worse than the filler it would remove.
+_FILLER = re.compile(
+    r"""
+      \bif\s+you\s+(?:had\s+)?(?:invested|bought|put|owned)\b
+    | \$[\d,.]+\s*(?:k\b)?\s*(?:a|per)\s+(?:month|week|year)\s+(?:in|into)\b
+    | \b(?:you|you'?d)\s+would\s+have\b
+    | \bhow\s+much\s+(?:you|i|we)(?:'d|\s+would|\s+will)?\s+(?:have|need)\b
+    | \bturning\s+\d{2}\b
+    | \b(?:rmd|required\s+minimum\s+distributions?)\b
+    | \b(?:401\(?k\)?|roth\s+ira|social\s+security|nest\s+egg)\b
+    | \bretirement\s+(?:account|savings|portfolio|plan)s?\b
+    | \$[\d,.]+\s*(?:k\b)?\s+investment\s+in\b
+    | \b(?:is|are|would\s+be)\s+worth\s+this\s+much\b
+    | \bwould\s+be\s+worth\s+(?:about\s+)?\$
+    | \bdollar[-\s]cost\s+averag
+    | \bbecome\s+a\s+millionaire\b
+    """,
+    re.I | re.X,
+)
+
+# What earns a slot for a headline that never names the company.
+#
+# Market-wide things only: an index, a macro release, a policy lever. Not
+# "another company did something", which is the class the relevance split was
+# written for and which this now removes rather than relabels.
+_MARKET_TERMS = re.compile(
+    r"""
+      \b(?:s&p\s*500|nasdaq|dow(?:\s+jones)?|russell\s*2000|vix)\b
+    | \b(?:the\s+)?fed\b | \bfomc\b | \bfederal\s+reserve\b
+    | \b(?:interest\s+)?rate\s+(?:cut|hike|decision)s?\b
+    | \binflation\b | \bcpi\b | \bppi\b | \bjobs\s+report\b | \bpayrolls\b
+    | \bgdp\b | \brecession\b | \btariffs?\b | \btreasury\s+yields?\b
+    | \b(?:bond|elevated|rising|falling|surging)\s+yields?\b
+    | \bexport\s+controls?\b | \bsanctions?\b | \btrade\s+war\b
+    | \bbull\s+market\b | \bbear\s+market\b | \bselloff\b
+    | \bearnings\s+season\b
+    """,
+    re.I | re.X,
+)
+
+
+def is_filler(text: str) -> bool:
+    """Personal-finance syndication that is not news about anything."""
+    return bool(_FILLER.search(text or ""))
+
+
+def _sector_terms(sector: str, industry: str) -> List[str]:
+    """Words from the company's own sector and industry.
+
+    Whole words, and the single-word generics are dropped for the same reason
+    `_GENERIC_HEADS` exists: "Technology" would claim every headline with the
+    word in it, which on a technology company is most of the feed."""
+    out: List[str] = []
+    for raw in (sector or "", industry or ""):
+        cleaned = re.sub(r"[^\w\s&-]", " ", raw)
+        cleaned = " ".join(cleaned.split())
+        # Multi-word only. "Consumer Electronics" identifies something;
+        # "Technology" on a technology company identifies nothing.
+        if cleaned and len(cleaned.split()) >= 2:
+            out.append(cleaned)
+    return out
+
+
+def is_market_context(text: str, sector: str = "", industry: str = "") -> bool:
+    """Is a headline that does not name the company still about its market?"""
+    blob = text or ""
+    if _MARKET_TERMS.search(blob):
+        return True
+    for term in _sector_terms(sector, industry):
+        if re.search(r"\b" + re.escape(term) + r"\b", blob, re.I):
+            return True
+    return False
+
+
+# Catalyst types that matter without naming a company.
+#
+# The rest of the taxonomy — earnings, guidance, analyst action, M&A, product
+# news — describes something *a* company did, and on this page the company is
+# fixed. Measured on AAPL: "Cramer strongly recommends buying beaten-down 90s
+# tech legend" carried an `earnings` tag off the words "its Q2 cash flow" and
+# rode it onto Apple's page as a major story about a company the headline does
+# not even name. "TSMC owns two-thirds of the chip foundry market" did the same
+# through `policy / supply chain`, which fires on the bare word "chip".
+#
+# Tariffs, sanctions and export controls are genuinely market-wide and are
+# handled by `_MARKET_TERMS` instead, so they do not need a catalyst type here.
+MARKET_CATALYSTS = frozenset({"legislation", "macro event"})
+
+
+def keep_article(about: bool, text: str, catalysts: List[Dict[str, str]],
+                 sector: str = "", industry: str = "") -> Tuple[bool, str]:
+    """(keep, why not). One place, so the panel can report what it removed.
+
+    Order matters. Filler is dropped even when it names the company, because
+    "If You Had Invested $1,000 in Apple Ten Years Ago" is the same article
+    with the name filled in. Everything else that names the company is kept
+    without further argument: the asymmetry recorded above the relevance split
+    still holds, and a false drop is worse than a weak keep.
+    """
+    if is_filler(text):
+        return False, "filler"
+    if about:
+        return True, ""
+    if any((c or {}).get("type") in MARKET_CATALYSTS for c in catalysts or []):
+        return True, ""
+    if is_market_context(text, sector, industry):
+        return True, ""
+    return False, "off-topic"
+
+
 def _importance_rank(catalysts: List[Dict[str, str]]) -> int:
     """The strongest catalyst on an item, 0 when there is none."""
     return max((_IMPORTANCE_RANK.get(c.get("importance", ""), 0)
@@ -536,8 +674,13 @@ def _age_hours(published: str) -> Optional[float]:
     return round((datetime.now(timezone.utc) - stamp).total_seconds() / 3600.0, 1)
 
 
+# Over-fetch, because the filter removes about half of a ticker feed and a
+# page that asked for twelve should still get twelve where twelve exist.
+OVERFETCH = 3
+
+
 def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
-    items = provider.news(ticker, limit=limit)
+    items = provider.news(ticker, limit=limit * OVERFETCH)
     earnings = provider.earnings_date(ticker)
 
     # For the relevance split. The quote is cached and /api/ticker has already
@@ -546,12 +689,20 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
     # Degrades to symbol-only matching rather than failing: a missing name makes
     # the split coarser, not wrong.
     company_name = ""
+    sector = industry = ""
     try:
-        company_name = str((provider.quote(ticker) or {}).get("name") or "")
+        quote = provider.quote(ticker) or {}
+        company_name = str(quote.get("name") or "")
+        # For the context test. A headline that never names the company can
+        # still be about its industry, and "Consumer Electronics" is a phrase
+        # a headline plausibly contains where "Technology" is not.
+        sector = str(quote.get("sector") or "")
+        industry = str(quote.get("industry") or "")
     except Exception:
         company_name = ""
 
     scored: List[Dict[str, Any]] = []
+    dropped: Dict[str, int] = {"filler": 0, "off-topic": 0}
     for item in items:
         blob = "{} {}".format(item.get("title", ""), item.get("summary", ""))
         score, hits = _score_text(blob)
@@ -571,6 +722,14 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
         cats = _catalysts(blob)
         placed = tier_for(age, cats)
         about = mentions_company(blob, ticker, company_name)
+
+        # Before the row is built, and before it reaches the sentiment
+        # average. Filing an off-topic item under Market context still let it
+        # vote on this company's tone; dropping it is what stops that.
+        keep, why = keep_article(about, blob, cats, sector, industry)
+        if not keep:
+            dropped[why] += 1
+            continue
 
         scored.append(
             {
@@ -604,6 +763,15 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
         -_importance_rank(r["catalysts"]),
         999999.0 if r["age_hours"] is None else r["age_hours"],
     ))
+
+    # Trim before the sentiment average, not after.
+    #
+    # The over-fetch means more survives the filter than the page asks for, and
+    # scoring over rows the reader cannot see would make `net_sentiment` a
+    # claim about evidence that is not on screen. Ranked first, so what is
+    # dropped here is the weakest tail rather than an arbitrary slice.
+    surplus = max(0, len(scored) - limit)
+    scored = scored[:limit]
 
     # Fresh news moves price; a week-old headline is already discounted.
     weighted = 0.0
@@ -653,8 +821,9 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
                 )
             )
 
+    removed = dropped["filler"] + dropped["off-topic"]
     return {
-            "method": "Lexicon sentiment and regex catalyst tagging over the "
+        "method": "Lexicon sentiment and regex catalyst tagging over the "
                   "headline feed, recency-weighted. Ranked by tier, then "
                   "catalyst, then age",
         "overall_tone": overall,
@@ -667,6 +836,15 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
                         for t in TIER_ORDER},
         "about_count": sum(1 for r in scored if r["about_company"]),
         "context_count": sum(1 for r in scored if not r["about_company"]),
+        # What the filter took out, so the panel can say so rather than just
+        # looking short. `filler` is personal-finance syndication; `off_topic`
+        # is a headline about some other company with nothing market-wide in
+        # it. `surplus` is the tail past the requested limit and is not a
+        # judgement about the items.
+        "dropped": {"filler": dropped["filler"],
+                    "off_topic": dropped["off-topic"],
+                    "total": removed,
+                    "surplus": surplus},
         "matched_on": _match_terms(ticker, company_name),
         "earnings_date": earnings,
         "days_to_earnings": days_to_earnings,

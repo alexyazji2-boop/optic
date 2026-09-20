@@ -279,14 +279,31 @@ def test_the_client_leads_with_the_lede_and_not_a_stance_chip():
     assert "pl-stance" not in CSS, "and the rule for it is now dead"
 
 
-def test_the_factor_bars_are_collapsed_but_present():
-    """They are the measured part, and the skill note beside them is this
-    project's own finding that the blend does not beat raw momentum — the one
-    thing that must not become harder to find."""
+def test_the_factor_bars_are_always_shown():
+    """They were behind a "How the N inputs scored" summary and are not any
+    more.
+
+    They are the measured part, and the skill note beside them is this
+    project's own finding that the blend does not beat raw momentum. A toggle
+    over the one section that qualifies everything above it makes the default
+    view of this panel the confident half with the evidence hidden — which is
+    the opposite of the reason the disclosure was added."""
     fn = APP_JS.split("function renderOpticPulse(d) {", 1)[1].split("\nfunction ", 1)[0]
-    assert '<details class="pl-bars">' in fn
+    assert '<section class="pl-bars"' in fn
     assert "pl-factors" in fn and "pl-skill" in fn
-    assert "[open]" not in fn.split("pl-bars")[1][:200], "ships closed"
+    assert "<details" not in fn.split("pl-bars")[1], \
+        "the bars must not be behind a disclosure again"
+    assert "inputs scored</summary>" not in fn
+
+    # The summary carried the group's name for a screen reader; without it the
+    # five rows are an unlabelled grid, so the name moves to the container.
+    assert 'aria-label="How the ${p.factors_total || 5} inputs scored"' in fn
+
+    # And the rules for the summary are gone rather than left dark.
+    assert ".pl-bars > summary" not in CSS
+    assert ".pl-bars[open]" not in CSS
+    assert ".pl-bars { margin-top:" in CSS, \
+        "the spacing the summary used to contribute has to come from somewhere"
 
 
 def test_the_lede_carries_direction_as_a_rule_not_a_repeated_word():

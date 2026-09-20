@@ -1,23 +1,56 @@
-# Optic Terminal — keep this out of search results.
+# Optic Terminal — read the pages, leave the API alone.
 #
-# The app has no sign-in by design, so anyone with the address can use it. On a
-# random trycloudflare.com hostname that was obscurity by accident; on a real
-# domain it stops being obscure, and an indexed page invites traffic this thing
-# was never sized for — every visitor's ticker load hits a rate-limited free data
-# feed shared by everyone else on the site.
+# This file used to be `Disallow: /` for everyone. That was aimed at search
+# engines and it caught everything, including an assistant asked to read the
+# site on the owner's behalf: "all blocked by the site's own robots.txt".
+# Refusing that is not what the rule was for.
+#
+# What the rule *was* for is still true, and is the second block below. The app
+# has no sign-in by design, so anyone with the address can use it, and every
+# ticker load hits a rate-limited free data feed shared by everyone else on the
+# site. A crawler walking /api/ticker/<symbol> across a few thousand symbols
+# would fan out into a few thousand expensive requests and take the feed down
+# for real readers. That is the surface worth protecting, and it is the only
+# one: the HTML is a single small page and the assets are static files.
+#
+# **Staying out of search results does not need this file.** It needs the
+# `noindex` meta tag in index.html, and that tag only works if a crawler is
+# allowed to fetch the page and read it. A blanket Disallow here actively
+# defeats it — Google's own guidance is that a disallowed URL can still appear
+# in results from external links, because the crawler never sees the noindex it
+# was told not to fetch. Allowing the fetch makes the noindex effective.
 #
 # This is a request, not a control. Well-behaved crawlers honour it; anything
-# that ignores robots.txt will crawl regardless, and the file itself is public,
-# so it should never be used to hint at paths worth hiding. The only real access
-# control would be authentication.
+# that ignores robots.txt will crawl regardless, and the file is public, so it
+# must never be used to hint at paths worth hiding. The only real access
+# control is authentication.
+
+# Disallow first, Allow second, and the order is load-bearing.
 #
-# The API is listed separately because a crawler walking /api/ticker/<symbol>
-# would fan out into thousands of expensive requests.
-
+# The two big crawlers resolve a conflict by longest match, where /api/ beats
+# / on its own. Python's urllib.robotparser -- and anything else written to
+# the original 1994 draft -- takes the first matching rule instead, and with
+# Allow: / written first that meant /api/ticker/AAPL was *permitted*. The
+# protected surface was open to exactly the crawlers least likely to be
+# careful. Written this way it holds under both readings.
 User-agent: *
-Disallow: /
+Disallow: /api/
+Allow: /
 
-# Explicitly named because these ignore the wildcard often enough to be worth
+# One request per second is more than enough for a site that is one page, and
+# is a tenth of what an unthrottled crawler will do. Honoured by Bing and
+# Yandex; Google ignores it and is configured in Search Console instead.
+Crawl-delay: 1
+
+# Model-training crawlers, still refused.
+#
+# A separate question from the one above, and a separate answer. These are not
+# fetching a page because someone asked for it; they are collecting a corpus.
+# Allowing an assistant to read the site when its reader asks costs one
+# request. Allowing a training crawler costs the whole site, forever, with no
+# reader on the other end.
+#
+# Named individually because they ignore the wildcard often enough to be worth
 # stating outright.
 User-agent: GPTBot
 Disallow: /

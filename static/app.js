@@ -6815,16 +6815,19 @@ function agoWords(iso) {
  * assemble "down today but read bullish, carried by positioning, with macro
  * against" out of a word and five bars themselves.
  *
- * So the lede is now the largest thing here and the bars are behind a
- * disclosure. The stance word is not repeated as a chip beside it — the
+ * So the lede is now the largest thing here. The stance word is not
+ * repeated as a chip beside it — the
  * sentence contains it, and a 32px duplicate of a word already in the sentence
  * is the same fault this session removed from the price header and the status
  * strip. Direction is carried by the coloured rule down the left of the lede,
  * which is where the rest of the app already puts it.
  *
- * The bars are collapsed, not gone. They are the measured part and the skill
- * note beside them is the app's own finding that this blend does not beat raw
- * momentum — which is exactly the thing that must not become harder to find.
+ * The bars sat behind "How the N inputs scored" for a while and no longer do.
+ * They are the measured part, and the skill note beside them is the app's own
+ * finding that this blend does not beat raw momentum: a toggle over the one
+ * section that qualifies everything above it makes the default view of this
+ * panel the confident half with the evidence hidden. Reported as wanting them
+ * shown regardless, which is the same conclusion.
  */
 /* One line on a resolved catalyst, or nothing.
  *
@@ -6866,6 +6869,158 @@ function pulsePendingLine(pend) {
     way it resolves, so conviction is held short of high until it does.</p>`;
 }
 
+/* The deeper read, behind "Read more".
+ *
+ * The lede is one sentence by design and the bars below are five numbers. Both
+ * are right and neither is an explanation: a reader who wants to know *why*
+ * bullish has to read "+90 Momentum, 34%" off a bar and work out for
+ * themselves that it is doing a third of the work. That is the gap this fills.
+ *
+ * **Assembled, not written.** Every clause below names a figure that is
+ * already in the payload — the same rule the lede states in its own method
+ * line. Nothing here asks a model and nothing here is generated prose, so it
+ * cannot say something the bars contradict.
+ *
+ * Ranked by *contribution*, which is score x weight, not by score. Momentum at
+ * +90 on 34% of the weight and Positioning at +90 on 20% are the same number
+ * and not the same amount of work, and ranking by score alone would call them
+ * a tie. This is the arithmetic the composite already does; it is just never
+ * shown.
+ *
+ * On conflicts: the comment above `renderOpticPulse` records that this panel
+ * is the whole of the judgement on the Dossier overview and does not render
+ * them. It does now, here — a reading that has a conflict in the payload and
+ * does not mention it is the case where a one-sentence summary actively
+ * misleads.
+ */
+function pulseReadMore(d) {
+  const p = (d && d.pulse) || {};
+  const live = (p.factors || []).filter((f) => !f.unavailable
+    && f.score !== null && f.score !== undefined);
+  if (!live.length) return '';
+
+  const stance = String(p.stance || 'neutral');
+  // +1 when a positive score supports the stance, -1 when it opposes it, and 0
+  // on neutral, where there is no side for anything to be on.
+  const side = stance === 'bullish' ? 1 : stance === 'bearish' ? -1 : 0;
+  const pull = (f) => (Number(f.score) || 0) * (Number(f.weight_pct) || 0) / 100;
+  const signed = (n) => (n > 0 ? '+' : '') + fmt(n, 0);
+  const ranked = live.slice().sort((a, b) => Math.abs(pull(b)) - Math.abs(pull(a)));
+  const top = ranked[0];
+
+  const parts = [];
+
+  // 1. What is carrying it. The second input is named only when it is doing
+  //    real work beside the first ("and X at 2%" reads as a list, not a
+  //    reason) *and* is on the same side of it. Without the second condition a
+  //    bullish read introduced Options as "behind it at -55" and then listed
+  //    the same input under "Against it" two lines later, which is the panel
+  //    contradicting itself inside one paragraph.
+  const second = ranked[1];
+  const alsoMatters = second
+    && Math.abs(pull(second)) >= Math.abs(pull(top)) * 0.4
+    && Math.sign(Number(second.score)) === Math.sign(Number(top.score));
+  parts.push(`<p><strong>${esc(top.label)} is doing most of the work</strong>,
+    at ${signed(top.score)} on ${fmt(top.weight_pct, 0)}% of the weight${
+  alsoMatters ? `, with ${esc(second.label)} behind it at ${signed(second.score)}
+      on ${fmt(second.weight_pct, 0)}%` : ''}.
+    ${esc(top.measures || '')}</p>`);
+
+  // 2. The other side. A factor only counts as opposing if its sign is against
+  //    the stance *and* it contributes something: News at -2 on 12% of the
+  //    weight is not an argument, and calling it one overstates the dispute.
+  const opposed = side
+    ? ranked.filter((f) => Math.sign(Number(f.score)) === -side
+        && Math.abs(pull(f)) >= 1)
+    : [];
+  if (opposed.length) {
+    parts.push(`<p><strong>Against it:</strong> ${opposed.map((f) =>
+      `${esc(f.label)} at ${signed(f.score)} on ${fmt(f.weight_pct, 0)}%`)
+      .join(', ')}.</p>`);
+  } else if (side) {
+    // The least-aligned input, not the smallest one. Ranking by contribution
+    // alone picked Options at -20 on a *bearish* read and called it "the
+    // nearest to pulling the other way" — on a bearish read a negative score
+    // is agreement, so that named the wrong input and reversed its meaning.
+    const aligned = (f) => side * pull(f);
+    const weakest = live.slice().sort((a, b) => aligned(a) - aligned(b))[0];
+    parts.push(aligned(weakest) < 0
+      ? `<p><strong>Nothing material is pulling the other way.</strong>
+          ${esc(weakest.label)} is the nearest to it at ${signed(weakest.score)},
+          which on ${fmt(weakest.weight_pct, 0)}% of the weight is close to no
+          opinion rather than a disagreement.</p>`
+      : `<p><strong>Every input that had data points the same way.</strong>
+          The weakest of them is ${esc(weakest.label)} at
+          ${signed(weakest.score)} on ${fmt(weakest.weight_pct, 0)}% of the
+          weight.</p>`);
+  } else {
+    parts.push(`<p><strong>The inputs do not agree on a direction</strong>,
+      which is what a neutral reading is. It is not a forecast of no movement.</p>`);
+  }
+
+  // 3. Where the conviction came from, and what held it back.
+  const bits = [];
+  if (p.agreement_pct !== null && p.agreement_pct !== undefined) {
+    bits.push(`${fmt(p.agreement_pct, 0)}% of the inputs point the same way`);
+  }
+  if (p.factors_priced && p.factors_total) {
+    bits.push(`${p.factors_priced} of ${p.factors_total} had data`);
+  }
+  if (bits.length && p.conviction) {
+    const held = p.pending_catalyst && p.pending_catalyst.pending === true
+      ? ` It is held short of high while a scheduled event is still ahead,
+          because nothing measured here predicts which way that resolves.` : '';
+    // The meta row below already says "high conviction, 100% of inputs
+    // agree". Repeating those two words here would be the same fault this
+    // panel removed when it dropped the 32px stance chip beside a sentence
+    // that already contained the stance. What the chip cannot say, and what
+    // this sentence is here for, is what the word means: conviction measures
+    // how much the inputs agree with each other, not how likely the move is.
+    //
+    // The dependence clause is derived, not asserted. Options and Positioning
+    // are both computed from the same option chain — dealer gamma from one
+    // side of it, call-versus-put activity from the other — so when those two
+    // agree it is less corroboration than two ticks suggest. Stating that
+    // unconditionally would be wrong the moment either input is missing, and a
+    // panel that explains its own reasoning has to be right about it.
+    const chain = live.filter((f) => f.key === 'gamma' || f.key === 'flow');
+    const shared = chain.length === 2
+      ? ` ${chain.map((f) => esc(f.label)).join(' and ')} are both read off the
+          same option chain, so those two agreeing is less corroboration than
+          two separate ticks look like.` : '';
+    parts.push(`<p><strong>${esc(cap(convictionWords(p.conviction)))}</strong>:
+      ${esc(bits.join(' and '))}.${held}
+      Conviction is agreement between the inputs, not a probability.${shared}</p>`);
+  }
+
+  // 4. What it cannot tell you. House rule, and the one part of this block
+  //    that is worth more than the rest of it put together.
+  const missing = (p.factors || []).filter((f) => f.unavailable);
+  const limits = [];
+  (p.conflicts || []).forEach((c) => {
+    const text = typeof c === 'string' ? c : (c && (c.text || c.note)) || '';
+    if (text) limits.push(esc(text));
+  });
+  if (missing.length) {
+    limits.push(`${missing.map((f) => esc(f.label)).join(' and ')}
+      ${missing.length === 1 ? 'had no data' : 'had no data'} on this run
+      (${esc(missing.map((f) => f.why_unavailable || 'reason not given')
+    .join('; '))}). A missing input redistributes its weight rather than
+      counting as zero, so the remaining inputs each carry more than the
+      percentage shown.`);
+  }
+  limits.push(`These are weights this app chose, not a fitted model. The panel
+    below shows each input's own measurement, and the skill note there is this
+    project's own finding about how much the blend is worth.`);
+  parts.push(`<p class="pl-more-limits">${limits.join(' ')}</p>`);
+
+  return `<details class="pl-more">
+    <summary>Read more</summary>
+    <div class="pl-more-body">${parts.join('')}</div>
+  </details>`;
+}
+
+
 function renderOpticPulse(d) {
   const p = d.pulse;
   if (!p) return '';
@@ -6897,6 +7052,11 @@ function renderOpticPulse(d) {
     ${pulseCatalystLine(p.catalyst)}
     ${pulsePendingLine(p.pending_catalyst)}
 
+    ${/* Directly under the sentence it expands, above the story link. The
+         short path down the panel is unchanged — lede, any catalyst, the
+         story, the meta row — and this adds one word to it. */''}
+    ${pulseReadMore(d)}
+
     ${story && story.title ? `<a class="pl-story" href="${esc(story.url || '#')}"
       target="_blank" rel="noopener noreferrer">
       ${newsTierBadge(story)}
@@ -6918,8 +7078,18 @@ function renderOpticPulse(d) {
       </details>` : ''}
     </div>
 
-    <details class="pl-bars">
-      <summary>How the ${p.factors_total || 5} inputs scored</summary>
+    ${/* Always on, no disclosure.
+         They were behind "How the N inputs scored" so the lede could be the
+         largest thing in the panel, and the lede still is — but the bars are
+         the measured part and the skill note beside them is this project's
+         own finding that the blend does not beat raw momentum. A toggle over
+         the one section that qualifies everything above it means the default
+         view of this panel is the confident half without the evidence.
+         No visible heading, because the ask was to drop the summary and five
+         labelled rows with signed scores under "Optic Pulse" do not need one.
+         The group keeps a name for a screen reader, which the summary used to
+         provide. */''}
+    <section class="pl-bars" aria-label="How the ${p.factors_total || 5} inputs scored">
       <div class="pl-factors">
         ${(p.factors || []).map((f) => `<div class="pl-factor${f.unavailable ? ' is-none' : ''}">
           <span class="pl-flabel" title="${esc(f.measures || '')}">${esc(f.label)}</span>
@@ -6933,7 +7103,7 @@ function renderOpticPulse(d) {
     ? `<p class="pl-caveat">${p.factors_priced} of ${p.factors_total} inputs had data.
         A missing input redistributes its weight rather than counting as zero.</p>` : ''}
       ${g.method ? `<p class="pl-method">${gloss(g.method)}</p>` : ''}
-    </details>
+    </section>
   </section>`;
 }
 
@@ -9010,7 +9180,34 @@ function newsHeadlineSections(news, arts) {
       <p class="sub">Served under this symbol, but these headlines do not name
         the company. Often the reason a stock moved, and not news about it.</p>
       ${context.map(newsArticleRow).join('')}` : ''}
+    ${newsFilterNote(news)}
     ${newsTierLegend(news, matched)}`;
+}
+
+/* What the filter removed, said out loud.
+ *
+ * Without this a filtered page just looks short, and "three headlines on NVDA"
+ * reads as a broken feed rather than as a feed that returned eighteen of which
+ * fifteen were about other companies. Measured on the day this shipped: AAPL
+ * 5 of 10 removed, NVDA 7 of 10, SPY 6 of 10.
+ *
+ * Two counts and not one, because they are different complaints. `filler` is
+ * syndicated personal-finance content that is not news about anything -- "If
+ * You Had Invested $500 a Month in VOO" arrived on Apple's wire. `off_topic`
+ * is a real story about a different company with nothing market-wide in it. A
+ * reader who thinks the filter is too aggressive needs to know which of the
+ * two it is being aggressive about. */
+function newsFilterNote(news) {
+  const d = news.dropped || {};
+  const total = Number(d.total) || 0;
+  if (!total) return '';
+  const parts = [];
+  if (d.filler) parts.push(`${d.filler} personal-finance filler`);
+  if (d.off_topic) parts.push(`${d.off_topic} about other companies`);
+  return `<p class="sub nw-filtered">${total} headline${total === 1 ? '' : 's'}
+    the feed returned under this symbol ${total === 1 ? 'was' : 'were'} left
+    out: ${esc(parts.join(', '))}. Anything naming this company is kept
+    whatever else it is.</p>`;
 }
 
 /* The rules, rendered from what the server publishes rather than restated here.
@@ -9031,7 +9228,10 @@ function newsTierLegend(news, matched) {
     <p class="nw-limit"><strong>What this cannot do.</strong> The grouping reads
       the headline and summary for the symbol or the company name, so a headline
       that means this company without naming it sits under Market context, and a
-      company whose name is an ordinary English word will over-match. Tiers rank
+      company whose name is an ordinary English word will over-match. A headline
+      that names neither this company nor anything market-wide is dropped, which
+      means a genuinely relevant story about a supplier or a rival is dropped
+      with it: there is no supply-chain map here to tell one from the other. Tiers rank
       what a headline is <em>about</em>, never how far the stock moved: nothing
       here can show that a headline caused a move rather than shared a day with
       one.</p>

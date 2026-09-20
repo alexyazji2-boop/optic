@@ -8661,6 +8661,53 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
 .pl-lede.is-bullish { border-left-color: var(--pos); }
 .pl-lede.is-bearish { border-left-color: var(--neg); }
 
+/* "Read more": the prose between the one-sentence lede and the five bars.
+
+   Indented to the lede's text column rather than the panel's, so it reads as a
+   continuation of that sentence and not as a new section. Same summary
+   treatment .pl-bars used to carry before its summary was removed: a small
+   underlined word with no disclosure triangle, which is also how .pl-src
+   renders, so the two remaining disclosures in this panel match. */
+.pl-more { margin: calc(var(--space-4) * -1) 0 var(--space-4); }
+.pl-more > summary {
+  cursor: pointer;
+  list-style: none;
+  padding-left: var(--space-4);
+  font-size: var(--t-small);
+  font-weight: 600;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color var(--dur-ui) var(--ease-ui);
+}
+.pl-more > summary::-webkit-details-marker { display: none; }
+.pl-more > summary:hover { color: var(--ink); }
+.pl-more-body {
+  margin-top: var(--space-3);
+  padding-left: var(--space-4);
+  /* 68ch, wider than the lede's 46ch: this is a paragraph and the lede is a
+     headline, and a display-width measure on body copy is hard to track. */
+  max-width: 68ch;
+}
+.pl-more-body p {
+  margin: 0 0 var(--space-3);
+  font-size: var(--t-small);
+  line-height: 1.6;
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+.pl-more-body p:last-child { margin-bottom: 0; }
+.pl-more-body strong { color: var(--ink); font-weight: 600; }
+/* The limits paragraph is quieter than the reasoning above it, the same way
+   .pl-caveat sits under the bars. It is not less important; it is the part a
+   reader returns to rather than starts with. */
+.pl-more-limits {
+  font-size: var(--t-caption) !important;
+  color: var(--ink-muted) !important;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
 /* The freshest company story, as a link. Flat: a bordered card here would
    out-shout the sentence above it, which is the wrong priority. */
 .pl-story {
@@ -8713,23 +8760,16 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
   max-width: 64ch;
 }
 
-/* The workings, collapsed. Not gone: the bars are the measured part, and the
-   skill note beside them is this project's own finding that the blend does not
-   beat raw momentum — the one thing that must not become harder to find. */
-.pl-bars > summary {
-  cursor: pointer;
-  list-style: none;
-  margin-top: var(--space-3);
-  font-size: var(--t-small);
-  font-weight: 600;
-  color: var(--ink-2);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  transition: color var(--dur-ui) var(--ease-ui);
-}
-.pl-bars > summary::-webkit-details-marker { display: none; }
-.pl-bars > summary:hover { color: var(--ink); }
-.pl-bars[open] > summary { margin-bottom: var(--space-4); }
+/* The workings, always shown. They sat behind a "How the N inputs scored"
+   summary and no longer do: a toggle over the one section that qualifies
+   everything above it makes the default view of this panel the confident half
+   with the evidence hidden.
+
+   The rules for that summary are gone rather than left dark, and the spacing
+   it used to contribute (space-3 above it, space-4 below it when open) is
+   carried here instead — without it the first bar butts against the meta row
+   and the two read as one block. */
+.pl-bars { margin-top: var(--space-5); }
 
 /* One row per input. A grid rather than flex so the labels, bars and values
    line up in three columns however long a label is. */
