@@ -944,15 +944,28 @@ let statusOpen = false;
  *
  * The button only appears when the content actually overflows — a "more" that
  * reveals nothing is the same fault as the session summary's. */
-function setStatus(parts) {
+function setStatus(parts, opts = {}) {
   const host = $('#statusline');
   if (!host) return;
-  host.classList.toggle('is-open', statusOpen);
+  /* `disclose: false` drops the clamp and the button together.
+   *
+   * It has to be both. The clamp is what the button exists to lift, so keeping
+   * one without the other is the single arrangement that can hide a reading
+   * with no way back to it: Home's two parts sit on one row at desktop width
+   * and wrap to two on a phone, and the phone is precisely where the toggle
+   * would no longer be there to recover the second row.
+   *
+   * Only worth offering to a caller whose strip is short by construction. The
+   * clamp was measured against seven items over five rows on Options; Home
+   * passes one sentence and one status chip and has never needed it. */
+  const disclose = opts.disclose !== false;
+  host.classList.toggle('sl-plain', !disclose);
+  host.classList.toggle('is-open', disclose && statusOpen);
   host.innerHTML = `<div class="sl-parts">${
-    parts.map((p) => `<span>${p}</span>`).join('')}</div>
+    parts.map((p) => `<span>${p}</span>`).join('')}</div>${disclose ? `
     <button type="button" class="sl-more" data-sl-more hidden
       aria-expanded="${statusOpen ? 'true' : 'false'}"
-      aria-controls="statusline">${statusOpen ? 'Less' : 'More'}</button>`;
+      aria-controls="statusline">${statusOpen ? 'Less' : 'More'}</button>` : ''}`;
 
   const inner = host.querySelector('.sl-parts');
   const more = host.querySelector('[data-sl-more]');
@@ -23576,7 +23589,7 @@ function updateStatus() {
         ? `${esc(STATE.ticker)} is loaded. Pick a tab above, or search another symbol.`
         : 'Search a ticker or company name to begin.',
       liveIndicatorHTML(),
-    ]);
+    ], { disclose: false });
     return;
   }
   // 'settings' belongs here too: it has no symbol of its own, so it shouldn't be

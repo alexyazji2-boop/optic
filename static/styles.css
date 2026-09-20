@@ -795,6 +795,10 @@ nav.tabs button[aria-selected="true"]::after {
   max-height: 1.6em;
 }
 .statusline.is-open .sl-parts { max-height: none; overflow: visible; }
+/* No toggle, so no clamp — a caller that opts out of the disclosure is
+   saying its strip is short enough to read whole at any width. Clipping
+   it with nothing to press would hide the tail for good. */
+.statusline.sl-plain .sl-parts { max-height: none; overflow: visible; }
 .sl-more {
   flex: none;
   /* 44px would double this strip's height for a control that reveals four

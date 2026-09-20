@@ -418,7 +418,7 @@ def test_the_status_toggle_only_appears_when_there_is_more_to_see():
     render-time fit check. Overflow is measured on the inner row, because the
     strip is what clips and its own scrollHeight already equals its
     clientHeight."""
-    fn = APP.split("function setStatus(parts) {", 1)[1].split("\nfunction ", 1)[0]
+    fn = APP.split("function setStatus(parts, opts = {}) {", 1)[1].split("\nfunction ", 1)[0]
     assert "inner.scrollHeight > inner.clientHeight + 1 || statusOpen" in fn
     assert "hidden" in fn, "the button ships hidden and is revealed on measurement"
 
@@ -428,8 +428,35 @@ def test_the_status_open_state_survives_a_repaint():
     setStatus replaces innerHTML. State in the DOM alone would re-collapse the
     strip under the reader."""
     assert "let statusOpen = false;" in APP
-    fn = APP.split("function setStatus(parts) {", 1)[1].split("\nfunction ", 1)[0]
-    assert "host.classList.toggle('is-open', statusOpen);" in fn
+    fn = APP.split("function setStatus(parts, opts = {}) {", 1)[1].split("\nfunction ", 1)[0]
+    assert "host.classList.toggle('is-open', disclose && statusOpen);" in fn
+
+
+def test_home_gets_the_strip_without_a_disclosure():
+    """Reported as a screenshot of Home reading "Search a ticker or company
+    name to begin. / Market closed · auto-refresh paused / Less".
+
+    The button was there because `statusOpen` is module state shared by every
+    view: open the strip on Options, come back to Home, and the button is
+    revealed regardless of whether Home has anything to reveal. It does not —
+    one sentence and one status chip is the whole strip.
+
+    The clamp goes with the button. A clipped row with nothing left to press is
+    the one arrangement that can lose a reading for good, and a phone wraps
+    those two parts onto two rows."""
+    home = APP.split("if (STATE.view === 'home') {", 1)[1].split("return;", 1)[0]
+    assert "{ disclose: false }" in home
+
+    fn = APP.split("function setStatus(parts, opts = {}) {", 1)[1].split("\nfunction ", 1)[0]
+    assert "const disclose = opts.disclose !== false;" in fn, \
+        "an absent opts must still disclose, so the dozen other callers are unchanged"
+    assert "${disclose ? `" in fn.split("sl-more", 1)[0], \
+        "the button is not emitted at all, rather than emitted and then hidden"
+    assert "host.classList.toggle('sl-plain', !disclose);" in fn
+    assert ".statusline.sl-plain .sl-parts { max-height: none; overflow: visible; }" \
+        in NO_COMMENTS, "no toggle means no clamp"
+    assert "host.classList.toggle('is-open', disclose && statusOpen);" in fn, \
+        "an open state carried from another tab must not reach a strip with no button"
 
 
 def test_no_panel_is_capped_into_a_nested_scroll_container():
