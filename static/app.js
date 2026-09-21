@@ -22583,9 +22583,15 @@ function renderBrief(d) {
   ${briefLead(wires.lead)}
   ${deskNav}
 
+  ${/* `data-fixed`: the desks are cards in a grid, not sections of the page.
+      * They already have their own navigation in `read-nav` directly above
+      * them, so indexing them again would put eight of the twenty chips in the
+      * page index on the one block that does not need them -- and a chevron on
+      * each of eight news cards collapses a newspaper, which is not what a
+      * reader opens this tab to do. */''}
   <div class="read-desks">
     ${desks.map((k) => `
-      <section class="panel read-desk" id="read-desk-${esc(k.id)}">
+      <section class="panel read-desk" data-fixed="1" id="read-desk-${esc(k.id)}">
         <h2>${esc(k.label)}</h2>
         <ul class="brief-list">${k.entries.map(briefHeadline).join('')}</ul>
       </section>`).join('')}
@@ -27349,7 +27355,27 @@ const PANELS_OPEN_BY_DEFAULT = {
   long: ['long-term view', 'close defence', 'valuation vs its own history'],
   market: ['macro regime', 'market breadth', 'sector rotation', 'stock maps',
     'currencies', 'economic data'],
-  brief: ["optic's read", 'weekly market analysis', 'morning desk', 'on the calendar'],
+  /* Read is a newspaper, so almost all of it opens.
+   *
+   * The other views here are analysis: a verdict at the top and evidence below
+   * it, where a closed panel means "you have been told the answer, open this if
+   * you want the working". This tab has no verdict. Every section is something
+   * that happened, and a reader who has to click twelve times to read the news
+   * has been given a worse page than the one that scrolled.
+   *
+   * So collapsing here is the reader's tool rather than the page's default, and
+   * what stays shut is only the three blocks that are not news: the mode
+   * explainer, 1,360px of catalyst reference, and the attribution. That leaves
+   * the jump index doing the work -- which is the actual complaint, a 13,700px
+   * page being the one page in the app with no way to move around it.
+   *
+   * These matched nothing until this tab was wired into the render pass, so
+   * two of the four were also simply wrong: the heading is "Weekly market
+   * update", not "weekly market analysis", and "optic's read" names the hero,
+   * whose h2 is nested and therefore never collapsible in the first place. */
+  brief: ['morning desk', 'overnight', "today's priority", 'weekly market',
+    'fear & greed', 'market regime', 'on the calendar', 'official releases',
+    'insider filings'],
   tracker: ['the record', 'open positions', 'how the ledger works'],
   indices: ['major etfs', 'index regime'],
   roth: [],
@@ -27510,10 +27536,30 @@ function buildSectionIndex(view) {
   const nav = document.createElement('nav');
   nav.className = 'sec-index span-all';
   nav.setAttribute('aria-label', 'Jump to a section');
-  nav.innerHTML = panels.map((panel, i) => {
-    if (!panel.id) panel.id = `sec-${view}-${i}`;
+  nav.innerHTML = panels.map((panel) => {
     const head = panel.querySelector(':scope > h2');
     const full = headingName(head);
+    /* Named for the section, not for where it currently sits in the list.
+     *
+     * This was `sec-${view}-${i}`, which is unique only if every panel is
+     * numbered in the same pass -- true while an index was built once per
+     * render and false the moment one is rebuilt as late sections arrive. Each
+     * rebuild kept the ids already assigned and numbered the newcomers by
+     * their position in the NEW list, so the positions collided.
+     *
+     * Measured on Read, where seven of twelve sections arrive on their own
+     * requests: sec-brief-1 ended up on both Overnight and Market regime,
+     * sec-brief-2 on both Today's priority and the Catalyst Library, and
+     * sec-brief-3 on three panels at once. getElementById returns the first,
+     * so four of twelve chips scrolled to the wrong section and the
+     * which-section-am-I-in highlight lit the wrong chip with them.
+     *
+     * panelId is the identity this file already uses for a section -- it is
+     * what collapse state persists under -- so the id is that, slugged. Only
+     * ids this function generated are replaced; `cal-panel` and the desks'
+     * anchors are the author's and are left alone. */
+    const mine = !panel.id || panel.id.startsWith('sec-' + view + '-');
+    if (mine) panel.id = 'sec-' + panelId(view, full).replace(/[^a-z0-9]+/g, '-');
     let label = full.replace(/\s*[·—-]\s*$/, '');
     if (label.length > 26) label = label.slice(0, 25).trimEnd() + '…';
     return `<button type="button" class="sec-chip" data-sec-jump="${esc(panel.id)}"
@@ -27721,6 +27767,12 @@ function makePanelsCollapsible(view) {
     // nothing to click and nothing to label the collapsed state with.
     const head = panel.querySelector(':scope > h2');
     if (!head || panel.dataset.collapsible === '1') return;
+    /* And a panel can say it is not a section. `.panel` is the card surface as
+     * much as it is the page's unit of content, and a grid of cards with a
+     * heading each -- the Read tab's eight newsdesks -- is one section wearing
+     * the class eight times. Opting out here keeps them out of the section
+     * index too, which reads `data-collapsible="1"`. */
+    if (panel.dataset.fixed === '1') return;
 
     const title = headingName(head);
     if (!title) return;
@@ -27976,42 +28028,105 @@ document.addEventListener('click', (evt) => {
   if (panel.dataset.panelId) rememberCollapse(panel.dataset.panelId, open);
 });
 
+/* Everything a view needs once its DOM exists: the notice, the glossary pass,
+ * collapsing, the mode filter and the jump index.
+ *
+ * Pulled out of the wrapper below because it has a second caller. Idempotent by
+ * construction, and it has to stay that way: makePanelsCollapsible skips a
+ * panel that already carries the attribute, applyUiMode strips its own note
+ * before rebuilding it, addBulkControl returns early when its bar is there, and
+ * buildSectionIndex removes the old index first. */
+function chromeView(view) {
+  const host = views[view];
+  if (!host) return;
+  // Notice first, before the panels — and here rather than in each renderer so
+  // a view physically cannot be added without it.
+  const banner = legalBanner(view);
+  if (banner && !host.querySelector('.legal-area')) {
+    // Above the evidence, below the answer. See afterOpticLoop.
+    const anchor = afterOpticLoop(host);
+    const holder = document.createElement('div');
+    holder.innerHTML = banner;
+    while (holder.firstChild) host.insertBefore(holder.firstChild, anchor);
+  }
+  glossHeaders(host);
+  dedupeGlossTerms(host);
+  // Last, so it wraps the finished DOM including anything the steps above added.
+  makePanelsCollapsible(view);
+  /* Before addBulkControl and buildSectionIndex, both of which count panels.
+   * Run after them and the section index would list nine panels Simple mode
+   * has hidden, and "expand all" would open them. */
+  applyUiMode(view);
+  // Before the index is built: it pins below this header and needs its height.
+  syncSecurityHeader();
+  addBulkControl(view);
+  // After makePanelsCollapsible, which is what sets data-collapsible="1" —
+  // the index is built from that attribute, so ordering here is load-bearing.
+  buildSectionIndex(view);
+}
+
+/* Views whose chrome is rebuilt when a panel arrives after the render pass.
+ *
+ * Same problem watchForLatePanels was written for and the same argument for an
+ * observer over a list of loaders, one step further on: applyUiMode was not the
+ * only pass those late panels were missing. A view that mounts sections from
+ * their own requests renders its index from whatever had landed by then.
+ *
+ * Read is the case that forced it. Seven of its twelve sections — Overnight,
+ * Today's priority, catalyst mode, the Catalyst Library, Weekly, Fear & Greed
+ * and Insider filings — are separate requests fired unawaited by loadBrief, so
+ * an index built at render time would name five of twelve. */
+function watchForLateChrome() {
+  if (typeof MutationObserver !== 'function') return;
+  CHROMED_VIEWS.forEach((view) => {
+    const host = views[view];
+    if (!host) return;
+    let queued = false;
+    const obs = new MutationObserver((records) => {
+      if (queued) return;
+      // A panel, and never one this pass produced. Same predicate as
+      // watchForLatePanels, for the same reason: attribute churn and text
+      // updates are most of what happens in a view.
+      const added = records.some((r) => [...r.addedNodes].some((n) => {
+        if (n.nodeType !== 1) return false;
+        if (n.matches?.('[data-mode-note]')) return false;
+        if (n.classList?.contains('panel')) return true;
+        return !!n.querySelector?.('.panel:not([data-mode-note])');
+      }));
+      if (!added) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        queued = false;
+        /* Deaf while it works. The pass is idempotent, so a re-entry would
+         * settle rather than spin — but CLAUDE.md records two observers in
+         * this file that did spin, one at ~3Hz and one at ~7Hz, and both took
+         * the page's clicks with them. Not being able to re-enter at all is
+         * cheaper than reasoning about whether it would. */
+        obs.disconnect();
+        chromeView(view);
+        obs.observe(host, { childList: true, subtree: true });
+      });
+    });
+    obs.observe(host, { childList: true, subtree: true });
+  });
+}
+
 /* Every renderer replaces its view's innerHTML wholesale, so the header pass has
  * to run after each one. Wrapping them here keeps it in a single place instead of
  * a trailing call appended to eight functions that would drift apart over time. */
+const CHROMED_VIEWS = ['swing', 'earnings', 'market', 'indices', 'roth',
+  'tracker', 'long', 'brief'];
+
 [
   ['swing', () => renderSwing], ['earnings', () => renderEarnings],
   ['market', () => renderMarket], ['indices', () => renderIndices], ['roth', () => renderRoth],
   ['tracker', () => renderTracker], ['long', () => renderLong],
+  ['brief', () => renderBrief],
 ].forEach(([view, get]) => {
   const original = get();
   const wrapped = function (...args) {
     const result = original.apply(this, args);
-    // Notice first, before the panels — and inserted here rather than in each
-    // renderer so a view physically cannot be added without it.
-    const banner = legalBanner(view);
-    if (banner && views[view] && !views[view].querySelector('.legal-area')) {
-      // Above the evidence, below the answer. See afterOpticLoop.
-      const host = views[view];
-      const anchor = afterOpticLoop(host);
-      const holder = document.createElement('div');
-      holder.innerHTML = banner;
-      while (holder.firstChild) host.insertBefore(holder.firstChild, anchor);
-    }
-    glossHeaders(views[view]);
-    dedupeGlossTerms(views[view]);
-    // Last, so it wraps the finished DOM including anything the steps above added.
-    makePanelsCollapsible(view);
-    /* Before addBulkControl and buildSectionIndex, both of which count panels.
-     * Run after them and the section index would list nine panels Simple mode
-     * has hidden, and "expand all" would open them. */
-    applyUiMode(view);
-    // Before the index is built: it pins below this header and needs its height.
-    syncSecurityHeader();
-    addBulkControl(view);
-    // After makePanelsCollapsible, which is what sets data-collapsible="1" —
-    // the index is built from that attribute, so ordering here is load-bearing.
-    buildSectionIndex(view);
+    chromeView(view);
     return result;
   };
   // Reassign the binding the rest of the file calls through.
@@ -28023,9 +28138,12 @@ document.addEventListener('click', (evt) => {
     case 'roth': renderRoth = wrapped; break;
     case 'tracker': renderTracker = wrapped; break;
     case 'long': renderLong = wrapped; break;
+    case 'brief': renderBrief = wrapped; break;
     default: break;
   }
 });
+
+watchForLateChrome();
 
 /* Follow the OS theme.
  *
