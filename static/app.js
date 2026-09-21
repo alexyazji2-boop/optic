@@ -19091,8 +19091,64 @@ async function loadAllowance() {
   try {
     const reply = await getJSON('/api/ai-allowance');
     ACCOUNT.allowance = reply.allowance || null;
+    /* `reply.ai` was fetched and thrown away on every call.
+     *
+     * The endpoint has always returned `{allowance, ai}` and this line read
+     * only the first of them, so nothing in the client ever knew whether the
+     * assistant had a key. Measured on production, where it does not: the
+     * Pulse panel opened with an enabled input and an enabled send button,
+     * said nothing, and would have failed on the first question. */
+    ACCOUNT.ai = reply.ai || null;
   } catch (err) { ACCOUNT.allowance = null; }
   renderAllowanceNote();
+  renderPulseUnavailable();
+}
+
+/* The disabled state, when Pulse has no credential.
+ *
+ * A panel that looks ready and is not is worse than one that says so: the
+ * reader spends a question and a wait to find out. So the composer is
+ * disabled rather than merely unhelpful, and the reason sits where the
+ * allowance note would be.
+ *
+ * The header button still opens the panel. Disabling that instead would hide
+ * the explanation behind the one control that could reveal it, and a reader
+ * would be left with a dead button and no reason for it.
+ *
+ * `enabled === false` rather than `!enabled`: the field is absent until the
+ * first fetch lands, and an undefined state is "not known yet", not "off".
+ * Treating it as off would flash the notice on every cold load. */
+function renderPulseUnavailable() {
+  const ai = ACCOUNT.ai;
+  const off = !!ai && ai.enabled === false;
+  const input = $('#chat-input');
+  const send = $('#chat-send') || document.querySelector('[data-chat-send]');
+  const research = $('#chat-research');
+  let host = $('#chat-off');
+
+  if (!off) {
+    if (host) host.remove();
+    [input, send, research].forEach((el) => { if (el) el.disabled = false; });
+    if (input) input.removeAttribute('aria-describedby');
+    return;
+  }
+  [input, send, research].forEach((el) => { if (el) el.disabled = true; });
+  if (input) {
+    input.placeholder = 'Pulse is unavailable';
+    input.setAttribute('aria-describedby', 'chat-off');
+  }
+  if (!host) {
+    const anchor = input && input.parentNode ? input : null;
+    if (!anchor) return;
+    host = document.createElement('p');
+    host.id = 'chat-off';
+    host.className = 'chat-allow chat-off';
+    anchor.parentNode.insertBefore(host, anchor);
+  }
+  // The server's own sentence, which knows whether it is talking to the
+  // operator or to a visitor. Repeating a guess at it here would be a second
+  // copy to keep in step.
+  host.textContent = ai.hint || 'Pulse is unavailable.';
 }
 
 /* What is left of today's assistant allowance, stated before the click.

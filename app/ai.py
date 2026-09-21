@@ -22,6 +22,7 @@ from datetime import date
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 from . import knowledge
+from .runtime import is_hosted
 
 import logging
 
@@ -611,7 +612,22 @@ def available() -> Dict[str, Any]:
         "enabled": bool(client is not None and source),
         "model": MODEL,
         "credential_source": source or "none",
+        # Two audiences, and the same sentence is wrong for one of them.
+        #
+        # This hint reads "set ANTHROPIC_API_KEY in your environment", which is
+        # the right instruction for whoever is running the terminal on their
+        # own machine and a useless one for a visitor to the public site: they
+        # have no environment to set it in. Measured on production, where the
+        # key is unset: the panel opened with a live input and said nothing at
+        # all, so the only version of this a reader could ever have seen was
+        # the wrong one.
+        #
+        # Same branch and same reason as `originIsEphemeral()` on the client:
+        # who is reading decides which sentence is true.
         "hint": (
+            "Pulse is not configured on this deployment, so it cannot answer "
+            "questions. Every other panel on the terminal works without it."
+            if is_hosted() else
             "Set ANTHROPIC_API_KEY in your environment (or run `ant auth login`) to enable "
             "the assistant and deep research. Every other panel works without it."
         ),

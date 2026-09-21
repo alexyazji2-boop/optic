@@ -11232,6 +11232,22 @@ body.auth-open { overflow: hidden; }
   color: var(--ink-muted);
 }
 
+/* Pulse with no credential. Warmer than an error and plainer than a nudge:
+   nothing is broken, the feature is simply not configured here, and the rest
+   of the terminal is unaffected. Shares .chat-allow's placement so the reader
+   looks in the one place above the composer for anything about Pulse's
+   availability. */
+.chat-off {
+  color: var(--ink-2);
+  border-left: 2px solid var(--border-strong);
+  padding-left: var(--space-3);
+}
+/* The composer, switched off. Not hidden: a reader has to see what is
+   unavailable to understand the sentence above it. */
+#chat-input:disabled,
+#chat-send:disabled,
+#chat-research:disabled { opacity: 0.45; cursor: not-allowed; }
+
 .chat-allow.spent { color: var(--ink-2); }
 
 .chat-allow button {
