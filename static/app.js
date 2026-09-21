@@ -27114,6 +27114,7 @@ const PANELS_DENSE = {
   indices: [],
   tracker: [],
   roth: [],
+  financials: [],
 };
 
 /* What Simple hides on top of the advanced set.
@@ -27134,6 +27135,7 @@ const PANELS_SIMPLE_HIDES = {
   indices: [],
   tracker: [],
   roth: [],
+  financials: [],
 };
 
 const PANELS_ADVANCED = {
@@ -27150,6 +27152,7 @@ const PANELS_ADVANCED = {
   indices: [],
   tracker: [],
   roth: [],
+  financials: [],
 };
 
 /* What the hidden panels are, per view. The note said "options and positioning"
@@ -27444,6 +27447,15 @@ const PANELS_OPEN_BY_DEFAULT = {
   tracker: ['the record', 'open positions', 'how the ledger works'],
   indices: ['major etfs', 'index regime'],
   roth: [],
+  /* The statements, and the segment tables under them.
+   *
+   * 6,261px and seven sections with no index and no collapse, because this
+   * facet was never in the pass either -- the second-longest page in the
+   * Dossier after Options, which has ten chips. What opens is what the tab is
+   * named for; short interest, the earnings record, the filing list, the
+   * insider table and corporate actions are all reference you come to this
+   * tab for one at a time. */
+  financials: ['financials', 'segments and geography'],
 };
 
 const COLLAPSE_KEY = 'optic.panels.open';
@@ -27586,7 +27598,15 @@ const SECTION_INDEX_MIN = 6;
 function afterOpticLoop(host) {
   const blocks = host.querySelectorAll(':scope > .pl-hero, :scope > .pl-block');
   const last = blocks[blocks.length - 1];
-  return last ? last.nextSibling : host.firstChild;
+  if (last) return last.nextSibling;
+  /* No loop on this page, but the workspace header still goes first.
+   *
+   * Every view that had a jump index also had a loop, so `host.firstChild` was
+   * always below the ticker header by accident. The Financials facet has a
+   * header and no loop, and the index landed above it: the page opened with a
+   * row of section names and only then said which company they were about. */
+  const head = host.querySelector(':scope > .sec-head');
+  return head ? head.nextSibling : host.firstChild;
 }
 
 function buildSectionIndex(view) {
@@ -28180,13 +28200,13 @@ function watchForLateChrome() {
  * to run after each one. Wrapping them here keeps it in a single place instead of
  * a trailing call appended to eight functions that would drift apart over time. */
 const CHROMED_VIEWS = ['swing', 'earnings', 'market', 'indices', 'roth',
-  'tracker', 'long', 'brief'];
+  'tracker', 'long', 'brief', 'financials'];
 
 [
   ['swing', () => renderSwing], ['earnings', () => renderEarnings],
   ['market', () => renderMarket], ['indices', () => renderIndices], ['roth', () => renderRoth],
   ['tracker', () => renderTracker], ['long', () => renderLong],
-  ['brief', () => renderBrief],
+  ['brief', () => renderBrief], ['financials', () => renderFinancialsView],
 ].forEach(([view, get]) => {
   const original = get();
   const wrapped = function (...args) {
@@ -28204,6 +28224,7 @@ const CHROMED_VIEWS = ['swing', 'earnings', 'market', 'indices', 'roth',
     case 'tracker': renderTracker = wrapped; break;
     case 'long': renderLong = wrapped; break;
     case 'brief': renderBrief = wrapped; break;
+    case 'financials': renderFinancialsView = wrapped; break;
     default: break;
   }
 });
