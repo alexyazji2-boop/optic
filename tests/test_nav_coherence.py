@@ -130,16 +130,19 @@ def test_the_strip_may_wrap_only_between_the_two_breakpoints():
     assert "flex-wrap: nowrap;" in CSS
 
 
-def test_the_last_groups_menu_opens_leftwards():
+def test_a_menu_near_the_right_edge_opens_leftwards():
     """`left: 0` anchors a 190px dropdown to its tab's left edge, which is
-    fine until that tab is the rightmost one. Measured at 900px once
+    fine until that tab is near the right edge. Measured at 900px once
     Watchlist became the eighth group: the menu ran 781 to 971 against a 900px
     window, and nothing could scroll to it.
 
     It did not happen before because the rightmost group was Optic's
-    Positions, which holds one view and renders as a plain button with no
-    menu at all."""
-    assert "nav.tabs-group > .nav-item:last-child .nav-menu" in CSS
-    rule = CSS.split("nav.tabs-group > .nav-item:last-child .nav-menu", 1)[1]
+    Positions, which held one view and rendered as a plain button with no menu
+    at all. Giving the Roth planner a home in that group gave it a caret, and
+    the answer stopped being `:last-child` -- see test_roth_view, where the
+    strip wrapped and the last group became the first item on the second row.
+    The rule is the same rule; what decides which tabs get it is measured now."""
+    assert "nav.tabs-group > .nav-item.menu-right .nav-menu" in CSS
+    rule = CSS.split("nav.tabs-group > .nav-item.menu-right .nav-menu", 1)[1]
     rule = rule[:rule.index("}")]
     assert "right: 0" in rule and "left: auto" in rule

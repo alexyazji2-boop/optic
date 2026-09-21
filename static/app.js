@@ -71,6 +71,7 @@ const views = {
   financials: $('#view-financials'), news: $('#view-news'),
   market: $('#view-market'), indices: $('#view-indices'), long: $('#view-long'),
   tracker: $('#view-tracker'), brief: $('#view-brief'),
+  roth: $('#view-roth'),
   compare: $('#view-compare'),
   instrument: $('#view-instrument'),
   chart: $('#view-chart'),
@@ -5947,6 +5948,8 @@ const PALETTE_PLACES = [
     terms: 'financials revenue margin cash ownership short interest statements' },
   { view: 'news', label: 'News', terms: 'news headlines catalysts sentiment company' },
   { view: 'tracker', label: "Optic's Positions", terms: 'positions ledger record paper trades book' },
+  { view: 'roth', label: 'Roth planner',
+    terms: 'roth ira retirement allocation contribution funds long term planner' },
   { view: 'settings', label: 'Settings', terms: 'settings appearance theme timezone preferences' },
 ];
 
@@ -20484,8 +20487,6 @@ function renderTracker(d) {
     + 'there is an edge. Treat anything under about fifty closed trades as noise.')}</p>
   </div>` : ''}
 
-  <div id="roth-host" class="span-all"></div>
-
   ${open.length ? `
   <div id="book-risk-host" class="span-all">${
   STATE.bookRisk ? renderPortfolioRisk(STATE.bookRisk) : ''}</div>` : ''}
@@ -23424,7 +23425,7 @@ async function loadTracker(force, opts = {}) {
   // Shared ledger, so nothing about the loaded ticker invalidates it.
   if (STATE.tracker && !force) {
     renderTracker(STATE.tracker); revealPanels(views.tracker);
-    loadPortfolioRisk(); loadRoth(); return;
+    loadPortfolioRisk(); return;
   }
   if (!silent) beginLoad(views.tracker, "Optic's own position ledger");
   try {
@@ -23433,9 +23434,8 @@ async function loadTracker(force, opts = {}) {
     setChartLive(isTapeLiveET());
     setChartAnimation(!silent || hasPendingDraws());
     renderTracker(data);
-    // Not awaited: one more request each, and the ledger is already usable.
+    // Not awaited: one more request, and the ledger is already usable.
     loadPortfolioRisk();
-    loadRoth();
     endLoad(views.tracker);
     if (!silent) revealPanels(views.tracker);
     // A scheduled scan may already be running; show its progress live.
@@ -23647,6 +23647,7 @@ function loadView(view, force) {
   if (view === 'market') return loadMarket(force);
   if (view === 'indices') return loadIndices(force);
   if (view === 'tracker') return loadTracker(force);
+  if (view === 'roth') return loadRoth(force);
   if (view === 'brief') { loadInsiderFeed(force); return loadBrief(force); }
   if (view === 'settings') return renderSettings();
   if (view === 'long') return loadLong(force);
@@ -25516,7 +25517,23 @@ const NAV_GROUPS = [
   // holdings you own; this is the terminal's own simulated ledger, and the app
   // already called it Optic's Positions in the panel heading, the status line
   // and paper.py. One name for one thing.
-  { id: 'portfolio', label: "Optic's Positions", views: ['tracker'] },
+  /* Two views, and the second one is why this group has a menu now.
+   *
+   * The Roth planner rendered into `#roth-host`, a div in the middle of
+   * `renderTracker`. Measured on the ledger with a section index: seven of its
+   * fifteen sections -- model allocation, contribution projection, where to put
+   * this year's contribution, the stock sleeve, what the wrapper changes, the
+   * fund universe and correlation -- were a retirement planner sitting inside
+   * a simulated options record, with no heading between them and no name in
+   * the nav. Its own disclaimer, `LEGAL.areas.roth`, never rendered either:
+   * the render pass inserts that, and it was keyed to a view that did not
+   * exist. A reader planning a Roth read the banner for paper options trades.
+   *
+   * Here rather than as a ninth top-level group: measured at 1411px, the
+   * narrowest width where the strip may not wrap, eight groups end at 1125
+   * against a gear at 1160. A ninth left 18px. The `follow` group above is the
+   * precedent for a group named after its primary view. */
+  { id: 'portfolio', label: "Optic's Positions", views: ['tracker', 'roth'] },
   /* On the strip, and it took an audit to notice it was not.
    *
    * This group existed only to give groupForView something to resolve, and it
@@ -25546,7 +25563,7 @@ const SUB_LABELS = {
   swing: 'Options', earnings: 'Earnings', compare: 'Compare', long: 'Investing',
   brief: 'Read', market: 'Macro', indices: 'Indices',
   watchlist: 'Watchlist', alerts: 'Alerts',
-  tracker: "Optic's Positions",
+  tracker: "Optic's Positions", roth: 'Roth planner',
 };
 
 const SUB_TITLES = {
@@ -25565,6 +25582,7 @@ const SUB_TITLES = {
   watchlist: 'Watchlist. What changed on the names you follow',
   alerts: 'Alerts. What fired, and why it was worth telling you',
   tracker: "Optic's Positions. The terminal's own paper-traded record",
+  roth: 'Roth planner. A rules-based model allocation to compare your own against',
 };
 
 /** Which group a view belongs to. */
@@ -25630,7 +25648,54 @@ function paintNav(view) {
   // The second row is gone, so anything still holding it must not reserve space.
   const sub = document.getElementById('subnav');
   if (sub) { sub.innerHTML = ''; sub.hidden = true; }
+
+  navMenuSides();
 }
+
+/* Which side each dropdown opens from, measured rather than assumed.
+ *
+ * This was a CSS rule on `:last-child`, written when the rightmost group was
+ * the first one to have a menu at all, and position in the list is not the
+ * question. Once the strip wraps -- which it does at every width from 560 to
+ * 1410 -- the last group can be the FIRST item on the second row. Measured at
+ * 900px the moment the Positions group gained a second view and a caret with
+ * it: the extra 14px tipped the row, Watchlist moved to the start of row two
+ * at x=18, and right-anchoring its menu put it at -79 to 111, ninety-eight
+ * pixels off the left edge of the window.
+ *
+ * So: right-anchored only when left-anchored would overflow AND there is room
+ * on the other side. A menu that cannot fit either way keeps `left: 0` and
+ * relies on the max-width beside it, because running off the right is the
+ * recoverable one -- the page's own gutter is there.
+ *
+ * 190px is `.nav-menu`'s min-width and the width every one of them actually
+ * takes; the real box is measured instead whenever the menu happens to be open,
+ * since a closed one is display:none and reports zero. */
+const NAV_MENU_MIN_W = 190;
+
+function navMenuSides() {
+  const nav = document.querySelector('nav.tabs-group');
+  if (!nav) return;
+  const gutter = 18;
+  nav.querySelectorAll(':scope > .nav-item').forEach((item) => {
+    const menu = item.querySelector('.nav-menu');
+    if (!menu) return;
+    const box = item.getBoundingClientRect();
+    const width = Math.max(NAV_MENU_MIN_W, menu.offsetWidth);
+    const spillsRight = box.left + width > window.innerWidth - gutter;
+    const fitsLeftwards = box.right - width >= gutter;
+    item.classList.toggle('menu-right', spillsRight && fitsLeftwards);
+  });
+}
+
+/* The strip reflows on resize without repainting, so the sides have to be
+ * re-measured on their own. Debounced for the same reason the chart's handler
+ * is: a window drag fires this continuously. */
+let navSidesTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(navSidesTimer);
+  navSidesTimer = setTimeout(navMenuSides, 120);
+});
 
 let viewBeforeSettings = 'home';
 

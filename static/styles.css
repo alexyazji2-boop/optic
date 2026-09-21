@@ -8285,18 +8285,21 @@ table.data th,
    window it opens in, whatever its min-width asks for. */
 .nav-menu { max-width: calc(100vw - 2 * var(--space-4)); }
 
-/* The last group's menu opens leftwards, or it opens off the screen.
+/* A menu near the right edge opens leftwards, or it opens off the screen.
    `left: 0` anchors a 190px menu to the left edge of its tab, which is fine
-   until that tab is the rightmost one. Measured at 900px once Watchlist
-   became the eighth group: the strip ended at 873 and its menu ran 781 to
-   971, 71px past the window, and nothing could scroll to it -- the page does
-   not scroll horizontally and `nav.tabs-group { overflow: visible }` means
-   the strip does not either.
-   It did not happen before because the rightmost group was Optic's
-   Positions, which holds a single view and renders as a plain button with no
-   menu at all. Watchlist is the first group with a dropdown to sit at that
-   end. The max-width above guards the width; this guards the side. */
-nav.tabs-group > .nav-item:last-child .nav-menu { left: auto; right: 0; }
+   until that tab is near the right edge of the window. Measured at 900px once
+   Watchlist became the eighth group: the strip ended at 873 and its menu ran
+   781 to 971, 71px past the window, and nothing could scroll to it -- the page
+   does not scroll horizontally and `nav.tabs-group { overflow: visible }`
+   means the strip does not either.
+   The class is set by `navMenuSides`, which measures. It was `:last-child`
+   first, and position in the list turned out not to be the question: the strip
+   wraps everywhere from 560 to 1410, so the last group can be the FIRST item
+   on the second row. Measured at 900 the moment the Positions group gained a
+   caret -- 14px, enough to tip the row -- Watchlist moved to x=18 and the
+   right-anchored menu ran -79 to 111, 98px off the LEFT edge instead.
+   The max-width above guards the width; this guards the side. */
+nav.tabs-group > .nav-item.menu-right .nav-menu { left: auto; right: 0; }
 
 
 /* ============================================== interaction, everywhere ====
