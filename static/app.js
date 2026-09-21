@@ -2655,7 +2655,7 @@ if (homeNarrowQuery && homeNarrowQuery.addEventListener) {
  * section has to be placed somewhere, so it cannot be silently omitted. */
 const HOME_SECTIONS = [
   {
-    group: 'analyse',
+    group: 'security',
     label: 'Analyse a ticker',
     note: 'Load a symbol and these three work it from different angles.',
     cards: [
@@ -2705,7 +2705,7 @@ const HOME_SECTIONS = [
     ],
   },
   {
-    group: 'scan',
+    group: 'discover',
     label: 'Find candidates',
     note: 'Named questions asked of the whole ranked universe.',
     cards: [
@@ -25505,18 +25505,35 @@ const NAV_GROUPS = [
    *
    * "No ticker loaded" stays as it is. That sentence is about a missing symbol
    * rather than about this tab, and it matches the rest of the app. */
-  { id: 'security', label: 'Dossier', views: SECURITY_VIEWS },
-  { id: 'analyse', label: 'Compare', views: ['compare'] },
-  { id: 'market', label: 'Market', views: ['brief', 'market', 'indices'] },
+  /* Compare joins the Dossier group rather than standing as its own tab.
+   *
+   * The objection recorded when it was separated was about the HEADER, not the
+   * grouping: `securityHeader` names one symbol, and Compare holds two to four,
+   * so a header over it would be a lie about what is on screen. That still
+   * holds and is still enforced -- `compare` is spread in here but deliberately
+   * left out of SECURITY_VIEWS, which is what drives the header and the facet
+   * strip. The group is only the drawer you pick a page from, and "I want to
+   * look at securities" is one destination however many are on screen. */
+  { id: 'security', label: 'Dossier', views: [...SECURITY_VIEWS, 'compare'] },
+  { id: 'market', label: 'Markets', views: ['brief', 'market', 'indices'] },
   /* Explore is the index and Scan is the tool: one is a page you browse when
    * you do not know what you are looking for, the other runs a named screen.
-   * Separate tabs because they answer different questions. */
-  { id: 'explore', label: 'Explore', views: ['explore'] },
-  { id: 'scan', label: 'Scan', views: ['scan'] },
-  // Named for what it is rather than what it resembles. "Portfolio" implies
-  // holdings you own; this is the terminal's own simulated ledger, and the app
-  // already called it Optic's Positions in the panel heading, the status line
-  // and paper.py. One name for one thing.
+   * They answer different questions and are still two separate pages -- what
+   * changed is that they stopped each costing a slot in the top row for it.
+   * Both are "I do not have a symbol yet", which is one destination. */
+  { id: 'discover', label: 'Discover', views: ['explore', 'scan'] },
+  /* The group is "Positions"; the view inside it keeps the name "Optic's
+   * Positions". Both are deliberate.
+   *
+   * "Portfolio" implies holdings you own. This terminal has no brokerage
+   * connection -- app/ai.py says so in the assistant's own system prompt --
+   * so a tab called Portfolio would be promising an integration that does not
+   * exist. The ledger keeps its full name wherever it is named, which is the
+   * panel heading, the status line and paper.py.
+   *
+   * The group needed a shorter word than the view because it now holds two:
+   * the terminal's simulated record, and the reader's own retirement plan.
+   * Both are positions held over time; only one of them is Optic's. */
   /* Two views, and the second one is why this group has a menu now.
    *
    * The Roth planner rendered into `#roth-host`, a div in the middle of
@@ -25533,7 +25550,7 @@ const NAV_GROUPS = [
    * narrowest width where the strip may not wrap, eight groups end at 1125
    * against a gear at 1160. A ninth left 18px. The `follow` group above is the
    * precedent for a group named after its primary view. */
-  { id: 'portfolio', label: "Optic's Positions", views: ['tracker', 'roth'] },
+  { id: 'portfolio', label: 'Positions', views: ['tracker', 'roth'] },
   /* On the strip, and it took an audit to notice it was not.
    *
    * This group existed only to give groupForView something to resolve, and it
@@ -25563,6 +25580,7 @@ const SUB_LABELS = {
   swing: 'Options', earnings: 'Earnings', compare: 'Compare', long: 'Investing',
   brief: 'Read', market: 'Macro', indices: 'Indices',
   watchlist: 'Watchlist', alerts: 'Alerts',
+  explore: 'Explore', scan: 'Scan',
   tracker: "Optic's Positions", roth: 'Roth planner',
 };
 
@@ -25581,6 +25599,8 @@ const SUB_TITLES = {
   indices: 'Major index long-run cycle',
   watchlist: 'Watchlist. What changed on the names you follow',
   alerts: 'Alerts. What fired, and why it was worth telling you',
+  explore: 'Explore. Browse sectors, themes and what is moving, with no symbol',
+  scan: 'Scan. Named screens over the ranked universe',
   tracker: "Optic's Positions. The terminal's own paper-traded record",
   roth: 'Roth planner. A rules-based model allocation to compare your own against',
 };

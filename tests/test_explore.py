@@ -33,7 +33,12 @@ def test_the_view_is_registered_everywhere_it_has_to_be():
     """Five places. Missing any one of them is a different broken symptom."""
     assert 'id="view-explore"' in HTML
     assert "explore: $('#view-explore')," in APP_JS
-    assert "{ id: 'explore', label: 'Explore', views: ['explore'] }," in APP_JS
+    # In a group, not necessarily its own: Explore and Scan share the Discover
+    # group now. What matters is that some group can reach it -- a view no
+    # group lists is reachable only from the command palette, which is the
+    # fault test_nav_coherence was written for.
+    groups = APP_JS.split("const NAV_GROUPS = [", 1)[1]
+    assert "'explore'" in groups[:groups.index("\n];")]
     assert "if (view === 'explore') return loadExplore(force);" in APP_JS
     assert "{ view: 'explore', label: 'Explore'," in APP_JS
 
