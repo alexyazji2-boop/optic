@@ -85,6 +85,22 @@ AXES: List[Dict[str, str]] = [
 ]
 AXIS_BY_ID = {a["id"]: a for a in AXES}
 
+# Not a breakdown axis. See the note in parse_instance: it says what sort of
+# line a figure is, and it co-occurs with the segment axis by design.
+CONSOLIDATION_AXIS = "ConsolidationItemsAxis"
+OPERATING_SEGMENTS = "OperatingSegmentsMember"
+# The lines that reconcile the segments to the consolidated total. Listed
+# rather than "anything that is not OperatingSegments", because an unfamiliar
+# member is more likely to be a slice this does not understand than a
+# reconciling item, and inventing a row for it would put a number on the page
+# that belongs to nothing.
+RECONCILING_MEMBERS = frozenset({
+    "IntersegmentEliminationMember",
+    "CorporateNonSegmentMember",
+    "MaterialReconcilingItemsMember",
+    "SegmentReconciliationItemsMember",
+})
+
 # The metrics, and the tags each can arrive under. Revenue reuses sec_facts'
 # list for the reason that module documents: revenue has lived under at least
 # six us-gaap tags and companies switch mid-history.
@@ -262,7 +278,45 @@ def parse_instance(url: str) -> Dict[str, Any]:
         # 270 contexts on Meta's 10-Q are dimensioned, and most of them are
         # nothing to do with segments.
         ours = [wanted_axes[a] for a in dims if a in wanted_axes]
-        if not ours or len(ours) != len(dims):
+
+        # ConsolidationItemsAxis is a qualifier, not a breakdown, and treating
+        # it as one more untracked axis was throwing the segment table away.
+        #
+        # Measured on Intel's June 2026 10-Q: of the facts carrying
+        # StatementBusinessSegmentsAxis, 20 revenue and 12 operating-income
+        # facts also carried ConsolidationItemsAxis and were dropped by the
+        # `len(ours) != len(dims)` rule. What survived was 8 operating-income
+        # facts and 4 revenue ones, so the revenue table had a single row --
+        # Intel Foundry -- against the six segments Intel actually reports.
+        #
+        # The rule was written to skip fair-value hierarchies and award types,
+        # which it should. This axis is different in kind: it does not slice
+        # revenue into parts, it says *what sort of line* a figure is. Its
+        # members, as tagged:
+        #
+        #   OperatingSegmentsMember       + a segment  -> that segment's figure
+        #   IntersegmentEliminationMember + no segment -> the elimination line
+        #   CorporateNonSegmentMember     + no segment -> corporate unallocated
+        #
+        # So the first is the segment table, and the other two are the rows
+        # that reconcile it to the consolidated total. A reader adding up the
+        # column needs them, which is why the reference terminals print
+        # "Eliminations from revenue" as a row of their own.
+        recon = None
+        if CONSOLIDATION_AXIS in dims:
+            member = dims[CONSOLIDATION_AXIS].split(":")[-1]
+            if member == OPERATING_SEGMENTS:
+                pass                       # the plain segment figure
+            elif member in RECONCILING_MEMBERS and not ours:
+                # A reconciling line carries no segment of its own, so it
+                # becomes its own row on the segment table.
+                recon = member
+                ours = ["segment"]
+            else:
+                continue
+            dims = {k: v for k, v in dims.items() if k != CONSOLIDATION_AXIS}
+
+        if not ours or len(ours) != len(dims) + (1 if recon else 0):
             continue
         value = _num(el.text)
         if value is None:
@@ -277,10 +331,14 @@ def parse_instance(url: str) -> Dict[str, Any]:
         else:
             continue                       # a half-year or nine-month cumulative
         for axis_id in ours:
-            axis_name = next(a for a, i in wanted_axes.items() if i == axis_id)
+            if recon:
+                member_raw = recon
+            else:
+                axis_name = next(a for a, i in wanted_axes.items() if i == axis_id)
+                member_raw = dims[axis_name]
             facts.append({
                 "metric": metric, "axis": axis_id,
-                "member": _member(dims[axis_name]),
+                "member": _member(member_raw),
                 "start": ctx["start"], "end": ctx["end"],
                 "kind": kind, "value": value,
                 # How many of our axes this fact carried. A cell of a cross-tab

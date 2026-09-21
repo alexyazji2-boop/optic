@@ -47,19 +47,54 @@ _DATA_DIR = os.environ.get(
 )
 CACHE_PATH = os.path.join(_DATA_DIR, "feed_cache.json")
 
-# The SEC requires automated callers to identify themselves with a contact
-# address, and enforces it: measured against sec.gov, a User-Agent containing an
-# email returns 200 from /Archives while one without returns 403. The full-text
-# search endpoint is laxer and answers either way, which is a good way to ship
-# something that works until the day it needs a document.
+# The SEC requires automated callers to identify themselves, and enforces it on
+# /Archives. What it enforces is narrower than "an email address", which is
+# worth writing down because the earlier reading of it left the whole segment
+# breakdown dark on a deployment that had no address to give.
 #
-# No address is hard-coded, because this repository is public. Set FEED_CONTACT in
-# .env (gitignored) to an address you're willing to be contacted on.
+# Measured against https://www.sec.gov/Archives/edgar/data/50863/index.json,
+# three trials each, stable:
+#
+#     OpticTerminal/1.0                                    403 403 403
+#     OpticTerminal/1.0 (theopticterminal.com)             403
+#     OpticTerminal/1.0 (anything at all)                  403
+#     OpticTerminal                                        403
+#     OpticTerminal/1.0 (https://theopticterminal.com)     200
+#     OpticTerminal/1.0 (+https://theopticterminal.com)    200 200 200
+#     Optic Terminal research bot                          200
+#
+# So it is not the email. A bare `Name/Version` token is refused and a URL with
+# a scheme is accepted; a bare domain without one is refused. That reads like a
+# filter on strings that look like an unidentified library client rather than a
+# documented rule, so it is a heuristic and could move -- which is exactly why
+# FEED_CONTACT still exists and still wins.
+#
+# `data.sec.gov` is laxer and answers `OpticTerminal/1.0` either way. Relying on
+# that is how something ships working and breaks the first time it needs a
+# document rather than a summary.
+#
+# No address is hard-coded, because this repository is public. Set FEED_CONTACT
+# in .env (gitignored) to an address you are willing to be contacted on; the
+# fallback names the site instead, which is a real contact channel -- it carries
+# the Report a Problem box that mails the operator.
 CONTACT = os.environ.get("FEED_CONTACT", "").strip()
-USER_AGENT = f"OpticTerminal/1.0 ({CONTACT})" if CONTACT else "OpticTerminal/1.0"
-# Whether we can expect /Archives to answer. Surfaced in the brief's status so a
-# missing contact shows up as configuration rather than as a broken section.
-CONTACT_OK = "@" in CONTACT
+SITE = "https://theopticterminal.com"
+
+
+def user_agent(contact: str = "") -> str:
+    """The header SEC accepts, with or without an address configured.
+
+    A function rather than an expression so both branches can be exercised:
+    the module-level value is fixed at import and a test that can only see one
+    of them proves half the rule."""
+    return "OpticTerminal/1.0 ({})".format(contact.strip() or "+" + SITE)
+
+
+USER_AGENT = user_agent(CONTACT)
+# Whether /Archives can be expected to answer. No longer "is there an email":
+# both forms were measured returning 200, and the thing SEC rejects is a
+# header that identifies nobody.
+CONTACT_OK = True
 
 # Twelve seconds suits an RSS file. Callers with a genuinely slower endpoint
 # pass their own: EDGAR's browse-edgar CGI, which app/insiders.py reads for the

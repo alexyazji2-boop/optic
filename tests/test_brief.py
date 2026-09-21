@@ -277,12 +277,39 @@ def test_today_key_uses_eastern_time():
     assert brief.today_key(late) == "2026-08-03"
 
 
-def test_user_agent_declares_a_contact_when_configured(monkeypatch):
-    """SEC /Archives returns 403 for a User-Agent with no contact address, so the
-    brief surfaces whether one is configured instead of failing opaquely."""
-    assert feeds.CONTACT_OK == ("@" in feeds.CONTACT)
-    if feeds.CONTACT_OK:
-        assert feeds.CONTACT in feeds.USER_AGENT
+def test_the_user_agent_identifies_the_app_with_or_without_an_address():
+    """What SEC /Archives refuses is narrower than "no email", and the earlier
+    reading of it left every filings-backed panel dark on a deployment with no
+    address to give.
+
+    Measured against https://www.sec.gov/Archives/edgar/data/50863/index.json,
+    three trials each and stable:
+
+        OpticTerminal/1.0                                    403 403 403
+        OpticTerminal/1.0 (theopticterminal.com)             403
+        OpticTerminal/1.0 (anything at all)                  403
+        OpticTerminal/1.0 (+https://theopticterminal.com)    200 200 200
+
+    A bare `Name/Version` token is refused; a URL with a scheme is accepted; a
+    bare domain without one is refused. So the requirement this has to meet is
+    "identify yourself with somewhere to be reached", and the site satisfies it
+    -- it carries the Report a Problem box that mails the operator.
+
+    A configured address still wins, because that is what SEC's own sample
+    shows and because the heuristic above is undocumented and could move."""
+    assert feeds.user_agent("me@example.com") == "OpticTerminal/1.0 (me@example.com)"
+    assert feeds.user_agent("  me@example.com  ").endswith("(me@example.com)")
+
+    fallback = feeds.user_agent("")
+    assert feeds.SITE in fallback
+    assert "https://" in fallback, "a bare domain is refused; the scheme matters"
+    assert fallback != "OpticTerminal/1.0", "the bare token is the refused form"
+    assert fallback.endswith(")") and "(" in fallback
+
+    # Live value, and the gate it opens.
+    assert feeds.USER_AGENT == feeds.user_agent(feeds.CONTACT)
+    assert feeds.CONTACT_OK is True, \
+        "the filings panels are no longer gated on an address being set"
 
 
 # ------------------------------------------------------------------ narrative
