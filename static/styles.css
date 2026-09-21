@@ -1068,9 +1068,11 @@ main { padding: var(--space-6) var(--space-6) var(--space-8); isolation: isolate
  * closing half a second apart reads as a rendering fault rather than as one
  * mark with a tic. `body[data-view]` is published by switchView.
  *
- * No dot here: the header mark has never had one. `line-redraw` works without
- * it -- the dot animation exists to stop the dot hanging in space ahead of a
- * half-drawn stroke, and there is no dot to hang.
+ * The dot is driven from here too, on the same clock as the other two. It has
+ * one job -- not hanging in space ahead of a half-drawn stroke -- and it can
+ * only do it if it is on the same 6s cycle as the line it belongs to. Left
+ * unanimated it stayed lit through the blink, so the closed lid had a gold
+ * speck floating over it.
  */
 body:not([data-view="home"]) .brand-mark-eye {
   animation: eye-blink 6s ease-in-out -4.25s infinite;
@@ -1082,6 +1084,9 @@ body:not([data-view="home"]) .brand-mark-eye {
 body:not([data-view="home"]) .brand-mark-line {
   stroke-dasharray: 100;
   animation: line-redraw 6s ease-in-out -4.25s infinite;
+}
+body:not([data-view="home"]) .brand-mark-dot {
+  animation: dot-reveal 6s ease-in-out -4.25s infinite;
 }
 
 /* Everything on the home page fades up on arrival, in reading order.
@@ -1127,6 +1132,7 @@ body:not([data-view="home"]) .brand-mark-line {
   .home-logo-dot,
   .brand-mark-eye,
   .brand-mark-line,
+  .brand-mark-dot,
   .home-title,
   .home-proto,
   .home-lede,

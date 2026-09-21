@@ -106,18 +106,36 @@
 
 <header class="topbar">
   <button class="brand" id="brand-home" type="button" aria-label="Optic Terminal. Go to home">
-    <!-- Grouped and classed to match .home-logo, so the blink can be one set of
-         keyframes driving both marks rather than two that drift apart. The
-         shape is unchanged: no dot is added here, because the header mark has
-         never had one and the point was to animate the logo, not restyle it. -->
+    <!-- The same drawing as .home-logo, at a third of the size. Not a second
+         version of it: every number below is the one the home mark uses, so
+         there is one mark and two widths rather than two marks that look like
+         each other.
+
+         It was not. The header carried an older, heavier cut -- a 2 aperture
+         against 1.3, a 2.4 line against 1.9, a slightly flatter zigzag, and no
+         dot at the end of it. Rendered side by side at 240px the difference is
+         not subtle: the heavy line rounds its own corners into each other, the
+         stroke crowds the aperture it sits in, and the line stops dead instead
+         of landing on a mark. At 34px that reads as a smudge, which is what it
+         was reported as.
+
+         Weight is left alone rather than compensated for the smaller size. A
+         half-size mark at identical stroke values does read a touch lighter,
+         and the usual answer is to thicken it -- but the two were
+         indistinguishable at 34px when compared directly, and one set of
+         numbers cannot drift from itself.
+
+         Grouped and classed to match .home-logo so the blink is one set of
+         keyframes driving both marks. -->
     <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
       <g class="brand-mark-eye">
         <path d="M2.6 16C6.3 8.9 10.9 5.4 16 5.4S25.7 8.9 29.4 16C25.7 23.1 21.1 26.6 16 26.6S6.3 23.1 2.6 16Z"
-              fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" opacity="0.8"/>
+              fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" opacity="0.7"/>
         <!-- pathLength="100" normalises the dash maths, as on the home mark. -->
         <path class="brand-mark-line" pathLength="100"
-              d="M7.8 20 11.6 15.6 14.6 17.8 18.6 11.8 21.6 14 23.6 11.6" fill="none" stroke="var(--brand)"
-              stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+              d="M7.4 20.2 11.4 15.6 14.6 17.8 18.6 11.6 21.6 14 23.9 11.4" fill="none" stroke="var(--brand)"
+              stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle class="brand-mark-dot" cx="23.9" cy="11.4" r="1.5" fill="var(--brand)"/>
       </g>
     </svg>
     <span class="brand-text">OPTIC <span>TERMINAL</span></span>
@@ -334,6 +352,7 @@
      being global, and tests/test_js_parses.py loads it under JavaScriptCore
      with script semantics. That harness is the only thing that catches a
      deleted function with live call sites. -->
+<script src="__probe.js"></script>
 <script src="components/knowledge.js?v=511"></script>
 <script src="charts.js?v=511"></script>
 <!-- Before app.js: it exposes window.OpticAuth, which app.js reads at load to
