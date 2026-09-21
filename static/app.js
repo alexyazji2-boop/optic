@@ -3124,12 +3124,19 @@ function renderHomeStatus(health) {
  * it never changes shape, and a re-render on every navigation would fight the
  * active-state transition.
  */
+/* One name per destination, shared with the desktop strip.
+ *
+ * This bar said "Analyse" for the view the desktop strip calls "Dossier", and
+ * "Ask" for the panel the header button calls "Pulse" -- two names for each of
+ * two things, which is the same fault the nav group comments already record
+ * fixing for "Optic's Positions". A reader moving between a laptop and a phone
+ * was being asked to learn the product twice. */
 const MOBILE_TABS = [
   { view: 'home', label: 'Home', icon: '&#9750;' },
-  { view: 'overview', label: 'Analyse', icon: '&#9683;' },
+  { view: 'overview', label: 'Dossier', icon: '&#9683;' },
   { view: 'watchlist', label: 'Watchlist', icon: '&#9776;' },
   { view: 'alerts', label: 'Alerts', icon: '&#9873;' },
-  { view: 'ask', label: 'Ask', icon: '&#10022;' },
+  { view: 'ask', label: 'Pulse', icon: '&#10022;' },
 ];
 
 function mountMobileTabs() {
@@ -9865,9 +9872,7 @@ function catalystCard(c) {
         <thead><tr><th>Ticker</th><th>Company</th><th>Link</th><th>Read-through</th><th>Why</th></tr></thead>
         <tbody>${companies}</tbody>
       </table>
-      <p class="caveat">Which companies are connected, how direct the link is and how strong
-        the read-through is are <strong>judgements</strong>, not data. Tickers are verified
-        against EDGAR's company directory; the connection itself is an inference.</p>`
+      `
     : '<p class="sub">No company links were stored for this catalyst.</p>'}
       ${c.source_url ? `<p class="caveat"><a href="${esc(c.source_url)}" target="_blank"
         rel="noopener noreferrer nofollow" style="color:var(--s1)">Source${
@@ -9925,7 +9930,17 @@ function renderCatalysts(d) {
   fmt(d.matched, 0)} catalyst${d.matched === 1 ? '' : 's'}${
   d.stored_total !== d.matched ? ` of ${fmt(d.stored_total, 0)} stored` : ''}</p>
     ${STATE.catalystScan ? `<div class="callout">${esc(STATE.catalystScan)}</div>` : ''}
-    ${list.length ? `<div class="cat-list">${list.map(catalystCard).join('')}</div>`
+    ${/* Once for the list, not once per card.
+         Every card carried its own copy of this, so a page with three
+         catalysts open printed the same paragraph three times -- measured on
+         the Read tab. It qualifies the company table inside every card
+         equally, which makes it a property of the list rather than of any
+         card, and the list is what it now sits above. */''}
+    ${list.length ? `<p class="caveat">Which companies are connected, how direct the link
+      is and how strong the read-through is are <strong>judgements</strong>, not data.
+      Tickers are verified against EDGAR's company directory; the connection itself is an
+      inference.</p>
+      <div class="cat-list">${list.map(catalystCard).join('')}</div>`
     : `<div class="callout">Nothing matches these filters. The library only contains events
        a scan has identified as durable. If it is empty, run a scan.</div>`}
     <p class="caveat">${gloss(d.method || '')}</p>
@@ -10464,10 +10479,12 @@ function renderRevenueMultiple(rm) {
  * is a list again. */
 const PRI_IMPACT_CLASS = { high: 'high', medium: 'medium', low: 'low' };
 
-function priorityRow(r) {
+function priorityRow(r, repeat) {
   const label = r.ticker
     ? `<button type="button" class="tkr" data-analyse="${esc(r.ticker)}">${esc(r.ticker)}</button>`
     : '';
+  // Quiet when the row above already said it. See dedupeConsecutiveWhy.
+  const why = r.why && !repeat ? String(r.why).slice(0, 190) : '';
   return `<div class="pri-row">
     <div class="pri-row-top">
       <span class="cal-impact ${PRI_IMPACT_CLASS[r.impact] || 'low'}">${esc(r.impact || '')}</span>
@@ -10475,8 +10492,37 @@ function priorityRow(r) {
       ${r.when ? `<span class="pri-when">${esc(r.when)}${r.time ? ' · ' + esc(r.time) : ''}</span>` : ''}
     </div>
     <div class="pri-title">${esc(r.title || '')}</div>
-    ${r.why ? `<p class="pri-why">${esc(String(r.why).slice(0, 190))}</p>` : ''}
+    ${why ? `<p class="pri-why">${esc(why)}</p>` : ''}
   </div>`;
+}
+
+/* Consecutive repeats of the same reason are printed once.
+ *
+ * `why` is a property of the *category* far more often than of the item, so
+ * rows of a kind carry the same sentence. Measured on the Read tab, in the
+ * Market-moving events column alone: "A scheduled BLS statistical release
+ * outside the set that regularly moves markets" three times in a row, one
+ * under each of three BLS entries.
+ *
+ * **Consecutive, not "anywhere in the column".** The first rule tried here
+ * hoisted a reason to the column heading when every row agreed, and it never
+ * fired once on real data: no column is uniform. The columns are *clustered*
+ * -- 3 BLS then 1 COT; 5 above-high, 5 below-low, 1 inside-range -- because
+ * they are sorted by the thing the reason describes.
+ *
+ * Suppressing only an immediate repeat is what makes this safe. A row whose
+ * neighbour said something different always prints its own reason, so no row
+ * is ever left looking like it has no explanation while its reason sits
+ * several rows above under a different heading. It is a ditto mark, and it
+ * cannot orphan anything. */
+function dedupeConsecutiveWhy(rows) {
+  let last = null;
+  return (rows || []).map((r) => {
+    const why = r && r.why ? String(r.why) : '';
+    const repeat = !!why && why === last;
+    last = why || last;
+    return { row: r, repeat };
+  });
 }
 
 /* Dismissible first-run explainers.
@@ -10530,17 +10576,25 @@ function renderPriority(p) {
     return `<div class="panel span-all"><h2>${hg("Today's priority")}</h2>
       <p class="sub">${esc(p.reason || 'Nothing on the board right now.')}</p></div>`;
   }
-  const cols = (p.columns || []).map((c) => `
+  const cols = (p.columns || []).map((c) => {
+    /* Marked over the whole column, then sliced -- so the first row inside
+       "Show all" knows what the last preview row said. Marking the two lists
+       separately would reprint the reason at the seam, which is the one place
+       a reader is most likely to notice it. */
+    const all = dedupeConsecutiveWhy((c.rows || []).length ? c.rows : (c.preview || []));
+    const shown = (c.preview || []).length;
+    return `
     <section class="pri-col">
       <h3 class="pri-col-title">${esc(c.name)}<span class="pri-count">${fmt(c.total, 0)}</span></h3>
       <p class="pri-col-blurb">${esc(c.blurb)}</p>
-      ${(c.preview || []).map(priorityRow).join('')
+      ${all.slice(0, shown).map((m) => priorityRow(m.row, m.repeat)).join('')
     || '<p class="sub">Nothing here today.</p>'}
-      ${c.total > (c.preview || []).length ? `<details class="pri-more">
+      ${c.total > shown ? `<details class="pri-more">
         <summary>Show all ${fmt(c.total, 0)}<i class="cal-caret" aria-hidden="true"></i></summary>
-        <div>${(c.rows || []).slice((c.preview || []).length).map(priorityRow).join('')}</div>
+        <div>${all.slice(shown).map((m) => priorityRow(m.row, m.repeat)).join('')}</div>
       </details>` : ''}
-    </section>`).join('');
+    </section>`;
+  }).join('');
 
   return `<div class="panel span-all">
     <h2>${hg("Today's priority")}${askPulse('priority')}</h2>
@@ -25364,12 +25418,19 @@ const NAV_GROUPS = [
   // already called it Optic's Positions in the panel heading, the status line
   // and paper.py. One name for one thing.
   { id: 'portfolio', label: "Optic's Positions", views: ['tracker'] },
-  /* Reachable, but not in the strip.
+  /* On the strip, and it took an audit to notice it was not.
    *
-   * groupForView has to resolve every view or switchView marks no tab active
-   * and the sub-nav empties. Watchlist and Alerts are real destinations with no
-   * tab of their own, so they get a group that the render filters out. */
-  { id: 'follow', label: 'Watchlist', views: ['watchlist', 'alerts'], offStrip: true },
+   * This group existed only to give groupForView something to resolve, and it
+   * was filtered out of the render. Measured at 1512px: the *only* routes to
+   * Watchlist or Alerts anywhere in the document were the two buttons inside
+   * #mtabs, the mobile bar, which is display:none at that width. So on a
+   * desktop the two views were reachable by the command palette and by
+   * nothing else -- you had to already know they existed and press Cmd-K.
+   *
+   * They are also two of the five things the mobile bar puts one tap away,
+   * which is the other half of the problem: the two navigations were
+   * describing different products. */
+  { id: 'follow', label: 'Watchlist', views: ['watchlist', 'alerts'] },
 ];
 
 /** The strip shows every group except the off-strip ones. */

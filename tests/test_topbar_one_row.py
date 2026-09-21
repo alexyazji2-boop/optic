@@ -27,16 +27,27 @@ CSS = open("static/styles.css", encoding="utf-8").read()
 # where the strip is inline and does not fit.
 #
 # 1653 as it shipped, 1428 once the padding, gaps and search box came down,
-# 1400 after the dropdown carets left the layout flow, and 1227 once the
-# wordmark went and left only the mark. The breakpoint stays at 1410 rather
-# than following it down: below that width the strip takes its own row and
-# spreads across it, which is the arrangement that was asked for, and dropping
-# the breakpoint to 1240 would quietly hand those viewports the inline row
-# instead. This assertion caught that last one: the
-# requirement dropped and this number did not, which is the drift it exists for.
+# 1400 after the dropdown carets left the layout flow, 1227 once the wordmark
+# went and left only the mark, and 1393 now that Watchlist is an eighth group
+# on the strip. That group used to be `offStrip: true`, which was how a
+# desktop ended up with no visible route to Watchlist or Alerts at all -- the
+# only ones in the document were inside #mtabs, which is display:none there.
+#
+# The breakpoint stays at 1410. Below it the strip takes its own row and
+# spreads across it, which is the arrangement that was asked for; dropping the
+# breakpoint to follow the requirement down would quietly hand those viewports
+# the inline row instead. An earlier version of this assertion caught exactly
+# that, when the requirement fell and this number did not.
+#
+# **The slack is now 17px, and it was 183.** Measured in the browser: at 1411,
+# the narrowest inline width, the last tab's right edge clears the settings
+# gear by 18px. A ninth group, or a longer label on an existing one, does not
+# fit -- it needs the breakpoint raised in the same commit. The stylesheet says
+# the same thing beside the rule.
+#
 # Re-measure in a browser rather than adjusting it to whatever makes the test
 # pass; the sum of the header's children plus its gaps and padding is the figure.
-MEASURED_INLINE_WIDTH = 1227
+MEASURED_INLINE_WIDTH = 1393
 
 # What the placeholder "Search or ask  ⌘K" measures in this font at this
 # tracking, plus the input's own padding and border. Below it the field starts

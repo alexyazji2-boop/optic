@@ -6038,7 +6038,13 @@ nav.tabs-group {
    * the tabs run under Pulse instead of folding. Measured after the type and
    * padding came down: the inline row needs 1408px, so the breakpoint sits at
    * 1420 for a little slack against a font that renders wider than it does
-   * here. Change either number and re-measure the other. */
+   * here. Change either number and re-measure the other.
+   *
+   * Re-measured when Watchlist became an eighth group: the inline row now
+   * needs 1393px and the breakpoint is 1410, so the slack is 17px where it
+   * used to be 183. At 1411 the last tab clears the settings gear by 18px.
+   * There is no room for a ninth group or a longer label without moving the
+   * breakpoint up in the same commit. */
   flex: none;
   min-width: auto;
   flex-wrap: nowrap;
