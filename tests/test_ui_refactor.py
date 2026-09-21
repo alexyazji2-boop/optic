@@ -459,6 +459,36 @@ def test_home_gets_the_strip_without_a_disclosure():
         "an open state carried from another tab must not reach a strip with no button"
 
 
+def test_the_disclaimer_footer_is_one_column_with_no_rule():
+    """Reported as "why is there a breaker here? keep the text consistent",
+    against a hairline sitting mid-sentence in the footer notice.
+
+    It was two CSS columns with a `column-rule` between them, to fill a 1900px
+    bar that a 110ch measure left two thirds empty. Measured at 1900px the
+    columns came out **two lines deep**, which is the same fault the block
+    already recorded talking itself out of a 46ch `column-width` -- "four
+    columns of one and a half lines each... the sentence had been chopped into
+    slivers" -- stopped at two slivers instead of four. The rule then made the
+    split look deliberate rather than fixing it.
+
+    The cap in the base rule now stands at every width, and the collapsed
+    notice and the expanded disclaimer share it."""
+    assert "column-rule" not in NO_COMMENTS, \
+        "the hairline is the breaker that was reported"
+    for selector in (".legal-line", ".legal-full"):
+        assert "{} {{ column-count".format(selector) not in NO_COMMENTS, selector
+
+    # One measure, both states, so the expanded version does not reflow to a
+    # different width than the line that opened it.
+    for selector in (".legal-line {", ".legal-full {"):
+        block = NO_COMMENTS[NO_COMMENTS.index(selector):]
+        block = block[:block.index("}")]
+        assert "max-width: 110ch;" in block, selector
+    # And nothing later takes the cap off again, which is what the 1180px
+    # block did.
+    assert "max-width: none;" not in NO_COMMENTS.split(".legal-line {", 1)[1][:1200]
+
+
 def test_no_panel_is_capped_into_a_nested_scroll_container():
     """Reported as "scrolling up and down is messed up", and it was.
 

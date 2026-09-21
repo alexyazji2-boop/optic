@@ -8394,62 +8394,30 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
 
 /* ================================================= the disclaimer footer ==
  *
- * The notice was capped at 110ch and left the rest of a wide screen empty —
- * about 700px of text against 1900px of bar, which reads as an unfinished
- * layout rather than as a deliberate measure.
+ * One column, one measure, no rule. It was two columns with a hairline
+ * between them and that is what came back as "why is there a breaker here?".
  *
- * Removing the cap is the obvious fix and the wrong one: at 1900px a single
- * column runs to roughly 290 characters a line, and past about 90 the eye
- * stops reliably finding the start of the next line. The text would fill the
- * space and become harder to read than it was.
+ * The columns were there for a real reason: capped at 110ch the notice left
+ * about 700px of a 1900px bar empty, and uncapping it ran to 165 characters a
+ * line, which is past where the eye reliably finds the start of the next one.
+ * Columns gave both a readable measure and a filled bar.
  *
- * Columns solve exactly this, and it is what a printed legal footer does.
- * `column-width` rather than `column-count` so the browser fits as many
- * readable columns as the viewport allows — three on a wide desktop, two at
- * 1280px, one on a laptop — with no breakpoint of mine deciding it. Each
- * column keeps its own comfortable measure and the full width gets used.
+ * They also produced columns **two lines deep**, measured at 1900px. That is
+ * the same fault this block already recorded talking itself out of a
+ * `column-width` of 46ch -- "four columns of one and a half lines each... the
+ * sentence had been chopped into slivers" -- just less extreme, and it stopped
+ * at two slivers instead of four. Multi-column setting needs columns deep
+ * enough that reading down one and returning to the top of the next is worth
+ * the journey. For a single 557-character paragraph it never was, and the
+ * hairline made the split look intentional rather than fixing it.
+ *
+ * So the cap in the base rule stands at every width. The cost is height: on a
+ * wide screen this goes from two lines to five, because the text is the length
+ * it is. Filling the bar was never worth cutting a sentence in half to do it,
+ * and if the footer needs to be shorter the honest fix is shorter copy, which
+ * is a decision for whoever owns the liability wording and not for a
+ * stylesheet.
  */
-@media (min-width: 1180px) {
-  .legal-line,
-  .legal-full {
-    max-width: none;
-    column-gap: var(--space-7);
-    /* A hairline between columns, so the split reads as typesetting rather
-       than as text that happened to reflow. */
-    column-rule: 1px solid var(--border);
-  }
-
-  /* Two, fixed — not as many as fit.
-   *
-   * A column-width of 46ch was the first attempt and it produced four columns
-   * of one and a half lines each on a 1600px screen: the width was filled and
-   * the sentence had been chopped into slivers. This notice is about 470
-   * characters, so the column COUNT has to come from how much text there is,
-   * not from how much room there is. Two keeps each column several lines deep
-   * and still uses the bar. */
-  .legal-line { column-count: 2; }
-
-  /* The expanded version gets the same explicit count, not a column-width.
-   *
-   * `columns: 54ch auto` was the first attempt and it silently produced ONE
-   * column. The unit is the reason: `ch` is the advance of the "0" glyph in the
-   * element's own font, and this app sets a wide display face — so 54ch
-   * resolved to 593px rather than the ~430 the number was reasoned in, two of
-   * those plus the gap came to within 11px of the available width, and the
-   * browser fitted one. Reasoning about measure in `ch` only works if you know
-   * which font the `ch` is being taken from.
-   *
-   * Five paragraphs across two columns is two or three each, which is what the
-   * count is chosen for rather than what the viewport happens to allow. */
-  .legal-full { column-count: 2; }
-  /* The "Full disclaimer" toggle must not be orphaned into its own column
-     away from the sentence it follows. */
-  .legal-line #legal-more { break-before: avoid; }
-  /* Paragraphs in the expanded version keep their spacing when a column break
-     lands between them. */
-  .legal-full p { margin: 0 0 var(--space-3); break-inside: avoid-column; }
-  .legal-full p:last-child { margin-bottom: 0; }
-}
 
 /* ==================================================== the section index ===
  *
