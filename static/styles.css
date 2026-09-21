@@ -8221,9 +8221,47 @@ table.data th,
   .home-search button { width: 100%; }
 }
 
+/* Between the phone and the inline row, the strip may wrap.
+ *
+ * Three arrangements, and this is the middle one. Inline (above 1410) it must
+ * not wrap: `nav.tabs-group { flex-wrap: nowrap }` keeps the strip honest
+ * about its width, because a shrinkable box whose content can wrap always
+ * wraps before anything else on the row gives up a pixel. On a phone (below
+ * 560) it must not wrap either: there it is a one-row horizontal scroller,
+ * and the phone block sets `overflow-x: auto` on nav.tabs for exactly that.
+ *
+ * In between it has a full row of its own and no escape valve. It cannot
+ * scroll, because the unconditional `nav.tabs-group { overflow: visible }`
+ * beats the phone block's `overflow-x: auto` on source order and applies at
+ * every width; and until this rule it could not wrap either. Measured at
+ * 771px once Watchlist made eight groups: the last tab ran 784 to 876
+ * against a 771px window, off the screen and unreachable. Seven groups ended
+ * at 761 and fitted by 10px, which is why it appeared only now.
+ *
+ * **Both bounds matter.** Written without the lower one -- inside the 1410
+ * block, where it started -- it also applied at 375 and beat the phone's
+ * nowrap on specificity, turning the scroller into three wrapped rows and a
+ * 288px header on an 812px screen. Measured before it was scoped. */
+@media (min-width: 560px) and (max-width: 1410px) {
+  nav.tabs.tabs-group { flex-wrap: wrap; row-gap: var(--space-2); }
+}
+
 /* The same overflow guard for every width: a menu may not be wider than the
    window it opens in, whatever its min-width asks for. */
 .nav-menu { max-width: calc(100vw - 2 * var(--space-4)); }
+
+/* The last group's menu opens leftwards, or it opens off the screen.
+   `left: 0` anchors a 190px menu to the left edge of its tab, which is fine
+   until that tab is the rightmost one. Measured at 900px once Watchlist
+   became the eighth group: the strip ended at 873 and its menu ran 781 to
+   971, 71px past the window, and nothing could scroll to it -- the page does
+   not scroll horizontally and `nav.tabs-group { overflow: visible }` means
+   the strip does not either.
+   It did not happen before because the rightmost group was Optic's
+   Positions, which holds a single view and renders as a plain button with no
+   menu at all. Watchlist is the first group with a dropdown to sit at that
+   end. The max-width above guards the width; this guards the side. */
+nav.tabs-group > .nav-item:last-child .nav-menu { left: auto; right: 0; }
 
 
 /* ============================================== interaction, everywhere ====

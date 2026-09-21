@@ -18,6 +18,7 @@ from __future__ import annotations
 import re
 
 APP = open("static/app.js", encoding="utf-8").read()
+CSS = open("static/styles.css", encoding="utf-8").read()
 
 
 def _block(name):
@@ -100,3 +101,45 @@ def test_the_phones_tabs_all_exist_on_the_desktop_too():
             continue          # the assistant, which is a panel rather than a view
         assert view in on_strip or view in in_dossier, \
             "{} ({}) is a phone-only destination".format(view, label)
+
+
+# ------------------------------------------- what an eighth group cost
+
+def test_the_strip_may_wrap_only_between_the_two_breakpoints():
+    """Three arrangements, and the middle one is the new case.
+
+    Inline (above 1410) it must not wrap: a shrinkable box whose content can
+    wrap always wraps before anything else on the row gives up a pixel, which
+    is what keeps the strip honest about its width. On a phone (below 560) it
+    must not wrap either: there it is a one-row horizontal scroller.
+
+    In between it has a full row and no escape valve -- it cannot scroll,
+    because the unconditional `nav.tabs-group { overflow: visible }` beats the
+    phone block's `overflow-x: auto` on source order. Measured at 771 once
+    Watchlist made eight groups: the last tab ran 784 to 876 against a 771px
+    window, off screen and unreachable.
+
+    Written without the lower bound it also applied at 375, beat the phone's
+    nowrap on specificity, and turned the scroller into three wrapped rows and
+    a 288px header on an 812px screen. Both bounds are load-bearing."""
+    assert "@media (min-width: 560px) and (max-width: 1410px)" in CSS
+    band = CSS.split("@media (min-width: 560px) and (max-width: 1410px)", 1)[1]
+    band = band[:band.index("\n}")]
+    assert "flex-wrap: wrap;" in band
+    # And the two arrangements either side of it still refuse to wrap.
+    assert "flex-wrap: nowrap;" in CSS
+
+
+def test_the_last_groups_menu_opens_leftwards():
+    """`left: 0` anchors a 190px dropdown to its tab's left edge, which is
+    fine until that tab is the rightmost one. Measured at 900px once
+    Watchlist became the eighth group: the menu ran 781 to 971 against a 900px
+    window, and nothing could scroll to it.
+
+    It did not happen before because the rightmost group was Optic's
+    Positions, which holds one view and renders as a plain button with no
+    menu at all."""
+    assert "nav.tabs-group > .nav-item:last-child .nav-menu" in CSS
+    rule = CSS.split("nav.tabs-group > .nav-item:last-child .nav-menu", 1)[1]
+    rule = rule[:rule.index("}")]
+    assert "right: 0" in rule and "left: auto" in rule
