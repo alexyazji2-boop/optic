@@ -141,7 +141,19 @@ def test_the_scales_are_still_single_scales():
     between."""
     assert len(re.findall(r"^\s+--space-\d:", CSS, re.M)) == 10
     assert len(re.findall(r"^\s+--t-[a-z0-9]+:", CSS, re.M)) == 10
-    assert len(re.findall(r"^\s+--r-[a-z]+:", CSS, re.M)) == 5
+    # Seven, not the five this asserted first.
+    #
+    # The count was guarding the wrong end. Five steps -- two of which were the
+    # same 8px -- was fewer than the app draws, so the divergence went into the
+    # rules instead: measured at 75 hardcoded radii, including `.panel` at 14px
+    # against an --r-lg of 16px and `.btn` at 10px against an --r-md of 8px.
+    # Freezing the scale small did not stop anyone picking a value; it removed
+    # the value they should have been picking.
+    #
+    # What actually holds the line is tests/test_radius_scale.py, which fails
+    # on any bare radius of 4px or more. With that in place the count here is
+    # only a reminder that adding a step is a decision.
+    assert len(re.findall(r"^\s+--r-[a-z]+:", CSS, re.M)) == 7
 
 
 def test_financial_figures_use_tabular_numerals():
