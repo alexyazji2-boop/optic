@@ -5917,6 +5917,41 @@ body.chat-open main { padding-right: var(--space-5); margin-right: var(--chat-w)
 body.chat-full main,
 body.chat-full footer.legal { margin-right: 0; }
 
+/* The header needs the reservation too, and never had it.
+ *
+ * `main` gets `margin-right: var(--chat-w)` above and the footer gets a
+ * matching padding, so both stay clear of the panel. The top bar got neither
+ * and laid out across the whole window, which put its right-hand end
+ * underneath the panel.
+ *
+ * Measured in a browser at 1100px with Pulse open, panel edge at x=769: the
+ * settings gear ran 828-866, the account slot 875-961 and the Pulse toggle
+ * itself 979-1066, all three entirely behind it. With the rule they sit at
+ * 508-546, 555-641 and 659-746, clearing the edge by the 23px gutter. The
+ * panel has its own close button so this was never a trap, but Settings and
+ * Sign in could not be reached without closing what you wanted open.
+ *
+ * It surfaced with the eighth nav group -- seven tabs ended at 758 and
+ * cleared the panel edge by 22px -- but the three buttons were already
+ * hidden, at every width where the panel splits rather than covers.
+ *
+ * Padding rather than margin: the bar is the sticky, full-bleed surface the
+ * glass and the bottom border are drawn on, and pulling its box in would
+ * leave a 320px strip of unpainted page beside it -- `footer.legal` reserves
+ * the panel with padding for exactly this reason and is the precedent.
+ * `chat-full` drops it for the same reason it drops the others: past that
+ * width the panel covers the page instead of splitting it. It also has to
+ * stay BELOW the `chat-open` line, because `applyChatWidth` adds `chat-full`
+ * alongside `chat-open` rather than in place of it, both selectors are
+ * (0,2,2), and source order is the only thing left to decide.
+ *
+ * The panel is drag-resizable, which is why both sides read `--chat-w`:
+ * swept at 320/500/700/860 against a 1100px window and nothing overlaps at
+ * any of them. The bar does grow -- 185px tall at 320, 564px at 860, since
+ * everything wraps -- but it degrades without overlap or a scrollbar. */
+body.chat-open header.topbar { padding-right: calc(var(--chat-w) + var(--space-5)); }
+body.chat-full header.topbar { padding-right: var(--space-5); }
+
 .grid { gap: var(--space-4) var(--space-5); }
 
 /* Headings carry the hierarchy now that the box is gone. */
