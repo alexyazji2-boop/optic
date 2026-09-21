@@ -6485,6 +6485,33 @@ b, strong { font-weight: 600; }
 }
 .ws-toolbar-gap { flex: 1 1 auto; }
 
+/* The tool drawer. Nothing at all above the phone breakpoint.
+ *
+ * `display: contents` is what makes this free on a desktop: the wrapper stops
+ * generating a box and its children become flex items of .ws-toolbar again, so
+ * the row is laid out exactly as it was before the wrapper existed. Both
+ * wrappers carry this class -- the tool groups are not contiguous in the
+ * toolbar, and reordering them to make one wrapper would have changed the
+ * desktop to fix the phone.
+ *
+ * The button is hidden rather than not rendered, so the markup is the same at
+ * every width and only CSS decides. */
+.ws-tools { display: contents; }
+.ws-tools-btn { display: none; }
+
+@media (max-width: 559px) {
+  /* Measured at 375x812 before this: nineteen buttons over six rows, 227px of
+     toolbar above a 443px chart. Inline now: the range pills, the interval,
+     Line/Candles and Reset zoom -- what you reach for constantly. In the
+     drawer: Fibs, Trends, Indicators, the study menus, Panes and Colours. */
+  .ws-tools-btn { display: inline-flex; }
+  .ws-tools { display: none; }
+  .ws-toolbar.tools-open .ws-tools { display: contents; }
+  /* A flexible spacer on a wrapping row is a row of its own, and it was:
+     measured as one of the six. It has nothing to push apart here. */
+  .ws-toolbar-gap { display: none; }
+}
+
 .ws-menu { position: relative; }
 .ws-menu-btn {
   padding: var(--space-1) var(--space-3);

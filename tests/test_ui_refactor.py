@@ -30,6 +30,27 @@ def test_there_is_a_breakpoint_for_phone_widths():
     assert "@media (max-width: 559px)" in CSS
 
 
+def phone_block_with(css, needle):
+    """The `@media (max-width: 559px)` block that actually contains `needle`.
+
+    There is more than one phone block in this stylesheet and there always
+    will be: CLAUDE.md's rule is that a phone override belongs *after* the
+    rule it overrides, so they are scattered by design rather than gathered
+    in one place.
+
+    Four tests below took `css.index("@media (max-width: 559px)")` -- the
+    *first* block -- and read a selector out of it. They all broke at once the
+    day a new phone block was added above theirs, and none of them is about
+    the first block: each is about the block that styles its own selector.
+    That is a fault in the lookup rather than in the CSS, and asserting the
+    needle appears in exactly one block is also a check worth having.
+    """
+    parts = css.split("@media (max-width: 559px)")[1:]
+    hits = [b[:b.index("\n}\n")] for b in parts if needle in b[:b.index("\n}\n")]]
+    assert len(hits) == 1, "{!r} appears in {} phone blocks".format(needle, len(hits))
+    return hits[0]
+
+
 def test_the_phone_tab_strip_keeps_its_own_overflow_declaration():
     """This looks like a duplicate of the 1280px block and is not.
 
@@ -39,8 +60,7 @@ def test_the_phone_tab_strip_keeps_its_own_overflow_declaration():
     outside the document — 375px viewport against a 580px scrollWidth — and put
     the horizontal scrollbar back.
     """
-    phone = NO_COMMENTS[NO_COMMENTS.index("@media (max-width: 559px)"):]
-    phone = phone[:phone.index("\n}\n")]
+    phone = phone_block_with(NO_COMMENTS, "nav.tabs,")
     strip = phone[phone.index("nav.tabs,"):]
     strip = strip[:strip.index("}")]
     assert "overflow-x: auto;" in strip
@@ -51,7 +71,7 @@ def test_the_phone_dropdown_cannot_overhang_the_screen():
     """`left: 0` plus `min-width: 190px` on a nav item sitting at x=190 ran the
     menu to 380px on a 375px screen, which was the entire horizontal scroll.
     Fixed positioning pinned to both edges removes the arithmetic."""
-    phone = CSS[CSS.index("@media (max-width: 559px)"):]
+    phone = phone_block_with(CSS, ".nav-menu {")
     menu = phone[phone.index(".nav-menu {"):]
     menu = menu[:menu.index("}")]
     assert "position: fixed;" in menu
@@ -63,7 +83,7 @@ def test_the_phone_dropdown_opens_below_the_bar_not_across_it():
     over the tab strip and hid the section you were choosing from. A percentage
     is no good either — on a fixed box it resolves against the viewport — so the
     bar's measured height is the anchor."""
-    phone = CSS[CSS.index("@media (max-width: 559px)"):]
+    phone = phone_block_with(CSS, ".nav-menu {")
     menu = phone[phone.index(".nav-menu {"):]
     menu = menu[:menu.index("}")]
     assert "var(--topbar-h" in menu
@@ -98,7 +118,7 @@ def test_the_topbar_search_wrapper_grows_rather_than_the_input_alone():
     """The input is wrapped in .combo so the autocomplete can position its list,
     and the wrapper is `flex: 0 1 auto`. Growing only the input left 96px of the
     row empty while the placeholder truncated inside it."""
-    phone = CSS[CSS.index("@media (max-width: 559px)"):]
+    phone = phone_block_with(CSS, ".search .combo {")
     combo = phone[phone.index(".search .combo {"):]
     combo = combo[:combo.index("}")]
     assert "flex: 1 1 auto;" in combo
@@ -619,6 +639,47 @@ def test_the_header_logo_blinks_everywhere_except_home():
     assert len(blocks) == 1, "the home mark's guard moved or was duplicated"
     rm = blocks[0][:blocks[0].index("}")]
     assert ".brand-mark-eye," in rm and ".brand-mark-line," in rm
+
+
+def test_the_chart_toolbar_has_a_phone_drawer_and_a_desktop_that_ignores_it():
+    """Measured at 375x812 on the Charting tab: nineteen buttons wrapping to
+    six rows, 227px of toolbar above a chart that got 443. More than a third
+    of the screen was controls, which is the "mobile chart controls create
+    unusable layouts" report.
+
+    Inline now: the range pills, the interval, Line/Candles, Reset zoom. In
+    the drawer: Fibs, Trends, Indicators, the study menus, Panes, Colours --
+    the set you open, use once and close. Re-measured: 141px over three rows
+    closed, 227px and twenty buttons open, and 54px on a desktop, unchanged.
+    """
+    fn = APP.split("function wsToolbar() {", 1)[1].split("\nfunction ", 1)[0]
+    assert 'class="ws-tools"' in fn
+    assert "data-ws-tools" in fn
+    # Two wrappers, because the tool groups are not contiguous: Panes and
+    # Colours sit after the pills, and reordering them would have changed the
+    # desktop to fix the phone.
+    assert fn.count('<div class="ws-tools">') == 2
+
+    # State survives the rebuild. The toolbar is replaced wholesale on every
+    # menu toggle, so a class on the element alone would be thrown away.
+    assert "let wsToolsOpen = false;" in APP
+    assert "wsToolsOpen ? ' tools-open' : ''" in fn
+
+    # `display: contents` is what makes this free above the breakpoint: the
+    # wrapper stops generating a box and its children go back to being flex
+    # items of the toolbar.
+    # Leading newline, or this matches the tail of
+    # `.ws-toolbar.tools-open .ws-tools { display: contents; }` in the phone
+    # block and passes while the desktop rule says something else entirely.
+    # A mutation to `display: flex` survived the bare substring.
+    assert "\n.ws-tools { display: contents; }" in NO_COMMENTS
+    assert "\n.ws-tools-btn { display: none; }" in NO_COMMENTS
+    phone = phone_block_with(NO_COMMENTS, ".ws-tools-btn")
+    assert ".ws-tools { display: none; }" in phone
+    assert ".ws-toolbar.tools-open .ws-tools { display: contents; }" in phone
+    # A flexible spacer on a wrapping row is a row of its own, and it was one
+    # of the six.
+    assert ".ws-toolbar-gap { display: none; }" in phone
 
 
 def test_no_panel_is_capped_into_a_nested_scroll_container():

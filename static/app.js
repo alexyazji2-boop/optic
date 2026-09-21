@@ -12983,8 +12983,42 @@ function wsStudiesMenu() {
   </div>`;
 }
 
+/* Whether the narrow-screen tool drawer is open.
+ *
+ * A module variable rather than a class on the element, because the toolbar is
+ * rebuilt wholesale (`tb.outerHTML = wsToolbar()`) every time a dropdown opens
+ * or closes. A DOM-only flag would be thrown away by the next menu click.
+ *
+ * Only consulted below 560px; above it the drawer is `display: contents` and
+ * this does nothing. */
+let wsToolsOpen = false;
+
+/* The toolbar, with the tool groups drawer-able on a phone.
+ *
+ * Measured at 375x812 on the Charting tab: nineteen buttons wrapping to six
+ * rows, 227px of controls above a chart that got 443. More than a third of the
+ * screen was toolbar, which is the "mobile chart controls create unusable
+ * layouts" report.
+ *
+ * What stays inline is what you reach for constantly and what tells you what
+ * you are looking at: the range pills, the interval, Line/Candles, and Reset
+ * zoom when there is a zoom to reset. What goes in the drawer is the set you
+ * open, use once and close: Fibs, Trends, Indicators, the study menus, Panes
+ * and Colours.
+ *
+ * **Two wrappers, not one, and they are not reordered.** The tool groups are
+ * not contiguous in this toolbar -- Panes and Colours sit after the pills --
+ * and moving them together would change the desktop layout to fix a phone.
+ * Both wrappers carry the same class and both are `display: contents` above
+ * the breakpoint, so on a desktop the flex row is exactly what it was: the
+ * children become flex items of the toolbar again and the wrapper contributes
+ * no box of its own. */
 function wsToolbar() {
-  return `<div class="ws-toolbar">
+  return `<div class="ws-toolbar${wsToolsOpen ? ' tools-open' : ''}">
+    <button type="button" class="ws-menu-btn ws-tools-btn" data-ws-tools
+      aria-expanded="${wsToolsOpen}"
+      title="Drawing tools, studies, panes and colours">Tools</button>
+    <div class="ws-tools">
     ${WS_MENUS.map((m) => {
     const activeCount = m.items.filter(wsOverlayOn).length;
     /* A menu with one option is not a menu.
@@ -13029,6 +13063,7 @@ function wsToolbar() {
     </div>`;
   }).join('')}
     ${wsStudiesMenu()}
+    </div>
     <div class="ws-toolbar-gap"></div>
     ${isIntradayRange(chartRange)
     // Daily and Weekly are meaningless against the intraday endpoint's own
@@ -13060,6 +13095,7 @@ function wsToolbar() {
          Indicators, because those draw ON the price plot and these are
          separate plots under it: one is "add a line to this chart" and the
          other is "add a chart". */''}
+    <div class="ws-tools">
     <div class="ws-menu">
       <button type="button" class="ws-menu-btn${wsPanesOpen.length ? ' on' : ''}"
         data-ws-menu="panes" aria-expanded="${wsMenuOpen === 'panes'}"
@@ -13081,6 +13117,7 @@ function wsToolbar() {
         data-ws-menu="colors" aria-expanded="${wsMenuOpen === 'colors'}"
         title="Colour of the candles and the line">Colours</button>
       ${wsMenuOpen === 'colors' ? wsColorPop() : ''}
+    </div>
     </div>
   </div>`;
 }
@@ -26369,6 +26406,16 @@ document.addEventListener('click', (evt) => {
     // Deliberately no return: the click was meant for whatever is underneath,
     // and swallowing it would mean every first click after opening a menu did
     // nothing but close it.
+  }
+  /* The narrow-screen tool drawer. Before [data-ws-menu] so the two cannot be
+     confused, and it rebuilds the toolbar only -- opening a drawer does not
+     change the chart, and redrawing the SVG to reveal six buttons is the same
+     waste the menu handler below already avoids. */
+  if (evt.target.closest('[data-ws-tools]')) {
+    wsToolsOpen = !wsToolsOpen;
+    const tbt = views.chart.querySelector('.ws-toolbar');
+    if (tbt) tbt.outerHTML = wsToolbar();
+    return;
   }
   const wsMenu = evt.target.closest('[data-ws-menu]');
   if (wsMenu) {
