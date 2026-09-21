@@ -28250,7 +28250,10 @@ function watchColorScheme() {
 }
 
 (async function boot() {
-  attachTypeahead('ticker-input', 'ticker-results');
+  /* The header box has no typeahead: focusing it opens the palette, so no
+   * keystroke ever reaches it and the list it used to own could not open.
+   * `attachTypeahead` stays for the home page's box, which is a real
+   * combobox and is not hijacked. */
   loadSettings();              // before anything reads SETTINGS
   syncChartTheme();            // before the first chart is drawn
   watchColorScheme();

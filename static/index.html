@@ -127,12 +127,19 @@
     <div class="combo">
       <!-- Focusing this hands over to the command palette (see the focusin
            handler in app.js). The shortcut is advertised in the placeholder
-           because a keyboard-only affordance is a feature for whoever wrote it. -->
+           because a keyboard-only affordance is a feature for whoever wrote it.
+
+           Which is also why it is not a combobox. It carried role="combobox",
+           aria-autocomplete="list" and aria-controls on a #ticker-results
+           listbox, and that listbox could never open: every focus on this box
+           moves to the palette before a character can reach it, so the
+           typeahead attached to it had no reachable path and a screen reader
+           was promised a list of suggestions that does not exist. The home
+           page's search box keeps its typeahead -- that one is a real
+           combobox and nothing hijacks its focus. -->
       <input id="ticker-input" placeholder="Search or ask  ⌘K" spellcheck="false"
-             autocomplete="off" aria-label="Ticker symbol or company name"
-             role="combobox" aria-expanded="false" aria-autocomplete="list"
-             aria-controls="ticker-results">
-      <ul class="combo-list" id="ticker-results" role="listbox" hidden></ul>
+             autocomplete="off" aria-haspopup="dialog"
+             aria-label="Search or ask. Opens the command palette">
     </div>
     <button class="btn primary" type="submit">Load</button>
   </form>
