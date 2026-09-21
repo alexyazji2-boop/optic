@@ -96,15 +96,29 @@
 })();
 </script>
 </head>
-<body>
+<!-- data-view starts at home and switchView keeps it current.
+     Declared here rather than left to JS: `body:not([data-view="home"])`
+     matches an element with no attribute at all, so on the first paint of the
+     home page -- before switchView has run once -- the header mark blinked
+     against the home logo it is supposed to defer to. Measured: on load,
+     getComputedStyle(.brand-mark-eye).animationName was "eye-blink". -->
+<body data-view="home">
 
 <header class="topbar">
   <button class="brand" id="brand-home" type="button" aria-label="Optic Terminal. Go to home">
+    <!-- Grouped and classed to match .home-logo, so the blink can be one set of
+         keyframes driving both marks rather than two that drift apart. The
+         shape is unchanged: no dot is added here, because the header mark has
+         never had one and the point was to animate the logo, not restyle it. -->
     <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
-      <path d="M2.6 16C6.3 8.9 10.9 5.4 16 5.4S25.7 8.9 29.4 16C25.7 23.1 21.1 26.6 16 26.6S6.3 23.1 2.6 16Z"
-            fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" opacity="0.8"/>
-      <path d="M7.8 20 11.6 15.6 14.6 17.8 18.6 11.8 21.6 14 23.6 11.6" fill="none" stroke="var(--brand)"
-            stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+      <g class="brand-mark-eye">
+        <path d="M2.6 16C6.3 8.9 10.9 5.4 16 5.4S25.7 8.9 29.4 16C25.7 23.1 21.1 26.6 16 26.6S6.3 23.1 2.6 16Z"
+              fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" opacity="0.8"/>
+        <!-- pathLength="100" normalises the dash maths, as on the home mark. -->
+        <path class="brand-mark-line" pathLength="100"
+              d="M7.8 20 11.6 15.6 14.6 17.8 18.6 11.8 21.6 14 23.6 11.6" fill="none" stroke="var(--brand)"
+              stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
     </svg>
     <span class="brand-text">OPTIC <span>TERMINAL</span></span>
   </button>

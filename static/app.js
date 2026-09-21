@@ -924,62 +924,37 @@ function armViewReveals() {
   });
 }
 
-/* Whether the status strip is showing everything. Outside the render, because
- * updateStatus runs on every view change, every poll and every repaint. */
-let statusOpen = false;
-
-/* One row, with the rest behind a disclosure.
+/* The status strip: one row of parts, and nothing hidden behind a control.
  *
- * Measured on the Options tab at 727px: seven items wrapping to five rows,
- * 130px of chrome above the fold. What was in them is the argument for hiding
- * them — the price, the change, the verdict and the market status were each
- * already on the same screen in a larger, better-labelled form, so the strip
- * was spending 130px to be the fifth copy of the price and the second copy of
- * the verdict.
+ * It was clamped to one line with a More/Less disclosure, for a measured
+ * reason -- seven items wrapping to five rows and 130px of chrome above the
+ * fold, on the Options tab at 727px. The clamp fixed that and the button was
+ * how you got past it.
  *
- * Clamped rather than culled per view. Callers pass whatever their view knows
- * and there are a dozen of them; a height that holds one row is one rule, where
- * trimming each list is a dozen edits that drift. Provenance and the live state
- * ride at the front so the part that is not duplicated is the part that shows.
+ * Both are gone, reported twice: first on Home, where the button appeared with
+ * nothing to reveal because `statusOpen` was module state shared by every
+ * view, and then everywhere.
  *
- * The button only appears when the content actually overflows — a "more" that
- * reveals nothing is the same fault as the session summary's. */
-function setStatus(parts, opts = {}) {
+ * **Removing the clamp with the button is what keeps this honest.** A clipped
+ * row with no control left is the one arrangement that can hide a reading for
+ * good. Measured at 1512px across Options, Earnings, Investing, Chart and
+ * Overview: every view is one row and 29px unclamped, the same height it had
+ * with the clamp, so on a desktop this changes nothing at all.
+ *
+ * The cost is on a narrow window, and it is real: at 633px the Options strip
+ * is seven parts over five rows, 152px. It wraps rather than clipping, which
+ * is the trade -- the original 130px measurement is the same problem seen from
+ * the other side. If that needs paying down, the answer is to carry fewer
+ * parts rather than to hide the ones it carries: the price, the change and the
+ * verdict are each already on that screen in a larger, better-labelled form.
+ */
+function setStatus(parts) {
   const host = $('#statusline');
   if (!host) return;
-  /* `disclose: false` drops the clamp and the button together.
-   *
-   * It has to be both. The clamp is what the button exists to lift, so keeping
-   * one without the other is the single arrangement that can hide a reading
-   * with no way back to it: Home's two parts sit on one row at desktop width
-   * and wrap to two on a phone, and the phone is precisely where the toggle
-   * would no longer be there to recover the second row.
-   *
-   * Only worth offering to a caller whose strip is short by construction. The
-   * clamp was measured against seven items over five rows on Options; Home
-   * passes one sentence and one status chip and has never needed it. */
-  const disclose = opts.disclose !== false;
-  host.classList.toggle('sl-plain', !disclose);
-  host.classList.toggle('is-open', disclose && statusOpen);
   host.innerHTML = `<div class="sl-parts">${
-    parts.map((p) => `<span>${p}</span>`).join('')}</div>${disclose ? `
-    <button type="button" class="sl-more" data-sl-more hidden
-      aria-expanded="${statusOpen ? 'true' : 'false'}"
-      aria-controls="statusline">${statusOpen ? 'Less' : 'More'}</button>` : ''}`;
-
-  const inner = host.querySelector('.sl-parts');
-  const more = host.querySelector('[data-sl-more]');
-  if (!inner || !more) return;
-  /* Overflow is measured on the inner row, not the strip: the strip is what
-   * clips, so its own scrollHeight already equals its clientHeight. */
-  if (inner.scrollHeight > inner.clientHeight + 1 || statusOpen) more.hidden = false;
-  more.addEventListener('click', () => {
-    statusOpen = !statusOpen;
-    host.classList.toggle('is-open', statusOpen);
-    more.setAttribute('aria-expanded', statusOpen ? 'true' : 'false');
-    more.textContent = statusOpen ? 'Less' : 'More';
-  });
+    parts.map((p) => `<span>${p}</span>`).join('')}</div>`;
 }
+
 
 /* Sentence case for anything rendered as a label, value or chip.
  *
@@ -23796,7 +23771,7 @@ function updateStatus() {
         ? `${esc(STATE.ticker)} is loaded. Pick a tab above, or search another symbol.`
         : 'Search a ticker or company name to begin.',
       liveIndicatorHTML(),
-    ], { disclose: false });
+    ]);
     return;
   }
   // 'settings' belongs here too: it has no symbol of its own, so it shouldn't be
@@ -25495,6 +25470,10 @@ function switchView(view, force) {
   // Captured before STATE.view is overwritten.
   if (view === 'settings' && STATE.view !== 'settings') viewBeforeSettings = STATE.view;
   STATE.view = view;
+  // Published to CSS so a rule can depend on which page this is. The header
+  // logo blinks everywhere except Home, where the big one is already doing it
+  // and two marks blinking out of phase reads as a fault.
+  document.body.dataset.view = view;
   Object.entries(views).forEach(([k, node]) => node.classList.toggle('active', k === view));
   if (view !== 'settings') NAV_LAST[groupForView(view)] = view;
   paintNav(view);

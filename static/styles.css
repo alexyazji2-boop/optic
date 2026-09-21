@@ -767,10 +767,13 @@ nav.tabs button[aria-selected="true"]::after {
   background: var(--s1);
 }
 
-/* Sticky under the top bar, so it floats over content and takes glass too. */
-/* One row by default. See setStatus for what was in the other four.
-   The strip clips; .sl-parts is what wraps inside it, so the row height is
-   `1lh` of the strip's own type plus its padding rather than a magic number. */
+/* Sticky under the top bar, so it floats over content and takes glass too.
+
+   No clamp and no disclosure. This was one clipped row with a More/Less
+   button, and both are gone -- see setStatus for the measurement. The short
+   version: at 1512px every view's strip is one row and 29px either way, so
+   dropping the clamp changed no height a reader sees; a clipped row with no
+   button left is the one state that hides a reading for good. */
 .statusline {
   padding: var(--space-2) var(--space-5);
   font-size: var(--t-small);
@@ -780,9 +783,6 @@ nav.tabs button[aria-selected="true"]::after {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
-  /* Not `wrap`: the parts row wraps, the strip does not, so the More button
-     stays on the first line beside the content it reveals. */
-  flex-wrap: nowrap;
 }
 .sl-parts {
   display: flex;
@@ -790,31 +790,7 @@ nav.tabs button[aria-selected="true"]::after {
   flex-wrap: wrap;
   flex: 1 1 auto;
   min-width: 0;
-  overflow: hidden;
-  /* Exactly one line of this strip's type. */
-  max-height: 1.6em;
 }
-.statusline.is-open .sl-parts { max-height: none; overflow: visible; }
-/* No toggle, so no clamp — a caller that opts out of the disclosure is
-   saying its strip is short enough to read whole at any width. Clipping
-   it with nothing to press would hide the tail for good. */
-.statusline.sl-plain .sl-parts { max-height: none; overflow: visible; }
-.sl-more {
-  flex: none;
-  /* 44px would double this strip's height for a control that reveals four
-     duplicated readings, so this one is deliberately a text affordance rather
-     than a tap target — it sits in a 40px band, not a touch list. */
-  padding: 0 var(--space-2);
-  border: 0;
-  background: none;
-  color: var(--ink-muted);
-  font: 600 var(--t-caption)/1.6 var(--sans);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  cursor: pointer;
-  transition: color var(--dur-ui) var(--ease-ui);
-}
-.sl-more:hover { color: var(--ink); }
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .statusline {
     -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
@@ -1081,6 +1057,33 @@ main { padding: var(--space-6) var(--space-6) var(--space-8); isolation: isolate
 }
 .home-logo-dot { animation: dot-reveal 6s ease-in-out -4.25s infinite; }
 
+/* The header mark blinks too, on every page except Home.
+ *
+ * Same keyframes and the same 6s clock as .home-logo, not a copy of them: two
+ * marks blinking to two sets of timings drift apart the first time either is
+ * retimed, and a blink is only legible because the lid and the line agree.
+ *
+ * Not on Home, and that is the whole of the rule. The 64px home logo is
+ * already blinking three feet lower down the same screen, and two apertures
+ * closing half a second apart reads as a rendering fault rather than as one
+ * mark with a tic. `body[data-view]` is published by switchView.
+ *
+ * No dot here: the header mark has never had one. `line-redraw` works without
+ * it -- the dot animation exists to stop the dot hanging in space ahead of a
+ * half-drawn stroke, and there is no dot to hang.
+ */
+body:not([data-view="home"]) .brand-mark-eye {
+  animation: eye-blink 6s ease-in-out -4.25s infinite;
+  /* fill-box, so the lid closes on the eye's own centre rather than the
+     viewport's. Without it the mark slides as it scales. */
+  transform-box: fill-box;
+  transform-origin: center;
+}
+body:not([data-view="home"]) .brand-mark-line {
+  stroke-dasharray: 100;
+  animation: line-redraw 6s ease-in-out -4.25s infinite;
+}
+
 /* Everything on the home page fades up on arrival, in reading order.
  *
  * One shared keyframe with a per-element delay, not six keyframes: the order is
@@ -1122,6 +1125,8 @@ main { padding: var(--space-6) var(--space-6) var(--space-8); isolation: isolate
   .home-logo-eye,
   .home-logo-line,
   .home-logo-dot,
+  .brand-mark-eye,
+  .brand-mark-line,
   .home-title,
   .home-proto,
   .home-lede,

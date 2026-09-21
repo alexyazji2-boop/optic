@@ -389,76 +389,6 @@ def test_the_options_tab_has_one_price_header_not_two():
         "compact is what drops the identity line"
 
 
-def test_the_status_strip_is_clamped_to_one_row():
-    """Seven items wrapping to five rows, 130px above the fold, measured on the
-    Options tab at 727px. What was in them is the argument: the price, the
-    change, the verdict and the market status were each already on that screen
-    in a larger, better-labelled form, so the strip was the fifth copy of the
-    price and the second copy of the verdict."""
-    assert ".sl-parts {" in NO_COMMENTS
-    parts = NO_COMMENTS[NO_COMMENTS.index(".sl-parts {"):]
-    parts = parts[:parts.index("}")]
-    assert "max-height: 1.6em;" in parts, "one line of the strip's own type"
-    assert "overflow: hidden;" in parts
-    assert ".statusline.is-open .sl-parts { max-height: none; overflow: visible; }" \
-        in NO_COMMENTS
-
-
-def test_the_status_strip_does_not_wrap_around_its_own_toggle():
-    """The strip clips and .sl-parts wraps inside it. If the strip itself
-    wrapped, More would drop onto a second line — restoring the height the
-    clamp exists to remove."""
-    block = NO_COMMENTS[NO_COMMENTS.index(".statusline {"):]
-    block = block[:block.index("}")]
-    assert "flex-wrap: nowrap;" in block
-
-
-def test_the_status_toggle_only_appears_when_there_is_more_to_see():
-    """A "more" that reveals nothing is the same fault as the session summary's
-    render-time fit check. Overflow is measured on the inner row, because the
-    strip is what clips and its own scrollHeight already equals its
-    clientHeight."""
-    fn = APP.split("function setStatus(parts, opts = {}) {", 1)[1].split("\nfunction ", 1)[0]
-    assert "inner.scrollHeight > inner.clientHeight + 1 || statusOpen" in fn
-    assert "hidden" in fn, "the button ships hidden and is revealed on measurement"
-
-
-def test_the_status_open_state_survives_a_repaint():
-    """updateStatus runs on every view change, every poll and every repaint, and
-    setStatus replaces innerHTML. State in the DOM alone would re-collapse the
-    strip under the reader."""
-    assert "let statusOpen = false;" in APP
-    fn = APP.split("function setStatus(parts, opts = {}) {", 1)[1].split("\nfunction ", 1)[0]
-    assert "host.classList.toggle('is-open', disclose && statusOpen);" in fn
-
-
-def test_home_gets_the_strip_without_a_disclosure():
-    """Reported as a screenshot of Home reading "Search a ticker or company
-    name to begin. / Market closed · auto-refresh paused / Less".
-
-    The button was there because `statusOpen` is module state shared by every
-    view: open the strip on Options, come back to Home, and the button is
-    revealed regardless of whether Home has anything to reveal. It does not —
-    one sentence and one status chip is the whole strip.
-
-    The clamp goes with the button. A clipped row with nothing left to press is
-    the one arrangement that can lose a reading for good, and a phone wraps
-    those two parts onto two rows."""
-    home = APP.split("if (STATE.view === 'home') {", 1)[1].split("return;", 1)[0]
-    assert "{ disclose: false }" in home
-
-    fn = APP.split("function setStatus(parts, opts = {}) {", 1)[1].split("\nfunction ", 1)[0]
-    assert "const disclose = opts.disclose !== false;" in fn, \
-        "an absent opts must still disclose, so the dozen other callers are unchanged"
-    assert "${disclose ? `" in fn.split("sl-more", 1)[0], \
-        "the button is not emitted at all, rather than emitted and then hidden"
-    assert "host.classList.toggle('sl-plain', !disclose);" in fn
-    assert ".statusline.sl-plain .sl-parts { max-height: none; overflow: visible; }" \
-        in NO_COMMENTS, "no toggle means no clamp"
-    assert "host.classList.toggle('is-open', disclose && statusOpen);" in fn, \
-        "an open state carried from another tab must not reach a strip with no button"
-
-
 def test_the_disclaimer_footer_is_one_column_with_no_rule():
     """Reported as "why is there a breaker here? keep the text consistent",
     against a hairline sitting mid-sentence in the footer notice.
@@ -584,6 +514,85 @@ def test_the_extended_hours_caveat_spans_the_header_rather_than_a_column():
     head = head[:head.index("}")]
     assert "display: flex;" in head, \
         "if this becomes a grid, the rule above should change with it"
+
+
+def test_the_status_strip_has_no_disclosure_left():
+    """Reported twice. First on Home, where a More/Less button appeared with
+    nothing to reveal because `statusOpen` was module state shared by every
+    view; then "remove this button across the whole terminal".
+
+    The clamp goes with the button and that is what keeps it honest. A clipped
+    row with no control left is the one arrangement that can hide a reading for
+    good. Measured at 1512px across Options, Earnings, Investing, Chart and
+    Overview: every strip is one row and 29px with the clamp removed, which is
+    the height it had with it -- so on a desktop nothing about the sizing
+    changed.
+
+    The cost lands on a narrow window and is stated rather than hidden: at
+    633px the Options strip is seven parts over five rows, 152px. It wraps
+    instead of clipping."""
+    fn = APP.split("function setStatus(parts) {", 1)[1].split("\nfunction ", 1)[0]
+    for gone in ("sl-more", "data-sl-more", "statusOpen", "is-open", "disclose"):
+        assert gone not in fn, gone
+    assert "addEventListener" not in fn, "nothing on this strip is clickable now"
+
+    # And the rules are deleted rather than left dark.
+    for gone in (".sl-more", ".statusline.is-open", ".sl-plain"):
+        assert gone not in NO_COMMENTS, gone
+
+    block = NO_COMMENTS[NO_COMMENTS.index(".sl-parts {"):]
+    block = block[:block.index("}")]
+    assert "max-height" not in block, "the clamp is what the button existed to lift"
+    assert "overflow: hidden" not in block, "and clipping is what it would hide"
+    assert "flex-wrap: wrap;" in block, "so it wraps rather than clipping"
+
+    # No caller is still asking for a disclosure that does not exist.
+    assert "disclose" not in APP.split("function updateStatus()", 1)[1][:4000]
+
+
+def test_the_header_logo_blinks_everywhere_except_home():
+    """The home page's 64px mark blinks on a 6s clock; the header's did not, so
+    leaving Home stopped the terminal's one piece of life.
+
+    Same keyframes and the same clock rather than a second set: two marks
+    blinking to two timings drift apart the first time either is retimed.
+
+    Not on Home, because the big one is already blinking on that screen and two
+    apertures closing half a second apart reads as a rendering fault."""
+    assert 'body:not([data-view="home"]) .brand-mark-eye {' in NO_COMMENTS
+    assert 'body:not([data-view="home"]) .brand-mark-line {' in NO_COMMENTS
+
+    eye = NO_COMMENTS[NO_COMMENTS.index('body:not([data-view="home"]) .brand-mark-eye {'):]
+    eye = eye[:eye.index("}")]
+    assert "eye-blink 6s" in eye, "the same keyframes and clock as .home-logo-eye"
+    assert "transform-box: fill-box;" in eye, \
+        "without it the lid closes on the viewport's centre and the mark slides"
+
+    line = NO_COMMENTS[NO_COMMENTS.index('body:not([data-view="home"]) .brand-mark-line {'):]
+    line = line[:line.index("}")]
+    assert "line-redraw 6s" in line and "stroke-dasharray: 100;" in line
+
+    # The gate has to be published, or the selector never matches -- and it
+    # has to be published in the markup too. `:not([data-view="home"])`
+    # matches an element carrying no such attribute at all, so before
+    # switchView had run once the header blinked against the home logo it is
+    # meant to defer to. Measured on load: animationName was "eye-blink".
+    assert "document.body.dataset.view = view;" in APP
+    assert '<body data-view="home">' in HTML, \
+        "an absent attribute is not the home page to :not(), it is every page"
+
+    # The markup the selectors need.
+    assert 'class="brand-mark-eye"' in HTML
+    assert 'class="brand-mark-line"' in HTML and 'pathLength="100"' in HTML
+
+    # Decorative, so it goes with the rest under reduced motion. The file has
+    # several of these blocks; the one that matters is the one already
+    # switching off the home mark, because these share its keyframes.
+    blocks = [b for b in NO_COMMENTS.split("@media (prefers-reduced-motion: reduce) {")[1:]
+              if ".home-logo-eye," in b[:b.index("}")]]
+    assert len(blocks) == 1, "the home mark's guard moved or was duplicated"
+    rm = blocks[0][:blocks[0].index("}")]
+    assert ".brand-mark-eye," in rm and ".brand-mark-line," in rm
 
 
 def test_no_panel_is_capped_into_a_nested_scroll_container():
