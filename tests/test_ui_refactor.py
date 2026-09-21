@@ -489,6 +489,103 @@ def test_the_disclaimer_footer_is_one_column_with_no_rule():
     assert "max-width: none;" not in NO_COMMENTS.split(".legal-line {", 1)[1][:1200]
 
 
+def test_the_section_strips_drag_yields_to_every_control_on_it():
+    """Reported as "these buttons do not work" against Expand all, Collapse
+    all and Panels.
+
+    The strip is drag-to-pan, and its `pointerdown` handler called
+    `nav.setPointerCapture`. A captured pointer retargets the rest of the
+    sequence — including the `click` — to the capture target, so the click
+    arrived on `nav`, every `evt.target.closest('[data-bulk]')` below returned
+    null, and all three buttons did nothing. The guard bailed out for
+    `[data-sec-jump]` chips, which is why those kept working and the bulk
+    buttons did not.
+
+    Measured by clicking Expand all with a real mouse and logging the click
+    target: `NAV.sec-index`, not the button. Panels open went 0 of 11 before
+    and 11 of 11 after.
+
+    **This test is weaker than the bug deserves and it is worth saying why.**
+    CLAUDE.md's rule is that reading source text to prove a control-flow
+    property is a bad test, and it applies here. But nothing in this suite can
+    reproduce the defect: `el.click()` and a hand-dispatched MouseEvent
+    sequence both exercise the handler and both *passed* while the button was
+    dead, because neither can make a pointer id active, so `setPointerCapture`
+    throws into its catch and no retargeting happens. Only a trusted pointer
+    sequence shows it.
+
+    So the substantive assertion is the second one, which is structural and a
+    regex can check honestly: the guard covers `button`, and every control the
+    strip renders is a `button`. An `<a>` or a `<div role="button">` added
+    here later would slip the guard again."""
+    fn = APP.split("function armSectionIndex(view, nav, panels) {", 1)[1]
+    fn = fn.split("\nfunction ", 1)[0]
+    down = fn.split("addEventListener('pointerdown'", 1)[1].split("});", 1)[0]
+    assert "closest('button')" in down, \
+        "the drag must not start on any control in the strip"
+    assert "[data-sec-jump]" not in down, \
+        "naming only the chips is the bug: the bulk buttons were not covered"
+
+    # The guard says `button`, so everything rendered into the strip has to be
+    # one. This is the half that would catch the next occurrence.
+    build = APP.split("function buildSectionIndex(view) {", 1)[1]
+    build = build.split("\nfunction ", 1)[0]
+    for control in ("data-sec-jump", "data-bulk=\"open\"", "data-bulk=\"close\"",
+                    "data-panels-open"):
+        assert control in build, control
+        before = build.split(control, 1)[0]
+        tag = before.rsplit("<", 1)[1].split()[0]
+        assert tag == "button", "{} is rendered as <{}>, which the drag guard " \
+            "does not recognise as a control".format(control, tag)
+
+
+def test_the_quote_panel_is_gone_and_took_nothing_with_it():
+    """Reported as "this is a repetition".
+
+    The Quote panel sat below a price header that already carried every row in
+    it: the name, the exchange, the last price, the change and its percent,
+    the day's range, the 52-week range, volume against average, and the market
+    cap. Nine readings, all of them a second time in a second typeface.
+
+    Three were only in the panel -- ATR (14), the expected two-week range and
+    the sector -- plus the extended-hours caveat, which is the one line on the
+    page saying the other figures are measured from the regular close rather
+    than from the after-hours print. Removing the panel had to keep those or
+    it would be deleting information rather than a duplicate, so this asserts
+    both halves: the panel is gone, and each of the four is in the header."""
+    swing = APP.split("function renderSwing(d) {", 1)[1].split("\nfunction ", 1)[0]
+    assert "hg('Quote')" not in swing, "the duplicate panel is back"
+    assert "hg('Quote')" not in APP, "and it has not reappeared elsewhere"
+
+    head = APP.split("function renderPriceHead(d, extQ) {", 1)[1]
+    head = head.split("\nfunction ", 1)[0]
+    for carried, why in (
+            ("vol.atr14", "how far this name moves on an ordinary day"),
+            ("vol.expected_2w_move_pct", "the expected two-week range"),
+            ("q.sector", "the sector"),
+            ("px-ext-note", "the extended-hours caveat")):
+        assert carried in head, "{} ({}) was dropped with the panel".format(carried, why)
+
+    # ATR is a term the glossary defines, and the panel it came from marked it.
+    assert "hg('ATR')" in head, "the abbreviation needs its gloss"
+
+
+def test_the_extended_hours_caveat_spans_the_header_rather_than_a_column():
+    """`.px-head` is a wrapping flex row, so a grid property on a child is
+    ignored in silence -- the note would sit in the row squeezing the price
+    instead of taking a line under it. This was written as `grid-column: 1 /
+    -1` first and did exactly that."""
+    block = NO_COMMENTS[NO_COMMENTS.index(".px-ext-note {"):]
+    block = block[:block.index("}")]
+    assert "flex:" in block and "100%" in block
+    assert "grid-column" not in block
+
+    head = NO_COMMENTS[NO_COMMENTS.index(".px-head {"):]
+    head = head[:head.index("}")]
+    assert "display: flex;" in head, \
+        "if this becomes a grid, the rule above should change with it"
+
+
 def test_no_panel_is_capped_into_a_nested_scroll_container():
     """Reported as "scrolling up and down is messed up", and it was.
 

@@ -7271,12 +7271,15 @@ function renderPriceHead(d, extQ) {
   const volRatio = (Number.isFinite(q.volume) && Number.isFinite(q.avg_volume)
     && q.avg_volume > 0) ? q.volume / q.avg_volume : null;
 
+  const vol = (d.technicals || {}).volatility || {};
+
   return `<section class="px-head" aria-label="Price">
     <div class="px-main">
       <div class="px-id">
         <h1 class="px-sym">${esc(d.ticker || q.ticker || '')}</h1>
         ${name ? `<span class="px-name">${esc(name)}</span>` : ''}
-        ${q.exchange ? `<span class="px-exch">${esc(q.exchange)}</span>` : ''}
+        ${q.exchange ? `<span class="px-exch">${esc(q.exchange)}${
+    q.sector ? ` \u00b7 ${esc(q.sector)}` : ''}</span>` : ''}
       </div>
       <div class="px-now">
         <span class="px-last ${dirClass}">${fmt(q.price, 2)}</span>
@@ -7318,7 +7321,29 @@ function renderPriceHead(d, extQ) {
       ${Number.isFinite(q.market_cap) ? `<div class="px-fact">
         <span class="px-fact-label">Market cap</span>
         <span class="px-fact-value">${fmtCompact(q.market_cap, 2)}</span></div>` : ''}
+      ${/* Inherited from the Quote panel when that panel was removed as a
+           duplicate of this one. These two were the only readings it carried
+           that nothing else on the page did -- everything else in it (name,
+           exchange, last, change, day range, 52-week range, volume against
+           average, market cap) was this strip again in a second typeface.
+
+           They belong here rather than nowhere: how far this name moves on an
+           ordinary day is the number that decides whether today's change is
+           large, and it is the one fact a price header usually omits. */''}
+      ${Number.isFinite(vol.atr14) ? `<div class="px-fact">
+        <span class="px-fact-label">${hg('ATR')} (14)</span>
+        <span class="px-fact-value">${fmt(vol.atr14, 2)}
+          ${Number.isFinite(vol.atr_pct)
+    ? `<span class="px-fact-note">${fmt(vol.atr_pct, 1)}% a day</span>` : ''}
+        </span></div>` : ''}
+      ${Number.isFinite(vol.expected_2w_move_pct) ? `<div class="px-fact">
+        <span class="px-fact-label">Expected 2-week range</span>
+        <span class="px-fact-value">\u00b1${fmt(vol.expected_2w_move_pct, 1)}%</span></div>` : ''}
     </div>
+    ${extQ && extQ.price !== null && extQ.price !== undefined ? `<p class="px-ext-note">
+      An extended-hours trade, on a fraction of regular-session volume. Every
+      other figure here, and every level on the chart, is measured from the
+      ${usd(q.price)} close rather than from it.</p>` : ''}
   </section>`;
 }
 
@@ -7972,42 +7997,24 @@ function renderSwing(d) {
       <p class="caveat">${esc(d.data_caveat || '')}</p>
     </div>
 
-    <div class="panel">
-      <h2>${hg('Quote')}</h2>
-      <p class="sub">${esc(q.name || '')}${q.exchange ? ' · ' + esc(q.exchange) : ''}</p>
-      <div style="display:flex;align-items:flex-end;gap:var(--space-4);flex-wrap:wrap;margin-bottom:var(--space-3)">
-        <div>
-          <div class="hero-label">${extQ ? 'Regular close' : 'Last'}</div>
-          <div class="hero">${fmt(q.price, 2)}</div>
-        </div>
-        <div class="${signClass(q.change_pct)}" style="font-size:var(--t-heading);font-weight:600">
-          ${q.change !== null && q.change !== undefined ? (q.change > 0 ? '▲ ' : q.change < 0 ? '▼ ' : '') + fmt(q.change, 2) : ''}
-          (${fmtPct(q.change_pct, 2)})
-        </div>
-        ${extQ ? `<div>
-          <div class="hero-label">${esc(extQ.kind)}</div>
-          <div class="hero ${signClass(extQ.pct)}" style="font-size:var(--t-d3)">${fmt(extQ.price, 2)}</div>
-          <div class="${signClass(extQ.pct)} small">${
-    fmtPct(extQ.pct, 2)} vs the close</div>
-        </div>` : ''}
-      </div>
-      ${extQ ? `<p class="caveat" style="margin:-4px 0 var(--space-3)">Extended-hours trade, on a fraction of
-        regular-session volume. Every other number in this panel, and every level on the chart.
-        Is measured from the ${usd(q.price)} close, not from here.</p>` : ''}
-      ${kv([
-    ["Today's range", `${usd(q.day_low)} – ${usd(q.day_high)}`],
-    ['52-week range', `${usd(q.fifty_two_low)} – ${usd(q.fifty_two_high)}`],
-    ['Volume vs 3m avg', q.volume && q.avg_volume ? `${fmtCompact(q.volume)} (${fmt(q.volume / q.avg_volume * 100, 0)}%)` : '—'],
-    ['ATR (14)', `${fmt((t.volatility || {}).atr14, 2)} (${fmt((t.volatility || {}).atr_pct, 2)}%)`],
-    // 20-day realized vol used to sit here too. It is in Volatility context twice
-    // over — as its own row and inside the window ladder — so this was the third
-    // copy of one number on one page.
+    ${/* The Quote panel stood here and was a duplicate of the price header
+         at the top of this same page.
 
-    ['Expected 2-week range', `±${fmt((t.volatility || {}).expected_2w_move_pct, 1)}%`],
-    ['Market cap', fmtCompact(q.market_cap)],
-    ['Sector', esc(q.sector || '—')],
-  ])}
-    </div>
+         Every row in it was already up there: the name, the exchange, the
+         last price, the change and its percent, the day's range, the 52-week
+         range, volume against average, and the market cap. Reported as "this
+         is a repetition". The only three readings it had to itself -- ATR
+         (14), the expected two-week range and the sector -- moved into
+         renderPriceHead rather than being dropped with it, and so did the
+         extended-hours caveat, which is the one thing on this page that says
+         the other figures are measured from the close and not from the
+         after-hours print.
+
+         The grid keeps its `c2` class with one child: `repeat(auto-fit,
+         minmax(420px, 1fr))` resolves that to a single full-width column,
+         which is what the comment two panels up wanted anyway -- it records
+         the verdict panel running to roughly three times the quote panel's
+         height and leaving ~500px of dead column beside it. */''}
   </div>
 
   ${cs.available ? `<div class="panel gap">
@@ -27401,10 +27408,30 @@ function armSectionIndex(view, nav, panels) {
 
   /* Drag to pan, for a trackpad or a touch screen where a horizontal flick is
    * natural but the strip is too short to bounce. Pointer capture so a drag
-   * that leaves the strip keeps working. */
+   * that leaves the strip keeps working.
+   *
+   * **The bail-out has to cover every control, not just the chips.** It named
+   * `[data-sec-jump]`, so a press on Expand all, Collapse all or Panels
+   * started a drag and called `setPointerCapture` — and a captured pointer
+   * retargets the whole rest of the sequence, including the `click`, to the
+   * capture target. The click then arrived on `nav` itself, every
+   * `evt.target.closest('[data-bulk]')` in the handler below returned null,
+   * and all three buttons did nothing. Reported as "these buttons do not
+   * work"; measured by clicking one with a real mouse and logging the click
+   * target, which came back `NAV.sec-index` rather than the button.
+   *
+   * Worth knowing for the next control added here: synthetic clicks cannot
+   * see this. `el.click()` and a hand-dispatched MouseEvent sequence both
+   * exercise the handler and both pass, because neither can make a pointer id
+   * active and `setPointerCapture` quietly throws into the catch below. Only a
+   * trusted pointer sequence reproduces it.
+   *
+   * `button` rather than a list of attributes, so a control added to this
+   * strip later is a control and not a drag handle. The strip's background is
+   * still draggable, which is the whole surface a drag was ever aimed at. */
   let drag = null;
   nav.addEventListener('pointerdown', (evt) => {
-    if (evt.button !== 0 || evt.target.closest('[data-sec-jump]')) return;
+    if (evt.button !== 0 || evt.target.closest('button')) return;
     drag = { x: evt.clientX, left: nav.scrollLeft };
     try { nav.setPointerCapture(evt.pointerId); } catch (e) { /* not capturable */ }
   });

@@ -11564,6 +11564,22 @@ body.auth-open { overflow: hidden; }
 
 .px-fact-note { color: var(--ink-muted); font-weight: 400; }
 
+/* The extended-hours caveat, inherited from the Quote panel that used to
+   carry it. Spans the whole header rather than sitting beside the facts,
+   because it qualifies every figure in them and not one of them.
+
+   `flex-basis: 100%`, not `grid-column`: .px-head is a wrapping flex row, and
+   a grid property there is ignored in silence -- the note would have sat in
+   the row squeezing the price instead of below it. */
+.px-ext-note {
+  flex: 1 0 100%;
+  margin: var(--space-3) 0 0;
+  font-size: var(--t-caption);
+  line-height: 1.55;
+  color: var(--ink-muted);
+  max-width: 72ch;
+}
+
 .px-range { grid-column: span 2; min-width: 200px; }
 
 .px-range-bar {
