@@ -550,6 +550,32 @@ def test_the_status_strip_has_no_disclosure_left():
     assert "disclose" not in APP.split("function updateStatus()", 1)[1][:4000]
 
 
+def test_the_status_strip_does_not_list_the_expiries():
+    """"Remove this, unnecessary."
+
+    It printed all four dates -- "Expiries: 2026-09-28, 2026-10-09,
+    2026-10-23, 2026-11-20" -- 58 characters, comfortably the longest thing on
+    the strip. Every one of them is already a row of the at-the-money greeks
+    table on the same tab, and each idea card names its own expiry.
+
+    It cost the most, too. With the clamp gone the strip wraps on a narrow
+    window, and this part was most of the wrapping: measured at 771px on
+    Options, three rows and 121px before, two rows and 80px after. Desktop was
+    one row either way."""
+    # Comments stripped first. The first version of this failed on the comment
+    # I had just written explaining the removal -- the rationale for taking
+    # something out names the thing taken out, so a contract that reads the raw
+    # file cannot tell the two apart. Same lesson as tests/test_chart_dock_empty.py.
+    code = re.sub(r"/\*.*?\*/", " ", APP, flags=re.S)
+    code = re.sub(r"(?<!:)//[^\n]*", " ", code)
+    fn = code.split("function updateStatus()", 1)[1].split("\nfunction ", 1)[0]
+    assert "Expiries:" not in fn
+    assert "(d.expiries || {}).used" not in fn
+    # The verdict beside it stays: it is the one swing-only reading on the
+    # strip that is a summary rather than a list.
+    assert "Verdict: ${esc(cap((d.verdict || {}).stance)" in fn
+
+
 def test_the_header_logo_blinks_everywhere_except_home():
     """The home page's 64px mark blinks on a 6s clock; the header's did not, so
     leaving Home stopped the terminal's one piece of life.

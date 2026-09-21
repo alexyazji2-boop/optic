@@ -23880,7 +23880,16 @@ function updateStatus() {
   }
   if (STATE.view === 'swing') {
     parts.push(`Verdict: ${esc(cap((d.verdict || {}).stance) || 'n/a')}`);
-    parts.push(`Expiries: ${((d.expiries || {}).used || []).join(', ') || 'none'}`);
+    /* No expiry list here.
+     *
+     * It printed all four dates -- "Expiries: 2026-09-28, 2026-10-09,
+     * 2026-10-23, 2026-11-20" -- which was 58 characters and comfortably the
+     * longest thing on the strip, and every one of those dates is already a
+     * row of the at-the-money greeks table further down this same tab, plus
+     * the expiry on each idea card. Reported as unnecessary.
+     *
+     * It also cost the most: with the More/Less clamp gone the strip wraps on
+     * a narrow window, and this one part was most of the wrapping. */
   } else if (STATE.view === 'earnings') {
     const lr = d.latest_result || {};
     const nr = d.next_report || {};
