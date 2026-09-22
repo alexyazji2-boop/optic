@@ -934,7 +934,19 @@ main { padding: var(--space-6) var(--space-6) var(--space-8); isolation: isolate
   background-color: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);   /* Asset restyle */
-  padding: var(--space-6) var(--space-7);   /* Asset restyle */
+  /* 20/24 rather than 24/32.
+   *
+   * Measured at 1280px: 27.6px vertical and 36.8px horizontal inside every
+   * card, against 13px table text. On a page carrying twenty panels that is
+   * the difference between a research terminal and a marketing site -- the
+   * padding was doing more work than most of the content in it, and the
+   * horizontal 36.8 was taken twice per panel out of the width tables have to
+   * fit their columns into.
+   *
+   * Not smaller than this: the panel border has to read as a container rather
+   * than as a line drawn around text, and --space-5 is where that still
+   * holds. */
+  padding: var(--space-5) var(--space-6);
   min-width: 0;
   overflow-x: auto;
   background-image:
@@ -3509,6 +3521,20 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
    measured on insert, and animating a container they live in makes getTotalLength
    and getBoundingClientRect return mid-transition values. */
 .panel.is-closed > .panel-body { display: none; }
+/* Every collapsible panel's content sits in one of these, and it had no
+ * containment of its own.
+ *
+ * Measured at 768px on the Options facet: a `table.data` ran 8px past its
+ * `.panel-body` with nothing able to scroll to it. Small, but it is the same
+ * fault as the catalyst table 144px past its card -- `table.data` carries a
+ * 480px floor, and an overflow escaping a parent with no width constraint
+ * does not reliably give the scrolling ancestor anything to scroll.
+ *
+ * Fixed here rather than per-panel because this wrapper is created by
+ * `makePanelsCollapsible` for every panel in the product, so the containment
+ * belongs to the wrapper rather than to whichever table happens to be too
+ * wide this week. */
+.panel > .panel-body { min-width: 0; overflow-x: auto; }
 
 /* A closed panel is a row, not a card — drop the tall padding so a stack of them
    reads as a list of sections you can open. */
@@ -7266,7 +7292,7 @@ b, strong { font-weight: 600; }
 .ws-wrail-lab { font-size: 9px; text-align: center; }
 
 .ws-dock-panels { display: flex; flex-direction: column; gap: var(--space-2); }
-.ws-none { color: var(--ink-muted); margin: 0; }
+.ws-none { margin: 0; }
 
 /* Widget internals. Kept tight — a 260px column has no room for the panel
    spacing the main views use. */
@@ -9330,10 +9356,21 @@ body.cp-open { overflow: hidden; }
   animation: skel-pulse 1.5s ease-in-out infinite both;
 }
 @media (prefers-reduced-motion: reduce) { .hm-skel { animation: none; } }
-.hm-none, .hm-degraded {
-  margin: 0;
+/* The empty-state voice, in one declaration.
+ *
+ * `.hm-none`, `.wl-none`, `.ws-none`, `.cmp-hint` and `.ht-rest` each said
+ * "muted, small" separately, so the treatment for "there is nothing here and
+ * that is not an error" lived in five places and had already drifted in one
+ * of them -- `.ws-none` set no size at all and inherited whatever its host
+ * used. Margins are still local, because how far a note sits from the thing
+ * it is about depends on the thing. */
+.hm-none, .hm-degraded, .wl-none, .wl-loading, .wl-more,
+.ws-none, .cmp-hint, .ht-rest {
   font-size: var(--t-small);
   color: var(--ink-muted);
+}
+.hm-none, .hm-degraded {
+  margin: 0;
 }
 .hm-degraded { margin-top: var(--space-4); }
 
@@ -9821,11 +9858,7 @@ body.cp-open { overflow: hidden; }
 }
 .wl-x:hover { color: var(--neg); background: var(--surface-2); }
 .wl-row.is-none { padding: var(--space-3) var(--space-2); gap: var(--space-3); align-items: baseline; }
-.wl-none, .wl-loading, .wl-more {
-  margin: var(--space-2) 0 0;
-  font-size: var(--t-small);
-  color: var(--ink-muted);
-}
+.wl-none, .wl-loading, .wl-more { margin: var(--space-2) 0 0; }
 
 /* On a phone the change and signal columns drop under the symbol rather than
    compressing five columns into 343px. */
@@ -13104,7 +13137,9 @@ main { padding-top: var(--space-7); }
   color: var(--ink);
 }
 .ht-when { flex: none; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
-.ht-rest { margin: var(--space-1) 0 0; font-size: var(--t-caption); color: var(--ink-muted); }
+/* One step smaller than the rest: this one sits inside a digest row rather
+   than under a panel. */
+.ht-rest { margin: var(--space-1) 0 0; font-size: var(--t-caption); }
 
 /* On a phone the three columns stack, and the band is the first thing under
    the market strip -- so it is capped to what fits without pushing the search
@@ -13136,11 +13171,7 @@ main { padding-top: var(--space-7); }
 }
 /* The hint only appears when there is no history to offer, so it is the empty
    state of the picks row rather than a second instruction beside it. */
-.cmp-hint {
-  margin: var(--space-3) 0 0;
-  font-size: var(--t-small);
-  color: var(--ink-muted);
-}
+.cmp-hint { margin: var(--space-3) 0 0; }
 
 /* ------------------------------------------- session: the description folds
  *
