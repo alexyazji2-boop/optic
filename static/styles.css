@@ -105,6 +105,32 @@
      is what stops the next one being a thirteenth. */
   --scrim: rgba(0, 0, 0, 0.55);
   --shadow-ink: rgba(0, 0, 0, 0.25);
+  /* Three elevations, and they exist because eleven `box-shadow`s in this file
+   * hardcoded `rgba(0, 0, 0, ...)` at alphas from 0.25 to 0.7. In the dark
+   * theme that is roughly right by accident; in the light theme it is a black
+   * smear under a cream card, which is why elevated surfaces looked heavier
+   * there than anywhere else in the app. --shadow-ink and --scroll-shade were
+   * already themed and were already in use two shadows out of thirteen.
+   *
+   * Three steps because the file only ever wanted three: something resting
+   * slightly above the page (a hovered card, a sticky bar), something floating
+   * over it (a menu, a popover), and something covering it (the palette, a
+   * modal, the Pulse panel). The near-duplicates each step replaces are listed
+   * beside it. */
+  --elev-1: 0 1px 2px var(--shadow-ink), 0 2px 8px -2px var(--shadow-ink);
+  --elev-2: 0 8px 24px -6px var(--shadow-cast), 0 2px 6px -2px var(--shadow-ink);
+  --elev-3: 0 24px 60px -16px var(--shadow-cast), 0 4px 12px -4px var(--shadow-ink);
+  /* The cast is deeper than the contact shadow and carries the theme's own
+   * black rather than a literal one. */
+  --shadow-cast: rgba(0, 0, 0, 0.5);
+  /* One colour for "the keyboard is here".
+   *
+   * Fifty-two focus rings, forty-eight on --s1 and four on --brand, which is
+   * the logo's gold and reads as an accent rather than as a state. A reader
+   * tabbing through Settings saw the ring change colour twice on the way
+   * down. Keyed to a name rather than to --s1 directly so the decision can be
+   * revisited in one place. */
+  --focus: var(--s1);
 
   /* The accent. Green for up, red for down, applied to numbers and to the one
      control per view that actually does something. */
@@ -438,6 +464,9 @@
   --bg-hover: rgba(11, 11, 11, 0.05);
   --scrim: rgba(11, 11, 11, 0.38);
   --shadow-ink: rgba(11, 11, 11, 0.18);
+  /* Lighter and warmer: the same geometry over a cream plane needs far less
+   * alpha or it reads as dirt rather than depth. */
+  --shadow-cast: rgba(11, 11, 11, 0.16);
   /* Darker green on white. #00c805 measures 1.8:1 against white and fails any
      text use, so the light theme takes a step down.
      
@@ -540,7 +569,7 @@
 * { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
 
 :focus-visible {
-  outline: 2px solid var(--s1);
+  outline: 2px solid var(--focus);
   outline-offset: 1px;
   border-radius: var(--r-sm);
 }
@@ -703,7 +732,7 @@ header.topbar {
   letter-spacing: 0.06em;
   font-variant-numeric: tabular-nums;
 }
-.search input:focus { outline: 2px solid var(--s1); outline-offset: 1px; }
+.search input:focus { outline: 2px solid var(--focus); outline-offset: 1px; }
 
 .btn {
   padding: var(--space-2) var(--space-3);
@@ -1338,7 +1367,7 @@ body:not([data-view="home"]) .brand-mark-dot {
   transition: color var(--dur-ui) var(--ease-ui);
 }
 .foot-link:hover { color: var(--ink); }
-.foot-link:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+.foot-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 @media (max-width: 640px) {
   .home { padding: var(--space-3) var(--space-0) var(--space-9); }
@@ -1612,11 +1641,27 @@ table.data.narrow { min-width: 0; }
  * Sentence case rather than uppercase because the strings are already written
  * that way in the renderers ("Support & resistance", "Where to enter"), and
  * uppercasing prose costs legibility for emphasis that weight already provides. */
+/* The one declaration of this selector. There were three; the other two are
+ * gone, and the reasoning from all of them is here.
+ *
+ * It was 13px uppercase in secondary ink once, which put the heading *below*
+ * the data it introduces -- a tile value is 24px and a hero figure 44px, so
+ * the heading was the quietest thing in its own panel. The correction
+ * overshot to a 32px display face. `--t-heading` is the step between: plainly
+ * a heading against 13px body text, plainly not the thing the page is about.
+ *
+ * Sentence case rather than uppercase because the renderers already write the
+ * strings that way ("Support & resistance"), and uppercasing prose costs
+ * legibility for emphasis that weight already provides.
+ *
+ * The UI face, not the display one: the display face is for the single figure
+ * or title a page is built around, and a panel heading repeats down the view. */
 .panel > h2 {
   margin: 0 0 var(--space-1);
-  font-size: var(--t-lead);
+  font-size: var(--t-heading);
   font-weight: 600;
   letter-spacing: -0.01em;
+  line-height: 1.25;
   color: var(--ink);
 }
 .panel > .sub {
@@ -1834,6 +1879,16 @@ table.data td {
   padding: var(--space-1) var(--space-2);
   border-bottom: 1px solid var(--grid);
   white-space: nowrap;
+  /* Lining figures, on the densest surface in the product.
+   *
+   * The intent was already here and only the base rule was missing: `td.name`
+   * sets `font-variant-numeric: normal` to opt a text column back OUT, which
+   * only makes sense against a default that opts every other column in. So
+   * every price column in every table has been rendering in proportional
+   * figures, where a 1 is narrower than a 7 and a column of numbers does not
+   * line up under itself. It is the single clearest difference between a page
+   * of data and a terminal. */
+  font-variant-numeric: tabular-nums;
 }
 table.data tr:last-child td { border-bottom: none; }
 table.data td { transition: background-color 0.1s ease; }
@@ -1867,7 +1922,7 @@ table.data td.name { color: var(--ink); font-variant-numeric: normal; }
   border-radius: var(--r-md);
   font-size: var(--t-small);
   font-variant-numeric: tabular-nums;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--elev-2);
   opacity: 0;
   transition: opacity 0.1s;
   max-width: 260px;
@@ -2009,7 +2064,7 @@ body.chat-resizing svg { pointer-events: none; }
   border: 1px solid var(--border-strong);
   border-radius: var(--r-md);
 }
-#chat textarea:focus { outline: 2px solid var(--s1); outline-offset: 1px; }
+#chat textarea:focus { outline: 2px solid var(--focus); outline-offset: 1px; }
 #chat .chat-actions { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-2); flex-wrap: wrap; }
 #chat .chat-actions label { font-size: var(--t-small); color: var(--ink-2); display: flex; align-items: center; gap: var(--space-1); }
 .suggest { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-2); }
@@ -2470,7 +2525,7 @@ body.chat-open footer.legal { padding-right: var(--chat-w); }
   color: var(--ink);
   font-size: var(--t-base);
 }
-.settings-select:focus { outline: 2px solid var(--s1); outline-offset: 1px; }
+.settings-select:focus { outline: 2px solid var(--focus); outline-offset: 1px; }
 
 /* Segmented option group, reused from the chart toolbar's look. */
 /* `.seg-opt` was a second, near-identical segmented control with its own radius,
@@ -2583,7 +2638,7 @@ nav.tabs ~ .icon-btn { margin-left: var(--space-2); }
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--r-lg);
-  box-shadow: 0 12px 28px -8px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--elev-2);
 }
 .combo-list li {
   display: flex;
@@ -2766,7 +2821,7 @@ ul.brief-list {
   border-radius: var(--r-md);
 }
 .read-search input:focus-visible {
-  outline: 2px solid var(--s1);
+  outline: 2px solid var(--focus);
   outline-offset: 1px;
 }
 #read-results:not(:empty) {
@@ -2884,7 +2939,7 @@ details.read-cal-row > summary {
 details.read-cal-row > summary::-webkit-details-marker { display: none; }
 details.read-cal-row > summary:hover { background: var(--bg-hover); }
 details.read-cal-row > summary:focus-visible {
-  outline: 2px solid var(--s1);
+  outline: 2px solid var(--focus);
   outline-offset: 1px;
 }
 .cal-caret {
@@ -3011,7 +3066,7 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
 .factor-defs-wrap[open] > summary::before { transform: rotate(90deg); }
 .factor-defs-wrap > summary:hover { color: var(--ink); }
 .factor-defs-wrap > summary:focus-visible {
-  outline: 2px solid var(--s1);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
   border-radius: var(--r-xs, 4px);
 }
@@ -3263,7 +3318,7 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
   border-bottom: 1px solid transparent;
 }
 .tkr:hover { color: var(--s1); border-bottom-color: currentColor; }
-.tkr:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; border-radius: 2px; }
+.tkr:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
 
 /* Live marker on the leading point of a chart's primary series.
  *
@@ -3339,7 +3394,7 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
   background: var(--btn-primary);
   color: var(--btn-primary-ink);
 }
-.pill:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+.pill:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) {
   .pill { transition: none; }
@@ -3445,7 +3500,7 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
 .panel.is-open .panel-toggle::before { transform: rotate(-135deg); }
 .panel > h2.is-toggle:hover .panel-toggle { color: var(--ink); }
 .panel-toggle:focus-visible {
-  outline: 2px solid var(--s1);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
   border-radius: var(--r-xs, 3px);
 }
@@ -3608,7 +3663,7 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
   transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
 }
 .scan-pill:hover { border-color: var(--border-strong); color: var(--ink); }
-.scan-pill:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+.scan-pill:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 /* The selected scan is marked by weight and a filled background as well as
  * colour, so which one is active survives a greyscale screen. */
 .scan-pill.on {
@@ -3652,7 +3707,7 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
   color: var(--ink);
   background: color-mix(in srgb, var(--s1) 12%, transparent);
 }
-.ask-pulse:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+.ask-pulse:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2); }
 
@@ -3680,7 +3735,7 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
   transition: border-color 120ms ease, color 120ms ease;
 }
 .bulk-btn:hover { border-color: var(--border-strong); color: var(--ink); }
-.bulk-btn:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+.bulk-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 /* A disabled chart control still has to be readable — it is explaining why an
  * option does not apply here, not hiding that it exists. */
@@ -3803,7 +3858,7 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
   white-space: nowrap;
 }
 .sector-read-btn:hover { text-decoration: underline; }
-.sector-read-btn:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+.sector-read-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 .sector-read { margin-top: var(--space-4); border-color: var(--border-strong); }
 .fg-score { font-size: var(--t-d2); font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
@@ -3883,7 +3938,7 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
   background: var(--surface-2);
   color: var(--ink);
 }
-.cat-search input:focus-visible { outline: 2px solid var(--s1); outline-offset: 1px; }
+.cat-search input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .cat-filters { display: flex; gap: var(--space-4); flex-wrap: wrap; }
 .cat-filters label {
   display: flex;
@@ -3916,7 +3971,7 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
 }
 .cat-card > summary::-webkit-details-marker { display: none; }
 .cat-card > summary:hover { background: color-mix(in srgb, var(--s1) 5%, transparent); }
-.cat-card > summary:focus-visible { outline: 2px solid var(--s1); outline-offset: -2px; }
+.cat-card > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .cat-card .cal-caret { position: absolute; right: 16px; top: 20px; }
 
 .cat-meta { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-2); }
@@ -4167,7 +4222,7 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
 }
 .lvl-menu > summary::-webkit-details-marker { display: none; }
 .lvl-menu > summary:hover { border-color: var(--border-strong); color: var(--ink); }
-.lvl-menu > summary:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+.lvl-menu > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .lvl-menu[open] > summary { border-color: var(--s1); color: var(--ink); }
 .lvl-menu[open] > summary .cal-caret { transform: rotate(90deg); }
 
@@ -4201,7 +4256,7 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
   border-radius: var(--r-md, 10px);
   border: 1px solid var(--border-strong);
   background: var(--surface);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--elev-2);
 }
 .lvl-opt {
   display: flex;
@@ -4300,7 +4355,7 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
 }
 .eval-h > summary::-webkit-details-marker { display: none; }
 .eval-h > summary:hover { color: var(--ink); }
-.eval-h > summary:focus-visible { outline: 2px solid var(--s1); outline-offset: -2px; }
+.eval-h > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .eval-h .cal-caret { position: absolute; right: 14px; top: 15px; }
 .eval-h table { margin: 0 var(--space-4) var(--space-3); width: calc(100% - 28px); }
 .callout.warn { border-left-color: var(--warn); }
@@ -4340,7 +4395,7 @@ button.home-card:hover {
   border-color: var(--accent);
   transform: translateY(-1px);
 }
-button.home-card:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+button.home-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) {
   button.home-card:hover { transform: none; }
@@ -4416,7 +4471,7 @@ button.home-card:focus-visible { outline: 2px solid var(--s1); outline-offset: 2
   line-height: 1;
 }
 .att-x:hover { background: var(--surface); color: var(--ink); }
-.att-x:focus-visible { outline: 2px solid var(--s1); outline-offset: 1px; }
+.att-x:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 
 /* ------------------------------------------------------ momentum row ----- */
 
@@ -4587,7 +4642,7 @@ button.home-card:focus-visible { outline: 2px solid var(--s1); outline-offset: 2
 }
 .scan-group:hover { border-color: var(--border-strong); color: var(--ink); }
 .scan-group.on { border-color: var(--s1); color: var(--ink); }
-.scan-group:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+.scan-group:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .sg-name { display: block; font-weight: 600; font-size: var(--t-body); }
 .sg-count {
   position: absolute;
@@ -4734,7 +4789,7 @@ button.home-card:focus-visible { outline: 2px solid var(--s1); outline-offset: 2
 .ex-got:hover { filter: brightness(1.08); }
 .ex-more { background: var(--surface-2); border-color: var(--border); color: var(--ink-2); }
 .ex-more:hover { border-color: var(--border-strong); color: var(--ink); }
-.ex-got:focus-visible, .ex-more:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+.ex-got:focus-visible, .ex-more:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .ex-close {
   position: absolute;
   top: 8px; right: 8px;
@@ -4789,7 +4844,7 @@ button.home-card:focus-visible { outline: 2px solid var(--s1); outline-offset: 2
 }
 .book-card:hover { border-color: var(--border-strong); }
 .book-card.on { border-color: var(--s1); }
-.book-card:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+.book-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .bk-top { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 .bk-name { font-weight: 600; font-size: var(--t-body); color: var(--ink); }
 .bk-figs {
@@ -4906,7 +4961,7 @@ button.home-card:focus-visible { outline: 2px solid var(--s1); outline-offset: 2
   cursor: pointer;
 }
 .ew-row:hover { background: var(--surface); border-color: var(--border-strong); }
-.ew-row:focus-visible { outline: 2px solid var(--s1); outline-offset: 1px; }
+.ew-row:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .ew-row.major { border-color: color-mix(in srgb, var(--s1) 40%, transparent); }
 .ew-tick {
   display: flex;
@@ -4964,7 +5019,7 @@ button.home-card:focus-visible { outline: 2px solid var(--s1); outline-offset: 2
   background: var(--surface-2);
   color: var(--ink);
 }
-.cmp-input:focus-visible { outline: 2px solid var(--s1); outline-offset: 1px; }
+.cmp-input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 
 .cmp-table th { vertical-align: bottom; }
 .cmp-table .cmp-name, .cmp-table .cmp-sector {
@@ -5024,7 +5079,7 @@ button.home-card:focus-visible { outline: 2px solid var(--s1); outline-offset: 2
   cursor: pointer;
 }
 .cal-pill:hover { border-color: var(--border-strong); color: var(--ink); }
-.cal-pill:focus-visible { outline: 2px solid var(--s1); outline-offset: 1px; }
+.cal-pill:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .cal-pill.on { border-color: var(--s1); color: var(--ink); background: var(--surface-2); }
 /* The count is the useful part of a filter you have not pressed yet — it says
    whether pressing it leads anywhere. */
@@ -5401,7 +5456,7 @@ button.home-card:focus-visible { outline: 2px solid var(--s1); outline-offset: 2
 
 .inst-clickable { cursor: pointer; }
 .inst-clickable:hover { background: var(--bg-hover); }
-.inst-clickable:focus-visible { outline: 2px solid var(--s1); outline-offset: -2px; }
+.inst-clickable:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 /* The affordance sits on the name rather than the whole row: underlining twelve
    numbers to say "this is clickable" would compete with the data. */
 .inst-link { border-bottom: 1px dotted var(--border-strong); }
@@ -5626,7 +5681,7 @@ aside#chat { height: 100vh; }
   cursor: pointer;
 }
 .lvl-clear:hover { color: var(--ink); border-color: var(--border-strong); }
-.lvl-clear:focus-visible { outline: 2px solid var(--s1); outline-offset: 1px; }
+.lvl-clear:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 /* The panes now live inside the price panel, so they need a divider from the
    tiles above rather than a panel border of their own. renderIndicatorPanes emits
    the .ind-pane blocks directly with no wrapper, so the spacing goes on the host. */
@@ -5666,7 +5721,7 @@ details.ind-explain > summary {
 }
 details.ind-explain > summary::-webkit-details-marker { display: none; }
 details.ind-explain > summary:hover { color: var(--ink); }
-details.ind-explain > summary:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+details.ind-explain > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 details.ind-explain[open] > summary .cal-caret { transform: rotate(90deg); }
 
 .ind-explain-body {
@@ -5791,7 +5846,7 @@ details.ind-explain[open] > summary .cal-caret { transform: rotate(90deg); }
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--r-md);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--elev-2);
   display: flex;
   flex-direction: column;
   gap: var(--space-0);
@@ -5868,7 +5923,7 @@ details.ind-explain[open] > summary .cal-caret { transform: rotate(90deg); }
   cursor: pointer;
 }
 .nav-page:hover { background: var(--surface-2); color: var(--ink); }
-.nav-page:focus-visible { outline: 2px solid var(--s1); outline-offset: -2px; }
+.nav-page:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .nav-page.current { color: var(--ink); background: var(--surface-2); }
 /* Absolutely positioned, not a flex child.
  *
@@ -5992,13 +6047,6 @@ body.chat-full header.topbar { padding-right: var(--space-5); }
 
 .grid { gap: var(--space-4) var(--space-5); }
 
-/* Headings carry the hierarchy now that the box is gone. */
-.panel > h2 {
-  font-size: var(--t-heading);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
 /* Buttons: one filled accent per view, everything else quiet. */
 .btn.primary {
   background: var(--btn-primary);
@@ -6039,7 +6087,7 @@ body.chat-full header.topbar { padding-right: var(--space-5); }
 @supports (color: color-mix(in srgb, red 50%, blue)) {
   .btn.primary:hover {
     box-shadow: 0 4px 14px color-mix(in srgb, var(--btn-primary) 42%, transparent),
-                0 1px 3px rgba(0, 0, 0, 0.25);
+                0 1px 3px var(--shadow-ink);
   }
 }
 /* Pressing puts it back down. Without this the button stays lifted through the
@@ -6622,7 +6670,7 @@ b, strong { font-weight: 600; }
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--r-md);
-  box-shadow: 0 14px 30px -10px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--elev-2);
   z-index: 20;
 }
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
@@ -7273,7 +7321,7 @@ b, strong { font-weight: 600; }
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--r-lg);
-  box-shadow: 0 24px 60px -16px rgba(0, 0, 0, 0.7);
+  box-shadow: var(--elev-3);
   overflow: hidden;
 }
 .ws-modal-head {
@@ -7793,7 +7841,10 @@ body:not(.chat-open) .ws-body.narrow.dock-open .ws-dock {
   z-index: 6;
   background: var(--surface);
   border-left: 1px solid var(--border-strong);
-  box-shadow: -12px 0 28px -12px rgba(0, 0, 0, 0.6);
+  /* Directional: this drawer slides in from the right, so the cast goes
+   left rather than down and the elevation scale does not fit. The
+   colour is still the theme's. */
+  box-shadow: -12px 0 28px -12px var(--shadow-cast);
   overflow-y: auto;
 }
 .ws-body { position: relative; }
@@ -8489,7 +8540,7 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
   background: var(--btn-primary);
   color: var(--btn-primary-ink);
 }
-.chart-pulse:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+.chart-pulse:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 /* The same live dot the top-bar Pulse button uses, so the two read as one
    feature in two places rather than as two different buttons. */
 
@@ -8667,7 +8718,7 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
   cursor: pointer;
 }
 .sec-chip:hover { color: var(--ink); background: var(--surface-2); }
-.sec-chip:focus-visible { outline: 2px solid var(--s1); outline-offset: 1px; }
+.sec-chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 /* The section currently on screen. Border rather than fill, so the marker does
    not compete with whichever chip the pointer is over. */
 .sec-chip.on {
@@ -8727,7 +8778,7 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
   cursor: pointer;
 }
 .sec-bulk-btn:hover { color: var(--ink); border-color: var(--border-strong); }
-.sec-bulk-btn:focus-visible { outline: 2px solid var(--s1); outline-offset: 1px; }
+.sec-bulk-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 
 /* ========================================================= the Optic loop ===
  *
@@ -8976,7 +9027,7 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
 }
 .pl-reason > details > summary::-webkit-details-marker { display: none; }
 .pl-reason > details > summary:hover { background: var(--surface-2); }
-.pl-reason > details > summary:focus-visible { outline: 2px solid var(--s1); outline-offset: 1px; }
+.pl-reason > details > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .pl-rank {
   flex: none;
   width: 20px;
@@ -9068,7 +9119,7 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--r-lg);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--elev-3);
   overflow: hidden;
   animation: cp-rise 140ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
@@ -9660,7 +9711,7 @@ body.cp-open { overflow: hidden; }
   cursor: pointer;
 }
 .hm-more:hover { color: var(--ink); }
-.hm-more:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+.hm-more:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .hm-read-head { margin: 0 0 var(--space-2); font-size: var(--t-lead); color: var(--ink); }
 .hm-read-body { margin: 0; font-size: var(--t-small); color: var(--ink-2); max-width: 76ch; line-height: 1.55; }
 .hm-alerts { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
@@ -9719,7 +9770,7 @@ body.cp-open { overflow: hidden; }
   border-radius: var(--r-sm);
 }
 .wl-open:hover { background: var(--surface-2); }
-.wl-open:focus-visible { outline: 2px solid var(--s1); outline-offset: -2px; }
+.wl-open:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .wl-sym { font-weight: 600; font-size: var(--t-body); color: var(--ink); }
 .wl-price, .wl-chg { font-variant-numeric: tabular-nums; font-size: var(--t-small); }
 .wl-price { color: var(--ink-2); }
@@ -9808,7 +9859,7 @@ body.cp-open { overflow: hidden; }
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.wv-add input:focus { outline: 2px solid var(--s1); outline-offset: 1px; }
+.wv-add input:focus { outline: 2px solid var(--focus); outline-offset: 1px; }
 
 .wv-sorts { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-4); }
 
@@ -9945,7 +9996,7 @@ body.cp-open { overflow: hidden; }
   resize: vertical;
   min-height: 3.4em;
 }
-.th-field-wrap textarea:focus { outline: 2px solid var(--s1); outline-offset: 1px; }
+.th-field-wrap textarea:focus { outline: 2px solid var(--focus); outline-offset: 1px; }
 .th-field-wrap textarea::placeholder { color: var(--ink-muted); }
 .th-actions { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .th-local { margin: 0; }
@@ -10089,7 +10140,7 @@ body.cp-open { overflow: hidden; }
   .mtab-ico { font-size: 17px; line-height: 1; }
   .mtab-lab { font-size: 10px; letter-spacing: 0.02em; }
   .mtab.on { color: var(--btn-primary); }
-  .mtab:focus-visible { outline: 2px solid var(--s1); outline-offset: -2px; }
+  .mtab:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
   /* The unseen count, pinned to the icon rather than laid out with it: the tab
      is a grid of two fixed rows and a third item would resize every tab in the
@@ -10169,7 +10220,7 @@ body.cp-open { overflow: hidden; }
               color var(--dur-ui) var(--ease-ui);
 }
 .kob-opt:hover { border-color: var(--brand); background: var(--raised); color: var(--ink); }
-.kob-opt:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.kob-opt:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .kob-glyph { font-size: var(--t-heading); line-height: 1; }
 .kob-label { font: 600 var(--t-body)/1.25 var(--sans); color: var(--ink); }
 .kob-tag { font-size: var(--t-small); line-height: 1.4; }
@@ -10196,7 +10247,7 @@ body.cp-open { overflow: hidden; }
               color var(--dur-ui) var(--ease-ui);
 }
 .gloss-term.is-inline:hover { color: var(--ink); border-bottom-color: var(--ink); }
-.gloss-term.is-inline:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.gloss-term.is-inline:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .gloss-term.is-inline[aria-expanded="true"] { border-bottom-style: solid; }
 
 /* A block rather than a floating panel. The point of this mode is that the
@@ -10266,7 +10317,7 @@ body.cp-open { overflow: hidden; }
    two controls read as one pair when closed as well as when open. */
 .pp-now { font: 600 var(--t-body)/1.2 var(--sans); max-width: 22ch; }
 .pp { position: relative; display: inline-flex; }
-.pp-field:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.pp-field:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 /* The same caret as the mode chip, under an aliased selector rather than a
    second copy of the triangle. */
 
@@ -10280,7 +10331,7 @@ body.cp-open { overflow: hidden; }
 .km-btn {
   cursor: pointer;
 }
-.km-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.km-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 
 /* Kept as an alias so the component's own markup needs no second class on the
    span. Same declarations as .oc-eyebrow; see the note on .oc-field. */
@@ -10319,7 +10370,7 @@ body.cp-open { overflow: hidden; }
   border: 1px solid var(--border-strong);
   border-radius: var(--r-md);
   background: var(--surface);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--elev-2);
   /* The menu is taller than the space under a chip near the bottom of a panel,
      and a fixed box cannot be scrolled to by the page. Same lesson as the
      section dropdowns. */
@@ -10536,7 +10587,7 @@ body.cp-open { overflow: hidden; }
   cursor: pointer;
 }
 .rh-route:hover { background: var(--surface-2); border-color: var(--border-strong); }
-.rh-route:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+.rh-route:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .rh-q { font-size: var(--t-body); color: var(--ink); font-weight: 500; }
 .rh-note { font-size: var(--t-caption); color: var(--ink-muted); }
 
@@ -10568,7 +10619,7 @@ body.cp-open { overflow: hidden; }
   border-radius: var(--r-sm);
 }
 .rh-open:hover { background: var(--surface-2); }
-.rh-open:focus-visible { outline: 2px solid var(--s1); outline-offset: -2px; }
+.rh-open:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .rh-item-sym { font-weight: 600; font-size: var(--t-small); color: var(--ink); }
 .rh-item-q {
   font-size: var(--t-small);
@@ -10659,7 +10710,7 @@ body.cp-open { overflow: hidden; }
   cursor: pointer;
 }
 
-.acct-btn:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+.acct-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 .acct-face {
   display: flex;
@@ -10828,7 +10879,7 @@ body.auth-open { overflow: hidden; }
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--r-lg);
-  box-shadow: 0 24px 64px var(--scroll-shade);
+  box-shadow: var(--elev-3);
 }
 
 .auth-close {
@@ -10897,7 +10948,7 @@ body.auth-open { overflow: hidden; }
 }
 
 .auth-provider:hover { border-color: var(--ink-muted); background: var(--raised); }
-.auth-provider:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+.auth-provider:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 .auth-glyph { width: 17px; height: 17px; flex: none; }
 
@@ -11104,7 +11155,7 @@ body.auth-open { overflow: hidden; }
   border: 1px solid var(--border-strong);
   border-left: 3px solid var(--s1);
   border-radius: var(--r-sm);
-  box-shadow: 0 8px 24px var(--scroll-shade);
+  box-shadow: var(--elev-2);
   font: 400 var(--t-body)/1.5 var(--sans);
   color: var(--ink);
   cursor: pointer;
@@ -11440,7 +11491,7 @@ body.auth-open { overflow: hidden; }
 }
 
 .wd-param input:focus, .wd-param select:focus {
-  outline: 2px solid var(--s1);
+  outline: 2px solid var(--focus);
   outline-offset: 1px;
 }
 
@@ -12405,7 +12456,7 @@ a.cc-story-t:focus-visible { color: var(--ink-2); text-decoration: underline; }
   border: 1px solid var(--border-strong);
   border-radius: var(--r-lg);
   background: var(--surface);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--elev-3);
 }
 .pch-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .pch-head h3 { margin: 0; }
@@ -12589,7 +12640,7 @@ body.chat-full .rp { display: none; }
   color: var(--ink-2);
   font: 500 var(--t-body)/1 var(--sans);
   cursor: pointer;
-  box-shadow: 0 6px 20px var(--shadow-ink);
+  box-shadow: var(--elev-2);
   transition: color var(--dur-ui) var(--ease-ui),
               border-color var(--dur-ui) var(--ease-ui),
               background-color var(--dur-ui) var(--ease-ui);
@@ -12635,7 +12686,7 @@ body.chat-full .rp { display: none; }
   font: 400 var(--t-body)/1.5 var(--sans);
   resize: vertical;
 }
-.rp-text:focus { outline: 2px solid var(--s1); outline-offset: 1px; }
+.rp-text:focus { outline: 2px solid var(--focus); outline-offset: 1px; }
 
 .rp-row {
   display: flex;
@@ -12856,7 +12907,18 @@ h1, .hero, .home-title {
   letter-spacing: -0.02em;
   line-height: 1.1;
 }
-h2, .panel > h2, .hm-h, .home-sec-title, .md-h3 {
+/* `.panel > h2` used to be in this list and is deliberately not any more.
+ *
+ * It was the third of three declarations of the same selector -- 17.25px/600
+ * at line 1644, 20.7px/600 at line 6035, and this one -- all at specificity
+ * (0,1,2), so source order decided and this one won. Every panel heading in
+ * the product rendered at 32px in the display face at weight 400, against
+ * 13px table text beneath it. On the Financials facet that is four cards in a
+ * two-column grid, each shouting its own name louder than the numbers it
+ * introduces, which is the "generic card, weak hierarchy" reading.
+ *
+ * A display size is for the one thing a page is about. These repeat. */
+h2, .hm-h, .home-sec-title, .md-h3 {
   font-family: var(--display);
   font-size: 32px;
   font-weight: 400;
@@ -12985,7 +13047,7 @@ main { padding-top: var(--space-7); }
   transition: color 0.12s ease;
 }
 .ht-more:hover { color: var(--ink); text-decoration: underline; }
-.ht-more:focus-visible { outline: 2px solid var(--s1); outline-offset: 3px; border-radius: var(--r-xs); }
+.ht-more:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: var(--r-xs); }
 
 /* auto-fit rather than three fixed columns: a degraded feed can return one or
    two, and two columns holding a third of the width each with a gap where the
@@ -13091,5 +13153,5 @@ main { padding-top: var(--space-7); }
 }
 .ses-fold > summary::-webkit-details-marker { display: none; }
 .ses-fold > summary:hover { color: var(--ink); }
-.ses-fold > summary:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; border-radius: var(--r-xs); }
+.ses-fold > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-xs); }
 .ses-fold-body { margin-top: var(--space-2); }
