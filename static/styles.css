@@ -13032,3 +13032,31 @@ main { padding-top: var(--space-7); }
   .hm-today { padding: var(--space-3) var(--space-4); }
   .ht-cols { gap: var(--space-3); }
 }
+
+/* ---------------------------------------------------- compare: somewhere to start
+ *
+ * Replaces a panel that said "Enter two tickers and press Compare" in a box of
+ * its own, directly beneath a box holding two ticker fields and a Compare
+ * button. Two panels, one instruction, and the reader still typing symbols
+ * from memory on the page whose job is putting two of them side by side.
+ */
+.cmp-picks {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.cmp-picks-lab {
+  font-size: var(--t-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-muted);
+}
+/* The hint only appears when there is no history to offer, so it is the empty
+   state of the picks row rather than a second instruction beside it. */
+.cmp-hint {
+  margin: var(--space-3) 0 0;
+  font-size: var(--t-small);
+  color: var(--ink-muted);
+}

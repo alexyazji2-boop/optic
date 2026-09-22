@@ -17863,6 +17863,33 @@ function renderCompareBars(c) {
   </div>`;
 }
 
+/* Somewhere to start, from what the reader has already looked at.
+ *
+ * The panel this replaced said "Enter two tickers and press Compare" in a box
+ * of its own directly under a box containing two ticker fields and a Compare
+ * button -- a second panel restating the first, which is the duplication this
+ * page had the clearest case of. And it left the reader typing symbols from
+ * memory on a page whose whole job is putting two of them side by side.
+ *
+ * `recentSymbols` is local and already exists for the command palette: where
+ * this browser has actually been, no request and nothing account-backed. On a
+ * first visit there is no history, so the sentence about nothing being fetched
+ * survives for the reader who has not got one yet -- it is the honest thing to
+ * say when there is nothing to offer, rather than filler tickers we picked. */
+function comparePicksHTML() {
+  const taken = new Set((STATE.compareInputs || [])
+    .map((v) => String(v || '').toUpperCase().trim()).filter(Boolean));
+  const picks = recentSymbols().filter((sym) => !taken.has(sym)).slice(0, 6);
+  if (!picks.length) {
+    return `<p class="cmp-hint">Nothing is fetched until you press Compare.</p>`;
+  }
+  return `<div class="cmp-picks">
+    <span class="cmp-picks-lab">Recently viewed</span>
+    ${picks.map((sym) => `<button type="button" class="pill" data-cmp-pick="${esc(sym)}"
+      >${esc(sym)}</button>`).join('')}
+  </div>`;
+}
+
 function renderCompare(c) {
   const inputs = (STATE.compareInputs || ['', '']).map((v, i) => `
     <input class="cmp-input" data-cmp-input="${i}" value="${esc(v)}"
@@ -17900,6 +17927,7 @@ function renderCompare(c) {
       ${(STATE.compareInputs || []).length > 2
     ? '<button type="button" class="bulk-btn" data-cmp-drop>− Remove</button>' : ''}
     </div>
+    ${comparePicksHTML()}
   </div>`;
 
   // The take slots between the controls and the table, so it reads as the
@@ -17910,10 +17938,7 @@ function renderCompare(c) {
     return head + cmpSkeleton((STATE.compareInputs || [])
       .map((v) => String(v || '').toUpperCase().trim()).filter(Boolean));
   }
-  if (!c) {
-    return head + `<div class="panel span-all"><p class="sub">Enter two tickers and press
-      Compare. Nothing is fetched until you do.</p></div>`;
-  }
+  if (!c) return head;
   if (!c.available) {
     const why = (c.failed || []).map((f) => `${esc(f.ticker)} · ${esc(f.reason)}`);
     return head + `<div class="panel span-all"><div class="callout">${
@@ -17980,7 +18005,22 @@ function renderCompare(c) {
   </div>`;
 }
 
+/* Arrive from a Dossier with NVDA loaded and NVDA is already in the first
+ * field. Drilling into a comparison should not lose the thing you were
+ * comparing FROM -- the palette already does this (see the data-goto-compare
+ * branch), and arriving by the nav was the one route that did not.
+ *
+ * Only when every field is empty, so it can never overwrite something typed,
+ * and only on the way in, so clearing a field and leaving it clear sticks. */
+function seedCompareFromContext() {
+  const inputs = STATE.compareInputs || ['', ''];
+  if (!STATE.ticker) return;
+  if (inputs.some((v) => String(v || '').trim())) return;
+  STATE.compareInputs = [STATE.ticker, ...inputs.slice(1)];
+}
+
 async function loadCompare(force) {
+  seedCompareFromContext();
   if (STATE.compare && !force) { views.compare.innerHTML = renderCompare(STATE.compare); return; }
   views.compare.innerHTML = renderCompare(STATE.compare || null);
   revealPanels(views.compare);
@@ -21440,6 +21480,7 @@ async function loadSwing(force, opts = {}) {
     updateChatContext();
     return data;
   } catch (err) {
+    outcome = { error: err };
     if (requestId !== swingRequestId || STATE.ticker !== ticker) return null;
     if (opts.propagateError) throw err;
     // A background refresh tick shouldn't wipe out a perfectly good dashboard
@@ -26901,6 +26942,20 @@ document.addEventListener('click', (evt) => {
     return;
   }
   if (evt.target.closest('[data-cmp-run]')) { runCompare(); return; }
+  const cmpPick = evt.target.closest('[data-cmp-pick]');
+  if (cmpPick) {
+    /* Into the first empty field, or appended if every field is full and
+     * there is room for a fourth. Replacing a filled field would throw away
+     * something the reader typed to save them one keystroke. */
+    const inputs = [...(STATE.compareInputs || ['', ''])];
+    const slot = inputs.findIndex((v) => !String(v || '').trim());
+    if (slot >= 0) inputs[slot] = cmpPick.dataset.cmpPick;
+    else if (inputs.length < 4) inputs.push(cmpPick.dataset.cmpPick);
+    else return;
+    STATE.compareInputs = inputs;
+    views.compare.innerHTML = renderCompare(STATE.compare);
+    return;
+  }
   if (evt.target.closest('[data-cmp-add]')) {
     STATE.compareInputs = [...(STATE.compareInputs || []), ''];
     views.compare.innerHTML = renderCompare(STATE.compare);
