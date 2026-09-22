@@ -23850,6 +23850,53 @@ function humanCountdown(minutes) {
   return `${h} hour${h === 1 ? '' : 's'} and ${m} minute${m === 1 ? '' : 's'}`;
 }
 
+/* Phases where the session description is a caveat about the price on screen
+ * rather than background about the session.
+ *
+ * The distinction is in the copy itself, in app/session.py. "Regular", "after"
+ * and "pre" explain what the session IS -- deepest liquidity, first verdict
+ * after the bell, levels that move again at the open. Useful once. The other
+ * three say the number you are looking at is not live: overnight carries "this
+ * feed carries no overnight tape for them, so a single stock still shows its
+ * 4pm close", holiday carries "the last price shown is the previous session's
+ * close", and closed says nothing trades until Sunday evening.
+ *
+ * So the first three fold and the last three do not. Hiding a data-validity
+ * warning behind a click to save 76px is the trade this file must not make;
+ * hiding the sentence about liquidity being deepest during the main session,
+ * on every page load, forever, is one worth making. */
+const SESSION_CAVEAT_PHASES = new Set(['overnight', 'holiday', 'closed']);
+
+/* The fold's state, remembered.
+ *
+ * `renderSessionBar` runs on every view switch, so a bare <details> would
+ * re-close itself each time the reader changed tab -- which reads as the page
+ * fighting them. Default closed: the phases where the text matters are the
+ * phases that never fold. */
+const SES_DESC_KEY = 'optic.session.desc';
+
+function sessionDescOpen() {
+  try { return localStorage.getItem(SES_DESC_KEY) === '1'; } catch (e) { return false; }
+}
+
+function rememberSessionDesc(open) {
+  try { localStorage.setItem(SES_DESC_KEY, open ? '1' : '0'); }
+  catch (e) { /* private mode: it just forgets between renders */ }
+}
+
+function sessionDescHTML(phase, description) {
+  if (!description) return '';
+  const body = gloss(description);
+  if (SESSION_CAVEAT_PHASES.has(phase)) {
+    return `<div class="ses-desc">${body}</div>`;
+  }
+  return `<details class="ses-desc ses-fold" id="ses-fold"${
+    sessionDescOpen() ? ' open' : ''}>
+    <summary>What is this session?</summary>
+    <div class="ses-fold-body">${body}</div>
+  </details>`;
+}
+
 function renderSessionBar() {
   const host = $('#sessionbar');
   if (!host) return;
@@ -23999,7 +24046,7 @@ function renderSessionBar() {
           data-goto-settings>Change</button></span>
       </div>
       ${tickerRelevant && p.stale_note ? `<div class="ses-warn">${gloss(p.stale_note)}</div>` : ''}
-      <div class="ses-desc">${gloss(sess.description || '')}</div>
+      ${sessionDescHTML(phase, sess.description)}
     </div>`;
 
   dedupeGlossTerms(host);
@@ -24019,6 +24066,9 @@ function renderSessionBar() {
     if (sEl.scrollHeight <= sEl.clientHeight + 1) mEl.hidden = true;
   };
   checkSummaryFit();
+
+  const fold = $('#ses-fold');
+  if (fold) fold.addEventListener('toggle', () => rememberSessionDesc(fold.open));
 
   const sum = $('#ses-summary');
   const more = $('#ses-more');

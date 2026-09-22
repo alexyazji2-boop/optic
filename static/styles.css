@@ -13060,3 +13060,36 @@ main { padding-top: var(--space-7); }
   font-size: var(--t-small);
   color: var(--ink-muted);
 }
+
+/* ------------------------------------------- session: the description folds
+ *
+ * Only in the phases where it is background. See SESSION_CAVEAT_PHASES: the
+ * overnight, holiday and weekend copy says the price on screen is not live,
+ * and that never folds. The rest explains what a session is, which is worth
+ * reading once and not on every page load for the life of the account.
+ *
+ * Measured at 800x835 with NVDA loaded: the bar was 253px and the ticker
+ * header did not appear until y=468, so the security a reader had just
+ * searched for sat in the bottom 44% of the first screen. The description was
+ * 76px of that.
+ *
+ * Matches details.ind-explain rather than inventing a second fold: same
+ * marker suppression, same muted summary, same focus ring.
+ */
+.ses-fold > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--t-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+  padding: var(--space-1) 0;
+  transition: color 0.12s ease;
+}
+.ses-fold > summary::-webkit-details-marker { display: none; }
+.ses-fold > summary:hover { color: var(--ink); }
+.ses-fold > summary:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; border-radius: var(--r-xs); }
+.ses-fold-body { margin-top: var(--space-2); }
