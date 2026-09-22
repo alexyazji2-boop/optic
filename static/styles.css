@@ -12940,3 +12940,95 @@ main { padding-top: var(--space-7); }
   .search input { width: 100%; min-width: 0; }
   .search { flex: 1 1 auto; min-width: 0; }
 }
+
+/* ======================================================= home: Today ========
+ *
+ * A digest band, not a dashboard card. The distinction is load-bearing: this
+ * sits above the search on the first screen a reader sees, so it has to be
+ * readable at a glance and must not push the search below the fold. Three
+ * columns, two rows each, one line per row.
+ *
+ * Measured at 880x965 before it existed: 364px of chrome, then the brand
+ * lockup, search and quick picks taking 320px of the 601 left above the fold.
+ * The terminal's own name was the first thing on the page and the next five
+ * days of scheduled releases were on another tab.
+ */
+.hm-today {
+  margin: var(--space-3) 0 var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.ht-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.ht-title { font-size: var(--t-lead); margin: 0; }
+.ht-sub { font-size: var(--t-small); color: var(--ink-muted); }
+/* Pushed to the far end rather than sitting beside the title: it leaves the
+   page, and a link that leaves should not read as part of the heading. */
+.ht-more {
+  margin-left: auto;
+  font: inherit;
+  font-size: var(--t-small);
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--s1);
+  cursor: pointer;
+  /* Required, and the app-wide rule is right: fifty-eight of eighty-three
+     hover rules once snapped while a handful eased, which reads as unfinished.
+     See test_every_hover_state_transitions. */
+  transition: color 0.12s ease;
+}
+.ht-more:hover { color: var(--ink); text-decoration: underline; }
+.ht-more:focus-visible { outline: 2px solid var(--s1); outline-offset: 3px; border-radius: var(--r-xs); }
+
+/* auto-fit rather than three fixed columns: a degraded feed can return one or
+   two, and two columns holding a third of the width each with a gap where the
+   third should be reads as a missing panel rather than as fewer panels. */
+.ht-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--space-4) var(--space-5);
+}
+.ht-col { min-width: 0; }
+.ht-col-name {
+  font-size: var(--t-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-muted);
+  font-weight: 500;
+  margin: 0 0 var(--space-2);
+}
+.ht-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); }
+/* Three parts on one line: impact, what, when. `what` is the only one allowed
+   to shrink, and it truncates rather than wrapping -- a two-line row in a
+   digest breaks the scan down the column. The full text is in the title. */
+.ht-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--t-small);
+}
+.ht-what {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.ht-when { flex: none; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.ht-rest { margin: var(--space-1) 0 0; font-size: var(--t-caption); color: var(--ink-muted); }
+
+/* On a phone the three columns stack, and the band is the first thing under
+   the market strip -- so it is capped to what fits without pushing the search
+   off the screen entirely. */
+@media (max-width: 559px) {
+  .hm-today { padding: var(--space-3) var(--space-4); }
+  .ht-cols { gap: var(--space-3); }
+}

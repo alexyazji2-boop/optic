@@ -2774,6 +2774,22 @@ function renderHome() {
         * height, so nothing below it jumps when it arrives. */''}
     <div id="cc-strip"></div>
 
+    ${/* What matters today, above the search rather than below it.
+        *
+        * Measured on this page at 880x965: 364px of chrome before `.home`
+        * starts, then the brand lockup, the search and the quick picks take
+        * 320px of the 601 left above the fold. What a reader saw first was the
+        * product's own name. The highest-value thing the terminal knows -- the
+        * next five days of scheduled releases, which watchlist names report
+        * this week, and which sectors changed state overnight -- was on a
+        * different tab entirely, eight thousand pixels down Optic's Read.
+        *
+        * Same endpoint and the same rows as that panel, three columns deep
+        * instead of all of them, and it links through rather than restating
+        * the tab. Hidden until it has something: a band that says "nothing
+        * scheduled" on a quiet day is worse than no band. */''}
+    <div id="hm-today" class="hm-today" hidden></div>
+
     ${/* Asked once, on the first visit, and never again.
         *
         * A card on the page rather than a modal over it. Nothing gates this
@@ -2879,6 +2895,11 @@ function renderHome() {
 
   // The market screen loads on its own; see loadHomeMarket.
   loadHomeMarket();
+  /* And the digest on its own again, so neither waits for the other. This one
+   * is one small request against a store the Read tab has usually already
+   * warmed, and the market screen is four legs; sequencing them would hold the
+   * top of the page behind the middle of it. */
+  loadHomeToday();
   // No autofocus any more. It used to be right when the page was a search box
   // and nothing else; now there is a market summary underneath and stealing
   // focus means a keystroke lands in a field instead of scrolling the page.
@@ -2922,6 +2943,83 @@ function homeData() {
     .then((d) => { STATE.home = d; homeDataAt = Date.now(); return d; })
     .finally(() => { homeDataInFlight = null; });
   return homeDataInFlight;
+}
+
+/* The three impact levels /api/priority publishes, as a whitelist.
+ *
+ * Declared here rather than beside `renderPriority`, which is where it used to
+ * live and is still its other caller. A const 7,500 lines below a function
+ * that reads it is a temporal dead zone, and the only reason the browser never
+ * hit it is that every call happened after the file finished evaluating. The
+ * jsc harness stops part-way through on purpose, and threw on the first run.
+ */
+const PRI_IMPACT_CLASS = { high: 'high', medium: 'medium', low: 'low' };
+
+/* The three columns worth showing on a home page, in the order a reader
+ * needs them: what is scheduled, who reports, what already moved.
+ *
+ * /api/priority publishes four. `sectors` is a count rather than a list of
+ * names -- ten rows of sector names is a table, and this is a digest. */
+const HOME_TODAY_COLUMNS = ['events', 'earnings', 'sectors'];
+const HOME_TODAY_ROWS = 2;
+
+function homeTodayRow(r) {
+  const impact = PRI_IMPACT_CLASS[r.impact] || 'low';
+  /* `short` is the terse form -- "COT" for the Commitments of Traders report --
+   * and it is empty on most rows. The title is the fallback rather than the
+   * other way round, because a blank cell reads as a fault. */
+  const when = (r.when || r.time || '').trim();
+  return `<li class="ht-row">
+    <span class="cal-impact ${impact}">${esc(r.impact || 'low')}</span>
+    <span class="ht-what" title="${esc(r.why || '')}">${esc(r.title || r.short || '')}</span>
+    ${when ? `<span class="ht-when">${esc(when)}</span>` : ''}
+  </li>`;
+}
+
+function homeTodayHTML(p) {
+  if (!p || p.available === false) return '';
+  const byId = {};
+  (p.columns || []).forEach((c) => { byId[c.id] = c; });
+  const cols = HOME_TODAY_COLUMNS
+    .map((id) => byId[id])
+    .filter((c) => c && (c.rows || []).length);
+  if (!cols.length) return '';
+  const horizon = Number(p.horizon_days) || 0;
+  return `<div class="ht-head">
+      <h2 class="ht-title">Today</h2>
+      ${horizon ? `<span class="ht-sub">Next ${fmt(horizon, 0)} days</span>` : ''}
+      <button type="button" class="ht-more" data-goto-view="brief"
+        >The full read \u2192</button>
+    </div>
+    <div class="ht-cols">${cols.map((c) => {
+    const rows = (c.rows || []).slice(0, HOME_TODAY_ROWS);
+    const rest = (c.total || rows.length) - rows.length;
+    return `<section class="ht-col">
+        <h3 class="ht-col-name" title="${esc(c.blurb || '')}">${esc(c.name || c.id)}</h3>
+        <ul class="ht-list">${rows.map(homeTodayRow).join('')}</ul>
+        ${rest > 0 ? `<p class="ht-rest">${fmt(rest, 0)} more</p>` : ''}
+      </section>`;
+  }).join('')}</div>`;
+}
+
+/* Not through mountPanel: that falls back to re-rendering Optic's Read when its
+ * host is missing, which is right for the Read tab's hosts and wrong for a home
+ * page one -- leaving Home would repaint a tab the reader is not on. */
+async function loadHomeToday() {
+  const host = document.getElementById('hm-today');
+  if (!host) return;
+  if (!STATE.priority) {
+    try {
+      STATE.priority = await getJSON('/api/priority');
+    } catch (err) {
+      return;              // the rest of Home is unaffected; say nothing
+    }
+  }
+  const live = document.getElementById('hm-today');
+  if (!live) return;       // the reader left while it was in flight
+  const html = homeTodayHTML(STATE.priority);
+  live.innerHTML = html;
+  live.hidden = !html;
 }
 
 async function loadHomeMarket(opts = {}) {
@@ -10480,7 +10578,6 @@ function renderRevenueMultiple(rm) {
  * Preview three per column with the full list behind a disclosure, rather than
  * four scrolling columns — the point is a glance, and a board you have to scroll
  * is a list again. */
-const PRI_IMPACT_CLASS = { high: 'high', medium: 'medium', low: 'low' };
 
 function priorityRow(r, repeat) {
   const label = r.ticker
