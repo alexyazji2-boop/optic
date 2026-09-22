@@ -1,4 +1,4 @@
-"""Optic's Positions — a public paper-trading ledger.
+"""Optic Portfolio — a public paper-trading ledger.
 
 The terminal takes its own simulated trades so its recommendations carry a
 visible track record instead of only ever being forward-looking claims. One

@@ -3207,7 +3207,7 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
 /* -------------------------------------------------- tile rows fill their width
  *
  * `.grid.c4` and `.grid.c3` hold rows of small stat tiles. As CSS grid, a row
- * that isn't full leaves real empty cells: measured on Optic's Positions, four
+ * that isn't full leaves real empty cells: measured on Optic Portfolio, four
  * tiles resolved to three columns, so the fourth sat alone with 589px of nothing
  * beside it — five times on that tab, and the same shape on Earnings, Roth and
  * Long-Term.

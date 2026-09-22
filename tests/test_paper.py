@@ -1,4 +1,4 @@
-"""Exit-rule and sizing tests for Optic's Positions (app/paper.py).
+"""Exit-rule and sizing tests for Optic Portfolio (app/paper.py).
 
 These are here because of one specific bug: a long put stores `direction =
 "long"` (the premium is owned), and the underlying-stop check read that field

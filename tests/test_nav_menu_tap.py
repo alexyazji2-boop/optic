@@ -200,7 +200,7 @@ def test_the_tap_path_returns_instead_of_falling_through():
 
 
 def test_a_single_page_section_still_navigates_on_tap():
-    """Home, Compare, Explore, Scan and Optic's Positions have one page each, so
+    """Home, Compare, Explore, Scan and Optic Portfolio have one page each, so
     paintNav gives them a plain button with no .nav-item wrapper and no menu.
     Requiring the wrapper is what keeps them navigating."""
     branch = group_button_branch()

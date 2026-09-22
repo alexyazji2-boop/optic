@@ -388,8 +388,8 @@ const HEADER_DEFS = {
   'overlap in your holdings': "Pairs of your holdings that move almost identically. Owning both feels like diversification but isn't. It's one bet at double the size, with twice the paperwork.",
   'individual stock sleeve': "An optional slice for single companies, capped by your risk setting and horizon, with each candidate gated on its long-run record. The concentrated part of the portfolio, sized so a single blow-up can't derail the plan.",
 
-  // ---- optic's positions
-  "optic's positions": "The terminal's own simulated trading record. Whenever a scan finds a setup that clears the conviction bar, it takes the trade on paper. Both as shares and as the option contract it recommended. And holds it until a stop, target, time limit or expiry closes it. It exists so the recommendations can be judged on results instead of on how confident they sound.",
+  // ---- optic portfolio
+  "optic portfolio": "The terminal's own simulated trading record. Whenever a scan finds a setup that clears the conviction bar, it takes the trade on paper. Both as shares and as the option contract it recommended. And holds it until a stop, target, time limit or expiry closes it. It exists so the recommendations can be judged on results instead of on how confident they sound.",
   'track record': "Results across every closed trade. Win rate on its own is close to meaningless. A strategy can win 70% of the time and still lose money if the losses are bigger. Expectancy, the average result per trade, is the number that decides whether an edge exists.",
   'open positions': "Trades the terminal currently holds on paper, marked at the latest available price. These P&L numbers move with the market and are not final. Nothing counts until the position closes.",
   'closed trades': "Every completed trade with the reason it ended. The exit reasons are the honest part: a record full of time stops means the signals were early or wrong, not just unlucky.",
@@ -2731,14 +2731,14 @@ const HOME_SECTIONS = [
       {
         view: 'tracker',
         color: 'var(--s2)',
-        title: "Optic's Positions",
+        title: "Optic Portfolio",
         body: "The terminal's own paper-traded record. When a scan finds a setup good enough it takes the trade. As shares and as the option it recommended, with a stop, a target and a size, then holds it to the exit. Book-level risk sits above it: whether those positions are separate bets or one bet with several tickets.",
       },
       {
         view: 'tracker',
         color: 'var(--s8)',
         title: 'Roth IRA model',
-        body: 'Inside Optic\'s Positions. A rules-based model allocation of low-cost index funds from your horizon and risk tolerance, with cost, correlation and a contribution projection. Not advice. A baseline to compare your own plan against.',
+        body: 'Inside Optic Portfolio. A rules-based model allocation of low-cost index funds from your horizon and risk tolerance, with cost, correlation and a contribution projection. Not advice. A baseline to compare your own plan against.',
       },
     ],
   },
@@ -3228,7 +3228,7 @@ function renderHomeStatus(health) {
  * This bar said "Analyse" for the view the desktop strip calls "Dossier", and
  * "Ask" for the panel the header button calls "Pulse" -- two names for each of
  * two things, which is the same fault the nav group comments already record
- * fixing for "Optic's Positions". A reader moving between a laptop and a phone
+ * fixing for "Optic Portfolio". A reader moving between a laptop and a phone
  * was being asked to learn the product twice. */
 const MOBILE_TABS = [
   { view: 'home', label: 'Home', icon: '&#9750;' },
@@ -6045,7 +6045,7 @@ const PALETTE_PLACES = [
   { view: 'financials', label: 'Financials',
     terms: 'financials revenue margin cash ownership short interest statements' },
   { view: 'news', label: 'News', terms: 'news headlines catalysts sentiment company' },
-  { view: 'tracker', label: "Optic's Positions", terms: 'positions ledger record paper trades book' },
+  { view: 'tracker', label: "Optic Portfolio", terms: 'positions ledger record paper trades book' },
   { view: 'roth', label: 'Roth planner',
     terms: 'roth ira retirement allocation contribution funds long term planner' },
   { view: 'settings', label: 'Settings', terms: 'settings appearance theme timezone preferences' },
@@ -13295,7 +13295,7 @@ function wsSetOverlay(id, on) {
 
 /* The ledger for the trading widget.
  *
- * Deliberately not loadTracker(): that one renders the whole Optic's Positions
+ * Deliberately not loadTracker(): that one renders the whole Optic Portfolio
  * view and calls beginLoad on it, which from here means building a few hundred
  * nodes into a hidden tab to fill one 260px panel. This fetches the same payload
  * and repaints just the widget.
@@ -14648,7 +14648,7 @@ function wsWidgetBody(id) {
   if (id === 'trading') {
     const t = STATE.tracker;
     if (!t) return `${none('Ledger not loaded.')}
-      <button type="button" class="btn" data-goto-view="tracker">Open Optic's Positions</button>`;
+      <button type="button" class="btn" data-goto-view="tracker">Open Optic Portfolio</button>`;
     const mine = (t.open || []).filter((p) => p.ticker === sym);
     const s2 = t.summary || {};
     return `<table class="data narrow"><tbody>
@@ -18556,7 +18556,7 @@ function renderEarnings(d) {
  * with. Storing it locally keeps the only copy on their machine. */
 const ROTH_STORE_KEY = 'optic.roth.inputs';
 
-/** Where the Roth section renders, inside Optic's Positions.
+/** Where the Roth section renders, inside Optic Portfolio.
 
     A function rather than a cached node: the tracker view re-renders and a held
     reference would point at a detached element, which is the same trap the
@@ -19084,7 +19084,7 @@ function renderSettings() {
         ? ASSISTANT_NAME + ' is configured and answering'
         : ASSISTANT_NAME + ' is switched off in this build';
     })()],
-    ['Optic\u2019s Positions', 'One shared simulated ledger, no real money'],
+    ['Optic Portfolio', 'One shared simulated ledger, no real money'],
     ['Stored on this device', 'Theme, time zone, chart preferences and any Roth holdings you enter'],
     ['Stored on the server', signedIn()
       ? 'Your account: name, email, watchlists, saved research, preferences and sessions'
@@ -19822,7 +19822,7 @@ if (window.OpticAuth) {
   });
 }
 
-/* ======================================================= OPTIC'S POSITIONS */
+/* ======================================================= OPTIC PORTFOLIO */
 
 const money = (v, digits = 0) => (v === null || v === undefined || Number.isNaN(v)
   ? '—'
@@ -20339,7 +20339,7 @@ function renderBookSelector(d) {
     </button>`;
   }).join('');
 
-  /* `gap` because this panel sits directly above Optic's Positions and was the
+  /* `gap` because this panel sits directly above Optic Portfolio and was the
      one block on the page without it: measured, every other sibling pair on
      the tracker view is 23px apart and this boundary was 0, so the books
      panel's closing caveat ran straight into the next heading. */
@@ -20486,7 +20486,7 @@ function renderTracker(d) {
   ${renderBookSelector(d)}
 
   <div class="panel span2 gap">
-    <h2>${hg("Optic's Positions")}</h2>
+    <h2>${hg("Optic Portfolio")}</h2>
     <p class="sub">One shared, simulated ledger. The same record for everyone who opens this page.
       It trades the terminal's own signals with fixed rules, in both instruments the Swing tab
       produces: the shares, and the exact option contract it recommended.</p>
@@ -23828,7 +23828,7 @@ function friendlyMarketState(raw) {
 // enough to tell apart at 6px tall, and the same colours drive the dot, the
 // segment and the legend so there's nothing to cross-reference.
 // Views where the loaded symbol is the subject. Everywhere else — Indices,
-// Macro, Roth, Optic's Positions, Settings, Home — the tab is about the market or
+// Macro, Roth, Optic Portfolio, Settings, Home — the tab is about the market or
 // the app, so a company profile and one stock's closing price are just noise
 // carried over from whatever was loaded last.
 const TICKER_VIEWS = ['swing', 'earnings', 'long'];
@@ -24182,7 +24182,7 @@ function updateStatus() {
   const quote = d.quote || {};
   // Investing nests everything under `holding` and carries a bare `price`.
   const holding = d.holding || {};
-  // Market-wide views aren't about the loaded symbol — Optic's Positions is one
+  // Market-wide views aren't about the loaded symbol — Optic Portfolio is one
   // shared ledger, so prefixing it with whatever ticker happens to be loaded
   // would imply the two are related.
   const tickerViews = ['swing', 'earnings', 'long'];
@@ -24257,7 +24257,7 @@ function updateStatus() {
     parts.push(`Regime: ${esc(cap((d.macro || {}).regime) || 'n/a')}`);
   } else if (STATE.view === 'tracker') {
     const s = d.summary || {};
-    parts.push(`Optic's Positions: ${s.open_count || 0} open · ${s.closed_count || 0} closed`);
+    parts.push(`Optic Portfolio: ${s.open_count || 0} open · ${s.closed_count || 0} closed`);
     parts.push(`<span class="${signClass(s.total_pnl)}">${fmtPct(s.return_pct, 2)}</span>`);
   }
 
@@ -25769,7 +25769,7 @@ const SUB_LABELS = {
   brief: 'Read', market: 'Macro', indices: 'Indices',
   watchlist: 'Watchlist', alerts: 'Alerts',
   explore: 'Explore', scan: 'Scan',
-  tracker: "Optic's Positions", roth: 'Roth planner',
+  tracker: "Optic Portfolio", roth: 'Roth planner',
 };
 
 const SUB_TITLES = {
@@ -25789,7 +25789,7 @@ const SUB_TITLES = {
   alerts: 'Alerts. What fired, and why it was worth telling you',
   explore: 'Explore. Browse sectors, themes and what is moving, with no symbol',
   scan: 'Scan. Named screens over the ranked universe',
-  tracker: "Optic's Positions. The terminal's own paper-traded record",
+  tracker: "Optic Portfolio. The terminal's own paper-traded record",
   roth: 'Roth planner. A rules-based model allocation to compare your own against',
 };
 
@@ -26080,7 +26080,7 @@ const VIEW_NAMES = {
   chart: 'Charting',
   home: 'Home', swing: 'Swing', earnings: 'Earnings',
   market: 'Macro', indices: 'Indices', long: 'Investing', roth: 'Roth',
-  tracker: "Optic's Positions", settings: 'Settings', brief: "Optic's Read",
+  tracker: "Optic Portfolio", settings: 'Settings', brief: "Optic's Read",
 };
 
 // The logo goes home, the way it does on essentially every site. It was a plain
@@ -26351,7 +26351,7 @@ function loadTicker(raw, destination) {
   loadSession(true);
   // Coming from home there's nothing to show on home, so land on the analysis.
   // `destination` is for callers that must leave their own tab. Clicking a
-  // holding in Optic's Positions means "show me why", which is the swing read,
+  // holding in Optic Portfolio means "show me why", which is the swing read,
   // not a re-render of the ledger you were already looking at.
   /* Overview rather than swing, now that the workspace has a front door. The
    * analysis page is twenty-four panels deep; opening a symbol there was the

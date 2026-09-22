@@ -1,6 +1,6 @@
 """Portfolio-level risk: are these separate bets, or one bet with several tickets?
 
-Optic's Positions reports each trade on its own — entry, stop, target, risk in
+Optic Portfolio reports each trade on its own — entry, stop, target, risk in
 dollars. That is the right view for managing a position and the wrong view for
 managing a book. Six longs in semiconductors have six stops and one outcome, and
 nothing in a per-trade ledger will ever say so.

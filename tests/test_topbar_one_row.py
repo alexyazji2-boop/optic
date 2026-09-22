@@ -2,7 +2,7 @@
 
 Seven nav groups, a brand, a search box and three controls on the right stopped
 fitting, and the strip did what `flex-wrap: wrap` told it to: at 1440 six groups
-sat on row one and "Optic's Positions" alone on row two, a 114px header where 68
+sat on row one and "Optic Portfolio" alone on row two, a 114px header where 68
 does the job.
 
 The fix took the width out of padding and gaps rather than out of the labels or

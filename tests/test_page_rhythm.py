@@ -4,7 +4,7 @@
 forget: measured across all nineteen views, sixteen boundaries had no space at
 all, so a panel's closing caveat ran into the next heading. The daily Read was
 the worst, seven flush boundaries down one page, and the one that was reported
-was the books panel running into Optic's Positions.
+was the books panel running into Optic Portfolio.
 
 Opt-in spacing cannot be held consistent by hand. A new panel is correct only if
 whoever wrote it remembered a class that does nothing visible when it is absent,

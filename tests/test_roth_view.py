@@ -1,4 +1,4 @@
-"""The Roth planner was a second product inside Optic's Positions.
+"""The Roth planner was a second product inside Optic Portfolio.
 
 It rendered into `#roth-host`, a div in the middle of `renderTracker`. With a
 section index on that view the shape of it is plain: fifteen sections, of which
@@ -13,7 +13,7 @@ retirement or tax advice"; the render pass is what inserts those, and it was
 keyed to `roth`, which was not a view. So a reader planning a Roth IRA read the
 banner about hypothetical paper options trades instead.
 
-Measured after the split: Optic's Positions went from fifteen sections and
+Measured after the split: Optic Portfolio went from fifteen sections and
 2,719px to eight and 2,018px, and the planner became a 7-section page with its
 own index and its own notice.
 """
