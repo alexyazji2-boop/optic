@@ -4008,7 +4008,23 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
   max-width: 78ch;
 }
 .cat-themes { font-size: var(--t-micro); color: var(--ink-muted); }
-.cat-body { padding: 0 var(--space-4) var(--space-4); }
+/* The catalyst table is wider than the card and nothing could scroll to it.
+ *
+ * Measured at 1280px: the table ran to x=1395 against a panel ending at 1251,
+ * and the panel was NOT scrollable -- scrollWidth equalled clientWidth -- so
+ * 144px of columns were clipped and unreachable rather than merely off to one
+ * side. `table.data` carries `min-width: 480px`, and an overflow that escapes
+ * a `visible` parent does not always give the scrolling ancestor anything to
+ * scroll.
+ *
+ * `min-width: 0` plus a scroller of its own is the same containment
+ * `.panel .grid > *` already uses a few hundred lines up, for the same reason
+ * and after the same symptom. */
+.cat-body {
+  padding: 0 var(--space-4) var(--space-4);
+  min-width: 0;
+  overflow-x: auto;
+}
 
 .cat-tag {
   font-size: var(--t-micro);
@@ -4133,7 +4149,7 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
   background: var(--ink);
   border: 2px solid var(--surface);
   transform: translateY(-50%);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  box-shadow: var(--elev-1);
 }
 .fg-scale-labels {
   display: flex;
@@ -8651,6 +8667,9 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
   background: var(--glass);
   border: 1px solid var(--glass-edge);
   border-radius: var(--r-chrome);
+  /* Sticky, with the page scrolling underneath it. A 1px edge is not enough
+     to say which one is on top once anything is moving. */
+  box-shadow: var(--elev-1);
 }
 /* Hidden, because a 10px bar under a 26px chip is most of the row's height.
    The edge fades below carry the "there is more" signal instead, and the wheel
