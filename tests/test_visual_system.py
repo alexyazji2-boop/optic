@@ -112,3 +112,41 @@ def test_the_catalyst_table_can_be_scrolled_to():
     assert "min-width: 0" in body[0] and "overflow-x: auto" in body[0]
     assert ".panel .grid > * { min-width: 0; overflow-x: auto; }" in CSS, \
         "the pattern this copies"
+
+
+# ------------------------------------------------- charting: the chart wins
+
+
+def test_the_charting_tab_gives_up_the_session_legend():
+    """Measured at 1280x900 with NVDA charted: 347px of chrome above the
+    workspace, a 97px toolbar inside it, and a 309px chart -- a third of the
+    screen on the one tab whose whole job is the chart. Dropping the phase
+    legend there took the session bar 204px -> 86px and the chart 309 -> 362.
+    At 768 the chart is 501px and at 375 it is 529px.
+
+    The legend decodes a 24-hour strip that the chart's own time axis already
+    covers, and `.ses-main` names the phase in words directly above it. Every
+    other view keeps it, because there the strip is the only session context
+    on the page.
+
+    Keyed on `body[data-view]` because `#sessionbar` is a sibling of the views
+    rather than a child of one."""
+    assert 'body[data-view="chart"] .ses-legend' in CSS
+
+
+def test_it_never_gives_up_the_staleness_warning():
+    """`.ses-fold` and not `.ses-desc`. The fold only exists in the phases
+    where the description is background; overnight, holiday and the weekend
+    render it as a plain div with no fold class, so the sentence saying the
+    price on screen is not live survives on the chart tab exactly as it does
+    everywhere else.
+
+    Verified by driving renderSessionBar into the overnight phase with the
+    chart tab open: the description rendered, visible, and not as a fold."""
+    rule = [ln for ln in CSS.split("\n")
+            if 'body[data-view="chart"]' in ln and "ses-" in ln]
+    assert rule, "the charting session rule is gone"
+    joined = " ".join(rule)
+    assert ".ses-fold" in joined
+    assert ".ses-desc" not in joined, \
+        "hiding .ses-desc would take the staleness warning with it"

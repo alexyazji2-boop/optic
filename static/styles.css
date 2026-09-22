@@ -13205,3 +13205,29 @@ main { padding-top: var(--space-7); }
 .ses-fold > summary:hover { color: var(--ink); }
 .ses-fold > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-xs); }
 .ses-fold-body { margin-top: var(--space-2); }
+
+/* ------------------------------------------- charting: give the chart the screen
+ *
+ * Measured at 1280x900 with NVDA charted: 347px of chrome above the workspace
+ * (top bar, session bar, facet strip), a 97px four-row toolbar inside it, and
+ * a 309px chart. A third of the screen, on the one tab whose entire job is the
+ * chart.
+ *
+ * The session bar's `#ses-detail` is the part this view can give up. The phase
+ * legend decodes a 24-hour strip that the chart's own time axis already
+ * covers, and the phase is named in words in `.ses-main` directly above it.
+ * Every other view keeps both, because on those the strip is the only session
+ * context on the page.
+ *
+ * `.ses-fold` and not `.ses-desc`: the fold only exists in the phases where
+ * the description is background (see SESSION_CAVEAT_PHASES). Overnight,
+ * holiday and weekend render the description as a plain div with no `.ses-fold`
+ * class, so the sentence saying the price on screen is not live survives here
+ * exactly as it does everywhere else. Hiding a staleness warning to buy chart
+ * height would be the worst version of this trade.
+ *
+ * Keyed on body[data-view] because #sessionbar is a sibling of the views
+ * rather than a child of one, so the workspace cannot reach it by descent.
+ */
+body[data-view="chart"] .ses-legend,
+body[data-view="chart"] .ses-fold { display: none; }
