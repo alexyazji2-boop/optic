@@ -5933,24 +5933,189 @@ function whatMattersNow(data) {
  * the question already typed rather than answering inline, because the answer
  * costs an API call and nobody should pay for five of them on page load.
  */
+/* The trading date, as an integer, from the server's ET clock.
+ *
+ * `session.now_et` is what `app/session.py` computed, and that module is
+ * authoritative: CLAUDE.md is explicit that calendar logic does not go on the
+ * client, because duplicating it is what once had the app reporting a regular
+ * session on Labor Day. This reads the date off the answer rather than
+ * deriving one. It is also why the browser's own clock is not used -- a reader
+ * in Tokyo would otherwise roll over to tomorrow's questions mid-afternoon.
+ *
+ * Null when the field is absent, and the caller treats that as "do not
+ * rotate": an unrotated list is the behaviour this replaced, which is a
+ * better failure than a list that reshuffles on every refresh tick.
+ */
+function marketDayKey(data) {
+  const iso = (((data || {}).session) || {}).now_et;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+  if (!m) return null;
+  return Math.floor(Date.UTC(+m[1], +m[2] - 1, +m[3]) / 86400000);
+}
+
+/* The questions Pulse offers, as a pool rather than a list.
+ *
+ * Five of these used to render every day in the same order, and two of them
+ * -- "Is this rally broadening or narrowing?" and "What is the market
+ * expecting from the Fed?" -- were the same sentence every single day. The
+ * other three were one sentence each with a number swapped in. A panel that
+ * says the same thing daily stops being read.
+ *
+ * Each entry returns its question or null, and null means the payload does
+ * not support it: a question that names a number has to name a real one, so
+ * every reading is checked before it is used rather than defaulted. The
+ * rotation runs over the POOL, at its fixed length, not over the ones that
+ * happened to resolve -- otherwise an instrument going quiet for an hour
+ * would renumber the offset and reshuffle the panel mid-session.
+ */
+const MARKET_QUESTION_POOL = [
+  {
+    id: 'vix',
+    make: (d) => {
+      const vix = stripInstrument(d, 'volatility', 'VIX');
+      if (!vix || vix.last === null || vix.last === undefined) return null;
+      return `VIX is at ${vix.last.toFixed(1)}. Is the market underpricing risk?`;
+    },
+  },
+  {
+    id: 'regime',
+    make: (d) => {
+      const regime = (d.macro || {}).regime;
+      return regime ? `The regime reads ${regime}. What would change it?` : null;
+    },
+  },
+  {
+    id: 'ratio',
+    make: (d) => {
+      // The cross-asset ratio that has moved most over twenty days, described
+      // with the reading the payload already carries for it -- so the question
+      // and the Ratios panel cannot disagree about what the pair means.
+      const rs = ((d.macro || {}).ratios || [])
+        .filter((r) => r.name && r.chg_20d !== null && r.chg_20d !== undefined);
+      if (!rs.length) return null;
+      const top = rs.reduce((a, b) => (Math.abs(b.chg_20d) > Math.abs(a.chg_20d) ? b : a));
+      const dir = top.chg_20d >= 0 ? 'up' : 'down';
+      const reads = String(top.reads || '').split(/[;.]/)[0].trim().toLowerCase();
+      return `${top.name} is ${dir} ${Math.abs(top.chg_20d).toFixed(1)}% over twenty days`
+        + `${reads ? `, which reads as ${reads}` : ''}. Does that hold up?`;
+    },
+  },
+  {
+    id: 'breadth',
+    make: (d) => {
+      // Replaces a standing "is this rally broadening or narrowing?" with the
+      // same question against the count that would answer it.
+      const c = ((d.indices || {}).counts) || {};
+      const up = Number(c.uptrend) || 0;
+      const down = Number(c.downtrend) || 0;
+      const total = ['uptrend', 'downtrend', 'neutral']
+        .reduce((n, k) => n + (Number(c[k]) || 0), 0);
+      if (!total) return null;
+      return `${up} of ${total} index groups are in an uptrend and ${down} in a `
+        + `downtrend. Is this broadening or narrowing?`;
+    },
+  },
+  {
+    id: 'curve',
+    make: (d) => {
+      const c = (d.macro || {}).curve_3m10y;
+      if (c === null || c === undefined || !isFinite(c)) return null;
+      const shape = c < 0 ? 'inverted' : 'positive';
+      return `The 3m/10y spread is ${c >= 0 ? '+' : ''}${Number(c).toFixed(2)} and `
+        + `${shape}. What is the curve saying about growth from here?`;
+    },
+  },
+  {
+    id: 'credit',
+    make: (d) => {
+      const hyg = stripInstrument(d, 'credit', 'HYG');
+      if (!hyg || hyg.chg_20d === null || hyg.chg_20d === undefined) return null;
+      const dir = hyg.chg_20d >= 0 ? 'up' : 'down';
+      return `High yield is ${dir} ${Math.abs(hyg.chg_20d).toFixed(1)}% over twenty `
+        + `days. Is credit agreeing with equities?`;
+    },
+  },
+  {
+    id: 'commodity',
+    make: (d) => {
+      const rows = (((d.macro || {}).groups) || {}).commodities || [];
+      const ok = rows.filter((r) => r.chg_20d !== null && r.chg_20d !== undefined);
+      if (!ok.length) return null;
+      const top = ok.reduce((a, b) => (Math.abs(b.chg_20d) > Math.abs(a.chg_20d) ? b : a));
+      const dir = top.chg_20d >= 0 ? 'up' : 'down';
+      return `${top.label} is ${dir} ${Math.abs(top.chg_20d).toFixed(1)}% over twenty `
+        + `days. Is that demand or supply?`;
+    },
+  },
+  {
+    id: 'dollar',
+    make: (d) => {
+      const dxy = stripInstrument(d, 'fx', 'DXY') || stripInstrument(d, 'fx', 'Dollar');
+      if (!dxy || dxy.chg_20d === null || dxy.chg_20d === undefined) return null;
+      const dir = dxy.chg_20d >= 0 ? 'stronger' : 'weaker';
+      return `The dollar is ${Math.abs(dxy.chg_20d).toFixed(1)}% ${dir} over twenty `
+        + `days. Who does that hurt?`;
+    },
+  },
+  {
+    id: 'fed',
+    // Standing, and deliberately so: it is the question a reader asks on a day
+    // when nothing in the payload has moved enough to be worth naming.
+    make: () => 'What is the market expecting from the Fed?',
+  },
+];
+
+/* Pinned, not rotated, and that distinction is the whole reason it is here
+ * rather than in the pool above.
+ *
+ * A pool entry that resolves to null on most days does not just skip itself,
+ * it stalls the rotation: the offset advances by one, the entry that drops
+ * off the window was the null one, and the five questions on screen are
+ * identical to yesterday's. Measured before this moved -- 2026-09-23 and
+ * 2026-09-24 rendered the same list. Every remaining pool entry resolves on
+ * an ordinary day, so the window now genuinely turns over.
+ *
+ * It earns a pin on the days it does apply: when the market is shut, what to
+ * watch for the reopen is the most useful thing on the page. */
+function sessionQuestion(data) {
+  const s = (data || {}).session || {};
+  if (s.holiday) {
+    return `The market is closed for ${s.holiday}. What should I watch for the reopen?`;
+  }
+  if (s.phase === 'overnight' || s.phase === 'closed') {
+    return 'Single stocks are not trading. What are the futures telling me?';
+  }
+  return null;
+}
+
 function marketQuestions(data) {
   // Same ranking the list above uses. Two sorts would drift, and the question
   // would name an instrument that is not the one at the top of the list.
   const biggest = rankedMoves(data)[0];
-  const vix = stripInstrument(data, 'volatility', 'VIX');
-  const regime = (data.macro || {}).regime;
 
   const qs = [];
+  /* Pinned first, not rotated. It is the one question that is already
+     different every day on its own -- a different instrument and a different
+     number -- and it is the most topical thing on the page. The four below it
+     are what rotate. */
   if (biggest) {
     qs.push(`Why is ${biggest.label} ${biggest.chg_1d >= 0 ? 'up' : 'down'} `
       + `${Math.abs(biggest.chg_1d).toFixed(1)}% today?`);
   }
-  if (vix && vix.last !== null && vix.last !== undefined) {
-    qs.push(`VIX is at ${vix.last.toFixed(1)}. Is the market underpricing risk?`);
+
+  const shut = sessionQuestion(data);
+  if (shut) qs.push(shut);
+
+  const day = marketDayKey(data);
+  const pool = MARKET_QUESTION_POOL;
+  const offset = day === null ? 0 : ((day % pool.length) + pool.length) % pool.length;
+  for (let i = 0; i < pool.length; i += 1) {
+    const entry = pool[(offset + i) % pool.length];
+    let q = null;
+    // One bad entry must not empty the panel.
+    try { q = entry.make(data); } catch (e) { q = null; }
+    if (q && !qs.includes(q)) qs.push(q);
   }
-  if (regime) qs.push(`The regime reads ${regime}. What would change it?`);
-  qs.push('Is this rally broadening or narrowing?');
-  qs.push('What is the market expecting from the Fed?');
 
   return `<section class="hm-block">
     <div class="hm-block-head">

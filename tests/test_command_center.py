@@ -156,13 +156,108 @@ def test_the_movers_scan_does_not_hold_the_page():
 
 
 def test_the_questions_name_real_numbers():
-    """Generated from the day's biggest mover, the actual VIX level and the
-    actual regime, so they cannot go stale into a canned list."""
+    """Generated from the payload, so they cannot go stale into a canned list.
+
+    The VIX and regime readings this used to find inside `marketQuestions`
+    are in `MARKET_QUESTION_POOL` now; the property they were asserting is
+    unchanged and is checked across the whole pool below."""
     fn = _fn("marketQuestions")
     assert "rankedMoves(data)[0]" in fn
     assert "biggest.label" in fn and "biggest.chg_1d" in fn
-    assert "vix.last" in fn
-    assert "(data.macro || {}).regime" in fn
+    pool = _pool()
+    assert "vix.last" in pool
+    assert "(d.macro || {}).regime" in pool
+
+
+def _pool():
+    start = APP_JS.index("const MARKET_QUESTION_POOL = [")
+    return APP_JS[start:APP_JS.index("\n];", start)]
+
+
+def _pool_entries():
+    """Each `{ id: ..., make: ... }` in the pool, as source text."""
+    pool = _pool()
+    parts = re.split(r"\n  \{\n", pool)[1:]
+    return [p.split("\n  },", 1)[0] for p in parts]
+
+
+def test_every_question_reads_the_payload_or_is_a_standing_one():
+    """A question that names a number has to name a real one. The only
+    entries allowed to ignore the payload are the standing questions, which
+    name nothing -- and those have to be free of digits, or they are a canned
+    reading wearing a constant."""
+    entries = _pool_entries()
+    assert len(entries) >= 8, "found {} entries; the split is wrong".format(len(entries))
+    for e in entries:
+        eid = re.search(r"id: '([a-z]+)'", e).group(1)
+        reads = "(d" in e or "d." in e
+        if reads:
+            # Absent data must produce no question rather than a default.
+            # Either shape counts: an early `return null` guard, or a ternary
+            # whose miss branch is `: null`.
+            assert "return null" in e or ": null" in e, \
+                "{} has no null path".format(eid)
+        else:
+            body = e.split("make:", 1)[1]
+            assert not re.search(r"\d", body), \
+                "{} names a number without reading one".format(eid)
+
+
+def test_the_pool_rotates_on_the_servers_trading_date():
+    """Not the browser's clock: a reader in Tokyo would roll over to
+    tomorrow's questions mid-afternoon. And not on each render, or the panel
+    reshuffles on every twenty-second refresh tick."""
+    fn = _fn("marketDayKey")
+    assert "session) || {}).now_et" in fn, "the ET instant is the server's answer"
+    assert "return null" in fn
+    caller = _fn("marketQuestions")
+    assert "marketDayKey(data)" in caller
+    assert "day === null ? 0" in caller, "no date means do not rotate"
+    assert "% pool.length" in caller
+
+
+def test_the_rotation_runs_over_the_whole_pool_not_the_resolved_ones():
+    """Rotating over what happened to resolve would renumber the offset when
+    an instrument goes quiet for an hour, reshuffling the panel mid-session."""
+    fn = _fn("marketQuestions")
+    assert "const pool = MARKET_QUESTION_POOL;" in fn
+    assert "for (let i = 0; i < pool.length; i += 1)" in fn
+    # And one bad entry must not empty the panel.
+    assert "try { q = entry.make(data); } catch" in fn
+
+
+def test_a_mostly_null_question_is_pinned_rather_than_rotated():
+    """A pool entry that resolves to null on most days does not skip itself,
+    it stalls the rotation: the offset advances by one, the entry that leaves
+    the window is the null one, and the five on screen are yesterday's.
+
+    Measured with the session question inside the pool: 2026-09-23 and
+    2026-09-24 rendered identical lists. After moving it out, ten consecutive
+    dates against one payload gave zero consecutive duplicates and ten
+    distinct questions, and two renders of the same date were identical --
+    which is the other half, because the page refreshes every twenty
+    seconds."""
+    pool = _pool()
+    assert "id: 'session'" not in pool, \
+        "an entry that is usually null cannot be a rotation member"
+    fn = _fn("marketQuestions")
+    assert "sessionQuestion(data)" in fn
+    assert fn.index("sessionQuestion(data)") < fn.index("marketDayKey(data)"), \
+        "pinned means before the rotation, not appended after it"
+    sq = _fn("sessionQuestion")
+    assert "s.holiday" in sq and "overnight" in sq
+    assert "return null" in sq
+
+
+def test_the_two_questions_that_never_changed_are_gone_or_earned():
+    """"Is this rally broadening or narrowing?" and the Fed question rendered
+    verbatim every day. The first is now asked against the count that would
+    answer it; the second is kept deliberately, as the question for a day when
+    nothing in the payload has moved enough to name."""
+    pool = _pool()
+    assert "'Is this rally broadening or narrowing?'" not in pool
+    assert "Is this broadening or narrowing?" in pool
+    assert "index groups are in an uptrend" in pool
 
 
 def test_the_questions_share_the_ranking_with_the_list():
