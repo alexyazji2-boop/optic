@@ -1,0 +1,15 @@
+{
+  "name": "Optic Terminal",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "server",
+      "command": ".venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000",
+      "description": "Optic Terminal FastAPI dev server on http://127.0.0.1:8000"
+    }
+  ],
+  "ports": [
+    { "name": "web server", "port": 8000 }
+  ]
+}
