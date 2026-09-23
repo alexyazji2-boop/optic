@@ -73,9 +73,14 @@ def test_the_phone_heading_rule_reaches_it_too():
     of the phone list held these two titles at 20.7px while every other panel
     heading on the same page went to 21px."""
     phone = CSS_CODE.split("@media (max-width: 559px) {", 1)[1]
-    line = [ln for ln in phone.splitlines() if "font-size: 21px" in ln and ".panel > h2" in ln]
-    assert line, "the phone heading rule is gone"
-    assert ".panel > .wv-head h2" in line[0]
+    # On the selector, not on `font-size: 21px`. That literal is gone: it was
+    # 0.3px off --t-heading at the default scale and frozen at every other.
+    sel = [ln for ln in phone.splitlines()
+           if ".panel > h2" in ln and ".hm-h" in ln]
+    assert sel, "the phone heading rule is gone"
+    assert ".panel > .wv-head h2" in sel[0]
+    rule = phone.split(sel[0], 1)[1]
+    assert "font-size: var(--t-heading)" in rule[:rule.index("}")]
 
 
 def test_the_alert_blocks_are_spaced_by_the_panel_and_not_by_themselves():

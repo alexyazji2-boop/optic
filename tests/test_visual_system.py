@@ -51,9 +51,13 @@ def test_the_panel_heading_has_one_declaration_that_sets_its_size():
 
 
 def test_a_panel_heading_is_not_display_type():
-    """The display face and 32px belong to the one thing a page is about. A
-    panel heading repeats down the view."""
-    block = re.search(r"\nh2,([^{]*)\{([^}]*font-size:\s*32px[^}]*)\}", CSS)
+    """The display face and the title tier belong to the one thing a page is
+    about. A panel heading repeats down the view.
+
+    Matched on `--t-title` rather than on `32px`: that literal was the whole
+    reason the tier could not follow --ui-scale, and a test anchored to it
+    would have had to be rewritten to allow the fix it was guarding."""
+    block = re.search(r"\nh2,([^{]*)\{([^}]*font-size:\s*var\(--t-title\)[^}]*)\}", CSS)
     assert block, "the display-heading rule moved; check this test still points at it"
     assert ".panel > h2" not in block.group(1), \
         "panel headings are back in the display-heading list"

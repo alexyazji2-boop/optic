@@ -140,7 +140,16 @@ def test_the_scales_are_still_single_scales():
     and ten type steps, not eleven of one because a rule wanted something in
     between."""
     assert len(re.findall(r"^\s+--space-\d:", CSS, re.M)) == 10
-    assert len(re.findall(r"^\s+--t-[a-z0-9]+:", CSS, re.M)) == 10
+    # Twelve, not the ten this asserted first, and for the reason the radius
+    # note below already records: the count was guarding the wrong end. The
+    # heading ramp stopped at --t-heading, so the two tiers above it -- page
+    # titles and the home display line -- were written as literal `32px` and
+    # `clamp(34px, 3.4vw, 48px)` instead. That made them the only type in the
+    # product --ui-scale could not reach. Measured at 1440px across the three
+    # settings: body 11 -> 12.65 -> 14.3 while both of those stood still.
+    # Freezing the scale did not stop anyone picking a value; it removed the
+    # value they should have been picking.
+    assert len(re.findall(r"^\s+--t-[a-z0-9]+:", CSS, re.M)) == 12
     # Seven, not the five this asserted first.
     #
     # The count was guarding the wrong end. Five steps -- two of which were the
@@ -215,3 +224,96 @@ def test_the_dead_bg_hover_fallbacks_are_gone():
     can never reach its fallback. Two of the three fallbacks disagreed with each
     other anyway."""
     assert "var(--bg-hover, " not in CSS_NC
+
+
+# ------------------------------------------------- the top of the type ramp
+#
+# The heading ramp stopped at --t-heading, so the two tiers above it were
+# written as literals: page titles at `32px` and the home display line at
+# `clamp(34px, 3.4vw, 48px)`. That made them the only type in the product
+# --ui-scale could not reach, and --ui-scale is a user setting whose whole
+# stated purpose is to change "the absolute size of everything and none of the
+# relationships between any two things".
+#
+# Measured on the home page at 1440px across compact/default/large:
+#
+#   before   body 11 -> 12.65 -> 14.3   title 32 / 32 / 32    ratio 2.9 -> 2.24
+#   after    body 11 -> 12.65 -> 14.3   title 28 / 32.2 / 36.4   ratio 2.55 flat
+#
+# and hero 48 / 48 / 48 became 42 / 48.3 / 54.6, ratio 3.82 flat. The default
+# column is what the literals already rendered, so this changed how the sizes
+# respond rather than what they are.
+
+CSS_CODE = re.sub(r"/\*.*?\*/", "", CSS, flags=re.S)
+
+
+def test_the_two_heading_tiers_exist_and_scale():
+    for token, base in (("--t-title", "28px"), ("--t-hero", "42px")):
+        decl = re.search(re.escape(token) + r":\s*([^;]+);", CSS_CODE)
+        assert decl, token
+        value = decl.group(1)
+        assert "var(--ui-scale)" in value, \
+            "{} is the fault it was added to fix if it does not scale".format(token)
+        assert base in value
+
+
+def test_a_page_title_uses_the_token():
+    block = re.search(r"\nh2,([^{]*)\{([^}]*)\}", CSS_CODE)
+    assert block, "the display-heading rule moved"
+    assert "font-size: var(--t-title)" in block.group(2)
+
+
+def test_every_term_of_the_hero_clamp_scales():
+    """Scaling only the bounds leaves the middle term deciding at every width
+    where the clamp is not already pinned -- and on a 1440px desktop it is
+    pinned to the maximum, so the setting would have moved the hero by a
+    pixel."""
+    block = CSS_CODE.split("\nh1, .hero, .home-title {", 1)[1]
+    block = block[:block.index("}")]
+    clamp = re.search(r"clamp\(([^;]+)\)\s*;", block, re.S)
+    assert clamp, "the hero is no longer a clamp; check this test"
+    terms = clamp.group(1).split(",")
+    assert len(terms) == 3
+    for i, t in enumerate(terms):
+        assert "var(--ui-scale)" in t or "var(--t-hero)" in t, \
+            "clamp term {} does not scale: {!r}".format(i, t.strip())
+
+
+def test_the_phone_overrides_are_tokens_too():
+    """Same fault one breakpoint along: `26px` and `21px`, both frozen."""
+    phone = CSS_CODE.split("@media (max-width: 559px) {", 1)[1]
+    hero = [ln for ln in phone.splitlines() if ".home-title" in ln and "font-size" in ln]
+    assert hero and "var(--ui-scale)" in hero[0], hero
+    sel = [ln for ln in phone.splitlines() if ".panel > h2" in ln and ".hm-h" in ln]
+    assert sel
+    rule = phone.split(sel[0], 1)[1]
+    assert "font-size: var(--t-heading)" in rule[:rule.index("}")]
+    assert not re.search(r"\.pl-lede \{ font-size: \d+px", phone)
+
+
+def test_no_heading_sized_literal_survives():
+    """A general guard rather than four specific ones. Anything at 18px or
+    more is heading-sized, and the ramp covers every tier of it now.
+
+    The allowance is a glyph, not type: `#chat-history-btn` is a 44x44 icon
+    button whose 22px is the size of the character drawn in it."""
+    allowed = {"#chat-history-btn"}
+    bad = []
+    for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", CSS_CODE):
+        m = re.search(r"font-size:\s*(\d+(?:\.\d+)?)px", body)
+        if not m or float(m.group(1)) < 18:
+            continue
+        name = sel.strip().split("\n")[-1].strip()
+        if name not in allowed:
+            bad.append("{} at {}px".format(name, m.group(1)))
+    assert not bad, "heading-sized literals outside the ramp: {}".format(bad)
+
+
+def test_an_uppercase_heading_takes_the_weight_the_others_take():
+    """Fifteen uppercase labels in this file are 600. `.ht-col-name` is an h3
+    and was 500, which is the weight the two non-headings use: `.cal-impact`
+    is a chip and `.bk-active` is a span subordinate to the h2 it sits in."""
+    block = CSS_CODE.split(".ht-col-name {", 1)[1]
+    block = block[:block.index("}")]
+    assert "text-transform: uppercase" in block
+    assert "font-weight: 600" in block
