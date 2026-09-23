@@ -13367,16 +13367,47 @@ body[data-view="chart"] .ses-fold { display: none; }
 }
 .rail-label { font-size: var(--t-small); color: var(--ink-2); white-space: nowrap; }
 
-/* Collapsed: icons only. The labels go, the rail keeps its hit targets. */
+/* Collapsed: icons only.
+ *
+ * Two faults in the first version, and the second is why the first was
+ * invisible. It hid text with `font-size: 0`, which leaves the text in flow --
+ * and with `overflow: visible` on the rail (which the fly-out menus need) it
+ * escaped the 56px column and painted over the page. And the rule that was
+ * meant to do the hiding never applied at all: `body.rail-tight .rail
+ * .nav-top` and `.rail nav.tabs-group .nav-top` are both specificity (0,3,1),
+ * so source order decided, and the section styling came later in the file.
+ *
+ * `display: none` on the label element rather than a size on its parent, and
+ * every collapsed rule carries the same `.rail nav.tabs-group` prefix as the
+ * rule it overrides, so the two cannot end up tied again. The accessible name
+ * is untouched -- the label is hidden, not removed, and the button carries a
+ * title. */
 body.rail-tight .rail { width: 56px; }
 body.rail-tight .rail .brand-text,
-body.rail-tight .rail-label,
-body.rail-tight .rail .nav-top { font-size: 0; }
-body.rail-tight .rail .nav-top { justify-content: center; padding: var(--space-2) 0; }
-body.rail-tight .rail-foot .icon-btn { justify-content: center; }
+body.rail-tight .rail .rail-label,
+body.rail-tight .rail nav.tabs-group .nav-label,
+body.rail-tight .rail nav.tabs-group .nav-caret { display: none; }
+body.rail-tight .rail nav.tabs-group .nav-top,
+body.rail-tight .rail-foot .icon-btn,
+body.rail-tight .rail > .brand {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+/* Nothing may paint outside the column. The rail keeps `overflow: visible` for
+   the fly-outs, so the clipping has to be the width itself holding. */
+body.rail-tight .rail nav.tabs-group .nav-top { overflow: hidden; }
 
-/* The top bar is a context strip now, not the navigation. */
+/* The top bar is a context strip now, not the navigation.
+ *
+ * The nav strip used to sit between the search box and the account controls
+ * and grow to fill the row, which is what held those controls against the
+ * right edge. Moving it to the rail took the spacer with it and left settings,
+ * Sign in and Pulse bunched against the Load button with most of the bar empty
+ * to their right. The push is explicit now rather than a side effect of what
+ * happened to be next to them. */
 .app-main > header.topbar { gap: var(--space-3); }
+.topbar-right { margin-left: auto; }
 
 @media (prefers-reduced-motion: reduce) {
   .rail { transition: none; }
@@ -13419,6 +13450,13 @@ body.rail-tight .rail-foot .icon-btn { justify-content: center; }
   transition: background-color var(--dur-ui, 120ms) ease, color var(--dur-ui, 120ms) ease;
 }
 .rail nav.tabs-group .nav-top:hover { background: var(--bg-hover); color: var(--ink); }
+/* Fixed, so a section's glyph sits on the same axis whether the rail is open
+   or collapsed -- the label appears and disappears beside it rather than
+   moving it. */
+.nav-icon { width: 18px; height: 18px; flex: none; opacity: 0.85; }
+.rail nav.tabs-group .nav-top[aria-selected="true"] .nav-icon,
+.rail nav.tabs-group .nav-item.on > .nav-top .nav-icon { opacity: 1; }
+.nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* The current section, marked on the edge the eye already follows down. */
 .rail nav.tabs-group .nav-top[aria-selected="true"],
 .rail nav.tabs-group .nav-item.on > .nav-top {

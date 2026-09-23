@@ -25952,6 +25952,42 @@ function groupForView(view) {
  * or a keyboard can perform, so it accelerates the mouse case rather than being
  * the only way in.
  */
+/* One glyph per section, for the collapsed rail.
+ *
+ * Collapsed, a section is 56px of rail with no room for its name, so without
+ * these it was a column of blank buttons. Drawn to the same recipe as the rest
+ * of the app's inline icons -- 24-unit box, no fill, 1.8 stroke, round caps --
+ * so they sit with the gear and the collapse glyph rather than looking
+ * imported.
+ *
+ * The name is still the accessible one: the label stays in the DOM and is
+ * hidden visually rather than removed, and the button carries a title, so a
+ * collapsed rail reads the same to a screen reader as an open one. */
+const NAV_ICONS = {
+  // A roofline over a door.
+  home: '<path d="M3.5 10.5 12 4l8.5 6.5V20a1 1 0 0 1-1 1h-5v-6h-5v6h-5a1 1 0 0 1-1-1Z"/>',
+  // A document with a turned corner: everything gathered on one subject.
+  security: '<path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7Z"/><path d="M14 3v4h4"/><path d="M9 12h6M9 16h6"/>',
+  // Two columns of different height, side by side.
+  analyse: '<path d="M6 20V10M12 20V4M18 20v-7"/>',
+  // A line across a range: the market, moving.
+  market: '<path d="M3 17l5-5 4 3 4-6 5 4"/><path d="M3 21h18"/>',
+  // An aperture with a handle: looking for something not yet named.
+  discover: '<circle cx="11" cy="11" r="6"/><path d="m20 20-4.3-4.3"/>',
+  // Stacked rows in a ledger.
+  portfolio: '<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 10h17M9 10v9.5"/>',
+  // An eye: the list you are keeping watch over.
+  follow: '<path d="M2.6 12C6 6.8 8.9 4.6 12 4.6s6 2.2 9.4 7.4c-3.4 5.2-6.3 7.4-9.4 7.4S6 17.2 2.6 12Z"/><circle cx="12" cy="12" r="2.6"/>',
+};
+
+function navIcon(groupId) {
+  const paths = NAV_ICONS[groupId];
+  if (!paths) return '';
+  return `<svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none"
+    stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+    stroke-linejoin="round">${paths}</svg>`;
+}
+
 function paintNav(view) {
   const active = groupForView(view);
   const nav = document.querySelector('nav.tabs-group');
@@ -25971,7 +26007,8 @@ function paintNav(view) {
     const single = pages.length < 2;
     if (single) {
       return `<button role="tab" class="nav-top" data-group="${group.id}"
-        aria-selected="${isActive}">${esc(navGroupLabel(group))}</button>`;
+        aria-selected="${isActive}" title="${esc(navGroupLabel(group))}"
+        >${navIcon(group.id)}<span class="nav-label">${esc(navGroupLabel(group))}</span></button>`;
     }
     // Just the section name. The page you are on is marked inside the menu, which
     // is enough — repeating it on the button made the bar wider and said the same
@@ -25979,7 +26016,9 @@ function paintNav(view) {
     return `<div class="nav-item${isActive ? ' on' : ''}">
       <button role="tab" class="nav-top" data-group="${group.id}"
         aria-selected="${isActive}" aria-haspopup="true" aria-expanded="false"
-        >${esc(navGroupLabel(group))}<i class="nav-caret" aria-hidden="true"></i></button>
+        title="${esc(navGroupLabel(group))}"
+        >${navIcon(group.id)}<span class="nav-label">${esc(navGroupLabel(group))}</span
+        ><i class="nav-caret" aria-hidden="true"></i></button>
       <div class="nav-menu" role="menu">
         ${pages.map((p) => `<button role="menuitem" class="nav-page${
   p.view === view ? ' current' : ''}" data-view="${p.view}"

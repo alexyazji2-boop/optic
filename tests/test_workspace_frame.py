@@ -56,9 +56,30 @@ def test_the_navigation_moved_into_the_rail():
     rail = HTML.split('<nav class="rail"', 1)[1]
     rail = rail[:rail.index('<div class="app-main">')]
     assert 'class="tabs tabs-group"' in rail
-    assert 'id="settings-btn"' in rail, "the gear belongs with the sections"
     bar = HTML.split('<header class="topbar">', 1)[1].split("</header>", 1)[0]
     assert "tabs-group" not in bar, "the bar is a context strip now"
+    # Settings stays in the bar with the account controls. It went to the rail
+    # footer in the first pass and was immediately asked after -- appearance,
+    # time zone and preferences belong beside Sign in, not beside a control
+    # that collapses the rail. The rail footer keeps Collapse, which IS a
+    # control of the rail.
+    assert 'id="settings-btn"' in bar
+    foot = HTML.split('<div class="rail-foot">', 1)[1].split("</div>", 1)[0]
+    assert 'id="settings-btn"' not in foot
+    assert 'id="rail-toggle"' in foot
+
+
+def test_the_account_controls_are_pushed_to_the_far_end():
+    """The nav strip used to sit between the search box and these and grow to
+    fill the row, which is what held them against the right edge. Moving the
+    nav to the rail took that spacer with it, and settings, Sign in and Pulse
+    ended up bunched against the Load button with most of the bar empty to
+    their right."""
+    assert ".topbar-right { margin-left: auto; }" in CSS
+    bar = HTML.split('<header class="topbar">', 1)[1].split("</header>", 1)[0]
+    assert 'class="icon-btn topbar-right"' in bar
+    # And it is the FIRST of the group, or it pushes only itself.
+    assert bar.index("topbar-right") < bar.index('id="account-slot"') < bar.index('id="chat-toggle"')
 
 
 def test_the_rail_nav_is_a_column_and_not_a_row():
@@ -179,3 +200,75 @@ def test_compare_is_its_own_section_again():
     line = [ln for ln in groups.splitlines() if "'security'" in ln]
     assert line and "'compare'" not in line[0], \
         "the Dossier group is the facets of one security"
+
+
+# ------------------------------------------------------ collapsed, properly
+
+
+def test_every_section_has_a_glyph():
+    """Collapsed, a section is 56px of rail with no room for its name. Without
+    these it was a column of blank buttons."""
+    ids = re.findall(r"^\s{2}([a-z]+):\s*'", APP.split("const NAV_ICONS = {", 1)[1]
+                     .split("\n};", 1)[0], re.M)
+    groups = APP.split("const NAV_GROUPS = [", 1)[1]
+    groups = groups[:groups.index("\n];")]
+    for gid in re.findall(r"\{ id: '([a-z]+)'", groups):
+        assert gid in ids, "the {} section has no icon".format(gid)
+
+
+def test_the_label_is_hidden_rather_than_removed():
+    """A collapsed rail has to read the same to a screen reader as an open
+    one, so the name stays in the DOM and the button carries a title."""
+    # BOTH render paths. A group with one view renders a plain button and a
+    # group with several renders a button plus a menu; they are built by
+    # separate template literals, so asserting the label exists "somewhere in
+    # the file" passed a mutation that had emptied the single-view branch.
+    # Sliced on structural markers, not on "}": the first brace inside either
+    # branch closes ${group.id}, which is the slicing trap that let two
+    # portfolio assertions survive earlier today.
+    fn = APP.split("function paintNav(view) {", 1)[1].split("\nfunction ", 1)[0]
+    cut, end = fn.index("aria-haspopup"), fn.index('class="nav-menu"')
+    single = fn[fn.index("if (single) {"):cut]
+    multi = fn[cut:end]
+    for branch, name in ((single, "single-view group"), (multi, "group with a menu")):
+        assert '<span class="nav-label">' in branch, name
+        assert 'title="${esc(navGroupLabel(group))}"' in branch, name
+        assert "navIcon(group.id)" in branch, name
+    assert "body.rail-tight .rail nav.tabs-group .nav-label," in CSS
+
+
+def test_collapsing_uses_display_not_a_font_size():
+    """`font-size: 0` leaves the text in flow. With `overflow: visible` on the
+    rail -- which the fly-out menus need -- it escaped the 56px column and
+    painted over the page."""
+    block = CSS_CODE.split("body.rail-tight .rail { width: 56px; }", 1)[1]
+    block = block[:block.index("\n.nav-icon") if "\n.nav-icon" in block else 400]
+    assert "font-size: 0" not in block
+    assert "display: none" in block
+
+
+def test_the_collapsed_rules_outrank_the_ones_they_override():
+    """They did not. `body.rail-tight .rail .nav-top` and
+    `.rail nav.tabs-group .nav-top` are both specificity (0,3,1), so source
+    order decided it -- and the section styling comes later in the file, so
+    the collapse rule never applied at all. Every collapsed selector carries
+    the same `.rail nav.tabs-group` prefix now, which cannot tie."""
+    for rule in ("body.rail-tight .rail nav.tabs-group .nav-label",
+                 "body.rail-tight .rail nav.tabs-group .nav-caret",
+                 "body.rail-tight .rail nav.tabs-group .nav-top"):
+        assert rule in CSS, rule
+
+
+def test_nothing_paints_outside_the_collapsed_column():
+    """The rail keeps `overflow: visible` for its fly-outs, so the width has
+    to hold on its own."""
+    assert "body.rail-tight .rail nav.tabs-group .nav-top { overflow: hidden; }" in CSS
+
+
+def test_the_glyph_does_not_move_when_the_label_goes():
+    """A fixed icon box, so a section's mark sits on the same axis in both
+    states and the label appears beside it rather than shifting it. Measured:
+    one distinct icon x-position across all seven, open and collapsed."""
+    block = CSS.split("\n.nav-icon {", 1)[1]
+    block = block[:block.index("}")]
+    assert "flex: none" in block and "width: 18px" in block

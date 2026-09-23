@@ -157,19 +157,11 @@
   <nav class="tabs tabs-group" role="tablist" aria-label="Sections"></nav>
 
   <div class="rail-foot">
-    <button class="icon-btn" id="settings-btn" data-view="settings"
-            aria-label="Settings" aria-pressed="false" title="Settings. Appearance and time zone">
-      <svg class="gear" viewBox="0 0 24 24" aria-hidden="true">
-        <!-- Classic cog: eight teeth as a dashed ring, so the tooth count and the
-             gap are one stroke rather than eight hand-placed paths. -->
-        <circle cx="12" cy="12" r="8.4" fill="none" stroke="currentColor" stroke-width="3.2"
-                stroke-dasharray="2.6 3.99" stroke-linecap="butt"/>
-        <circle cx="12" cy="12" r="6.2" fill="none" stroke="currentColor" stroke-width="2"/>
-        <circle cx="12" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/>
-      </svg>
-      <span class="rail-label">Settings</span>
-    </button>
-    <!-- Collapses the rail to icons. Persisted; see railCollapsed in app.js. -->
+    <!-- Settings is not here: it sits with the account controls in the top bar,
+         which is where it was and where a reader looked for it. Appearance,
+         time zone and preferences belong beside Sign in, not beside the rail's
+         own collapse toggle. -->
+    <!-- Collapses the rail to icons. Persisted; see applyRail in app.js. -->
     <button class="icon-btn rail-toggle" id="rail-toggle" type="button"
             aria-label="Collapse the sidebar" aria-pressed="false" title="Collapse the sidebar">
       <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"
@@ -208,6 +200,25 @@
 
   <!-- Kept: syncSecurityHeader and the instrument chart both write into it. -->
   <nav class="tabs tabs-sub" role="tablist" aria-label="Pages" id="subnav"></nav>
+
+  <!-- The right-hand cluster: settings, account, Pulse.
+       `margin-left: auto` on the first of them is what pushes the group to the
+       far end. It used to be the eight-group nav strip doing that -- it sat
+       between the search box and these three and grew to fill the row. Moving
+       the nav to the rail took the spacer with it, and the three ended up
+       bunched against Load with eight hundred pixels of empty bar to their
+       right. -->
+  <button class="icon-btn topbar-right" id="settings-btn" data-view="settings"
+          aria-label="Settings" aria-pressed="false" title="Settings. Appearance and time zone">
+    <svg class="gear" viewBox="0 0 24 24" aria-hidden="true">
+      <!-- Classic cog: eight teeth as a dashed ring, so the tooth count and the
+           gap are one stroke rather than eight hand-placed paths. -->
+      <circle cx="12" cy="12" r="8.4" fill="none" stroke="currentColor" stroke-width="3.2"
+              stroke-dasharray="2.6 3.99" stroke-linecap="butt"/>
+      <circle cx="12" cy="12" r="6.2" fill="none" stroke="currentColor" stroke-width="2"/>
+      <circle cx="12" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/>
+    </svg>
+  </button>
 
   <!-- Accounts. Empty until /api/auth/me answers: rendering "Sign in" and then
        swapping it for an avatar a moment later is the flash that gives away a
