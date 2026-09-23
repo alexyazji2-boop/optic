@@ -8383,44 +8383,6 @@ table.data th,
   nav.tabs-group::-webkit-scrollbar { display: none; }
   nav.tabs button { padding: var(--space-2) var(--space-3); }
 
-  /* Fixed, not absolute.
-   *
-   * Absolute positioning left the menu anchored to a nav item that can sit
-   * anywhere along a scrolling strip, so on a 375px screen the one under
-   * "Analysis" started at x=190 and its 190px min-width ran to 380 — five
-   * pixels past the viewport, which is the whole horizontal scroll. Pinning it
-   * to both edges of the screen removes the arithmetic entirely, and it also
-   * escapes the strip's overflow clipping. */
-  .nav-menu {
-    position: fixed;
-    /* Below the bar, not over it.
-     *
-     * `top: auto` on a fixed box falls back to its static position, which for a
-     * menu inside the tab strip is the strip's own top — so the panel opened
-     * across the tabs and hid which section you were in while you chose one.
-     *
-     * A percentage is no use either: on a fixed box it resolves against the
-     * viewport, so the `calc(100% + 4px)` the desktop rule uses would put this
-     * one screen-height below the fold. The bar's height is the only correct
-     * anchor and it is not a constant — it wraps to two or three rows depending
-     * on width — so it is measured and published as --topbar-h. */
-    /* Below the RAIL, which is where the nav lives now. It used to be
-       --topbar-h alone, from when these menus hung off the top bar; with the
-       nav moved to a rail that sits under the bar on a phone, that anchor put
-       the panel across the very strip it opened from -- the exact fault this
-       comment was written about, one element along. --rail-h is published by
-       trackRailHeight and is 0 on a desktop, where these menus fly out
-       sideways and this block does not apply. */
-    top: calc(var(--topbar-h, 165px) + var(--rail-h, 0px) + var(--space-1));
-    left: var(--space-3);
-    right: var(--space-3);
-    min-width: 0;
-    max-width: none;
-    /* The rail's desktop rule offsets the fly-out from the column by a step;
-       pinned to both screen edges that offset is just a shift. */
-    margin-left: 0;
-  }
-
   /* Chrome takes less, content takes more. */
   .statusline { padding: var(--space-2) var(--space-3); gap: var(--space-3); }
   main { padding: var(--space-5) var(--space-4) var(--space-8); }
@@ -13563,13 +13525,31 @@ body.rail-tight .rail nav.tabs-group .nav-menu { left: 56px; }
    fly-out menus drop upward from it. */
 @media (max-width: 559px) {
   .app { grid-template-columns: minmax(0, 1fr); }
-  /* Search first, then sections. A grid places the rail in row one because it
-     comes first in the DOM, and it comes first in the DOM because on every
-     other width it is a column beside the content. */
-  .rail { order: 2; }
-  .app-main { order: 1; }
+
+  /* The rail is FIXED under the top bar here. It was `order: 2` in a one-column
+     grid, which does not mean "after the search box" -- `.app-main` is the
+     whole page, header and content and footer, so the rail landed after all of
+     it. Measured on the home page at 375x812: the rail sat at y=6479 of a
+     6542px document. It was reported as the sidebar not existing on a phone,
+     and that is the honest description: no reader scrolls six thousand pixels
+     to find the navigation.
+     
+     Fixed rather than sticky because the rail and the top bar are grid
+     siblings and the bar lives inside `.app-main`, so no ordering can put the
+     rail between the bar and the content. Taking it out of flow can.
+     
+     `--topbar-h` is measured and republished as the bar wraps to two or three
+     rows, so the rail follows it instead of guessing. And this is the position
+     the rest of the phone CSS already assumed: the section fly-outs anchor to
+     `calc(var(--topbar-h) + var(--rail-h))`, which was correct for a rail
+     under the bar and opened the menu six thousand pixels from its button. */
   .rail {
-    position: static;
+    position: fixed;
+    top: var(--topbar-h, 66px);
+    left: 0;
+    right: 0;
+    /* Under the top bar's 50, over the page. */
+    z-index: 49;
     height: auto;
     width: auto;
     flex-direction: row;
@@ -13606,12 +13586,75 @@ body.rail-tight .rail nav.tabs-group .nav-menu { left: 56px; }
     scrollbar-width: none;
   }
   .rail nav.tabs-group::-webkit-scrollbar { display: none; }
-  .rail nav.tabs-group .nav-top { padding: var(--space-1) var(--space-2); }
+  /* `width: 100%` is a column rule. In a row it made every group that renders
+     as a bare button -- Home and Compare, the ones with a single page -- take
+     the whole scroll box, so the strip showed one entry at a time while the
+     grouped ones beside them sized to their label. Measured at 375x812:
+     Home 239px and Compare 239px against Dossier 98 and Markets 103, with one
+     visible at once. */
+  .rail nav.tabs-group .nav-top {
+    padding: var(--space-1) var(--space-2);
+    width: auto;
+  }
   .rail nav.tabs-group .nav-caret { margin-left: var(--space-0); transform: none; }
   /* Last in the row and not shrinkable, so the gear is always at the right
      end and always on screen. Measured at 375x812: 323-361 whatever the nav's
      scroll position. */
   .rail-foot { margin-top: 0; flex-direction: row; flex: none; }
+  /* The rail is out of flow, so the content has to be pushed past it. On the
+     header, not on `.statusline` or `main`: the header is sticky and therefore
+     still in flow, so its bottom margin reserves the space whatever follows it
+     -- and the statusline does not always render. */
+  .app-main > header.topbar { margin-bottom: var(--rail-h, 0px); }
+  /* The section fly-outs. Fixed, not absolute.
+   *
+   * Absolute positioning left the menu anchored to a nav item that can sit
+   * anywhere along a scrolling strip, so on a 375px screen the one under
+   * "Analysis" started at x=190 and its 190px min-width ran to 380 -- five
+   * pixels past the viewport, which is the whole horizontal scroll. Pinning it
+   * to both edges of the screen removes the arithmetic entirely.
+   *
+   * Below the bar AND the rail, not over them. `top: auto` on a fixed box
+   * falls back to its static position, which for a menu inside the strip is
+   * the strip's own top, so the panel opened across the tabs and hid which
+   * section you were in while you chose one. A percentage is no use either: on
+   * a fixed box it resolves against the viewport. Both heights are measured
+   * and republished -- the bar wraps to two or three rows, and `--rail-h` is
+   * 0 on a desktop, where these fly out sideways instead.
+   *
+   * THE SELECTOR AND ITS PLACE IN THE FILE ARE BOTH LOAD-BEARING. This lived
+   * a thousand lines earlier as a bare `.nav-menu`, which is (0,1,0), against
+   * `.rail nav.tabs-group .nav-menu` at (0,3,0) further down -- and a media
+   * query adds no specificity, so every declaration in it was discarded.
+   * Widening the selector alone was not enough either: at equal specificity
+   * the later rule wins, and the desktop ones are later. It matches both of
+   * them now and sits after both. Measured at 375x812 before: the Dossier
+   * menu opened at top 0, left 257, over the top bar and over its own
+   * button. */
+  .rail nav.tabs-group .nav-menu,
+  body.rail-tight .rail nav.tabs-group .nav-menu {
+    position: fixed;
+    top: calc(var(--topbar-h, 165px) + var(--rail-h, 0px) + var(--space-1));
+    left: var(--space-3);
+    right: var(--space-3);
+    min-width: 0;
+    max-width: none;
+    /* The rail's desktop rule offsets the fly-out from the column by a step;
+       pinned to both screen edges that offset is just a shift. */
+    margin-left: 0;
+  }
+  /* And the measured side-flip has to be undone by name.
+   *
+   * `navMenuSides()` marks a menu that would run off the right edge, and
+   * `nav.tabs-group > .nav-item.menu-right .nav-menu` is (0,3,2) -- higher
+   * than the rule above, so it kept `left: auto; right: 0` and the panel sized
+   * itself to its content against the right edge instead of spanning the
+   * screen. Measured at 375x812: the Dossier menu resolved to left 257, width
+   * 118. There is no side to flip to when both edges are pinned. */
+  nav.tabs-group > .nav-item.menu-right .nav-menu {
+    left: var(--space-3);
+    right: var(--space-3);
+  }
   .rail-label { display: none; }
   /* Square icon buttons, not the full-width rows they are in the column. In a
      row `width: 100%` resolved against the footer itself and gave the gear an

@@ -160,11 +160,42 @@ def test_a_collapsed_rail_still_opens_its_menus_on_screen():
 
 def test_a_phone_puts_the_rail_under_the_search_not_above_it():
     """The rail is first in the DOM because on every other width it is a column
-    beside the content, so a phone has to reorder it."""
-    phone = [b for b in CSS.split("@media (max-width: 559px)")[1:]
-             if ".rail { order: 2; }" in b[:b.index("\n}")]]
-    assert phone, "the phone ordering rule is gone"
-    assert ".app-main { order: 1; }" in phone[0]
+    beside the content, so a phone has to move it.
+
+    This asserted `order: 2` on the rail and `order: 1` on `.app-main`, and
+    that is what the reasoning called for -- but it does not do it. `.app-main`
+    is not the search box, it is the whole page: header, content and footer.
+    Ordering the rail after it put the rail after ALL of it. Measured on the
+    home page at 375x812: the rail sat at y=6479 of a 6542px document, which
+    was reported as the sidebar not existing on a phone.
+
+    It is out of flow now, fixed under the bar, which is where the fly-out
+    anchor below already assumed it was."""
+    block = _phone_block()
+    rail = block.split("\n  .rail {\n", 1)[1]
+    rail = rail[:rail.index("}")]
+    assert "position: fixed" in rail
+    # To the measured bar, not to a constant: it wraps to two or three rows.
+    assert "top: var(--topbar-h" in rail
+    assert "order:" not in block, \
+        "ordering cannot place the rail between the bar and the content"
+    # And the space it no longer takes in flow is reserved, or the rail draws
+    # over the first thing under the header.
+    assert ".app-main > header.topbar { margin-bottom: var(--rail-h, 0px); }" in block
+
+
+def test_the_fixed_rail_sits_under_the_bar_rather_than_over_it():
+    """Both are out of the page's flow and they meet. The bar is z-index 50."""
+    block = _phone_block()
+    rail = block.split("\n  .rail {\n", 1)[1]
+    rail = rail[:rail.index("}")]
+    z = re.search(r"z-index:\s*(\d+)", rail)
+    assert z, "a fixed rail with no z-index is behind whatever paints later"
+    bar = CSS_CODE.split("\nheader.topbar {", 1)[1]
+    bar = bar[:bar.index("}")]
+    bz = re.search(r"z-index:\s*(\d+)", bar)
+    assert bz, "the bar's own z-index is what this is chosen against"
+    assert int(z.group(1)) < int(bz.group(1))
 
 
 def test_the_phone_menu_anchor_follows_the_rail():
@@ -392,3 +423,58 @@ def test_collapse_is_separated_from_the_destination_above_it():
     before = before[:before.index("}")]
     assert "border-top" in before
     assert "position: absolute" in before
+
+
+def test_the_phone_flyout_rule_out_ranks_the_desktop_one_and_comes_after_it():
+    """Three selectors position these menus and the phone one was losing to
+    both of the others.
+
+    It was a bare `.nav-menu` (0,1,0) in a media query -- and a media query
+    adds no specificity -- against `.rail nav.tabs-group .nav-menu` (0,3,0).
+    Every declaration in it was discarded: measured at 375x812, the Dossier
+    menu opened at top 0, left 257, over the top bar and over its own button.
+
+    Widening the selector was not enough on its own. At equal specificity the
+    later rule wins and the desktop ones are later in the file, so the phone
+    rule had to move below them as well. Both halves are asserted here because
+    either one alone leaves it losing."""
+    phone = _phone_block()
+    assert ".rail nav.tabs-group .nav-menu," in phone, "a bare .nav-menu loses"
+    assert "body.rail-tight .rail nav.tabs-group .nav-menu {" in phone, \
+        "the collapsed variant is (0,4,0) and needs matching too"
+    # Source order, which is the half a specificity check cannot see.
+    desktop_at = CSS_CODE.index("\n.rail nav.tabs-group .nav-menu {")
+    phone_at = CSS_CODE.index("  .rail nav.tabs-group .nav-menu,")
+    assert phone_at > desktop_at, \
+        "equal specificity: the phone rule has to come after the desktop one"
+    rule = phone.split("  .rail nav.tabs-group .nav-menu,", 1)[1]
+    rule = rule[rule.index("{"):rule.index("}")]
+    assert "position: fixed" in rule
+    assert "var(--topbar-h" in rule and "var(--rail-h" in rule
+
+
+def test_the_measured_side_flip_is_undone_on_a_phone():
+    """`navMenuSides()` marks a menu that would run off the right edge, and
+    `nav.tabs-group > .nav-item.menu-right .nav-menu` is (0,3,2) -- higher
+    again than the rule above. It kept `left: auto; right: 0`, so the panel
+    sized to its content against the right edge rather than spanning the
+    screen: measured left 257, width 118 of a 375px viewport. There is no side
+    to flip to when both edges are pinned. Measured after: 14..361, 347px."""
+    phone = _phone_block()
+    block = phone.split("nav.tabs-group > .nav-item.menu-right .nav-menu {", 1)[1]
+    block = block[:block.index("}")]
+    assert "left: var(--space-3)" in block
+    assert "right: var(--space-3)" in block
+
+
+def test_the_phone_nav_buttons_size_to_their_label():
+    """`width: 100%` is a column rule. In a row it made every group that
+    renders as a bare button -- the ones with a single page -- take the whole
+    scroll box: measured at 375x812, Home 239px and Compare 239px against
+    Dossier 98 and Markets 103, with one entry visible at a time. After:
+    Home 88, two visible and a third part-shown, which is what tells a reader
+    the strip scrolls."""
+    phone = _phone_block()
+    rule = phone.split("  .rail nav.tabs-group .nav-top {", 1)[1]
+    rule = rule[:rule.index("}")]
+    assert "width: auto" in rule
