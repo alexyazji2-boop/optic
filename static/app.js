@@ -1571,8 +1571,19 @@ const CHART_RANGES = [
   // their own endpoint at their own resolution, and the daily-derived overlays
   // (moving averages, Fibonacci, RSI, MACD) do not apply to them. Marked so the
   // renderer can suppress what would otherwise be drawn from the wrong series.
-  { key: '1d', label: '1D', intraday: true },
-  { key: '5d', label: '5D', intraday: true },
+  // Minutes, matching CHART_INTERVALS -- see the note there on why these are
+  // not `1m`/`4h`. These are ranges only so `isIntradayRange` and every guard
+  // already keyed on it keep working; they are not offered as range pills.
+  { key: '1', label: '1m', intraday: true },
+  { key: '5', label: '5m', intraday: true },
+  { key: '15', label: '15m', intraday: true },
+  { key: '30', label: '30m', intraday: true },
+  { key: '60', label: '1h', intraday: true },
+  { key: '240', label: '4h', intraday: true },
+  // The two keys the pills used before the ladder. Still valid ranges so a
+  // stored preference keeps working; not offered as pills any more.
+  { key: '1d', label: '1D', intraday: true, legacy: true },
+  { key: '5d', label: '5D', intraday: true, legacy: true },
   { key: '1m', label: '1M', daily: 21, weekly: 5 },
   { key: '3m', label: '3M', daily: 63, weekly: 13 },
   { key: '6m', label: '6M', daily: 126, weekly: 26 },
@@ -1687,10 +1698,110 @@ function ltSlice(ser, rangeKey, intervalKey) {
   };
 }
 
+/* The bar size, from one minute to one week.
+ *
+ * Two entries used to live here, Daily and Weekly, and the intraday sizes were
+ * not choosable at all: picking the 1D or 5D range pill got you 5-minute or
+ * 15-minute bars because `INTRADAY_SPECS` said so, and the toolbar showed the
+ * resolution you had been given on a disabled pill.
+ *
+ * The two kinds are still two kinds and that is deliberate. `chartInterval`
+ * holds only `daily` or `weekly`, and twenty-six places read it as
+ * `=== 'weekly'` meaning "otherwise daily" -- they compute 20-day averages,
+ * label them "20-day SMA" and measure RSI in days. Putting `5m` into that
+ * variable would have every one of them describing a five-minute chart in
+ * days, which is the mislabelling this file's own comment about weekly
+ * indicators warns against. So an intraday choice sets `chartRange` to an
+ * intraday key instead, and `isIntradayRange` -- which already gates the whole
+ * daily-overlay path -- keeps the two apart exactly as it did before.
+ *
+ * `window` is the lookback each intraday size is fetched with, named here only
+ * so the toolbar can say what you are looking at. The server owns the real
+ * pairing in INTRADAY_SPECS; these strings must match what it sends back.
+ */
 const CHART_INTERVALS = [
-  { key: 'daily', label: 'Daily' },
-  { key: 'weekly', label: 'Weekly' },
+  /* Keyed in minutes, labelled for people.
+   *
+   * The obvious key for one minute is `1m`, and `1m` is already a RANGE key
+   * meaning one MONTH. `CHART_RANGES.find(r => r.key === '1m')` returns
+   * whichever comes first, so the 1M pill would have loaded a minute chart.
+   * Caught in a browser: the range row rendered `1m` for a month directly
+   * under an interval row rendering `1m` for a minute.
+   *
+   * A count of minutes has no such clash, and it is the notation the rest of
+   * the industry already uses for a resolution. */
+  { key: '1', label: '1m', intraday: true, window: '1 day', feed: '1m' },
+  { key: '5', label: '5m', intraday: true, window: '5 days', feed: '5m' },
+  { key: '15', label: '15m', intraday: true, window: '1 month', feed: '15m' },
+  { key: '30', label: '30m', intraday: true, window: '1 month', feed: '30m' },
+  { key: '60', label: '1h', intraday: true, window: '3 months', feed: '60m' },
+  { key: '240', label: '4h', intraday: true, window: '1 year', feed: '4h' },
+  { key: 'daily', label: '1D' },
+  { key: 'weekly', label: '1W' },
 ];
+
+/* What the Options chart offers, which is not the whole ladder.
+ *
+ * That tab reaches intraday through its own 1D and 5D range pills and has no
+ * ladder behind them, so listing the minute rungs in its Interval select
+ * would write `5` into `chartInterval` -- the variable twenty-six places read
+ * as daily-or-weekly. Its range pills keep 1D and 5D and drop the rungs,
+ * which would otherwise have rendered as a thirteen-pill row with the same
+ * sizes named twice.
+ *
+ * Derived rather than written out, so a rung added to the ladder cannot
+ * appear on a tab that has no way to serve it. */
+const SWING_INTERVALS = CHART_INTERVALS.filter((i) => !i.intraday);
+const SWING_RANGES = CHART_RANGES.filter((r) => !r.intraday || r.legacy);
+
+/** The ladder entry a click selected, or null. */
+function chartIntervalSpec(key) {
+  return CHART_INTERVALS.find((i) => i.key === key) || null;
+}
+
+/** Which ladder entry is lit: the intraday range when one is open, else the
+ *  daily/weekly choice. One control, two underlying variables. */
+function activeIntervalKey() {
+  return isIntradayRange(chartRange) ? chartRange : chartInterval;
+}
+
+/* What the bars on screen actually are, for the three places that say so.
+ *
+ * `chartInterval` is not the answer on an intraday range: it still holds
+ * `daily`, and the status line, the legend and the screen-reader heading all
+ * used to read it straight out and claim "daily" over five-minute bars. Two
+ * of them were fixed by writing the same conditional twice, which is how the
+ * third was missed -- it said "daily 5m", contradicting itself in four words.
+ *
+ * Prefers what the server sent back over what was asked for, so a feed that
+ * answers a 4h request with hourly bars is reported as hourly. */
+function chartIntervalLabel() {
+  if (!isIntradayRange(chartRange)) {
+    // The ladder's own name for it, so the legend and the lit button agree.
+    // The button reads 1D and the legend read "daily". `chartInterval` keeps
+    // its internal value; only the reporting changes.
+    return (chartIntervalSpec(chartInterval) || {}).label || chartInterval;
+  }
+  const spec = chartIntervalSpec(chartRange);
+  const got = (wsIntraday && wsIntraday.interval) || null;
+  /* When the feed sent what the rung asked for, say what the rung is called:
+     the button reads "1h" and the legend read "60m · 60", which is the same
+     bar size named two ways and a key nobody outside this file knows.
+     When it did NOT, say what came back -- a feed answering a 4h request with
+     hourly bars has to be reported as hourly, not as the thing we wanted. */
+  if (spec && got && got === spec.feed) return spec.label;
+  return got || (spec && spec.label) || 'intraday';
+}
+
+/* The span on screen, for the same three reporters.
+ *
+ * `chartRange` is the answer on a daily range and is a bare minute count on
+ * an intraday one -- the legend read "4h · 240". The window is what the
+ * server actually fetched and is the only part of it a reader can use. */
+function chartWindowLabel() {
+  if (!isIntradayRange(chartRange)) return chartRange;
+  return (chartIntervalSpec(chartRange) || {}).window || chartRange;
+}
 
 /* ---------------------------------------------------- client-side indicators
  *
@@ -2243,7 +2354,10 @@ try {
   const savedRange = localStorage.getItem(CHART_RANGE_KEY);
   if (CHART_RANGES.some((r) => r.key === savedRange)) chartRange = savedRange;
   const savedInterval = localStorage.getItem(CHART_INTERVAL_KEY);
-  if (CHART_INTERVALS.some((i) => i.key === savedInterval)) chartInterval = savedInterval;
+  // Against the daily/weekly half only. The ladder's minute rungs are valid
+  // interval KEYS and are never valid values for this variable; a stored `5`
+  // would otherwise be restored straight into it on the next load.
+  if (SWING_INTERVALS.some((i) => i.key === savedInterval)) chartInterval = savedInterval;
   /* The chart opens as price and volume, and nothing else.
    *
    * Everything else is opt-in — moving averages included. With the families that
@@ -8426,11 +8540,11 @@ function renderSwing(d) {
       <div class="chart-toolbar">
         <label class="range-pick"${ps.intraday ? ' hidden' : ''}>Interval
           <select id="chart-interval"${ps.intraday ? ' disabled' : ''}>
-            ${CHART_INTERVALS.map((i) => `<option value="${i.key}"${
+            ${SWING_INTERVALS.map((i) => `<option value="${i.key}"${
   i.key === chartInterval ? ' selected' : ''}>${i.label}</option>`).join('')}
           </select>
         </label>
-        ${rangePills(CHART_RANGES, chartRange, 'data-chart-range', 'Timeframe')}
+        ${rangePills(SWING_RANGES, chartRange, 'data-chart-range', 'Timeframe')}
         <div class="seg" role="group" aria-label="Chart style">
           <button type="button" data-chart-mode="line"
             aria-pressed="${chartMode === 'line'}">Line</button>
@@ -11321,10 +11435,15 @@ function maLabel(id, ps) {
   const length = params.length !== undefined ? params.length : '';
   const kind = String(id).startsWith('ema') ? 'EMA' : 'SMA';
   // `monthly` is here for safety rather than for a case that exists today:
-  // CHART_INTERVALS is daily and weekly only, and the monthly rollup belongs to
-  // the Investing tab, which has its own ltMa() and never calls this. One
-  // clause now beats the bug this function was written to fix reappearing the
-  // day a Monthly pill is added.
+  // the monthly rollup belongs to the Investing tab, which has its own ltMa()
+  // and never calls this. One clause now beats the bug this function was
+  // written to fix reappearing the day a Monthly pill is added.
+  //
+  // This used to say "CHART_INTERVALS is daily and weekly only". That stopped
+  // being true when the ladder gained the minute rungs -- but the reasoning
+  // survives, because those rungs never reach `chartInterval` and an intraday
+  // series carries neither `weekly` nor `monthly`, so it falls to days here
+  // and its overlays are suppressed upstream by isIntradayRange.
   const unit = (ps && ps.monthly) ? 'month' : ((ps && ps.weekly) ? 'week' : 'day');
   return length + '-' + unit + ' ' + kind;
 }
@@ -13129,11 +13248,7 @@ function wsLegend(ps) {
       title="${wsLegendOpen ? 'Collapse' : 'Expand'} the indicator list">
       <span class="ws-leg-caret">${wsLegendOpen ? '&#9662;' : '&#9656;'}</span>
       ${esc(STATE.chartSymbol || '')}
-      <span class="ws-leg-args">${esc(isIntradayRange(chartRange)
-    // Same reason as the status line: `chartInterval` is not what these bars
-    // are. It said "daily" over five-minute data.
-    ? ((wsIntraday && wsIntraday.interval) || 'intraday')
-    : chartInterval)} · ${esc(chartRange)}</span>
+      <span class="ws-leg-args">${esc(chartIntervalLabel())} · ${esc(chartWindowLabel())}</span>
       ${wsLegendOpen ? '' : `<span class="ws-leg-count">${n} overlay${
   n === 1 ? '' : 's'}${draws ? ` · ${draws} drawing${draws === 1 ? '' : 's'}` : ''}</span>`}
     </button>
@@ -13422,16 +13537,21 @@ function wsToolbar() {
     ${wsStudiesMenu()}
     </div>
     <div class="ws-toolbar-gap"></div>
+    ${/* One control for the bar size, one minute to one week. The daily and
+         weekly halves of it write to different variables -- see the comment
+         on CHART_INTERVALS -- but a reader is choosing one thing. */''}
+    ${rangePills(CHART_INTERVALS, activeIntervalKey(), 'data-ws-interval', 'Interval')}
     ${isIntradayRange(chartRange)
-    // Daily and Weekly are meaningless against the intraday endpoint's own
-    // resolution. Shown disabled rather than removed, so the toolbar does not
-    // change shape when a range pill is pressed.
-    ? `<div class="pills" role="group" aria-label="Interval"
-        title="1D and 5D come from the intraday feed at its own resolution">
+    // The lookback is fixed per intraday size: the server fetches a window
+    // chosen to land near a readable bar count, and the range pills describe
+    // spans of daily bars that this series does not have. Shown disabled
+    // rather than removed so the toolbar does not change shape.
+    ? `<div class="pills" role="group" aria-label="Range"
+        title="An intraday size is fetched with the window that keeps it readable">
         <button type="button" class="pill on" disabled aria-pressed="true">${
-    esc((wsIntraday && wsIntraday.interval) || 'intraday')}</button></div>`
-    : rangePills(CHART_INTERVALS, chartInterval, 'data-ws-interval', 'Interval')}
-    ${rangePills(CHART_RANGES, chartRange, 'data-ws-range', 'Range')}
+    esc((chartIntervalSpec(chartRange) || {}).window || 'intraday')}</button></div>`
+    : rangePills(CHART_RANGES.filter((r) => !r.intraday), chartRange,
+      'data-ws-range', 'Range')}
     ${wsWindow ? `<button type="button" class="ws-menu-btn ws-zoom-reset"
       data-ws-zoom-reset title="Back to the ${esc(chartRange)} range">Reset zoom</button>` : ''}
     ${/* The same Line / Candles pair the Options chart uses, rather than one
@@ -13776,7 +13896,9 @@ function renderChartWorkspace(d) {
       * on screen twice over — in the toolbar and in the status strip — and a
       * third copy in a visible heading would be clutter for sighted readers to
       * buy structure for everyone else. This is what .sr-only is for. */''}
-  <h2 class="sr-only">Charting ${esc(STATE.chartSymbol)}, ${esc(chartInterval)} ${esc(chartRange)}</h2>
+  ${/* The bar size, not `chartInterval`: on an intraday range that still says
+       `daily`, so this read "daily 5m" once the sizes became range keys. */''}
+  <h2 class="sr-only">Charting ${esc(STATE.chartSymbol)}, ${esc(chartIntervalLabel())} bars</h2>
   ${/* Without this the workspace was a one-way door: clicking Chart from the
       * strip took the symbol across correctly and then left the reader on a
       * page with no strip and no way back to the company they were reading.
@@ -24554,12 +24676,10 @@ function updateStatus() {
      * above a five-minute chart, which is a false claim about what is being
      * looked at rather than a cosmetic slip. */
     const intra = isIntradayRange(chartRange);
-    const shown = intra
-      ? ((wsIntraday && wsIntraday.interval) || 'intraday')
-      : chartInterval;
+    const shown = chartIntervalLabel();
     setStatus(STATE.chartSymbol
       ? [`Chart: ${STATE.chartSymbol}`,
-        wsWindow && !intra ? `${shown} · zoomed` : `${shown} · ${chartRange}`,
+        wsWindow && !intra ? `${shown} · zoomed` : `${shown} · ${chartWindowLabel()}`,
         intra
           ? 'drawings hidden on intraday'
           : `${wsDrawings().length} drawing${wsDrawings().length === 1 ? '' : 's'}`,
@@ -27327,10 +27447,29 @@ document.addEventListener('click', (evt) => {
   }
   const wsInt = evt.target.closest('[data-ws-interval]');
   if (wsInt) {
-    chartInterval = wsInt.dataset.wsInterval;
-    wsWindow = null;   // a range pill overrides a manual zoom
-    try { localStorage.setItem(CHART_INTERVAL_KEY, chartInterval); } catch (e) { /* private mode */ }
-    wsRedrawChart();
+    const key = wsInt.dataset.wsInterval;
+    const spec = chartIntervalSpec(key);
+    wsWindow = null;   // a size change overrides a manual zoom
+    if (spec && spec.intraday) {
+      /* An intraday size selects an intraday RANGE, not an interval. Writing
+         it to `chartInterval` would hand "5m" to the twenty-six places that
+         read that variable as daily-or-weekly. */
+      chartRange = key;
+      try { localStorage.setItem(CHART_RANGE_KEY, chartRange); } catch (e) { /* private mode */ }
+      wsLoadIntraday();
+    } else {
+      chartInterval = key;
+      try { localStorage.setItem(CHART_INTERVAL_KEY, chartInterval); } catch (e) { /* private mode */ }
+      /* Leaving an intraday size needs a daily range to land on, or the chart
+         stays on the intraday series and the pill you just pressed does
+         nothing. The last daily range is not remembered separately; 6M is the
+         middle of the ladder and shows a 1W chart and a 1D chart usefully. */
+      if (isIntradayRange(chartRange)) {
+        chartRange = '6m';
+        try { localStorage.setItem(CHART_RANGE_KEY, chartRange); } catch (e) { /* private mode */ }
+      }
+      wsRedrawChart();
+    }
     return;
   }
   const wsTl = evt.target.closest('[data-ws-tool]');

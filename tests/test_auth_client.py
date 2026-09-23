@@ -620,10 +620,50 @@ def test_drawings_are_hidden_rather_than_replayed_onto_intraday_bars():
 
 
 def test_the_status_line_reports_the_interval_on_screen():
-    """It said "daily" over five-minute bars, which is a false claim about what
-    is being looked at."""
-    assert "wsIntraday && wsIntraday.interval" in APP_JS
-    assert APP_JS.count("wsIntraday && wsIntraday.interval") >= 3
+    """It said "daily" over five-minute bars, which is a false claim about
+    what is being looked at.
+
+    This used to assert the conditional appeared at least three times, once
+    per place that reports the size. Three copies is what let the fourth
+    reporter be missed: the screen-reader heading read `chartInterval`
+    straight out and, once the intraday sizes became range keys, said
+    "daily 5m" -- contradicting itself in four words. There is one function
+    now, and the assertion is that every reporter calls it."""
+    assert "function chartIntervalLabel()" in APP_JS
+    assert APP_JS.count("wsIntraday && wsIntraday.interval") == 1, \
+        "the conditional belongs in chartIntervalLabel and nowhere else"
+    assert APP_JS.count("chartIntervalLabel()") >= 4, \
+        "definition plus the status line, the legend and the sr-only heading"
+    # Two cases, and both matter. When the feed sent the bar size the rung
+    # asked for, the reader sees the rung's own name -- the button says "1h"
+    # and the legend said "60m", which is one bar size named two ways. When
+    # it did not, the feed's answer wins: a 4h request served as hourly bars
+    # has to be reported as hourly.
+    fn = APP_JS.split("function chartIntervalLabel() {", 1)[1]
+    fn = fn[:fn.index("\n}")]
+    assert "got === spec.feed" in fn and "return spec.label" in fn
+    assert fn.index("got === spec.feed") < fn.index("return got"), \
+        "the agreed case has to be tested before the fallback"
+    # Which only works if every intraday rung declares what the feed calls it.
+    ladder = APP_JS.split("const CHART_INTERVALS = [", 1)[1]
+    ladder = ladder[:ladder.index("\n];")]
+    rungs = [ln for ln in ladder.splitlines() if "intraday: true" in ln]
+    assert len(rungs) == 6
+    for ln in rungs:
+        assert "feed: '" in ln, ln.strip()
+
+
+def test_the_span_on_screen_is_named_in_something_a_reader_knows():
+    """`chartRange` is a bare minute count on an intraday rung, so the legend
+    read "4h · 240". The window is what the server actually fetched."""
+    assert "function chartWindowLabel()" in APP_JS
+    assert APP_JS.count("chartWindowLabel()") >= 3, \
+        "definition plus the legend and the status line"
+    ladder = APP_JS.split("const CHART_INTERVALS = [", 1)[1]
+    ladder = ladder[:ladder.index("\n];")]
+    for ln in ladder.splitlines():
+        if "intraday: true" in ln:
+            assert "window: '" in ln, ln.strip()
 
 
 def test_hidden_is_a_different_state_from_off():

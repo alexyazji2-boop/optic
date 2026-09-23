@@ -1492,7 +1492,35 @@ def _wants_candidates(text: str) -> bool:
 # points for a chart a few hundred pixels wide, and 15-minute bars over one day
 # is 26 points, which is not a chart. Each range gets the interval that makes it
 # readable.
+# The intraday ladder, keyed by the bar size in minutes.
+#
+# Every pair here was probed against the live feed on AAPL before being
+# offered, because an interval the provider silently refuses renders as "no
+# intraday bars" and reads as a broken symbol rather than an unsupported
+# timeframe. Bars returned, and the gap between consecutive stamps matched the
+# interval in each case -- including 4h, which is not in yfinance's documented
+# list and does come back as genuine four-hour buckets: 43 bars over a month
+# at exactly 04:00:00 spacing, two per session at 09:30 and 13:30.
+#
+# The period attached to each is a default window rather than the provider's
+# maximum. It is chosen to land between roughly 250 and 550 bars, which is a
+# readable chart: 1m over its full 7-day allowance is 2,464 bars, and at that
+# density a candle is a hairline. The maxima the feed enforces are wider --
+# 7d for 1m, 60d for 5m through 30m, 730d for 60m -- and are what would cap a
+# zoom, not what is fetched up front.
+# Keyed in minutes, not `1m`/`4h`. `1m` is already a chart RANGE key meaning
+# one month on the client, and both lists are looked up by the same string:
+# the 1M range pill would have loaded a one-minute chart. See CHART_INTERVALS.
 INTRADAY_SPECS = {
+    "1": {"period": "1d", "interval": "1m"},
+    "5": {"period": "5d", "interval": "5m"},
+    "15": {"period": "1mo", "interval": "15m"},
+    "30": {"period": "1mo", "interval": "30m"},
+    "60": {"period": "3mo", "interval": "60m"},
+    "240": {"period": "1y", "interval": "4h"},
+    # The two keys the range pills used before the ladder existed. Kept as
+    # aliases: a client holding a stored preference or a page mid-session still
+    # asks for these, and answering them costs two entries.
     "1d": {"period": "1d", "interval": "5m"},
     "5d": {"period": "5d", "interval": "15m"},
 }
@@ -1514,7 +1542,8 @@ async def intraday(ticker: str, range: str = Query("1d")) -> Dict[str, Any]:
     spec = INTRADAY_SPECS.get((range or "").lower())
     if not spec:
         return {"available": False,
-                "reason": "Unknown range {!r}. Expected 1d or 5d.".format(range)}
+                "reason": "Unknown range {!r}. Expected one of: {}.".format(
+                    range, ", ".join(sorted(INTRADAY_SPECS)))}
 
     def build() -> Dict[str, Any]:
         symbol = ticker.upper().strip()
