@@ -174,32 +174,98 @@ def test_nothing_without_a_feed_is_offered():
 # ------------------------------------------------------------ phone layout
 
 
-def test_the_session_detail_collapses_at_every_width():
-    """It was phone-only, on the reasoning that the desktop has the room.
+def test_the_session_detail_folds_on_a_phone_and_only_on_a_phone():
+    """The detail block is 165px of every page at 375x812, above every view:
+    the phase legend, the timezone note, the company profile and the
+    description. None of it changes during a day.
 
-    The desktop has the room and spent it badly. Measured on AAPL at 727x835
-    with the strip fully expanded: the four phase keys, the timezone note and
-    the business description put the price hero at y=801 in an 835px viewport,
-    so the number the reader searched for was the last thing on the first
-    screen. The live parts — which session, the clock, the 24-hour strip — are
-    still unconditional; what is behind the button is a fixed timetable, a
-    colour legend and a company profile, none of which change during a day.
-    """
+    It had a disclosure once and the disclosure was removed, because it was
+    introduced for a phone-height measurement that was real and its two rules
+    were written for the 640px block and ended up outside one -- so
+    `display: none` applied at every width and a desktop with room to spare
+    hid the company behind a click. Measured on AAPL at 727x835 the desktop
+    spent that room badly too, but a click is not the fix for that.
+
+    So the fold is back for phones, shaped so it cannot repeat: the
+    unmediated default is the desktop's, shown with no control, and the only
+    thing that adds a fold is the width query. This test is that shape."""
     assert 'class="ses-detail' in APP_JS
-    # The disclosure is gone. It was introduced for a phone-height measurement
-    # that was real, and its two rules were written for the 640px block and
-    # ended up at the top of the file outside it — so `display: none` applied at
-    # every width and the desktop hid the company details behind a click for no
-    # reason. The name of this test was the only thing in the repository that
-    # said so; the code comment beside it claimed the desktop "renders exactly
-    # what it did before".
-    assert "data-ses-detail" not in APP_JS, "the toggle button is gone"
-    assert ".ses-detail-btn" not in CSS, "and so are its styles"
-    assert ".ses-detail { display: none; }" not in CSS, \
-        "the details render unconditionally now"
-    assert ".ses-detail.is-open" not in CSS
-    assert "is-open" not in _fn("renderSessionBar"), \
-        "and nothing gates them on an open class"
+    assert 'id="ses-detail-btn"' in APP_JS
+
+    # The button exists at every width and is hidden at every width but one.
+    assert ".ses-detail-btn { display: none; }" in CSS, \
+        "the desktop default has to be 'no control', not 'control'"
+
+    # And the rule that hides the panel is inside a width query. This is the
+    # assertion the comment in app.js asks for by name: the last attempt had
+    # exactly this rule outside one.
+    hide = ".ses-detail.is-closed { display: none; }"
+    assert hide in CSS
+    assert _inside_max_width(CSS, hide), \
+        "the hide rule escaped its media query, which is how this broke before"
+
+    # Nothing hides the panel unconditionally. Read the rule's body rather
+    # than matching a literal: `display: none` appended to the existing
+    # `.ses-detail { margin-top: ... }` is the same bug and does not contain
+    # the string this used to look for.
+    base = CSS.split("\n.ses-detail {", 1)[1]
+    base = base[:base.index("}")]
+    assert "display" not in base, \
+        "the unmediated rule must not give .ses-detail a display: {!r}".format(base.strip())
+
+    # The live parts stay out of the fold: which session, the clock and the
+    # 24-hour strip are what the bar is for.
+    render = _fn("renderSessionBar")
+    assert render.index("ses-strip") < render.index('id="ses-detail-btn"')
+
+
+def test_a_fold_set_on_a_phone_is_inert_on_a_desktop():
+    """The class stays in the markup at every width rather than being kept
+    out of it, so a reader who folded it on a phone and opened the same
+    account on a laptop does not carry a hidden panel across.
+
+    Verified by forcing the stored state closed and reloading at 1440px:
+    `ses-detail is-closed` on the element, `display: block`, legend `flex`,
+    button `none`."""
+    render = _fn("renderSessionBar")
+    assert "sessionDetailOpen() ? '' : ' is-closed'" in render, \
+        "the class is written unconditionally; only CSS decides what it means"
+    # Which is only safe because the rule that acts on it is width-scoped --
+    # asserted in the test above, and the reason this one can exist at all.
+    assert _inside_max_width(CSS, ".ses-detail.is-closed { display: none; }")
+
+
+def test_the_fold_defaults_to_open():
+    """A reader who has never touched it sees what they saw before. `!== '0'`
+    rather than `=== '1'`: an unset key has to read as open, and the
+    description's fold beside it defaults the other way because its phases
+    are the ones where the text matters."""
+    fn = _fn("sessionDetailOpen")
+    assert "!== '0'" in fn
+    assert "return true" in fn, "and a storage failure opens it, not closes it"
+
+
+def _inside_max_width(css, needle):
+    """Is this declaration inside a `@media (max-width: ...)` block?
+
+    Counts braces from the last `@media` opening before it. A declaration that
+    escaped its query is the specific failure this guards, and the only honest
+    way to check is to walk the nesting rather than trust proximity."""
+    at = css.index(needle)
+    depth = 0
+    i = at
+    # Walk backwards to find the enclosing block opener.
+    while i > 0:
+        i -= 1
+        if css[i] == "}":
+            depth += 1
+        elif css[i] == "{":
+            if depth == 0:
+                head_start = css.rfind("}", 0, i)
+                head = css[head_start + 1:i]
+                return "@media" in head and "max-width" in head
+            depth -= 1
+    return False
 
 
 def test_the_company_profile_sits_behind_the_session_disclosure():
@@ -215,16 +281,32 @@ def test_the_company_profile_sits_behind_the_session_disclosure():
     assert "${companyBlock}" not in head, "and must not also render above it"
 
 
-def test_no_disclosure_state_is_kept_across_the_sixty_second_repaint():
-    """There is nothing left to keep.
+def test_the_folds_state_survives_the_sixty_second_repaint():
+    """`loadSession` is on a 60s interval and renderSessionBar replaces
+    innerHTML wholesale, so a fold's open state has to live outside the DOM or
+    it shuts under a reader mid-sentence.
 
-    `loadSession` is on a 60s interval and renderSessionBar replaces innerHTML
-    wholesale, so while the panel was collapsible its open state had to live in
-    a module flag or it shut under a reader mid-sentence. With the panel always
-    rendered the flag is dead weight, and a flag nothing reads is the kind of
-    thing that gets wired back up by mistake.
-    """
-    assert "sessionDetailOpen" not in APP_JS
+    This asserted there was no such state at all, because the disclosure had
+    been removed: it was aimed at a phone and landed on every width, hiding
+    the company details on a desktop that has the room for them. The fold is
+    back for phones only -- the unmediated default is the desktop's, shown
+    with no control, and only the width query adds one -- so the invariant it
+    was really protecting is the one asserted here.
+
+    localStorage rather than a module flag, which is strictly stronger: it
+    survives a reload as well as a repaint, and it is how the description's
+    own fold beside it already remembers."""
+    assert "function sessionDetailOpen()" in APP_JS
+    assert "localStorage.getItem(SES_DETAIL_KEY)" in APP_JS
+    # Read at render, or the repaint reopens it.
+    render = _fn("renderSessionBar")
+    assert "sessionDetailOpen() ? '' : ' is-closed'" in render
+    # In the handler, not merely somewhere in the file: `function
+    # rememberSessionDetail(open)` contains that call verbatim, so a file-wide
+    # check passes with the call site deleted.
+    handler = APP_JS.split("detailBtn.addEventListener('click', () => {", 1)[1]
+    handler = handler[:handler.index("});")]
+    assert "rememberSessionDetail(open);" in handler
 
 
 def test_the_summary_fit_is_measured_at_render():
@@ -244,7 +326,14 @@ def test_the_summary_fit_is_measured_at_render():
     # which caught this assertion on its first run.
     code = re.sub(r"/\*.*?\*/", " ", fn, flags=re.S)
     code = re.sub(r"^\s*//.*$", " ", code, flags=re.M)
-    assert "if (open) checkSummaryFit();" not in code, "no open state to wait on"
+    # It is called unconditionally at render, which is the property this test
+    # is named for. It is ALSO called when the phone fold opens, and that is
+    # not a regression to the old deferral -- it is the same trap read the
+    # right way round: inside the closed panel the box has no layout, so the
+    # check has to run again once it does. The render-time call below is what
+    # keeps the desktop, where the panel is never closed, measuring on time.
+    assert code.count("checkSummaryFit();") >= 2
+    assert "  checkSummaryFit();\n" in code, "the unconditional render-time call is gone"
     assert "fitChecked" not in code, "and no latch, because it runs once per render"
 
 

@@ -2358,6 +2358,58 @@ body.chat-resizing svg { pointer-events: none; }
 }
 
 .ses-detail { margin-top: var(--space-4); }
+
+/* The detail fold, and the shape of it is the point.
+ *
+ * `#ses-detail` carries the phase legend, the timezone note, the company
+ * block and the description: measured at 375x812, 165px of every page, above
+ * every view.
+ *
+ * The last attempt at paying that down put these details behind an "Hours &
+ * company" button and broke the desktop, because the two rules meant for a
+ * width query ended up outside one -- so `display: none` applied at every
+ * width and a desktop with room to spare hid the company behind a click. The
+ * comment on that markup in app.js asks, in as many words, that the next
+ * attempt pay it inside a width query and verify the rule is actually in one.
+ *
+ * So the default here, unmediated, IS the desktop's: the panel shown and no
+ * control at all. Only the phone block below adds a fold. A rule that escapes
+ * the query fails towards "not folded on a phone either", which is the state
+ * this shipped in for months, rather than towards a desktop that has lost its
+ * company details with no button to get them back.
+ *
+ * `.is-closed` is left inert here on purpose rather than being kept out of
+ * the markup: a reader who folded it on a phone and opened the same account
+ * on a laptop would otherwise carry a hidden panel across with them. */
+.ses-detail-btn { display: none; }
+
+@media (max-width: 559px) {
+  .ses-detail-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+    padding: var(--space-1) var(--space-3);
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-md);
+    color: var(--ink-2);
+    font: inherit;
+    font-size: var(--t-small);
+    cursor: pointer;
+  }
+  .ses-detail-btn::after {
+    content: "";
+    width: 0;
+    height: 0;
+    border-left: 3.5px solid transparent;
+    border-right: 3.5px solid transparent;
+    border-top: 4px solid currentColor;
+    opacity: 0.6;
+  }
+  .ses-detail-btn[aria-expanded="true"]::after { transform: rotate(180deg); }
+  .ses-detail.is-closed { display: none; }
+}
 .ses-desc { margin-top: var(--space-3); }
 .ses-legend {
   display: flex;

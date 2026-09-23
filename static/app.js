@@ -24513,6 +24513,35 @@ const SESSION_CAVEAT_PHASES = new Set(['overnight', 'holiday', 'closed']);
  * phases that never fold. */
 const SES_DESC_KEY = 'optic.session.desc';
 
+/* The detail panel's fold, on a phone only.
+ *
+ * `#ses-detail` carries the phase legend, the timezone note, the company
+ * block and the description. Measured at 375x812 it is 165px of every page,
+ * above every view, and the comment on the markup below records the last
+ * attempt at paying that down and exactly how it failed: the rules were
+ * written for a width query and ended up outside one, so the desktop -- which
+ * has the room -- hid the company details behind a click for no reason.
+ *
+ * So the shape here is deliberate and is the opposite of that attempt. The
+ * DEFAULT, unmediated, is the desktop's: everything shown, no control. The
+ * phone block is the only thing that adds a fold. A rule that escapes the
+ * query now fails towards "visible on a phone too", which is the state this
+ * has been in for months, rather than towards a desktop with its details
+ * hidden and no button to get them back.
+ *
+ * Open by default: a reader who has never touched it sees what they see
+ * today, and the fold is something they choose. */
+const SES_DETAIL_KEY = 'optic.session.detail.v1';
+
+function sessionDetailOpen() {
+  try { return localStorage.getItem(SES_DETAIL_KEY) !== '0'; } catch (e) { return true; }
+}
+
+function rememberSessionDetail(open) {
+  try { localStorage.setItem(SES_DETAIL_KEY, open ? '1' : '0'); }
+  catch (e) { /* private mode: it just forgets between renders */ }
+}
+
 function sessionDescOpen() {
   try { return localStorage.getItem(SES_DESC_KEY) === '1'; } catch (e) { return false; }
 }
@@ -24675,7 +24704,13 @@ function renderSessionBar() {
         * The phone cost is back and is the accepted price of the details being
         * visible without being asked for. If it needs paying down again, pay
         * it inside a width query and verify the rule is actually in one. */''}
-    <div class="ses-detail" id="ses-detail">
+    ${/* Rendered at every width; `display: none` above 559 keeps it off a
+         desktop. Labelled for what it reveals rather than "Details", so it
+         says something before it is pressed. */''}
+    <button type="button" class="ses-detail-btn" id="ses-detail-btn"
+      aria-controls="ses-detail" aria-expanded="${sessionDetailOpen()}">
+      Hours &amp; company</button>
+    <div class="ses-detail${sessionDetailOpen() ? '' : ' is-closed'}" id="ses-detail">
       ${companyBlock}
       <div class="ses-legend">${legend}
         <span class="ses-key ses-zone">${onMarketTime
@@ -24707,6 +24742,21 @@ function renderSessionBar() {
 
   const fold = $('#ses-fold');
   if (fold) fold.addEventListener('toggle', () => rememberSessionDesc(fold.open));
+
+  const detailBtn = $('#ses-detail-btn');
+  const detail = $('#ses-detail');
+  if (detailBtn && detail) {
+    detailBtn.addEventListener('click', () => {
+      const open = detail.classList.toggle('is-closed') === false;
+      detailBtn.setAttribute('aria-expanded', String(open));
+      rememberSessionDetail(open);
+      /* Re-measure the description's clamp. Inside a closed panel both
+         scrollHeight and clientHeight are 0 and the fit check reads `0 <= 1`,
+         which is the trap this file already documents -- it would decide the
+         text fits and hide the More button for good. */
+      if (open) checkSummaryFit();
+    });
+  }
 
   const sum = $('#ses-summary');
   const more = $('#ses-more');
