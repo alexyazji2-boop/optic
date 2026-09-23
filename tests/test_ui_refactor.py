@@ -86,10 +86,17 @@ def test_the_phone_dropdown_opens_below_the_bar_not_across_it():
     phone = phone_block_with(CSS, ".nav-menu {")
     menu = phone[phone.index(".nav-menu {"):]
     menu = menu[:menu.index("}")]
+    # Both bars, because the nav moved. These menus hung off the top bar when
+    # this was written; the sections live in a rail now, which on a phone is a
+    # horizontal strip sitting UNDER that bar. Anchoring to --topbar-h alone
+    # would put the panel across the very strip it opens from, which is the
+    # fault this test is named for, one element along.
     assert "var(--topbar-h" in menu
-    # ...and something has to actually set it, with a fallback in the CSS for
+    assert "var(--rail-h" in menu
+    # ...and something has to actually set them, with a fallback in the CSS for
     # browsers that never run the observer.
     assert "setProperty('--topbar-h'" in APP
+    assert "setProperty('--rail-h'" in APP
     # Sliced to the function, not to a character count. At [:1200] this broke
     # when a comment was added inside it — a window measured in characters
     # fails on an edit that changes nothing it was testing. Same fault as the

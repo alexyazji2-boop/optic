@@ -104,7 +104,17 @@
      getComputedStyle(.brand-mark-eye).animationName was "eye-blink". -->
 <body data-view="home">
 
-<header class="topbar">
+<!-- The workspace frame.
+     A grid of rail | content, with the Pulse panel reserving its own column
+     when open. This replaced a page-shaped shell -- a full-width bar carrying
+     brand, search, eight nav groups, settings, account and Pulse, over a
+     centred column -- which put the product's navigation in competition with
+     its own search box for horizontal room and left every page starting
+     below ~350px of chrome. A terminal's navigation belongs down the side,
+     where it costs no vertical space and can hold labels. -->
+<div class="app">
+
+<nav class="rail" id="rail" aria-label="Sections">
   <button class="brand" id="brand-home" type="button" aria-label="Optic Terminal. Go to home">
     <!-- The same drawing as .home-logo, at a third of the size. Not a second
          version of it: every number below is the one the home mark uses, so
@@ -141,6 +151,40 @@
     <span class="brand-text">OPTIC <span>TERMINAL</span></span>
   </button>
 
+  <!-- Rendered by paintNav, which is unchanged: it writes into
+       `nav.tabs-group` wherever that element lives. Vertical here, so a group
+       can carry its name instead of being squeezed to fit a row. -->
+  <nav class="tabs tabs-group" role="tablist" aria-label="Sections"></nav>
+
+  <div class="rail-foot">
+    <button class="icon-btn" id="settings-btn" data-view="settings"
+            aria-label="Settings" aria-pressed="false" title="Settings. Appearance and time zone">
+      <svg class="gear" viewBox="0 0 24 24" aria-hidden="true">
+        <!-- Classic cog: eight teeth as a dashed ring, so the tooth count and the
+             gap are one stroke rather than eight hand-placed paths. -->
+        <circle cx="12" cy="12" r="8.4" fill="none" stroke="currentColor" stroke-width="3.2"
+                stroke-dasharray="2.6 3.99" stroke-linecap="butt"/>
+        <circle cx="12" cy="12" r="6.2" fill="none" stroke="currentColor" stroke-width="2"/>
+        <circle cx="12" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/>
+      </svg>
+      <span class="rail-label">Settings</span>
+    </button>
+    <!-- Collapses the rail to icons. Persisted; see railCollapsed in app.js. -->
+    <button class="icon-btn rail-toggle" id="rail-toggle" type="button"
+            aria-label="Collapse the sidebar" aria-pressed="false" title="Collapse the sidebar">
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"
+           stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+        <path d="M9 4v16"></path>
+      </svg>
+      <span class="rail-label">Collapse</span>
+    </button>
+  </div>
+</nav>
+
+<div class="app-main">
+
+<header class="topbar">
   <form class="search" id="ticker-form">
     <div class="combo">
       <!-- Focusing this hands over to the command palette (see the focusin
@@ -162,25 +206,8 @@
     <button class="btn primary" type="submit">Load</button>
   </form>
 
-  <!-- Two rows. The top one is where you are working — one stock, the market,
-       the scanners, your own holdings — and the second is which page inside
-       that. Eleven peers in one row overflowed at 993px in a 780px bar, and
-       flattening them also implied they were the same kind of thing, which they
-       are not: three of them do nothing at all without a ticker loaded. -->
-  <nav class="tabs tabs-group" role="tablist" aria-label="Sections"></nav>
+  <!-- Kept: syncSecurityHeader and the instrument chart both write into it. -->
   <nav class="tabs tabs-sub" role="tablist" aria-label="Pages" id="subnav"></nav>
-
-  <button class="icon-btn" id="settings-btn" data-view="settings"
-          aria-label="Settings" aria-pressed="false" title="Settings. Appearance and time zone">
-    <svg class="gear" viewBox="0 0 24 24" aria-hidden="true">
-      <!-- Classic cog: eight teeth as a dashed ring, so the tooth count and the
-           gap are one stroke rather than eight hand-placed paths. -->
-      <circle cx="12" cy="12" r="8.4" fill="none" stroke="currentColor" stroke-width="3.2"
-              stroke-dasharray="2.6 3.99" stroke-linecap="butt"/>
-      <circle cx="12" cy="12" r="6.2" fill="none" stroke="currentColor" stroke-width="2"/>
-      <circle cx="12" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/>
-    </svg>
-  </button>
 
   <!-- Accounts. Empty until /api/auth/me answers: rendering "Sign in" and then
        swapping it for an avatar a moment later is the flash that gives away a
@@ -258,6 +285,9 @@
   </p>
   <div class="legal-full" id="legal-full" hidden></div>
 </footer>
+
+</div><!-- /.app-main -->
+</div><!-- /.app -->
 
 <!-- Report a problem.
      Fixed and present on every view, because the reader who has just hit

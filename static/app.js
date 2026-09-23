@@ -2625,6 +2625,71 @@ if (document.readyState === 'loading') {
   trackTopbarHeight();
 }
 
+/* The rail's height, published for the same reason --topbar-h is.
+ *
+ * On a phone the rail is a horizontal scroller rather than a column, and its
+ * fly-out menus are position:fixed for the reason the top bar's were: an
+ * absolutely-positioned menu inside a scroll container gets clipped by it, and
+ * a menu anchored to a nav item that can sit anywhere along that strip runs
+ * off the right edge. A fixed box cannot say "just below my parent" in CSS, so
+ * the parent's measured height is the anchor -- and the rail's height is not a
+ * constant either.
+ *
+ * Zero on a desktop, where the rail is a full-height column and its menus fly
+ * out sideways from the item itself. The phone rule is the only reader. */
+function trackRailHeight() {
+  const rail = document.getElementById('rail');
+  if (!rail) return;
+  const publish = () => {
+    const phone = typeof matchMedia === 'function'
+      && matchMedia('(max-width: 559px)').matches;
+    const h = phone ? Math.round(rail.getBoundingClientRect().height) : 0;
+    document.documentElement.style.setProperty('--rail-h', h + 'px');
+  };
+  publish();
+  if (typeof ResizeObserver === 'function') new ResizeObserver(publish).observe(rail);
+  window.addEventListener('resize', publish);
+}
+
+/* Collapsed to icons, and remembered.
+ *
+ * A rail that forgets is a rail you re-collapse on every visit, and the whole
+ * point of collapsing it is that the reader wanted the width back. */
+const RAIL_KEY = 'optic.rail.tight';
+
+function applyRail(tight) {
+  document.body.classList.toggle('rail-tight', tight);
+  const btn = document.getElementById('rail-toggle');
+  if (btn) {
+    btn.setAttribute('aria-pressed', String(tight));
+    const label = tight ? 'Expand the sidebar' : 'Collapse the sidebar';
+    btn.setAttribute('aria-label', label);
+    btn.title = label;
+    const text = btn.querySelector('.rail-label');
+    if (text) text.textContent = tight ? 'Expand' : 'Collapse';
+  }
+  try { localStorage.setItem(RAIL_KEY, tight ? '1' : '0'); }
+  catch (e) { /* private mode: it just forgets between loads */ }
+}
+
+function initRail() {
+  let tight = false;
+  try { tight = localStorage.getItem(RAIL_KEY) === '1'; } catch (e) { tight = false; }
+  applyRail(tight);
+  const btn = document.getElementById('rail-toggle');
+  if (btn) {
+    btn.addEventListener('click', () => {
+      applyRail(!document.body.classList.contains('rail-tight'));
+    });
+  }
+  trackRailHeight();
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initRail);
+} else {
+  initRail();
+}
+
 const HOME_SEARCH_WIDE = 'Search a ticker or company. E.g. NVDA or Apple';
 const HOME_SEARCH_NARROW = 'Ticker or company';
 const homeNarrowQuery = typeof matchMedia === 'function'

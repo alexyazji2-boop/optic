@@ -6032,7 +6032,15 @@ main {
      already carries its own cap in `ch` (74, 78, 105 at various panels) and the
      home page's search lockup is pinned at 860. What was left inside the cap
      was tables, charts and tile grids, none of which wanted protecting. */
-  margin: 0 auto;
+  /* `0 auto` until the workspace frame. With no cap above it the centring was
+     already a no-op in block layout -- auto margins resolve to zero when the
+     width is auto -- but `main` is a flex item now, and there an auto cross-axis
+     margin turns OFF stretch and sizes the element to its max-content width.
+     Measured at 1280: main came out 1129px inside a 1068px column and ran 61px
+     past the viewport, which was the whole of the horizontal page scroll.
+     `body.chat-open main` below still sets its own margin-right; this only
+     stops the element asking to be centred in a column it should fill. */
+  margin: 0;
   padding: var(--space-6) var(--space-5) var(--space-8);
 }
 body.chat-open main { padding-right: var(--space-5); margin-right: var(--chat-w); }
@@ -8350,11 +8358,21 @@ table.data th,
      * one screen-height below the fold. The bar's height is the only correct
      * anchor and it is not a constant — it wraps to two or three rows depending
      * on width — so it is measured and published as --topbar-h. */
-    top: calc(var(--topbar-h, 165px) + var(--space-1));
+    /* Below the RAIL, which is where the nav lives now. It used to be
+       --topbar-h alone, from when these menus hung off the top bar; with the
+       nav moved to a rail that sits under the bar on a phone, that anchor put
+       the panel across the very strip it opened from -- the exact fault this
+       comment was written about, one element along. --rail-h is published by
+       trackRailHeight and is 0 on a desktop, where these menus fly out
+       sideways and this block does not apply. */
+    top: calc(var(--topbar-h, 165px) + var(--rail-h, 0px) + var(--space-1));
     left: var(--space-3);
     right: var(--space-3);
     min-width: 0;
     max-width: none;
+    /* The rail's desktop rule offsets the fly-out from the column by a step;
+       pinned to both screen edges that offset is just a shift. */
+    margin-left: 0;
   }
 
   /* Chrome takes less, content takes more. */
@@ -13231,3 +13249,202 @@ main { padding-top: var(--space-7); }
  */
 body[data-view="chart"] .ses-legend,
 body[data-view="chart"] .ses-fold { display: none; }
+
+/* ===================================================== the workspace frame ==
+ *
+ * Rail down the side, content beside it. This replaced a page-shaped shell:
+ * one full-width bar carrying the brand, the search box, eight nav groups,
+ * settings, the account slot and Pulse, over a centred column. Two things were
+ * wrong with it and both were structural rather than cosmetic.
+ *
+ * The navigation competed with the search box for horizontal room -- measured
+ * at 1411px, the narrowest width where the strip may not wrap, eight groups
+ * ended at 1125 against a settings gear at 1160, and a ninth group left 18px.
+ * Navigation that cannot grow is navigation that cannot be labelled.
+ *
+ * And it cost vertical space on every page. Measured at 1280x900 on the
+ * charting tab: 347px of chrome above the workspace, on the one view whose
+ * entire job is a chart. A rail costs none: it uses width the content column
+ * was not using anyway, and on a 1280px screen there is more of that than
+ * there is height.
+ *
+ * Grid rather than flex so the rail can be a fixed track that the content
+ * column simply does not overlap -- the previous shell reserved the Pulse
+ * panel with a margin on `main` and a padding on the header, two rules that
+ * had to agree with each other and once did not.
+ */
+.app {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 100dvh;
+}
+.app-main { min-width: 0; display: flex; flex-direction: column; }
+
+.rail {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 212px;
+  padding: var(--space-3) var(--space-2);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  z-index: 40;
+  transition: width 160ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+/* The brand sits at the top of the rail rather than in the bar. */
+.rail > .brand {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2);
+  width: 100%;
+  justify-content: flex-start;
+}
+.rail .brand-text {
+  display: inline;
+  font-size: var(--t-caption);
+  letter-spacing: 0.08em;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.rail-foot { margin-top: auto; display: flex; flex-direction: column; gap: var(--space-1); }
+.rail-foot .icon-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  justify-content: flex-start;
+  padding: var(--space-2);
+}
+.rail-label { font-size: var(--t-small); color: var(--ink-2); white-space: nowrap; }
+
+/* Collapsed: icons only. The labels go, the rail keeps its hit targets. */
+body.rail-tight .rail { width: 56px; }
+body.rail-tight .rail .brand-text,
+body.rail-tight .rail-label,
+body.rail-tight .rail .nav-top { font-size: 0; }
+body.rail-tight .rail .nav-top { justify-content: center; padding: var(--space-2) 0; }
+body.rail-tight .rail-foot .icon-btn { justify-content: center; }
+
+/* The top bar is a context strip now, not the navigation. */
+.app-main > header.topbar { gap: var(--space-3); }
+
+@media (prefers-reduced-motion: reduce) {
+  .rail { transition: none; }
+}
+
+/* ---------------------------------------------- the nav, now down the side
+ *
+ * `paintNav` is unchanged: it writes the same markup into `nav.tabs-group`
+ * wherever that element lives. What changes is the axis, and with it three
+ * rules that only made sense in a row -- the wrap band between 560 and 1410,
+ * the measured left/right menu flip, and the phone's horizontal scroller.
+ * A column needs none of them: it has as much height as it needs and its
+ * menus open sideways.
+ */
+.rail nav.tabs-group {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: var(--space-0);
+  overflow: visible;
+  min-height: 0;
+}
+.rail nav.tabs-group > .nav-item { position: relative; }
+.rail nav.tabs-group .nav-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  justify-content: flex-start;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--r-sm);
+  font-size: var(--t-small);
+  text-align: left;
+  white-space: nowrap;
+  /* The app-wide rule, and it is right: fifty-eight of eighty-three hover
+     states once snapped while a handful eased, which reads as unfinished.
+     Paint-level properties only -- animating a layout property forces a
+     document reflow per frame. */
+  transition: background-color var(--dur-ui, 120ms) ease, color var(--dur-ui, 120ms) ease;
+}
+.rail nav.tabs-group .nav-top:hover { background: var(--bg-hover); color: var(--ink); }
+/* The current section, marked on the edge the eye already follows down. */
+.rail nav.tabs-group .nav-top[aria-selected="true"],
+.rail nav.tabs-group .nav-item.on > .nav-top {
+  background: var(--surface-2);
+  color: var(--ink);
+  box-shadow: inset 2px 0 0 var(--s1);
+}
+/* The caret points along the axis the menu opens on. */
+.rail nav.tabs-group .nav-caret { margin-left: auto; transform: rotate(-90deg); }
+
+/* Menus fly out to the right of the rail rather than dropping below a tab. */
+.rail nav.tabs-group .nav-menu {
+  top: 0;
+  left: 100%;
+  right: auto;
+  margin-left: var(--space-1);
+  box-shadow: var(--elev-2);
+}
+body.rail-tight .rail nav.tabs-group .nav-menu { left: 56px; }
+
+/* A phone has no room for a rail. It becomes a row along the bottom edge of
+   the frame instead, above the existing mobile tab bar's territory, and the
+   fly-out menus drop upward from it. */
+@media (max-width: 559px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  /* Search first, then sections. A grid places the rail in row one because it
+     comes first in the DOM, and it comes first in the DOM because on every
+     other width it is a column beside the content. */
+  .rail { order: 2; }
+  .app-main { order: 1; }
+  .rail {
+    position: static;
+    height: auto;
+    width: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-2);
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    padding: var(--space-2) var(--space-3);
+  }
+  .rail > .brand { width: auto; margin: 0 var(--space-2) 0 0; flex: none; }
+  .rail nav.tabs-group { flex-direction: row; gap: var(--space-1); }
+  .rail nav.tabs-group .nav-top { padding: var(--space-1) var(--space-2); }
+  .rail nav.tabs-group .nav-caret { margin-left: var(--space-0); transform: none; }
+  .rail-foot { margin-top: 0; flex-direction: row; }
+  .rail-label { display: none; }
+  .rail-toggle { display: none; }
+}
+
+/* --------------------------------------------- the rail, corrected in place
+ *
+ * Three faults, all from the nav having been a horizontal strip inside the
+ * top bar until now, measured at 1280x900:
+ *
+ * `nav.tabs-group` carried `order: 3` and `flex: 1 0 100%` -- both written to
+ * place it on the bar's third row and make it claim the full width. In a
+ * column those put the settings footer ABOVE the sections (foot at y=87,
+ * nav at y=172) and forced the nav to a 100% basis.
+ *
+ * `main` is a flex item now, and a flex item's default `min-width: auto` lets
+ * it refuse to shrink below its content. It measured 1129px inside a 1068px
+ * column and ran 61px past the viewport -- the whole of the horizontal page
+ * scroll. The same `min-width: 0` the panel grids already use.
+ *
+ * And the rail's icons had no size, so the collapse glyph rendered at 105px
+ * square and pushed everything under it down a screen.
+ */
+.rail nav.tabs-group { order: 0; flex: 0 1 auto; }
+.app-main > * { min-width: 0; }
+.rail .icon-btn svg,
+.rail .brand-mark { width: 18px; height: 18px; flex: none; }
+.rail > .brand .brand-mark { width: 22px; height: 22px; }
