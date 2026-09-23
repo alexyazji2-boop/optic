@@ -27,6 +27,10 @@ from __future__ import annotations
 import re
 
 CSS = open("static/styles.css", encoding="utf-8").read()
+# Declarations only. A comment explaining why a declaration was removed quotes
+# the declaration, and a bare substring check cannot tell those apart -- this
+# is the third time that has caught a test in this repo.
+CSS_CODE = re.sub(r"/\*.*?\*/", "", CSS, flags=re.S)
 HTML = open("static/index.html", encoding="utf-8").read()
 APP = open("static/app.js", encoding="utf-8").read()
 
@@ -139,3 +143,39 @@ def test_the_phone_menu_anchor_follows_the_rail():
     fn = APP.split("function trackRailHeight() {", 1)[1].split("\n}\n", 1)[0]
     assert "matchMedia('(max-width: 559px)')" in fn, \
         "zero on a desktop, where the menus fly out sideways instead"
+
+
+def test_the_rail_does_not_clip_its_own_fly_outs():
+    """Reported as "there's no dropdown", and it was one word of CSS.
+
+    `overflow-y: auto` on the rail computes `overflow-x` to `auto` as well --
+    per spec, a `visible` on one axis becomes `auto` when the other is not
+    visible. The section menus open sideways, so asking for a vertical
+    scrollbar clipped them at the rail's own edge: measured, the Dossier menu
+    ran 206 to 396 against a rail ending at 212.
+
+    Visible is safe because the rail's content does not grow with data -- a
+    brand row, the sections and two footer buttons, about 380px against a
+    100dvh column."""
+    block = CSS_CODE.split("\n.rail {", 1)[1]
+    block = block[:block.index("}")]
+    assert "overflow: visible" in block
+    assert "overflow-y: auto" not in block, \
+        "this clips the horizontal axis too, and the menus open sideways"
+
+
+def test_compare_is_its_own_section_again():
+    """It was folded into Dossier to get the top strip from eight sections to
+    six, back when the navigation was a horizontal row competing with the
+    search box for width. The rail removed that constraint.
+
+    The merge had a cost that showed up immediately: `NAV_LAST` returns you to
+    the last page you used in a group, so once Compare had been opened it
+    became what the Dossier button did -- a page about two to four securities
+    answering to the section named for one."""
+    groups = APP.split("const NAV_GROUPS = [", 1)[1]
+    groups = groups[:groups.index("\n];")]
+    assert "{ id: 'analyse', label: 'Compare', views: ['compare'] }" in groups
+    line = [ln for ln in groups.splitlines() if "'security'" in ln]
+    assert line and "'compare'" not in line[0], \
+        "the Dossier group is the facets of one security"

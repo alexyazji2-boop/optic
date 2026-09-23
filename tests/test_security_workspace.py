@@ -66,8 +66,8 @@ def test_every_new_view_is_in_the_views_map():
 def test_the_nav_group_reuses_the_facet_list_rather_than_repeating_it():
     """Two hand-maintained copies of the same seven names would drift, and the
     symptom is a tab in the strip that the nav menu cannot reach."""
-    assert "views: [...SECURITY_VIEWS, 'compare'] }" in APP_JS, \
-        "the group spreads the facet list rather than restating it"
+    assert "views: SECURITY_VIEWS }" in APP_JS, \
+        "the group reuses the facet list rather than restating it"
     # And the seven are not written out a second time anywhere in NAV_GROUPS.
     groups = APP_JS.split("const NAV_GROUPS = [", 1)[1]
     groups = groups[:groups.index("\n];")]

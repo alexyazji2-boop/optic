@@ -25767,7 +25767,20 @@ const NAV_GROUPS = [
    * left out of SECURITY_VIEWS, which is what drives the header and the facet
    * strip. The group is only the drawer you pick a page from, and "I want to
    * look at securities" is one destination however many are on screen. */
-  { id: 'security', label: 'Dossier', views: [...SECURITY_VIEWS, 'compare'] },
+  { id: 'security', label: 'Dossier', views: SECURITY_VIEWS },
+  /* Its own section again.
+   *
+   * It was folded into the Dossier group to get the top strip from eight
+   * sections to six, when the navigation was a horizontal row competing with
+   * the search box for width -- at 1411px eight groups ended at 1125 against a
+   * gear at 1160. The rail removed that constraint: a column has room for as
+   * many sections as the product has.
+   *
+   * And the merge had a cost that showed. `NAV_LAST` returns you to the last
+   * page you used in a group, so once Compare had been opened it became what
+   * the Dossier button did -- a page about two to four securities answering to
+   * the section named for one. */
+  { id: 'analyse', label: 'Compare', views: ['compare'] },
   { id: 'market', label: 'Markets', views: ['brief', 'market', 'indices'] },
   /* Explore is the index and Scan is the tool: one is a page you browse when
    * you do not know what you are looking for, the other runs a named screen.
