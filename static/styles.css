@@ -6742,6 +6742,7 @@ b, strong { font-weight: 600; }
   .ws-tools-btn { display: inline-flex; }
   .ws-tools { display: none; }
   .ws-toolbar.tools-open .ws-tools { display: contents; }
+
   /* A flexible spacer on a wrapping row is a row of its own, and it was:
      measured as one of the six. It has nothing to push apart here. */
   .ws-toolbar-gap { display: none; }
@@ -6786,6 +6787,33 @@ b, strong { font-weight: 600; }
   border-radius: var(--r-md);
   box-shadow: var(--elev-2);
   z-index: 20;
+}
+
+@media (max-width: 559px) {
+  /* The toolbar menus are anchored to the TOOLBAR here, not to their button.
+   *
+   * `.ws-menu-pop` has a 210px minimum and opens from `left: 0` of the button
+   * it belongs to, which is fine in a wide bar and runs off a narrow one:
+   * measured at 375x812, Trends opened at x=172 and ended at 382, seven
+   * pixels past the screen, with an ancestor clipping the rest. Events and
+   * Panes were off the edge too.
+   *
+   * Making `.ws-menu` static hands the pop's containing block to the toolbar,
+   * which is already `position: relative` for exactly this reason -- so
+   * `top: 100%` becomes "under the whole bar", which on a wrapping multi-row
+   * toolbar is where it belongs anyway.
+   *
+   * THIS BLOCK HAS TO SIT HERE, below the two rules it overrides. It was a
+   * hundred lines up with the rest of the phone toolbar rules, where
+   * `.ws-menu { position: relative }` and this `.ws-menu-pop` both followed
+   * it unmediated at equal specificity and discarded the lot. That is the
+   * fourth rule today to lose a cascade this way. */
+  .ws-menu { position: static; }
+  .ws-menu-pop {
+    left: var(--space-3);
+    right: var(--space-3);
+    min-width: 0;
+  }
 }
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .ws-menu-pop {
@@ -7540,6 +7568,50 @@ b, strong { font-weight: 600; }
 
 /* ---- the drawing layer ------------------------------------------------- */
 .ws-plot { position: relative; min-height: 180px; min-width: 0; }
+
+/* The charting workspace on a phone.
+ *
+ * Nothing here had a narrow rule at all: the desktop grid just did whatever a
+ * 375px viewport made it do. Measured on AAPL at 375x812 before any of this,
+ * with the plot at y=752 of an 812px screen -- the chart was below the fold
+ * on the tab whose job is charting.
+ *
+ *   drawing rail   40 x 649   a column beside the chart, fine
+ *   canvas        298 x 649   of which the PLOT was 180 and two
+ *                             oscillator panes were 179 each
+ *   widget rail   338 x 611   fifteen buttons stacked full-width, and
+ *                             because the grid has three columns and four
+ *                             children it wrapped to its own row under
+ *                             everything
+ *
+ * So the price chart was the third-largest thing in its own workspace. */
+@media (max-width: 559px) {
+  /* The rail becoming a row is the 900px block's job and it already does it.
+     Only the scrollbar is added here: a visible one across a 44px strip is
+     most of the strip. */
+  .ws-wrail { overflow-y: hidden; scrollbar-width: none; }
+  .ws-wrail::-webkit-scrollbar { display: none; }
+
+  /* The chart gets the room. 180px was the floor and it was also the whole
+     allowance, because the two panes below it take their height from content
+     and there was nothing left to flex into. */
+  .ws-plot { min-height: 300px; }
+  .ws-pane { max-height: 110px; }
+
+  /* Every pill row here can be wider than the screen -- the interval ladder
+     is eight pills totalling 412px in a 338px toolbar, so `1W` sat at x=359
+     to 408 and could not be tapped at all. They scroll rather than overflow.
+     `overflow-x: visible` was the default and is what hid it. */
+  .ws-toolbar .pills,
+  .ws-toolbar .seg {
+    overflow-x: auto;
+    scrollbar-width: none;
+    max-width: 100%;
+  }
+  .ws-toolbar .pills::-webkit-scrollbar,
+  .ws-toolbar .seg::-webkit-scrollbar { display: none; }
+  .ws-toolbar .pill { flex: none; }
+}
 .ws-chart { min-height: 0; min-width: 0; }
 /* Over the chart, same box. `pointer-events: none` on the wrapper and `auto` on
    the SVG inside it, so the chart's own crosshair still works everywhere the
@@ -8638,13 +8710,35 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
  *
  * The rail is a column of panel toggles; this one is an action, so it gets the
  * accent the toggles deliberately do not have and sits apart from them with a
- * divider. margin-top: auto pins it to the bottom whatever the widget count. */
-.ws-wrail { display: flex; flex-direction: column; }
+ * divider. margin-top: auto pins it to the bottom whatever the widget count.
+ *
+ * There was a `.ws-wrail { display: flex; flex-direction: column; }` here,
+ * restating what the base rule nine hundred lines up already says, as setup
+ * for that auto margin. Unmediated and last, it silently undid both
+ * responsive blocks: the rail is meant to become a scrolling ROW below 900px
+ * and it stayed a column, so on a 375px phone fifteen buttons rendered as
+ * 338x611 -- a wall of them under the chart, taller than the viewport. */
 .ws-wrail-pulse {
   margin-top: auto;
   color: var(--ink);
   border-top: 1px solid var(--border);
 }
+@media (max-width: 900px) {
+  /* `margin-top: auto` pins to the bottom of a column and means nothing in a
+     row, so the divider and the gap move to the inline end.
+     Below the rule above, not up with the other 900px declarations: that is
+     where this lived and the unmediated block immediately above discarded it.
+     Measured, the computed margin-top on a tablet was 0 either way, which is
+     how a dead override looks when the property it sets happens to resolve to
+     the same value. */
+  .ws-wrail-pulse {
+    margin-top: 0;
+    margin-left: auto;
+    border-top: 0;
+    border-left: 1px solid var(--border);
+  }
+}
+
 .ws-wrail-pulse .ws-wrail-ico { color: var(--btn-primary); }
 .ws-wrail-pulse:hover {
   background: color-mix(in srgb, var(--btn-primary) 18%, transparent);
@@ -13614,7 +13708,9 @@ body.rail-tight .rail nav.tabs-group .nav-menu { left: 56px; }
        x=314 on top of nav buttons three through seven and scrolled away with
        them. Measured after: rail scrollWidth 375 against clientWidth 375, nav
        scrollWidth 794 against 121, footer fixed at 323-361. */
-    flex: 1 1 auto;
+    /* `flex` is not set here. An unmediated `.rail nav.tabs-group { flex: 0 1
+       auto }` sits below this block and would discard it; the grow is
+       declared again after that rule instead. */
     min-width: 0;
     overflow-x: auto;
     scrollbar-width: none;
@@ -13630,7 +13726,29 @@ body.rail-tight .rail nav.tabs-group .nav-menu { left: 56px; }
     padding: var(--space-1) var(--space-2);
     width: auto;
   }
-  .rail nav.tabs-group .nav-caret { margin-left: var(--space-0); transform: none; }
+  /* Inline, not absolute.
+   *
+   * The base rule pins the caret to `top: --space-1; right: --space-1` of the
+   * nav item, which was right when the nav was a full-width top bar and the
+   * corner was the right-hand end of a wide button. In this row the buttons
+   * size to their label, so a 7x4px triangle at the top-right corner of a
+   * 98px pill reads as a stray speck floating above the strip -- which is
+   * exactly how it was reported. Measured: caret at y=141 against a button
+   * spanning 135 to 179, so it sat on the top edge rather than beside the
+   * word.
+   *
+   * `margin-left: auto` did nothing here either: an absolutely positioned
+   * box is placed by its offsets, not by its margins. */
+  .rail nav.tabs-group .nav-caret {
+    position: static;
+    margin-left: var(--space-1);
+    transform: none;
+    flex: none;
+  }
+  /* And it has to flip when the menu is open, which is the one thing the
+     glyph is for. `.nav-item.open .nav-caret` is (0,2,0) and the rule above
+     is (0,3,0), so the reset won and the caret never moved. */
+  .rail nav.tabs-group .nav-item.open .nav-caret { transform: rotate(180deg); }
   /* Last in the row and not shrinkable, so the gear is always at the right
      end and always on screen. Measured at 375x812: 323-361 whatever the nav's
      scroll position. */
@@ -13723,6 +13841,13 @@ body.rail-tight .rail nav.tabs-group .nav-menu { left: 56px; }
  * square and pushed everything under it down a screen.
  */
 .rail nav.tabs-group { order: 0; flex: 0 1 auto; }
+
+@media (max-width: 559px) {
+  /* Grow to fill the row. The phone block sets this too and cannot keep it:
+     the rule directly above is unmediated and later, so `flex: 0 1 auto` won
+     and the strip only ever took its content width. */
+  .rail nav.tabs-group { flex: 1 1 auto; }
+}
 .app-main > * { min-width: 0; }
 .rail .icon-btn svg,
 .rail .brand-mark { width: 18px; height: 18px; flex: none; }

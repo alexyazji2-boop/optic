@@ -362,7 +362,14 @@ def test_on_a_phone_the_nav_scrolls_and_the_rail_does_not():
     assert "overflow-x: auto" in nav
     # Or the nav refuses to shrink below its content and nothing scrolls.
     assert "min-width: 0" in nav
-    assert "flex: 1 1 auto" in nav
+    # And it grows to fill the row -- but NOT from this block. An unmediated
+    # `.rail nav.tabs-group { flex: 0 1 auto }` sits below it and, at equal
+    # specificity, discarded a `flex` declared here. It is declared again
+    # after that rule, and the order is the whole point of the assertion.
+    grow = CSS_CODE.index(".rail nav.tabs-group { order: 0; flex: 0 1 auto; }")
+    after = CSS_CODE[grow:]
+    assert "flex: 1 1 auto" not in nav, "declared here it is dead"
+    assert ".rail nav.tabs-group { flex: 1 1 auto; }" in after
     # The multi-line form. `.rail { order: 2; }` is a separate one-liner in
     # this block on purpose -- it is about where the row sits, not how it
     # behaves -- so a bare `.rail {` split picks that one and reads nothing.
