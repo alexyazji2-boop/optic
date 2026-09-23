@@ -1940,6 +1940,16 @@ table.data tr:last-child td { border-bottom: none; }
 table.data td { transition: background-color 0.1s ease; }
 table.data tr:hover td { background: var(--surface-2); }
 table.data td.name { color: var(--ink); font-variant-numeric: normal; }
+/* A first column that holds numbers rather than a name.
+ *
+ * `td.name` opts a TEXT column out of lining figures, which is right for
+ * company names and wrong for the nine prices the chart dock's Key levels
+ * widget puts in that column: measured on AMD, 223.58 / 197.34 / 491.24 down
+ * the left edge with no two decimal points under each other. `.num` opts it
+ * back in without giving up the left alignment `.name` is really being used
+ * for there. Same meaning the class already has in `.seg-table td.num` and
+ * `.sector-board .num`. */
+table.data td.name.num { font-variant-numeric: tabular-nums; }
 .scroll-y { max-height: 340px; overflow-y: auto; }
 
 /* ------------------------------------------------------------------ charts */
@@ -9461,10 +9471,28 @@ body.cp-open { overflow: hidden; }
   margin-top: var(--space-3);
 }
 
+/* The name of a group of scans, and it is a label rather than a heading.
+ *
+ * It was written as one -- `font: 600 var(--t-micro)/1 var(--sans)` -- and
+ * rendered as neither. `.panel h3` is (0,1,1) and sets `font-size:
+ * var(--t-base)`, so it beat this (0,1,0) and the label drew at 17.25px, a
+ * size nobody chose. The `font` shorthand did win for the family, and it names
+ * `--sans`, so this was the only heading in the product not in the display
+ * face: six of them, on Explore, all at a sub-heading size in Plus Jakarta
+ * Sans next to twenty-four panel headings in Host Grotesk.
+ *
+ * Kept as a label rather than promoted to a heading, because that is what it
+ * is, and given the uppercase treatment every other `--t-micro` label in the
+ * file already has. `.panel .ex-group-h` is (0,2,0) and beats `.panel h3`. */
+.panel .ex-group-h,
 .ex-group-h {
   margin: 0 0 var(--space-1);
-  font: 600 var(--t-micro)/1 var(--sans);
-  letter-spacing: 0.01em;
+  font-family: var(--sans);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   color: var(--ink-muted);
 }
 
@@ -9935,7 +9963,27 @@ body.cp-open { overflow: hidden; }
  * not cards — the home page's six-row summary and this are the same rows, and
  * wrapping the long one in a card would make them look like different things.
  */
-.wv { padding: var(--space-2) 0 var(--space-8); }
+/* Watchlist and Alerts used to render onto the bare page: `section.wv` had a
+ * padding and nothing else, no surface, no border, no radius. Every other
+ * route in the product puts its content in a `.panel` -- Scan, Explore, the
+ * Optic Portfolio, all seven security facets -- so these two were the only
+ * places where a table of numbers sat directly on the page background with its
+ * column headers floating above it. They are panels now, and `.wv` is gone.
+ *
+ * `.panel > h2` is a child combinator and the title here is not a child: the
+ * header is a ROW (title and sub on the left, "Add a symbol" or "Clear all" on
+ * the right), so the h2 sits inside `.wv-head`. Without this rule it fell
+ * through to `main h2` at `--t-d3` -- a 27.6px display title on a card whose
+ * neighbours all use 20.7px. Specificity (0,2,1), which is what it takes to
+ * beat `main h2` (0,0,2) and the bare `h2` at 32px. */
+.panel > .wv-head h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: var(--t-heading);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
 .wv-head {
   display: flex;
   align-items: flex-start;
@@ -11567,7 +11615,10 @@ body.auth-open { overflow: hidden; }
    varies from nothing to a full sentence, so it gets the flexible track: giving
    it a fixed width would either truncate the useful ones or leave a hole. */
 
-.wd-block { margin-bottom: var(--space-6); }
+/* No margin of its own. It was the only separation these blocks had when they
+   were bare `.wv` sections; now they are panels and the panel's own
+   `margin-bottom` spaces them, so this override made the gap under "Your
+   watches" 27.6px against 23px under the block above it. */
 
 .wd-new {
   display: flex;
@@ -13092,7 +13143,10 @@ main { padding-top: var(--space-7); }
   /* 32px headings are a desktop measurement. At 390px they take three words a
      line and push the reading they head off the screen. */
   h1, .hero, .home-title { font-size: 26px; line-height: 1.15; }
-  h2, .panel > h2, .hm-h, .home-sec-title, .md-h3 { font-size: 21px; }
+  /* `.panel > .wv-head h2` is (0,2,1) and outranks `.panel > h2` here, so
+     without it in this list the Watchlist and Alerts titles stayed at
+     20.7px while every other panel heading on the page went to 21px. */
+  h2, .panel > h2, .panel > .wv-head h2, .hm-h, .home-sec-title, .md-h3 { font-size: 21px; }
   .pl-lede { font-size: 21px; line-height: 1.3; }
 
   /* The measure cap is wider than the screen here, so it does nothing but

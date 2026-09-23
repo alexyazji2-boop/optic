@@ -338,8 +338,14 @@ def test_the_loaded_chart_view_has_a_heading():
     """The empty state has <h2>Charting</h2> and it is replaced when a symbol
     loads, so the view a reader spends the most time in was the only one with
     nothing in its heading outline."""
-    block = APP[APP.index("host.innerHTML = `\n  ${/*"):][:1600]
-    assert 'class="sr-only">Charting ${esc(STATE.chartSymbol)}' in block
+    # Anchored to renderChartWorkspace, not to the first `host.innerHTML` in
+    # the file that happens to open with a comment. It was the latter, and the
+    # moment another view's markup started the same way -- the watchlist, when
+    # it became a panel -- this read a different function and failed with
+    # nothing wrong in the code it is about.
+    fn = APP.split("function renderChartWorkspace(d) {", 1)[1]
+    fn = fn[:fn.index("\nfunction ")]
+    assert 'class="sr-only">Charting ${esc(STATE.chartSymbol)}' in fn
 
 
 # ------------------------------------------------- de-cluttering the Options tab

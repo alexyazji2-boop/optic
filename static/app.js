@@ -3869,11 +3869,14 @@ function renderWatchlist() {
   const list = watchList();
   const active = watchActiveList();
   host.innerHTML = `
-  <section class="wv">
-    ${watchListsBar()}
+  ${/* Above the card, not in it. It chooses WHICH list the card below is
+      showing, which is the same job `.scan-modes` does above the Scan
+      results and `.sec-index` does above the Optic Portfolio panels. */''}
+  ${watchListsBar()}
+  <section class="panel">
     <div class="wv-head">
       <div>
-        <h2 class="hm-h">${esc((active && active.name) || 'Watchlist')}</h2>
+        <h2>${esc((active && active.name) || 'Watchlist')}</h2>
         ${/* The count lives in its own span so the feed repaint can update it.
             * Read once at render, it went stale the moment a row was removed —
             * "5 names" above four rows. */''}
@@ -4019,12 +4022,12 @@ function renderAlerts() {
   // endpoint and the two have no dependency on each other.
   if (!data) {
     host.innerHTML = `${renderWatchHits()}${renderWatchesBlock()}
-      <section class="wv">${loadingHTML('scan alerts')}</section>`;
+      <section class="panel">${loadingHTML('scan alerts')}</section>`;
     return;
   }
   if (data.error) {
     host.innerHTML = `${renderWatchHits()}${renderWatchesBlock()}
-      <section class="wv">${errorHTML(data.error)}</section>`;
+      <section class="panel">${errorHTML(data.error)}</section>`;
     return;
   }
   const all = data.rows || [];
@@ -4049,10 +4052,10 @@ function renderAlerts() {
   ${renderWatchHits()}
   ${renderWatchesBlock()}
 
-  <section class="wv">
+  <section class="panel">
     <div class="wv-head">
       <div>
-        <h2 class="hm-h">From the scheduled scan</h2>
+        <h2>From the scheduled scan</h2>
         <p class="wv-sub">Not yours: these fire on Optic's own positions and the
           ranked universe, whether or not you asked. Each one names the rule that
           tripped it and the readings it tripped on.
@@ -4404,9 +4407,9 @@ function renderWatchHits() {
        result and then wonders why nothing accumulates; this is the one sentence
        that explains it, and it is the honest reason to make an account rather
        than a wall in front of the terminal. */
-    return `<section class="wv wh-block" aria-label="Watches that fired">
+    return `<section class="panel" aria-label="Watches that fired">
       <div class="wv-head"><div>
-        <h2 class="hm-h">What fired while you were away</h2>
+        <h2>What fired while you were away</h2>
         <p class="wv-sub">Optic checks watches on its own schedule for people
           with an account, and keeps what fired here until you read it. A guest's
           watches live in this browser, so they can only be checked while it is
@@ -4417,21 +4420,21 @@ function renderWatchHits() {
 
   const state = STATE.watchHits;
   if (!state) {
-    return `<section class="wv wh-block" aria-label="Watches that fired">
+    return `<section class="panel" aria-label="Watches that fired">
       ${loadingHTML('what fired')}</section>`;
   }
   if (state.error) {
-    return `<section class="wv wh-block" aria-label="Watches that fired">
+    return `<section class="panel" aria-label="Watches that fired">
       ${errorHTML(state.error)}</section>`;
   }
 
   const hits = state.hits || [];
   const unseen = state.unseen || 0;
 
-  return `<section class="wv wh-block" aria-label="Watches that fired">
+  return `<section class="panel" aria-label="Watches that fired">
     <div class="wv-head">
       <div>
-        <h2 class="hm-h">What fired while you were away${
+        <h2>What fired while you were away${
   unseen ? ` <span class="wh-count">${unseen}</span>` : ''}</h2>
         <p class="wv-sub">Your own watches, evaluated on Optic's schedule against
           the same panels the analysis page shows. Each one reports at most once a
@@ -4505,10 +4508,10 @@ function renderWatchesBlock() {
   const symbols = Object.keys(bySymbol).sort();
   const anyChecked = symbols.some((s) => WATCH_CHECKS[s] && WATCH_CHECKS[s].results);
 
-  return `<section class="wv wd-block" aria-label="Your watches">
+  return `<section class="panel" aria-label="Your watches">
     <div class="wv-head">
       <div>
-        <h2 class="hm-h">Your watches</h2>
+        <h2>Your watches</h2>
         ${/* This paragraph described the app until the server-side runner
              existed, and then described it wrongly: a signed-in reader's
              watches are now evaluated on Optic's schedule whether or not any
@@ -8399,7 +8402,7 @@ function renderSwing(d) {
                  table was overflowing into the panel beside it. -->
             <thead><tr><th>Level ($)</th><th>Distance</th><th>Strength</th><th>Touches</th></tr></thead>
             <tbody>${srComputed.map((l) => `<tr>
-              <td class="name">${usd(l.price)}
+              <td class="name num">${usd(l.price)}
                 <div class="subnote">${esc(cap(l.role))}</div></td>
               <td class="${signClass(l.distance_pct)}">${fmtPct(l.distance_pct, 1)}</td>
               <td><strong>${fmt(l.strength, 0)}</strong><span data-bar="${l.strength}" data-bar-max="100"></span></td>
@@ -8430,7 +8433,7 @@ function renderSwing(d) {
           <table class="data">
             <thead><tr><th>Level</th><th>Price ($)</th><th>Distance</th><th>Role</th></tr></thead>
             <tbody>${((t.fibonacci || {}).levels || []).map((l) => `<tr>
-              <td class="name">${esc(l.label)}${l.is_golden ? ' ★' : ''}</td>
+              <td class="name num">${esc(l.label)}${l.is_golden ? ' ★' : ''}</td>
               <td>${fmt(l.price, 2)}</td>
               <td class="${signClass(l.distance_pct)}">${fmtPct(l.distance_pct, 1)}</td>
               <td class="name muted">${esc(cap(l.role))}</td>
@@ -9055,7 +9058,7 @@ function renderEntryPlan(p) {
       </tr></thead>
       <tbody>${(p.candidates || []).map((c) => `<tr${c.rank === 1 ? ' style="background:var(--surface-2)"' : ''}>
         <td>${c.rank}${c.rank === 1 ? ' ★' : ''}</td>
-        <td class="name">${fmt(c.strike, 1)} <span class="muted">${esc(c.moneyness)}</span></td>
+        <td class="name num">${fmt(c.strike, 1)} <span class="muted">${esc(c.moneyness)}</span></td>
         <td class="name">${esc(c.expiry)}</td>
         <td>${c.dte}</td>
         <td>${fmt(c.entry_mid, 2)}</td>
@@ -14721,7 +14724,9 @@ function wsWidgetBody(id) {
     if (!lv.length) return none(d ? 'No levels found.' : 'Load a symbol.');
     const spot = ((d || {}).technicals || {}).spot;
     return `<table class="data narrow"><tbody>${lv.slice(0, 9).map((l) => `<tr>
-      <td class="name">${fmt(l.price, 2)}</td>
+      ${/* `name num`: the first column, left-aligned like a name, but it holds
+           a price. `td.name` alone turns lining figures off. */''}
+      <td class="name num">${fmt(l.price, 2)}</td>
       <td class="${l.role === 'resistance' ? 'down' : 'up'}">${esc(l.role || '')}</td>
       <td>${spot ? fmtPct(((l.price - spot) / spot) * 100, 1) : ''}</td>
       <td>${fmt(l.strength, 0)}</td>

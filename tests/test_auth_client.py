@@ -421,7 +421,14 @@ def test_the_builder_does_not_borrow_the_settings_row_control_class():
 
 
 @pytest.mark.parametrize("selector", [
-    ".wd-block", ".wd-new", ".wd-param", ".wd-row", ".wd-chip", ".wd-sym-head",
+    # `.wd-block` was here and is gone from the markup. It carried one
+    # declaration, a margin-bottom, which was the only thing separating these
+    # blocks while they were bare `.wv` sections. They are `.panel`s now and
+    # the panel's own margin spaces them -- keeping the override made the gap
+    # under "Your watches" 27.6px against 23px under the block above it. The
+    # class went with the rule rather than staying on as a hook with nothing
+    # behind it, which is what this parametrisation exists to catch.
+    ".wd-new", ".wd-param", ".wd-row", ".wd-chip", ".wd-sym-head",
     ".wd-price", ".wd-list", ".wd-btn", ".wd-foot", ".wd-err", ".wd-why",
 ])
 def test_every_watch_class_has_a_rule(selector):
