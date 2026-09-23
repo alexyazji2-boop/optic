@@ -20354,6 +20354,17 @@ function funnelPanelHTML(f, gates, cfg) {
  * which was reported as a rendering fault for colouring a non-directional
  * reading with a directional pair. */
 
+/* What a book is worth: its starting capital plus everything it has made or
+ * lost, closed and open. Distinct from `equity_for` in paper.py, which is
+ * realised-only on purpose so position sizing cannot drift with unrealised
+ * swings -- that one is a sizing base and is labelled as one. */
+function bookValue(b) {
+  const su = (b && b.summary) || {};
+  const start = su.start_equity;
+  if (start === null || start === undefined) return b && b.equity;
+  return start + (su.total_pnl || 0);
+}
+
 function renderBookSelector(d) {
   const books = d.books || [];
   if (books.length < 2) return '';
@@ -20375,13 +20386,21 @@ function renderBookSelector(d) {
            consecutive scans. That is fixed in paper.py, but the display was
            the half of it that made the bug invisible. A return needs a trade
            behind it before it means anything. */''}
+      ${/* Value, not the sizing base.
+          * These cards showed `b.equity`, which is start + REALISED only, beside
+          * a return that counts open marks too -- so the conservative book read
+          * "$100.0K" and "-0.17%" side by side, its equity untouched because it
+          * has closed nothing while its three open positions are down. The same
+          * contradiction the headline tiles had, three times over.
+          * `start_equity + total_pnl` is what the book is worth, and it agrees
+          * with the return printed next to it. */''}
       ${(su.open_count || 0) + (su.closed_count || 0) === 0 ? `
       <span class="bk-figs bk-figs-empty">
-        <span><i>Equity</i>$${fmtCompact(b.equity)}</span>
+        <span><i>Value</i>$${fmtCompact(bookValue(b))}</span>
         <span class="bk-untraded"><i>Record</i>No trades yet</span>
       </span>` : `
       <span class="bk-figs">
-        <span><i>Equity</i>$${fmtCompact(b.equity)}</span>
+        <span><i>Value</i>$${fmtCompact(bookValue(b))}</span>
         <span><i>Return</i><b class="${signClass(ret)}">${ret === null || ret === undefined
     ? '\u2014' : (ret > 0 ? '+' : '') + fmt(ret, 2) + '%'}</b></span>
         <span><i>Open</i>${fmt(su.open_count, 0)}</span>
@@ -20440,6 +20459,10 @@ function renderBookSelector(d) {
 }
 
 function renderTracker(d) {
+  /* Which of the three books these figures describe. `d.book` is the id the
+   * server answered for; the label comes from the book list so the heading and
+   * the selected card cannot disagree about its name. */
+  const bookName = ((d.books || []).find((b) => b.id === (d.book || 'balanced')) || {}).label || '';
   hideTip();
   const t = d || {};
   if (t.error) { views.tracker.innerHTML = errorHTML(t.error); return; }
@@ -20551,10 +20574,19 @@ function renderTracker(d) {
   ${renderBookSelector(d)}
 
   <div class="panel span2 gap">
-    <h2>${hg("Optic Portfolio")}</h2>
-    <p class="sub">One shared, simulated ledger. The same record for everyone who opens this page.
-      It trades the terminal's own signals with fixed rules, in both instruments the Swing tab
-      produces: the shares, and the exact option contract it recommended.</p>
+    ${/* The heading names the book these figures belong to.
+       *
+       * There are three portfolios and the selector above switches between
+       * them, but every figure below used to sit under the same fixed
+       * "Optic Portfolio" heading -- so a reader who switched to Aggressive
+       * got different numbers under a title that had not changed, which reads
+       * as the page failing to update rather than as a different book. */''}
+    <h2>${hg("Optic Portfolio")}${bookName ? ` <span class="bk-active">${esc(bookName)}</span>` : ''}</h2>
+    <p class="sub">Three simulated ledgers, shared by everyone who opens this page, running the
+      terminal's own signals under three different rule sets. ${bookName ? `You are looking at the
+      ${esc(bookName.toLowerCase())} book; the cards above switch between them.` : ''} Each trades
+      both instruments the Options tab produces: the shares, and the exact contract it
+      recommended.</p>
 
     <div class="tracker-bar">
       <button class="btn primary" type="button" id="tracker-scan" ${scanning ? 'disabled' : ''}>
@@ -20578,9 +20610,33 @@ function renderTracker(d) {
       ${fmt(feed.seconds_remaining, 0)}s.</div>` : ''}
 
     <div class="grid c4" style="margin:var(--space-3) 0">
-      ${tile('Equity', money(s.equity), `started at ${money(s.start_equity)}`, signClass(s.realised_pnl))}
-      ${tile('Realised P&L', money(s.realised_pnl), `${s.closed_count || 0} closed trades`, signClass(s.realised_pnl))}
-      ${tile('Unrealised P&L', money(s.unrealised_pnl), `${s.open_count || 0} open now`, signClass(s.unrealised_pnl))}
+      ${/* "Equity" was the first tile and it contradicted the fourth.
+          *
+          * It showed `start + realised` -- 99,025 against a 100,000 start, in
+          * red -- beside a Total return of +1.32% in green. Both were labelled
+          * as the state of the same book and they disagreed about its sign.
+          *
+          * Neither number was wrong. `equity_for` in paper.py is realised-only
+          * on purpose, and says why: marking open positions into equity would
+          * let position sizing drift with unrealised swings. It is a sizing
+          * base, not a valuation. But "Equity" in every brokerage means cash
+          * plus the market value of what you hold, so the label promised a
+          * valuation and delivered the sizing base.
+          *
+          * The explanation did exist -- in a caveat four hundred pixels below
+          * the tile, which is not where a reader is when the two numbers
+          * disagree in front of them.
+          *
+          * So the headline is now the valuation, which reconciles with the
+          * return beside it, and the sizing base has moved to the risk row
+          * where it is the number actually being spent against. */''}
+      ${tile('Account value', money(s.start_equity + s.total_pnl),
+    `started at ${money(s.start_equity)}`, signClass(s.total_pnl))}
+      ${tile('Realised P&L', money(s.realised_pnl),
+    `${fmt(s.closed_count || 0, 0)} closed ${(s.closed_count === 1) ? 'trade' : 'trades'}`,
+    signClass(s.realised_pnl))}
+      ${tile('Unrealised P&L', money(s.unrealised_pnl),
+    `${fmt(s.open_count || 0, 0)} open now`, signClass(s.unrealised_pnl))}
       ${tile('Total return', fmtPct(s.return_pct, 2), 'realised plus open marks', signClass(s.return_pct))}
     </div>
     <div class="grid c4" style="margin-bottom:var(--space-3)">
@@ -20589,11 +20645,14 @@ function renderTracker(d) {
       ${tile('Risk deployed', money(capacity.open_risk, 0),
     `${fmt(capacity.open_risk_pct, 1)}% of a ${fmt(cfg.max_portfolio_risk_pct, 0)}% budget`)}
       ${tile('Risk budget left', money(capacity.risk_budget_left, 0), 'before the book stops adding')}
+      ${/* The sizing base, where it is spent rather than at the top of the
+          * page pretending to be the account's value. Every percentage in this
+          * row is measured against it. */''}
+      ${tile('Sizing base', money(s.equity), 'closed trades only, so an open run-up cannot raise the next bet',
+    signClass(s.realised_pnl))}
       ${tile('New per scan', fmt(cfg.max_new_per_scan, 0), 'so the book fills over days')}
     </div>
-    <p class="caveat">Equity counts closed trades only. Open positions are shown but deliberately kept
-      out of the sizing calculation, so an unrealised run-up can't quietly increase the size of the
-      next bet. The caps exist because the universe is the whole exchange. Without them one scan
+    <p class="caveat">The caps exist because the universe is the whole exchange. Without them one scan
       could find thirty qualifying setups and put a third of the account at risk in an afternoon, on
       names that are mostly the same momentum bet under different tickers.</p>
   </div>

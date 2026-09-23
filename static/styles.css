@@ -13461,3 +13461,19 @@ body.rail-tight .rail nav.tabs-group .nav-menu { left: 56px; }
 .rail .icon-btn svg,
 .rail .brand-mark { width: 18px; height: 18px; flex: none; }
 .rail > .brand .brand-mark { width: 22px; height: 22px; }
+
+/* The book a set of figures belongs to, named in its own heading. Three
+   portfolios share this panel and the selector above switches them; without
+   the name, switching looked like the page failing to update. */
+.bk-active {
+  font-size: var(--t-small);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  padding: var(--space-0) var(--space-2);
+  vertical-align: middle;
+  margin-left: var(--space-2);
+}
