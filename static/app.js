@@ -13490,6 +13490,11 @@ function wsToolbar() {
     <button type="button" class="ws-menu-btn ws-tools-btn" data-ws-tools
       aria-expanded="${wsToolsOpen}"
       title="Drawing tools, studies, panes and colours">Tools</button>
+    ${/* Beside Tools rather than inside `.ws-tools`, which is the drawer on a
+         phone: a declutter is most wanted when the drawer is shut. */''}
+    <button type="button" class="ws-menu-btn ws-reset" data-ws-reset
+      ${wsChartIsClean() ? 'disabled' : ''}
+      title="Back to price and volume. Your drawings are kept.">Reset</button>
     <div class="ws-tools">
     ${WS_MENUS.map((m) => {
     const activeCount = m.items.filter(wsOverlayOn).length;
@@ -15743,30 +15748,126 @@ const WS_UNDO_MAX = 40;
 let wsUndoStack = [];
 let wsRedoStack = [];
 
+/* The whole chart's appearance, not just its drawings.
+ *
+ * The stack held `wsDrawings()` alone, which is what it was written for. Reset
+ * turns off every overlay in one click, and an action that large has to be
+ * reversible by the control a reader already has rather than by re-ticking
+ * fifteen boxes from memory. So the snapshot covers everything Reset touches.
+ *
+ * The flag list comes from `Object.keys(WS_FLAGS)` rather than being written
+ * out here. Every overlay in this app is already registered there -- that is
+ * what `wsOverlayOn` reads -- so an overlay added later is covered by both
+ * Reset and undo without anyone remembering to add it in a second place. The
+ * alternative is the dead-control class of bug this file is full of: a new
+ * toggle that Reset silently declines to clear.
+ */
+function wsChartState() {
+  const flags = {};
+  Object.keys(WS_FLAGS).forEach((id) => { flags[id] = wsOverlayOn(id); });
+  return {
+    drawings: wsDrawings(),
+    flags,
+    panes: wsPanesOpen.slice(),
+    studies: indicatorIds.slice(),
+    hidden: { ...seriesHidden },
+  };
+}
+
+/* Restore a snapshot.
+ *
+ * Every flag goes back through `wsSetOverlay`, never by assigning the
+ * variable: the setters are what write the preference to localStorage and
+ * what fetch the payloads two of them need (trend lines and accumulation
+ * zones have their own endpoints). Assigning `showTrends = true` would light
+ * the checkbox over a chart with nothing on it.
+ */
+function wsApplyChartState(st) {
+  if (!st) return;
+  wsSaveDrawings(st.drawings || []);
+  Object.keys(st.flags || {}).forEach((id) => {
+    if (wsOverlayOn(id) !== st.flags[id]) wsSetOverlay(id, !!st.flags[id]);
+  });
+  wsPanesOpen = (st.panes || []).filter((id) => WS_PANES.some((p) => p.id === id));
+  try { localStorage.setItem(WS_PANES_KEY, JSON.stringify(wsPanesOpen)); }
+  catch (e) { /* private mode */ }
+  indicatorIds = (st.studies || []).slice();
+  try { localStorage.setItem(IND_STATE_KEY, JSON.stringify(indicatorIds)); }
+  catch (e) { /* private mode */ }
+  seriesHidden = { ...(st.hidden || {}) };
+  try { localStorage.setItem(WS_HIDE_KEY, JSON.stringify(seriesHidden)); }
+  catch (e) { /* private mode */ }
+}
+
 /** Snapshot before a change. Call this, then mutate. */
 function wsPushUndo() {
-  wsUndoStack.push(JSON.stringify(wsDrawings()));
+  wsUndoStack.push(JSON.stringify(wsChartState()));
   if (wsUndoStack.length > WS_UNDO_MAX) wsUndoStack.shift();
   // Any new edit invalidates the redo branch — the alternative is a tree, and
   // nobody expects redo to resurrect work from a path they abandoned.
   wsRedoStack = [];
 }
 
-function wsUndo() {
-  if (!wsUndoStack.length) return;
-  wsRedoStack.push(JSON.stringify(wsDrawings()));
-  wsSaveDrawings(JSON.parse(wsUndoStack.pop()));
+/* A full repaint, not wsRenderDrawings alone.
+ *
+ * Restoring drawings only needs the overlay layer redrawn; restoring flags,
+ * panes and studies changes the series the chart is built from. Undoing a
+ * reset would otherwise put the drawings back over a chart that still had
+ * nothing on it. */
+function wsRestore(from, to) {
+  if (!from.length) return;
+  to.push(JSON.stringify(wsChartState()));
+  wsApplyChartState(JSON.parse(from.pop()));
   wsSelected = null;
-  wsRenderDrawings();
+  wsRepaintWithPanes();
   wsSyncDrawChrome();
 }
 
-function wsRedo() {
-  if (!wsRedoStack.length) return;
-  wsUndoStack.push(JSON.stringify(wsDrawings()));
-  wsSaveDrawings(JSON.parse(wsRedoStack.pop()));
-  wsSelected = null;
-  wsRenderDrawings();
+function wsUndo() { wsRestore(wsUndoStack, wsRedoStack); }
+
+function wsRedo() { wsRestore(wsRedoStack, wsUndoStack); }
+
+/* Back to the chart everything opens on.
+ *
+ * Not "turn off the things I can see": the target is the documented default,
+ * price and volume and nothing else, which is the same state the versioned
+ * storage keys were bumped to produce. A reader who has built up three
+ * averages, two clouds, a supply band, the Fibonacci levels and two
+ * oscillator panes wants one click back to that, not fifteen.
+ *
+ * Drawings are deliberately untouched. They are the reader's own work rather
+ * than a display setting, they have their own Clear in the tool rail, and a
+ * declutter that silently deleted an hour of annotation would be the worst
+ * bug on this tab. Volume stays for the reason the defaults comment gives:
+ * it is a strip under the price rather than a line across it, so it costs
+ * nothing in legibility.
+ */
+const WS_RESET_KEEP = ['vol'];
+
+/** Is the chart already the one it opens on? Drives the Reset button's
+ *  disabled state, because a control that would change nothing should say so
+ *  rather than take the click. */
+function wsChartIsClean() {
+  if (wsPanesOpen.length || wsPriceIndicatorIds().length) return false;
+  if (Object.keys(seriesHidden).length) return false;
+  return Object.keys(WS_FLAGS)
+    .every((id) => wsOverlayOn(id) === WS_RESET_KEEP.includes(id));
+}
+
+function wsResetChart() {
+  wsPushUndo();
+  Object.keys(WS_FLAGS).forEach((id) => {
+    const want = WS_RESET_KEEP.includes(id);
+    if (wsOverlayOn(id) !== want) wsSetOverlay(id, want);
+  });
+  wsPanesOpen = [];
+  try { localStorage.setItem(WS_PANES_KEY, '[]'); } catch (e) { /* private mode */ }
+  indicatorIds = [];
+  try { localStorage.setItem(IND_STATE_KEY, '[]'); } catch (e) { /* private mode */ }
+  wsIndicators = null;
+  seriesHidden = {};
+  try { localStorage.setItem(WS_HIDE_KEY, '{}'); } catch (e) { /* private mode */ }
+  wsRepaintWithPanes();
   wsSyncDrawChrome();
 }
 
@@ -27443,6 +27544,12 @@ document.addEventListener('click', (evt) => {
     // with the symbol: most sessions never open them, and it is a live call.
     if (isIntradayRange(chartRange)) wsLoadIntraday();
     else wsRedrawChart();
+    return;
+  }
+  if (evt.target.closest('[data-ws-reset]')) {
+    // wsResetChart pushes its own undo entry first, so this is reversible
+    // with the same arrow the drawing tools use.
+    wsResetChart();
     return;
   }
   const wsInt = evt.target.closest('[data-ws-interval]');
