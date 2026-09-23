@@ -11865,7 +11865,7 @@ function renderSeasonality(s) {
       both raw and net of ${esc(s.benchmark)} over the same period, because "December is
       strong" must not just mean "the market went up in December".</p>
 
-    <div class="callout" style="margin:0 0 12px">${headline}</div>
+    <div class="callout" style="margin:0 0 var(--space-3)">${headline}</div>
 
     <h3>${hg('Month of the year')}</h3>
     <p class="caveat" style="margin-top:0">${fmt(mo.periods, 0)} months of history, so about
@@ -11885,7 +11885,7 @@ function renderSeasonality(s) {
       results. An effect there is most likely the earnings reaction wearing a calendar
       costume.` : ''}</p>
 
-    <h3 style="margin-top:18px">${hg('Day of the week')}</h3>
+    <h3 style="margin-top:var(--space-4)">${hg('Day of the week')}</h3>
     <p class="caveat" style="margin-top:0">Worth more than the monthly grid on sample size
       alone: ${fmt(wd.periods, 0)} trading days gives roughly
       ${fmt((wd.periods || 0) / 5, 0)} observations per weekday against about fifteen per
@@ -11902,7 +11902,7 @@ function renderSeasonality(s) {
       the honest robustness column at this sample size. Far from the mean means a few large
       days are carrying it.</p>
 
-    <h3 style="margin-top:18px">${hg('Turn of the month')}</h3>
+    <h3 style="margin-top:var(--space-4)">${hg('Turn of the month')}</h3>
     <p class="caveat" style="margin-top:0">The last ${fmt((tom.window || {}).before, 0)} and
       first ${fmt((tom.window || {}).after, 0)} trading days of each month against the rest
       of it. The window fixed in advance rather than chosen for producing the best number.
@@ -11924,7 +11924,7 @@ function renderSeasonality(s) {
       ${tom.p === null || tom.p === undefined ? '—' : fmt(tom.p, 3)} —
       ${seasVerdict(tom.verdict)}.</p>
 
-    <p class="caveat" style="margin-top:14px">${gloss('Two limits worth holding on to. The '
+    <p class="caveat" style="margin-top:var(--space-3)">${gloss('Two limits worth holding on to. The '
     + 'correction above is within this ticker: check twenty tickers and you get twenty fresh '
     + 'chances at a false positive, and roughly one will land. And fifteen years is a single '
     + 'market regime for many names. A company listed after 2010 has never seen a sustained '
@@ -12645,14 +12645,14 @@ function renderRotation(r) {
 
     <div id="chart-rotation" class="chart-host"></div>
 
-    ${crossed.length ? `<div class="callout" style="margin-top:12px">
+    ${crossed.length ? `<div class="callout" style="margin-top:var(--space-3)">
       <strong>Crossed a boundary this week:</strong>
       ${crossed.map((c) => `${esc(c.symbol)} ${esc(c.from)} → ${esc(c.to)}`).join(' · ')}.
       A crossing is the earliest thing this chart says, and also the least reliable.
       A sector sitting near a line can cross back next week without anything having changed.
     </div>` : ''}
 
-    <table class="data" style="margin-top:12px">
+    <table class="data" style="margin-top:var(--space-3)">
       <thead><tr><th>Sector</th><th>Quadrant</th><th>Strength</th><th>Momentum</th>
         <th>Δ strength</th><th>Δ momentum</th><th>Moved from</th></tr></thead>
       <tbody>${rows}</tbody>
@@ -16502,7 +16502,7 @@ function renderForex(fx) {
       misinterpret an FX screen. So each row spells out what <em>up</em> means
       rather than leaving it to be inferred.</p>
 
-    <div class="tracker-bar" style="margin-bottom:12px">
+    <div class="tracker-bar" style="margin-bottom:var(--space-3)">
       <input id="fx-q" type="search" class="settings-select" style="flex:0 1 260px"
         placeholder="Search. A currency, a group, or a driver"
         value="${esc(fx.query || '')}" aria-label="Search currency pairs">
@@ -16656,13 +16656,13 @@ function renderStockMap(sm) {
     ${sm.holdings_caveat ? `<p class="caveat" style="margin:0 0 var(--space-3)">${
   esc(sm.holdings_caveat)}</p>` : ''}
     ${body}
-    ${(sm.dropped || []).length ? `<div class="callout" style="margin-top:12px">
+    ${(sm.dropped || []).length ? `<div class="callout" style="margin-top:var(--space-3)">
       <strong>${fmt(sm.dropped.length, 0)} dropped</strong> for missing measures:
       ${sm.dropped.map((x) => `${esc(x.symbol)} (${esc(x.missing)})`).join(', ')}.
       Dropped rather than drawn at zero. A P/E of nothing plotted at the origin
       reads as "very cheap", which is the opposite of the truth for a company
       with no earnings.</div>` : ''}
-    <table class="data" style="margin-top:12px">
+    <table class="data" style="margin-top:var(--space-3)">
       <thead><tr><th>Name</th>
         ${Object.keys(M).map((k) => `<th>${esc(M[k].label)}</th>`).join('')}
       </tr></thead>
@@ -16752,7 +16752,7 @@ function renderExtras(x) {
 
   const divBlock = a.pays_dividend ? `
     <h3>${hg('Dividends')}</h3>
-    <div class="grid c4" style="margin-bottom:10px">
+    <div class="grid c4" style="margin-bottom:var(--space-2)">
       ${tile('Latest payment', money((a.dividends.slice(-1)[0] || {}).amount, 2),
     esc((a.dividends.slice(-1)[0] || {}).date || ''))}
       ${tile('Growth streak', `${fmt(a.growth_streak_years, 0)}y`,
@@ -16784,7 +16784,7 @@ function renderExtras(x) {
 
   const svBlock = (sv.rows || []).length ? `
     <h3 style="margin-top:var(--space-4)">${hg('Off-exchange short volume')}</h3>
-    <div class="grid c4" style="margin-bottom:10px">
+    <div class="grid c4" style="margin-bottom:var(--space-2)">
       ${tile('Latest', fmt(sv.latest_pct, 1) + '%', esc((sv.rows[0] || {}).date || ''))}
       ${tile(`${fmt(sv.days, 0)}-day average`, fmt(sv.average_pct, 1) + '%',
     'this symbol’s own baseline')}
@@ -16815,7 +16815,7 @@ function renderExtras(x) {
     <div class="callout">${esc(rel.error)}</div>` : `
     <h3 style="margin-top:var(--space-4)">${hg('Versus the index')} <span
       class="th-plain">· vs ${esc(rel.benchmark)}</span></h3>
-    <div class="grid c5" style="margin-bottom:10px">
+    <div class="grid c5" style="margin-bottom:var(--space-2)">
       ${['5d', '20d', '60d', '120d', '252d'].map((k) => tile(k.replace('d', ' days'),
     (rel.excess || {})[k] === null || (rel.excess || {})[k] === undefined
       ? '—' : fmtPct(rel.excess[k], 1),
@@ -17018,7 +17018,7 @@ function renderEcon(e) {
     const val = (v) => (v === null || v === undefined ? '—'
       : `${fmt(v, Math.abs(v) < 10 ? 2 : 1)}${u}`);
     body = `
-      <div class="grid c4" style="margin:12px 0">
+      <div class="grid c4" style="margin:var(--space-3) 0">
         ${tile('Latest', val(e.latest.value), esc(e.latest.date))}
         ${tile('Previous', val((e.previous || {}).value),
     e.previous ? esc(e.previous.date) : 'no prior reading')}
@@ -17353,7 +17353,7 @@ function renderMarket(d) {
 
 function meterHTML(score, color) {
   const pct = Math.max(0, Math.min(100, score || 0));
-  return `<div style="background:var(--surface-2);height:8px;border-radius:4px;overflow:hidden;margin-top:var(--space-1)">
+  return `<div style="background:var(--surface-2);height:8px;border-radius:var(--r-xs);overflow:hidden;margin-top:var(--space-1)">
     <div style="width:${pct}%;height:100%;background:${color};transition:width 0.3s ease"></div>
   </div>`;
 }
@@ -25284,7 +25284,7 @@ function renderPulseEmpty() {
 
 function mdLite(text) {
   let out = esc(text);
-  out = out.replace(/```([\s\S]*?)```/g, (m, code) => `<pre style="background:var(--surface-2);padding:var(--space-2);border-radius:6px;overflow-x:auto;font-size:var(--t-caption)">${code}</pre>`);
+  out = out.replace(/```([\s\S]*?)```/g, (m, code) => `<pre style="background:var(--surface-2);padding:var(--space-2);border-radius:var(--r-sm);overflow-x:auto;font-size:var(--t-caption)">${code}</pre>`);
   out = out.replace(/`([^`]+)`/g, '<code>$1</code>');
   out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   // Single-asterisk italics, after bold so the ** pass has already consumed
@@ -27889,6 +27889,7 @@ function setAllPanels(view, open) {
     btn.setAttribute('aria-label', (open ? 'Collapse ' : 'Expand ') + title);
     if (panel.dataset.panelId) rememberCollapse(panel.dataset.panelId, open);
   });
+  if (open) markClampedCaveats(host);
   const bar = host.querySelector('.panel-bulk');
   if (bar) bar.dataset.allOpen = String(open);
 }
@@ -28470,6 +28471,8 @@ document.addEventListener('click', (evt) => {
       + (head.textContent || '').trim());
   }
   if (panel.dataset.panelId) rememberCollapse(panel.dataset.panelId, open);
+  // Now that its contents have layout, the caveats inside can be measured.
+  if (open) markClampedCaveats(panel);
 });
 
 /* Everything a view needs once its DOM exists: the notice, the glossary pass,
@@ -28480,9 +28483,63 @@ document.addEventListener('click', (evt) => {
  * panel that already carries the attribute, applyUiMode strips its own note
  * before rebuilding it, addBulkControl returns early when its bar is there, and
  * buildSectionIndex removes the old index first. */
+/* Long caveats fold; short ones are left alone.
+ *
+ * Measured, not assumed: a caveat is only marked when its content actually
+ * overflows two lines. Clamping every one of them would put a "more" on a
+ * sentence that already fits, which is the same fault as a disclosure that
+ * expands nothing -- the company-description fit check a few hundred lines up
+ * exists for exactly that reason and this follows it.
+ *
+ * Made operable rather than just clickable: 150 of these render across the
+ * product, and a paragraph that reveals text on click has to be reachable by
+ * keyboard and announce that it expands. */
+function markClampedCaveats(host) {
+  if (!host) return;
+  host.querySelectorAll('p.caveat').forEach((el) => {
+    if (el.dataset.caveatChecked === '1') return;
+    el.classList.add('is-clamped');
+    /* Inside `display: none` both heights are 0 and the test reads `0 <= 1`,
+     * so every caveat in a collapsed panel is judged to fit. Measured on the
+     * Options facet: 21 caveats, 0 clamped, because the panels had not been
+     * opened yet -- the fit check a few hundred lines up carries a comment
+     * about exactly this and I still walked into it.
+     *
+     * Unmarked, so it is judged again when the panel that holds it opens. */
+    if (!el.clientHeight) { el.classList.remove('is-clamped'); return; }
+    el.dataset.caveatChecked = '1';
+    if (el.scrollHeight <= el.clientHeight + 1) {
+      el.classList.remove('is-clamped');
+      delete el.dataset.caveatChecked;   // re-check if the text changes
+      return;
+    }
+    el.setAttribute('role', 'button');
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('aria-expanded', 'false');
+  });
+}
+
+/* Delegated, because these are rendered into every panel on every repaint --
+ * the same reason the glossary terms and the nav menus are. */
+document.addEventListener('click', (evt) => {
+  const cav = evt.target.closest && evt.target.closest('p.caveat[role="button"]');
+  if (!cav) return;
+  const open = cav.classList.toggle('is-open');
+  cav.classList.toggle('is-clamped', !open);
+  cav.setAttribute('aria-expanded', String(open));
+});
+document.addEventListener('keydown', (evt) => {
+  if (evt.key !== 'Enter' && evt.key !== ' ') return;
+  const cav = evt.target.closest && evt.target.closest('p.caveat[role="button"]');
+  if (!cav) return;
+  evt.preventDefault();
+  cav.click();
+});
+
 function chromeView(view) {
   const host = views[view];
   if (!host) return;
+  markClampedCaveats(host);
   // Notice first, before the panels — and here rather than in each renderer so
   // a view physically cannot be added without it.
   const banner = legalBanner(view);

@@ -1828,7 +1828,41 @@ ul.reasons li { margin-bottom: var(--space-1); }
 .callout.info { border-left-color: var(--s1); }
 .callout.bad { border-left-color: var(--critical); }
 
-.caveat { margin-top: var(--space-3); font-size: var(--t-caption); color: var(--ink-muted); font-style: italic; }
+/* The house convention: every panel states what it cannot tell you. It is
+ * load-bearing and none of it is deleted here -- what changed is that it
+ * stopped being a wall.
+ *
+ * Measured with NVDA loaded: the Options facet carries 8,291 characters of
+ * caveat across 28 of them, a quarter of everything on the page, and Investing
+ * is 37% prose. All of it was set in italic at 12.65px. Italic is for
+ * emphasis; three hundred characters of it, twenty-eight times, is harder to
+ * read than the text it is qualifying and reads as noise rather than as care.
+ *
+ * Upright now, and the long ones clamp to two lines with the rest one click
+ * away. A caveat short enough to fit is left alone entirely -- see
+ * markClampedCaveats, which only marks the ones that actually overflow. */
+.caveat {
+  margin-top: var(--space-3);
+  font-size: var(--t-caption);
+  color: var(--ink-muted);
+  line-height: 1.55;
+}
+.caveat.is-clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  cursor: pointer;
+  border-radius: var(--r-xs);
+  transition: color var(--dur-ui, 120ms) ease;
+}
+.caveat.is-clamped:hover { color: var(--ink-2); }
+.caveat.is-clamped:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.caveat.is-open { cursor: pointer; }
+/* The affordance, on its own line so it cannot be mistaken for the sentence
+   it follows. */
+.caveat.is-clamped::after { content: ' more'; color: var(--s1); }
+.caveat.is-open::after { content: ' less'; color: var(--s1); }
 
 .gloss-term {
   font-style: normal;
