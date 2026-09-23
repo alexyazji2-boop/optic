@@ -89,5 +89,10 @@ def test_the_controls_it_rescues_are_the_ones_that_exist():
     """Both directions, as everywhere else: a rule protecting a control that is
     gone protects nothing, and says nothing about it."""
     html = open("static/index.html", encoding="utf-8").read()
-    for el_id in ("settings-btn", "account-slot", "chat-toggle"):
-        assert 'id="{}"'.format(el_id) in html, el_id
+    # The gear is not in this list any more: it moved to the rail footer, and
+    # the rail is not in the bar, so the padding rule does not rescue it and
+    # asserting it here would pass on an element the rule cannot reach.
+    bar = html.split('<header class="topbar">', 1)[1].split("</header>", 1)[0]
+    for el_id in ("account-slot", "chat-toggle"):
+        assert 'id="{}"'.format(el_id) in bar, el_id
+    assert 'id="settings-btn"' not in bar

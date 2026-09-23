@@ -19,6 +19,7 @@ import re
 
 APP = open("static/app.js", encoding="utf-8").read()
 CSS = open("static/styles.css", encoding="utf-8").read()
+HTML = open("static/index.html", encoding="utf-8").read()
 
 
 def _block(name):
@@ -65,9 +66,13 @@ def test_the_palette_is_not_the_only_way_to_reach_a_view():
     in_dossier = set(re.findall(r"'([a-z]+)'", APP.split(
         "const SECURITY_VIEWS = [", 1)[1].split("]", 1)[0]))
     on_mobile = {v for v, _ in _mobile_tabs()}
-    # 'settings' is the gear, which is a button in the header rather than a
-    # nav entry, and 'instrument' is a transient page opened from a link.
-    exempt = {"settings", "instrument"}
+    # 'instrument' is a transient page opened from a link, not a destination.
+    # 'settings' used to be exempt here on the grounds that the gear was a
+    # header button rather than a nav entry. The gear moved into the rail, and
+    # the rail is last in the document on a phone -- measured at y=6520 of a
+    # 6583px page -- so that exemption was quietly hiding exactly the fault
+    # this test is named for. It is a mobile tab now and needs no exemption.
+    exempt = {"instrument"}
     orphans = in_palette - on_strip - in_dossier - on_mobile - exempt
     assert not orphans, "reachable only from the palette: {}".format(sorted(orphans))
 
@@ -92,14 +97,22 @@ def test_the_phone_uses_the_desktop_words():
 
 def test_the_phones_tabs_all_exist_on_the_desktop_too():
     """Not the same *set* -- a phone shows fewer -- but nothing on it should be
-    a destination the desktop has no concept of."""
+    a destination the desktop has no concept of.
+
+    The rail footer is the third desktop home and has to be read as one.
+    Settings is a button down there rather than a nav group, and checking only
+    NAV_GROUPS and SECURITY_VIEWS would call it phone-only when the desktop
+    shows it permanently in the rail."""
     on_strip = set(re.findall(r"'([a-z]+)'", NAV_GROUPS))
     in_dossier = set(re.findall(r"'([a-z]+)'", APP.split(
         "const SECURITY_VIEWS = [", 1)[1].split("]", 1)[0]))
+    foot = HTML.split('<div class="rail-foot">', 1)[1].split("</div>", 1)[0]
+    in_rail_foot = set(re.findall(r'data-view="([a-z]+)"', foot))
+    assert in_rail_foot, "the rail footer routes to nothing; did Settings move?"
     for view, label in _mobile_tabs():
         if view == "ask":
             continue          # the assistant, which is a panel rather than a view
-        assert view in on_strip or view in in_dossier, \
+        assert view in on_strip or view in in_dossier or view in in_rail_foot, \
             "{} ({}) is a phone-only destination".format(view, label)
 
 
@@ -146,3 +159,46 @@ def test_a_menu_near_the_right_edge_opens_leftwards():
     rule = CSS.split("nav.tabs-group > .nav-item.menu-right .nav-menu", 1)[1]
     rule = rule[:rule.index("}")]
     assert "right: 0" in rule and "left: auto" in rule
+
+
+# ------------------------------------------- the bar and the list it renders
+
+
+def test_the_bar_does_not_hardcode_how_many_tabs_there_are():
+    """`.mtabs` was `grid-template-columns: repeat(5, 1fr)` and MOBILE_TABS
+    grew to six, which put the sixth tab on a second row: measured at 375x812
+    the bar went from 53px tall to 106px, and a fixed bottom bar taking 13% of
+    the viewport reads as a broken layout rather than a new tab.
+
+    A count written in CSS against a list written in JS has nothing holding
+    the two together, so the grid counts its own columns now."""
+    block = CSS.split(".mtabs {\n", 1)[1]
+    block = block[:block.index("\n  }")]
+    assert "grid-auto-flow: column" in block
+    assert "grid-auto-columns: 1fr" in block
+    assert not re.search(r"grid-template-columns:\s*repeat\(\d", block), \
+        "a literal column count here goes stale the next time a tab is added"
+
+
+def test_the_tabs_can_shrink_to_share_the_bar():
+    """A grid column is min-content wide by default and "Watchlist" does not
+    wrap, so six columns overflow a 375px bar rather than sharing it.
+    Measured after: six tabs at 63px each, one row, no label clipped."""
+    block = CSS.split("\n  .mtab {\n", 1)[1]
+    block = block[:block.index("\n  }")]
+    assert "min-width: 0" in block
+
+
+def test_settings_is_reachable_on_a_phone():
+    """The gear was in the top bar, which is sticky, so a phone always had it
+    on screen. It moved into the rail -- and on a phone the rail is `order: 2`,
+    which puts it at the end of the document: measured at 375x812 on the home
+    page the rail sat at y=6520 of a 6583px page, with the whole of it below
+    the fixed tab bar.
+
+    This is the fault this file is named for, arriving from the other
+    direction: a destination with a permanent desktop home and no phone one."""
+    assert "settings" in {v for v, _ in _mobile_tabs()}
+    html = open("static/index.html", encoding="utf-8").read()
+    foot = html.split('<div class="rail-foot">', 1)[1].split("</div>", 1)[0]
+    assert 'data-view="settings"' in foot, "and a desktop home in the rail"

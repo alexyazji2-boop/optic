@@ -58,28 +58,41 @@ def test_the_navigation_moved_into_the_rail():
     assert 'class="tabs tabs-group"' in rail
     bar = HTML.split('<header class="topbar">', 1)[1].split("</header>", 1)[0]
     assert "tabs-group" not in bar, "the bar is a context strip now"
-    # Settings stays in the bar with the account controls. It went to the rail
-    # footer in the first pass and was immediately asked after -- appearance,
-    # time zone and preferences belong beside Sign in, not beside a control
-    # that collapses the rail. The rail footer keeps Collapse, which IS a
-    # control of the rail.
-    assert 'id="settings-btn"' in bar
+    # Settings lives in the rail footer. It moved to the top bar for one pass
+    # on the reading that appearance and time zone are account business, and
+    # that was asked to be undone: it is a destination like every other entry
+    # in the rail, and the rail is where the destinations are. It carries a
+    # rail-label so it collapses with them.
+    assert 'id="settings-btn"' not in bar
+    # To the rail-foot's own close. The buttons inside it contain no <div>, so
+    # the first </div> after it is the footer's -- but slice on the toggle as
+    # well, so a footer that gains a wrapper does not silently pass.
     foot = HTML.split('<div class="rail-foot">', 1)[1].split("</div>", 1)[0]
-    assert 'id="settings-btn"' not in foot
+    assert 'id="settings-btn"' in foot
     assert 'id="rail-toggle"' in foot
+    assert '<span class="rail-label">Settings</span>' in foot
+    # And Settings comes first: Collapse is a control of the rail, so it sits
+    # last, under the hairline.
+    assert foot.index('id="settings-btn"') < foot.index('id="rail-toggle"')
 
 
 def test_the_account_controls_are_pushed_to_the_far_end():
     """The nav strip used to sit between the search box and these and grow to
     fill the row, which is what held them against the right edge. Moving the
-    nav to the rail took that spacer with it, and settings, Sign in and Pulse
-    ended up bunched against the Load button with most of the bar empty to
-    their right."""
-    assert ".topbar-right { margin-left: auto; }" in CSS
+    nav to the rail took that spacer with it, and Sign in and Pulse ended up
+    bunched against the Load button with most of the bar empty to their
+    right."""
+    assert ".topbar-right { margin-left: auto; }" in CSS_CODE
     bar = HTML.split('<header class="topbar">', 1)[1].split("</header>", 1)[0]
-    assert 'class="icon-btn topbar-right"' in bar
-    # And it is the FIRST of the group, or it pushes only itself.
-    assert bar.index("topbar-right") < bar.index('id="account-slot"') < bar.index('id="chat-toggle"')
+    # A class, not an id, because the push has to follow whichever control is
+    # first: it was on the gear until the gear moved into the rail, and an id
+    # selector went on pushing an element that had left the bar.
+    # And it is on the FIRST of the group, or it pushes only itself: an auto
+    # margin absorbs the free space where it is declared, so the same class on
+    # Pulse would leave the account slot behind next to Load.
+    assert '<div class="account-slot topbar-right" id="account-slot">' in bar
+    assert bar.index('id="account-slot"') < bar.index('id="chat-toggle"')
+    assert bar.count("topbar-right") == 1
 
 
 def test_the_rail_nav_is_a_column_and_not_a_row():
@@ -272,3 +285,110 @@ def test_the_glyph_does_not_move_when_the_label_goes():
     block = CSS.split("\n.nav-icon {", 1)[1]
     block = block[:block.index("}")]
     assert "flex: none" in block and "width: 18px" in block
+
+
+# ------------------------------------------------- the rail as a phone row
+
+
+def _phone_block():
+    """The `max-width: 559px` block that turns the rail into a row.
+
+    Sliced to the closing brace of the media query, counting braces, because
+    the block contains nested rules and stopping at the first `}` reads one
+    declaration of it."""
+    i = CSS_CODE.index("@media (max-width: 559px) {\n  .app {")
+    depth, j = 1, CSS_CODE.index("{", i) + 1
+    while depth:
+        nxt_open = CSS_CODE.find("{", j)
+        nxt_close = CSS_CODE.find("}", j)
+        if nxt_open != -1 and nxt_open < nxt_close:
+            depth += 1
+            j = nxt_open + 1
+        else:
+            depth -= 1
+            j = nxt_close + 1
+    return CSS_CODE[i:j]
+
+
+def test_on_a_phone_the_nav_scrolls_and_the_rail_does_not():
+    """`.rail nav.tabs-group` carries `overflow: visible` so the fly-outs can
+    open sideways out of the column, which is right at every other width.
+
+    In a row it meant the seven group buttons ran from x=193 to x=969 out of a
+    nav box measured at 112px, and the rail took the scroll instead. The
+    footer is a flex sibling placed after that shrunken box, so it landed at
+    x=314 -- on top of nav buttons three through seven -- and scrolled away
+    with them. Measured after: rail scrollWidth 375 against clientWidth 375,
+    nav scrollWidth 794 against 121, footer fixed at 323-361."""
+    block = _phone_block()
+    # One rule per selector in this block, so a split cannot pick the wrong
+    # one. There were briefly two `.rail nav.tabs-group` rules here and this
+    # assertion read the first, which is the one-line row rule and says
+    # nothing about overflow.
+    assert block.count(".rail nav.tabs-group {") == 1
+    nav = block.split(".rail nav.tabs-group {", 1)[1]
+    nav = nav[:nav.index("}")]
+    assert "overflow-x: auto" in nav
+    # Or the nav refuses to shrink below its content and nothing scrolls.
+    assert "min-width: 0" in nav
+    assert "flex: 1 1 auto" in nav
+    # The multi-line form. `.rail { order: 2; }` is a separate one-liner in
+    # this block on purpose -- it is about where the row sits, not how it
+    # behaves -- so a bare `.rail {` split picks that one and reads nothing.
+    assert block.count("\n  .rail {\n") == 1
+    rail = block.split("\n  .rail {\n", 1)[1]
+    assert "overflow-x: hidden" in rail[:rail.index("}")]
+    assert "overflow-x: auto" not in rail[:rail.index("}")], \
+        "the rail scrolling again is what put the footer over the nav buttons"
+
+
+def test_the_footer_keeps_the_gear_on_screen_in_that_row():
+    """Last in the row and not shrinkable. Measured at 375x812: the gear sits
+    at 323-361 whatever the nav's scroll position, against a viewport of
+    375."""
+    block = _phone_block()
+    foot = block.split(".rail-foot {", 1)[1]
+    foot = foot[:foot.index("}")]
+    assert "flex: none" in foot
+    assert "flex-direction: row" in foot
+
+
+def test_the_phone_rule_that_hides_collapse_can_actually_win():
+    """`.rail-foot .icon-btn` is (0,2,0) and sets `display: flex`. A bare
+    `.rail-toggle` is (0,1,0), so the rule meant to hide the toggle on phones
+    lost the cascade and did nothing: computed display was `flex`.
+
+    That mattered beyond a stray button. Tapping it set `body.rail-tight`,
+    and `body.rail-tight .rail { width: 56px }` also outranks the `width:
+    auto` the phone block gives the rail -- so the whole nav strip squeezed to
+    56px with no way back, the toggle having squeezed itself out of reach."""
+    block = _phone_block()
+    assert ".rail-foot .rail-toggle { display: none; }" in block, \
+        "a one-class selector here loses to .rail-foot .icon-btn"
+    # And the rule it has to beat is still the reason why.
+    setter = CSS_CODE.split(".rail-foot .icon-btn {", 1)[1]
+    assert "display: flex" in setter[:setter.index("}")]
+
+
+def test_the_wordmark_is_a_mark_only_in_that_row():
+    """It took 161px of a 375px row and left the nav a 121px scroll box, which
+    is about one group button visible at a time. Measured after: brand 14-56,
+    nav 75-314."""
+    block = _phone_block()
+    assert ".rail > .brand .brand-text { display: none; }" in block
+
+
+def test_collapse_is_separated_from_the_destination_above_it():
+    """Settings navigates and Collapse does not, and at `--space-1` apart they
+    read as one pair of related buttons. Misreading a pair costs a page.
+
+    Drawn as a pseudo-element rather than `border-top` on the button, because
+    a border there sits inside the hover background and squares off its top
+    corner."""
+    rule = CSS_CODE.split("\n.rail-toggle {", 1)[1]
+    assert "position: relative" in rule[:rule.index("}")], \
+        "the ::before below is absolutely positioned against this"
+    before = CSS_CODE.split("\n.rail-toggle::before {", 1)[1]
+    before = before[:before.index("}")]
+    assert "border-top" in before
+    assert "position: absolute" in before

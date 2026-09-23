@@ -2201,9 +2201,11 @@ body.chat-resizing svg { pointer-events: none; }
      content beneath it rather than stretched to meet the far edge. */
   nav.tabs.tabs-group { justify-content: flex-start; gap: var(--space-5); }
   /* The tab strip drops to its own row here, so it no longer claims the free
-     space on row one. The gear takes over that job and keeps Pulse beside it —
-     without this the gear was stranded next to the Load button. */
-  #settings-btn { margin-left: auto; }
+     space on row one. The account slot takes over that job and keeps Pulse
+     beside it -- without this the pair was stranded next to the Load button.
+     This was `#settings-btn` until the gear moved into the rail footer, at
+     which point it was a push applied to an element no longer in the bar. */
+  .account-slot { margin-left: auto; }
   #chat-toggle { margin-left: var(--space-2); }
 }
 
@@ -10205,7 +10207,12 @@ body.cp-open { overflow: hidden; }
 @media (max-width: 559px) {
   .mtabs {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    /* One column per tab, counted by the grid rather than written down here.
+       It was `repeat(5, 1fr)` and MOBILE_TABS grew to six, which put the sixth
+       on a second row and took the bar from 53px tall to 106px -- a hardcoded
+       count in CSS against a list in JS that nothing holds together. */
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
     position: fixed;
     left: 0;
     right: 0;
@@ -10231,9 +10238,13 @@ body.cp-open { overflow: hidden; }
     display: grid;
     justify-items: center;
     gap: 2px;
-    /* 375 / 5 = 75px per target. Well over the 24px minimum, and 52px tall is
-       the height a thumb hits without aiming. */
+    /* 375 / 6 = 62px per target. Still well over the 24px minimum, and 52px
+       tall is the height a thumb hits without aiming. */
     min-height: 52px;
+    /* A grid column is min-content wide by default and "Watchlist" does not
+       shrink, so without this the six columns overflow the bar instead of
+       sharing it. */
+    min-width: 0;
     padding: var(--space-2) 0;
     font: inherit;
     background: none;
@@ -13357,6 +13368,20 @@ body[data-view="chart"] .ses-fold { display: none; }
   white-space: nowrap;
 }
 .rail-foot { margin-top: auto; display: flex; flex-direction: column; gap: var(--space-1); }
+/* Settings is a destination and Collapse is a control of the rail itself, so
+   a hairline separates them rather than a gap: at `--space-1` they read as one
+   pair of related buttons, and clicking the wrong one of a pair costs a page.
+   Drawn as a pseudo-element, not `border-top` on the button -- a border there
+   is inside the hover background and squares off its top corner. */
+.rail-toggle { position: relative; margin-top: var(--space-2); }
+.rail-toggle::before {
+  content: "";
+  position: absolute;
+  left: var(--space-2);
+  right: var(--space-2);
+  top: calc(var(--space-2) / -2);
+  border-top: 1px solid var(--border);
+}
 .rail-foot .icon-btn {
   display: flex;
   align-items: center;
@@ -13402,10 +13427,12 @@ body.rail-tight .rail nav.tabs-group .nav-top { overflow: hidden; }
  *
  * The nav strip used to sit between the search box and the account controls
  * and grow to fill the row, which is what held those controls against the
- * right edge. Moving it to the rail took the spacer with it and left settings,
- * Sign in and Pulse bunched against the Load button with most of the bar empty
- * to their right. The push is explicit now rather than a side effect of what
- * happened to be next to them. */
+ * right edge. Moving it to the rail took the spacer with it and left Sign in
+ * and Pulse bunched against the Load button with most of the bar empty to
+ * their right. The push is explicit now rather than a side effect of what
+ * happened to be next to them, and it is a class rather than an id so it can
+ * follow whichever control ends up first -- it sat on the gear until the gear
+ * moved to the rail. */
 .app-main > header.topbar { gap: var(--space-3); }
 .topbar-right { margin-left: auto; }
 
@@ -13494,20 +13521,56 @@ body.rail-tight .rail nav.tabs-group .nav-menu { left: 56px; }
     flex-direction: row;
     align-items: center;
     gap: var(--space-2);
-    /* The row DOES scroll, and can: the phone menus are position: fixed and
-       escape the container rather than being clipped by it. */
-    overflow-x: auto;
+    /* The NAV scrolls here, not the rail -- see the tabs-group rule below.
+       The phone menus are position: fixed and escape either container rather
+       than being clipped by it, which is what makes the choice free. */
+    overflow-x: hidden;
     border-right: 0;
     border-bottom: 1px solid var(--border);
     padding: var(--space-2) var(--space-3);
   }
   .rail > .brand { width: auto; margin: 0 var(--space-2) 0 0; flex: none; }
-  .rail nav.tabs-group { flex-direction: row; gap: var(--space-1); }
+  /* Mark only. The wordmark took 161px of a 375px row and left the nav 121px
+     of scroll box, which is about one group button visible at a time. The
+     mark is still the home button, and it is the one place in the app where
+     the name is not already on screen twice. */
+  .rail > .brand .brand-text { display: none; }
+  .rail nav.tabs-group {
+    flex-direction: row;
+    gap: var(--space-1);
+    /* `.rail nav.tabs-group` carries `overflow: visible` so the fly-outs can
+       open sideways out of the column, which is right at every other width.
+       In a row it meant the seven group buttons ran from x=193 to x=969 out
+       of a nav box measured at 112px, and the RAIL took the scroll instead:
+       the footer, a flex sibling placed after that shrunken box, landed at
+       x=314 on top of nav buttons three through seven and scrolled away with
+       them. Measured after: rail scrollWidth 375 against clientWidth 375, nav
+       scrollWidth 794 against 121, footer fixed at 323-361. */
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .rail nav.tabs-group::-webkit-scrollbar { display: none; }
   .rail nav.tabs-group .nav-top { padding: var(--space-1) var(--space-2); }
   .rail nav.tabs-group .nav-caret { margin-left: var(--space-0); transform: none; }
-  .rail-foot { margin-top: 0; flex-direction: row; }
+  /* Last in the row and not shrinkable, so the gear is always at the right
+     end and always on screen. Measured at 375x812: 323-361 whatever the nav's
+     scroll position. */
+  .rail-foot { margin-top: 0; flex-direction: row; flex: none; }
   .rail-label { display: none; }
-  .rail-toggle { display: none; }
+  /* Square icon buttons, not the full-width rows they are in the column. In a
+     row `width: 100%` resolved against the footer itself and gave the gear an
+     81px hit area with 18px of glyph in the middle of it. */
+  .rail-foot .icon-btn { width: 38px; justify-content: center; padding: 0; }
+  /* Nothing to collapse: the rail is already a row here.
+     `.rail-foot .icon-btn` is (0,2,0) and sets `display: flex`, so a bare
+     `.rail-toggle` (0,1,0) lost the cascade and this rule did nothing -- the
+     toggle was live on phones, and tapping it set `body.rail-tight`, whose
+     `body.rail-tight .rail { width: 56px }` also outranks the `width: auto`
+     above and squeezed the whole nav strip to 56px. Measured before the fix:
+     display computed `flex`. */
+  .rail-foot .rail-toggle { display: none; }
 }
 
 /* --------------------------------------------- the rail, corrected in place

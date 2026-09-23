@@ -3301,6 +3301,13 @@ const MOBILE_TABS = [
   { view: 'watchlist', label: 'Watchlist', icon: '&#9776;' },
   { view: 'alerts', label: 'Alerts', icon: '&#9873;' },
   { view: 'ask', label: 'Pulse', icon: '&#10022;' },
+  // The gear used to be in the top bar, which is sticky, so a phone always had
+  // it on screen. It lives in the rail now -- and on a phone the rail is
+  // `order: 2`, which puts it at the very end of the document: measured at
+  // 375x812 on the home page, the rail sat at y=6520 of a 6583px page. A
+  // destination 6,500px down is the palette-only case this file's own
+  // `test_the_palette_is_not_the_only_way_to_reach_a_view` calls a bug.
+  { view: 'settings', label: 'Settings', icon: '&#9881;' },
 ];
 
 function mountMobileTabs() {

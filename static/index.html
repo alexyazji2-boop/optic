@@ -157,10 +157,23 @@
   <nav class="tabs tabs-group" role="tablist" aria-label="Sections"></nav>
 
   <div class="rail-foot">
-    <!-- Settings is not here: it sits with the account controls in the top bar,
-         which is where it was and where a reader looked for it. Appearance,
-         time zone and preferences belong beside Sign in, not beside the rail's
-         own collapse toggle. -->
+    <!-- Settings is a destination, so it lives with the destinations. It spent
+         one pass in the top bar beside Sign in on the reading that appearance
+         and time zone are account business; they are not, and the rail is
+         where you go to go somewhere. Carries a `rail-label` like the toggle
+         below it, so it collapses to its gear with everything else. -->
+    <button class="icon-btn rail-settings" id="settings-btn" data-view="settings" type="button"
+            aria-label="Settings" aria-pressed="false" title="Settings. Appearance and time zone">
+      <svg class="gear" viewBox="0 0 24 24" aria-hidden="true">
+        <!-- Classic cog: eight teeth as a dashed ring, so the tooth count and
+             the gap are one stroke rather than eight hand-placed paths. -->
+        <circle cx="12" cy="12" r="8.4" fill="none" stroke="currentColor" stroke-width="3.2"
+                stroke-dasharray="2.6 3.99" stroke-linecap="butt"/>
+        <circle cx="12" cy="12" r="6.2" fill="none" stroke="currentColor" stroke-width="2"/>
+        <circle cx="12" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/>
+      </svg>
+      <span class="rail-label">Settings</span>
+    </button>
     <!-- Collapses the rail to icons. Persisted; see applyRail in app.js. -->
     <button class="icon-btn rail-toggle" id="rail-toggle" type="button"
             aria-label="Collapse the sidebar" aria-pressed="false" title="Collapse the sidebar">
@@ -201,30 +214,21 @@
   <!-- Kept: syncSecurityHeader and the instrument chart both write into it. -->
   <nav class="tabs tabs-sub" role="tablist" aria-label="Pages" id="subnav"></nav>
 
-  <!-- The right-hand cluster: settings, account, Pulse.
+  <!-- The right-hand cluster: account and Pulse.
        `margin-left: auto` on the first of them is what pushes the group to the
        far end. It used to be the eight-group nav strip doing that -- it sat
-       between the search box and these three and grew to fill the row. Moving
-       the nav to the rail took the spacer with it, and the three ended up
-       bunched against Load with eight hundred pixels of empty bar to their
-       right. -->
-  <button class="icon-btn topbar-right" id="settings-btn" data-view="settings"
-          aria-label="Settings" aria-pressed="false" title="Settings. Appearance and time zone">
-    <svg class="gear" viewBox="0 0 24 24" aria-hidden="true">
-      <!-- Classic cog: eight teeth as a dashed ring, so the tooth count and the
-           gap are one stroke rather than eight hand-placed paths. -->
-      <circle cx="12" cy="12" r="8.4" fill="none" stroke="currentColor" stroke-width="3.2"
-              stroke-dasharray="2.6 3.99" stroke-linecap="butt"/>
-      <circle cx="12" cy="12" r="6.2" fill="none" stroke="currentColor" stroke-width="2"/>
-      <circle cx="12" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/>
-    </svg>
-  </button>
+       between the search box and these and grew to fill the row. Moving the
+       nav to the rail took the spacer with it, and they ended up bunched
+       against Load with eight hundred pixels of empty bar to their right.
 
+       Settings is not here. It sits in the rail footer with Collapse: it is a
+       destination like every other entry in the rail, not an account action,
+       and the rail is where the destinations are. -->
   <!-- Accounts. Empty until /api/auth/me answers: rendering "Sign in" and then
        swapping it for an avatar a moment later is the flash that gives away a
        bolted-on auth layer, and auth.js has a three-state model
        (loading / guest / user) specifically to avoid it. -->
-  <div class="account-slot" id="account-slot"></div>
+  <div class="account-slot topbar-right" id="account-slot"></div>
 
   <button class="btn primary" id="chat-toggle"><span class="pulse-mark">●</span>&nbsp;Pulse</button>
 </header>
