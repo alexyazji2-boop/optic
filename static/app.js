@@ -1956,6 +1956,12 @@ let showVbp = false;
 let showInsiders = false;
 let showEarnMarks = false;
 let showZones = false;
+/* Accumulation zones, from the long-term payload rather than the daily one.
+ *
+ * Off by default like every other level family, and fetched only when asked
+ * for: `/api/longterm` computes twelve years of weekly structure and most
+ * sessions on the charting tab never want it. See loadAccumZones. */
+let showAccum = false;
 let showEMA = false;
 /* EMA clouds: the space between a pair of averages, filled and tinted by which
  * one is on top.
@@ -2230,6 +2236,7 @@ const SHOW_VBP_KEY = 'optic.chart.vbp.v2';
 const SHOW_INS_KEY = 'optic.chart.insiders.v2';
 const SHOW_EARN_KEY = 'optic.chart.earnmarks.v1';
 const SHOW_ZONES_KEY = 'optic.chart.zones.v2';
+const SHOW_ACCUM_KEY = 'optic.chart.accum.v1';
 const SHOW_EMA_KEY = 'optic.chart.ema.v2';
 try {
   chartMode = localStorage.getItem(CHART_MODE_KEY) === 'candle' ? 'candle' : 'line';
@@ -2264,6 +2271,7 @@ try {
   showInsiders = localStorage.getItem(SHOW_INS_KEY) === 'on';
   showEarnMarks = localStorage.getItem(SHOW_EARN_KEY) === 'on';
   showZones = localStorage.getItem(SHOW_ZONES_KEY) === 'on';
+  showAccum = localStorage.getItem(SHOW_ACCUM_KEY) === 'on';
   showEMA = localStorage.getItem(SHOW_EMA_KEY) === 'on';
   showCloudFast = localStorage.getItem(SHOW_CLOUD_FAST_KEY) === 'on';
   showCloudSlow = localStorage.getItem(SHOW_CLOUD_SLOW_KEY) === 'on';
@@ -11050,6 +11058,14 @@ const OVERLAY_DEFS = [
   { id: 'earnmarks', label: 'Earnings dates', group: 'Events', color: 's4', width: 1 },
   { id: 'sessions', label: 'Session dividers', group: 'Events', color: 'ink2', width: 1 },
   { id: 'trends', label: 'Auto trend lines', group: 'Levels', color: 'pos', width: 1.6 },
+  /* The long-term structure, which was on the Investing tab and nowhere else.
+   *
+   * `zones` above is supply and demand read off the daily pattern payload --
+   * a weeks-to-months read. These come from `/api/longterm`, computed on
+   * twelve years of weekly bars: the 40- and 200-week averages, and the
+   * retracements of the multi-year range. A chart that offers both says what
+   * horizon each belongs to, which is why they are two overlays and not one. */
+  { id: 'accum', label: 'Accumulation zones', group: 'Levels', color: 'refSR', width: 1 },
 ];
 
 const OVERLAY_BY_ID = Object.fromEntries(OVERLAY_DEFS.map((d) => [d.id, d]));
@@ -12703,7 +12719,7 @@ function renderRotation(r) {
  * answer comes from a pivot, a Fibonacci ratio or a volume shelf. */
 const WS_MENUS = [
   { id: 'fibs', label: 'Fibs', items: ['fib'] },
-  { id: 'trends', label: 'Trends', items: ['trends', 'sr', 'zones'] },
+  { id: 'trends', label: 'Trends', items: ['trends', 'sr', 'zones', 'accum'] },
   { id: 'indicators',
     label: 'Indicators',
     items: ['sma20', 'sma50', 'sma200', 'ema9', 'ema21', 'ema50',
@@ -12718,6 +12734,7 @@ const WS_MENUS = [
  * sharing the settings rather than duplicating them. */
 const WS_FLAGS = {
   fib: () => showFib, sr: () => showSR, zones: () => showZones,
+  accum: () => showAccum,
   vbp: () => showVbp, vol: () => showVol, insiders: () => showInsiders,
   earnmarks: () => showEarnMarks,
   sma20: () => seriesShown('sma20'), sma50: () => seriesShown('sma50'),
@@ -13346,6 +13363,12 @@ const WS_SETTERS = {
     // Its own endpoint, fetched only when asked for — fitting every pivot pair
     // over a year is real work and most sessions never turn this on.
     if (on) loadTrendlines(STATE.view === 'chart' ? STATE.chartSymbol : STATE.ticker);
+  },
+  accum: (on) => {
+    showAccum = on; storeFlag(SHOW_ACCUM_KEY, on);
+    // Same shape as trends above, and for the same reason: twelve years of
+    // weekly structure is a separate request the chart payload does not carry.
+    if (on) loadAccumZones(STATE.view === 'chart' ? STATE.chartSymbol : STATE.ticker);
   },
   // Each average has its own switch now. See setSeriesFlag: it also keeps the
   // family flag in step, so anything asking "are moving averages on?" still
@@ -14837,6 +14860,91 @@ function trendSegments(tl, chartDates) {
 }
 
 /** Trend lines load per symbol, on demand — only when the overlay is on. */
+/* The long-term levels for the charting tab.
+ *
+ * `/api/longterm` is the Investing tab's endpoint and it returns the whole
+ * holding block; only `accumulation_zones` is read here. Cached per symbol on
+ * STATE the same way trendlines are, so switching the overlay off and on again
+ * costs nothing and switching symbols refetches.
+ *
+ * Failure is recorded rather than thrown. This is one optional overlay on a
+ * chart that is already drawn, so a dead endpoint must leave the chart alone;
+ * `available: false` is the shape every AI writer in this app already returns
+ * and `accumLines` tests it the way CLAUDE.md says to -- `available !== true`,
+ * not `if (!zones)`, because a truthy failure object sails past a falsy check.
+ */
+async function loadAccumZones(symbol, force) {
+  const sym = symbol || STATE.chartSymbol || STATE.ticker;
+  if (!sym) return;
+  if (STATE.accumZonesFor === sym && !force) return;
+  STATE.accumZonesFor = sym;
+  try {
+    const data = await getJSON(`/api/longterm/${encodeURIComponent(sym)}?indices=false`);
+    STATE.accumZones = (data && data.holding) || { available: false, reason: 'no holding block' };
+  } catch (err) {
+    STATE.accumZones = { available: false, reason: err.message };
+  }
+  if (STATE.view === 'chart') wsRedrawChart();
+  else if (STATE.view === 'swing' && STATE.swing) {
+    preserveUI(views.swing, () => renderSwing(STATE.swing));
+  }
+}
+
+/* Accumulation zones as reference lines.
+ *
+ * The retracements go through `fibLines`, which is the same builder the
+ * Investing chart calls, so the two cannot label or colour one level two ways
+ * -- the rule that already holds for srBands and zoneBands.
+ *
+ * The two weekly averages do not. `fibLines` reads a ratio out of the label
+ * and there is none in "40-week average"; more to the point they are averages
+ * rather than retracements, and drawing them in the Fibonacci colour would
+ * say they were. They are built here, dimmed, in the overlay's own colour.
+ * The Investing tab draws these two as real series because its x-axis is
+ * weekly; on a daily chart a 40-week average would be a fourth long line
+ * arguing with SMA 200, so they are levels here and the label says which.
+ */
+function accumLines(holding) {
+  // Two failure shapes reach here and neither is falsy, which is the trap
+  // CLAUDE.md records: the server sends `{error: ...}` on a bad symbol and
+  // loadAccumZones writes `{available: false, reason: ...}` when the request
+  // itself fails. `if (!holding)` catches neither.
+  if (!holding || holding.error || holding.available === false) return [];
+  const zones = (holding.accumulation_zones || []).filter((z) => z && z.price);
+  // `levels.spot`, not `long_trend.spot`. It is the last daily close and it is
+  // what the Investing chart passes to the same builder; reading it from the
+  // wrong block gives undefined, and fibLines then drops the "From here" row
+  // from every tooltip without erroring.
+  const spot = ((holding.levels || {}).spot) || null;
+  const isRetracement = (z) => z.ratio !== null && z.ratio !== undefined;
+  const st = overlayStyle('accum');
+  return [
+    ...fibLines(zones.filter(isRetracement).map((z) => ({
+      price: z.price,
+      // The same "38.2%" form technicals.py sends, so fibLines produces the
+      // identical label it produces on the Investing chart.
+      label: `${fmt(z.ratio * 100, 1)}%`,
+      is_golden: !!z.is_golden,
+      role: z.kind,
+    })), spot),
+    ...zones.filter((z) => !isRetracement(z)).map((z) => ({
+      value: z.price,
+      color: st.color,
+      emphasis: false,
+      dim: true,
+      dash: false,
+      label: `${z.label} (${fmt(z.price, 2)})`,
+      detail: [
+        ['Level', String(z.label || '')],
+        ['Price', fmt(z.price, 2)],
+        ['Role', String(z.kind || '')],
+        z.distance_pct === null || z.distance_pct === undefined
+          ? null : ['From here', fmtPct(z.distance_pct, 1)],
+      ].filter(Boolean),
+    })),
+  ];
+}
+
 async function loadTrendlines(symbol, force) {
   const sym = symbol || STATE.chartSymbol || STATE.ticker;
   if (!sym) return;
@@ -16100,6 +16208,10 @@ function wsMountChart() {
       refLines: intraday ? [] : [
         ...(showFib ? fibLines(((d.technicals || {}).fibonacci || {}).levels,
           (d.technicals || {}).spot) : []),
+        // The Investing tab's long-term structure, drawn on the same plot so a
+        // multi-year level and a multi-week one can be read against each other.
+        // Excluded on intraday with everything else: these are weekly bars.
+        ...(showAccum ? accumLines(STATE.accumZones) : []),
       ],
       bands: intraday ? [] : [
         ...(showSR ? srBands(((d.technicals || {}).support_resistance || []),
@@ -16245,6 +16357,8 @@ async function loadChartWorkspace(symbol, force) {
   // chart is usable while it lands.
   if (wsDockOpen.includes('seasonality')) loadSeasonality(false, sym);
   if (showTrends) loadTrendlines(sym);
+  // Same rule: only if the overlay is on, and only when the symbol changes.
+  if (showAccum) loadAccumZones(sym);
   // The studies, for THIS symbol. Not awaited, for the reason above: the chart
   // is usable while they land, and they draw on the next redraw. Guarded on a
   // selection existing so a reader who has never opened the menu makes no
