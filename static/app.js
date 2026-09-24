@@ -26258,12 +26258,18 @@ function pulseStarters(expanded) {
   const usable = PULSE_STARTERS.filter((c) => !c.need || sym);
   const shown = expanded ? usable : usable.slice(0, 4);
   return `<div class="pulse-empty">
-    ${/* The mascot belongs here rather than in a second block of its own.
-         A first draft added one to `#chat-log` and it rendered UNDER this,
-         so the panel greeted a reader twice -- exactly the duplication the
-         phone pass spent a day removing elsewhere. This is the empty state;
-         it has been all along. */''}
-    ${pulseMascotHTML('pulse-face-lg')}
+    ${/* The mark, not a character.
+         A snowman lived here through several passes -- eyes, a scarf, arms,
+         a redraw to stop the shapes overlapping -- and the verdict on it was
+         that it looked creepy. A face at 104px invites that judgement and
+         there is no version of it that stops inviting it, so this is the same
+         glyph already sitting in the Pulse button at the top of this panel.
+         One mark, three sizes, no face.
+
+         Still the only greeting here: a first draft put one in `#chat-log`
+         as well and it rendered under this, so the panel introduced itself
+         twice. */''}
+    ${pulseMarkHTML('pulse-glyph-lg')}
     <h3>What would you like to look at?</h3>
     <p class="pulse-empty-sub">Pulse reads the terminal's own computed output for
       whatever is on screen${sym ? `· currently <strong>${esc(sym)}</strong>` : ''}.
@@ -26374,67 +26380,6 @@ function pulseMarkHTML(cls) {
  * `viewBox` is 32x38 rather than square: he stands up. The CSS sets a height
  * and lets the width follow, or he gets squashed.
  */
-function pulseMascotHTML(cls) {
-  /* Drawn so nothing overlaps, rather than layered and hoping the stack hides
-   * it.
-   *
-   * The previous version put the arms and two foot ellipses behind the body
-   * "so the body overlaps them" -- which only works with an opaque fill, and
-   * the fill was `--brand` at 0.12. Every stroke behind the body showed
-   * straight through it, and the body ellipse (y 18.4-34.8) cut through both
-   * feet (32.1-36.7), so the bottom of him was a tangle of crossing outlines.
-   *
-   * So: head and body are two shapes with a gap between them that the scarf
-   * covers, the arms start on the body's own edge and go outward, and the feet
-   * are gone. A snowman resting on nothing does not need them, and they were
-   * the whole of the mess.
-   */
-  return `<svg class="pulse-face ${cls || ''}" viewBox="0 0 32 40" aria-hidden="true" focusable="false">
-    ${/* Arms: twigs that begin exactly on the body's boundary, so they read as
-         attached without a stroke running into the fill. */''}
-    <g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-      <path d="M7.2 24.6 2.8 21.2M4.9 23 4.2 19.9M4.9 23 2 24.1"/>
-      <path d="M24.8 24.6 29.2 21.2M27.1 23 27.8 19.9M27.1 23 30 24.1"/>
-    </g>
-    <g stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"
-       fill="var(--brand)" fill-opacity="0.14">
-      ${/* Body first, head second: the only place they meet is the neck, and
-           the scarf is drawn over that seam. */''}
-      <ellipse cx="16" cy="28" rx="9.1" ry="9"/>
-      <circle cx="16" cy="9.6" r="7.1"/>
-    </g>
-    ${/* The scarf sits on the gap between the two, which is what lets them be
-         separate shapes instead of one merged blob. */''}
-    <path class="pulse-collar" d="M10.6 17.4q5.4 2.6 10.8 0"
-      fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
-    ${/* The logo's aperture, twice, and literally the logo's: the brand mark's
-         own path scaled to 4.8 units wide and centred on each socket. Widened
-         and moved apart from the previous pair, which sat 0.9 units from each
-         other and read as a pair of round spectacles rather than as two eyes.
-         Lens and pupil share a <g> so a blink squashes both together -- on the
-         pupil alone the eye closes and the pupil hangs in the air. */''}
-    <g class="pulse-eye">
-      <path d="M9.65 9.5C10.4 8.07 11.32 7.36 12.35 7.36S14.3 8.07 15.05 9.5C14.3 10.93 13.38 11.64 12.35 11.64S10.4 10.93 9.65 9.5Z"
-        fill="var(--surface)" stroke="currentColor" stroke-width="0.85" stroke-linejoin="round"/>
-      <circle cx="12.35" cy="9.5" r="0.8" fill="currentColor"/>
-    </g>
-    <g class="pulse-eye">
-      <path d="M16.95 9.5C17.7 8.07 18.62 7.36 19.65 7.36S21.6 8.07 22.35 9.5C21.6 10.93 20.68 11.64 19.65 11.64S17.7 10.93 16.95 9.5Z"
-        fill="var(--surface)" stroke="currentColor" stroke-width="0.85" stroke-linejoin="round"/>
-      <circle cx="19.65" cy="9.5" r="0.8" fill="currentColor"/>
-    </g>
-    <path class="pulse-smile" d="M13.5 13.6q2.5 2 5 0"
-      fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-    ${/* Three buttons, which is what makes the lower shape read as a snowman's
-         body rather than as a second head. */''}
-    <g fill="currentColor" opacity="0.55">
-      <circle cx="16" cy="24" r="0.8"/>
-      <circle cx="16" cy="28" r="0.8"/>
-      <circle cx="16" cy="32" r="0.8"/>
-    </g>
-  </svg>`;
-}
-
 /* The two marks that live in static markup.
  *
  * `index.html` carries the hosts and this fills them, rather than the SVG
