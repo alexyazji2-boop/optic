@@ -149,3 +149,32 @@ def test_the_limiter_reports_itself():
     state = Y.pace_state()
     for key in ("rate", "burst", "tokens", "base_rate"):
         assert key in state
+
+def test_the_optional_flags_cannot_be_passed_by_position():
+    """This is a scar, not a style rule.
+
+    `include_company` was added in front of `budget`, and one caller passed its
+    arguments positionally -- `_run(_swing_snapshot, ticker, wanted,
+    max_expiries, macro, True, budget)`. So /api/ticker handed budget=None to
+    include_company, and the Dossier quietly stopped fetching fundamentals.
+    Nothing raised. Production answered "company: not requested" on the one
+    endpoint that is supposed to have it, and the tests below passed
+    throughout, because they check the scan path and the default.
+
+    Keyword-only makes the next insertion a TypeError instead of a silent
+    rebinding."""
+    from app import main as M
+    sig = inspect.signature(M._swing_snapshot)
+    for name in ("include_earnings", "include_company", "budget"):
+        assert sig.parameters[name].kind is inspect.Parameter.KEYWORD_ONLY, \
+            name + " can still be passed by position"
+
+
+def test_the_dossier_endpoint_asks_for_the_company_block():
+    """The half the flag exists to protect. A scan skipping fundamentals is
+    the point; the ticker endpoint skipping them is the regression."""
+    from app import main as M
+    src = inspect.getsource(M)
+    call = src[src.index("_run(_swing_snapshot, ticker, wanted"):][:220]
+    assert "include_company=False" not in call
+    assert "budget=budget" in call, "budget has to be named, not positioned"

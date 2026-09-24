@@ -204,6 +204,13 @@ def _swing_snapshot(
     expiries: Optional[List[str]],
     max_expiries: int,
     include_macro: bool,
+    # Keyword-only, and that bar is load-bearing rather than tidy. Adding
+    # `include_company` in front of `budget` silently rebound one caller's
+    # budget argument onto the new flag -- `_run(_swing_snapshot, ticker,
+    # wanted, max_expiries, macro, True, budget)` -- so /api/ticker passed
+    # budget=None as include_company and the Dossier lost its fundamentals.
+    # Nothing raised; production just started answering "not requested".
+    *,
     include_earnings: bool = True,
     include_company: bool = True,
     budget: Optional[float] = None,
@@ -521,7 +528,8 @@ async def ticker_analysis(
     reader's own business and nothing here should assume one.
     """
     wanted = [e.strip() for e in expiries.split(",") if e.strip()] if expiries else None
-    return await _run(_swing_snapshot, ticker, wanted, max_expiries, macro, True, budget)
+    return await _run(_swing_snapshot, ticker, wanted, max_expiries, macro,
+                      include_earnings=True, budget=budget)
 
 
 @app.get("/api/earnings/{ticker}")
