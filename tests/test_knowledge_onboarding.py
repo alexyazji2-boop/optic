@@ -189,3 +189,44 @@ def test_the_options_are_focusable_and_transition():
     rule = CSS[CSS.index(".kob-opt {"):]
     rule = rule[:rule.index("}")]
     assert "transition" in rule
+
+
+def test_both_paths_put_the_card_in_the_same_place():
+    """The card has two code paths and only one of them moved.
+
+    `renderHome` paints it inline; `insertOnboardingCard` adds it to a page
+    that is already painted. The second anchored to `#cc-strip` and carried a
+    comment saying that was where the template put it. It stopped being true
+    when the home search moved up under the strip, so the template put the card
+    after the hero and the mount put it before -- 569px landing between the
+    strip and the search, pushing the search back below the fold.
+
+    Only a browser that has never answered the question runs the mount path,
+    which is why local testing missed it and production showed it immediately.
+
+    Anchored to the block it precedes rather than the one it follows, because
+    `#hm-market` is the element it sits directly above in the template: the two
+    paths now agree by construction rather than by both being edited."""
+    fn = body_of("insertOnboardingCard")
+    assert "hm-market" in fn, "the mount must anchor where the template puts it"
+    assert "beforebegin" in fn
+    # And the template really does put it directly before that block.
+    home = CODE[CODE.index("function renderHome() {"):]
+    home = home[:home.index("\nasync function")]
+    start = home.index("knowledgeOnboardingHTML()") + len("knowledgeOnboardingHTML()")
+    between = home[start:home.index('<div id="hm-market"')]
+    # Template-literal noise is fine; a rendered element is not.
+    assert not re.search(r"<(div|section|form|details)\b", between), \
+        "something now sits between the card and the market block: " + between.strip()[:120]
+
+
+def test_the_card_never_lands_above_the_home_search():
+    """The whole point of the anchor change. Whichever path runs, the search
+    is above the card -- measured at y=671 of an 835px viewport with the card
+    present, against y=1190 before."""
+    home = CODE[CODE.index("function renderHome() {"):]
+    home = home[:home.index("\nasync function")]
+    assert home.index('id="home-input"') < home.index("knowledgeOnboardingHTML()")
+    fn = body_of("insertOnboardingCard")
+    assert "cc-strip" not in fn.split("hm-market", 1)[0], \
+        "the strip anchor must not run before the market anchor"

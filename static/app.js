@@ -25827,8 +25827,23 @@ function insertOnboardingCard() {
   if (document.querySelector('.kob')) return;
   const markup = knowledgeOnboardingHTML();
   if (!markup) return;
-  // After the strip, which is where renderHome puts it: the market stays the
-  // first thing on the page.
+  /* Immediately before the market block, which is where renderHome puts it.
+   *
+   * This used to anchor to `#cc-strip` and the comment here used to say that
+   * was where renderHome put it. That stopped being true when the home search
+   * moved up under the strip: the template put the card after the hero and
+   * this path still put it before, so on a browser that had not answered the
+   * question yet -- which is the only browser that ever runs this -- 569px of
+   * card landed between the strip and the search and pushed the search back
+   * below the fold. Caught on production, not here, because the local browser
+   * had already answered.
+   *
+   * Anchored to the block it precedes rather than the one it follows, so the
+   * two paths agree by construction: `#hm-market` is painted by the same
+   * template and is always present. */
+  const market = document.getElementById('hm-market');
+  if (market) { market.insertAdjacentHTML('beforebegin', markup); return; }
+  // Nothing to anchor to means this is not the home page.
   const strip = document.getElementById('cc-strip');
   if (!strip) return;
   strip.insertAdjacentHTML('afterend', markup);
