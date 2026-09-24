@@ -25938,19 +25938,19 @@ function pulseMarkHTML(cls) {
  * arms and two feet. Chunky rather than drawn with thin limbs, because thin
  * limbs on a round body read as a spider.
  *
- * The heartbeat moved to the belly, which is better than it was as a mouth:
- * it is the reading he is showing you rather than an expression, the head is
- * free to smile, and a chart line across a torso is what a monitor looks
- * like. The collar picks the same gold up under the chin so the accent
- * appears twice instead of once, and it is what stops the head reading as
- * balanced on nothing.
+ * He carries no heartbeat. It was a mouth, then a line across his belly, and
+ * it is gone: asked for directly, and he is better without it -- the body is
+ * a clean shape again and the eyes carry the identity instead. The reduced
+ * mark still has the trace, so the waveform is not lost to the product, it
+ * has just stopped being drawn on him twice over.
  *
- * Three things from the earlier draft still hold and are still here. The eyes
- * are large and set low, which is the whole difference between friendly and
- * clinical. The highlights are the surface colour, so they land as pupils in
- * dark mode and look better there than in light. And the trace stays SHARP --
- * a draft that curved it read as a moustache at 110px, and the angles are the
- * only reason it reads as a heartbeat at all.
+ * His eyes ARE the Optic mark. Not an almond drawn to look like the logo: the
+ * brand mark's own path, scaled and translated onto each socket, so if that
+ * shape ever changes these are recomputed from it rather than redrawn by eye.
+ * They blink, which is the one bit of life he has.
+ *
+ * The collar stays. It is what stops the head reading as balanced on nothing,
+ * and with the belly line gone it is the only accent on him.
  *
  * `viewBox` is 32x38 rather than square: he stands up. The CSS sets a height
  * and lets the width follow, or he gets squashed.
@@ -25968,18 +25968,25 @@ function pulseMascotHTML(cls) {
       <ellipse cx="16" cy="26.6" rx="9.5" ry="8.2"/>
       <circle cx="16" cy="11" r="7.6"/>
     </g>
-    <path class="pulse-collar" d="M10.4 18.4q5.6 2.4 11.2 0"
+    <path class="pulse-collar" d="M10.4 18.6q5.6 2.4 11.2 0"
       fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
-    <circle class="pulse-eye" cx="13.3" cy="10.4" r="1.75" fill="currentColor"/>
-    <circle class="pulse-eye" cx="18.7" cy="10.4" r="1.75" fill="currentColor"/>
-    <circle class="pulse-shine" cx="13.95" cy="9.65" r="0.62" fill="var(--surface)"/>
-    <circle class="pulse-shine" cx="19.35" cy="9.65" r="0.62" fill="var(--surface)"/>
-    <path class="pulse-smile" d="M13.5 14.3q2.5 2 5 0"
+    ${/* The logo's eye, twice, and it is literally the logo's: the brand mark's
+         own path scaled to 0.19 and translated onto each socket, rather than an
+         almond drawn to look like it. Recomputed if the mark ever changes.
+         Lens and pupil share a <g> so a blink squashes both together -- on the
+         pupil alone the eye closes and the pupil hangs in the air. */''}
+    <g class="pulse-eye">
+      <path d="M10.45 10.3C11.16 8.95 12.03 8.29 13 8.29S14.84 8.95 15.55 10.3C14.84 11.65 13.97 12.31 13 12.31S11.16 11.65 10.45 10.3Z"
+        fill="var(--surface)" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/>
+      <circle cx="13" cy="10.3" r="1.05" fill="currentColor"/>
+    </g>
+    <g class="pulse-eye">
+      <path d="M16.45 10.3C17.16 8.95 18.03 8.29 19 8.29S20.84 8.95 21.55 10.3C20.84 11.65 19.97 12.31 19 12.31S17.16 11.65 16.45 10.3Z"
+        fill="var(--surface)" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/>
+      <circle cx="19" cy="10.3" r="1.05" fill="currentColor"/>
+    </g>
+    <path class="pulse-smile" d="M13.6 14.7q2.4 1.9 4.8 0"
       fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-    <path class="pulse-trace" pathLength="100"
-      d="M8.9 27.4h2.5l1.6-3.2 2.4 6.3 1.8-3.6 1.3 2.1h2.8"
-      fill="none" stroke="currentColor" stroke-width="2.1"
-      stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`;
 }
 

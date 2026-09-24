@@ -62,15 +62,15 @@ def test_the_heartbeat_stays_sharp():
     the trace. A draft that curved it read as a moustache at 110px: the angles
     are the only reason it reads as a heartbeat at all. The corners lift
     instead, which turns the mouth up without touching the spikes."""
-    for name in ("pulseMarkHTML", "pulseMascotHTML"):
-        fn = _fn(name)
-        # The TRACE, by its class. The figure's arms, smile and collar are all
-        # curves and should be -- taking the first `d` in the function reads an
-        # arm and fails on a drawing that is perfectly correct.
-        after = fn.split('class="pulse-trace"', 1)[1]
-        d = re.search(r'd="([^"]+)"', after).group(1)
-        assert re.fullmatch(r"[\sMmLlHhVvZz0-9.\-]+", d), \
-            "{}: the heartbeat has a curve command in it: {!r}".format(name, d)
+    # The reduced mark only. The figure carries no trace any more -- it was a
+    # mouth, then a belly line, and it was asked to go.
+    fn = _fn("pulseMarkHTML")
+    after = fn.split('class="pulse-trace"', 1)[1]
+    d = re.search(r'd="([^"]+)"', after).group(1)
+    assert re.fullmatch(r"[\sMmLlHhVvZz0-9.\-]+", d), \
+        "the heartbeat has a curve command in it: {!r}".format(d)
+    assert 'class="pulse-trace"' not in _fn("pulseMascotHTML"), \
+        "the line through him is back"
 
 
 def test_the_marks_carry_no_hex():
@@ -110,9 +110,8 @@ def test_only_the_trace_moves_and_reduced_motion_stops_it():
     assert "animation: pulse-trace-draw" in block
     # Per mark, not file-wide: there are two, and a check that either one has
     # it passes with the other stripped.
-    for name in ("pulseMarkHTML", "pulseMascotHTML"):
-        assert 'pathLength="100"' in _fn(name), \
-            "{}: without it the dash maths has to know the path's real length".format(name)
+    assert 'pathLength="100"' in _fn("pulseMarkHTML"), \
+        "without it the dash maths has to know the path's real length"
     reduced = CSS.split("@media (prefers-reduced-motion: reduce) {", 1)
     assert any(".pulse-trace { animation: none" in chunk for chunk in reduced[1:])
     # The MARK no longer scales. The keyframe itself stays: `.ses-dot.p-regular`
@@ -151,7 +150,7 @@ def test_he_has_a_body_and_not_just_a_face():
     the detail removed: a head, a rounder body under it, stub arms, feet."""
     fn = _fn("pulseMascotHTML")
     assert fn.count("<ellipse") >= 3, "body and two feet"
-    assert fn.count("<circle") >= 5, "head, two eyes, two highlights"
+    assert fn.count("<circle") >= 3, "head and two pupils"
     assert fn.count('<path d="M7.4 24') == 1 and fn.count('<path d="M24.6 24') == 1, "two arms"
     assert 'viewBox="0 0 32 38"' in fn, "he stands up, so the box is not square"
     # Arms before the body, or they read as stuck on rather than attached.
@@ -164,3 +163,32 @@ def test_the_standing_figure_is_not_squashed():
     block = CSS.split(".pulse-face-lg {", 1)[1]
     block = block[:block.index("}")]
     assert "height:" in block and "width: auto" in block
+
+
+def test_his_eyes_are_the_optic_mark_and_they_blink():
+    """Not an almond drawn to look like the logo: the brand mark's own path,
+    scaled 0.19 and translated onto each socket. The four control points below
+    are that path's, so a change to the mark is visible here as a failure
+    rather than as two shapes quietly drifting apart."""
+    brand = open("static/index.html", encoding="utf-8").read()
+    assert "M2.6 16C6.3 8.9 10.9 5.4 16 5.4S25.7 8.9 29.4 16" in brand, \
+        "the brand mark changed; the eyes are derived from it and must be redone"
+    fn = _fn("pulseMascotHTML")
+    assert fn.count('<g class="pulse-eye">') == 2
+    # Lens and pupil in one group, or a blink shuts the eye and leaves the
+    # pupil hanging in the air over it.
+    for eye in fn.split('<g class="pulse-eye">')[1:]:
+        socket = eye[:eye.index("</g>")]
+        assert "<path" in socket and "<circle" in socket
+
+    # Anchored to the start of a line: `.pulse-face-lg .pulse-eye {` contains
+    # `.pulse-eye {`, so a bare split reads the colour rule above instead.
+    block = CSS.split("\n.pulse-eye {", 1)[1]
+    block = block[:block.index("}")]
+    assert "transform-box: fill-box" in block, \
+        "without it transform-origin is the SVG's corner and the eyes slide off his face"
+    assert "transform-origin: center" in block
+    assert "animation: pulse-blink" in block
+    assert "@keyframes pulse-blink" in CSS
+    reduced = CSS.split("@media (prefers-reduced-motion: reduce) {", 1)
+    assert any(".pulse-eye { animation: none; }" in c for c in reduced[1:])

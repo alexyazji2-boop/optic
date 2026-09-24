@@ -806,10 +806,32 @@ header.topbar {
  * A height and no width: the viewBox is 32x38 because he stands up, and
  * setting both to the same number squashes him. */
 .pulse-face-lg { height: 92px; width: auto; color: var(--ink-2); }
-.pulse-face-lg .pulse-trace,
 .pulse-face-lg .pulse-collar { stroke: var(--brand); }
-.pulse-face-lg .pulse-eye { fill: var(--ink); }
+.pulse-face-lg .pulse-eye { color: var(--ink); }
 .pulse-face-lg .pulse-smile { stroke: var(--ink); }
+
+/* He blinks.
+ *
+ * `transform-box: fill-box` is what makes `transform-origin: center` mean the
+ * eye's own centre rather than the SVG's origin -- without it the lids scale
+ * towards the top-left corner and the eyes slide off his face.
+ *
+ * Two blinks close together and then a long wait, which is roughly what a
+ * real one does; evenly spaced single blinks read as a metronome. The whole
+ * group squashes, lens and pupil together, so the pupil cannot hang in the
+ * air over a shut eye. */
+.pulse-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pulse-blink 6.5s ease-in-out infinite;
+}
+@keyframes pulse-blink {
+  0%, 86%, 100% { transform: scaleY(1); }
+  88%, 89% { transform: scaleY(0.08); }
+  91% { transform: scaleY(1); }
+  93%, 94% { transform: scaleY(0.08); }
+  96% { transform: scaleY(1); }
+}
 
 /* In `.pulse-empty`, which is the intro that already existed. A first draft
    put the face in a block of its own and the panel greeted a reader twice. */
@@ -829,6 +851,7 @@ header.topbar {
 
 @media (prefers-reduced-motion: reduce) {
   .pulse-trace { animation: none; stroke-dasharray: none; }
+  .pulse-eye { animation: none; }
   /* The two remaining users of pulse-beat. The old rule here covered only the
      mark, so a reader who asks for less motion still got a pulsing dot. */
   .ses-dot.p-regular { animation: none; }
