@@ -1960,10 +1960,20 @@ ul.reasons li { margin-bottom: var(--space-1); }
   cursor: help;
   border-radius: var(--r-xs);
 }
-.gloss-term:hover, .gloss-term:focus-visible {
+.gloss-term:hover {
   color: var(--s1);
   text-decoration-color: var(--s1);
   outline: none;
+}
+/* Split from the hover rule it used to share. Colour alone is the same signal
+ * hover gives, so a keyboard reader could not tell which term was focused from
+ * one they happened to be pointing at, and WCAG 1.4.1 asks for more than hue
+ * either way. Tight offset because these sit inline in running text. */
+.gloss-term:focus-visible {
+  color: var(--s1);
+  text-decoration-color: var(--s1);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 /* Headings are uppercase and letter-spaced, so a dotted rule sitting tight under
    the caps reads as noise — push it further down. Colour stays at ink-muted so
@@ -2150,7 +2160,16 @@ body.chat-open aside#chat { display: flex; }
 body.chat-resizing .chat-grip { opacity: 0.9; }
 /* Invisible at rest but never unreachable: opacity does not remove the target,
    so the 10px strip still takes the pointer and the keyboard. */
-.chat-grip:focus-visible { outline: none; }
+/* The ring is the whole point here, not an afterthought. This handle takes
+ * ArrowLeft/Right/Home/End and resizes the chat panel with them, so a keyboard
+ * reader who tabs onto an invisible 10px strip finds their arrow keys have
+ * silently stopped scrolling the page. `outline: none` was inherited from the
+ * hover rule above, where it is correct -- a pointer already shows where it
+ * is. Offset outwards so the ring sits clear of the 10px strip. */
+.chat-grip:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
 /* While dragging, nothing else should take the pointer or select text. */
 body.chat-resizing { cursor: col-resize; user-select: none; }
 body.chat-resizing iframe,
@@ -14034,4 +14053,33 @@ body.rail-tight .rail nav.tabs-group .nav-menu { left: 56px; }
   padding: var(--space-0) var(--space-2);
   vertical-align: middle;
   margin-left: var(--space-2);
+}
+
+/* ------------------------------------------------- keyboard keeps its ring
+ *
+ * Four controls answered :focus with `outline: none` and a border tint. On a
+ * text input that is survivable -- there is a caret saying where you are --
+ * but `:focus` also matches keyboard focus, and on a <select> there is no
+ * caret, so tabbing into the range picker or the Roth controls moved focus
+ * with nothing but one pixel of border colour to show for it.
+ *
+ * The tint stays: it is the right weight for a pointer, which already knows
+ * where it is. These restate the app's own ring for the keyboard case only,
+ * and sit after those rules because :focus-visible and :focus are the same
+ * specificity -- source order is what decides between them. */
+.home-search input:focus-visible,
+.range-pick select:focus-visible,
+.roth-controls textarea:focus-visible,
+.roth-controls input:focus-visible,
+.roth-controls select:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+/* #cp-input is an id, so its base `outline: none` outranks the global
+ * `:focus-visible` rule (0,1,0) and no amount of state could get a ring back.
+ * Matching the id here is the fix, not a preference. */
+#cp-input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
