@@ -3550,6 +3550,63 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
   grid-column: 1 / -1;
 }
 
+/* The same rule, counting only what is on screen.
+ *
+ * `:last-child` and `:nth-child` count hidden elements, and these grids carry
+ * them: a panel switched off by Simple mode or the panel chooser keeps its
+ * `hidden` attribute and its place in the child order. So on Investing the
+ * rule above was matching "Valuation & accumulation", which is hidden, while
+ * "Valuation vs its own history" -- the actual last visible panel, 743px tall
+ * -- sat in one column with 577px of nothing beside it. Measured at 1182px.
+ *
+ * `of :not([hidden])` is what makes the selector count the visible ones. Kept
+ * alongside the original rather than replacing it: where nothing is hidden the
+ * two agree, and where the syntax is unsupported the old behaviour stands. */
+.grid.c2 > *:nth-last-child(1 of :not([hidden])):nth-child(odd of :not([hidden])) {
+  grid-column: 1 / -1;
+}
+
+/* And the case parity cannot see at all: a full-width sibling.
+ *
+ * `nth-child` counts children, not columns, so one `.span-all` or `.span2` in
+ * the grid puts every later panel's parity one out. Measured on Investing:
+ * "Valuation vs its own history" is the last visible child and sits at visible
+ * position four -- even -- so the parity rule above declined it, while the
+ * `.span-all` wrapper two places before it had already closed that row. 743px
+ * tall in one column with 577 of nothing beside it.
+ *
+ * Adjacency answers it without counting. An element that directly follows a
+ * full-width sibling starts a row; if it is also the last visible child,
+ * nothing can pair with it, so it takes the row. A panel preceded by an
+ * ordinary half-width panel is left alone, because that one has a partner. */
+.grid.c2 > :is(
+    :first-child,
+    .span-all + *,
+    .span2 + *,
+    .panel.is-closed + *
+  ):is(
+    :has(+ .span-all),
+    :has(+ .span2),
+    :has(+ .panel.is-closed),
+    :nth-last-child(1 of :not([hidden]))
+  ) {
+  grid-column: 1 / -1;
+}
+
+/* A collapsed panel is a title bar, and a title bar has no reason to take half
+   a row.
+ *
+ * Measured on Investing at 1182px: "Drawdown" closed to 65px and held one
+ * column, leaving 577x65 empty beside it, and the span2 panels above and below
+ * it could not pair with anything. Full width turns the closed ones into a
+ * clean stack you can read down, and leaves the two-up layout to the panels
+ * that actually have content in them. */
+.grid.c2 > .panel.is-closed,
+.grid.c3 > .panel.is-closed,
+.grid.c4 > .panel.is-closed {
+  grid-column: 1 / -1;
+}
+
 /* A ticker that opens its own analysis. Styled as text rather than a button so a
    table of holdings still reads as a table, with the affordance on hover. */
 .tkr {
@@ -14138,18 +14195,18 @@ body.rail-tight .rail nav.tabs-group .nav-menu { left: 56px; }
   outline-offset: 2px;
 }
 
-/* ---- what the statements say -------------------------------------------- */
+/* ---- readings panel: one lead shape, four pages -------------------------------------------- */
 /* A reading per row rather than a grid of cards: these are sentences, and a
    sentence set in a 232px column wraps to five lines. auto-fit with a wide
    minimum gives two columns on a desktop and one on anything narrower without
    a second breakpoint to keep in step. */
-.fin-reads {
+.lead-reads {
   display: grid;
   gap: var(--space-4);
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   margin-top: var(--space-4);
 }
-.fin-read-head {
+.lead-read-head {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -14159,14 +14216,14 @@ body.rail-tight .rail nav.tabs-group .nav-menu { left: 56px; }
 /* The label is the quiet half. The chip beside it carries the reading, so the
    two must not compete -- this is the security header's lesson in a smaller
    frame. */
-.fin-read-lab {
+.lead-read-lab {
   font-size: var(--t-micro);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--ink-muted);
   font-weight: 600;
 }
-.fin-read-detail {
+.lead-read-detail {
   margin: 0;
   font-size: var(--t-small);
   color: var(--ink-2);
