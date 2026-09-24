@@ -55,8 +55,13 @@ def test_financials_opens_with_a_reading():
 def test_an_empty_reading_renders_no_panel():
     """SPY files no statements. A heading with nothing under it is worse than
     no heading, and the fallback copy below it already explains ETFs."""
+    # The guard moved into `readingsPanel` when three more pages wanted the
+    # same shape. Asserted where it lives, and asserted that Financials still
+    # goes through it rather than drawing its own panel.
     fn = _fn("renderFinancialsLead", _code())
-    assert "if (!rows.length) return ''" in fn
+    assert "readingsPanel({" in fn
+    shared = _fn("readingsPanel", _code())
+    assert "if (!rows.length) return ''" in shared
 
 
 def test_every_reading_comes_off_the_payload_already_on_the_page():

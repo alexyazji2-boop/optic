@@ -5729,6 +5729,12 @@ function renderExplore(data) {
 
   host.innerHTML = `
   <div class="ex-wrap">
+    ${readingsPanel({
+    title: 'What is worth a look',
+    sub: 'A reading of the three sections below, not a fourth thing to read.',
+    cls: 'span-all',
+    rows: exploreReadings(scans, moves, sectors),
+  })}
     <section class="panel">
       <h2>${hg('Screens')}</h2>
       <p class="sub">${esc(scans.ready
@@ -9931,6 +9937,225 @@ async function loadSegments(force) {
  * are the same functions, called from the facet the reader would look for them
  * on. Extras arrives on its own request, so the panel is mounted when it lands
  * rather than blocking the statements above it. */
+/* ---- what the indices say --------------------------------------------------
+ *
+ * "All six in a secular uptrend" is true here most months and tells a reader
+ * almost nothing. What separates one of those months from another is the
+ * dispersion: on the day this was written every index was above its 200-week
+ * average, and the Nasdaq sat 11.0% over its 40-week while the Russell sat
+ * 1.9% over its own. That gap is the reading, and the table below carries
+ * every number in it.
+ */
+function indicesReadings(idx) {
+  const rows = (idx.indices || []).filter((r) => r && r.name);
+  if (!rows.length) return [];
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const out = [];
+
+  const above = rows.filter((r) => r.above_200w_sma === true).length;
+  out.push({
+    label: 'Secular trend',
+    tone: above === rows.length ? 'bull' : above === 0 ? 'bear' : 'neutral',
+    verdict: `${above} of ${rows.length} above`,
+    detail: `${above} of the ${rows.length} indices here close above their 200-week `
+      + 'average, which is the line this page uses to separate a secular uptrend '
+      + 'from a correction inside one.',
+  });
+
+  const fast = rows.filter((r) => num(r.vs_40w_sma) !== null)
+    .sort((a, b) => b.vs_40w_sma - a.vs_40w_sma);
+  if (fast.length >= 2) {
+    const lead = fast[0];
+    const lag = fast[fast.length - 1];
+    const spread = lead.vs_40w_sma - lag.vs_40w_sma;
+    out.push({
+      label: 'Dispersion',
+      // Wide or narrow is the reading; neither is good or bad on its own.
+      tone: 'neutral',
+      verdict: spread >= 6 ? 'wide' : spread >= 3 ? 'moderate' : 'narrow',
+      detail: `${lead.name} is ${fmt(lead.vs_40w_sma, 1)}% above its 40-week `
+        + `average and ${lag.name} ${fmt(lag.vs_40w_sma, 1)}%, a spread of `
+        + `${fmt(spread, 1)} points. A narrow spread means the indices are moving `
+        + 'together; a wide one means the label on the index matters more than the market.',
+    });
+  }
+
+  const drawn = rows.filter((r) => num(r.current_drawdown_pct) !== null)
+    .sort((a, b) => a.current_drawdown_pct - b.current_drawdown_pct);
+  if (drawn.length) {
+    const worst = drawn[0];
+    out.push({
+      label: 'Furthest from a high',
+      tone: worst.current_drawdown_pct <= -20 ? 'bear' : 'neutral',
+      verdict: `${fmt(Math.abs(worst.current_drawdown_pct), 1)}% down`,
+      detail: `${worst.name} sits ${fmt(Math.abs(worst.current_drawdown_pct), 1)}% `
+        + 'below its own record close, the deepest of these. A drawdown is measured '
+        + 'against that index\'s own history, so these are not comparable to each other '
+        + 'as sizes of loss.',
+    });
+  }
+
+  const gvm = idx.growth_vs_market || {};
+  if (gvm.note) {
+    out.push({
+      label: 'Style',
+      tone: 'neutral',
+      verdict: num(gvm.chg_3m_pct) === null ? 'no reading'
+        : gvm.chg_3m_pct > 2 ? 'growth ahead'
+          : gvm.chg_3m_pct < -2 ? 'broad market ahead' : 'together',
+      detail: String(gvm.note),
+    });
+  }
+  return out;
+}
+
+/* ---- what the screens say --------------------------------------------------
+ *
+ * This page is a directory: screens, sectors, cross-asset. The reading it can
+ * honestly carry is not about any one of those but about what the day looks
+ * like across them -- how much of the universe survived the liquidity filter,
+ * and which instrument has moved furthest against its own normal range.
+ *
+ * Ranked by `rel` rather than raw percent for the reason recorded on
+ * rankedMoves: raw percent ranks by which instrument is inherently jumpiest.
+ */
+function exploreReadings(scans, moves, sectors) {
+  const out = [];
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+  if (scans && scans.ready && num(scans.considered)) {
+    const universe = num(scans.universe_size) || 0;
+    const share = universe ? (scans.considered / universe) * 100 : null;
+    out.push({
+      label: 'What is screenable',
+      tone: 'neutral',
+      verdict: `${fmt(scans.considered, 0)} names`,
+      detail: `${fmt(scans.considered, 0)} of ${fmt(universe, 0)} symbols cleared the `
+        + `price and volume filters${share === null ? '' : ` -- ${fmt(share, 0)}%`}. `
+        + 'Every screen on this page ranks within that set, so a name absent from a '
+        + 'result may have been filtered out before the screen ran rather than failed it.',
+    });
+  }
+
+  const top = (moves || [])[0];
+  if (top && num(top.chg_1d) !== null) {
+    out.push({
+      label: 'Biggest move',
+      tone: top.chg_1d > 0 ? 'bull' : top.chg_1d < 0 ? 'bear' : 'neutral',
+      // Computed first rather than nested in the template: a ternary holding a
+      // second template literal inside an interpolation is how the last
+      // version of this line ended up with an unterminated string.
+      verdict: `${top.label || top.symbol || ''} ${fmtPct(top.chg_1d, 1)}`,
+      detail: 'Ranked against each instrument\'s own typical daily range rather '
+        + 'than by raw percent'
+        + (num(top.rel) ? `, so this is ${fmt(top.rel, 1)}x a normal day for it` : '')
+        + '. The biggest percentage on a screen is usually just the jumpiest '
+        + 'instrument on it.',
+    });
+  }
+
+  const rows = (sectors || []).filter((r) => num(r.chg_1d) !== null);
+  if (rows.length) {
+    const up = rows.filter((r) => r.chg_1d > 0).length;
+    out.push({
+      label: 'Sector breadth',
+      tone: up > rows.length * 0.6 ? 'bull' : up < rows.length * 0.4 ? 'bear' : 'neutral',
+      verdict: `${up} of ${rows.length} up`,
+      detail: `${up} of the ${rows.length} sectors are higher on the day. Breadth says `
+        + 'how much of the market is taking part, which a single index level cannot.',
+    });
+  }
+  return out;
+}
+
+/* ---- what a screen returned ------------------------------------------------
+ *
+ * Placed with the results, never above the controls. The Compare tab records
+ * what happens otherwise: a conclusion about the last thing you ran sitting
+ * where the inputs should be, reading as though it were the page's content.
+ */
+function scanReadings(res) {
+  const rows = (res && res.rows) || [];
+  if (!rows.length) return [];
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const out = [];
+
+  const roc = rows.map((r) => num(r.roc20)).filter((v) => v !== null);
+  if (roc.length) {
+    const up = roc.filter((v) => v > 0).length;
+    const hi = Math.max(...roc);
+    const lo = Math.min(...roc);
+    out.push({
+      label: 'Direction',
+      tone: up === roc.length ? 'bull' : up === 0 ? 'bear' : 'neutral',
+      verdict: up === roc.length ? 'all higher' : up === 0 ? 'all lower'
+        : `${up} of ${roc.length} higher`,
+      detail: `Over twenty sessions these run from ${fmtPct(lo, 1)} to ${fmtPct(hi, 1)}. `
+        + 'A screen that returns one direction is telling you about the screen as much '
+        + 'as about the market.',
+    });
+  }
+
+  const vol = rows.map((r) => num(r.volume_expansion)).filter((v) => v !== null);
+  if (vol.length) {
+    const busy = vol.filter((v) => v >= 1.5).length;
+    out.push({
+      label: 'Participation',
+      tone: 'neutral',
+      verdict: `${busy} of ${vol.length} on heavy volume`,
+      detail: `${busy} are trading at 1.5x their own average volume or more. A move `
+        + 'without volume behind it is a move fewer people took part in.',
+    });
+  }
+
+  if (num(res.matched) && num(res.shown) && res.matched > res.shown) {
+    out.push({
+      label: 'Coverage',
+      tone: 'neutral',
+      verdict: `${fmt(res.shown, 0)} of ${fmt(res.matched, 0)}`,
+      detail: `${fmt(res.matched, 0)} names matched and the strongest `
+        + `${fmt(res.shown, 0)} are shown. These readings describe what is on screen, `
+        + 'not the whole match set.',
+    });
+  }
+  return out;
+}
+
+/* ---- a readings panel ------------------------------------------------------
+ *
+ * The shape the Financials lead established, extracted because three more
+ * pages wanted it: a label, a one-word verdict as a chip, and a sentence
+ * carrying the figures the verdict came from.
+ *
+ * The rule every caller is held to, and the reason this is worth sharing
+ * rather than copying: each row is derived from data already rendered on the
+ * page below it. No reading here fetches anything, and none of them says
+ * something the page cannot show you the working for.
+ *
+ * `data-fixed` because a reading is not a section. makePanelsCollapsible would
+ * otherwise fold the page's own lead into a chevron.
+ */
+function readingRow(r) {
+  return `<div class="lead-read">
+    <div class="lead-read-head">
+      <span class="lead-read-lab">${esc(r.label)}</span>
+      <span class="chip ${esc(r.tone || 'neutral')}"><span class="dot"></span>${
+  esc(r.verdict)}</span>
+    </div>
+    <p class="lead-read-detail">${esc(r.detail)}</p>
+  </div>`;
+}
+
+function readingsPanel(opts) {
+  const rows = opts.rows || [];
+  if (!rows.length) return '';
+  return `<div class="panel ${esc(opts.cls || 'span2 gap')} lead-panel" data-fixed="1">
+    <h2>${hg(opts.title)}</h2>
+    ${opts.sub ? `<p class="sub">${esc(opts.sub)}</p>` : ''}
+    <div class="lead-reads">${rows.map(readingRow).join('')}</div>
+  </div>`;
+}
+
 /* ---- what the statements say ---------------------------------------------
  *
  * Every other Dossier facet opens by telling you what it thinks. Options leads
@@ -10048,22 +10273,12 @@ function financialsReadings(co) {
 }
 
 function renderFinancialsLead(co) {
-  const rows = financialsReadings(co);
-  if (!rows.length) return '';
-  return `<div class="panel span2 gap fin-lead" data-fixed="1">
-    <h2>${hg('What the statements say')}</h2>
-    <p class="sub">Read off the figures on this page. Every one of them appears
-      in full below, and none of it is advice or a forecast.</p>
-    <div class="fin-reads">
-      ${rows.map((r) => `<div class="fin-read">
-        <div class="fin-read-head">
-          <span class="fin-read-lab">${esc(r.label)}</span>
-          <span class="chip ${esc(r.tone)}"><span class="dot"></span>${esc(r.verdict)}</span>
-        </div>
-        <p class="fin-read-detail">${esc(r.detail)}</p>
-      </div>`).join('')}
-    </div>
-  </div>`;
+  return readingsPanel({
+    title: 'What the statements say',
+    sub: 'Read off the figures on this page. Every one of them appears in full '
+      + 'below, and none of it is advice or a forecast.',
+    rows: financialsReadings(co),
+  });
 }
 
 /* ---- congressional disclosures -------------------------------------------
@@ -21713,6 +21928,12 @@ function renderIndices(d) {
   if (idx.error) { views.indices.innerHTML = errorHTML(idx.error); return; }
 
   views.indices.innerHTML = `
+  ${readingsPanel({
+    title: 'What the indices say',
+    sub: 'Read off the table below. Every figure quoted here is in it.',
+    cls: 'span-all',
+    rows: indicesReadings(idx),
+  })}
   ${renderIndexBoard(STATE.indexBoard)}
 
   <div class="panel span2 gap">
@@ -24155,7 +24376,13 @@ function renderScan(cat, res) {
     ${cols.map((c) => `<td class="num">${scanCell(c.kind, r[c.key])}</td>`).join('')}
   </tr>`).join('');
 
-  return head + `<div class="panel span-all">
+  return head + `${readingsPanel({
+    title: 'What this screen returned',
+    sub: 'A reading of the rows below, and only of the rows below.',
+    cls: 'span-all',
+    rows: scanReadings(res),
+  })}
+  <div class="panel span-all">
     <h2>${esc(res.name)}</h2>
     <p class="sub">${esc(res.looks_for)}</p>
     ${res.stale ? `<div class="callout warn">The ranking behind this is
