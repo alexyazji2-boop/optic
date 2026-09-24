@@ -38,6 +38,7 @@ from . import weekly as weekly_mod
 from . import catalysts as catalysts_mod
 from . import catalyst_live as catalyst_live_mod
 from .analytics import cases as cases_mod
+from .analytics import congress as congress_mod
 from .analytics import screen as screen_mod
 from .analytics import screener as screener_mod
 from .analytics import segments as segments_mod
@@ -1711,6 +1712,27 @@ async def weekly_update(force: bool = False) -> Dict[str, Any]:
         update["generated_at"] = datetime.now(timezone.utc).isoformat()
         return update
     return await _run(build)
+
+
+@app.get("/api/congress")
+async def congress_trades(
+    ticker: Optional[str] = Query(None, description="Filter to one symbol"),
+    limit: int = Query(60, ge=1, le=300),
+) -> Dict[str, Any]:
+    """Stock trades disclosed by members of the House under the STOCK Act.
+
+    Free and public: the Clerk of the House publishes both the index and the
+    filings, so there is no key here and no vendor in the path.
+
+    The refresh is bounded and lazy. 400 filings a year is a backlog to fill
+    over successive calls rather than a burst to fire at a government file
+    server, so a stale read pulls the index plus a budget of new filings and
+    answers with whatever is parsed -- `filings_parsed` against
+    `filings_known` says how much of the record that is.
+    """
+    if congress_mod.stale():
+        await _run(congress_mod.refresh)
+    return congress_mod.summary(ticker=ticker, limit=limit)
 
 
 @app.get("/api/catalysts")

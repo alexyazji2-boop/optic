@@ -10010,6 +10010,72 @@ function renderFinancialsLead(co) {
   </div>`;
 }
 
+/* ---- congressional disclosures -------------------------------------------
+ *
+ * Public filings, not a vendor feed: the Clerk of the House publishes these
+ * under the STOCK Act and Optic reads them directly.
+ *
+ * Presented as a record rather than a signal, which is most of the design.
+ * Every amount is the band the filer reported and is shown as a band, because
+ * a midpoint is a figure nobody disclosed. The lag between trading and filing
+ * is a column rather than a footnote: a trade disclosed seven weeks late is a
+ * different object from one filed the same day, and the table should not
+ * flatten them into "a congressman bought this".
+ */
+function congressRow(t) {
+  const band = `$${fmtCompact(t.amount_low, 0)} – $${fmtCompact(t.amount_high, 0)}`;
+  const lag = t.disclosure_lag_days;
+  return `<tr>
+    <td class="name">${esc(t.member || '')}${
+  t.district ? ` <span class="muted">${esc(t.district)}</span>` : ''}</td>
+    <td class="${t.side === 'buy' ? 'pos' : t.side === 'sell' ? 'neg' : ''}">${
+  esc(cap(t.transaction || ''))}</td>
+    <td>${esc(t.traded_iso || t.traded || '')}</td>
+    <td class="${lag !== null && lag !== undefined && lag > 30 ? 'muted' : ''}">${
+  lag === null || lag === undefined ? '—' : `${fmt(lag, 0)}d`}</td>
+    <td style="font-variant-numeric:tabular-nums">${band}</td>
+  </tr>`;
+}
+
+function renderCongress(c) {
+  if (!c) return '';
+  if (!c.available || !(c.trades || []).length) {
+    return `<div class="panel" data-fixed="1"><h2>${hg('Congressional disclosures')}</h2>
+      <p class="sub">No House filing covering this symbol in the record read so
+        far${c.filings_parsed ? ` (${fmt(c.filings_parsed, 0)} of ${
+  fmt(c.filings_known, 0)} filings)` : ''}. That is an absence of a disclosure,
+        not evidence that nothing was traded.</p></div>`;
+  }
+  return `<div class="panel">
+    <h2>${hg('Congressional disclosures')}</h2>
+    <p class="sub">${fmt(c.count, 0)} disclosed trade${c.count === 1 ? '' : 's'} ·
+      ${fmt(c.buys, 0)} bought, ${fmt(c.sells, 0)} sold · reported total
+      $${fmtCompact(c.amount_low, 0)} – $${fmtCompact(c.amount_high, 0)}</p>
+    <table class="data">
+      <thead><tr><th>Member</th><th>Transaction</th><th>Traded</th>
+        <th title="Days between the trade and the filing">Filed after</th>
+        <th>Amount</th></tr></thead>
+      <tbody>${(c.trades || []).map(congressRow).join('')}</tbody>
+    </table>
+    <p class="caveat">${esc(c.caveat || '')}
+      ${c.complete ? '' : `Read so far: ${fmt(c.filings_parsed, 0)} of ${
+  fmt(c.filings_known, 0)} filings this year.`}
+      <a href="${esc(c.source || '')}" target="_blank" rel="noopener">Source</a>.</p>
+  </div>`;
+}
+
+async function loadCongress(force) {
+  const sym = STATE.ticker;
+  if (!sym) return;
+  if (!force && STATE.congressFor === sym) return;
+  STATE.congressFor = sym;
+  try {
+    STATE.congress = await getJSON(`/api/congress?ticker=${encodeURIComponent(sym)}&limit=40`);
+  } catch (err) {
+    STATE.congress = { available: false, reason: err.message };
+  }
+}
+
 function renderFinancialsView(force) {
   const d = STATE.swing || {};
   const co = d.company;
@@ -10019,6 +10085,7 @@ function renderFinancialsView(force) {
       + 'for this ticker. Funds, indices and most ADRs do not file statements.'
       + '</div></div>'}
     <div id="fin-extras-host">${renderExtras(STATE.extras)}</div>
+    <div id="congress-host">${renderCongress(STATE.congress)}</div>
     <div id="seg-host">${renderSegments()}</div>`;
   revealPanels(views.financials);
   // Its own request, started after the paint so the statements above are
@@ -10026,6 +10093,15 @@ function renderFinancialsView(force) {
   loadSegments(force);
   // loadExtras mounts into #extras-host on the Swing tab; this facet has its
   // own host, so it re-renders here once the request settles.
+  // Its own request too: the filings are a government file server, not the
+  // market feed, and a slow read of them should not hold up the statements.
+  loadCongress(force).then(() => {
+    const host = document.getElementById('congress-host');
+    if (host && STATE.view === 'financials') {
+      host.innerHTML = renderCongress(STATE.congress);
+      revealPanels(host);
+    }
+  });
   loadExtras(force).then(() => {
     const host = document.getElementById('fin-extras-host');
     if (host && STATE.view === 'financials') {
@@ -28877,7 +28953,7 @@ const PANELS_OPEN_BY_DEFAULT = {
    * named for; short interest, the earnings record, the filing list, the
    * insider table and corporate actions are all reference you come to this
    * tab for one at a time. */
-  financials: ['financials', 'segments and geography'],
+  financials: ['financials', 'segments and geography', 'congressional disclosures'],
 };
 
 const COLLAPSE_KEY = 'optic.panels.open';

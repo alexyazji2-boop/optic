@@ -18,3 +18,9 @@ anthropic>=0.60
 argon2-cffi>=23.1
 PyJWT[crypto]>=2.8
 webauthn>=2.0
+
+# Congressional trade disclosures. The House Clerk publishes an XML index of
+# filings but puts the trades themselves in per-filing PDFs, which carry a real
+# text layer -- so this is parsing, not OCR, and pypdf is the whole of it. Pure
+# Python, BSD, no native build. See app/analytics/congress.py.
+pypdf>=4.0
