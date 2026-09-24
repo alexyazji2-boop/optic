@@ -1070,7 +1070,22 @@ function originIsEphemeral() {
 function errorHTML(msg, opts = {}) {
   const down = opts.originUnreachable || ORIGIN_DOWN_RE.test(String(msg || ''));
   if (!down) {
-    return `<div class="error-box"><strong>Could not load.</strong> ${esc(msg)}</div>`;
+    /* A retry, not just a sentence.
+     *
+     * The origin-down branch below has always explained itself, polled and
+     * offered a button; this branch -- which is every per-endpoint failure,
+     * a throttled feed or a symbol the provider has no data for -- said
+     * "Could not load" and stopped. A reader with a dead panel and no control
+     * has one option, which is to reload the whole page and lose the rest of
+     * the screen with it.
+     *
+     * `switchView(STATE.view, true)` is the same path the nav takes and the
+     * `force` flag is what makes it refetch rather than repaint the cached
+     * failure. */
+    return `<div class="error-box"><strong>Could not load.</strong> ${esc(msg)}
+      <div class="error-acts">
+        <button type="button" class="btn" data-view-retry>Try again</button>
+      </div></div>`;
   }
   /* The origin is gone, which needs different words from a failed request, and
    * different words again depending on whether the address itself can rot.
@@ -27381,6 +27396,12 @@ document.addEventListener('click', (evt) => {
   if (evt.target.closest('[data-alert-unread]')) {
     alertUnreadOnly = !alertUnreadOnly;
     renderAlerts();
+    return;
+  }
+  if (evt.target.closest('[data-view-retry]')) {
+    // The view we are on, refetched. `force` skips the cache, or the retry
+    // repaints the same failure it was clicked to clear.
+    switchView(STATE.view, true);
     return;
   }
   if (evt.target.closest('[data-origin-retry]')) {

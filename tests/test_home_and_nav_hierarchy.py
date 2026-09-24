@@ -139,3 +139,25 @@ def test_the_price_outranks_the_symbol_in_the_security_header():
     # And the change keeps a weight, or the direction is the quietest thing
     # in the row again.
     assert "font-weight: 600" in chg_rule
+
+
+# ------------------------------------------------- states that offer a way out
+
+
+def test_a_failed_panel_offers_a_retry_rather_than_just_a_sentence():
+    """The origin-down branch has always explained itself, polled and offered
+    a button. The other branch -- every per-endpoint failure, a throttled feed,
+    a symbol the provider has no data for -- said "Could not load" and stopped,
+    leaving a reader with a dead panel and one option: reload the whole page
+    and lose the rest of the screen with it.
+
+    Driven in a browser: the error renders with the button, the click refetches
+    and the panel comes back with real content."""
+    fn = _fn("errorHTML")
+    generic = fn.split("if (!down) {", 1)[1].split("\n  }", 1)[0]
+    assert "data-view-retry" in generic
+    # And the control has a handler, which is the half that makes it real.
+    assert "evt.target.closest('[data-view-retry]')" in APP
+    handler = APP.split("evt.target.closest('[data-view-retry]')", 1)[1][:260]
+    assert "switchView(STATE.view, true)" in handler, \
+        "without force it repaints the cached failure it was clicked to clear"
