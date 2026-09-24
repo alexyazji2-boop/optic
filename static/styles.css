@@ -3053,6 +3053,17 @@ ul.brief-list {
 .read-tick-day.up { color: var(--pos); }
 .read-tick-day.down { color: var(--neg); }
 
+/* The read's own headline, now that it sits under the title that names it.
+   Larger than a `.sub` because it is the first sentence of the thing the page
+   is for, and it used to be the subtitle of a panel one further down. */
+.read-lede {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--t-lead);
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.35;
+}
+
 .read-hero-top {
   display: flex;
   align-items: flex-start;

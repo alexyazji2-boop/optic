@@ -22485,11 +22485,27 @@ function readUpdatedHTML(iso) {
     <strong>Last updated</strong> ${stamp ? esc(stamp) : 'time not recorded'}${
   ago ? ` <span class="read-updated-ago">· ${esc(ago)}</span>` : ''}
   </p>
-  ${nextIso ? `<p class="read-next">Next rebuild ${esc(stampIn(nextIso, zone))}
+  `;
+}
+
+/* The rebuild schedule, which is three lines of explanation and was sitting
+ * between the title and the read.
+ *
+ * Split out rather than shortened: it answers a real question -- does this
+ * cover the weekend -- and the answer is worth the words. It just is not worth
+ * them first. "Last updated ... 11m ago" above the read is the half a reader
+ * needs before reading; when the next one lands is the half they need after.
+ */
+function readRebuildHTML() {
+  const zone = activeZone();
+  const next = nextBriefAnchor();
+  if (!next) return '';
+  const nextIso = next.toISOString();
+  return `<p class="read-next">Next rebuild ${esc(stampIn(nextIso, zone))}
     <span class="read-updated-ago">· in ${esc(roughGap(next - new Date()))}</span>.
     The terminal rebuilds this read at 9:00 am Eastern <strong>every day, weekends
     included</strong>, so it keeps picking up news while the market is shut and a
-    Monday read covers everything back to Friday's close.</p>` : ''}`;
+    Monday read covers everything back to Friday's close.</p>`;
 }
 
 function briefWhen(iso) {
@@ -23547,10 +23563,20 @@ function renderBrief(d) {
   views.brief.innerHTML = `
   ${briefStrip(groups.indices)}
 
+  ${/* The read sits under the heading that names it.
+       *
+       * It used to be the next panel down, titled "Morning desk", while the
+       * panel called "Optic's Read" held a timestamp, a search box and a
+       * disclaimer -- so the page opened with 430px of chrome under a title
+       * promising a read, and the read itself began below the fold under a
+       * different name. Asked directly: "where is the actual read?"
+       *
+       * The disclaimer moves below the prose it qualifies, which is also the
+       * order it reads in. */''}
   <div class="panel read-hero">
     <div class="read-hero-top">
       <div>
-        <h2>Optic's Read: ${esc(d.day)}</h2>
+        <h2>Optic's Read: ${esc(d.day)}${askPulse('morning')}</h2>
         ${readUpdatedHTML(d.built_at)}
       </div>
       <div class="read-search">
@@ -23558,13 +23584,7 @@ function renderBrief(d) {
                autocomplete="off" aria-label="Search headlines">
       </div>
     </div>
-    <div id="read-results"></div>
-    ${legalBanner('brief')}
-  </div>
-
-  <div class="panel span-all">
-    <h2>${hg('Morning desk')}${askPulse('morning')}</h2>
-    <p class="sub">${esc(summary.headline || '')}</p>
+    <p class="read-lede">${esc(summary.headline || '')}</p>
     <!-- What period this read covers, stated rather than assumed. On a Monday it
          is ~65 hours and on a Tuesday ~24, and a reader checking whether the
          weekend is in here should not have to work that out. -->
@@ -23578,6 +23598,9 @@ function renderBrief(d) {
         || '<p class="sub">Market moves were not available on this refresh.</p>'}
     </div>
     <p class="caveat">${esc(summary.method || '')} ${esc(o.note || '')}</p>
+    ${readRebuildHTML()}
+    <div id="read-results"></div>
+    ${legalBanner('brief')}
   </div>
 
   <div id="global-host" class="span-all">${renderGlobal(STATE.globalOvernight)}</div>
@@ -28822,7 +28845,7 @@ const PANELS_OPEN_BY_DEFAULT = {
    * two of the four were also simply wrong: the heading is "Weekly market
    * update", not "weekly market analysis", and "optic's read" names the hero,
    * whose h2 is nested and therefore never collapsible in the first place. */
-  brief: ['morning desk', 'overnight', "today's priority", 'weekly market',
+  brief: ['overnight', "today's priority", 'weekly market',
     'fear & greed', 'market regime', 'on the calendar', 'official releases',
     'insider filings'],
   /* Renamed panels, stale keys. "The record" became "Optic Portfolio" and

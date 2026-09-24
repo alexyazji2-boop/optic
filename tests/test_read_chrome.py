@@ -177,7 +177,16 @@ def test_read_opens_almost_everything():
     verdict. Twelve clicks to read the news is a worse page than the one that
     only scrolled."""
     keys = [a or b for a, b in _dict_entry("PANELS_OPEN_BY_DEFAULT", "brief")]
-    assert len(keys) >= 9, "a newspaper does not open collapsed"
+    assert len(keys) >= 8, "a newspaper does not open collapsed"
+    # Was nine, and the one that went is the strongest version of this rule
+    # rather than an exception to it. "Morning desk" held the read itself while
+    # the panel titled "Optic's Read" held a timestamp, a search box and a
+    # disclaimer -- so the page opened with chrome under a heading promising a
+    # read, and the read began below the fold under a different name. It is in
+    # the hero now, which is not collapsible at all: the lead cannot be closed,
+    # and it no longer needs a default to say so.
+    assert "morning desk" not in keys, \
+        "that panel is gone; a stale key here opens nothing"
     for shut in ("catalyst library", "where this comes from", "market catalyst"):
         assert not any(shut in k for k in keys), \
             "{} is reference material, not news".format(shut)
@@ -202,3 +211,33 @@ def test_read_hides_nothing_by_mode():
     for table in ("PANELS_ADVANCED", "PANELS_DENSE", "PANELS_SIMPLE_HIDES"):
         assert not [a or b for a, b in _dict_entry(table, "brief")], \
             "{} now hides part of Read by mode".format(table)
+
+
+def test_the_read_sits_under_the_heading_that_names_it():
+    """Asked directly, looking at the page: "where is the actual read?"
+
+    The panel titled "Optic's Read: <date>" carried a last-updated line, a
+    next-rebuild note, a search box and a disclaimer -- 430px of chrome -- and
+    then ended. The read itself was the next panel down, under "Morning desk",
+    which on most screens put it below the fold under a name that does not
+    say it is the thing the page is for.
+
+    The summary was rendering correctly the whole time, which is what made this
+    invisible to every test: `summary.headline` and all five paragraphs were in
+    the DOM, just not where the title promised."""
+    hero = APP[APP.index('<div class="panel read-hero">'):]
+    hero = hero[:hero.index("\n  <div id=") if "\n  <div id=" in hero else 4000]
+    assert "Optic's Read:" in hero
+    # The headline and the prose, in the panel that names them.
+    assert "summary.headline" in hero, "the read's own headline is elsewhere again"
+    assert "briefProse(summary.paragraphs)" in hero, "the prose is elsewhere again"
+    # And the disclaimer follows the prose it qualifies rather than preceding it.
+    assert hero.index("briefProse(summary.paragraphs)") < hero.index("legalBanner('brief')")
+
+
+def test_the_read_is_not_also_left_behind_in_a_second_panel():
+    """Moving it and leaving a copy would be worse than either: two headlines
+    that drift the first time one is edited."""
+    assert APP.count("briefProse(summary.paragraphs)") == 1
+    assert "hg('Morning desk')" not in APP, \
+        "the emptied panel should be gone, not rendering a bare heading"
