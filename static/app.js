@@ -25929,35 +25929,55 @@ function pulseMarkHTML(cls) {
   </svg>`;
 }
 
-/* The face. Four decisions, each one drawn and looked at rather than argued:
+/* The face, and a body to put it on.
  *
- * The eyes are large and set LOW. That is the whole difference between this
- * and the first draft, which had small eyes high on the circle and read as
- * clinical. Big and low is the same trick every friendly mascot uses.
+ * The first version was a circle with two eyes and a heartbeat in it, which
+ * is a smiley rather than a character -- it was sent back with "what is this".
+ * A mascot needs a silhouette you would recognise with the detail removed, so
+ * this one is built like a snowman: a head, a rounder body under it, stub
+ * arms and two feet. Chunky rather than drawn with thin limbs, because thin
+ * limbs on a round body read as a spider.
  *
- * A soft fill rather than a bare outline, so it has a body instead of being a
- * ring. `fill-opacity` on the brand token rather than a tint colour, because
- * the palette has no tint slot and inventing a hex for one is what the design
- * system exists to stop.
+ * The heartbeat moved to the belly, which is better than it was as a mouth:
+ * it is the reading he is showing you rather than an expression, the head is
+ * free to smile, and a chart line across a torso is what a monitor looks
+ * like. The collar picks the same gold up under the chin so the accent
+ * appears twice instead of once, and it is what stops the head reading as
+ * balanced on nothing.
  *
- * Highlights in the surface colour, which is what makes the eyes read as eyes
- * rather than holes.
+ * Three things from the earlier draft still hold and are still here. The eyes
+ * are large and set low, which is the whole difference between friendly and
+ * clinical. The highlights are the surface colour, so they land as pupils in
+ * dark mode and look better there than in light. And the trace stays SHARP --
+ * a draft that curved it read as a moustache at 110px, and the angles are the
+ * only reason it reads as a heartbeat at all.
  *
- * And the trace stays SHARP. A friendlier draft rounded its peaks into a
- * curve and at 110px it read as a moustache -- the angles are the only reason
- * it reads as a heartbeat at all. The friendliness comes from the two end
- * segments lifting instead, which turns the corners up without touching the
- * spikes. */
+ * `viewBox` is 32x38 rather than square: he stands up. The CSS sets a height
+ * and lets the width follow, or he gets squashed.
+ */
 function pulseMascotHTML(cls) {
-  return `<svg class="pulse-face ${cls || ''}" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-    <circle cx="16" cy="16.4" r="11.6"
-      fill="var(--brand)" fill-opacity="0.1" stroke="currentColor" stroke-width="1.6"/>
-    <circle class="pulse-eye" cx="11.6" cy="14.2" r="2.1" fill="currentColor"/>
-    <circle class="pulse-eye" cx="20.4" cy="14.2" r="2.1" fill="currentColor"/>
-    <circle class="pulse-shine" cx="12.3" cy="13.4" r="0.72" fill="var(--surface)"/>
-    <circle class="pulse-shine" cx="21.1" cy="13.4" r="0.72" fill="var(--surface)"/>
+  return `<svg class="pulse-face ${cls || ''}" viewBox="0 0 32 38" aria-hidden="true" focusable="false">
+    <g stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"
+       fill="var(--brand)" fill-opacity="0.12">
+      ${/* Arms first so the body overlaps them, which is what makes them read
+           as attached rather than stuck on. */''}
+      <path d="M7.4 24q-3.5 0.6-4.3 3 -0.4 1.4 1.1 1.8 2 0.4 3.7-1.2Z"/>
+      <path d="M24.6 24q3.5 0.6 4.3 3 0.4 1.4-1.1 1.8-2 0.4-3.7-1.2Z"/>
+      <ellipse cx="11.8" cy="34.4" rx="3.4" ry="2.3"/>
+      <ellipse cx="20.2" cy="34.4" rx="3.4" ry="2.3"/>
+      <ellipse cx="16" cy="26.6" rx="9.5" ry="8.2"/>
+      <circle cx="16" cy="11" r="7.6"/>
+    </g>
+    <path class="pulse-collar" d="M10.4 18.4q5.6 2.4 11.2 0"
+      fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+    <circle class="pulse-eye" cx="13.3" cy="10.4" r="1.75" fill="currentColor"/>
+    <circle class="pulse-eye" cx="18.7" cy="10.4" r="1.75" fill="currentColor"/>
+    <circle class="pulse-shine" cx="13.95" cy="9.65" r="0.62" fill="var(--surface)"/>
+    <circle class="pulse-shine" cx="19.35" cy="9.65" r="0.62" fill="var(--surface)"/>
+    <path class="pulse-smile" d="M13.5 14.3q2.5 2 5 0"
+      fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
     <path class="pulse-trace" pathLength="100"
-      d="M8.4 21l2.8-0.9 1.7-3.5 2.6 6.8 1.9-3.9 1.4 2.3 2.8-0.8"
+      d="M8.9 27.4h2.5l1.6-3.2 2.4 6.3 1.8-3.6 1.3 2.1h2.8"
       fill="none" stroke="currentColor" stroke-width="2.1"
       stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`;

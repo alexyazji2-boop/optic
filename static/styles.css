@@ -801,10 +801,15 @@ header.topbar {
   38% { stroke-dashoffset: 0; }
 }
 
-/* The face, in the panel's empty state. */
-.pulse-face-lg { width: 76px; height: 76px; color: var(--ink-2); }
-.pulse-face-lg .pulse-trace { stroke: var(--brand); }
+/* The figure, in the panel's empty state.
+ *
+ * A height and no width: the viewBox is 32x38 because he stands up, and
+ * setting both to the same number squashes him. */
+.pulse-face-lg { height: 92px; width: auto; color: var(--ink-2); }
+.pulse-face-lg .pulse-trace,
+.pulse-face-lg .pulse-collar { stroke: var(--brand); }
 .pulse-face-lg .pulse-eye { fill: var(--ink); }
+.pulse-face-lg .pulse-smile { stroke: var(--ink); }
 
 /* In `.pulse-empty`, which is the intro that already existed. A first draft
    put the face in a block of its own and the panel greeted a reader twice. */

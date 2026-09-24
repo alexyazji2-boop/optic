@@ -62,10 +62,15 @@ def test_the_heartbeat_stays_sharp():
     the trace. A draft that curved it read as a moustache at 110px: the angles
     are the only reason it reads as a heartbeat at all. The corners lift
     instead, which turns the mouth up without touching the spikes."""
-    for fn in (_fn("pulseMarkHTML"), _fn("pulseMascotHTML")):
-        d = re.search(r'd="([^"]+)"', fn).group(1)
-        assert not re.search(r"[qcsalt]", d, re.I) or re.fullmatch(r"[\sMmLlHhVvZz0-9.\-]+", d), \
-            "the trace has a curve command in it: {!r}".format(d)
+    for name in ("pulseMarkHTML", "pulseMascotHTML"):
+        fn = _fn(name)
+        # The TRACE, by its class. The figure's arms, smile and collar are all
+        # curves and should be -- taking the first `d` in the function reads an
+        # arm and fails on a drawing that is perfectly correct.
+        after = fn.split('class="pulse-trace"', 1)[1]
+        d = re.search(r'd="([^"]+)"', after).group(1)
+        assert re.fullmatch(r"[\sMmLlHhVvZz0-9.\-]+", d), \
+            "{}: the heartbeat has a curve command in it: {!r}".format(name, d)
 
 
 def test_the_marks_carry_no_hex():
@@ -88,7 +93,9 @@ def test_the_face_uses_the_palette_for_its_warmth():
     colour, because the palette has no tint slot and inventing a hex for one
     is what the design system exists to stop."""
     fn = _fn("pulseMascotHTML")
-    assert 'fill="var(--brand)" fill-opacity="0.1"' in fn
+    # On the group that holds the body, the head, the arms and the feet, so
+    # one declaration covers every part of him.
+    assert re.search(r'fill="var\(--brand\)" fill-opacity="0\.\d+"', fn)
     assert 'fill="var(--surface)"' in fn, "the eye highlights"
 
 
@@ -136,3 +143,24 @@ def test_the_copy_does_not_mention_what_a_message_costs():
     # And the client's own sentence.
     reason = _fn("pulseBlockedReason")
     assert "costs" not in reason
+
+
+def test_he_has_a_body_and_not_just_a_face():
+    """The first version was a circle with two eyes and a heartbeat in it,
+    which is a smiley. A mascot needs a silhouette you would recognise with
+    the detail removed: a head, a rounder body under it, stub arms, feet."""
+    fn = _fn("pulseMascotHTML")
+    assert fn.count("<ellipse") >= 3, "body and two feet"
+    assert fn.count("<circle") >= 5, "head, two eyes, two highlights"
+    assert fn.count('<path d="M7.4 24') == 1 and fn.count('<path d="M24.6 24') == 1, "two arms"
+    assert 'viewBox="0 0 32 38"' in fn, "he stands up, so the box is not square"
+    # Arms before the body, or they read as stuck on rather than attached.
+    assert fn.index("M7.4 24") < fn.index('cx="16" cy="26.6"')
+
+
+def test_the_standing_figure_is_not_squashed():
+    """A height and no width. Setting both to the same number on a 32x38
+    viewBox squashes him."""
+    block = CSS.split(".pulse-face-lg {", 1)[1]
+    block = block[:block.index("}")]
+    assert "height:" in block and "width: auto" in block
