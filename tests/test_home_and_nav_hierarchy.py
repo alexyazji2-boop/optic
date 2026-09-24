@@ -104,3 +104,38 @@ def test_the_session_bar_keeps_its_live_part_and_folds_the_rest():
     # what makes folding safe -- see test_command_bar.py for the attempt that
     # hid both and had to be reverted.
     assert ".ses-detail-btn {\n  display: inline-flex;" in CSS
+
+
+# ------------------------------------------------- the number comes first
+
+
+def test_the_price_outranks_the_symbol_in_the_security_header():
+    """Measured on AAPL at 1440x950 before this: symbol 27.6px/700, price
+    14.95px/600, change 14.95px/400. The price was the same size as the
+    exchange and the sector beside it, the change was the lightest thing in
+    the row, and the loudest was the four letters the reader had just typed
+    into the box above.
+
+    The symbol is identity and they already know it. The price is what they
+    opened the page for."""
+    def size_of(cls):
+        rule = CSS.split("\n.%s {" % cls, 1)[1]
+        rule = rule[:rule.index("}")]
+        return re.search(r"font-size: var\((--t-[a-z0-9]+)\)", rule).group(1), rule
+
+    # The scale, largest first, as the ramp declares it.
+    ramp = ["--t-micro", "--t-caption", "--t-small", "--t-body", "--t-base",
+            "--t-lead", "--t-heading", "--t-title", "--t-d3", "--t-d2", "--t-d1"]
+    px, px_rule = size_of("sec-px")
+    sym, _ = size_of("sec-sym")
+    chg, chg_rule = size_of("sec-chg")
+    assert ramp.index(px) > ramp.index(sym), \
+        "the price ({}) must outrank the symbol ({})".format(px, sym)
+    assert ramp.index(chg) >= ramp.index("--t-base"), \
+        "the change was body-sized and lighter than everything beside it"
+
+    # Both are figures a reader scans down a column of.
+    assert "tabular-nums" in px_rule and "tabular-nums" in chg_rule
+    # And the change keeps a weight, or the direction is the quietest thing
+    # in the row again.
+    assert "font-weight: 600" in chg_rule

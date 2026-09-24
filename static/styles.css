@@ -12395,10 +12395,28 @@ body.auth-open { overflow: hidden; }
   flex-wrap: wrap;
   gap: var(--space-2) var(--space-3);
 }
-.sec-sym { font-size: var(--t-d3); font-weight: 700; letter-spacing: 0.01em; }
+/* The number first, then the name.
+ *
+ * Measured on AAPL at 1440x950 before this: the symbol was 27.6px/700, the
+ * price 14.95px/600 and the change 14.95px/400 -- so the price was the same
+ * size as the exchange and the sector beside it, the change was the lightest
+ * thing in the row, and the loudest was the four letters the reader had just
+ * typed into the box above.
+ *
+ * The price takes the display size and the symbol steps down to a heading.
+ * The symbol is identity and the reader already knows it; the price is the
+ * thing they opened the page for. The change goes up with it and keeps its
+ * weight, because a direction read at a glance is half of what that line is
+ * for, and it sat below the company name in the old order. */
+.sec-sym { font-size: var(--t-heading); font-weight: 700; letter-spacing: 0.01em; }
 .sec-name { color: var(--ink-2); font-size: var(--t-body); }
-.sec-px { font-variant-numeric: tabular-nums; font-size: var(--t-body); font-weight: 600; }
-.sec-chg { font-variant-numeric: tabular-nums; font-size: var(--t-small); }
+.sec-px {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--t-d3);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.sec-chg { font-variant-numeric: tabular-nums; font-size: var(--t-base); font-weight: 600; }
 .sec-chg.up { color: var(--pos); }
 .sec-chg.down { color: var(--neg); }
 .sec-chg.flat { color: var(--ink-muted); }
