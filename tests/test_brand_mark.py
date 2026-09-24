@@ -12,8 +12,15 @@ at identical stroke values does read a touch lighter and the usual answer is to
 thicken it -- but the two were indistinguishable at 34px when compared
 directly, and one set of numbers cannot drift from itself.
 
-The header mark is in index.html; the home mark is built by renderHome in
-app.js. This test is the only thing that can see both at once.
+The header mark is static markup in index.html and stays that way on purpose:
+it is the first thing on the page and inline SVG renders before any script
+runs, so mounting it would cost a visible flash of no logo at boot.
+
+Everything drawn by script now comes from one function. `opticMarkHTML` renders
+the aperture under whatever class prefix the caller needs -- the home page, and
+the Pulse panel's empty state -- so those two cannot drift from each other at
+all. What can still drift is index.html against that function, which is exactly
+the pair this file compares.
 """
 
 from __future__ import annotations
@@ -25,7 +32,10 @@ CSS = open("static/styles.css", encoding="utf-8").read()
 HTML = open("static/index.html", encoding="utf-8").read()
 
 HEADER = HTML.split('class="brand-mark"', 1)[1].split("</svg>", 1)[0]
-HOME = APP.split('class="home-logo"', 1)[1].split("</svg>", 1)[0]
+# The generated side, read from the one function that draws it rather than
+# from a call site. Sliced from the template literal, which is where the paths
+# and the stroke weights live.
+HOME = APP.split("function opticMarkHTML(", 1)[1].split("\n}", 1)[0]
 
 
 def _paths(svg):

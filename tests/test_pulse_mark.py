@@ -148,3 +148,33 @@ def test_the_copy_does_not_mention_what_a_message_costs():
     # And the client's own sentence.
     reason = _fn("pulseBlockedReason")
     assert "costs" not in reason
+
+
+def test_the_empty_state_carries_the_optic_aperture():
+    """The waveform is drawn for 17px. At 76 it reads thin, and it is the
+    Pulse glyph rather than the mark the product is named for -- so the panel's
+    one large graphic is now the aperture the header and the home page carry.
+
+    Rendered through `opticMarkHTML`, not pasted: there were already two
+    hand-written copies of those three paths and a third would be the one that
+    drifts. tests/test_brand_mark.py compares the generated drawing against
+    index.html's static copy, which is the only pair that still can."""
+    starters = APP[APP.index("function pulseStarters("):]
+    starters = starters[:starters.index("\nfunction ")]
+    assert "opticMarkHTML('pulse-logo')" in starters
+    assert "pulseMarkHTML(" not in starters, "the waveform is the small mark"
+    # One drawing: the aperture path appears once in the whole file.
+    assert APP.count("M2.6 16C6.3 8.9") == 1, \
+        "the aperture is hand-copied somewhere again"
+
+
+def test_the_mark_in_the_panel_does_not_animate():
+    """The header mark blinks everywhere except Home and the home logo irises
+    open on arrival -- both are arrival. This one sits above four cards a
+    reader is reading, and motion beside text being read is motion nobody
+    asked for."""
+    block = CSS.split("\n.pulse-logo {", 1)[1]
+    block = block[:block.index("}")]
+    assert "animation" not in block
+    # And it inherits none, because the animated rules are keyed per prefix.
+    assert ".pulse-logo-eye" not in CSS and ".pulse-logo-line" not in CSS

@@ -784,10 +784,16 @@ header.topbar {
 .pulse-mark { display: inline-flex; align-items: center; }
 .pulse-glyph { display: block; }
 .pulse-glyph-sm { width: 17px; height: 17px; }
-/* The empty state's anchor. Same mark as the button above it and the mobile
-   tab below it -- one drawing at three sizes, rather than a character that
-   only exists in one place and has to carry a personality on its own. */
-.pulse-glyph-lg { width: 76px; height: 76px; color: var(--ink-2); }
+/* The empty state's anchor is the Optic aperture, not the Pulse waveform.
+   The waveform is drawn for 17px and reads thin at 76; the aperture is the
+   mark the product is named for and is already the header's and the home
+   page's. Same drawing, third placement -- `opticMarkHTML` renders all three.
+
+   It does not blink or iris open here. Those belong to arrival: the header
+   mark blinks everywhere except Home so it has something to do, and the home
+   logo opens once on load. This sits above four cards a reader is reading,
+   and motion beside text you are reading is motion nobody asked for. */
+.pulse-logo { width: 76px; height: 76px; color: var(--ink-2); }
 
 /* The trace redraws itself, the same idiom and the same timing as the brand
    mark's chart line -- `pathLength="100"` normalises the dash maths so the
@@ -7925,7 +7931,7 @@ table.data tr.fx-detail td,
    as the panel introducing itself. The starter cards keep their own grid and
    their text stays left-aligned -- those are things to read, not a greeting. */
 .pulse-empty { padding: var(--space-4) var(--space-3); text-align: center; }
-.pulse-empty .pulse-glyph-lg { display: block; margin: 0 auto var(--space-3); }
+.pulse-empty .pulse-logo { display: block; margin: 0 auto var(--space-3); }
 .pulse-empty .pulse-empty-sub { margin-inline: auto; max-width: 46ch; }
 .pulse-empty .pulse-cards { text-align: left; }
 .pulse-empty h3 { margin: 0 0 var(--space-2); font-size: var(--t-heading); }

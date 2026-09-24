@@ -3017,23 +3017,7 @@ function renderHome() {
         * digest and the knowledge card are not that, and they were costing
         * 935px between the two. */''}
     <div class="home-brand">
-      <svg class="home-logo" viewBox="0 0 32 32" aria-label="Optic Terminal logo" role="img">
-      <!-- No outer ring. The header's brand-mark has never had one, so the two
-           marks now match; the ring also boxed in a shape whose whole point is
-           that it is an aperture. Only the eye group is left, which is what the
-           blink scales. -->
-      <g class="home-logo-eye">
-        <path d="M2.6 16C6.3 8.9 10.9 5.4 16 5.4S25.7 8.9 29.4 16C25.7 23.1 21.1 26.6 16 26.6S6.3 23.1 2.6 16Z"
-              fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" opacity="0.7"/>
-        <!-- pathLength="100" normalises the dash maths: the redraw can then be
-             written as an offset from 0 to 100 without measuring the path. -->
-        <path class="home-logo-line" pathLength="100"
-              d="M7.4 20.2 11.4 15.6 14.6 17.8 18.6 11.6 21.6 14 23.9 11.4"
-              fill="none" stroke="var(--brand)"
-              stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle class="home-logo-dot" cx="23.9" cy="11.4" r="1.5" fill="var(--brand)"/>
-      </g>
-    </svg>
+      ${opticMarkHTML('home-logo', { label: 'Optic Terminal logo' })}
 
     <h1 class="home-title">Optic <span>Terminal</span></h1>
     </div>
@@ -26258,18 +26242,17 @@ function pulseStarters(expanded) {
   const usable = PULSE_STARTERS.filter((c) => !c.need || sym);
   const shown = expanded ? usable : usable.slice(0, 4);
   return `<div class="pulse-empty">
-    ${/* The mark, not a character.
-         A snowman lived here through several passes -- eyes, a scarf, arms,
-         a redraw to stop the shapes overlapping -- and the verdict on it was
-         that it looked creepy. A face at 104px invites that judgement and
-         there is no version of it that stops inviting it, so this is the same
-         glyph already sitting in the Pulse button at the top of this panel.
-         One mark, three sizes, no face.
+    ${/* The Optic mark, not a character and not the Pulse waveform.
+         A snowman lived here through several passes and the verdict was that
+         it looked creepy; the waveform that replaced it is the button's own
+         glyph, which is right at 17px and thin at 76. The aperture is the
+         thing the product is named for, and it is the same drawing the
+         header and the home page carry.
 
          Still the only greeting here: a first draft put one in `#chat-log`
          as well and it rendered under this, so the panel introduced itself
          twice. */''}
-    ${pulseMarkHTML('pulse-glyph-lg')}
+    ${opticMarkHTML('pulse-logo')}
     <h3>What would you like to look at?</h3>
     <p class="pulse-empty-sub">Pulse reads the terminal's own computed output for
       whatever is on screen${sym ? `· currently <strong>${esc(sym)}</strong>` : ''}.
@@ -26344,6 +26327,36 @@ function mdLite(text) {
  * brand is the only pair that works there. The caller decides by passing a
  * class; nothing here picks a colour.
  */
+/* The Optic mark: the aperture, the chart line through it, and the dot that
+ * ends the line.
+ *
+ * One drawing, rendered under whatever class prefix the caller needs, because
+ * there were already two hand-written copies of these three paths -- the home
+ * logo here and `.brand-mark` in index.html -- and Pulse wanting one would
+ * have made three. The prefix rather than a single class because the CSS
+ * genuinely differs per placement: the header mark blinks everywhere except
+ * Home, the home mark irises open on arrival, and the one in the Pulse panel
+ * does neither.
+ *
+ * `pathLength="100"` normalises the dash maths so the redraw can be written as
+ * an offset from 0 to 100 without measuring the path.
+ */
+function opticMarkHTML(prefix, opts = {}) {
+  const label = opts.label
+    ? ` aria-label="${esc(opts.label)}" role="img"` : ' aria-hidden="true"';
+  return `<svg class="${esc(prefix)}" viewBox="0 0 32 32"${label}>
+    <g class="${esc(prefix)}-eye">
+      <path d="M2.6 16C6.3 8.9 10.9 5.4 16 5.4S25.7 8.9 29.4 16C25.7 23.1 21.1 26.6 16 26.6S6.3 23.1 2.6 16Z"
+            fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" opacity="0.7"/>
+      <path class="${esc(prefix)}-line" pathLength="100"
+            d="M7.4 20.2 11.4 15.6 14.6 17.8 18.6 11.6 21.6 14 23.9 11.4"
+            fill="none" stroke="var(--brand)"
+            stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle class="${esc(prefix)}-dot" cx="23.9" cy="11.4" r="1.5" fill="var(--brand)"/>
+    </g>
+  </svg>`;
+}
+
 function pulseMarkHTML(cls) {
   return `<svg class="pulse-glyph ${cls || ''}" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
     <circle cx="16" cy="16" r="11.2" fill="none" stroke="currentColor" stroke-width="1.6"/>
