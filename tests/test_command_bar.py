@@ -219,14 +219,23 @@ def test_the_fold_is_remembered_and_the_same_everywhere():
     assert "rememberSessionDetail(open)" in APP_JS
 
 
-def test_the_fold_defaults_to_open():
-    """A reader who has never touched it sees what they saw before. `!== '0'`
-    rather than `=== '1'`: an unset key has to read as open, and the
-    description's fold beside it defaults the other way because its phases
-    are the ones where the text matters."""
+def test_the_fold_defaults_to_open_where_there_is_room_for_it():
+    """This asserted `!== '0'` -- open everywhere an unset key was found --
+    which was right while the fold was new and wrong once it was measured.
+    At 375x812 the detail is 274px ahead of the content, and "it takes too
+    much space" was the phone report that asked for the fold at all.
+
+    So the untouched default now splits on width (see the test below) and what
+    survives from the original intent is the part that was never about the
+    phone: a desktop reader who has touched nothing still sees what they saw
+    before, and a storage failure opens rather than closes, because a fold
+    that cannot remember is better stuck open than stuck shut."""
     fn = _fn("sessionDetailOpen")
-    assert "!== '0'" in fn
-    assert "return true" in fn, "and a storage failure opens it, not closes it"
+    assert "return true" in fn
+    # The storage failure lands on the width test, which is open on a desktop.
+    catch = fn.split("catch (e)", 1)[1]
+    assert "return false" not in catch, \
+        "a private-mode failure must not shut the fold outright"
 
 
 def _inside_max_width(css, needle):
@@ -581,3 +590,48 @@ def test_the_mark_carries_the_brand_alone():
     lands on."""
     assert ".brand-mark { width: 34px; height: 34px;" in CSS
     assert 'viewBox="0 0 32 32"' in open("static/index.html").read()
+
+
+def test_the_fold_starts_closed_on_a_phone_and_open_on_a_desktop():
+    """"It takes too much space" was the phone complaint, and a fold that
+    ships open does not answer it until the reader finds the button.
+
+    Measured on the live site at 375x812: `#ses-detail` is 274px, a third of
+    the viewport, sitting ahead of whatever the reader opened the app for. A
+    desktop has that room and the always-on read is worth having there, so the
+    untouched default splits on width rather than picking one for both.
+
+    An explicit choice has to outrank the width, or a phone reader who opens
+    the fold finds it shut again on the next view -- which is the bug the
+    localStorage key was added to prevent in the first place."""
+    fn = _fn("sessionDetailOpen")
+    # A saved answer wins, both ways round -- and unconditionally, or a phone
+    # reader's explicit "open" is read and then overruled by the width anyway.
+    assert re.search(r"if \(saved === '1'\) return true;", fn)
+    assert re.search(r"if \(saved === '0'\) return false;", fn)
+    # And only then the width.
+    assert "PHONE_QUERY" in fn, "the fold must reuse the one phone breakpoint"
+    # By name only: a literal here is a second breakpoint to keep in step with
+    # the first, and they drift.
+    assert not re.search(r"matchMedia\(\s*['\"]", fn), \
+        "no inline media string -- use PHONE_QUERY"
+    assert "matchMedia" in fn
+    # Negated: matching the phone query means closed, not open.
+    assert re.search(r"return\s*!\(?\s*window\.matchMedia", fn), \
+        "a phone must default closed -- an unnegated return opens it there"
+    # The width test has to come after the saved-value tests, or a stored
+    # preference never gets read on the device that most needs it honoured.
+    assert fn.index("saved === '0'") < fn.index("PHONE_QUERY")
+
+
+def test_the_phone_fold_still_leaves_the_session_legible():
+    """A fold that hides which session it is would trade one problem for a
+    worse one. The phase and the countdown live in the summary above the
+    disclosure, not inside it, so closing the fold costs the legend and the
+    company details and keeps the answer to "what is the market doing now"."""
+    render = _fn("renderSessionBar")
+    head = render[:render.index('<div class="ses-detail')]
+    assert "ses-phase" in head or "ses-title" in head, \
+        "the phase must sit outside the fold"
+    assert "ses-count" in head or "ses-sub" in head, \
+        "the countdown must sit outside the fold"

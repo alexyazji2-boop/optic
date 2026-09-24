@@ -24607,12 +24607,28 @@ const SES_DESC_KEY = 'optic.session.desc';
  * has been in for months, rather than towards a desktop with its details
  * hidden and no button to get them back.
  *
- * Open by default: a reader who has never touched it sees what they see
- * today, and the fold is something they choose. */
+ * The default is open on a desktop and folded on a phone, and that split is
+ * the whole point. Measured on the live site at 375x812: the detail is 274px,
+ * a third of the viewport, ahead of anything the reader came for. A desktop
+ * has the room and the always-on read is worth having; a phone does not, so
+ * the fold starts closed there and the summary line above it -- the phase and
+ * the countdown -- still says what session it is.
+ *
+ * An explicit choice outranks both. Once the reader has touched the button,
+ * `localStorage` holds a '1' or a '0' and the viewport stops deciding, so a
+ * phone reader who opens it keeps it open. Only the untouched case reads the
+ * width. */
 const SES_DETAIL_KEY = 'optic.session.detail.v1';
 
 function sessionDetailOpen() {
-  try { return localStorage.getItem(SES_DETAIL_KEY) !== '0'; } catch (e) { return true; }
+  try {
+    const saved = localStorage.getItem(SES_DETAIL_KEY);
+    if (saved === '1') return true;
+    if (saved === '0') return false;
+  } catch (e) { /* private mode: fall through to the width */ }
+  // Untouched, so the width decides. `PHONE_QUERY` is the same 719px the rest
+  // of the phone layout uses, rather than a second number to keep in step.
+  return !(window.matchMedia && window.matchMedia(PHONE_QUERY).matches);
 }
 
 function rememberSessionDetail(open) {
