@@ -25690,6 +25690,18 @@ function pulseNewConversation() {
     + Math.random().toString(36).slice(2, 6);
   const log = $('#chat-log');
   if (log) log.innerHTML = '';
+  /* An empty log is the empty state, and this is the one path that produced
+   * one without drawing it.
+   *
+   * `renderPulseEmpty` runs at boot and from `updateChatContext`, so the
+   * starters -- and the mascot, which lives in them -- were there on a first
+   * load and gone the moment a conversation was cleared. The panel then
+   * showed nothing at all until a ticker changed and updateChatContext
+   * happened to run: no greeting, no cards, no way in.
+   *
+   * Cheap to call unconditionally: it returns early when the log has real
+   * messages, which after this line it cannot. */
+  renderPulseEmpty();
   renderPulseHistory(false);
 }
 

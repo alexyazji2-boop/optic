@@ -192,3 +192,37 @@ def test_his_eyes_are_the_optic_mark_and_they_blink():
     assert "@keyframes pulse-blink" in CSS
     reduced = CSS.split("@media (prefers-reduced-motion: reduce) {", 1)
     assert any(".pulse-eye { animation: none; }" in c for c in reduced[1:])
+
+
+# ------------------------------------------- the empty state has to be drawn
+
+
+def test_clearing_a_conversation_redraws_the_empty_state():
+    """Reported as "where is the pulse snowman" — and he was nowhere, because
+    the panel had no empty state at all.
+
+    `renderPulseEmpty` runs at boot and from `updateChatContext`. Starting a
+    new conversation emptied `#chat-log` and called neither, so the panel went
+    blank: no greeting, no starter cards, no mascot, and no way in until a
+    ticker changed and updateChatContext happened to run. Measured on
+    production: `#chat-log` present and completely empty, and calling
+    `renderPulseEmpty()` by hand put the mascot back with both eyes.
+
+    Cheap to call unconditionally — it returns early when the log holds real
+    messages, which immediately after that line it cannot."""
+    fn = APP[APP.index("function pulseNewConversation() {"):]
+    fn = fn[:fn.index("\n}")]
+    assert "log.innerHTML = ''" in fn
+    assert "renderPulseEmpty()" in fn, \
+        "an emptied log is the empty state and has to be drawn as one"
+    assert fn.index("log.innerHTML = ''") < fn.index("renderPulseEmpty()"), \
+        "drawing before clearing would be wiped by the clear"
+
+
+def test_the_mascot_lives_in_the_empty_state_and_only_there():
+    """One greeting. An earlier draft mounted a second mascot into `#chat-log`
+    and it rendered under this one, so the panel greeted a reader twice."""
+    starters = APP[APP.index("function pulseStarters("):]
+    starters = starters[:starters.index("\nfunction ")]
+    assert "pulseMascotHTML(" in starters
+    assert APP.count("pulseMascotHTML('pulse-face-lg')") == 1
