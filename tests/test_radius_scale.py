@@ -96,3 +96,136 @@ def test_every_token_on_the_scale_earns_its_place():
     for name in _tokens():
         uses = CSS.count("var(--{})".format(name))
         assert uses >= 3, "{} is used {} times".format(name, uses)
+
+
+# --------------------------------------------- one family, one corner
+
+
+def _no_comments(css):
+    """Comments cannot vouch for code. A note explaining that `.pill` used to
+    carry --r-ctl contains the string `--r-ctl`, and a check that greps the
+    raw file finds it and passes on the strength of its own apology."""
+    return re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+
+
+def _declared(css):
+    """(selector, property, media-context) -> every value declared for it.
+
+    Media context matters: a responsive override is a second value on purpose
+    and must not be read as a conflict. @media adds no specificity, which is
+    why a rule inside one can still lose to a plain rule later in the file --
+    but that is a different bug, and tests/test_phone_workspace.py owns it."""
+    out = {}
+    stack = []
+    for m in re.finditer(r"@media([^{]*)\{|([^{}@]+)\{([^{}]*)\}|\}", css):
+        if m.group(1) is not None:
+            stack.append(m.group(1).strip())
+        elif m.group(2) is None:
+            if stack:
+                stack.pop()
+        else:
+            sel, body = m.group(2), m.group(3)
+            hit = re.search(r"(?:^|;)\s*border-radius\s*:\s*([^;]+)", body)
+            if not hit:
+                continue
+            for one in sel.split(","):
+                one = re.sub(r"\s+", " ", one.strip())
+                if one:
+                    out.setdefault((one, tuple(stack)), []).append(hit.group(1).strip())
+    return out
+
+
+# Base-then-override layerings that exist on purpose, frozen so that a new one
+# has to be looked at rather than absorbed. Each sets a shared value on a group
+# and then a specific rule restates it for one member -- legitimate, and also
+# exactly the shape that put --r-ctl on `.pill`, which is why the set is closed
+# rather than the pattern being allowed.
+#
+# Left alone rather than flattened: the first value in each is live for the
+# other selectors sharing that grouped rule, so deleting the declaration would
+# move `.search input` to fix `.btn`.
+KNOWN_LAYERED = {
+    (".btn", "var(--r-md)", "var(--r-ctl)"),
+    (".ws-menu-btn", "var(--r-md)", "var(--r-ctl)"),
+    (".tile", "var(--r-md)", "var(--r-lg)"),
+    (".hm-block", "var(--r-md)", "var(--r-lg)"),
+}
+
+
+def test_no_selector_is_given_two_different_radii_at_the_same_width():
+    """`.pill` was given --r-pill in its own rule and then --r-ctl by a later
+    sweep that listed it beside the buttons. The sweep's own comment says the
+    curve belongs on "panels, buttons, pills" -- and 10px on a 29px control is
+    a rounded rectangle, so the rule that meant to keep pills curved was the
+    one uncurving them.
+
+    Nothing in the file reads as wrong: both declarations are tokenised, both
+    are defensible alone, and only the order decides. That is why this is a
+    test and not a review comment."""
+    bad = {}
+    for (sel, media), vals in _declared(_no_comments(CSS)).items():
+        if len(set(vals)) < 2:
+            continue
+        # A later multi-corner value is a shape, not a disagreement: a menu
+        # panel square against the control above it and rounded below is one
+        # element, drawn correctly.
+        if len(_corners(vals[-1])) > 1:
+            continue
+        if (sel, vals[0], vals[-1]) in KNOWN_LAYERED:
+            continue
+        bad[(sel, media)] = vals
+    assert not bad, "\n".join(
+        "  {}{}: {}".format(sel, "  @media " + " ".join(media) if media else "",
+                            " then ".join(vals))
+        for (sel, media), vals in bad.items())
+
+
+# A family is a set of components a reader is meant to read as the same thing.
+# Membership is by what it is, not by what it is called: `.sec-chip` is a chip
+# because it sits in a row of chips, and that is the whole argument for it
+# having their corner.
+FAMILIES = {
+    "pill":   [".chip", ".pill", ".scan-pill", ".wd-chip", ".sec-chip"],
+    "button": [".btn", ".icon-btn", ".ws-menu-btn"],
+    "card":   [".panel", ".home-card", ".tile"],
+}
+
+
+def _resolved(cls, css):
+    """The radius a class ends up with: last unconditional declaration wins.
+
+    Only rules whose selector is exactly this class, which is the case for all
+    of these and keeps the resolver honest -- a real cascade needs specificity
+    and this does not pretend to be one."""
+    vals = [v[-1] for (sel, media), v in _declared(css).items()
+            if sel == cls and not media]
+    assert vals, "no unconditional radius for {}".format(cls)
+    return vals[-1]
+
+
+def test_every_member_of_a_family_is_drawn_with_the_same_corner():
+    """Measured in the browser before this: of five chips, `.chip`,
+    `.scan-pill` and `.wd-chip` rendered at 999px while `.pill` rendered at
+    10px and `.sec-chip` at 8px. Of three buttons, `.icon-btn` was two pixels
+    squarer than the `.btn` in the same bar.
+
+    Each on its own is a detail nobody would file. Together they are what
+    "incohesive component system" means: things with one job and one name
+    drawn three ways, so the eye reads them as three components."""
+    stripped = _no_comments(CSS)
+    for family, members in FAMILIES.items():
+        got = {m: _resolved(m, stripped) for m in members}
+        assert len(set(got.values())) == 1, \
+            "the {} family is drawn {} ways: {}".format(
+                family, len(set(got.values())),
+                ", ".join("{} {}".format(k, v) for k, v in sorted(got.items())))
+
+
+def test_each_family_sits_on_the_step_the_scale_named_for_it():
+    """Coherence alone would be satisfied by drawing every pill at 4px. The
+    scale already says which step each family belongs on, in the comment beside
+    the token, so the families are pinned to those rather than to each other."""
+    stripped = _no_comments(CSS)
+    assert _resolved(".chip", stripped) == "var(--r-pill)"
+    assert _resolved(".btn", stripped) == "var(--r-ctl)"
+    assert _resolved(".panel", stripped) == "var(--r-lg)"
