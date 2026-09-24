@@ -2851,18 +2851,17 @@ def _spend_guard(request: Request) -> None:
             # turn a disk problem into "Pulse is closed to everyone".
             raise HTTPException(
                 status_code=401,
-                detail="Pulse needs a free account: each message costs the "
-                       "operator money, and an address is the only thing that "
-                       "can be metered. {} messages a day once you are in. "
-                       "Everything else in the terminal stays open either "
-                       "way.".format(auth_store.PLANS["free"]["ai_calls_per_day"]))
+                detail="Pulse needs a free account. {} messages a day once "
+                       "you are in, and everything else in the terminal stays "
+                       "open either way.".format(
+                           auth_store.PLANS["free"]["ai_calls_per_day"]))
         else:
             auth_ratelimit.spend(
                 "ai_day", auth_ratelimit.client_ip(request),
                 GUEST_AI_CALLS_PER_DAY, _DAY,
-                "Guests get {} assistant messages a day, because each one costs the "
-                "operator money. Create a free account for {} a day. Everything else "
-                "in the terminal stays open either way.".format(
+                "Guests get {} assistant messages a day. Create a free account "
+                "for {} a day. Everything else in the terminal stays open "
+                "either way.".format(
                     GUEST_AI_CALLS_PER_DAY,
                     auth_store.PLANS["free"]["ai_calls_per_day"]))
     except (sqlite3.Error, OSError) as exc:

@@ -770,19 +770,63 @@ header.topbar {
    stylesheet appeared to say blue in two places. */
 .btn[disabled] { opacity: 0.45; cursor: not-allowed; }
 
-.pulse-mark {
-  color: var(--btn-primary-ink);
-  font-size: var(--t-micro);
-  vertical-align: 1px;
-  display: inline-block;
-  animation: pulse-beat 1.8s ease-in-out infinite;
+/* Pulse's mark, and its face.
+ *
+ * Two drawings, and the split is measured: at 16 and 20px the mascot's eyes
+ * stop resolving and the whole thing turns to mush, while the circle and the
+ * waveform stay legible all the way down. So the face is used where there is
+ * room and the reduced mark everywhere else.
+ *
+ * Both are `currentColor` throughout, which is what lets the same drawing sit
+ * on the primary button in white and in the panel header in ink. The accent
+ * belongs to the trace only where there is a surface behind it to contrast
+ * against; on the button there is not, and a two-tone glyph on a brand fill
+ * reads as a rendering fault. */
+.pulse-mark { display: inline-flex; align-items: center; }
+.pulse-glyph, .pulse-face { display: block; }
+.pulse-glyph-sm { width: 17px; height: 17px; }
+
+/* The trace redraws itself, the same idiom and the same timing as the brand
+   mark's chart line -- `pathLength="100"` normalises the dash maths so the
+   keyframes do not have to know the path's real length. It is the only thing
+   that moves: a mark that scales in the corner of a button is motion the
+   reader did not ask for, which is what the bullet here used to do. */
+.pulse-trace {
+  stroke-dasharray: 100;
+  animation: pulse-trace-draw 5.5s ease-in-out infinite;
 }
+@keyframes pulse-trace-draw {
+  0%, 62%, 100% { stroke-dashoffset: 0; }
+  12% { stroke-dashoffset: 100; }
+  38% { stroke-dashoffset: 0; }
+}
+
+/* The face, in the panel's empty state. */
+.pulse-face-lg { width: 76px; height: 76px; color: var(--ink-2); }
+.pulse-face-lg .pulse-trace { stroke: var(--brand); }
+.pulse-face-lg .pulse-eye { fill: var(--ink); }
+
+/* In `.pulse-empty`, which is the intro that already existed. A first draft
+   put the face in a block of its own and the panel greeted a reader twice. */
+.pulse-empty .pulse-face-lg { margin: 0 0 var(--space-3); }
+
+/* `pulse-beat` is still here and the mark no longer uses it.
+ *
+ * Deleting it with the bullet took the animation off `.ses-dot.p-regular` and
+ * off the refreshing indicator app.js sets inline, both of which still name
+ * it -- a keyframe that does not exist does not error, the animation simply
+ * never runs. Caught by the test that asserts the mark has stopped scaling,
+ * which had to be told the keyframe itself is not the thing being removed. */
 @keyframes pulse-beat {
   0%, 100% { opacity: 0.55; transform: scale(0.85); }
   50% { opacity: 1; transform: scale(1); }
 }
+
 @media (prefers-reduced-motion: reduce) {
-  .pulse-mark { animation: none; opacity: 1; }
+  .pulse-trace { animation: none; stroke-dasharray: none; }
+  /* The two remaining users of pulse-beat. The old rule here covered only the
+     mark, so a reader who asks for less motion still got a pulsing dot. */
+  .ses-dot.p-regular { animation: none; }
 }
 
 nav.tabs {

@@ -230,7 +230,7 @@
        (loading / guest / user) specifically to avoid it. -->
   <div class="account-slot topbar-right" id="account-slot"></div>
 
-  <button class="btn primary" id="chat-toggle"><span class="pulse-mark">●</span>&nbsp;Pulse</button>
+  <button class="btn primary" id="chat-toggle"><span class="pulse-mark" id="pulse-mark-btn"></span>&nbsp;Pulse</button>
 </header>
 
 <div class="statusline" id="statusline">
@@ -343,7 +343,7 @@
        tabindex="0" aria-label="Resize Pulse. Arrow keys to adjust, Home for narrow, End to cover the screen"
        title="Drag to resize"></div>
   <div class="chat-head">
-    <span class="pulse-mark">●</span>
+    <span class="pulse-mark" id="pulse-mark-head"></span>
     <span class="title">Pulse</span>
     <span class="chip neutral" id="chat-ctx"><span class="dot"></span><span>No context</span></span>
     <button class="icon-btn" id="chat-history-btn" title="Saved conversations"

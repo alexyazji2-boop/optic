@@ -3422,7 +3422,8 @@ const MOBILE_TABS = [
   { view: 'overview', label: 'Dossier', icon: '&#9683;' },
   { view: 'watchlist', label: 'Watchlist', icon: '&#9776;' },
   { view: 'alerts', label: 'Alerts', icon: '&#9873;' },
-  { view: 'ask', label: 'Pulse', icon: '&#10022;' },
+  // The mark rather than a four-pointed star, which was standing in for it.
+  { view: 'ask', label: 'Pulse', icon: null, mark: 'pulse' },
   // The gear used to be in the top bar, which is sticky, so a phone always had
   // it on screen. It lives in the rail now -- and on a phone the rail is
   // `order: 2`, which puts it at the very end of the document: measured at
@@ -3440,7 +3441,7 @@ function mountMobileTabs() {
   nav.setAttribute('aria-label', 'Primary');
   nav.innerHTML = MOBILE_TABS.map((t) => `<button type="button" class="mtab"
     data-mtab="${esc(t.view)}" aria-label="${esc(t.label)}">
-    <span class="mtab-ico" aria-hidden="true">${t.icon}</span>
+    <span class="mtab-ico" aria-hidden="true">${t.mark === 'pulse' ? pulseMarkHTML('pulse-glyph-sm') : t.icon}</span>
     <span class="mtab-lab">${esc(t.label)}</span>
   </button>`).join('');
   document.body.appendChild(nav);
@@ -19858,7 +19859,7 @@ function pulseBlockedReason() {
   if (state && state.requires_account === true) {
     const perDay = Number(state.signed_in_allowance) || 0;
     return {
-      html: `Pulse needs a free account: each message costs the operator money.
+      html: `Pulse needs a free account.
         <button type="button" data-auth-open="signup">Create one</button>${
   perDay ? ` for ${perDay} messages a day` : ''}. Every other panel stays open.`,
       placeholder: 'Sign in to use Pulse',
@@ -25838,6 +25839,12 @@ function pulseStarters(expanded) {
   const usable = PULSE_STARTERS.filter((c) => !c.need || sym);
   const shown = expanded ? usable : usable.slice(0, 4);
   return `<div class="pulse-empty">
+    ${/* The mascot belongs here rather than in a second block of its own.
+         A first draft added one to `#chat-log` and it rendered UNDER this,
+         so the panel greeted a reader twice -- exactly the duplication the
+         phone pass spent a day removing elsewhere. This is the empty state;
+         it has been all along. */''}
+    ${pulseMascotHTML('pulse-face-lg')}
     <h3>What would you like to look at?</h3>
     <p class="pulse-empty-sub">Pulse reads the terminal's own computed output for
       whatever is on screen${sym ? `· currently <strong>${esc(sym)}</strong>` : ''}.
@@ -25893,6 +25900,79 @@ function mdLite(text) {
   out = out.replace(/^\s*[-*] (.*)$/gm, '• $1');
   out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:var(--s1)">$1</a>');
   return out;
+}
+
+/* ------------------------------------------------------------ the mascot
+ *
+ * Pulse has a face. Two marks rather than one, and the split is measured
+ * rather than stylistic: drawn at 16 and 20px the eyes stop resolving and the
+ * whole thing turns to mush, while the circle and the waveform stay legible
+ * all the way down. So the character is used where there is room for it and a
+ * reduced mark everywhere else, which is how a mascot is normally locked up.
+ *
+ * The waveform is the fixed part of both, because it is the name. It is also
+ * the same idea the brand mark already draws -- a chart line through an eye --
+ * so the two read as one family rather than two logos.
+ *
+ * `currentColor` for the body and the accent for the trace, except on the
+ * primary button, where the whole thing is `currentColor` because white on
+ * brand is the only pair that works there. The caller decides by passing a
+ * class; nothing here picks a colour.
+ */
+function pulseMarkHTML(cls) {
+  return `<svg class="pulse-glyph ${cls || ''}" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+    <circle cx="16" cy="16" r="11.2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <path class="pulse-trace" pathLength="100"
+      d="M7.6 16h3.2l2-4.6 3 10 2.2-6 1.4 2.8h4.4"
+      fill="none" stroke="currentColor" stroke-width="2.1"
+      stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+/* The face. Four decisions, each one drawn and looked at rather than argued:
+ *
+ * The eyes are large and set LOW. That is the whole difference between this
+ * and the first draft, which had small eyes high on the circle and read as
+ * clinical. Big and low is the same trick every friendly mascot uses.
+ *
+ * A soft fill rather than a bare outline, so it has a body instead of being a
+ * ring. `fill-opacity` on the brand token rather than a tint colour, because
+ * the palette has no tint slot and inventing a hex for one is what the design
+ * system exists to stop.
+ *
+ * Highlights in the surface colour, which is what makes the eyes read as eyes
+ * rather than holes.
+ *
+ * And the trace stays SHARP. A friendlier draft rounded its peaks into a
+ * curve and at 110px it read as a moustache -- the angles are the only reason
+ * it reads as a heartbeat at all. The friendliness comes from the two end
+ * segments lifting instead, which turns the corners up without touching the
+ * spikes. */
+function pulseMascotHTML(cls) {
+  return `<svg class="pulse-face ${cls || ''}" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+    <circle cx="16" cy="16.4" r="11.6"
+      fill="var(--brand)" fill-opacity="0.1" stroke="currentColor" stroke-width="1.6"/>
+    <circle class="pulse-eye" cx="11.6" cy="14.2" r="2.1" fill="currentColor"/>
+    <circle class="pulse-eye" cx="20.4" cy="14.2" r="2.1" fill="currentColor"/>
+    <circle class="pulse-shine" cx="12.3" cy="13.4" r="0.72" fill="var(--surface)"/>
+    <circle class="pulse-shine" cx="21.1" cy="13.4" r="0.72" fill="var(--surface)"/>
+    <path class="pulse-trace" pathLength="100"
+      d="M8.4 21l2.8-0.9 1.7-3.5 2.6 6.8 1.9-3.9 1.4 2.3 2.8-0.8"
+      fill="none" stroke="currentColor" stroke-width="2.1"
+      stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+/* The two marks that live in static markup.
+ *
+ * `index.html` carries the hosts and this fills them, rather than the SVG
+ * being pasted into the page twice: one drawing, one place to change it. Both
+ * are small, so both get the reduced mark rather than the face. */
+function mountPulseMarks() {
+  ['pulse-mark-btn', 'pulse-mark-head'].forEach((id) => {
+    const host = document.getElementById(id);
+    if (host && !host.firstElementChild) host.innerHTML = pulseMarkHTML('pulse-glyph-sm');
+  });
 }
 
 function addMsg(role, text) {
@@ -29379,6 +29459,7 @@ function watchColorScheme() {
     });
   }
   loadCalendarSession();
+  mountPulseMarks();
   mountMobileTabs();
   renderHome();
   updateStatus();
