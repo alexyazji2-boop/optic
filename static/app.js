@@ -28995,8 +28995,15 @@ const PANELS_OPEN_BY_DEFAULT = {
    * for an answer already on screen, which is what a closed panel is for.
    * Collapsed, never removed: one click, and the state is remembered. */
   swing: ['swing verdict', 'price, moving averages'],
-  earnings: ['event pricing', 'earnings verdict', 'next report'],
-  long: ['long-term view', 'close defence', 'valuation vs its own history'],
+  /* 'earnings verdict' named no panel on this tab or any other -- the same
+     dead-key trap as the tracker's 'the record' and the brief's 'morning
+     desk'. What it was reaching for is the written read, which now sits under
+     the report rather than above it. */
+  earnings: ['event pricing', 'pre-earnings brief', 'next report'],
+  /* 'close defence' is a panel on the Options tab, not this one, so on
+     Investing it opened nothing. `return & risk` is the half of the lead the
+     conviction score does not carry, and it is here. */
+  long: ['long-term view', 'return & risk', 'valuation vs its own history'],
   market: ['macro regime', 'market breadth', 'sector rotation', 'stock maps',
     'currencies', 'economic data'],
   /* Read is a newspaper, so almost all of it opens.
