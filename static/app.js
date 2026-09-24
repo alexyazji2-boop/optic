@@ -2931,6 +2931,32 @@ const HOME_SECTIONS = [
   },
 ];
 
+/* Is this a first run?
+ *
+ * The homepage carries a 32px wordmark, a 592px search box and a row of
+ * ticker pills. All three are an onboarding surface, and the search is a
+ * second copy of the one in the top bar -- measured at 1440x950, `#ticker-input`
+ * at y=11 and `#home-input` at y=696, the same job twice on one screen, the
+ * larger of the two being the one that is harder to reach.
+ *
+ * It earns its place exactly once: on a screen where the reader has never
+ * loaded anything and the top bar is a 200px box they have no reason to have
+ * noticed yet. After that the market is what the page is for.
+ *
+ * Three signals, any one of which means "not new". A loaded ticker is the
+ * weakest of them and is still worth having: it covers the reader who arrives
+ * on a shared link, where nothing is stored yet but the page is plainly not
+ * being seen for the first time. */
+function homeIsFirstRun() {
+  if (STATE.ticker) return false;
+  if (recentSymbols().length) return false;
+  try {
+    const w = watchList();
+    if (w && w.length) return false;
+  } catch (e) { /* no watchlist is itself a first-run signal */ }
+  return true;
+}
+
 function renderHome() {
   hideTip();
   const quick = HOME_QUICK_PICKS
@@ -2995,6 +3021,7 @@ function renderHome() {
         * day. */''}
     ${knowledgeOnboardingHTML()}
 
+    ${homeIsFirstRun() ? `
     <div class="home-brand">
       <svg class="home-logo" viewBox="0 0 32 32" aria-label="Optic Terminal logo" role="img">
       <!-- No outer ring. The header's brand-mark has never had one, so the two
@@ -3041,7 +3068,7 @@ function renderHome() {
     <div class="home-quick">
       <span class="label">Or jump to</span>
       ${quick}
-    </div>
+    </div>` : ''}
 
     ${/* The market, above the product tour. Painted empty and filled by
         * renderHomeMarket once /api/home lands — the alternative is holding the
@@ -26530,7 +26557,7 @@ const NAV_GROUPS = [
    * left out of SECURITY_VIEWS, which is what drives the header and the facet
    * strip. The group is only the drawer you pick a page from, and "I want to
    * look at securities" is one destination however many are on screen. */
-  { id: 'security', label: 'Dossier', views: SECURITY_VIEWS },
+  { id: 'security', label: 'Dossier', views: SECURITY_VIEWS, flat: true },
   /* Its own section again.
    *
    * It was folded into the Dossier group to get the top strip from eight
@@ -26708,7 +26735,14 @@ function paintNav(view) {
     const pages = [...group.views.map((v) => ({ view: v, label: SUB_LABELS[v] || v })),
       ...extraFor(group.id)];
     const isActive = group.id === active;
-    const single = pages.length < 2;
+    /* `flat` renders a group with several pages as a plain button.
+     *
+     * Dossier's seven were in this menu AND in the section bar inside every
+     * one of those pages -- the same seven words, twice, one above the other.
+     * The rail opens the workspace at the page you were last on and the
+     * section bar moves you around inside it, which is one navigation with
+     * two jobs rather than two navigations with one. */
+    const single = pages.length < 2 || group.flat;
     if (single) {
       return `<button role="tab" class="nav-top" data-group="${group.id}"
         aria-selected="${isActive}" title="${esc(navGroupLabel(group))}"

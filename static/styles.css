@@ -2453,35 +2453,49 @@ body.chat-resizing svg { pointer-events: none; }
  * `.is-closed` is left inert here on purpose rather than being kept out of
  * the markup: a reader who folded it on a phone and opened the same account
  * on a laptop would otherwise carry a hidden panel across with them. */
-.ses-detail-btn { display: none; }
-
-@media (max-width: 559px) {
-  .ses-detail-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin-top: var(--space-3);
-    padding: var(--space-1) var(--space-3);
-    background: var(--surface-2);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--r-md);
-    color: var(--ink-2);
-    font: inherit;
-    font-size: var(--t-small);
-    cursor: pointer;
-  }
-  .ses-detail-btn::after {
-    content: "";
-    width: 0;
-    height: 0;
-    border-left: 3.5px solid transparent;
-    border-right: 3.5px solid transparent;
-    border-top: 4px solid currentColor;
-    opacity: 0.6;
-  }
-  .ses-detail-btn[aria-expanded="true"]::after { transform: rotate(180deg); }
-  .ses-detail.is-closed { display: none; }
+/* Shown at every width now, and that is a change of direction with a reason.
+ *
+ * This started phone-only because an earlier attempt at a disclosure here
+ * broke the desktop: its rules escaped the width query, so the details were
+ * hidden everywhere AND the button that revealed them was hidden too, leaving
+ * no way back. The fold was then scoped to phones to be safe.
+ *
+ * What makes it safe everywhere is that the button is visible everywhere. The
+ * failure last time was not "the desktop folded", it was "the desktop folded
+ * with no control". Measured at 1440x950: the bar is 150px of every page above
+ * every view, and the part that never changes during a day -- the phase
+ * legend, the timezone note, the company profile, the description -- is most
+ * of it. The live part, which session and the clock and the 24-hour strip,
+ * stays unconditional. */
+.ses-detail-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding: var(--space-1) var(--space-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--t-small);
+  cursor: pointer;
+  transition: color var(--dur-ui) var(--ease-ui),
+              border-color var(--dur-ui) var(--ease-ui);
 }
+.ses-detail-btn:hover { color: var(--ink); border-color: var(--ink-muted); }
+.ses-detail-btn::after {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 3.5px solid transparent;
+  border-right: 3.5px solid transparent;
+  border-top: 4px solid currentColor;
+  opacity: 0.6;
+  transition: transform var(--dur-ui) var(--ease-ui);
+}
+.ses-detail-btn[aria-expanded="true"]::after { transform: rotate(180deg); }
+.ses-detail.is-closed { display: none; }
 .ses-desc { margin-top: var(--space-3); }
 .ses-legend {
   display: flex;

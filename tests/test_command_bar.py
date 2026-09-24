@@ -174,40 +174,31 @@ def test_nothing_without_a_feed_is_offered():
 # ------------------------------------------------------------ phone layout
 
 
-def test_the_session_detail_folds_on_a_phone_and_only_on_a_phone():
-    """The detail block is 165px of every page at 375x812, above every view:
-    the phase legend, the timezone note, the company profile and the
-    description. None of it changes during a day.
+def test_the_session_detail_folds_at_every_width():
+    """The detail block is the phase legend, the timezone note, the company
+    profile and the description. None of it changes during a day, and at
+    1440x950 the bar is 150px of every page above every view.
 
-    It had a disclosure once and the disclosure was removed, because it was
-    introduced for a phone-height measurement that was real and its two rules
-    were written for the 640px block and ended up outside one -- so
-    `display: none` applied at every width and a desktop with room to spare
-    hid the company behind a click. Measured on AAPL at 727x835 the desktop
-    spent that room badly too, but a click is not the fix for that.
+    This was phone-only for one release, because an earlier attempt at a
+    disclosure here broke the desktop: its rules escaped the width query, so
+    the details were hidden everywhere AND the button that revealed them was
+    hidden too, leaving no way back. Scoping it to phones was the safe
+    response to that; making the button visible at every width is the correct
+    one. The failure was never "the desktop folded", it was "the desktop
+    folded with no control".
 
-    So the fold is back for phones, shaped so it cannot repeat: the
-    unmediated default is the desktop's, shown with no control, and the only
-    thing that adds a fold is the width query. This test is that shape."""
+    So what is asserted now is the control, not the scoping."""
     assert 'class="ses-detail' in APP_JS
     assert 'id="ses-detail-btn"' in APP_JS
 
-    # The button exists at every width and is hidden at every width but one.
-    assert ".ses-detail-btn { display: none; }" in CSS, \
-        "the desktop default has to be 'no control', not 'control'"
+    # Visible at every width. This is the assertion that makes the fold safe,
+    # and it is the exact inverse of the one it replaced.
+    assert ".ses-detail-btn {\n  display: inline-flex;" in CSS, \
+        "a fold whose control is hidden at some width has no way back"
+    assert ".ses-detail-btn { display: none; }" not in CSS
 
-    # And the rule that hides the panel is inside a width query. This is the
-    # assertion the comment in app.js asks for by name: the last attempt had
-    # exactly this rule outside one.
-    hide = ".ses-detail.is-closed { display: none; }"
-    assert hide in CSS
-    assert _inside_max_width(CSS, hide), \
-        "the hide rule escaped its media query, which is how this broke before"
-
-    # Nothing hides the panel unconditionally. Read the rule's body rather
-    # than matching a literal: `display: none` appended to the existing
-    # `.ses-detail { margin-top: ... }` is the same bug and does not contain
-    # the string this used to look for.
+    # And nothing hides the panel except the class the button toggles.
+    assert ".ses-detail.is-closed { display: none; }" in CSS
     base = CSS.split("\n.ses-detail {", 1)[1]
     base = base[:base.index("}")]
     assert "display" not in base, \
@@ -219,20 +210,13 @@ def test_the_session_detail_folds_on_a_phone_and_only_on_a_phone():
     assert render.index("ses-strip") < render.index('id="ses-detail-btn"')
 
 
-def test_a_fold_set_on_a_phone_is_inert_on_a_desktop():
-    """The class stays in the markup at every width rather than being kept
-    out of it, so a reader who folded it on a phone and opened the same
-    account on a laptop does not carry a hidden panel across.
-
-    Verified by forcing the stored state closed and reloading at 1440px:
-    `ses-detail is-closed` on the element, `display: block`, legend `flex`,
-    button `none`."""
+def test_the_fold_is_remembered_and_the_same_everywhere():
+    """One state, not one per width. It is written unconditionally into the
+    markup and read back from storage, so a reader who folds it on a laptop
+    finds it folded on a phone -- which is what a preference means."""
     render = _fn("renderSessionBar")
-    assert "sessionDetailOpen() ? '' : ' is-closed'" in render, \
-        "the class is written unconditionally; only CSS decides what it means"
-    # Which is only safe because the rule that acts on it is width-scoped --
-    # asserted in the test above, and the reason this one can exist at all.
-    assert _inside_max_width(CSS, ".ses-detail.is-closed { display: none; }")
+    assert "sessionDetailOpen() ? '' : ' is-closed'" in render
+    assert "rememberSessionDetail(open)" in APP_JS
 
 
 def test_the_fold_defaults_to_open():
