@@ -40,6 +40,28 @@ BEARISH_TERMS = {
     "price target cut": 3, "dilution": 2, "offering": 1, "short seller": 3,
 }
 
+# The band is +/-1 because that is where the per-article scale already stops
+# calling a story neutral -- below it the chip and the headline beside it would
+# disagree about whether anything leaned.
+CATALYST_LEAN_BAND = 1.0
+
+
+def lean_from_scores(scores: List[float]) -> Dict[str, Any]:
+    """Which way the headlines carrying one catalyst leaned, if they did.
+
+    Averaged rather than voted, and neutral unless the mean clears the band:
+    a type found in one bullish and one bearish story has not leaned, and the
+    honest colour there is no colour.
+    """
+    vals = [float(v) for v in (scores or [])]
+    if not vals:
+        return {"lean": "neutral", "lean_score": 0.0}
+    mean = sum(vals) / len(vals)
+    lean = ("bullish" if mean >= CATALYST_LEAN_BAND
+            else "bearish" if mean <= -CATALYST_LEAN_BAND else "neutral")
+    return {"lean": lean, "lean_score": round(mean, 2)}
+
+
 CATALYSTS: List[Tuple[str, str, str]] = [
     (r"\bearnings\b|\bq[1-4]\b|\bquarterly results\b|\breports? (?:q[1-4]|results)\b", "earnings", "high"),
     (r"\bguidance\b|\bforecast\b|\boutlook\b", "guidance", "high"),
@@ -794,10 +816,32 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
     else:
         overall = "neutral"
 
+    # A catalyst type carries no direction of its own, and saying otherwise
+    # would be the easy, wrong version of this panel.
+    #
+    # "analyst action" matches upgrade and downgrade on the same pattern.
+    # "management change" matches appoint and resign. "earnings" matches a beat
+    # and a miss, "guidance" raised and cut, "capital return" a buyback and a
+    # dividend cut. Colouring the type green or red would assert a reading this
+    # classifier never made.
+    #
+    # What is real is the sentiment already scored on each headline. So a type
+    # inherits the lean of the headlines it was actually found in: `analyst
+    # action` goes red when the story carrying it read bearish, because that
+    # one was a downgrade. The field is named `lean` rather than `tone` to keep
+    # it distinct from the headline's own tone, and it stays neutral unless the
+    # mean clears the same +/-1 the per-article scale uses -- below that the
+    # headlines disagree and the honest colour is no colour.
     catalyst_counts: Dict[str, int] = {}
+    catalyst_scores: Dict[str, List[float]] = {}
     for row in scored:
         for cat in row["catalysts"]:
-            catalyst_counts[cat["type"]] = catalyst_counts.get(cat["type"], 0) + 1
+            name = cat["type"]
+            catalyst_counts[name] = catalyst_counts.get(name, 0) + 1
+            catalyst_scores.setdefault(name, []).append(float(row.get("sentiment_score") or 0.0))
+
+    def _lean(name: str) -> Dict[str, Any]:
+        return lean_from_scores(catalyst_scores.get(name) or [])
 
     earnings_warning = None
     days_to_earnings = None
@@ -850,7 +894,7 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
         "days_to_earnings": days_to_earnings,
         "earnings_warning": earnings_warning,
         "catalyst_summary": sorted(
-            [{"type": k, "mentions": v} for k, v in catalyst_counts.items()],
+            [{"type": k, "mentions": v, **_lean(k)} for k, v in catalyst_counts.items()],
             key=lambda r: -r["mentions"],
         ),
         "articles": scored,

@@ -9641,6 +9641,27 @@ function newsTierBadge(a) {
     esc(label.label)}</span>`;
 }
 
+/* A catalyst's colour comes from the headlines it was found in, never from
+ * what kind of catalyst it is.
+ *
+ * The type carries no direction: "analyst action" matches upgrade and
+ * downgrade on one pattern, "management change" matches appoint and resign,
+ * "earnings" a beat and a miss. Painting the type green or red would assert a
+ * reading nothing computed. What is real is the sentiment already scored on
+ * each headline, so `lean` -- the mean of those scores -- is what colours the
+ * chip, and it stays neutral when the headlines disagree.
+ *
+ * The dot rather than the whole chip carries the hue, so a red catalyst is
+ * still read as a catalyst rather than as an error state. */
+function catalystChip(label, lean) {
+  const cls = lean === 'bullish' ? 'bull' : lean === 'bearish' ? 'bear' : 'neutral';
+  const why = lean && lean !== 'neutral'
+    ? `The headlines carrying this read ${lean}. The catalyst type itself has no direction.`
+    : 'The headlines carrying this do not lean either way.';
+  return `<span class="chip ${cls}" title="${esc(why)}"><span class="dot"></span>${
+    esc(label)}</span>`;
+}
+
 function newsArticleRow(a) {
   return `<div class="nw-row">
     <div class="nw-line">
@@ -9652,8 +9673,12 @@ function newsArticleRow(a) {
   a.age_words ? ` \u00b7 ${esc(a.age_words)}` : ''}</span>
     </div>
     ${a.summary ? `<p class="nw-sum">${esc(a.summary.slice(0, 220))}</p>` : ''}
+    ${/* This headline's own tone, not an average: at row level the reading is
+         exact, and a catalyst listed under a bearish story should not look
+         neutral because the same type read bullish elsewhere. */''}
     ${(a.catalysts || []).length ? `<div class="nw-tags">${a.catalysts.map((c) =>
-    `<span class="chip neutral"><span class="dot"></span>${esc(cap(c.type))}</span>`)
+    catalystChip(cap(c.type), (a.tone || '').includes('bull') ? 'bullish'
+      : (a.tone || '').includes('bear') ? 'bearish' : 'neutral'))
     .join('')}</div>` : ''}
   </div>`;
 }
@@ -9761,8 +9786,7 @@ function renderNewsView() {
     ${news.earnings_warning ? `<div class="callout">${esc(news.earnings_warning)}</div>` : ''}
     ${(news.catalyst_summary || []).length ? `<h3>${hg('Catalyst types detected')}</h3>
       <div class="legend">${news.catalyst_summary.map((c) =>
-    `<span class="chip neutral"><span class="dot"></span>${esc(cap(c.type))} \u00d7${
-      c.mentions}</span>`).join('')}</div>` : ''}
+    catalystChip(`${cap(c.type)} \u00d7${c.mentions}`, c.lean)).join('')}</div>` : ''}
     ${newsHeadlineSections(news, arts)}
     <p class="caveat">${esc(news.method || '')}. Use \u201cDeep research\u201d in the
       assistant for a live, sourced brief.</p>
