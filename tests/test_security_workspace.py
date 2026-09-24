@@ -66,9 +66,11 @@ def test_every_new_view_is_in_the_views_map():
 def test_the_nav_group_reuses_the_facet_list_rather_than_repeating_it():
     """Two hand-maintained copies of the same seven names would drift, and the
     symptom is a tab in the strip that the nav menu cannot reach."""
-    # Trailing properties allowed -- the group carries `flat: true` now. What
-    # this is asserting is the reuse, not the punctuation after it.
-    assert re.search(r"views: SECURITY_VIEWS[,}]", APP_JS), \
+    # Whatever follows it -- `, flat: true`, or a space and a brace once that
+    # came back off. This is asserting the reuse, not the punctuation after it,
+    # and pinning the punctuation is how it failed the last time the group's
+    # trailing properties changed.
+    assert re.search(r"views: SECURITY_VIEWS\s*[,}]", APP_JS), \
         "the group reuses the facet list rather than restating it"
     # And the seven are not written out a second time anywhere in NAV_GROUPS.
     groups = APP_JS.split("const NAV_GROUPS = [", 1)[1]

@@ -26789,7 +26789,19 @@ const NAV_GROUPS = [
    * left out of SECURITY_VIEWS, which is what drives the header and the facet
    * strip. The group is only the drawer you pick a page from, and "I want to
    * look at securities" is one destination however many are on screen. */
-  { id: 'security', label: 'Dossier', views: SECURITY_VIEWS, flat: true },
+  /* The menu is back, on the reader's call.
+   *
+   * It was flattened because these seven names are also in the section bar
+   * inside every one of these pages, and saying the same seven words twice
+   * one above the other is a real cost. What that traded away is the part
+   * that mattered: from the rail, the menu is the only way to open Earnings
+   * or Financials directly. Flat, the rail opens whichever page you were last
+   * on and you then move again inside it -- two steps to reach a page the
+   * menu reached in one, on every visit.
+   *
+   * The duplication is the cheaper problem. It costs width on a rail that has
+   * room for it; the flattening cost a click on every navigation. */
+  { id: 'security', label: 'Dossier', views: SECURITY_VIEWS },
   /* Its own section again.
    *
    * It was folded into the Dossier group to get the top strip from eight

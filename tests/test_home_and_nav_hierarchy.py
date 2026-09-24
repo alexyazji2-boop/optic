@@ -73,26 +73,35 @@ def test_the_hero_still_comes_before_the_market():
 # ------------------------------------------------- one Dossier navigation
 
 
-def test_dossier_opens_from_the_rail_without_repeating_its_pages():
-    """The rail listed Overview, Chart, Options, Investing, Earnings,
-    Financials and News, and so did the section bar inside every one of them.
-    `flat` renders a group with several pages as a plain button: the rail
-    opens the workspace at the page you were last on, the section bar moves
-    you around inside it."""
+def test_dossier_opens_its_pages_from_the_rail():
+    """This asserted `flat: true` and the flattening has been reversed, on the
+    reader's call: "where is the dossier dropdown?"
+
+    The audit finding was real -- these seven names are in the rail menu and in
+    the section bar inside every one of those pages, the same seven words twice
+    -- but the fix traded the wrong thing away. From the rail, the menu is the
+    only way to open Earnings or Financials directly. Flattened, the rail opens
+    whichever page you were last on and you move again inside it: two steps for
+    what the menu did in one, on every navigation.
+
+    The duplication costs width on a rail that has room. The flattening cost a
+    click every time."""
     groups = APP.split("const NAV_GROUPS = [", 1)[1]
     groups = groups[:groups.index("\n];")]
     line = [ln for ln in groups.splitlines() if "id: 'security'" in ln]
-    assert line and "flat: true" in line[0], line
+    assert line, "the Dossier group is gone"
+    assert "flat: true" not in line[0], \
+        "flat renders it as a plain button with no menu"
+    # And the mechanism the other groups rely on is untouched.
     fn = _fn("paintNav")
     assert "const single = pages.length < 2 || group.flat;" in fn
 
 
-def test_only_dossier_is_flattened():
-    """Markets, Discover, Positions and Watchlist have no in-page section bar
-    to defer to, so their menus are the only way to reach what is in them."""
-    groups = APP.split("const NAV_GROUPS = [", 1)[1]
-    groups = groups[:groups.index("\n];")]
-    assert groups.count("flat: true") == 1
+def test_a_group_with_one_page_still_renders_without_a_menu():
+    """`flat` is gone from Dossier, not from paintNav: a caret on a group with
+    a single destination is a menu that opens to one item."""
+    fn = _fn("paintNav")
+    assert "pages.length < 2" in fn, "a one-page group must not grow a caret"
 
 
 def test_the_section_bar_is_still_the_one_that_remains():
@@ -172,3 +181,35 @@ def test_a_failed_panel_offers_a_retry_rather_than_just_a_sentence():
     handler = APP.split("evt.target.closest('[data-view-retry]')", 1)[1][:260]
     assert "switchView(STATE.view, true)" in handler, \
         "without force it repaints the cached failure it was clicked to clear"
+
+
+def test_the_dossier_menu_lists_its_pages_and_they_are_clickable():
+    """Restoring the menu is only half of it. The click handler is scoped to
+    `nav.tabs [data-view]`, and the last time these pages moved into dropdowns
+    that scope did not reach them -- the comment on that handler records it:
+    the menu rendered, opened, and was inert.
+
+    So this asserts the two halves meet: the menu buttons carry `data-view`,
+    and the element they sit inside still matches the selector the handler
+    uses. Driven in a browser to be sure -- hover Dossier, click Earnings,
+    land on earnings in one click."""
+    fn = _fn("paintNav")
+    menu = fn[fn.index('<div class="nav-menu"'):]
+    assert 'data-view="${p.view}"' in menu, "menu pages need the attribute the handler reads"
+    # The handler's scope, and the element the rail actually renders.
+    assert "evt.target.closest('nav.tabs [data-view]')" in APP
+    # The element itself is in index.html, and it has to keep both classes:
+    # `tabs-group` is what paintNav looks the container up by, and `tabs` is
+    # what the click handler's selector matches through.
+    html = open("static/index.html", encoding="utf-8").read()
+    assert 'class="tabs tabs-group"' in html, \
+        "the rail's nav must keep both classes or the handler stops seeing the menu"
+
+
+def test_the_menu_marks_the_page_you_are_on():
+    """Seven identical rows with no current-page marker is a list, not a
+    navigation -- and it was the argument for dropping the label from the
+    parent button, so it has to actually be there."""
+    fn = _fn("paintNav")
+    menu = fn[fn.index('<div class="nav-menu"'):]
+    assert "p.view === view ? ' current' : ''" in menu
