@@ -13711,7 +13711,18 @@ body[data-view="chart"] .ses-fold { display: none; }
   color: var(--ink-2);
   white-space: nowrap;
 }
-.rail-foot { margin-top: auto; display: flex; flex-direction: column; gap: var(--space-1); }
+/* Follows the nav rather than being pinned to the floor.
+ *
+ * `margin-top: auto` resolved to 339px on an 835px rail -- measured -- so the
+ * sidebar read as two clusters with something missing between them rather than
+ * as one list that had ended. The empty space still exists, because the rail is
+ * as tall as the window either way; it now sits below the last item, where the
+ * end of a list is what it looks like.
+ *
+ * Safe to unpin because this rail's content does not grow with data: a brand
+ * row, six sections and two footer buttons, about 470px all told. That is the
+ * same assumption the `overflow: visible` note above already rests on. */
+.rail-foot { margin-top: var(--space-5); display: flex; flex-direction: column; gap: var(--space-1); }
 /* Settings is a destination and Collapse is a control of the rail itself, so
    a hairline separates them rather than a gap: at `--space-1` they read as one
    pair of related buttons, and clicking the wrong one of a pair costs a page.
@@ -13809,7 +13820,16 @@ body.rail-tight .rail nav.tabs-group .nav-top { overflow: hidden; }
   gap: var(--space-2);
   width: 100%;
   justify-content: flex-start;
-  padding: var(--space-2) var(--space-3);
+  /* Square padding, so the glyph column is straight.
+   *
+   * With --space-3 on the sides these icons sat at x=24 while the brand mark
+   * above and the gear below sat at 19 -- measured against the rail's own left
+   * edge. Five pixels on the one vertical line the eye follows all the way
+   * down the sidebar, and it put the nav labels at 51 against the footer's 47
+   * at the same time. Both columns land together now: icons at 19, nav and
+   * footer labels at 46. The brand mark keeps its own 22px box and sits a
+   * little wider, which is what a logo is allowed to do. */
+  padding: var(--space-2);
   border-radius: var(--r-sm);
   font-size: var(--t-small);
   text-align: left;
@@ -14096,4 +14116,39 @@ body.rail-tight .rail nav.tabs-group .nav-menu { left: 56px; }
 #cp-input:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+
+/* ---- what the statements say -------------------------------------------- */
+/* A reading per row rather than a grid of cards: these are sentences, and a
+   sentence set in a 232px column wraps to five lines. auto-fit with a wide
+   minimum gives two columns on a desktop and one on anything narrower without
+   a second breakpoint to keep in step. */
+.fin-reads {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  margin-top: var(--space-4);
+}
+.fin-read-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-1);
+}
+/* The label is the quiet half. The chip beside it carries the reading, so the
+   two must not compete -- this is the security header's lesson in a smaller
+   frame. */
+.fin-read-lab {
+  font-size: var(--t-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+  font-weight: 600;
+}
+.fin-read-detail {
+  margin: 0;
+  font-size: var(--t-small);
+  color: var(--ink-2);
+  line-height: 1.5;
 }

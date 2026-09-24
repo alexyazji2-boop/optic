@@ -9888,11 +9888,146 @@ async function loadSegments(force) {
  * are the same functions, called from the facet the reader would look for them
  * on. Extras arrives on its own request, so the panel is mounted when it lands
  * rather than blocking the statements above it. */
+/* ---- what the statements say ---------------------------------------------
+ *
+ * Every other Dossier facet opens by telling you what it thinks. Options leads
+ * with a swing verdict, Investing with a conviction score and a sentence about
+ * whether the name suits a core holding, News with net sentiment across the
+ * headlines it read. Financials opened on short interest -- a real number, and
+ * a narrow one -- and then listed tables, so the one tab whose whole subject
+ * is "is this a good business" was the one tab that never said.
+ *
+ * These readings are derived, not fetched: every figure below is already in
+ * the /api/ticker company payload and is rendered further down the same page.
+ * Nothing here is a new request and nothing here is a forecast.
+ *
+ * The thresholds are stated rather than tuned. Two points of margin movement
+ * is the smallest gap worth a sentence -- inside that, revenue and earnings
+ * growth are moving together and saying otherwise reads a rounding difference
+ * as a trend.
+ */
+const FIN_MARGIN_BAND = 2;      // pp of YoY growth difference that counts
+
+function financialsReadings(co) {
+  const f = (co || {}).financials || {};
+  const g = f.growth || {};
+  const m = f.margins || {};
+  const e = (co || {}).earnings_history || {};
+  const o = (co || {}).ownership || {};
+  const si = (co || {}).short_interest || {};
+  const out = [];
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+  // 1. Are earnings growing faster than sales, and by enough to mean anything?
+  const rev = num(g.revenue_yoy_pct);
+  const ni = num(g.net_income_yoy_pct);
+  if (rev !== null && ni !== null) {
+    const gap = ni - rev;
+    const wide = Math.abs(gap) >= FIN_MARGIN_BAND;
+    out.push({
+      label: 'Margins',
+      tone: !wide ? 'neutral' : gap > 0 ? 'bull' : 'bear',
+      verdict: !wide ? 'moving together'
+        : gap > 0 ? 'widening' : 'narrowing',
+      detail: `Revenue ${fmtPct(rev, 1)} year over year, earnings ${fmtPct(ni, 1)}.`
+        + (wide
+          ? ` Earnings moved ${fmt(Math.abs(gap), 1)} points ${gap > 0 ? 'faster' : 'slower'}`
+            + ` than sales, so each dollar of revenue ${gap > 0 ? 'kept more' : 'kept less'}.`
+          : ' Within two points of each other, which is not a trend.'),
+    });
+  }
+  // 2. What is actually kept, at each line.
+  const net = num(m.net_pct);
+  if (net !== null) {
+    out.push({
+      label: 'Profitability',
+      tone: 'neutral',
+      verdict: `${fmt(net, 1)}% net`,
+      detail: `Of every dollar of revenue, ${fmt(net, 1)} cents reaches net income`
+        + (num(m.gross_pct) !== null
+          ? ` -- ${fmt(m.gross_pct, 1)}% gross, ${fmt(m.operating_pct, 1)}% operating.` : '.'),
+    });
+  }
+  // 3. Whether the company has been landing its own guidance.
+  const rate = num(e.beat_rate_pct);
+  const n = num(e.sample_size);
+  if (rate !== null && n) {
+    out.push({
+      label: 'Against estimates',
+      tone: rate >= 75 ? 'bull' : rate <= 40 ? 'bear' : 'neutral',
+      verdict: `beat ${fmt(e.beat_count, 0)} of ${fmt(n, 0)}`,
+      detail: `${fmt(rate, 0)}% of the last ${fmt(n, 0)} quarters came in above the`
+        + ' consensus estimate. A record, not a prediction: the next quarter is'
+        + ' not drawn from this.',
+    });
+  }
+  // 4. Short interest, characterised by both float share and days to cover,
+  //    because either alone misreads a thin float.
+  const pf = num(si.percent_of_float);
+  if (pf !== null) {
+    const pct = pf <= 1 ? pf * 100 : pf;   // the field has shipped both ways
+    const dtc = num(si.days_to_cover);
+    out.push({
+      label: 'Short interest',
+      tone: pct >= 10 ? 'bear' : 'neutral',
+      verdict: pct < 2 ? 'negligible' : pct >= 10 ? 'crowded' : 'modest',
+      detail: `${fmt(pct, 2)}% of the float is sold short`
+        + (dtc !== null ? `, about ${fmt(dtc, 1)} days of average volume to cover.` : '.')
+        + (pct < 2 ? ' Too small a position to move the price on its own.' : ''),
+    });
+  }
+  // 5. Insider direction, with the magnitude that decides whether it is one.
+  const ins = o.insider_6m || {};
+  const netSh = num(ins.net_shares);
+  const gross = (num(ins.purchase_shares) || 0) + (num(ins.sale_shares) || 0);
+  if (netSh !== null && gross) {
+    /* The label alone overstates. AAPL reports `insider_signal: "selling"` on
+     * 403,303 bought against 406,507 sold -- a net of 3,204 shares, under one
+     * percent of what changed hands, which is a payroll event and not a view.
+     * So the share of gross activity decides the word, and the raw counts are
+     * shown either way. */
+    const share = Math.abs(netSh) / gross;
+    const meaningful = share >= 0.1;
+    out.push({
+      label: 'Insiders',
+      tone: !meaningful ? 'neutral' : netSh > 0 ? 'bull' : 'bear',
+      verdict: !meaningful ? 'no net direction'
+        : netSh > 0 ? 'net buying' : 'net selling',
+      detail: `${fmtCompact(num(ins.purchase_shares) || 0, 1)} shares bought and `
+        + `${fmtCompact(num(ins.sale_shares) || 0, 1)} sold over six months`
+        + (!meaningful
+          ? `, a net of ${fmtCompact(Math.abs(netSh), 1)} -- under a tenth of what`
+            + ' changed hands, so the direction is noise rather than a view.'
+          : `, a net of ${fmtCompact(Math.abs(netSh), 1)}.`),
+    });
+  }
+  return out;
+}
+
+function renderFinancialsLead(co) {
+  const rows = financialsReadings(co);
+  if (!rows.length) return '';
+  return `<div class="panel span2 gap fin-lead" data-fixed="1">
+    <h2>${hg('What the statements say')}</h2>
+    <p class="sub">Read off the figures on this page. Every one of them appears
+      in full below, and none of it is advice or a forecast.</p>
+    <div class="fin-reads">
+      ${rows.map((r) => `<div class="fin-read">
+        <div class="fin-read-head">
+          <span class="fin-read-lab">${esc(r.label)}</span>
+          <span class="chip ${esc(r.tone)}"><span class="dot"></span>${esc(r.verdict)}</span>
+        </div>
+        <p class="fin-read-detail">${esc(r.detail)}</p>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+
 function renderFinancialsView(force) {
   const d = STATE.swing || {};
   const co = d.company;
   views.financials.innerHTML = `${securityHeader('financials')}
-    ${co ? renderCompany(co)
+    ${co ? renderFinancialsLead(co) + renderCompany(co)
     : '<div class="panel"><h2>Financials</h2><div class="callout">No company data '
       + 'for this ticker. Funds, indices and most ADRs do not file statements.'
       + '</div></div>'}
@@ -19043,8 +19178,17 @@ function renderEarnings(d) {
     <td>${fmt(r.hold, 0)}</td><td>${fmt(r.sell, 0)}</td><td>${fmt(r.strong_sell, 0)}</td>
   </tr>`).join('');
 
+  /* The brief sits after the report, not before it.
+   *
+   * Its own degraded copy reads "every figure it would discuss is on the panel
+   * above" -- written for this position and then rendered first, where there
+   * was no panel above and the sentence pointed at nothing. On a deployment
+   * with no assistant key that absence was also the first thing on the tab:
+   * Earnings opened by explaining what it could not tell you.
+   *
+   * Reading it the other way round -- numbers, then the reading of them -- is
+   * also the right order when the brief does exist. */
   views.earnings.innerHTML = securityHeader('earnings') + `
-  <div class="panel span2 gap" id="earnBriefHost"></div>
   <div class="panel span2 gap">
     <h2>${hg(reported ? 'Latest result' : 'Next report')} · ${esc(d.ticker || '')}</h2>
     <p class="sub">${gloss(v.headline || '')}</p>
@@ -19101,6 +19245,8 @@ function renderEarnings(d) {
   ext.as_of ? ` Last ${esc(ext.kind)} print ${new Date(ext.as_of).toLocaleString()}.` : ''}</p>` : ''}
     <p class="caveat">${esc(d.data_caveat || '')}</p>
   </div>
+
+  <div class="panel span2 gap" id="earnBriefHost"></div>
 
   <div class="grid c2 gap">
     <div class="panel">
