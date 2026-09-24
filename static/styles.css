@@ -804,7 +804,9 @@ header.topbar {
  *
  * A height and no width: the viewBox is 32x38 because he stands up, and
  * setting both to the same number squashes him. */
-.pulse-face-lg { height: 92px; width: auto; color: var(--ink-2); }
+/* 104, not 92: the aperture in each eye is 5.4 units on a 32-unit box, so
+   it needs the pixels to read as a lens rather than as a circle. */
+.pulse-face-lg { height: 104px; width: auto; color: var(--ink-2); }
 .pulse-face-lg .pulse-collar { stroke: var(--brand); }
 .pulse-face-lg .pulse-eye { color: var(--ink); }
 .pulse-face-lg .pulse-smile { stroke: var(--ink); }
@@ -7941,7 +7943,15 @@ table.data tr.fx-detail td,
   line-height: 1.45;
 }
 
-.pulse-empty { padding: var(--space-4) var(--space-3); }
+/* The empty state is a greeting, so it is centred on the panel.
+   The mascot was flush left against the panel padding with the heading and
+   the text ranged beside it, which reads as a stray illustration rather than
+   as the panel introducing itself. The starter cards keep their own grid and
+   their text stays left-aligned -- those are things to read, not a greeting. */
+.pulse-empty { padding: var(--space-4) var(--space-3); text-align: center; }
+.pulse-empty .pulse-face-lg { display: block; margin: 0 auto var(--space-3); }
+.pulse-empty .pulse-empty-sub { margin-inline: auto; max-width: 46ch; }
+.pulse-empty .pulse-cards { text-align: left; }
 .pulse-empty h3 { margin: 0 0 var(--space-2); font-size: var(--t-heading); }
 .pulse-empty-sub {
   margin: 0 0 var(--space-4);

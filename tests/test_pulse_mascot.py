@@ -147,14 +147,50 @@ def test_the_copy_does_not_mention_what_a_message_costs():
 def test_he_has_a_body_and_not_just_a_face():
     """The first version was a circle with two eyes and a heartbeat in it,
     which is a smiley. A mascot needs a silhouette you would recognise with
-    the detail removed: a head, a rounder body under it, stub arms, feet."""
+    the detail removed: a head, a rounder body under it, arms, buttons.
+
+    This used to pin the feet and the exact arm paths, and those were the bug.
+    Two foot ellipses at cy 34.4 sat inside a body ellipse spanning 18.4-34.8,
+    and the fill is --brand at 0.14 -- so nothing occluded anything and the
+    bottom of him was a tangle of crossing outlines. The feet are gone and the
+    shapes no longer overlap, which is why this now asserts the silhouette
+    rather than the coordinates that produced it."""
     fn = _fn("pulseMascotHTML")
-    assert fn.count("<ellipse") >= 3, "body and two feet"
+    assert fn.count("<ellipse") >= 1, "a body rounder than the head"
     assert fn.count("<circle") >= 3, "head and two pupils"
-    assert fn.count('<path d="M7.4 24') == 1 and fn.count('<path d="M24.6 24') == 1, "two arms"
-    assert 'viewBox="0 0 32 38"' in fn, "he stands up, so the box is not square"
-    # Arms before the body, or they read as stuck on rather than attached.
-    assert fn.index("M7.4 24") < fn.index('cx="16" cy="26.6"')
+    assert "stroke-linecap" in fn, "twig arms are strokes, not filled shapes"
+    assert fn.count("pulse-collar") == 1, "one scarf, over the seam"
+    # Three buttons, which is what stops the lower shape reading as a second
+    # head. Counted inside their own group: the head is also `cx="16"`, so a
+    # file-wide count of that returns four and means nothing.
+    buttons = fn.split('<g fill="currentColor"', 1)[1]
+    assert buttons[:buttons.index("</g>")].count("<circle") == 3
+
+
+def test_nothing_in_the_silhouette_overlaps_anything_else():
+    """The fill is semi-transparent, so overlap is not hidden -- it is drawn.
+    Head and body are separate shapes with a gap the scarf covers, and the
+    arms start outside the body rather than under it.
+
+    Parsed rather than eyeballed: the head circle and the body ellipse must
+    not intersect, and no arm may begin inside the body."""
+    import re as _re
+    fn = _fn("pulseMascotHTML")
+    head = _re.search(r'<circle cx="16" cy="([\d.]+)" r="([\d.]+)"', fn)
+    body = _re.search(r'<ellipse cx="16" cy="([\d.]+)" rx="([\d.]+)" ry="([\d.]+)"', fn)
+    assert head and body, "head and body must both be there"
+    head_bottom = float(head.group(1)) + float(head.group(2))
+    body_top = float(body.group(1)) - float(body.group(3))
+    assert head_bottom <= body_top, \
+        "head reaches {} and the body starts at {}".format(head_bottom, body_top)
+    # Every arm endpoint clear of the body's own bounding box.
+    bx, by = 16.0, float(body.group(1))
+    rx, ry = float(body.group(2)), float(body.group(3))
+    arms = _re.findall(r'<path d="M([\d.]+) ([\d.]+)', fn)
+    starts = [(float(x), float(y)) for x, y in arms]
+    inside = [(x, y) for x, y in starts
+              if ((x - bx) / rx) ** 2 + ((y - by) / ry) ** 2 < 0.92]
+    assert not inside, "an arm starts inside the body: {}".format(inside)
 
 
 def test_the_standing_figure_is_not_squashed():
@@ -180,6 +216,28 @@ def test_his_eyes_are_the_optic_mark_and_they_blink():
     for eye in fn.split('<g class="pulse-eye">')[1:]:
         socket = eye[:eye.index("</g>")]
         assert "<path" in socket and "<circle" in socket
+
+    # Derived, and checked as derived rather than taken on trust.
+    #
+    # This used to assert the eye's literal control points, which made it a
+    # copy of the drawing rather than a check on it -- rescaling the eyes
+    # meant rewriting the assertion, and a mutation that replaced the path
+    # with arbitrary numbers passed. Every point in each eye has to be the
+    # brand mark's matching point under ONE uniform scale and translation.
+    import re as _re
+    src = [float(v) for v in _re.findall(r"-?\d+\.?\d*",
+           "M2.6 16C6.3 8.9 10.9 5.4 16 5.4S25.7 8.9 29.4 16"
+           "C25.7 23.1 21.1 26.6 16 26.6S6.3 23.1 2.6 16Z")]
+    for eye in fn.split('<g class="pulse-eye">')[1:2]:
+        d = _re.search(r'<path d="([^"]+)"', eye).group(1)
+        got = [float(v) for v in _re.findall(r"-?\d+\.?\d*", d)]
+        assert len(got) == len(src), "the eye is not the mark's own path"
+        sx = (got[2] - got[0]) / (src[2] - src[0])
+        for i in range(0, len(src), 2):
+            exp_x = (src[i] - src[0]) * sx + got[0]
+            exp_y = (src[i + 1] - src[1]) * sx + got[1]
+            assert abs(got[i] - exp_x) < 0.05 and abs(got[i + 1] - exp_y) < 0.05, \
+                "point {} is not the mark's under one uniform scale".format(i // 2)
 
     # Anchored to the start of a line: `.pulse-face-lg .pulse-eye {` contains
     # `.pulse-eye {`, so a bare split reads the colour rule above instead.
