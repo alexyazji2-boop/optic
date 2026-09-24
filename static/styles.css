@@ -14180,3 +14180,56 @@ body.rail-tight .rail nav.tabs-group .nav-menu { left: 56px; }
   color: var(--ink-2);
   line-height: 1.5;
 }
+
+/* ---- catalyst detail ----------------------------------------------------- */
+/* A summary chip that opens. The caret is the only thing marking it apart from
+   the row chips, which do not open -- they already sit on the story they came
+   from. */
+.chip.cat-open {
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--t-caption);
+}
+.cat-caret {
+  width: 0;
+  height: 0;
+  margin-left: var(--space-1);
+  border-left: 3.5px solid transparent;
+  border-right: 3.5px solid transparent;
+  border-top: 4px solid currentColor;
+  opacity: 0.55;
+  transition: transform var(--dur-ui, 120ms) ease;
+}
+.chip.cat-open.on .cat-caret { transform: rotate(180deg); opacity: 0.9; }
+.chip.cat-open.on { border-color: var(--border-strong); }
+.chip.cat-open:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.cat-detail {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.cat-detail-head {
+  margin: 0 0 var(--space-2);
+  font-size: var(--t-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+  font-weight: 600;
+}
+/* A hairline between entries rather than a gap: these are short and a gap at
+   this size reads as three unrelated blocks. */
+.cat-detail-row + .cat-detail-row {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+.cat-detail-row a { font-weight: 600; }
+.cat-detail-sum {
+  margin: var(--space-1) 0 0;
+  font-size: var(--t-small);
+  color: var(--ink-2);
+  line-height: 1.5;
+}

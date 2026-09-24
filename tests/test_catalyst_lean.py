@@ -120,3 +120,81 @@ def test_the_chip_says_what_the_colour_means():
     assert "title=" in fn
     assert "headlines carrying this" in fn
     assert "no direction" in fn
+
+
+# ------------------------------------------- the chip answers its own question
+
+
+def test_a_summary_chip_opens_and_a_row_chip_does_not():
+    """"Commercial deal x2, bearish" raises a question it cannot answer: which
+    two, and why bearish. A summary chip stands for headlines the reader cannot
+    see, so it opens.
+
+    A row chip is already sitting on the story it came from. Making it open a
+    list containing that one story would be a control that does nothing, so
+    `opts.type` gates it and only the summary passes one."""
+    fn = APP[APP.index("function catalystChip("):]
+    fn = fn[:fn.index("\nfunction ")]
+    assert "if (!opts.type) return" in fn, "a chip without a type must not open"
+    assert 'data-catalyst="${esc(opts.type)}"' in fn
+    # The summary passes a type; the row does not.
+    legend = APP[APP.index("Catalyst types detected"):][:500]
+    assert "{ type: c.type }" in legend
+    row = APP[APP.index("function newsArticleRow(a) {"):]
+    row = row[:row.index("\n}")]
+    call = row[row.index("catalystChip("):]
+    assert "type:" not in call[:call.index(".join(")]
+
+
+def test_the_detail_is_filtered_from_the_articles_already_on_the_page():
+    """The catalyst list is per-article in the payload, so this is the same
+    data read the other way round. A request here would be a second source of
+    truth for headlines already rendered below it."""
+    fn = APP[APP.index("function catalystDetail("):]
+    fn = fn[:fn.index("\nfunction ")]
+    assert "news.articles" in fn
+    for banned in ("getJSON(", "fetch(", "await "):
+        assert banned not in fn, "the detail must not make a request: " + banned
+    assert "c.type === want" in fn
+
+
+def test_each_headline_in_the_detail_carries_its_own_tone():
+    """The list exists to show the disagreement the average hides. Measured on
+    QCOM: "Commercial deal" averages bearish across a neutral headline and
+    "Qualcomm Renews Deal With Apple. Why the Stock Is Dropping" -- and a list
+    that painted both with the average would hide the only interesting thing
+    in it."""
+    fn = APP[APP.index("function catalystDetail("):]
+    fn = fn[:fn.index("\nfunction ")]
+    assert "toneChip(a.tone)" in fn
+
+
+def test_the_detail_says_what_it_is_showing():
+    fn = APP[APP.index("function catalystDetail("):]
+    fn = fn[:fn.index("\nfunction ")]
+    assert "cat-detail-head" in fn
+    assert "headline" in fn
+    # And links out, because the headline belongs to its publisher.
+    assert 'rel="noopener noreferrer nofollow"' in fn
+
+
+def test_pressing_the_open_chip_again_closes_it():
+    """A control that only opens leaves the reader with no way back to the
+    row of chips they were comparing."""
+    handler = APP[APP.index("const catBtn = evt.target.closest('[data-catalyst]')"):][:900]
+    assert "STATE.catalystOpen === want ? null : want" in handler
+
+
+def test_opening_one_does_not_scroll_the_page_out_from_under_it():
+    """The view re-renders and changes height, so focus has to come back to
+    the chip without the browser jumping to it."""
+    handler = APP[APP.index("const catBtn = evt.target.closest('[data-catalyst]')"):][:900]
+    assert "preventScroll: true" in handler
+
+
+def test_the_chip_is_a_button_and_announces_its_state():
+    fn = APP[APP.index("function catalystChip("):]
+    fn = fn[:fn.index("\nfunction ")]
+    assert "<button type=\"button\"" in fn
+    assert 'aria-expanded="${open}"' in fn
+    assert 'aria-controls="catalyst-detail"' in fn

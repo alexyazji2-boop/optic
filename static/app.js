@@ -9653,13 +9653,60 @@ function newsTierBadge(a) {
  *
  * The dot rather than the whole chip carries the hue, so a red catalyst is
  * still read as a catalyst rather than as an error state. */
-function catalystChip(label, lean) {
+function catalystChip(label, lean, opts = {}) {
   const cls = lean === 'bullish' ? 'bull' : lean === 'bearish' ? 'bear' : 'neutral';
   const why = lean && lean !== 'neutral'
     ? `The headlines carrying this read ${lean}. The catalyst type itself has no direction.`
     : 'The headlines carrying this do not lean either way.';
-  return `<span class="chip ${cls}" title="${esc(why)}"><span class="dot"></span>${
-    esc(label)}</span>`;
+  const inner = `<span class="dot"></span>${esc(label)}`;
+  /* The summary chips open; the row chips do not.
+   *
+   * A chip in the summary stands for several headlines the reader cannot see,
+   * which is the whole reason "Commercial deal x2, bearish" raises a question
+   * it does not answer. A chip under a headline is already sitting on the
+   * story it came from, so making it open a list containing that one story
+   * would be a control that does nothing. */
+  if (!opts.type) return `<span class="chip ${cls}" title="${esc(why)}">${inner}</span>`;
+  const open = STATE.catalystOpen === opts.type;
+  return `<button type="button" class="chip ${cls} cat-open${open ? ' on' : ''}"
+    data-catalyst="${esc(opts.type)}" aria-expanded="${open}"
+    aria-controls="catalyst-detail" title="${esc(why)} Click to see the headlines."
+    >${inner}<i class="cat-caret" aria-hidden="true"></i></button>`;
+}
+
+/* The headlines behind one chip.
+ *
+ * Filtered out of the articles already on the page rather than fetched: the
+ * catalyst list is per-article in the payload, so this is the same data read
+ * the other way round and it costs nothing.
+ *
+ * Each row carries its own tone rather than the type's average, for the same
+ * reason the row chips do -- this list exists to show the disagreement the
+ * average hides.
+ */
+function catalystDetail(news) {
+  const want = STATE.catalystOpen;
+  if (!want) return '';
+  const hits = (news.articles || []).filter((a) =>
+    (a.catalysts || []).some((c) => c.type === want));
+  const entry = (news.catalyst_summary || []).find((c) => c.type === want) || {};
+  if (!hits.length) {
+    return `<div class="cat-detail" id="catalyst-detail">
+      <p class="sub">No headline on this page carries that catalyst any more.</p></div>`;
+  }
+  return `<div class="cat-detail" id="catalyst-detail">
+    <p class="cat-detail-head">${esc(cap(want))} · ${hits.length} headline${
+  hits.length === 1 ? '' : 's'}${entry.lean && entry.lean !== 'neutral'
+    ? ` · reading ${esc(entry.lean)} on average` : ' · no net lean'}</p>
+    ${hits.map((a) => `<div class="cat-detail-row">
+      ${toneChip(a.tone)}
+      <a href="${esc(a.url)}" target="_blank" rel="noopener noreferrer nofollow"
+        >${esc(a.title)}</a>
+      <span class="subnote">${esc(a.publisher || '')}${
+  a.age_words ? ` · ${esc(a.age_words)}` : ''}</span>
+      ${a.summary ? `<p class="cat-detail-sum">${esc(a.summary.slice(0, 200))}</p>` : ''}
+    </div>`).join('')}
+  </div>`;
 }
 
 function newsArticleRow(a) {
@@ -9786,7 +9833,8 @@ function renderNewsView() {
     ${news.earnings_warning ? `<div class="callout">${esc(news.earnings_warning)}</div>` : ''}
     ${(news.catalyst_summary || []).length ? `<h3>${hg('Catalyst types detected')}</h3>
       <div class="legend">${news.catalyst_summary.map((c) =>
-    catalystChip(`${cap(c.type)} \u00d7${c.mentions}`, c.lean)).join('')}</div>` : ''}
+    catalystChip(`${cap(c.type)} \u00d7${c.mentions}`, c.lean, { type: c.type })).join('')}</div>
+      ${catalystDetail(news)}` : ''}
     ${newsHeadlineSections(news, arts)}
     <p class="caveat">${esc(news.method || '')}. Use \u201cDeep research\u201d in the
       assistant for a live, sourced brief.</p>
@@ -27725,6 +27773,22 @@ document.addEventListener('click', (evt) => {
   if (evt.target.closest('[data-alert-unread]')) {
     alertUnreadOnly = !alertUnreadOnly;
     renderAlerts();
+    return;
+  }
+  const catBtn = evt.target.closest('[data-catalyst]');
+  if (catBtn) {
+    /* Toggling, so a second press on the open chip closes it. Re-rendering the
+     * whole news view rather than patching the panel in place: the view is
+     * built from STATE in one pass and a second, partial path would be the
+     * thing that drifts from it. The payload is already in memory, so this is
+     * a repaint and not a request. */
+    const want = catBtn.dataset.catalyst;
+    STATE.catalystOpen = STATE.catalystOpen === want ? null : want;
+    renderNewsView();
+    // Keep the chip under the cursor rather than letting the page jump to the
+    // top of a view that just changed height.
+    const again = views.news.querySelector(`[data-catalyst="${CSS.escape(want)}"]`);
+    if (again) again.focus({ preventScroll: true });
     return;
   }
   if (evt.target.closest('[data-view-retry]')) {
