@@ -8045,6 +8045,20 @@ table.data tr.fx-detail td,
 }
 .error-acts { margin-top: var(--space-3); }
 
+/* The empty state borrows the error state's action spacing rather than
+   choosing its own: they are the same gesture -- a sentence, then the control
+   that answers it -- and two panels a reader sees in the same session should
+   not sit their buttons at different distances. */
+.empty-acts { margin-top: var(--space-3); }
+/* Room to breathe, because this panel is usually alone on the page rather than
+   one card in a grid, and centred for the same reason. */
+.empty-state {
+  padding: var(--space-7) var(--space-6);
+  text-align: center;
+}
+.empty-state > h2 { margin-bottom: var(--space-2); }
+.empty-state > .sub { max-width: 46ch; margin-inline: auto; }
+
 /* ---- economic series picker -------------------------------------------- */
 .econ-groups { display: flex; flex-direction: column; gap: var(--space-2); margin: var(--space-3) 0; }
 .econ-group { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; }

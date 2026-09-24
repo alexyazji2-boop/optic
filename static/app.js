@@ -1039,6 +1039,33 @@ function loadingHTML(what) {
   return `<div class="loading"><span class="spinner"></span>Loading ${esc(what)}…</div>`;
 }
 
+/* The third state, and the one that had no helper.
+ *
+ * `loadingHTML` and `errorHTML` have been shared from the start; "nothing here
+ * yet" was left to each call site, so the same panel got written twice --
+ * verbatim, inline styles and all -- and would have drifted the first time
+ * either copy was touched.
+ *
+ * `action` is optional and is a data-attribute the delegated click handler
+ * already answers, not a callback: this returns a string into innerHTML, so
+ * anything holding a closure would be dropped on the floor.
+ *
+ * The copy rule that made this worth extracting: say what would fill the
+ * space, then offer the control that fills it. "No ticker loaded" names the
+ * absence and stops; a reader who did not know a symbol was needed has learnt
+ * only that something is missing. */
+function emptyHTML(title, body, action) {
+  const act = action
+    ? `<div class="empty-acts"><button type="button" class="btn" ${action.attr}>${esc(action.label)}</button></div>`
+    : '';
+  /* data-fixed, or makePanelsCollapsible folds this into a chevron and hides
+   * the sentence and the button behind it -- an empty state collapsed to its
+   * own title is the announcement this was written to stop being. `.panel` is
+   * the card surface here, not a section of the page. */
+  return `<div class="panel empty-state" data-fixed="1"><h2>${esc(title)}</h2>
+    <p class="sub">${esc(body)}</p>${act}</div>`;
+}
+
 /* Recognised from the message, not from a flag threaded through fifteen call
  * sites. getJSON produces exactly two shapes for an unreachable origin — "the
  * server is unreachable (HTTP 5xx) after N attempts" and "the connection dropped
@@ -9562,11 +9589,10 @@ async function loadSecurityFacet(view, force, opts = {}) {
   if (!host) return;
   const ticker = STATE.ticker;
   if (!STATE.ticker) {
-    host.innerHTML = `<div class="panel"><h2>No ticker loaded</h2>
-      <p class="sub">Enter a symbol in the top bar, or pick one on the
-      <button class="btn" type="button" data-goto-home
-        style="padding:var(--space-0) var(--space-2);font-size:var(--t-small)"
-        >Home</button> page.</p></div>`;
+    host.innerHTML = emptyHTML(
+      'No symbol loaded',
+      'Pick one and this panel fills in with its levels, flow and context.',
+      { label: 'Search for a symbol', attr: 'data-open-palette' });
     return;
   }
   /* loadSwing's own guard is `STATE.swing.ticker === STATE.ticker`, so that is
@@ -24452,9 +24478,10 @@ function loadView(view, force) {
     'explore', 'earnings', 'compare', 'instrument', 'chart',
     'overview', 'financials', 'news',
     'watchlist', 'alerts'].includes(view) && !STATE.ticker) {
-    views[view].innerHTML = `<div class="panel"><h2>No ticker loaded</h2>
-      <p class="sub">Enter a symbol in the top bar, or pick one on the
-      <button class="btn" type="button" data-goto-home style="padding:var(--space-0) var(--space-2);font-size:var(--t-small)">Home</button> page.</p></div>`;
+    views[view].innerHTML = emptyHTML(
+      'No symbol loaded',
+      'Pick one and this panel fills in with its levels, flow and context.',
+      { label: 'Search for a symbol', attr: 'data-open-palette' });
     return;
   }
   // The workspace tracks its own symbol, so it neither needs STATE.ticker nor
@@ -24937,7 +24964,7 @@ function updateStatus() {
   if (!STATE.ticker
       && !['market', 'indices', 'roth', 'tracker', 'settings', 'brief',
         'compare', 'earnings', 'instrument'].includes(STATE.view)) {
-    setStatus(['No ticker loaded. Enter a symbol to begin.']);
+    setStatus(['No symbol loaded. Search for one to begin.']);
     return;
   }
 
