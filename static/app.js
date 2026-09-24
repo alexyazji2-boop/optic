@@ -11994,7 +11994,10 @@ function renderInstrument(d) {
     ${note ? `<span class="note">${esc(note)}</span>` : ''}</div>`;
 
   return `<div class="panel span-all">
-    <div class="weekly-kicker">${esc(d.group || 'cross-asset')}</div>
+    ${/* cap(), because this is a field from the instrument catalogue rendered
+         straight out -- "equity", "rates", "fx" -- and a label starting a line
+         reads as a sentence whatever it came from. */''}
+    <div class="weekly-kicker">${esc(cap(d.group || 'Cross-asset'))}</div>
     <h2 class="weekly-title">${esc(d.label)}${askPulse('instrument')}</h2>
     <p class="weekly-sub">${esc(cap(d.note || ''))} · ${esc(d.symbol)},
       ${fmt((d.dates || []).length, 0)} daily bars.</p>
@@ -12011,7 +12014,7 @@ function renderInstrument(d) {
       ${stat('20 days', fmtPct(s.chg_20d, 2), signClass(s.chg_20d))}
       ${stat('vs 200-day', fmtPct(s.vs_sma200, 1), signClass(s.vs_sma200))}
       ${stat('RSI', fmt(s.rsi, 0), '',
-    s.rsi >= 70 ? 'overbought territory' : s.rsi <= 30 ? 'oversold territory' : 'mid-range')}
+    s.rsi >= 70 ? 'Overbought territory' : s.rsi <= 30 ? 'Oversold territory' : 'Mid-range')}
       ${stat('From 52-week high', fmtPct(s.pct_from_52w_high, 1), signClass(s.pct_from_52w_high))}
     </div>
 
@@ -28174,7 +28177,12 @@ document.addEventListener('click', (evt) => {
     STATE.trackerBook = bookBtn.dataset.book;
     STATE.tracker = null;
     STATE.bookRisk = null;
-    loadTracker(true);
+    /* Go to what was pressed, the way the index cards on Home go to a chart.
+     * The book's figures render into panels further down a long view, so
+     * without this the press repaints something off-screen and the page looks
+     * unchanged. Awaited, because the panels do not exist until the reload
+     * has painted them. */
+    loadTracker(true).then(() => revealBook());
     return;
   }
   const noticeOk = evt.target.closest('[data-notice-ok]');
@@ -28817,7 +28825,13 @@ const PANELS_OPEN_BY_DEFAULT = {
   brief: ['morning desk', 'overnight', "today's priority", 'weekly market',
     'fear & greed', 'market regime', 'on the calendar', 'official releases',
     'insider filings'],
-  tracker: ['the record', 'open positions', 'how the ledger works'],
+  /* Renamed panels, stale keys. "The record" became "Optic Portfolio" and
+   * "How the ledger works" became "How these positions are taken", so two of
+   * these three matched nothing and the view opened with the reader's own
+   * portfolio shut. Matching is `title.includes(key)`, so these are the
+   * headings as they now read. The explainers stay closed: they are the same
+   * text on every visit and they are 4,500px of it. */
+  tracker: ['optic portfolio', 'open positions'],
   indices: ['major etfs', 'index regime'],
   roth: [],
   /* The statements, and the segment tables under them.
@@ -28871,8 +28885,49 @@ function rememberCollapse(id, open) {
 function headingName(head) {
   if (!head) return '';
   const clone = head.cloneNode(true);
-  clone.querySelectorAll('button, .th-plain, .lvl-count, .chip').forEach((n) => n.remove());
+  /* `.bk-active` is the selected book's name, and it belongs with the chip and
+   * the Ask-Pulse button rather than in the panel's identity. Leaving it in
+   * made the id move with the selection -- `tracker|optic portfolio
+   * conservative`, then `...balanced` -- so every book press produced a panel
+   * whose remembered state had never been written and whose heading matched no
+   * default. It opened closed, every time, which read as the press doing
+   * nothing at all. */
+  clone.querySelectorAll('button, .th-plain, .lvl-count, .chip, .bk-active')
+    .forEach((n) => n.remove());
   return (clone.textContent || '').replace(/\s+/g, ' ').trim();
+}
+
+/* Open the selected book's panels and put the first one on screen.
+ *
+ * Both panels, because one book's reading is split across them: "Optic
+ * Portfolio" carries the value, return and rules, "Open positions" carries
+ * what it is actually holding. Opening one and not the other answers half the
+ * question the press asked.
+ *
+ * Written through `rememberCollapse` rather than by toggling classes alone, so
+ * the next render agrees with what is on screen instead of shutting it again.
+ */
+function revealBook() {
+  const host = views.tracker;
+  if (!host) return;
+  let first = null;
+  ['Optic Portfolio', 'Open positions'].forEach((name) => {
+    const panel = [...host.querySelectorAll('.panel[data-panel-id]')].find((el) => {
+      const head = el.querySelector(':scope > h2');
+      return head && headingName(head).toLowerCase() === name.toLowerCase();
+    });
+    if (!panel) return;
+    panel.classList.add('is-open');
+    panel.classList.remove('is-closed');
+    const btn = panel.querySelector(':scope > h2 .panel-toggle');
+    if (btn) {
+      btn.setAttribute('aria-expanded', 'true');
+      btn.setAttribute('aria-label', 'Collapse ' + name);
+    }
+    rememberCollapse(panel.dataset.panelId, true);
+    if (!first) first = panel;
+  });
+  if (first) first.scrollIntoView({ block: 'start', behavior: 'smooth' });
 }
 
 /** Stable-ish id for a panel: view plus its heading name. */

@@ -43,11 +43,18 @@ def test_the_tile_is_declared_once():
 
 def test_the_consolidated_tile_keeps_what_was_actually_rendering():
     """The later rule's values are the ones readers saw, so those are the ones
-    that survive the merge: the flat surface, no border, the wider padding."""
+    that survive the merge: the flat surface and no border.
+
+    The padding is no longer pinned here. --space-5 a side left an 88px content
+    box in a 134px tile, and a price set at --t-d3 is 116px wide -- so the
+    figure could not centre in its own tile, which is what a reader reported.
+    tests/test_stat_tiles.py owns the padding now, together with the negative
+    margin on `.tile .value` that has to match it; pinning half of that pair
+    here would let the two drift apart."""
     body = _rule(".tile")
     assert "background: var(--surface-2)" in body
     assert "border: 0" in body
-    assert "padding: var(--space-4) var(--space-5)" in body
+    assert "padding:" in body, "the tile still needs its own padding"
 
 
 def test_tile_figures_are_centred():

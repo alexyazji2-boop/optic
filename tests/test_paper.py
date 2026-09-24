@@ -361,3 +361,103 @@ def test_no_open_position_can_carry_a_target_at_or_below_zero():
     for book in paper.BOOK_IDS:
         found, _ = paper.consider_ticker(_short_with_a_wide_stop(), 100_000.0, book)
         assert all((leg.get("target") or 1) > 0 for leg in found)
+
+
+# ------------------------------------------- a rate-limited feed is not a shortlist
+
+
+def _dead_feed_scan(monkeypatch, tmp_path, names, fail):
+    """Run a real scan against an injected snapshot function.
+
+    `run_scan` takes `snapshot_fn` and a `watchlist`, and a watchlist skips the
+    screen entirely, so the whole candidate loop can be driven without a
+    network or a universe."""
+    monkeypatch.setattr(paper, "DB_PATH", str(tmp_path / "t.db"))
+    monkeypatch.setattr(paper, "MAX_COOLOFF_SECONDS", 0.0)
+    calls = []
+
+    def snapshot_fn(ticker):
+        calls.append(ticker)
+        if fail(ticker):
+            raise Exception("404: No price data found for '{}'.".format(ticker))
+        return {"ticker": ticker, "verdict": {"composite_score": 0.0},
+                "expiries": {"available": True}, "levels": {}, "quote": {"price": 10.0}}
+
+    class _Provider:
+        def quote(self, ticker):
+            return {"price": 10.0}
+
+        def history(self, *a, **k):
+            return None
+
+    res = paper.run_scan(snapshot_fn, _Provider(), watchlist=list(names),
+                         trigger="test", allow_entries=True)
+    return res, calls
+
+
+# The exact shortlist from the 09:32 scheduled scan that reported 30 considered,
+# 0 opened, and thirty identical 404s. Every one of these resolves normally on a
+# healthy feed -- checked against the provider directly, 502 daily bars each --
+# so the scan had been rate-limited from the first name and spent the other
+# twenty-nine finding that out one at a time.
+THIRTY = ["RARE", "GRAL", "ILMN", "COO", "COLL", "NEOG", "FLNC", "IONS", "NAMS",
+          "QMCO", "METC", "MRNA", "IOVA", "RCAT", "CAR", "NTRA", "CSIQ", "MATW",
+          "FEIM", "SFD", "GTLB", "CHTR", "QRVO", "TRIP", "LULU", "PATK", "SAIL",
+          "PZZA", "NMRK", "TEAM"]
+
+
+def test_a_feed_returning_nothing_stops_the_scan_instead_of_grinding(monkeypatch, tmp_path):
+    """`_swing_snapshot` raises 404 "No price data found" when history comes
+    back empty, and a throttled feed returns empty rather than erroring -- so a
+    rate limit is indistinguishable from a delisted ticker at this call site.
+    The loop treated every one as the latter and carried on.
+
+    The options-chain check further down the same loop has handled exactly this
+    for a while: cool off, retry once, count the skips, give up after five. The
+    snapshot one call earlier had none of it."""
+    res, calls = _dead_feed_scan(monkeypatch, tmp_path, THIRTY, lambda t: True)
+    assert len(calls) <= paper.MAX_THROTTLED_SKIPS, \
+        "asked the dead feed for {} names".format(len(calls))
+    funnel = res.get("funnel") or {}
+    assert funnel.get("dead_snapshots") == paper.MAX_THROTTLED_SKIPS
+    assert funnel.get("capped"), "the scan has to record why it stopped"
+
+
+def test_it_says_once_that_the_feed_is_the_problem_not_the_shortlist():
+    """Thirty identical 404s buried the one fact that explained all thirty, and
+    a reader looking at that history would reasonably conclude the screen had
+    produced thirty bad symbols."""
+    import inspect
+    src = inspect.getsource(paper.run_scan)
+    assert "dead_snapshots" in src
+    assert "not a problem with the shortlist" in src
+
+
+def test_dead_names_scattered_through_a_good_run_do_not_stop_it(monkeypatch, tmp_path):
+    """The counter is consecutive, not cumulative. A universe screen can hand
+    over a handful of names that genuinely have no data -- a recent delisting,
+    a ticker change -- and a scan that abandoned the rest because of six of
+    them spread across thirteen would be a worse bug than the one being fixed
+    here."""
+    names = ["A", "BAD1", "B", "BAD2", "C", "BAD3", "D", "BAD4", "E", "BAD5",
+             "F", "BAD6", "G"]
+    res, calls = _dead_feed_scan(monkeypatch, tmp_path, names,
+                                 lambda t: t.startswith("BAD"))
+    assert len(calls) == len(names), "a working feed must see the whole shortlist"
+    assert not (res.get("funnel") or {}).get("capped")
+
+
+def test_a_throttled_snapshot_is_retried_before_being_given_up_on():
+    """Cooling off and asking again is what rescues a scan that hit a limit on
+    its first name. Without the retry the fix above would only make the failure
+    quieter, not rarer."""
+    import inspect
+    src = inspect.getsource(paper.run_scan)
+    # From the attempt to the reset that follows it. Sliced forward from
+    # `snapshot = None` rather than to the first "dead_snapshots = 0", because
+    # that string is also the counter's initialiser further up the function.
+    start = src.index("snapshot = None")
+    block = src[start:src.index("dead_snapshots = 0", start)]
+    assert "_feed_throttled()" in block, "the retry has to be conditional on a throttle"
+    assert "_cool_off(" in block
+    assert block.count("snapshot_fn(ticker)") == 2, "one attempt, one retry"

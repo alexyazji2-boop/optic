@@ -343,3 +343,66 @@ def test_each_card_prints_when_its_record_begins():
     fn = fn[:fn.index("\nfunction renderTracker")]
     assert "Record from ${esc(b.since)}" in fn
     assert ".bk-since" in CSS
+
+
+# ------------------------------------------- pressing a book has to land somewhere
+
+
+def test_the_portfolio_panel_keeps_one_id_across_books():
+    """Pressing a book did nothing visible, and this is why.
+
+    The panel heading is "Optic Portfolio" plus a `.bk-active` span carrying
+    the selected book's name. `headingName` strips the chip and the Ask-Pulse
+    button out of a heading before it becomes a storage key -- but not that
+    span -- so the id moved with the selection: `tracker|optic portfolio
+    conservative`, then `...balanced`, then `...aggressive`.
+
+    A fresh id has no remembered state, so the panel fell back to the view's
+    defaults, and the default list did not match it either. Measured in the
+    browser: press a book, get a 65px collapsed panel, every time."""
+    fn = _code(APP_JS[APP_JS.index("function headingName("):])
+    fn = fn[:fn.index("\nfunction ")]
+    assert ".bk-active" in fn, \
+        "the active-book badge must be stripped or the panel id moves with it"
+
+
+def test_the_tracker_defaults_name_panels_that_exist():
+    """"The record" was renamed "Optic Portfolio" and "How the ledger works"
+    became "How these positions are taken", so two of the three keys here
+    matched nothing. Matching is `title.toLowerCase().includes(key)`, so a
+    renamed panel does not fail loudly -- it just never opens."""
+    code = _code(APP_JS)
+    block = code[code.index("const PANELS_OPEN_BY_DEFAULT"):]
+    line = [l for l in block.split("\n") if l.strip().startswith("tracker:")][0]
+    keys = _re.findall(r"'([^']+)'", line)
+    assert keys, "the tracker needs at least one panel open"
+    # Every key has to name a heading the view actually renders.
+    headings = set(_re.findall(r"hg\(['\"]([^'\"]+)['\"]\)", code))
+    headings |= set(_re.findall(r"<h2>([A-Z][^<${]{2,40})<", code))
+    lowered = [h.lower() for h in headings]
+    for key in keys:
+        assert any(key in h for h in lowered), \
+            "no panel heading contains {!r}".format(key)
+
+
+def test_pressing_a_book_opens_its_figures_and_its_positions():
+    """One book's reading is split across two panels: "Optic Portfolio" has
+    the value, return and rules, "Open positions" has what it is holding.
+    Opening one without the other answers half of what the press asked.
+
+    Measured after the fix: Open positions 65px -> 1482px, and the portfolio
+    panel's top moved from y=1723 to y=186."""
+    code = _code(APP_JS)
+    assert "function revealBook(" in code
+    fn = code[code.index("function revealBook("):]
+    fn = fn[:fn.index("\nfunction ")]
+    assert "Optic Portfolio" in fn and "Open positions" in fn
+    assert "scrollIntoView" in fn, "the press has to go to what it selected"
+    # Written through the same store the renderer reads, or the next paint
+    # shuts what the press just opened.
+    assert "rememberCollapse(" in fn
+    # And the click path actually calls it, after the reload has painted.
+    click = code[code.index("const bookBtn = evt.target.closest('[data-book]')"):][:600]
+    assert "revealBook()" in click
+    assert "loadTracker(true).then(" in click, \
+        "the panels do not exist until the reload has painted them"

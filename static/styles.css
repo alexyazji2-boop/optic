@@ -1819,7 +1819,10 @@ table.data.narrow { min-width: 0; }
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  padding: var(--space-4) var(--space-5);
+  /* --space-3 on the sides, not --space-5. At 23px a side, a 134px tile spent
+     34% of itself on padding and left an 88px content box for figures that
+     need more than that. */
+  padding: var(--space-4) var(--space-3);
   background: var(--surface-2);
   border: 0;
   border-radius: var(--r-md);
@@ -1866,6 +1869,20 @@ table.data.narrow { min-width: 0; }
   font-weight: 600;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
+  /* The figure gets the whole tile, padding included.
+   *
+   * `text-align: center` cannot centre a line that is wider than the box it
+   * sits in: the line box anchors at the content edge and the overflow all
+   * goes one way. Measured at 134px: "7,704.28" is 116px against an 88px
+   * content box, so it sat 14px right of the tile's centre and 4px past its
+   * edge, while "54" and "-1.2%" -- which fit -- were dead centre. Only the
+   * long values looked wrong, which is what made it read as a rendering
+   * glitch rather than a padding problem.
+   *
+   * Reclaiming the side padding gives the figure the full tile width and
+   * centring works again. The label, delta and note keep the padding: they
+   * are the things that should stay inside it. */
+  margin-inline: calc(-1 * var(--space-3));
 }
 /* Pushed to the bottom so the notes line up too. Only some tiles carry one, and
    a note that floats directly under a short value while its neighbour's sits

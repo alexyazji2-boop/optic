@@ -1071,6 +1071,9 @@ def run_scan(snapshot_fn: Callable[[str], Dict[str, Any]], provider,
         opened_positions: List[Dict[str, Any]] = []
         capped = None
         throttled_skips = 0
+        # Consecutive snapshots that returned nothing. Reset by any name
+        # that comes back, so this counts a dead feed rather than dead names.
+        dead_snapshots = 0
         for index, ticker in enumerate(candidates_in):
             live, capped = _books_with_room(opened_by_book)
             if not live:
@@ -1078,11 +1081,46 @@ def run_scan(snapshot_fn: Callable[[str], Dict[str, Any]], provider,
 
             considered += 1
             _set_progress(done=index + 1, note=ticker)
+            # The same rate limit the options path below already handles, one
+            # call earlier and with none of the handling.
+            #
+            # `_swing_snapshot` raises 404 "No price data found" when history
+            # comes back empty, and a throttled feed returns empty rather than
+            # erroring -- so a rate limit here is indistinguishable from a
+            # delisted ticker, and this path treated every one as the latter.
+            #
+            # Observed on the 09:32 scheduled scan: 30 names considered, 30
+            # identical 404s, 0 opened. Every symbol in that list resolves
+            # fine on a healthy feed, so the scan had been rate-limited from
+            # the first name and spent the remaining 29 finding that out one
+            # at a time.
+            snapshot = None
+            failure = None
             try:
                 snapshot = snapshot_fn(ticker)
             except Exception as exc:
-                notes.append("{}: snapshot failed ({})".format(ticker, exc))
+                failure = exc
+            if snapshot is None and _feed_throttled():
+                _cool_off("waiting out a rate limit before retrying " + ticker)
+                try:
+                    snapshot = snapshot_fn(ticker)
+                    failure = None
+                except Exception as exc:
+                    failure = exc
+            if snapshot is None:
+                dead_snapshots += 1
+                notes.append("{}: snapshot failed ({})".format(ticker, failure))
+                # Consecutive, so a handful of genuinely dead tickers scattered
+                # through a shortlist does not stop a working scan -- only a run
+                # where nothing at all is coming back does.
+                if dead_snapshots >= MAX_THROTTLED_SKIPS:
+                    capped = ("no price data came back for {} names in a row, so the scan "
+                              "stopped. The feed was rate-limiting or down; nothing was "
+                              "traded and nothing is wrong with the shortlist"
+                              .format(dead_snapshots))
+                    break
                 continue
+            dead_snapshots = 0
 
             # Refuse to trade on a throttled feed. This matters more than it
             # looks: a rate-limited options fetch comes back as an empty chain,
@@ -1155,6 +1193,14 @@ def run_scan(snapshot_fn: Callable[[str], Dict[str, Any]], provider,
         if throttled_skips:
             notes.append("{} name(s) skipped because the data feed was rate-limiting. Nothing "
                          "was traded on incomplete data.".format(throttled_skips))
+        if dead_snapshots:
+            # Said once, in front. The per-name 404s are still in the notes for
+            # anyone reading closely, but thirty of them in a row buried the
+            # one fact that explains all thirty.
+            notes.append("No price data came back for the last {} name(s). That is the feed "
+                         "being rate-limited or down, not a problem with the shortlist -- "
+                         "the same symbols resolve normally on a healthy feed."
+                         .format(dead_snapshots))
 
         funnel = {
             "universe": universe_info.get("name"),
@@ -1169,6 +1215,12 @@ def run_scan(snapshot_fn: Callable[[str], Dict[str, Any]], provider,
             ],
             "capped": capped,
             "throttled_skips": throttled_skips,
+            # Reported separately from throttled_skips: that one means the
+            # options chain came back empty, this one means no price came back
+            # at all. They have the same cause and different consequences, and
+            # a scan that reported only the first looked like it had simply
+            # found nothing worth trading.
+            "dead_snapshots": dead_snapshots,
             "feed": _feed_state(),
         }
 

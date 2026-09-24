@@ -521,8 +521,16 @@ def test_a_panels_stored_identity_does_not_include_its_buttons():
     own, wrong, copy. There is now one helper and both call it.
     """
     assert "function headingName(head) {" in APP_JS
-    assert APP_JS.count("clone.querySelectorAll('button, .th-plain, .lvl-count, .chip')") == 1, \
+    # One copy of the strip list, wherever it currently stands. Pinned as a
+    # literal before, which made adding `.bk-active` to it -- the fix for the
+    # portfolio panel's id moving with the selected book -- look like a
+    # regression in a test about button labels. What this is really protecting
+    # is that there is exactly one such list, so the count is what matters.
+    strips = re.findall(r"clone\.querySelectorAll\('([^']+)'\)", APP_JS)
+    assert len(strips) == 1, \
         "two copies of how to name a heading is how one of them goes wrong"
+    for part in ("button", ".chip"):
+        assert part in strips[0], part + " must still be stripped from a heading"
     collapsible = APP_JS.split("function makePanelsCollapsible(view) {", 1)[1] \
         .split("\n}", 1)[0]
     assert "const title = headingName(head);" in collapsible
