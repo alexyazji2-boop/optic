@@ -2734,7 +2734,21 @@ def _write_guard(request: Request) -> None:
 # bug. The account itself is the friction: it costs an address per allowance, and
 # the hourly burst cap still sits over the top.
 AI_CALLS_PER_HOUR = int(os.environ.get("AI_CALLS_PER_HOUR", "30"))
-GUEST_AI_CALLS_PER_DAY = int(os.environ.get("GUEST_AI_CALLS_PER_DAY", "5"))
+# 0 means "an account is required", and that is the default.
+#
+# Pulse is the one surface in the terminal that spends the operator's money per
+# use, and it was the one thing a visitor could spend without leaving a trace
+# to meter. Metered by address it was also the easiest thing in the app to get
+# more of: a new address is a new allowance.
+#
+# Everything else stays open to guests. `tests/test_auth_authorization.py`
+# holds that line and is the test that catches somebody wrapping the wrong
+# router in a login check.
+#
+# Still an environment variable rather than a literal, so an operator running
+# their own copy can re-open it -- set it above zero and the per-address
+# metering below works exactly as it did.
+GUEST_AI_CALLS_PER_DAY = int(os.environ.get("GUEST_AI_CALLS_PER_DAY", "0"))
 
 _ai_calls: Dict[str, List[float]] = {}
 
@@ -2788,6 +2802,11 @@ def ai_allowance(request: Request) -> Dict[str, Any]:
                                          GUEST_AI_CALLS_PER_DAY, _DAY)
         state["scope"] = "guest"
         state["signed_in_allowance"] = auth_store.PLANS["free"]["ai_calls_per_day"]
+        # So the panel can say "sign in" before the click rather than showing a
+        # composer that answers a 401. Reported as its own fact rather than
+        # inferred from `allowed == 0`, which is also what an exhausted
+        # allowance looks like and means something different.
+        state["requires_account"] = GUEST_AI_CALLS_PER_DAY <= 0
         return state
     except (sqlite3.Error, OSError) as exc:
         # OSError as well as sqlite3.Error: opening the database creates its
@@ -2795,6 +2814,10 @@ def ai_allowance(request: Request) -> Dict[str, Any]:
         # os.makedirs rather than from sqlite. Catching only the sqlite family
         # left the realistic failure — no disk — as a 500 on /api/chat.
         _allowance_unavailable(exc)
+        # No `requires_account` here, and that is the point: with the database
+        # gone nobody can be identified, the daily cap is not being enforced at
+        # all, and telling the panel to demand a sign-in would lock out the
+        # account holders it cannot currently see.
         return {"scope": "guest", "used": 0, "allowed": 0, "left": 0,
                 "enforced": False,
                 "signed_in_allowance": auth_store.PLANS["free"]["ai_calls_per_day"]}
@@ -2820,6 +2843,19 @@ def _spend_guard(request: Request) -> None:
                 "That is {} assistant messages today, which is what this plan "
                 "includes. The allowance resets 24 hours after each message.".format(
                     limits.get("ai_calls_per_day")))
+        elif GUEST_AI_CALLS_PER_DAY <= 0:
+            # Raised inside the try on purpose. If `current_user` threw
+            # instead, we are in the except below and cannot tell a guest from
+            # an account holder -- and CLAUDE.md is explicit that the assistant
+            # survives the accounts database being gone. A 401 there would
+            # turn a disk problem into "Pulse is closed to everyone".
+            raise HTTPException(
+                status_code=401,
+                detail="Pulse needs a free account: each message costs the "
+                       "operator money, and an address is the only thing that "
+                       "can be metered. {} messages a day once you are in. "
+                       "Everything else in the terminal stays open either "
+                       "way.".format(auth_store.PLANS["free"]["ai_calls_per_day"]))
         else:
             auth_ratelimit.spend(
                 "ai_day", auth_ratelimit.client_ip(request),

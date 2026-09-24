@@ -19837,9 +19837,39 @@ async function loadAllowance() {
  * `enabled === false` rather than `!enabled`: the field is absent until the
  * first fetch lands, and an undefined state is "not known yet", not "off".
  * Treating it as off would flash the notice on every cold load. */
-function renderPulseUnavailable() {
+/* Why the composer is shut, or null when it is not.
+ *
+ * Two reasons now and one owner for both. The second is an account: Pulse is
+ * the one surface that spends the operator's money per use, so it is the one
+ * that asks for an address. A guest who can type into it gets a 401 back
+ * mid-answer, which reads as a broken feature rather than a limit -- the same
+ * argument the no-credential case beside it is already built on.
+ *
+ * `=== true` rather than truthiness: the field is absent until the first
+ * allowance fetch lands, and absent means "not known yet", not "required".
+ * Treating it as required would flash a sign-in wall on every cold load,
+ * including for people already signed in. */
+function pulseBlockedReason() {
   const ai = ACCOUNT.ai;
-  const off = !!ai && ai.enabled === false;
+  if (ai && ai.enabled === false) {
+    return { text: ai.hint || 'Pulse is unavailable.', placeholder: 'Pulse is unavailable' };
+  }
+  const state = ACCOUNT.allowance;
+  if (state && state.requires_account === true) {
+    const perDay = Number(state.signed_in_allowance) || 0;
+    return {
+      html: `Pulse needs a free account: each message costs the operator money.
+        <button type="button" data-auth-open="signup">Create one</button>${
+  perDay ? ` for ${perDay} messages a day` : ''}. Every other panel stays open.`,
+      placeholder: 'Sign in to use Pulse',
+    };
+  }
+  return null;
+}
+
+function renderPulseUnavailable() {
+  const reason = pulseBlockedReason();
+  const off = !!reason;
   const input = $('#chat-input');
   const send = $('#chat-send') || document.querySelector('[data-chat-send]');
   const research = $('#chat-research');
@@ -19853,7 +19883,7 @@ function renderPulseUnavailable() {
   }
   [input, send, research].forEach((el) => { if (el) el.disabled = true; });
   if (input) {
-    input.placeholder = 'Pulse is unavailable';
+    input.placeholder = reason.placeholder;
     input.setAttribute('aria-describedby', 'chat-off');
   }
   if (!host) {
@@ -19864,10 +19894,15 @@ function renderPulseUnavailable() {
     host.className = 'chat-allow chat-off';
     anchor.parentNode.insertBefore(host, anchor);
   }
-  // The server's own sentence, which knows whether it is talking to the
-  // operator or to a visitor. Repeating a guess at it here would be a second
-  // copy to keep in step.
-  host.textContent = ai.hint || 'Pulse is unavailable.';
+  /* The server's own sentence where there is one -- it knows whether it is
+   * talking to the operator or to a visitor, and repeating a guess at it here
+   * would be a second copy to keep in step.
+   *
+   * `textContent` for that one and `innerHTML` for the account case, which
+   * carries a button. Nothing interpolated into it comes from a person: the
+   * only value is a number, coerced with Number() above. */
+  if (reason.html) host.innerHTML = reason.html;
+  else host.textContent = reason.text;
 }
 
 /* What is left of today's assistant allowance, stated before the click.

@@ -50,12 +50,29 @@ That bug shipped once.
 session (which trading phase is open). `app/auth/` is about a *sign-in* session. They
 share a word and nothing else; a function that says "session" has to say which.
 
-**Accounts are additive and nothing gates the terminal.** Every research endpoint
-answers a guest exactly as it did before accounts existed, and that is a requirement,
-not a current state of affairs. What an account changes is where the watchlist and
-saved research are *kept*. `tests/test_auth_authorization.py` asserts the open
-surface stays open, and it is the test that will catch somebody wrapping the wrong
-router in a login check.
+**Accounts are additive and nothing gates the terminal, with one named
+exception.** Every research endpoint answers a guest exactly as it did before
+accounts existed, and that is a requirement, not a current state of affairs. What
+an account changes is where the watchlist and saved research are *kept*.
+`tests/test_auth_authorization.py` asserts the open surface stays open, and it is
+the test that will catch somebody wrapping the wrong router in a login check.
+
+The exception is Pulse — `/api/chat` and `/api/research`, which share
+`_spend_guard`. They are the only endpoints that spend the operator's money per
+call, and metered by address they were also the easiest thing here to get more
+of, because a new address is a new allowance. A guest gets 401 and a sentence
+naming the way in; an account gets its plan's allowance, Free being five a day.
+`GUEST_AI_CALLS_PER_DAY` above zero restores the old per-address metering, so the
+gate is a default rather than a literal.
+
+Two things about that guard are load-bearing. The 401 is raised *inside* the
+`try`, because in the `except` nobody can be identified and a 401 there would
+turn a disk problem into "Pulse is closed to everyone" — an account holder whose
+session lookup fails still gets through on the hourly cap alone, which is the
+invariant below about surviving the accounts database being gone. And the panel
+reads `requires_account` as its own field rather than inferring it from
+`allowed == 0`, which is also what a spent allowance looks like and means
+something a reader would act on differently.
 
 **Admin is one boolean from the environment, and the second half of it is the
 security.** `ADMIN_EMAILS` names who owns the deployment, and `app/auth/admin.py`

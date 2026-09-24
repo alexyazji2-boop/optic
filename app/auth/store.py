@@ -543,7 +543,9 @@ def set_preferences(user_id: str, patch: Dict[str, Any]) -> Dict[str, Any]:
 
 
 PLANS = {
-    "free": {"label": "Free", "ai_calls_per_day": 25, "watchlists": 3,
+    # Five, not twenty-five. Each one is a paid call against the operator's
+    # own key, and the free tier is what a visitor gets for an email address.
+    "free": {"label": "Free", "ai_calls_per_day": 5, "watchlists": 3,
              "saved_research": 40},
     "pro": {"label": "Pro", "ai_calls_per_day": 400, "watchlists": 25,
             "saved_research": 1000},

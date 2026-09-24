@@ -67,18 +67,53 @@ def test_the_client_keeps_the_flag_it_used_to_discard():
 def test_the_composer_is_actually_disabled_not_merely_unhelpful():
     """A panel that looks ready and is not costs the reader a question and a
     wait to discover it."""
-    fn = APP.split("function renderPulseUnavailable() {", 1)[1].split("\nfunction ", 1)[0]
+    fn = _render()
     for control in ("#chat-input", "#chat-send", "#chat-research"):
         assert control in fn, control
     assert "disabled = true" in fn and "disabled = false" in fn, \
         "it has to switch back on when a key appears"
 
 
+def _render():
+    """The body of `renderPulseUnavailable`, which owns what happens to the
+    controls once `pulseBlockedReason` has decided there is a block."""
+    return APP.split("function renderPulseUnavailable() {", 1)[1].split("\nfunction ", 1)[0]
+
+
+def _reason():
+    """The body of `pulseBlockedReason`.
+
+    These assertions used to read `renderPulseUnavailable`, which owned the
+    branch. It gained a second reason -- Pulse now takes an account -- and the
+    decision moved into its own function so there is still one owner of "is
+    the composer shut, and why". The invariants below are unchanged; only
+    where they live is."""
+    return APP.split("function pulseBlockedReason() {", 1)[1].split("\nfunction ", 1)[0]
+
+
+def test_an_account_requirement_is_not_guessed_at_either():
+    """Same trap as `ai.enabled`, one field along: `requires_account` is absent
+    until the first allowance fetch lands. Truthiness would put a sign-in wall
+    in front of everyone on a cold load, including people already signed in."""
+    fn = _reason()
+    assert "state.requires_account === true" in fn
+
+
+def test_a_blocked_composer_says_which_block_it_is():
+    """One placeholder for both reasons would tell a guest that Pulse is
+    unavailable when it is available and they are not signed in."""
+    fn = _reason()
+    assert "placeholder: 'Pulse is unavailable'" in fn
+    assert "placeholder: 'Sign in to use Pulse'" in fn
+    render = APP.split("function renderPulseUnavailable() {", 1)[1].split("\nfunction ", 1)[0]
+    assert "input.placeholder = reason.placeholder;" in render
+
+
 def test_an_unknown_state_is_not_treated_as_off():
     """`ai` is absent until the first fetch lands. `!enabled` would be true
     then, and the notice would flash on every cold load before the endpoint
     answered."""
-    fn = APP.split("function renderPulseUnavailable() {", 1)[1].split("\nfunction ", 1)[0]
+    fn = _reason()
     assert "ai.enabled === false" in fn
     assert "!ai.enabled" not in fn
 
@@ -86,7 +121,7 @@ def test_an_unknown_state_is_not_treated_as_off():
 def test_the_panel_still_opens_so_the_reason_can_be_read():
     """Disabling the header button instead would hide the explanation behind
     the one control that reveals it, and leave a dead button with no reason."""
-    fn = APP.split("function renderPulseUnavailable() {", 1)[1].split("\nfunction ", 1)[0]
+    fn = _reason()
     assert "chat-open" not in fn, "this must not touch whether the panel opens"
     assert "pulse-btn" not in fn and "data-open-pulse" not in fn
 
@@ -94,7 +129,7 @@ def test_the_panel_still_opens_so_the_reason_can_be_read():
 def test_the_reason_is_the_servers_sentence_not_a_second_copy():
     """The server already branches on the audience. Guessing at the wording
     here would be a second copy to keep in step."""
-    fn = APP.split("function renderPulseUnavailable() {", 1)[1].split("\nfunction ", 1)[0]
+    fn = _reason()
     assert "ai.hint" in fn
     assert "ANTHROPIC_API_KEY" not in APP, \
         "the client must not hard-code the operator's instruction"
@@ -103,7 +138,7 @@ def test_the_reason_is_the_servers_sentence_not_a_second_copy():
 def test_the_reason_is_announced_to_a_screen_reader():
     """A disabled input with an unexplained state beside it is the version of
     this bug that only some readers get."""
-    fn = APP.split("function renderPulseUnavailable() {", 1)[1].split("\nfunction ", 1)[0]
+    fn = _render()
     # Both halves named in full. A bare `"aria-describedby" in fn` passes on
     # the removeAttribute line alone, which is how a mutation deleting the
     # setAttribute survived this test the first time it was run against one.

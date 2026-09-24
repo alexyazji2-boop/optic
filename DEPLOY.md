@@ -70,7 +70,7 @@ hidden until it has it, the same contract `ANTHROPIC_API_KEY` already uses.
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | For Google | Cloud console, OAuth client ID, Web application. Authorised redirect URI must be exactly `https://theopticterminal.com/api/auth/google/callback`. |
 | `APPLE_CLIENT_ID` / `APPLE_TEAM_ID` / `APPLE_KEY_ID` / `APPLE_PRIVATE_KEY` | For Apple | Needs a paid Apple Developer membership. `APPLE_CLIENT_ID` is the **Service ID**, not the App ID. The private key is the whole `.p8` contents; a literal `\n` from a dashboard paste is accepted and converted, which is the most common reason the token exchange fails with an unhelpful `invalid_client`. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` / `EMAIL_FROM` | For email | Verification and reset links. Unset, they are written to the server log and the UI says so rather than claiming mail was sent. Port 465 is implicit TLS; anything else opens in the clear and upgrades with STARTTLS. |
-| `GUEST_AI_CALLS_PER_DAY` | Optional | Assistant messages a guest gets per day. Default 5. Signing in raises it to the plan's allowance. |
+| `GUEST_AI_CALLS_PER_DAY` | Optional | Assistant messages a guest gets per day. Default **0**, which means Pulse takes a free account. Set it above zero to re-open Pulse to guests. Signing in gives the plan's allowance (Free is 5). |
 | `WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGIN` | Rarely | Both derive from `APP_URL`. Set `RP_ID` only to bind passkeys to a parent domain; `WEBAUTHN_ORIGIN` takes extra comma-separated origins, which is what a DNS move needs so assertions from the old domain still verify. |
 | `SESSION_TTL_SECONDS` | Optional | Default 30 days, slid forward on use. |
 | `COOKIE_SECURE` | No | Decided by whether a hosting platform is present. Secure on the live site, not on `http://localhost` where the browser would silently drop the cookie. |
@@ -139,9 +139,13 @@ Settings → Networking → **Generate Domain** for a `*.up.railway.app` URL, or
 Every research endpoint answers anybody, with or without an account. Accounts exist so
 a watchlist and saved research can be *kept*; they gate nothing that worked before.
 
-The one thing metered by account is the assistant, because it spends money per call:
-a guest gets `GUEST_AI_CALLS_PER_DAY` messages a day, an account gets its plan's
-allowance, and the per-address hourly cap sits over both as the burst limit.
+The one thing that **takes** an account is the assistant, because it spends money
+per call and an address is the only thing that can be metered: metered by IP it
+was also the easiest thing here to get more of, since a new address is a new
+allowance. A guest gets `GUEST_AI_CALLS_PER_DAY` messages a day, which defaults
+to 0 and refuses with a 401 naming the way in; an account gets its plan's
+allowance (Free is 5); and the per-address hourly cap sits over both as the
+burst limit. Set `GUEST_AI_CALLS_PER_DAY` above zero to re-open it to guests.
 
 Four endpoints change the shared paper-trading record and are gated by
 `OPTIC_WRITE_TOKEN` rather than by an account, because that record belongs to the
