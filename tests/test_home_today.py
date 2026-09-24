@@ -161,12 +161,24 @@ def test_it_reuses_the_impact_vocabulary_the_app_already_has(rendered):
 # ------------------------------------------------------------- how it loads
 
 
-def test_the_host_sits_above_the_search_not_below_it():
+def test_the_host_sits_below_the_search_not_above_it():
+    """This asserted the opposite, and the opposite put the search out of
+    reach.
+
+    The digest is 366px. With it and the knowledge card above the brand
+    lockup, the home search sat at y=1060 in an 835px viewport -- measured,
+    with the onboarding card already dismissed -- so the page's primary action
+    was below the fold on every visit. It was reported as missing.
+
+    What the original rule was protecting is the market coming first, and that
+    still holds: `#cc-strip` is the live index row and is still the first thing
+    under the session bar. The digest is a read of the day rather than the
+    market itself, so it is the piece that moves."""
     home = APP.split("function renderHome() {", 1)[1].split("\nasync function", 1)[0]
     assert 'id="hm-today"' in home
-    assert home.index('id="cc-strip"') < home.index('id="hm-today"') \
-        < home.index('class="home-brand"'), \
-        "the digest belongs between the market strip and the brand lockup"
+    assert home.index('id="cc-strip"') < home.index('class="home-brand"') \
+        < home.index('id="hm-today"'), \
+        "the index strip leads, then the search, then the digest"
 
 
 def test_it_starts_hidden_so_a_quiet_day_reserves_no_height():

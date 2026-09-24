@@ -2973,31 +2973,6 @@ const HOME_SECTIONS = [
   },
 ];
 
-/* Is this a first run?
- *
- * The homepage carries a 32px wordmark, a 592px search box and a row of
- * ticker pills. All three are an onboarding surface, and the search is a
- * second copy of the one in the top bar -- measured at 1440x950, `#ticker-input`
- * at y=11 and `#home-input` at y=696, the same job twice on one screen, the
- * larger of the two being the one that is harder to reach.
- *
- * It earns its place exactly once: on a screen where the reader has never
- * loaded anything and the top bar is a 200px box they have no reason to have
- * noticed yet. After that the market is what the page is for.
- *
- * Three signals, any one of which means "not new". A loaded ticker is the
- * weakest of them and is still worth having: it covers the reader who arrives
- * on a shared link, where nothing is stored yet but the page is plainly not
- * being seen for the first time. */
-function homeIsFirstRun() {
-  if (STATE.ticker) return false;
-  if (recentSymbols().length) return false;
-  try {
-    const w = watchList();
-    if (w && w.length) return false;
-  } catch (e) { /* no watchlist is itself a first-run signal */ }
-  return true;
-}
 
 function renderHome() {
   hideTip();
@@ -3029,41 +3004,18 @@ function renderHome() {
         * height, so nothing below it jumps when it arrives. */''}
     <div id="cc-strip"></div>
 
-    ${/* What matters today, above the search rather than below it.
+    ${/* The hero sits under the index strip and above everything else.
         *
-        * Measured on this page at 880x965: 364px of chrome before `.home`
-        * starts, then the brand lockup, the search and the quick picks take
-        * 320px of the 601 left above the fold. What a reader saw first was the
-        * product's own name. The highest-value thing the terminal knows -- the
-        * next five days of scheduled releases, which watchlist names report
-        * this week, and which sectors changed state overnight -- was on a
-        * different tab entirely, eight thousand pixels down Optic's Read.
+        * It was below the digest and the knowledge card, which put the search
+        * at y=1060 in an 835px viewport -- measured, with the onboarding card
+        * already dismissed. A control the reader has to scroll to find is not
+        * one the page is offering, and this is the page's primary action.
         *
-        * Same endpoint and the same rows as that panel, three columns deep
-        * instead of all of them, and it links through rather than restating
-        * the tab. Hidden until it has something: a band that says "nothing
-        * scheduled" on a quiet day is worse than no band. */''}
-    <div id="hm-today" class="hm-today" hidden></div>
-
-    ${/* Asked once, on the first visit, and never again.
-        *
-        * A card on the page rather than a modal over it. Nothing gates this
-        * terminal — every research endpoint answers a guest exactly as it did
-        * before accounts existed, and that is a requirement rather than a
-        * current state of affairs — so a wall in front of the market on the
-        * first load would be the one place the rule broke, for a preference.
-        *
-        * One question and five answers, not a quiz. The brief is explicit that
-        * nobody sits an exam to use this, and the answers are the taglines
-        * already published with each mode, so there is no second copy of them
-        * to drift.
-        *
-        * Above the brand and below the strip: the market is still the first
-        * thing on the page, which is the reason anybody opens it on the second
-        * day. */''}
-    ${knowledgeOnboardingHTML()}
-
-    ${homeIsFirstRun() ? `
+        * "The market is the first thing on the page" still holds, and it is
+        * why this goes after `#cc-strip` rather than at the very top: the live
+        * index numbers are what the second-day reader opens this for. The
+        * digest and the knowledge card are not that, and they were costing
+        * 935px between the two. */''}
     <div class="home-brand">
       <svg class="home-logo" viewBox="0 0 32 32" aria-label="Optic Terminal logo" role="img">
       <!-- No outer ring. The header's brand-mark has never had one, so the two
@@ -3110,7 +3062,42 @@ function renderHome() {
     <div class="home-quick">
       <span class="label">Or jump to</span>
       ${quick}
-    </div>` : ''}
+    </div>
+
+
+    ${/* What matters today, above the search rather than below it.
+        *
+        * Measured on this page at 880x965: 364px of chrome before `.home`
+        * starts, then the brand lockup, the search and the quick picks take
+        * 320px of the 601 left above the fold. What a reader saw first was the
+        * product's own name. The highest-value thing the terminal knows -- the
+        * next five days of scheduled releases, which watchlist names report
+        * this week, and which sectors changed state overnight -- was on a
+        * different tab entirely, eight thousand pixels down Optic's Read.
+        *
+        * Same endpoint and the same rows as that panel, three columns deep
+        * instead of all of them, and it links through rather than restating
+        * the tab. Hidden until it has something: a band that says "nothing
+        * scheduled" on a quiet day is worse than no band. */''}
+    <div id="hm-today" class="hm-today" hidden></div>
+
+    ${/* Asked once, on the first visit, and never again.
+        *
+        * A card on the page rather than a modal over it. Nothing gates this
+        * terminal — every research endpoint answers a guest exactly as it did
+        * before accounts existed, and that is a requirement rather than a
+        * current state of affairs — so a wall in front of the market on the
+        * first load would be the one place the rule broke, for a preference.
+        *
+        * One question and five answers, not a quiz. The brief is explicit that
+        * nobody sits an exam to use this, and the answers are the taglines
+        * already published with each mode, so there is no second copy of them
+        * to drift.
+        *
+        * Above the brand and below the strip: the market is still the first
+        * thing on the page, which is the reason anybody opens it on the second
+        * day. */''}
+    ${knowledgeOnboardingHTML()}
 
     ${/* The market, above the product tour. Painted empty and filled by
         * renderHomeMarket once /api/home lands — the alternative is holding the

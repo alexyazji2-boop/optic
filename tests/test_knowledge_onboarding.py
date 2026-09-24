@@ -86,9 +86,18 @@ def test_it_is_a_card_in_the_flow_not_a_modal_over_the_page():
 
 
 def test_the_market_is_still_the_first_thing_on_the_page():
-    """The strip is the reason anybody opens this on the second day."""
+    """The strip is the reason anybody opens this on the second day, and it is
+    still first -- `#cc-strip` leads the page.
+
+    What changed is what follows it. This card is 569px and used to sit between
+    the strip and the search, which left the search at y=1060 in an 835px
+    viewport and the reader unable to find it. A one-time question about
+    wording does not outrank the control the page exists to offer, so it now
+    comes after."""
     home = CODE[CODE.index('<div id="cc-strip"></div>'):]
-    assert home.index("knowledgeOnboardingHTML()") < home.index("home-brand")
+    assert home.index("home-brand") < home.index("knowledgeOnboardingHTML()")
+    # And the strip is still ahead of both.
+    assert home.index('<div id="cc-strip"></div>') < home.index("home-brand")
 
 
 def test_it_offers_every_mode_and_a_way_out():

@@ -30,33 +30,44 @@ def _fn(name):
 # ------------------------------------------------- one search box
 
 
-def test_the_home_hero_is_onboarding_and_renders_only_for_a_new_reader():
-    """The wordmark, the 592px search and the ticker pills are an onboarding
-    surface. They earn their place on a screen where nothing has been loaded
-    and the 200px box in the top bar is something the reader has no reason to
-    have noticed. After that the market is what the page is for."""
+def test_the_home_hero_is_always_on_the_page():
+    """This was gated on `homeIsFirstRun()` and is not any more, on the
+    reader's call.
+
+    The audit premise was that the wordmark, the 592px search and the ticker
+    pills are onboarding: they earn a screen where nothing is loaded, and after
+    that the market is what the page is for. The premise was wrong about how
+    the page is used. The top bar's 200px box is a different gesture from
+    landing on Home and typing a name into the thing in front of you, and
+    removing the second one took the page's primary action away from everybody
+    who had ever loaded a ticker -- which, after one visit, is everybody.
+
+    The same call was made once before for the phone, where these three were
+    hidden as duplicates and came back; see
+    tests/test_command_bar.py::test_the_phone_hides_only_what_is_still_a_duplicate.
+
+    Kept from the audit: the lede moved into the tour, and the market sits
+    directly under the hero rather than below three lines of product pitch."""
     home = _fn("renderHome")
-    assert "${homeIsFirstRun() ? `" in home
-    # All three are inside the gate, and the market is not.
-    gate = home.split("${homeIsFirstRun() ? `", 1)[1]
-    gate = gate[:gate.index("` : ''}")]
+    assert "homeIsFirstRun" not in APP, \
+        "the gate is gone; the predicate should not survive it"
     for part in ('class="home-brand"', 'id="home-input"', 'class="home-quick"'):
-        assert part in gate, part
-    assert 'id="hm-market"' not in gate, "the market is not onboarding"
+        assert part in home, part
+    # Unconditional: not wrapped in any ternary that could hide it again.
+    for part in ('class="home-brand"', 'id="home-input"'):
+        before = home[:home.index(part)]
+        assert before.count("? `") == before.count("` : ''}"), \
+            part + " sits inside an unclosed conditional"
 
 
-def test_first_run_is_three_signals_and_any_one_ends_it():
-    """A loaded ticker is the weakest of them and is still worth having: it
-    covers the reader who arrives on a shared link, where nothing is stored
-    yet but the page is plainly not being seen for the first time."""
-    fn = _fn("homeIsFirstRun")
-    assert "STATE.ticker" in fn
-    assert "recentSymbols()" in fn
-    assert "watchList()" in fn
-    assert fn.count("return false") == 3
-    assert fn.rstrip().endswith("return true;")
-    # A storage failure must not wedge the page into onboarding forever.
-    assert "catch" in fn
+def test_the_hero_still_comes_before_the_market():
+    """Order is the part of the audit that survived. The hero is the page's
+    action and the market is what it reports; the tour with the product pitch
+    in it stays below both."""
+    home = _fn("renderHome")
+    assert home.index('class="home-brand"') < home.index('id="hm-market"')
+    assert home.index('id="home-input"') < home.index('id="hm-market"')
+    assert home.index('id="hm-market"') < home.index('id="home-tour"')
 
 
 # ------------------------------------------------- one Dossier navigation
