@@ -205,6 +205,7 @@ def _swing_snapshot(
     max_expiries: int,
     include_macro: bool,
     include_earnings: bool = True,
+    include_company: bool = True,
     budget: Optional[float] = None,
 ) -> Dict[str, Any]:
     ticker = ticker.upper().strip()
@@ -280,10 +281,19 @@ def _swing_snapshot(
             history=hist, budget=budget,
         )
 
-    try:
-        company = fundamentals_mod.analyse(YF_PROVIDER, ticker, quote)
-    except Exception as exc:  # company data is context, never fatal
-        company = {"error": "fundamentals unavailable: {}".format(exc)}
+    # Same argument as earnings_momentum below, and it was missed here because
+    # this block is one call rather than three. Measured: fundamentals.analyse
+    # is five provider fetches and 1.8s per ticker -- short interest, the
+    # statements, earnings history, insider and institutional holdings. Over a
+    # thirty-name shortlist that is 150 requests and about 54 seconds spent on
+    # a block `consider_ticker` never opens: it reads verdict, technicals,
+    # quote, entry_plan and ticker, and nothing else.
+    company: Dict[str, Any] = {"available": False, "reason": "not requested"}
+    if include_company:
+        try:
+            company = fundamentals_mod.analyse(YF_PROVIDER, ticker, quote)
+        except Exception as exc:  # company data is context, never fatal
+            company = {"error": "fundamentals unavailable: {}".format(exc)}
 
     # Shown on the Swing tab but never scored. Skipped for tracker scans: it costs
     # three more provider calls per ticker, and over a thirty-name shortlist that
@@ -1137,8 +1147,13 @@ def _tracker_snapshot(ticker: str) -> Dict[str, Any]:
     """A scan needs the verdict, levels and entry plan — nothing else. Macro is
     skipped because it's identical for every ticker and costs a fetch each time,
     and earnings momentum because it isn't scored and would add three provider
-    calls per name to a thirty-name shortlist."""
-    return _swing_snapshot(ticker, None, 4, False, include_earnings=False)
+    calls per name to a thirty-name shortlist.
+
+    Company fundamentals go for the same reason and were the larger miss: five
+    fetches a ticker against earnings momentum's three, so 150 of the scan's
+    480 requests were being spent on a block the ledger does not read."""
+    return _swing_snapshot(ticker, None, 4, False, include_earnings=False,
+                           include_company=False)
 
 
 @app.get("/api/tracker")

@@ -8,6 +8,7 @@ Everything is cached briefly so a dashboard refresh doesn't re-hammer Yahoo.
 from __future__ import annotations
 
 import math
+import os
 import re
 import threading
 import time
@@ -35,6 +36,104 @@ _CACHE: Dict[str, Any] = {}
 _NET_LOCK = threading.RLock()
 
 
+# ------------------------------------------------------------ outbound pacing
+#
+# Everything below was reactive: note_throttle records a 429 after Yahoo has
+# already refused us, and nothing slowed the requests going out or waited when
+# the feed had said stop. Two consequences, both measured on the scheduled scan.
+#
+# The rate. A snapshot is 16 fetches and a thirty-name scan is 480, issued
+# back-to-back through _NET_LOCK at whatever speed they complete -- about 4.5 a
+# second. That is the rate that earns the limit.
+#
+# The compounding. With no gate, a request fired while throttled returns
+# another 429, and every note_throttle pushes `until` out a further 60s. The
+# scan's own cool-off is capped at 90s, so once this started the feed could
+# never come back inside one scan: the backoff grew faster than the wait.
+#
+# The interval adapts because Yahoo's limit is undocumented and clearly not
+# constant. Success decays it back towards the floor; a 429 doubles it. Bounded
+# both ends so a bad afternoon cannot wedge the app and a good one cannot walk
+# it back to hammering.
+# A burst allowance and a sustained rate, not a flat interval between calls.
+#
+# A fixed interval charges the same toll to both callers, and they are not the
+# same problem. One Dossier page is 16 fetches and wants to feel instant; a scan
+# is 300 and is what actually earns the limit. Measured with a 0.35s interval:
+# the scan improved and the Dossier went from 4.3s to 7.0s, which is the wrong
+# trade to make by accident.
+#
+# So: a bucket of BURST tokens that refills at RATE per second. A page load
+# spends most of the bucket and barely waits. A scan drains it in the first few
+# seconds and is then held at RATE, which is the sustained number Yahoo cares
+# about.
+YF_BURST = float(os.environ.get("YF_BURST", "12"))
+YF_RATE = float(os.environ.get("YF_RATE", "2.0"))         # requests/second
+YF_RATE_FLOOR = float(os.environ.get("YF_RATE_FLOOR", "0.25"))
+# How long a gated call will wait for an active backoff before giving up and
+# letting the caller see the failure. Longer than THROTTLE_BACKOFF_SECONDS
+# would mean one throttle stalls an interactive request for a full minute.
+MAX_GATE_WAIT = float(os.environ.get("YF_MAX_GATE_WAIT", "20.0"))
+
+_BUCKET: Dict[str, float] = {"tokens": YF_BURST, "rate": YF_RATE, "last": time.time()}
+
+
+def pace_state() -> Dict[str, Any]:
+    """What the limiter is doing, for /api/health and the scan log."""
+    return {"rate": round(float(_BUCKET["rate"]), 3),
+            "burst": YF_BURST,
+            "tokens": round(float(_BUCKET["tokens"]), 2),
+            "base_rate": YF_RATE}
+
+
+def _on_success() -> None:
+    """Recover towards the base rate, slowly.
+
+    A single success after a rate limit is not evidence the limit has lifted,
+    and resetting on one is how a limiter oscillates between hammering and
+    being refused. 2% a call takes roughly 35 calls to undo one halving."""
+    cur = float(_BUCKET["rate"])
+    if cur < YF_RATE:
+        _BUCKET["rate"] = min(YF_RATE, cur * 1.02)
+
+
+def _on_throttle() -> None:
+    """Halve the sustained rate and surrender the burst.
+
+    The bucket is emptied as well as slowed: whatever allowance was left is
+    exactly what would be spent firing into a window Yahoo has just closed."""
+    _BUCKET["rate"] = max(YF_RATE_FLOOR, float(_BUCKET["rate"]) / 2.0)
+    _BUCKET["tokens"] = 0.0
+
+
+def _wait_turn() -> None:
+    """Hold until it is safe to make a request. Called holding _NET_LOCK.
+
+    Two waits in order. The backoff first, because there is no point spending a
+    token on a window that is already closed -- and because without this a
+    throttled call returns another 429 and pushes `until` out a further 60s,
+    which is how the backoff outran the scan's own 90s cool-off and the feed
+    could never come back inside one scan. Then the bucket."""
+    deadline = time.time() + MAX_GATE_WAIT
+    while True:
+        remaining = float(_THROTTLE["until"]) - time.time()
+        now = time.time()
+        if remaining <= 0 or now >= deadline:
+            break
+        time.sleep(max(min(remaining, 1.0, deadline - now), 0.05))
+
+    now = time.time()
+    rate = max(float(_BUCKET["rate"]), YF_RATE_FLOOR)
+    _BUCKET["tokens"] = min(YF_BURST,
+                            float(_BUCKET["tokens"]) + (now - float(_BUCKET["last"])) * rate)
+    _BUCKET["last"] = now
+    if _BUCKET["tokens"] < 1.0:
+        time.sleep((1.0 - float(_BUCKET["tokens"])) / rate)
+        _BUCKET["tokens"] = 1.0
+        _BUCKET["last"] = time.time()
+    _BUCKET["tokens"] = float(_BUCKET["tokens"]) - 1.0
+
+
 def _cached(key: str, ttl: float, producer):
     """Tiny TTL memo. Chains move fast, price history doesn't — callers pick."""
     now = time.time()
@@ -48,7 +147,17 @@ def _cached(key: str, ttl: float, producer):
         hit = _CACHE.get(key)
         if hit is not None and time.time() - hit[0] < ttl:
             return hit[1]
-        value = producer()
+        # Every network fetch in this module goes through here, which is the
+        # only reason one gate is enough. A method that reached yfinance
+        # directly would bypass the limiter silently.
+        _wait_turn()
+        try:
+            value = producer()
+        except BaseException as exc:
+            if _is_rate_limit(exc):
+                _on_throttle()
+            raise
+        _on_success()
         _CACHE[key] = (time.time(), value)
         return value
 
