@@ -748,8 +748,18 @@ header.topbar {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-variant-numeric: tabular-nums;
+  transition: border-color var(--dur-ui) ease, box-shadow var(--dur-ui) ease;
 }
-.search input:focus { outline: 2px solid var(--focus); outline-offset: 1px; }
+/* The outline is the accessible focus ring and stays. The border and the faint
+   wash under it are the premium half: the product's primary entry point reads
+   as live while it holds the caret, in the brand accent the rail and palette
+   already use, rather than only gaining a system outline. */
+.search input:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+  border-color: color-mix(in srgb, var(--btn-primary) 55%, var(--border-strong));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--btn-primary) 16%, transparent);
+}
 
 .btn {
   padding: var(--space-2) var(--space-3);
@@ -9600,8 +9610,23 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
   gap: var(--space-3);
   padding: var(--space-4) var(--space-4);
   border-bottom: 1px solid var(--border);
+  transition: border-color var(--dur-ui) ease, box-shadow var(--dur-ui) ease;
 }
-.cp-icon { color: var(--ink-muted); font-size: 16px; flex: none; }
+/* The field lights up while it holds the caret, so the one place you type reads
+   as the active surface rather than as a plain header. Same accent the rail
+   uses for "you are here", carried to the palette so the two feel like one
+   product. */
+.cp-field:focus-within {
+  border-bottom-color: color-mix(in srgb, var(--btn-primary) 55%, var(--border-strong));
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--btn-primary) 45%, transparent);
+}
+.cp-field:focus-within .cp-icon { color: var(--ink-2); }
+.cp-icon {
+  color: var(--ink-muted);
+  font-size: 16px;
+  flex: none;
+  transition: color var(--dur-ui) ease;
+}
 #cp-input {
   flex: 1 1 auto;
   min-width: 0;
@@ -9640,18 +9665,25 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
   cursor: pointer;
   /* 26px so a pointer target clears WCAG 2.5.8 without a hit-area hack. */
   min-height: 26px;
+  transition: background-color var(--dur-ui) ease, box-shadow var(--dur-ui) ease;
 }
 /* Highlight follows the keyboard, not the pointer. Two competing highlights in
    a list you drive with arrow keys is worse than one that is occasionally in a
-   different place from the cursor. */
-.cp-row.on { background: color-mix(in srgb, var(--btn-primary) 22%, transparent); }
+   different place from the cursor. The inset bar is the rail's own "you are
+   here" mark, so the selected row is read the same way in both places. */
+.cp-row.on {
+  background: color-mix(in srgb, var(--btn-primary) 22%, transparent);
+  box-shadow: inset 2px 0 0 var(--btn-primary);
+}
 .cp-row-lead {
   flex: none;
   width: 26px;
   font-size: var(--t-caption);
   color: var(--ink-muted);
   text-align: center;
+  transition: color var(--dur-ui) ease;
 }
+.cp-row.on .cp-row-lead { color: var(--ink-2); }
 .cp-row-main { flex: none; font-size: var(--t-body); color: var(--ink); font-weight: 500; }
 .cp-row-detail {
   flex: 1 1 auto;
