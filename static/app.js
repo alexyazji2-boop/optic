@@ -25171,6 +25171,12 @@ function sessionDetailOpen() {
     if (saved === '1') return true;
     if (saved === '0') return false;
   } catch (e) { /* private mode: fall through to the width */ }
+  /* Charting is sized against the viewport rather than scrolled, so every
+   * pixel above it comes straight off the chart. 57px of session timetable is
+   * a third of what the plot gains from collapsing it, on the one view whose
+   * whole purpose is chart height. The phase and the countdown stay in the
+   * summary line above the fold either way. */
+  if (STATE.view === 'chart') return false;
   // Untouched, so the width decides. `PHONE_QUERY` is the same 719px the rest
   // of the phone layout uses, rather than a second number to keep in step.
   return !(window.matchMedia && window.matchMedia(PHONE_QUERY).matches);
@@ -25394,6 +25400,15 @@ function renderSessionBar() {
          which is the trap this file already documents -- it would decide the
          text fits and hide the More button for good. */
       if (open) checkSummaryFit();
+      /* The Charting workspace is sized `100dvh - var(--chrome-h)`, and
+       * `--chrome-h` is this view's own offset from the top of the page. This
+       * fold changes that offset by 57px and nothing was re-publishing it:
+       * wsSyncChromeHeight runs on mount, on a ws-body WIDTH change and on a
+       * window resize, and a fold is none of those. So closing the session on
+       * the chart tab freed 57px that the chart never received -- the page
+       * just grew a gap under it. Measured: view top 316 -> 259 while
+       * --chrome-h stayed 316. */
+      if (STATE.view === 'chart') { wsSyncChromeHeight(); wsRedrawChart(); }
     });
   }
 

@@ -232,8 +232,13 @@ def test_the_fold_defaults_to_open_where_there_is_room_for_it():
     that cannot remember is better stuck open than stuck shut."""
     fn = _fn("sessionDetailOpen")
     assert "return true" in fn
-    # The storage failure lands on the width test, which is open on a desktop.
+    # The catch BLOCK, not everything after it. Sliced to end-of-function this
+    # swept in the Charting rule below -- `if (STATE.view === 'chart') return
+    # false` -- which is a deliberate decision about one view, not a storage
+    # failure. What this protects is that losing localStorage falls through to
+    # the width rather than shutting the fold.
     catch = fn.split("catch (e)", 1)[1]
+    catch = catch[:catch.index("}") + 1]
     assert "return false" not in catch, \
         "a private-mode failure must not shut the fold outright"
 

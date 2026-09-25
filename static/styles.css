@@ -6898,6 +6898,21 @@ b, strong { font-weight: 600; }
  * whole window. Hence the escape from `main`'s max-width and the fixed-height
  * grid — a chart that scrolls is a chart you cannot read against its own axis.
  */
+/* The session bar is off on Charting, and this is de-duplication rather than
+   a space grab -- though it is worth 115px on the one view sized against the
+   viewport instead of scrolling.
+
+   The chart's own header already states the phase: "AAPL 336.72 338.91 334.30
+   335.92 V 24,696,400 -0.33% Overnight". So the bar above it said "OVERNIGHT"
+   a second time, with a phase strip and a timetable, directly over a chart
+   that draws its own dates along the bottom and a status line already reading
+   "Chart: AAPL 1D 6m".
+
+   Measured at 1440x900: the plot goes 397px to 512px, 44% of the window to
+   57%. Scoped to this view rather than removed, because everywhere else the
+   session bar is the only thing saying what the market is doing. */
+body[data-view="chart"] .sessionbar { display: none; }
+
 .view-workspace.active {
   /* Flex column, not a grid with named rows.
    *
