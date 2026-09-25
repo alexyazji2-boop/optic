@@ -14698,3 +14698,56 @@ body.rail-tight .rail .rail-recent { display: none; }
 @media (max-width: 559px) {
   .rail-recent { display: none; }
 }
+
+/* ------------------------------------------------ the digest opens out
+ *
+ * The rows are one line each and truncate, because a digest is scanned down a
+ * column and a wrapping row breaks that. That is still true -- so the way to
+ * read the rest of a row is to open it, not to make every row taller.
+ */
+.ht-row-item { min-width: 0; }
+.ht-det { min-width: 0; }
+
+/* The summary IS the row, so it keeps the flex layout the row had. Both marker
+   rules: Safari needs the webkit pseudo-element and everything else takes
+   `list-style`. Without them a disclosure triangle sits in front of the impact
+   chip and pushes the whole column in by 14px. */
+.ht-det > summary { cursor: pointer; list-style: none; }
+.ht-det > summary::-webkit-details-marker { display: none; }
+.ht-det > summary::marker { content: ""; }
+
+/* Opened, the title is allowed to wrap -- which is the entire point, since the
+   thing being revealed is usually the end of it. */
+.ht-det[open] > summary .ht-what {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+/* And the impact chip stops sitting on the baseline of a two-line title. */
+.ht-det[open] > summary { align-items: flex-start; }
+
+.ht-why {
+  margin: var(--space-1) 0 var(--space-2);
+  /* Indented past the impact chip so the sentence reads as belonging to the
+     row above it rather than as a new row. The chip is a fixed width; this is
+     measured against it rather than guessed. */
+  padding-left: calc(var(--space-6) + var(--space-2));
+  font-size: var(--t-caption);
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+
+/* The count is a control now, so it looks and behaves like one. */
+.ht-rest {
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: var(--t-caption);
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: color var(--dur-ui) var(--ease-ui);
+}
+.ht-rest:hover { color: var(--ink); }
+.ht-rest:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: var(--r-xs); }

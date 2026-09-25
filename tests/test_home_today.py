@@ -46,13 +46,20 @@ def _col(cid, name, rows, total=None):
 
 CASES = {
     "full": {"available": True, "horizon_days": 5, "columns": [
+        # Four events, two shown, two behind the button. `total` is not passed
+        # because app/priority.py:181 sets it to `len(rows)` -- the two cannot
+        # differ, and a fixture that made them differ was testing a payload the
+        # server cannot produce. It mattered: the count is now taken from the
+        # rows in hand, because that is how many the button can actually
+        # reveal, and against a `total` of 4 with 3 rows sent it would have
+        # promised two and opened onto one.
         _col("events", "Market-moving events",
              [_row("CFTC Commitments of Traders"), _row("Employee Tenure", "low"),
-              _row("Third thing", "low")], total=4),
+              _row("Third thing", "low"), _row("Fourth thing", "low")]),
         _col("earnings", "Earnings this week",
              [_row("COST reports Thursday", "high", "Thursday")]),
         _col("sectors", "Sector read-through",
-             [_row("XLY - Consumer Discretionary", "high", "")], total=10)]},
+             [_row("XLY - Consumer Discretionary", "high", "")])]},
 
     # Every column present and every one of them empty. A band that says
     # "nothing scheduled" on a quiet day is worse than no band.
@@ -124,6 +131,7 @@ def test_it_is_a_digest_and_stops_at_two_rows(rendered):
     assert html.count('class="ht-row"') == 4, "two rows per column, three columns"
     assert "2 more" in html, "the remainder is counted, not dropped silently"
     assert "Third thing" not in html
+    assert "Fourth thing" not in html
 
 
 def test_a_column_the_digest_does_not_carry_is_left_out(rendered):
@@ -242,7 +250,18 @@ def test_a_long_title_truncates_rather_than_wrapping():
     assert "text-overflow: ellipsis" in block and "white-space: nowrap" in block
     assert "min-width: 0" in block, "or the flex child refuses to shrink at all"
     fn = APP.split("function homeTodayRow(r) {", 1)[1].split("\n}", 1)[0]
-    assert 'title="${esc(r.why || \'\')}"' in fn
+    # The full TEXT, which is what this stylesheet comment has always claimed
+    # and what the attribute has never held: it carried `r.why`, the
+    # explanation, so a truncated title could not be read by hovering it
+    # either. "Metropolitan Area Employment and Unemployment ..." was
+    # unreadable at any width by any means.
+    # Comments stripped first: this function now explains in prose what the
+    # attribute used to hold, and the first version of this check found
+    # `r.why` inside that explanation.
+    code = re.sub(r"/\*.*?\*/", "", fn, flags=re.S)
+    span = re.search(r'<span class="ht-what"[^>]*>', code).group()
+    assert 'title="${esc(what)}"' in span, span
+    assert "r.why" not in span, span
 
 
 def test_the_columns_collapse_rather_than_leaving_a_hole():
@@ -251,3 +270,119 @@ def test_the_columns_collapse_rather_than_leaving_a_hole():
     block = CSS.split(".ht-cols {", 1)[1]
     block = block[:block.index("}")]
     assert "auto-fit" in block and "minmax(" in block
+
+
+# ------------------------------------------------------------ opening a row
+#
+# Reported with a screenshot of a narrow window: "Metropolitan Area Employment
+# and Unemployment ..." cut off with no way to read the rest of it.
+
+
+def test_a_truncated_row_can_be_opened(rendered):
+    """The row stays one line -- a digest is scanned down a column and a
+    wrapping row breaks that -- so the way to read the rest is to open it.
+
+    A <details>, not a class toggle: the keyboard and a screen reader get it
+    for free, `preserveUI` already restores open <details> keyed on their
+    summary text so a row survives the twenty-second refresh, and the open
+    state lives on the element rather than in a second store that could
+    disagree with it."""
+    html = rendered["full"]["html"]
+    assert '<details class="ht-det">' in html
+    assert '<summary class="ht-row">' in html
+    assert 'class="ht-why"' in html
+
+
+def test_the_title_is_allowed_to_wrap_once_it_is_open():
+    """The thing being revealed is usually the end of the title, so leaving it
+    clipped would open a row onto the same truncation."""
+    block = CSS.split('.ht-det[open] > summary .ht-what {', 1)[1]
+    block = block[:block.index("}")]
+    assert "white-space: normal" in block
+    assert "overflow: visible" in block
+
+
+def test_the_disclosure_triangle_is_suppressed_both_ways():
+    """A marker in front of the impact chip pushes the whole column in. Safari
+    needs the webkit pseudo-element; everything else takes `list-style`."""
+    assert ".ht-det > summary::-webkit-details-marker { display: none; }" in CSS
+    assert "list-style: none" in CSS.split(".ht-det > summary {", 1)[1][:120]
+
+
+def test_a_row_with_nothing_to_reveal_is_not_a_control():
+    """A dead control does not error; it takes the click and does nothing,
+    which reads as a slow app rather than a missing feature."""
+    fn = APP.split("function homeTodayRow(r) {", 1)[1].split("\n}", 1)[0]
+    assert "if (!why) return" in fn
+    assert '<div class="ht-row">' in fn, "a plain row, not a summary"
+
+
+# ------------------------------------------------------------ and the rest
+
+
+def test_the_count_is_a_control_not_a_sentence(rendered):
+    """It read "7 more" and was a <p>: a sentence telling the reader there were
+    seven more and offering no way to see them, which is worse than not
+    mentioning them."""
+    html = rendered["full"]["html"]
+    # The tag itself. The first version of this built a string and then
+    # concatenated "<button" onto it before asserting "<button" was in it --
+    # a tautology that passed with the element changed straight back to a <p>.
+    # Caught by mutating it to exactly that.
+    assert '<button type="button" class="ht-rest"' in html, \
+        "the count must be a button, not a sentence"
+    assert "<p class=\"ht-rest\"" not in html
+    assert "data-ht-all=" in html
+    assert 'aria-expanded="false"' in html
+
+
+def test_the_count_says_what_the_button_can_actually_show(rendered):
+    """`total` is `len(rows)` by construction -- app/priority.py:181 -- so the
+    two can never disagree today. Counted against the rows in hand anyway,
+    because if they ever did, "7 more" would open onto fewer than seven: a
+    promise made by a button that cannot keep it."""
+    fn = APP.split("function homeTodayHTML(p) {", 1)[1].split("\n}\n", 1)[0]
+    assert "const rest = all.length - rows.length;" in fn
+    assert "c.total" not in fn.split("const rest", 1)[1][:200]
+
+
+def test_opening_a_column_repaints_from_the_payload_already_in_hand():
+    """This opens rows that were fetched and withheld, not rows that need
+    fetching. `loadHomeToday` would re-request /api/priority for the same
+    answer."""
+    i = APP.index("closest('[data-ht-all]')")
+    # The handler's own body, to its `return;` -- a fixed window ran past it
+    # into the next handler, which does fetch. Comments stripped too: this one
+    # explains in prose why it does not call `loadHomeToday`.
+    block = APP[i:APP.index("\n    return;\n  }", i)]
+    block = re.sub(r"/\*.*?\*/", "", block, flags=re.S)
+    assert "homeTodayHTML(STATE.priority)" in block
+    assert "getJSON" not in block and "loadHomeToday" not in block
+    # Scroll and focus survive: the button that was clicked is replaced by the
+    # repaint, and losing focus mid-keyboard-navigation strands the reader.
+    assert "preserveUI(" in block
+
+
+def test_an_open_row_survives_the_refresh_tick():
+    """This panel is repainted every twenty seconds. A bare `innerHTML =`
+    closed every open row on a timer -- a reader part way through the sentence
+    under one lost it with no idea why. Measured before the fix: two rows open,
+    refresh, zero open.
+
+    The columns were already safe, because `homeTodayOpen` is module state and
+    the markup is rebuilt from it. That is what made this easy to miss."""
+    fn = APP.split("async function loadHomeToday() {", 1)[1].split("\n}", 1)[0]
+    assert "preserveUI(live, () => { live.innerHTML = html; });" in fn
+    # preserveUI keys open <details> on their summary text, which is the right
+    # key here: the feed re-sorts these rows, and an index-based key would
+    # reopen whichever row had moved into that slot.
+    pu = APP.split("function preserveUI(host, fn) {", 1)[1].split("\n}", 1)[0]
+    assert "details[open]" in pu and "detailsKey" in pu
+
+
+def test_the_open_columns_survive_the_refresh_tick():
+    """This panel is rebuilt from scratch every twenty seconds. State kept on
+    the markup would collapse every open column under a reader on a timer."""
+    assert "const homeTodayOpen = new Set();" in APP
+    fn = APP.split("function homeTodayHTML(p) {", 1)[1].split("\n}\n", 1)[0]
+    assert "homeTodayOpen.has(c.id)" in fn

@@ -3236,17 +3236,47 @@ const PRI_IMPACT_CLASS = { high: 'high', medium: 'medium', low: 'low' };
 const HOME_TODAY_COLUMNS = ['events', 'earnings', 'sectors'];
 const HOME_TODAY_ROWS = 2;
 
+/* Which columns have been opened out to their full list, by column id.
+ *
+ * Module scope rather than a data attribute on the DOM: this panel is rebuilt
+ * from scratch by the twenty-second refresh tick, and state kept on the markup
+ * would collapse every open column under a reader every twenty seconds. */
+const homeTodayOpen = new Set();
+
 function homeTodayRow(r) {
   const impact = PRI_IMPACT_CLASS[r.impact] || 'low';
   /* `short` is the terse form -- "COT" for the Commitments of Traders report --
    * and it is empty on most rows. The title is the fallback rather than the
    * other way round, because a blank cell reads as a fault. */
   const when = (r.when || r.time || '').trim();
-  return `<li class="ht-row">
-    <span class="cal-impact ${impact}">${esc(r.impact || 'low')}</span>
-    <span class="ht-what" title="${esc(r.why || '')}">${esc(r.title || r.short || '')}</span>
-    ${when ? `<span class="ht-when">${esc(when)}</span>` : ''}
-  </li>`;
+  const what = r.title || r.short || '';
+  const why = String(r.why || '').trim();
+  /* The row is truncated to one line on purpose -- a digest is scanned down a
+   * column and a wrapping row breaks that -- so there has to be a way to read
+   * the rest of it. There was not: `.ht-what` carried `title="${r.why}"`, the
+   * EXPLANATION, while the stylesheet's own comment beside it said "the full
+   * text is in the title". So "Metropolitan Area Employment and Unemployment
+   * ..." could not be read at all, at any width, by any means.
+   *
+   * A <details> rather than a class toggle, for three reasons: the keyboard
+   * and a screen reader get it for free, `preserveUI` already restores open
+   * <details> keyed on their summary text so a row survives the refresh tick,
+   * and the open state lives on the element rather than in a second store that
+   * could disagree with it.
+   *
+   * `title` still carries the full text, so a hover answers without a click
+   * and the stylesheet's comment is true for the first time. */
+  const head = `<span class="cal-impact ${impact}">${esc(r.impact || 'low')}</span>
+    <span class="ht-what" title="${esc(what)}">${esc(what)}</span>
+    ${when ? `<span class="ht-when">${esc(when)}</span>` : ''}`;
+  // Nothing to reveal and nothing cut off: a plain row rather than a control
+  // that opens onto nothing. A dead control does not error, it takes the click
+  // and does nothing, which reads as a slow app.
+  if (!why) return `<li class="ht-row-item"><div class="ht-row">${head}</div></li>`;
+  return `<li class="ht-row-item"><details class="ht-det">
+    <summary class="ht-row">${head}</summary>
+    <p class="ht-why">${esc(why)}</p>
+  </details></li>`;
 }
 
 function homeTodayHTML(p) {
@@ -3265,12 +3295,25 @@ function homeTodayHTML(p) {
         >The full read \u2192</button>
     </div>
     <div class="ht-cols">${cols.map((c) => {
-    const rows = (c.rows || []).slice(0, HOME_TODAY_ROWS);
-    const rest = (c.total || rows.length) - rows.length;
+    const all = c.rows || [];
+    const open = homeTodayOpen.has(c.id);
+    const rows = open ? all : all.slice(0, HOME_TODAY_ROWS);
+    /* Counted against what is in hand, not against `c.total`.
+     *
+     * `total` is the size of the set the server scored, and the payload
+     * carries only the top of it -- so "7 more" could promise rows that were
+     * never sent and open onto the same two. The count now says how many more
+     * this panel can actually show. */
+    const rest = all.length - rows.length;
     return `<section class="ht-col">
         <h3 class="ht-col-name" title="${esc(c.blurb || '')}">${esc(c.name || c.id)}</h3>
         <ul class="ht-list">${rows.map(homeTodayRow).join('')}</ul>
-        ${rest > 0 ? `<p class="ht-rest">${fmt(rest, 0)} more</p>` : ''}
+        ${/* A button, not a paragraph. It read "7 more" and was a <p>: a
+             sentence telling the reader there were seven more and offering no
+             way to see them, which is worse than not mentioning them. */''}
+        ${rest > 0 || open ? `<button type="button" class="ht-rest"
+          data-ht-all="${esc(c.id)}" aria-expanded="${open}">${
+  open ? 'Show fewer' : `${fmt(rest, 0)} more`}</button>` : ''}
       </section>`;
   }).join('')}</div>`;
 }
@@ -3291,7 +3334,18 @@ async function loadHomeToday() {
   const live = document.getElementById('hm-today');
   if (!live) return;       // the reader left while it was in flight
   const html = homeTodayHTML(STATE.priority);
-  live.innerHTML = html;
+  /* Through preserveUI, because this runs on the twenty-second refresh tick.
+   *
+   * The rows open now, and a bare `innerHTML =` closed every one of them on a
+   * timer -- a reader part way through the sentence under a row lost it, and
+   * would have had no idea why. Measured before this: two rows open, refresh,
+   * zero rows open. preserveUI restores `details[open]` keyed on summary text,
+   * which is the right key here: the rows are re-sorted by the feed and an
+   * index-based one would reopen whichever row had taken that slot.
+   *
+   * The open COLUMNS were already safe -- `homeTodayOpen` is module state and
+   * the markup is rebuilt from it -- which is what made this easy to miss. */
+  preserveUI(live, () => { live.innerHTML = html; });
   live.hidden = !html;
 }
 
@@ -29136,6 +29190,19 @@ document.addEventListener('click', (evt) => {
     return;
   }
   /* ---------------------------------------------------- Insiders page */
+  const htAll = evt.target.closest('[data-ht-all]');
+  if (htAll) {
+    const id = htAll.dataset.htAll;
+    if (homeTodayOpen.has(id)) homeTodayOpen.delete(id); else homeTodayOpen.add(id);
+    /* Repaint from the payload already in hand -- this opens rows that were
+     * fetched and withheld, not rows that need fetching. `loadHomeToday`
+     * would re-request /api/priority for the same answer. */
+    const host = document.getElementById('hm-today');
+    if (host && STATE.priority) {
+      preserveUI(host, () => { host.innerHTML = homeTodayHTML(STATE.priority); });
+    }
+    return;
+  }
   const recentBtn = evt.target.closest('[data-recent-symbol]');
   if (recentBtn) {
     // The same entry point the search box uses, so a symbol opened from the
