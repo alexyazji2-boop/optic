@@ -10101,9 +10101,13 @@ body.cp-open { overflow: hidden; }
   background: none;
   text-align: left;
   cursor: pointer;
-  transition: background var(--dur-ui) var(--ease-ui);
+  transition: background var(--dur-ui) var(--ease-ui),
+              box-shadow var(--dur-ui) var(--ease-ui);
 }
-.cc-move:hover { background: var(--raised); }
+/* Robinhood and Coinbase both mark the row you are on with a single accent edge
+   rather than a full fill. The same gold the rail and palette use, so hovering
+   a move here reads the same way as selecting a section or a palette row. */
+.cc-move:hover { background: var(--raised); box-shadow: inset 2px 0 0 var(--btn-primary); }
 .cc-move-name { font-weight: 600; color: var(--ink); }
 .cc-move-chg { font-variant-numeric: tabular-nums; }
 /* The multiple, in the same muted register as the note: it explains the
@@ -10135,6 +10139,9 @@ body.cp-open { overflow: hidden; }
    market data above them, which is the wrong priority for this page. */
 .cc-qs { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-0); }
 .cc-q {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   width: 100%;
   padding: var(--space-1) var(--space-2);
   border: 1px solid var(--border);
@@ -10145,9 +10152,36 @@ body.cp-open { overflow: hidden; }
   text-align: left;
   cursor: pointer;
   transition: color var(--dur-ui) var(--ease-ui),
-              border-color var(--dur-ui) var(--ease-ui);
+              border-color var(--dur-ui) var(--ease-ui),
+              background-color var(--dur-ui) var(--ease-ui);
 }
-.cc-q:hover { color: var(--ink); border-color: var(--ink-muted); }
+/* A quiet "ask" caret that only firms up on hover or focus. Kalshi frames a
+   question as a thing you can act on and Robinhood makes that affordance feel
+   tactile; the twist is to keep both without turning five prompts into five
+   loud cards -- the priority note above still holds, so the caret rests at 0.35
+   until the row is reached. currentColor, so it follows the row's own ink. */
+.cc-q::after {
+  content: "";
+  flex: none;
+  margin-left: auto;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-top: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.35;
+  transition: opacity var(--dur-ui) var(--ease-ui),
+              transform var(--dur-ui) var(--ease-ui);
+}
+.cc-q:hover,
+.cc-q:focus-visible {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--btn-primary) 45%, var(--border-strong));
+  background: var(--bg-hover);
+}
+.cc-q:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.cc-q:hover::after,
+.cc-q:focus-visible::after { opacity: 0.75; transform: translateX(2px) rotate(45deg); }
 
 .cc-movers-t { width: 100%; }
 /* Paint-level only, per the design system: animating a layout property forces a
