@@ -6735,7 +6735,7 @@ async function paletteBuild(query) {
      */
     recentSymbols().slice(0, 5).forEach((sym) => rows.push({
       group: 'Recent', lead: '\u25CE', label: sym, detail: 'Open again',
-      run: () => { closePalette(); loadTicker(sym, 'swing'); },
+      run: () => { closePalette(); loadTicker(sym, SEARCH_LANDING); },
     }));
     QUICK_ACTIONS.forEach((a) => rows.push({
       group: 'Actions', lead: '\u2726', label: a.label, detail: a.detail,
@@ -6781,7 +6781,7 @@ async function paletteBuild(query) {
     rows.push({
       group: 'Open', lead: '\u25CE', label: upper, detail: 'Analyse this symbol',
       tag: exactPlace ? '' : 'enter',
-      run: () => { closePalette(); loadTicker(upper, 'swing'); },
+      run: () => { closePalette(); loadTicker(upper, SEARCH_LANDING); },
     });
     /* The other places that symbol goes.
      *
@@ -6847,7 +6847,7 @@ async function paletteBuild(query) {
     if (isTicker && r.symbol === upper) return;
     rows.push({
       group: 'Symbols', lead: r.etf ? 'ETF' : '\u25CE', label: r.symbol,
-      detail: r.name, run: () => { closePalette(); loadTicker(r.symbol, 'swing'); },
+      detail: r.name, run: () => { closePalette(); loadTicker(r.symbol, SEARCH_LANDING); },
     });
   });
 
@@ -27753,7 +27753,7 @@ function attachTypeahead(inputId, listId) {
     if (!pick) return;
     input.value = pick.symbol;
     close();
-    loadTicker(pick.symbol);
+    loadTicker(pick.symbol, SEARCH_LANDING);
   };
 
   const highlight = (text, query) => {
@@ -27875,6 +27875,22 @@ function tickerMark(symbol, size) {
 }
 
 /** Load a ticker from anywhere (top bar, home form, home quick-pick). */
+/* Where a searched symbol lands.
+ *
+ * Every way of typing a ticker in: the top bar form, its typeahead, the
+ * palette's exact-match row, its recents, its symbol results, and the home
+ * quick-picks. Several of those sent the reader to the Options tab and the
+ * rest sent them to whatever tab they happened to be on, so searching a name
+ * from Earnings opened that name's earnings and searching it from Options
+ * opened a twenty-four panel options page.
+ *
+ * Overview is the workspace's front door and the only one of those answers
+ * that does not assume what the question was. The other routes into a symbol
+ * keep their own destinations on purpose -- a holding in the ledger and a
+ * watchlist row both mean "show me why", which is the swing read.
+ */
+const SEARCH_LANDING = 'overview';
+
 function loadTicker(raw, destination) {
   const next = (raw || '').trim().toUpperCase();
   if (!next) return;
@@ -27922,14 +27938,14 @@ function loadTicker(raw, destination) {
 
 $('#ticker-form').addEventListener('submit', (evt) => {
   evt.preventDefault();
-  loadTicker($('#ticker-input').value);
+  loadTicker($('#ticker-input').value, SEARCH_LANDING);
 });
 
 // Home form, quick-picks, and the "no ticker" panel's link back to home.
 document.addEventListener('submit', (evt) => {
   if (evt.target.id !== 'home-form') return;
   evt.preventDefault();
-  loadTicker($('#home-input').value);
+  loadTicker($('#home-input').value, SEARCH_LANDING);
 });
 document.addEventListener('change', (evt) => {
   if (evt.target.id === 'lt-interval') {
@@ -28522,7 +28538,7 @@ document.addEventListener('click', (evt) => {
     return;
   }
   const pick = evt.target.closest('[data-pick]');
-  if (pick) { loadTicker(pick.dataset.pick); return; }
+  if (pick) { loadTicker(pick.dataset.pick, SEARCH_LANDING); return; }
   if (evt.target.closest('[data-cat-search]')) {
     CATALYST_FILTERS.q = (document.getElementById('cat-q') || {}).value || '';
     loadCatalysts(true);
