@@ -14264,6 +14264,15 @@ function wsToolbar() {
         title="Colour of the candles and the line">Colours</button>
       ${wsMenuOpen === 'colors' ? wsColorPop() : ''}
     </div>
+    ${/* Last, because it is the only control here that is not about what the
+         chart shows. Inside `.ws-tools` so a phone folds it into the drawer
+         with the rest rather than leaving one button stranded beside Tools. */''}
+    <button type="button" class="ws-menu-btn${wsIsMaximised() ? ' on' : ''}"
+      data-ws-max aria-pressed="${wsIsMaximised()}"
+      title="${wsIsMaximised()
+    ? 'Back to the rest of the terminal. Escape does this too.'
+    : 'Give the chart the whole window. The tools and drawings come with it.'}">${
+  wsIsMaximised() ? 'Exit full screen' : 'Full screen'}</button>
     </div>
   </div>`;
 }
@@ -17137,9 +17146,21 @@ function wsDrawKeys(evt) {
     return;
   }
   if (evt.key === 'Escape') {
-    // Cancel a half-placed drawing, and drop the selection.
-    wsPending = null; wsSelected = null; wsTool = 'cursor';
-    wsRenderDrawings(); wsSyncDrawChrome();
+    /* A ladder, innermost first: the half-drawn line, then the selection, then
+     * full screen. Pressing Escape to abandon a trendline should not also throw
+     * the reader out of the chart they were drawing it on.
+     *
+     * Only reached when native fullscreen was refused and `ws-max` is carrying
+     * this on its own. With native fullscreen the browser takes Escape first
+     * and exits whatever else was going on, which is the browser's call rather
+     * than ours -- `fullscreenchange` then clears the class. */
+    const busy = wsPending || wsSelected || wsTool !== 'cursor';
+    if (busy) {
+      wsPending = null; wsSelected = null; wsTool = 'cursor';
+      wsRenderDrawings(); wsSyncDrawChrome();
+      return;
+    }
+    if (wsIsMaximised()) { evt.preventDefault(); wsSetMaximised(false); }
   }
 }
 
@@ -17394,6 +17415,7 @@ function wsMountChart() {
     wsWatchWidth();
     // The body's resize and the plot's are different events. See wsWatchPlot.
     wsWatchPlot();
+    wsWatchHead();
     wsRenderNav();
   }));
 }
@@ -17542,6 +17564,107 @@ let wsNarrowObserved = null;
 let wsNarrowLastWidth = 0;
 let wsNarrowTimer = null;
 
+/* ----------------------------------------------------------- full screen
+ *
+ * Two mechanisms, because they fail in different ways and one of them is
+ * allowed to fail.
+ *
+ * `body.ws-max` is the one that does the work: it drops the rail, the top bar
+ * and the footer, and the workspace fills what is left. It needs no permission
+ * and cannot be refused, so the button always does something.
+ *
+ * The Fullscreen API is asked for on top of that, and only as a bonus -- it is
+ * what takes the browser's own chrome away. It can be refused (an iframe
+ * without allow="fullscreen", a policy, a browser that has never had it) and a
+ * refusal is not an error here: the class has already given the reader a
+ * full-window chart. So the promise is caught and dropped.
+ *
+ * It is requested on documentElement rather than on `.ws-body`, which is the
+ * element a reader would point at. Fullscreen renders the chosen element AND
+ * ITS DESCENDANTS ONLY -- and two things this chart needs are neither:
+ * `#tooltip`, which is the crosshair readout, and `#auth-toasts`, which is how
+ * "No chart to draw on yet" reaches anybody. Both are children of <body>. On
+ * `.ws-body` the chart would go full screen and lose its own readout; on the
+ * root everything stays in one tree and nothing has to move.
+ */
+const WS_MAX_CLASS = 'ws-max';
+
+function wsIsMaximised() {
+  return document.body.classList.contains(WS_MAX_CLASS);
+}
+
+/** The fullscreen element, across the two spellings still in the wild. */
+function wsNativeFullscreen() {
+  return document.fullscreenElement || document.webkitFullscreenElement || null;
+}
+
+function wsRequestNativeFullscreen(on) {
+  const root = document.documentElement;
+  try {
+    if (on) {
+      if (wsNativeFullscreen()) return;
+      const req = root.requestFullscreen || root.webkitRequestFullscreen;
+      const out = req && req.call(root);
+      // Refused is a normal answer, not a failure: see above.
+      if (out && out.catch) out.catch(() => {});
+    } else {
+      if (!wsNativeFullscreen()) return;
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      const out = exit && exit.call(document);
+      if (out && out.catch) out.catch(() => {});
+    }
+  } catch (e) { /* older engines throw instead of rejecting */ }
+}
+
+/* Resize the chart after the layout has moved.
+ *
+ * Not left to wsWatchPlot. That watcher compares the viewBox's WIDTH against
+ * the element and is deliberately width-only, because a height check can
+ * disagree with itself and redraw forever -- and full screen is mostly a change
+ * of HEIGHT. A chart that kept its 560px height in a 1400px window would be the
+ * letterboxing this feature is supposed to show off.
+ *
+ * Two frames: the class lands, the browser reflows, `wsSyncChromeHeight`
+ * measures where the workspace actually starts now, and only then is there a
+ * real height to draw into.
+ */
+function wsAfterMaximise() {
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    wsSyncChromeHeight();
+    wsSyncNarrow();
+    // Rebuilds the toolbar, so the button's own label and pressed state come
+    // from this one call rather than being written twice.
+    wsRedrawChart();
+  }));
+}
+
+function wsSetMaximised(on) {
+  const want = !!on;
+  if (wsIsMaximised() === want && !!wsNativeFullscreen() === want) return;
+  document.body.classList.toggle(WS_MAX_CLASS, want);
+  wsRequestNativeFullscreen(want);
+  wsAfterMaximise();
+}
+
+/* Leaving by any route the page did not choose.
+ *
+ * Escape, F11 and the browser's own exit all end native fullscreen without
+ * going through wsSetMaximised, and the class would be left behind: a chart
+ * filling the window with no way back to the rail. Listening to the event
+ * rather than to the key covers all three at once.
+ *
+ * Only follows fullscreen DOWN. Going up happens when the reader presses F11 on
+ * some other page, and stealing that into a maximised chart is not what they
+ * asked for.
+ */
+['fullscreenchange', 'webkitfullscreenchange'].forEach((name) => {
+  document.addEventListener(name, () => {
+    if (wsNativeFullscreen() || !wsIsMaximised()) return;
+    document.body.classList.remove(WS_MAX_CLASS);
+    if (STATE.view === 'chart') wsAfterMaximise();
+  });
+});
+
 /* Has the drawn chart come adrift from the box it is drawn into?
  *
  * The SVG carries `width="100%"` and the default `preserveAspectRatio`, so when
@@ -17577,6 +17700,43 @@ function wsChartAdrift() {
   // scheduling a redraw on every view switch for wsRedrawChart to decline.
   if (!drawn || !box) return false;
   return Math.abs(box - drawn) > 8;
+}
+
+/* How tall the workspace header actually is.
+ *
+ * `.ws-legend` floats over the top-left of the plot, and its offset was the
+ * literal `top: 44px` -- the height of a header that fits on one line. It does
+ * not always fit on one line: the header carries the symbol, the OHLC readout,
+ * the session state and Explain chart, and it is `flex-wrap: wrap`, so between
+ * about 860 and 1000px of workspace it takes two rows and grows to 93px. The
+ * legend stayed at 44 and was drawn straight through the second row. Measured
+ * at a 1180px window with no full screen: a 49px overlap, with the change and
+ * the session state struck through by the legend chip.
+ *
+ * Published as a property rather than fixed with another number, for the reason
+ * --topbar-h and --chrome-h are: the CSS keeps the layout and this supplies the
+ * measurement. A second magic number would be wrong at a different width.
+ *
+ * No loop: the legend is absolutely positioned, so moving it cannot resize the
+ * header that decides where it goes.
+ */
+let wsHeadObserver = null;
+let wsHeadObserved = null;
+
+function wsWatchHead() {
+  const head = views.chart && views.chart.querySelector('.ws-head');
+  if (!head || typeof ResizeObserver === 'undefined') return;
+  if (wsHeadObserver && wsHeadObserved === head) return;
+  if (wsHeadObserver) wsHeadObserver.disconnect();
+  wsHeadObserved = head;
+  const publish = () => {
+    const h = Math.round(head.getBoundingClientRect().height);
+    if (!h) return;   // not laid out; the default in the CSS still applies
+    document.documentElement.style.setProperty('--ws-head-h', h + 'px');
+  };
+  publish();
+  wsHeadObserver = new ResizeObserver(publish);
+  wsHeadObserver.observe(head);
 }
 
 /* The plot's own resize, which the body's does not imply. Same shape as
@@ -27657,6 +27817,14 @@ let viewBeforeSettings = 'home';
 
 function switchView(view, force) {
   if (view !== 'tracker') stopTrackerPoll();
+  /* Full screen belongs to the chart, so leaving the chart ends it.
+   *
+   * The CSS is scoped to the chart view as well, so a stranded class could not
+   * break another page's layout -- but it would leave the browser in native
+   * fullscreen with the rail and top bar drawn inside it, and a Full screen
+   * button on a page that is not the chart. Ending it here is the honest
+   * version. */
+  if (view !== 'chart' && wsIsMaximised()) wsSetMaximised(false);
   // Captured before STATE.view is overwritten.
   if (view === 'settings' && STATE.view !== 'settings') viewBeforeSettings = STATE.view;
   STATE.view = view;
@@ -28364,6 +28532,10 @@ document.addEventListener('click', (evt) => {
     ltRange = ltTf.dataset.ltRange;
     try { localStorage.setItem(LT_RANGE_KEY, ltRange); } catch (e) { /* private mode */ }
     if (STATE.long) preserveUI(views.long, () => renderLong(STATE.long));
+    return;
+  }
+  if (evt.target.closest('[data-ws-max]')) {
+    wsSetMaximised(!wsIsMaximised());
     return;
   }
   const modeBtn = evt.target.closest('[data-chart-mode]');

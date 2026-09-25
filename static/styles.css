@@ -7391,7 +7391,12 @@ body[data-view="chart"] .sessionbar { display: none; }
    the readings there keeps them next to the lines they describe. */
 .ws-legend {
   position: absolute;
-  top: 44px;
+  /* The header's measured height, published by wsWatchHead. This was the
+     literal 44px -- the height of a header that fits on one line -- and the
+     header wraps to two at workspace widths around 900px, where the legend was
+     then drawn through it. The fallback is the old number, which is right for
+     the one-line case and is what applies before the first measurement. */
+  top: var(--ws-head-h, 44px);
   left: var(--space-3);
   z-index: 3;
   pointer-events: auto;
@@ -14296,4 +14301,51 @@ body.rail-tight .rail nav.tabs-group .nav-menu { left: 56px; }
   font-size: var(--t-small);
   color: var(--ink-2);
   line-height: 1.5;
+}
+
+/* ------------------------------------------------------- chart full screen
+ *
+ * Scoped to the chart view as well as the class. The class is cleared when the
+ * reader navigates away, but a scope costs nothing and means a class left
+ * behind by a reload, a crash or a half-finished transition cannot take the
+ * rail off some other page.
+ *
+ * At the end of the file on purpose: `main`'s padding and `.view-workspace`'s
+ * height are both declared earlier at equal specificity, and equal specificity
+ * is decided by source order. Placing this block up with the layout rules left
+ * the padding in and the workspace 24px short -- the same trap the phone
+ * command-centre block at the foot of this file records.
+ */
+body.ws-max[data-view="chart"] .rail,
+body.ws-max[data-view="chart"] .topbar,
+body.ws-max[data-view="chart"] .legal,
+/* The Dossier section strip goes too, and it is the one that needs saying.
+ *
+ * Those seven names navigate to OTHER pages, so they are app chrome rather
+ * than chart chrome -- 48px of "leave this chart" inside a mode whose whole
+ * purpose is the chart. The way back is the Exit full screen button, which the
+ * rule below pins to the end of the toolbar.
+ *
+ * It also removes a fault rather than only some pixels. `.sec-head` is sticky
+ * at `top: var(--topbar-h)`, and with the top bar hidden that property keeps
+ * whatever it last measured -- so the strip was displaced 24px DOWN from its
+ * flow position while the toolbar stayed put, and the two overlapped. Measured
+ * in full screen: strip 66-114, toolbar starting at 90. */
+body.ws-max[data-view="chart"] .sec-head { display: none; }
+
+/* No height is set here, deliberately. `.view-workspace.active` already sizes
+   itself as the viewport minus `--chrome-h`, and wsSyncChromeHeight measures
+   that chrome from where the workspace actually starts rather than assuming a
+   number -- so with the chrome gone the existing calc resolves to the whole
+   viewport on its own. A `height: 100dvh` here would be a second answer to a
+   question that already has one, and the two would drift. */
+body.ws-max[data-view="chart"] main { padding: 0; }
+
+/* The one affordance that has to survive, because it is how the reader gets
+   out. In native fullscreen there is no browser chrome and no rail, so a
+   toolbar that scrolled this button off the end would be a trap. */
+body.ws-max[data-view="chart"] [data-ws-max] {
+  position: sticky;
+  right: 0;
+  margin-left: auto;
 }
