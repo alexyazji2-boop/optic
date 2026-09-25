@@ -14221,11 +14221,21 @@ function wsToolbar() {
          `data-ws-mode` already carried an explicit value so the handler is
          unchanged. It stays `data-ws-mode` and does not borrow the Options
          tab's `data-chart-mode`, whose handler re-renders the Swing view. */''}
+    ${/* Candles is disabled where the bars cannot be drawn as candles, and
+         Line reads as the active one because it is what is on screen. The
+         stored preference is untouched, so leaving the intraday range puts
+         candles back without the reader asking twice.
+
+         Disabled rather than removed, for the reason the range pills above
+         give: the toolbar keeps its shape. */''}
     <div class="seg" role="group" aria-label="Chart style">
       <button type="button" data-ws-mode="line"
-        aria-pressed="${chartMode === 'line'}">Line</button>
-      <button type="button" data-ws-mode="candle"
-        aria-pressed="${chartMode === 'candle'}">Candles</button>
+        aria-pressed="${!wsCandlesPossible() || chartMode === 'line'}">Line</button>
+      <button type="button" data-ws-mode="candle"${wsCandlesPossible() ? ''
+    // One line: a template literal's indentation ends up inside the tooltip.
+    : ' disabled title="Candles need an open, high and low for every bar.'
+      + ' The intraday feed sends closes only, so this range draws as a line."'}
+        aria-pressed="${wsCandlesPossible() && chartMode === 'candle'}">Candles</button>
     </div>
     ${/* Panes, beside the other menus. Its own menu rather than an entry in
          Indicators, because those draw ON the price plot and these are
@@ -15148,6 +15158,24 @@ function wsWindowNow(d) {
  * property of the data, and an intraday series arrives without open/high/low. */
 function wsCandles(ps) {
   return chartMode === 'candle' && !!(ps.open && ps.high && ps.low);
+}
+
+/* The same question, asked of the source rather than the built series.
+ *
+ * The toolbar renders before and independently of the chart, and it was lighting
+ * the Candles pill on an intraday range where `wsCandles` had already refused:
+ * the control said candles, the plot drew a line, and nothing on screen
+ * accounted for the difference. Reported with a screenshot of exactly that.
+ *
+ * Kept separate from `wsCandles` rather than folded into it because one is
+ * asked per build with a series in hand and the other per toolbar render with
+ * only the payload -- but tests/test_chart_mode_honesty.py holds them to the
+ * same answer, which is the part that matters. */
+function wsCandlesPossible() {
+  // /api/intraday sends closes only; see intradaySeries, which says so.
+  if (isIntradayRange(chartRange)) return false;
+  const raw = ((STATE.chartData || {}).technicals || {}).price_series || {};
+  return !!(raw.open && raw.high && raw.low);
 }
 
 function wsLastBar(ps) {
@@ -17364,6 +17392,8 @@ function wsMountChart() {
     wsInstallDrawHandlers();
     wsSyncNarrow();
     wsWatchWidth();
+    // The body's resize and the plot's are different events. See wsWatchPlot.
+    wsWatchPlot();
     wsRenderNav();
   }));
 }
@@ -17511,6 +17541,67 @@ function wsSyncNarrow() {
 let wsNarrowObserved = null;
 let wsNarrowLastWidth = 0;
 let wsNarrowTimer = null;
+
+/* Has the drawn chart come adrift from the box it is drawn into?
+ *
+ * The SVG carries `width="100%"` and the default `preserveAspectRatio`, so when
+ * its viewBox no longer matches the element the browser does NOT clip or
+ * complain -- it scales the whole picture to fit and centres it. The chart
+ * comes out shrunk in the middle of its panel with even gutters either side,
+ * the axis no longer under the bars, and the drawing layer (which is a separate
+ * overlay in real pixels) pointing at the wrong prices. Nothing errors.
+ * Reproduced by hand at 885px with a 560px viewBox: it is exactly the reported
+ * picture.
+ *
+ * It can come adrift because the chart is drawn to a measured pixel width, and
+ * the element measured is `.ws-plot` -- the workspace minus the dock, the
+ * widget rail and the drawing rail -- while the only resize watched was
+ * `.ws-body`, which those all sit inside. Anything that moves the boundary
+ * between them resizes the plot without resizing the body. The dock is the one
+ * that does it by 260px, and `wsToggleWidget` carries a hand-written redraw for
+ * exactly that case; this is the same fix without a list of cases to keep up to
+ * date.
+ *
+ * Comparing the viewBox against the element, rather than tracking widths,
+ * cannot oscillate: a redraw makes them equal, and equal is the exit condition.
+ * 8px because that is below anything a reader would notice and above the
+ * rounding between a bounding rect and an integer viewBox. */
+function wsChartAdrift() {
+  const plot = views.chart && views.chart.querySelector('.ws-plot');
+  const svg = plot && plot.querySelector('svg');
+  if (!plot || !svg) return false;
+  const drawn = Math.round(Number((svg.getAttribute('viewBox') || '').split(/\s+/)[2]) || 0);
+  const box = Math.round(plot.getBoundingClientRect().width);
+  // Not laid out is not adrift. Leaving the view hides the plot, which measures
+  // zero and would otherwise read as the largest disagreement possible --
+  // scheduling a redraw on every view switch for wsRedrawChart to decline.
+  if (!drawn || !box) return false;
+  return Math.abs(box - drawn) > 8;
+}
+
+/* The plot's own resize, which the body's does not imply. Same shape as
+ * wsWatchWidth below, including the guard against re-observing a node it is
+ * already watching -- read the comment there before changing this, the loop it
+ * describes cost a session. */
+let wsPlotObserver = null;
+let wsPlotObserved = null;
+let wsPlotTimer = null;
+
+function wsWatchPlot() {
+  const plot = views.chart && views.chart.querySelector('.ws-plot');
+  if (!plot || typeof ResizeObserver === 'undefined') return;
+  if (wsPlotObserver && wsPlotObserved === plot) return;
+  if (wsPlotObserver) wsPlotObserver.disconnect();
+  wsPlotObserved = plot;
+  wsPlotObserver = new ResizeObserver(() => {
+    // No width bookkeeping: the question is whether what is drawn matches the
+    // box, which the picture itself answers.
+    if (!wsChartAdrift()) return;
+    clearTimeout(wsPlotTimer);
+    wsPlotTimer = setTimeout(() => { if (wsChartAdrift()) wsRedrawChart(); }, 120);
+  });
+  wsPlotObserver.observe(plot);
+}
 
 function wsWatchWidth() {
   const body = views.chart && views.chart.querySelector('.ws-body');
