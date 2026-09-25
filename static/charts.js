@@ -516,6 +516,41 @@ const TIME_UNITS = [
 const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+/** A bar's label as a reader would write it.
+ *
+ * The tooltip printed the label raw, so hovering an intraday bar returned
+ * "2026-09-04T14:00:00-04:00" as its heading -- a machine timestamp over two
+ * lines of human-readable numbers.
+ *
+ * Formatted from the string's OWN parts rather than through a Date, and that
+ * is the part worth keeping. `new Date("...-04:00")` converts to whatever zone
+ * the browser is in, so the same bar reads 2:00 pm in New York and 7:00 pm in
+ * London -- for a bar whose identity IS its market time. Reading the digits
+ * out of the string shows the time the exchange stamped, wherever it is
+ * hovered from. `parseBarDate` above converts on purpose, because an axis is
+ * placing ticks rather than naming a moment.
+ *
+ * Daily bars carry no time, so they get the year instead; intraday bars drop
+ * it, because a year on every hover is noise when the axis already says it.
+ */
+function barLabelText(label) {
+  const raw = String(label == null ? '' : label);
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/);
+  if (!m) return raw;
+  const [, y, mo, d, hh, mm] = m;
+  // Noon, so a day name cannot be dragged across a boundary by a local offset.
+  const named = new Date(Number(y), Number(mo) - 1, Number(d), 12);
+  if (isNaN(named.getTime())) return raw;
+  const day = named.toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+  });
+  if (hh === undefined) return `${day}, ${y}`;
+  const h24 = Number(hh);
+  const suffix = h24 >= 12 ? 'pm' : 'am';
+  const h12 = h24 % 12 || 12;
+  return `${day} \u00b7 ${h12}:${mm} ${suffix}`;
+}
+
 function parseBarDate(label) {
   if (!label) return null;
   const raw = String(label);
@@ -1973,7 +2008,7 @@ function lineChart(opts) {
         b.setAttribute('opacity', k === i ? 0.95 : 0.42);
       });
     }
-    showTip(tipRows(labels[i] || `#${i + 1}`, rows), evt);
+    showTip(tipRows(barLabelText(labels[i]) || `#${i + 1}`, rows), evt);
     // Tell the caller which bar is under the cursor, so a header or legend can
     // track it. Index only: this function knows nothing about what the caller
     // wants to display, and passing the bar would mean guessing.
@@ -2302,7 +2337,7 @@ function macdChart(macd, signal, hist, labels, width = 720, opts = {}) {
     let i = Math.round((((evt.clientX - box.left) * scale) - m.l) / plotW * (n - 1));
     i = Math.max(0, Math.min(n - 1, i));
     cross.setAttribute('x1', X(i)); cross.setAttribute('x2', X(i)); cross.setAttribute('opacity', 0.45);
-    showTip(tipRows(labels[i] || '', [
+    showTip(tipRows(barLabelText(labels[i]), [
       [`<span style="color:${C.s1}">■</span> MACD`, fmt(macd[i], 3)],
       [`<span style="color:${C.s4}">■</span> Signal`, fmt(signal[i], 3)],
       ['Histogram', fmt(hist[i], 3)],
