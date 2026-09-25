@@ -14609,3 +14609,92 @@ body.ws-max[data-view="chart"] [data-ws-max] {
 
 .ins-side { font-weight: 600; }
 .ins-row .ins-more { white-space: nowrap; font-size: var(--t-caption); }
+
+/* --------------------------------------------------------- the rail's space
+ *
+ * Measured at 965px tall: the brand took 42px, the sections 313px and the foot
+ * 90px, and the remaining 460px was nothing -- with Settings and Collapse
+ * floating in the middle of it rather than sitting at the bottom, which is
+ * what made it read as unfinished rather than as roomy. After this, 14px.
+ *
+ * The whole block is inside `min-width: 560px`, which is where the rail is a
+ * COLUMN. Below it the rail is a row along the bottom of the screen, and both
+ * of these rules are actively wrong there: `margin-top: auto` in a row pushes
+ * nothing anywhere useful, and the phone block already sets `margin-top: 0` --
+ * but it sits earlier in this file, so an unscoped rule here would win on
+ * source order and undo it. The first draft of this did exactly that, and also
+ * hid the recents at every width under 1080px, where the rail is still a
+ * perfectly good column with 460px going spare.
+ */
+@media (min-width: 560px) {
+  .rail-foot {
+    /* auto, not a fixed gap. The foot is the bottom of the rail; at
+       `margin-top: var(--space-5)` it sat wherever the sections happened to
+       end and left the void underneath it. */
+    margin-top: auto;
+  }
+
+  .rail-recent {
+    /* Above the foot, and the first thing to give up room: the sections and
+       the foot are navigation and this is a convenience. min-height 0 so it
+       scrolls rather than pushing the foot off a short window. */
+    margin-top: var(--space-5);
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: var(--space-1);
+  }
+  .rail-recent-h {
+    margin: 0 0 var(--space-2);
+    padding-left: var(--space-2);
+    font-size: var(--t-caption);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+  }
+  .rail-recent-none {
+    margin: 0;
+    padding: 0 var(--space-2);
+    font-size: var(--t-caption);
+    color: var(--ink-muted);
+    line-height: 1.5;
+  }
+  .rail-recent-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+  }
+  .rail-recent-item {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--space-0) var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: none;
+    color: var(--ink-2);
+    font: inherit;
+    font-size: var(--t-caption);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: color var(--dur-ui) var(--ease-ui),
+                border-color var(--dur-ui) var(--ease-ui),
+                background-color var(--dur-ui) var(--ease-ui);
+  }
+  .rail-recent-item:hover { color: var(--ink); border-color: var(--border-strong); }
+  .rail-recent-item.current { color: var(--ink); border-color: var(--accent); }
+}
+
+/* Collapsed, the rail is icons only and a row of bare symbols has no icon to
+   collapse to. It goes with the labels, and it is keyed on the class the rail
+   actually uses -- `body.rail-tight`, set by applyRail -- rather than on a
+   plausible-looking one that would have matched nothing. */
+body.rail-tight .rail .rail-recent { display: none; }
+
+/* And on the phone, where the rail is a row with no vertical space to fill. */
+@media (max-width: 559px) {
+  .rail-recent { display: none; }
+}

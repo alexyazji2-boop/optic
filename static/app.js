@@ -3147,6 +3147,25 @@ function renderHome() {
    * this page's own blocks. */
   revealPanels(views.home, '.home > *');
 
+  /* Three requests, started together.
+   *
+   * `loadHomeMarket` fetches /api/home and only then writes the market block --
+   * and the block is what creates `#cc-movers` and `#hm-watch`, so the movers
+   * scan and the watchlist could not begin until it had. Neither reads the home
+   * payload: the watchlist takes its symbols from localStorage and the movers
+   * scan is a fixed screen. They were queued behind it by the shape of the
+   * code, not by a dependency.
+   *
+   * Measured cold, before: /api/home 839ms, then the watchlist a further 442ms,
+   * with the block filling at about 1.35s. Started together it fills when the
+   * slowest of the three lands.
+   *
+   * Errors are swallowed HERE only. Each of these renders its own failure into
+   * its own host when it is called for real below; this call is a head start,
+   * and an unhandled rejection from a head start is a console error on a path
+   * that is working. */
+  loadWatchlist();
+  moversPayload().catch(() => {});
   // The market screen loads on its own; see loadHomeMarket.
   loadHomeMarket();
   /* And the digest on its own again, so neither waits for the other. This one
@@ -6366,22 +6385,33 @@ let moversInFlight = null;
 let moversAt = 0;
 let moversData = null;
 
+/* The payload, with no DOM in it. Split out from homeMovers so the request can
+ * start before the element that displays it exists.
+ *
+ * It could not before: homeMovers returns early unless `#cc-movers` is on the
+ * page, and that element is inside the market block, which is written only
+ * after /api/home resolves. So the movers scan and the watchlist both queued
+ * BEHIND the home payload rather than beside it -- measured on a cold load at
+ * 839ms for /api/home and then a further 442ms for the watchlist, when the two
+ * share no data and neither reads the other's answer.
+ *
+ * `.finally`: a rejected fetch left in place would serve the same failure to
+ * every later caller for the life of the page. */
+function moversPayload() {
+  if (moversData && Date.now() - moversAt < 5000) return Promise.resolve(moversData);
+  if (!moversInFlight) {
+    moversInFlight = getJSON('/api/scanners/movers')
+      .then((d) => { moversData = d; moversAt = Date.now(); return d; })
+      .finally(() => { moversInFlight = null; });
+  }
+  return moversInFlight;
+}
+
 async function homeMovers() {
   if (!document.getElementById('cc-movers')) return;
   let data;
   try {
-    if (moversData && Date.now() - moversAt < 5000) {
-      data = moversData;
-    } else {
-      if (!moversInFlight) {
-        moversInFlight = getJSON('/api/scanners/movers')
-          .then((d) => { moversData = d; moversAt = Date.now(); return d; })
-          // `.finally`: a rejected fetch that left the promise in place would
-          // serve the same failure to every later caller for the life of the page.
-          .finally(() => { moversInFlight = null; });
-      }
-      data = await moversInFlight;
-    }
+    data = await moversPayload();
   } catch (err) {
     // Re-read after the await. The host captured before it may have been
     // replaced by a re-render, and writing into a detached node succeeds
@@ -6538,6 +6568,41 @@ function recentSymbols() {
   } catch (e) { return []; }
 }
 
+/* The rail's own recent list.
+ *
+ * The rail is 212px wide and 965px tall, and below the section buttons it held
+ * 460px of nothing with Settings and Collapse floating in the middle of it.
+ * Measured, on a 965px window.
+ *
+ * Recents rather than the watchlist, which is a whole nav destination and a
+ * homepage panel already -- this app has a written rule about offering the
+ * same job twice on one screen, and three copies of the watchlist would be the
+ * clearest possible breach of it. Where you have just been is not recorded
+ * anywhere on screen: it existed only inside the command palette, behind a
+ * keystroke. It is also free, which matters on a rail that is drawn on every
+ * page: `recentSymbols` reads localStorage and makes no request.
+ */
+function railRecentHTML() {
+  const list = recentSymbols();
+  if (!list.length) {
+    /* Said, not hidden. An empty strip with no explanation reads as a panel
+     * that failed to load; one sentence makes it a space that is waiting. */
+    return `<p class="rail-recent-none">Symbols you open show up here.</p>`;
+  }
+  return `<h2 class="rail-recent-h">Recent</h2>
+    <ul class="rail-recent-list">${list.map((sym) => `<li>
+      <button type="button" class="rail-recent-item${
+  sym === STATE.ticker ? ' current' : ''}" data-recent-symbol="${esc(sym)}"
+        title="Open ${esc(sym)}">${esc(sym)}</button>
+    </li>`).join('')}</ul>`;
+}
+
+/** Repaint the rail's recent list wherever it is mounted. */
+function paintRailRecent() {
+  const host = document.getElementById('rail-recent');
+  if (host) host.innerHTML = railRecentHTML();
+}
+
 function rememberSymbol(symbol) {
   const sym = String(symbol || '').trim().toUpperCase();
   if (!sym) return;
@@ -6546,6 +6611,10 @@ function rememberSymbol(symbol) {
   const next = [sym, ...recentSymbols().filter((s) => s !== sym)].slice(0, RECENT_MAX);
   try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)); }
   catch (e) { /* private mode: the bar just has no history */ }
+  // The rail shows this list, and it is drawn on every page rather than
+  // rebuilt per view -- so it has to be told, or it shows the list as it was
+  // when the page loaded.
+  paintRailRecent();
 }
 
 /* ------------------------------------------------------------ quick actions
@@ -28295,6 +28364,8 @@ function switchView(view, force) {
   if (view !== 'settings') NAV_LAST[groupForView(view)] = view;
   paintNav(view);
   paintMobileTabs(view);
+  // The current symbol is marked in the list, and that mark moves with the view.
+  paintRailRecent();
   // The settings gear sits in the top bar, not the tab strip, so it isn't covered
   // by the loop above.
   const gear = $('#settings-btn');
@@ -29065,6 +29136,13 @@ document.addEventListener('click', (evt) => {
     return;
   }
   /* ---------------------------------------------------- Insiders page */
+  const recentBtn = evt.target.closest('[data-recent-symbol]');
+  if (recentBtn) {
+    // The same entry point the search box uses, so a symbol opened from the
+    // rail lands where a searched one lands -- see SEARCH_LANDING.
+    loadTicker(recentBtn.dataset.recentSymbol);
+    return;
+  }
   const facetBtn = evt.target.closest('[data-ins-facet]');
   if (facetBtn) {
     const want = facetBtn.dataset.insFacet;
@@ -31147,6 +31225,13 @@ function watchColorScheme() {
   loadCalendarSession();
   mountPulseMarks();
   mountMobileTabs();
+  /* Drawn at boot, not only on a view change.
+   *
+   * `switchView` repaints it, but the first page is rendered by `renderHome`
+   * directly rather than through switchView -- so on a cold arrival the strip
+   * was an empty div with no sentence in it, which is the blank space this
+   * block exists to remove. */
+  paintRailRecent();
   renderHome();
   updateStatus();
   try {

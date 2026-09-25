@@ -1,0 +1,183 @@
+"""The rail's empty half, and the cold start nobody should pay for.
+
+Two separate complaints, both about a page that is not ready when you arrive.
+
+**The rail.** Measured at 965px tall: the brand took 42px, the sections 313px
+and the foot 90px, leaving 460px of nothing -- with Settings and Collapse
+floating in the middle of it rather than sitting at the bottom, which is what
+made it read as unfinished rather than as roomy. After this: 14px.
+
+**The cold start.** /api/home is six legs, three of which reach the network.
+Measured on the live server: 7.35s on the first request after a restart, 0.6s
+on every one after it. The platform restarts on every deploy, so the first
+person to open the site after a deploy paid all of it.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+APP = (ROOT / "static/app.js").read_text()
+CSS = (ROOT / "static/styles.css").read_text()
+HTML = (ROOT / "static/index.html").read_text()
+MAIN = (ROOT / "app/main.py").read_text()
+
+
+def function(name):
+    return re.search(r"^(?:async )?function " + name + r"\([^\n]*\) \{.*?^\}",
+                     APP, re.M | re.S).group()
+
+
+# ------------------------------------------------- the foot sits at the foot
+
+
+def test_the_foot_is_pinned_to_the_bottom():
+    """At `margin-top: var(--space-5)` it sat wherever the sections happened to
+    end, and the rail's remaining height opened up underneath it."""
+    block = CSS[CSS.index("the rail's space"):]
+    rule = block[block.index(".rail-foot {"):]
+    rule = rule[:rule.index("}")]
+    assert "margin-top: auto" in rule
+
+
+def test_the_rail_rules_do_not_reach_the_phone():
+    """Below 560px the rail is a row along the bottom of the screen, where
+    `margin-top: auto` pushes nothing useful and the phone block already sets
+    `margin-top: 0`. That block sits EARLIER in this file, so an unscoped rule
+    at the end would win on source order and undo it -- the first draft did
+    exactly that."""
+    block = CSS[CSS.index("the rail's space"):]
+    opener = block[:block.index(".rail-foot {")]
+    assert "@media (min-width: 560px)" in opener, \
+        "the column-only rules must be scoped to the column layout"
+    # And the phone rule it must not clobber is still there.
+    assert ".rail-foot { margin-top: 0;" in CSS
+
+
+def test_the_recents_hide_where_there_is_no_column_to_fill():
+    """Collapsed the rail is icons only, and a row of bare symbols has no icon
+    to collapse to; on the phone it is a row with no vertical space at all.
+
+    Keyed on `body.rail-tight`, which is the class applyRail actually sets. A
+    plausible-looking `.rail.is-collapsed` would have matched nothing and
+    failed silently, which is the whole failure mode of a dead selector."""
+    assert "body.rail-tight .rail .rail-recent { display: none; }" in CSS
+    assert "classList.toggle('rail-tight'" in APP, "the class this depends on"
+    tail = CSS[CSS.index("body.rail-tight .rail .rail-recent"):]
+    assert "@media (max-width: 559px)" in tail
+
+
+# ------------------------------------------------- what fills it
+
+
+def test_it_shows_where_you_have_been_not_a_third_watchlist():
+    """The watchlist is already a nav destination and a homepage panel. This
+    app has a written rule about offering the same job twice on one screen --
+    tests/test_home_and_nav_hierarchy.py is entirely about it -- and a third
+    copy would be the clearest possible breach.
+
+    Where you have just been is recorded nowhere on screen: the recents list
+    existed only inside the command palette, behind a keystroke."""
+    fn = function("railRecentHTML")
+    assert "recentSymbols()" in fn
+    assert "watchList()" not in fn and "STATE.watchlist" not in fn
+
+
+def test_it_costs_no_request():
+    """The rail is drawn on every page. Anything here that fetched would be a
+    request per navigation, on the element that is supposed to be instant."""
+    for name in ("railRecentHTML", "paintRailRecent"):
+        fn = function(name)
+        assert "getJSON" not in fn and "fetch(" not in fn, name
+    # recentSymbols reads localStorage and nothing else.
+    assert "localStorage.getItem(RECENT_KEY)" in function("recentSymbols")
+
+
+def test_an_empty_list_says_so_rather_than_rendering_nothing():
+    """An empty strip with no explanation reads as a panel that failed to load.
+    One sentence makes it a space that is waiting."""
+    fn = function("railRecentHTML")
+    assert "rail-recent-none" in fn
+    assert "Symbols you open show up here." in fn
+
+
+def test_it_is_drawn_at_boot_and_not_only_on_a_view_change():
+    """`switchView` repaints it, but the first page is rendered by `renderHome`
+    directly rather than through switchView -- so on a cold arrival the strip
+    was an empty div with no sentence in it. Measured: innerText was ''."""
+    boot = APP[APP.index("mountPulseMarks();"):]
+    boot = boot[:boot.index("updateStatus();")]
+    assert "paintRailRecent();" in boot
+    assert boot.index("paintRailRecent();") < boot.index("renderHome();")
+
+
+def test_the_list_repaints_when_it_changes():
+    """The rail is drawn once per navigation, not per symbol load, so opening a
+    ticker would not have moved it until the next page change."""
+    assert "paintRailRecent();" in function("rememberSymbol")
+    assert "paintRailRecent();" in function("switchView")
+
+
+def test_a_symbol_opened_from_the_rail_lands_where_a_searched_one_does():
+    """Two entry points to the same destination that disagree is how "it opens
+    the wrong tab" gets reported. loadTicker is the shared one; see
+    SEARCH_LANDING."""
+    i = APP.index("closest('[data-recent-symbol]')")
+    block = APP[i:i + 500]
+    assert "loadTicker(recentBtn.dataset.recentSymbol)" in block
+    assert "SEARCH_LANDING" in APP
+
+
+def test_the_host_exists_for_the_painter_to_find():
+    assert 'id="rail-recent"' in HTML
+    assert "getElementById('rail-recent')" in function("paintRailRecent")
+
+
+# ------------------------------------------------- the cold start
+
+
+def test_the_home_payload_is_built_before_a_reader_asks():
+    """7.35s on the first request after a restart, 0.6s after. This platform
+    restarts on every deploy, and the landing page is the most requested
+    endpoint in the app -- so the person who pays the cold cost is also the
+    most likely one to exist."""
+    assert "async def _warm_home()" in MAIN
+    fn = MAIN[MAIN.index("async def _warm_home()"):]
+    fn = fn[:fn.index("\n@app.on_event")]
+    assert "await home_summary()" in fn
+    # Started at boot, and held so it is not garbage-collected mid-flight:
+    # asyncio keeps only a weak reference to a bare create_task.
+    assert "app.state.warm_task = asyncio.create_task(_warm_home())" in MAIN
+
+
+def test_the_warm_up_cannot_take_the_process_down():
+    """It is a head start, not a dependency. Every leg of /api/home already
+    reports its own absence when a reader asks for real, so a warm-up that
+    raised would trade a slow first page for no pages at all."""
+    fn = MAIN[MAIN.index("async def _warm_home()"):]
+    fn = fn[:fn.index("\n@app.on_event")]
+    assert "except Exception as exc:" in fn
+    # But not the cancellation that shutdown sends it.
+    assert "except asyncio.CancelledError:" in fn
+    assert fn.index("except asyncio.CancelledError:") < fn.index("except Exception as exc:")
+
+
+def test_the_warm_up_is_cancelled_on_shutdown():
+    """A task still sleeping when the server is told to stop keeps the loop
+    alive for its remaining wait and logs a "task was destroyed but it is
+    pending" on the way out."""
+    fn = MAIN[MAIN.index("async def _stop_tracker()"):]
+    fn = fn[:fn.index("\n\n")]
+    assert "warm_task" in fn and "tracker_task" in fn
+
+
+def test_it_waits_for_the_server_to_finish_binding():
+    """`_tracker_loop` waits thirty seconds for the same reason. Two here,
+    because this one is racing an actual visitor rather than a schedule."""
+    fn = MAIN[MAIN.index("async def _warm_home()"):]
+    fn = fn[:fn.index("\n@app.on_event")]
+    m = re.search(r"asyncio\.sleep\((\d+)\)", fn)
+    assert m, "no delay before it touches the network"
+    assert 1 <= int(m.group(1)) <= 5, m.group(1)

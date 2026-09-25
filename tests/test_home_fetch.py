@@ -47,8 +47,19 @@ CODE = strip_comments(APP_JS)
 
 
 def body_of(name):
+    """One function's source, stopping at the next top-level declaration.
+
+    Splitting on "\nfunction " alone was not enough: an `async function` that
+    follows the target does not start with it, so the body ran on into the next
+    function. That is how a test asserting `getElementById` was absent from
+    `moversPayload` failed on a line that belonged to `homeMovers` underneath
+    it. Both spellings, whichever comes first.
+    """
     start = CODE.index("function %s(" % name)
-    return CODE[start:].split("\nfunction ", 1)[0]
+    rest = CODE[start:]
+    ends = [i for i in (rest.find("\nfunction ", 1), rest.find("\nasync function ", 1))
+            if i != -1]
+    return rest[:min(ends)] if ends else rest
 
 
 # ------------------------------------------------------------- one fetch path
@@ -204,7 +215,10 @@ def test_both_new_flights_clear_on_failure():
     """`.finally`, not `.then`. A rejected fetch that left the promise in place
     would serve the same failure to every later caller for the life of the
     page."""
-    for name in ("loadWatchlist", "homeMovers"):
+    # `moversPayload`, not `homeMovers`: the fetch moved out of the renderer so
+    # it could start before the element that displays it exists. See
+    # test_the_movers_fetch_can_start_before_its_host_does.
+    for name in ("loadWatchlist", "moversPayload"):
         fn = body_of(name)
         assert ".finally(" in fn, name
         assert "InFlight = null" in fn, name
@@ -214,14 +228,36 @@ def test_the_movers_fetch_is_deduped_where_the_fetch_is():
     """It has one caller, so the duplicate was the caller running twice. The
     guard belongs on the fetch rather than the render: a future second caller
     would otherwise make it three."""
-    fn = body_of("homeMovers")
+    fn = body_of("moversPayload")
     # The guard itself, not a mention of the variable. `"moversInFlight" in fn`
     # was the first version and it survived `if (true) {`, which starts a fresh
     # request on every call while leaving the name in place.
     assert "if (!moversInFlight) {" in fn
-    assert "data = await moversInFlight;" in fn
+    assert "return moversInFlight;" in fn
     calls = re.findall(r"getJSON\(\s*['\"]/api/scanners/movers['\"]", CODE)
     assert len(calls) == 1, calls
+
+
+def test_the_movers_fetch_can_start_before_its_host_does():
+    """`homeMovers` returns early unless `#cc-movers` is on the page, and that
+    element is written only after /api/home resolves -- so the movers scan and
+    the watchlist queued BEHIND the home payload rather than beside it, though
+    neither reads a field of it. Measured on a cold load: /api/home 839ms, then
+    the watchlist a further 442ms, with the market block filling at about 1.35s.
+
+    Split so the request has no DOM in it, and started from renderHome next to
+    loadHomeMarket. Measured after: all three begin within the same
+    millisecond."""
+    payload = body_of("moversPayload")
+    assert "getElementById" not in payload, "the fetch must not need a host"
+    # And the renderer still refuses to write into a page that has no room for
+    # it -- that guard was never the problem.
+    assert "if (!document.getElementById('cc-movers')) return;" in body_of("homeMovers")
+    # Started beside the home payload, not after it.
+    home = body_of("renderHome")
+    assert "loadWatchlist();" in home
+    assert "moversPayload()" in home
+    assert home.index("loadWatchlist();") < home.index("loadHomeMarket();")
 
 
 def test_the_movers_error_branch_re_reads_its_host():
@@ -236,7 +272,7 @@ def test_the_movers_error_branch_re_reads_its_host():
 
 
 def test_the_movers_reuse_window_stays_inside_the_refresh_tick():
-    fn = body_of("homeMovers")
+    fn = body_of("moversPayload")
     window = re.search(r"Date\.now\(\)\s*-\s*moversAt\s*<\s*(\d+)", fn)
     assert window, "no freshness comparison"
     assert 1000 <= int(window.group(1)) < 20000, window.group(1)

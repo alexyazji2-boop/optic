@@ -1447,9 +1447,40 @@ async def _tracker_loop() -> None:
         await asyncio.sleep(TRACKER_MARK_MINUTES * 60)
 
 
+async def _warm_home() -> None:
+    """Build the home payload once at boot, so that no reader has to.
+
+    /api/home is six legs and three of them reach the network. Measured on the
+    live server: 7.35s on the first request after a restart, 0.6s on every one
+    after it. This platform restarts on every deploy, so without this the first
+    person to open the site after a deploy pays the entire cold cost -- and the
+    landing page is the most requested endpoint in the app, so that person is
+    also the most likely one to exist.
+
+    Two seconds of delay first, for the reason `_tracker_loop` waits thirty:
+    let the server finish binding before it starts pulling on the network. Two
+    rather than thirty because this one is racing an actual visitor.
+
+    Failures are swallowed and logged at info. This is a head start, not a
+    dependency: every leg already reports its own absence when a reader asks
+    for real, and a warm-up that raised would take the process down with it.
+    """
+    try:
+        await asyncio.sleep(2)
+        await home_summary()
+        logging.getLogger("uvicorn.error").info("home payload warmed")
+    except asyncio.CancelledError:                              # noqa: PERF203
+        raise
+    except Exception as exc:                                    # noqa: BLE001
+        logging.getLogger("uvicorn.error").info("home warm skipped: %s", exc)
+
+
 @app.on_event("startup")
 async def _start_tracker() -> None:
     paper.init_db()
+    # Held on the app so the reference isn't garbage-collected mid-flight --
+    # asyncio keeps only a weak reference to a bare create_task.
+    app.state.warm_task = asyncio.create_task(_warm_home())
     if TRACKER_AUTO:
         # Held on the app so the reference isn't garbage-collected mid-flight.
         app.state.tracker_task = asyncio.create_task(_tracker_loop())
@@ -1457,9 +1488,13 @@ async def _start_tracker() -> None:
 
 @app.on_event("shutdown")
 async def _stop_tracker() -> None:
-    task = getattr(app.state, "tracker_task", None)
-    if task:
-        task.cancel()
+    # Both tasks. A warm-up still sleeping when the server is told to stop
+    # would otherwise keep the loop alive for its remaining two seconds and log
+    # a "task was destroyed but it is pending" on the way out.
+    for name in ("tracker_task", "warm_task"):
+        task = getattr(app.state, name, None)
+        if task:
+            task.cancel()
 
 
 # --------------------------------------------------- naming a ticker in chat

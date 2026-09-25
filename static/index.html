@@ -156,6 +156,12 @@
        can carry its name instead of being squeezed to fit a row. -->
   <nav class="tabs tabs-group" role="tablist" aria-label="Sections"></nav>
 
+  <!-- Where you have been. Filled by paintRailRecent from localStorage, so it
+       costs no request and works before anything has loaded. It sits between
+       the sections and the foot because the foot is pinned to the bottom and
+       this is the space that opened up when it was. -->
+  <div class="rail-recent" id="rail-recent"></div>
+
   <div class="rail-foot">
     <!-- Settings is a destination, so it lives with the destinations. It spent
          one pass in the top bar beside Sign in on the reading that appearance
