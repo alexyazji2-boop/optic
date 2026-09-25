@@ -7929,6 +7929,19 @@ function swingFullSeries(d) {
 }
 
 /** The series the chart draws: the manual window if there is one, else the range. */
+/* Is the intraday payload in hand the one the current range is asking for?
+ *
+ * A payload for another symbol or another rung is not a failure, it is the
+ * previous question's answer still sitting there -- so this is a test of
+ * whether we have an answer, not of whether the feed worked. Shared by the
+ * series builder and the fetch guard below, which have to agree: if they
+ * disagreed in the direction of "we have it", the chart stays empty forever;
+ * in the other direction they re-ask on every repaint. */
+function intradayMatches() {
+  return !!(STATE.intraday && STATE.intraday.ticker === STATE.ticker
+    && STATE.intraday.range === chartRange);
+}
+
 function swingSeries(d) {
   /* Intraday is not windowed here. It arrives from its own endpoint already
    * scoped to the session, and `swingWindow` indexes the daily/weekly series —
@@ -7936,9 +7949,37 @@ function swingSeries(d) {
    * intraday for the same reason, so the wheel does nothing rather than
    * appearing to do nothing. */
   if (isIntradayRange(chartRange)) {
-    const intra = (STATE.intraday && STATE.intraday.ticker === STATE.ticker
-      && STATE.intraday.range === chartRange) ? STATE.intraday : null;
-    return intradaySeries(intra);
+    const matched = intradayMatches();
+    const series = intradaySeries(matched ? STATE.intraday : null);
+    if (series) return series;
+    /* Never null past this point.
+     *
+     * `intradaySeries` returns null for a payload that has not arrived yet,
+     * is for another symbol, or came back unavailable -- all three ordinary
+     * states, none of them a fault. Every caller reads a field off the result
+     * immediately, so returning null turned "the minute bars have not landed"
+     * into `Cannot read properties of null (reading 'intraday')` across the
+     * whole view, behind a Try again button that could not help because
+     * nothing had actually failed. Reported on MSFT and reproduced by setting
+     * an intraday range with no payload loaded.
+     *
+     * The empty shape keeps `intraday: true` so the callers that branch on it
+     * branch the same way, and separates the two cases rather than flattening
+     * both to an empty chart: `pending` means wait, and a `reason` is the
+     * feed saying it has nothing -- which is a thing to say, not to retry. */
+    return {
+      dates: [], close: [], volume: [],
+      shown_bars: 0, total_bars: 0,
+      intraday: true,
+      pending: !matched || !!STATE.intraday.loading,
+      reason: (matched && !STATE.intraday.loading)
+        ? (STATE.intraday.reason || 'No intraday bars came back.') : '',
+      /* The rung's feed string, which is what the server would have sent.
+       * NOT `chartInterval`: on an intraday range that still holds `daily`,
+       * and this object says `intraday: true`. */
+      interval: (chartIntervalSpec(chartRange) || {}).feed || chartRange,
+      weekly: false,
+    };
   }
   const raw = ((d.technicals || {}).price_series) || {};
   const full = swingFullSeries(d);
@@ -7990,8 +8031,23 @@ function swingApplyWindow(win) {
  * name, the Fibonacci lines and the panel identity. */
 function swingBarCountText(ps) {
   if (ps.intraday) {
-    return `${ps.interval || ''} bars, ${ps.shown_bars} over ${
-      chartRange === '1d' ? 'today' : 'five sessions'}`;
+    const size = ps.interval || 'intraday';
+    // A heading is a claim, and "0 over five sessions" made two false ones at
+    // once: that there are bars, and that nothing is happening.
+    if (ps.pending) return `${size} bars, loading`;
+    if (!ps.shown_bars) return `${size} bars, none available`;
+    /* The span the bars actually cover.
+     *
+     * This read `chartRange === '1d' ? 'today' : 'five sessions'`, from when
+     * 1D and 5D were the only two intraday ranges. The interval ladder added
+     * six more rungs writing minute counts into the same variable, so a 15m
+     * chart -- fetched over a month -- was headed "five sessions", and so were
+     * 1m, 5m, 30m, 1h and 4h. The two legacy keys keep their words because
+     * they are not rungs on the ladder and have no window of their own. */
+    const span = chartRange === '1d' ? 'today'
+      : chartRange === '5d' ? 'five sessions'
+        : (chartIntervalSpec(chartRange) || {}).window || chartRange;
+    return `${size} bars, ${ps.shown_bars} over ${span}`;
   }
   return `${ps.weekly ? 'weekly' : 'daily'} bars, ${ps.shown_bars} of ${
     ps.total_bars} shown`;
@@ -8312,10 +8368,55 @@ function swingPriceBlock(d, ps, ctx) {
           one ? 'it' : 'them'} into view.</p>`
         : '';
     }
+  } else {
+    /* No bars to plot. There was no else here at all, so the mount kept the
+     * empty 9px <svg> the panel was built with: a sliver of nothing under a
+     * heading that claimed bars, with no sentence saying why. Measured at
+     * 9px tall with two nodes in it.
+     *
+     * Reachable whenever an intraday rung is selected and the payload has not
+     * landed or the feed has none -- the state a persisted `optic.chart.range`
+     * restores on the next visit. The daily path can reach it too, for a
+     * symbol the provider returns no history for. */
+    const host = document.getElementById('chart-price');
+    if (host) {
+      // The 160px mount() reserves is for a chart that is coming. This box
+      // sizes itself.
+      host.style.minHeight = '';
+      host.innerHTML = ps.pending
+        ? emptyHTML('Loading bars',
+          `Fetching ${ps.interval || 'price'} bars for ${STATE.ticker || 'this symbol'}.`)
+        /* The action is offered only on the intraday branch. On a daily range
+         * "switch to daily bars" is where the reader already is, and a button
+         * that changes nothing is worse than no button. */
+        : emptyHTML('No bars to draw',
+          ps.reason || 'The feed returned no bars for this interval.',
+          ps.intraday
+            ? { label: 'Show daily bars instead', attr: 'data-chart-range="6m"' }
+            : null);
+    }
+    // The off-scale note counts levels against a price range that does not
+    // exist here, and a stale one would outlive the chart it described.
+    const note = document.getElementById('chart-price-note');
+    if (note) note.innerHTML = '';
   }
 }
 
 function renderSwing(d) {
+  /* An intraday range with no payload for this symbol has to ask for one.
+   *
+   * `loadIntraday` had exactly one caller -- the range pill's click handler --
+   * so the bars were fetched only at the moment somebody pressed a pill. Two
+   * ordinary routes reach an intraday `chartRange` without one: the range is
+   * persisted to localStorage and restored at boot, and it survives a ticker
+   * change, which leaves `STATE.intraday` holding the previous company's bars.
+   * In both the chart drew empty and stayed empty, because nothing else in the
+   * app asks for that endpoint.
+   *
+   * Guarded on the payload being absent rather than on a flag, so the repaint
+   * `loadIntraday` performs on its way in does not re-ask: it writes a
+   * `{ticker, range, loading: true}` placeholder first, which matches. */
+  if (isIntradayRange(chartRange) && !intradayMatches()) loadIntraday(chartRange);
   // A glossary tooltip left open over an element that's about to be replaced
   // never gets its mouseout — the browser doesn't fire one when the hovered
   // node is removed from the DOM out from under the cursor. Clear it explicitly
@@ -8348,8 +8449,11 @@ function renderSwing(d) {
   // Intraday ranges come from their own endpoint, in the same shape, so the
   // chart code below needs no special case. What they deliberately lack is the
   // daily-derived overlays — see intradaySeries().
-  const intra = (STATE.intraday && STATE.intraday.ticker === STATE.ticker
-    && STATE.intraday.range === chartRange) ? STATE.intraday : null;
+  // Via intradayMatches, not a second copy of the same three comparisons: a
+  // template reading one answer while the series was built from another is the
+  // kind of disagreement that shows as a correct-looking chart of the wrong
+  // thing.
+  const intra = intradayMatches() ? STATE.intraday : null;
   // Honours a manual pan/zoom window when there is one, and falls back to the
   // range pills when there is not. See swingSeries.
   const ps = swingSeries(d);
@@ -9590,9 +9694,18 @@ async function loadSecurityFacet(view, force, opts = {}) {
       // A failed refresh keeps the last useful reading. A first load must
       // explain the failure instead of turning it into "not available" data.
       if (opts.silent && have) return;
+      /* No retry button appended here. `errorHTML` carries its own -- the
+       * generic branch a `data-view-retry` and the origin-down branch a
+       * `data-origin-retry` -- and this one rendered a SECOND Try again
+       * outside the error card, so the reader was offered the same recovery
+       * twice, once styled as part of the message and once loose beneath it.
+       * Reported in a screenshot of the Overview tab.
+       *
+       * The one inside the card does the same work: for these three views
+       * `switchView(view, true)` dispatches straight back to
+       * `loadSecurityFacet(view, true)`, which is what this button called. */
       host.innerHTML = `${securityHeader(view)}${errorHTML(err.message,
-        { originUnreachable: err.originUnreachable })}
-        <button type="button" class="btn" data-retry-security>Try again</button>`;
+        { originUnreachable: err.originUnreachable })}`;
       return;
     }
   }
@@ -27977,10 +28090,6 @@ document.addEventListener('click', (evt) => {
   // Closing the instrument tab. Checked before the row handler so the little x
   // does not also re-open the chart it is dismissing.
   // Pulse conversation history.
-  if (evt.target.closest('[data-retry-security]')) {
-    loadSecurityFacet(STATE.view, true);
-    return;
-  }
   if (evt.target.closest('#chat-history-btn')) {
     renderPulseHistory(!pulseHistoryOpen);
     return;

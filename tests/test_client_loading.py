@@ -42,7 +42,16 @@ function entryBudget() { return null; }
 function securityHeader() { return STATE.ticker; }
 function esc(value) { return String(value); }
 function cap(value) { return value.charAt(0).toUpperCase() + value.slice(1); }
-function errorHTML(value) { return 'Could not load: ' + value; }
+/* errorHTML is NOT stubbed. It was, returning a bare sentence, and that is
+ * how `loadSecurityFacet` came to append a Try again button of its own: the
+ * stub showed no control, so one was added beside the call, and the real page
+ * rendered two. The stub hid the duplicate from the very tests written to
+ * check the failure offers a way out.
+ *
+ * The real function is pulled in below. Only its two environment reads are
+ * stubbed -- the origin poller and the hostname test. */
+function startOriginWatch() {}
+function originIsEphemeral() { return false; }
 function priorSnapshot() { return null; }
 function snapshotOf() { return {}; }
 function marketSessionET() { return phase; }
@@ -75,9 +84,11 @@ def run_js(scenario):
     if not exe:
         pytest.skip("JavaScriptCore is unavailable")
     setup = "\n".join(declaration(name) for name in [
+        "ORIGIN_DOWN_RE",
         "swingRequestId", "swingLoading", "chartRequestId", "SESSION_LABEL",
         "AUTO_REFRESH_VIEWS", "autoRefreshPending"])
     loaders = "\n".join(function(name) for name in [
+        "errorHTML",
         "loadSwing", "loadSecurityFacet", "loadChartWorkspace", "tickAutoRefresh",
         "liveIndicatorHTML"])
     script = STUBS + setup + loaders + "\n(async function() {\n" + scenario + """
@@ -122,7 +133,9 @@ def test_first_load_failure_is_visible_and_retry_recovers(view):
       pending[0].reject(new Error('HTTP 503')); await first;
       assert(!painted.length, 'failed data rendered as an empty successful response');
       assert(views[STATE.view].innerHTML.includes('HTTP 503'), 'error missing');
-      assert(views[STATE.view].innerHTML.includes('data-retry-security'), 'retry missing');
+      assert(views[STATE.view].innerHTML.includes('data-view-retry'), 'retry missing');
+      assert((views[STATE.view].innerHTML.match(/Try again/g) || []).length === 1,
+             'the same recovery was offered twice');
       var retry = loadSecurityFacet(STATE.view, true);
       pending[1].resolve({ticker: 'AAPL'}); await retry;
       assert(views[STATE.view].innerHTML === 'loaded AAPL', 'retry did not recover');
