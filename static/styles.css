@@ -12270,20 +12270,24 @@ body.auth-open { overflow: hidden; }
    right. One column on a phone, price first — the brief's mobile order starts
    with the price and this is what makes that true. */
 
+/* Robinhood-style hero: the identity sits small on top, the price is the one
+   big thing, the change carries the day's single accent directly beneath it,
+   and the dense reference facts drop below a divider so they support the number
+   rather than crowding it. A column, not a two-up row: the facts read as a
+   footer to the price rather than as a second panel competing with it. Still
+   `display: flex` -- .px-ext-note spans the header with flex-basis:100%. */
 .px-head {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-5) var(--space-7);
+  flex-direction: column;
+  gap: var(--space-5);
   margin-bottom: var(--space-5);
-  padding: var(--space-5) var(--space-6);
+  padding: var(--space-6);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
 }
 
-.px-main { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.px-main { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
 
 .px-id { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
 
@@ -12312,30 +12316,44 @@ body.auth-open { overflow: hidden; }
   color: var(--ink-muted);
 }
 
-.px-now { display: flex; align-items: baseline; gap: var(--space-4); flex-wrap: wrap; }
+/* Price stacked over change, tight, so the two read as one lockup. */
+.px-now { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); }
 
 .px-last {
-  font: 600 var(--t-d1)/1 var(--sans);
+  /* The one big thing on the page. A step above --t-d1, the top of the type
+     scale, because this is the number the whole view exists to state; the
+     multiple keeps it on --ui-scale so it still tracks the reader's size
+     preference. */
+  font: 650 calc(var(--t-d1) * 1.28)/0.95 var(--sans);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
   /* The price itself is not coloured by direction. The *change* is. A price
      painted red reads as "this number is wrong" rather than "it is down
      today", and it is the same number whichever way the day went. */
   color: var(--ink);
 }
 
+/* The day's single accent. Colour plus a directional triangle, weight 700, so
+   one glance reads the direction before the digits do -- the Robinhood cue,
+   drawn from the same up/down pair every percentage in the app uses. The
+   triangle is a CSS marker, not markup, so it stays out of the read-aloud text
+   and the figure the tests assert on. */
 .px-chg {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-2);
-  font: 600 var(--t-d3)/1 var(--sans);
+  font: 700 var(--t-d3)/1 var(--sans);
   font-variant-numeric: tabular-nums;
 }
+.px-chg.up::before,
+.px-chg.down::before { font-size: 0.62em; line-height: 1; }
+.px-chg.up::before { content: "\25B2"; }
+.px-chg.down::before { content: "\25BC"; }
 
 .px-chg.up, .px-chg-pct.up { color: var(--pos); }
 .px-chg.down, .px-chg-pct.down { color: var(--neg); }
 .px-chg.flat, .px-last.flat { color: var(--ink-2); }
-.px-chg-pct { font-size: var(--t-lead); opacity: 0.9; }
+.px-chg-pct { font-size: var(--t-lead); font-weight: 600; opacity: 0.95; }
 
 /* The extended-hours print. Its own row with a rule above it, because it is a
    different session and a different claim from the number above. */
@@ -12365,6 +12383,10 @@ body.auth-open { overflow: hidden; }
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(132px, max-content));
   gap: var(--space-3) var(--space-6);
+  /* A hairline sets the reference facts apart from the hero above them, so the
+     price stands alone and these read as its supporting detail. */
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
 }
 
 .px-fact { display: flex; flex-direction: column; gap: var(--space-1); }
