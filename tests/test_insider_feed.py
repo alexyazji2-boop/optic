@@ -305,17 +305,32 @@ def test_every_control_has_a_handler(attr, handler):
     assert handler in block
 
 
-def test_the_feed_loads_with_the_read_view():
+def test_the_feed_loads_with_the_page_it_is_on():
+    """It was the foot of Optic's Read, which is a summary of one day; a
+    market-wide list of filings had nothing to do with the day being
+    summarised. It is a facet of the Insiders page now, beside the
+    congressional disclosures -- the same question asked of different filers.
+
+    Read keeps a pointer rather than losing it silently: it was the bottom of
+    that page for a while and somebody will go looking."""
     block = APP_JS.split("function loadView(view, force) {", 1)[1].split("\nfunction ", 1)[0]
-    assert "loadInsiderFeed(force)" in block
+    assert "if (view === 'insiders') return loadInsiders(force);" in block
+    assert "loadInsiderFeed(force)" not in block, \
+        "the Read must not fetch a feed it no longer shows"
+    entry = APP_JS.split("function loadInsiders(force) {", 1)[1].split("\n}", 1)[0]
+    assert "loadInsiderFeed(force)" in entry
+    assert 'data-go-view="insiders"' in APP_JS, "the Read has to say where it went"
 
 
 def test_it_does_not_ride_on_the_brief_payload():
     """The brief is one shared build per day; this is live. Binding them would
     have made the day's read wait on EDGAR."""
-    assert "id=\"insider-host\"" in APP_JS
     body = APP_JS.split("async function loadInsiderFeed(", 1)[1].split("\nfunction ", 1)[0]
     assert "/api/insiders/latest" in body
+    # Its own request, and its own repaint. `#insider-host` is gone with the
+    # slot at the foot of the Read that it named.
+    assert "insider-host" not in APP_JS
+    assert "renderInsidersFacetHost()" in body
 
 
 def test_a_grant_takes_no_directional_colour():

@@ -158,3 +158,210 @@ def test_it_says_which_chamber_and_why():
 def test_it_is_presented_as_a_record_not_a_signal():
     doc = congress.__doc__ or ""
     assert "Not a signal" in doc
+
+
+# --------------------------------------------------------------- filtering
+#
+# Added with the Insiders page, which asks this module the questions a reader
+# asks: this member, this side, this fortnight. All of it happens here rather
+# than in the browser -- the archive is a thousand rows and the page shows
+# sixty, so filtering there would mean shipping everything in order to narrow
+# it, and the counts have to describe the narrowed set anyway.
+
+import contextlib
+import inspect
+
+
+TRADES = [
+    {"ticker": "MSFT", "side": "buy", "member": "Hon. Kevin Hern", "district": "OK01",
+     "traded_iso": "2026-09-10", "filed": "2026-09-20", "disclosure_lag_days": 10,
+     "amount_low": 1001, "amount_high": 15000, "asset_kind": "ST",
+     "transaction": "purchase", "traded": "09/10/2026", "notified": "09/20/2026",
+     "doc_id": "1", "source_url": "u"},
+    {"ticker": "MSFT", "side": "sell", "member": "Hon. April McClain Delaney", "district": "MD06",
+     "traded_iso": "2026-09-12", "filed": "2026-09-14", "disclosure_lag_days": 2,
+     "amount_low": 15001, "amount_high": 50000, "asset_kind": "ST",
+     "transaction": "sale", "traded": "09/12/2026", "notified": "09/14/2026",
+     "doc_id": "2", "source_url": "u"},
+    {"ticker": "AAPL", "side": "sell", "member": "Hon. Kevin Hern", "district": "OK01",
+     "traded_iso": "2026-08-01", "filed": "2026-09-30", "disclosure_lag_days": 60,
+     "amount_low": 1001, "amount_high": 15000, "asset_kind": "ST",
+     "transaction": "sale", "traded": "08/01/2026", "notified": "09/30/2026",
+     "doc_id": "3", "source_url": "u"},
+    {"ticker": "AAPL", "side": "other", "member": "Hon. Kevin Hern", "district": "OK01",
+     "traded_iso": "2026-09-12", "filed": "2026-09-13", "disclosure_lag_days": 1,
+     "amount_low": 1001, "amount_high": 15000, "asset_kind": "ST",
+     "transaction": "exchange", "traded": "09/12/2026", "notified": "09/13/2026",
+     "doc_id": "4", "source_url": "u"},
+    # A second buy, by the OTHER member. Without it the archive held exactly one
+    # purchase and so did Hern's slice, so a `buys` that counted the whole
+    # archive instead of the filtered set returned the same 1 either way and
+    # every test here passed. Found by mutating the count to ignore the filter.
+    {"ticker": "NVDA", "side": "buy", "member": "Hon. April McClain Delaney", "district": "MD06",
+     "traded_iso": "2026-09-11", "filed": "2026-09-15", "disclosure_lag_days": 4,
+     "amount_low": 50001, "amount_high": 100000, "asset_kind": "ST",
+     "transaction": "purchase", "traded": "09/11/2026", "notified": "09/15/2026",
+     "doc_id": "5", "source_url": "u"},
+]
+
+
+@contextlib.contextmanager
+def loaded(trades=None):
+    """Put rows in the module's store and take them out again.
+
+    Restores whatever was there, so this cannot leave a populated cache behind
+    for the parsing tests above -- which assert against an empty one.
+    """
+    with congress._LOCK:
+        before = dict(congress._MEM)
+        congress._MEM.update(trades=list(TRADES if trades is None else trades),
+                             parsed=5, known=5, at=congress.time.time(),
+                             index_at="2026-09-25T00:00:00+00:00")
+    try:
+        yield
+    finally:
+        with congress._LOCK:
+            congress._MEM.clear()
+            congress._MEM.update(before)
+
+
+def test_the_filters_cannot_be_passed_by_position():
+    """This function had two positional parameters and gained five. Earlier in
+    the same session a third positional flag added to `_swing_snapshot` bound
+    itself to the argument after it and shipped a Dossier panel reading "not
+    requested". Keyword-only makes that impossible rather than unlikely."""
+    spec = inspect.getfullargspec(congress.summary)
+    assert spec.args == ["ticker", "limit"]
+    for name in ("member", "side", "since", "until", "activity_days", "top"):
+        assert name in spec.kwonlyargs, name
+
+
+def test_a_member_is_matched_by_substring_and_ignores_case():
+    """The filed name carries an honorific and often a middle name and suffix
+    -- "Hon. Richard Dean McCormick" -- so an exact match could only ever be
+    produced by clicking a name, never by typing one."""
+    with loaded():
+        assert congress.summary(member="hern")["count"] == 3
+        assert congress.summary(member="HERN")["count"] == 3
+        assert congress.summary(member="Kevin Hern")["count"] == 3
+        assert congress.summary(member="Delaney")["count"] == 2
+        assert congress.summary(member="nobody")["count"] == 0
+
+
+def test_the_date_range_is_inclusive_at_both_ends():
+    """A reader who types the 12th on both sides means that day, not the empty
+    interval between it and itself."""
+    with loaded():
+        assert congress.summary(since="2026-09-12", until="2026-09-12")["count"] == 2
+        assert congress.summary(since="2026-09-10")["count"] == 4
+        assert congress.summary(until="2026-08-01")["count"] == 1
+
+
+def test_the_range_reads_the_trade_date_not_the_filing_date():
+    """They are different dates and the gap runs to weeks. The AAPL sale below
+    was traded on 1 August and filed on 30 September; a September filter must
+    not return it, because the reader is asking what was traded then."""
+    with loaded():
+        out = congress.summary(since="2026-09-01")
+        assert all(t["traded_iso"] >= "2026-09-01" for t in out["trades"])
+        assert not any(t["doc_id"] == "3" for t in out["trades"]), \
+            "a filing date was matched against a trade-date filter"
+
+
+def test_every_count_describes_the_filtered_set():
+    """A reader who has narrowed to one member and one month is asking what
+    that slice holds. A total that ignored the filter would be answering a
+    question nobody asked, while looking authoritative."""
+    with loaded():
+        out = congress.summary(member="hern")
+        assert out["count"] == 3
+        assert out["buys"] == 1 and out["sells"] == 1 and out["other"] == 1
+        assert out["members"] == 1
+        assert out["symbols"] == 2
+        # And they really are different numbers from the unfiltered ones, or
+        # this test cannot tell a filtered count from a total.
+        whole = congress.summary()
+        assert whole["count"] == 5 and whole["buys"] == 2 and whole["members"] == 2
+        assert {r["ticker"] for r in out["top_tickers"]} == {"MSFT", "AAPL"}
+
+
+def test_the_third_direction_is_reported_rather_than_folded_in():
+    """Neither a buy nor a sell: exchanges and the like. Counting one as the
+    other is the same mistake as calling an insider exercise a purchase, which
+    this codebase has already made once and written up."""
+    with loaded():
+        out = congress.summary()
+        assert out["other"] == 1
+        assert out["buys"] == 2 and out["sells"] == 2 and out["count"] == 5
+        assert out["buys"] + out["sells"] + out["other"] == out["count"]
+
+
+def test_the_activity_series_keeps_its_quiet_days():
+    """A bar chart that silently drops empty days compresses a fortnight of
+    nothing into the same width as a busy week, and makes a cluster look like
+    a trend."""
+    with loaded():
+        act = congress.summary(activity_days=5)["activity"]
+        assert len(act) == 5
+        assert [r["date"] for r in act] == sorted(r["date"] for r in act), "newest last"
+        assert act[-1]["date"] == "2026-09-12", "the window ends at the latest trade"
+        assert any(r["buys"] == 0 and r["sells"] == 0 and r["other"] == 0 for r in act)
+        # Four of the five: the August AAPL sale is older than a five-day window.
+        assert sum(r["buys"] + r["sells"] + r["other"] for r in act) == 4
+
+
+def test_the_activity_series_is_keyed_on_the_trade_date():
+    """Both dates are real and they answer different questions. This one lines
+    up with a price chart, which is what the rest of the row is for."""
+    with loaded():
+        act = {r["date"]: r for r in congress.summary(activity_days=40)["activity"]}
+        assert act["2026-09-12"]["sells"] == 1, "the 12th is a trade date"
+        assert act.get("2026-09-14", {}).get("sells", 0) == 0, \
+            "the 14th is that trade's FILING date and holds nothing"
+
+
+def test_the_ranking_is_by_disclosure_count_not_by_money():
+    """Amounts are bands, so ranking by money ranks by the width of a band
+    somebody else chose: one $1M-$5M sale would outrank ten purchases that say
+    far more about what a committee is doing."""
+    with loaded():
+        top = congress.summary()["top_tickers"]
+        # Two at two apiece and one at one. Ties break on the symbol, so the
+        # order is stable rather than dependent on insertion.
+        assert [r["ticker"] for r in top] == ["AAPL", "MSFT", "NVDA"]
+        assert all(top[i]["count"] >= top[i + 1]["count"] for i in range(len(top) - 1))
+        row = next(r for r in top if r["ticker"] == "MSFT")
+        assert row["buys"] == 1 and row["sells"] == 1
+        assert row["members"] == 2, "two different filers traded it"
+
+
+def test_the_ranking_survives_being_turned_into_json():
+    """`members` is counted with a set and a set is not JSON. Returning one
+    would 500 the endpoint rather than the function."""
+    import json
+    with loaded():
+        json.dumps(congress.summary())
+
+
+def test_the_lag_is_reported_as_a_median():
+    """One filing 476 days late -- there is one in the live archive -- drags a
+    mean and tells the reader nothing about the usual case.
+
+    The median proper, not `lags[len // 2]`: on an even count that is the
+    upper-middle, which for these four lags answers 10 where the median is 6.
+    The first version of this returned that and this test caught it."""
+    with loaded():
+        out = congress.summary()
+        lags = sorted(t["disclosure_lag_days"] for t in TRADES)
+        assert lags == [1, 2, 4, 10, 60]
+        assert out["lag_median"] == 4
+        assert out["lag_max"] == 60
+
+
+def test_an_unfiltered_call_is_unchanged():
+    """The page that existed before this asks for a ticker and a limit and
+    must get exactly what it got."""
+    with loaded():
+        a = congress.summary(ticker="MSFT", limit=1)
+        assert a["count"] == 2 and len(a["trades"]) == 1
+        assert a["trades"][0]["ticker"] == "MSFT"

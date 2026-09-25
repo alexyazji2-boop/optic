@@ -48,9 +48,18 @@ def test_it_is_on_the_no_ticker_allow_list():
     by default. Explore is the third to be caught by it: its loader ran, its
     requests never fired, and the page showed "No ticker loaded" on a view that
     has nothing to do with a symbol. Verified live with STATE.ticker null."""
-    guard = APP_JS[APP_JS.index("if (!['market', 'indices', 'roth'"):]
-    guard = guard[:guard.index("&& !STATE.ticker")]
-    assert "'explore'" in guard
+    # The list moved into TICKERLESS_VIEWS, because the Settings back-button
+    # kept a second shorter copy of it and that copy had never heard of
+    # Explore, Scan, Watchlist, Alerts or Compare -- so returning from Settings
+    # to any of the five with no symbol loaded landed on Home instead.
+    assert "if (!TICKERLESS_VIEWS.includes(view) && !STATE.ticker)" in APP_JS
+    allowed = APP_JS[APP_JS.index("const TICKERLESS_VIEWS = ["):]
+    allowed = allowed[:allowed.index("];")]
+    assert "'explore'" in allowed
+    # And there is exactly one such list.
+    assert APP_JS.count("const TICKERLESS_VIEWS = [") == 1
+    assert APP_JS.count("TICKERLESS_VIEWS.includes(") == 2, \
+        "both the loader guard and the Settings back-button read it"
 
 
 # ---------------------------------------------------------------- requests

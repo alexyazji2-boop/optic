@@ -134,9 +134,12 @@ def test_the_no_ticker_guard_lists_the_new_views():
     Explore and would have caught all three of these. These facets ARE about a
     loaded symbol, but they render their own picker under the workspace header
     so the reader keeps the tab strip instead of hitting a bare dead end."""
-    block = APP_JS.split("function loadView(view, force) {", 1)[1].split("&& !STATE.ticker", 1)[0]
+    # The list is TICKERLESS_VIEWS now: the Settings back-button kept its own
+    # shorter copy, and one array cannot drift from itself.
+    block = APP_JS.split("const TICKERLESS_VIEWS = [", 1)[1].split("];", 1)[0]
     for v in NEW_VIEWS:
         assert f"'{v}'" in block, f"{v} will render 'No ticker loaded' instead of itself"
+    assert "if (!TICKERLESS_VIEWS.includes(view) && !STATE.ticker)" in APP_JS
 
 
 def test_every_facet_has_a_label_and_a_title():

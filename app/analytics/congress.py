@@ -37,11 +37,12 @@ import io
 import logging
 import os
 import re
+import statistics
 import threading
 import time
 import xml.etree.ElementTree as ET
 import zipfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -263,23 +264,153 @@ def refresh(year: Optional[int] = None, budget: Optional[int] = None) -> Dict[st
     return summary()
 
 
-def summary(ticker: Optional[str] = None, limit: int = 60) -> Dict[str, Any]:
-    """What is parsed right now. Never fetches -- callers decide when to spend."""
+def _matches(trade: Dict[str, Any], *, member: Optional[str], side: Optional[str],
+             since: Optional[str], until: Optional[str]) -> bool:
+    """One row against one filter set.
+
+    Every test is skipped when its filter is absent, so an empty filter set
+    matches everything and the unfiltered call costs one pass instead of a
+    special case.
+    """
+    if member:
+        # Substring, case-folded. The filed name carries an honorific and a
+        # suffix ("Hon. Richard Dean McCormick"), so an exact match would only
+        # ever be produced by clicking a name rather than typing one.
+        if member.casefold() not in (trade.get("member") or "").casefold():
+            return False
+    if side and trade.get("side") != side:
+        return False
+    # ISO dates compare correctly as strings, which is the whole reason
+    # traded_iso exists beside the filer's US-format `traded`.
+    traded = trade.get("traded_iso")
+    if since and (not traded or traded < since):
+        return False
+    if until and (not traded or traded > until):
+        return False
+    return True
+
+
+def _activity(trades: List[Dict[str, Any]], days: int) -> List[Dict[str, Any]]:
+    """Trades per day, split by direction, newest day last.
+
+    Keyed on the TRADE date rather than the disclosure date. Both are real and
+    they answer different questions -- when it happened, versus when anyone
+    could have known -- and this is the one that lines up with a price chart,
+    which is what the rest of the row is for. The gap between the two is
+    reported separately as the disclosure lag.
+
+    Every day in the window is emitted, including the empty ones: a bar chart
+    that silently drops quiet days compresses a fortnight of nothing into the
+    same width as a busy week and makes a cluster look like a trend.
+    """
+    if days <= 0:
+        return []
+    dated = [t for t in trades if t.get("traded_iso")]
+    if not dated:
+        return []
+    last = max(t["traded_iso"] for t in dated)
+    try:
+        end = datetime.strptime(last, "%Y-%m-%d").date()
+    except ValueError:
+        return []
+    start = end - timedelta(days=days - 1)
+    buckets: Dict[str, Dict[str, int]] = {}
+    for offset in range(days):
+        key = (start + timedelta(days=offset)).isoformat()
+        buckets[key] = {"date": key, "buys": 0, "sells": 0, "other": 0}
+    for t in dated:
+        row = buckets.get(t["traded_iso"])
+        if row is None:
+            continue            # older than the window
+        side = t.get("side")
+        row["buys" if side == "buy" else "sells" if side == "sell" else "other"] += 1
+    return [buckets[k] for k in sorted(buckets)]
+
+
+def _top_tickers(trades: List[Dict[str, Any]], limit: int) -> List[Dict[str, Any]]:
+    """Most-disclosed symbols, with the direction split each one carries.
+
+    Ranked by disclosure COUNT rather than by amount. Amounts are bands, so a
+    ranking by money would be a ranking by the width of a band somebody else
+    chose -- and a single $1M-$5M sale would outrank ten separate purchases
+    that tell you far more about what a committee is doing.
+    """
+    tally: Dict[str, Dict[str, Any]] = {}
+    for t in trades:
+        sym = t.get("ticker")
+        if not sym:
+            continue
+        row = tally.setdefault(sym, {"ticker": sym, "count": 0, "buys": 0, "sells": 0,
+                                     "other": 0, "members": set()})
+        row["count"] += 1
+        side = t.get("side")
+        row["buys" if side == "buy" else "sells" if side == "sell" else "other"] += 1
+        if t.get("member"):
+            row["members"].add(t["member"])
+    out = sorted(tally.values(), key=lambda r: (-r["count"], r["ticker"]))[:limit]
+    # The set was only ever a counter; it must not reach JSON.
+    return [{**r, "members": len(r["members"])} for r in out]
+
+
+def summary(ticker: Optional[str] = None, limit: int = 60, *,
+            member: Optional[str] = None, side: Optional[str] = None,
+            since: Optional[str] = None, until: Optional[str] = None,
+            activity_days: int = 30, top: int = 6) -> Dict[str, Any]:
+    """What is parsed right now. Never fetches -- callers decide when to spend.
+
+    The filters are keyword-only. This function already had two positional
+    parameters and gained five; earlier this session a third positional flag
+    added to a different function bound itself to the argument after it and
+    shipped a panel reading "not requested". Keyword-only makes that
+    impossible rather than unlikely.
+
+    Every count below is over the FILTERED set, not the whole archive. A
+    reader who has narrowed to one member and one month is asking what that
+    slice contains, and a total that ignored the filter would be answering a
+    question nobody asked -- while looking authoritative.
+    """
     with _LOCK:
         trades = list(_MEM["trades"])
         parsed, known, at = _MEM["parsed"], _MEM["known"], _MEM["index_at"]
     if ticker:
         want = ticker.upper().strip()
         trades = [t for t in trades if t["ticker"] == want]
+    if member or side or since or until:
+        trades = [t for t in trades
+                  if _matches(t, member=member, side=side, since=since, until=until)]
     shown = trades[:limit]
     buys = sum(1 for t in trades if t["side"] == "buy")
     sells = sum(1 for t in trades if t["side"] == "sell")
+    lags = sorted(t["disclosure_lag_days"] for t in trades
+                  if t.get("disclosure_lag_days") is not None)
+    filed = [t["filed"] for t in trades if t.get("filed")]
     return {
         "available": bool(trades) or parsed > 0,
         "trades": shown,
         "count": len(trades),
         "buys": buys,
         "sells": sells,
+        # Neither a buy nor a sell: exchanges and the like. Reported rather
+        # than folded into either side, for the same reason an insider
+        # exercise is not a purchase.
+        "other": len(trades) - buys - sells,
+        "activity": _activity(trades, activity_days),
+        "activity_days": activity_days,
+        "top_tickers": _top_tickers(trades, top),
+        "members": len({t["member"] for t in trades if t.get("member")}),
+        "symbols": len({t["ticker"] for t in trades if t.get("ticker")}),
+        # The middle of the lag distribution, not the mean: there is a filing
+        # in the live archive disclosed 476 days after the trade, and one of
+        # those drags a mean away from anything a reader would recognise.
+        #
+        # statistics.median rather than `lags[len // 2]`, which is the
+        # upper-middle on an even count and not the median. Rounded, because a
+        # half day is not a unit this data has.
+        "lag_median": round(statistics.median(lags)) if lags else None,
+        "lag_max": lags[-1] if lags else None,
+        "latest_filed": max(filed) if filed else None,
+        "latest_traded": max((t["traded_iso"] for t in trades if t.get("traded_iso")),
+                             default=None),
         # A band per trade means the total is a band. Reported as two numbers
         # rather than a midpoint, because a midpoint is a figure nobody filed.
         "amount_low": sum(t["amount_low"] for t in trades),

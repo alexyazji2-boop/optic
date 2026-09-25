@@ -1714,10 +1714,25 @@ async def weekly_update(force: bool = False) -> Dict[str, Any]:
     return await _run(build)
 
 
+_ISO_DAY = r"^\d{4}-\d{2}-\d{2}$"
+
+
 @app.get("/api/congress")
 async def congress_trades(
     ticker: Optional[str] = Query(None, description="Filter to one symbol"),
     limit: int = Query(60, ge=1, le=300),
+    member: Optional[str] = Query(
+        None, max_length=80,
+        description="Case-insensitive substring of the filer's name"),
+    side: Optional[str] = Query(
+        None, pattern="^(buy|sell|other)$",
+        description="buy, sell, or other (exchanges and similar)"),
+    since: Optional[str] = Query(None, pattern=_ISO_DAY,
+                                 description="Earliest trade date, YYYY-MM-DD"),
+    until: Optional[str] = Query(None, pattern=_ISO_DAY,
+                                 description="Latest trade date, YYYY-MM-DD"),
+    activity_days: int = Query(30, ge=1, le=180,
+                               description="Width of the per-day activity series"),
 ) -> Dict[str, Any]:
     """Stock trades disclosed by members of the House under the STOCK Act.
 
@@ -1732,7 +1747,14 @@ async def congress_trades(
     """
     if congress_mod.stale():
         await _run(congress_mod.refresh)
-    return congress_mod.summary(ticker=ticker, limit=limit)
+    # Filtering happens here, not in the browser. The archive is thousands of
+    # rows and the page shows sixty, so a client filter would mean shipping
+    # everything in order to narrow it -- and the counts, the per-day series
+    # and the ranking all have to describe the filtered set, which means
+    # whatever computes them has to see all of it.
+    return congress_mod.summary(
+        ticker=ticker, limit=limit, member=member, side=side,
+        since=since, until=until, activity_days=activity_days)
 
 
 @app.get("/api/catalysts")

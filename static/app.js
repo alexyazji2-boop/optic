@@ -79,8 +79,35 @@ const views = {
   explore: $('#view-explore'),
   watchlist: $('#view-watchlist'),
   alerts: $('#view-alerts'),
+  insiders: $('#view-insiders'),
   settings: $('#view-settings'),
 };
+
+/* Views that render without a loaded symbol.
+ *
+ * An allow-list by omission, so a new view is ticker-specific by default and
+ * breaks the moment it is added: its loader runs, its requests never fire, and
+ * it shows "No ticker loaded" on a page that has nothing to do with a symbol.
+ * Watchlist, Alerts and Explore were each caught that way. Anything added that
+ * is not about one loaded symbol joins this array in the same commit.
+ *
+ * Overview, Financials and News ARE per-symbol and are here anyway, because
+ * loadSecurityFacet renders its own "no security loaded" panel under the
+ * workspace header -- the reader keeps the tab strip and can see where they
+ * are, instead of landing on a bare dead end with no way back.
+ *
+ * One array, two readers. `switchView`'s guard had this list written out and
+ * the Settings back-button had its own shorter copy, which is how returning
+ * from Settings to Explore, Scan, Watchlist, Alerts or Compare with no symbol
+ * loaded sent the reader to Home instead: five views the second list had never
+ * heard of. A single constant cannot drift from itself.
+ */
+const TICKERLESS_VIEWS = [
+  'home', 'market', 'indices', 'roth', 'tracker', 'settings', 'brief',
+  'scan', 'explore', 'compare', 'instrument', 'chart',
+  'overview', 'financials', 'news', 'earnings',
+  'watchlist', 'alerts', 'insiders',
+];
 
 /* The security workspace: the facets of one company, in reading order.
  *
@@ -4939,6 +4966,34 @@ document.addEventListener('input', (evt) => {
 });
 
 document.addEventListener('submit', (evt) => {
+  if (evt.target.id === 'ins-filter-form') {
+    evt.preventDefault();
+    /* Read out of the form rather than tracked per keystroke.
+     *
+     * Five inputs updating module state on every `input` event is five
+     * refetches per typed character unless it is debounced, and a debounce on
+     * a form that has an Apply button is two ways to submit the same thing.
+     * The form IS the state until it is applied. */
+    const get = (name) => {
+      const el = evt.target.elements[name];
+      return el ? (el.value || '').trim() : '';
+    };
+    const since = get('since');
+    const until = get('until');
+    congressQuery = {
+      ...congressQuery,
+      ticker: get('ticker').toUpperCase(),
+      member: get('member'),
+      side: get('side'),
+      // Swapped rather than rejected: a reader who fills the boxes the other
+      // way round means the range between them, and an error message here
+      // would be the app being pedantic about its own field order.
+      since: since && until && since > until ? until : since,
+      until: since && until && since > until ? since : until,
+    };
+    loadInsidersCongress(false);
+    return;
+  }
   if (evt.target.id === 'ins-find-form') {
     evt.preventDefault();
     const box = document.getElementById('ins-q');
@@ -4946,8 +5001,7 @@ document.addEventListener('submit', (evt) => {
     if (next === insiderTicker) return;
     insiderTicker = next;
     STATE.insiders = null;
-    const host = document.getElementById('insider-host');
-    if (host) host.innerHTML = renderInsiderFeed();
+    renderInsidersFacetHost();
     loadInsiderFeed(false);
     return;
   }
@@ -6445,6 +6499,8 @@ const PALETTE_PLACES = [
   { view: 'explore', label: 'Explore',
     terms: 'explore discover browse trending ideas sectors what is happening' },
   { view: 'scan', label: 'Scan', terms: 'scan screener find candidates momentum breakout' },
+  { view: 'insiders', label: 'Insiders',
+    terms: 'insiders insider congress congressional politicians form 4 stock act disclosures pelosi senator representative buying selling' },
   { view: 'watchlist', label: 'Watchlist', terms: 'watchlist watching follow list' },
   { view: 'alerts', label: 'Alerts', terms: 'alerts alarms notifications fired' },
   { view: 'compare', label: 'Compare', terms: 'compare versus vs side by side' },
@@ -24177,6 +24233,404 @@ function insiderFeedRow(r) {
   </tr>`;
 }
 
+/* =========================================================== Insiders view
+ *
+ * Two filing regimes on one page, because they answer the same question from
+ * opposite ends and a reader comparing them should not have to change tabs:
+ *
+ *   Congress   what members of the House disclosed trading, under the STOCK
+ *              Act. Late by law -- up to 45 days -- and reported as a band,
+ *              never a figure.
+ *   Company    Form 4s, filed within two business days of the trade, exact to
+ *              the share and the cent.
+ *
+ * Deliberately NOT a signal. Both are records of what was filed. The page
+ * ranks by how often a symbol appears, never by how much money it implies,
+ * because a congressional amount is the width of a band somebody else chose.
+ */
+
+const INSIDER_FACETS = [
+  { id: 'congress', label: 'Congress', hint: 'House disclosures under the STOCK Act' },
+  { id: 'filings', label: 'Company filings', hint: 'Form 4s, market-wide' },
+];
+
+const INS_FACET_KEY = 'optic.insiders.facet';
+const INS_SAVED_KEY = 'optic.insiders.saved.v1';
+
+let insidersFacet = 'congress';
+try {
+  const savedFacet = localStorage.getItem(INS_FACET_KEY);
+  if (INSIDER_FACETS.some((f) => f.id === savedFacet)) insidersFacet = savedFacet;
+} catch (e) { /* private mode */ }
+
+/* The filter set, and the one place its vocabulary is written down.
+ *
+ * `side` is matched against the server's own three-way, not against a word
+ * invented here. Three watch conditions in this app once shipped comparing a
+ * stored parameter against a value produced somewhere else -- direction
+ * against up/down where the analytics produce rising/falling -- and all three
+ * stored fine, evaluated fine and never fired.
+ */
+const CONGRESS_SIDES = [
+  { id: '', label: 'Any direction' },
+  { id: 'buy', label: 'Purchases' },
+  { id: 'sell', label: 'Sales' },
+  { id: 'other', label: 'Exchanges and similar' },
+];
+const CONGRESS_WINDOWS = [14, 30, 90];
+
+const CONGRESS_BLANK = { ticker: '', member: '', side: '', since: '', until: '', days: 30 };
+let congressQuery = { ...CONGRESS_BLANK };
+let congressSaved = [];
+try {
+  const raw = JSON.parse(localStorage.getItem(INS_SAVED_KEY) || '[]');
+  if (Array.isArray(raw)) congressSaved = raw.filter((x) => x && typeof x.name === 'string').slice(0, 12);
+} catch (e) { /* private mode, or something else wrote the key */ }
+
+function congressSaveSearches() {
+  try { localStorage.setItem(INS_SAVED_KEY, JSON.stringify(congressSaved)); }
+  catch (e) { /* private mode */ }
+}
+
+/** The query as a URL, and as the thing a saved search stores. */
+function congressQueryString(q) {
+  const parts = [`limit=60&activity_days=${encodeURIComponent(q.days || 30)}`];
+  if (q.ticker) parts.push('ticker=' + encodeURIComponent(q.ticker.toUpperCase()));
+  if (q.member) parts.push('member=' + encodeURIComponent(q.member));
+  if (q.side) parts.push('side=' + encodeURIComponent(q.side));
+  if (q.since) parts.push('since=' + encodeURIComponent(q.since));
+  if (q.until) parts.push('until=' + encodeURIComponent(q.until));
+  return parts.join('&');
+}
+
+/** Is anything actually narrowed? Drives the Reset button's disabled state. */
+function congressFiltered(q) {
+  return !!(q.ticker || q.member || q.side || q.since || q.until);
+}
+
+/** A saved search, described in words rather than as a query string. */
+function congressQueryLabel(q) {
+  const bits = [];
+  if (q.ticker) bits.push(q.ticker.toUpperCase());
+  if (q.member) bits.push(q.member);
+  const side = CONGRESS_SIDES.find((x) => x.id === q.side);
+  if (side && side.id) bits.push(side.label.toLowerCase());
+  if (q.since && q.until) bits.push(`${q.since} to ${q.until}`);
+  else if (q.since) bits.push(`since ${q.since}`);
+  else if (q.until) bits.push(`up to ${q.until}`);
+  return bits.join(' · ') || 'Everything';
+}
+
+/* ---------------------------------------------------------------- the chart
+ *
+ * Written here rather than through lineChart, which draws a price series with
+ * a time axis, a value axis and a crosshair. This is a count per day over at
+ * most ninety days: two stacked rectangles and a baseline.
+ *
+ * Purchases below the line and sales above it, in the app's own directional
+ * pair. Stacked rather than side by side because the question is "how much was
+ * filed that day, and which way" -- two thin bars per day at ninety days is
+ * under two pixels each.
+ */
+function congressActivityChart(rows, days) {
+  const list = rows || [];
+  if (!list.length) return '';
+  const peak = Math.max(1, ...list.map((r) => r.buys + r.sells + r.other));
+  const W = 100;                       // a viewBox in percent, so it scales
+  const H = 34;
+  const slot = W / list.length;
+  const gap = list.length > 60 ? 0 : Math.min(0.5, slot * 0.18);
+  const w = Math.max(0.4, slot - gap);
+  const bars = list.map((r, i) => {
+    const total = r.buys + r.sells + r.other;
+    if (!total) return '';
+    const x = i * slot + gap / 2;
+    const h = (total / peak) * H;
+    const bh = (r.buys / total) * h;
+    const sh = (r.sells / total) * h;
+    const oh = h - bh - sh;
+    const title = `${r.date} · ${r.buys} bought, ${r.sells} sold${
+      r.other ? `, ${r.other} other` : ''}`;
+    let y = H - h;
+    const seg = (height, cls) => {
+      if (height <= 0) return '';
+      const out = `<rect class="${cls}" x="${x.toFixed(2)}" y="${y.toFixed(2)}"
+        width="${w.toFixed(2)}" height="${height.toFixed(2)}"><title>${esc(title)}</title></rect>`;
+      y += height;
+      return out;
+    };
+    /* Sales on top, purchases at the base. Fixed order, so the eye can read
+     * the red band across the row without re-reading the key on every bar. */
+    return seg(sh, 'ca-sell') + seg(oh, 'ca-other') + seg(bh, 'ca-buy');
+  }).join('');
+  const first = list[0].date;
+  const last = list[list.length - 1].date;
+  return `<div class="ca-wrap">
+    <svg class="ca-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
+      role="img" aria-label="Disclosed trades per day over ${days} days">
+      ${bars}
+    </svg>
+    <div class="ca-axis"><span>${esc(dayLabel(first))}</span><span>${esc(dayLabel(last))}</span></div>
+  </div>`;
+}
+
+/** "Sep 12" from an ISO day, without pulling the whole date formatter in. */
+function dayLabel(iso) {
+  const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return String(iso || '');
+  // Noon, so a timezone behind UTC cannot roll the date back a day.
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+/* ------------------------------------------------------------ the ranking */
+
+function congressTopList(rows) {
+  const list = rows || [];
+  if (!list.length) return '<p class="sub">Nothing to rank in this slice.</p>';
+  const peak = Math.max(1, ...list.map((r) => r.count));
+  return `<ul class="ct-list">${list.map((r) => {
+    const buyPct = (r.buys / r.count) * 100;
+    const sellPct = (r.sells / r.count) * 100;
+    return `<li class="ct-row">
+      <button type="button" class="ct-sym" data-ins-pick="${esc(r.ticker)}"
+        title="Filter this page to ${esc(r.ticker)}">${esc(r.ticker)}</button>
+      <span class="ct-counts">${fmt(r.count, 0)} filing${r.count === 1 ? '' : 's'} ·
+        ${fmt(r.buys, 0)} bought · ${fmt(r.sells, 0)} sold ·
+        ${fmt(r.members, 0)} member${r.members === 1 ? '' : 's'}</span>
+      ${/* Two bars, not one. The outer width is how often the symbol appears
+           against the busiest one; the inner split is which way. A single bar
+           would have to choose between the two and would be read as the
+           other. */''}
+      <span class="ct-bar" style="width:${((r.count / peak) * 100).toFixed(1)}%">
+        <span class="ct-buy" style="width:${buyPct.toFixed(1)}%"></span>
+        <span class="ct-sell" style="width:${sellPct.toFixed(1)}%"></span>
+      </span>
+    </li>`;
+  }).join('')}</ul>`;
+}
+
+/* -------------------------------------------------------------- the table */
+
+function insCongressRow(t) {
+  const band = `$${fmtCompact(t.amount_low, 0)} – $${fmtCompact(t.amount_high, 0)}`;
+  const lag = t.disclosure_lag_days;
+  const tone = t.side === 'buy' ? 'pos' : t.side === 'sell' ? 'neg' : '';
+  /* 45 days is the statutory deadline, so past it is the fact worth marking --
+   * not "old". Under it the number is context and takes no colour. */
+  const late = lag !== null && lag !== undefined && lag > 45;
+  /* No `data-ins-doc` here. It was, as the hook for an expanding row -- and
+   * the row has nothing left to expand: the filing itself and the district
+   * are in the last column already. A dead attribute does not error, it takes
+   * the click and does nothing, which reads as a slow app rather than a
+   * missing feature. tests/test_insiders_page.py audits the pair. */
+  return `<tr class="ins-row">
+    <td class="name">${esc(t.member || '')}</td>
+    <td><button type="button" class="ct-sym" data-ins-pick="${esc(t.ticker || '')}"
+      >${esc(t.ticker || '—')}</button></td>
+    <td><span class="ins-side ${tone}">${esc(cap(t.transaction || t.side || ''))}</span></td>
+    <td class="num">${band}</td>
+    <td>${esc(dayLabel(t.traded_iso) || t.traded || '')}</td>
+    <td>${esc(dayLabel(t.filed) || '')}</td>
+    <td class="num${late ? ' neg' : ''}">${
+  lag === null || lag === undefined ? '—' : `${fmt(lag, 0)}d`}</td>
+    <td class="ins-more">${t.source_url ? `<a href="${esc(t.source_url)}"
+      target="_blank" rel="noopener" title="The filing itself, on the Clerk's server"
+      >Filing</a>` : ''}${t.district ? ` <span class="muted">${esc(t.district)}</span>` : ''}</td>
+  </tr>`;
+}
+
+/* --------------------------------------------------------------- the view */
+
+function insidersFacetBar() {
+  return `<div class="ins-facets" role="tablist" aria-label="Which filings">
+    ${INSIDER_FACETS.map((f) => `<button type="button" role="tab"
+      class="ins-facet${insidersFacet === f.id ? ' on' : ''}"
+      data-ins-facet="${f.id}" aria-selected="${insidersFacet === f.id}"
+      title="${esc(f.hint)}">${esc(f.label)}</button>`).join('')}
+  </div>`;
+}
+
+function congressFilterForm() {
+  const q = congressQuery;
+  return `<form class="ins-filters panel" id="ins-filter-form" data-fixed="1">
+    <div class="ins-field"><label for="cq-ticker">Symbol</label>
+      <input id="cq-ticker" name="ticker" type="text" value="${esc(q.ticker)}"
+        placeholder="Any" maxlength="10" spellcheck="false" autocomplete="off"></div>
+    <div class="ins-field"><label for="cq-member">Member</label>
+      <input id="cq-member" name="member" type="text" value="${esc(q.member)}"
+        placeholder="Part of a name" maxlength="80" spellcheck="false" autocomplete="off"></div>
+    <div class="ins-field"><label for="cq-side">Direction</label>
+      <select id="cq-side" name="side">${CONGRESS_SIDES.map((x) => `<option value="${x.id}"${
+  q.side === x.id ? ' selected' : ''}>${esc(x.label)}</option>`).join('')}</select></div>
+    ${/* Trade date, not filing date, and the label has to say so: the two run
+         weeks apart and a reader filtering "September" means what was traded
+         then. */''}
+    <div class="ins-field"><label for="cq-since">Traded from</label>
+      <input id="cq-since" name="since" type="date" value="${esc(q.since)}"></div>
+    <div class="ins-field"><label for="cq-until">Traded to</label>
+      <input id="cq-until" name="until" type="date" value="${esc(q.until)}"></div>
+    <div class="ins-acts">
+      <button class="btn btn-primary" type="submit">Apply</button>
+      <button class="btn" type="button" data-ins-reset
+        ${congressFiltered(q) ? '' : 'disabled'}>Reset</button>
+      <button class="btn" type="button" data-ins-save
+        ${congressFiltered(q) ? '' : 'disabled'}
+        title="Keeps this filter set in this browser">Save this search</button>
+    </div>
+    ${congressSaved.length ? `<div class="ins-saved">
+      ${congressSaved.map((sv, i) => `<span class="ins-chip">
+        <button type="button" data-ins-load="${i}" title="${esc(congressQueryLabel(sv.q))}"
+          >${esc(sv.name)}</button>
+        <button type="button" class="ins-chip-x" data-ins-drop="${i}"
+          aria-label="Forget ${esc(sv.name)}">&times;</button>
+      </span>`).join('')}
+    </div>` : ''}
+  </form>`;
+}
+
+/* The form and the results are rendered separately, and that is the fix for a
+ * real fault rather than a tidiness preference.
+ *
+ * The whole facet used to repaint whenever a request settled, which rebuilt the
+ * form from `congressQuery` -- so anything typed and not yet applied was thrown
+ * away by a result arriving, and a reader half through a member's name lost it
+ * to their own previous query finishing. `preserveUI` was not enough: it
+ * restores focus and the caret, not a value the rebuild never knew about.
+ *
+ * So results repaint on their own, and the form is rebuilt only when something
+ * OUTSIDE it changed the query -- a ranked symbol, Reset, a saved search --
+ * where the fields genuinely have to catch up.
+ */
+function renderCongressFacet() {
+  return congressFilterForm()
+    + `<div id="ins-results-host">${congressResults()}</div>`;
+}
+
+function congressResults() {
+  const c = STATE.insCongress;
+  if (!c) {
+    return congressFilterForm()
+      + '<div class="panel" data-fixed="1"><p class="sub">Reading the Clerk’s filings…</p></div>';
+  }
+  if (c.available === false && c.reason) {
+    return congressFilterForm()
+      + `<div class="panel" data-fixed="1"><div class="error-box"><strong>Could not load.</strong>
+        ${esc(c.reason)}<div class="error-acts"><button type="button" class="btn"
+        data-ins-retry>Try again</button></div></div></div>`;
+  }
+  const n = c.count || 0;
+  const q = congressQuery;
+  const narrowed = congressFiltered(q);
+  return `${n ? `<div class="grid c2">
+      <div class="panel">
+        <h2>${hg('Disclosed trades per day')}</h2>
+        <p class="sub">${fmt(n, 0)} disclosure${n === 1 ? '' : 's'} ·
+          ${fmt(c.buys, 0)} bought · ${fmt(c.sells, 0)} sold${
+  c.other ? ` · ${fmt(c.other, 0)} exchange or similar` : ''} ·
+          ${fmt(c.members, 0)} member${c.members === 1 ? '' : 's'} ·
+          ${fmt(c.symbols, 0)} symbol${c.symbols === 1 ? '' : 's'}</p>
+        <div class="ins-windows" role="group" aria-label="Window">
+          ${CONGRESS_WINDOWS.map((d) => `<button type="button" class="pill${
+  q.days === d ? ' on' : ''}" data-ins-days="${d}" aria-pressed="${q.days === d}"
+            >${d}d</button>`).join('')}
+        </div>
+        ${congressActivityChart(c.activity, c.activity_days)}
+        <p class="ca-key"><span class="ca-dot ca-buy"></span> bought
+          <span class="ca-dot ca-sell"></span> sold</p>
+        <p class="caveat">Dated by when the trade happened, not when it was
+          filed. The two run weeks apart: half of these were disclosed
+          ${c.lag_median === null || c.lag_median === undefined
+    ? 'some days' : `${fmt(c.lag_median, 0)} days`} or more after the fact${
+  c.lag_max ? `, and the slowest in this slice took ${fmt(c.lag_max, 0)}` : ''}.</p>
+      </div>
+      <div class="panel">
+        <h2>${hg('Most disclosed')}</h2>
+        <p class="sub">By how often a symbol appears, not by money. The amounts
+          are bands, so a ranking by value would rank by the width of a band the
+          filer chose.</p>
+        ${congressTopList(c.top_tickers)}
+      </div>
+    </div>
+    <div class="panel">
+      <h2>${hg('The filings')}${n > (c.trades || []).length ? `<span class="th-plain">
+        · newest ${fmt((c.trades || []).length, 0)} of ${fmt(n, 0)}</span>` : ''}</h2>
+      <div class="scroll-y table-scroll"><table class="data">
+        <thead><tr><th>Member</th><th>Symbol</th><th>Transaction</th>
+          <th class="num">Amount</th><th>Traded</th><th>Disclosed</th>
+          <th class="num" title="Days between the trade and the filing. The STOCK Act allows 45.">Filed after</th>
+          <th></th></tr></thead>
+        <tbody>${(c.trades || []).map(insCongressRow).join('')}</tbody>
+      </table></div>
+      <p class="caveat">${esc(c.caveat || '')}</p>
+    </div>`
+    : `<div class="panel" data-fixed="1"><h2>${hg('No filings match')}</h2>
+      <p class="sub">${narrowed
+    ? 'Nothing in the record read so far matches those filters. That is an absence of a disclosure, not evidence that nothing was traded.'
+    : 'No House filings have been parsed yet. They are fetched a few at a time rather than in one burst at a government file server, so this fills in as you come back.'}</p>
+      ${narrowed ? '<div class="empty-acts"><button type="button" class="btn" data-ins-reset>Clear the filters</button></div>' : ''}</div>`}
+    <p class="caveat">${c.index_at ? `Indexed ${esc(shortWhen(c.index_at))}. ` : ''}${
+  c.latest_filed ? `Latest disclosure ${esc(dayLabel(c.latest_filed))}. ` : ''}${
+  c.complete ? 'The whole year is read.'
+    : `Read so far: ${fmt(c.filings_parsed, 0)} of ${fmt(c.filings_known, 0)} filings this year.`}
+      <a href="${esc(c.source || '')}" target="_blank" rel="noopener">Source</a>.</p>`;
+}
+
+function renderInsidersView() {
+  hideTip();
+  const facet = INSIDER_FACETS.find((f) => f.id === insidersFacet) || INSIDER_FACETS[0];
+  views.insiders.innerHTML = `<div class="panel ins-head" data-fixed="1">
+      <h1>${hg('Insiders')}</h1>
+      <p class="sub">Who is trading what, from the two filing regimes that have
+        to be public. A record of what was filed, not a signal: nothing here is
+        ranked by how profitable it looked.</p>
+      ${insidersFacetBar()}
+    </div>
+    <div id="ins-facet-host">${
+  facet.id === 'congress' ? renderCongressFacet() : renderInsiderFeed()}</div>`;
+  revealPanels(views.insiders);
+}
+
+/** Repaint the facet, so the page header and the tabs keep their place.
+ *
+ *  `full` rebuilds the filter form too. Without it only the results change,
+ *  which is what a request settling should cost -- see renderCongressFacet.
+ */
+function renderInsidersFacetHost(opts) {
+  const host = document.getElementById('ins-facet-host');
+  if (!host || STATE.view !== 'insiders') return;
+  const results = document.getElementById('ins-results-host');
+  const partial = insidersFacet === 'congress' && results && !(opts && opts.full);
+  // Scroll and focus survive either way: a result landing must not jump the
+  // page out from under someone reading the table.
+  preserveUI(host, () => {
+    if (partial) results.innerHTML = congressResults();
+    else host.innerHTML = insidersFacet === 'congress' ? renderCongressFacet() : renderInsiderFeed();
+  });
+  revealPanels(partial ? results : host);
+}
+
+async function loadInsidersCongress(force) {
+  const url = '/api/congress?' + congressQueryString(congressQuery);
+  // Keyed on the query, so switching facets back and forth does not refetch
+  // the same slice -- and changing any filter does.
+  if (!force && STATE.insCongressFor === url) return;
+  STATE.insCongressFor = url;
+  try {
+    STATE.insCongress = await getJSON(url);
+  } catch (err) {
+    STATE.insCongress = { available: false, reason: err.message };
+  }
+  renderInsidersFacetHost();
+}
+
+function loadInsiders(force) {
+  renderInsidersView();
+  if (insidersFacet === 'congress') return loadInsidersCongress(force);
+  return loadInsiderFeed(force);
+}
+
 function renderInsiderFeed() {
   const d = STATE.insiders;
   if (!d) return `<div class="panel span-all"><h2>${hg('Insider filings')}</h2>
@@ -24249,11 +24703,11 @@ async function loadInsiderFeed(force) {
   } catch (err) {
     STATE.insiders = { available: false, reason: err.message };
   }
-  const host = document.getElementById('insider-host');
-  if (host && STATE.view === 'brief') {
-    host.innerHTML = renderInsiderFeed();
-    revealPanels(host);
-  }
+  // The feed moved off Optic's Read and onto the Insiders page, where it sits
+  // beside the congressional filings that answer the same question from the
+  // other end. It repaints into the facet host rather than into its old
+  // `span-all` slot at the foot of the Read.
+  renderInsidersFacetHost();
 }
 
 function renderBrief(d) {
@@ -24378,10 +24832,17 @@ function renderBrief(d) {
       ? `<p class="caveat">Degraded on this build: ${esc((d.degraded_sources || []).join(', '))}.</p>`
       : ''}
   </div>
-  ${/* Its own host, filled by its own request. The brief is one shared build
-      * per day; this is live and arrives on a different cadence, so binding it
-      * into the brief payload would have made the day's read wait on EDGAR. */''}
-  <div id="insider-host" class="span-all">${renderInsiderFeed()}</div>`;
+  ${/* The Form 4 feed used to end this page. It is a market-wide list of
+      * filings and had nothing to do with the day being summarised, so it is
+      * on the Insiders page now -- beside the congressional filings, which are
+      * the same question asked of a different set of filers. A pointer rather
+      * than a silent removal: it was the bottom of this page for a while and
+      * somebody will come looking for it. */''}
+  <div class="panel span-all" data-fixed="1"><h2>${hg('Insider filings')}</h2>
+    <p class="sub">Form 4s across the market, and what members of the House
+      disclosed trading, are on their own page now.</p>
+    <div class="empty-acts"><button type="button" class="btn"
+      data-go-view="insiders">Open Insiders</button></div></div>`;
 
   const box = document.getElementById('read-q');
   if (box) {
@@ -25356,10 +25817,7 @@ function loadView(view, force) {
   // because loadSecurityFacet renders its own "no security loaded" panel under
   // the workspace header — the reader keeps the tab strip and can see where
   // they are, instead of landing on a bare dead end with no way back.
-  if (!['market', 'indices', 'roth', 'tracker', 'settings', 'brief', 'scan',
-    'explore', 'earnings', 'compare', 'instrument', 'chart',
-    'overview', 'financials', 'news',
-    'watchlist', 'alerts'].includes(view) && !STATE.ticker) {
+  if (!TICKERLESS_VIEWS.includes(view) && !STATE.ticker) {
     views[view].innerHTML = emptyHTML(
       'No symbol loaded',
       'Pick one and this panel fills in with its levels, flow and context.',
@@ -25397,6 +25855,7 @@ function loadView(view, force) {
   if (view === 'overview' || view === 'financials' || view === 'news') {
     return loadSecurityFacet(view, force);
   }
+  if (view === 'insiders') return loadInsiders(force);
   if (view === 'swing') return loadSwing(force);
   if (view === 'earnings') return loadEarnings(force);
   if (view === 'compare') return loadCompare(force);
@@ -25411,7 +25870,7 @@ function loadView(view, force) {
   if (view === 'indices') return loadIndices(force);
   if (view === 'tracker') return loadTracker(force);
   if (view === 'roth') return loadRoth(force);
-  if (view === 'brief') { loadInsiderFeed(force); return loadBrief(force); }
+  if (view === 'brief') return loadBrief(force);
   if (view === 'settings') return renderSettings();
   if (view === 'long') return loadLong(force);
 }
@@ -27571,7 +28030,7 @@ const NAV_GROUPS = [
    * They answer different questions and are still two separate pages -- what
    * changed is that they stopped each costing a slot in the top row for it.
    * Both are "I do not have a symbol yet", which is one destination. */
-  { id: 'discover', label: 'Discover', views: ['explore', 'scan'] },
+  { id: 'discover', label: 'Discover', views: ['explore', 'scan', 'insiders'] },
   /* The group is "Positions"; the view inside it keeps the name "Optic's
    * Positions". Both are deliberate.
    *
@@ -28012,7 +28471,7 @@ if (settingsBtn) {
     // symbol could have been cleared while Settings was open, and returning to a
     // "No ticker loaded" panel is a worse answer than Home.
     let back = viewBeforeSettings;
-    const needsTicker = !['home', 'market', 'indices', 'roth', 'tracker', 'brief'].includes(back);
+    const needsTicker = !TICKERLESS_VIEWS.includes(back);
     if (back === 'settings' || (needsTicker && !STATE.ticker)) back = 'home';
     switchView(back);
   });
@@ -28594,23 +29053,90 @@ document.addEventListener('click', (evt) => {
     // The filter is applied server-side, so switching is a refetch. Cheap: the
     // filings are already parsed and cached, so this re-reads the cache.
     STATE.insiders = null;
-    const host = document.getElementById('insider-host');
-    if (host) host.innerHTML = renderInsiderFeed();
+    renderInsidersFacetHost();
     loadInsiderFeed(false);
     return;
   }
   if (evt.target.closest('[data-ins-clear]')) {
     insiderTicker = '';
     STATE.insiders = null;
-    const host = document.getElementById('insider-host');
-    if (host) host.innerHTML = renderInsiderFeed();
+    renderInsidersFacetHost();
     loadInsiderFeed(false);
+    return;
+  }
+  /* ---------------------------------------------------- Insiders page */
+  const facetBtn = evt.target.closest('[data-ins-facet]');
+  if (facetBtn) {
+    const want = facetBtn.dataset.insFacet;
+    if (want === insidersFacet) return;
+    insidersFacet = want;
+    try { localStorage.setItem(INS_FACET_KEY, want); } catch (e) { /* private mode */ }
+    // Repaint the whole view, because the tab bar's own pressed state moved.
+    renderInsidersView();
+    if (want === 'congress') loadInsidersCongress(false); else loadInsiderFeed(false);
+    return;
+  }
+  const dayBtn = evt.target.closest('[data-ins-days]');
+  if (dayBtn) {
+    const want = Number(dayBtn.dataset.insDays);
+    if (!CONGRESS_WINDOWS.includes(want) || want === congressQuery.days) return;
+    congressQuery.days = want;
+    loadInsidersCongress(false);
+    return;
+  }
+  const symPick = evt.target.closest('[data-ins-pick]');
+  if (symPick) {
+    const sym = symPick.dataset.insPick || '';
+    // A second press on the symbol already filtered to clears it, so the
+    // control is a toggle rather than a one-way trip into a filtered page.
+    congressQuery.ticker = (congressQuery.ticker || '').toUpperCase() === sym.toUpperCase()
+      ? '' : sym;
+    // The Symbol field has to catch up, so the form is rebuilt with it.
+    renderInsidersFacetHost({ full: true });
+    loadInsidersCongress(false);
+    return;
+  }
+  if (evt.target.closest('[data-ins-reset]')) {
+    // `days` is the chart's window, not a filter, and survives a reset: it is
+    // how the reader is reading the chart, not what they are looking for.
+    congressQuery = { ...CONGRESS_BLANK, days: congressQuery.days };
+    renderInsidersFacetHost({ full: true });
+    loadInsidersCongress(false);
+    return;
+  }
+  if (evt.target.closest('[data-ins-retry]')) { loadInsidersCongress(true); return; }
+  if (evt.target.closest('[data-ins-save]')) {
+    const name = (window.prompt('Name this search', congressQueryLabel(congressQuery)) || '').trim();
+    if (!name) return;
+    // Same name replaces, rather than growing a second chip that looks
+    // identical and does something else.
+    congressSaved = [{ name: name.slice(0, 40), q: { ...congressQuery } },
+      ...congressSaved.filter((x) => x.name !== name)].slice(0, 12);
+    congressSaveSearches();
+    renderInsidersFacetHost({ full: true });
+    return;
+  }
+  const loadSaved = evt.target.closest('[data-ins-load]');
+  if (loadSaved) {
+    const saved = congressSaved[Number(loadSaved.dataset.insLoad)];
+    if (!saved) return;
+    // The window is not part of a saved search, so a saved one does not
+    // silently change how the chart is being read.
+    congressQuery = { ...CONGRESS_BLANK, ...saved.q, days: congressQuery.days };
+    renderInsidersFacetHost({ full: true });
+    loadInsidersCongress(false);
+    return;
+  }
+  const dropSaved = evt.target.closest('[data-ins-drop]');
+  if (dropSaved) {
+    congressSaved.splice(Number(dropSaved.dataset.insDrop), 1);
+    congressSaveSearches();
+    renderInsidersFacetHost({ full: true });
     return;
   }
   if (evt.target.closest('[data-ins-refresh]')) {
     STATE.insiders = null;
-    const host = document.getElementById('insider-host');
-    if (host) host.innerHTML = renderInsiderFeed();
+    renderInsidersFacetHost();
     loadInsiderFeed(true);
     return;
   }

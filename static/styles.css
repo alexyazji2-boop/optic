@@ -14349,3 +14349,160 @@ body.ws-max[data-view="chart"] [data-ws-max] {
   right: 0;
   margin-left: auto;
 }
+
+/* ---------------------------------------------------------- Insiders page
+ *
+ * Optic's own tokens throughout. The directional pair is --pos / --neg, the
+ * same one the candles, the volume strip and every percentage in this app
+ * already use, so a green bar here means what a green bar means everywhere
+ * else. No new colours were introduced for this page.
+ */
+.ins-head h1 { margin: 0 0 var(--space-1); font-size: var(--t-title); }
+.ins-head .sub { max-width: 68ch; }
+
+.ins-facets {
+  display: flex;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
+  flex-wrap: wrap;
+}
+.ins-facet {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--t-small);
+  font-weight: 600;
+  cursor: pointer;
+  transition: color var(--dur-ui) var(--ease-ui),
+              border-color var(--dur-ui) var(--ease-ui),
+              background-color var(--dur-ui) var(--ease-ui);
+}
+.ins-facet:hover { color: var(--ink); border-color: var(--border-strong); }
+.ins-facet.on { background: var(--plane); color: var(--ink); border-color: var(--accent); }
+
+/* The filter row. A grid rather than a flex row: five controls of different
+   natural widths wrapped into a ragged two-and-a-half lines, and the labels
+   stopped lining up with each other. */
+.ins-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-3);
+  align-items: end;
+}
+.ins-field { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.ins-field label {
+  font-size: var(--t-caption);
+  color: var(--ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+/* flex-basis is a WIDTH in a row and a HEIGHT in a column, and these labels are
+   columns: the shared control classes in this file carry `flex: 0 1 340px` for
+   the Settings page's rows, which reused here made every input 340px tall. */
+.ins-field input,
+.ins-field select {
+  width: 100%;
+  min-width: 0;
+  flex: none;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--t-small);
+}
+.ins-acts {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  flex-wrap: wrap;
+  /* Spans the whole grid, so the buttons sit under the fields rather than
+     becoming a sixth column of a different height. */
+  grid-column: 1 / -1;
+}
+.ins-saved { grid-column: 1 / -1; display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.ins-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+.ins-chip button {
+  background: none;
+  border: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--t-caption);
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+}
+.ins-chip button { transition: color var(--dur-ui) var(--ease-ui); }
+.ins-chip button:hover { color: var(--ink); }
+.ins-chip-x { border-left: 1px solid var(--border) !important; padding: var(--space-1) var(--space-2) !important; }
+
+.ins-windows { display: flex; gap: var(--space-1); margin-bottom: var(--space-3); }
+
+/* The activity chart. preserveAspectRatio: none on the SVG, so the bars
+   stretch to the panel's width and the height is set here -- the viewBox is a
+   percentage grid, not pixels, and letting it letterbox would centre a strip
+   of bars in the middle of an empty panel. */
+.ca-wrap { margin-bottom: var(--space-2); }
+.ca-chart { display: block; width: 100%; height: 120px; }
+.ca-buy { fill: var(--pos); }
+.ca-sell { fill: var(--neg); }
+.ca-other { fill: var(--ink-muted); }
+.ca-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--t-caption);
+  color: var(--ink-muted);
+  margin-top: var(--space-1);
+}
+.ca-key { font-size: var(--t-caption); color: var(--ink-muted); margin: var(--space-2) 0; }
+.ca-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  margin: 0 var(--space-0) 0 var(--space-2);
+}
+/* The key's swatches are spans, not SVG shapes, so they need background rather
+   than fill -- the fill rules above do nothing to an HTML element. */
+.ca-dot.ca-buy { background: var(--pos); }
+.ca-dot.ca-sell { background: var(--neg); }
+
+/* The ranking. */
+.ct-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+.ct-row { display: grid; grid-template-columns: auto 1fr; gap: var(--space-2) var(--space-3); align-items: baseline; }
+.ct-sym {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  color: var(--ink);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.ct-sym { transition: color var(--dur-ui) var(--ease-ui); }
+.ct-sym:hover { color: var(--accent); text-decoration: underline; }
+.ct-counts { font-size: var(--t-caption); color: var(--ink-muted); }
+.ct-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--border);
+  min-width: 2px;
+}
+.ct-buy { background: var(--pos); }
+.ct-sell { background: var(--neg); }
+
+.ins-side { font-weight: 600; }
+.ins-row .ins-more { white-space: nowrap; font-size: var(--t-caption); }
