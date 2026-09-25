@@ -24472,7 +24472,7 @@ function congressFilterForm() {
     <div class="ins-field"><label for="cq-until">Traded to</label>
       <input id="cq-until" name="until" type="date" value="${esc(q.until)}"></div>
     <div class="ins-acts">
-      <button class="btn btn-primary" type="submit">Apply</button>
+      <button class="btn primary" type="submit">Apply</button>
       <button class="btn" type="button" data-ins-reset
         ${congressFiltered(q) ? '' : 'disabled'}>Reset</button>
       <button class="btn" type="button" data-ins-save
