@@ -14834,3 +14834,29 @@ body.rail-tight .rail .rail-recent { display: none; }
 .pt-stat { display: flex; flex-direction: column; gap: var(--space-0); min-width: 0; }
 .pt-stat strong { font-size: var(--t-lead); font-variant-numeric: tabular-nums; }
 .pt-sub { font-size: var(--t-caption); color: var(--ink-muted); }
+
+/* A segmented control in a field column fills the column.
+ *
+ * `.seg` is `inline-flex`, so it hugs its buttons -- but inside `.ins-field`,
+ * which is a flex COLUMN, it is stretched to the column's width by the default
+ * cross-axis stretch. The box grew and the buttons did not, so Long/Short sat
+ * in the left half of a full-width bordered box with the rest of it empty.
+ * Measured on the ticket at a 241px column: Direction filled 53%, Instrument
+ * 61% and Call/Put 43% -- 114px, 93px and 138px of dead space inside a border
+ * that looked like a control.
+ *
+ * Scoped to `.ins-field`, and that scope is the whole care here: the same
+ * class carries Line/Candles on two chart toolbars and three rows in Settings,
+ * where the control is meant to hug its labels and stretching it would leave
+ * a Line button half a toolbar wide.
+ */
+.ins-field > .seg { display: flex; }
+.ins-field > .seg button {
+  /* Equal shares of the box rather than each button's own text width: a
+     "Shares"/"Option" pair with one longer word would otherwise split the
+     border unevenly and read as one of them being selected. */
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+  justify-content: center;
+}

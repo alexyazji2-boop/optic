@@ -318,3 +318,33 @@ def test_a_book_that_failed_to_price_offers_to_try_again():
     assert "data-paper-remark" in function("paperTicketHTML")
     i = APP.index("closest('[data-paper-remark]')")
     assert "paperMark();" in APP[i:i + 300]
+
+
+def test_a_segmented_control_fills_the_column_it_sits_in():
+    """`.seg` is inline-flex and hugs its buttons, but inside `.ins-field` --
+    a flex COLUMN -- the box is stretched to the column width by the default
+    cross-axis stretch. The box grew and the buttons did not, so Long/Short sat
+    in the left half of a full-width bordered box.
+
+    Measured at a 241px column before this: Direction filled 53%, Instrument
+    61%, Call/Put 43% -- up to 138px of dead space inside a border that looked
+    like a control. After: 99%, with the two halves at 119px and 120px."""
+    block = CSS[CSS.index("A segmented control in a field column fills the column."):]
+    assert ".ins-field > .seg button {" in block
+    rule = block[block.index(".ins-field > .seg button {"):]
+    rule = rule[:rule.index("}")]
+    assert "flex: 1 1 0" in rule, "equal shares, not each button's text width"
+    assert "min-width: 0" in rule
+
+
+def test_the_fill_is_scoped_to_the_field_column():
+    """The same class carries Line/Candles on two chart toolbars and three rows
+    in Settings, where the control is meant to hug its labels -- stretching it
+    there would leave a Line button half a toolbar wide. Verified in a browser:
+    the Settings rows still measure box == buttons."""
+    block = CSS[CSS.index("A segmented control in a field column fills the column."):]
+    for line in block.splitlines():
+        if line.startswith(".seg") or line.startswith(".ws-toolbar"):
+            raise AssertionError("unscoped: " + line)
+    # And the bare rule it must not have replaced is still there.
+    assert ".seg { display: inline-flex;" in CSS
