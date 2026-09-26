@@ -138,6 +138,27 @@ def test_the_host_exists_for_the_painter_to_find():
 # ------------------------------------------------- the cold start
 
 
+def test_the_priority_board_is_cached_like_its_neighbour():
+    """One of its four legs is the same ~150-call earnings scan that
+    /api/earnings-week caches for an hour -- and that endpoint's own docstring
+    says it "takes tens of seconds cold, which is far too slow for a tab a
+    reader opens casually". This board is not a tab opened casually: it is on
+    the landing page above the fold, and it had no cache at all.
+
+    Timed cold, per leg: earnings 66.6s, events 3.9s, sectors 0.8s, movers
+    0.01s. Measured on the live server: 42s."""
+    assert "_PRIORITY_CACHE" in MAIN and "PRIORITY_TTL" in MAIN
+    fn = MAIN[MAIN.index("async def priority_board()"):]
+    fn = fn[:fn.index("\n\n\n")]
+    assert 'hit = _PRIORITY_CACHE.get("board")' in fn
+    assert "time.time() - hit[\"at\"]) < PRIORITY_TTL" in fn
+    # Shorter than the hour its neighbour uses: the sector leg reads current
+    # price against the prior session's range and is the one a reader could
+    # catch being wrong. It rebuilds in 0.8s.
+    ttl = float(re.search(r"PRIORITY_TTL = ([\d.]+)", MAIN).group(1))
+    assert 300 <= ttl <= 1800, ttl
+
+
 def test_the_home_payload_is_built_before_a_reader_asks():
     """7.35s on the first request after a restart, 0.6s after. This platform
     restarts on every deploy, and the landing page is the most requested
@@ -147,6 +168,10 @@ def test_the_home_payload_is_built_before_a_reader_asks():
     fn = MAIN[MAIN.index("async def _warm_home()"):]
     fn = fn[:fn.index("\n@app.on_event")]
     assert "await home_summary()" in fn
+    # And the board, which is the slower of the two: timed cold, its earnings
+    # leg alone is 66.6s against 0.02s for the whole build once warm, and the
+    # live server served it in 42s.
+    assert "await priority_board()" in fn
     # Started at boot, and held so it is not garbage-collected mid-flight:
     # asyncio keeps only a weak reference to a bare create_task.
     assert "app.state.warm_task = asyncio.create_task(_warm_home())" in MAIN

@@ -1448,7 +1448,7 @@ async def _tracker_loop() -> None:
 
 
 async def _warm_home() -> None:
-    """Build the home payload once at boot, so that no reader has to.
+    """Build the landing page's two slow payloads at boot, so no reader does.
 
     /api/home is six legs and three of them reach the network. Measured on the
     live server: 7.35s on the first request after a restart, 0.6s on every one
@@ -1465,14 +1465,21 @@ async def _warm_home() -> None:
     dependency: every leg already reports its own absence when a reader asks
     for real, and a warm-up that raised would take the process down with it.
     """
+    log = logging.getLogger("uvicorn.error")
     try:
         await asyncio.sleep(2)
         await home_summary()
-        logging.getLogger("uvicorn.error").info("home payload warmed")
+        log.info("home payload warmed")
+        # The board as well: it is on the same first screen and its earnings
+        # leg is 66s cold. Built after the home payload rather than beside
+        # it, because both pull on the same provider and racing them at boot
+        # would just make the first reader wait for a busier thread pool.
+        await priority_board()
+        log.info("priority board warmed")
     except asyncio.CancelledError:                              # noqa: PERF203
         raise
     except Exception as exc:                                    # noqa: BLE001
-        logging.getLogger("uvicorn.error").info("home warm skipped: %s", exc)
+        log.info("warm-up skipped: %s", exc)
 
 
 @app.on_event("startup")
@@ -1920,11 +1927,39 @@ def _cached_ranking() -> Optional[Dict[str, Any]]:
     return (blob or {}).get("ranking") or None
 
 
+# The board, and when it was built. Same shape as _EW_CACHE below, for the same
+# reason and on the same evidence.
+_PRIORITY_CACHE: Dict[str, Any] = {}
+PRIORITY_TTL = 600.0
+
+
 @app.get("/api/priority")
 async def priority_board() -> Dict[str, Any]:
-    """Today's four-column triage board."""
+    """Today's four-column triage board.
+
+    Cached for ten minutes, because one of its four legs is an earnings scan.
+    Timed cold, per leg: earnings 66.6s, events 3.9s, sectors 0.8s, movers
+    0.01s -- and 0.02s for the whole build once the provider caches are warm.
+    `_earnings` calls the same weekly scan `/api/earnings-week` does, and that
+    endpoint's docstring already says it is "~150 provider calls and takes tens
+    of seconds cold, which is far too slow for a tab a reader opens casually".
+    This board is not a tab a reader opens casually -- it is on the landing
+    page, above the fold. Measured on the live server before this: 42s.
+
+    Ten minutes rather than the hour `/api/earnings-week` uses. The earnings
+    and events legs move on the scale of days and would tolerate far more, but
+    the sector column reads current price against the prior session's high and
+    low, and that is the leg a reader could catch being wrong. It costs 0.8s to
+    rebuild, so ten minutes is the price of not making anyone wait for the
+    other 70.
+    """
     def build() -> Dict[str, Any]:
-        return priority_mod.build(YF_PROVIDER, scanners_mod, _cached_ranking())
+        hit = _PRIORITY_CACHE.get("board")
+        if hit and (time.time() - hit["at"]) < PRIORITY_TTL:
+            return hit["data"]
+        out = priority_mod.build(YF_PROVIDER, scanners_mod, _cached_ranking())
+        _PRIORITY_CACHE["board"] = {"at": time.time(), "data": out}
+        return out
     return await _run(build)
 
 

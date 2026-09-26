@@ -3168,10 +3168,16 @@ function renderHome() {
   moversPayload().catch(() => {});
   // The market screen loads on its own; see loadHomeMarket.
   loadHomeMarket();
-  /* And the digest on its own again, so neither waits for the other. This one
-   * is one small request against a store the Read tab has usually already
-   * warmed, and the market screen is four legs; sequencing them would hold the
-   * top of the page behind the middle of it. */
+  /* And the digest on its own again, so neither waits for the other.
+   *
+   * This said "one small request against a store the Read tab has usually
+   * already warmed". It is not and there is no such store: /api/priority has
+   * four legs of its own and one of them is the ~150-call earnings scan, timed
+   * at 66.6s cold. Measured on the live server, the board arrived 42 seconds
+   * after the page. Being fired on its own is what kept that off the rest of
+   * the screen -- the panel stays `hidden` until it lands -- so the comment
+   * was right about the shape and wrong about the cost, which is the sort of
+   * wrong that stops anyone looking. The server caches it now. */
   loadHomeToday();
   // No autofocus any more. It used to be right when the page was a search box
   // and nothing else; now there is a market summary underneath and stealing
