@@ -80,6 +80,7 @@ const views = {
   watchlist: $('#view-watchlist'),
   alerts: $('#view-alerts'),
   insiders: $('#view-insiders'),
+  paper: $('#view-paper'),
   settings: $('#view-settings'),
 };
 
@@ -106,7 +107,7 @@ const TICKERLESS_VIEWS = [
   'home', 'market', 'indices', 'roth', 'tracker', 'settings', 'brief',
   'scan', 'explore', 'compare', 'instrument', 'chart',
   'overview', 'financials', 'news', 'earnings',
-  'watchlist', 'alerts', 'insiders',
+  'watchlist', 'alerts', 'insiders', 'paper',
 ];
 
 /* The security workspace: the facets of one company, in reading order.
@@ -1589,6 +1590,7 @@ const LEGAL = {
     roth: '<strong>Not retirement or tax advice.</strong> A rules-based illustration to compare against your own plan. It is not tailored to your income, tax situation, other accounts or goals, and contribution limits and eligibility change. Confirm current rules with the IRS and a licensed professional.',
     earnings: '<strong>Not a recommendation.</strong> Event pricing describes what the market is charging, not what you should do about it. Holding an option through a report can lose money even when the direction is right.',
     tracker: '<strong>Hypothetical performance.</strong> These positions were never placed with real money. Simulated results are prepared with the benefit of hindsight, assume fills at the mid price, and bear no commission, slippage, financing, borrow cost or tax. No real account would necessarily achieve results resembling these, and simulated performance does not indicate future results.',
+    paper: '<strong>Hypothetical performance.</strong> Positions you enter here were never placed with real money. Marks assume you could trade at the last price or the chain mid, and bear no commission, slippage, financing, borrow cost, assignment risk or tax. A short position here cannot fail to borrow and an option here is never exercised early. No real account would necessarily achieve results resembling these.',
     market: '<strong>Not a recommendation.</strong> A regime read on the market as a whole, not a view on any individual security, and not advice to change your positioning.',
     indices: '<strong>Not a recommendation.</strong> Long-run index context, not advice to buy, sell or hold any index fund.',
     brief: '<strong>Not a recommendation.</strong> A summary of published news, not analysis of it, and not a view on any security mentioned. Headlines belong to their publishers and link to the original, and nothing here has been verified independently. Scheduled releases are calendar dates, not forecasts.',
@@ -4857,6 +4859,25 @@ document.addEventListener('input', (evt) => {
 });
 
 document.addEventListener('change', (evt) => {
+  if (evt.target.id === 'pt-expiry' || evt.target.id === 'pt-strike') {
+    if (evt.target.id === 'pt-expiry') {
+      paperTicket.expiry = evt.target.value;
+      // A strike from the previous expiry is not on the new ladder.
+      paperTicket.strike = '';
+    } else {
+      paperTicket.strike = evt.target.value;
+    }
+    renderPaperView();
+    return;
+  }
+  if (evt.target.id === 'pt-ticker') {
+    paperTicket.ticker = (evt.target.value || '').toUpperCase().trim();
+    renderPaperView();
+    if (paperTicket.instrument === 'option' && paperTicket.ticker) {
+      paperLoadChain(paperTicket.ticker);
+    }
+    return;
+  }
   const kind = evt.target.closest && evt.target.closest('[data-watch-kind]');
   if (!kind) return;
   // Re-rendered rather than patched: the parameter field's kind changes with the
@@ -5045,6 +5066,29 @@ document.addEventListener('input', (evt) => {
 });
 
 document.addEventListener('submit', (evt) => {
+  if (evt.target.id === 'pt-form') {
+    evt.preventDefault();
+    const get = (n) => {
+      const el = evt.target.elements[n];
+      return el ? (el.value || '').trim() : '';
+    };
+    // Read out of the form at submit, the same way the congress filters are:
+    // updating module state per keystroke is a re-render per character, and
+    // this form rebuilds itself whenever the instrument changes.
+    paperTicket = {
+      ...paperTicket,
+      ticker: get('ticker').toUpperCase(),
+      qty: get('qty'), entry: get('entry'), stop: get('stop'),
+      target: get('target'), thesis: get('thesis'),
+      expiry: get('expiry') || paperTicket.expiry,
+      strike: get('strike') || paperTicket.strike,
+    };
+    const refused = paperOpenTrade();
+    if (refused) paperNote = refused;
+    renderPaperView();
+    if (!refused) paperMark();
+    return;
+  }
   if (evt.target.id === 'ins-filter-form') {
     evt.preventDefault();
     /* Read out of the form rather than tracked per keystroke.
@@ -6589,6 +6633,8 @@ const PALETTE_PLACES = [
   { view: 'explore', label: 'Explore',
     terms: 'explore discover browse trending ideas sectors what is happening' },
   { view: 'scan', label: 'Scan', terms: 'scan screener find candidates momentum breakout' },
+  { view: 'paper', label: 'Paper trades',
+    terms: 'paper trade simulator practice manual position long short buy sell shares option call put book ticket mock virtual' },
   { view: 'insiders', label: 'Insiders',
     terms: 'insiders insider congress congressional politicians form 4 stock act disclosures pelosi senator representative buying selling' },
   { view: 'watchlist', label: 'Watchlist', terms: 'watchlist watching follow list' },
@@ -24362,6 +24408,594 @@ function insiderFeedRow(r) {
   </tr>`;
 }
 
+/* ======================================================= the paper book
+ *
+ * A trade you enter by hand, marked by the server, kept in this browser.
+ *
+ * **Why it is not the Optic Portfolio tab.** That one is the terminal's own
+ * record: positions the scanner opened under a fixed risk policy, in a ledger
+ * nobody can edit. Its entire value is that last clause. A hand-entered trade
+ * landing in it would end that, and the damage would be invisible -- the
+ * numbers would still add up.
+ *
+ * **Why it lives in localStorage.** There is no sign-in and there is not going
+ * to be one, so a server-side book would be one book shared by every visitor.
+ * The browser keeps the only copy and posts it to /api/paper/mark to be
+ * priced, which stores nothing -- the same arrangement /api/retirement already
+ * uses for holdings.
+ *
+ * **What Optic adds to it.** Two things no simulator can do without the rest
+ * of this terminal:
+ *
+ *   the read    the stance and conviction Optic held on that symbol AT THE
+ *               MOMENT you opened, frozen onto the trade. Afterwards the book
+ *               can tell you how you did on the trades where you agreed with
+ *               it against the ones where you did not -- which is a question
+ *               about your judgement, and the only scoreboard here that is.
+ *   the stop    a trade is not openable without one. Everything is then
+ *               reported in R -- multiples of what you said you would lose --
+ *               rather than in dollars against an account size you invented.
+ */
+
+const PAPER_KEY = 'optic.paper.v1';
+const PAPER_MAX = 50;                 // matches papertrade.MAX_POSITIONS
+
+/* The book: open positions, and what has been closed. Read once, written on
+ * every change. A bad or half-written blob is treated as no book rather than
+ * throwing on the first render -- private mode and a hand-edited key both
+ * arrive here. */
+let paperBook = { open: [], closed: [] };
+try {
+  const raw = JSON.parse(localStorage.getItem(PAPER_KEY) || 'null');
+  if (raw && Array.isArray(raw.open) && Array.isArray(raw.closed)) paperBook = raw;
+} catch (e) { /* private mode, or something else wrote the key */ }
+
+function paperSave() {
+  try { localStorage.setItem(PAPER_KEY, JSON.stringify(paperBook)); }
+  catch (e) { /* private mode: the book lasts as long as the tab */ }
+}
+
+function paperId() {
+  return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+/* The ticket's own state, separate from the book.
+ *
+ * Kept here rather than read from the form on every keystroke, because the
+ * instrument switch rebuilds the ticket -- an option needs an expiry, a strike
+ * and a side that shares do not -- and a rebuild driven from the DOM would
+ * lose whatever had been typed into the fields that survive it. */
+let paperTicket = {
+  ticker: '', instrument: 'shares', direction: 'long',
+  qty: '', entry: '', stop: '', target: '', thesis: '',
+  expiry: '', strike: '', optionType: 'call',
+};
+let paperChain = null;          // { ticker, spot, rows } for the ticket only
+let paperChainFor = '';
+let paperMarks = {};            // id -> the server's mark
+let paperMarking = false;
+let paperNote = '';             // one line back from the last action
+
+/* ------------------------------------------------------------ the numbers */
+
+/** What one position costs to open, in dollars. */
+function paperCost(pos) {
+  return pos.entry_price * pos.qty * (pos.instrument === 'option' ? 100 : 1);
+}
+
+/** What the stop says this trade is allowed to lose. The denominator of R. */
+function paperRisk(pos) {
+  if (!pos.stop) return null;
+  const per = Math.abs(pos.entry_price - pos.stop);
+  return per * pos.qty * (pos.instrument === 'option' ? 100 : 1);
+}
+
+/* Profit and loss in multiples of what was risked.
+ *
+ * Reported instead of a percentage return on an invented account size. A book
+ * with no deposits in it has no equity, so "up 4%" here would be a percentage
+ * of a number the reader made up -- whereas "+2.1R" means the trade made twice
+ * what it was set up to lose, which is true whatever the account. */
+function paperR(pos, pnl) {
+  const risk = paperRisk(pos);
+  if (!risk || pnl === null || pnl === undefined) return null;
+  return pnl / risk;
+}
+
+function paperRText(r) {
+  if (r === null || r === undefined || !isFinite(r)) return '—';
+  return `${r >= 0 ? '+' : ''}${fmt(r, 2)}R`;
+}
+
+/* ------------------------------------------------------------- the ticket */
+
+/** Optic's own read on the ticket's symbol, if that symbol is loaded. */
+function paperRead() {
+  const sym = (paperTicket.ticker || '').toUpperCase();
+  if (!sym || !STATE.swing || STATE.swing.ticker !== sym) return null;
+  const v = STATE.swing.verdict || {};
+  if (!v.stance) return null;
+  return { stance: v.stance, conviction: v.conviction, score: v.composite_score,
+           summary: v.summary };
+}
+
+function paperReadHTML() {
+  const read = paperRead();
+  const sym = (paperTicket.ticker || '').toUpperCase();
+  if (!sym) return '';
+  if (!read) {
+    return `<p class="pt-read pt-read-none">Optic has no read on ${esc(sym)} loaded.
+      <button type="button" class="auth-link" data-paper-load="${esc(sym)}"
+        >Load it</button> and this trade will record what the terminal thought
+      at the moment you opened it.</p>`;
+  }
+  const agrees = paperAgreement(read, paperTicket.direction);
+  return `<p class="pt-read">Optic reads ${esc(sym)} as
+    <strong class="${read.stance === 'bullish' ? 'pos' : read.stance === 'bearish' ? 'neg' : ''}"
+      >${esc(read.stance)}</strong>${read.conviction ? `, ${esc(read.conviction)} conviction` : ''}.
+    ${agrees === null ? 'Neither with nor against you.'
+    : agrees ? 'That agrees with this trade.' : 'That is against this trade.'}
+    <span class="pt-read-note">Recorded on the trade, and scored separately below.</span></p>`;
+}
+
+/* Does the terminal's read point the same way as the trade?
+ *
+ * null for a neutral read rather than false: "Optic was neutral and you were
+ * long" is not a disagreement, and counting it as one would make the scoreboard
+ * below say the reader fought the terminal on trades where it held no view. */
+function paperAgreement(read, direction) {
+  if (!read || !read.stance) return null;
+  if (read.stance === 'bullish') return direction === 'long';
+  if (read.stance === 'bearish') return direction === 'short';
+  return null;
+}
+
+/* -------------------------------------------------------- the ticket form */
+
+function paperTicketHTML() {
+  const t = paperTicket;
+  const isOpt = t.instrument === 'option';
+  const chain = (paperChain && paperChain.ticker === (t.ticker || '').toUpperCase())
+    ? paperChain : null;
+  const expiries = chain ? [...new Set(chain.rows.map((r) => r.expiry))] : [];
+  const strikes = chain && t.expiry
+    ? [...new Set(chain.rows.filter((r) => r.expiry === t.expiry
+        && r.is_call === (t.optionType === 'call')).map((r) => r.strike))].sort((a, b) => a - b)
+    : [];
+  const picked = chain && t.expiry && t.strike
+    ? chain.rows.find((r) => r.expiry === t.expiry && String(r.strike) === String(t.strike)
+        && r.is_call === (t.optionType === 'call'))
+    : null;
+  return `<form class="panel pt-ticket" id="pt-form" data-fixed="1">
+    <h2>${hg('Open a trade')}</h2>
+    <div class="pt-grid">
+      <div class="ins-field"><label for="pt-ticker">Symbol</label>
+        <input id="pt-ticker" name="ticker" type="text" value="${esc(t.ticker)}"
+          placeholder="NVDA" maxlength="12" spellcheck="false" autocomplete="off"></div>
+      <div class="ins-field"><label>Direction</label>
+        <div class="seg" role="group" aria-label="Direction">
+          <button type="button" data-paper-dir="long"
+            aria-pressed="${t.direction === 'long'}">Long</button>
+          <button type="button" data-paper-dir="short"
+            aria-pressed="${t.direction === 'short'}">Short</button>
+        </div></div>
+      <div class="ins-field"><label>Instrument</label>
+        <div class="seg" role="group" aria-label="Instrument">
+          <button type="button" data-paper-inst="shares"
+            aria-pressed="${!isOpt}">Shares</button>
+          <button type="button" data-paper-inst="option"
+            aria-pressed="${isOpt}">Option</button>
+        </div></div>
+    </div>
+    ${isOpt ? `<div class="pt-grid">
+      <div class="ins-field"><label>Call or put</label>
+        <div class="seg" role="group" aria-label="Option type">
+          <button type="button" data-paper-ot="call"
+            aria-pressed="${t.optionType === 'call'}">Call</button>
+          <button type="button" data-paper-ot="put"
+            aria-pressed="${t.optionType === 'put'}">Put</button>
+        </div></div>
+      <div class="ins-field"><label for="pt-expiry">Expiry</label>
+        <select id="pt-expiry" name="expiry"${expiries.length ? '' : ' disabled'}>
+          ${expiries.length ? '' : '<option value="">Load a symbol first</option>'}
+          ${expiries.map((e) => `<option value="${esc(e)}"${
+  t.expiry === e ? ' selected' : ''}>${esc(e)}</option>`).join('')}
+        </select></div>
+      <div class="ins-field"><label for="pt-strike">Strike</label>
+        <select id="pt-strike" name="strike"${strikes.length ? '' : ' disabled'}>
+          ${strikes.length ? '' : '<option value="">—</option>'}
+          ${strikes.map((k) => `<option value="${k}"${
+  String(t.strike) === String(k) ? ' selected' : ''}>${fmt(k, 2)}</option>`).join('')}
+        </select></div>
+    </div>
+    ${picked ? `<p class="pt-quote">${esc(picked.contract)} · mid
+      <strong>$${fmt(picked.mid, 2)}</strong> (bid ${fmt(picked.bid, 2)} / ask ${fmt(picked.ask, 2)})
+      · ${fmt(picked.dte, 0)} days · delta ${fmt(picked.delta, 2)}${
+  picked.spread_pct !== null && picked.spread_pct !== undefined
+    ? ` · spread ${fmt(picked.spread_pct, 1)}%` : ''}
+      ${/* The mid is what the book will mark this at, so the spread is the
+           first thing that makes a paper fill a fiction. Said here, at the
+           moment of entry, rather than in a footnote nobody reads. */''}
+      ${picked.spread_pct > 10 ? '<span class="neg"> — wide; a real fill would be worse.</span>' : ''}</p>`
+    : ''}` : ''}
+    <div class="pt-grid">
+      <div class="ins-field"><label for="pt-qty">${isOpt ? 'Contracts' : 'Shares'}</label>
+        <input id="pt-qty" name="qty" type="number" min="0" step="any"
+          value="${esc(t.qty)}" placeholder="100"></div>
+      <div class="ins-field"><label for="pt-entry">Entry ${isOpt ? 'premium' : 'price'}</label>
+        <input id="pt-entry" name="entry" type="number" min="0" step="any"
+          value="${esc(t.entry)}" placeholder="${picked ? fmt(picked.mid, 2) : 'market'}"></div>
+      <div class="ins-field"><label for="pt-stop">Stop</label>
+        <input id="pt-stop" name="stop" type="number" min="0" step="any"
+          value="${esc(t.stop)}" placeholder="required"></div>
+      <div class="ins-field"><label for="pt-target">Target</label>
+        <input id="pt-target" name="target" type="number" min="0" step="any"
+          value="${esc(t.target)}" placeholder="optional"></div>
+    </div>
+    <div class="ins-field"><label for="pt-thesis">Why, and what would prove you wrong</label>
+      <input id="pt-thesis" name="thesis" type="text" value="${esc(t.thesis)}"
+        maxlength="200" placeholder="Held the 200-day and volume came in"></div>
+    ${paperReadHTML()}
+    ${paperPreviewHTML()}
+    <div class="ins-acts">
+      <button class="btn primary" type="submit">Open the trade</button>
+      <button class="btn" type="button" data-paper-clear>Clear</button>
+    </div>
+    ${paperNote ? `<p class="pt-note">${esc(paperNote)}</p>` : ''}
+  </form>`;
+}
+
+/* What the trade costs and risks, before it is opened.
+ *
+ * Shown rather than left to be discovered: every one of these numbers is
+ * decided by the four fields above it, and a reader who finds out afterwards
+ * that a two-dollar stop on five contracts was a thousand dollars of risk has
+ * learned it the expensive way, which is the way this page exists to avoid. */
+function paperPreviewHTML() {
+  const t = paperTicket;
+  const qty = Number(t.qty);
+  const entry = Number(t.entry);
+  const stop = Number(t.stop);
+  if (!(qty > 0) || !(entry > 0)) return '';
+  const mult = t.instrument === 'option' ? 100 : 1;
+  const cost = entry * qty * mult;
+  const risk = stop > 0 ? Math.abs(entry - stop) * qty * mult : null;
+  const target = Number(t.target);
+  const reward = target > 0 ? Math.abs(target - entry) * qty * mult : null;
+  /* The stop on the wrong side is a typo, not a strategy: a long stopped above
+   * entry is stopped out immediately, and the book would record a loss the
+   * reader never intended to take. */
+  const wrongSide = stop > 0 && ((t.direction === 'long' && stop >= entry)
+    || (t.direction === 'short' && stop <= entry));
+  return `<div class="pt-preview">
+    <span><span class="pt-k">Costs</span> $${fmtCompact(cost, 2)}</span>
+    <span><span class="pt-k">Risks</span> ${risk === null
+    ? '<span class="neg">no stop set</span>' : `$${fmtCompact(risk, 2)}`}</span>
+    ${reward !== null && risk ? `<span><span class="pt-k">Reward:risk</span>
+      ${fmt(reward / risk, 2)} to 1</span>` : ''}
+    ${wrongSide ? `<span class="neg">Stop is on the wrong side of entry for a
+      ${esc(t.direction)}.</span>` : ''}
+  </div>`;
+}
+
+/* ---------------------------------------------------------- the positions */
+
+function paperPosLabel(pos) {
+  if (pos.instrument !== 'option') return `${pos.qty} ${esc(pos.ticker)}`;
+  return `${pos.qty} ${esc(pos.ticker)} ${fmt(pos.strike, 2)} ${
+    esc(pos.option_type)} ${esc(String(pos.expiry).slice(5))}`;
+}
+
+function paperOpenRow(pos) {
+  const m = paperMarks[pos.id] || {};
+  const pnl = m.pnl;
+  const r = paperR(pos, pnl);
+  const tone = pnl === null || pnl === undefined ? '' : (pnl >= 0 ? 'pos' : 'neg');
+  const agrees = paperAgreement(pos.read, pos.direction);
+  return `<tr>
+    <td class="name">${paperPosLabel(pos)}
+      <span class="pt-dir ${pos.direction === 'long' ? 'pos' : 'neg'}">${esc(pos.direction)}</span></td>
+    <td class="num">${fmt(pos.entry_price, 2)}</td>
+    <td class="num">${m.mark_price === undefined || m.mark_price === null
+    ? '—' : fmt(m.mark_price, 2)}</td>
+    ${/* The mark's provenance, per row. `mark_option` answers from the live
+         chain when there is one and from a model when there is not, and a
+         modelled mark is an estimate -- no other simulator tells you which
+         you are looking at, and it changes what the P&L beside it is worth. */''}
+    <td class="pt-src">${m.mark_source ? esc(m.mark_source)
+    : `<span class="muted">${esc(m.reason || 'not marked')}</span>`}</td>
+    <td class="num ${tone}">${pnl === null || pnl === undefined
+    ? '—' : `${pnl >= 0 ? '+' : '−'}$${fmtCompact(Math.abs(pnl), 2)}`}</td>
+    <td class="num ${tone}">${paperRText(r)}</td>
+    <td class="pt-read-cell">${pos.read
+    ? `<span class="${agrees === null ? 'muted' : agrees ? 'pos' : 'neg'}"
+        title="${esc(pos.read.summary || '')}">${esc(pos.read.stance)}${
+  agrees === null ? '' : agrees ? ' · with' : ' · against'}</span>`
+    : '<span class="muted">—</span>'}</td>
+    <td><button type="button" class="btn pt-close" data-paper-close="${esc(pos.id)}"
+      ${m.mark_price === undefined || m.mark_price === null ? 'disabled' : ''}
+      title="Close at the current mark">Close</button></td>
+  </tr>`;
+}
+
+function paperClosedRow(t) {
+  const tone = t.pnl >= 0 ? 'pos' : 'neg';
+  const agrees = paperAgreement(t.read, t.direction);
+  return `<tr>
+    <td class="name">${paperPosLabel(t)}
+      <span class="pt-dir ${t.direction === 'long' ? 'pos' : 'neg'}">${esc(t.direction)}</span></td>
+    <td class="num">${fmt(t.entry_price, 2)}</td>
+    <td class="num">${fmt(t.exit_price, 2)}</td>
+    <td class="num ${tone}">${t.pnl >= 0 ? '+' : '−'}$${fmtCompact(Math.abs(t.pnl), 2)}</td>
+    <td class="num ${tone}">${paperRText(t.r)}</td>
+    <td class="pt-read-cell">${t.read
+    ? `<span class="${agrees === null ? 'muted' : agrees ? 'pos' : 'neg'}">${
+  esc(t.read.stance)}</span>` : '<span class="muted">—</span>'}</td>
+    <td class="pt-when">${esc(dayLabel(String(t.closed_at).slice(0, 10)))}</td>
+  </tr>`;
+}
+
+/* --------------------------------------------------------- the scoreboard
+ *
+ * Realised only. An open position's P&L is a quote, not a result, and folding
+ * it into a win rate would let a book look like it wins by never closing
+ * anything that is down -- which is the exact habit a practice account exists
+ * to expose rather than to hide.
+ */
+function paperStatsHTML() {
+  const done = paperBook.closed;
+  if (!done.length) {
+    return `<div class="panel" data-fixed="1"><h2>${hg('Record')}</h2>
+      <p class="sub">Nothing closed yet. Every number here is realised: an open
+        position's profit is a quote, not a result.</p></div>`;
+  }
+  const wins = done.filter((t) => t.pnl > 0);
+  const total = done.reduce((a, t) => a + t.pnl, 0);
+  const withR = done.filter((t) => t.r !== null && t.r !== undefined && isFinite(t.r));
+  const avgR = withR.length ? withR.reduce((a, t) => a + t.r, 0) / withR.length : null;
+  /* The scoreboard the rest of this page exists for.
+   *
+   * Split on whether the trade ran with Optic's read or against it, using the
+   * read frozen at the moment it was opened -- not today's, which has had the
+   * benefit of watching the trade. Neutral reads are in neither bucket: they
+   * were not an opinion to agree with. */
+  const sided = (want) => {
+    const rows = done.filter((t) => paperAgreement(t.read, t.direction) === want
+      && t.r !== null && t.r !== undefined && isFinite(t.r));
+    if (!rows.length) return null;
+    return { n: rows.length, avg: rows.reduce((a, t) => a + t.r, 0) / rows.length };
+  };
+  const withOptic = sided(true);
+  const against = sided(false);
+  return `<div class="panel">
+    <h2>${hg('Record')}</h2>
+    <p class="sub">${fmt(done.length, 0)} closed · ${fmt(wins.length, 0)} up ·
+      ${fmt(Math.round(wins.length / done.length * 100), 0)}% win rate</p>
+    <div class="pt-stats">
+      <div class="pt-stat"><span class="pt-k">Realised</span>
+        <strong class="${total >= 0 ? 'pos' : 'neg'}">${total >= 0 ? '+' : '−'}$${
+  fmtCompact(Math.abs(total), 2)}</strong></div>
+      <div class="pt-stat"><span class="pt-k">Average</span>
+        <strong class="${avgR >= 0 ? 'pos' : 'neg'}">${paperRText(avgR)}</strong>
+        <span class="pt-sub">per trade, in multiples of what it risked</span></div>
+    </div>
+    ${withOptic || against ? `<h3 class="pt-h3">With the terminal, and against it</h3>
+      <div class="pt-stats">
+        ${withOptic ? `<div class="pt-stat"><span class="pt-k">Traded with Optic's read</span>
+          <strong class="${withOptic.avg >= 0 ? 'pos' : 'neg'}">${paperRText(withOptic.avg)}</strong>
+          <span class="pt-sub">${fmt(withOptic.n, 0)} trade${withOptic.n === 1 ? '' : 's'}</span></div>` : ''}
+        ${against ? `<div class="pt-stat"><span class="pt-k">Traded against it</span>
+          <strong class="${against.avg >= 0 ? 'pos' : 'neg'}">${paperRText(against.avg)}</strong>
+          <span class="pt-sub">${fmt(against.n, 0)} trade${against.n === 1 ? '' : 's'}</span></div>` : ''}
+      </div>
+      <p class="caveat">The read is the one Optic held when the trade was opened,
+        not today's. Trades where it was neutral are in neither column: a neutral
+        read was not an opinion to disagree with. Two or three trades is not a
+        finding about anything.</p>` : ''}
+  </div>`;
+}
+
+/* ------------------------------------------------------------- the render */
+
+function renderPaperView() {
+  const open = paperBook.open;
+  views.paper.innerHTML = `<div class="panel pt-head" data-fixed="1">
+      <h1>${hg('Paper trades')}</h1>
+      <p class="sub">Your own book, entered by hand and priced by the terminal.
+        It lives in this browser and nowhere else — no account, no server
+        copy, and no connection to Optic Portfolio, which is the terminal's own
+        record and stays untouched.</p>
+    </div>
+    ${paperTicketHTML()}
+    <div class="panel">
+      <h2>${hg('Open')}${open.length ? `<span class="th-plain"> · ${
+  fmt(open.length, 0)}</span>` : ''}</h2>
+      ${open.length ? `<div class="table-scroll"><table class="data">
+        <thead><tr><th>Position</th><th class="num">Entry</th><th class="num">Mark</th>
+          <th>Marked from</th><th class="num">P&amp;L</th>
+          <th class="num" title="Profit in multiples of what the stop said the trade would lose">R</th>
+          <th title="The stance Optic held on this symbol when the trade was opened">Optic then</th>
+          <th></th></tr></thead>
+        <tbody>${open.map(paperOpenRow).join('')}</tbody>
+      </table></div>
+      <p class="caveat">Marks come from the last trade for shares and the chain
+        mid for options, and the column says which. A mid is not a fill: the
+        spread is yours to pay in a real account.</p>`
+    : `<p class="sub">No open positions. The ticket above opens one.</p>`}
+    </div>
+    ${paperStatsHTML()}
+    ${paperBook.closed.length ? `<div class="panel">
+      <h2>${hg('Closed')}</h2>
+      <div class="table-scroll"><table class="data">
+        <thead><tr><th>Position</th><th class="num">Entry</th><th class="num">Exit</th>
+          <th class="num">P&amp;L</th><th class="num">R</th>
+          <th>Optic then</th><th>Closed</th></tr></thead>
+        <tbody>${paperBook.closed.slice(0, 50).map(paperClosedRow).join('')}</tbody>
+      </table></div>
+      <div class="ins-acts"><button type="button" class="btn" data-paper-reset
+        >Clear the book</button></div>
+    </div>` : ''}`;
+  revealPanels(views.paper);
+}
+
+/* ------------------------------------------------------------- the wiring */
+
+/** Price the open book. One request for all of it; see papertrade.mark_book. */
+async function paperMark(opts) {
+  if (paperMarking || !paperBook.open.length) return;
+  paperMarking = true;
+  try {
+    const out = await postJSON('/api/paper/mark', { positions: paperBook.open });
+    paperMarks = {};
+    (out.marks || []).forEach((m) => { paperMarks[m.id] = m; });
+  } catch (err) {
+    // The positions are still the reader's and the page still has to draw
+    // them. An unmarked book is a book with no P&L column, not a broken page.
+    paperNote = 'Could not price the book just now (' + err.message + ').';
+  } finally {
+    paperMarking = false;
+  }
+  if (STATE.view === 'paper' && !(opts && opts.silent)) renderPaperView();
+}
+
+/* Pull Optic's read on a symbol from the paper page.
+ *
+ * `STATE.swing` is where the whole app keeps the loaded security's payload,
+ * and only the Dossier facets fill it -- so with nothing loaded, a reader on
+ * this page typing NVDA got "Optic has no read on NVDA loaded" and no way to
+ * get one without leaving. `loadSwing` is view-agnostic and `silent` keeps it
+ * from touching the Options tab's chrome on the way past.
+ *
+ * Asked for rather than fetched on every keystroke: /api/ticker is the
+ * expensive call in this app -- sixteen provider fetches, about two seconds --
+ * and a reader who types four symbols while deciding should not pay for four
+ * of them.
+ */
+async function paperLoadRead(sym) {
+  const want = String(sym || '').toUpperCase().trim();
+  if (!want) return;
+  paperNote = `Reading ${want}\u2026`;
+  renderPaperView();
+  try {
+    await loadTicker(want);
+    await loadSwing(false, { silent: true });
+    paperNote = '';
+  } catch (err) {
+    paperNote = `Could not read ${want} (${err.message}).`;
+  }
+  if (STATE.view === 'paper') renderPaperView();
+}
+
+/** The chain behind the option half of the ticket. */
+async function paperLoadChain(sym) {
+  const want = String(sym || '').toUpperCase();
+  if (!want || paperChainFor === want) return;
+  paperChainFor = want;
+  try {
+    const d = await getJSON('/api/chain/' + encodeURIComponent(want) + '?max_expiries=6');
+    paperChain = { ticker: want, spot: d.spot, rows: d.rows || [] };
+  } catch (err) {
+    paperChain = null;
+    paperNote = 'No options chain for ' + want + ' (' + err.message + ').';
+  }
+  if (STATE.view === 'paper') renderPaperView();
+}
+
+function loadPaper() {
+  renderPaperView();
+  return paperMark();
+}
+
+/* Open the trade on the ticket, or say why not.
+ *
+ * Refused rather than repaired, and refused BEFORE anything is written: a book
+ * that accepts a trade with no stop cannot report R for it, and one that
+ * accepts a stop on the wrong side of entry records a loss the reader never
+ * meant to take. Both are typos, and the moment to catch a typo is before it
+ * becomes a row in a record.
+ */
+function paperOpenTrade() {
+  const t = paperTicket;
+  const ticker = (t.ticker || '').toUpperCase().trim();
+  const qty = Number(t.qty);
+  const isOpt = t.instrument === 'option';
+  const chain = (paperChain && paperChain.ticker === ticker) ? paperChain : null;
+  const picked = chain && t.expiry && t.strike
+    ? chain.rows.find((r) => r.expiry === t.expiry && String(r.strike) === String(t.strike)
+        && r.is_call === (t.optionType === 'call'))
+    : null;
+  // The entry defaults to what it could be traded at now, which is the mid for
+  // an option and the last for shares. Typed in, it wins: a reader entering a
+  // trade they took yesterday means yesterday's price.
+  const entry = Number(t.entry) || (isOpt ? (picked && picked.mid)
+    : (chain && chain.spot)) || 0;
+  const stop = Number(t.stop);
+
+  if (!ticker) return 'Which symbol?';
+  if (paperBook.open.length >= PAPER_MAX) {
+    return `This book holds ${PAPER_MAX} open positions. Close one first.`;
+  }
+  if (isOpt && !picked) return 'Pick an expiry and a strike from the chain.';
+  if (!(qty > 0)) return isOpt ? 'How many contracts?' : 'How many shares?';
+  if (!(entry > 0)) return 'What price did you get in at?';
+  if (!(stop > 0)) {
+    return 'A stop is required. Everything here is reported in multiples of what '
+      + 'a trade risked, and a trade with no stop has no denominator.';
+  }
+  if ((t.direction === 'long' && stop >= entry) || (t.direction === 'short' && stop <= entry)) {
+    return `A ${t.direction} stops out ${t.direction === 'long' ? 'below' : 'above'} `
+      + 'entry. That stop is on the wrong side and would close the trade immediately.';
+  }
+
+  const read = paperRead();
+  paperBook.open.unshift({
+    id: paperId(),
+    ticker,
+    instrument: t.instrument,
+    direction: t.direction,
+    option_type: isOpt ? t.optionType : null,
+    strike: isOpt ? Number(t.strike) : null,
+    expiry: isOpt ? t.expiry : null,
+    qty,
+    entry_price: entry,
+    entry_spot: (chain && chain.spot) || entry,
+    entry_at: new Date().toISOString(),
+    stop,
+    target: Number(t.target) || null,
+    thesis: (t.thesis || '').slice(0, 200),
+    /* Frozen, not looked up later. The whole point is what the terminal
+     * thought BEFORE the outcome was known; reading it at close time would be
+     * scoring Optic with the benefit of having watched the trade. */
+    read: read ? { stance: read.stance, conviction: read.conviction,
+                   score: read.score, summary: read.summary } : null,
+  });
+  paperSave();
+  paperTicket = { ...paperTicket, qty: '', entry: '', stop: '', target: '', thesis: '' };
+  paperNote = `Opened ${t.direction} ${qty} ${ticker}.`;
+  return null;
+}
+
+function paperClose(id) {
+  const i = paperBook.open.findIndex((p) => p.id === id);
+  if (i < 0) return;
+  const pos = paperBook.open[i];
+  const m = paperMarks[id] || {};
+  if (m.mark_price === undefined || m.mark_price === null) return;
+  const pnl = m.pnl;
+  paperBook.open.splice(i, 1);
+  paperBook.closed.unshift({
+    ...pos, exit_price: m.mark_price, exit_source: m.mark_source,
+    pnl, r: paperR(pos, pnl), closed_at: new Date().toISOString(),
+  });
+  // Trimmed, so a book left running for a year does not grow without limit in
+  // a store with a few megabytes in it.
+  paperBook.closed = paperBook.closed.slice(0, 200);
+  delete paperMarks[id];
+  paperSave();
+  paperNote = `Closed ${pos.ticker} at ${fmt(m.mark_price, 2)}.`;
+  renderPaperView();
+}
+
 /* =========================================================== Insiders view
  *
  * Two filing regimes on one page, because they answer the same question from
@@ -25984,6 +26618,7 @@ function loadView(view, force) {
   if (view === 'overview' || view === 'financials' || view === 'news') {
     return loadSecurityFacet(view, force);
   }
+  if (view === 'paper') return loadPaper(force);
   if (view === 'insiders') return loadInsiders(force);
   if (view === 'swing') return loadSwing(force);
   if (view === 'earnings') return loadEarnings(force);
@@ -26059,6 +26694,23 @@ function humanCountdown(minutes) {
   const h = Math.floor(minutes / 60);
   const m = Math.round(minutes % 60);
   if (h === 0) return `${m} minute${m === 1 ? '' : 's'}`;
+  /* Past a day, days and hours -- not hours and minutes.
+   *
+   * On a Saturday afternoon the next session is about thirty hours out and
+   * this read "Overnight in 29 hours and 3 minutes", which is a number nobody
+   * can hold: the reader wants to know it is tomorrow evening, and has to
+   * divide by 24 to find that out. The minutes go with it, because a precision
+   * of one minute inside a gap of thirty hours is precision about nothing.
+   *
+   * Under a day it is unchanged. "In 3 hours and 20 minutes" is a number
+   * somebody plans around, and rounding that to "3 hours" would lose the part
+   * they are actually using. */
+  if (h >= 24) {
+    const d = Math.floor(h / 24);
+    const rem = h % 24;
+    const days = `${d} day${d === 1 ? '' : 's'}`;
+    return rem ? `${days} and ${rem} hour${rem === 1 ? '' : 's'}` : days;
+  }
   if (m === 0) return `${h} hour${h === 1 ? '' : 's'}`;
   return `${h} hour${h === 1 ? '' : 's'} and ${m} minute${m === 1 ? '' : 's'}`;
 }
@@ -28188,7 +28840,7 @@ const NAV_GROUPS = [
    * narrowest width where the strip may not wrap, eight groups end at 1125
    * against a gear at 1160. A ninth left 18px. The `follow` group above is the
    * precedent for a group named after its primary view. */
-  { id: 'portfolio', label: 'Positions', views: ['tracker', 'roth'] },
+  { id: 'portfolio', label: 'Positions', views: ['tracker', 'paper', 'roth'] },
   /* On the strip, and it took an audit to notice it was not.
    *
    * This group existed only to give groupForView something to resolve, and it
@@ -29196,6 +29848,50 @@ document.addEventListener('click', (evt) => {
     return;
   }
   /* ---------------------------------------------------- Insiders page */
+  /* ------------------------------------------------------ the paper book */
+  const ptDir = evt.target.closest('[data-paper-dir]');
+  if (ptDir) { paperTicket.direction = ptDir.dataset.paperDir; renderPaperView(); return; }
+  const ptInst = evt.target.closest('[data-paper-inst]');
+  if (ptInst) {
+    paperTicket.instrument = ptInst.dataset.paperInst;
+    renderPaperView();
+    // The chain is only needed by the option half, so it is fetched when that
+    // half appears rather than on every symbol typed into a shares ticket.
+    if (paperTicket.instrument === 'option' && paperTicket.ticker) {
+      paperLoadChain(paperTicket.ticker);
+    }
+    return;
+  }
+  const ptOt = evt.target.closest('[data-paper-ot]');
+  if (ptOt) {
+    paperTicket.optionType = ptOt.dataset.paperOt;
+    // The strike ladder is per side, so a strike chosen for a call is not
+    // necessarily on the put ladder. Cleared rather than carried across.
+    paperTicket.strike = '';
+    renderPaperView();
+    return;
+  }
+  const ptLoad = evt.target.closest('[data-paper-load]');
+  if (ptLoad) { paperLoadRead(ptLoad.dataset.paperLoad); return; }
+  const ptClose = evt.target.closest('[data-paper-close]');
+  if (ptClose) { paperClose(ptClose.dataset.paperClose); return; }
+  if (evt.target.closest('[data-paper-clear]')) {
+    paperTicket = { ...paperTicket, qty: '', entry: '', stop: '', target: '', thesis: '' };
+    paperNote = '';
+    renderPaperView();
+    return;
+  }
+  if (evt.target.closest('[data-paper-reset]')) {
+    // Destructive and local, so it asks. There is no server copy to restore
+    // from and no undo: this browser is the only place the book exists.
+    if (!window.confirm('Delete every open and closed paper trade in this browser?')) return;
+    paperBook = { open: [], closed: [] };
+    paperMarks = {};
+    paperSave();
+    paperNote = 'Book cleared.';
+    renderPaperView();
+    return;
+  }
   const htAll = evt.target.closest('[data-ht-all]');
   if (htAll) {
     const id = htAll.dataset.htAll;

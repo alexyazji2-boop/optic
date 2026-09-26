@@ -39,6 +39,7 @@ from . import catalysts as catalysts_mod
 from . import catalyst_live as catalyst_live_mod
 from .analytics import cases as cases_mod
 from .analytics import congress as congress_mod
+from . import papertrade as papertrade_mod
 from .analytics import screen as screen_mod
 from .analytics import screener as screener_mod
 from .analytics import segments as segments_mod
@@ -836,6 +837,29 @@ async def watches_run(request: Request) -> Dict[str, Any]:
 
     def build() -> Dict[str, Any]:
         return watch_runner.run_once(_watch_snapshot)
+
+    return await _run(build)
+
+
+@app.post("/api/paper/mark")
+async def paper_book_mark(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Mark a hand-entered paper book. Nothing is stored.
+
+    POST rather than GET for the reason `/api/retirement` is: a book is an
+    arbitrary-length body, and somebody's positions should not end up in a URL,
+    a browser history entry or a server access log. The response is computed
+    and discarded; the browser keeps the only copy.
+
+    Stored nowhere on purpose, not by omission. This terminal has no sign-in,
+    so a server-side book would be one book shared by every visitor. See
+    app/papertrade.py, which also explains why this cannot write to the ledger
+    behind Optic Portfolio: a track record a reader can edit is not one.
+    """
+    def build() -> Dict[str, Any]:
+        out = papertrade_mod.mark_book(
+            YF_PROVIDER, payload.get("positions") or [], rate=RISK_FREE)
+        out["generated_at"] = datetime.now(timezone.utc).isoformat()
+        return out
 
     return await _run(build)
 

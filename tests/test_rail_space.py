@@ -206,3 +206,30 @@ def test_it_waits_for_the_server_to_finish_binding():
     m = re.search(r"asyncio\.sleep\((\d+)\)", fn)
     assert m, "no delay before it touches the network"
     assert 1 <= int(m.group(1)) <= 5, m.group(1)
+
+
+# ------------------------------------------------- the countdown past a day
+
+
+def test_a_gap_longer_than_a_day_is_said_in_days():
+    """On a Saturday afternoon the next session is about thirty hours out, and
+    the session bar read "Overnight in 29 hours and 3 minutes" -- a number
+    nobody can hold. The reader wants to know it is tomorrow evening and has to
+    divide by 24 to find that out.
+
+    Checked at the boundaries under JavaScriptCore: 1439 -> "23 hours and 59
+    minutes", 1440 -> "1 day", 1743 -> "1 day and 5 hours", 2880 -> "2 days"."""
+    fn = re.search(r"function humanCountdown\(minutes\) \{.*?\n\}", APP, re.S).group()
+    assert "if (h >= 24) {" in fn
+    assert "Math.floor(h / 24)" in fn
+    # An exact day says "2 days", not "2 days and 0 hours".
+    assert "return rem ?" in fn
+
+
+def test_a_gap_under_a_day_still_carries_its_minutes():
+    """"In 3 hours and 20 minutes" is a number somebody plans around. Rounding
+    it to "3 hours" would drop the part they are using -- the days rule is for
+    gaps where one minute is precision about nothing."""
+    fn = re.search(r"function humanCountdown\(minutes\) \{.*?\n\}", APP, re.S).group()
+    tail = fn.split("if (h >= 24) {", 1)[1].split("}", 1)[1]
+    assert "minute${m === 1 ? '' : 's'}" in tail

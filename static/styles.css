@@ -14751,3 +14751,86 @@ body.rail-tight .rail .rail-recent { display: none; }
 }
 .ht-rest:hover { color: var(--ink); }
 .ht-rest:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: var(--r-xs); }
+
+/* ------------------------------------------------------------ paper trades
+ *
+ * Optic's own tokens. The directional pair is --pos / --neg, the same one the
+ * candles, the volume strip and every percentage already use, so a green P&L
+ * here means what green means everywhere else in the terminal.
+ */
+.pt-head h1 { margin: 0 0 var(--space-1); font-size: var(--t-title); }
+.pt-head .sub { max-width: 70ch; }
+
+.pt-ticket { display: grid; gap: var(--space-3); }
+.pt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-3);
+  align-items: end;
+}
+
+/* The contract the ticket is pointed at, and what it would cost to trade it. */
+.pt-quote {
+  margin: 0;
+  font-size: var(--t-caption);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Cost, risk and reward:risk, before the trade exists. */
+.pt-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--plane);
+  font-size: var(--t-small);
+  font-variant-numeric: tabular-nums;
+}
+.pt-k { color: var(--ink-muted); margin-right: var(--space-1); }
+
+/* Optic's read on the ticket's symbol. */
+.pt-read {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px solid var(--accent);
+  font-size: var(--t-small);
+  color: var(--ink-2);
+}
+.pt-read-none { border-left-color: var(--border); }
+.pt-read-note { display: block; color: var(--ink-muted); font-size: var(--t-caption); }
+.pt-note { margin: 0; font-size: var(--t-small); color: var(--ink-2); }
+
+/* A direction on a position line, not a chip: it is part of the name of the
+   thing, and a pill here would compete with the impact chips elsewhere. */
+.pt-dir {
+  margin-left: var(--space-2);
+  font-size: var(--t-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+/* Where the mark came from. Quiet: it is provenance, not a reading. */
+.pt-src { font-size: var(--t-caption); color: var(--ink-muted); }
+.pt-read-cell { font-size: var(--t-caption); }
+.pt-when { font-size: var(--t-caption); color: var(--ink-muted); white-space: nowrap; }
+.pt-close { padding: var(--space-0) var(--space-2); font-size: var(--t-caption); }
+
+.pt-h3 {
+  margin: var(--space-5) 0 var(--space-2);
+  font-size: var(--t-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+.pt-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-4);
+}
+.pt-stat { display: flex; flex-direction: column; gap: var(--space-0); min-width: 0; }
+.pt-stat strong { font-size: var(--t-lead); font-variant-numeric: tabular-nums; }
+.pt-sub { font-size: var(--t-caption); color: var(--ink-muted); }
