@@ -262,3 +262,59 @@ def test_the_chain_is_only_fetched_for_the_option_half():
 def test_it_introduces_no_new_colours():
     block = CSS[CSS.index("/* ------------------------------------------------------------ paper trades"):]
     assert not re.search(r"#[0-9a-fA-F]{3,8}", block), "a hex value on this page"
+
+
+# ------------------------------------------------- failures that recover
+#
+# Reported from a screenshot: the expiry control read "Load a symbol first"
+# with NVDA typed into the field beside it, and the book said "Could not price
+# the book just now (Failed to fetch)" with no way to ask again. The server had
+# gone down. Both states were permanent for the rest of the session.
+
+
+def test_a_failed_chain_can_be_asked_for_again():
+    """`paperChainFor` was set before the fetch and left set whatever happened,
+    so the guard short-circuited every later attempt: one failure and that
+    symbol's chain was never requested again.
+
+    Driven for real -- server killed mid-flight, state went to `failed` with a
+    Try again beside it, server restarted, retry recovered 1,570 chain rows."""
+    fn = function("paperLoadChain")
+    assert "paperChainFor = '';" in fn, "a failed load must not pin the symbol"
+    # And the guard only short-circuits states that are actually in hand.
+    assert "paperChainState === 'loading'" in fn
+    assert "paperChainState === 'ready'" in fn
+
+
+def test_the_chain_request_ignores_a_stale_answer():
+    """Typing a second symbol while the first is in flight: the slower reply
+    must not overwrite the newer one's chain."""
+    fn = function("paperLoadChain")
+    assert fn.count("if (paperChainFor !== want) return;") == 2
+
+
+def test_the_expiry_control_says_which_of_the_four_things_is_true():
+    """"Load a symbol first" is one of four states and the only one that reads
+    as an instruction. Shown for all four, it was wrong in three -- including
+    the one a reader meets with the symbol already typed in."""
+    fn = function("paperChainPrompt")
+    assert "Type a symbol above" in fn
+    assert "Could not read" in fn
+    assert "has no listed options" in fn
+    assert "'s chain" in fn, "and one for while it is being read"
+    # The control renders it rather than the old constant.
+    ticket = function("paperTicketHTML")
+    assert "paperChainPrompt(t)" in ticket
+    assert "Load a symbol first" not in ticket
+
+
+def test_a_book_that_failed_to_price_offers_to_try_again():
+    """Marking runs on arriving at the page and after opening a trade, so a
+    reader whose book failed to price had to leave the page and come back --
+    with nothing on screen telling them that was the move."""
+    fn = function("paperMark")
+    assert "paperMarkFailed = true;" in fn
+    assert "paperMarkFailed = false;" in fn, "and cleared when it is tried again"
+    assert "data-paper-remark" in function("paperTicketHTML")
+    i = APP.index("closest('[data-paper-remark]')")
+    assert "paperMark();" in APP[i:i + 300]

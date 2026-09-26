@@ -24471,9 +24471,18 @@ let paperTicket = {
   expiry: '', strike: '', optionType: 'call',
 };
 let paperChain = null;          // { ticker, spot, rows } for the ticket only
-let paperChainFor = '';
+let paperChainFor = '';         // the symbol the chain is for, or being fetched
+/* Which of the four things is true of the chain right now.
+ *
+ * A boolean would not have been enough: "no symbol yet", "asking", "asked and
+ * the feed said no" and "asked and it has no options" all render the expiry
+ * control differently, and collapsing them is what produced a dropdown reading
+ * "Load a symbol first" with NVDA in the field next to it. */
+let paperChainState = 'idle';   // idle | loading | ready | empty | failed
+let paperChainError = '';
 let paperMarks = {};            // id -> the server's mark
 let paperMarking = false;
+let paperMarkFailed = false;    // so the note can offer a retry
 let paperNote = '';             // one line back from the last action
 
 /* ------------------------------------------------------------ the numbers */
@@ -24597,17 +24606,28 @@ function paperTicketHTML() {
         </div></div>
       <div class="ins-field"><label for="pt-expiry">Expiry</label>
         <select id="pt-expiry" name="expiry"${expiries.length ? '' : ' disabled'}>
-          ${expiries.length ? '' : '<option value="">Load a symbol first</option>'}
+          ${/* Says which of the four things is true, rather than "Load a
+               symbol first" with the symbol already typed in beside it. The
+               chain takes several seconds on a cold read, and a control that
+               looks identical whether it is working or has given up is the one
+               that gets clicked again and again. */''}
+          ${expiries.length ? '' : `<option value="">${esc(paperChainPrompt(t))}</option>`}
           ${expiries.map((e) => `<option value="${esc(e)}"${
   t.expiry === e ? ' selected' : ''}>${esc(e)}</option>`).join('')}
         </select></div>
       <div class="ins-field"><label for="pt-strike">Strike</label>
         <select id="pt-strike" name="strike"${strikes.length ? '' : ' disabled'}>
-          ${strikes.length ? '' : '<option value="">—</option>'}
+          ${strikes.length ? '' : `<option value="">${
+  expiries.length ? 'Pick an expiry' : '—'}</option>`}
           ${strikes.map((k) => `<option value="${k}"${
   String(t.strike) === String(k) ? ' selected' : ''}>${fmt(k, 2)}</option>`).join('')}
         </select></div>
     </div>
+    ${paperChainState === 'failed' ? `<p class="pt-note">Could not read the
+      options chain for ${esc((t.ticker || '').toUpperCase())}${
+  paperChainError ? ` (${esc(paperChainError)})` : ''}.
+      <button type="button" class="auth-link" data-paper-chain
+        >Try again</button></p>` : ''}
     ${picked ? `<p class="pt-quote">${esc(picked.contract)} · mid
       <strong>$${fmt(picked.mid, 2)}</strong> (bid ${fmt(picked.bid, 2)} / ask ${fmt(picked.ask, 2)})
       · ${fmt(picked.dte, 0)} days · delta ${fmt(picked.delta, 2)}${
@@ -24641,8 +24661,22 @@ function paperTicketHTML() {
       <button class="btn primary" type="submit">Open the trade</button>
       <button class="btn" type="button" data-paper-clear>Clear</button>
     </div>
-    ${paperNote ? `<p class="pt-note">${esc(paperNote)}</p>` : ''}
+    ${paperNote ? `<p class="pt-note">${esc(paperNote)}${
+  paperMarkFailed ? ` <button type="button" class="auth-link" data-paper-remark
+    >Price it again</button>` : ''}</p>` : ''}
   </form>`;
+}
+
+/** What the expiry control should say when it has no expiries to offer.
+ *
+ * Four states, four sentences. They rendered as one -- "Load a symbol first" --
+ * which is the only one of the four that was ever right, and it is the one a
+ * reader sees with the symbol already typed into the field beside it. */
+function paperChainPrompt(t) {
+  if (!t.ticker) return 'Type a symbol above';
+  if (paperChainState === 'failed') return `Could not read ${t.ticker}'s chain`;
+  if (paperChainState === 'empty') return `${t.ticker} has no listed options`;
+  return `Reading ${t.ticker}'s chain…`;
 }
 
 /* What the trade costs and risks, before it is opened.
@@ -24844,6 +24878,7 @@ function renderPaperView() {
 async function paperMark(opts) {
   if (paperMarking || !paperBook.open.length) return;
   paperMarking = true;
+  paperMarkFailed = false;
   try {
     const out = await postJSON('/api/paper/mark', { positions: paperBook.open });
     paperMarks = {};
@@ -24851,6 +24886,12 @@ async function paperMark(opts) {
   } catch (err) {
     // The positions are still the reader's and the page still has to draw
     // them. An unmarked book is a book with no P&L column, not a broken page.
+    //
+    // Flagged as well as said, so the note can carry a way out. It could not:
+    // marking runs on arriving at the page and after opening a trade, so a
+    // reader whose book failed to price had to leave the page and come back to
+    // try again, with nothing on screen telling them that was the move.
+    paperMarkFailed = true;
     paperNote = 'Could not price the book just now (' + err.message + ').';
   } finally {
     paperMarking = false;
@@ -24889,14 +24930,35 @@ async function paperLoadRead(sym) {
 /** The chain behind the option half of the ticket. */
 async function paperLoadChain(sym) {
   const want = String(sym || '').toUpperCase();
-  if (!want || paperChainFor === want) return;
+  if (!want) return;
+  /* Joined, not re-entered: a second call for the symbol already in flight
+   * would fire a second chain request for the same answer.
+   *
+   * `paperChainFor` used to be set here and left set whatever happened, so a
+   * chain that failed once was never asked for again -- the dropdown read
+   * "Load a symbol first" for the rest of the session with the symbol sitting
+   * in the field beside it. Reported from a screenshot of exactly that, with
+   * the server down. It is cleared on failure now, so recovering is retrying.
+   */
+  if (paperChainFor === want && (paperChainState === 'loading'
+    || paperChainState === 'ready')) return;
   paperChainFor = want;
+  paperChainState = 'loading';
+  paperChainError = '';
+  if (STATE.view === 'paper') renderPaperView();
   try {
     const d = await getJSON('/api/chain/' + encodeURIComponent(want) + '?max_expiries=6');
+    // The reader may have typed something else while this was in flight.
+    if (paperChainFor !== want) return;
     paperChain = { ticker: want, spot: d.spot, rows: d.rows || [] };
+    paperChainState = (paperChain.rows.length ? 'ready' : 'empty');
   } catch (err) {
+    if (paperChainFor !== want) return;
     paperChain = null;
-    paperNote = 'No options chain for ' + want + ' (' + err.message + ').';
+    paperChainState = 'failed';
+    paperChainError = err.message;
+    // Cleared, so the next attempt is not short-circuited by the guard above.
+    paperChainFor = '';
   }
   if (STATE.view === 'paper') renderPaperView();
 }
@@ -29869,6 +29931,21 @@ document.addEventListener('click', (evt) => {
     // necessarily on the put ladder. Cleared rather than carried across.
     paperTicket.strike = '';
     renderPaperView();
+    return;
+  }
+  if (evt.target.closest('[data-paper-remark]')) {
+    paperNote = '';
+    paperMarkFailed = false;
+    renderPaperView();
+    paperMark();
+    return;
+  }
+  if (evt.target.closest('[data-paper-chain]')) {
+    // A retry means asking again, so the guard must not treat the failed
+    // symbol as already handled -- paperLoadChain clears it on failure for
+    // exactly this.
+    paperChainState = 'idle';
+    paperLoadChain(paperTicket.ticker);
     return;
   }
   const ptLoad = evt.target.closest('[data-paper-load]');
