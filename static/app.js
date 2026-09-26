@@ -12665,6 +12665,29 @@ const INSTRUMENT_RANGES = [
 let instrumentRange = '1y';
 let instrumentMode = 'line';
 
+/** Where closing this chart lands, in the words the navigation uses for it. */
+function instrumentBackLabel() {
+  const back = STATE.instrumentBack;
+  if (!back) return null;
+  /* Three maps, most specific first. SUB_LABELS is what the rail's own menu
+   * calls a page, so the button and the menu entry agree; VIEW_NAMES covers
+   * the handful SUB_LABELS has no entry for (Home among them). Falling through
+   * to the raw view id would print "market", which is the lowercase-id bug
+   * this file has already shipped twice. */
+  return SUB_LABELS[back] || VIEW_NAMES[back] || null;
+}
+
+function instrumentBackHTML() {
+  const label = instrumentBackLabel();
+  // No recorded origin means the reader arrived here some other way -- a
+  // reload, a restored view. A button promising to go "back" to a page they
+  // were never on is worse than no button.
+  if (!label) return '';
+  return `<button type="button" class="inst-back" data-close-instrument>
+    <span class="inst-back-arrow" aria-hidden="true">\u2190</span>
+    Back to ${esc(label)}</button>`;
+}
+
 function renderInstrument(d) {
   if (!d) return '<div class="panel span-all"><p class="sub">Pick an instrument.</p></div>';
   if (d === 'loading') {
@@ -12687,6 +12710,17 @@ function renderInstrument(d) {
     ${note ? `<span class="note">${esc(note)}</span>` : ''}</div>`;
 
   return `<div class="panel span-all">
+    ${/* The way back, named.
+       *
+       * `openInstrument` has always recorded the exact view this was opened
+       * from -- and the only control that used it was a 14px multiplication
+       * sign inside the rail's dropdown, marked aria-hidden, which a reader
+       * had to open a menu to find and a keyboard could not reach at all.
+       *
+       * It says where it goes rather than "Back", because this chart is
+       * reachable from the home strip, Macro and Indices, and "Back" on a page
+       * with three possible origins is a question rather than a label. */''}
+    ${instrumentBackHTML()}
     ${/* cap(), because this is a field from the instrument catalogue rendered
          straight out -- "equity", "rates", "fx" -- and a label starting a line
          reads as a sentence whatever it came from. */''}

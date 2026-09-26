@@ -14885,3 +14885,37 @@ body.rail-tight .rail .rail-recent { display: none; }
               background-color var(--dur-ui) var(--ease-ui);
 }
 .pt-danger:hover { color: var(--neg); border-color: var(--neg); }
+
+/* The way out of an instrument chart.
+ *
+ * Above the kicker rather than beside the title: it is not part of the
+ * instrument's identity, it is how you leave, and a control sharing a line
+ * with an h2 competes with it. Quiet by default and only as loud as a link,
+ * because the chart is what the reader came for.
+ */
+.inst-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-2);
+  padding: var(--space-0) var(--space-2) var(--space-0) var(--space-1);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: var(--t-caption);
+  cursor: pointer;
+  transition: color var(--dur-ui) var(--ease-ui),
+              border-color var(--dur-ui) var(--ease-ui),
+              background-color var(--dur-ui) var(--ease-ui);
+}
+.inst-back:hover { color: var(--ink); border-color: var(--border); background: var(--surface); }
+.inst-back:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+/* The arrow shifts, not the button: moving the control itself on hover makes
+   the label jump under a cursor that is already on it. */
+.inst-back-arrow { transition: transform var(--dur-ui) var(--ease-ui); }
+.inst-back:hover .inst-back-arrow { transform: translateX(-2px); }
