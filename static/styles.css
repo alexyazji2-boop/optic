@@ -14499,8 +14499,19 @@ body.ws-max[data-view="chart"] [data-ws-max] {
 .ins-field label {
   font-size: var(--t-caption);
   color: var(--ink-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  /* Written case, not uppercase.
+   *
+   * These are field labels on a form, and one of them is a whole clause --
+   * "WHY, AND WHAT WOULD PROVE YOU WRONG" is thirty-four characters of capitals
+   * asking a question, which is shouting rather than labelling. Uppercase is
+   * still right for the micro-headings elsewhere in this file (RECENT, SECTOR
+   * READ-THROUGH): those are one or two words naming a block, and they are
+   * read once. A form label is read every time the field is filled in.
+   *
+   * The markup already says `Symbol`, `Entry price`, `Why, and what would
+   * prove you wrong` -- only the transform was changing them, so nothing in
+   * the JavaScript moves for this. */
+  letter-spacing: 0.01em;
 }
 /* flex-basis is a WIDTH in a row and a HEIGHT in a column, and these labels are
    columns: the shared control classes in this file carry `flex: 0 1 340px` for

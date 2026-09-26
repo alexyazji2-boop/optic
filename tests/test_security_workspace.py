@@ -142,6 +142,26 @@ def test_the_no_ticker_guard_lists_the_new_views():
     assert "if (!TICKERLESS_VIEWS.includes(view) && !STATE.ticker)" in APP_JS
 
 
+def test_every_view_in_the_navigation_has_a_label():
+    """`SUB_LABELS[v] || v` falls back to the raw view id, which is lowercase
+    and looks like a bug rather than a name. The rail rendered "insiders" and
+    "paper" in a menu beside "Optic Portfolio" and "Roth planner" -- twice,
+    because the facet test below only covers the Dossier's own facets and a new
+    view in any other group was never checked.
+
+    Every view any nav group can open, not just the facets."""
+    groups = APP_JS.split("const NAV_GROUPS = [", 1)[1].split("\n];", 1)[0]
+    views = set(re.findall(r"'([a-z]+)'", groups.replace("id: ", "@")))
+    # `id:` values are group ids, not views -- dropped by the marker above.
+    views -= set(re.findall(r"@'([a-z]+)'", groups.replace("id: ", "@")))
+    labels = APP_JS.split("const SUB_LABELS = {", 1)[1].split("\n};", 1)[0]
+    titles = APP_JS.split("const SUB_TITLES = {", 1)[1].split("\n};", 1)[0]
+    for v in sorted(views):
+        assert re.search(rf"(^|[{{\s]){v}:", labels, re.M), \
+            f"{v} renders as its own id in the rail menu"
+        assert re.search(rf"(^|[{{\s]){v}:", titles, re.M), f"{v} has no tooltip"
+
+
 def test_every_facet_has_a_label_and_a_title():
     labels = APP_JS.split("const SUB_LABELS = {", 1)[1].split("\n};", 1)[0]
     titles = APP_JS.split("const SUB_TITLES = {", 1)[1].split("\n};", 1)[0]

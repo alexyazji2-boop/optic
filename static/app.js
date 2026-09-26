@@ -6633,8 +6633,10 @@ const PALETTE_PLACES = [
   { view: 'explore', label: 'Explore',
     terms: 'explore discover browse trending ideas sectors what is happening' },
   { view: 'scan', label: 'Scan', terms: 'scan screener find candidates momentum breakout' },
-  { view: 'paper', label: 'Paper trades',
-    terms: 'paper trade simulator practice manual position long short buy sell shares option call put book ticket mock virtual' },
+  { view: 'paper', label: 'Paper Desk',
+    /* The old label stays in `terms`: renaming a destination must not make it
+       unfindable by the word it used to be called. */
+    terms: 'paper desk trades trading simulator practice manual position long short buy sell shares option call put book ticket mock virtual' },
   { view: 'insiders', label: 'Insiders',
     terms: 'insiders insider congress congressional politicians form 4 stock act disclosures pelosi senator representative buying selling' },
   { view: 'watchlist', label: 'Watchlist', terms: 'watchlist watching follow list' },
@@ -24844,7 +24846,7 @@ function paperStatsHTML() {
 function renderPaperView() {
   const open = paperBook.open;
   views.paper.innerHTML = `<div class="panel pt-head" data-fixed="1">
-      <h1>${hg('Paper trades')}</h1>
+      <h1>${hg('Paper Desk')}</h1>
       <p class="sub">Your own book, entered by hand and priced by the terminal.
         It lives in this browser and nowhere else — no account, no server
         copy, and no connection to Optic Portfolio, which is the terminal's own
@@ -28949,8 +28951,8 @@ const SUB_LABELS = {
   swing: 'Options', earnings: 'Earnings', compare: 'Compare', long: 'Investing',
   brief: 'Read', market: 'Macro', indices: 'Indices',
   watchlist: 'Watchlist', alerts: 'Alerts',
-  explore: 'Explore', scan: 'Scan',
-  tracker: "Optic Portfolio", roth: 'Roth planner',
+  explore: 'Explore', scan: 'Scan', insiders: 'Insiders',
+  tracker: "Optic Portfolio", paper: 'Paper Desk', roth: 'Roth planner',
 };
 
 const SUB_TITLES = {
@@ -28969,6 +28971,8 @@ const SUB_TITLES = {
   watchlist: 'Watchlist. What changed on the names you follow',
   alerts: 'Alerts. What fired, and why it was worth telling you',
   explore: 'Explore. Browse sectors, themes and what is moving, with no symbol',
+  insiders: 'Insiders. Company Form 4s and what members of the House disclosed',
+  paper: 'Paper Desk. Your own book, entered by hand and priced by the terminal',
   scan: 'Scan. Named screens over the ranked universe',
   tracker: "Optic Portfolio. The terminal's own paper-traded record",
   roth: 'Roth planner. A rules-based model allocation to compare your own against',

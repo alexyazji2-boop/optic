@@ -290,7 +290,7 @@
   <!-- The paper book. Hand-entered trades, kept in this browser and marked by
        the server on request. Deliberately NOT the Optic Portfolio section: that
        one is the terminal's own record and its value is that nobody edited it. -->
-  <section class="view" id="view-paper" role="tabpanel" aria-label="Paper trades"></section>
+  <section class="view" id="view-paper" role="tabpanel" aria-label="Paper Desk"></section>
   <!-- Insiders. Market-wide and symbol-free, like Explore and Scan: who is
        trading what, from the two filing regimes that have to be public. -->
   <section class="view" id="view-insiders" role="tabpanel" aria-label="Insider and congressional filings"></section>
@@ -340,11 +340,22 @@
   </div>
   <button type="button" class="rp-btn" id="rp-open"
     aria-expanded="false" aria-controls="rp-panel">
+    <!-- A warning triangle. It was two concentric circles with four spokes,
+         which is a steering wheel at any size and was read as one -- and the
+         one thing this control must not be is ambiguous, because it is the
+         button somebody reaches for when the app has already let them down.
+         The triangle-and-bang is the most recognised warning mark there is.
+
+         stroke-linejoin on the triangle, or the three corners come to points
+         that read as sharper than the rest of this icon set. The bang's dot is
+         a zero-length segment with a round cap, so it inherits the same stroke
+         width as the stem above it rather than being a hand-sized circle. -->
     <svg class="rp-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none"
-      stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-      <circle cx="12" cy="12" r="9"></circle>
-      <circle cx="12" cy="12" r="3.4"></circle>
-      <path d="M12 2.9v5.7M12 15.4v5.7M2.9 12h5.7M15.4 12h5.7"></path>
+      stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+      stroke-linejoin="round">
+      <path d="M12 4 20.8 20H3.2Z"></path>
+      <path d="M12 10v3.9"></path>
+      <path d="M12 17h.01"></path>
     </svg>Report a Problem</button>
 </div>
 

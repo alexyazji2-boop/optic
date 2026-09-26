@@ -36,9 +36,34 @@ def test_the_view_is_registered_everywhere_it_has_to_be():
     assert "paper: $('#view-paper')" in APP
     assert "views: ['tracker', 'paper', 'roth']" in APP, "not in the Positions group"
     assert "if (view === 'paper') return loadPaper(force);" in APP
-    assert "{ view: 'paper', label: 'Paper trades'" in APP
+    assert "{ view: 'paper', label: 'Paper Desk'" in APP
+    # And the rail menu's own label, which is a SEPARATE map. `SUB_LABELS[v]
+    # || v` falls back to the raw view id, so a view missing from it renders
+    # as lowercase "paper" beside "Optic Portfolio" and "Roth planner". It did,
+    # and so did "insiders" -- see test_security_workspace.py, which now checks
+    # every view any nav group can open rather than only the Dossier facets.
+    labels = APP.split("const SUB_LABELS = {", 1)[1].split("\n};", 1)[0]
+    assert "paper: 'Paper Desk'" in labels
     allowed = APP.split("const TICKERLESS_VIEWS = [", 1)[1].split("];", 1)[0]
     assert "'paper'" in allowed, "a book is not about one loaded symbol"
+
+
+def test_the_field_labels_are_not_shouted():
+    """One of them is a whole clause -- "WHY, AND WHAT WOULD PROVE YOU WRONG"
+    is thirty-four characters of capitals asking a question, which is shouting
+    rather than labelling. Uppercase still suits the micro-headings elsewhere
+    (RECENT, SECTOR READ-THROUGH): those name a block and are read once. A form
+    label is read every time the field is filled in.
+
+    The markup always said `Symbol` and `Entry price`; only the transform was
+    changing them."""
+    rule = CSS.split(".ins-field label {", 1)[1]
+    rule = rule[:rule.index("}")]
+    assert "text-transform: uppercase" not in rule, rule
+    # The labels themselves are written in the case they should render in.
+    ticket = function("paperTicketHTML")
+    for written in (">Symbol<", ">Direction<", ">Stop<", ">Target<"):
+        assert written in ticket, written
 
 
 def test_it_carries_a_hypothetical_performance_disclaimer():
