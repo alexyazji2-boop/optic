@@ -233,3 +233,66 @@ def test_a_gap_under_a_day_still_carries_its_minutes():
     fn = re.search(r"function humanCountdown\(minutes\) \{.*?\n\}", APP, re.S).group()
     tail = fn.split("if (h >= 24) {", 1)[1].split("}", 1)[1]
     assert "minute${m === 1 ? '' : 's'}" in tail
+
+
+# ------------------------------------------------- the Markets icon climbs
+
+
+def _polyline(d):
+    """The points of an absolute M/L path like `M3 16.5 9 10.5 13 14.5`."""
+    nums = [float(n) for n in re.findall(r"-?\d+(?:\.\d+)?", d)]
+    return list(zip(nums[0::2], nums[1::2]))
+
+
+def _market_icon_paths():
+    """The two `d` strings of the Markets nav icon.
+
+    Scoped to NAV_ICONS. Splitting the whole file on `market: '` found the
+    LEGAL DISCLAIMER map instead -- it has a `market:` key too and it comes
+    first -- so the extraction returned a sentence about not recommending
+    anything and the geometry assertions had nothing to parse.
+    """
+    icons = APP.split("const NAV_ICONS = {", 1)[1].split("\n};", 1)[0]
+    block = icons.split("market: '", 1)[1].split("',", 1)[0]
+    return re.findall(r'<path d="([^"]+)"', block)
+
+
+def test_the_markets_icon_finishes_climbing():
+    """It was `M3 17l5-5 4 3 4-6 5 4`, whose last leg went DOWN -- from (16,9)
+    to (21,13). A line that finishes falling reads as a squiggle however much
+    ground it gained on the way, and it was reported as not looking like a
+    trend at all.
+
+    SVG y grows downward, so "higher" is a SMALLER y. Getting that backwards is
+    the easy mistake here and would pass a test written the other way round."""
+    line = _market_icon_paths()[0]
+    pts = _polyline(line)
+    assert len(pts) >= 3, "a straight line is a chart of nothing"
+    assert pts[-1][1] < pts[0][1], "it must end higher than it starts"
+    assert pts[-1][1] < pts[-2][1], "and the last leg must be the climb"
+    assert pts[-1][1] == min(y for _, y in pts), "ending at the highest point"
+    # And it still has a pullback: markets do not go up in a line, and an icon
+    # that says they do is the one claim this app must not make.
+    assert any(pts[i][1] > pts[i - 1][1] for i in range(1, len(pts))), \
+        "a straight diagonal is not a market"
+
+
+def test_the_markets_icon_carries_an_arrowhead():
+    """What turns a rising line into a trend at 18px."""
+    paths = _market_icon_paths()
+    assert len(paths) == 2, paths
+    line, head = paths
+    tip = _polyline(line)[-1]
+    # The arrowhead starts on the tip's own row and closes at its column, which
+    # is what makes it an arrow rather than a stray tick.
+    assert "h" in head and "v" in head, head
+    hx, hy = _polyline(head)[0]
+    assert hy == tip[1], "the arrowhead sits on the line's own row"
+    assert hx < tip[0], "and reaches back toward it"
+
+
+def test_the_icon_draws_no_axis_of_its_own():
+    """At 18px an axis, a zigzag and an arrowhead is three ideas in a space
+    that holds one -- and no other icon in this set draws its own baseline:
+    `analyse` is three bars with nothing under them."""
+    assert "M3 21h18" not in "".join(_market_icon_paths())

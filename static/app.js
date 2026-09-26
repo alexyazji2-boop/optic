@@ -29052,8 +29052,22 @@ const NAV_ICONS = {
   security: '<path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7Z"/><path d="M14 3v4h4"/><path d="M9 12h6M9 16h6"/>',
   // Two columns of different height, side by side.
   analyse: '<path d="M6 20V10M12 20V4M18 20v-7"/>',
-  // A line across a range: the market, moving.
-  market: '<path d="M3 17l5-5 4 3 4-6 5 4"/><path d="M3 21h18"/>',
+  /* A climb to the top right, with the arrowhead that makes it one.
+   *
+   * It was `M3 17l5-5 4 3 4-6 5 4` over a baseline, and its last leg went
+   * DOWN -- from (16,9) to (21,13). A line that finishes falling reads as a
+   * squiggle however much ground it gained on the way, which is how this came
+   * to be reported as not looking like a trend at all.
+   *
+   * Now it ends on its strongest up-leg, at the highest point it reaches, and
+   * the two strokes at that corner close it into an arrow. The pullback in the
+   * middle stays: a straight diagonal is a chart of nothing, and the one thing
+   * this icon should not imply is that markets go up in a line.
+   *
+   * The baseline is gone with it. At 18px an axis, a zigzag and an arrowhead
+   * is three ideas in a space that holds one, and no other icon in this set
+   * draws its own axis -- `analyse` is three bars with nothing under them. */
+  market: '<path d="M3 16.5 9 10.5 13 14.5 20.5 7"/><path d="M14.5 7h6v6"/>',
   // An aperture with a handle: looking for something not yet named.
   discover: '<circle cx="11" cy="11" r="6"/><path d="m20 20-4.3-4.3"/>',
   // Stacked rows in a ledger.
