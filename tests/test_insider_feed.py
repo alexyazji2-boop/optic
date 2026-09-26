@@ -161,7 +161,13 @@ def test_the_scoped_view_says_it_is_scoped():
     body = APP_JS.split("function renderInsiderFeed(", 1)[1].split("\nasync function ", 1)[0]
     assert "d.ticker ?" in body
     assert "not a search of" in body
-    assert "data-ins-clear" in body, "no way back to the market-wide feed"
+    # The way back is the page's own Clear, not a second control inside this
+    # panel. The feed used to carry its own symbol box and its own "Back to the
+    # market" link; the Insiders page now has one box driving both filing
+    # regimes, and two inputs for one job on one screen is the duplication this
+    # repo has a whole test file about.
+    assert "data-ins-clear" not in body
+    assert "data-ins-reset" in APP_JS, "the page-level Clear has to exist"
 
 
 def test_an_empty_scoped_result_names_the_symbol_and_the_way_out():
@@ -180,19 +186,20 @@ def test_the_two_empty_messages_do_not_both_appear():
 
 
 def test_the_search_is_a_form_submit_not_a_keystroke():
-    """Each search is an EDGAR request. Firing one per keystroke would be a
-    dozen requests to spell a symbol."""
-    assert "evt.target.id === 'ins-find-form'" in APP_JS
-    # Bounded by this handler's own body, not a fixed character count: the
-    # watchlist's wv-add-form handler follows immediately and also calls
-    # preventDefault, so a 600-character window passed with this one's deleted.
-    # Cut at the assignment rather than at the first `return`, which is part of
-    # the guard the second assertion is looking for.
-    block = APP_JS.split("evt.target.id === 'ins-find-form'", 1)[1]
-    block = block.split("insiderTicker = next;", 1)[0]
+    """Each search is an EDGAR request AND a read of the Clerk's filings.
+    Firing on every keystroke would be a dozen of each to spell a symbol.
+
+    The form is the Insiders page's own now -- `ins-filter-form` -- because one
+    box drives both filing regimes. The feed's separate `ins-find-form` is
+    gone with the second box it submitted."""
+    assert "evt.target.id === 'ins-find-form'" not in APP_JS
+    block = APP_JS.split("evt.target.id === 'ins-filter-form'", 1)[1]
+    block = block.split("\n    return;", 1)[0]
     assert "evt.preventDefault()" in block
-    assert "if (next === insiderTicker) return;" in block, \
-        "re-submitting the same symbol refetches for nothing"
+    # And it moves both feeds, or the page shows one regime for the symbol
+    # asked for and the other for whatever was asked before it.
+    assert "insiderTicker = sym;" in block
+    assert "loadInsidersCongress(" in block and "loadInsiderFeed(" in block
 
 
 # ------------------------------------------------------------- the enrichment

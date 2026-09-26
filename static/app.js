@@ -5091,40 +5091,16 @@ document.addEventListener('submit', (evt) => {
   }
   if (evt.target.id === 'ins-filter-form') {
     evt.preventDefault();
-    /* Read out of the form rather than tracked per keystroke.
-     *
-     * Five inputs updating module state on every `input` event is five
-     * refetches per typed character unless it is debounced, and a debounce on
-     * a form that has an Apply button is two ways to submit the same thing.
-     * The form IS the state until it is applied. */
-    const get = (name) => {
-      const el = evt.target.elements[name];
-      return el ? (el.value || '').trim() : '';
-    };
-    const since = get('since');
-    const until = get('until');
-    congressQuery = {
-      ...congressQuery,
-      ticker: get('ticker').toUpperCase(),
-      member: get('member'),
-      side: get('side'),
-      // Swapped rather than rejected: a reader who fills the boxes the other
-      // way round means the range between them, and an error message here
-      // would be the app being pedantic about its own field order.
-      since: since && until && since > until ? until : since,
-      until: since && until && since > until ? since : until,
-    };
-    loadInsidersCongress(false);
-    return;
-  }
-  if (evt.target.id === 'ins-find-form') {
-    evt.preventDefault();
-    const box = document.getElementById('ins-q');
-    const next = (box.value || '').trim().toUpperCase();
-    if (next === insiderTicker) return;
-    insiderTicker = next;
+    const el = evt.target.elements.ticker;
+    const sym = (el ? el.value : '').trim().toUpperCase();
+    /* One symbol, both regimes. The page asks "who bought this" and the answer
+     * is in two filings systems, so a reader should not have to ask it twice
+     * in two different places. */
+    congressQuery = { ...CONGRESS_BLANK, ticker: sym, days: congressQuery.days };
+    insiderTicker = sym;
     STATE.insiders = null;
-    renderInsidersFacetHost();
+    renderInsidersFacetHost({ full: true });
+    loadInsidersCongress(false);
     loadInsiderFeed(false);
     return;
   }
@@ -25127,19 +25103,12 @@ function paperClose(id) {
  * because a congressional amount is the width of a band somebody else chose.
  */
 
-const INSIDER_FACETS = [
-  { id: 'congress', label: 'Congress', hint: 'House disclosures under the STOCK Act' },
-  { id: 'filings', label: 'Company filings', hint: 'Form 4s, market-wide' },
-];
-
-const INS_FACET_KEY = 'optic.insiders.facet';
-const INS_SAVED_KEY = 'optic.insiders.saved.v1';
-
-let insidersFacet = 'congress';
-try {
-  const savedFacet = localStorage.getItem(INS_FACET_KEY);
-  if (INSIDER_FACETS.some((f) => f.id === savedFacet)) insidersFacet = savedFacet;
-} catch (e) { /* private mode */ }
+/* No facet state. This page carried a Congress / Company filings tab pair and
+ * remembered which one you were on; both regimes render together now, so there
+ * is nothing to choose and nothing to remember. The old localStorage key is
+ * simply abandoned -- reading it to delete it would be a migration for a
+ * preference that no longer has a meaning.
+ */
 
 /* The filter set, and the one place its vocabulary is written down.
  *
@@ -25321,80 +25290,42 @@ function insCongressRow(t) {
 
 /* --------------------------------------------------------------- the view */
 
-function insidersFacetBar() {
-  return `<div class="ins-facets" role="tablist" aria-label="Which filings">
-    ${INSIDER_FACETS.map((f) => `<button type="button" role="tab"
-      class="ins-facet${insidersFacet === f.id ? ' on' : ''}"
-      data-ins-facet="${f.id}" aria-selected="${insidersFacet === f.id}"
-      title="${esc(f.hint)}">${esc(f.label)}</button>`).join('')}
-  </div>`;
-}
-
-function congressFilterForm() {
-  const q = congressQuery;
-  return `<form class="ins-filters panel" id="ins-filter-form" data-fixed="1">
-    <div class="ins-field"><label for="cq-ticker">Symbol</label>
-      <input id="cq-ticker" name="ticker" type="text" value="${esc(q.ticker)}"
-        placeholder="Any" maxlength="10" spellcheck="false" autocomplete="off"></div>
-    <div class="ins-field"><label for="cq-member">Member</label>
-      <input id="cq-member" name="member" type="text" value="${esc(q.member)}"
-        placeholder="Part of a name" maxlength="80" spellcheck="false" autocomplete="off"></div>
-    <div class="ins-field"><label for="cq-side">Direction</label>
-      <select id="cq-side" name="side">${CONGRESS_SIDES.map((x) => `<option value="${x.id}"${
-  q.side === x.id ? ' selected' : ''}>${esc(x.label)}</option>`).join('')}</select></div>
-    ${/* Trade date, not filing date, and the label has to say so: the two run
-         weeks apart and a reader filtering "September" means what was traded
-         then. */''}
-    <div class="ins-field"><label for="cq-since">Traded from</label>
-      <input id="cq-since" name="since" type="date" value="${esc(q.since)}"></div>
-    <div class="ins-field"><label for="cq-until">Traded to</label>
-      <input id="cq-until" name="until" type="date" value="${esc(q.until)}"></div>
-    <div class="ins-acts">
-      <button class="btn primary" type="submit">Apply</button>
-      <button class="btn" type="button" data-ins-reset
-        ${congressFiltered(q) ? '' : 'disabled'}>Reset</button>
-      <button class="btn" type="button" data-ins-save
-        ${congressFiltered(q) ? '' : 'disabled'}
-        title="Keeps this filter set in this browser">Save this search</button>
-    </div>
-    ${congressSaved.length ? `<div class="ins-saved">
-      ${congressSaved.map((sv, i) => `<span class="ins-chip">
-        <button type="button" data-ins-load="${i}" title="${esc(congressQueryLabel(sv.q))}"
-          >${esc(sv.name)}</button>
-        <button type="button" class="ins-chip-x" data-ins-drop="${i}"
-          aria-label="Forget ${esc(sv.name)}">&times;</button>
-      </span>`).join('')}
-    </div>` : ''}
+/* One box, and it takes a symbol.
+ *
+ * This was six fields -- symbol, member, direction, traded-from, traded-to,
+ * plus Apply, Reset and Save this search -- and the ask that replaced it was
+ * "just search a ticker and you can see all of the buys related to the
+ * ticker". That is the question this page is actually for, and five of the six
+ * fields were answering questions nobody had.
+ *
+ * The server filters it has lost are still there and still tested; nothing
+ * calls them from here. Leaving them costs nothing and means narrowing by
+ * member or by date is a form field away rather than a rewrite.
+ */
+function insSymbolForm() {
+  const sym = (congressQuery.ticker || '').toUpperCase();
+  return `<form class="panel ins-find-form" id="ins-filter-form" data-fixed="1">
+    <label class="ins-find-lab" for="cq-ticker">Symbol</label>
+    <input id="cq-ticker" name="ticker" type="text" value="${esc(sym)}"
+      placeholder="NVDA, or blank for everything" maxlength="10"
+      spellcheck="false" autocomplete="off">
+    <button class="btn primary" type="submit">Show filings</button>
+    ${sym ? `<button class="btn" type="button" data-ins-reset>Clear</button>` : ''}
   </form>`;
 }
 
-/* The form and the results are rendered separately, and that is the fix for a
- * real fault rather than a tidiness preference.
- *
- * The whole facet used to repaint whenever a request settled, which rebuilt the
- * form from `congressQuery` -- so anything typed and not yet applied was thrown
- * away by a result arriving, and a reader half through a member's name lost it
- * to their own previous query finishing. `preserveUI` was not enough: it
- * restores focus and the caret, not a value the rebuild never knew about.
- *
- * So results repaint on their own, and the form is rebuilt only when something
- * OUTSIDE it changed the query -- a ranked symbol, Reset, a saved search --
- * where the fields genuinely have to catch up.
- */
 function renderCongressFacet() {
-  return congressFilterForm()
-    + `<div id="ins-results-host">${congressResults()}</div>`;
+  return insSymbolForm()
+    + `<div id="ins-results-host">${congressResults()}${renderInsiderFeed()}</div>`;
 }
 
 function congressResults() {
   const c = STATE.insCongress;
   if (!c) {
-    return congressFilterForm()
-      + '<div class="panel" data-fixed="1"><p class="sub">Reading the Clerk’s filings…</p></div>';
+    return '<div class="panel" data-fixed="1"><p class="sub">Reading the Clerk’s filings…</p></div>';
   }
   if (c.available === false && c.reason) {
-    return congressFilterForm()
-      + `<div class="panel" data-fixed="1"><div class="error-box"><strong>Could not load.</strong>
+    return `<div class="panel" data-fixed="1"><div class="error-box"><strong>Could not load.</strong>
         ${esc(c.reason)}<div class="error-acts"><button type="button" class="btn"
         data-ins-retry>Try again</button></div></div></div>`;
   }
@@ -25457,16 +25388,19 @@ function congressResults() {
 
 function renderInsidersView() {
   hideTip();
-  const facet = INSIDER_FACETS.find((f) => f.id === insidersFacet) || INSIDER_FACETS[0];
+
   views.insiders.innerHTML = `<div class="panel ins-head" data-fixed="1">
       <h1>${hg('Insiders')}</h1>
       <p class="sub">Who is trading what, from the two filing regimes that have
         to be public. A record of what was filed, not a signal: nothing here is
         ranked by how profitable it looked.</p>
-      ${insidersFacetBar()}
+      ${/* No Congress / Company filings tabs any more. Both are on the page
+           together, because the question is "who bought this" and the answer
+           lives in two filing systems -- making the reader pick one first was
+           asking them to know which regime a buyer files under before they
+           can look them up. */''}
     </div>
-    <div id="ins-facet-host">${
-  facet.id === 'congress' ? renderCongressFacet() : renderInsiderFeed()}</div>`;
+    <div id="ins-facet-host">${renderCongressFacet()}</div>`;
   revealPanels(views.insiders);
 }
 
@@ -25479,12 +25413,12 @@ function renderInsidersFacetHost(opts) {
   const host = document.getElementById('ins-facet-host');
   if (!host || STATE.view !== 'insiders') return;
   const results = document.getElementById('ins-results-host');
-  const partial = insidersFacet === 'congress' && results && !(opts && opts.full);
+  const partial = results && !(opts && opts.full);
   // Scroll and focus survive either way: a result landing must not jump the
   // page out from under someone reading the table.
   preserveUI(host, () => {
-    if (partial) results.innerHTML = congressResults();
-    else host.innerHTML = insidersFacet === 'congress' ? renderCongressFacet() : renderInsiderFeed();
+    if (partial) results.innerHTML = congressResults() + renderInsiderFeed();
+    else host.innerHTML = renderCongressFacet();
   });
   revealPanels(partial ? results : host);
 }
@@ -25505,8 +25439,11 @@ async function loadInsidersCongress(force) {
 
 function loadInsiders(force) {
   renderInsidersView();
-  if (insidersFacet === 'congress') return loadInsidersCongress(force);
-  return loadInsiderFeed(force);
+  // Both, always. The page shows the two filing regimes together, so opening
+  // it on one and making the reader ask for the other was the tab split this
+  // replaced.
+  loadInsiderFeed(force);
+  return loadInsidersCongress(force);
 }
 
 function renderInsiderFeed() {
@@ -25531,14 +25468,9 @@ function renderInsiderFeed() {
         data-ins-only="0" aria-pressed="${!insiderPurchasesOnly}">Everything filed</button>
       <button type="button" class="pill" data-ins-refresh>Refresh</button>
     </div>
-    <form class="ins-find" id="ins-find-form">
-      <input id="ins-q" type="text" placeholder="One symbol, or blank for the market"
-        aria-label="Filings for one symbol" value="${esc(insiderTicker)}"
-        spellcheck="false" autocomplete="off" maxlength="10">
-      <button class="btn" type="submit">Find</button>
-      ${insiderTicker ? `<button type="button" class="auth-link" data-ins-clear
-        >Back to the market</button>` : ''}
-    </form>
+    ${/* The feed's own symbol box is gone. The box at the top of this page
+         drives both regimes, and two inputs for one job on one screen is the
+         duplication this repo has a whole test file about. */''}
     ${d.ticker ? `<p class="sub"><strong>${esc(d.ticker)}</strong> only, newest
       filing first. This is that company's own Form 4 history, not a search of
       the market-wide list above.</p>` : ''}
@@ -29974,13 +29906,6 @@ document.addEventListener('click', (evt) => {
     loadInsiderFeed(false);
     return;
   }
-  if (evt.target.closest('[data-ins-clear]')) {
-    insiderTicker = '';
-    STATE.insiders = null;
-    renderInsidersFacetHost();
-    loadInsiderFeed(false);
-    return;
-  }
   /* ---------------------------------------------------- Insiders page */
   /* ------------------------------------------------------ the paper book */
   const ptDir = evt.target.closest('[data-paper-dir]');
@@ -30075,17 +30000,6 @@ document.addEventListener('click', (evt) => {
     loadTicker(recentBtn.dataset.recentSymbol);
     return;
   }
-  const facetBtn = evt.target.closest('[data-ins-facet]');
-  if (facetBtn) {
-    const want = facetBtn.dataset.insFacet;
-    if (want === insidersFacet) return;
-    insidersFacet = want;
-    try { localStorage.setItem(INS_FACET_KEY, want); } catch (e) { /* private mode */ }
-    // Repaint the whole view, because the tab bar's own pressed state moved.
-    renderInsidersView();
-    if (want === 'congress') loadInsidersCongress(false); else loadInsiderFeed(false);
-    return;
-  }
   const dayBtn = evt.target.closest('[data-ins-days]');
   if (dayBtn) {
     const want = Number(dayBtn.dataset.insDays);
@@ -30101,17 +30015,24 @@ document.addEventListener('click', (evt) => {
     // control is a toggle rather than a one-way trip into a filtered page.
     congressQuery.ticker = (congressQuery.ticker || '').toUpperCase() === sym.toUpperCase()
       ? '' : sym;
-    // The Symbol field has to catch up, so the form is rebuilt with it.
+    // The Symbol field has to catch up, so the form is rebuilt with it -- and
+    // the company filings follow the same symbol.
+    insiderTicker = congressQuery.ticker;
+    STATE.insiders = null;
     renderInsidersFacetHost({ full: true });
     loadInsidersCongress(false);
+    loadInsiderFeed(false);
     return;
   }
   if (evt.target.closest('[data-ins-reset]')) {
     // `days` is the chart's window, not a filter, and survives a reset: it is
     // how the reader is reading the chart, not what they are looking for.
     congressQuery = { ...CONGRESS_BLANK, days: congressQuery.days };
+    insiderTicker = '';
+    STATE.insiders = null;
     renderInsidersFacetHost({ full: true });
     loadInsidersCongress(false);
+    loadInsiderFeed(false);
     return;
   }
   if (evt.target.closest('[data-ins-retry]')) { loadInsidersCongress(true); return; }

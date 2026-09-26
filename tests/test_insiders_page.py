@@ -162,13 +162,44 @@ def test_a_result_landing_does_not_throw_away_what_is_being_typed():
         assert "renderInsidersFacetHost({ full: true })" in APP[i:i + 900], control
 
 
-def test_dates_the_wrong_way_round_are_swapped_not_refused():
-    """A reader who fills the boxes the other way round means the range between
-    them. An error message here would be the app being pedantic about its own
-    field order."""
-    block = APP.split("if (evt.target.id === 'ins-filter-form')", 1)[1][:1400]
-    assert "since > until ? until : since" in block
-    assert "since > until ? since : until" in block
+def test_the_page_asks_for_a_symbol_and_nothing_else():
+    """It asked for six things -- symbol, member, direction, traded-from,
+    traded-to, plus Apply, Reset and Save this search. The question this page
+    answers is "who bought this", and a symbol is the whole of it.
+
+    The server's member, side and date filters are untouched and still tested
+    in tests/test_congress.py. Nothing calls them from here, which costs
+    nothing and means narrowing by member is a form field away rather than a
+    rewrite."""
+    fn = function("insSymbolForm")
+    assert 'name="ticker"' in fn
+    for gone in ('name="member"', 'name="side"', 'name="since"', 'name="until"'):
+        assert gone not in fn, gone
+
+
+def test_one_symbol_drives_both_filing_regimes():
+    """The answer to "who bought this" lives in two filing systems, and a
+    reader should not have to ask it twice in two different places. The tab
+    pair that used to make them choose first is gone."""
+    assert "insidersFacetBar" not in APP, "the tab bar is gone, not merely unused"
+    assert "INSIDER_FACETS" not in APP
+    facet = function("renderCongressFacet")
+    assert "congressResults()" in facet and "renderInsiderFeed()" in facet
+    loader = function("loadInsiders")
+    assert "loadInsiderFeed(" in loader and "loadInsidersCongress(" in loader
+
+
+def test_the_filter_form_is_rendered_once():
+    """It was rendered twice -- once by the facet and again inside the results,
+    on the loading branch and the error branch. Two identical six-field panels,
+    one above the other. Reported from a screenshot of exactly that, and caused
+    by a pair of strips that silently did not apply when the form and the
+    results were split apart."""
+    results = function("congressResults")
+    assert "insSymbolForm()" not in results, "the results must not draw the form"
+    assert "congressFilterForm" not in APP, "the old six-field form is gone"
+    facet = function("renderCongressFacet")
+    assert facet.count("insSymbolForm()") == 1
 
 
 def test_the_window_is_not_part_of_a_saved_search():

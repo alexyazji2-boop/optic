@@ -14919,3 +14919,31 @@ body.rail-tight .rail .rail-recent { display: none; }
    the label jump under a cursor that is already on it. */
 .inst-back-arrow { transition: transform var(--dur-ui) var(--ease-ui); }
 .inst-back:hover .inst-back-arrow { transform: translateX(-2px); }
+
+/* The Insiders page's one input.
+ *
+ * It replaced a six-field filter panel -- symbol, member, direction, two dates,
+ * Apply / Reset / Save this search. The question this page answers is "who
+ * bought this", and a symbol is the whole of it.
+ */
+.ins-find-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.ins-find-lab { font-size: var(--t-caption); color: var(--ink-muted); }
+.ins-find-form input {
+  /* Wide enough for the placeholder, which is a sentence rather than a hint:
+     a blank box on a page about filings does not say that blank means all of
+     them. */
+  flex: 1 1 260px;
+  min-width: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--t-small);
+}
