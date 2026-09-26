@@ -14860,3 +14860,17 @@ body.rail-tight .rail .rail-recent { display: none; }
   text-align: center;
   justify-content: center;
 }
+
+/* The armed half of the clear-the-book control. Danger is carried by the text
+   colour and the border, not a fill: a solid red button beside a plain one
+   reads as the recommended action, and the recommended action here is Keep. */
+.pt-danger {
+  color: var(--neg);
+  border-color: var(--neg);
+  /* Paint-level only, like every other hover in this file: animating a layout
+     property forces a full-document reflow per frame. */
+  transition: color var(--dur-ui) var(--ease-ui),
+              border-color var(--dur-ui) var(--ease-ui),
+              background-color var(--dur-ui) var(--ease-ui);
+}
+.pt-danger:hover { color: var(--neg); border-color: var(--neg); }

@@ -24483,6 +24483,16 @@ let paperChainError = '';
 let paperMarks = {};            // id -> the server's mark
 let paperMarking = false;
 let paperMarkFailed = false;    // so the note can offer a retry
+/* Is the clear-the-book control asking, rather than doing?
+ *
+ * A second click rather than a native dialog, because a native dialog is not
+ * reliably shown: a browser that has been told to block further dialogs -- and
+ * an embedded or automated context -- answers `confirm()` with false and shows
+ * the reader nothing. The old code returned on that false, so the button did
+ * nothing and looked dead. Two clicks on two different labels is a
+ * confirmation nothing can suppress, and it cannot be answered by accident:
+ * the second control is not where the first one was. */
+let paperResetArmed = false;
 let paperNote = '';             // one line back from the last action
 
 /* ------------------------------------------------------------ the numbers */
@@ -24866,8 +24876,15 @@ function renderPaperView() {
           <th>Optic then</th><th>Closed</th></tr></thead>
         <tbody>${paperBook.closed.slice(0, 50).map(paperClosedRow).join('')}</tbody>
       </table></div>
-      <div class="ins-acts"><button type="button" class="btn" data-paper-reset
-        >Clear the book</button></div>
+      <div class="ins-acts">${paperResetArmed ? `
+        ${/* Says what it will destroy, counted. "Clear the book" is a label;
+             "delete 3 open and 12 closed" is the decision. */''}
+        <button type="button" class="btn pt-danger" data-paper-reset-go
+          >Delete ${fmt(paperBook.open.length, 0)} open and ${
+  fmt(paperBook.closed.length, 0)} closed</button>
+        <button type="button" class="btn" data-paper-reset-cancel>Keep them</button>
+        <span class="pt-sub">Optic Portfolio is not touched.</span>`
+    : '<button type="button" class="btn" data-paper-reset>Clear the book</button>'}</div>
     </div>` : ''}`;
   revealPanels(views.paper);
 }
@@ -29127,6 +29144,9 @@ function switchView(view, force) {
    * button on a page that is not the chart. Ending it here is the honest
    * version. */
   if (view !== 'chart' && wsIsMaximised()) wsSetMaximised(false);
+  // An armed delete must not survive leaving the page: coming back to a button
+  // already asking "delete 15 trades" is one click from losing them.
+  if (view !== 'paper') paperResetArmed = false;
   // Captured before STATE.view is overwritten.
   if (view === 'settings' && STATE.view !== 'settings') viewBeforeSettings = STATE.view;
   STATE.view = view;
@@ -29959,13 +29979,27 @@ document.addEventListener('click', (evt) => {
     return;
   }
   if (evt.target.closest('[data-paper-reset]')) {
-    // Destructive and local, so it asks. There is no server copy to restore
-    // from and no undo: this browser is the only place the book exists.
-    if (!window.confirm('Delete every open and closed paper trade in this browser?')) return;
+    /* Arms, it does not delete. See paperResetArmed.
+     *
+     * This called `window.confirm` and returned on a false, which is what a
+     * suppressed dialog answers -- so the button did nothing at all and read
+     * as broken. Reported as exactly that, and reproduced: confirm() returned
+     * false without the reader ever seeing it. */
+    paperResetArmed = true;
+    renderPaperView();
+    return;
+  }
+  if (evt.target.closest('[data-paper-reset-cancel]')) {
+    paperResetArmed = false;
+    renderPaperView();
+    return;
+  }
+  if (evt.target.closest('[data-paper-reset-go]')) {
     paperBook = { open: [], closed: [] };
     paperMarks = {};
+    paperResetArmed = false;
     paperSave();
-    paperNote = 'Book cleared.';
+    paperNote = 'Book cleared. Nothing was touched in Optic Portfolio.';
     renderPaperView();
     return;
   }

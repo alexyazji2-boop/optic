@@ -238,9 +238,47 @@ def test_every_control_on_this_page_has_a_handler():
 
 def test_clearing_the_book_asks_first():
     """There is no server copy to restore from and no undo: this browser is the
-    only place the book exists."""
+    only place the book exists.
+
+    Two clicks on two different labels, not `window.confirm`. A browser told to
+    block further dialogs -- and an embedded or automated context -- answers
+    confirm() with false and shows the reader nothing, and the old code
+    returned on that false. So the button did nothing at all and read as
+    broken. Reported as exactly that, and reproduced: confirm() returned false
+    without any dialog appearing."""
     i = APP.index("closest('[data-paper-reset]')")
-    assert "window.confirm(" in APP[i:i + 400]
+    # The arm handler's own body, to its `return;`. A fixed 700-char window ran
+    # past it into the -go handler, which legitimately does clear the book --
+    # so the strengthened check below failed against correct code.
+    arm = APP[i:APP.index("\n    return;\n  }", i)]
+    assert "window.confirm(" not in arm, "a dialog that can be suppressed is not a gate"
+    assert "paperResetArmed = true;" in arm
+    # And it ARMS, it does not delete. Asserting the arming line is present was
+    # not enough on its own: a mutation that dropped an immediate
+    # `paperBook = { open: [], closed: [] }` above it left the line in place
+    # and passed, with one click wiping the book and no confirmation at all.
+    assert "paperBook = { open: [], closed: [] };" not in arm, \
+        "the first click must not destroy anything"
+    # The second control is a different one, so the confirmation cannot be
+    # answered by a double-click landing in the same place.
+    assert "data-paper-reset-go" in APP and "data-paper-reset-cancel" in APP
+    go = APP[APP.index("closest('[data-paper-reset-go]')"):][:400]
+    assert "paperBook = { open: [], closed: [] };" in go
+
+
+def test_the_armed_control_says_what_it_will_destroy():
+    """"Clear the book" is a label. "Delete 3 open and 12 closed" is the
+    decision, and it is the one being confirmed."""
+    fn = function("renderPaperView")
+    assert "paperResetArmed ?" in fn
+    assert "open and ${" in fn
+    assert "Optic Portfolio is not touched." in fn
+
+
+def test_an_armed_delete_does_not_survive_leaving_the_page():
+    """Coming back to a button already asking "delete 15 trades" is one click
+    from losing them."""
+    assert "if (view !== 'paper') paperResetArmed = false;" in function("switchView")
 
 
 def test_the_read_can_be_fetched_from_this_page():
