@@ -159,12 +159,16 @@ def test_signing_in_raises_the_allowance(accounts, monkeypatch):
         "password": "tungsten-carbide-9", "confirm_password": "tungsten-carbide-9"})
     head = {"x-forwarded-for": "203.0.113.22"}
     # Past the guest allowance of one, because the bucket is now the account.
+    # Counted off the plan: what this proves is that the ceiling moved, not
+    # what the ceiling is.
+    allowed = store_plans()["free"]["ai_calls_per_day"]
+    assert allowed > 1, "sanity: an account has to get more than the guest"
     codes = [signed.post("/api/chat", json=BODY, headers=head).status_code
-             for _ in range(4)]
-    assert codes == [200, 200, 200, 200], codes
+             for _ in range(allowed)]
+    assert codes == [200] * allowed, codes
     state = signed.get("/api/ai-allowance").json()["allowance"]
     assert state["scope"] == "account"
-    assert state["used"] == 4
+    assert state["used"] == allowed
 
 
 def test_the_plan_allowance_is_enforced(accounts, monkeypatch):
@@ -277,23 +281,46 @@ def store_plans():
     return store.PLANS
 
 
-def test_a_free_account_gets_five_a_day_and_the_sixth_is_refused(accounts):
-    """Five, and the sixth says so. The hourly cap is lifted well clear so the
-    daily one is what answers."""
+def test_a_free_account_gets_its_allowance_and_the_next_call_is_refused(accounts):
+    """The mechanism, counted off the plan rather than off a literal. The
+    number itself is pinned once, below; here the point is that the Nth call
+    works and the N+1th is refused and says so. The hourly cap is lifted well
+    clear so the daily one is what answers."""
+    allowed = store_plans()["free"]["ai_calls_per_day"]
     main.AI_CALLS_PER_HOUR = 100
-    who = signed_in("fiveaday@example.com")
+    who = signed_in("allowance@example.com")
     head = {"x-forwarded-for": "203.0.113.32"}
     codes = [who.post("/api/chat", json=BODY, headers=head).status_code
-             for _ in range(6)]
-    assert codes == [200, 200, 200, 200, 200, 429], codes
-    assert "5 assistant messages today" in who.post(
+             for _ in range(allowed + 1)]
+    assert codes == [200] * allowed + [429], codes
+    assert "{} assistant messages today".format(allowed) in who.post(
         "/api/chat", json=BODY, headers=head).json()["detail"]
 
 
-def test_the_free_plan_is_five():
-    """The number the refusal quotes and the number the panel promises both
-    come from here, so there is nothing to keep in step."""
-    assert store_plans()["free"]["ai_calls_per_day"] == 5
+def test_the_guest_refusal_quotes_the_plan_not_a_number_of_its_own():
+    """The claim `PLANS` makes about itself: "both places that say it out loud
+    build it from here". Nothing tested the guest 401 against the plan, so a
+    hardcoded number in that sentence survived a mutation - the refusal would
+    have gone on promising five a day beside a counter that stops at three,
+    which is the drift the comment says cannot happen.
+
+    The panel's copy is covered separately: it reads `signed_in_allowance` off
+    the allowance payload, which is the same value by construction."""
+    allowed = store_plans()["free"]["ai_calls_per_day"]
+    res = client.post("/api/chat", json=BODY,
+                      headers={"x-forwarded-for": "203.0.113.90"})
+    assert res.status_code == 401
+    assert "{} messages a day".format(allowed) in res.json()["detail"]
+
+
+def test_the_free_plan_is_three():
+    """The one place the number is pinned, and the only test that should need
+    editing to change it. Five until the operator asked for three.
+
+    The refusal quotes it and the panel promises it, and both build it from
+    `PLANS` rather than saying it themselves -- so a literal here is the
+    product decision written down, not a duplicate of it."""
+    assert store_plans()["free"]["ai_calls_per_day"] == 3
 
 
 def test_an_operator_can_re_open_it_to_guests(monkeypatch):

@@ -543,9 +543,17 @@ def set_preferences(user_id: str, patch: Dict[str, Any]) -> Dict[str, Any]:
 
 
 PLANS = {
-    # Five, not twenty-five. Each one is a paid call against the operator's
-    # own key, and the free tier is what a visitor gets for an email address.
-    "free": {"label": "Free", "ai_calls_per_day": 5, "watchlists": 3,
+    # Three, not twenty-five, and it was five until the operator asked for
+    # three. Each one is a paid call against the operator's own key, and the
+    # free tier is what a visitor gets for an email address.
+    #
+    # The number is written once. Both places that say it out loud build it
+    # from here -- `_spend_guard`'s 401 formats it, and the panel reads
+    # `signed_in_allowance` off the allowance payload -- so changing this line
+    # changes the copy too. That is deliberate: a hardcoded "5 messages a day"
+    # beside a counter that stopped at three is the kind of drift CLAUDE.md
+    # records for the direction words in watches.py.
+    "free": {"label": "Free", "ai_calls_per_day": 3, "watchlists": 3,
              "saved_research": 40},
     "pro": {"label": "Pro", "ai_calls_per_day": 400, "watchlists": 25,
             "saved_research": 1000},
