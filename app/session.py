@@ -84,6 +84,99 @@ DESCRIPTIONS = {
 EARLY_REGULAR_END = 13 * 60        # 1:00pm on a half day
 EARLY_AFTER_END = 17 * 60          # 5:00pm on a half day
 
+# ------------------------------------------------------------------ futures
+#
+# CME Globex equity index futures: ES, NQ, YM, RTY. A separate week from the
+# equity one above, and the reason this exists is the two hours it disagrees
+# about. `_weekend` calls Sunday shut until 8:00pm, because that is when the
+# equity overnight session starts -- but the futures opened at 6:00pm, and the
+# home strip is already showing their prices. Measured on a Sunday at 18:44 ET
+# the terminal read "Weekend. Closed, Overnight in 1 hour and 15 minutes" over
+# a row of live ES and NQ quotes.
+#
+# The week: open Sunday 6:00pm, shut Friday 5:00pm, and an hour down at 5:00pm
+# every day in between for maintenance.
+FUTURES_OPEN = 18 * 60             # 6:00pm: Sunday's open, and each reopen
+FUTURES_BREAK_START = 17 * 60      # 5:00pm: the daily maintenance halt
+FUTURES_WEEK_END = 17 * 60         # 5:00pm Friday
+
+FUTURES_LABELS = {
+    "open": "Futures open",
+    "break": "Futures halted",
+    "weekend": "Futures closed",
+}
+
+FUTURES_DESCRIPTIONS = {
+    "open": "CME equity index futures trade nearly around the clock, Sunday 6:00pm to "
+            "Friday 5:00pm ET, with an hour down at 5:00pm each day. A future is not the "
+            "index: it carries basis and its own expiry, so read it as where the market "
+            "is leaning rather than as a price.",
+    "break": "The daily maintenance hour. CME equity index futures are halted from 5:00pm "
+             "and reopen at 6:00pm ET.",
+    "weekend": "Futures are shut for the weekend. CME equity index futures reopen Sunday "
+               "at 6:00pm ET, two hours before the US equity overnight session.",
+}
+
+# Said rather than implied, in the house style of every other panel. The weekly
+# cycle is exact; the holiday calendar is not modelled, and CME's is not NYSE's
+# -- several equity holidays are shortened futures sessions rather than closed
+# ones, so a holiday would be reported here as an ordinary open day.
+FUTURES_LIMITS = ("The futures week is modelled from the CME schedule. Holiday sessions "
+                  "are not: CME shortens some days the NYSE closes, and this will read "
+                  "those as ordinary.")
+
+
+def futures_phase(when: datetime) -> str:
+    """open, break or weekend, for CME equity index futures."""
+    weekday = when.weekday()                                # Mon=0 .. Sun=6
+    minutes = _minutes(when)
+    if weekday == 5:                                        # Saturday
+        return "weekend"
+    if weekday == 6:                                        # Sunday
+        return "open" if minutes >= FUTURES_OPEN else "weekend"
+    if weekday == 4 and minutes >= FUTURES_WEEK_END:        # Friday after 5pm
+        return "weekend"
+    # Monday to Thursday, plus Friday before the week's close: one hour down.
+    # Friday never reaches this test, because 5:00pm is already the weekend
+    # there rather than the start of a break that would reopen.
+    if FUTURES_BREAK_START <= minutes < FUTURES_OPEN:
+        return "break"
+    return "open"
+
+
+def _futures_next_change(when: datetime) -> Dict[str, Any]:
+    """Walked forward a minute at a time, for the reason `_next_change` is.
+
+    Reasoning about the cases is what gets Sunday evening and the Friday close
+    wrong, and this runs a few thousand cheap iterations at most."""
+    current = futures_phase(when)
+    probe = when.replace(second=0, microsecond=0)
+    for _ in range(60 * 24 * 4):
+        probe += timedelta(minutes=1)
+        nxt = futures_phase(probe)
+        if nxt != current:
+            return {
+                "phase": nxt,
+                "label": FUTURES_LABELS[nxt],
+                "starts_at": probe.isoformat(),
+                "minutes_away": int((probe - when).total_seconds() // 60),
+            }
+    return {}
+
+
+def futures_state(now: Optional[datetime] = None) -> Dict[str, Any]:
+    """Whether index futures are trading, and when that next changes."""
+    when = (now or datetime.now(timezone.utc)).astimezone(ET)
+    phase = futures_phase(when)
+    return {
+        "phase": phase,
+        "label": FUTURES_LABELS[phase],
+        "description": FUTURES_DESCRIPTIONS[phase],
+        "is_open": phase == "open",
+        "limits": FUTURES_LIMITS,
+        "next": _futures_next_change(when),
+    }
+
 
 def _easter(year: int) -> date:
     """Gregorian Easter Sunday. Needed only for Good Friday, the one closure
@@ -330,6 +423,11 @@ def state(now: Optional[datetime] = None) -> Dict[str, Any]:
         "next": _next_change(when),
         # The one thing a reader has to know before trusting an off-hours price.
         "feed_covers_phase": phase != "overnight",
+        # Alongside rather than merged into `phase`. They are two different
+        # markets on two different calendars, and the whole point of adding it
+        # is the hours where they disagree -- flattening them into one status
+        # would throw away exactly the fact this is here to carry.
+        "futures": futures_state(when),
     }
 
 
