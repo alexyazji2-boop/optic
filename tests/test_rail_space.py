@@ -5,7 +5,18 @@ Two separate complaints, both about a page that is not ready when you arrive.
 **The rail.** Measured at 965px tall: the brand took 42px, the sections 313px
 and the foot 90px, leaving 460px of nothing -- with Settings and Collapse
 floating in the middle of it rather than sitting at the bottom, which is what
-made it read as unfinished rather than as roomy. After this: 14px.
+made it read as unfinished rather than as roomy.
+
+"After this: 14px" is what this docstring used to claim, and it was measuring
+the wrong thing. 14px was the space left *under* the foot once `margin-top:
+auto` pinned it down. The slack itself never went anywhere: re-measured on a
+900px rail carrying 529px of content, the void had simply moved above the foot
+and was 297px. It was reported a second time, correctly. Pinning the foot
+without growing anything in front of it moves a hole; it does not close one.
+`.rail-recent` now carries `flex: 1` and the list runs down the rail instead
+of wrapping as chips, so the one region that can grow does. Re-measured after
+that: 5px between the recents and the foot, and the leftover sits inside a
+labelled list rather than between two blocks.
 
 **The cold start.** /api/home is six legs, three of which reach the network.
 Measured on the live server: 7.35s on the first request after a restart, 0.6s
@@ -30,6 +41,26 @@ def function(name):
                      APP, re.M | re.S).group()
 
 
+def rule_of(selector):
+    """One rule's declarations from the rail block, with comments removed.
+
+    Comments removed, and that is the whole point of this helper rather than a
+    slice at the call site. The first version of the `flex: 1` test below read
+    the rule as raw text, and the rule's own comment explains that `flex: 1` is
+    what closes the gap -- so deleting the declaration left the test passing on
+    the sentence describing it. It survived its mutation. Same escape CLAUDE.md
+    records for a `return` matched inside its branch's comment, and it is the
+    second time in this session.
+
+    Stripping before the closing brace is found, not after, so a `}` inside a
+    comment cannot end the rule early.
+    """
+    block = CSS[CSS.index("the rail's space"):]
+    start = block.index(selector + " {") + len(selector) + 2
+    tail = re.sub(r"/\*.*?\*/", " ", block[start:], flags=re.S)
+    return tail[:tail.index("}")]
+
+
 # ------------------------------------------------- the foot sits at the foot
 
 
@@ -40,6 +71,33 @@ def test_the_foot_is_pinned_to_the_bottom():
     rule = block[block.index(".rail-foot {"):]
     rule = rule[:rule.index("}")]
     assert "margin-top: auto" in rule
+
+
+def test_the_recents_grow_into_the_space_rather_than_sitting_above_it():
+    """The assertion this file was missing, and the reason the same complaint
+    came back twice. Every test here checked that the foot was pinned, which
+    was true and insufficient: with nothing growing in front of it the slack
+    just pooled above the foot instead of below it."""
+    rule = rule_of(".rail-recent")
+    assert re.search(r"flex:\s*1\b", rule), \
+        "nothing in the rail grows, so the slack only moves"
+
+
+def test_the_recents_run_down_the_rail_rather_than_wrapping_as_chips():
+    """Three chips on one line used 28px of a rail that had 371px going spare
+    and read as a leftover row. One symbol per line uses the height."""
+    rule = rule_of(".rail-recent-list")
+    assert "flex-direction: column" in rule
+    assert "flex-wrap: wrap" not in rule, "back to chips"
+
+
+def test_a_recent_row_spans_the_rail():
+    """As an `inline-flex` chip each row was only as wide as its symbol, so a
+    column of them stepped in and out along the left edge instead of lining up
+    with the section labels above."""
+    rule = rule_of(".rail-recent-item")
+    assert "width: 100%" in rule
+    assert "display: inline-flex" not in rule
 
 
 def test_the_rail_rules_do_not_reach_the_phone():

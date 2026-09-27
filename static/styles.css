@@ -14649,7 +14649,16 @@ body.ws-max[data-view="chart"] [data-ws-max] {
   .rail-recent {
     /* Above the foot, and the first thing to give up room: the sections and
        the foot are navigation and this is a convenience. min-height 0 so it
-       scrolls rather than pushing the foot off a short window. */
+       scrolls rather than pushing the foot off a short window.
+
+       `flex: 1` is what actually closes the hole, and its absence is why this
+       was reported twice. `margin-top: auto` on the foot pinned the foot to
+       the bottom, which only MOVED the empty space: measured on a 900px rail
+       with 529px of content, the 371px of slack stopped being a void under
+       Settings and became a 297px void above it. Nothing grew, so nothing
+       filled. Now the one region that can grow does, and the leftover sits
+       inside a labelled list instead of between two blocks. */
+    flex: 1 1 auto;
     margin-top: var(--space-5);
     min-height: 0;
     overflow-y: auto;
@@ -14672,18 +14681,28 @@ body.ws-max[data-view="chart"] [data-ws-max] {
     line-height: 1.5;
   }
   .rail-recent-list {
+    /* A column, not wrapped pills. Three pills on one line used 28px of the
+       rail's height and read as a leftover chip row; one symbol per line uses
+       the height the rail actually has and scans like the sections above it. */
     list-style: none;
     margin: 0;
     padding: 0;
     display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-1);
+    flex-direction: column;
+    gap: var(--space-0);
   }
   .rail-recent-item {
-    display: inline-flex;
+    /* Full width and left-aligned, so the symbols line up with the section
+       labels above them rather than floating as chips of varying width.
+       A border on every row would stack eight boxes down the rail; the
+       current one is marked with a left rule instead, which is one line
+       rather than eight. */
+    display: flex;
     align-items: center;
-    padding: var(--space-0) var(--space-2);
-    border: 1px solid var(--border);
+    width: 100%;
+    padding: var(--space-1) var(--space-2);
+    border: 0;
+    border-left: 2px solid transparent;
     border-radius: var(--r-sm);
     background: none;
     color: var(--ink-2);
@@ -14691,13 +14710,14 @@ body.ws-max[data-view="chart"] [data-ws-max] {
     font-size: var(--t-caption);
     font-weight: 600;
     font-variant-numeric: tabular-nums;
+    text-align: left;
     cursor: pointer;
     transition: color var(--dur-ui) var(--ease-ui),
                 border-color var(--dur-ui) var(--ease-ui),
                 background-color var(--dur-ui) var(--ease-ui);
   }
-  .rail-recent-item:hover { color: var(--ink); border-color: var(--border-strong); }
-  .rail-recent-item.current { color: var(--ink); border-color: var(--accent); }
+  .rail-recent-item:hover { color: var(--ink); background: var(--surface-2); }
+  .rail-recent-item.current { color: var(--ink); border-left-color: var(--accent); }
 }
 
 /* Collapsed, the rail is icons only and a row of bare symbols has no icon to
