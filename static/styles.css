@@ -1821,6 +1821,20 @@ table.data.narrow { min-width: 0; }
   border: 0;
   border-radius: var(--r-md);
   text-align: center;
+  /* Centred down the box as well as across it.
+   *
+   * The grid stretches every tile to the tallest in the row, and the content
+   * was top-aligned inside that, so a tile with no delta and no note spent the
+   * extra height as a gap under its figure. Measured on the instrument row at
+   * 1440px: every tile 142px, label at 18 and value at 58 in all of them, and
+   * the space under the content 18px on the three-line tiles against 42px on
+   * the two-line ones. The figures lined up and the boxes did not, which reads
+   * as the short ones having slipped upward inside their own card.
+   *
+   * Reserving an invisible third line was the first attempt and it is a no-op:
+   * an empty line occupies exactly the space the gap already did, so nothing
+   * moves. The content has to move, which means centring it. */
+  justify-content: center;
 }
 /* Two lines' worth, whether it uses them or not.
  *
@@ -1878,11 +1892,13 @@ table.data.narrow { min-width: 0; }
    * are the things that should stay inside it. */
   margin-inline: calc(-1 * var(--space-3));
 }
-/* Pushed to the bottom so the notes line up too. Only some tiles carry one, and
-   a note that floats directly under a short value while its neighbour's sits
-   lower is the same raggedness one row down. */
+/* No longer pushed to the bottom. `margin-top: auto` was how the notes were
+   lined up with each other while the content was top-aligned; against
+   `justify-content: center` an auto margin wins outright, which would splay
+   the three-line tiles open while the two-line ones sat centred. The notes
+   still line up, because every tile carrying one now centres the same three
+   lines. */
 .tile .note {
-  margin-top: auto;
   font-size: var(--t-caption);
   color: var(--ink-2);
   line-height: 1.5;
@@ -5219,6 +5235,13 @@ button.home-card:focus-visible { outline: 2px solid var(--focus); outline-offset
   flex-direction: column;
   gap: var(--space-0);
   text-align: center;
+  /* Down the box as well, for the reason `.tile` carries it. These cells are
+     two lines each so they are usually level anyway, but the grid stretches
+     them to the tallest and the empty book's "No trades yet" wraps on a narrow
+     card -- which leaves its neighbour's figure hanging at the top of a taller
+     box. Every other figure in a row of equal boxes here is centred both ways:
+     .tile, .ms-cell and .map-tile. */
+  justify-content: center;
 }
 .bk-figs i {
   font-style: normal;

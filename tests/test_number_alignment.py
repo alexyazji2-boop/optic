@@ -80,10 +80,31 @@ def test_the_tile_label_reserves_two_lines():
     assert "font-size: var(--t-caption)" in body
 
 
-def test_the_tile_note_is_pushed_to_the_bottom():
-    """Only some tiles carry one. A note floating under a short value while its
-    neighbour's sits lower is the same raggedness one row down."""
-    assert "margin-top: auto" in _rule(".tile .note")
+def test_the_tile_centres_its_content_down_the_box():
+    """The tile was the odd one out, and `test_the_market_strip_is_centred_too`
+    below is the proof: `.ms-cell` is the same shape -- a caption over a figure
+    in a row of equal cells -- and has been centred all along.
+
+    The grid stretches every tile to the tallest in its row and the content was
+    top-aligned inside that, so a tile with no delta and no note spent the extra
+    height as a gap under its figure. Measured on the instrument row at 1440px:
+    every tile 142px, label at 18 and value at 58 in all of them, and the space
+    under the content 18px on the three-line tiles against 42px on the two-line
+    ones. Reported as boxes that were not "properly adjusted within the box"."""
+    assert "justify-content: center" in _rule(".tile")
+
+
+def test_the_tile_note_no_longer_pins_itself_to_the_bottom():
+    """It used to, and that was right while the content was top-aligned: it was
+    how the notes lined up with each other. Against `justify-content: center` an
+    auto margin wins outright, so the three-line tiles would splay open while
+    the two-line ones sat centred -- the raggedness back, one row down, which is
+    the exact thing the old rule existed to prevent.
+
+    The notes still line up. Every tile carrying one now centres the same three
+    lines, so they land at the same height by construction rather than by being
+    pushed there."""
+    assert "margin-top: auto" not in _rule(".tile .note")
 
 
 # ------------------------------------------------------------ market strip
