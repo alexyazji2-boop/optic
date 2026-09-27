@@ -73,6 +73,33 @@ def test_the_foot_is_pinned_to_the_bottom():
     assert "margin-top: auto" in rule
 
 
+def test_the_sections_start_at_the_rails_left_edge():
+    """The gap that was actually being reported, and it was horizontal.
+
+    `nav.tabs` carries `margin-left: auto` for the TOPBAR, where the strip is a
+    row claiming the free space to its left -- the comment on
+    `nav.tabs ~ .icon-btn` says exactly that. The rail reuses the class in a
+    COLUMN, where the same margin pushes the group to the right edge, and
+    because an auto margin also cancels the stretch an item would get from
+    `align-items: normal`, the group stops filling the rail.
+
+    Measured on the live site at 212px wide: brand, recents and foot each sat
+    9px from the left edge and 193px wide; the sections sat at 91px and were
+    111px wide. An 82px channel of nothing down the left of the nav, which is
+    what three screenshots were circling while I measured the vertical axis.
+    """
+    assert re.search(r"margin-left:\s*0", rule_of(".rail nav.tabs")), \
+        "the topbar's auto margin is back in the rail's column"
+
+
+def test_the_topbar_rule_that_override_exists_for_is_still_there():
+    """A positive control. If the base rule ever stops carrying the auto
+    margin, the override above is dead weight rather than a fix, and whoever
+    finds it should be told which of the two to delete."""
+    base = re.search(r"\nnav\.tabs \{(.*?)\n\}", CSS, re.S).group(1)
+    assert "margin-left: auto" in base
+
+
 def test_the_recents_grow_into_the_space_rather_than_sitting_above_it():
     """The assertion this file was missing, and the reason the same complaint
     came back twice. Every test here checked that the foot was pinned, which

@@ -14646,6 +14646,26 @@ body.ws-max[data-view="chart"] [data-ws-max] {
     margin-top: auto;
   }
 
+  .rail nav.tabs {
+    /* The gap down the left of the sections, reported three times and never
+       the vertical one I kept measuring.
+
+       `nav.tabs` carries `margin-left: auto` because in the TOPBAR it is a
+       horizontal strip that claims the free space to its left -- the comment
+       on `nav.tabs ~ .icon-btn` says so. The rail reuses the class in a
+       COLUMN, where that same auto margin does something else entirely: it
+       pushes the whole group to the right edge, and because an auto margin
+       also cancels the stretch an item would otherwise get from
+       `align-items: normal`, the group stops filling the rail. Measured at
+       212px wide: every other child sat 9px from the left edge and 193px
+       wide, and the sections sat at 91px and 111px wide -- an 82px channel of
+       nothing down the left of the nav, with the labels hanging off the right.
+
+       The same shape as the `flex-basis` note in CLAUDE.md: a control class
+       written for one axis is not reusable on the other. */
+    margin-left: 0;
+  }
+
   .rail-recent {
     /* Above the foot, and the first thing to give up room: the sections and
        the foot are navigation and this is a convenience. min-height 0 so it
