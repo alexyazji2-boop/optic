@@ -122,3 +122,83 @@ def test_the_covered_sessions_still_do():
     assert "pulse-beat" in body
     for phase in ("regular", "pre", "after"):
         assert "refreshing" in _labels()[phase]
+
+
+# ------------------------------------------- the pulse, per instrument
+#
+# `isTapeLiveET` answers for a US stock, and it was the only answer available,
+# so the instrument view asked it about gold, bitcoin and the E-mini too. The
+# report was a Sunday evening: ES=F trading, the equity phase reading "closed",
+# and the chart's leading dot sitting still on a price that was moving.
+
+
+def _fn(name: str) -> str:
+    """One function's body, comments stripped.
+
+    Stripped because this file is about to assert that a symbol suffix appears
+    in a branch, and every one of those suffixes is also named in the prose
+    explaining the branch. Three tests elsewhere in this repo have passed on
+    their own comments.
+    """
+    body = APP_JS[APP_JS.index("function " + name + "("):]
+    body = body[:body.index("\n}") + 2]
+    body = re.sub(r"/\*.*?\*/", " ", body, flags=re.S)
+    return re.sub(r"^\s*//.*$", " ", body, flags=re.M)
+
+
+def test_the_futures_week_comes_from_the_server():
+    """CLAUDE.md's rule: calendar logic does not go on the client. That
+    duplication is what made the app report a regular session on Labor Day."""
+    fn = _fn("isFuturesTapeLive")
+    assert "STATE.session" in fn and "futures" in fn
+    assert "getDay" not in fn and "getHours" not in fn, "a clock crept in"
+
+
+def test_an_unloaded_payload_does_not_pulse():
+    """False until the answer arrives, and the asymmetry is the argument: a
+    missed pulse costs nothing, a pulse on a shut market is the page telling
+    the reader something untrue."""
+    fn = _fn("isFuturesTapeLive")
+    assert "!!(fut && fut.is_open)" in fn
+
+
+def test_a_future_follows_the_futures_week_and_a_stock_does_not():
+    fn = _fn("chartLiveForSymbol")
+    assert "'=F'" in fn and "isFuturesTapeLive()" in fn
+    assert "isTapeLiveET()" in fn, "everything else still follows the cash session"
+
+
+def test_crypto_never_closes():
+    fn = _fn("chartLiveForSymbol")
+    assert "'-USD'" in fn
+    assert "return true" in fn
+
+
+def test_fx_is_left_on_the_cash_session_on_purpose():
+    """It trades Sunday 5:00pm to Friday 5:00pm, an hour wider than the CME
+    week. Claiming a window an hour early is the expensive mistake, so FX gets
+    no overnight pulse until its week is modelled as exactly as the CME one."""
+    fn = _fn("chartLiveForSymbol")
+    assert "'=X'" not in fn, "FX must not borrow the futures week"
+
+
+def test_the_instrument_chart_sets_the_flag_itself():
+    """`liveNextChart` is a module global in charts.js that every chart's
+    loader sets before drawing. This one never did, so it inherited whichever
+    value the last view rendered left behind -- the dot pulsed or sat still
+    depending on where the reader had just been, which is worse than either
+    answer because it is not repeatable."""
+    fn = _fn("drawInstrumentChart")
+    assert "setChartLive(chartLiveForSymbol(" in fn
+
+
+def test_the_server_publishes_what_the_client_reads():
+    """The tie, in the shape this file was written for: a client reading
+    `futures.is_open` against a server that publishes it."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    payload = session.state(datetime(2026, 9, 27, 18, 44, tzinfo=ZoneInfo("America/New_York")))
+    assert "futures" in payload
+    assert payload["futures"]["is_open"] is True
+    assert payload["phase"] == "closed", "and the two disagree, which is the point"

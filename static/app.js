@@ -12752,6 +12752,13 @@ function drawInstrumentChart(d) {
   if (!d || d === 'loading' || !d.available) return;
   const host = document.getElementById('chart-inst');
   if (!host) return;
+  /* Set here, and it never was. `liveNextChart` is a module global in
+     charts.js that every other chart's loader sets before drawing; this one
+     did not, so the instrument chart inherited whichever value the last view
+     rendered happened to leave behind. The leading dot pulsed or sat still
+     depending on where the reader had just been, which is worse than either
+     answer on its own because it is not repeatable. */
+  setChartLive(chartLiveForSymbol((STATE.instrument || {}).symbol || d.symbol));
   const candles = instrumentMode === 'candle' && d.open && d.high && d.low
     ? { open: d.open, high: d.high, low: d.low, close: d.close } : null;
   mount('legend-inst', legend([
@@ -27629,6 +27636,45 @@ const TAPE_LIVE_PHASES = ['regular', 'pre', 'after'];
 
 function isTapeLiveET() {
   return TAPE_LIVE_PHASES.includes(marketSessionET());
+}
+
+/* The futures week, which is not the equity week.
+ *
+ * Server-only, and false until the payload lands. `marketSessionFromClock`
+ * exists as a pre-load fallback for the equity phase and this deliberately has
+ * no equivalent: CLAUDE.md's rule is that calendar logic does not go on the
+ * client, and the cost of the two mistakes here is not symmetric. A missed
+ * pulse is nothing; a pulse on a shut market is the page telling the reader
+ * something untrue, which is the argument `setChartLive` already makes.
+ */
+function isFuturesTapeLive() {
+  const fut = ((STATE.session || {}).session || {}).futures;
+  return !!(fut && fut.is_open);
+}
+
+/* Whether *this instrument's* leading point is still moving.
+ *
+ * `isTapeLiveET` answers for a US stock and was the only answer available, so
+ * the Charting and instrument views asked it about gold, bitcoin and the
+ * E-mini as well. Three different markets, three different weeks:
+ *
+ * - Crypto never closes, so BTC-USD is moving at 3am on a Sunday.
+ * - CME futures run Sunday 6:00pm to Friday 5:00pm ET with an hour down each
+ *   day, which is the two hours on a Sunday evening this was reported over:
+ *   ES is trading and the equity phase still reads "closed".
+ * - Everything else follows the cash session, which is what `isTapeLiveET`
+ *   already models correctly.
+ *
+ * FX (`=X`) is deliberately in the last group rather than with the futures.
+ * It trades Sunday 5:00pm to Friday 5:00pm, an hour wider than the futures
+ * week, and claiming a window an hour early is the expensive mistake. It gets
+ * no overnight pulse until that week is modelled as exactly as the CME one is.
+ */
+function chartLiveForSymbol(symbol) {
+  const sym = String(symbol || '').toUpperCase();
+  if (sym.endsWith('-USD')) return true;
+  if (sym.endsWith('=F')) return isFuturesTapeLive();
+  return isTapeLiveET();
 }
 
 /* One entry per phase app/session.py can publish, minus the two the caller
