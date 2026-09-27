@@ -14,6 +14,7 @@ can read back.
 """
 from __future__ import annotations
 
+import asyncio
 import re
 
 import pytest
@@ -526,3 +527,113 @@ def test_the_warn_state_has_a_colour():
     """A class the send path sets and the stylesheet has never heard of renders
     as unstyled body text, which reads as success."""
     assert ".rp-note.is-warn" in CSS
+
+
+# ------------------------------------------------- the backlog at boot
+#
+# A report is stored first and emailed second, and the email is allowed to
+# fail. `submit` only ever sends the report in its own hand, so any window
+# where FEEDBACK_EMAIL_TO or the SMTP settings were missing leaves a backlog
+# that nothing retries. Boot is the natural moment to clear it: setting those
+# variables on this platform *is* a restart, so the backlog goes out as a
+# consequence of configuring the thing that was missing.
+
+
+def _flush_now(monkeypatch):
+    """Run the startup flush without its thirty-second wait."""
+    async def no_wait(_seconds):
+        return None
+    monkeypatch.setattr(main.asyncio, "sleep", no_wait)
+    asyncio.run(main._flush_feedback())
+
+
+def test_the_backlog_goes_out_at_boot(accounts, monkeypatch):
+    sent = []
+    monkeypatch.setattr(fb, "FEEDBACK_TO", "operator@example.com")
+    monkeypatch.setattr(mailer, "available", lambda: {"available": True})
+    monkeypatch.setattr(mailer, "send", lambda to, subject, body: sent.append(to) or True)
+    for i in range(3):
+        fb.store("filed before there was an address {}".format(i))
+    assert len(fb.unsent()) == 3, "sanity: a backlog exists"
+
+    _flush_now(monkeypatch)
+
+    assert len(sent) == 3
+    assert fb.unsent() == []
+
+
+def test_boot_sends_nothing_when_there_is_still_no_address(accounts, monkeypatch):
+    """The normal state of this deployment. The backlog has to survive it:
+    these are the only copies of what those readers said."""
+    sent = []
+    monkeypatch.setattr(fb, "FEEDBACK_TO", "")
+    monkeypatch.setattr(mailer, "send", lambda *a, **k: sent.append(a) or True)
+    fb.store("still waiting for an address")
+
+    _flush_now(monkeypatch)
+
+    assert sent == []
+    assert len(fb.unsent()) == 1, "the report must still be there"
+
+
+def test_a_dead_relay_at_boot_does_not_take_the_terminal_down(accounts, monkeypatch):
+    """Mail that cannot go out must not stop the server serving. The whole
+    point of storing first is that delivery is allowed to fail."""
+    monkeypatch.setattr(fb, "FEEDBACK_TO", "operator@example.com")
+    monkeypatch.setattr(mailer, "available", lambda: {"available": True})
+
+    def explode(*a, **k):
+        raise OSError("connection refused")
+    monkeypatch.setattr(mailer, "send", explode)
+    fb.store("filed while the relay was down")
+
+    _flush_now(monkeypatch)  # must not raise
+
+    assert len(fb.unsent()) == 1, "kept for the next boot"
+
+
+def test_the_flush_runs_off_the_event_loop():
+    """`flush` opens SMTP connections. Run inline it would block every other
+    request on the server for as long as the relay took to answer."""
+    fn = MAIN[MAIN.index("async def _flush_feedback()"):]
+    fn = fn[:fn.index("\n@app.on_event")]
+    code = re.sub(r'""".*?"""', " ", fn, flags=re.S)
+    assert "_run(feedback_mod.flush)" in code
+    assert "feedback_mod.flush()" not in code, "called inline, not off the loop"
+
+
+def test_boot_does_not_count_the_backlog_when_there_is_no_address(accounts, monkeypatch):
+    """Unconfigured is the normal state, and `flush` would otherwise read the
+    table on every boot to report a number that goes nowhere."""
+    calls = []
+    monkeypatch.setattr(fb, "FEEDBACK_TO", "")
+    monkeypatch.setattr(fb, "flush", lambda *a, **k: calls.append(a) or {"sent": 0})
+
+    _flush_now(monkeypatch)
+
+    assert calls == [], "flush was called despite there being no address"
+
+
+def test_the_flush_is_started_at_boot_and_held(accounts):
+    """A bare create_task is garbage-collected mid-flight: asyncio keeps only a
+    weak reference to it. The warm-up task is held on app.state for exactly
+    this reason and this one sleeps fifteen times longer."""
+    fn = MAIN[MAIN.index("async def _start_tracker()"):]
+    fn = fn[:fn.index("\n@app.on_event(\"shutdown\")")]
+    assert "app.state.feedback_task = asyncio.create_task(_flush_feedback())" in fn
+
+
+def test_the_flush_is_cancelled_at_shutdown(accounts):
+    """It sleeps thirty seconds. Left running, it keeps the loop alive past the
+    stop and logs a "task was destroyed but it is pending" on the way out."""
+    fn = MAIN[MAIN.index("async def _stop_tracker()"):]
+    fn = fn[:fn.index("\n\n\n")]
+    assert "feedback_task" in fn
+
+
+def test_the_manual_flush_instruction_is_not_left_behind(accounts):
+    """.env.example told the operator to run `feedback.flush()` by hand once
+    the address was set. Boot does it now, and an instruction that describes
+    the old behaviour is worse than none: it is followed."""
+    env = open(".env.example").read()
+    assert "python -c" not in env or "feedback; print(feedback.flush())" not in env

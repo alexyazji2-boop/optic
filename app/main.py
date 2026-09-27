@@ -1546,12 +1546,56 @@ async def _warm_home() -> None:
         log.info("warm-up skipped: %s", exc)
 
 
+async def _flush_feedback() -> None:
+    """Send the problem reports that were filed before there was an address.
+
+    A report is stored first and emailed second, and the email is allowed to
+    fail, so any window where FEEDBACK_EMAIL_TO or the SMTP settings were
+    missing leaves a backlog that nothing retries: `submit` only ever sends the
+    report in its own hand. Boot is the natural moment to clear it, because
+    setting those variables on this platform *is* a restart -- the backlog goes
+    out as a consequence of configuring the thing that was missing, rather than
+    waiting for someone to remember a maintenance call.
+
+    Thirty seconds first, for the reason `_tracker_loop` waits: let the server
+    bind and let `_warm_home` have the thread pool, since that one is racing an
+    actual visitor and this one is racing nobody. These reports have waited
+    considerably longer than thirty seconds already.
+
+    Off the event loop because `flush` opens SMTP connections, and it stops on
+    its own first failure, so a relay that is down costs one connection attempt
+    rather than two hundred. Swallowed and logged like the warm-up: mail that
+    cannot go out must not take the terminal down with it.
+    """
+    log = logging.getLogger("uvicorn.error")
+    try:
+        await asyncio.sleep(30)
+        # Checked before the sleep would have been wrong and before the call is
+        # only a saving: unconfigured is the normal state here and `flush` would
+        # otherwise count the backlog on every boot to report a number nobody
+        # reads. Configured is the rare case, so pay the query there.
+        if not feedback_mod.configured().get("available"):
+            return
+        out = await _run(feedback_mod.flush)
+        if out.get("sent"):
+            log.info("feedback backlog: %d sent, %d still pending",
+                     out["sent"], out.get("pending", 0))
+        elif out.get("pending"):
+            log.warning("feedback backlog: %d report(s) could not be sent",
+                        out["pending"])
+    except asyncio.CancelledError:                              # noqa: PERF203
+        raise
+    except Exception as exc:                                    # noqa: BLE001
+        log.info("feedback flush skipped: %s", exc)
+
+
 @app.on_event("startup")
 async def _start_tracker() -> None:
     paper.init_db()
     # Held on the app so the reference isn't garbage-collected mid-flight --
     # asyncio keeps only a weak reference to a bare create_task.
     app.state.warm_task = asyncio.create_task(_warm_home())
+    app.state.feedback_task = asyncio.create_task(_flush_feedback())
     if TRACKER_AUTO:
         # Held on the app so the reference isn't garbage-collected mid-flight.
         app.state.tracker_task = asyncio.create_task(_tracker_loop())
@@ -1559,10 +1603,11 @@ async def _start_tracker() -> None:
 
 @app.on_event("shutdown")
 async def _stop_tracker() -> None:
-    # Both tasks. A warm-up still sleeping when the server is told to stop
-    # would otherwise keep the loop alive for its remaining two seconds and log
-    # a "task was destroyed but it is pending" on the way out.
-    for name in ("tracker_task", "warm_task"):
+    # All three. A warm-up still sleeping when the server is told to stop would
+    # otherwise keep the loop alive for its remaining two seconds and log a
+    # "task was destroyed but it is pending" on the way out, and the feedback
+    # flush sleeps fifteen times longer than that.
+    for name in ("tracker_task", "warm_task", "feedback_task"):
         task = getattr(app.state, name, None)
         if task:
             task.cancel()
