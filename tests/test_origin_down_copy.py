@@ -58,6 +58,27 @@ def _fn(src: str, name: str) -> str:
     return src[start:nxt if nxt > 0 else len(src)]
 
 
+def _code(text: str) -> str:
+    """Comments stripped.
+
+    Added after three mutations survived this file at once. The tests below
+    assert that `streamTo` guards its fetch and that it branches on
+    `navigator.onLine === false` -- and the comment explaining that branch
+    names it verbatim, so deleting the branch left both tests passing on the
+    prose describing it. The fifth time tonight in this repo; CLAUDE.md records
+    the first."""
+    text = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
+    return re.sub(r"^\s*//.*$", " ", text, flags=re.M)
+
+
+def _stream_fetch_block(src: str) -> str:
+    """Just the request and its handler, comments out, so a `catch` belonging
+    to the JSON parse further down cannot stand in for the one being asserted.
+    That is what the first version of this did."""
+    fn = _code(_fn(src, "streamTo"))
+    return fn[fn.index("let res;"):fn.index("if (!res.ok")]
+
+
 # --------------------------------------------------------------- the banner
 
 
@@ -108,25 +129,59 @@ def test_the_stable_copy_only_promises_what_the_poller_does():
 
 def test_the_streaming_path_branches_the_same_way():
     """A bare "HTTP 530" reads as the assistant breaking, so this message is
-    worth having; it just cannot claim the domain expired."""
-    # Anchored on the branch itself. Anchoring on "This link has expired"
-    # started the window *after* the call that decides which copy runs.
-    block = APP_JS[APP_JS.index("detail = originIsEphemeral()"):]
-    block = block[:block.index("throw new Error")]
-    assert "This link has expired" in block    # kept, for the tunnel case
-    assert "The address is fine" in block
+    worth having; it just cannot claim the domain expired.
+
+    The branch moved into `originDownMessage`, which is what the streaming
+    reader and the no-response path now share. Both sentences still live behind
+    one host test, which is the property this was always asserting."""
+    fn = _fn(APP_JS, "originDownMessage")
+    assert "originIsEphemeral()" in fn
+    assert "This link has expired" in fn       # kept, for the tunnel case
+    assert "The address is fine" in fn
 
 
-def test_all_three_502_sites_branch_on_the_host():
-    """There are three, not two. A test that anchored on the shared status
-    range found `getJSON` instead of the streaming path, which is how the third
-    one turned up at all."""
+def test_every_502_site_still_reaches_the_host_test():
+    """There are two, and a test that anchored on the shared status range once
+    found `getJSON` instead of the streaming path, which is how the second one
+    turned up at all.
+
+    They no longer have to name `originIsEphemeral` themselves: delegating to
+    `originDownMessage` reaches the same branch and is the stronger form of
+    this, because a third site added later gets the host test by using the
+    function rather than by remembering to."""
     sites = [m.start() for m in
              re.finditer(r"res\.status >= 502 && res\.status <= 530", APP_JS)]
     assert len(sites) == 2, sites          # getJSON and the streaming reader
     for start in sites:
         window = APP_JS[start:start + 900]
-        assert "originIsEphemeral()" in window, APP_JS[start:start + 200]
+        assert ("originIsEphemeral()" in window
+                or "originDownMessage(" in window), APP_JS[start:start + 200]
+
+
+def test_a_request_that_never_got_a_response_says_something_useful():
+    """Reported as "Failed to fetch", which is Chrome's own string for a
+    `fetch` that rejected; Safari says "Load failed". Neither is a sentence
+    anybody can act on, and this was the only request in the app that could
+    show one: `getJSON` turns the same event into "the connection dropped
+    after N attempts", which `ORIGIN_DOWN_RE` recognises and every other panel
+    renders properly. The streaming path had no catch at all.
+
+    Measured during a deploy of this app: the health poll read a commit, then
+    nothing, then the new commit. Every request inside that window rejects."""
+    block = _stream_fetch_block(APP_JS)
+    assert "try {" in block, "the fetch is still unguarded"
+    assert re.search(r"\}\s*catch\s*\(", block), "no handler on the fetch itself"
+    assert "originDownMessage(" in block
+    assert "navigator.onLine === false" in block, "offline is the one certain case"
+
+
+def test_the_offline_message_keeps_the_readers_question():
+    """A dead end that also threw away what they typed would be two failures."""
+    block = _stream_fetch_block(APP_JS)
+    offline = block[block.index("navigator.onLine === false"):]
+    offline = offline[:offline.index("originDownMessage(")]
+    assert "The question is still in the box" in offline
+    assert "send it again once you are back on" in offline
 
 
 def test_both_messages_share_one_host_test():

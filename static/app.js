@@ -28720,6 +28720,30 @@ function createStreamRenderer(bubble) {
   };
 }
 
+/* The words for an origin that did not answer, shared by the two ways that
+ * happens.
+ *
+ * A status in the 502-530 range means the edge answered and the origin behind
+ * it did not. A `fetch` that *throws* means there was no response at all, which
+ * on a same-origin request is the same event one step earlier: the connection
+ * was refused rather than proxied. Measured during a deploy of this app, the
+ * health poll read a normal commit, then nothing, then the new commit -- so
+ * there is a window of a few seconds where every request gets the second shape.
+ *
+ * One function because the sentence is the same fact, and two copies of it
+ * would drift the way the three "temporary tunnel" strings did.
+ */
+function originDownMessage(status) {
+  const num = status ? ` (HTTP ${status})` : '';
+  if (originIsEphemeral()) {
+    return `This link has expired${num}. The temporary tunnel serving this page was `
+      + 'replaced. The terminal is still running on a new address; ask for the current '
+      + 'link and reload.';
+  }
+  return `The server did not answer${num}. The address is fine, so this is a restart `
+    + 'or a deploy: wait a moment and send it again.';
+}
+
 async function streamTo(url, body, node) {
   const bubble = node.querySelector('.bubble');
   const statusEl = node.querySelector('.status');
@@ -28727,11 +28751,33 @@ async function streamTo(url, body, node) {
   const render = createStreamRenderer(bubble);
   let acc = '';
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    /* `fetch` rejects only when there was no HTTP response at all, and the
+       message it rejects with is the browser's own: Chrome says "Failed to
+       fetch", Safari says "Load failed". Both were reaching the reader
+       verbatim, because this is the one request in the app that does not go
+       through `getJSON` -- that one turns the same event into "the connection
+       dropped after N attempts", which `ORIGIN_DOWN_RE` recognises and every
+       other panel renders properly. Pulse was the only surface that could
+       print a browser string, and it did: reported as "Failed to fetch"
+       during a deploy of this app.
+
+       `navigator.onLine === false` is the one case the browser is certain
+       about, so it is the only one branched on; `true` means "an interface is
+       up", not "the server is reachable". */
+    if (navigator.onLine === false) {
+      throw new Error('You appear to be offline. The question is still in the box: '
+        + 'send it again once you are back on.');
+    }
+    throw new Error(originDownMessage(''));
+  }
   if (!res.ok || !res.body) {
     // Read the server's explanation rather than reporting a bare number. A 400
     // here means "you sent nothing to research", which is worth saying out loud.
@@ -28745,13 +28791,9 @@ async function streamTo(url, body, node) {
       // status means the origin is down or mid-deploy, and telling somebody
       // their own domain has expired sends them hunting a URL that does not
       // exist. Worth distinguishing either way, because a bare "HTTP 530" reads
-      // as the assistant breaking.
-      detail = originIsEphemeral()
-        ? `This link has expired (HTTP ${res.status}). The temporary tunnel serving `
-          + 'this page was replaced. The terminal is still running on a new address; '
-          + 'ask for the current link and reload.'
-        : `The server did not answer (HTTP ${res.status}). The address is fine, so `
-          + 'this is a restart or a deploy: wait a moment and send it again.';
+      // as the assistant breaking. Shared with the no-response branch above,
+      // which is the same fact one step earlier.
+      detail = originDownMessage(res.status);
     }
     throw new Error(detail || `Request failed (HTTP ${res.status})`);
   }
