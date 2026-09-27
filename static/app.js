@@ -5099,9 +5099,11 @@ document.addEventListener('submit', (evt) => {
     congressQuery = { ...CONGRESS_BLANK, ticker: sym, days: congressQuery.days };
     insiderTicker = sym;
     STATE.insiders = null;
+    STATE.contracts = null;
     renderInsidersFacetHost({ full: true });
     loadInsidersCongress(false);
     loadInsiderFeed(false);
+    loadContracts(false);
     return;
   }
   if (evt.target.id !== 'wv-add-form') return;
@@ -6625,8 +6627,12 @@ const PALETTE_PLACES = [
     terms: 'financials revenue margin cash ownership short interest statements' },
   { view: 'news', label: 'News', terms: 'news headlines catalysts sentiment company' },
   { view: 'tracker', label: "Optic Portfolio", terms: 'positions ledger record paper trades book' },
-  { view: 'roth', label: 'Roth planner',
-    terms: 'roth ira retirement allocation contribution funds long term planner' },
+  { view: 'roth', label: 'Retirement',
+    /* "roth" stays in the terms: it is what the page was called, what the
+       endpoint is still named, and what a reader who knows the account type
+       will type. A rename must not make a destination unfindable by the word
+       it used to be. */
+    terms: 'retirement roth ira allocation contribution funds long term planner pension' },
   { view: 'settings', label: 'Settings', terms: 'settings appearance theme timezone preferences' },
 ];
 
@@ -25290,6 +25296,88 @@ function insCongressRow(t) {
 
 /* --------------------------------------------------------------- the view */
 
+/* ------------------------------------------------- federal contracts
+ *
+ * The third filing regime on this page, and the one that is not a trade: what
+ * the government awarded, from USAspending. A member of Congress buying a
+ * defence contractor and that contractor winning a defence award are the same
+ * question asked at both ends, which is why it belongs beside the other two
+ * rather than on a page of its own.
+ *
+ * Its per-company half is deliberately quiet about uncertainty. Most listed
+ * companies are not federal contractors, and USAspending's recipient search is
+ * a keyword search -- asked for "Apple" it ranks a company that presses apples
+ * first. So the server accepts a recipient only on an exact name match and
+ * says plainly when it will not guess; see app/contracts.py.
+ */
+
+function contractRow(a) {
+  return `<tr>
+    <td class="name">${esc(a.recipient || '')}${a.state
+    ? ` <span class="muted">${esc(a.state)}</span>` : ''}</td>
+    <td>${esc(a.agency || '')}${a.sub_agency && a.sub_agency !== a.agency
+    ? `<span class="ct-sub"> · ${esc(a.sub_agency)}</span>` : ''}</td>
+    <td class="num">$${fmtCompact(a.amount, 1)}</td>
+    <td>${esc(dayLabel(a.start) || '')}</td>
+    <td class="ins-more">${a.url
+    ? `<a href="${esc(a.url)}" target="_blank" rel="noopener"
+        title="${esc(a.description || 'The award on USAspending')}">Award</a>` : ''}</td>
+  </tr>`;
+}
+
+function renderContracts() {
+  const c = STATE.contracts;
+  if (!c) {
+    return '<div class="panel" data-fixed="1"><h2>' + hg('Federal contracts')
+      + '</h2><p class="sub">Reading USAspending…</p></div>';
+  }
+  if (c.available === false) {
+    return `<div class="panel" data-fixed="1"><h2>${hg('Federal contracts')}</h2>
+      <div class="callout">${esc(c.reason || 'USAspending did not answer.')}</div></div>`;
+  }
+  const rows = c.awards || [];
+  const company = c.scope === 'company';
+  /* Three outcomes, three sentences. "Matched, and it has no awards" and
+   * "could not be matched" are different facts, and reporting both as "no
+   * contracts" would tell a reader a company has no federal business when what
+   * happened is that this refused to guess which recipient it is. */
+  const head = !company
+    ? `The largest new awards across the government in the last ${
+  fmt(c.days || 30, 0)} days.`
+    : c.matched
+      ? `Awarded to <strong>${esc(c.recipient || '')}</strong>${c.lifetime_amount
+        ? `, which has been awarded $${fmtCompact(c.lifetime_amount, 1)} in all`
+        : ''}. Largest first.`
+      : esc(c.reason || 'No federal contractor matches this company.');
+  return `<div class="panel">
+    <h2>${hg('Federal contracts')}${company && c.matched ? `<span class="th-plain">
+      · ${esc(c.ticker)}</span>` : ''}</h2>
+    <p class="sub">${head}</p>
+    ${rows.length ? `<div class="table-scroll"><table class="data">
+      <thead><tr><th>${company ? 'Award' : 'Recipient'}</th><th>Agency</th>
+        <th class="num">Amount</th><th>Started</th><th></th></tr></thead>
+      <tbody>${rows.map(contractRow).join('')}</tbody>
+    </table></div>` : ''}
+    <p class="caveat">${esc(c.caveat || '')}
+      <a href="${esc(c.source || '')}" target="_blank" rel="noopener">USAspending</a>.</p>
+  </div>`;
+}
+
+async function loadContracts(force) {
+  const sym = (congressQuery.ticker || '').toUpperCase();
+  const url = '/api/contracts?limit=12' + (sym ? '&ticker=' + encodeURIComponent(sym) : '');
+  // Keyed on the URL, like the congress read beside it: switching symbol
+  // refetches, coming back to the same one does not.
+  if (!force && STATE.contractsFor === url) return;
+  STATE.contractsFor = url;
+  try {
+    STATE.contracts = await getJSON(url);
+  } catch (err) {
+    STATE.contracts = { available: false, reason: err.message };
+  }
+  renderInsidersFacetHost();
+}
+
 /* One box, and it takes a symbol.
  *
  * This was six fields -- symbol, member, direction, traded-from, traded-to,
@@ -25316,7 +25404,8 @@ function insSymbolForm() {
 
 function renderCongressFacet() {
   return insSymbolForm()
-    + `<div id="ins-results-host">${congressResults()}${renderInsiderFeed()}</div>`;
+    + `<div id="ins-results-host">${congressResults()}${renderInsiderFeed()}${
+  renderContracts()}</div>`;
 }
 
 function congressResults() {
@@ -25391,8 +25480,8 @@ function renderInsidersView() {
 
   views.insiders.innerHTML = `<div class="panel ins-head" data-fixed="1">
       <h1>${hg('Insiders')}</h1>
-      <p class="sub">Who is trading what, from the two filing regimes that have
-        to be public. A record of what was filed, not a signal: nothing here is
+      <p class="sub">Who is trading what, and who the government is paying,
+        from three filing regimes that all have to be public. A record of what was filed, not a signal: nothing here is
         ranked by how profitable it looked.</p>
       ${/* No Congress / Company filings tabs any more. Both are on the page
            together, because the question is "who bought this" and the answer
@@ -25417,7 +25506,7 @@ function renderInsidersFacetHost(opts) {
   // Scroll and focus survive either way: a result landing must not jump the
   // page out from under someone reading the table.
   preserveUI(host, () => {
-    if (partial) results.innerHTML = congressResults() + renderInsiderFeed();
+    if (partial) results.innerHTML = congressResults() + renderInsiderFeed() + renderContracts();
     else host.innerHTML = renderCongressFacet();
   });
   revealPanels(partial ? results : host);
@@ -25439,10 +25528,11 @@ async function loadInsidersCongress(force) {
 
 function loadInsiders(force) {
   renderInsidersView();
-  // Both, always. The page shows the two filing regimes together, so opening
-  // it on one and making the reader ask for the other was the tab split this
+  // All three, always. The page shows the filing regimes together, so opening
+  // it on one and making the reader ask for the others was the tab split this
   // replaced.
   loadInsiderFeed(force);
+  loadContracts(force);
   return loadInsidersCongress(force);
 }
 
@@ -28918,7 +29008,7 @@ const SUB_LABELS = {
   brief: 'Read', market: 'Macro', indices: 'Indices',
   watchlist: 'Watchlist', alerts: 'Alerts',
   explore: 'Explore', scan: 'Scan', insiders: 'Insiders',
-  tracker: "Optic Portfolio", paper: 'Paper Desk', roth: 'Roth planner',
+  tracker: "Optic Portfolio", paper: 'Paper Desk', roth: 'Retirement',
 };
 
 const SUB_TITLES = {
@@ -28941,7 +29031,7 @@ const SUB_TITLES = {
   paper: 'Paper Desk. Your own book, entered by hand and priced by the terminal',
   scan: 'Scan. Named screens over the ranked universe',
   tracker: "Optic Portfolio. The terminal's own paper-traded record",
-  roth: 'Roth planner. A rules-based model allocation to compare your own against',
+  roth: 'Retirement. A rules-based model allocation to compare your own against',
 };
 
 /** Which group a view belongs to. */
@@ -29303,7 +29393,7 @@ paintNav(STATE.view || 'home');
 const VIEW_NAMES = {
   chart: 'Charting',
   home: 'Home', swing: 'Swing', earnings: 'Earnings',
-  market: 'Macro', indices: 'Indices', long: 'Investing', roth: 'Roth',
+  market: 'Macro', indices: 'Indices', long: 'Investing', roth: 'Retirement',
   tracker: "Optic Portfolio", settings: 'Settings', brief: "Optic's Read",
 };
 
@@ -30019,9 +30109,11 @@ document.addEventListener('click', (evt) => {
     // the company filings follow the same symbol.
     insiderTicker = congressQuery.ticker;
     STATE.insiders = null;
+    STATE.contracts = null;
     renderInsidersFacetHost({ full: true });
     loadInsidersCongress(false);
     loadInsiderFeed(false);
+    loadContracts(false);
     return;
   }
   if (evt.target.closest('[data-ins-reset]')) {
@@ -30030,9 +30122,11 @@ document.addEventListener('click', (evt) => {
     congressQuery = { ...CONGRESS_BLANK, days: congressQuery.days };
     insiderTicker = '';
     STATE.insiders = null;
+    STATE.contracts = null;
     renderInsidersFacetHost({ full: true });
     loadInsidersCongress(false);
     loadInsiderFeed(false);
+    loadContracts(false);
     return;
   }
   if (evt.target.closest('[data-ins-retry]')) { loadInsidersCongress(true); return; }

@@ -40,6 +40,7 @@ from . import catalyst_live as catalyst_live_mod
 from .analytics import cases as cases_mod
 from .analytics import congress as congress_mod
 from . import papertrade as papertrade_mod
+from . import contracts as contracts_mod
 from .analytics import screen as screen_mod
 from .analytics import screener as screener_mod
 from .analytics import segments as segments_mod
@@ -837,6 +838,45 @@ async def watches_run(request: Request) -> Dict[str, Any]:
 
     def build() -> Dict[str, Any]:
         return watch_runner.run_once(_watch_snapshot)
+
+    return await _run(build)
+
+
+@app.get("/api/contracts")
+async def federal_contracts(
+    ticker: Optional[str] = Query(None, max_length=10,
+                                  description="Resolve this symbol to a contractor"),
+    limit: int = Query(12, ge=1, le=50),
+) -> Dict[str, Any]:
+    """Federal contract awards from USAspending.
+
+    With no ticker: the largest new awards market-wide, which is the access
+    pattern that API serves well and the useful default -- most federal
+    contractors are private, so a view that only worked for a matched symbol
+    would be blank most of the time.
+
+    With one: that company's awards, but only when the recipient can be
+    matched exactly. app/contracts.py explains why the rule is equality and
+    not a keyword search; the short version is that asking USAspending for
+    "Apple" returns a company that presses apples.
+
+    The symbol is resolved to a legal name through the local universe file
+    rather than the provider: it is a dictionary lookup against a list this
+    app already keeps, where a quote would be a network call to learn a name
+    that does not change.
+    """
+    def build() -> Dict[str, Any]:
+        sym = (ticker or "").upper().strip()
+        if not sym:
+            return contracts_mod.recent(limit=limit)
+        hits = universe_mod.search(sym, 5)
+        exact = next((h for h in hits if (h.get("symbol") or "").upper() == sym), None)
+        if not exact:
+            return {"available": True, "matched": False, "scope": "company",
+                    "ticker": sym, "awards": [],
+                    "reason": "No US-listed company with that symbol.",
+                    "source": "https://www.usaspending.gov/"}
+        return contracts_mod.for_company(exact.get("name") or sym, sym, limit=limit)
 
     return await _run(build)
 
