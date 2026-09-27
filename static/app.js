@@ -81,6 +81,7 @@ const views = {
   alerts: $('#view-alerts'),
   insiders: $('#view-insiders'),
   paper: $('#view-paper'),
+  reports: $('#view-reports'),
   settings: $('#view-settings'),
 };
 
@@ -107,7 +108,7 @@ const TICKERLESS_VIEWS = [
   'home', 'market', 'indices', 'roth', 'tracker', 'settings', 'brief',
   'scan', 'explore', 'compare', 'instrument', 'chart',
   'overview', 'financials', 'news', 'earnings',
-  'watchlist', 'alerts', 'insiders', 'paper',
+  'watchlist', 'alerts', 'insiders', 'paper', 'reports',
 ];
 
 /* The security workspace: the facets of one company, in reading order.
@@ -6617,6 +6618,8 @@ const PALETTE_PLACES = [
     terms: 'paper desk trades trading simulator practice manual position long short buy sell shares option call put book ticket mock virtual' },
   { view: 'insiders', label: 'Insiders',
     terms: 'insiders insider congress congressional politicians form 4 stock act disclosures pelosi senator representative buying selling' },
+  { view: 'reports', label: 'Problem Reports',
+    terms: 'reports problem report feedback bug issue complaints readers inbox support' },
   { view: 'watchlist', label: 'Watchlist', terms: 'watchlist watching follow list' },
   { view: 'alerts', label: 'Alerts', terms: 'alerts alarms notifications fired' },
   { view: 'compare', label: 'Compare', terms: 'compare versus vs side by side' },
@@ -25048,6 +25051,102 @@ async function paperLoadChain(sym) {
   if (STATE.view === 'paper') renderPaperView();
 }
 
+/* Problem reports, for whoever owns the deployment.
+ *
+ * The other end of the Report a Problem button. Until this view there was no
+ * place to go: reports were written to SQLite and the only way to read one was
+ * a curl with the write token, which is a command rather than a destination.
+ * It was asked for three times before anyone noticed that was the answer.
+ *
+ * Not `getJSON`. That one sends a bare fetch and retries on failure, and both
+ * halves are wrong here: `_write_guard`'s owner branch pairs with `csrf_guard`,
+ * so a signed-in owner needs the CSRF header on this GET or the cookie is
+ * refused, and retrying a 401 three times just asks the same unauthorised
+ * question slower.
+ */
+async function fetchReports(limit) {
+  const headers = {};
+  const token = writeToken();
+  if (token) headers['X-Optic-Token'] = token;
+  const csrf = window.OpticAuth ? window.OpticAuth.csrf() : '';
+  if (csrf) headers['X-Optic-CSRF'] = csrf;
+  const res = await fetch('/api/feedback?limit=' + encodeURIComponent(limit || 50), {
+    headers,
+    credentials: 'same-origin',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.detail || ('HTTP ' + res.status));
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+function reportRowHTML(row) {
+  let when = row.created_at || '';
+  try { when = new Date(row.created_at).toLocaleString(); } catch (e) { /* keep the raw stamp */ }
+  const meta = [];
+  if (row.page) meta.push('Page: ' + row.page);
+  if (row.reply_to) meta.push('Reply to: ' + row.reply_to);
+  if (row.user_agent) meta.push(row.user_agent);
+  return `<li class="rp-item">
+    <div class="rp-item-head">
+      <time class="rp-item-when">${esc(when)}</time>
+      <span class="rp-item-sent">${row.emailed ? 'Emailed' : 'Stored'}</span>
+    </div>
+    <p class="rp-item-msg">${esc(row.message || '')}</p>
+    <p class="rp-item-meta">${esc(meta.join(' · '))}</p>
+  </li>`;
+}
+
+function reportsHTML(data) {
+  const rows = (data && data.reports) || [];
+  if (!rows.length) {
+    return emptyHTML('No problem reports yet',
+      'When a reader uses Report a Problem, it lands here.');
+  }
+  const total = data.total || rows.length;
+  /* Said rather than implied. The endpoint pages at 50 and a reader who cannot
+     see that count reads the page as the whole record. */
+  const shown = rows.length < total
+    ? `Showing the newest ${rows.length} of ${total}.`
+    : `${total} report${total === 1 ? '' : 's'}.`;
+  const delivery = data.delivery && data.delivery.available !== true && data.delivery.reason
+    ? `<p class="rp-delivery">${esc(data.delivery.reason)}</p>` : '';
+  return `<div class="panel" data-fixed="1">
+    <h2>Problem Reports</h2>
+    <p class="sub">${esc(shown)}</p>
+    ${delivery}
+    <ul class="rp-list">${rows.map(reportRowHTML).join('')}</ul>
+  </div>`;
+}
+
+async function loadReports(force) {
+  const host = views.reports;
+  if (!host) return;
+  if (!force && STATE.reportsLoaded) return;
+  host.innerHTML = `<div class="panel" data-fixed="1"><h2>Problem Reports</h2>
+    <p class="sub">Loading.</p></div>`;
+  try {
+    const data = await fetchReports(50);
+    STATE.reportsLoaded = true;
+    host.innerHTML = reportsHTML(data);
+  } catch (err) {
+    STATE.reportsLoaded = false;
+    /* The server's own sentence, not a generic failure. `_write_guard` and the
+       read route between them already say which of the three things is missing
+       -- no token configured, wrong token, or a session that cannot be checked
+       -- and replacing that with "could not load" would throw away the only
+       part a reader can act on. */
+    host.innerHTML = emptyHTML(
+      err.status === 401 || err.status === 403 || err.status === 503
+        ? 'These are not yours to read'
+        : 'Could not load the reports',
+      err.message || 'Try again shortly.');
+  }
+}
+
 function loadPaper() {
   renderPaperView();
   return paperMark();
@@ -26807,6 +26906,7 @@ function loadView(view, force) {
   }
   if (view === 'paper') return loadPaper(force);
   if (view === 'insiders') return loadInsiders(force);
+  if (view === 'reports') return loadReports(force);
   if (view === 'swing') return loadSwing(force);
   if (view === 'earnings') return loadEarnings(force);
   if (view === 'compare') return loadCompare(force);
@@ -29041,11 +29141,36 @@ const NAV_GROUPS = [
    * which is the other half of the problem: the two navigations were
    * describing different products. */
   { id: 'follow', label: 'Watchlist', views: ['watchlist', 'alerts'] },
+  /* The owner's own deployment, and the only group that is not for readers.
+   *
+   * `owner: true` keeps it off every nav but the owner's, so this is a ninth
+   * group for exactly one person. That matters because of the measurement on
+   * `follow` above: at 1411px eight groups end at 1125 against a gear at 1160,
+   * and a ninth leaves 18px. Nobody else ever renders it, and `nav.tabs`
+   * carries `overflow-x: auto` for the one reader who does.
+   *
+   * The flag hides the *entrance*, never the data. `/api/feedback` is guarded
+   * server-side by `_write_guard`, so a reader who guesses the view still gets
+   * a refusal from the server rather than other people's words. */
+  { id: 'reports', label: 'Reports', views: ['reports'], owner: true },
 ];
 
-/** The strip shows every group except the off-strip ones. */
+/** Whether this browser is signed in as the owner of the deployment.
+ *
+ * Read from `OpticAuth`, which takes it from the server's `/api/auth/me` and
+ * never infers it from the email on the client. A browser that set this itself
+ * would gain nothing -- every owner path is re-checked server-side -- but it
+ * would make the nav claim a privilege the API refuses, which is worse than
+ * showing nothing. */
+function isOwner() {
+  return !!(window.OpticAuth && window.OpticAuth.state
+    && window.OpticAuth.state().admin);
+}
+
+/** The strip shows every group except the off-strip ones, and shows the
+ *  owner's group only to the owner. */
 function navVisibleGroups() {
-  return NAV_GROUPS.filter((g) => !g.offStrip);
+  return NAV_GROUPS.filter((g) => !g.offStrip && (!g.owner || isOwner()));
 }
 
 function navGroupLabel(group) {
@@ -29058,6 +29183,7 @@ const SUB_LABELS = {
   brief: 'Read', market: 'Macro', indices: 'Indices',
   watchlist: 'Watchlist', alerts: 'Alerts',
   explore: 'Explore', scan: 'Scan', insiders: 'Insiders',
+  reports: 'Problem Reports',
   tracker: "Optic Portfolio", paper: 'Paper Desk', roth: 'Retirement',
 };
 
@@ -29078,6 +29204,7 @@ const SUB_TITLES = {
   alerts: 'Alerts. What fired, and why it was worth telling you',
   explore: 'Explore. Browse sectors, themes and what is moving, with no symbol',
   insiders: 'Insiders. Company Form 4s and what members of the House disclosed',
+  reports: 'Problem Reports. What readers have told you is broken',
   paper: 'Paper Desk. Your own book, entered by hand and priced by the terminal',
   scan: 'Scan. Named screens over the ranked universe',
   tracker: "Optic Portfolio. The terminal's own paper-traded record",
@@ -29146,6 +29273,12 @@ const NAV_ICONS = {
   portfolio: '<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 10h17M9 10v9.5"/>',
   // An eye: the list you are keeping watch over.
   follow: '<path d="M2.6 12C6 6.8 8.9 4.6 12 4.6s6 2.2 9.4 7.4c-3.4 5.2-6.3 7.4-9.4 7.4S6 17.2 2.6 12Z"/><circle cx="12" cy="12" r="2.6"/>',
+  /* The same warning triangle the Report a Problem button carries, and the
+     same path data rather than a second drawing of one: this section is the
+     other end of that button, and a reader who has used it should meet the
+     mark they already pressed. The bang's dot is a zero-length segment with
+     a round cap, so it inherits the stroke width of the stem above it. */
+  reports: '<path d="M12 4 20.8 20H3.2Z"/><path d="M12 10v3.9"/><path d="M12 17h.01"/>',
 };
 
 function navIcon(groupId) {
@@ -29438,6 +29571,17 @@ const NAV_LAST = {};
 // Paint once for whatever view the app opens on. Without this the second row
 // renders empty-but-visible on first load, which is a stray rule across the page.
 paintNav(STATE.view || 'home');
+
+/* Again when auth resolves, and this is not belt-and-braces.
+ *
+ * `paintNav` runs at boot, and `OpticAuth` answers `/api/auth/me` over the
+ * network some time after that -- so the first paint is always made as a
+ * guest, and the owner's group would be missing until the reader happened to
+ * navigate. `on()` fires immediately if the answer has already landed, so
+ * this costs one extra paint at most. */
+if (window.OpticAuth && window.OpticAuth.on) {
+  window.OpticAuth.on(() => paintNav(STATE.view || 'home'));
+}
 
 // Human names for the views, for the gear's tooltip.
 const VIEW_NAMES = {

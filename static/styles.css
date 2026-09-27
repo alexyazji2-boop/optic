@@ -13345,6 +13345,31 @@ body.chat-full .rp { display: none; }
 .rp-note.is-ok { color: var(--pos); }
 .rp-note.is-bad { color: var(--neg); }
 .rp-note.is-warn { color: var(--warn); }
+
+/* The owner's list of reader-reported problems.
+ *
+ * Rows rather than a table: a report is a paragraph somebody typed, and the
+ * two useful columns beside it (when, and whether it went out) are short
+ * enough to sit above it without a header row to explain them. */
+.rp-list { list-style: none; margin: var(--space-4) 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: var(--space-3); }
+.rp-item { padding: var(--space-3); border: 1px solid var(--border);
+  border-radius: var(--r-md); background: var(--surface-2); }
+.rp-item-head { display: flex; align-items: baseline; gap: var(--space-2);
+  margin-bottom: var(--space-2); }
+.rp-item-when { font-size: var(--t-caption); color: var(--ink-muted);
+  font-variant-numeric: tabular-nums; }
+.rp-item-sent { margin-left: auto; font-size: var(--t-caption);
+  color: var(--ink-muted); }
+/* pre-wrap, because a report is typed prose and the line breaks the reader
+   put in it are part of what they were trying to show you. */
+.rp-item-msg { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere;
+  color: var(--ink); }
+.rp-item-meta { margin: var(--space-2) 0 0; font-size: var(--t-caption);
+  color: var(--ink-muted); overflow-wrap: anywhere; }
+.rp-item-meta:empty { display: none; }
+.rp-delivery { margin: var(--space-2) 0 0; font-size: var(--t-small);
+  color: var(--warn); }
 .rp-note:empty { display: none; }
 
 .rp-caveat {
