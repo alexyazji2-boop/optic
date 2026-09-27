@@ -20609,6 +20609,26 @@ function reportContextLine() {
     'Window: ' + size].join(' | ');
 }
 
+/* Where a report goes, which is not always where the page came from.
+
+   The POST was relative, so it followed the build rather than the product: a
+   report filed from a laptop dev server was written to that laptop's SQLite,
+   and one filed from a tunnel preview died with the tunnel. The button worked,
+   the reader was thanked, and the report never left the machine. It goes to
+   the live site from anywhere else now, and falls back to the relative path
+   when that cannot be reached, because a report kept on the wrong machine
+   still beats one dropped on the floor. */
+const REPORT_HOME = 'https://theopticterminal.com';
+const REPORT_HOME_HOSTS = ['theopticterminal.com', 'www.theopticterminal.com'];
+
+function reportTargets() {
+  const host = ((typeof location !== 'undefined' && location.hostname) || '').toLowerCase();
+  /* Relative on the live site itself: same-origin, so no preflight and no
+     dependence on the CORS allow-list being right. */
+  if (REPORT_HOME_HOSTS.indexOf(host) !== -1) return ['/api/feedback'];
+  return [REPORT_HOME + '/api/feedback', '/api/feedback'];
+}
+
 /* Opened from the pill, from Settings and from the footer, so the three cannot
  * drift into three different forms. */
 function openReportPanel() {
@@ -20657,34 +20677,64 @@ async function sendReport() {
   send.disabled = true;
   note.className = 'rp-note';
   note.textContent = 'Sending.';
-  try {
-    const res = await fetch('/api/feedback', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: text + '\n\n' + reportContextLine(),
-        page: STATE.view || '',
-      }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.detail || ('HTTP ' + res.status));
 
-    /* `stored` and `emailed` are separate, and the copy says which happened.
-       "Thanks, we got it" over a report that went nowhere is the same lie the
-       mailer refuses to tell about a verification link. Stored is still a win
-       for the reader: it is kept and goes out with the next batch. */
-    note.className = 'rp-note is-ok';
-    note.textContent = data.emailed
-      ? 'Sent. Thank you.'
-      : 'Saved. It is on the server and will be passed on.';
-    box.value = '';
-    reportCount();
-  } catch (err) {
-    note.className = 'rp-note is-bad';
-    note.textContent = 'That did not send. ' + (err.message || 'Try again shortly.');
-  } finally {
-    send.disabled = false;
+  const body = JSON.stringify({
+    message: text + '\n\n' + reportContextLine(),
+    page: STATE.view || '',
+  });
+  const targets = reportTargets();
+  let data = null;
+  let reached = -1;
+  let failure = null;
+
+  for (let i = 0; i < targets.length; i++) {
+    try {
+      const res = await fetch(targets[i], {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        /* Omitted rather than defaulted: cross-origin fetch sends no cookie
+           unless asked, and saying so here keeps it that way if this is ever
+           copied to a call that is same-origin. */
+        credentials: 'omit',
+        body: body,
+      });
+      const parsed = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(parsed.detail || ('HTTP ' + res.status));
+      data = parsed;
+      reached = i;
+      break;
+    } catch (err) {
+      failure = err;
+    }
   }
+  send.disabled = false;
+
+  if (!data) {
+    note.className = 'rp-note is-bad';
+    note.textContent = 'That did not send. ' + ((failure && failure.message)
+      || 'Try again shortly.');
+    return;
+  }
+
+  /* `stored` and `emailed` are separate, and the copy says which happened.
+     "Thanks, we got it" over a report that went nowhere is the same lie the
+     mailer refuses to tell about a verification link. Stored is still a win
+     for the reader: it is kept and goes out with the next batch. */
+  if (reached > 0) {
+    /* The fallback answered, so this build could not reach the live site. The
+       text is left in the box on purpose: it was stored somewhere the operator
+       does not read, and the reader is the only one who can still act on it. */
+    note.className = 'rp-note is-warn';
+    note.textContent = 'Could not reach theopticterminal.com, so this is saved on '
+      + 'the build you are using rather than sent. Your text is still here.';
+    return;
+  }
+  note.className = 'rp-note is-ok';
+  note.textContent = data.emailed
+    ? 'Sent. Thank you.'
+    : 'Saved. It is on the server and will be passed on.';
+  box.value = '';
+  reportCount();
 }
 
 function installReportPanel() {

@@ -25,6 +25,7 @@ import os
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 from . import db
 from .auth import mailer
@@ -33,6 +34,53 @@ log = logging.getLogger(__name__)
 
 # Never a literal. The repository is public and this is a personal address.
 FEEDBACK_TO = (os.environ.get("FEEDBACK_EMAIL_TO") or "").strip()
+
+# Where a report is meant to end up, whatever build the reader is running.
+# Safe as a literal where the address above is not: it is the public name of
+# the site, printed on the site.
+CANONICAL_HOSTS = ("theopticterminal.com", "www.theopticterminal.com")
+
+# The origins allowed to post a report from another origin, which is the same
+# list as "where Optic runs when it is not production": a dev server and a
+# tunnel preview. Deliberately not `*`. This endpoint takes anonymous text and
+# its only defence is a per-address rate limit, and a wildcard would let any
+# site on the web spend a visitor's address against that limit from a page the
+# visitor thought was unrelated.
+_DEV_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+_DEV_SUFFIX = ".trycloudflare.com"
+
+
+def cors_origin(origin: str) -> str:
+    """Echo `origin` back when it may post a report cross-origin, else "".
+
+    Parsed, not matched as a substring. `origin.endswith(_DEV_SUFFIX)` over the
+    raw header is the standard hole in this check: it is also true of
+    `https://evil.example/#.trycloudflare.com`, and userinfo puts an arbitrary
+    prefix in front of the host that a reader of the string takes for the host.
+    `urlparse(...).hostname` is the part the browser actually enforces.
+    """
+    text = (origin or "").strip()
+    # A header long enough to be worth parsing carefully is not one of ours.
+    if not text or len(text) > 200:
+        return ""
+    try:
+        parsed = urlparse(text)
+    except ValueError:
+        return ""
+    if parsed.scheme not in ("http", "https"):
+        return ""
+    # A real Origin is scheme://host[:port] and nothing more. Anything carrying
+    # a path, query, fragment or userinfo is either not an Origin or is dressed
+    # to read like one of the hosts below.
+    if (parsed.path or parsed.query or parsed.fragment
+            or parsed.username or parsed.password):
+        return ""
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return ""
+    if host in _DEV_HOSTS or host.endswith(_DEV_SUFFIX):
+        return text
+    return ""
 
 # Long enough for a paragraph and a pasted error, short enough that the column
 # is not an attack surface. The client counts down against the same number.
@@ -135,6 +183,27 @@ def submit(message: str, page: str = "", reply_to: str = "",
     return {"stored": True, "emailed": False, "id": row["id"],
             "reason": "The report is stored. Sending it on failed, so it will be "
                       "sent with the next batch."}
+
+
+def log(limit: int = 50) -> Dict[str, Any]:
+    """The newest reports and how many there are. What the operator reads.
+
+    Distinct from `unsent()`, which is the email backlog and drops a report the
+    moment it goes out. That is the wrong list for someone trying to find out
+    what readers have been saying, and it was the only list there was: every
+    report filed since this shipped is in SQLite with no route to it that is
+    not a Python shell on the server.
+
+    Carries `configured()` so the answer to "why has none of this been emailed"
+    arrives with the reports rather than having to be gone looking for.
+    """
+    with db.cursor() as conn:
+        rows = conn.execute(
+            "SELECT id,message,page,reply_to,user_agent,emailed,created_at "
+            "FROM feedback ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+        total = conn.execute("SELECT COUNT(*) AS n FROM feedback").fetchone()["n"]
+    return {"reports": [dict(r) for r in rows], "total": total,
+            "delivery": configured()}
 
 
 def unsent(limit: int = 200) -> List[Dict[str, Any]]:

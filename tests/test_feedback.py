@@ -17,7 +17,9 @@ from __future__ import annotations
 import re
 
 import pytest
+from fastapi.testclient import TestClient
 
+import app.main as main
 from app import feedback as fb
 from app.auth import mailer, ratelimit
 
@@ -276,3 +278,251 @@ def test_the_context_line_is_in_the_message_the_reader_can_see():
 def test_the_panel_is_installed_at_startup():
     code = _code(APP_JS)
     assert "installReportPanel();" in code[code.index("function installFixedChrome()"):]
+
+
+# ------------------------------------------------- where a report goes
+#
+# The defect: the POST was relative, so it followed the *build* rather than the
+# product. A report filed from a laptop dev server was written to that laptop's
+# SQLite and read by nobody; one filed from a tunnel preview died with the
+# tunnel. Nothing looked wrong from either side. The button worked, the reader
+# was thanked, and the report never left the machine.
+#
+# Sending to the live site from anywhere else makes that a cross-origin POST,
+# and a JSON content type makes it a preflighted one, which is what the CORS
+# tests below are about. The allow-list is deliberately not `*`: this endpoint
+# takes anonymous text and a per-address rate limit is its only defence, so a
+# wildcard would let any site on the web spend a visitor's address against that
+# limit from a page the visitor thought was unrelated.
+
+client = TestClient(main.app)
+
+
+@pytest.mark.parametrize("origin", [
+    "http://localhost:8000", "http://localhost:5173", "http://127.0.0.1:8000",
+    "http://[::1]:8000", "https://shy-pond-1234.trycloudflare.com",
+])
+def test_a_build_optic_runs_on_may_post_a_report_to_the_live_site(origin):
+    assert fb.cors_origin(origin) == origin
+
+
+@pytest.mark.parametrize("origin", [
+    "https://evil.example", "http://evil.example:8000", "",
+    "null", "file://", "https://theopticterminal.com.evil.example",
+])
+def test_no_other_origin_may(origin):
+    assert fb.cors_origin(origin) == ""
+
+
+@pytest.mark.parametrize("origin", [
+    # The hole an `endswith` over the raw header falls into, three ways.
+    "https://evil.example/#.trycloudflare.com",
+    "https://evil.example/?x=.trycloudflare.com",
+    "https://evil.example/localhost",
+    # Userinfo puts an arbitrary prefix in front of the real host, so a reader
+    # of the string takes the wrong part of it for the host.
+    "https://localhost@evil.example",
+    "https://user:localhost@evil.example",
+])
+def test_an_origin_is_parsed_rather_than_matched_as_a_substring(origin):
+    assert fb.cors_origin(origin) == ""
+
+
+def test_the_live_site_is_not_granted_a_cross_origin_exception():
+    """It never needs one: the client posts a relative path there, which is
+    same-origin, so no allow header is consulted at all. Granting it anyway
+    would widen the list for nothing."""
+    for host in fb.CANONICAL_HOSTS:
+        assert fb.cors_origin("https://" + host) == ""
+
+
+def test_the_preflight_is_answered_for_a_build_optic_runs_on(accounts):
+    """Without this OPTIONS 405s and no cross-origin report is ever sent: the
+    browser never gets as far as the POST."""
+    res = client.options("/api/feedback", headers={
+        "Origin": "http://localhost:5173",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type",
+    })
+    assert res.status_code == 204
+    assert res.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert "POST" in res.headers["access-control-allow-methods"]
+    assert "content-type" in res.headers["access-control-allow-headers"].lower()
+
+
+def test_the_preflight_refuses_a_stranger(accounts):
+    res = client.options("/api/feedback", headers={
+        "Origin": "https://evil.example",
+        "Access-Control-Request-Method": "POST",
+    })
+    assert "access-control-allow-origin" not in res.headers
+
+
+def test_a_cross_origin_report_is_accepted_and_stored(accounts):
+    res = client.post("/api/feedback", json={"message": "The chart is blank."},
+                      headers={"Origin": "http://localhost:5173"})
+    assert res.status_code == 200
+    assert res.json()["stored"] is True
+    assert res.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert [r["message"] for r in fb.unsent()] == ["The chart is blank."]
+
+
+def test_a_refused_report_still_carries_the_allow_header(accounts):
+    """The subtle one, and the reason this route renders its own responses.
+
+    An HTTPException is rendered by Starlette's own handler, which never sees
+    the route's response object. Raised, a 400 or a 429 reaches a cross-origin
+    caller stripped of its allow header, the browser reports an opaque CORS
+    failure, and the reader is told the report did not send rather than why."""
+    res = client.post("/api/feedback", json={"message": "   "},
+                      headers={"Origin": "http://localhost:5173"})
+    assert res.status_code == 400
+    assert res.json()["detail"] == "A report needs a message."
+    assert res.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+def test_the_rate_limit_refusal_also_carries_it(accounts):
+    """The same hazard on the path a reader is most likely to actually meet."""
+    for i in range(10):
+        client.post("/api/feedback", json={"message": "report {}".format(i)},
+                    headers={"Origin": "http://localhost:5173"})
+    res = client.post("/api/feedback", json={"message": "one too many"},
+                      headers={"Origin": "http://localhost:5173"})
+    assert res.status_code == 429
+    assert res.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+def test_the_response_varies_on_origin(accounts):
+    """The body is identical for every origin but the allow header is not, and
+    a cache that missed that would hand one origin a decision about another."""
+    res = client.post("/api/feedback", json={"message": "vary"},
+                      headers={"Origin": "https://evil.example"})
+    assert res.headers["vary"] == "Origin"
+    assert "access-control-allow-origin" not in res.headers
+
+
+# ------------------------------------------------- reading the reports
+
+
+def test_the_reports_are_readable_without_a_mail_relay(accounts, monkeypatch):
+    """Emailing a report needs FEEDBACK_EMAIL_TO *and* SMTP_HOST *and*
+    EMAIL_FROM. Until all three exist every report is in SQLite, and before
+    this endpoint the only way to read one was a Python shell on the server."""
+    monkeypatch.setattr(main, "WRITE_TOKEN", "test-write-token")
+    fb.store("first problem", page="view-chart")
+    fb.store("second problem", page="view-insiders")
+
+    res = client.get("/api/feedback", headers={"X-Optic-Token": "test-write-token"})
+    assert res.status_code == 200
+    out = res.json()
+    assert out["total"] == 2
+    assert {r["message"] for r in out["reports"]} == {"first problem", "second problem"}
+    assert {r["page"] for r in out["reports"]} == {"view-chart", "view-insiders"}
+    # Why nothing has been emailed arrives with the reports rather than having
+    # to be gone looking for.
+    assert out["delivery"]["available"] is False
+    assert "FEEDBACK_EMAIL_TO" in out["delivery"]["reason"]
+
+
+def test_the_reports_are_not_readable_by_anybody_else(accounts, monkeypatch):
+    """What this protects is other people's words. A reader filing a problem is
+    writing to the operator, not to the web."""
+    monkeypatch.setattr(main, "WRITE_TOKEN", "test-write-token")
+    fb.store("a reader's words")
+    assert client.get("/api/feedback").status_code == 401
+    assert client.get("/api/feedback",
+                      headers={"X-Optic-Token": "wrong"}).status_code == 401
+
+
+def test_the_log_says_which_reports_went_out(accounts, monkeypatch):
+    monkeypatch.setattr(fb, "FEEDBACK_TO", "operator@example.com")
+    monkeypatch.setattr(mailer, "available", lambda: {"available": True})
+    monkeypatch.setattr(mailer, "send", lambda *a, **k: True)
+    fb.submit("emailed one")
+    monkeypatch.setattr(mailer, "send", lambda *a, **k: False)
+    fb.submit("stuck one")
+
+    out = fb.log()
+    assert out["total"] == 2
+    by_message = {r["message"]: r["emailed"] for r in out["reports"]}
+    assert by_message == {"emailed one": 1, "stuck one": 0}
+
+
+def test_the_log_is_newest_first_and_is_not_the_email_backlog(accounts, monkeypatch):
+    """`unsent()` drops a report the moment it is sent, which is the wrong list
+    for someone trying to find out what readers have been saying."""
+    monkeypatch.setattr(fb, "FEEDBACK_TO", "operator@example.com")
+    monkeypatch.setattr(mailer, "available", lambda: {"available": True})
+    monkeypatch.setattr(mailer, "send", lambda *a, **k: True)
+    for i in range(3):
+        fb.store("report {}".format(i))
+    fb.flush()
+
+    assert fb.unsent() == [], "sanity: the backlog is empty once they are sent"
+    assert [r["message"] for r in fb.log()["reports"]] == \
+        ["report 2", "report 1", "report 0"]
+
+
+def test_the_log_limit_is_bounded(accounts):
+    for i in range(5):
+        fb.store("report {}".format(i))
+    assert len(fb.log(limit=2)["reports"]) == 2
+    assert fb.log(limit=2)["total"] == 5, "the count is of everything, not the page"
+
+
+# ------------------------------------------------- client wiring, routing
+
+
+def test_a_report_is_sent_to_the_live_site_from_any_other_build():
+    code = _code(APP_JS)
+    fn = code[code.index("function reportTargets()"):]
+    fn = fn[:fn.index("\nfunction openReportPanel")]
+    assert "REPORT_HOME + '/api/feedback'" in fn
+    assert "https://theopticterminal.com" in _code(APP_JS[:APP_JS.index("function reportTargets()")]) \
+        or "REPORT_HOME = 'https://theopticterminal.com'" in code
+
+
+def test_the_live_site_posts_to_itself(accounts):
+    """Relative there: same-origin, so no preflight and no dependence on the
+    allow-list being right on the one build that matters most."""
+    code = _code(APP_JS)
+    fn = code[code.index("function reportTargets()"):]
+    fn = fn[:fn.index("\nfunction openReportPanel")]
+    assert "location.hostname" in fn
+    assert "REPORT_HOME_HOSTS" in fn
+    assert "return ['/api/feedback']" in fn
+    for host in fb.CANONICAL_HOSTS:
+        assert "'{}'".format(host) in code, \
+            "the client and the server must agree on what the live site is"
+
+
+def test_sendreport_uses_the_targets_rather_than_a_relative_path():
+    """The defect was the relative path. A second one left behind in the send
+    path would restore it for every reader."""
+    fn = _code(APP_JS[APP_JS.index("async function sendReport()"):])
+    fn = fn[:fn.index("\nfunction installReportPanel")]
+    assert "reportTargets()" in fn
+    assert "fetch('/api/feedback'" not in fn, "the relative path is back"
+
+
+def test_a_report_that_cannot_reach_the_live_site_is_not_lost_or_called_sent():
+    """Both halves matter. Falling back keeps the report; saying so keeps the
+    reader from believing it arrived when it is sitting on their own machine,
+    which is why the text is left in the box on that path alone."""
+    fn = APP_JS[APP_JS.index("async function sendReport()"):]
+    fn = fn[:fn.index("\nfunction installReportPanel")]
+    code = _code(fn)
+    assert "for (let i = 0; i < targets.length; i++)" in code, "no fallback loop"
+    assert "is-warn" in code
+    assert "Could not reach theopticterminal.com" in fn
+    # `box.value = ''` must not run on the fallback branch: it is the reader's
+    # only remaining copy of what they wrote.
+    warn = code[code.index("is-warn"):]
+    assert warn.index("return;") < warn.index("box.value = ''"), \
+        "the fallback branch clears the reader's text"
+
+
+def test_the_warn_state_has_a_colour():
+    """A class the send path sets and the stylesheet has never heard of renders
+    as unstyled body text, which reads as success."""
+    assert ".rp-note.is-warn" in CSS

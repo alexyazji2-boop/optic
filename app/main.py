@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 from fastapi import Body, FastAPI, HTTPException, Query, Request
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -2205,9 +2205,45 @@ async def alerts_clear(request: Request) -> Dict[str, Any]:
     return {"removed": alerts_mod.clear()}
 
 
+def _feedback_cors(request: Request) -> Dict[str, str]:
+    """CORS headers for /api/feedback, which is posted to from other origins.
+
+    The client sends a problem report to theopticterminal.com from whatever
+    build it happens to be served by, so anywhere but production this is a
+    cross-origin POST, and the JSON content type makes it a preflighted one.
+    No credentials: the report carries no cookie and no session, so there is
+    nothing here for a forged request to ride on and nothing to widen by
+    allowing it. `feedback_mod.cors_origin` is the allow-list.
+
+    `Vary: Origin` whatever the outcome. The body is identical for every origin
+    but this header is not, and a cache that missed that would hand one origin
+    a decision that was made about another.
+    """
+    headers = {"Vary": "Origin"}
+    allowed = feedback_mod.cors_origin(request.headers.get("origin") or "")
+    if allowed:
+        headers["Access-Control-Allow-Origin"] = allowed
+    return headers
+
+
+@app.options("/api/feedback")
+async def feedback_preflight(request: Request) -> Response:
+    """The preflight the POST below needs. Without it OPTIONS 405s and no
+    cross-origin report is ever sent, because the browser never gets as far as
+    the POST. An origin outside the allow-list gets the same 204 without an
+    allow header, which the browser reads as a refusal."""
+    cors = _feedback_cors(request)
+    if "Access-Control-Allow-Origin" in cors:
+        cors["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        cors["Access-Control-Allow-Headers"] = "Content-Type"
+        # A day. The preflight is pure policy and the policy is a constant.
+        cors["Access-Control-Max-Age"] = "86400"
+    return Response(status_code=204, headers=cors)
+
+
 @app.post("/api/feedback")
 async def submit_feedback(request: Request,
-                          payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+                          payload: Dict[str, Any] = Body(default={})) -> Response:
     """One reader-reported problem.
 
     No `_write_guard`. That guard protects the terminal's own state, and this
@@ -2218,21 +2254,52 @@ async def submit_feedback(request: Request,
 
     Rate limited by address instead, and the send runs off the event loop
     because it opens an SMTP connection.
+
+    Rendered through JSONResponse rather than returned as a dict so the CORS
+    headers survive the error paths. An HTTPException is rendered by Starlette's
+    own handler, which never sees this route's response object, so a raised 400
+    or 429 would reach a cross-origin caller stripped of its allow header. The
+    browser would then report an opaque CORS failure and the reader would be
+    told the report did not send instead of being told why.
     """
-    auth_ratelimit.guard(request, "feedback", auth_ratelimit.client_ip(request))
-    message = payload.get("message")
-    if not isinstance(message, str) or not message.strip():
-        raise HTTPException(status_code=400, detail="A report needs a message.")
+    cors = _feedback_cors(request)
+    try:
+        auth_ratelimit.guard(request, "feedback", auth_ratelimit.client_ip(request))
+        message = payload.get("message")
+        if not isinstance(message, str) or not message.strip():
+            raise HTTPException(status_code=400, detail="A report needs a message.")
 
-    page = payload.get("page") if isinstance(payload.get("page"), str) else ""
-    reply = payload.get("reply_to") if isinstance(payload.get("reply_to"), str) else ""
-    # Taken from the request, not from the body: a client-supplied User-Agent is
-    # just another string the reporter typed.
-    agent = request.headers.get("user-agent") or ""
+        page = payload.get("page") if isinstance(payload.get("page"), str) else ""
+        reply = payload.get("reply_to") if isinstance(payload.get("reply_to"), str) else ""
+        # Taken from the request, not from the body: a client-supplied
+        # User-Agent is just another string the reporter typed.
+        agent = request.headers.get("user-agent") or ""
 
-    out = await _run(feedback_mod.submit, message, page, reply, agent)
-    auth_ratelimit.record("feedback", auth_ratelimit.client_ip(request))
-    return out
+        out = await _run(feedback_mod.submit, message, page, reply, agent)
+        auth_ratelimit.record("feedback", auth_ratelimit.client_ip(request))
+    except HTTPException as exc:
+        return JSONResponse(status_code=exc.status_code,
+                            content={"detail": exc.detail}, headers=cors)
+    return JSONResponse(content=out, headers=cors)
+
+
+@app.get("/api/feedback")
+async def read_feedback(request: Request,
+                        limit: int = Query(50, ge=1, le=200)) -> Dict[str, Any]:
+    """The reports, for whoever owns the deployment.
+
+    `_write_guard` on a read. The guard's real subject is "is this the
+    operator", and a second gate meaning the same thing is a second gate to
+    keep in step. What it protects is other people's words: a reader filing a
+    problem is writing to the operator, not to the web.
+
+    The write token is the route that always works here. The guard's admin
+    branch pairs with `csrf_guard`, and a URL typed into an address bar carries
+    no CSRF header, so a signed-in owner visiting this directly gets a 403 that
+    is about the cookie rather than about them.
+    """
+    _write_guard(request)
+    return await _run(feedback_mod.log, limit)
 
 
 @app.get("/api/econ")

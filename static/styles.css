@@ -13344,6 +13344,7 @@ body.chat-full .rp { display: none; }
 }
 .rp-note.is-ok { color: var(--pos); }
 .rp-note.is-bad { color: var(--neg); }
+.rp-note.is-warn { color: var(--warn); }
 .rp-note:empty { display: none; }
 
 .rp-caveat {
