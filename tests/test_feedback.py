@@ -637,3 +637,38 @@ def test_the_manual_flush_instruction_is_not_left_behind(accounts):
     the old behaviour is worse than none: it is followed."""
     env = open(".env.example").read()
     assert "python -c" not in env or "feedback; print(feedback.flush())" not in env
+
+
+def test_a_refused_read_is_not_told_it_tried_to_write(accounts, monkeypatch):
+    """`_write_guard` phrases every refusal as being about changing the ledger,
+    because until this route existed every caller it turned away was. Shipped
+    unchanged, a reader asking for the reports on a deployment with no token
+    was told "Writes are disabled... it refuses to let anonymous callers change
+    the ledger", and went looking for a write they never made."""
+    # No token and no admin: the fail-closed branch a fresh deployment hits.
+    monkeypatch.setattr(main, "WRITE_TOKEN", "")
+    monkeypatch.setattr(main, "is_hosted", lambda: True)
+    res = client.get("/api/feedback")
+    assert res.status_code == 503
+    detail = res.json()["detail"]
+    assert "OPTIC_WRITE_TOKEN" in detail, "it still has to say what to set"
+    assert "write" not in detail.lower().replace("optic_write_token", ""), \
+        "the reader asked to read"
+    assert "ledger" not in detail.lower()
+
+
+def test_a_refused_read_still_says_what_would_let_it_through(accounts, monkeypatch):
+    monkeypatch.setattr(main, "WRITE_TOKEN", "test-write-token")
+    res = client.get("/api/feedback", headers={"X-Optic-Token": "wrong"})
+    assert res.status_code == 401
+    assert "write token" in res.json()["detail"].lower()
+
+
+def test_the_read_copy_does_not_change_the_guards_verdict(accounts, monkeypatch):
+    """Only the wording is this route's. Rewriting a status as well would make
+    two answers to "is this the operator" that could drift apart."""
+    monkeypatch.setattr(main, "WRITE_TOKEN", "test-write-token")
+    fb.store("a reader's words")
+    assert client.get("/api/feedback").status_code == 401
+    ok = client.get("/api/feedback", headers={"X-Optic-Token": "test-write-token"})
+    assert ok.status_code == 200 and ok.json()["total"] == 1

@@ -2250,6 +2250,21 @@ async def alerts_clear(request: Request) -> Dict[str, Any]:
     return {"removed": alerts_mod.clear()}
 
 
+# Keyed on the status `_write_guard` chose, so the rule stays that function's
+# and only the wording is this route's.
+_READ_GUARD_COPY = {
+    401: "These are other people's problem reports, so reading them needs the "
+         "write token. Every research panel stays open to everyone.",
+    403: "That request did not look like it came from this page. The write "
+         "token in a header works from anywhere; a browser session needs the "
+         "page to send its CSRF header.",
+    503: "Problem reports are readable by the operator, and this deployment "
+         "has no OPTIC_WRITE_TOKEN set to tell who that is. Set one in the "
+         "platform's variables. The reports themselves are safe: they are "
+         "stored either way.",
+}
+
+
 def _feedback_cors(request: Request) -> Dict[str, str]:
     """CORS headers for /api/feedback, which is posted to from other origins.
 
@@ -2343,7 +2358,17 @@ async def read_feedback(request: Request,
     no CSRF header, so a signed-in owner visiting this directly gets a 403 that
     is about the cookie rather than about them.
     """
-    _write_guard(request)
+    try:
+        _write_guard(request)
+    except HTTPException as exc:
+        # Every refusal that guard writes is phrased about changing the ledger,
+        # because until this route existed every caller it turned away was
+        # trying to. A reader who asked for the reports and is told "writes are
+        # disabled... it refuses to let anonymous callers change the ledger"
+        # goes looking for a write they never made. Same rule, same status,
+        # true sentence.
+        raise HTTPException(status_code=exc.status_code,
+                            detail=_READ_GUARD_COPY.get(exc.status_code, exc.detail))
     return await _run(feedback_mod.log, limit)
 
 
