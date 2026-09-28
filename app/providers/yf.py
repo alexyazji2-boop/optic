@@ -15,7 +15,7 @@ import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -137,6 +137,25 @@ def _on_throttle() -> None:
     _BUCKET["tokens"] = min(float(_BUCKET["tokens"]), 0.0)
 
 
+# What the gate and the network cost the calling thread, for the ticker
+# build's Server-Timing header. Per thread because each of a build's legs runs
+# on its own pool thread, so a leg reads its own waits and nobody else's.
+_METER = threading.local()
+
+
+def meter_reset() -> None:
+    _METER.gated = 0.0
+    _METER.fetching = 0.0
+    _METER.requests = 0
+
+
+def meter_read() -> Tuple[float, float, int]:
+    """Seconds held at the gate, seconds inside fetches, and fetches made by
+    this thread since meter_reset."""
+    return (float(getattr(_METER, "gated", 0.0)), float(getattr(_METER, "fetching", 0.0)),
+            int(getattr(_METER, "requests", 0)))
+
+
 def _wait_turn() -> None:
     """Hold until it is safe to make a request.
 
@@ -153,7 +172,8 @@ def _wait_turn() -> None:
     that had already finished waited there to record its success until the
     last sleeper woke. Measured with twenty fetches at once, twelve tokens and
     2/s: the twelve that were done at 0.30s all returned at 4.03s."""
-    deadline = time.time() + MAX_GATE_WAIT
+    began = time.time()
+    deadline = began + MAX_GATE_WAIT
     while True:
         remaining = float(_THROTTLE["until"]) - time.time()
         now = time.time()
@@ -170,6 +190,8 @@ def _wait_turn() -> None:
         _BUCKET["last"] = now
     if tokens < 0.0:
         time.sleep(-tokens / rate)
+    _METER.gated = float(getattr(_METER, "gated", 0.0)) + time.time() - began
+    _METER.requests = int(getattr(_METER, "requests", 0)) + 1
 
 
 def _cached(key: str, ttl: float, producer):
@@ -190,6 +212,12 @@ def _cached(key: str, ttl: float, producer):
         # directly would bypass the limiter silently. The gate is global; the
         # fetch after it is not (see _NET_LOCK).
         _wait_turn()
+        # Outermost fetch only: a producer can call another cached fetch (the
+        # quote falls back to the history), and counting both would count the
+        # inner one's seconds twice.
+        depth = int(getattr(_METER, "depth", 0))
+        _METER.depth = depth + 1
+        fetch_began = time.time()
         try:
             value = producer()
         except BaseException as exc:
@@ -197,6 +225,11 @@ def _cached(key: str, ttl: float, producer):
                 with _PACE_LOCK:
                     _on_throttle()
             raise
+        finally:
+            _METER.depth = depth
+            if depth == 0:
+                _METER.fetching = (float(getattr(_METER, "fetching", 0.0))
+                                   + time.time() - fetch_began)
         with _PACE_LOCK:
             _on_success()
         _CACHE[key] = (time.time(), value)
@@ -793,9 +826,13 @@ class YFinanceProvider(MarketDataProvider):
                         "surprise_pct": _f(row.get("Surprise(%)")),
                     }
                 )
-            return out[: limit * 2]
+            return out
 
-        return _cached("earnhist:" + ticker, self.TTL_FILED, build)
+        # Sliced after the cache, not inside it. The key has no limit in it, so
+        # a slice cached inside was whichever caller came first: the Dossier's
+        # fundamentals ask for ten quarters and its earnings momentum for eight,
+        # and they now start together.
+        return _cached("earnhist:" + ticker, self.TTL_FILED, build)[: limit * 2]
 
     def profile(self, ticker: str) -> Dict[str, Any]:
         """What the company actually does, in its own words.

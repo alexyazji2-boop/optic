@@ -77,8 +77,8 @@ def test_the_build_starts_with_the_same_call(monkeypatch):
     started = {}
 
     class Legs:
-        def __init__(self, parallel):
-            pass
+        def __init__(self, parallel, timings=None):
+            self.parallel = parallel
 
         def start(self, name, fn, *args, **kwargs):
             started[name] = (fn, args)

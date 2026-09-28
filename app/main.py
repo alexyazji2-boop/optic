@@ -9,6 +9,7 @@ import os
 import re
 import secrets
 import sqlite3
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -93,6 +94,7 @@ from .analytics import sectors as sectors_mod
 from .analytics import structure as structure_mod
 from .analytics import swing, technicals
 from .providers.tradier import TradierProvider
+from .providers import yf as yf_provider_mod
 from .providers.yf import PROVIDER as YF_PROVIDER
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
@@ -265,7 +267,70 @@ def _run(fn, *args, **kwargs):
 # finishes and fills its cache. Legs never wait on legs, so the pool cannot
 # deadlock against itself, and every provider call is still paced by the
 # provider's own limiter.
-_LEG_POOL = ThreadPoolExecutor(max_workers=16, thread_name_prefix="ticker-leg")
+#
+# Thirty-two since the company fetches became legs of their own: a first load
+# is now eighteen, and two readers loading at once would otherwise queue each
+# other's. A leg can wait on another only through a provider key lock, which
+# is held by a thread that is already running, so a full pool still cannot
+# deadlock.
+_LEG_POOL = ThreadPoolExecutor(max_workers=32, thread_name_prefix="ticker-leg")
+
+
+class _Timings:
+    """Where one request's time went, sent as its Server-Timing header.
+
+    That header because the browser's network panel draws it beside the
+    request and `curl -D -` prints it, so reading the live site's numbers needs
+    no log access. Every row is milliseconds:
+
+      queue    waiting for a worker thread before the build started
+      build    the build, start to finish
+      compute  the build's own work, which is `build` less the time it sat
+               waiting on a leg
+      <leg>    each fetch, with when it started, how long the rate limiter
+               held it, how long its requests took, and how many it made
+    """
+
+    def __init__(self) -> None:
+        self.t0 = time.perf_counter()
+        self.started: Optional[float] = None
+        self.ended: Optional[float] = None
+        self.blocked = 0.0
+        self.legs: List[tuple] = []
+        self._lock = threading.Lock()
+
+    def wrap(self, name: str, fn):
+        def timed(*args, **kwargs):
+            yf_provider_mod.meter_reset()
+            began = time.perf_counter()
+            try:
+                return fn(*args, **kwargs)
+            finally:
+                took = time.perf_counter() - began
+                gated, fetching, requests = yf_provider_mod.meter_read()
+                with self._lock:
+                    self.legs.append((name, began - self.t0, took, gated, fetching, requests))
+        return timed
+
+    def header(self) -> str:
+        def ms(sec: float) -> str:
+            return "{:.1f}".format(sec * 1000.0)
+
+        end = self.ended if self.ended is not None else time.perf_counter()
+        start = self.started if self.started is not None else self.t0
+        parts = ["queue;dur=" + ms(start - self.t0),
+                 "build;dur=" + ms(end - start),
+                 "compute;dur=" + ms(max(end - start - self.blocked, 0.0))]
+        with self._lock:
+            legs = sorted(self.legs, key=lambda row: row[1])
+        # " / " inside the description rather than commas: a comma in a quoted
+        # desc is legal, but it is also what every hand-rolled reader of this
+        # header splits the metrics on, the first one written for it included.
+        for name, at, took, gated, fetching, requests in legs:
+            parts.append('{};dur={};desc="at {} ms / gate {} ms / fetch {} ms / {} req"'.format(
+                name, ms(took), ms(at).split(".")[0], ms(gated).split(".")[0],
+                ms(fetching).split(".")[0], requests))
+        return ", ".join(parts)
 
 
 class _Legs:
@@ -279,20 +344,28 @@ class _Legs:
     already had around that call.
     """
 
-    def __init__(self, parallel: bool) -> None:
+    def __init__(self, parallel: bool, timings: Optional[_Timings] = None) -> None:
         self.parallel = parallel
+        self.timings = timings
         self._legs: Dict[str, Any] = {}
 
     def start(self, name: str, fn, *args, **kwargs) -> None:
+        if self.timings is not None:
+            fn = self.timings.wrap(name, fn)
         self._legs[name] = (_LEG_POOL.submit(fn, *args, **kwargs) if self.parallel
                             else (fn, args, kwargs))
 
     def get(self, name: str) -> Any:
         leg = self._legs.pop(name)
-        if not self.parallel:
-            fn, args, kwargs = leg
-            return fn(*args, **kwargs)
-        return leg.result()
+        began = time.perf_counter()
+        try:
+            if not self.parallel:
+                fn, args, kwargs = leg
+                return fn(*args, **kwargs)
+            return leg.result()
+        finally:
+            if self.timings is not None:
+                self.timings.blocked += time.perf_counter() - began
 
 
 def _sector_confirm(ticker: str) -> Dict[str, Any]:
@@ -316,10 +389,13 @@ def _swing_snapshot(
     include_company: bool = True,
     budget: Optional[float] = None,
     parallel: bool = False,
+    timings: Optional[_Timings] = None,
 ) -> Dict[str, Any]:
     ticker = ticker.upper().strip()
+    if timings is not None:
+        timings.started = time.perf_counter()
 
-    legs = _Legs(parallel)
+    legs = _Legs(parallel, timings)
     legs.start("quote", PROVIDER.quote, ticker)
     legs.start("hist", PROVIDER.history, ticker, period="2y", interval="1d")
     legs.start("news", news_mod.analyse, YF_PROVIDER, ticker)
@@ -333,6 +409,27 @@ def _swing_snapshot(
     legs.start("filings", filings_mod.recent, ticker)
     legs.start("sector", _sector_confirm, ticker)
     legs.start("earnings_date", YF_PROVIDER.earnings_date, ticker)
+    # The company and earnings blocks' own fetches, started now rather than one
+    # after another inside those blocks. They were the last two legs to finish:
+    # fundamentals is five fetches in a row and could not start before the
+    # quote, earnings momentum three. Profiled on cold symbols (SNAP, LYFT,
+    # 2026-09-28) the company leg ran from 0.39s to 2.05s and the earnings leg
+    # to 1.76s, with everything else done by 1.2s. The blocks themselves are
+    # unchanged and find these in the provider's cache, or wait on the one
+    # already in flight, so each is still one request.
+    #
+    # Only in parallel: nothing collects these, so a scan, which builds this
+    # sequentially and runs a leg only when it reads it, never starts them.
+    if legs.parallel:
+        if include_company:
+            legs.start("short_interest", YF_PROVIDER.short_interest, ticker)
+            legs.start("insiders", YF_PROVIDER.insiders, ticker)
+            legs.start("institutions", YF_PROVIDER.institutions, ticker)
+        if include_company or include_earnings:
+            legs.start("financials", YF_PROVIDER.financials, ticker)
+            legs.start("earnings_history", YF_PROVIDER.earnings_history, ticker)
+        if include_earnings:
+            legs.start("estimates", YF_PROVIDER.estimates, ticker)
 
     quote = legs.get("quote")
     # The one leg that needs another's answer, started the moment it has it.
@@ -630,6 +727,7 @@ def _accounts_health() -> Dict[str, Any]:
 @app.get("/api/ticker/{ticker}")
 async def ticker_analysis(
     ticker: str,
+    response: Response,
     expiries: Optional[str] = Query(None, description="Comma-separated YYYY-MM-DD expiries"),
     max_expiries: int = Query(4, ge=1, le=10),
     macro: bool = Query(True, description="Include the macro regime panel"),
@@ -646,12 +744,17 @@ async def ticker_analysis(
     reader's own business and nothing here should assume one.
     """
     wanted = [e.strip() for e in expiries.split(",") if e.strip()] if expiries else None
-    return await _run(_swing_snapshot, ticker, wanted, max_expiries, macro,
-                      include_earnings=True, budget=budget, parallel=True)
+    timings = _Timings()
+    payload = await _run(_swing_snapshot, ticker, wanted, max_expiries, macro,
+                         include_earnings=True, budget=budget, parallel=True,
+                         timings=timings)
+    timings.ended = time.perf_counter()
+    response.headers["Server-Timing"] = timings.header()
+    return payload
 
 
 @app.get("/api/quote/{ticker}")
-async def quick_quote(ticker: str) -> Dict[str, Any]:
+async def quick_quote(ticker: str, response: Response) -> Dict[str, Any]:
     """The price and the name, ahead of the full analysis.
 
     /api/ticker is several seconds on a symbol's first load, and the Dossier's
@@ -659,17 +762,23 @@ async def quick_quote(ticker: str) -> Dict[str, Any]:
     call the build starts with, so asking for it first costs nothing: the
     build's own quote is then served from the cache this filled.
     """
+    timings = _Timings()
+
     def build() -> Dict[str, Any]:
+        timings.started = time.perf_counter()
         sym = ticker.upper().strip()
         try:
-            quote = PROVIDER.quote(sym)
+            quote = timings.wrap("quote", PROVIDER.quote)(sym)
         except Exception as exc:                                # noqa: BLE001
             logging.getLogger("uvicorn.error").info("quick quote for %s: %s", sym, exc)
             return {"ticker": sym, "available": False}
         if not quote or quote.get("price") is None:
             return {"ticker": sym, "available": False}
         return {"ticker": sym, "available": True, "quote": quote}
-    return await _run(build)
+    body = await _run(build)
+    timings.ended = time.perf_counter()
+    response.headers["Server-Timing"] = timings.header()
+    return body
 
 
 @app.get("/api/earnings/{ticker}")

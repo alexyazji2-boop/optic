@@ -89,6 +89,11 @@ def fetches(monkeypatch):
     monkeypatch.setattr(main, "_sector_confirm", rec("sector", {}))
     monkeypatch.setattr(Y, "earnings_date", rec("earnings_date", None))
     monkeypatch.setattr(main.fundamentals_mod, "analyse", rec("fundamentals", {}))
+    # The company and earnings blocks' own fetches, which a parallel build
+    # starts up front (see test_company_prefetch.py).
+    for name in ("short_interest", "insiders", "institutions", "financials",
+                 "earnings_history", "estimates"):
+        monkeypatch.setattr(Y, name, rec(name, {}))
     return seen
 
 
@@ -97,7 +102,9 @@ def test_parallel_starts_every_independent_fetch_before_reading_any(fetches):
         main._swing_snapshot("ZZZZ", None, 4, True, include_earnings=True, parallel=True)
     deadline = time.time() + 5
     want = {"quote", "history", "news", "expirations", "chain", "macro", "earnings",
-            "filings", "sector", "earnings_date", "fundamentals"}
+            "filings", "sector", "earnings_date", "fundamentals",
+            "short_interest", "insiders", "institutions", "financials",
+            "earnings_history", "estimates"}
     while time.time() < deadline and not want <= set(fetches):
         time.sleep(0.02)
     assert want <= set(fetches), sorted(want - set(fetches))
