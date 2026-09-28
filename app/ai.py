@@ -16,12 +16,14 @@ clear message instead of failing, and the rest of the terminal is unaffected.
 from __future__ import annotations
 
 import json
+import math
 import os
+import threading
 import time
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
-from . import knowledge
+from . import knowledge, weekly_store
 from .runtime import is_hosted
 
 import logging
@@ -1175,17 +1177,43 @@ as Inflation Takes Focus". subhead is one short clause. Paragraphs may use **bol
 _WEEKLY_CACHE: Dict[str, Dict[str, Any]] = {}
 WEEKLY_MAX_TOKENS = int(os.environ.get("WEEKLY_TOKENS", "6000"))
 
+# How long a failed write stands before a reader tries again. Failures were not
+# kept, so while one lasted every page load paid for another attempt, each up
+# to WEEKLY_MAX_TOKENS of output and about 56 seconds (measured on 2026-09-28).
+# Ten minutes holds that to six an hour. It is no longer because the one
+# failure measured was a one-off: the first write after a deploy came back
+# unusable and the retry was fine.
+WEEKLY_RETRY_SECONDS = 600.0
+_WEEKLY_FAILED: Dict[str, Dict[str, Any]] = {}
+_WEEKLY_UNUSABLE = "The weekly update could not be written on the latest attempt."
 
-def write_weekly_update(week_key: str, facts: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """The weekly update, or None.
+# One write at a time, and a reader who arrives during it waits for that one
+# rather than paying for another. Without this everyone who loaded the page in
+# the ~56 seconds of a write found nothing kept and started their own, and
+# whichever finished last replaced the rest. The wait outlasts a measured write,
+# so a reader normally gets the piece, and is bounded because the SDK's own
+# timeout is ten minutes, which is too long to hold a request thread.
+WEEKLY_WAIT_SECONDS = 90.0
+_WEEKLY_LOCK = threading.Lock()
 
-    Cached by ISO week and generated once for everyone, the same economics as the
-    morning note: one call a week shared by every reader rather than one per page
-    view. That is the only reason a piece this long is affordable.
+
+def write_weekly_update(week_key: str, facts: Dict[str, Any],
+                        force: bool = False) -> Optional[Dict[str, Any]]:
+    """The weekly update, a failure saying why, or None with no assistant.
+
+    Written once per ISO week for everyone, the same economics as the morning
+    note: one call a week shared by every reader rather than one per page view.
+    That is the only reason a piece this long is affordable. It is kept in
+    `app/weekly_store.py`, because a deploy restarts the process and a copy in
+    memory alone was written again after every one.
+
+    `force` writes it again and replaces the kept one, but only once the new
+    one exists: a forced write that fails leaves readers the update they had.
     """
-    hit = _WEEKLY_CACHE.get(week_key)
-    if hit:
-        return hit["update"]
+    if not force:
+        answer = _weekly_kept(week_key) or _weekly_failure(week_key)
+        if answer:
+            return answer
 
     try:
         from anthropic import Anthropic
@@ -1201,6 +1229,24 @@ def write_weekly_update(week_key: str, facts: Dict[str, Any]) -> Optional[Dict[s
         log.warning("weekly update skipped: client construction failed: %s", exc)
         return {"available": False, "reason": _human_error(exc)}
 
+    if not _WEEKLY_LOCK.acquire(timeout=WEEKLY_WAIT_SECONDS):
+        return {"available": False,
+                "reason": ("The weekly update is still being written. Reload in a "
+                           "minute or two to see it.")}
+    try:
+        if not force:
+            # The write this request waited behind has just kept a piece or
+            # just failed, and either one is the answer.
+            answer = _weekly_kept(week_key) or _weekly_failure(week_key)
+            if answer:
+                return answer
+        return _write_weekly(client, week_key, facts)
+    finally:
+        _WEEKLY_LOCK.release()
+
+
+def _write_weekly(client: Any, week_key: str, facts: Dict[str, Any]) -> Dict[str, Any]:
+    """One model call: kept when it produced a piece, remembered when it did not."""
     body = json.dumps(_prune(facts), default=str)[:80000]
     try:
         msg = client.messages.create(
@@ -1210,27 +1256,49 @@ def write_weekly_update(week_key: str, facts: Dict[str, Any]) -> Optional[Dict[s
         )
     except Exception as exc:
         log.warning("weekly update failed: %s: %s", type(exc).__name__, exc)
-        return {"available": False, "reason": _human_error(exc)}
+        return _weekly_failed(week_key, _human_error(exc))
 
     text = "".join(getattr(b, "text", "") for b in (msg.content or []))
     parsed = _parse_brief_json(text, getattr(msg, "stop_reason", None) == "max_tokens",
                               "weekly")
     if parsed is None:
-        return None
+        return _weekly_failed(week_key, _WEEKLY_UNUSABLE)
     paragraphs = [str(x).strip() for x in (parsed.get("paragraphs") or []) if str(x).strip()]
     while paragraphs and paragraphs[-1].lstrip().startswith("##"):
         paragraphs.pop()
     if not paragraphs:
         log.warning("weekly update skipped: no paragraphs survived")
-        return None
+        return _weekly_failed(week_key, _WEEKLY_UNUSABLE)
 
-    update = {
-        "available": True,
-        "week_key": week_key,
+    written = {
         "headline": str(parsed.get("headline") or "").strip(),
         "subhead": str(parsed.get("subhead") or "").strip(),
         "paragraphs": paragraphs,
-        "written_by": MODEL,
+        "model": MODEL,
+        "written_at": datetime.now(timezone.utc).isoformat(),
+    }
+    weekly_store.save(week_key, written)
+    update = _weekly_update(week_key, written)
+    _WEEKLY_CACHE.clear()          # only ever one week in flight
+    _WEEKLY_CACHE[week_key] = {"at": time.time(), "update": update}
+    _WEEKLY_FAILED.clear()
+    return dict(update)
+
+
+def _weekly_update(week_key: str, written: Dict[str, Any]) -> Dict[str, Any]:
+    """The update as served: what the model wrote, and what this code puts round it.
+
+    Built the same way from a fresh write and from the store, so a kept update
+    carries the method and disclaimer in force today rather than the week's.
+    """
+    return {
+        "available": True,
+        "week_key": week_key,
+        "headline": written.get("headline") or "",
+        "subhead": written.get("subhead") or "",
+        "paragraphs": list(written.get("paragraphs") or []),
+        "written_by": written.get("model") or MODEL,
+        "written_at": written.get("written_at"),
         "method": (
             "Written from the releases, the agency calendar, a watchlist earnings "
             "scan and index levels computed here. Nothing else. The earnings list "
@@ -1242,9 +1310,39 @@ def write_weekly_update(week_key: str, facts: Dict[str, Any]) -> Optional[Dict[s
             "recommendation, and not a forecast."
         ),
     }
-    _WEEKLY_CACHE.clear()          # only ever one week in flight
-    _WEEKLY_CACHE[week_key] = {"at": time.time(), "update": update}
-    return update
+
+
+def _weekly_kept(week_key: str) -> Optional[Dict[str, Any]]:
+    """This week's update from memory, or from the store after a restart."""
+    hit = _WEEKLY_CACHE.get(week_key)
+    if hit is None:
+        written = weekly_store.load(week_key)
+        if written is None:
+            return None
+        # setdefault, not an assignment: this runs outside the lock, and a
+        # forced write may have kept a newer piece since this one was read.
+        hit = _WEEKLY_CACHE.setdefault(
+            week_key, {"at": time.time(), "update": _weekly_update(week_key, written)})
+    # A copy: the route adds this request's facts to whatever it is handed.
+    return dict(hit["update"])
+
+
+def _weekly_failed(week_key: str, reason: str) -> Dict[str, Any]:
+    _WEEKLY_FAILED.clear()
+    _WEEKLY_FAILED[week_key] = {"at": time.time(), "reason": reason}
+    return _weekly_failure(week_key) or {"available": False, "reason": reason}
+
+
+def _weekly_failure(week_key: str) -> Optional[Dict[str, Any]]:
+    """The last failure while it still stands, saying when the next attempt is."""
+    failed = _WEEKLY_FAILED.get(week_key)
+    left = failed["at"] + WEEKLY_RETRY_SECONDS - time.time() if failed else 0.0
+    if left <= 0:
+        return None
+    minutes = int(math.ceil(left / 60.0))
+    return {"available": False,
+            "reason": "{} The next attempt is in about {} minute{}.".format(
+                failed["reason"], minutes, "" if minutes == 1 else "s")}
 
 
 CATALYST_PROMPT = """You maintain a research library of market catalysts: events that keep \

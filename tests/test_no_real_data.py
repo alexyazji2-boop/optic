@@ -36,6 +36,7 @@ import os
 from app import alerts as alert_inbox
 from app import db as accounts_db
 from app import paper
+from app import weekly_store
 
 REPO_DATA = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
 
@@ -48,7 +49,7 @@ def test_no_database_points_at_the_real_data_directory():
     """The rule the conftest docstring has always stated, asserted rather than
     remembered. Before this it was true of accounts and of nothing else."""
     for name, module in (("accounts", accounts_db), ("tracker", paper),
-                         ("alerts", alert_inbox)):
+                         ("alerts", alert_inbox), ("weekly", weekly_store)):
         assert not _under_real_data(module.DB_PATH), \
             "{} database points into data/: {}".format(name, module.DB_PATH)
 

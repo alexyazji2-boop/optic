@@ -54,6 +54,7 @@ from app import catalysts
 from app import db as accounts_db
 from app import live_mirror
 from app import paper
+from app import weekly_store
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -91,6 +92,11 @@ def _real_data_out_of_the_way(tmp_path_factory):
         # reads it on every search. Like the inbox it makes its own schema.
         patch.setattr(catalysts, "DB_PATH",
                       str(tmp_path_factory.mktemp("catalysts") / "catalysts.db"))
+        # The weekly update is kept on disk, and a test's fake one left in
+        # data/ is what the dev server would serve as this week's. It makes
+        # its own schema too.
+        patch.setattr(weekly_store, "DB_PATH",
+                      str(tmp_path_factory.mktemp("weekly") / "weekly.db"))
         yield
 
 
@@ -113,6 +119,17 @@ def _no_live_calls(monkeypatch):
         raise RuntimeError("the suite does not read the live site: " + url)
 
     monkeypatch.setattr(live_mirror, "_http_get", refuse)
+
+
+@pytest.fixture(autouse=True)
+def _no_weekly_update_carried_over(monkeypatch):
+    """Each test starts with no weekly update in memory and no failure held.
+
+    A failed write stands for ten minutes, so without this the first test to
+    fail one (`test_key_refused.py` refuses the key on purpose) becomes the
+    answer every later test of the same week is given, whatever it fakes."""
+    monkeypatch.setattr(ai, "_WEEKLY_CACHE", {})
+    monkeypatch.setattr(ai, "_WEEKLY_FAILED", {})
 
 
 @pytest.fixture

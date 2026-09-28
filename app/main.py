@@ -2367,7 +2367,8 @@ async def weekly_update(force: bool = False) -> Dict[str, Any]:
 
     Same economics as the morning note: one model call a week shared by every
     reader, not one per page view. That is the only reason a piece this long is
-    affordable to publish at all.
+    affordable to publish at all. Kept in `app/weekly_store.py` so a deploy does
+    not write it again; `force` is the one way to replace it.
     """
     def build() -> Dict[str, Any]:
         # On a copy that cannot write it, the live site's, which is the same
@@ -2386,10 +2387,8 @@ async def weekly_update(force: bool = False) -> Dict[str, Any]:
                         "reason": ("The live site's weekly update could not be fetched, "
                                    "and this copy's Anthropic key cannot write one. "
                                    "It is fetched again on the next load.")}
-        if force:
-            ai._WEEKLY_CACHE.pop(key, None)
         facts = weekly_mod.gather(YF_PROVIDER)
-        update = ai.write_weekly_update(key, facts)
+        update = ai.write_weekly_update(key, facts, force=force)
         # See the earnings brief above: a failure is now a truthy dict.
         if not update or update.get("available") is not True:
             return {"available": False, "week_key": key,

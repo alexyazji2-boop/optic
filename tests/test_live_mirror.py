@@ -285,8 +285,8 @@ def test_unreachable_with_a_working_key_writes_its_own(monkeypatch):
     _mirroring(monkeypatch, {"/api/weekly": OSError("timed out")}, mode="on", key_ok=True)
     written = []
     monkeypatch.setattr(main.weekly_mod, "gather", lambda provider: written.append(1) or {})
-    monkeypatch.setattr(ai, "write_weekly_update", lambda key, facts: {"available": False,
-                                                                        "reason": "own"})
+    monkeypatch.setattr(ai, "write_weekly_update",
+                        lambda key, facts, force=False: {"available": False, "reason": "own"})
     monkeypatch.setattr(ai, "available", lambda: {"enabled": True})
     body = TestClient(main.app).get("/api/weekly").json()
     assert written == [1] and body["reason"] == "own"
