@@ -1774,12 +1774,26 @@ async def intraday(ticker: str, range: str = Query("1d")) -> Dict[str, Any]:
                     "reason": ("No intraday bars came back. Free intraday history is "
                                "thin outside regular hours and absent for many symbols.")}
 
-        closes, times, volumes = [], [], []
+        # Open, high and low beside the close. This sent closes only, so every
+        # rung under a day could draw nothing but a line and the Candles button
+        # was disabled on all eight of them. The feed has always carried all
+        # four: measured on PLTR, every rung from 1m to 4h came back with no
+        # missing open, high or low and no bar whose high sat under its body.
+        # A missing value is sent as null rather than guessed, and the chart
+        # leaves that one candle out.
+        opens, highs, lows, closes, times, volumes = [], [], [], [], [], []
+
+        def _price(value):
+            return None if value is None or value != value else round(float(value), 4)
+
         for stamp, row in frame.iterrows():
             close = row.get("Close")
             if close is None or close != close:
                 continue
             closes.append(round(float(close), 4))
+            opens.append(_price(row.get("Open")))
+            highs.append(_price(row.get("High")))
+            lows.append(_price(row.get("Low")))
             times.append(stamp.isoformat())
             vol = row.get("Volume")
             volumes.append(None if vol is None or vol != vol else float(vol))
@@ -1787,6 +1801,25 @@ async def intraday(ticker: str, range: str = Query("1d")) -> Dict[str, Any]:
         if not closes:
             return {"available": False, "ticker": symbol, "range": range,
                     "reason": "Intraday bars came back with no usable closes."}
+
+        # Fibonacci from these bars, not the daily ones. The daily grid is
+        # anchored to a swing across months, which sits off the edge of a chart
+        # of one session, so the Fibs button drew nothing on any rung under a
+        # day. Same two functions as the daily grid, over the whole window the
+        # chart shows, so the levels hang off the high and low on screen. The
+        # leg runs from the earlier extreme to the later one: a high after the
+        # low is an up leg, whose retracements sit under price as support.
+        # That is the rule find_swing_points' own docstring states; the daily
+        # grid takes its direction from the composite bias instead, which is
+        # not computed on intraday bars.
+        swing_rows = frame.dropna(subset=["High", "Low", "Close"])
+        fib: Dict[str, Any] = {}
+        if len(swing_rows) >= 2:
+            swing = technicals.find_swing_points(swing_rows, lookback=len(swing_rows))
+            if swing:
+                fib = technicals.fib_levels(
+                    swing, "bullish" if swing.get("high_is_recent") else "bearish",
+                    closes[-1])
 
         # The reference for a percentage change is the first bar of the window,
         # not the previous daily close — the chart shows this window, so the
@@ -1798,8 +1831,12 @@ async def intraday(ticker: str, range: str = Query("1d")) -> Dict[str, Any]:
             "range": range,
             "interval": spec["interval"],
             "times": times,
+            "opens": opens,
+            "highs": highs,
+            "lows": lows,
             "closes": closes,
             "volumes": volumes,
+            "fibonacci": fib,
             "bars": len(closes),
             "first": first,
             "last": last,

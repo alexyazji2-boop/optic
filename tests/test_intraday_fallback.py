@@ -129,6 +129,32 @@ def test_real_bars_are_still_returned_unchanged():
     """)
 
 
+def test_open_high_and_low_come_through_so_candles_can_draw():
+    """They were dropped here even once the payload could carry them, and a
+    series without them is what makes both charts fall back to a line."""
+    run_js("""
+      chartRange = '15';
+      STATE.intraday = {ticker: 'AAPL', range: '15', available: true,
+                        times: ['a', 'b'], opens: [1, 2], highs: [3, 4], lows: [0, 1],
+                        closes: [2, 3], volumes: [9, 9], bars: 2, interval: '15m',
+                        last: 3, fibonacci: {levels: [{price: 2.5, label: '50.0%'}]}};
+      var ps = swingSeries({});
+      assert(ps.open.join() === '1,2' && ps.high.join() === '3,4' && ps.low.join() === '0,1', 'ohlc');
+      assert(ps.fib && ps.fib.levels.length === 1, 'the intraday grid did not come through');
+      assert(ps.spot === 3, 'spot');
+    """)
+
+
+def test_an_older_payload_with_closes_only_does_not_claim_candles():
+    run_js("""
+      chartRange = '15';
+      STATE.intraday = {ticker: 'AAPL', range: '15', available: true,
+                        times: ['a'], closes: [2], volumes: [9], bars: 1, interval: '15m'};
+      var ps = swingSeries({});
+      assert(!('open' in ps) && !('high' in ps) && !('low' in ps), 'invented OHLC');
+    """)
+
+
 # ------------------------------------------------- waiting vs having none
 
 

@@ -42,7 +42,8 @@ def run_js(scenario):
     if not exe:
         pytest.skip("JavaScriptCore is unavailable")
     src = ("var chartRange = '6m';\nvar chartMode = 'line';\n"
-           "var STATE = {chartData: null};\n"
+           "var STATE = {chartData: null, chartSymbol: 'PLTR'};\n"
+           "var wsIntraday = null;\n"
            "function assert(v, m) { if (!v) throw new Error(m); }\n"
            + array_const("CHART_RANGES") + "\n"
            + "\n".join(function(n) for n in
@@ -64,7 +65,8 @@ def test_the_toolbar_and_the_chart_agree_about_candles():
     run_js("""
       chartMode = 'candle';
       var daily = {open: [1], high: [2], low: [0], close: [1]};
-      var intra = {close: [1]};   // /api/intraday sends closes only
+      var intra = {open: [1], high: [2], low: [0], close: [1]};
+      var closesOnly = {close: [1]};   // a payload cached before OHLC was sent
 
       chartRange = '6m';
       STATE.chartData = {technicals: {price_series: daily}};
@@ -72,21 +74,33 @@ def test_the_toolbar_and_the_chart_agree_about_candles():
       assert(wsCandles(daily) === true, 'and the chart must draw them');
 
       chartRange = '15';
-      assert(wsCandlesPossible() === false, 'intraday cannot be candles');
-      assert(wsCandles(intra) === false, 'and the chart already knew');
+      wsIntraday = {symbol: 'PLTR', range: '15', available: true,
+                    opens: [1], highs: [2], lows: [0], closes: [1]};
+      assert(wsCandlesPossible() === true, 'intraday OHLC must allow candles');
+      assert(wsCandles(intra) === true, 'and the chart must draw them');
+
+      wsIntraday = {symbol: 'PLTR', range: '15', available: true, closes: [1]};
+      assert(wsCandlesPossible() === false, 'closes alone cannot be candles');
+      assert(wsCandles(closesOnly) === false, 'and the chart already knew');
     """)
 
 
 @pytest.mark.parametrize("rung", ["1", "5", "15", "30", "60", "240", "1d", "5d"])
-def test_no_intraday_rung_offers_candles(rung):
+def test_every_intraday_rung_offers_candles_once_its_bars_have_ohlc(rung):
     """Every key, because the ladder added six to a pair of branches written
-    when there were two."""
+    when there were two. They all refused candles on the range alone while
+    /api/intraday sent closes only, which is how this was reported: candles
+    did not work on any size under a day."""
     run_js("""
       chartMode = 'candle';
       chartRange = '%s';
       STATE.chartData = {technicals: {price_series: {open: [1], high: [2], low: [0]}}};
-      assert(wsCandlesPossible() === false, 'candles offered on %s');
-    """ % (rung, rung))
+      wsIntraday = {symbol: 'PLTR', range: '%s', available: true,
+                    opens: [1], highs: [2], lows: [0], closes: [1]};
+      assert(wsCandlesPossible() === true, 'candles refused on %s');
+      wsIntraday = {symbol: 'PLTR', range: '%s', available: true, closes: [1]};
+      assert(wsCandlesPossible() === false, 'candles offered on %s with closes only');
+    """ % (rung, rung, rung, rung, rung))
 
 
 def test_a_daily_payload_without_ohlc_does_not_offer_candles_either():
@@ -111,6 +125,16 @@ def test_nothing_loaded_yet_does_not_grey_the_control_out():
       wsCandlesPossible();   // must not throw on a missing payload
       STATE.chartData = 'loading';
       wsCandlesPossible();
+
+      chartRange = '5';
+      wsIntraday = null;
+      assert(wsCandlesPossible() === true, 'greyed out before any bars arrived');
+      wsIntraday = {symbol: 'PLTR', range: '5', loading: true};
+      assert(wsCandlesPossible() === true, 'greyed out while the bars load');
+      wsIntraday = {symbol: 'TSLA', range: '5', available: true, closes: [1]};
+      assert(wsCandlesPossible() === true, 'another symbol answered for this one');
+      wsIntraday = {symbol: 'PLTR', range: '15', available: true, closes: [1]};
+      assert(wsCandlesPossible() === true, 'another rung answered for this one');
     """)
 
 

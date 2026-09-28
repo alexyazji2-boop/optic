@@ -2587,19 +2587,38 @@ function isIntradayRange(key) {
  * case — but deliberately WITHOUT sma20/sma50/sma200/ema21. Those are daily
  * averages; overlaying a 200-day line on a chart of the last six hours would
  * draw a flat line across the top and imply it means something here. The same
- * reasoning is why the momentum panels stay on daily bars and say so. */
+ * reasoning is why the momentum panels stay on daily bars and say so.
+ *
+ * Open, high and low come through when the payload has them, which it does now
+ * on every rung, so candles draw under a day as they do above one. A payload
+ * cached from before they were sent has closes only; then the series simply
+ * lacks them, and both charts' own test for open, high and low draws a line.
+ *
+ * `fib` is the grid /api/intraday computes from these bars' own swing. The
+ * daily grid hangs off a months-long swing and would sit off the edge of a
+ * session's chart. */
 function intradaySeries(intra) {
   if (!intra || !intra.available) return null;
+  const ohlc = Array.isArray(intra.opens) && Array.isArray(intra.highs)
+    && Array.isArray(intra.lows);
   return {
     dates: intra.times || [],
+    ...(ohlc ? { open: intra.opens, high: intra.highs, low: intra.lows } : {}),
     close: intra.closes || [],
     volume: intra.volumes || [],
+    fib: intra.fibonacci || null,
+    spot: intra.last,
     shown_bars: intra.bars || 0,
     total_bars: intra.bars || 0,
     intraday: true,
     interval: intra.interval,
     weekly: false,
   };
+}
+
+/* The Fibonacci lines for an intraday series, from its own grid. */
+function intradayFibLines(ps) {
+  return fibLines(((ps && ps.fib) || {}).levels, ps && ps.spot);
 }
 
 /** Tail-slice every array in a price_series to the selected range, keeping the
@@ -8460,8 +8479,10 @@ function swingPriceBlock(d, ps, ctx) {
         // The reader's own candle colours, not s3/s8: those are the defaults
         // chartColor() returns anyway, and hardcoding them made the key lie
         // the moment anyone used the Charting tab's colour picker.
-        ? [{ name: ps.weekly ? 'Up week' : 'Up day', color: chartColor('up') },
-          { name: ps.weekly ? 'Down week' : 'Down day', color: chartColor('down') }]
+        // `bar` under a day: these are five- and fifteen-minute candles now,
+        // and "Up day" would name a period none of them is.
+        ? [{ name: ps.intraday ? 'Up bar' : ps.weekly ? 'Up week' : 'Up day', color: chartColor('up') },
+          { name: ps.intraday ? 'Down bar' : ps.weekly ? 'Down week' : 'Down day', color: chartColor('down') }]
         : [{ name: 'Close', color: chartColor('line') }]),
       /* Derived from the same per-average switches as the series, so the
        * legend cannot name a line that is not on the chart. It previously
@@ -8470,7 +8491,7 @@ function swingPriceBlock(d, ps, ctx) {
         ['sma20', maColors.fast], ['sma50', maColors.mid], ['sma200', maColors.slow],
       ].filter(([id]) => seriesDrawn(id))
         .map(([id, color]) => ({ name: maLabel(id, ps), color }))),
-      showFib && !ps.intraday ? { name: 'Fibonacci level', color: C.refFib, dash: true } : null,
+      showFib ? { name: 'Fibonacci level', color: C.refFib, dash: true } : null,
       showSR && !ps.intraday ? { name: 'Support / resistance', color: C.refSR, dash: true } : null,
       showVbp ? { name: 'Volume by price', color: C.ink2, boxed: true } : null,
       showInsiders && !ps.intraday ? { name: 'Insider buy', color: C.s3, boxed: true } : null,
@@ -8495,7 +8516,8 @@ function swingPriceBlock(d, ps, ctx) {
     // Fibonacci and support/resistance are drawn as bands now; only the
     // resistance ceilings stay as lines, because a 52-week high is a single print
     // rather than a zone.
-    const overlayRefs = ps.intraday ? [] : [
+    // Fibonacci is the exception on intraday: its grid comes from these bars.
+    const overlayRefs = ps.intraday ? (showFib ? intradayFibLines(ps) : []) : [
       ...ceilingRefs,
       // Fibs are lines again, not bands — see fibLines for why.
       ...(showFib ? fibLines((t.fibonacci || {}).levels, t.spot) : []),
@@ -8981,14 +9003,14 @@ function renderSwing(d) {
             <i class="cal-caret" aria-hidden="true"></i>
           </summary>
           <div class="lvl-pop" role="group" aria-label="Technical level visibility">
-            ${ps.intraday ? `<p class="lvl-note">These are all computed from daily
-              closes, so none of them apply to an intraday chart. Pick 1M or wider
-              to use them.</p>` : ''}
+            ${ps.intraday ? `<p class="lvl-note">Fibonacci levels here come from the
+              high and low of these bars. The rest are computed from daily closes, so
+              they do not apply to an intraday chart. Pick 1M or wider to use them.</p>` : ''}
             <label class="lvl-opt"><input type="checkbox" data-level-opt="ma"
               ${showMA ? 'checked' : ''} ${ps.intraday ? 'disabled' : ''}>
               <span class="lvl-key ma"></span>Moving averages</label>
             <label class="lvl-opt"><input type="checkbox" data-level-opt="fib"
-              ${showFib ? 'checked' : ''} ${ps.intraday ? 'disabled' : ''}>
+              ${showFib ? 'checked' : ''}>
               <span class="lvl-key fib"></span>Fibonacci levels</label>
             <label class="lvl-opt"><input type="checkbox" data-level-opt="sr"
               ${showSR ? 'checked' : ''} ${ps.intraday ? 'disabled' : ''}>
@@ -14753,8 +14775,8 @@ function wsToolbar() {
         aria-pressed="${!wsCandlesPossible() || chartMode === 'line'}">Line</button>
       <button type="button" data-ws-mode="candle"${wsCandlesPossible() ? ''
     // One line: a template literal's indentation ends up inside the tooltip.
-    : ' disabled title="Candles need an open, high and low for every bar.'
-      + ' The intraday feed sends closes only, so this range draws as a line."'}
+    : ' disabled title="Candles need an open, high and low for every bar,'
+      + ' and these bars arrived without them, so this range draws as a line."'}
         aria-pressed="${wsCandlesPossible() && chartMode === 'candle'}">Candles</button>
     </div>
     ${/* Panes, beside the other menus. Its own menu rather than an entry in
@@ -15691,7 +15713,8 @@ function wsWindowNow(d) {
 }
 
 /* Candles need OHLC. The mode is a preference; whether it can be honoured is a
- * property of the data, and an intraday series arrives without open/high/low. */
+ * property of the data. Intraday series carry open, high and low now; one
+ * cached from before that has closes only, and draws as a line. */
 function wsCandles(ps) {
   return chartMode === 'candle' && !!(ps.open && ps.high && ps.low);
 }
@@ -15708,8 +15731,17 @@ function wsCandles(ps) {
  * only the payload -- but tests/test_chart_mode_honesty.py holds them to the
  * same answer, which is the part that matters. */
 function wsCandlesPossible() {
-  // /api/intraday sends closes only; see intradaySeries, which says so.
-  if (isIntradayRange(chartRange)) return false;
+  /* Intraday: asked of the payload in hand, as daily is below. It refused on
+   * the range alone while /api/intraday sent closes only, which disabled the
+   * button on every rung under a day. Until this symbol's bars for this rung
+   * land there is nothing to contradict, so the button stays live rather than
+   * greying out and back a second later. */
+  if (isIntradayRange(chartRange)) {
+    const intra = wsIntraday;
+    if (!intra || intra.loading || intra.symbol !== STATE.chartSymbol
+        || intra.range !== chartRange) return true;
+    return !!(intra.opens && intra.highs && intra.lows);
+  }
   const raw = ((STATE.chartData || {}).technicals || {}).price_series || {};
   return !!(raw.open && raw.high && raw.low);
 }
@@ -17836,7 +17868,9 @@ function wsMountChart() {
       // Levels the workspace draws. Fibs as labelled lines, support and
       // resistance as bands, supply and demand as bands — same functions the
       // Swing chart uses, so the two cannot render the same level differently.
-      refLines: intraday ? [] : [
+      // On intraday, the Fibonacci grid of these bars rather than nothing: the
+      // Fibs button took the click on every rung under a day and drew no line.
+      refLines: intraday ? (showFib ? intradayFibLines(ps) : []) : [
         ...(showFib ? fibLines(((d.technicals || {}).fibonacci || {}).levels,
           (d.technicals || {}).spot) : []),
         // The Investing tab's long-term structure, drawn on the same plot so a

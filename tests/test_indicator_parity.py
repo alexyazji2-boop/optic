@@ -231,8 +231,9 @@ def test_the_charting_legend_does_not_print_the_length_twice():
 def test_the_swing_candle_keys_use_the_reader_s_colours():
     """The legend hardcoded s3/s8 and stopped being true the moment anyone used
     the Charting tab's colour picker."""
-    assert "name: ps.weekly ? 'Up week' : 'Up day', color: chartColor('up')" in APP_JS
-    assert "name: ps.weekly ? 'Down week' : 'Down day', color: chartColor('down')" in APP_JS
+    # "Up bar" on intraday, where the candles are minutes rather than days.
+    assert "name: ps.intraday ? 'Up bar' : ps.weekly ? 'Up week' : 'Up day', color: chartColor('up')" in APP_JS
+    assert "name: ps.intraday ? 'Down bar' : ps.weekly ? 'Down week' : 'Down day', color: chartColor('down')" in APP_JS
 
 
 # ------------------------------------------------------------------- hygiene
