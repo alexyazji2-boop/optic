@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 from concurrent.futures import ThreadPoolExecutor
 import logging
 import os
@@ -243,9 +244,23 @@ else:
     PROVIDER = YF_PROVIDER
 
 
+# Set by the scheduled loops, so everything they run takes the jobs' lane at
+# the rate limiter and a reader's fetches go first (see yf.background). A
+# context variable because each loop is its own task: set inside one, it is
+# seen by that task's _run calls and by nobody else's.
+_BACKGROUND_JOB = contextvars.ContextVar("optic_background_job", default=False)
+
+
 def _run(fn, *args, **kwargs):
     """Push blocking provider/analytics work off the event loop."""
-    return asyncio.get_running_loop().run_in_executor(None, lambda: fn(*args, **kwargs))
+    if _BACKGROUND_JOB.get():
+        def call():
+            with yf_provider_mod.background():
+                return fn(*args, **kwargs)
+    else:
+        def call():
+            return fn(*args, **kwargs)
+    return asyncio.get_running_loop().run_in_executor(None, call)
 
 
 # ------------------------------------------------------------------ assembly
@@ -287,6 +302,9 @@ class _Timings:
       build    the build, start to finish
       compute  the build's own work, which is `build` less the time it sat
                waiting on a leg
+      cpu      CPU the whole process used over the build. Near `build`, the
+               server was busy computing rather than waiting on Yahoo; other
+               requests running at the same moment count as well.
       <leg>    each fetch, with when it started, how long the rate limiter
                held it, how long its requests took, and how many it made
     """
@@ -295,9 +313,19 @@ class _Timings:
         self.t0 = time.perf_counter()
         self.started: Optional[float] = None
         self.ended: Optional[float] = None
+        self._cpu: List[float] = []
         self.blocked = 0.0
         self.legs: List[tuple] = []
         self._lock = threading.Lock()
+
+    def begin(self) -> None:
+        self.started = time.perf_counter()
+        self._cpu = [time.process_time()]
+
+    def finish(self) -> None:
+        self.ended = time.perf_counter()
+        if self._cpu:
+            self._cpu.append(time.process_time())
 
     def wrap(self, name: str, fn):
         def timed(*args, **kwargs):
@@ -321,6 +349,8 @@ class _Timings:
         parts = ["queue;dur=" + ms(start - self.t0),
                  "build;dur=" + ms(end - start),
                  "compute;dur=" + ms(max(end - start - self.blocked, 0.0))]
+        if len(self._cpu) == 2:
+            parts.append("cpu;dur=" + ms(self._cpu[1] - self._cpu[0]))
         with self._lock:
             legs = sorted(self.legs, key=lambda row: row[1])
         # " / " inside the description rather than commas: a comma in a quoted
@@ -393,7 +423,7 @@ def _swing_snapshot(
 ) -> Dict[str, Any]:
     ticker = ticker.upper().strip()
     if timings is not None:
-        timings.started = time.perf_counter()
+        timings.begin()
 
     legs = _Legs(parallel, timings)
     legs.start("quote", PROVIDER.quote, ticker)
@@ -409,6 +439,10 @@ def _swing_snapshot(
     legs.start("filings", filings_mod.recent, ticker)
     legs.start("sector", _sector_confirm, ticker)
     legs.start("earnings_date", YF_PROVIDER.earnings_date, ticker)
+    # Read at the very end, by "what matters next", and started here: on a
+    # fresh server it is the FRED calendar fetched cold, and inside the build's
+    # own work it made `compute` 1.45s of a 1.9s first load (SNPS, 2026-09-28).
+    legs.start("calendar", _macro_calendar_rows)
     # The company and earnings blocks' own fetches, started now rather than one
     # after another inside those blocks. They were the last two legs to finish:
     # fundamentals is five fetches in a row and could not start before the
@@ -616,7 +650,7 @@ def _swing_snapshot(
     except Exception as exc:
         logging.getLogger("uvicorn.error").warning(
             "next earnings date unavailable for %s: %s", ticker, exc)
-    payload["whats_next"] = pulse_mod.whats_next(payload, _macro_calendar_rows())
+    payload["whats_next"] = pulse_mod.whats_next(payload, legs.get("calendar"))
     # The layer above the eight options panels. Same reasoning as `why`: the
     # workings were all present and the summary was not.
     payload["options_brief"] = pulse_mod.options_brief(payload)
@@ -748,7 +782,7 @@ async def ticker_analysis(
     payload = await _run(_swing_snapshot, ticker, wanted, max_expiries, macro,
                          include_earnings=True, budget=budget, parallel=True,
                          timings=timings)
-    timings.ended = time.perf_counter()
+    timings.finish()
     response.headers["Server-Timing"] = timings.header()
     return payload
 
@@ -765,7 +799,7 @@ async def quick_quote(ticker: str, response: Response) -> Dict[str, Any]:
     timings = _Timings()
 
     def build() -> Dict[str, Any]:
-        timings.started = time.perf_counter()
+        timings.begin()
         sym = ticker.upper().strip()
         try:
             quote = timings.wrap("quote", PROVIDER.quote)(sym)
@@ -776,7 +810,7 @@ async def quick_quote(ticker: str, response: Response) -> Dict[str, Any]:
             return {"ticker": sym, "available": False}
         return {"ticker": sym, "available": True, "quote": quote}
     body = await _run(build)
-    timings.ended = time.perf_counter()
+    timings.finish()
     response.headers["Server-Timing"] = timings.header()
     return body
 
@@ -1551,6 +1585,8 @@ async def tracker_mark(request: Request) -> Dict[str, Any]:
 
 
 async def _do_scan(tickers: Optional[List[str]], trigger: str) -> Dict[str, Any]:
+    # A manual scan too: it is its own task, and three hundred requests.
+    _BACKGROUND_JOB.set(True)
     async with _SCAN_LOCK:
         result = await _run(
             paper.run_scan, _tracker_snapshot, PROVIDER, tickers, trigger, RISK_FREE
@@ -1659,6 +1695,7 @@ async def _tracker_loop() -> None:
     """Keep the ledger current on its own so the record accumulates whether or
     not anyone is looking at the page."""
     log = logging.getLogger("uvicorn.error")
+    _BACKGROUND_JOB.set(True)
     await asyncio.sleep(30)  # let startup finish before touching the network
 
     # Seed from the ledger, not from zero. A full scan is a few minutes of
@@ -1830,6 +1867,7 @@ async def _catalyst_loop() -> None:
     it, nor should TRACKER_AUTO=false switch the library off with it.
     """
     log = logging.getLogger("uvicorn.error")
+    _BACKGROUND_JOB.set(True)
     await asyncio.sleep(CATALYST_BOOT_DELAY)
     while True:
         try:
@@ -2533,7 +2571,11 @@ async def priority_board() -> Dict[str, Any]:
         hit = _PRIORITY_CACHE.get("board")
         if hit and (time.time() - hit["at"]) < PRIORITY_TTL:
             return hit["data"]
-        out = priority_mod.build(YF_PROVIDER, scanners_mod, _cached_ranking())
+        # In the jobs' lane whoever asked, a reader or the warm-up after a
+        # deploy: its earnings leg is about a hundred and fifty requests, and a
+        # reader loading a symbol meanwhile should not queue behind them.
+        with yf_provider_mod.background():
+            out = priority_mod.build(YF_PROVIDER, scanners_mod, _cached_ranking())
         _PRIORITY_CACHE["board"] = {"at": time.time(), "data": out}
         return out
     return await _run(build)
@@ -2557,7 +2599,8 @@ async def earnings_week_calendar(
         hit = _EW_CACHE.get(offset)
         if hit and (time.time() - hit["at"]) < EW_TTL:
             return hit["data"]
-        out = earnings_week_mod.build(YF_PROVIDER, offset=offset)
+        with yf_provider_mod.background():                # the same scan
+            out = earnings_week_mod.build(YF_PROVIDER, offset=offset)
         out["generated_at"] = datetime.now(timezone.utc).isoformat()
         _EW_CACHE[offset] = {"at": time.time(), "data": out}
         return out

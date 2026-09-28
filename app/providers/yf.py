@@ -14,6 +14,7 @@ import threading
 import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -156,6 +157,60 @@ def meter_read() -> Tuple[float, float, int]:
             int(getattr(_METER, "requests", 0)))
 
 
+# Two lanes through one limiter: a reader's fetches, and the scheduled jobs'.
+#
+# The jobs spend the same allowance a reader's first load needs, and they are
+# not small: the watch runner can be twenty minutes of requests every half
+# hour, a tracker scan is three hundred, and the homepage's earnings scan about
+# a hundred and fifty, run by the warm-up straight after every deploy. Measured
+# on the live site two minutes after one (NTNX, 2026-09-28), a cold first load
+# took 12.8s and its legs spent up to 7.4s of it held at the gate; three
+# minutes later, with the warm-up done, FTNT's spent none.
+#
+# So a job waits until the bucket is full before each request, and takes a
+# token only then. It still runs at the full sustained rate when nobody is
+# reading, and a reader arriving always finds the burst there to spend.
+# Waited for outside the key lock (see _cached), so a reader who needs the same
+# key is not queued behind a job that has not started its fetch.
+_LANE = threading.local()
+
+# How long a job yields before it goes ahead anyway. A job starved for good
+# would be a scan that never finishes, and nothing would say so.
+MAX_YIELD_WAIT = float(os.environ.get("YF_MAX_YIELD_WAIT", "30.0"))
+
+
+@contextmanager
+def background():
+    """Run the enclosed fetches in the jobs' lane, on this thread."""
+    prior = getattr(_LANE, "background", False)
+    _LANE.background = True
+    try:
+        yield
+    finally:
+        _LANE.background = prior
+
+
+def in_background() -> bool:
+    return bool(getattr(_LANE, "background", False))
+
+
+def _yield_to_readers() -> None:
+    """Hold a job's fetch until the bucket is full, or MAX_YIELD_WAIT has passed."""
+    began = time.time()
+    deadline = began + MAX_YIELD_WAIT
+    while True:
+        with _PACE_LOCK:
+            now = time.time()
+            rate = max(float(_BUCKET["rate"]), YF_RATE_FLOOR)
+            tokens = min(YF_BURST,
+                         float(_BUCKET["tokens"]) + (now - float(_BUCKET["last"])) * rate)
+        short = YF_BURST - tokens
+        if short <= 1e-6 or now >= deadline:
+            break
+        time.sleep(min(max(short / rate, 0.01), 0.5, max(deadline - now, 0.01)))
+    _METER.gated = float(getattr(_METER, "gated", 0.0)) + time.time() - began
+
+
 def _wait_turn() -> None:
     """Hold until it is safe to make a request.
 
@@ -194,13 +249,21 @@ def _wait_turn() -> None:
     _METER.requests = int(getattr(_METER, "requests", 0)) + 1
 
 
-def _cached(key: str, ttl: float, producer):
-    """Tiny TTL memo. Chains move fast, price history doesn't — callers pick."""
+def _cached(key: str, ttl: float, producer, gate: bool = True):
+    """Tiny TTL memo. Chains move fast, price history doesn't — callers pick.
+
+    `gate=False` is for a result derived from other cached fetches and making
+    no request of its own (the quote, the short interest and the profile read
+    one shared `.info` scrape). Gated, it would spend a token on a call that
+    never reaches the network, and the limiter would count three requests for
+    the one it lets out."""
     now = time.time()
     hit = _CACHE.get(key)
     if hit is not None and now - hit[0] < ttl:
         return hit[1]
 
+    if gate and in_background():
+        _yield_to_readers()
     with _key_lock(key):
         # Re-check: another thread may have populated the key while we waited,
         # which also collapses duplicate fetches on a cold start.
@@ -211,7 +274,8 @@ def _cached(key: str, ttl: float, producer):
         # only reason one gate is enough. A method that reached yfinance
         # directly would bypass the limiter silently. The gate is global; the
         # fetch after it is not (see _NET_LOCK).
-        _wait_turn()
+        if gate:
+            _wait_turn()
         # Outermost fetch only: a producer can call another cached fetch (the
         # quote falls back to the history), and counting both would count the
         # inner one's seconds twice.
@@ -333,12 +397,24 @@ class YFinanceProvider(MarketDataProvider):
 
     # ------------------------------------------------------------ quotes
 
+    def _info(self, ticker: str) -> Dict[str, Any]:
+        """Yahoo's `.info` scrape for a symbol, once, for everything that reads it.
+
+        The quote, the short interest and the profile each built their own
+        yf.Ticker and scraped it, so a first load fetched the same document
+        three times at once: 2.7s, 2.9s and part of 3.5s on the live site
+        (FTNT, 2026-09-28), where one scrape alone measured 0.5s to 0.8s. Held
+        for the quote's thirty seconds, which is the shortest any of them
+        wants; the other two keep their own results for as long as they did.
+        """
+        return _cached("info:" + ticker, self.TTL_QUOTE,
+                       lambda: dict(yf.Ticker(ticker).info or {}))
+
     def quote(self, ticker: str) -> Dict[str, Any]:
         def build() -> Dict[str, Any]:
-            t = yf.Ticker(ticker)
             info: Dict[str, Any] = {}
             try:
-                info = dict(t.info or {})
+                info = self._info(ticker)
             except Exception as exc:
                 if _is_rate_limit(exc):
                     note_throttle(exc)
@@ -407,7 +483,7 @@ class YFinanceProvider(MarketDataProvider):
                 "as_of": datetime.now(timezone.utc).isoformat(),
             }
 
-        return _cached("quote:" + ticker, self.TTL_QUOTE, build)
+        return _cached("quote:" + ticker, self.TTL_QUOTE, build, gate=False)
 
     # How many symbols to read at once. The `.info` scrape behind `quote()` is a
     # request per symbol and the macro panel asks for twenty-two, which measured
@@ -726,12 +802,33 @@ class YFinanceProvider(MarketDataProvider):
             today = pd.Timestamp.today().normalize()
             t = yf.Ticker(ticker)
 
-            for exp in wanted:
+            def one(exp: str):
                 try:
-                    oc = t.option_chain(exp)
+                    return t.option_chain(exp)
                 except Exception as exc:
                     if _is_rate_limit(exc):
                         note_throttle(exc)
+                    return None
+
+            # The expiries side by side. One after another they were the
+            # slowest leg of a first load on the live site, 4.5s for four
+            # (FTNT, 2026-09-28), where Yahoo answered ten requests at once in
+            # 1.0s to 1.3s each. The expiry list is read once first: every
+            # option_chain call needs it to turn a date into Yahoo's key, and
+            # threads that each found it missing would each fetch it.
+            try:
+                t.options
+            except Exception as exc:                            # noqa: BLE001
+                if _is_rate_limit(exc):
+                    note_throttle(exc)
+            if len(wanted) > 1:
+                with ThreadPoolExecutor(max_workers=len(wanted)) as pool:
+                    chains = list(pool.map(one, wanted))
+            else:
+                chains = [one(exp) for exp in wanted]
+
+            for exp, oc in zip(wanted, chains):
+                if oc is None:
                     continue
                 for side_df, is_call in ((oc.calls, True), (oc.puts, False)):
                     if side_df is None or side_df.empty:
@@ -785,7 +882,7 @@ class YFinanceProvider(MarketDataProvider):
     def short_interest(self, ticker: str) -> Dict[str, Any]:
         def build() -> Dict[str, Any]:
             try:
-                info = dict(yf.Ticker(ticker).info or {})
+                info = self._info(ticker)
             except Exception:
                 return {}
             settle = info.get("dateShortInterest")
@@ -806,7 +903,7 @@ class YFinanceProvider(MarketDataProvider):
                 "settlement_date": settle_date,
             }
 
-        return _cached("short:" + ticker, self.TTL_FILED, build)
+        return _cached("short:" + ticker, self.TTL_FILED, build, gate=False)
 
     def earnings_history(self, ticker: str, limit: int = 10) -> List[Dict[str, Any]]:
         def build() -> List[Dict[str, Any]]:
@@ -845,7 +942,7 @@ class YFinanceProvider(MarketDataProvider):
 
         def build() -> Dict[str, Any]:
             try:
-                info = dict(yf.Ticker(ticker).info or {})
+                info = self._info(ticker)
             except Exception as exc:
                 if _is_rate_limit(exc):
                     note_throttle(exc)
@@ -878,7 +975,7 @@ class YFinanceProvider(MarketDataProvider):
                 "website": info.get("website"),
             }
 
-        return _cached("profile:" + ticker, 86400, build)
+        return _cached("profile:" + ticker, 86400, build, gate=False)
 
     def fund_meta(self, ticker: str) -> Dict[str, Any]:
         """ETF/fund cost and income figures.
@@ -1003,19 +1100,28 @@ class YFinanceProvider(MarketDataProvider):
     def financials(self, ticker: str) -> Dict[str, Any]:
         """Annual and quarterly statement lines, keyed by the labels yfinance uses."""
 
+        statements = (
+            ("income_annual", "income_stmt"),
+            ("income_quarterly", "quarterly_income_stmt"),
+            ("balance_annual", "balance_sheet"),
+            ("cashflow_annual", "cashflow"),
+        )
+
+        def read(attr: str):
+            # A Ticker each: the four share nothing but the session, and one
+            # object's statement caches are not written with threads in mind.
+            try:
+                return getattr(yf.Ticker(ticker), attr)
+            except Exception:
+                return None
+
         def build() -> Dict[str, Any]:
-            t = yf.Ticker(ticker)
+            # Side by side: one request each, and in a row they were 3.5s of a
+            # first load on the live site (FTNT, 2026-09-28).
+            with ThreadPoolExecutor(max_workers=len(statements)) as pool:
+                frames = list(pool.map(read, [attr for _, attr in statements]))
             out: Dict[str, Any] = {}
-            for name, attr in (
-                ("income_annual", "income_stmt"),
-                ("income_quarterly", "quarterly_income_stmt"),
-                ("balance_annual", "balance_sheet"),
-                ("cashflow_annual", "cashflow"),
-            ):
-                try:
-                    frame = getattr(t, attr)
-                except Exception:
-                    frame = None
+            for (name, _), frame in zip(statements, frames):
                 if frame is None or getattr(frame, "empty", True):
                     out[name] = None
                     continue

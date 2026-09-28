@@ -642,9 +642,33 @@ def fetch_text(url: str, ttl_seconds: float, key: Optional[str] = None,
     return text
 
 
+# The disk cache as this process last read or wrote it: read from the file
+# once, not on every lookup. It is one JSON document of up to sixty entries,
+# 8.6MB on the development copy (one company's SEC facts is 5.2MB of it), and
+# every memory miss parsed all of it. A cold symbol's filings lookup parsed it
+# twice and rewrote it once, about 0.8s of that symbol's first load spent
+# holding the interpreter lock that every other leg of the load was waiting
+# for, and the macro calendar parsed it again on every load (2026-09-28).
+# Keyed by path, so a CACHE_PATH changed underneath is read afresh.
+_DISK: Dict[str, Dict[str, Any]] = {}
+_DISK_LOCK = threading.Lock()
+
+
 def _load_disk() -> Dict[str, Any]:
+    """The disk cache. Read it; only _store writes to it."""
+    path = CACHE_PATH
+    disk = _DISK.get(path)
+    if disk is None:
+        with _DISK_LOCK:
+            disk = _DISK.get(path)
+            if disk is None:
+                disk = _DISK[path] = _read_disk(path)
+    return disk
+
+
+def _read_disk(path: str) -> Dict[str, Any]:
     try:
-        with open(CACHE_PATH) as handle:
+        with open(path) as handle:
             data = json.load(handle)
         return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
@@ -655,8 +679,12 @@ def _save_disk(payload: Dict[str, Any]) -> None:
     try:
         os.makedirs(os.path.dirname(CACHE_PATH), exist_ok=True)
         tmp = CACHE_PATH + ".tmp"
+        # dumps and a write, not dump: dump to a file runs the pure-Python
+        # encoder, 0.32s on that 8.6MB file against 0.056s for the C one, and
+        # the text they produce is identical.
+        text = json.dumps(payload)
         with open(tmp, "w") as handle:
-            json.dump(payload, handle)
+            handle.write(text)
         os.replace(tmp, CACHE_PATH)
     except OSError:
         # A read-only or missing data dir must not take the brief down; the
@@ -684,12 +712,15 @@ def _store(key: str, entry: Dict[str, Any]) -> None:
     with _LOCK:
         _MEM[key] = entry
     disk = _load_disk()
-    disk[key] = entry
-    # Keep the file from growing without bound if source ids ever change.
-    if len(disk) > 60:
-        for stale in sorted(disk, key=lambda k: disk[k].get("at", 0))[:len(disk) - 60]:
-            disk.pop(stale, None)
-    _save_disk(disk)
+    # Held across the write: two stores at once would otherwise change the
+    # dict while the other was serialising it.
+    with _DISK_LOCK:
+        disk[key] = entry
+        # Keep the file from growing without bound if source ids ever change.
+        if len(disk) > 60:
+            for stale in sorted(disk, key=lambda k: disk[k].get("at", 0))[:len(disk) - 60]:
+                disk.pop(stale, None)
+        _save_disk(disk)
 
 
 # ---------------------------------------------------------------- feed parsing

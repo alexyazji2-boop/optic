@@ -92,6 +92,7 @@ def slow_provider(monkeypatch):
     monkeypatch.setattr(main.filings_mod, "recent", slow("filings", []))
     monkeypatch.setattr(main, "_sector_confirm", slow("sector", {}))
     monkeypatch.setattr(YF, "earnings_date", slow("earnings_date", None))
+    monkeypatch.setattr(main, "_macro_calendar_rows", slow("calendar", []))
     for name in PREFETCHED:
         monkeypatch.setattr(YF, name, slow(name, [] if name == "earnings_history" else {}))
     # The blocks themselves, out of the way: left real, a block still reading

@@ -50,19 +50,22 @@ def _desc(desc):
 def test_the_ticker_route_sends_the_header(monkeypatch):
     def build(ticker, expiries, max_expiries, include_macro, *, include_earnings=True,
               include_company=True, budget=None, parallel=False, timings=None):
-        timings.started = time.perf_counter()
+        timings.begin()
         legs = main._Legs(parallel, timings)
         legs.start("quote", lambda: Y._cached("t:q", 60, lambda: time.sleep(0.05) or 1))
         legs.start("chain", lambda: time.sleep(0.1))
         legs.get("quote"), legs.get("chain")
-        time.sleep(0.05)                                  # the build's own work
+        spin = time.perf_counter() + 0.05                 # the build's own work
+        while time.perf_counter() < spin:
+            pass
         return {"ticker": ticker}
 
     monkeypatch.setattr(main, "_swing_snapshot", build)
     res = TestClient(main.app).get("/api/ticker/ABC")
     assert res.status_code == 200
     rows = _rows(res.headers["server-timing"])
-    assert {"queue", "build", "compute", "quote", "chain"} <= set(rows), sorted(rows)
+    assert {"queue", "build", "compute", "cpu", "quote", "chain"} <= set(rows), sorted(rows)
+    assert rows["cpu"][0] >= 40, "the 0.05s of busy work was not counted: %r" % (rows["cpu"],)
     assert rows["build"][0] >= 150, "the build took at least its two legs and its work"
     assert 40 <= rows["compute"][0] < rows["build"][0] - 80, \
         "compute is the build less its waits: %r" % (rows["compute"],)

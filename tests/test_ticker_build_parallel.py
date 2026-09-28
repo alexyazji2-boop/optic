@@ -94,6 +94,7 @@ def fetches(monkeypatch):
     for name in ("short_interest", "insiders", "institutions", "financials",
                  "earnings_history", "estimates"):
         monkeypatch.setattr(Y, name, rec(name, {}))
+    monkeypatch.setattr(main, "_macro_calendar_rows", rec("calendar", []))
     return seen
 
 
@@ -104,7 +105,7 @@ def test_parallel_starts_every_independent_fetch_before_reading_any(fetches):
     want = {"quote", "history", "news", "expirations", "chain", "macro", "earnings",
             "filings", "sector", "earnings_date", "fundamentals",
             "short_interest", "insiders", "institutions", "financials",
-            "earnings_history", "estimates"}
+            "earnings_history", "estimates", "calendar"}
     while time.time() < deadline and not want <= set(fetches):
         time.sleep(0.02)
     assert want <= set(fetches), sorted(want - set(fetches))
