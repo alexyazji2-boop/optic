@@ -196,9 +196,10 @@ def test_weekly_recomputes_rather_than_resampling():
     rather than optional."""
     fn = body_of("wsWithOscillators")
     # Both branches, counted. Asserting the substring once passed against a
-    # mutation that dropped `!weekly` from the RSI branch only: MACD still
+    # mutation that dropped the flag from the RSI branch only: MACD still
     # carried it, so the string was still there and the test saw nothing.
-    assert fn.count("!weekly &&") == 2, fn.count("!weekly &&")
+    # `recompute` now, not `weekly`: intraday bars take the same branch.
+    assert fn.count("!recompute &&") == 2, fn.count("!recompute &&")
     assert "rsiSeries(closes, 14)" in fn
     assert "macdSeries(closes)" in fn
 

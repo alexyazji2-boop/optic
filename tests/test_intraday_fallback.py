@@ -62,6 +62,8 @@ def run_js(scenario):
            + array_const("CHART_INTERVALS") + "\n"
            + "\n".join(function(n) for n in [
                "isIntradayRange", "chartIntervalSpec", "intradayMatches",
+               # intradaySeries computes the bars' own averages with these.
+               "smaSeries", "emaSeries",
                "intradaySeries", "swingSeries", "swingBarCountText"])
            + "\n(function() {\n" + scenario + "\n})();\nprint('TEST_OK');")
     out = subprocess.run([exe, "-e", src], capture_output=True, text=True,
@@ -142,6 +144,25 @@ def test_open_high_and_low_come_through_so_candles_can_draw():
       assert(ps.open.join() === '1,2' && ps.high.join() === '3,4' && ps.low.join() === '0,1', 'ohlc');
       assert(ps.fib && ps.fib.levels.length === 1, 'the intraday grid did not come through');
       assert(ps.spot === 3, 'spot');
+    """)
+
+
+def test_the_averages_are_the_bars_own():
+    """Every average was switched off under a day while the only ones on hand
+    were daily. These are computed from the intraday closes, start once they
+    have that many bars behind them, and never borrow a daily value."""
+    run_js("""
+      chartRange = '5';
+      var closes = [];
+      for (var i = 0; i < 60; i++) closes.push(100 + i);
+      STATE.intraday = {ticker: 'AAPL', range: '5', available: true,
+                        times: closes.map(function (_, i) { return 't' + i; }),
+                        closes: closes, volumes: closes, bars: 60, interval: '5m'};
+      var ps = swingSeries({});
+      assert(ps.sma20[18] === null && ps.sma20[19] === 109.5, 'sma20 ' + ps.sma20[19]);
+      assert(ps.sma50[49] === 124.5, 'sma50 ' + ps.sma50[49]);
+      assert(ps.sma200.every(function (v) { return v === null; }), 'sma200 before 200 bars');
+      assert(ps.ema9.length === 60 && ps.ema21.length === 60 && ps.ema50.length === 60, 'ema lengths');
     """)
 
 

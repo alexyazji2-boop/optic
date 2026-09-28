@@ -2543,8 +2543,7 @@ function lastMacdCross(macd, signal) {
  *
  * Shared by the MACD and RSI panels — both ask the same question of a fast line
  * against its own average, so they should answer it in the same words. */
-function macdCrossSentence(cross, wk, dates, weekly, zoom, what = 'MACD') {
-  const unit = weekly ? 'week' : 'day';
+function macdCrossSentence(cross, wk, dates, unit, zoom, what = 'MACD') {
   const gap = wk.macd[wk.macd.length - 1] - wk.signal[wk.signal.length - 1];
   const prevGap = wk.macd.length > 1
     ? wk.macd[wk.macd.length - 2] - wk.signal[wk.signal.length - 2] : gap;
@@ -2584,10 +2583,14 @@ function isIntradayRange(key) {
 /* Build a price_series-shaped object from intraday bars.
  *
  * Shaped identically to the daily series so the chart code needs no special
- * case — but deliberately WITHOUT sma20/sma50/sma200/ema21. Those are daily
- * averages; overlaying a 200-day line on a chart of the last six hours would
- * draw a flat line across the top and imply it means something here. The same
- * reasoning is why the momentum panels stay on daily bars and say so.
+ * case. The averages are computed here from these bars, the way
+ * aggregateWeekly computes weekly ones: the daily sma20..ema50 are indexed by
+ * session, and a 200-day line over six hours of candles would be a flat line
+ * across the top claiming to mean something. Every average and oscillator was
+ * switched off under a day for that reason, which read as none of the
+ * indicators working. So these are 20-, 50- and 200-bar averages, the legend
+ * says bars, and each starts once it has that many bars behind it rather than
+ * borrowing daily history to start sooner.
  *
  * Open, high and low come through when the payload has them, which it does now
  * on every rung, so candles draw under a day as they do above one. A payload
@@ -2601,11 +2604,18 @@ function intradaySeries(intra) {
   if (!intra || !intra.available) return null;
   const ohlc = Array.isArray(intra.opens) && Array.isArray(intra.highs)
     && Array.isArray(intra.lows);
+  const close = intra.closes || [];
   return {
     dates: intra.times || [],
     ...(ohlc ? { open: intra.opens, high: intra.highs, low: intra.lows } : {}),
-    close: intra.closes || [],
+    close,
     volume: intra.volumes || [],
+    sma20: smaSeries(close, 20),
+    sma50: smaSeries(close, 50),
+    sma200: smaSeries(close, 200),
+    ema9: emaSeries(close, 9),
+    ema21: emaSeries(close, 21),
+    ema50: emaSeries(close, 50),
     fib: intra.fibonacci || null,
     spot: intra.last,
     shown_bars: intra.bars || 0,
@@ -8487,10 +8497,12 @@ function swingPriceBlock(d, ps, ctx) {
       /* Derived from the same per-average switches as the series, so the
        * legend cannot name a line that is not on the chart. It previously
        * dropped the 200 entry on weekly while the series still drew it. */
-      ...(ps.intraday ? [] : [
+      ...([
         ['sma20', maColors.fast], ['sma50', maColors.mid], ['sma200', maColors.slow],
       ].filter(([id]) => seriesDrawn(id))
-        .map(([id, color]) => ({ name: maLabel(id, ps), color }))),
+        .map(([id, color]) => ({
+          name: maLabel(id, ps) + (maShortOf(id, ps) ? ` (${maShortOf(id, ps)})` : ''), color,
+        }))),
       showFib ? { name: 'Fibonacci level', color: C.refFib, dash: true } : null,
       showSR && !ps.intraday ? { name: 'Support / resistance', color: C.refSR, dash: true } : null,
       showVbp ? { name: 'Volume by price', color: C.ink2, boxed: true } : null,
@@ -8501,13 +8513,15 @@ function swingPriceBlock(d, ps, ctx) {
       // mid / lower" would be longer than the rest of the legend combined for no
       // extra information. Six unlabelled lines on the chart is the failure this
       // avoids — the reader could see them and not know which was VWAP.
-      ...(ps.intraday ? [] : [
+      ...([
         ['ema9', emaColors.fast], ['ema21', emaColors.mid], ['ema50', emaColors.slow],
       ].filter(([id]) => seriesDrawn(id))
-        .map(([id, color]) => ({ name: maLabel(id, ps), color }))),
+        .map(([id, color]) => ({
+          name: maLabel(id, ps) + (maShortOf(id, ps) ? ` (${maShortOf(id, ps)})` : ''), color,
+        }))),
       // One key per cloud, not one per state. See emaCloudLegend.
       ...emaCloudLegend(ps),
-      ...(ps.intraday ? [] : indicatorOverlayLegend(overlayPalette)),
+      ...indicatorOverlayLegend(overlayPalette),
     ].filter(Boolean)));
     // Daily-derived overlays do not belong on an intraday chart: the averages
     // are not in the intraday series at all, and the Fib and support levels are
@@ -8564,7 +8578,8 @@ function swingPriceBlock(d, ps, ctx) {
         /* Per-average switches, matching the Charting tab's Indicators menu —
          * the flags are shared, so the two tabs cannot disagree about which
          * averages are on. Labels keep this tab's bar-unit naming. */
-        ...(ps.intraday ? [] : [
+        // On intraday these are the bars' own averages, from intradaySeries.
+        ...([
           ['sma20', maLabel('sma20', ps), ps.sma20, maColors.fast],
           ['sma50', maLabel('sma50', ps), ps.sma50, maColors.mid],
           ['sma200', maLabel('sma200', ps), ps.sma200, maColors.slow],
@@ -8572,19 +8587,17 @@ function swingPriceBlock(d, ps, ctx) {
           name, values: values || [], color, width: styleOf(id).width, marker: false,
         }))),
         // Selected overlays, drawn on the price axis. Dashed so they read as
-        // something you switched on rather than part of the base chart, and
-        // excluded on intraday for the same reason the daily averages are: they
-        // are computed from daily bars and would describe a different timeframe
-        // from the one on screen.
-        ...(ps.intraday ? [] : [
+        // something you switched on rather than part of the base chart. On
+        // intraday they are computed on the intraday bars; swingStudies()
+        // refuses a payload computed on any other bars.
+        ...([
           ['ema9', maLabel('ema9', ps), ps.ema9, emaColors.fast],
           ['ema21', maLabel('ema21', ps), ps.ema21, emaColors.mid],
           ['ema50', maLabel('ema50', ps), ps.ema50, emaColors.slow],
         ].filter(([id]) => seriesDrawn(id)).map(([id, name, values, color]) => ({
           name, values: values || [], color, width: styleOf(id).width, marker: false,
         }))),
-        ...(ps.intraday ? [] : indicatorOverlaySeries((ps.dates || []).length,
-          overlayPalette)),
+        ...indicatorOverlaySeries((ps.dates || []).length, overlayPalette),
       ],
       candles: candleMode
         ? { open: ps.open, high: ps.high, low: ps.low, close: ps.close }
@@ -8987,8 +9000,7 @@ function renderSwing(d) {
     const on = indicatorIds.includes(r.id);
     const overlay = IND_PRICE_PANE.includes(r.id);
     return `<label class="lvl-opt" title="${esc(r.measures)}">
-              <input type="checkbox" data-ind="${esc(r.id)}"${on ? ' checked' : ''}
-                ${ps.intraday && overlay ? 'disabled' : ''}>
+              <input type="checkbox" data-ind="${esc(r.id)}"${on ? ' checked' : ''}>
               <span class="ind-drop-name">${esc(r.name)}</span>
               <span class="ind-drop-where">${overlay ? 'on the chart' : 'own pane'}</span>
             </label>`;
@@ -9003,11 +9015,12 @@ function renderSwing(d) {
             <i class="cal-caret" aria-hidden="true"></i>
           </summary>
           <div class="lvl-pop" role="group" aria-label="Technical level visibility">
-            ${ps.intraday ? `<p class="lvl-note">Fibonacci levels here come from the
-              high and low of these bars. The rest are computed from daily closes, so
-              they do not apply to an intraday chart. Pick 1M or wider to use them.</p>` : ''}
+            ${ps.intraday ? `<p class="lvl-note">On these bars: the averages and clouds
+              are 20-, 50- and 200-bar ones, and Fibonacci levels come from the high and
+              low of these bars. Support, resistance, supply and demand and insider
+              trades are read from daily bars, so they stay on 1M or wider.</p>` : ''}
             <label class="lvl-opt"><input type="checkbox" data-level-opt="ma"
-              ${showMA ? 'checked' : ''} ${ps.intraday ? 'disabled' : ''}>
+              ${showMA ? 'checked' : ''}>
               <span class="lvl-key ma"></span>Moving averages</label>
             <label class="lvl-opt"><input type="checkbox" data-level-opt="fib"
               ${showFib ? 'checked' : ''}>
@@ -9025,13 +9038,13 @@ function renderSwing(d) {
               ${showInsiders ? 'checked' : ''} ${ps.intraday ? 'disabled' : ''}>
               <span class="lvl-key ins"></span>Insider trades</label>
             <label class="lvl-opt"><input type="checkbox" data-level-opt="ema"
-              ${showEMA ? 'checked' : ''} ${ps.intraday ? 'disabled' : ''}>
+              ${showEMA ? 'checked' : ''}>
               <span class="lvl-key ema"></span>EMA 9 / 21 / 50</label>
             <label class="lvl-opt"><input type="checkbox" data-level-opt="cloud921"
-              ${showCloudFast ? 'checked' : ''} ${ps.intraday ? 'disabled' : ''}>
+              ${showCloudFast ? 'checked' : ''}>
               <span class="lvl-key cloud"></span>EMA 9 / 21 cloud</label>
             <label class="lvl-opt"><input type="checkbox" data-level-opt="cloud2150"
-              ${showCloudSlow ? 'checked' : ''} ${ps.intraday ? 'disabled' : ''}>
+              ${showCloudSlow ? 'checked' : ''}>
               <span class="lvl-key cloud"></span>EMA 21 / 50 cloud</label>
             <label class="lvl-opt"><input type="checkbox" data-level-opt="zones"
               ${showZones ? 'checked' : ''} ${ps.intraday ? 'disabled' : ''}>
@@ -9371,9 +9384,10 @@ function renderSwing(d) {
     // history available, and only then cut to the window. Slicing first meant the
     // averages warmed up *inside* the visible range and the signal line began
     // nine bars in — the same gap the RSI line itself used to have.
-    const rsiSource = ps.weekly
-      ? rsiSeries((weeklyAll || {}).close || [], 14)
-      : (t.rsi.series || []);
+    // Weekly and intraday bars get their own RSI; the server's is daily.
+    const rsiSource = ps.intraday ? rsiSeries(ps.close || [], 14)
+      : ps.weekly ? rsiSeries((weeklyAll || {}).close || [], 14)
+        : (t.rsi.series || []);
     const rsiSignalSource = smaSeries(rsiSource, RSI_SIGNAL_PERIOD);
     const rsiZoom = momentumBars(ps.shown_bars, rsiSource.length);
     const rsiVals = tailTo(rsiSource, rsiZoom);
@@ -9436,7 +9450,7 @@ function renderSwing(d) {
         value: rsiVals[rsiCross.index],
         color: rsiCross.bullish ? C.good : C.critical,
         label: `${rsiCross.bullish ? 'Bullish' : 'Bearish'} cross${rsiCross.barsAgo
-          ? ` · ${rsiCross.barsAgo} ${ps.weekly ? 'week' : 'day'}${
+          ? ` · ${rsiCross.barsAgo} ${barUnit(ps)}${
             rsiCross.barsAgo === 1 ? '' : 's'} ago` : ' · latest bar'}`,
       }] : [],
       yFormat: (x) => fmt(x, 0),
@@ -9445,15 +9459,16 @@ function renderSwing(d) {
     const rsiNote = document.getElementById('rsi-cross-note');
     if (rsiNote) {
       rsiNote.innerHTML = macdCrossSentence(
-        rsiCross, { macd: rsiVals, signal: rsiSignal }, rsiDates, ps.weekly, rsiZoom, 'RSI',
+        rsiCross, { macd: rsiVals, signal: rsiSignal }, rsiDates, barUnit(ps), rsiZoom, 'RSI',
       );
     }
   }
 
   if ((t.macd || {}).series) {
-    const full = ps.weekly
+    const full = (ps.weekly || ps.intraday)
       ? (() => {
-        const m = macdSeries(weeklyAll.close);
+        // Recomputed on the bars on screen, weekly or intraday, as the RSI is.
+        const m = macdSeries(ps.intraday ? (ps.close || []) : weeklyAll.close);
         return {
           macd: tailTo(m.macd, ps.shown_bars),
           signal: tailTo(m.signal, ps.shown_bars),
@@ -9485,11 +9500,11 @@ function renderSwing(d) {
     ].filter(Boolean)));
     mount('chart-macd', (w) => macdChart(
       wk.macd, wk.signal, wk.hist, macdDates, w,
-      { cross, unit: ps.weekly ? 'week' : 'day' },
+      { cross, unit: barUnit(ps) },
     ));
 
     const note = document.getElementById('macd-cross-note');
-    if (note) note.innerHTML = macdCrossSentence(cross, wk, macdDates, ps.weekly, zoom);
+    if (note) note.innerHTML = macdCrossSentence(cross, wk, macdDates, barUnit(ps), zoom);
   }
 
   if ((gex.by_strike || []).length) {
@@ -12168,7 +12183,7 @@ function renderIndicatorPanes() {
   if (!indicatorIds.some((id) => !IND_PRICE_PANE.includes(id) || id === 'sec')) {
     return overlays;
   }
-  const data = STATE.indicators;
+  const data = swingStudies();
   if (!data) return '<p class="loading"><span class="spinner"></span>Computing…</p>';
   if (!data.available) {
     return `<div class="callout">${esc(data.reason || 'Unavailable.')}</div>`;
@@ -12399,8 +12414,25 @@ function maLabel(id, ps) {
   // survives, because those rungs never reach `chartInterval` and an intraday
   // series carries neither `weekly` nor `monthly`, so it falls to days here
   // and its overlays are suppressed upstream by isIntradayRange.
-  const unit = (ps && ps.monthly) ? 'month' : ((ps && ps.weekly) ? 'week' : 'day');
+  const unit = barUnit(ps);
   return length + '-' + unit + ' ' + kind;
+}
+
+/* Why an average has no line, or '' when it has one: a 200-bar SMA on the
+ * 78 bars of a one-day chart has no value anywhere, and a key that names it
+ * plainly would name a line the chart is not drawing. */
+function maShortOf(id, ps) {
+  const arr = ps && ps[id];
+  if (Array.isArray(arr) && arr.some((v) => Number.isFinite(v))) return '';
+  const length = (overlayStyle(id).params || {}).length;
+  return length ? `needs ${length} bars` : 'no values here';
+}
+
+/* What one bar of a series is, for a label: bar under a day, where "20-day"
+ * would name a length the line is not. */
+function barUnit(ps) {
+  if (ps && ps.intraday) return 'bar';
+  return (ps && ps.monthly) ? 'month' : ((ps && ps.weekly) ? 'week' : 'day');
 }
 
 /** Has this overlay been changed from its default? Drives the "reset" affordance,
@@ -12602,7 +12634,7 @@ function allocateOverlayColors(usedColors) {
  * mid / lower" would be longer than the rest of the legend for no extra
  * information. */
 function indicatorOverlayLegend(palette) {
-  const got = (STATE.indicators && STATE.indicators.indicators) || {};
+  const got = (swingStudies() && swingStudies().indicators) || {};
   const colors = palette || allocateOverlayColors([]);
   return indicatorIds
     .filter((id) => IND_PRICE_PANE.includes(id))
@@ -12633,8 +12665,16 @@ function alignToChart(values, bars) {
   return new Array(bars - values.length).fill(null).concat(values);
 }
 
+/* The Options tab's study payload, if it was computed on the bars on screen.
+ * Between a size change and its answer the old payload is still held, and
+ * drawing it would lay daily lines over minute bars. */
+function swingStudies() {
+  const data = STATE.indicators;
+  return data && data.bars === studyBars() ? data : null;
+}
+
 function indicatorOverlaySeries(bars, palette) {
-  const got = (STATE.indicators && STATE.indicators.indicators) || {};
+  const got = (swingStudies() && swingStudies().indicators) || {};
   const colors = palette || allocateOverlayColors([]);
   const out = [];
   indicatorIds.forEach((id) => {
@@ -12656,7 +12696,7 @@ function indicatorOverlaySeries(bars, palette) {
 }
 
 function drawIndicatorCharts() {
-  const data = STATE.indicators;
+  const data = swingStudies();
   if (!data || !data.available) return;
   const labels = data.dates || [];
   indicatorIds.forEach((id) => {
@@ -12687,17 +12727,21 @@ function drawIndicatorCharts() {
 async function loadIndicators(force) {
   if (!STATE.ticker) return;
   if (!indicatorIds.length) { STATE.indicators = null; return; }
-  const key = `${STATE.ticker}|${indicatorIds.join(',')}`;
+  // Per bar size as well: on an intraday range these are computed on its bars.
+  const bars = studyBars();
+  const key = `${STATE.ticker}|${indicatorIds.join(',')}|${bars}`;
   if (STATE.indicatorsKey === key && !force) return;
   STATE.indicatorsKey = key;
   let payload;
   try {
     payload = await getJSON(
       `/api/indicators/${encodeURIComponent(STATE.ticker)}`
-      + `?ids=${encodeURIComponent(indicatorIds.join(','))}`);
+      + `?ids=${encodeURIComponent(indicatorIds.join(','))}`
+      + (bars === 'daily' ? '' : `&intraday=${encodeURIComponent(bars)}`));
   } catch (err) {
     payload = { available: false, reason: err.message };
   }
+  payload = { ...payload, bars };
   // Ticking four boxes quickly starts four requests, and they do not come back in
   // order. Without this check the slowest reply wins: selecting VWAP, ADX, RS then
   // the regression channel left the channel missing from the panel because a
@@ -14217,7 +14261,7 @@ function wsOverlayDrawn(id) {
  * Read live from C rather than captured, so a theme flip repaints correctly.
  */
 function emaClouds(ps) {
-  if (!ps || ps.intraday) return [];
+  if (!ps) return [];
   const out = [];
   const add = (id, fast, slow) => {
     // Drawn, not merely enabled: a hidden cloud keeps its legend row.
@@ -14340,12 +14384,13 @@ function wsLegend(ps) {
   // Offset and source only. The length moved into the row's name, and printing
   // it twice made `SMA 20 (20, 0, close)` read as two different numbers.
   const maDetail = (id) => `${p(id).offset}, ${p(id).source}`;
-  add('sma20', ps.sma20, maDetail('sma20'));
-  add('sma50', ps.sma50, maDetail('sma50'));
-  add('sma200', ps.sma200, maDetail('sma200'));
-  add('ema9', ps.ema9, null);
-  add('ema21', ps.ema21, null);
-  add('ema50', ps.ema50, null);
+  // The reason in place of the parameters when there is no line to describe.
+  add('sma20', ps.sma20, maShortOf('sma20', ps) || maDetail('sma20'));
+  add('sma50', ps.sma50, maShortOf('sma50', ps) || maDetail('sma50'));
+  add('sma200', ps.sma200, maShortOf('sma200', ps) || maDetail('sma200'));
+  add('ema9', ps.ema9, maShortOf('ema9', ps) || null);
+  add('ema21', ps.ema21, maShortOf('ema21', ps) || null);
+  add('ema50', ps.ema50, maShortOf('ema50', ps) || null);
   /* Clouds report the gap, not a level.
    *
    * The value column on every other row is "where is this line right now",
@@ -14402,7 +14447,8 @@ function wsLegend(ps) {
    * while taking it off the plot, and a study has none to preserve on this tab:
    * its parameters come from the server. The cross removes it, which is the
    * only state it has. */
-  if (!isIntradayRange(chartRange)) {
+  {
+    // Intraday too: wsStudyRows answers only for a payload of the bars on screen.
     const studyColors = wsStudyPalette(ps);
     wsStudyRows().forEach(({ id, name, value }) => {
       const level = last((value.lines[0] || {}).values);
@@ -14637,13 +14683,11 @@ function wsStudiesMenu() {
     ${wsMenuOpen === 'studies' ? `<div class="ws-menu-pop ws-studies">
       ${rows.map((r) => `<label class="ws-opt" title="${esc(r.measures)}">
         <input type="checkbox" data-ws-study="${esc(r.id)}"
-          ${indicatorIds.includes(r.id) ? ' checked' : ''}
-          ${intraday ? 'disabled' : ''}>
+          ${indicatorIds.includes(r.id) ? ' checked' : ''}>
         <span>${esc(r.name)}</span>
       </label>`).join('')}
-      ${intraday ? `<p class="ws-studies-note">Not on a ${esc(chartRange)} range:
-        these are computed from daily bars, so they would describe a different
-        timeframe from the one on screen.</p>` : ''}
+      ${intraday ? `<p class="ws-studies-note">Computed on these bars. VWAP is
+        anchored at the first bar of the window.</p>` : ''}
       <p class="ws-studies-note">ADX, Stochastic, on-balance volume, money flow
         and relative strength need their own scale rather than the price axis.
         They are on the Analysis tab, under Indicators.</p>
@@ -15300,8 +15344,11 @@ function wsTogglePane(id) {
   } catch (e) { /* private mode */ }
 }
 
-/** Attach the oscillator arrays to a full-length series. */
-function wsWithOscillators(base, d, weekly) {
+/** Attach the oscillator arrays to a full-length series.
+ *
+ * `recompute` is for bars that are not the server's daily ones, weekly or
+ * intraday, where its RSI and MACD are indexed by a different bar. */
+function wsWithOscillators(base, d, recompute) {
   if (!wsPanesOpen.length) return base;
   const closes = base.close || [];
   if (closes.length < 30) return base;
@@ -15312,7 +15359,7 @@ function wsWithOscillators(base, d, weekly) {
     /* The server's series when the bars are the server's bars, recomputed when
        they are not. Same length as `close` either way, which is what keeps the
        pane's x-axis identical to the chart's after windowing. */
-    const rsi = (!weekly && ((t.rsi || {}).series || []).length === closes.length)
+    const rsi = (!recompute && ((t.rsi || {}).series || []).length === closes.length)
       ? t.rsi.series
       : rsiSeries(closes, 14);
     out.rsi = rsi;
@@ -15320,7 +15367,7 @@ function wsWithOscillators(base, d, weekly) {
   }
   if (wsPaneOpen('macd')) {
     const server = (t.macd || {}).series || {};
-    const useServer = !weekly && (server.macd || []).length === closes.length;
+    const useServer = !recompute && (server.macd || []).length === closes.length;
     const m = useServer ? server : macdSeries(closes);
     out.macd = m.macd;
     out.macdSignal = m.signal;
@@ -15375,7 +15422,7 @@ function wsPanesHTML() {
 function wsMountPanes(ps) {
   if (!wsPanesOpen.length) return;
   const dates = ps.dates || [];
-  const unit = chartInterval === 'weekly' ? 'week' : 'day';
+  const unit = barUnit(ps);
 
   if (wsPaneOpen('rsi') && (ps.rsi || []).length) {
     const cross = lastMacdCross(ps.rsi, ps.rsiSignal || []);
@@ -15534,10 +15581,18 @@ function wsPriceIndicatorIds() {
   return indicatorIds.filter((id) => IND_PRICE_PANE.includes(id));
 }
 
+/* Which bars a study payload was computed on: an intraday range key, or daily.
+ * The Charting tab's weekly series is rolled up from daily bars client-side and
+ * its studies have always been the daily ones, so weekly shares "daily". */
+function studyBars() {
+  return isIntradayRange(chartRange) ? chartRange : 'daily';
+}
+
 async function wsLoadIndicators() {
   const symbol = STATE.chartSymbol;
   const ids = wsPriceIndicatorIds();
   const key = ids.join(',');
+  const bars = studyBars();
   if (!symbol) return;
   if (!ids.length) {
     // Nothing selected. Clear rather than leave the last payload, or unticking
@@ -15546,23 +15601,25 @@ async function wsLoadIndicators() {
     return;
   }
   if (wsIndicators && wsIndicators.symbol === symbol && wsIndicators.key === key
-      && !wsIndicators.loading) {
+      && wsIndicators.bars === bars && !wsIndicators.loading) {
     wsRedrawChart();
     return;
   }
-  wsIndicators = { symbol, key, loading: true };
+  wsIndicators = { symbol, key, bars, loading: true };
   wsRedrawChart();
   try {
     const data = await getJSON('/api/indicators/' + encodeURIComponent(symbol)
-      + '?ids=' + encodeURIComponent(key));
-    // The reader may have changed symbol or selection while this was in flight.
-    // Same guard loadIndicators() carries, and for the same measured reason:
-    // ticking four boxes quickly starts four requests that do not return in
-    // order, and without this the slowest one wins.
-    if (STATE.chartSymbol !== symbol || wsPriceIndicatorIds().join(',') !== key) return;
-    wsIndicators = { ...data, symbol, key };
+      + '?ids=' + encodeURIComponent(key)
+      + (bars === 'daily' ? '' : '&intraday=' + encodeURIComponent(bars)));
+    // The reader may have changed symbol, selection or bar size while this was
+    // in flight. Same guard loadIndicators() carries, and for the same measured
+    // reason: ticking four boxes quickly starts four requests that do not
+    // return in order, and without this the slowest one wins.
+    if (STATE.chartSymbol !== symbol || wsPriceIndicatorIds().join(',') !== key
+        || studyBars() !== bars) return;
+    wsIndicators = { ...data, symbol, key, bars };
   } catch (err) {
-    wsIndicators = { symbol, key, available: false, reason: err.message };
+    wsIndicators = { symbol, key, bars, available: false, reason: err.message };
   }
   wsRedrawChart();
 }
@@ -15599,7 +15656,7 @@ function chartBaseColors(ps, candleMode, intraday, marks) {
   if (showVbp || showVol) out.push(C.ink2);
   if (showInsiders && !intraday) out.push(C.s3, C.neg);
   if (showZones && !intraday) out.push(C.neg, C.s3);
-  if (!intraday) MA_SERIES_IDS.filter(seriesDrawn).forEach((id) => out.push(ma[id]));
+  MA_SERIES_IDS.filter(seriesDrawn).forEach((id) => out.push(ma[id]));
   return out;
 }
 
@@ -15615,6 +15672,9 @@ function wsStudyRows() {
   const payload = wsIndicators;
   if (!payload || payload.loading || payload.available === false) return [];
   if (payload.symbol !== STATE.chartSymbol) return [];
+  // Daily lines over minute bars would line up by counting back from the newest
+  // bar, and put last spring on this morning.
+  if (payload.bars !== studyBars()) return [];
   const got = payload.indicators || {};
   return IND_FALLBACK_CATALOGUE.filter((r) => {
     if (!wsPriceIndicatorIds().includes(r.id)) return false;
@@ -15674,7 +15734,10 @@ function wsSeries(d) {
         || 'No intraday bars for this symbol.');
     }
     const intra = intradaySeries(wsIntraday);
-    return intra || wsIntradayStub('No intraday bars for this symbol.');
+    // With the panes' RSI and MACD computed from these bars, as the weekly
+    // series does from weeks.
+    return intra ? wsWithOscillators(intra, null, true)
+      : wsIntradayStub('No intraday bars for this symbol.');
   }
   const full = wsFullSeries(d);
   const total = (full.dates || []).length;
@@ -17902,10 +17965,9 @@ function wsMountChart() {
           tints: stages ? stages.colors : null,
           hidden: wsCandles(ps), fill: !wsCandles(ps) },
         /* One entry per average, each gated on its own switch, so the six
-         * checkboxes in the Indicators menu mean what they say. Excluded
-         * wholesale on intraday, as before: these are computed from daily bars
-         * and would describe a different timeframe from the one on screen. */
-        ...(intraday ? [] : [
+         * checkboxes in the Indicators menu mean what they say. On intraday
+         * they are the bars' own averages, from intradaySeries. */
+        ...([
           ['sma20', maLabel('sma20', ps), ps.sma20],
           ['sma50', maLabel('sma50', ps), ps.sma50],
           ['sma200', maLabel('sma200', ps), ps.sma200],
@@ -17927,7 +17989,8 @@ function wsMountChart() {
          *
          * Fed from `wsIndicators`, never `STATE.indicators` — see that store's
          * comment. The two tabs hold different symbols. */
-        ...(intraday ? [] : wsIndicatorSeries((ps.dates || []).length, ps)),
+        // Intraday too: wsStudyRows only answers for a payload of these bars.
+        ...wsIndicatorSeries((ps.dates || []).length, ps),
       ],
       /* Insider markers and volume-by-price.
        *
@@ -27723,7 +27786,7 @@ function updateStatus() {
           ? 'drawings hidden on intraday'
           : `${wsDrawings().length} drawing${wsDrawings().length === 1 ? '' : 's'}`,
         intra
-          ? 'Daily overlays and drawings do not apply to these bars'
+          ? 'Averages, studies and Fibs are on these bars. Daily levels and drawings are not'
           : 'Drag to pan, scroll to zoom, shift-drag to measure']
       : ['Chart. Pick a symbol to begin.']);
     return;
@@ -30607,6 +30670,8 @@ document.addEventListener('click', (evt) => {
   if (tf) {
     chartRange = tf.dataset.chartRange;
     try { localStorage.setItem(CHART_RANGE_KEY, chartRange); } catch (e) { /* private mode */ }
+    // Studies are computed per bar size, so a new size may need new ones.
+    loadIndicators();
     if (isIntradayRange(chartRange)) { loadIntraday(chartRange); return; }
     if (STATE.swing) preserveUI(views.swing, () => renderSwing(STATE.swing));
     return;
@@ -31062,6 +31127,8 @@ document.addEventListener('click', (evt) => {
     // with the symbol: most sessions never open them, and it is a live call.
     if (isIntradayRange(chartRange)) wsLoadIntraday();
     else wsRedrawChart();
+    // Studies are computed per bar size, so a new size may need new ones.
+    if (wsPriceIndicatorIds().length) wsLoadIndicators();
     return;
   }
   if (evt.target.closest('[data-ws-reset]')) {
@@ -31095,6 +31162,8 @@ document.addEventListener('click', (evt) => {
       }
       wsRedrawChart();
     }
+    // Studies are computed per bar size, so a new size may need new ones.
+    if (wsPriceIndicatorIds().length) wsLoadIndicators();
     return;
   }
   const wsTl = evt.target.closest('[data-ws-tool]');

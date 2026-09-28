@@ -98,7 +98,8 @@ def test_the_loader_drops_a_reply_that_arrived_late():
     requests that do not return in order, and the slowest would win."""
     loader = _fn("wsLoadIndicators")
     assert "if (STATE.chartSymbol !== symbol" in loader
-    assert "!== key) return;" in loader
+    assert "!== key\n        || studyBars() !== bars) return;" in loader, \
+        "a reply for another bar size is late too"
 
 
 def test_unticking_the_last_study_clears_the_cache():
@@ -193,12 +194,14 @@ def _code_only(src: str) -> str:
 
 
 def test_an_average_is_labelled_in_the_units_on_screen():
-    fn = _fn("maLabel")
+    fn = _fn("maLabel") + _fn("barUnit")
     assert "ps.weekly" in fn
     assert "'week'" in fn and "'day'" in fn
     # And monthly, which no tab reaches today but which would reintroduce the
     # exact bug this function fixes the day a Monthly pill is added.
     assert "'month'" in fn
+    # And bars under a day, where the averages are 20, 50 and 200 of them.
+    assert "if (ps && ps.intraday) return 'bar';" in fn
     # No hardcoded unit strings left in the code, on either tab.
     code = _code_only(APP_JS)
     assert "'200-day SMA'" not in code
@@ -239,11 +242,15 @@ def test_the_swing_candle_keys_use_the_reader_s_colours():
 # ------------------------------------------------------------------- hygiene
 
 
-def test_the_studies_are_excluded_on_intraday():
-    """Same reason the averages are: computed from daily bars, so they would
-    describe a different timeframe from the one on screen."""
-    assert "intraday ? [] : wsIndicatorSeries(" in APP_JS
-    assert "if (!isIntradayRange(chartRange)) {" in _fn("wsLegend")
+def test_the_studies_are_computed_on_the_bars_on_screen():
+    """They were excluded on intraday, because a daily study lined up with
+    minute bars by counting back from the newest bar. They are computed on the
+    intraday bars now, and a payload is only answered for the bars it was
+    computed on, so a daily one held during a size change draws nothing."""
+    assert "intraday ? [] : wsIndicatorSeries(" not in APP_JS
+    assert "...wsIndicatorSeries((ps.dates || []).length, ps)," in APP_JS
+    assert "if (payload.bars !== studyBars()) return [];" in _fn("wsStudyRows")
+    assert "if (!isIntradayRange(chartRange)) {" not in _fn("wsLegend")
 
 
 def test_every_class_the_studies_menu_renders_has_a_rule():

@@ -2630,27 +2630,64 @@ async def indicator_panel(
     ids: str = Query("", description="Comma-separated indicator ids"),
     range_: str = Query("2y", alias="range"),
     anchor: str = Query("", description="Anchor date for VWAP, YYYY-MM-DD"),
+    intraday: str = Query("", description="An /api/intraday range key, e.g. 5 or 60"),
 ) -> Dict[str, Any]:
     """Optional indicators, computed only for the ids asked for.
 
     A catalogue endpoint rather than more fields on the ticker payload: nine
     indicators on every request would be work nobody asked for on most page loads,
     and the reader picks these deliberately.
+
+    **`intraday` computes them on the chart's own intraday bars.** Every study
+    was switched off under a day, because these were daily bars and the chart
+    lines them up with its own bars by counting back from the newest: a daily
+    Bollinger band drawn over five-minute candles would put last March on this
+    morning. Same frame /api/intraday draws, so the lines are bar for bar with
+    the candles. Its own parameter rather than a value of `range`, because
+    "1d" and "5d" are both a daily period and an intraday key.
+
+    VWAP is anchored at the first bar of the window there: a date anchor
+    compared against a timezone-aware minute index raises, and the window's
+    first bar is what the chart shows. The one-line readings are dropped, as
+    they are written in sessions and a bar is not one.
     """
     def build() -> Dict[str, Any]:
         sym = ticker.upper().strip()
         wanted = [i for i in (ids or "").replace(" ", "").split(",") if i]
-        hist = PROVIDER.history(sym, period=range_, interval="1d")
+        spec = INTRADAY_SPECS.get((intraday or "").lower()) if intraday else None
+        if intraday and not spec:
+            return {"available": False,
+                    "reason": "Unknown intraday range {!r}. Expected one of: {}.".format(
+                        intraday, ", ".join(sorted(INTRADAY_SPECS)))}
+
+        def frame_for(symbol: str):
+            if spec:
+                return YF_PROVIDER.intraday_history(
+                    symbol, period=spec["period"], interval=spec["interval"])
+            source = PROVIDER if symbol == sym else YF_PROVIDER
+            return source.history(symbol, period=range_, interval="1d")
+
+        hist = frame_for(sym)
         if hist is None or hist.empty:
+            if spec:
+                return {"available": False, "ticker": sym,
+                        "reason": "No intraday bars came back for {}.".format(sym)}
             raise HTTPException(status_code=404,
                                 detail="No price data found for '{}'.".format(sym))
         bench = None
         if "rs" in wanted:
-            frame = YF_PROVIDER.history("SPY", period=range_, interval="1d")
+            frame = frame_for("SPY")
             if frame is not None and not frame.empty:
                 bench = frame["Close"].astype(float)
         out = indicators_mod.compute(hist, wanted, bench=bench,
-                                     anchor=anchor or None)
+                                     anchor=None if spec else (anchor or None))
+        if spec and out.get("available") is not False:
+            # Times, not dates: the chart's x-axis is minutes here.
+            out["dates"] = [ts.isoformat() for ts in hist.index]
+            for result in (out.get("indicators") or {}).values():
+                result.pop("reading", None)
+            out["intraday"] = intraday
+            out["interval"] = spec["interval"]
         out["ticker"] = sym
         out["generated_at"] = datetime.now(timezone.utc).isoformat()
         return out

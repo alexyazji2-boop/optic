@@ -2392,13 +2392,27 @@ function macdChart(macd, signal, hist, labels, width = 720, opts = {}) {
   if (labels && labels.length) {
     const axisLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.85 : null });
     root.appendChild(axisLayer);
-    const marks = [0, Math.floor((labels.length - 1) / 2), labels.length - 1];
-    marks.forEach((i, k) => {
-      axisLayer.appendChild(s('text', {
-        x: X(i), y: H - 5, fill: C.muted, 'font-size': CF.tick,
-        'text-anchor': k === 0 ? 'start' : k === 2 ? 'end' : 'middle',
-      }, labels[i]));
-    });
+    /* The same calendar ticks as lineChart, so this pane's axis reads like the
+     * RSI pane above it. It printed three raw labels, which was tolerable as
+     * "2026-06-12" and not once the pane drew minute bars: it wrote
+     * "2026-09-21T09:30:00-04:00" under the chart. The three marks stay as the
+     * fallback for labels that are not dates. */
+    const ticks = timeTicks(labels, X, 46);
+    if (ticks.length) {
+      ticks.forEach((t) => {
+        axisLayer.appendChild(s('text', {
+          x: X(t.i), y: H - 5, fill: C.muted, 'font-size': CF.tick, 'text-anchor': 'middle',
+        }, t.text));
+      });
+    } else {
+      const marks = [0, Math.floor((labels.length - 1) / 2), labels.length - 1];
+      marks.forEach((i, k) => {
+        axisLayer.appendChild(s('text', {
+          x: X(i), y: H - 5, fill: C.muted, 'font-size': CF.tick,
+          'text-anchor': k === 0 ? 'start' : k === 2 ? 'end' : 'middle',
+        }, labels[i]));
+      });
+    }
   }
 
   const cross = s('line', { y1: m.t, y2: m.t + plotH, stroke: C.ink2, 'stroke-width': 1, opacity: 0 });

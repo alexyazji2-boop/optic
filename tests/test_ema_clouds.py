@@ -59,12 +59,17 @@ def test_line_chart_accepts_the_option():
     assert re.search(r"^\s*clouds = \[\],\s*$", CHARTS, re.M)
 
 
-def test_clouds_are_suppressed_on_intraday():
-    """The EMAs come from daily closes. Drawn on an intraday chart they would be
-    describing a different timeframe from the one on screen, which is why the
-    averages and the Fibonacci levels are excluded there too."""
+def test_clouds_draw_on_intraday_from_the_bars_own_emas():
+    """They were suppressed there while the EMAs came from daily closes. The
+    intraday series computes its own now, so a cloud on a 5m chart is the 9/21
+    of five-minute bars, and suppressing it was the "no indicator works under a
+    day" that was reported."""
     builder = _block(APP, "function emaClouds(ps)", "\n}")
-    assert "if (!ps || ps.intraday) return [];" in builder
+    assert "if (!ps) return [];" in builder
+    assert "ps.intraday" not in builder
+    series = _block(APP, "function intradaySeries(intra)", "\n}")
+    for period in (9, 21, 50):
+        assert "ema%d: emaSeries(close, %d)," % (period, period) in series
 
 
 def test_weekly_aggregate_recomputes_the_emas():

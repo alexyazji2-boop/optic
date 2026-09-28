@@ -153,17 +153,22 @@ def test_it_goes_through_the_shared_builder():
     assert "return fibLines(((ps && ps.fib) || {}).levels, ps && ps.spot);" in _fn("intradayFibLines")
 
 
-def test_the_options_menu_lets_fibs_on_under_a_day_and_nothing_else():
-    """The other levels are computed from daily closes and stay disabled there;
-    the note says which is which."""
+def test_the_options_menu_lets_on_what_is_computed_on_these_bars():
+    """Fibonacci, the averages and the clouds are computed on the intraday bars
+    and are live there. Support, resistance, supply and demand and insider
+    trades are read from daily bars and stay disabled; the note says which is
+    which."""
     menu = APP[APP.index('data-level-opt="ma"'):]
     menu = menu[:menu.index("data-clear-levels")]
-    fib = menu[menu.index('data-level-opt="fib"'):]
-    fib = fib[:fib.index("</label>")]
-    assert "ps.intraday ? 'disabled'" not in fib
-    sr = menu[menu.index('data-level-opt="sr"'):]
-    assert "ps.intraday ? 'disabled'" in sr[:sr.index("</label>")]
-    assert "Fibonacci levels here come from the" in APP
+
+    def box(opt):
+        part = menu[menu.index('data-level-opt="%s"' % opt):]
+        return part[:part.index("</label>")]
+    for live in ("fib", "ma", "ema", "cloud921", "cloud2150"):
+        assert "ps.intraday ? 'disabled'" not in box(live), live
+    for daily in ("sr", "zones", "insiders"):
+        assert "ps.intraday ? 'disabled'" in box(daily), daily
+    assert "Fibonacci levels come from the high and" in APP
 
 
 def test_the_options_key_names_an_intraday_candle_a_bar_not_a_day():
