@@ -1556,6 +1556,41 @@ async def _tracker_loop() -> None:
         await asyncio.sleep(TRACKER_MARK_MINUTES * 60)
 
 
+# The catalyst loop looks at the clock this often. It is not how often it scans
+# (that is CATALYST_SCAN_HOURS, read against the store), so a look that finds
+# nothing due costs two indexed reads.
+CATALYST_CHECK_MINUTES = 15
+# After the warm-up and the tracker's first pass, which are racing a visitor;
+# this is racing nobody.
+CATALYST_BOOT_DELAY = 90
+
+
+async def _catalyst_loop() -> None:
+    """Keep the catalyst library current whether or not anyone presses Scan.
+
+    The button was the only way in, and on a host it needs the write token, so
+    the live library held nothing at all and the local one was six weeks old.
+    Its own task rather than a leg of `_tracker_loop`: a scan is one model call
+    that can take a minute or more, and the tracker's marks should not wait on
+    it, nor should TRACKER_AUTO=false switch the library off with it.
+    """
+    log = logging.getLogger("uvicorn.error")
+    await asyncio.sleep(CATALYST_BOOT_DELAY)
+    while True:
+        try:
+            out = await _run(catalysts_mod.run_if_due)
+            if out is not None and out.get("available"):
+                log.info("catalyst scan: %s stories, %s catalysts (%s new), %s written",
+                         out["scanned"], out["identified"], out["new"], out["written"])
+            elif out is not None:
+                log.warning("catalyst scan did not complete: %s", out.get("reason"))
+        except asyncio.CancelledError:                          # noqa: PERF203
+            raise
+        except Exception as exc:                                # noqa: BLE001
+            log.warning("catalyst scan pass failed: %s", exc)
+        await asyncio.sleep(CATALYST_CHECK_MINUTES * 60)
+
+
 async def _warm_home() -> None:
     """Build the landing page's two slow payloads at boot, so no reader does.
 
@@ -1641,6 +1676,7 @@ async def _start_tracker() -> None:
     # asyncio keeps only a weak reference to a bare create_task.
     app.state.warm_task = asyncio.create_task(_warm_home())
     app.state.feedback_task = asyncio.create_task(_flush_feedback())
+    app.state.catalyst_task = asyncio.create_task(_catalyst_loop())
     if TRACKER_AUTO:
         # Held on the app so the reference isn't garbage-collected mid-flight.
         app.state.tracker_task = asyncio.create_task(_tracker_loop())
@@ -1648,11 +1684,11 @@ async def _start_tracker() -> None:
 
 @app.on_event("shutdown")
 async def _stop_tracker() -> None:
-    # All three. A warm-up still sleeping when the server is told to stop would
+    # All four. A warm-up still sleeping when the server is told to stop would
     # otherwise keep the loop alive for its remaining two seconds and log a
     # "task was destroyed but it is pending" on the way out, and the feedback
     # flush sleeps fifteen times longer than that.
-    for name in ("tracker_task", "warm_task", "feedback_task"):
+    for name in ("tracker_task", "warm_task", "feedback_task", "catalyst_task"):
         task = getattr(app.state, name, None)
         if task:
             task.cancel()
@@ -2068,12 +2104,13 @@ async def catalyst_refresh(request: Request,
 
     A POST and a separate endpoint from the search above, deliberately: this one
     spends money and writes to the store, and neither of those should happen
-    because somebody opened a tab.
+    because somebody opened a tab. The library does not wait on it: the
+    catalyst loop below scans on a schedule whether or not anyone presses this.
     """
     _write_guard(request)
 
     def build() -> Dict[str, Any]:
-        out = catalysts_mod.refresh(hours=hours)
+        out = catalysts_mod.refresh(hours=hours, trigger="manual")
         out["generated_at"] = datetime.now(timezone.utc).isoformat()
         return out
     return await _run(build)

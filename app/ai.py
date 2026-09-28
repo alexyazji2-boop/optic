@@ -1187,17 +1187,30 @@ def write_weekly_update(week_key: str, facts: Dict[str, Any]) -> Optional[Dict[s
 CATALYST_PROMPT = """You maintain a research library of market catalysts: events that keep \
 mattering after the day they were published.
 
-You are given recent stories. Most are NOT catalysts. A single company's earnings move, a \
-routine enforcement action, an incremental data point. These are news, and news belongs in \
-a feed, not a library. A catalyst is an event whose read-through is still live in a month: \
-a policy programme, a tariff regime, a rate-cycle turn, a supply-chain shift, a major \
-regulatory decision, a structural commodity move.
+You are given the week's stories from central banks, statistical agencies, regulators and \
+news wires, each with an id, and the LIBRARY of catalysts already stored. Most stories are \
+NOT catalysts. A single company's earnings move, a routine enforcement action, an \
+incremental data point. These are news, and news belongs in a feed, not a library. A \
+catalyst is an event whose read-through is still live in a month: a policy programme, a \
+tariff regime, a rate-cycle turn, a war, a ceasefire or a sanctions package, a supply-chain \
+shift, a major regulatory decision, a structural commodity move.
+
+Look across the whole world, not only Washington. A central bank abroad, an election, an \
+export ban or a supply shock anywhere is a catalyst when its read-through reaches US-listed \
+companies.
 
 Be strict. Returning two real catalysts is a better outcome than returning eight, six of \
 which are ordinary news. If none of the stories qualify, return an empty list.
 
+The LIBRARY lists what is already stored, each entry with its id, and with the ids of any \
+story here it was drawn from. Do not return a library entry again because a story mentions \
+it. If a story reports a material new development in one, return it with existing_id set to \
+that entry's id, and write the title and summary for the event as it now stands.
+
 For each catalyst, give:
-- title: a specific, dated-sounding name. "U.S. Critical Minerals Investment Push. August \
+- story_ids: the ids of the stories it is drawn from, at least one. A catalyst with no story \
+behind it is not stored.
+- title: a specific, dated-sounding name. "U.S. Critical Minerals Investment Push, August \
 2026", not "Mining News".
 - summary: two or three sentences on what the event actually is. Describe it; do not \
 speculate about what it will cause.
@@ -1225,17 +1238,25 @@ rounding error on its revenue. Say that when it is true.
 Never state or imply that any company is worth buying or selling. This is research context. \
 Describe the connection and stop.
 
-Return JSON only: {"catalysts": [{...}, ...]}. Use the source story's own date as \
-event_date in YYYY-MM-DD, and echo back the story's url as source_url."""
+Do not use em dashes or en dashes anywhere. Use a comma, a colon or a full stop.
+
+Return JSON only: {"catalysts": [{...}, ...]}. The date comes from the stories you cite, so \
+do not give one."""
 
 
-def extract_catalysts(stories: List[Dict[str, Any]]) -> Optional[List[Dict[str, Any]]]:
+def extract_catalysts(stories: List[Dict[str, Any]],
+                      library: Optional[List[Dict[str, Any]]] = None
+                      ) -> Optional[List[Dict[str, Any]]]:
     """Identify durable catalysts among recent stories, or None.
 
     Returns raw model output; the caller validates every ticker against EDGAR
     before anything is stored. Keeping those steps apart is deliberate — the
     model proposes, the directory disposes, and no unvalidated symbol can reach
-    the library even if this function is called from somewhere new.
+    the library even if this function is called from somewhere new. The same
+    holds for sources: the model cites story ids and the caller resolves them.
+
+    `library` is what is already stored, so a development in a stored catalyst
+    comes back as an update to it rather than as a second copy.
     """
     if not stories:
         return []
@@ -1253,12 +1274,17 @@ def extract_catalysts(stories: List[Dict[str, Any]]) -> Optional[List[Dict[str, 
         log.warning("catalyst extraction skipped: client construction failed: %s", exc)
         return None
 
-    body = json.dumps(_prune(stories), default=str)[:60000]
+    # Not through _prune, and not cut to a character count. _prune caps a list
+    # at 25, right for a snapshot's arrays and wrong here: it cut every scan to
+    # its first 25 stories without a word. A character cut ends the JSON in the
+    # middle of a story. The caller sizes the list to what it wants read.
+    body = ("LIBRARY:\n" + json.dumps(library or [], default=str)
+            + "\n\nSTORIES:\n" + json.dumps(stories, default=str))
     try:
         msg = client.messages.create(
-            model=MODEL, max_tokens=6000,
+            model=MODEL, max_tokens=8000,
             system=[{"type": "text", "text": CATALYST_PROMPT}],
-            messages=[{"role": "user", "content": "STORIES:\n" + body}],
+            messages=[{"role": "user", "content": body}],
         )
     except Exception as exc:
         log.warning("catalyst extraction failed: %s: %s", type(exc).__name__, exc)

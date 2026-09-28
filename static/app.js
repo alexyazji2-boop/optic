@@ -11455,6 +11455,46 @@ function catalystCard(c) {
   </details>`;
 }
 
+/* When the library last read the wires, and how often it does.
+ *
+ * It filled only when somebody pressed Scan, which on the hosted terminal needs
+ * the write token, so this page showed three catalysts from August 14 in late
+ * September with nothing on it to say how old the list was. The server scans
+ * on a schedule now, and this line is what shows it has. */
+function catalystScanLine(scan) {
+  if (!scan) return '';
+  const hours = Number(scan.every_hours);
+  const every = hours > 0 ? ` The library rescans the wires every ${
+    fmt(hours, Number.isInteger(hours) ? 0 : 1)} hour${hours === 1 ? '' : 's'}.` : '';
+  if (!scan.last_ok_at) return every ? ` · No scan has finished yet.${every}` : '';
+  return ` · Last scanned ${esc(stampIn(scan.last_ok_at, activeZone()))} (${
+    esc(briefAgo(scan.last_ok_at))}).${every}`;
+}
+
+/* A scan that failed is said rather than hidden behind the last one that
+ * worked. The reason is the server's own sentence, never an exception's text,
+ * and it is not repeated when the button already printed it. */
+function catalystScanProblem(scan) {
+  if (STATE.catalystScan || !scan || scan.last_ok !== false || !scan.last_reason) return '';
+  return `<div class="callout">The last scan, ${esc(briefAgo(scan.last_at))}, did not finish: ${
+    esc(scan.last_reason)}</div>`;
+}
+
+function catalystEmptyText(d) {
+  const scan = d.scan || {};
+  if (d.stored_total) return 'Nothing matches these filters.';
+  if (scan.last_ok_at) {
+    return 'No scan so far has found an event durable enough to keep. The library stores '
+      + 'catalysts, not ordinary news.';
+  }
+  if (scan.every_hours) {
+    return 'Nothing is stored yet. The first scheduled scan runs a couple of minutes after '
+      + 'the server starts.';
+  }
+  return 'Nothing is stored yet. The library only contains events a scan has identified as '
+    + 'durable, so run a scan to fill it.';
+}
+
 function renderCatalysts(d) {
   const f = CATALYST_FILTERS;
   const facets = (d && d.facets) || { categories: [], sectors: [], themes: [] };
@@ -11502,8 +11542,10 @@ function renderCatalysts(d) {
   return head + `<div class="panel span-all">
     <p class="note" style="color:var(--ink-muted);margin:0 0 var(--space-3)">${
   fmt(d.matched, 0)} catalyst${d.matched === 1 ? '' : 's'}${
-  d.stored_total !== d.matched ? ` of ${fmt(d.stored_total, 0)} stored` : ''}</p>
+  d.stored_total !== d.matched ? ` of ${fmt(d.stored_total, 0)} stored` : ''}${
+  catalystScanLine(d.scan)}</p>
     ${STATE.catalystScan ? `<div class="callout">${esc(STATE.catalystScan)}</div>` : ''}
+    ${catalystScanProblem(d.scan)}
     ${/* Once for the list, not once per card.
          Every card carried its own copy of this, so a page with three
          catalysts open printed the same paragraph three times -- measured on
@@ -11515,8 +11557,7 @@ function renderCatalysts(d) {
       Tickers are verified against EDGAR's company directory; the connection itself is an
       inference.</p>
       <div class="cat-list">${list.map(catalystCard).join('')}</div>`
-    : `<div class="callout">Nothing matches these filters. The library only contains events
-       a scan has identified as durable. If it is empty, run a scan.</div>`}
+    : `<div class="callout">${esc(catalystEmptyText(d))}</div>`}
     <p class="caveat">${gloss(d.method || '')}</p>
   </div>`;
 }
@@ -11551,7 +11592,9 @@ async function refreshCatalysts(btn) {
     const r = await postJSON('/api/catalysts/refresh', {});
     STATE.catalystScan = r.available
       ? `Scanned ${r.scanned} stories · ${r.identified} catalyst${r.identified === 1 ? '' : 's'} identified${
-        r.tickers_dropped ? ` · ${r.tickers_dropped} unresolvable ticker${r.tickers_dropped === 1 ? '' : 's'} dropped` : ''}`
+        r.identified ? `, ${r.new || 0} new` : ''}${
+        r.tickers_dropped ? ` · ${r.tickers_dropped} unresolvable ticker${r.tickers_dropped === 1 ? '' : 's'} dropped` : ''}${
+        r.unsourced ? ` · ${r.unsourced} with no story behind ${r.unsourced === 1 ? 'it' : 'them'} dropped` : ''}`
       : (r.reason || 'The scan could not run.');
   } catch (err) {
     STATE.catalystScan = err.message;
