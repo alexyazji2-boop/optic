@@ -8195,6 +8195,15 @@ function swingFullSeries(d) {
   return chartInterval === 'weekly' ? aggregateWeekly(raw) : raw;
 }
 
+/* The bars the Options chart's window indexes: this range's intraday bars
+ * under a day, the daily or weekly history above one. See wsBaseSeries. */
+function swingBaseSeries(d) {
+  if (isIntradayRange(chartRange)) {
+    return (intradayMatches() && intradaySeries(STATE.intraday)) || { dates: [] };
+  }
+  return swingFullSeries(d);
+}
+
 /** The series the chart draws: the manual window if there is one, else the range. */
 /* Is the intraday payload in hand the one the current range is asking for?
  *
@@ -8210,15 +8219,19 @@ function intradayMatches() {
 }
 
 function swingSeries(d) {
-  /* Intraday is not windowed here. It arrives from its own endpoint already
-   * scoped to the session, and `swingWindow` indexes the daily/weekly series —
-   * applying one to the other would slice the wrong array. The adapter declines
-   * intraday for the same reason, so the wheel does nothing rather than
-   * appearing to do nothing. */
+  /* Intraday is windowed over its own bars. It was not windowed at all, and the
+   * zoom adapter declined intraday, because `swingWindow` indexed the daily
+   * series: that is why no pinch or scroll zoomed a chart under a day. The
+   * window is keyed on the range (swingWindowKey), so an intraday window never
+   * lands on the daily bars, or the other way round. */
   if (isIntradayRange(chartRange)) {
     const matched = intradayMatches();
     const series = intradaySeries(matched ? STATE.intraday : null);
-    if (series) return series;
+    if (series) {
+      const win = (swingWindow && swingWindow.key === swingWindowKey())
+        ? wsClampWindow(swingWindow, (series.dates || []).length) : null;
+      return win ? wsSliceWindow(series, win) : series;
+    }
     /* Never null past this point.
      *
      * `intradaySeries` returns null for a payload that has not arrived yet,
@@ -8269,7 +8282,7 @@ function swingSeries(d) {
 
 /** Current window as concrete indices, whatever set it. */
 function swingWindowNow(d) {
-  const total = ((swingFullSeries(d).dates) || []).length;
+  const total = ((swingBaseSeries(d).dates) || []).length;
   const win = (swingWindow && swingWindow.key === swingWindowKey())
     ? wsClampWindow(swingWindow, total) : null;
   if (win) return { ...win, total };
@@ -8279,7 +8292,7 @@ function swingWindowNow(d) {
 
 function swingApplyWindow(win) {
   if (!STATE.swing) return false;
-  const total = ((swingFullSeries(STATE.swing).dates) || []).length;
+  const total = ((swingBaseSeries(STATE.swing).dates) || []).length;
   const next = wsClampWindow(win, total);
   if (!next) return false;
   const keyed = { ...next, key: swingWindowKey() };
@@ -12665,6 +12678,25 @@ function alignToChart(values, bars) {
   return new Array(bars - values.length).fill(null).concat(values);
 }
 
+/* A study's values for the window on screen.
+ *
+ * alignToChart takes the newest bars, which is right until the reader zooms
+ * or pans away from the newest bars: then a Bollinger band drawn over March
+ * was December's. The payload and the full series end on the same bar, so the
+ * offset between them is their difference in length, and the window is cut at
+ * the same indices the price was. */
+function alignToWindow(values, win) {
+  if (!Array.isArray(values)) return [];
+  if (!win || !win.total) return values;
+  const off = values.length - win.total;
+  const out = [];
+  for (let i = win.from; i < win.to; i += 1) {
+    const v = values[i + off];
+    out.push(v === undefined ? null : v);
+  }
+  return out;
+}
+
 /* The Options tab's study payload, if it was computed on the bars on screen.
  * Between a size change and its answer the old payload is still held, and
  * drawing it would lay daily lines over minute bars. */
@@ -12677,6 +12709,8 @@ function indicatorOverlaySeries(bars, palette) {
   const got = (swingStudies() && swingStudies().indicators) || {};
   const colors = palette || allocateOverlayColors([]);
   const out = [];
+  // The window on screen, so a zoomed chart's study lines are the zoomed bars'.
+  const win = bars && STATE.swing ? swingWindowNow(STATE.swing) : null;
   indicatorIds.forEach((id) => {
     if (!IND_PRICE_PANE.includes(id)) return;
     const v = got[id];
@@ -12684,7 +12718,7 @@ function indicatorOverlaySeries(bars, palette) {
     v.lines.forEach((line, i) => {
       out.push({
         name: line.name,
-        values: bars ? alignToChart(line.values, bars) : line.values,
+        values: win ? alignToWindow(line.values, win) : line.values,
         color: colors[id] || C.s7,
         width: 1.4,
         dash: i === 0 ? null : '4 3',
@@ -15483,6 +15517,35 @@ function wsFullSeries(d) {
   return wsWithOscillators(base, d, weekly);
 }
 
+/* The full-length series a Charting-tab window indexes: the intraday bars on an
+ * intraday range, the daily or weekly history otherwise. The window, the
+ * navigator and the zoom have to count the same bars. Counting the daily ones
+ * on an intraday chart is why zoom did nothing there: the window moved across
+ * two years of daily bars the chart was not drawing. */
+function wsBaseSeries(d) {
+  if (isIntradayRange(chartRange)) {
+    if (!wsIntraday || wsIntraday.symbol !== STATE.chartSymbol
+        || wsIntraday.range !== chartRange || wsIntraday.loading
+        || wsIntraday.available === false) return { dates: [] };
+    const intra = intradaySeries(wsIntraday);
+    return intra ? wsWithOscillators(intra, null, true) : { dates: [] };
+  }
+  return wsFullSeries(d);
+}
+
+/* A full series cut to a window. Every array, not a named list: a named list
+ * goes stale the moment the payload gains a field, and a series left at full
+ * length stretches lineChart's x-axis to fit it. */
+function wsSliceWindow(full, win) {
+  const total = (full.dates || []).length;
+  const out = { ...full };
+  Object.keys(out).forEach((k) => {
+    if (Array.isArray(out[k])) out[k] = out[k].slice(win.from, win.to);
+  });
+  return { ...out, shown_bars: win.to - win.from, total_bars: total,
+           weekly: !!full.weekly, zoomed: true };
+}
+
 function wsClampWindow(win, total) {
   if (!win || !total) return null;
   let span = Math.max(WS_MIN_BARS, Math.min(total, Math.round(win.to - win.from)));
@@ -15693,11 +15756,12 @@ function wsIndicatorSeries(bars, ps) {
   const got = payload.indicators || {};
   const palette = wsStudyPalette(ps);
   const out = [];
+  const win = bars ? wsWindowNow(STATE.chartData) : null;
   wsStudyRows().forEach(({ id, value: v }) => {
     v.lines.forEach((line, i) => {
       out.push({
         name: line.name,
-        values: bars ? alignToChart(line.values, bars) : line.values,
+        values: win ? alignToWindow(line.values, win) : line.values,
         color: palette[id] || C.s7,
         width: 1.4,
         // The middle line solid, the bands dashed, so a three-line channel
@@ -15734,10 +15798,12 @@ function wsSeries(d) {
         || 'No intraday bars for this symbol.');
     }
     const intra = intradaySeries(wsIntraday);
+    if (!intra) return wsIntradayStub('No intraday bars for this symbol.');
     // With the panes' RSI and MACD computed from these bars, as the weekly
-    // series does from weeks.
-    return intra ? wsWithOscillators(intra, null, true)
-      : wsIntradayStub('No intraday bars for this symbol.');
+    // series does from weeks, and the zoom window applied like the daily one.
+    const full = wsWithOscillators(intra, null, true);
+    const win = wsClampWindow(wsWindow, (full.dates || []).length);
+    return win ? wsSliceWindow(full, win) : full;
   }
   const full = wsFullSeries(d);
   const total = (full.dates || []).length;
@@ -15755,20 +15821,13 @@ function wsSeries(d) {
     const raw = ((d.technicals || {}).price_series) || {};
     return sliceSeries(raw, chartRange, chartInterval, full);
   }
-  // Same "slice every array" rule as sliceSeries, and for the same reason: a
-  // named list of fields goes stale the moment the payload gains one, and a
-  // series left at full length stretches lineChart's x-axis to fit it.
-  const out = { ...full };
-  Object.keys(out).forEach((k) => {
-    if (Array.isArray(out[k])) out[k] = out[k].slice(win.from, win.to);
-  });
-  return { ...out, shown_bars: win.to - win.from, total_bars: total,
-           weekly: !!full.weekly, zoomed: true };
+  // Same "slice every array" rule as sliceSeries; see wsSliceWindow.
+  return wsSliceWindow(full, win);
 }
 
 /** Current window as concrete indices, whatever set it. */
 function wsWindowNow(d) {
-  const total = ((wsFullSeries(d).dates) || []).length;
+  const total = ((wsBaseSeries(d).dates) || []).length;
   const win = wsClampWindow(wsWindow, total);
   if (win) return { ...win, total };
   const shown = (wsSeries(d).dates || []).length;
@@ -17329,7 +17388,8 @@ const WS_NAV_EDGE = 6;   // grab width for the resize handles, in px
 function wsRenderNav() {
   const host = document.getElementById('ws-nav');
   if (!host || !STATE.chartData || STATE.chartData === 'loading') return;
-  const full = wsFullSeries(STATE.chartData);
+  // The bars the window indexes, intraday ones on an intraday range.
+  const full = wsBaseSeries(STATE.chartData);
   const closes = full.close || [];
   const total = closes.length;
   const box = host.getBoundingClientRect();
@@ -17475,7 +17535,7 @@ function wsBarUnderCursor(evt) {
 }
 
 function wsApplyWindow(win) {
-  const total = ((wsFullSeries(STATE.chartData).dates) || []).length;
+  const total = ((wsBaseSeries(STATE.chartData).dates) || []).length;
   const next = wsClampWindow(win, total);
   if (!next) return false;
   const prev = wsWindow;
@@ -17510,6 +17570,19 @@ const CHART_ZOOM = new Map();
 
 function registerChartZoom(hostId, adapter) {
   CHART_ZOOM.set(hostId, adapter);
+}
+
+/* The chart under the pointer even when it has no frame to aim at yet: it
+ * swaps its SVG between frames on every redraw. See the wheel handler. */
+function chartZoomHost(evt) {
+  if (!evt.target || !evt.target.closest) return null;
+  for (const [hostId, adapter] of CHART_ZOOM) {
+    const host = evt.target.closest('#' + hostId);
+    if (!host) continue;
+    if (adapter.enabled && !adapter.enabled()) return null;
+    return { host, adapter };
+  }
+  return null;
 }
 
 function chartZoomTarget(evt) {
@@ -17549,24 +17622,174 @@ function chartBarsPerPixel(target) {
   return frame.bars / Math.max(1, plotPx);
 }
 
+/* Wheel, trackpad and pinch: one handler, scaled by how far the input moved.
+ *
+ * This zoomed 1.15 per EVENT, which is right for a mouse wheel's notch and
+ * wrong for everything a Mac trackpad sends. A two-finger scroll arrives as
+ * dozens of events of a few pixels each, so one gentle stroke zoomed straight
+ * to the limit; a pinch arrives, in Chrome, Edge and Firefox, as ctrl+wheel
+ * events of a pixel or two, with the same result; a sideways swipe has a
+ * deltaY of 0, which is not greater than 0, so it zoomed IN. And Safari sends a
+ * pinch as gesture events this never listened for, so there the page zoomed
+ * instead of the chart. Reported as: the trackpad cannot zoom the charts.
+ *
+ * So the zoom is proportional to the distance: e^(k * pixels), with k chosen
+ * so a 100px mouse notch is the 1.15 it always was, and the pinch rate the
+ * one Chrome itself uses (deltaY = -100 ln(scale)). A horizontal swipe, or
+ * shift with a wheel, pans. What is left over when a small step rounds to no
+ * whole bar is kept for the next event, or a slow stroke would never move.
+ * And input is gathered per animation frame, because redrawing on every one
+ * of sixty events a second is what makes a smooth gesture judder. */
+const ZOOM_PER_PX = Math.log(1.15) / 100;
+const PINCH_PER_PX = 0.01;
+let chartWheel = null;
+let chartWheelFrame = 0;
+let chartGesture = null;
+
+function wheelPixels(delta, mode) {
+  // Lines: Firefox's mouse wheel sends 3 a notch, and 33px a line makes that
+  // notch the ~100px Chrome and Safari send, so one notch zooms alike in all.
+  if (mode === 1) return delta * 33;
+  if (mode === 2) return delta * 800;     // pages
+  return delta;
+}
+
+function queueChartFrame() {
+  if (chartWheelFrame) return;
+  chartWheelFrame = requestAnimationFrame(() => {
+    chartWheelFrame = 0;
+    flushChartWheel();
+  });
+}
+
+/* Zoom a window about a bar, keeping that bar under the cursor. */
+function zoomedWindow(cur, bar, nextSpan) {
+  const span = cur.to - cur.from;
+  const anchorIdx = cur.from + bar;
+  const frac = span > 1 ? bar / (span - 1) : 0.5;
+  const from = Math.round(anchorIdx - frac * (nextSpan - 1));
+  return { from, to: from + nextSpan };
+}
+
+function flushChartWheel() {
+  const w = chartWheel;
+  if (!w) return;
+  // The frame as it is now: the one the gesture started on may have been
+  // replaced by a redraw since, and a detached SVG measures as zero wide.
+  const svg = w.target.host.querySelector('svg.chart');
+  const frame = svg && svg.chartFrame;
+  if (!frame) { queueChartFrame(); return; }
+  const target = { ...w.target, svg, frame };
+  if (target.adapter.enabled && !target.adapter.enabled()) { chartWheel = null; return; }
+  const cur = target.adapter.window();
+  const span = cur.to - cur.from;
+  let next = { from: cur.from, to: cur.to };
+  if (w.zoomLog) {
+    const want = Math.max(WS_MIN_BARS, Math.min(cur.total, Math.round(span * Math.exp(w.zoomLog))));
+    if (want !== span) {
+      next = zoomedWindow(cur, Math.min(w.bar, span - 1), want);
+      w.zoomLog -= Math.log(want / span);
+    }
+    // At either limit there is nowhere to go; carrying the rest would make the
+    // first move the other way feel stuck.
+    if (want === WS_MIN_BARS || want === cur.total) w.zoomLog = 0;
+  }
+  if (w.panPx) {
+    const barsPerPx = chartBarsPerPixel(target);
+    if (barsPerPx) {
+      const bars = Math.trunc(w.panPx * barsPerPx);
+      if (bars) {
+        next = { from: next.from + bars, to: next.to + bars };
+        w.panPx -= bars / barsPerPx;
+      }
+    } else {
+      w.panPx = 0;
+    }
+  }
+  if ((next.from !== cur.from || next.to !== cur.to) && target.adapter.apply(next)) {
+    target.adapter.redraw();
+  }
+}
+
 document.addEventListener('wheel', (evt) => {
+  let target = chartZoomTarget(evt);
+  let bar = target ? chartBarUnderCursor(target, evt) : null;
+  if (!target) {
+    /* Mid-redraw. The chart swaps its SVG between frames, and for that moment
+     * there is no frame to aim at. Measured: during a stream of wheel events
+     * one in three landed in that gap, and each was left to the page, so the
+     * page scrolled in jerks while the chart zoomed. For a pinch it is worse,
+     * because an unblocked ctrl+wheel is the browser zooming the whole page.
+     * So a gesture already under way on this chart keeps the event, and it is
+     * applied at the last bar it was aimed at. */
+    const held = chartZoomHost(evt);
+    if (!held || !chartWheel || chartWheel.target.host !== held.host) return;
+    target = chartWheel.target;
+    bar = chartWheel.bar;
+  } else if (bar === null) {
+    return;
+  }
+  evt.preventDefault();          // the page must not scroll, or zoom, while the chart does
+  // Safari pinching: the gesture handlers below own it.
+  if (chartGesture) return;
+
+  const dx = wheelPixels(evt.deltaX, evt.deltaMode);
+  const dy = wheelPixels(evt.deltaY, evt.deltaMode);
+  if (!chartWheel || chartWheel.target.host !== target.host) {
+    chartWheel = { target, bar, zoomLog: 0, panPx: 0 };
+  }
+  chartWheel.target = target;
+  chartWheel.bar = bar;
+  if (evt.ctrlKey) {
+    // A trackpad pinch, delivered as ctrl+wheel. Out is negative: zoom in.
+    chartWheel.zoomLog += dy * PINCH_PER_PX;
+  } else if (evt.shiftKey) {
+    // A mouse's sideways scroll. Some browsers turn it into deltaX already.
+    chartWheel.panPx += dx || dy;
+  } else if (Math.abs(dx) > Math.abs(dy)) {
+    // A two-finger swipe across: pan, the way the chart is dragged.
+    chartWheel.panPx += dx;
+  } else {
+    chartWheel.zoomLog += dy * ZOOM_PER_PX;
+  }
+  queueChartFrame();
+}, { passive: false });
+
+/* Safari's pinch. It fires gesturestart, gesturechange and gestureend with a
+ * `scale` measured from the start of the pinch, and no ctrl+wheel, so without
+ * these the browser zoomed the whole page. Non-standard, so the listeners are
+ * simply never called elsewhere. The window is recomputed from the one the
+ * pinch began on, so scale is not applied twice. */
+document.addEventListener('gesturestart', (evt) => {
   const target = chartZoomTarget(evt);
   if (!target) return;
   const bar = chartBarUnderCursor(target, evt);
   if (bar === null) return;
-  evt.preventDefault();          // the page must not scroll while zooming
+  evt.preventDefault();
+  chartGesture = { target, bar, start: target.adapter.window(), scale: 1 };
+}, { passive: false });
 
-  const cur = target.adapter.window();
-  const span = cur.to - cur.from;
-  // 1.15 per notch. Measured against 1.5, which crossed a year of daily bars
-  // in three clicks and overshot constantly.
-  const factor = evt.deltaY > 0 ? 1.15 : 1 / 1.15;
-  const nextSpan = Math.max(WS_MIN_BARS, Math.min(cur.total, Math.round(span * factor)));
-  // Keep the cursor's bar at the same fraction across the plot.
-  const anchorIdx = cur.from + bar;
-  const frac = span > 1 ? bar / (span - 1) : 0.5;
-  const from = Math.round(anchorIdx - frac * (nextSpan - 1));
-  if (target.adapter.apply({ from, to: from + nextSpan })) target.adapter.redraw();
+document.addEventListener('gesturechange', (evt) => {
+  const g = chartGesture;
+  if (!g) return;
+  evt.preventDefault();
+  const scale = Number(evt.scale);
+  if (!Number.isFinite(scale) || scale <= 0) return;
+  const span = g.start.to - g.start.from;
+  const want = Math.max(WS_MIN_BARS, Math.min(g.start.total, Math.round(span / scale)));
+  const next = zoomedWindow(g.start, Math.min(g.bar, span - 1), want);
+  if (g.target.adapter.apply(next)) {
+    // One repaint per frame here too.
+    if (!g.frame) {
+      g.frame = requestAnimationFrame(() => { g.frame = 0; g.target.adapter.redraw(); });
+    }
+  }
+}, { passive: false });
+
+document.addEventListener('gestureend', (evt) => {
+  if (!chartGesture) return;
+  evt.preventDefault();
+  chartGesture = null;
 }, { passive: false });
 
 /* Dragging the plot.
@@ -17663,12 +17886,11 @@ registerChartZoom('ws-chart', {
   redraw: () => wsRedrawChart(),
 });
 
-/* The Options price chart. Declines intraday: that series arrives from its own
- * endpoint already scoped to the session, and swingWindow indexes the
- * daily/weekly one, so the wheel does nothing rather than appearing to. */
+/* The Options price chart, intraday included now that its window counts the
+ * intraday bars. Off only until there are bars to zoom. */
 registerChartZoom('chart-price', {
   enabled: () => STATE.view === 'swing' && !!STATE.swing
-    && !isIntradayRange(chartRange),
+    && ((swingBaseSeries(STATE.swing).dates) || []).length > 1,
   window: () => swingWindowNow(STATE.swing),
   apply: (win) => swingApplyWindow(win),
   redraw: () => swingRedrawChart(),
@@ -18485,6 +18707,11 @@ function wsRedrawChart(opts) {
   setChartAnimation(!!(opts && opts.animate));
   wsMountChart();
   requestAnimationFrame(() => requestAnimationFrame(wsEnsureChart));
+  /* The status line states the bar size and whether the view is zoomed, so it
+   * follows every redraw. It was refreshed only from the drawing layer's sync,
+   * which returns early on intraday, and a zoomed five-minute chart kept
+   * reading "1D" from the daily chart before it. */
+  updateStatus();
 }
 
 /** Full rebuild. Only for a new symbol, where the dock's contents are stale too. */
@@ -27781,7 +28008,7 @@ function updateStatus() {
     const shown = chartIntervalLabel();
     setStatus(STATE.chartSymbol
       ? [`Chart: ${STATE.chartSymbol}`,
-        wsWindow && !intra ? `${shown} · zoomed` : `${shown} · ${chartWindowLabel()}`,
+        wsWindow ? `${shown} · zoomed` : `${shown} · ${chartWindowLabel()}`,
         intra
           ? 'drawings hidden on intraday'
           : `${wsDrawings().length} drawing${wsDrawings().length === 1 ? '' : 's'}`,

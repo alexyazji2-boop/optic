@@ -163,9 +163,12 @@ def test_the_options_chart_registers_for_pan_and_zoom():
     assert "STATE.view === 'swing'" in block
     assert "swingWindowNow(STATE.swing)" in block
     assert "swingRedrawChart()" in block
-    # Intraday is declined rather than silently no-op: that series comes from a
-    # different endpoint and swingWindow indexes the daily/weekly one.
-    assert "!isIntradayRange(chartRange)" in block
+    # Intraday is no longer declined. It was, while swingWindow indexed the
+    # daily series only, and that is why nothing zoomed a chart under a day.
+    # The window counts the intraday bars now (swingBaseSeries), so the
+    # adapter only waits for there to be bars.
+    assert "!isIntradayRange(chartRange)" not in block
+    assert "((swingBaseSeries(STATE.swing).dates) || []).length > 1" in block
 
 
 def test_the_zoom_window_cannot_outlive_what_it_indexes():

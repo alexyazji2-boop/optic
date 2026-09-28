@@ -49,6 +49,9 @@ HARNESS = """
 var chartRange = '6m';
 var chartInterval = 'daily';
 var STATE = {ticker: 'AAPL', intraday: null};
+// swingSeries windows the intraday bars now, so it reads the zoom state.
+var swingWindow = null;
+var WS_MIN_BARS = 12;
 function assert(v, m) { if (!v) throw new Error(m); }
 """
 
@@ -64,6 +67,8 @@ def run_js(scenario):
                "isIntradayRange", "chartIntervalSpec", "intradayMatches",
                # intradaySeries computes the bars' own averages with these.
                "smaSeries", "emaSeries",
+               # and swingSeries applies a zoom window over them.
+               "swingWindowKey", "wsClampWindow", "wsSliceWindow",
                "intradaySeries", "swingSeries", "swingBarCountText"])
            + "\n(function() {\n" + scenario + "\n})();\nprint('TEST_OK');")
     out = subprocess.run([exe, "-e", src], capture_output=True, text=True,

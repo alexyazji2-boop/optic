@@ -130,7 +130,7 @@ def test_an_average_under_a_day_is_named_in_bars():
 
 def test_the_panes_recompute_on_intraday_bars():
     series = _fn("wsSeries")
-    assert "return intra ? wsWithOscillators(intra, null, true)" in series
+    assert "const full = wsWithOscillators(intra, null, true);" in series
     assert "const unit = barUnit(ps);" in _fn("wsMountPanes")
 
 
