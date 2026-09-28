@@ -650,6 +650,28 @@ async def ticker_analysis(
                       include_earnings=True, budget=budget, parallel=True)
 
 
+@app.get("/api/quote/{ticker}")
+async def quick_quote(ticker: str) -> Dict[str, Any]:
+    """The price and the name, ahead of the full analysis.
+
+    /api/ticker is several seconds on a symbol's first load, and the Dossier's
+    header strip only needs this much of it. PROVIDER.quote is the same cached
+    call the build starts with, so asking for it first costs nothing: the
+    build's own quote is then served from the cache this filled.
+    """
+    def build() -> Dict[str, Any]:
+        sym = ticker.upper().strip()
+        try:
+            quote = PROVIDER.quote(sym)
+        except Exception as exc:                                # noqa: BLE001
+            logging.getLogger("uvicorn.error").info("quick quote for %s: %s", sym, exc)
+            return {"ticker": sym, "available": False}
+        if not quote or quote.get("price") is None:
+            return {"ticker": sym, "available": False}
+        return {"ticker": sym, "available": True, "quote": quote}
+    return await _run(build)
+
+
 @app.get("/api/earnings/{ticker}")
 async def earnings_panel(ticker: str) -> Dict[str, Any]:
     """Earnings panel: consensus, surprise history with price reactions, estimate

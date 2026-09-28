@@ -29,11 +29,40 @@ from .common import clean_iv, pick_swing_expiries
 
 _CACHE: Dict[str, Any] = {}
 
-# yfinance is not safe to drive from several threads at once — concurrent
-# yf.download calls interfere and silently return frames with most symbols
-# missing, which surfaces as half-empty panels rather than an error. Serialising
-# network access is cheap because everything below is cached.
+# yf.download is not safe to run twice at once: concurrent calls interfere and
+# silently return frames with most symbols missing, which surfaces as
+# half-empty panels rather than an error. Downloads take this lock, and so does
+# batch_quote's pool, which keeps one from starting mid-pool.
+#
+# It was held around every fetch in the module too, network call included, in
+# _cached, so the whole app fetched from Yahoo one request at a time. A
+# symbol's first load waited on every other reader's, and its own fetches ran
+# in single file even when started side by side: in the parallel ticker build
+# three legs finished at the same instant, 4.11s, having queued here. Single-
+# symbol reads are safe together (batch_quote has run eight at once for weeks),
+# so _cached now holds a lock per key instead: a cold start still makes one
+# request per key, and different keys no longer wait on each other.
 _NET_LOCK = threading.RLock()
+
+# The limiter's state, the token bucket and the throttle window. Held only to
+# take a token or record a refusal, never across a network call or a wait
+# (see _wait_turn). Its own lock
+# rather than _NET_LOCK because a rate-limited worker inside batch_quote's pool
+# records the refusal while the pool's owner holds _NET_LOCK waiting on that
+# worker: with one lock for both, that is a deadlock, and it froze every Yahoo
+# call in the process until a restart. A test that faked a "Too Many Requests"
+# there hung the suite on 2026-09-28, which is how it was found.
+_PACE_LOCK = threading.Lock()
+_KEY_LOCKS: Dict[str, threading.Lock] = {}
+_KEY_GUARD = threading.Lock()
+
+
+def _key_lock(key: str) -> threading.Lock:
+    with _KEY_GUARD:
+        lock = _KEY_LOCKS.get(key)
+        if lock is None:
+            lock = _KEY_LOCKS[key] = threading.Lock()
+        return lock
 
 
 # ------------------------------------------------------------ outbound pacing
@@ -101,19 +130,29 @@ def _on_throttle() -> None:
     """Halve the sustained rate and surrender the burst.
 
     The bucket is emptied as well as slowed: whatever allowance was left is
-    exactly what would be spent firing into a window Yahoo has just closed."""
+    exactly what would be spent firing into a window Yahoo has just closed.
+    Emptied, not reset: below zero it is the queue of callers already booked
+    a turn (see _wait_turn), and zeroing it would hand their turns out again."""
     _BUCKET["rate"] = max(YF_RATE_FLOOR, float(_BUCKET["rate"]) / 2.0)
-    _BUCKET["tokens"] = 0.0
+    _BUCKET["tokens"] = min(float(_BUCKET["tokens"]), 0.0)
 
 
 def _wait_turn() -> None:
-    """Hold until it is safe to make a request. Called holding _NET_LOCK.
+    """Hold until it is safe to make a request.
 
     Two waits in order. The backoff first, because there is no point spending a
     token on a window that is already closed -- and because without this a
     throttled call returns another 429 and pushes `until` out a further 60s,
     which is how the backoff outran the scan's own 90s cool-off and the feed
-    could never come back inside one scan. Then the bucket."""
+    could never come back inside one scan. Then the bucket.
+
+    Neither wait holds _PACE_LOCK. A caller past the bucket takes its token on
+    credit, under the lock, and sleeps off the debt after releasing it: the
+    bucket goes below zero by the queue booked behind it, so each caller's
+    turn is still one refill after the last. Slept under the lock, every fetch
+    that had already finished waited there to record its success until the
+    last sleeper woke. Measured with twenty fetches at once, twelve tokens and
+    2/s: the twelve that were done at 0.30s all returned at 4.03s."""
     deadline = time.time() + MAX_GATE_WAIT
     while True:
         remaining = float(_THROTTLE["until"]) - time.time()
@@ -122,16 +161,15 @@ def _wait_turn() -> None:
             break
         time.sleep(max(min(remaining, 1.0, deadline - now), 0.05))
 
-    now = time.time()
-    rate = max(float(_BUCKET["rate"]), YF_RATE_FLOOR)
-    _BUCKET["tokens"] = min(YF_BURST,
-                            float(_BUCKET["tokens"]) + (now - float(_BUCKET["last"])) * rate)
-    _BUCKET["last"] = now
-    if _BUCKET["tokens"] < 1.0:
-        time.sleep((1.0 - float(_BUCKET["tokens"])) / rate)
-        _BUCKET["tokens"] = 1.0
-        _BUCKET["last"] = time.time()
-    _BUCKET["tokens"] = float(_BUCKET["tokens"]) - 1.0
+    with _PACE_LOCK:
+        now = time.time()
+        rate = max(float(_BUCKET["rate"]), YF_RATE_FLOOR)
+        tokens = min(YF_BURST,
+                     float(_BUCKET["tokens"]) + (now - float(_BUCKET["last"])) * rate) - 1.0
+        _BUCKET["tokens"] = tokens
+        _BUCKET["last"] = now
+    if tokens < 0.0:
+        time.sleep(-tokens / rate)
 
 
 def _cached(key: str, ttl: float, producer):
@@ -141,7 +179,7 @@ def _cached(key: str, ttl: float, producer):
     if hit is not None and now - hit[0] < ttl:
         return hit[1]
 
-    with _NET_LOCK:
+    with _key_lock(key):
         # Re-check: another thread may have populated the key while we waited,
         # which also collapses duplicate fetches on a cold start.
         hit = _CACHE.get(key)
@@ -149,15 +187,18 @@ def _cached(key: str, ttl: float, producer):
             return hit[1]
         # Every network fetch in this module goes through here, which is the
         # only reason one gate is enough. A method that reached yfinance
-        # directly would bypass the limiter silently.
+        # directly would bypass the limiter silently. The gate is global; the
+        # fetch after it is not (see _NET_LOCK).
         _wait_turn()
         try:
             value = producer()
         except BaseException as exc:
             if _is_rate_limit(exc):
-                _on_throttle()
+                with _PACE_LOCK:
+                    _on_throttle()
             raise
-        _on_success()
+        with _PACE_LOCK:
+            _on_success()
         _CACHE[key] = (time.time(), value)
         return value
 
@@ -194,7 +235,9 @@ def _is_rate_limit(exc: BaseException) -> bool:
 
 
 def note_throttle(exc: BaseException) -> None:
-    with _NET_LOCK:
+    # _PACE_LOCK, not _NET_LOCK: this is called from batch_quote's workers while
+    # the pool's owner holds _NET_LOCK (see _PACE_LOCK).
+    with _PACE_LOCK:
         _THROTTLE["until"] = time.time() + THROTTLE_BACKOFF_SECONDS
         _THROTTLE["hits"] = int(_THROTTLE["hits"]) + 1
         _THROTTLE["last_seen"] = datetime.now(timezone.utc).isoformat()
@@ -546,15 +589,17 @@ class YFinanceProvider(MarketDataProvider):
 
         def build() -> Dict[str, pd.DataFrame]:
             try:
-                raw = yf.download(
-                    tickers,
-                    period=period,
-                    interval=interval,
-                    group_by="ticker",
-                    auto_adjust=False,
-                    progress=False,
-                    threads=True,
-                )
+                # The one call that must not overlap another of itself.
+                with _NET_LOCK:
+                    raw = yf.download(
+                        tickers,
+                        period=period,
+                        interval=interval,
+                        group_by="ticker",
+                        auto_adjust=False,
+                        progress=False,
+                        threads=True,
+                    )
             except Exception as exc:
                 if _is_rate_limit(exc):
                     note_throttle(exc)

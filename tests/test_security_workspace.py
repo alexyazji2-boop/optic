@@ -212,9 +212,15 @@ def test_the_chart_facet_names_the_symbol_it_is_actually_showing():
 
 def test_the_price_is_only_shown_when_it_belongs_to_that_symbol():
     """STATE.swing holds the loaded ticker's quote. Printing it beside a
-    different charted symbol would be a wrong number, not a missing one."""
+    different charted symbol would be a wrong number, not a missing one.
+
+    The quick quote a first load paints ahead of the payload is held to the
+    same rule, and so is a payload still held for the previous name while the
+    next one loads. tests/test_quick_quote.py drives all three cases."""
     body = APP_JS.split("function securityHeader(", 1)[1].split("\nfunction ", 1)[0]
-    assert "sym === STATE.ticker ? ((STATE.swing || {}).quote) : null" in body
+    assert "sym === STATE.ticker ? (swingQ || quick) : null" in body
+    assert "STATE.swing.ticker === sym" in body
+    assert "STATE.quickQuote.ticker === sym" in body
 
 
 def test_compare_is_not_a_facet():

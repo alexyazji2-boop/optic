@@ -10101,7 +10101,13 @@ function securityHeader(view, opts = {}) {
    * means when they click Financials. */
   const sym = (opts.symbol !== undefined ? opts.symbol : STATE.ticker) || '';
   if (!sym) return '';
-  const q = (sym === STATE.ticker ? ((STATE.swing || {}).quote) : null) || {};
+  // The full payload's quote once it has landed, and the quick one before it
+  // (see loadSecurityFacet). Never another symbol's: a payload still held for
+  // the previous name must not lend its price to this one.
+  const swingQ = STATE.swing && (!STATE.swing.ticker || STATE.swing.ticker === sym)
+    ? STATE.swing.quote : null;
+  const quick = STATE.quickQuote && STATE.quickQuote.ticker === sym ? STATE.quickQuote.quote : null;
+  const q = (sym === STATE.ticker ? (swingQ || quick) : null) || {};
   const has = q.price !== null && q.price !== undefined;
   const pct = q.change_pct;
   const dir = !Number.isFinite(pct) || Math.abs(pct) < 0.005
@@ -10182,6 +10188,7 @@ async function loadSecurityFacet(view, force, opts = {}) {
   const have = STATE.swing && STATE.swing.ticker === STATE.ticker;
   if (!have || force) {
     let ticking = null;
+    let pending = true;   // the quick quote below stands in for this load only
     if (!opts.silent) {
       /* Said, with a clock, because the wait looked like a failure. A symbol's
        * first load measured 9.4s, 10.3s and 58.1s on the live site, and a
@@ -10207,6 +10214,24 @@ async function loadSecurityFacet(view, force, opts = {}) {
           clock.textContent = `${Math.round((Date.now() - started) / 1000)}s`;
         }, 1000);
       }
+      /* The price first. The strip's name, price and change are one cached
+       * quote on the server, a fraction of a second, while the rest of a first
+       * load is several; asked for alongside it, the header is repainted with
+       * the price the moment it lands and the counter keeps running below.
+       * A plain fetch, not getJSON: best effort, the full load reports its own
+       * failures, and test_client_loading.py counts getJSON requests. */
+      if (!have && typeof fetch === 'function') {
+        fetch(`/api/quote/${encodeURIComponent(ticker)}`)
+          .then((res) => (res.ok ? res.json() : null))
+          .then((r) => {
+            if (!pending || !r || r.available !== true || STATE.ticker !== ticker) return;
+            if (STATE.swing && STATE.swing.ticker === ticker) return;   // the full answer won
+            STATE.quickQuote = { ticker, quote: r.quote };
+            const head = host.querySelector && host.querySelector('header.sec-head');
+            if (head && STATE.view === view) head.outerHTML = securityHeader(view);
+          })
+          .catch(() => { /* the full load says what went wrong */ });
+      }
     }
     try {
       const data = await loadSwing(force, { silent: true, propagateError: true });
@@ -10231,6 +10256,11 @@ async function loadSecurityFacet(view, force, opts = {}) {
       return;
     } finally {
       if (ticking) clearInterval(ticking);
+      /* Ends with the load it stood in for. Kept, it would be the price the
+       * next first load of this symbol opened with, however old by then; the
+       * error card above has already been drawn with it. */
+      pending = false;
+      if (STATE.quickQuote && STATE.quickQuote.ticker === ticker) STATE.quickQuote = null;
     }
   }
   if (STATE.view !== view) return;      // the reader moved on while it loaded
