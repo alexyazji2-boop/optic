@@ -255,11 +255,20 @@ def test_a_catalyst_takes_its_link_source_and_date_from_its_stories(monkeypatch)
     out, _ = _scan(monkeypatch, [dict(OPEC, event_date="1999-01-01",
                                       source_url="https://invented.example")])
     row = _rows()[0]
-    assert row["event_date"] == _iso(1)[:10], "the newest cited story dates it"
-    # The link is the newest story a reader can open: the FT one is paywalled.
+    # The link is the newest story a reader can open, the FT one being
+    # paywalled, and the date is that story's, so the two never disagree.
     assert row["source_url"] == "https://bbc.example/opec"
     assert row["source_name"] == "BBC News"
+    assert row["event_date"] == _iso(3)[:10]
     assert (out["identified"], out["new"], out["written"]) == (1, 1, 1)
+
+
+def test_the_date_is_the_linked_storys_not_the_newest_cited(monkeypatch):
+    """Stories a day apart, so the two rules cannot agree by accident."""
+    _scan(monkeypatch, [dict(OPEC, story_ids=["s2", "s3"])])
+    row = _rows()[0]
+    assert row["source_url"] == "https://cnbc.example/defence"
+    assert row["event_date"] == _iso(30)[:10]
 
 
 def test_a_paywalled_story_is_the_link_when_it_is_the_only_one(monkeypatch):
@@ -316,6 +325,14 @@ def test_an_older_story_never_moves_a_catalyst_back(monkeypatch):
     row = _rows()[0]
     assert (row["title"], row["event_date"]) == ("Current title", _iso(0)[:10])
     assert out["written"] == 0
+
+
+def test_the_same_story_read_again_can_correct_its_own_date(monkeypatch):
+    """The first live scan stored a catalyst under a newer date than its own
+    linked story's. Rereading that story is a correction, not a move back."""
+    _seed(event_date=_iso(0)[:10], source_url="https://cnbc.example/defence")
+    _scan(monkeypatch, [dict(OPEC, existing_id="iran0000blockade", story_ids=["s3"])])
+    assert _rows()[0]["event_date"] == _iso(30)[:10]
 
 
 def test_an_update_that_brings_no_companies_keeps_the_stored_ones(monkeypatch):

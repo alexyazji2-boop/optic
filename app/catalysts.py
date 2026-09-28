@@ -270,10 +270,11 @@ def upsert(entries: List[Dict[str, Any]]) -> int:
 
     An update replaces the text and carries the date forward, so a catalyst
     that keeps developing stays at the top of the list and inside its horizon.
-    It never carries one back: a scan that rereads an older story about a stored
-    catalyst would otherwise date a September development to August. Companies
-    survive an update that brought none, since an empty list is a thin answer,
-    not a finding that the links stopped existing.
+    A different, older story never carries it back: a scan that rereads one
+    would otherwise date a September development to August. The same story
+    may, since its own date is the right one for it. Companies survive an
+    update that brought none, since an empty list is a thin answer, not a
+    finding that the links stopped existing.
     """
     if not entries:
         return 0
@@ -299,7 +300,8 @@ def upsert(entries: List[Dict[str, Any]]) -> int:
                                         ELSE excluded.companies END,
                          source_url=COALESCE(excluded.source_url, catalysts.source_url),
                          source_name=COALESCE(excluded.source_name, catalysts.source_name)
-                       WHERE excluded.event_date >= catalysts.event_date""",
+                       WHERE excluded.event_date >= catalysts.event_date
+                          OR excluded.source_url = catalysts.source_url""",
                     (e["id"], now, e.get("event_date") or now[:10], e["title"],
                      e.get("summary", ""), e.get("category", "corporate"),
                      e.get("horizon", "medium-term"),
@@ -687,11 +689,14 @@ def _refresh(hours: int, trigger: str) -> Dict[str, Any]:
             log.info("catalysts: dropped %r, no story in the scan behind it",
                      str(c["title"])[:80])
             continue
-        # The date is the latest development's; the link is the newest story a
-        # reader without a subscription can open, and the newest of all when
-        # every one is paywalled.
-        event_date = max(str(s["published"]) for s in cited)[:10]
+        # The link is the newest story a reader without a subscription can
+        # open, or the newest of all when every one is paywalled, and the date
+        # is that story's. Dated by the newest story cited, the first live
+        # scan put 2026-09-28 on a fuel-economy rollback whose linked story
+        # was from the 26th and a Fed proposal released on the 24th: a card
+        # whose date and link disagree.
         link = max(cited, key=lambda s: (feeds.is_reachable(s), str(s["published"])))
+        event_date = str(link["published"])[:10]
         title = _plain(c["title"])[:200]
 
         existing = str(c.get("existing_id") or "").strip()
