@@ -392,11 +392,18 @@ def scan_due(now: Optional[datetime] = None) -> bool:
 
 
 def scheduled() -> bool:
-    """Whether this server refreshes the library on its own."""
+    """Whether this server refreshes the library on its own.
+
+    Only with a key Anthropic accepts, and not while the page shows the live
+    site's library instead: a copy with an expired key tried every hour and
+    recorded a refusal every time.
+    """
     if not AUTO:
         return False
-    from . import ai                        # local: avoids an import cycle
-    return ai.available().get("enabled") is True
+    from . import ai, live_mirror           # local: avoids an import cycle
+    if live_mirror.active():
+        return False
+    return ai.key_usable()
 
 
 # When this process last started a scheduled scan, on the monotonic clock.

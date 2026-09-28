@@ -588,6 +588,7 @@ def _human_error(exc: Exception) -> str:
         return ("Rate limited by the API. Too many requests in a short window. Wait "
                 "a moment before asking again.")
     if "authentication" in blob or "invalid x-api-key" in blob or status == 401:
+        _note_refused()
         # Two audiences, as in `available` below. "Check ANTHROPIC_API_KEY in
         # .env, then restart the server so it is re-read" read to the operator
         # as though a restart might do it. Measured on 2026-09-28: the local key
@@ -617,6 +618,7 @@ def _human_error(exc: Exception) -> str:
     # production actually hit. It fell through to "unexpected error... Try
     # again" -- which told every reader to retry a fault no retry can reach.
     if "not scoped to a workspace" in blob or "anthropic-workspace-id" in blob:
+        _note_refused()
         return ("Pulse is not set up correctly on this deployment: its API key needs "
                 "a workspace, and Anthropic refuses every request until it has one. "
                 "Asking again will not help; the key has to be changed.")
@@ -628,6 +630,54 @@ def _human_error(exc: Exception) -> str:
                 "again will get the same answer.".format(name))
     # Unrecognised: keep the type name, which is the one useful part of the repr.
     return "The assistant failed with an unexpected error ({}). Try again.".format(name)
+
+
+# ------------------------------------------------------ whether the key works
+
+# What Anthropic last said about this server's key. `available` answers "is
+# there a key", and an expired key passes that: measured on 2026-09-28, the
+# local .env held a key that had expired on 2026-09-10, and every panel treated
+# it as configured until its first call came back 401.
+_KEY_CHECK: Dict[str, Any] = {"usable": None, "at": 0.0}
+KEY_CHECK_TTL = 900.0
+
+
+def _note_refused() -> None:
+    """Called by `_human_error` on a refusal, so the first 401 settles it."""
+    _KEY_CHECK.update(usable=False, at=time.time())
+
+
+def key_usable() -> bool:
+    """True when there is a key and Anthropic accepts it.
+
+    Asked of the Models API, which costs nothing, and remembered for fifteen
+    minutes so a page load is not a round trip to Anthropic. A network failure
+    is not a refusal: the last answer stands, and with none the key gets the
+    benefit of the doubt, because switching a copy over to another server's
+    panels on a blip is the worse surprise.
+    """
+    if available().get("enabled") is not True:
+        return False
+    now = time.time()
+    if _KEY_CHECK["usable"] is not None and now - _KEY_CHECK["at"] < KEY_CHECK_TTL:
+        return bool(_KEY_CHECK["usable"])
+    try:
+        from anthropic import Anthropic
+        kwargs: Dict[str, Any] = {"max_retries": 0, "timeout": 10.0}
+        workspace = (os.environ.get("ANTHROPIC_WORKSPACE_ID") or "").strip()
+        if workspace:
+            kwargs["default_headers"] = {"anthropic-workspace-id": workspace}
+        Anthropic(**kwargs).models.list(limit=1)
+        usable = True
+    except Exception as exc:                                    # noqa: BLE001
+        # 400 is the unscoped personal key, 401 a bad or expired one, 403 one
+        # without access. Anything else is the network, which proves nothing.
+        if getattr(exc, "status_code", None) not in (400, 401, 403):
+            log.info("key check inconclusive: %s", type(exc).__name__)
+            return True if _KEY_CHECK["usable"] is None else bool(_KEY_CHECK["usable"])
+        usable = False
+    _KEY_CHECK.update(usable=usable, at=now)
+    return usable
 
 
 def available() -> Dict[str, Any]:

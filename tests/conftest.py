@@ -48,8 +48,11 @@ from __future__ import annotations
 
 import pytest
 
+from app import ai
 from app import alerts as alert_inbox
+from app import catalysts
 from app import db as accounts_db
+from app import live_mirror
 from app import paper
 
 
@@ -84,7 +87,32 @@ def _real_data_out_of_the_way(tmp_path_factory):
         # doing -- four test files redirect it by hand and the rest do not.
         patch.setattr(alert_inbox, "DB_PATH",
                       str(tmp_path_factory.mktemp("alerts") / "alerts.db"))
+        # The catalyst store is real data too, and the library's freshness line
+        # reads it on every search. Like the inbox it makes its own schema.
+        patch.setattr(catalysts, "DB_PATH",
+                      str(tmp_path_factory.mktemp("catalysts") / "catalysts.db"))
         yield
+
+
+@pytest.fixture(autouse=True)
+def _no_live_calls(monkeypatch):
+    """No test asks Anthropic about the key or reads the live site.
+
+    `ai.key_usable` makes a real call to the Models API, and `live_mirror`
+    fetches from theopticterminal.com; left alone, whether a test mirrored
+    would depend on the key in the machine's .env. Here a key is usable when
+    one is configured, which is what every test before the probe assumed, the
+    mirror is off, and a stray read of the live site fails loudly. The tests
+    of those three things put the real ones back themselves."""
+    monkeypatch.setattr(ai, "_KEY_CHECK", {"usable": None, "at": 0.0})
+    monkeypatch.setattr(ai, "key_usable", lambda: ai.available().get("enabled") is True)
+    monkeypatch.setattr(live_mirror, "MODE", "off")
+    monkeypatch.setattr(live_mirror, "_CACHE", {})
+
+    def refuse(url, timeout=None):
+        raise RuntimeError("the suite does not read the live site: " + url)
+
+    monkeypatch.setattr(live_mirror, "_http_get", refuse)
 
 
 @pytest.fixture

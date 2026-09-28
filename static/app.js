@@ -11418,6 +11418,13 @@ const CAT_STRENGTH_CLASS = { strong: 'up', moderate: 'flat', weak: 'down' };
 
 const CATALYST_FILTERS = { q: '', status: 'relevant', category: '', sector: '', theme: '' };
 
+/* Only a web address becomes a link. The library can arrive from the live site
+ * as well as this copy's own store, and esc() stops markup, not a scheme: a
+ * `javascript:` address would still run on click. */
+function httpUrl(u) {
+  return /^https?:\/\//i.test(String(u || '')) ? String(u) : '';
+}
+
 function catalystCard(c) {
   const companies = (c.companies || []).map((co) => `<tr>
     <td class="name"><button type="button" class="tkr" data-analyse="${esc(co.ticker)}"
@@ -11448,7 +11455,7 @@ function catalystCard(c) {
       </table>
       `
     : '<p class="sub">No company links were stored for this catalyst.</p>'}
-      ${c.source_url ? `<p class="caveat"><a href="${esc(c.source_url)}" target="_blank"
+      ${httpUrl(c.source_url) ? `<p class="caveat"><a href="${esc(httpUrl(c.source_url))}" target="_blank"
         rel="noopener noreferrer nofollow" style="color:var(--s1)">Source${
   c.source_name ? ' · ' + esc(c.source_name) : ''}</a></p>` : ''}
     </div>
@@ -11478,6 +11485,24 @@ function catalystScanProblem(scan) {
   if (STATE.catalystScan || !scan || scan.last_ok !== false || !scan.last_reason) return '';
   return `<div class="callout">The last scan, ${esc(briefAgo(scan.last_at))}, did not finish: ${
     esc(scan.last_reason)}</div>`;
+}
+
+/* The library on this page is the live site's when this copy cannot scan, and
+ * the panel says so, with the reason the server gave. If the live site could
+ * not be reached either, this copy's own store is what is shown, and that is
+ * said too, since it is the older of the two. */
+function catalystMirrorNote(d) {
+  if (!d) return '';
+  const host = (u) => String(u || '').replace(/^https?:\/\//, '');
+  if (d.mirror) {
+    return `<p class="caveat">Showing the live library from ${esc(host(d.mirror.from))}. ${
+      esc(d.mirror.why || '')}</p>`;
+  }
+  if (d.mirror_failed) {
+    return `<div class="callout">${esc(host(d.mirror_failed.from))} could not be reached, so this
+      is this copy's own library.</div>`;
+  }
+  return '';
 }
 
 function catalystEmptyText(d) {
@@ -11528,7 +11553,9 @@ function renderCatalysts(d) {
         <label>Theme <select data-cat-filter="theme">${
   opts(facets.themes, f.theme, 'All themes')}</select></label>
       </div>
-      <button type="button" class="bulk-btn" data-cat-refresh>Scan for new catalysts</button>
+      ${d && d.mirror
+    ? '<button type="button" class="bulk-btn" data-cat-reload>Refresh from the live site</button>'
+    : '<button type="button" class="bulk-btn" data-cat-refresh>Scan for new catalysts</button>'}
     </div>
   </div>`;
 
@@ -11544,6 +11571,7 @@ function renderCatalysts(d) {
   fmt(d.matched, 0)} catalyst${d.matched === 1 ? '' : 's'}${
   d.stored_total !== d.matched ? ` of ${fmt(d.stored_total, 0)} stored` : ''}${
   catalystScanLine(d.scan)}</p>
+    ${catalystMirrorNote(d)}
     ${STATE.catalystScan ? `<div class="callout">${esc(STATE.catalystScan)}</div>` : ''}
     ${catalystScanProblem(d.scan)}
     ${/* Once for the list, not once per card.
@@ -11569,14 +11597,14 @@ function catalystHost() {
   return document.getElementById('catalyst-host');
 }
 
-async function loadCatalysts(force) {
+async function loadCatalysts(force, fresh) {
   const host = catalystHost();
   if (!host) return;
   if (STATE.catalysts && !force) { host.innerHTML = renderCatalysts(STATE.catalysts); return; }
   host.innerHTML = renderCatalysts(null);
   const f = CATALYST_FILTERS;
   const qs = new URLSearchParams({ q: f.q, status: f.status, category: f.category,
-    sector: f.sector, theme: f.theme }).toString();
+    sector: f.sector, theme: f.theme, ...(fresh ? { fresh: 'true' } : {}) }).toString();
   try {
     STATE.catalysts = await getJSON(`/api/catalysts?${qs}`);
   } catch (err) {
@@ -11613,11 +11641,19 @@ async function refreshCatalysts(btn) {
  *
  * Collapsed by default on a weekday and open at the start of the week, since
  * that is when it is new. */
+/* Said on the panel rather than hidden: a copy without a working key shows the
+ * live site's update, which is the same one every reader of the live site gets. */
+function weeklyMirrorNote(w) {
+  if (!w || !w.mirror) return '';
+  return `<p class="caveat">From ${esc(String(w.mirror.from || '').replace(/^https?:\/\//, ''))},
+    which writes this once a week. ${esc(w.mirror.why || '')}</p>`;
+}
+
 function renderWeekly(w) {
   if (!w) return '';
   if (!w.available) {
     return `<div class="panel span-all"><h2>${hg('Weekly market update')}</h2>
-      <p class="sub">${esc(w.reason || 'No weekly update available.')}</p></div>`;
+      <p class="sub">${esc(w.reason || 'No weekly update available.')}</p>${weeklyMirrorNote(w)}</div>`;
   }
   const e = (w.facts || {}).earnings || {};
   const days = (e.days || []).map((d) => `<li><strong>${esc(d.day)}:</strong> ${
@@ -11636,6 +11672,7 @@ function renderWeekly(w) {
     </div>` : ''}
     <p class="caveat">${gloss(w.method || '')}</p>
     <p class="caveat">${esc(w.disclaimer || '')}</p>
+    ${weeklyMirrorNote(w)}
   </div>`;
 }
 
@@ -31731,6 +31768,14 @@ document.addEventListener('click', (evt) => {
   if (catFilter && catFilter.tagName === 'SELECT') { /* handled on change */ }
   const catRefresh = evt.target.closest('[data-cat-refresh]');
   if (catRefresh) { refreshCatalysts(catRefresh); return; }
+  const catReload = evt.target.closest('[data-cat-reload]');
+  if (catReload) {
+    catReload.disabled = true;
+    catReload.textContent = 'Refreshing…';
+    STATE.catalystScan = '';
+    loadCatalysts(true, true);
+    return;
+  }
   const sread = evt.target.closest('[data-sector-read]');
   if (sread) {
     openSectorRead(sread.dataset.sectorRead,

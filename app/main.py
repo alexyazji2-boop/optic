@@ -37,6 +37,7 @@ from . import priority as priority_mod
 from . import weekly as weekly_mod
 from . import catalysts as catalysts_mod
 from . import catalyst_live as catalyst_live_mod
+from . import live_mirror
 from .analytics import cases as cases_mod
 from .analytics import congress as congress_mod
 from . import papertrade as papertrade_mod
@@ -2015,7 +2016,22 @@ async def weekly_update(force: bool = False) -> Dict[str, Any]:
     affordable to publish at all.
     """
     def build() -> Dict[str, Any]:
+        # On a copy that cannot write it, the live site's, which is the same
+        # update every reader gets. `force` only skips this copy's cache: it is
+        # never passed on, so nobody here can make the live site write again.
         key = weekly_mod.week_key()
+        if live_mirror.active():
+            got = live_mirror.fetch("/api/weekly", fresh=force)
+            if got is not None:
+                return got
+            # Unreachable, and this copy cannot write one either: say both,
+            # rather than attempt a write that is certain to be refused.
+            if not ai.key_usable():
+                return {"available": False, "week_key": key,
+                        "mirror_failed": {"from": live_mirror.LIVE_URL},
+                        "reason": ("The live site's weekly update could not be fetched, "
+                                   "and this copy's Anthropic key cannot write one. "
+                                   "It is fetched again on the next load.")}
         if force:
             ai._WEEKLY_CACHE.pop(key, None)
         facts = weekly_mod.gather(YF_PROVIDER)
@@ -2089,11 +2105,27 @@ async def catalyst_library(
     sector: str = Query(""),
     theme: str = Query(""),
     limit: int = Query(60, ge=1, le=200),
+    fresh: bool = Query(False, description="Skip this copy's cache of the live library"),
 ) -> Dict[str, Any]:
-    """Search the stored catalyst library. Reads only — never generates."""
+    """Search the stored catalyst library. Reads only — never generates.
+
+    A local copy that cannot write its own (see live_mirror) answers with the
+    live site's library, and says so. If the live site cannot be reached it
+    falls back to its own store, and says that too.
+    """
     def build() -> Dict[str, Any]:
-        return catalysts_mod.search(query=q, status=status, category=category,
-                                    sector=sector, theme=theme, limit=limit)
+        mirroring = live_mirror.active()
+        if mirroring:
+            got = live_mirror.fetch("/api/catalysts", {
+                "q": q, "status": status, "category": category, "sector": sector,
+                "theme": theme, "limit": limit}, fresh=fresh)
+            if got is not None:
+                return got
+        out = catalysts_mod.search(query=q, status=status, category=category,
+                                   sector=sector, theme=theme, limit=limit)
+        if mirroring:
+            out["mirror_failed"] = {"from": live_mirror.LIVE_URL}
+        return out
     return await _run(build)
 
 
@@ -2108,6 +2140,13 @@ async def catalyst_refresh(request: Request,
     catalyst loop below scans on a schedule whether or not anyone presses this.
     """
     _write_guard(request)
+    # A copy showing the live library has nothing to scan with, and its own
+    # store is not what the page shows. The button is not drawn in that case;
+    # this is for a page that was open before the key stopped working.
+    if live_mirror.active():
+        return {"available": False, "mirror": {"from": live_mirror.LIVE_URL},
+                "reason": live_mirror.why() + " The live library rescans itself "
+                          "on its own schedule."}
 
     def build() -> Dict[str, Any]:
         out = catalysts_mod.refresh(hours=hours, trigger="manual")
