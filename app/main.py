@@ -2250,6 +2250,45 @@ async def pe_history_panel(ticker: str, years: int = Query(10, ge=2, le=20)) -> 
     return await _run(build)
 
 
+@app.get("/api/weekly-bars/{ticker}")
+async def weekly_bars(ticker: str) -> Dict[str, Any]:
+    """Ten years of weekly bars for the charts' 1W size.
+
+    `/api/weekly-bars`, not `/api/weekly/{ticker}`: `/api/weekly` is the Weekly
+    update panel, and a client function named after it collided with that
+    panel's own loadWeekly -- the later declaration silently won.
+
+    The weekly chart was rolled up from the two years of daily bars the ticker
+    payload carries: 105 weeks, so a 200-week average -- on the 1D chart as a
+    200-day one -- could never draw on 1W, and its key said it needed 200 bars.
+    Ten years is about 520 weeks. Labelled by each week's Monday, as the feed
+    labels them, which is also what makes a mid-week trade snap to its own week
+    rather than the one before.
+    """
+    sym = ticker.strip().upper()
+
+    def build() -> Dict[str, Any]:
+        df = YF_PROVIDER.history(sym, period="10y", interval="1wk")
+        if df is None or df.empty:
+            return {"available": False, "ticker": sym,
+                    "reason": "No weekly history for {}.".format(sym)}
+        df = df.dropna(subset=["Close"])
+
+        def col(name, digits=4):
+            if name not in df:
+                return None
+            return [None if v != v else round(float(v), digits) for v in df[name]]
+        return {
+            "available": True,
+            "ticker": sym,
+            "dates": [str(i.date()) for i in df.index],
+            "open": col("Open"), "high": col("High"), "low": col("Low"),
+            "close": col("Close"), "volume": col("Volume", 0),
+            "bars": int(len(df)),
+        }
+    return await _run(build)
+
+
 @app.get("/api/trendlines/{ticker}")
 async def trendlines_panel(ticker: str,
                            period: str = Query("1y"),

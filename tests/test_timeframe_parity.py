@@ -129,7 +129,8 @@ def test_the_charting_tab_draws_every_family_on_every_size():
     assert "bands: intraday ? [] :" not in ws
     assert "srBands(ps.sr || [], ps.atr, ps.spot)" in ws
     assert "zoneBands(intraday ? (ps.patterns || {}) : (d.patterns || {}))" in ws
-    assert "segments: !showTrends ? []\n        : trendSegments(trendlinesFor(d.ticker), ps.dates || [])," in ws
+    assert ("segments: !showTrends ? []\n        : trendSegments(trendlinesFor(d.ticker), ps.dates || [], "
+            "{ mondays: !!ps.mondays })," in ws)
     assert "events: showInsiders\n" in ws
     assert "!intraday" not in ws
 
@@ -140,12 +141,12 @@ def test_the_options_tab_draws_every_family_on_every_size():
     assert "!ps.intraday" not in swing
     assert "srBands(srLevels, ps.intraday ? ps.atr : (t.volatility || {}).atr14," in swing
     assert "zoneBands(ps.intraday ? (ps.patterns || {}) : d.patterns)" in swing
-    assert "trendSegments(trendlinesFor(d.ticker), ps.dates || [])" in swing
+    assert "trendSegments(trendlinesFor(d.ticker), ps.dates || [], { mondays: !!ps.mondays })" in swing
 
 
 def test_the_options_levels_come_from_the_bars_on_screen():
     render = _fn("renderSwing")
-    assert "const srSource = srIntra || sliceSeries(" in render
+    assert "const srSource = srIntra || (weeklyAll || sliceSeries(" in render
     assert "const srUnit = srIntra ? ' bars' :" in render
 
 
@@ -189,3 +190,54 @@ def test_weekly_bars_have_their_own_studies():
 def test_stages_and_drawings_work_on_every_size():
     assert "if (!wsOverlayDrawn('stages') || !symbol) return null;" in _fn("stageTints")
     assert "`${sym}@${chartRange}`" in _fn("wsDrawKey")
+
+
+# ------------------------------------------------------------ weekly history
+
+
+def test_the_weekly_endpoint_sends_ten_years_of_monday_labelled_bars(monkeypatch):
+    feed = _Feed()
+    body = _client(monkeypatch, feed).get("/api/weekly-bars/PLTR").json()
+    assert ("PLTR", "10y", "1wk") in feed.daily_calls
+    assert body["available"] is True and body["bars"] == 104
+    assert body["dates"][0] == "2024-09-30", "the week's Monday"
+    assert len(body["open"]) == len(body["close"]) == 104
+
+
+def test_1w_uses_the_weekly_bars_once_they_are_here():
+    """A 200-week average needs 200 weeks; the roll-up of two years of daily
+    bars had 105, so SMA 200 could never draw on 1W."""
+    fn = _fn("weeklySeriesFor")
+    assert "if (sym && (!w || w.symbol !== sym)) loadWeeklyBars(sym);" in fn
+    assert "return aggregateWeekly(((d && d.technicals) || {}).price_series || {});" in fn
+    bars = _fn("weeklyFromBars")
+    assert "sma200: smaSeries(close, 200)," in bars
+    for name in ("wsFullSeries", "swingFullSeries"):
+        assert "weeklySeriesFor(d)" in _fn(name), name
+    assert "const weeklyAll = chartInterval === 'weekly' ? weeklySeriesFor(d) : null;" in _fn("renderSwing")
+
+
+def test_a_late_weekly_answer_for_another_symbol_is_dropped():
+    fn = _fn("loadWeeklyBars")
+    assert "if (!weeklyBars || weeklyBars.symbol !== symbol) return;" in fn
+    assert "wsWindow = null;" in fn, "a window into the stand-in is not a window into these bars"
+
+
+def test_daily_trend_anchors_find_their_own_monday():
+    fn = _fn("trendSegments")
+    assert "const target = mondays ? (weekMonday(anchor) || anchor) : anchor;" in fn
+
+
+def test_no_client_function_is_declared_twice():
+    """Function declarations hoist, and the later of two with one name replaces
+    the earlier without a word. The weekly-bars loader was first written as
+    loadWeekly, which the Weekly update panel already had eleven thousand lines
+    further down: the chart called the panel's loader, fetched the panel, and
+    the 1W chart stayed on its 105-week stand-in with nothing in the console."""
+    import collections
+    names = []
+    for path in ("static/app.js", "static/charts.js"):
+        names += re.findall(r"^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(",
+                            (ROOT / path).read_text(), re.M)
+    dup = [n for n, c in collections.Counter(names).items() if c > 1]
+    assert not dup, dup

@@ -627,7 +627,8 @@ def test_each_bar_size_keeps_its_own_drawings():
     existing drawing moves."""
     key = APP_JS[APP_JS.index("function wsDrawKey()"):]
     key = key[:key.index("\n}")]
-    assert "return isIntradayRange(chartRange) ? `${sym}@${chartRange}` : sym;" in key
+    assert "if (isIntradayRange(chartRange)) return `${sym}@${chartRange}`;" in key
+    assert "return chartInterval === 'weekly' ? `${sym}@1W` : sym;" in key
     assert "return wsDrawStore[wsDrawKey()] || [];" in APP_JS
     assert "wsDrawStore[wsDrawKey()] = list;" in APP_JS
     block = APP_JS[APP_JS.index("function wsRenderDrawings()"):]

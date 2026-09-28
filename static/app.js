@@ -2129,6 +2129,73 @@ function aggregateWeekly(ps) {
   return out;
 }
 
+/* ---------------------------------------------------------- weekly bars
+ *
+ * Ten years of weekly bars from /api/weekly-bars, for the 1W size on both chart
+ * tabs. The weekly chart was aggregateWeekly over the ticker payload's two
+ * years of daily bars: 105 weeks, so the 200-week average -- the 1D chart's
+ * 200-day one -- could never draw on 1W. Fetched when 1W is first drawn for a
+ * symbol; the roll-up stands in until it lands, and the chart redraws.
+ *
+ * These are labelled by each week's Monday, as the feed labels them, where the
+ * roll-up labels a week by its last session. Insider trades and earnings dates
+ * snap to the last bar at or before them, so with Friday labels a Tuesday trade
+ * landed on the week BEFORE it; with Mondays it lands on its own. */
+let weeklyBars = null;
+let weeklySeriesCache = null;
+
+async function loadWeeklyBars(symbol) {
+  if (!symbol) return;
+  if (weeklyBars && weeklyBars.symbol === symbol) return;   // here, or on its way
+  weeklyBars = { symbol, loading: true };
+  let data;
+  try {
+    data = await getJSON('/api/weekly-bars/' + encodeURIComponent(symbol));
+  } catch (err) {
+    data = { available: false, reason: err.message };
+  }
+  if (!weeklyBars || weeklyBars.symbol !== symbol) return;
+  weeklyBars = { ...data, symbol };
+  weeklySeriesCache = null;
+  if (chartInterval !== 'weekly') return;
+  if (STATE.view === 'chart' && (STATE.chartData || {}).ticker === symbol) {
+    // A window was indices into the 105-week stand-in, not these bars.
+    wsWindow = null;
+    wsRedrawChart();
+  } else if (STATE.view === 'swing' && STATE.swing && STATE.swing.ticker === symbol) {
+    preserveUI(views.swing, () => renderSwing(STATE.swing));
+  }
+}
+
+function weeklyFromBars(w) {
+  const close = w.close || [];
+  return {
+    dates: w.dates || [], open: w.open || [], high: w.high || [], low: w.low || [],
+    close, volume: w.volume || [],
+    sma20: smaSeries(close, 20), sma50: smaSeries(close, 50), sma200: smaSeries(close, 200),
+    ema9: emaSeries(close, 9), ema21: emaSeries(close, 21), ema50: emaSeries(close, 50),
+    weekly: true,
+    // Read by trendSegments, which has to find a daily anchor's Monday.
+    mondays: true,
+  };
+}
+
+/* The weekly series for a payload: its ten years of weekly bars once they are
+ * here, the roll-up of its daily bars until then. Cached per payload, because
+ * every redraw asks and the averages are 520 bars long. */
+function weeklySeriesFor(d) {
+  const sym = d && d.ticker;
+  const w = weeklyBars;
+  if (w && w.symbol === sym && w.available === true && Array.isArray(w.close) && w.close.length) {
+    if (!weeklySeriesCache || weeklySeriesCache.src !== w) {
+      weeklySeriesCache = { src: w, series: weeklyFromBars(w) };
+    }
+    return weeklySeriesCache.series;
+  }
+  if (sym && (!w || w.symbol !== sym)) loadWeeklyBars(sym);
+  return aggregateWeekly(((d && d.technicals) || {}).price_series || {});
+}
+
 // 'line' or 'candle'. Persisted because it's a viewing preference, not state
 // belonging to a particular ticker.
 let chartMode = 'line';
@@ -8197,7 +8264,7 @@ function swingFullSeries(d) {
   const raw = ((d.technicals || {}).price_series) || {};
   // Aggregate before windowing, for the same reason sliceSeries does: rolling
   // up after cutting produces a partial first bar.
-  return chartInterval === 'weekly' ? aggregateWeekly(raw) : raw;
+  return chartInterval === 'weekly' ? weeklySeriesFor(d) : raw;
 }
 
 /* The bars the Options chart's window indexes: this range's intraday bars
@@ -8558,7 +8625,7 @@ function swingPriceBlock(d, ps, ctx) {
         ps.intraday ? ps.spot : t.spot) : []),
     ];
     const trendSegs = !showTrends ? []
-      : trendSegments(trendlinesFor(d.ticker), ps.dates || []);
+      : trendSegments(trendlinesFor(d.ticker), ps.dates || [], { mondays: !!ps.mondays });
     mount('chart-price', (w) => lineChart({
       width: w,
       height: 420,
@@ -8759,8 +8826,7 @@ function renderSwing(d) {
   // Full weekly aggregate, unsliced. The oscillators need more history than the
   // window shows so their warm-up happens off-screen instead of leaving a gap at
   // the left edge of the chart.
-  const weeklyAll = chartInterval === 'weekly'
-    ? aggregateWeekly((d.technicals || {}).price_series || {}) : null;
+  const weeklyAll = chartInterval === 'weekly' ? weeklySeriesFor(d) : null;
   // Levels come from the full series at this interval, so zooming changes what's
   // visible but never which levels exist. Pivot strictness drops on weekly:
   // `order` counts neighbouring bars, and 4 weeks either side of a pivot is a
@@ -8769,10 +8835,10 @@ function renderSwing(d) {
   // shelves a five-minute chart shows are the ones in its bars.
   const srIntra = isIntradayRange(chartRange) && intradayMatches()
     ? intradaySeries(STATE.intraday) : null;
-  const srSource = srIntra || sliceSeries(
+  const srSource = srIntra || (weeklyAll || sliceSeries(
     d.technicals && d.technicals.price_series ? d.technicals.price_series : {},
     'all', chartInterval,
-  );
+  ));
   const srSpot = (d.quote || {}).price
     || (srSource.close || []).filter((v) => v !== null).slice(-1)[0];
   const srComputed = computeSRLevels(srSource, srSpot, {
@@ -14938,7 +15004,9 @@ try {
  * index that was a different date. */
 function wsDrawKey() {
   const sym = STATE.chartSymbol || '';
-  return isIntradayRange(chartRange) ? `${sym}@${chartRange}` : sym;
+  if (isIntradayRange(chartRange)) return `${sym}@${chartRange}`;
+  // Weekly bar 120 is a different date from daily bar 120 too.
+  return chartInterval === 'weekly' ? `${sym}@1W` : sym;
 }
 
 function wsDrawings() {
@@ -15537,7 +15605,7 @@ function wsFullSeries(d) {
   // Aggregate before windowing, for the same reason sliceSeries does: rolling
   // up after cutting produces a partial first bar.
   const weekly = chartInterval === 'weekly';
-  const base = weekly ? aggregateWeekly(raw) : raw;
+  const base = weekly ? weeklySeriesFor(d) : raw;
   // After the roll-up and before the window: the oscillators have to be as long
   // as the bars they annotate, and still full-length when wsSeries slices.
   return wsWithOscillators(base, d, weekly);
@@ -15682,7 +15750,8 @@ function studyBars() {
 /* The query that asks /api/indicators for those bars. */
 function studyQuery(bars) {
   if (bars === 'daily') return '';
-  if (bars === 'weekly') return '&weekly=true';
+  // Ten years, the span the weekly chart draws.
+  if (bars === 'weekly') return '&weekly=true&range=10y';
   return '&intraday=' + encodeURIComponent(bars);
 }
 
@@ -16525,8 +16594,11 @@ function wsSeasonalityMini(sn) {
  * whole value of automating this — "this support broke" is the event, and it
  * should not require comparing two numbers in a table.
  */
-function trendSegments(tl, chartDates) {
+function trendSegments(tl, chartDates, opts) {
   if (!tl || !tl.available || !Array.isArray(chartDates) || !chartDates.length) return [];
+  // Weeks labelled by their Monday: a daily anchor is looked up by its week's
+  // Monday, or the first bar at or after it is the NEXT week's.
+  const mondays = !!(opts && opts.mondays);
   const srcDates = tl.dates || [];
   // Where each chart bar sits in the server's frame, and vice versa.
   const posInChart = new Map();
@@ -16538,7 +16610,8 @@ function trendSegments(tl, chartDates) {
     if (!d1 || !d2) return null;
     // A weekly chart has no bar for most daily dates, so fall back to the
     // nearest chart bar at or after the anchor.
-    const nearest = (target) => {
+    const nearest = (anchor) => {
+      const target = mondays ? (weekMonday(anchor) || anchor) : anchor;
       if (posInChart.has(target)) return posInChart.get(target);
       for (let i = 0; i < chartDates.length; i += 1) {
         if (chartDates[i] >= target) return i;
@@ -18226,7 +18299,7 @@ function wsMountChart() {
         ...(showZones ? zoneBands(intraday ? (ps.patterns || {}) : (d.patterns || {})) : []),
       ],
       segments: !showTrends ? []
-        : trendSegments(trendlinesFor(d.ticker), ps.dates || []),
+        : trendSegments(trendlinesFor(d.ticker), ps.dates || [], { mondays: !!ps.mondays }),
       // Same builder as the Swing chart, so the two tabs cannot disagree about
       // where a cloud flips or how wide it is.
       clouds: emaClouds(ps),
