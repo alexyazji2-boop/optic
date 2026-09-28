@@ -638,6 +638,12 @@ def _cited(c: Dict[str, Any], by_id: Dict[str, Dict[str, Any]],
     return cited
 
 
+# The one failure left without a named cause: the model answered, and the answer
+# was not JSON the library could use.
+_UNREADABLE = ("The model answered, but not in a form the library could read, so "
+               "nothing was stored. The next scan tries again.")
+
+
 def _failed(kind: str, reason: str, scanned: int = 0) -> Dict[str, Any]:
     _record_scan(kind, False, scanned=scanned, reason=reason)
     return {"available": False, "reason": reason}
@@ -663,12 +669,19 @@ def _refresh(hours: int, trigger: str) -> Dict[str, Any]:
     index = _stored_index(stories)
 
     found = ai.extract_catalysts(_for_model(stories), index["library"])
+    # A failed call comes back as a dict with its reason, the convention every
+    # writer here follows. The scan printed "Catalyst extraction failed on this
+    # attempt" whatever went wrong, including a refused key, which the weekly
+    # update on the same page was already naming correctly.
+    if isinstance(found, dict):
+        return _failed(trigger, str(found.get("reason") or _UNREADABLE),
+                       scanned=len(stories))
     if found is None:
         return _failed(trigger, (
             "The assistant is not configured, so new catalysts cannot be "
             "identified. Anything already stored is still searchable."
-            if ai.available().get("enabled") is not True else
-            "Catalyst extraction failed on this attempt."), scanned=len(stories))
+            if ai.available().get("enabled") is not True else _UNREADABLE),
+            scanned=len(stories))
 
     directory = ticker_directory()
     if not directory:

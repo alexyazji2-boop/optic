@@ -588,8 +588,21 @@ def _human_error(exc: Exception) -> str:
         return ("Rate limited by the API. Too many requests in a short window. Wait "
                 "a moment before asking again.")
     if "authentication" in blob or "invalid x-api-key" in blob or status == 401:
-        return ("The API key was rejected. Check ANTHROPIC_API_KEY in .env, then "
-                "restart the server so it is re-read.")
+        # Two audiences, as in `available` below. "Check ANTHROPIC_API_KEY in
+        # .env, then restart the server so it is re-read" read to the operator
+        # as though a restart might do it. Measured on 2026-09-28: the local key
+        # was well formed, loaded, sent to api.anthropic.com and refused as
+        # "API key is invalid", so no restart could have. On the public site
+        # the same sentence sent a visitor to a file on a server they cannot
+        # reach.
+        if is_hosted():
+            return ("Anthropic refused this deployment's API key, so nothing could "
+                    "be written. The key has to be replaced on the server; asking "
+                    "again will not help.")
+        return ("Anthropic refused this server's API key as invalid, so nothing could "
+                "be written. A restart alone will not fix it: put a working key in "
+                "ANTHROPIC_API_KEY in .env (keys are made at console.anthropic.com), "
+                "then restart the server so it reads the new one.")
     if "permission" in blob or status == 403:
         return "The API key does not have access to this model."
     if "credit" in blob or "billing" in blob or "quota" in blob:
@@ -1249,7 +1262,9 @@ def extract_catalysts(stories: List[Dict[str, Any]],
                       ) -> Optional[List[Dict[str, Any]]]:
     """Identify durable catalysts among recent stories, or None.
 
-    Returns raw model output; the caller validates every ticker against EDGAR
+    Returns raw model output, or `{"available": False, "reason": ...}` when the
+    call itself failed, the shape every writer here uses, so the scan can say
+    why instead of "failed on this attempt". The caller validates every ticker against EDGAR
     before anything is stored. Keeping those steps apart is deliberate — the
     model proposes, the directory disposes, and no unvalidated symbol can reach
     the library even if this function is called from somewhere new. The same
@@ -1272,7 +1287,7 @@ def extract_catalysts(stories: List[Dict[str, Any]],
         client = Anthropic(max_retries=3)
     except Exception as exc:
         log.warning("catalyst extraction skipped: client construction failed: %s", exc)
-        return None
+        return {"available": False, "reason": _human_error(exc)}
 
     # Not through _prune, and not cut to a character count. _prune caps a list
     # at 25, right for a snapshot's arrays and wrong here: it cut every scan to
@@ -1288,7 +1303,7 @@ def extract_catalysts(stories: List[Dict[str, Any]],
         )
     except Exception as exc:
         log.warning("catalyst extraction failed: %s: %s", type(exc).__name__, exc)
-        return None
+        return {"available": False, "reason": _human_error(exc)}
 
     text = "".join(getattr(b, "text", "") for b in (msg.content or []))
     parsed = _parse_brief_json(text, getattr(msg, "stop_reason", None) == "max_tokens",

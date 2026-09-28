@@ -388,7 +388,7 @@ def test_every_scan_is_recorded_and_a_failure_says_why(monkeypatch):
     _scan(monkeypatch, [OPEC])
     fail, good = _scans()
     assert (fail["ok"], fail["kind"], fail["scanned"]) == (0, "manual", 3)
-    assert fail["reason"] == "Catalyst extraction failed on this attempt."
+    assert fail["reason"] == catalysts._UNREADABLE
     assert (good["ok"], good["identified"], good["written"]) == (1, 1, 1)
 
 
@@ -431,7 +431,7 @@ def test_a_failed_scan_is_reported_beside_the_last_good_one(monkeypatch):
     _scan(monkeypatch, None)
     scan = catalysts.search()["scan"]
     assert scan["last_ok"] is False
-    assert scan["last_reason"] == "Catalyst extraction failed on this attempt."
+    assert scan["last_reason"] == catalysts._UNREADABLE
     assert scan["last_ok_at"] < scan["last_at"]
 
 
