@@ -1209,6 +1209,8 @@ def write_weekly_update(week_key: str, facts: Dict[str, Any],
 
     `force` writes it again and replaces the kept one, but only once the new
     one exists: a forced write that fails leaves readers the update they had.
+    Nothing here asks who wanted it; the route puts `force` behind
+    `_write_guard`, and any other caller has to decide the same.
     """
     if not force:
         answer = _weekly_kept(week_key) or _weekly_failure(week_key)

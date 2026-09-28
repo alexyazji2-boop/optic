@@ -2361,14 +2361,33 @@ async def sentiment_panel() -> Dict[str, Any]:
     return await _run(build)
 
 
+# Keyed on the status `_write_guard` chose, as `_READ_GUARD_COPY` is: the rule
+# is that function's and only the wording is this route's. The guard's own
+# sentences are about changing the ledger, and whoever sent `force` asked for a
+# new weekly update.
+_WEEKLY_FORCE_COPY = {
+    401: "Forcing a rewrite replaces the weekly update for every reader and pays "
+         "for a new one, so it needs the write token. Reading it stays open to "
+         "everyone without force=true.",
+    403: "That request did not look like it came from this page. A signed-in "
+         "session needs the page's CSRF header to force a rewrite; the write "
+         "token in a header works from anywhere.",
+    503: "Forcing a rewrite is for the operator, and this deployment has no "
+         "OPTIC_WRITE_TOKEN set to tell who that is. Set one in the platform's "
+         "variables. Reading the update stays open to everyone without force=true.",
+}
+
+
 @app.get("/api/weekly")
-async def weekly_update(force: bool = False) -> Dict[str, Any]:
+async def weekly_update(request: Request, force: bool = False) -> Dict[str, Any]:
     """The weekly market update, generated once per ISO week.
 
     Same economics as the morning note: one model call a week shared by every
     reader, not one per page view. That is the only reason a piece this long is
     affordable to publish at all. Kept in `app/weekly_store.py` so a deploy does
-    not write it again; `force` is the one way to replace it.
+    not write it again; `force` is the one way to replace it, and it is the
+    operator's alone. Reading stays open to everyone, the week's first write
+    included, because that write is a reader's plain load.
     """
     def build() -> Dict[str, Any]:
         # On a copy that cannot write it, the live site's, which is the same
@@ -2387,6 +2406,27 @@ async def weekly_update(force: bool = False) -> Dict[str, Any]:
                         "reason": ("The live site's weekly update could not be fetched, "
                                    "and this copy's Anthropic key cannot write one. "
                                    "It is fetched again on the next load.")}
+        # `force` pays for a new piece, up to 6,000 output tokens and about 56
+        # seconds (measured 2026-09-28), and hands it to every reader in place
+        # of the one they had, the churn `app/weekly_store.py` exists to stop.
+        # Open, any visitor could do both. The guard sits here rather than
+        # first because a copy showing the live site's update has answered
+        # above, and there `force` wrote nothing and spent nothing.
+        #
+        # Refused rather than ignored. Serving the kept piece instead would
+        # answer an operator who forgot the token with a 200 and an unchanged
+        # headline, which reads as a rewrite that happened or failed quietly.
+        # No reader loses anything by it: the page never sends `force`.
+        #
+        # The admin branch's CSRF check matters more here than on the POSTs.
+        # SameSite=Lax sends the owner's cookie on a link followed from another
+        # site, so on this GET that header is all that stops the link.
+        if force:
+            try:
+                _write_guard(request)
+            except HTTPException as exc:
+                raise HTTPException(status_code=exc.status_code,
+                                    detail=_WEEKLY_FORCE_COPY.get(exc.status_code, exc.detail))
         facts = weekly_mod.gather(YF_PROVIDER)
         update = ai.write_weekly_update(key, facts, force=force)
         # See the earnings brief above: a failure is now a truthy dict.

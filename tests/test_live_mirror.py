@@ -302,6 +302,19 @@ def test_force_is_never_passed_to_the_live_site(monkeypatch):
     assert all("force" not in u for u in live.urls)
 
 
+def test_a_mirroring_copy_refetches_on_force_without_the_token(monkeypatch):
+    """The write token guards the write, and a copy showing the live site's
+    update makes none. A guard in front of the mirror would stop nothing but a
+    reader of this copy fetching the live piece again."""
+    live = _mirroring(monkeypatch, {"/api/weekly": WEEKLY})
+    monkeypatch.setattr(main, "WRITE_TOKEN", "test-write-token")
+    client = TestClient(main.app)
+    client.get("/api/weekly")
+    forced = client.get("/api/weekly", params={"force": "true"})
+    assert forced.status_code == 200 and forced.json()["headline"] == "Live week"
+    assert len(live.urls) == 2 and all("force" not in u for u in live.urls)
+
+
 def test_the_local_schedule_stands_down_while_mirroring(monkeypatch):
     """Even with a key that works: the live library is the one on the page, so
     a local scan would pay to fill a store nobody is shown."""

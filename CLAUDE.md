@@ -386,8 +386,9 @@ purpose, no cookie-cutter grid blocks, no placeholder copy. Claims must be check
 `./publish.sh` — runs tests, checks for secrets, commits, pushes, then waits for the live
 commit SHA to match. `DEPLOY.md` has the detail.
 
-`OPTIC_WRITE_TOKEN` must be set in Railway Variables or manual scans and alert-clearing
-return 503. Scheduled scans are unaffected.
+`OPTIC_WRITE_TOKEN` must be set in Railway Variables or manual scans, alert-clearing
+and `/api/weekly?force=true` return 503. Scheduled scans are unaffected, and so is
+the weekly update's once-a-week write, which is a reader's plain load.
 
 `ADMIN_EMAILS` is what makes an account the owner. The address has to be
 confirmed before it counts, and with no SMTP configured the confirmation link is

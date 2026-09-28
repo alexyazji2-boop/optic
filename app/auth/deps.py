@@ -102,10 +102,14 @@ def is_admin(request: Request) -> bool:
 # ------------------------------------------------------------------ csrf
 #
 # Defence in depth over SameSite=Lax. Lax already blocks a cross-site POST from
-# carrying the session cookie, and no endpoint changes state on GET; this is the
-# second lock, in the double-submit form: a value the server set in a readable
-# cookie has to be echoed in a header. An attacker on another origin can cause a
-# request but cannot read that cookie to fill the header in.
+# carrying the session cookie; this is the second lock, in the double-submit
+# form: a value the server set in a readable cookie has to be echoed in a
+# header. An attacker on another origin can cause a request but cannot read that
+# cookie to fill the header in.
+#
+# One GET changes state, `/api/weekly?force=true`, and reaches this through
+# `_write_guard`. Lax does send the cookie on a link followed from another site,
+# so on that route this is the only lock rather than the second.
 
 
 def issue_csrf(response: Response) -> str:

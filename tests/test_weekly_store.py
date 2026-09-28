@@ -165,10 +165,15 @@ def test_an_unwritable_store_costs_the_restart_not_the_page(model, monkeypatch, 
 # ---------------------------------------------------------------------- force
 
 
-def test_force_writes_it_again_and_the_new_one_is_kept(model, client):
+def test_force_writes_it_again_and_the_new_one_is_kept(model, client, monkeypatch):
+    # `force` is the operator's (tests/test_weekly_force.py). Pinned rather
+    # than left to the machine: with a token in .env this refused, without one
+    # it passed on the laptop allowance alone.
+    monkeypatch.setattr(main, "WRITE_TOKEN", "test-write-token")
     model.replies = [_piece(BEFORE), _piece(AFTER)]
     client.get("/api/weekly")
-    forced = client.get("/api/weekly", params={"force": "true"}).json()
+    forced = client.get("/api/weekly", params={"force": "true"},
+                        headers={"X-Optic-Token": "test-write-token"}).json()
     assert forced["headline"] == AFTER and len(model.calls) == 2
     _restart()
     assert client.get("/api/weekly").json()["headline"] == AFTER

@@ -11,8 +11,10 @@ the Wheel", so the week's update changed under them within the week.
 
 So it is written once per ISO week and kept here, under TRACKER_DATA_DIR, which
 in production is the Railway volume at /app/data and outlives the container.
-`/api/weekly?force=true` is the one way to replace it, and `writes` counts how
-often that has happened, so 1 after a deploy is the evidence this is working.
+`/api/weekly?force=true` is the one way to replace it, and it takes the write
+token or the signed-in owner (`_write_guard` in `app/main.py`). `writes` counts
+how often the week has been written, so 1 after a deploy is the evidence this
+is working.
 
 **What is stored is what the model wrote, and nothing the code supplies.** The
 headline, subhead and paragraphs are the piece; the method note and disclaimer

@@ -46,7 +46,7 @@ resets on every deploy — a tracker that silently forgets.
 | `FEED_CONTACT` | Yes | Any contact email. SEC EDGAR returns 403 without a User-Agent that has one. |
 | `ANTHROPIC_API_KEY` | Optional | Only Pulse needs it. Leave it unset and everything else works; Pulse reports it needs a key. |
 | `AI_CALLS_PER_HOUR` | Optional | Per-visitor cap on assistant messages. Defaults to 30. `0` disables it. |
-| `OPTIC_WRITE_TOKEN` | **Yes, in practice** | Gates the four endpoints that change the record. Unset on a hosting platform, they refuse with 503 rather than accepting anonymous writes. Generate with `openssl rand -hex 24`. |
+| `OPTIC_WRITE_TOKEN` | **Yes, in practice** | Gates the four endpoints that change the record, and `force` on the weekly update. Unset on a hosting platform, they refuse with 503 rather than accepting anonymous writes. Generate with `openssl rand -hex 24`. |
 | `TRADIER_ACCESS_TOKEN` | Optional | Real-time chains instead of the ~15-min-delayed feed. |
 | `LEDGER_SNAPSHOT_HOURS` | Optional | Ledger snapshot interval, default 24. `0` disables. |
 | `LEDGER_SNAPSHOT_KEEP` | Optional | How many snapshots to retain, default 7. |
@@ -159,6 +159,23 @@ operator and not to any user:
 Without that gate the hosted ledger is a shared scratchpad: a stranger adding
 trades is indistinguishable from the owner doing it, which destroys the only
 thing a track record is for.
+
+`GET /api/weekly?force=true` is behind the same guard. It writes the week's
+update again, a model call of up to 6,000 output tokens and about 56 seconds
+(measured 2026-09-28), and replaces it for every reader, so while it was open
+anyone could spend on the operator's key and change the week's headline. A
+refused `force` gets the guard's status and a sentence saying what it needs,
+rather than the kept update served as if nothing was asked. A plain
+`GET /api/weekly` stays open to everyone, and the week's first write is still
+whichever reader loads it first. To force it:
+
+    curl -H "X-Optic-Token: $OPTIC_WRITE_TOKEN" "https://theopticterminal.com/api/weekly?force=true"
+
+A signed-in owner can do it from the browser console on the site, which can
+send the page's CSRF header:
+`fetch('/api/weekly?force=true', {headers: {'X-Optic-CSRF': OpticAuth.csrf()}})`.
+Typed into the address bar it is refused with 403, because a link from another
+site looks exactly the same.
 
 The unset case fails closed on a host and open locally, decided by whether a
 platform announces itself in the environment (`RAILWAY_ENVIRONMENT` and
