@@ -28416,10 +28416,21 @@ const PULSE_STARTERS = [
   { need: null, text: 'Which chart patterns has this terminal measured as actually working, and at what hit rate?' },
 ];
 
+/* Three, because the grid is three across.
+ *
+ * `.pulse-cards` is `repeat(auto-fit, minmax(210px, 1fr))`, which lands on
+ * three columns at the panel's usual width. At four, the fourth card wrapped
+ * onto a row of its own and sat there next to two card-widths of nothing --
+ * a full row followed by a stub, directly above "See more examples", which
+ * reads as the list having been cut off mid-thought rather than deliberately
+ * shortened. Three fills the row exactly and the expander does the rest.
+ */
+const PULSE_STARTERS_SHOWN = 3;
+
 function pulseStarters(expanded) {
   const sym = STATE.ticker || STATE.chartSymbol || '';
   const usable = PULSE_STARTERS.filter((c) => !c.need || sym);
-  const shown = expanded ? usable : usable.slice(0, 4);
+  const shown = expanded ? usable : usable.slice(0, PULSE_STARTERS_SHOWN);
   return `<div class="pulse-empty">
     ${/* The Optic mark, not a character and not the Pulse waveform.
          A snowman lived here through several passes and the verdict was that

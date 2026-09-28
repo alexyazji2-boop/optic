@@ -44,9 +44,24 @@ def test_the_symbol_cards_actually_name_the_symbol():
             assert "{T}" in line, f"ticker card with no substitution: {line.strip()[:60]}"
 
 
-def test_four_show_before_the_expander():
+def test_three_show_before_the_expander():
+    """Three, not four, and the reason is the grid rather than the count.
+    `.pulse-cards` resolves to three columns at the panel's usual width, so a
+    fourth card wrapped onto a row of its own beside two card-widths of
+    nothing -- a full row then a stub, right above "See more examples", which
+    reads as cut off rather than deliberately shortened."""
     body = APP_JS.split("function pulseStarters(", 1)[1].split("\nfunction ", 1)[0]
-    assert "usable.slice(0, 4)" in body
+    assert "usable.slice(0, PULSE_STARTERS_SHOWN)" in body
+    assert re.search(r"const PULSE_STARTERS_SHOWN = 3;", APP_JS)
+
+
+def test_the_expander_still_has_something_to_expand_to():
+    """A "See more examples" button that reveals nothing is worse than no
+    button. The no-ticker list is the smaller of the two, so it is the one
+    that could run out."""
+    block = APP_JS.split("const PULSE_STARTERS = [", 1)[1].split("\n];", 1)[0]
+    no_ticker = [ln for ln in block.splitlines() if "need: null" in ln]
+    assert len(no_ticker) > 3, "nothing left behind the expander for a guest"
 
 
 # ------------------------------------------------------------- the actual bug
