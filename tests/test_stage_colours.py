@@ -184,26 +184,30 @@ def test_each_chart_asks_for_its_own_payloads_symbol():
     assert "stageTints(stageSym, d.dates, false)" in _fn(APP, "drawInstrumentChart")
 
 
-def test_stages_colour_the_candles_and_the_line_keeps_its_direction():
-    """Asked for afterwards: "whenever a chart is in an increasing matter, make
-    the line green and in a decreasing matter, make the line red". A stage is a
-    week's reading, so a falling day in stage 2 was drawn green; the stage now
-    colours candles only, on all three charts, and the line is priceLineColor."""
-    assert "if (!wsCandles(ps)) return null;" in _fn(APP, "wsStages")
-    assert "const stages = candleMode ? stageTints(d.ticker, ps.dates, ps.intraday) : null;" \
-        in _fn(APP, "swingPriceBlock")
-    assert "const stages = candles ? stageTints(stageSym, d.dates, false) : null;" \
-        in _fn(APP, "drawInstrumentChart")
+def test_the_candles_and_the_line_keep_their_own_direction():
+    """Asked twice. First "whenever a chart is in an increasing matter, make the
+    line green and in a decreasing matter, red", then, of NKE's hourly candles
+    in stage 4, "why are all candles [red], even in uptrends like these?". A
+    stage is a week's reading, so every bar of a week was drawn in it and a
+    rally in a declining stage was a row of red. The stage is a band under the
+    price now, on all three charts and in both modes (test_stage_band.py)."""
+    assert "if (!wsCandles(ps)) return null;" not in _fn(APP, "wsStages")
+    assert "const stages = stageTints(d.ticker, ps.dates, ps.intraday);" in _fn(APP, "swingPriceBlock")
+    assert "const stages = stageTints(stageSym, d.dates, false);" in _fn(APP, "drawInstrumentChart")
 
 
-def test_all_three_colour_both_candles_and_line_from_one_array():
-    assert APP.count("candleTints: stages ? stages.colors : null") == 3
-    assert APP.count("tints: stages ? stages.colors : null") == 3
+def test_all_three_draw_the_band_from_one_array_and_tint_nothing():
+    assert APP.count("stageBand: stages ? stages.colors : null") == 3
+    assert "candleTints:" not in APP and "tints: stages" not in APP
 
 
-def test_the_legends_key_the_stages_instead_of_up_and_down():
-    assert "...(stages ? stages.key : candleMode" in _fn(APP, "swingPriceBlock")
-    assert "...(stages ? stages.key : [{ name: d.label, color: lineColor }])" in _fn(APP, "drawInstrumentChart")
+def test_the_keys_name_the_candles_colours_and_then_the_bands_stages():
+    swing = _fn(APP, "swingPriceBlock")
+    assert "...(candleMode" in swing and "...(stages ? stages.key : [])," in swing
+    assert "...(stages ? stages.key : candleMode" not in swing
+    inst = _fn(APP, "drawInstrumentChart")
+    assert "...(candles ? [{ name: 'Up day', color: C.s3 }, { name: 'Down day', color: C.s8 }]" in inst
+    assert "...(stages ? stages.key : [])," in inst
     leg = _fn(APP, "wsLegend")
     assert 'data-ws-leg="stages"' in leg
     assert 'data-ws-hide="stages"' in leg and 'data-ws-off="stages"' in leg
@@ -262,10 +266,11 @@ def test_the_style_dialog_offers_no_colour_for_it():
     assert "${def.fixed ? `<p class=\"ws-mnote\">${esc(def.fixed)}</p>` : def.fill ?" in row
 
 
-def test_the_colour_picker_says_when_stages_are_what_colour_the_bars():
+def test_the_colour_picker_no_longer_says_stages_take_the_candles():
+    """They do not: the candle rows are what the candles are drawn in."""
     pop = _fn(APP, "wsColorPop")
-    assert "const staged = wsOverlayDrawn('stages');" in pop
-    assert "${staged ? `<p class=\"ws-menu-note\">" in pop
+    assert "const staged = wsOverlayDrawn('stages');" not in pop
+    assert "drawn in the\n      colour of their stage" not in APP
 
 
 # ------------------------------------------------------ the shared Monday

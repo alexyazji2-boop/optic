@@ -8639,8 +8639,9 @@ function swingPriceBlock(d, ps, ctx) {
     // Before the averages: with Stages on, the mark they must not be mistaken
     // for is drawn in the stage colours. Same lookup as the Charting tab, on
     // this payload's own symbol.
-    // Candles only. The line's colour is its direction (priceLineColor).
-    const stages = candleMode ? stageTints(d.ticker, ps.dates, ps.intraday) : null;
+    // Drawn as a band under the price, in both modes; the candles and the line
+    // keep their own direction (see stageBand in charts.js).
+    const stages = stageTints(d.ticker, ps.dates, ps.intraday);
     const maOn = maColorsOnChart(candleMode, stages && stages.marks);
     const maColors = { fast: maOn.sma20, mid: maOn.sma50, slow: maOn.sma200 };
 
@@ -8668,9 +8669,8 @@ function swingPriceBlock(d, ps, ctx) {
     STATE.overlayPalette = overlayPalette;
 
     mount('legend-price', legend([
-      // When the price is coloured by stage, the key says so instead of naming
-      // an up and a down colour that no bar is drawn in.
-      ...(stages ? stages.key : candleMode
+      // The candles' own colours, and then the band's stages when it is drawn.
+      ...(candleMode
         // The reader's own candle colours, not s3/s8: those are the defaults
         // chartColor() returns anyway, and hardcoding them made the key lie
         // the moment anyone used the Charting tab's colour picker.
@@ -8679,6 +8679,7 @@ function swingPriceBlock(d, ps, ctx) {
         ? [{ name: ps.intraday ? 'Up bar' : ps.weekly ? 'Up week' : 'Up day', color: chartColor('up') },
           { name: ps.intraday ? 'Down bar' : ps.weekly ? 'Down week' : 'Down day', color: chartColor('down') }]
         : [{ name: 'Close', color: priceLineColor(ps.close) }]),
+      ...(stages ? stages.key : []),
       /* Derived from the same per-average switches as the series, so the
        * legend cannot name a line that is not on the chart. It previously
        * dropped the 200 entry on weekly while the series still drew it. */
@@ -8757,7 +8758,6 @@ function swingPriceBlock(d, ps, ctx) {
         { name: 'Close',
           values: ps.close,
           color: candleMode ? C.ink : priceLineColor(ps.close),
-          tints: stages ? stages.colors : null,
           hidden: candleMode,
           fill: !candleMode },
         /* Per-average switches, matching the Charting tab's Indicators menu —
@@ -8787,7 +8787,7 @@ function swingPriceBlock(d, ps, ctx) {
       candles: candleMode
         ? { open: ps.open, high: ps.high, low: ps.low, close: ps.close }
         : null,
-      candleTints: stages ? stages.colors : null,
+      stageBand: stages ? stages.colors : null,
       refLines: overlayRefs,
       // Under the levels and under the price, so neither is muted by the fill.
       clouds: emaClouds(ps),
@@ -10181,9 +10181,32 @@ async function loadSecurityFacet(view, force, opts = {}) {
    * Swing section, which is not the section the reader is looking at. */
   const have = STATE.swing && STATE.swing.ticker === STATE.ticker;
   if (!have || force) {
+    let ticking = null;
     if (!opts.silent) {
+      /* Said, with a clock, because the wait looked like a failure. A symbol's
+       * first load measured 9.4s, 10.3s and 58.1s on the live site, and a
+       * reader who saw a bare "Loading HOOD..." that long pressed Load again,
+       * which is the "two inputs" this answers: the second press only looked
+       * like the fix because the first had filled the caches by then. */
       host.innerHTML = `${securityHeader(view)}
-        <div class="panel"><p class="sub">Loading ${esc(ticker)}\u2026</p></div>`;
+        <div class="panel"><p class="sub">Loading ${esc(ticker)}\u2026
+          <span class="load-elapsed" data-load-elapsed></span></p>
+          <p class="caveat">The first look at a symbol gathers its option chains,
+            fundamentals and filings, which takes several seconds. After that it is
+            quick.</p></div>`;
+      // Its own element, held rather than looked up: a second load rewrites the
+      // panel while this one is still waiting, and a lookup would write this
+      // clock into that one's counter, the two flickering between two counts.
+      // Only where there is a page to count on: test_client_loading.py runs
+      // this loader under JavaScriptCore, with stub panels and no timers.
+      const clock = host.querySelector ? host.querySelector('[data-load-elapsed]') : null;
+      if (clock && typeof setInterval === 'function') {
+        const started = Date.now();
+        ticking = setInterval(() => {
+          if (!clock.isConnected) { clearInterval(ticking); return; }
+          clock.textContent = `${Math.round((Date.now() - started) / 1000)}s`;
+        }, 1000);
+      }
     }
     try {
       const data = await loadSwing(force, { silent: true, propagateError: true });
@@ -10206,6 +10229,8 @@ async function loadSecurityFacet(view, force, opts = {}) {
       host.innerHTML = `${securityHeader(view)}${errorHTML(err.message,
         { originUnreachable: err.originUnreachable })}`;
       return;
+    } finally {
+      if (ticking) clearInterval(ticking);
     }
   }
   if (STATE.view !== view) return;      // the reader moved on while it loaded
@@ -12864,9 +12889,10 @@ function maColorsOnChart(candleMode, marks) {
   const out = {};
 
   // 1. The immovable: the price mark as drawn, then every colour the reader picked.
-  const fixed = new Set((marks || (candleMode
+  // The price as drawn, plus any colour the chart also draws (the stage band's).
+  const fixed = new Set([...(candleMode
     ? [chartColor('up'), chartColor('down')]
-    : lineMarks())).map(lc));
+    : lineMarks()), ...(marks || [])].map(lc));
   MA_SERIES_IDS.forEach((id) => {
     if (!overlayColorChosen(id)) return;
     out[id] = overlayStyle(id).color;
@@ -13319,8 +13345,6 @@ function stageTints(symbol, dates, intraday) {
 /* The Charting tab's stages, from the one set of inputs its chart, legend and
  * study palette all use, so the three cannot disagree about what is drawn. */
 function wsStages(ps) {
-  // Candles only: the line's colour is its direction (priceLineColor).
-  if (!wsCandles(ps)) return null;
   return stageTints((STATE.chartData || {}).ticker, ps.dates, !!ps.intraday);
 }
 
@@ -13357,11 +13381,13 @@ function drawInstrumentChart(d) {
     () => ((STATE.instrument || {}).symbol || '') === stageSym);
   const candles = instrumentMode === 'candle' && d.open && d.high && d.low
     ? { open: d.open, high: d.high, low: d.low, close: d.close } : null;
-  // Candles only: the line's colour is its direction (priceLineColor).
-  const stages = candles ? stageTints(stageSym, d.dates, false) : null;
+  // A band under the price; the candles and the line keep their own direction.
+  const stages = stageTints(stageSym, d.dates, false);
   const lineColor = candles ? C.brand : priceLineColor(d.close);
   mount('legend-inst', legend([
-    ...(stages ? stages.key : [{ name: d.label, color: lineColor }]),
+    ...(candles ? [{ name: 'Up day', color: C.s3 }, { name: 'Down day', color: C.s8 }]
+      : [{ name: d.label, color: lineColor }]),
+    ...(stages ? stages.key : []),
     ...(d.volume ? [{ name: 'Volume', color: C.ink2, boxed: true }] : []),
   ]));
   mount('chart-inst', (w) => lineChart({
@@ -13370,10 +13396,9 @@ function drawInstrumentChart(d) {
     labels: d.dates || [],
     volume: d.volume || null,
     series: [{ name: d.label, values: d.close, color: lineColor,
-      tints: stages ? stages.colors : null,
       hidden: !!candles, fill: !candles }],
     candles,
-    candleTints: stages ? stages.colors : null,
+    stageBand: stages ? stages.colors : null,
     valueTags: true,
   }));
 }
@@ -14732,11 +14757,8 @@ function wsLegend(ps) {
     const sym = (STATE.chartData || {}).ticker;
     const tinted = legStages;
     const r = sym ? (stageSettled.get(sym) || {}).r : null;
-    // "candles only" before "unavailable": in line mode there is no tint by
-    // design, since the line's colour is its direction, and calling a reading
-    // that loaded fine unavailable would send the reader looking for a fault.
     const why = hidden ? '' : !r ? 'loading' : r.available !== true ? 'not enough history'
-      : !wsCandles(ps) ? 'candles only' : !tinted ? 'unavailable' : intra ? 'by week' : '';
+      : !tinted ? 'unavailable' : intra ? 'by week' : '';
     rows.push(`<div class="ws-leg-row${hidden ? ' is-hidden' : ''}" data-ws-leg="stages"${
   r && r.available !== true && r.reason ? ` title="${esc(r.reason)}"` : ''}>
       <span class="ws-leg-name">Stages${why ? ` <span class="ws-leg-args">(${esc(why)})</span>` : ''}</span>
@@ -14894,15 +14916,10 @@ function markWarnText(contrast) {
 }
 
 function wsColorPop() {
-  /* Stages colour the candles, so while they are drawn the candle rows are not
-   * what is on the chart, and a swatch that changed nothing would read as
-   * broken. Up and down still colour the volume bars. The line is not staged:
-   * its colour is its direction unless one is picked here. */
-  const staged = wsOverlayDrawn('stages');
+  /* Stages draw a band under the price, so these rows are always what the
+   * candles are drawn in. The line's colour is its direction unless one is
+   * picked here. */
   return `<div class="ws-menu-pop ws-colors">
-    ${staged ? `<p class="ws-menu-note">Stages is on, so the candles are drawn in the
-      colour of their stage. Up and down colour the volume bars now, and the candles
-      again with Stages off.</p>` : ''}
     ${CHART_COLOR_ROWS.map((row) => {
     const chosen = !!chartColors[row.slot];
     // The line's default is green over a rise and red over a fall, so it has no
@@ -16025,9 +16042,8 @@ async function wsLoadIndicators() {
 function chartBaseColors(ps, candleMode, intraday, marks) {
   const ma = maColorsOnChart(candleMode, marks);
   // With Stages on the mark is drawn in the stage colours, so those are taken.
-  const out = marks ? [...(candleMode ? [C.ink] : []), ...marks]
-    : candleMode ? [C.ink, chartColor('up'), chartColor('down')]
-      : lineMarks();
+  const out = [...(candleMode ? [C.ink, chartColor('up'), chartColor('down')] : lineMarks()),
+    ...(marks || [])];
   if (showFib) out.push(C.refFib);
   if (showSR) out.push(C.refSR);
   // Volume-by-price and the volume strip both key in ink2. The strip's bars are
@@ -16121,7 +16137,8 @@ function wsSeries(d) {
     // series does from weeks, and the zoom window applied like the daily one.
     const full = wsWithOscillators(intra, null, true);
     const win = wsClampWindow(wsWindow, (full.dates || []).length);
-    return win ? wsSliceWindow(full, win) : full;
+    if (win) { wsFit = null; return wsSliceWindow(full, win); }
+    return wsReadable(full);
   }
   const full = wsFullSeries(d);
   const total = (full.dates || []).length;
@@ -16137,10 +16154,42 @@ function wsSeries(d) {
      * the raw payload here was what left the RSI and MACD panes empty on every
      * range except a manually zoomed one. */
     const raw = ((d.technicals || {}).price_series) || {};
-    return sliceSeries(raw, chartRange, chartInterval, full);
+    return wsReadable(sliceSeries(raw, chartRange, chartInterval, full));
   }
   // Same "slice every array" rule as sliceSeries; see wsSliceWindow.
+  wsFit = null;
   return wsSliceWindow(full, win);
+}
+
+/* How many candles the Charting tab opens on before a reader asks for more.
+ *
+ * NKE on the hour over three months is about 450 candles in 950 pixels of
+ * plot, two pixels each, which draws a body 1.3px wide: every candle ran into
+ * its neighbours and the chart read as one jagged line with no candles in it.
+ * Five pixels a candle leaves a body of three and a gap. Nothing is dropped:
+ * the whole range is loaded, the chart opens on its newest part, and the
+ * wheel, the drag and the navigator strip reach the rest. A line has no such
+ * limit, so this is candles only. */
+const CANDLE_MIN_SLOT = 5;
+
+// What the default view trimmed to, for the status line; null when it did not.
+let wsFit = null;
+
+function wsReadableBars() {
+  const host = document.getElementById('ws-chart');
+  // The price axis and the margins take about 90px of the chart's width.
+  const plot = Math.max(240, ((host && host.clientWidth) || 960) - 90);
+  return Math.max(WS_MIN_BARS, Math.floor(plot / CANDLE_MIN_SLOT));
+}
+
+/** The default view: the newest candles that still read as candles, or all of
+ *  them when that already fits, or when the chart is a line. */
+function wsReadable(ps) {
+  const n = (ps.dates || []).length;
+  const cap = wsReadableBars();
+  if (!wsCandles(ps) || n <= cap) { wsFit = null; return ps; }
+  wsFit = { shown: cap, total: n };
+  return wsSliceWindow(ps, { from: n - cap, to: n });
 }
 
 /** Current window as concrete indices, whatever set it. */
@@ -18472,7 +18521,7 @@ function wsMountChart() {
         open: ps.open || [], high: ps.high || [],
         low: ps.low || [], close: ps.close || [],
       } : null,
-      candleTints: stages ? stages.colors : null,
+      stageBand: stages ? stages.colors : null,
       /* The reader's colours. See chartColor().
        *
        * Candles get an explicit value either way so the default lives in one
@@ -18529,7 +18578,6 @@ function wsMountChart() {
           color: wsCandles(ps) ? C.ink : priceLineColor(ps.close),
           // Line mode's stage colours. Harmless in candle mode, where this
           // series is not stroked and the candles take the same array.
-          tints: stages ? stages.colors : null,
           hidden: wsCandles(ps), fill: !wsCandles(ps) },
         /* One entry per average, each gated on its own switch, so the six
          * checkboxes in the Indicators menu mean what they say. On intraday
@@ -26036,10 +26084,31 @@ async function fetchReports(limit, retried) {
   if (token) headers['X-Optic-Token'] = token;
   const csrf = window.OpticAuth ? window.OpticAuth.csrf() : '';
   if (csrf) headers['X-Optic-CSRF'] = csrf;
-  const res = await fetch('/api/feedback?limit=' + encodeURIComponent(limit || 50), {
-    headers,
-    credentials: 'same-origin',
-  });
+  /* Retried like getJSON retries, because this was the one read that was not.
+   * `fetch` rejects only when there was no response at all, with the browser's
+   * own sentence, and one dropped connection put Chrome's "Failed to fetch" on
+   * the reports page of the live site while the endpoint itself answered in
+   * 159ms. The same delays, and the same marked error when they run out, so
+   * the page can offer recovery instead of the browser's words. */
+  let res = null;
+  for (let i = 0; i <= RETRY_DELAYS_MS.length; i += 1) {
+    try {
+      res = await fetch('/api/feedback?limit=' + encodeURIComponent(limit || 50), {
+        headers,
+        credentials: 'same-origin',
+      });
+      break;
+    } catch (e) {
+      if (i < RETRY_DELAYS_MS.length) {
+        await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[i]));
+      }
+    }
+  }
+  if (!res) {
+    const err = new Error(`the connection dropped after ${RETRY_DELAYS_MS.length + 1} attempts`);
+    err.originUnreachable = true;
+    throw err;
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     /* Ask for the token, the way `postJSON` already does for the four write
@@ -26128,11 +26197,13 @@ async function loadReports(force) {
        -- no token configured, wrong token, or a session that cannot be checked
        -- and replacing that with "could not load" would throw away the only
        part a reader can act on. */
-    host.innerHTML = emptyHTML(
-      err.status === 401 || err.status === 403 || err.status === 503
-        ? 'These are not yours to read'
-        : 'Could not load the reports',
-      err.message || 'Try again shortly.');
+    host.innerHTML = err.originUnreachable
+      ? errorHTML(err.message, { originUnreachable: true })
+      : emptyHTML(
+        err.status === 401 || err.status === 403 || err.status === 503
+          ? 'These are not yours to read'
+          : 'Could not load the reports',
+        err.message || 'Try again shortly.');
   }
 }
 
@@ -28364,7 +28435,9 @@ function updateStatus() {
     const shown = chartIntervalLabel();
     setStatus(STATE.chartSymbol
       ? [`Chart: ${STATE.chartSymbol}`,
-        wsWindow ? `${shown} · zoomed` : `${shown} · ${chartWindowLabel()}`,
+        wsWindow ? `${shown} · zoomed`
+          : wsFit ? `${shown} · newest ${wsFit.shown} of ${wsFit.total} candles, scroll for more`
+            : `${shown} · ${chartWindowLabel()}`,
         `${wsDrawings().length} drawing${wsDrawings().length === 1 ? '' : 's'}`,
         'Drag to pan, scroll to zoom, shift-drag to measure']
       : ['Chart. Pick a symbol to begin.']);

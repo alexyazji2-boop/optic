@@ -15174,3 +15174,7 @@ body.rail-tight .rail .rail-recent { display: none; }
   font: inherit;
   font-size: var(--t-small);
 }
+
+/* The seconds a symbol's first load has been waiting, beside "Loading HOOD...".
+   Tabular figures so the count does not shuffle the line as it grows. */
+.load-elapsed { margin-left: 6px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }

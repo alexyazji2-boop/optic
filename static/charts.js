@@ -808,6 +808,7 @@ function lineChart(opts) {
      * colour. A line takes the same thing from its series' own `tints`, so the
      * two chart styles are coloured by one array. */
     candleTints = null,
+    stageBand = null,
     // Sloped lines in (bar index, price) space — trend lines, channels, and any
     // drawing anchored to two points. refLines cannot express these: they are
     // horizontal by construction, which is right for a level and wrong for a
@@ -1452,6 +1453,34 @@ function lineChart(opts) {
     r.y = Math.min(Math.max(r.lineY - 4, prevY + LABEL_GAP), m.t + priceH - 2);
     prevY = r.y;
   });
+
+  /* Each bar's stage, as a band along the foot of the price area.
+   *
+   * Stages used to colour the candles and the line themselves, as the reference
+   * chart draws them, and that hid the one thing a candle is for: NKE in stage 4
+   * drew every candle red, rallies included. The band carries the week's stage
+   * and every candle keeps its own direction. The price domain is padded 8%
+   * below its lowest bar, so the band sits under the data rather than on it.
+   * One rect per run of a colour, since a stage lasts weeks. */
+  if (Array.isArray(stageBand) && stageBand.length) {
+    const bandLayer = s('g', { class: 'stage-band' });
+    root.appendChild(bandLayer);
+    const bandH = 4;
+    const y = m.t + priceH - bandH;
+    const half = n > 1 ? plotW / (n - 1) / 2 : plotW / 2;
+    let start = 0;
+    for (let i = 1; i <= n; i += 1) {
+      if (i < n && stageBand[i] === stageBand[start]) continue;
+      if (stageBand[start]) {
+        const x0 = Math.max(m.l, X(start) - half);
+        const x1 = Math.min(m.l + plotW, X(i - 1) + half);
+        bandLayer.appendChild(s('rect', {
+          x: x0, y, width: Math.max(1, x1 - x0), height: bandH, fill: stageBand[start],
+        }));
+      }
+      start = i;
+    }
+  }
 
   if (candles) {
     const o = candles.open || [], h = candles.high || [],

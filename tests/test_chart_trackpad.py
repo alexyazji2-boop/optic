@@ -231,7 +231,8 @@ def test_the_charting_window_counts_the_bars_on_screen():
         assert "wsBaseSeries(" in _fn(name), name
     series = _fn("wsSeries")
     assert "const win = wsClampWindow(wsWindow, (full.dates || []).length);" in series
-    assert "return win ? wsSliceWindow(full, win) : full;" in series
+    assert "if (win) { wsFit = null; return wsSliceWindow(full, win); }" in series
+    assert "return wsReadable(full);" in series
 
 
 def test_the_options_window_counts_the_bars_on_screen_and_zooms_intraday():
@@ -257,4 +258,5 @@ def test_studies_follow_the_window_not_the_newest_bars():
 
 def test_the_status_line_follows_the_zoom_on_every_rung():
     assert "updateStatus();" in _fn("wsRedrawChart")
-    assert "wsWindow ? `${shown} · zoomed` : `${shown} · ${chartWindowLabel()}`," in APP
+    assert "wsWindow ? `${shown} · zoomed`" in APP
+    assert ": wsFit ? `${shown} · newest ${wsFit.shown} of ${wsFit.total} candles, scroll for more`" in APP

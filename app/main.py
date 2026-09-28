@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import logging
 import os
 import re
@@ -248,6 +249,57 @@ def _run(fn, *args, **kwargs):
 # ------------------------------------------------------------------ assembly
 
 
+# The ticker build's slow, independent fetches, run side by side on request.
+#
+# Measured on a cold symbol (PINS, 2026-09-28): macro 2.6s, fundamentals 2.4s,
+# SEC filings 0.9s, the sector check 0.7s, and about half a second each for the
+# quote, the history, the option chains and the news, 9.3s in all, one after
+# another, though nothing waits on another's answer except fundamentals on the
+# quote. On the live site first loads measured 9.4s, 10.3s and 58.1s: long
+# enough that a reader who pressed Load once took it for broken and pressed it
+# again, and the second press found the caches the first had filled. Reported
+# as "I need to change the ticker with two inputs, not one".
+#
+# One pool for the process, not one per request, so an early exit (the 404 for
+# a symbol with no prices) leaves nothing to shut down: a leg nobody collects
+# finishes and fills its cache. Legs never wait on legs, so the pool cannot
+# deadlock against itself, and every provider call is still paced by the
+# provider's own limiter.
+_LEG_POOL = ThreadPoolExecutor(max_workers=16, thread_name_prefix="ticker-leg")
+
+
+class _Legs:
+    """Start fetches together, or run each where it is read.
+
+    Sequential is the default and the scans keep it: a scan builds a snapshot
+    for thirty names, and eight requests at once per name is the traffic that
+    earns a rate limit. In that mode `get` makes the call at the point the
+    build reads it, so a scan's order of calls is what it always was. Either
+    way a leg's exception surfaces at `get`, inside whatever try the build
+    already had around that call.
+    """
+
+    def __init__(self, parallel: bool) -> None:
+        self.parallel = parallel
+        self._legs: Dict[str, Any] = {}
+
+    def start(self, name: str, fn, *args, **kwargs) -> None:
+        self._legs[name] = (_LEG_POOL.submit(fn, *args, **kwargs) if self.parallel
+                            else (fn, args, kwargs))
+
+    def get(self, name: str) -> Any:
+        leg = self._legs.pop(name)
+        if not self.parallel:
+            fn, args, kwargs = leg
+            return fn(*args, **kwargs)
+        return leg.result()
+
+
+def _sector_confirm(ticker: str) -> Dict[str, Any]:
+    prof = YF_PROVIDER.profile(ticker) or {}
+    return sector_confirm_mod.build(YF_PROVIDER, ticker, prof.get("sector"))
+
+
 def _swing_snapshot(
     ticker: str,
     expiries: Optional[List[str]],
@@ -263,11 +315,30 @@ def _swing_snapshot(
     include_earnings: bool = True,
     include_company: bool = True,
     budget: Optional[float] = None,
+    parallel: bool = False,
 ) -> Dict[str, Any]:
     ticker = ticker.upper().strip()
 
-    quote = PROVIDER.quote(ticker)
-    hist = PROVIDER.history(ticker, period="2y", interval="1d")
+    legs = _Legs(parallel)
+    legs.start("quote", PROVIDER.quote, ticker)
+    legs.start("hist", PROVIDER.history, ticker, period="2y", interval="1d")
+    legs.start("news", news_mod.analyse, YF_PROVIDER, ticker)
+    legs.start("expiries", PROVIDER.expirations, ticker)
+    legs.start("chain", PROVIDER.options_chain, ticker, expiries=expiries,
+               max_expiries=max_expiries)
+    if include_macro:
+        legs.start("macro", macro_mod.analyse, YF_PROVIDER)
+    if include_earnings:
+        legs.start("earnings", earnings_mod.momentum, YF_PROVIDER, ticker)
+    legs.start("filings", filings_mod.recent, ticker)
+    legs.start("sector", _sector_confirm, ticker)
+    legs.start("earnings_date", YF_PROVIDER.earnings_date, ticker)
+
+    quote = legs.get("quote")
+    # The one leg that needs another's answer, started the moment it has it.
+    if include_company:
+        legs.start("company", fundamentals_mod.analyse, YF_PROVIDER, ticker, quote)
+    hist = legs.get("hist")
     if hist is None or hist.empty:
         raise HTTPException(status_code=404, detail="No price data found for '{}'.".format(ticker))
 
@@ -292,10 +363,10 @@ def _swing_snapshot(
         "bandwidth": structure_mod.bandwidth_rank(close) if close is not None else {"available": False},
         "candles": structure_mod.candle_patterns(live_hist),
     }
-    news_read = news_mod.analyse(YF_PROVIDER, ticker)
+    news_read = legs.get("news")
 
-    available_expiries = PROVIDER.expirations(ticker)
-    chain = PROVIDER.options_chain(ticker, expiries=expiries, max_expiries=max_expiries)
+    available_expiries = legs.get("expiries")
+    chain = legs.get("chain")
 
     gex_read: Dict[str, Any] = {}
     greeks_read: Dict[str, Any] = {}
@@ -319,7 +390,7 @@ def _swing_snapshot(
     macro_read: Optional[Dict[str, Any]] = None
     if include_macro:
         try:
-            macro_read = macro_mod.analyse(YF_PROVIDER)
+            macro_read = legs.get("macro")
         except Exception as exc:  # macro is supporting context, never fatal
             macro_read = {"error": "macro panel unavailable: {}".format(exc)}
 
@@ -347,7 +418,7 @@ def _swing_snapshot(
     company: Dict[str, Any] = {"available": False, "reason": "not requested"}
     if include_company:
         try:
-            company = fundamentals_mod.analyse(YF_PROVIDER, ticker, quote)
+            company = legs.get("company")
         except Exception as exc:  # company data is context, never fatal
             company = {"error": "fundamentals unavailable: {}".format(exc)}
 
@@ -358,7 +429,7 @@ def _swing_snapshot(
     earnings_momentum: Dict[str, Any] = {"available": False, "reason": "not requested"}
     if include_earnings:
         try:
-            earnings_momentum = earnings_mod.momentum(YF_PROVIDER, ticker)
+            earnings_momentum = legs.get("earnings")
         except Exception as exc:
             earnings_momentum = {"available": False,
                                  "reason": "earnings momentum unavailable: {}".format(exc)}
@@ -412,7 +483,7 @@ def _swing_snapshot(
     payload["close_defence"] = defence_mod.for_swing(payload)
     # The company's own recent disclosures. Primary source, and the 8-K item
     # codes are the filer's classification rather than an interpretation.
-    payload["filings"] = filings_mod.recent(ticker)
+    payload["filings"] = legs.get("filings")
     # Days to expiry, so the dealer-gamma and charm readings can be read against
     # the date they unwind on rather than in isolation.
     payload["expiry_context"] = expiries_mod.context()
@@ -420,9 +491,7 @@ def _swing_snapshot(
     # weakest of the claims made about a setup, so it is reported beside the
     # per-name analysis rather than folded into the score.
     try:
-        prof = YF_PROVIDER.profile(ticker) or {}
-        payload["sector_confirm"] = sector_confirm_mod.build(
-            YF_PROVIDER, ticker, prof.get("sector"))
+        payload["sector_confirm"] = legs.get("sector")
     except Exception as exc:
         logging.getLogger("uvicorn.error").warning(
             "sector confirmation unavailable for %s: %s", ticker, exc)
@@ -446,7 +515,7 @@ def _swing_snapshot(
     # matters next" without it would be missing the obvious answer. Cached by
     # the provider and best-effort, like the calendar.
     try:
-        payload["next_earnings_date"] = YF_PROVIDER.earnings_date(ticker)
+        payload["next_earnings_date"] = legs.get("earnings_date")
     except Exception as exc:
         logging.getLogger("uvicorn.error").warning(
             "next earnings date unavailable for %s: %s", ticker, exc)
@@ -578,7 +647,7 @@ async def ticker_analysis(
     """
     wanted = [e.strip() for e in expiries.split(",") if e.strip()] if expiries else None
     return await _run(_swing_snapshot, ticker, wanted, max_expiries, macro,
-                      include_earnings=True, budget=budget)
+                      include_earnings=True, budget=budget, parallel=True)
 
 
 @app.get("/api/earnings/{ticker}")

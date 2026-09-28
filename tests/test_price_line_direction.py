@@ -107,8 +107,8 @@ def test_every_price_chart_draws_its_line_in_its_direction():
 
 
 def test_the_averages_keep_clear_of_both_colours_the_line_can_take():
-    assert ": lineMarks())).map(lc));" in _fn("maColorsOnChart")
-    assert ": lineMarks();" in _fn("chartBaseColors")
+    assert ": lineMarks()), ...(marks || [])].map(lc));" in _fn("maColorsOnChart")
+    assert "chartColor('down')] : lineMarks())," in _fn("chartBaseColors")
 
 
 def test_the_picker_shows_the_pair_until_a_colour_is_picked():
@@ -120,7 +120,9 @@ def test_the_picker_shows_the_pair_until_a_colour_is_picked():
     assert "the candles and the line are" not in RAW, "Stages no longer colour the line"
 
 
-def test_the_legend_says_stages_colour_the_candles_rather_than_that_they_failed():
-    """In line mode wsStages is null by design; the legend read "unavailable"."""
+def test_the_legend_reads_the_band_the_same_in_both_modes():
+    """"Candles only" was right for a day: stages coloured the candles alone.
+    They draw a band now, in line mode too, so the row reads the same in both."""
     leg = _fn("wsLegend")
-    assert ": !wsCandles(ps) ? 'candles only' : !tinted ? 'unavailable'" in leg
+    assert "'candles only'" not in leg
+    assert ": !tinted ? 'unavailable' : intra ? 'by week' : '';" in leg
