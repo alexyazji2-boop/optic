@@ -2349,6 +2349,7 @@ const CHART_COLOR_PRESETS = [
   // first pass had s5 as "Violet" (it is pink, hue 338), s6 as "Pink" (lime,
   // 90), s7 as "Cyan" (violet, 247) and s8 as "Rust" (coral, hue 0). A tooltip
   // that misnames the colour under the cursor is worse than no tooltip.
+  { slot: 'brand', label: 'Gold' },
   { slot: 'pos', label: 'Green' }, { slot: 'neg', label: 'Red' },
   { slot: 's1', label: 'Blue' }, { slot: 's2', label: 'Orange' },
   { slot: 's3', label: 'Teal' }, { slot: 's4', label: 'Amber' },
@@ -2361,7 +2362,7 @@ const CHART_COLOR_PRESETS = [
 function chartColorDefault(slot) {
   if (slot === 'up') return C.s3;
   if (slot === 'down') return C.s8;
-  return C.s1;                       // the line, in line mode
+  return C.brand;                    // the line, in line mode: Optic's gold
 }
 
 /** What to draw with. The override if there is one, the theme otherwise. */
@@ -8422,7 +8423,11 @@ function swingPriceBlock(d, ps, ctx) {
     // hardcoded s1/s2/s4 that used to live here in candle mode is why the same
     // SMA 20 was a different colour on the two tabs, and why a colour chosen in
     // the dialog was honoured on one of them and dropped on the other.
-    const maOn = maColorsOnChart(candleMode);
+    // Before the averages: with Stages on, the mark they must not be mistaken
+    // for is drawn in the stage colours. Same lookup as the Charting tab, on
+    // this payload's own symbol.
+    const stages = stageTints(d.ticker, ps.dates, ps.intraday);
+    const maOn = maColorsOnChart(candleMode, stages && stages.marks);
     const maColors = { fast: maOn.sma20, mid: maOn.sma50, slow: maOn.sma200 };
 
     // Everything the base chart is already using, so the overlays can take hues
@@ -8441,15 +8446,13 @@ function swingPriceBlock(d, ps, ctx) {
      * on `seriesDrawn(id)` per average. With EMA 9 on and the family flag off
      * the allocator never learned s5 was taken and handed it to Bollinger, so
      * two overlays were drawn in one colour. */
-    const baseColors = chartBaseColors(ps, candleMode, ps.intraday);
+    const baseColors = chartBaseColors(ps, candleMode, ps.intraday, stages && stages.marks);
     const overlayPalette = allocateOverlayColors(baseColors);
     // Kept on STATE so the written explanations below can show the same swatch as
     // the line on the chart. Recomputing it there would drift the moment the base
     // colours differ — which they do between line and candle mode.
     STATE.overlayPalette = overlayPalette;
 
-    // Same lookup as the Charting tab, on this payload's own symbol.
-    const stages = stageTints(d.ticker, ps.dates, ps.intraday);
     mount('legend-price', legend([
       // When the price is coloured by stage, the key says so instead of naming
       // an up and a down colour that no bar is drawn in.
@@ -9361,8 +9364,8 @@ function renderSwing(d) {
     const rsiDates = tailTo(ps.dates || [], rsiZoom);
 
     mount('legend-rsi', legend([
-      { name: ps.weekly ? 'RSI(14) weekly' : 'RSI(14)', color: C.s1 },
-      { name: `Signal (${RSI_SIGNAL_PERIOD}-period average)`, color: C.s4 },
+      { name: ps.weekly ? 'RSI(14) weekly' : 'RSI(14)', color: C.brand },
+      { name: `Signal (${RSI_SIGNAL_PERIOD}-period average)`, color: C.s7 },
       { name: 'Overbought / oversold', color: C.refSR, dash: true },
       { name: 'Midline 50', color: C.muted, dash: true },
       rsiCross ? { name: rsiCross.bullish ? 'Bullish cross' : 'Bearish cross',
@@ -9383,8 +9386,8 @@ function renderSwing(d) {
       // On weekly, recompute from weekly closes — a 14-week RSI is a genuinely
       // slower measure than the 14-day one, not the same line resampled.
       series: [
-        { name: ps.weekly ? 'RSI(14) weekly' : 'RSI(14)', values: rsiVals, color: C.s1 },
-        { name: 'Signal', values: rsiSignal, color: C.s4, width: 1.5, marker: false },
+        { name: ps.weekly ? 'RSI(14) weekly' : 'RSI(14)', values: rsiVals, color: C.brand },
+        { name: 'Signal', values: rsiSignal, color: C.s7, width: 1.5, marker: false },
       ],
       // RSI is bounded 0-100, so the axis is fixed. Auto-scaling it put the
       // overbought band at the very top edge and the oversold band in dead space,
@@ -9452,8 +9455,8 @@ function renderSwing(d) {
     const cross = lastMacdCross(wk.macd, wk.signal);
 
     mount('legend-macd', legend([
-      { name: 'MACD', color: C.s1 },
-      { name: 'Signal', color: C.s4 },
+      { name: 'MACD', color: C.brand },
+      { name: 'Signal', color: C.s7 },
       { name: 'Histogram (MACD − signal)', color: C.s3, boxed: true },
       cross ? { name: cross.bullish ? 'Bullish cross' : 'Bearish cross',
         color: cross.bullish ? C.good : C.critical } : null,
@@ -9501,9 +9504,11 @@ function renderSwing(d) {
       width: w,
       height: 200,
       labels: prof.spots.map((x) => fmt(x, 0)),
-      series: [{ name: 'Net GEX', values: prof.net_gex, color: C.s1, fill: true }],
+      series: [{ name: 'Net GEX', values: prof.net_gex, color: C.brand, fill: true }],
+      // The flip line was --warn, which is the gold line's own colour in the
+      // light theme (2.7 apart). A neutral reads as the reference it is.
       refLines: [
-        prof.flip_point ? { value: 0, label: `flip ≈ ${fmt(prof.flip_point, 2)}`, color: C.warn } : { value: 0, label: '', color: C.baseline },
+        prof.flip_point ? { value: 0, label: `flip ≈ ${fmt(prof.flip_point, 2)}`, color: C.ink2 } : { value: 0, label: '', color: C.baseline },
       ],
       zeroLine: true,
       yFormat: (x) => '$' + fmtCompact(x),
@@ -12407,7 +12412,8 @@ const IND_FALLBACK_CATALOGUE = [
     measures: 'Price divided by SPY, rebased to 100.' },
 ];
 
-const IND_COLORS = ['s1', 's3', 's4', 'neg'];
+// First line in the brand gold; the third was amber, 22.6 from it, so violet.
+const IND_COLORS = ['brand', 's3', 's7', 'neg'];
 
 /* Which indicators belong ON the price axis rather than in their own pane.
  *
@@ -12508,18 +12514,20 @@ function overlayColorChosen(id) {
  *
  * **Measured against the mark's real colours, not against s3/s8.** The candle
  * pair is configurable now, so a hardcoded guard would protect the wrong two
- * hues the moment anyone changed them. */
+ * hues the moment anyone changed them. With Stages on, the real colours are
+ * the four stage colours, and `marks` passes them: measured against up and
+ * down instead, SMA 50 was moved off a teal no bar was drawn in, onto blue. */
 const MA_CANDLE_FALLBACKS = ['s1', 's2', 's4', 's5', 's7', 's6', 'ink2', 'refSR'];
 const MA_SERIES_IDS = ['sma20', 'sma50', 'sma200', 'ema9', 'ema21', 'ema50'];
 
-function maColorsOnChart(candleMode) {
+function maColorsOnChart(candleMode, marks) {
   const lc = (c) => String(c || '').toLowerCase();
   const out = {};
 
-  // 1. The immovable: the price mark, then every colour the reader picked.
-  const fixed = new Set(candleMode
-    ? [lc(chartColor('up')), lc(chartColor('down'))]
-    : [lc(chartColor('line'))]);
+  // 1. The immovable: the price mark as drawn, then every colour the reader picked.
+  const fixed = new Set((marks || (candleMode
+    ? [chartColor('up'), chartColor('down')]
+    : [chartColor('line')])).map(lc));
   MA_SERIES_IDS.forEach((id) => {
     if (!overlayColorChosen(id)) return;
     out[id] = overlayStyle(id).color;
@@ -12927,7 +12935,16 @@ function stageTints(symbol, dates, intraday) {
   const key = [1, 2, 3, 4].filter((n) => seen.has(n))
     .map((n) => ({ name: `Stage ${n} \u00b7 ${names[n] || ''}`.trim(), color: C['stage' + n] }));
   if (seen.has(0)) key.push({ name: 'No stage yet', color: C.muted });
-  return { colors, key };
+  // All four, not only those on screen, so an average's colour does not change
+  // as the reader pans a stage into view. See maColorsOnChart.
+  const marks = [C.stage1, C.stage2, C.stage3, C.stage4];
+  return { colors, key, marks };
+}
+
+/* The Charting tab's stages, from the one set of inputs its chart, legend and
+ * study palette all use, so the three cannot disagree about what is drawn. */
+function wsStages(ps) {
+  return stageTints((STATE.chartData || {}).ticker, ps.dates, !!ps.intraday);
 }
 
 async function paintStage(hostId, symbol, stillCurrent) {
@@ -12965,7 +12982,7 @@ function drawInstrumentChart(d) {
     ? { open: d.open, high: d.high, low: d.low, close: d.close } : null;
   const stages = stageTints(stageSym, d.dates, false);
   mount('legend-inst', legend([
-    ...(stages ? stages.key : [{ name: d.label, color: C.s1 }]),
+    ...(stages ? stages.key : [{ name: d.label, color: C.brand }]),
     ...(d.volume ? [{ name: 'Volume', color: C.ink2, boxed: true }] : []),
   ]));
   mount('chart-inst', (w) => lineChart({
@@ -12973,7 +12990,7 @@ function drawInstrumentChart(d) {
     height: 380,
     labels: d.dates || [],
     volume: d.volume || null,
-    series: [{ name: d.label, values: d.close, color: C.s1,
+    series: [{ name: d.label, values: d.close, color: C.brand,
       tints: stages ? stages.colors : null,
       hidden: !!candles, fill: !candles }],
     candles,
@@ -13183,14 +13200,14 @@ function drawPeChart(p) {
   const pts = p.pe_series;
   const b = p.pe_bands || {};
   mount('legend-pe', legend([
-    { name: 'Trailing P/E', color: C.s1 },
+    { name: 'Trailing P/E', color: C.brand },
     { name: 'Its own median', color: C.ink2, boxed: true },
   ]));
   mount('chart-pe', (w) => lineChart({
     width: w,
     height: 210,
     labels: pts.map((x) => x.date),
-    series: [{ name: 'Trailing P/E', values: pts.map((x) => x.pe), color: C.s1,
+    series: [{ name: 'Trailing P/E', values: pts.map((x) => x.pe), color: C.brand,
       fill: true }],
     valueTags: true,
     yFormat: (v) => fmt(v, 0),
@@ -14241,7 +14258,8 @@ function wsLegend(ps) {
    *
    * Recomputed here rather than passed in, because it is a pure function of
    * state the legend already has. */
-  const legMa = maColorsOnChart(wsCandles(ps));
+  const legStages = wsStages(ps);
+  const legMa = maColorsOnChart(wsCandles(ps), legStages && legStages.marks);
   const colorOf = (id) => (MA_SERIES_IDS.includes(id)
     ? legMa[id] : overlayStyle(id).color);
 
@@ -14332,7 +14350,7 @@ function wsLegend(ps) {
     const hidden = overlayHidden('stages');
     const intra = isIntradayRange(chartRange);
     const sym = (STATE.chartData || {}).ticker;
-    const tinted = stageTints(sym, ps.dates, intra);
+    const tinted = legStages;
     const r = sym ? (stageSettled.get(sym) || {}).r : null;
     const why = hidden ? '' : intra ? 'weekly, not on intraday'
       : !r ? 'loading' : r.available !== true ? 'not enough history'
@@ -15342,8 +15360,8 @@ function wsMountPanes(ps) {
     const last = ps.rsi[ps.rsi.length - 1];
     wsPaneLegend('rsi', `<strong>RSI</strong> 14
       <span class="ws-pane-val">${fmt(last, 1)}</span>
-      <span class="ws-pane-key" style="background:${C.s1}"></span>RSI
-      <span class="ws-pane-key" style="background:${C.s4}"></span>Signal ${RSI_SIGNAL_PERIOD}${
+      <span class="ws-pane-key" style="background:${C.brand}"></span>RSI
+      <span class="ws-pane-key" style="background:${C.s7}"></span>Signal ${RSI_SIGNAL_PERIOD}${
   cross ? ` <span class="ws-pane-cross ${cross.bullish ? 'up' : 'down'}">${
     cross.bullish ? 'bullish' : 'bearish'} cross</span>` : ''}`);
     mount('ws-pane-rsi', (w) => lineChart({
@@ -15351,8 +15369,8 @@ function wsMountPanes(ps) {
       height: 132,
       labels: dates,
       series: [
-        { name: 'RSI', values: ps.rsi, color: C.s1 },
-        { name: 'Signal', values: ps.rsiSignal || [], color: C.s4, width: 1.5, marker: false },
+        { name: 'RSI', values: ps.rsi, color: C.brand },
+        { name: 'Signal', values: ps.rsiSignal || [], color: C.s7, width: 1.5, marker: false },
       ],
       // Bounded 0-100, so the axis is fixed rather than auto-scaled: the same
       // reason the Options panel fixed it. Auto-scaling put the overbought band
@@ -15373,8 +15391,8 @@ function wsMountPanes(ps) {
     const last = ps.macd[ps.macd.length - 1];
     wsPaneLegend('macd', `<strong>MACD</strong> 12, 26, 9
       <span class="ws-pane-val">${fmt(last, 2)}</span>
-      <span class="ws-pane-key" style="background:${C.s1}"></span>MACD
-      <span class="ws-pane-key" style="background:${C.s4}"></span>Signal
+      <span class="ws-pane-key" style="background:${C.brand}"></span>MACD
+      <span class="ws-pane-key" style="background:${C.s7}"></span>Signal
       <span class="ws-pane-key" style="background:${C.s3}"></span>Histogram${
   cross ? ` <span class="ws-pane-cross ${cross.bullish ? 'up' : 'down'}">${
     cross.bullish ? 'bullish' : 'bearish'} cross</span>` : ''}`);
@@ -15545,11 +15563,12 @@ async function wsLoadIndicators() {
  * Everything here is a colour something else on the plot is currently drawn in,
  * conditioned on the same flags that draw it.
  */
-function chartBaseColors(ps, candleMode, intraday) {
-  const ma = maColorsOnChart(candleMode);
-  const out = candleMode
-    ? [C.ink, chartColor('up'), chartColor('down')]
-    : [chartColor('line')];
+function chartBaseColors(ps, candleMode, intraday, marks) {
+  const ma = maColorsOnChart(candleMode, marks);
+  // With Stages on the mark is drawn in the stage colours, so those are taken.
+  const out = marks ? [...(candleMode ? [C.ink] : []), ...marks]
+    : candleMode ? [C.ink, chartColor('up'), chartColor('down')]
+      : [chartColor('line')];
   if (showFib && !intraday) out.push(C.refFib);
   if (showSR && !intraday) out.push(C.refSR);
   // Volume-by-price and the volume strip both key in ink2. The strip's bars are
@@ -15563,8 +15582,10 @@ function chartBaseColors(ps, candleMode, intraday) {
 }
 
 function wsStudyPalette(ps) {
+  const stages = wsStages(ps);
   return allocateOverlayColors(
-    chartBaseColors(ps, wsCandles(ps), isIntradayRange(chartRange)));
+    chartBaseColors(ps, wsCandles(ps), isIntradayRange(chartRange),
+      stages && stages.marks));
 }
 
 /** The payload rows that actually have data to draw, in catalogue order. */
@@ -17769,7 +17790,7 @@ function wsMountChart() {
   const intraday = !!ps.intraday;
   // The payload's own symbol, not STATE.chartSymbol: the colours have to be
   // the stages of the bars being drawn. See stageTints.
-  const stages = stageTints(d.ticker, ps.dates, intraday);
+  const stages = wsStages(ps);
 
   // Kept on a module-level handle so wsEnsureChart can re-run it if the mount
   // is superseded. Reassigned on every call, so it always closes over the
@@ -17783,7 +17804,7 @@ function wsMountChart() {
     // The averages' colours, from the resolver both tabs share. Computed once
     // per build rather than per series, because it allocates as a set: each
     // answer has to know what the previous ones took.
-    const wsMaColors = maColorsOnChart(wsCandles(ps));
+    const wsMaColors = maColorsOnChart(wsCandles(ps), stages && stages.marks);
     return lineChart({
       width: w,
       height,
@@ -18508,7 +18529,7 @@ function mapColour(value, domain) {
     // green-to-red diverging scale on RSI would imply 70 is bad and 30 is good,
     // which is a claim the measure does not make.
     const t = Math.max(0, Math.min(1, (value - min) / span));
-    return `color-mix(in srgb, ${C.s1} ${Math.round(t * 85 + 15)}%, ${C.surface})`;
+    return `color-mix(in srgb, ${C.brand} ${Math.round(t * 85 + 15)}%, ${C.surface})`;
   }
   // Diverging around the midpoint, so the neutral colour lands on the middle of
   // the range rather than on zero — a month where every sector rose should not
@@ -18854,7 +18875,7 @@ function mountRelPerfChart() {
     series: keys.map((k, i) => ({
       name: `${k} rank`,
       values: rp.windows[k].series || [],
-      color: i === 0 ? C.s1 : C.s4,
+      color: i === 0 ? C.brand : C.s7,
       width: i === 0 ? 1.8 : 1.3,
       marker: false,
     })),
@@ -18913,7 +18934,7 @@ function mountRelativeChart() {
     height: 200,
     labels: rel.dates || [],
     series: [{ name: `${rel.ticker} / ${rel.benchmark}`, values: rel.ratio,
-      color: C.s1, fill: true }],
+      color: C.brand, fill: true }],
     // 100 is where the pair started, so it is the line that matters — above is
     // outperformance, below is not.
     refLines: [{ value: 100, color: C.baseline, label: 'even', emphasis: true }],
@@ -19010,7 +19031,7 @@ function mountEconChart() {
     width: w,
     height: 260,
     labels: e.dates || [],
-    series: [{ name: e.label, values: e.values, color: C.s1, fill: true }],
+    series: [{ name: e.label, values: e.values, color: C.brand, fill: true }],
     valueTags: true,
     // Zero matters on a change series and not on a level, so it is drawn only
     // where the series can actually cross it.
@@ -19255,7 +19276,7 @@ function renderMarket(d) {
   `;
 
   views.market.querySelectorAll('[data-spark]').forEach((host) => {
-    try { host.appendChild(sparkline(JSON.parse(host.dataset.spark), 96, 24, C.s1)); } catch (e) { /* skip */ }
+    try { host.appendChild(sparkline(JSON.parse(host.dataset.spark), 96, 24, C.brand)); } catch (e) { /* skip */ }
   });
   views.market.querySelectorAll('[data-bar]').forEach((host) => {
     host.appendChild(inlineBar(Number(host.dataset.bar), Number(host.dataset.barMax) || sectorMax, 70, 9));
@@ -19264,7 +19285,7 @@ function renderMarket(d) {
     mount(`ratio-chart-${i}`, (w) => lineChart({
       width: w,
       height: 130, labels: r.dates || [], markerLast: true,
-      series: [{ name: r.name, values: r.series || [], color: C.s1, fill: true }],
+      series: [{ name: r.name, values: r.series || [], color: C.brand, fill: true }],
       yFormat: (x) => fmt(x, x < 1 ? 4 : 2),
     }));
   });
@@ -20821,20 +20842,20 @@ function renderRoth(d) {
 
   if (pr.available && pr.series) {
     mount('legend-roth', legend([
-      { name: 'Central estimate', color: C.s1 },
+      { name: 'Central estimate', color: C.brand },
       { name: 'Lower band', color: C.s2, dash: true },
       { name: 'Upper band', color: C.s3, dash: true },
-      { name: 'Contributions only', color: C.s4, dash: true },
+      { name: 'Contributions only', color: C.s7, dash: true },
     ]));
     mount('chart-roth', (w) => lineChart({
       width: w,
       height: 300,
       labels: pr.series.map((p) => `yr ${p.year}`),
       series: [
-        { name: 'Central estimate', values: pr.series.map((p) => p.balance), color: C.s1 },
+        { name: 'Central estimate', values: pr.series.map((p) => p.balance), color: C.brand },
         { name: 'Lower band', values: pr.series_low, color: C.s2, width: 1.5, marker: false },
         { name: 'Upper band', values: pr.series_high, color: C.s3, width: 1.5, marker: false },
-        { name: 'Contributions only', values: pr.series.map((p) => p.contributed), color: C.s4, width: 1.5, marker: false },
+        { name: 'Contributions only', values: pr.series.map((p) => p.contributed), color: C.s7, width: 1.5, marker: false },
       ],
       // The chart pads its range 8% below the lowest value, which on an
       // all-positive money series puts a tick just under zero and renders it
@@ -23161,7 +23182,7 @@ function ltPriceBlock(h, lt, ltLevels) {
     mount('legend-weekly', legend([
       ...(ltCandles
         ? [{ name: `Up ${unit}`, color: C.s3 }, { name: `Down ${unit}`, color: C.s8 }]
-        : [{ name: `${ltSer.monthly ? 'Monthly' : 'Weekly'} close`, color: C.s1 }]),
+        : [{ name: `${ltSer.monthly ? 'Monthly' : 'Weekly'} close`, color: C.brand }]),
       ...(ltMa40 ? [{ name: `40-${unit} average`, color: overlayStyle('sma50').color }] : []),
       ...(ltMa200 ? [{ name: `200-${unit} average`, color: overlayStyle('sma200').color }] : []),
       ...(showVol ? [{ name: 'Volume', color: C.ink2 }] : []),
@@ -23194,7 +23215,7 @@ function ltPriceBlock(h, lt, ltLevels) {
       volume: showVol ? (ltSer.volume || null) : null,
       series: [
         { name: `${ltSer.monthly ? 'Monthly' : 'Weekly'} close`,
-          values: ltSer.close, color: C.s1, hidden: ltCandles, fill: !ltCandles },
+          values: ltSer.close, color: C.brand, hidden: ltCandles, fill: !ltCandles },
         ...(ltMa40 ? [{ name: `40-${unit} average`, values: ltMa40,
           color: overlayStyle('sma50').color, width: overlayStyle('sma50').width,
           marker: false }] : []),

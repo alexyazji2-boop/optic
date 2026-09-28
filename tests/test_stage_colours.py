@@ -176,7 +176,8 @@ def test_an_answer_redraws_only_a_chart_still_showing_that_symbol():
 def test_each_chart_asks_for_its_own_payloads_symbol():
     """STATE.ticker and STATE.chartSymbol are independent, and the colours have
     to be the stages of the bars being drawn."""
-    assert "const stages = stageTints(d.ticker, ps.dates, intraday);" in _fn(APP, "wsMountChart")
+    assert "const stages = wsStages(ps);" in _fn(APP, "wsMountChart")
+    assert "stageTints((STATE.chartData || {}).ticker, ps.dates, !!ps.intraday)" in _fn(APP, "wsStages")
     assert "const stages = stageTints(d.ticker, ps.dates, ps.intraday);" in _fn(APP, "swingPriceBlock")
     assert "const stages = stageTints(stageSym, d.dates, false);" in _fn(APP, "drawInstrumentChart")
 
@@ -188,7 +189,7 @@ def test_all_three_colour_both_candles_and_line_from_one_array():
 
 def test_the_legends_key_the_stages_instead_of_up_and_down():
     assert "...(stages ? stages.key : candleMode" in _fn(APP, "swingPriceBlock")
-    assert "...(stages ? stages.key : [{ name: d.label, color: C.s1 }])" in _fn(APP, "drawInstrumentChart")
+    assert "...(stages ? stages.key : [{ name: d.label, color: C.brand }])" in _fn(APP, "drawInstrumentChart")
     leg = _fn(APP, "wsLegend")
     assert 'data-ws-leg="stages"' in leg
     assert 'data-ws-hide="stages"' in leg and 'data-ws-off="stages"' in leg

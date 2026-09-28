@@ -68,11 +68,15 @@ def test_no_handler_claims_an_attribute_nothing_renders():
 
 
 def test_the_defaults_are_the_slots_each_mark_already_used():
-    """Candles have always been s3/s8 and the line s1. Changing any of these
-    would restyle every chart in the app on the way to making them
-    configurable, for readers who never asked for a colour."""
+    """Candles have always been s3/s8. Changing them would restyle every chart
+    in the app for readers who never asked for a colour.
+
+    The line was s1, blue, on the same argument, until the owner asked for
+    every chart in Optic's own gold: that is someone asking, so it is C.brand
+    now, which follows --btn-primary."""
     fn = _fn(APP_JS, "chartColorDefault")
-    assert "C.s3" in fn and "C.s8" in fn and "C.s1" in fn
+    assert "C.s3" in fn and "C.s8" in fn and "C.brand" in fn
+    assert "C.s1" not in fn
 
 
 def test_charts_js_falls_back_to_the_same_slots():
@@ -151,7 +155,9 @@ def test_the_presets_are_tokens_that_exist():
     block = APP_JS[APP_JS.index("CHART_COLOR_PRESETS = ["):]
     block = block[:block.index("];")]
     slots = re.findall(r"slot: '([a-z0-9]+)'", block)
-    assert len(slots) == 12
+    # Twelve, and Gold since the line's default became the brand colour: the
+    # default has to be one of the swatches, or none of them reads as pressed.
+    assert len(slots) == 13 and slots[0] == "brand"
     # Every one has to be a slot charts.js actually syncs, or C[slot] is
     # undefined and the swatch renders as a transparent gap.
     for slot in slots:

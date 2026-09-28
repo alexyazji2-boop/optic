@@ -66,6 +66,19 @@ const C = {
    * looks like from the outside. */
   accent: '#00c805',
 
+  /* Optic's gold, the colour of the primary buttons, and the default colour of
+   * the one line a chart is about. It was --s1's blue until the owner asked for
+   * every chart in the brand colour. --brand follows --btn-primary, so this is
+   * #d4b144 on the dark plane and #9a6b00 in the light theme.
+   *
+   * It sits 22.6 apart from --s4's amber in the dark theme (CIE76), and --warn
+   * is 2.7 from it in the light one: the same colour. So the lines drawn
+   * beside it by default -- RSI and MACD signals, a second rank window, the
+   * contributions line -- moved off amber to --s7's violet (111 and 116), and
+   * the gamma flip line to a neutral. Blue stays in the categorical slots,
+   * where its job is telling eleven sectors apart, not being the chart. */
+  brand: '#d4b144',
+
   /* Reference-line colours, held apart from the eight categorical slots.
    *
    * Levels are annotation, not data: they mark where something happened rather
@@ -97,7 +110,7 @@ const C_VARS = {
   pos: '--pos', neg: '--neg', mid: '--mid',
   good: '--good', warn: '--warn', serious: '--serious', critical: '--critical',
   stage1: '--stage-1', stage2: '--stage-2', stage3: '--stage-3', stage4: '--stage-4',
-  accent: '--accent',
+  accent: '--accent', brand: '--brand',
   refSR: '--ref-sr', refFib: '--ref-fib', refSession: '--ref-session',
 };
 
@@ -2233,7 +2246,7 @@ function inlineBar(value, maxAbs, width = 76, height = 9) {
 }
 
 /** Sparkline: one series, no legend, no axis — the number beside it carries the value. */
-function sparkline(values, width = 96, height = 26, color = C.s1) {
+function sparkline(values, width = 96, height = 26, color = C.brand) {
   const clean = (values || []).filter((v) => v !== null && isFinite(v));
   if (clean.length < 2) return document.createTextNode('');
   const lo = Math.min(...clean), hi = Math.max(...clean);
@@ -2362,7 +2375,7 @@ function macdChart(macd, signal, hist, labels, width = 720, opts = {}) {
         : ' · latest bar'}`));
   }
 
-  [[macd, C.s1, 'MACD'], [signal, C.s4, 'Signal']].forEach(([vals, color]) => {
+  [[macd, C.brand, 'MACD'], [signal, C.s7, 'Signal']].forEach(([vals, color]) => {
     const pts = vals.map((v, i) => (v === null || !isFinite(v) ? null : `${X(i).toFixed(1)},${Y(v).toFixed(1)}`))
       .filter(Boolean);
     if (pts.length) {
@@ -2398,8 +2411,8 @@ function macdChart(macd, signal, hist, labels, width = 720, opts = {}) {
     i = Math.max(0, Math.min(n - 1, i));
     cross.setAttribute('x1', X(i)); cross.setAttribute('x2', X(i)); cross.setAttribute('opacity', 0.45);
     showTip(tipRows(barLabelText(labels[i]), [
-      [`<span style="color:${C.s1}">■</span> MACD`, fmt(macd[i], 3)],
-      [`<span style="color:${C.s4}">■</span> Signal`, fmt(signal[i], 3)],
+      [`<span style="color:${C.brand}">■</span> MACD`, fmt(macd[i], 3)],
+      [`<span style="color:${C.s7}">■</span> Signal`, fmt(signal[i], 3)],
       ['Histogram', fmt(hist[i], 3)],
     ]), evt);
   }, () => { hideTip(); cross.setAttribute('opacity', 0); });
@@ -2636,7 +2649,7 @@ function bubbleChart(points, opts = {}) {
     .forEach((p) => {
       const cx = X(p.x); const cy = Y(p.y); const r = R(p.size);
       const dot = s('circle', {
-        cx, cy, r, fill: p.color || C.s1, 'fill-opacity': 0.75,
+        cx, cy, r, fill: p.color || C.brand, 'fill-opacity': 0.75,
         stroke: C.surface, 'stroke-width': 1.5, style: 'cursor:pointer',
       });
       dot.addEventListener('mouseenter', (evt) => showTip(tipRows(

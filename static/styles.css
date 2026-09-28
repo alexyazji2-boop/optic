@@ -8661,8 +8661,9 @@ body.ws-panning { user-select: none; }
 }
 .ws-nav.dragging { cursor: grabbing; }
 .ws-nav svg { display: block; width: 100%; height: 100%; }
-.ws-nav-window { fill: var(--s1); opacity: 0.16; }
-.ws-nav-edge { fill: var(--s1); opacity: 0.85; cursor: ew-resize; }
+/* The window is the chart's own colour, like its line: Optic's gold. */
+.ws-nav-window { fill: var(--brand); opacity: 0.16; }
+.ws-nav-edge { fill: var(--brand); opacity: 0.85; cursor: ew-resize; }
 .ws-nav-mask { fill: var(--plane); opacity: 0.55; }
 .ws-nav-line { fill: none; stroke: var(--ink-muted); stroke-width: 1; }
 .ws-nav-area { fill: var(--ink-muted); opacity: 0.16; }
@@ -12670,7 +12671,7 @@ body.auth-open { overflow: hidden; }
   background: var(--baseline);
 }
 
-.cb-row.is-lead .cb-fill { background: var(--s1); }
+.cb-row.is-lead .cb-fill { background: var(--brand); }
 
 .cb-score {
   font: 600 var(--t-caption)/1.2 var(--sans);
