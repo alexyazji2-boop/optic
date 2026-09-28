@@ -12752,6 +12752,10 @@ body.auth-open { overflow: hidden; }
 .sec-chg.down { color: var(--neg); }
 .sec-chg.flat { color: var(--ink-muted); }
 .sec-meta { color: var(--ink-muted); font-size: var(--t-small); margin-left: auto; }
+/* `.sec-id` aligns on baseline, which suits text beside text and gives a
+   bordered chip nowhere sensible to sit beside a display-size price. Centred
+   on its own line instead. */
+.sec-id .stage-chip { align-self: center; }
 /* On Charting the strip is the whole header, so it does not need the padding
    that separates it from a price line that is not there. */
 .sec-head.compact { padding-top: var(--space-1); margin-bottom: var(--space-2); }

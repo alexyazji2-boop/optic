@@ -9859,6 +9859,26 @@ function securityHeader(view, opts = {}) {
       title="${esc(SUB_TITLES[v] || '')}">${esc(SUB_LABELS[v] || v)}</button>`;
   }).join('');
 
+  /* The Weinstein stage, in the full strip and never the compact one.
+   *
+   * Compact is Charting and Options. Charting already carries the stage in its
+   * own price header, so the full strip only would put it on every other facet
+   * without doubling it up on the one that has it.
+   *
+   * One id per facet, not one shared id. Every facet is its own section and a
+   * stale header lingers in the hidden ones, so a single id would be duplicated
+   * across them -- and getElementById would paint whichever came first in the
+   * document, which need not be the facet on screen.
+   *
+   * A microtask because this returns a string: every caller assigns it to
+   * innerHTML synchronously, so by the time the microtask runs the host is in
+   * the page. Guarded on STATE.ticker, which is what the full strip names --
+   * not STATE.chartSymbol, which CLAUDE.md records as deliberately independent. */
+  if (!opts.compact) {
+    const stageHost = 'stage-sec-' + view;
+    queueMicrotask(() => paintStage(stageHost, sym, () => (STATE.ticker || '') === sym));
+  }
+
   /* Compact drops the price line. Used on Charting, where the toolbar and the
    * status strip already carry the symbol and the last price twice over, and
    * where a third copy would cost rows from a deliberately full-height chart. */
@@ -9869,6 +9889,7 @@ function securityHeader(view, opts = {}) {
       ${has ? `<span class="sec-px">${fmt(q.price, 2)}</span>
         <span class="sec-chg ${dir}">${Number.isFinite(pct)
     ? `${pct >= 0 ? '+' : ''}${fmt(pct, 2)}%` : ''}</span>` : ''}
+      <span class="stage-chip" id="stage-sec-${esc(view)}" hidden></span>
       ${q.exchange ? `<span class="sec-meta">${esc(q.exchange)}${
     q.sector ? ` \u00b7 ${esc(q.sector)}` : ''}</span>` : ''}
     </div>`}

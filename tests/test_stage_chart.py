@@ -36,7 +36,14 @@ CLEAN_CSS = _strip(CSS)
 
 
 def _rule(selector: str) -> str:
-    start = CLEAN_CSS.index(selector + " {") + len(selector) + 2
+    """The rule whose selector list *is* `selector`, not one that merely ends in
+    it. A substring search found `.sec-id .stage-chip {` before the base
+    `.stage-chip {` once the Dossier strip gained a chip, because the descendant
+    rule sits earlier in the file -- and asserted the base rule's display
+    against a rule that only sets alignment."""
+    m = re.search(r"(?:^|[}\n])\s*" + re.escape(selector) + r"\s*\{", CLEAN_CSS)
+    assert m, "no rule for " + selector
+    start = m.end()
     return CLEAN_CSS[start:CLEAN_CSS.index("}", start)]
 
 
@@ -140,3 +147,55 @@ def test_it_shortens_rather_than_clips_in_a_narrow_header():
     assert ".ws-body.narrow .ws-head .stage-tag" in CLEAN_CSS
     block = CLEAN_CSS[CLEAN_CSS.index("body.chat-open .ws-head .stage-name"):]
     assert "display: none" in block[:block.index("}")]
+
+
+# ------------------------------------------------------ the Dossier header
+
+
+def _sec_header() -> str:
+    return _fn("securityHeader")
+
+
+def test_the_dossier_strip_carries_the_chip_beside_the_change():
+    fn = _sec_header()
+    assert 'id="stage-sec-${esc(view)}"' in fn
+    # After the change figure, before the exchange line that is pushed right.
+    # The markup occurrence: `'stage-sec-' + view` in the paint code comes first.
+    assert fn.index('class="sec-chg') < fn.index('id="stage-sec-') < fn.index('class="sec-meta"')
+
+
+def test_it_is_in_the_full_strip_only_so_charting_does_not_show_it_twice():
+    """Compact is Charting and Options, and Charting already carries the stage
+    in its own price header. Measured: exactly one visible chip on that tab."""
+    fn = _sec_header()
+    full = fn[fn.index("${opts.compact ? '' : `<div class=\"sec-id\">"):]
+    assert "stage-sec-" in full
+    assert "if (!opts.compact) {" in fn, "the paint must be skipped when compact"
+
+
+def test_each_facet_gets_its_own_id():
+    """Every facet is its own section and a stale header lingers in the hidden
+    ones. One shared id would be duplicated across them, and getElementById
+    would paint whichever came first in the document."""
+    fn = _sec_header()
+    assert "'stage-sec-' + view" in fn
+    assert 'id="stage-sec"' not in _strip(APP), "a single shared id is back"
+
+
+def test_the_dossier_chip_is_guarded_on_the_dossiers_own_symbol():
+    """STATE.ticker, not STATE.chartSymbol: CLAUDE.md records the two as
+    deliberately independent. Proven in a browser -- with TSLA on screen,
+    NVDA's late answer painted unguarded read Stage 2 under TSLA's name."""
+    fn = _sec_header()
+    assert "() => (STATE.ticker || '') === sym" in fn
+    assert "chartSymbol" not in fn[fn.index("if (!opts.compact) {"):fn.index("return `<header")]
+
+
+def test_it_is_painted_after_the_caller_puts_the_strip_in_the_page():
+    """securityHeader returns a string; its callers assign it synchronously,
+    so a microtask is the first moment the host exists."""
+    assert "queueMicrotask(() => paintStage(stageHost" in _sec_header()
+
+
+def test_the_chip_sits_on_the_prices_line():
+    assert "align-self: center" in _rule(".sec-id .stage-chip")
