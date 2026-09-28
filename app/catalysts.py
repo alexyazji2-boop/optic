@@ -143,12 +143,27 @@ CREATE INDEX IF NOT EXISTS catalyst_scans_at ON catalyst_scans(at DESC);
 """
 
 
+# Columns added to a table after it first shipped. CREATE TABLE IF NOT EXISTS
+# never touches a table that is already there, so a store made before a column
+# existed refuses every insert naming it: measured on the local store, whose
+# scan table predated `unsourced`, every scan after that went unrecorded and
+# the page kept showing the one row from before it.
+_ADDED_COLUMNS = {
+    "catalyst_scans": [("unsourced", "INTEGER NOT NULL DEFAULT 0")],
+}
+
+
 def _connect() -> sqlite3.Connection:
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=15)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(SCHEMA)
+    for table, columns in _ADDED_COLUMNS.items():
+        have = {r[1] for r in conn.execute("PRAGMA table_info(%s)" % table)}
+        for name, decl in columns:
+            if name not in have:
+                conn.execute("ALTER TABLE %s ADD COLUMN %s %s" % (table, name, decl))
     return conn
 
 

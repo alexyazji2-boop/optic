@@ -435,6 +435,21 @@ def test_a_failed_scan_is_reported_beside_the_last_good_one(monkeypatch):
     assert scan["last_ok_at"] < scan["last_at"]
 
 
+def test_a_scan_table_from_before_a_column_existed_still_records():
+    """The local store's scan table was made before `unsourced`, and every
+    insert naming it failed, so no scan after that was ever recorded."""
+    with sqlite3.connect(catalysts.DB_PATH) as conn:
+        conn.execute("""CREATE TABLE catalyst_scans (at TEXT NOT NULL, kind TEXT NOT NULL,
+                        ok INTEGER NOT NULL, scanned INTEGER NOT NULL DEFAULT 0,
+                        identified INTEGER NOT NULL DEFAULT 0,
+                        written INTEGER NOT NULL DEFAULT 0, reason TEXT)""")
+        conn.execute("INSERT INTO catalyst_scans (at, kind, ok, reason) VALUES "
+                     "('2026-09-28T14:27:16+00:00', 'manual', 0, 'old')")
+    catalysts._record_scan("manual", False, unsourced=2, reason="new")
+    assert [(r["reason"], r["unsourced"]) for r in _scans()] == [("old", 0), ("new", 2)]
+    assert catalysts.search()["scan"]["last_reason"] == "new"
+
+
 # -------------------------------------------------------------- the schedule
 
 
