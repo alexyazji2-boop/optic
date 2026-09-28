@@ -11549,7 +11549,7 @@ function fibLines(levels, spot) {
         detail: [
           ['Level', String(l.label || '')],
           ['Price', fmt(l.price, 2)],
-          ['Role', String(l.role || '')],
+          ['Role', cap(String(l.role || ''))],
           spot ? ['From here', fmtPct(((l.price - spot) / spot) * 100, 1)] : null,
         ].filter(Boolean),
       };
@@ -16216,7 +16216,9 @@ function wsWidgetBody(id) {
       ${/* `name num`: the first column, left-aligned like a name, but it holds
            a price. `td.name` alone turns lining figures off. */''}
       <td class="name num">${fmt(l.price, 2)}</td>
-      <td class="${l.role === 'resistance' ? 'down' : 'up'}">${esc(l.role || '')}</td>
+      ${/* cap(), because `role` is the server's lowercase vocabulary rendered
+           straight out, and a table cell reads as a label. */''}
+      <td class="${l.role === 'resistance' ? 'down' : 'up'}">${esc(cap(l.role || ''))}</td>
       <td>${spot ? fmtPct(((l.price - spot) / spot) * 100, 1) : ''}</td>
       <td>${fmt(l.strength, 0)}</td>
     </tr>`).join('')}</tbody></table>`;
