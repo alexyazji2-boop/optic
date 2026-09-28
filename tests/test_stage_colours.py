@@ -1,0 +1,287 @@
+"""The price mark coloured by Weinstein stage, as the reference chart draws it.
+
+Built after TrendSpider's weekly PLTR, where every candle is in the colour of
+its stage: green advancing, amber topping, red declining, light green basing.
+Checked against that chart in a browser rather than argued: PLTR on the
+Charting tab, weekly candles over the whole payload, drew 69 Stage 2, 11 Stage
+3, 18 Stage 4 and 7 Stage 1 bodies -- the same weeks, one for one, as the
+server's history -- and 126 daily bars over six months matched their weeks
+with no mismatches.
+
+The property under all of it is that a bar's colour is its own week's stage
+and nobody else's: not a later week's (hindsight, which stage.py rules out and
+tests/test_stage.py proves), not another symbol's (the payload's own ticker),
+and not a neighbouring week's (one Monday rule, shared with the server).
+"""
+from __future__ import annotations
+
+import datetime as dt
+import os
+import re
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parent.parent
+APP_SRC = (ROOT / "static/app.js").read_text()
+CHARTS_SRC = (ROOT / "static/charts.js").read_text()
+CSS = (ROOT / "static/styles.css").read_text()
+
+
+def _strip(text: str) -> str:
+    """Code without its comments. Tests in this repo have passed on their own
+    prose more than once: a comment naming the fix satisfies a substring
+    search for the fix."""
+    text = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
+    return re.sub(r"^\s*//.*$", " ", text, flags=re.M)
+
+
+APP = _strip(APP_SRC)
+CHARTS = _strip(CHARTS_SRC)
+CLEAN_CSS = _strip(CSS)
+
+
+def _fn(src: str, name: str) -> str:
+    body = src[src.index("function " + name + "("):]
+    return body[:body.index("\n}") + 2]
+
+
+def _chart_fn() -> str:
+    return _fn(CHARTS, "lineChart")
+
+
+# ------------------------------------------------------------ the colours
+
+
+def test_four_tokens_three_of_them_the_terminals_own():
+    root = CLEAN_CSS[:CLEAN_CSS.index(':root[data-theme="light"]')]
+    for n in (1, 2, 3, 4):
+        assert "--stage-%d:" % n in root, n
+    assert "--stage-2: var(--pos);" in root
+    assert "--stage-3: var(--warn);" in root
+    assert "--stage-4: var(--neg);" in root
+
+
+def test_the_light_theme_has_its_own_stage_1():
+    """The dark theme's light green is 1.3:1 on white. Measured: anything
+    lighter than --pos 70% into --surface fails the 3:1 a mark needs."""
+    light = CLEAN_CSS[CLEAN_CSS.index(':root[data-theme="light"]'):]
+    light = light[:light.index("}")]
+    assert "--stage-1:" in light
+
+
+def test_the_charts_read_the_tokens_so_a_theme_flip_repaints_them():
+    c_vars = CHARTS[CHARTS.index("const C_VARS = {"):]
+    c_vars = c_vars[:c_vars.index("};")]
+    for n in (1, 2, 3, 4):
+        assert "stage%d: '--stage-%d'" % (n, n) in c_vars, n
+
+
+# ------------------------------------------------------------ the renderer
+
+
+def test_a_candle_takes_its_tint_before_its_direction():
+    fn = _chart_fn()
+    assert "candleTints = null" in fn
+    assert re.search(r"const colour = \(candleTints && candleTints\[i\]\)\s*\|\|\s*\(up \?", fn)
+
+
+def test_a_tinted_line_is_drawn_in_runs_coloured_by_the_bar_they_lead_into():
+    """So the line changes colour at the bar whose week changed stage, and not
+    one bar early."""
+    fn = _chart_fn()
+    assert "if (Array.isArray(se.tints))" in fn
+    loop = fn[fn.index("if (Array.isArray(se.tints))"):]
+    loop = loop[:loop.index("} else {")]
+    assert "const c = tint(k);" in loop
+    assert "runs.push({ color: c, from: k - 1, to: k })" in loop
+    assert "pts.slice(run.from, run.to + 1)" in loop, "runs must share their joining point"
+    assert "fill: run.color" in loop, "the area under each run is in its own stage"
+
+
+def test_the_untinted_line_is_drawn_exactly_as_before():
+    fn = _chart_fn()
+    plain = fn[fn.index("if (Array.isArray(se.tints))"):]
+    plain = plain[plain.index("} else {"):]
+    plain = plain[:plain.index("if (markerLast")]
+    assert "stroke: se.color" in plain
+    assert "'data-draw': animating && !se.dash ? seriesDelay(se) : null" in plain
+
+
+def test_the_end_dot_value_tag_hover_dot_and_swatch_follow_the_bar():
+    """A tinted line is a different colour at every stage. Anything still in
+    the base colour names a line that is not on the chart."""
+    fn = _chart_fn()
+    assert "const endColor = (se.tints && se.tints[lastIdx]) || se.color;" in fn
+    assert fn.count("stroke: endColor") == 1 and fn.count("fill: endColor") == 1
+    assert "color: (se.tints && se.tints[li]) || se.color" in fn
+    assert "const hue = (se.tints && se.tints[i]) || se.color;" in fn
+    assert "dots[k].setAttribute('fill', hue);" in fn
+    assert '<span style="color:${hue}">' in fn
+
+
+# ------------------------------------------------------------ the lookup
+
+
+def test_nothing_is_tinted_when_off_hidden_or_intraday():
+    fn = _fn(APP, "stageTints")
+    assert "if (!wsOverlayDrawn('stages') || intraday || !symbol) return null;" in fn
+
+
+def test_an_unavailable_reading_is_not_a_falsy_test():
+    assert "r.available !== true" in _fn(APP, "stageTints")
+
+
+def test_a_bar_with_no_stage_is_muted_not_its_direction_colour():
+    """Two colour languages on one chart would make green mean "up" on the left
+    and "Stage 2" on the right."""
+    fn = _fn(APP, "stageTints")
+    assert "return n ? C['stage' + n] : C.muted;" in fn
+
+
+def test_the_key_names_only_the_stages_on_screen():
+    fn = _fn(APP, "stageTints")
+    assert ".filter((n) => seen.has(n))" in fn
+    assert "if (seen.has(0)) key.push" in fn
+
+
+def test_a_bar_finds_its_week_by_the_shared_monday_rule():
+    assert "byWeek.get(weekMonday(iso))" in _fn(APP, "stageTints")
+    assert "const weekKey = weekMonday;" in _fn(APP, "aggregateWeekly")
+
+
+def test_a_failed_fetch_redraws_nothing_so_a_blip_cannot_loop():
+    fn = _fn(APP, "stageReading")
+    assert "if (r) stagesArrived(symbol);" in fn
+    assert "stageWaiting.has(symbol)" in fn, "one request in flight per symbol"
+    fetch = _fn(APP, "fetchStage")
+    assert re.search(r"if \(!r\) stageCache\.delete\(symbol\);\s*else stageSettled\.set", fetch)
+
+
+def test_an_answer_redraws_only_a_chart_still_showing_that_symbol():
+    fn = _fn(APP, "stagesArrived")
+    assert "d.ticker === symbol" in fn
+    assert "STATE.swing.ticker === symbol" in fn
+    assert "((STATE.instrument || {}).symbol || '') === symbol" in fn
+    # The colour wheel's OS picker belongs to its input; rebuilding the toolbar
+    # under it shuts it.
+    assert "wsRedrawChart({ keepToolbar: true })" in fn
+
+
+# ------------------------------------------------------------ the three charts
+
+
+def test_each_chart_asks_for_its_own_payloads_symbol():
+    """STATE.ticker and STATE.chartSymbol are independent, and the colours have
+    to be the stages of the bars being drawn."""
+    assert "const stages = stageTints(d.ticker, ps.dates, intraday);" in _fn(APP, "wsMountChart")
+    assert "const stages = stageTints(d.ticker, ps.dates, ps.intraday);" in _fn(APP, "swingPriceBlock")
+    assert "const stages = stageTints(stageSym, d.dates, false);" in _fn(APP, "drawInstrumentChart")
+
+
+def test_all_three_colour_both_candles_and_line_from_one_array():
+    assert APP.count("candleTints: stages ? stages.colors : null") == 3
+    assert APP.count("tints: stages ? stages.colors : null") == 3
+
+
+def test_the_legends_key_the_stages_instead_of_up_and_down():
+    assert "...(stages ? stages.key : candleMode" in _fn(APP, "swingPriceBlock")
+    assert "...(stages ? stages.key : [{ name: d.label, color: C.s1 }])" in _fn(APP, "drawInstrumentChart")
+    leg = _fn(APP, "wsLegend")
+    assert 'data-ws-leg="stages"' in leg
+    assert 'data-ws-hide="stages"' in leg and 'data-ws-off="stages"' in leg
+
+
+def test_the_charting_legend_says_why_nothing_is_coloured():
+    leg = _fn(APP, "wsLegend")
+    for why in ("'weekly, not on intraday'", "'loading'", "'not enough history'", "'unavailable'"):
+        assert why in leg, why
+
+
+# ------------------------------------------------------------ the switch
+
+
+def test_it_is_on_until_someone_turns_it_off():
+    assert "let showStages = true;" in APP
+    assert "showStages = localStorage.getItem(SHOW_STAGES_KEY) !== 'off';" in APP
+
+
+def test_it_is_wired_like_every_other_toggle():
+    flags = APP[APP.index("const WS_FLAGS = {"):]
+    assert "stages: () => showStages," in flags[:flags.index("};")]
+    setters = APP[APP.index("const WS_SETTERS = {"):]
+    assert "stages: (on) => { showStages = !!on; storeFlag(SHOW_STAGES_KEY, on); }," \
+        in setters[:setters.index("};")]
+    menus = APP[APP.index("const WS_MENUS = ["):]
+    assert "{ id: 'stages', label: 'Stages', items: ['stages'] }," in menus[:menus.index("];")]
+
+
+def test_the_two_charts_without_a_toolbar_menu_have_a_switch_and_it_has_a_handler():
+    """Both directions, as tests/test_auth_client.py asserts for every control:
+    a switch with no handler takes the click and does nothing, and a coloured
+    chart with no switch where it is read leaves the reader hunting."""
+    assert "${ps.intraday ? '' : stagesToggleHTML()}" in APP
+    inst = _fn(APP, "renderInstrument")
+    assert "${stagesToggleHTML()}" in inst
+    assert "data-stages-toggle" in _fn(APP, "stagesToggleHTML")
+    handler = APP[APP.index("evt.target.closest('[data-stages-toggle]')"):]
+    handler = handler[:handler.index("return;\n  }")]
+    assert "wsSetOverlay('stages', !on);" in handler
+    assert "setOverlayHidden('stages', false)" in handler, "one press must always change the chart"
+    assert "renderSwing(STATE.swing)" in handler and "renderInstrument(STATE.instrumentData)" in handler
+
+
+def test_the_switch_shows_what_is_drawn_not_what_is_enabled():
+    assert "const on = wsOverlayDrawn('stages');" in _fn(APP, "stagesToggleHTML")
+
+
+def test_the_style_dialog_offers_no_colour_for_it():
+    defs = APP[APP.index("const OVERLAY_DEFS = ["):]
+    entry = defs[defs.index("id: 'stages'"):]
+    assert "fixed:" in entry[:entry.index("},")]
+    row = _fn(APP, "wsManageRow")
+    assert "${def.fixed ? `<p class=\"ws-mnote\">${esc(def.fixed)}</p>` : def.fill ?" in row
+
+
+def test_the_colour_picker_says_when_stages_are_what_colour_the_bars():
+    pop = _fn(APP, "wsColorPop")
+    assert "const staged = wsOverlayDrawn('stages') && !isIntradayRange(chartRange);" in pop
+    assert "${staged ? `<p class=\"ws-menu-note\">" in pop
+
+
+# ------------------------------------------------------ the shared Monday
+
+
+JSC = ("/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/"
+       "Helpers/jsc")
+
+
+def _jsc():
+    return JSC if os.path.exists(JSC) else shutil.which("jsc")
+
+
+def test_the_browser_and_the_server_agree_on_every_days_monday():
+    """Executed, not read. Four hundred consecutive days through the client's
+    weekMonday against the server's rule in app/analytics/stage.py, across a
+    year end and a leap day. One day of disagreement is one bar coloured with
+    the wrong week's stage."""
+    exe = _jsc()
+    if not exe:
+        pytest.skip("no JavaScriptCore on this machine")
+    start = dt.date(2023, 12, 1)
+    days = [start + dt.timedelta(days=i) for i in range(400)]
+    script = """
+      load('tests/support/browser_stubs.js');
+      try { load('static/charts.js'); load('static/app.js'); } catch (e) {}
+      var days = %s;
+      print('MONDAYS:' + days.map(weekMonday).join(','));
+      print('JUNK:' + weekMonday('not a date'));
+    """ % repr([d.isoformat() for d in days]).replace("'", '"')
+    out = subprocess.run([exe, "-e", script], capture_output=True, text=True,
+                         timeout=120).stdout
+    got = out.split("MONDAYS:")[1].split("\n")[0].split(",")
+    want = [(d - dt.timedelta(days=d.weekday())).isoformat() for d in days]
+    assert got == want
+    assert "JUNK:null" in out

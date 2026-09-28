@@ -16,6 +16,14 @@ bars it holds, and a 3-month chart has about thirteen weeks -- far short of a
 the reader happens to be looking at, so it is computed from two years of
 weekly closes whatever the chart shows.
 
+**Why ten years of weeks, and a stage for every one of them.** The charts
+colour each bar by the stage of its week, and the longest daily range on
+screen is five years (the instrument page). A week needs 53 weeks behind it
+before it has a stage, so five years of coloured bars needs six of history;
+ten leaves room and is about 520 rows. Each week is read from the closes up to
+and including its own and never a later one, so an old bar is coloured by what
+its stage was then rather than by what hindsight makes it.
+
 **Why the slope is measured over ten weeks.** Calibrated on live data before
 this was written. Over four weeks the S&P 500's steady uptrend read +1.5%,
 close enough to a flat band that a quiet stretch would flicker it into "Stage
@@ -34,6 +42,7 @@ average's slope over the thirteen weeks *before* the recent window.
 
 from __future__ import annotations
 
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Sequence
 
 SMA_WEEKS = 30          # Weinstein's own
@@ -77,9 +86,39 @@ def _direction(slope_pct: float) -> str:
     return "flat"
 
 
+def _valid(c) -> bool:
+    return c is not None and c == c and c > 0
+
+
+def _read_at(clean: Sequence[float], sma: Sequence[Optional[float]], i: int) -> Dict[str, Any]:
+    """The reading at week ``i``, from the closes up to and including it.
+
+    One function for the chip and for every coloured bar, so the newest bar on
+    a chart and the label above it cannot disagree about the same week.
+    """
+    price = clean[i]
+    now = sma[i]
+    recent_from = sma[i - SLOPE_WEEKS]
+    prior_from = sma[i - SLOPE_WEEKS - PRIOR_WEEKS]
+    slope = _pct(now, recent_from)
+    prior = _pct(recent_from, prior_from)
+    trend = _direction(slope)
+    above = price > now
+    # Only its sign is needed, to tell a base from a top.
+    came_from = "up" if prior > 0 else "down"
+    if trend == "rising" and above:
+        stage = 2
+    elif trend == "falling" and not above:
+        stage = 4
+    else:
+        stage = 1 if came_from == "down" else 3
+    return {"stage": stage, "price": price, "now": now, "slope": slope,
+            "prior": prior, "trend": trend, "above": above, "came_from": came_from}
+
+
 def classify(closes: Sequence[float]) -> Dict[str, Any]:
     """The stage for a series of weekly closes, oldest first."""
-    clean = [float(c) for c in closes if c is not None and c == c and c > 0]
+    clean = [float(c) for c in closes if _valid(c)]
     if len(clean) < MIN_WEEKS:
         return {
             "available": False,
@@ -91,47 +130,36 @@ def classify(closes: Sequence[float]) -> Dict[str, Any]:
         }
 
     sma = _sma(clean, SMA_WEEKS)
-    price = clean[-1]
-    now = sma[-1]
-    recent_from = sma[-1 - SLOPE_WEEKS]
-    prior_from = sma[-1 - SLOPE_WEEKS - PRIOR_WEEKS]
-
-    slope = _pct(now, recent_from)
-    prior = _pct(recent_from, prior_from)
-    trend = _direction(slope)
-    above = price > now
-    # Only its sign is needed, to tell a base from a top.
-    came_from = "up" if prior > 0 else "down"
+    r = _read_at(clean, sma, len(clean) - 1)
+    stage, price, now = r["stage"], r["price"], r["now"]
+    slope, prior, trend = r["slope"], r["prior"], r["trend"]
+    above, came_from = r["above"], r["came_from"]
 
     transition = None
     # One word for the chip, the sentence for its title. The chip is read at a
     # glance beside a price; the reason it says "new" belongs a hover away.
     short = None
-    if trend == "rising" and above:
-        stage = 2
+    if stage == 2:
         if came_from == "down":
             short = "new"
             transition = ("Newly in Stage 2: the average turned up only "
                           "recently, after a decline. Early advances are the "
                           "ones most likely to fail.")
-    elif trend == "falling" and not above:
-        stage = 4
+    elif stage == 4:
         if came_from == "up":
             short = "new"
             transition = ("Newly in Stage 4: the average turned down only "
                           "recently, after an advance.")
-    else:
-        stage = 1 if came_from == "down" else 3
-        if stage == 1 and above:
-            short = "breakout"
-            transition = ("Price has broken above the average, but the average "
-                          "is not rising yet, which is what Weinstein waited for "
-                          "before calling it Stage 2.")
-        elif stage == 3 and not above:
-            short = "breakdown"
-            transition = ("Price has slipped below an average that is not "
-                          "falling yet: the first sign of a top, or a "
-                          "pullback inside the advance.")
+    elif stage == 1 and above:
+        short = "breakout"
+        transition = ("Price has broken above the average, but the average "
+                      "is not rising yet, which is what Weinstein waited for "
+                      "before calling it Stage 2.")
+    elif stage == 3 and not above:
+        short = "breakdown"
+        transition = ("Price has slipped below an average that is not "
+                      "falling yet: the first sign of a top, or a "
+                      "pullback inside the advance.")
 
     vs = _pct(price, now)
     explain = ("Price is {:.1f}% {} a 30-week average that has {} {:.1f}% over "
@@ -159,16 +187,70 @@ def classify(closes: Sequence[float]) -> Dict[str, Any]:
     }
 
 
+def history(weeks: Sequence[date], closes: Sequence[float]) -> List[List[Any]]:
+    """``[[monday, stage], ...]`` for every week that has a stage at all.
+
+    That is every week with MIN_WEEKS closes up to and including its own; the
+    first 52 of any series have too little behind them and are left out rather
+    than guessed.
+
+    Keyed on the Monday of each week, as an ISO date, because that is a rule
+    both ends can compute without agreeing on anything else: the feed labels a
+    weekly bar by its Monday and the client finds a daily bar's Monday with
+    the same arithmetic ``aggregateWeekly`` already uses. Normalised here
+    anyway, so a feed that labelled a week by another day would still land on
+    the right key.
+
+    Bad closes are dropped with their dates, not after them. Filtering the
+    closes alone would slide every later stage onto the wrong week.
+    """
+    pairs = [(w, float(c)) for w, c in zip(weeks, closes) if _valid(c)]
+    if len(pairs) < MIN_WEEKS:
+        return []
+    clean = [c for _, c in pairs]
+    sma = _sma(clean, SMA_WEEKS)
+    out: List[List[Any]] = []
+    for i in range(MIN_WEEKS - 1, len(clean)):
+        w = pairs[i][0]
+        monday = w - timedelta(days=w.weekday())
+        out.append([monday.isoformat(), _read_at(clean, sma, i)["stage"]])
+    return out
+
+
+def _week_dates(frame) -> Optional[List[date]]:
+    """The date of each weekly row, or None when the rows are not dated.
+
+    The feed's weekly index is dated. One that was not would otherwise take the
+    chip down with the colours, when only the colours need a date."""
+    out: List[date] = []
+    for ts in getattr(frame, "index", []):
+        if isinstance(ts, datetime):
+            out.append(ts.date())
+        elif isinstance(ts, date):
+            out.append(ts)
+        else:
+            return None
+    return out
+
+
 def for_symbol(provider, symbol: str) -> Dict[str, Any]:
-    """Fetch two years of weekly closes and classify them."""
+    """Fetch ten years of weekly closes, classify them, and stage every week."""
     sym = (symbol or "").strip()
     if not sym:
         return {"available": False, "reason": "No symbol.", "limits": LIMITS}
-    frame = provider.history(sym, period="2y", interval="1wk")
+    frame = provider.history(sym, period="10y", interval="1wk")
     if frame is None or getattr(frame, "empty", True):
         return {"available": False,
                 "reason": "No weekly history for {}.".format(sym),
                 "limits": LIMITS}
-    out = classify(frame["Close"].astype(float).tolist())
+    closes = frame["Close"].astype(float).tolist()
+    out = classify(closes)
     out["symbol"] = sym
+    if out.get("available") is True:
+        weeks = _week_dates(frame)
+        if weeks is not None:
+            out["history"] = history(weeks, closes)
+        # The chart's key names every stage on screen, not only this week's,
+        # and this is the one place the four names are written down.
+        out["names"] = {str(k): v for k, v in NAMES.items()}
     return out

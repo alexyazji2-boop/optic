@@ -80,11 +80,15 @@ def test_reset_targets_the_documented_default_not_a_written_out_list():
     storage keys were bumped to produce. Derived from WS_FLAGS so an overlay
     added later is cleared without anyone remembering a second place --
     otherwise Reset silently declines to clear the newest toggle, which is
-    the dead-control bug wearing a different hat."""
+    the dead-control bug wearing a different hat.
+
+    Stages are kept as well. They are how the chart opens, and they colour
+    the price rather than add anything to it, so a Reset that turned them off
+    would change the colour of every bar in the name of decluttering."""
     fn = _fn("wsResetChart")
     assert "Object.keys(WS_FLAGS).forEach" in fn
     assert "WS_RESET_KEEP.includes(id)" in fn
-    assert "const WS_RESET_KEEP = ['vol'];" in APP, \
+    assert "const WS_RESET_KEEP = ['vol', 'stages'];" in APP, \
         "volume is a strip under the price, not a line across it"
 
 

@@ -234,6 +234,20 @@
   --serious: #ec835a;
   --critical: #d03b3b;
 
+  /* Weinstein stages, which colour the price mark itself while Stages is on.
+     Three are the terminal's own: an advance is --pos and a decline --neg, as
+     every up and down figure here is, and a top is --warn because it is a
+     caution rather than a direction. A base is a lighter green, --pos 40% into
+     --ink, because it is on its way to an advance without being one; the
+     reference chart this was built after draws it the same way. 10.81:1 on
+     --surface, and 1.91:1 in luminance from --pos, so the two greens read as
+     two marks rather than one. The light theme sets its own Stage 1; the
+     other three follow its --pos, --warn and --neg through the references. */
+  --stage-1: #98d292;
+  --stage-2: var(--pos);
+  --stage-3: var(--warn);
+  --stage-4: var(--neg);
+
   /* Reference-line colours, deliberately outside the eight categorical slots —
      a level is annotation, not a series. Validated against every colour that can
      share a price chart with them: magenta for support/resistance, and a neutral
@@ -541,6 +555,10 @@
      contrast in the app. A dark amber keeps the "caution" reading without
      relying on a hue that cannot carry text on a light ground. */
   --warn: #956703;          /* on --surface-2: 4.64:1 */
+  /* Stage 1 is --pos 70% into --surface here. Any lighter fails the 3:1 a
+     candle needs to read as a shape on white: 60% measured 2.65:1. This is
+     3.17:1 on --surface and 1.72:1 in luminance from --pos. */
+  --stage-1: #4da14d;
   --s2: #eb6834;
   --s3: #1baf7a;
   --s4: #eda100;
@@ -7553,6 +7571,9 @@ body[data-view="chart"] .sessionbar { display: none; }
 .ws-leg-args { color: var(--ink-muted); font-weight: 400; }
 .ws-leg-val { color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .ws-leg-static { color: var(--ink-muted); }
+/* The stage key: one square per stage on screen, named in its title. */
+.ws-leg-key { display: inline-flex; align-items: center; gap: var(--space-0); }
+.ws-leg-sw { width: 8px; height: 8px; border-radius: var(--space-0); }
 .ws-leg-empty { color: var(--ink-muted); }
 .ws-leg-btn {
   border: none;
@@ -13437,10 +13458,11 @@ body.chat-full .rp { display: none; }
 .rp-note.is-bad { color: var(--neg); }
 .rp-note.is-warn { color: var(--warn); }
 
-/* Weinstein stage chip. Colour follows the direction the stage describes and
-   nothing else: Stage 2 is an advance and takes --pos, Stage 4 a decline and
-   takes --neg, as every up and down figure in the terminal does. Stage 3 is a
-   caution rather than a direction, so --warn; Stage 1 is neither, so neutral.
+/* Weinstein stage chip. Its dot is the colour the chart draws that stage's
+   bars in, --stage-1..4, so the chip doubles as the key. The text follows the
+   dot for Stages 2 to 4. Stage 1 keeps neutral text, as the reference chart
+   labels it: its lighter green is a colour for a mark, and in the light theme
+   it is 3.17:1, which is enough for a candle and not enough for words.
    `cursor: help` because the reasoning and the limits are in the title. */
 .stage-chip {
   display: inline-flex; align-items: center; gap: var(--space-1);
@@ -13452,9 +13474,10 @@ body.chat-full .rp { display: none; }
 .stage-chip[hidden] { display: none; }
 .stage-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .stage-chip.stage-1 { color: var(--ink-2); }
-.stage-chip.stage-2 { color: var(--pos); }
-.stage-chip.stage-3 { color: var(--warn); }
-.stage-chip.stage-4 { color: var(--neg); }
+.stage-chip.stage-1 .stage-dot { background: var(--stage-1); }
+.stage-chip.stage-2 { color: var(--stage-2); }
+.stage-chip.stage-3 { color: var(--stage-3); }
+.stage-chip.stage-4 { color: var(--stage-4); }
 .stage-tag { font-weight: 500; color: var(--ink-muted); }
 .stage-row { margin: var(--space-2) 0 0; }
 

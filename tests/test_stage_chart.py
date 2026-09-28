@@ -51,6 +51,9 @@ def _rule(selector: str) -> str:
 
 
 class _Weekly:
+    """Undated rows. The chip must still answer from a feed like this; only
+    the colours need to know which week is which."""
+
     def __init__(self, closes):
         self.calls = []
         self._closes = closes
@@ -58,6 +61,16 @@ class _Weekly:
     def history(self, symbol, period="2y", interval="1d"):
         self.calls.append((symbol, period, interval))
         return pd.DataFrame({"Close": self._closes})
+
+
+class _DatedWeekly(_Weekly):
+    """Rows labelled by their Monday, as the real feed labels them."""
+
+    def history(self, symbol, period="2y", interval="1d"):
+        self.calls.append((symbol, period, interval))
+        idx = pd.date_range("2019-01-07", periods=len(self._closes), freq="W-MON",
+                            tz="America/New_York")
+        return pd.DataFrame({"Close": self._closes}, index=idx)
 
 
 def test_the_endpoint_answers_with_a_stage(monkeypatch):
@@ -68,11 +81,26 @@ def test_the_endpoint_answers_with_a_stage(monkeypatch):
     assert body["symbol"] == "PLTR"
 
 
-def test_it_asks_for_two_years_of_weekly_bars_whatever_the_chart_shows(monkeypatch):
+def test_it_asks_for_ten_years_of_weekly_bars_whatever_the_chart_shows(monkeypatch):
     feed = _Weekly([50 + i for i in range(80)])
     monkeypatch.setattr(main, "YF_PROVIDER", feed)
     TestClient(main.app).get("/api/stage", params={"symbol": "^GSPC"})
-    assert feed.calls == [("^GSPC", "2y", "1wk")]
+    assert feed.calls == [("^GSPC", "10y", "1wk")]
+
+
+def test_the_endpoint_sends_every_weeks_stage_keyed_on_its_monday(monkeypatch):
+    monkeypatch.setattr(main, "YF_PROVIDER", _DatedWeekly([50 + i for i in range(80)]))
+    body = TestClient(main.app).get("/api/stage", params={"symbol": "PLTR"}).json()
+    assert len(body["history"]) == 80 - 52
+    assert body["history"][-1] == ["2020-07-13", 2]
+    assert body["names"]["1"] == "Basing"
+
+
+def test_undated_rows_cost_the_colours_and_not_the_chip(monkeypatch):
+    monkeypatch.setattr(main, "YF_PROVIDER", _Weekly([50 + i for i in range(80)]))
+    body = TestClient(main.app).get("/api/stage", params={"symbol": "PLTR"}).json()
+    assert body["available"] is True and body["stage"] == 2
+    assert "history" not in body
 
 
 def test_a_symbol_that_breaks_a_path_is_a_query_parameter(monkeypatch):
@@ -134,10 +162,27 @@ def test_the_chip_has_its_hidden_pair():
     assert "display: none" in _rule(".stage-chip[hidden]")
 
 
-def test_colour_follows_the_direction_the_stage_describes():
-    assert "var(--pos)" in _rule(".stage-chip.stage-2")
-    assert "var(--neg)" in _rule(".stage-chip.stage-4")
-    assert "var(--warn)" in _rule(".stage-chip.stage-3")
+def test_the_chip_is_in_the_colour_its_bars_are_drawn_in():
+    """The chip doubles as the chart's key, so it reads the same four tokens
+    the candles do."""
+    assert "var(--stage-2)" in _rule(".stage-chip.stage-2")
+    assert "var(--stage-3)" in _rule(".stage-chip.stage-3")
+    assert "var(--stage-4)" in _rule(".stage-chip.stage-4")
+    assert "var(--stage-1)" in _rule(".stage-chip.stage-1 .stage-dot")
+
+
+def test_three_stages_are_the_terminals_own_direction_and_caution_colours():
+    """An advance is --pos and a decline --neg, as every up and down figure
+    here is. Only Stage 1 is a new colour."""
+    root = CLEAN_CSS[:CLEAN_CSS.index(':root[data-theme="light"]')]
+    assert "--stage-2: var(--pos);" in root
+    assert "--stage-3: var(--warn);" in root
+    assert "--stage-4: var(--neg);" in root
+
+
+def test_stage_1_keeps_neutral_text_where_its_green_is_a_mark_colour():
+    """3.17:1 in the light theme: enough for a candle, not for words."""
+    assert "var(--ink-2)" in _rule(".stage-chip.stage-1")
 
 
 def test_it_shortens_rather_than_clips_in_a_narrow_header():

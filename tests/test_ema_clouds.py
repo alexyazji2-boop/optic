@@ -101,7 +101,9 @@ def test_a_filled_overlay_offers_no_line_width_or_colour():
         entry = defs[defs.index("id: '%s'" % cloud):]
         assert "fill: true" in entry[:entry.index("}")], cloud
     row = _block(APP, "function wsManageRow(def)", "\n}")
-    assert "${def.fill ? `" in row, "the dialog does not branch on fill"
+    # `def.fixed` is checked first now, for Weinstein stages, whose colours are
+    # the reading in the same way; the clouds still take the fill branch.
+    assert "def.fill ? `" in row, "the dialog does not branch on fill"
 
 
 def test_clear_all_levels_clears_the_clouds():

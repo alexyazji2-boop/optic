@@ -2064,15 +2064,25 @@ function computeSRLevels(ps, spot, opts = {}) {
 /** Roll daily bars up into weekly ones: first open, highest high, lowest low,
  *  last close, summed volume. Keyed by ISO week so a short holiday week still
  *  forms one bar rather than being merged into its neighbour. */
+/* The Monday of a date's week, as an ISO date.
+ *
+ * Shared by the weekly roll-up and the stage colours, because
+ * app/analytics/stage.py keys each week's stage on that same Monday: two
+ * copies of this arithmetic would be two chances for a bar to look up a week
+ * that is not its own. Null for anything that is not a date, where the
+ * roll-up's inline version threw from toISOString. */
+function weekMonday(iso) {
+  const d = new Date(String(iso).slice(0, 10) + 'T00:00:00Z');
+  if (Number.isNaN(d.getTime())) return null;
+  const day = (d.getUTCDay() + 6) % 7;             // Monday = 0
+  d.setUTCDate(d.getUTCDate() - day);              // back to that week's Monday
+  return d.toISOString().slice(0, 10);
+}
+
 function aggregateWeekly(ps) {
   const dates = ps.dates || [];
   if (!dates.length) return ps;
-  const weekKey = (iso) => {
-    const d = new Date(iso + 'T00:00:00Z');
-    const day = (d.getUTCDay() + 6) % 7;           // Monday = 0
-    d.setUTCDate(d.getUTCDate() - day);            // back to that week's Monday
-    return d.toISOString().slice(0, 10);
-  };
+  const weekKey = weekMonday;
   const out = { dates: [], open: [], high: [], low: [], close: [], volume: [] };
   let key = null;
   for (let i = 0; i < dates.length; i += 1) {
@@ -2171,6 +2181,13 @@ const SHOW_TRENDS_KEY = 'optic.chart.trends.v1';
 // move happened.
 let showSessions = false;
 const SHOW_SESSIONS_KEY = 'optic.chart.sessions.v1';
+/* Weinstein stages, as the colour of the price mark: every bar in the stage of
+ * its week, the way the reference chart the stage label was built after draws
+ * them. On by default, unlike the overlays above, because it is not another
+ * line across the chart; it recolours the one mark that is always there, and
+ * each chart's legend carries the key so a colour never has to be guessed. */
+let showStages = true;
+const SHOW_STAGES_KEY = 'optic.chart.stages.v1';
 const SHOW_MA_KEY = 'optic.chart.ma.v2';
 
 /* One flag per average, not one per family.
@@ -2461,6 +2478,8 @@ try {
   showEMA = localStorage.getItem(SHOW_EMA_KEY) === 'on';
   showCloudFast = localStorage.getItem(SHOW_CLOUD_FAST_KEY) === 'on';
   showCloudSlow = localStorage.getItem(SHOW_CLOUD_SLOW_KEY) === 'on';
+  // `!== 'off'`, as volume: a default-on flag is only off when someone said so.
+  showStages = localStorage.getItem(SHOW_STAGES_KEY) !== 'off';
   loadSeriesFlags();
 } catch (e) { /* private mode */ }
 
@@ -8429,8 +8448,12 @@ function swingPriceBlock(d, ps, ctx) {
     // colours differ — which they do between line and candle mode.
     STATE.overlayPalette = overlayPalette;
 
+    // Same lookup as the Charting tab, on this payload's own symbol.
+    const stages = stageTints(d.ticker, ps.dates, ps.intraday);
     mount('legend-price', legend([
-      ...(candleMode
+      // When the price is coloured by stage, the key says so instead of naming
+      // an up and a down colour that no bar is drawn in.
+      ...(stages ? stages.key : candleMode
         // The reader's own candle colours, not s3/s8: those are the defaults
         // chartColor() returns anyway, and hardcoding them made the key lie
         // the moment anyone used the Charting tab's colour picker.
@@ -8510,6 +8533,7 @@ function swingPriceBlock(d, ps, ctx) {
         { name: 'Close',
           values: ps.close,
           color: candleMode ? C.ink : chartColor('line'),
+          tints: stages ? stages.colors : null,
           hidden: candleMode,
           fill: !candleMode },
         /* Per-average switches, matching the Charting tab's Indicators menu —
@@ -8540,6 +8564,7 @@ function swingPriceBlock(d, ps, ctx) {
       candles: candleMode
         ? { open: ps.open, high: ps.high, low: ps.low, close: ps.close }
         : null,
+      candleTints: stages ? stages.colors : null,
       refLines: overlayRefs,
       // Under the levels and under the price, so neither is muted by the fill.
       clouds: emaClouds(ps),
@@ -8920,6 +8945,7 @@ function renderSwing(d) {
           <button type="button" data-chart-mode="candle"
             aria-pressed="${chartMode === 'candle'}">Candles</button>
         </div>
+        ${ps.intraday ? '' : stagesToggleHTML()}
         <details class="lvl-menu">
           <summary aria-label="Indicators">
             <span class="lvl-icon" aria-hidden="true"></span>Indicators${
@@ -12243,6 +12269,13 @@ const OVERLAY_DEFS = [
    * retracements of the multi-year range. A chart that offers both says what
    * horizon each belongs to, which is why they are two overlays and not one. */
   { id: 'accum', label: 'Accumulation zones', group: 'Levels', color: 'refSR', width: 1 },
+  /* Stages recolour the price mark rather than draw on it. `fixed` is the
+   * style dialog's cue that there is no colour or width to choose, for the
+   * reason the clouds give: the colours are the reading. */
+  { id: 'stages', label: 'Weinstein stages', group: 'Trend', color: 'pos', width: 1,
+    fixed: 'Colours each bar by the Weinstein stage of its week: light green '
+      + 'basing, green advancing, amber topping, red declining. The colours are '
+      + 'the reading, so they are fixed. Weekly, so not drawn on intraday bars.' },
 ];
 
 const OVERLAY_BY_ID = Object.fromEntries(OVERLAY_DEFS.map((d) => [d.id, d]));
@@ -12764,6 +12797,7 @@ function renderInstrument(d) {
         <button type="button" data-inst-mode="candle"
           aria-pressed="${instrumentMode === 'candle'}">Candles</button>
       </div>
+      ${stagesToggleHTML()}
     </div>
     <div class="stage-row"><span class="stage-chip" id="stage-inst" hidden></span></div>
     <div id="legend-inst"></div>
@@ -12802,10 +12836,98 @@ function fetchStage(symbol) {
     .catch(() => null)
     .then((r) => {
       if (!r) stageCache.delete(symbol);
+      // Kept where a chart can read it without waiting, whoever asked. A chip
+      // painted on Overview means the chart after it colours on its first draw.
+      else stageSettled.set(symbol, { at: Date.now(), r });
       return r;
     });
   stageCache.set(symbol, { at: Date.now(), promise });
   return promise;
+}
+
+/* Every bar's stage, as a colour, for the three charts that draw a price.
+ *
+ * The charts build synchronously and the reading is a request, so this answers
+ * from what has already landed and starts the fetch if nothing has. The first
+ * draw of a new symbol goes out in its up and down colours, and stagesArrived
+ * redraws whichever chart is still showing that symbol when the answer comes.
+ * A failed fetch redraws nothing, so a network blip cannot start a loop; the
+ * next redraw asks again.
+ *
+ * Null -- draw up and down as usual -- when Stages is off or hidden, on an
+ * intraday range, and when the symbol has too little history for a stage. A
+ * stage is a weekly reading: on five-minute bars it would paint the whole chart
+ * one colour and hide the direction of every bar to say nothing.
+ *
+ * A bar older than the first week with a stage is --ink-muted rather than its
+ * direction colour. Two colour languages on one chart would make green mean
+ * "up" on the left of it and "Stage 2" on the right.
+ *
+ * The key lists only the stages on screen, for the rule the legends already
+ * keep: a key must not name a colour that is not on the chart. */
+const stageSettled = new Map();
+const stageWaiting = new Set();
+const stageWeeks = new WeakMap();
+
+function stageReading(symbol) {
+  const hit = stageSettled.get(symbol);
+  if ((!hit || Date.now() - hit.at >= STAGE_TTL_MS) && !stageWaiting.has(symbol)) {
+    stageWaiting.add(symbol);
+    fetchStage(symbol).then((r) => {
+      stageWaiting.delete(symbol);
+      if (r) stagesArrived(symbol);
+    });
+  }
+  return hit ? hit.r : null;
+}
+
+function stagesArrived(symbol) {
+  if (STATE.view === 'chart') {
+    const d = STATE.chartData;
+    if (d && d !== 'loading' && d.ticker === symbol) wsRedrawChart({ keepToolbar: true });
+  } else if (STATE.view === 'swing') {
+    if (STATE.swing && STATE.swing.ticker === symbol) swingRedrawChart();
+  } else if (STATE.view === 'instrument') {
+    if (((STATE.instrument || {}).symbol || '') === symbol) drawInstrumentChart(STATE.instrumentData);
+  }
+}
+
+/* The Stages switch on the Options chart and the instrument page. The Charting
+ * tab has its own toolbar button; these two have no menu it belongs in, and a
+ * chart coloured by stage with no way to turn it off where it is being read
+ * would leave the reader hunting for the tab that has one.
+ *
+ * Pressed means drawn, not merely enabled: hidden from the Charting legend's
+ * eye, the colours are off here too, and a lit button over up-and-down bars
+ * would be a control disagreeing with the chart under it. */
+function stagesToggleHTML() {
+  const on = wsOverlayDrawn('stages');
+  return `<div class="seg" role="group" aria-label="Price colour">
+    <button type="button" data-stages-toggle aria-pressed="${on}"
+      title="${on ? 'Colour the bars by up and down instead'
+    : 'Colour each bar by the Weinstein stage of its week'}">Stages</button>
+  </div>`;
+}
+
+function stageTints(symbol, dates, intraday) {
+  if (!wsOverlayDrawn('stages') || intraday || !symbol) return null;
+  if (!Array.isArray(dates) || !dates.length) return null;
+  const r = stageReading(symbol);
+  // `available !== true`: an unavailable reading is a truthy object.
+  if (!r || r.available !== true || !Array.isArray(r.history) || !r.history.length) return null;
+  let byWeek = stageWeeks.get(r);
+  if (!byWeek) { byWeek = new Map(r.history); stageWeeks.set(r, byWeek); }
+  const names = r.names || {};
+  const seen = new Set();
+  const colors = dates.map((iso) => {
+    const n = byWeek.get(weekMonday(iso)) || 0;
+    seen.add(n);
+    return n ? C['stage' + n] : C.muted;
+  });
+  const key = [1, 2, 3, 4].filter((n) => seen.has(n))
+    .map((n) => ({ name: `Stage ${n} \u00b7 ${names[n] || ''}`.trim(), color: C['stage' + n] }));
+  if (seen.has(0)) key.push({ name: 'No stage yet', color: C.muted });
+  return { colors, key };
 }
 
 async function paintStage(hostId, symbol, stillCurrent) {
@@ -12841,8 +12963,9 @@ function drawInstrumentChart(d) {
     () => ((STATE.instrument || {}).symbol || '') === stageSym);
   const candles = instrumentMode === 'candle' && d.open && d.high && d.low
     ? { open: d.open, high: d.high, low: d.low, close: d.close } : null;
+  const stages = stageTints(stageSym, d.dates, false);
   mount('legend-inst', legend([
-    { name: d.label, color: C.s1 },
+    ...(stages ? stages.key : [{ name: d.label, color: C.s1 }]),
     ...(d.volume ? [{ name: 'Volume', color: C.ink2, boxed: true }] : []),
   ]));
   mount('chart-inst', (w) => lineChart({
@@ -12851,8 +12974,10 @@ function drawInstrumentChart(d) {
     labels: d.dates || [],
     volume: d.volume || null,
     series: [{ name: d.label, values: d.close, color: C.s1,
+      tints: stages ? stages.colors : null,
       hidden: !!candles, fill: !candles }],
     candles,
+    candleTints: stages ? stages.colors : null,
     valueTags: true,
   }));
 }
@@ -14000,6 +14125,8 @@ function renderRotation(r) {
 const WS_MENUS = [
   { id: 'fibs', label: 'Fibs', items: ['fib'] },
   { id: 'trends', label: 'Trends', items: ['trends', 'sr', 'zones', 'accum'] },
+  // One item, so it renders as a toggle button rather than a menu.
+  { id: 'stages', label: 'Stages', items: ['stages'] },
   { id: 'indicators',
     label: 'Indicators',
     items: ['sma20', 'sma50', 'sma200', 'ema9', 'ema21', 'ema50',
@@ -14025,6 +14152,7 @@ const WS_FLAGS = {
   cloud2150: () => showCloudSlow,
   trends: () => showTrends,
   sessions: () => showSessions,
+  stages: () => showStages,
 };
 
 function wsOverlayOn(id) {
@@ -14195,6 +14323,34 @@ function wsLegend(ps) {
   add('insiders', null, 'form 4');
   add('trends', null, 'auto');
 
+  /* The stage key. A row like the others, so it can be hidden or removed from
+   * where it is read, and its swatches are the stages on screen. When there
+   * is nothing to colour it says why rather than disappearing: on intraday a
+   * weekly reading does not apply, and a young listing has too little
+   * history, which the title spells out. */
+  if (wsOverlayOn('stages')) {
+    const hidden = overlayHidden('stages');
+    const intra = isIntradayRange(chartRange);
+    const sym = (STATE.chartData || {}).ticker;
+    const tinted = stageTints(sym, ps.dates, intra);
+    const r = sym ? (stageSettled.get(sym) || {}).r : null;
+    const why = hidden ? '' : intra ? 'weekly, not on intraday'
+      : !r ? 'loading' : r.available !== true ? 'not enough history'
+        : !tinted ? 'unavailable' : '';
+    rows.push(`<div class="ws-leg-row${hidden ? ' is-hidden' : ''}" data-ws-leg="stages"${
+  r && r.available !== true && r.reason ? ` title="${esc(r.reason)}"` : ''}>
+      <span class="ws-leg-name">Stages${why ? ` <span class="ws-leg-args">(${esc(why)})</span>` : ''}</span>
+      ${tinted ? `<span class="ws-leg-key">${tinted.key.map((k) => `<span class="ws-leg-sw"
+        style="background:${k.color}" title="${esc(k.name)}"></span>`).join('')}</span>` : ''}
+      <button type="button" class="ws-leg-btn${hidden ? ' is-off' : ''}"
+        data-ws-hide="stages" aria-pressed="${hidden ? 'true' : 'false'}"
+        title="${hidden ? 'Show' : 'Hide'} Weinstein stages">${
+  hidden ? '&#128584;' : '&#128065;'}</button>
+      <button type="button" class="ws-leg-btn" data-ws-off="stages"
+        title="Remove Weinstein stages">&times;</button>
+    </div>`);
+  }
+
   /* The studies, from the same palette the chart draws them with.
    *
    * `wsStudyPalette` rather than a second allocation, because the swatch here
@@ -14337,7 +14493,14 @@ function markWarnText(contrast) {
 }
 
 function wsColorPop() {
+  /* Stages colour the candles and the line, so while they are drawn these
+   * rows are not what is on the chart, and a swatch that changed nothing
+   * would read as broken. Up and down still colour the volume bars. */
+  const staged = wsOverlayDrawn('stages') && !isIntradayRange(chartRange);
   return `<div class="ws-menu-pop ws-colors">
+    ${staged ? `<p class="ws-menu-note">Stages is on, so the candles and the line are
+      drawn in the colour of their stage. These colour the volume bars now, and
+      the candles and line again with Stages off.</p>` : ''}
     ${CHART_COLOR_ROWS.map((row) => {
     const current = chartColor(row.slot);
     const chosen = !!chartColors[row.slot];
@@ -14686,6 +14849,7 @@ const WS_SETTERS = {
   ema50: (on) => setSeriesFlag('ema50', on),
   cloud921: (on) => { showCloudFast = !!on; storeFlag(SHOW_CLOUD_FAST_KEY, on); },
   cloud2150: (on) => { showCloudSlow = !!on; storeFlag(SHOW_CLOUD_SLOW_KEY, on); },
+  stages: (on) => { showStages = !!on; storeFlag(SHOW_STAGES_KEY, on); },
 };
 
 function wsSetOverlay(id, on) {
@@ -14818,7 +14982,7 @@ function wsManageRow(def) {
         style="opacity:1">Reset</button>` : ''}
     </div>
     <div class="ws-mrow-controls">
-      ${def.fill ? `<p class="ws-mnote">Drawn as a filled area, so there is no
+      ${def.fixed ? `<p class="ws-mnote">${esc(def.fixed)}</p>` : def.fill ? `<p class="ws-mnote">Drawn as a filled area, so there is no
         line width to set. Its two colours are the same up and down pair the
         candles and the volume bars use, and are fixed for that reason: here the
         colour is the reading, not a label. Blue means the faster average is on
@@ -16873,9 +17037,11 @@ function wsRedo() { wsRestore(wsRedoStack, wsUndoStack); }
  * declutter that silently deleted an hour of annotation would be the worst
  * bug on this tab. Volume stays for the reason the defaults comment gives:
  * it is a strip under the price rather than a line across it, so it costs
- * nothing in legibility.
+ * nothing in legibility. Stages stay because they are how the chart opens:
+ * they colour the price rather than add to it, and a Reset that changed the
+ * colour of every bar would be the opposite of a declutter.
  */
-const WS_RESET_KEEP = ['vol'];
+const WS_RESET_KEEP = ['vol', 'stages'];
 
 /** Is the chart already the one it opens on? Drives the Reset button's
  *  disabled state, because a control that would change nothing should say so
@@ -17599,6 +17765,9 @@ function wsMountChart() {
   const ps = wsSeries(d);
   const styleOf = (id) => overlayStyle(id);
   const intraday = !!ps.intraday;
+  // The payload's own symbol, not STATE.chartSymbol: the colours have to be
+  // the stages of the bars being drawn. See stageTints.
+  const stages = stageTints(d.ticker, ps.dates, intraday);
 
   // Kept on a module-level handle so wsEnsureChart can re-run it if the mount
   // is superseded. Reassigned on every call, so it always closes over the
@@ -17623,6 +17792,7 @@ function wsMountChart() {
         open: ps.open || [], high: ps.high || [],
         low: ps.low || [], close: ps.close || [],
       } : null,
+      candleTints: stages ? stages.colors : null,
       /* The reader's colours. See chartColor().
        *
        * Candles get an explicit value either way so the default lives in one
@@ -17670,6 +17840,9 @@ function wsMountChart() {
           // not stroked. The reader's line colour applies to line mode, which
           // is the mode where a line is actually drawn.
           color: wsCandles(ps) ? C.ink : chartColor('line'),
+          // Line mode's stage colours. Harmless in candle mode, where this
+          // series is not stroked and the candles take the same array.
+          tints: stages ? stages.colors : null,
           hidden: wsCandles(ps), fill: !wsCandles(ps) },
         /* One entry per average, each gated on its own switch, so the six
          * checkboxes in the Indicators menu mean what they say. Excluded
@@ -30747,6 +30920,21 @@ document.addEventListener('click', (evt) => {
     // The Swing chart shares these flags, so it redraws too or the two tabs
     // disagree about what is switched on.
     if (STATE.swing) preserveUI(views.swing, () => renderSwing(STATE.swing));
+    return;
+  }
+  /* See stagesToggleHTML. Turning it on also un-hides it, so one press always
+   * changes the chart. The whole view re-renders, not only the chart, because
+   * the button's own pressed state is part of the view. */
+  if (evt.target.closest('[data-stages-toggle]')) {
+    const on = wsOverlayDrawn('stages');
+    if (!on && overlayHidden('stages')) setOverlayHidden('stages', false);
+    wsSetOverlay('stages', !on);
+    if (STATE.view === 'swing' && STATE.swing) {
+      preserveUI(views.swing, () => renderSwing(STATE.swing));
+    } else if (STATE.view === 'instrument' && STATE.instrumentData) {
+      views.instrument.innerHTML = renderInstrument(STATE.instrumentData);
+      drawInstrumentChart(STATE.instrumentData);
+    }
     return;
   }
   /* Explore. A screen row opens the Scan view on that screen; a sector row

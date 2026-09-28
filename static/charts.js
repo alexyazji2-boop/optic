@@ -51,6 +51,9 @@ const C = {
   s5: '#d55181', s6: '#5fa617', s7: '#9085e9', s8: '#e66767',
   pos: '#0ca30c', neg: '#d95656',
   good: '#0ca30c', warn: '#fab219', serious: '#ec835a', critical: '#d03b3b',
+  // Weinstein stages. --stage-1..4 in styles.css says why these four; the
+  // values here are the dark theme's, for the moment before syncChartTheme.
+  stage1: '#98d292', stage2: '#0ca30c', stage3: '#fab219', stage4: '#d95656',
 
   /* The default colour for a chart drawing.
    *
@@ -93,6 +96,7 @@ const C_VARS = {
   s5: '--s5', s6: '--s6', s7: '--s7', s8: '--s8',
   pos: '--pos', neg: '--neg', mid: '--mid',
   good: '--good', warn: '--warn', serious: '--serious', critical: '--critical',
+  stage1: '--stage-1', stage2: '--stage-2', stage3: '--stage-3', stage4: '--stage-4',
   accent: '--accent',
   refSR: '--ref-sr', refFib: '--ref-fib', refSession: '--ref-session',
 };
@@ -777,6 +781,11 @@ function lineChart(opts) {
      * rewrites C when the OS theme flips, and a default frozen at import would
      * keep drawing the old theme's colours. */
     candleUp = null, candleDown = null, volUp = null, volDown = null,
+    /* Per-bar colours for the candles, over the up and down pair: the Weinstein
+     * stage of each bar's week, today. A null entry keeps that bar's direction
+     * colour. A line takes the same thing from its series' own `tints`, so the
+     * two chart styles are coloured by one array. */
+    candleTints = null,
     // Sloped lines in (bar index, price) space — trend lines, channels, and any
     // drawing anchored to two points. refLines cannot express these: they are
     // horizontal by construction, which is right for a level and wrong for a
@@ -1434,7 +1443,8 @@ function lineChart(opts) {
       const oo = o[i], hh = h[i], ll = l[i], cc = c[i];
       if ([oo, hh, ll, cc].some((v) => v === null || v === undefined || !isFinite(v))) continue;
       const up = cc >= oo;
-      const colour = up ? (candleUp || C.s3) : (candleDown || C.s8);
+      const colour = (candleTints && candleTints[i])
+        || (up ? (candleUp || C.s3) : (candleDown || C.s8));
       const x = X(i);
       levelLayer.appendChild(s('line', {
         x1: x, y1: Y(hh), x2: x, y2: Y(ll), stroke: colour, 'stroke-width': 1,
@@ -1456,32 +1466,77 @@ function lineChart(opts) {
   series.forEach((se, si) => {
     if (se.hidden) return;  // present for hover/tooltip only, not drawn
     const pts = [];
+    // Which bar each point is, for a tinted line: a gap in the values means
+    // point k is not bar k.
+    const at = [];
     se.values.forEach((v, i) => {
       if (v === null || !isFinite(v)) return;
       pts.push(`${X(i).toFixed(2)},${Y(v).toFixed(2)}`);
+      at.push(i);
     });
     if (!pts.length) return;
-    if (se.fill) {
+    /* A tinted line is drawn in runs, one per colour.
+     *
+     * The segment into a point takes that point's colour, because it is the move
+     * into that bar: the line changes colour at the bar whose week changed stage
+     * rather than one bar early. Each run starts on the last point of the run
+     * before it, so the line is unbroken. The fill under it is split the same
+     * way, which shades each stretch in its stage.
+     *
+     * A fade rather than the sweep. Every run would sweep from its own start at
+     * once, which reads as the line assembling itself in pieces. */
+    if (Array.isArray(se.tints)) {
+      const tint = (k) => se.tints[at[k]] || se.color;
+      const runs = [];
+      for (let k = 1; k < pts.length; k += 1) {
+        const c = tint(k);
+        const prev = runs[runs.length - 1];
+        if (prev && prev.color === c) prev.to = k;
+        else runs.push({ color: c, from: k - 1, to: k });
+      }
       const base = Y(Math.max(lo, 0));
-      root.appendChild(s('path', {
-        d: `M${pts[0].split(',')[0]},${base} L${pts.join(' L')} L${pts[pts.length - 1].split(',')[0]},${base} Z`,
-        fill: se.color, opacity: 0.1, stroke: 'none',
-        // Fades rather than sweeps: an area clipped to a growing width reads as a
-        // curtain, and it would race the line it sits under.
-        'data-fade': animating ? DRAW_MS * 0.55 : null,
+      runs.forEach((run) => {
+        const part = pts.slice(run.from, run.to + 1);
+        if (se.fill) {
+          root.appendChild(s('path', {
+            d: `M${part[0].split(',')[0]},${base} L${part.join(' L')} L${
+              part[part.length - 1].split(',')[0]},${base} Z`,
+            fill: run.color, opacity: 0.1, stroke: 'none',
+            'data-fade': animating ? DRAW_MS * 0.55 : null,
+          }));
+        }
+        root.appendChild(s('polyline', {
+          points: part.join(' '), fill: 'none', stroke: run.color,
+          'stroke-width': se.width || 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round',
+          'stroke-dasharray': se.dash || null, opacity: se.opacity || 1,
+          'data-fade': animating ? DRAW_MS * 0.55 : null,
+        }));
+      });
+    } else {
+      if (se.fill) {
+        const base = Y(Math.max(lo, 0));
+        root.appendChild(s('path', {
+          d: `M${pts[0].split(',')[0]},${base} L${pts.join(' L')} L${pts[pts.length - 1].split(',')[0]},${base} Z`,
+          fill: se.color, opacity: 0.1, stroke: 'none',
+          // Fades rather than sweeps: an area clipped to a growing width reads as a
+          // curtain, and it would race the line it sits under.
+          'data-fade': animating ? DRAW_MS * 0.55 : null,
+        }));
+      }
+      root.appendChild(s('polyline', {
+        points: pts.join(' '), fill: 'none', stroke: se.color,
+        'stroke-width': se.width || 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round',
+        'stroke-dasharray': se.dash || null, opacity: se.opacity || 1,
+        // Already-dashed series are skipped — animating dashoffset on them would
+        // fight the pattern that carries their meaning.
+        'data-draw': animating && !se.dash ? seriesDelay(se) : null,
       }));
     }
-    root.appendChild(s('polyline', {
-      points: pts.join(' '), fill: 'none', stroke: se.color,
-      'stroke-width': se.width || 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round',
-      'stroke-dasharray': se.dash || null, opacity: se.opacity || 1,
-      // Already-dashed series are skipped — animating dashoffset on them would
-      // fight the pattern that carries their meaning.
-      'data-draw': animating && !se.dash ? seriesDelay(se) : null,
-    }));
 
     if (markerLast && se.marker !== false) {
       const lastIdx = se.values.reduce((acc, v, i) => (v !== null && isFinite(v) ? i : acc), -1);
+      // The end of a tinted line is in its last bar's colour, not the base one.
+      const endColor = (se.tints && se.tints[lastIdx]) || se.color;
       if (lastIdx >= 0) {
         // A halo behind the leading point of the primary series while the
         // session is live. One series only: every line pulsing is noise, and the
@@ -1490,7 +1545,7 @@ function lineChart(opts) {
         if (liveNextChart && si === 0) {
           const halo = s('circle', {
             cx: X(lastIdx), cy: Y(se.values[lastIdx]), r: 4,
-            fill: 'none', stroke: se.color, 'stroke-width': 1.5,
+            fill: 'none', stroke: endColor, 'stroke-width': 1.5,
             class: 'live-halo',
             'data-fade': animating ? DRAW_MS * 0.8 : null,
           });
@@ -1500,7 +1555,7 @@ function lineChart(opts) {
         // 2px surface ring keeps the end dot legible where lines cross.
         const endDot = s('circle', {
           cx: X(lastIdx), cy: Y(se.values[lastIdx]), r: 4,
-          fill: se.color, stroke: C.surface, 'stroke-width': 2,
+          fill: endColor, stroke: C.surface, 'stroke-width': 2,
           class: liveNextChart && si === 0 ? 'live-dot' : null,
           // Lands as the line reaches it, rather than sitting at the far right
           // waiting for a line that hasn't arrived yet.
@@ -1586,7 +1641,8 @@ function lineChart(opts) {
         if (se.tag === false || se.hidden) return null;
         const li = se.values.reduce((acc, v, i) => (v !== null && isFinite(v) ? i : acc), -1);
         if (li < 0) return null;
-        return { si, color: se.color, value: se.values[li], y: Y(se.values[li]) };
+        return { si, color: (se.tints && se.tints[li]) || se.color,
+          value: se.values[li], y: Y(se.values[li]) };
       })
       .filter(Boolean);
     // Into the same list, so one collision pass positions everything and the
@@ -1987,11 +2043,15 @@ function lineChart(opts) {
     series.forEach((se, k) => {
       const v = se.values[i];
       if (v === null || v === undefined || !isFinite(v)) { dots[k].setAttribute('opacity', 0); return; }
+      // A tinted line is a different colour at every stage, and a swatch in
+      // the base colour would name a line that is not on the chart.
+      const hue = (se.tints && se.tints[i]) || se.color;
       dots[k].setAttribute('cx', X(i));
       dots[k].setAttribute('cy', Y(v));
+      dots[k].setAttribute('fill', hue);
       dots[k].setAttribute('opacity', 1);
       rows.push([
-        `<span style="color:${se.color}">■</span> ${se.name}`,
+        `<span style="color:${hue}">■</span> ${se.name}`,
         (valueFormat || yFormat)(v),
       ]);
     });

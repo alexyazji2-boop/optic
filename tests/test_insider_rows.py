@@ -150,11 +150,13 @@ def test_the_rule_is_about_the_item_count_not_about_fibs():
     second becomes a dropdown again, with nothing to remember."""
     toolbar = _fn("wsToolbar")
     assert "'fibs'" not in toolbar and '"fibs"' not in toolbar
-    # Fibs is still the only single-item menu, which is what makes this safe.
+    # Fibs and Stages are the single-item menus, and both are plain on/off
+    # overlays with nothing else to put in a dropdown, which is what makes
+    # rendering them as buttons safe.
     menus = APP_JS[APP_JS.index("const WS_MENUS = ["):]
     menus = menus[:menus.index("\n];")]
     singles = re.findall(r"items: \['([a-z0-9]+)'\]", menus)
-    assert singles == ["fib"], singles
+    assert singles == ["fib", "stages"], singles
 
 
 def test_a_manage_menu_stays_a_dropdown():
