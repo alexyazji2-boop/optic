@@ -3210,13 +3210,22 @@ def _spend_guard(request: Request) -> None:
     try:
         user = auth_deps.current_user(request)
         if user and auth_admin.is_admin(user):
-            # Skips the *daily* cap only, and does not return: the hourly
-            # per-address cap further down still applies to the owner. The
-            # daily cap exists so visitors cannot drain the operator's
-            # Anthropic balance, and metering the operator against their own
-            # key protects nobody. The hourly one is a runaway-loop guard as
-            # well, and a loop does not care whose key it is spending.
-            pass
+            # Unlimited: both caps, not only the daily one. The operator asked
+            # for it, and it is their key.
+            #
+            # This skipped the daily cap alone for a while, keeping the hourly
+            # one as a runaway-loop guard on the grounds that a loop does not
+            # care whose key it is spending. That reasoning is still true; what
+            # changed is where the guard belongs. A per-address cap inside the
+            # app protects nothing once the operator is the one being capped,
+            # and it cannot see spend from anywhere else on the same key. A
+            # spend limit set in the Anthropic console can, and it caps the
+            # balance whatever the app does -- a loop, a bug, or a leaked key.
+            #
+            # Only a *verified* owner reaches here. `is_admin` requires the
+            # address to be confirmed as well as listed, so registering under
+            # the owner's address does not buy anyone unlimited use.
+            return
         elif user:
             limits = auth_store.subscription(user["id"])["limits"]
             auth_ratelimit.spend(

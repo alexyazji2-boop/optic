@@ -256,17 +256,16 @@ def test_a_signed_in_stranger_is_still_metered(monkeypatch):
     assert body["allowed"] == store.PLANS["free"]["ai_calls_per_day"]
 
 
-def test_the_owner_keeps_the_hourly_cap(monkeypatch):
-    """The daily cap protects the operator's balance from visitors. The hourly
-    one is also a runaway-loop guard, and a loop does not care whose key it is,
-    so skipping the daily one must not skip that.
+def test_the_verified_owner_is_not_capped_hourly_either(monkeypatch):
+    """Unlimited, as the operator asked. This test used to assert the opposite
+    -- that the owner kept the hourly cap as a runaway-loop guard -- and that
+    reasoning is recorded beside `_spend_guard`: the guard moved to a spend
+    limit in the Anthropic console, which caps the balance whatever the app
+    does and sees spend from anywhere on the key.
 
-    Driven through `_spend_guard` rather than read out of the source. The first
-    version of this test grepped main.py for a `return` in the admin branch and
-    was defeated by the word "return" appearing in that branch's own comment,
-    which is the kind of pass that proves nothing."""
-    from fastapi import HTTPException
-
+    Driven through `_spend_guard` rather than read out of the source. An
+    earlier version grepped main.py for a `return` in the admin branch and was
+    defeated by the word appearing in that branch's own comment."""
     register()
     verify(OWNER)
     monkeypatch.setenv(admin.ENV_NAME, OWNER)
@@ -274,12 +273,27 @@ def test_the_owner_keeps_the_hourly_cap(monkeypatch):
     monkeypatch.setattr(main, "_ai_calls", {})
 
     request = _request_with_cookies()
-    main._spend_guard(request)
-    main._spend_guard(request)
+    for _ in range(10):                 # five times the hourly cap
+        main._spend_guard(request)      # must not raise
+
+
+def test_an_unverified_owner_address_is_still_capped(monkeypatch):
+    """The half that makes the above safe. Anyone may type the owner's address
+    into the signup form, so being *listed* must buy nothing: without the
+    `email_verified` condition, unlimited use would be one registration away
+    for any stranger who knows the address."""
+    from fastapi import HTTPException
+
+    register()                           # listed, not verified
+    monkeypatch.setenv(admin.ENV_NAME, OWNER)
+    monkeypatch.setattr(main, "AI_CALLS_PER_HOUR", 2)
+    monkeypatch.setattr(main, "_ai_calls", {})
+
+    request = _request_with_cookies()
     with pytest.raises(HTTPException) as raised:
-        main._spend_guard(request)
+        for _ in range(10):
+            main._spend_guard(request)
     assert raised.value.status_code == 429
-    assert "in an hour" in raised.value.detail
 
 
 def _request_with_cookies():
