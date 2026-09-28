@@ -155,18 +155,16 @@ def test_the_chart_is_actually_handed_them():
     assert "showAccum ? accumLines(STATE.accumZones) : []" in fn
 
 
-def test_they_are_excluded_on_intraday():
-    """Weekly bars over twelve years against a five-minute series. The same
-    exclusion the averages and the daily zones already carry, and it comes free
-    from the intraday guard on the whole refLines array -- so this asserts the
-    call sits in the daily branch of that guard rather than after it. The
-    intraday branch holds the intraday Fibonacci grid and nothing else."""
+def test_they_are_drawn_on_every_bar_size_and_clipped_to_the_plot():
+    """They were excluded on intraday with every other level, which left the
+    toggle drawing nothing under a day. A zone is a price, and a price is the
+    same on any bar size; refLineFit 'clip' drops the ones off this chart
+    rather than letting a multi-year level squash a session into a sliver."""
     fn = _fn("wsMountChart")
-    guard = "refLines: intraday ? (showFib ? intradayFibLines(ps) : []) : ["
-    refs = fn.split(guard, 1)[1]
+    refs = fn[fn.index("refLines: ["):]
     refs = refs[:refs.index("\n      ],")]
-    assert "accumLines(STATE.accumZones)" in refs
-    assert "accumLines" not in fn.split(guard, 1)[0].split("refLines:")[-1]
+    assert "...(showAccum ? accumLines(STATE.accumZones) : [])," in refs
+    assert "refLineFit: 'clip'," in fn
 
 
 # ------------------------------------------------- the fields the client reads

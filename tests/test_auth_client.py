@@ -618,13 +618,21 @@ def test_intraday_ranges_on_the_workspace_use_the_intraday_endpoint():
     assert "/api/intraday/" in APP_JS
 
 
-def test_drawings_are_hidden_rather_than_replayed_onto_intraday_bars():
+def test_each_bar_size_keeps_its_own_drawings():
     """Drawings store a bar index. Index 120 on a daily series and on a
-    five-minute series are different moments by a factor of about eighty."""
+    five-minute series are different moments by a factor of about eighty, so
+    they were hidden under a day, while one drawn there was still saved into
+    the daily set and turned up on the daily chart at the wrong date. Each
+    intraday size keeps its own set now, and the daily key is unchanged so no
+    existing drawing moves."""
+    key = APP_JS[APP_JS.index("function wsDrawKey()"):]
+    key = key[:key.index("\n}")]
+    assert "return isIntradayRange(chartRange) ? `${sym}@${chartRange}` : sym;" in key
+    assert "return wsDrawStore[wsDrawKey()] || [];" in APP_JS
+    assert "wsDrawStore[wsDrawKey()] = list;" in APP_JS
     block = APP_JS[APP_JS.index("function wsRenderDrawings()"):]
     block = block[:block.index("const NS =")]
-    assert "isIntradayRange(chartRange)" in block
-    assert "layer.innerHTML = ''" in block
+    assert "if (isIntradayRange(chartRange)) { layer.innerHTML = ''; return; }" not in block
 
 
 def test_the_status_line_reports_the_interval_on_screen():

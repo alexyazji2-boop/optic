@@ -135,13 +135,18 @@ def test_the_panes_recompute_on_intraday_bars():
 
 
 def test_both_tabs_key_their_studies_to_the_bars():
-    assert "return isIntradayRange(chartRange) ? chartRange : 'daily';" in _fn("studyBars")
+    bars = _fn("studyBars")
+    assert "if (isIntradayRange(chartRange)) return chartRange;" in bars
+    assert "return chartInterval === 'weekly' ? 'weekly' : 'daily';" in bars
+    query = _fn("studyQuery")
+    assert "if (bars === 'weekly') return '&weekly=true';" in query
+    assert "return '&intraday=' + encodeURIComponent(bars);" in query
     ws = _fn("wsLoadIndicators")
     assert "&& wsIndicators.bars === bars && !wsIndicators.loading" in ws
-    assert "'&intraday=' + encodeURIComponent(bars)" in ws
+    assert "+ studyQuery(bars));" in ws
     swing = _fn("loadIndicators")
     assert "const key = `${STATE.ticker}|${indicatorIds.join(',')}|${bars}`;" in swing
-    assert "`&intraday=${encodeURIComponent(bars)}`" in swing
+    assert "+ studyQuery(bars));" in swing
     assert "return data && data.bars === studyBars() ? data : null;" in _fn("swingStudies")
     for name in ("indicatorOverlaySeries", "indicatorOverlayLegend", "renderIndicatorPanes",
                  "drawIndicatorCharts"):
@@ -177,9 +182,13 @@ def test_the_options_momentum_panels_use_the_bars_on_screen():
     assert "macdCrossSentence(cross, wk, macdDates, barUnit(ps), zoom)" in APP
 
 
-def test_the_status_line_no_longer_says_nothing_applies():
+def test_the_status_line_carries_no_intraday_exception_any_more():
+    """It said daily overlays did not apply, then that daily levels and
+    drawings did not. Both are on every bar size now, so the line is the same
+    on every one."""
     assert "'Daily overlays and drawings do not apply to these bars'" not in APP
-    assert "Averages, studies and Fibs are on these bars." in APP
+    assert "Daily levels and drawings are not" not in APP
+    assert "'drawings hidden on intraday'" not in APP
 
 
 def test_the_macd_axis_uses_the_calendar_ticks_every_other_chart_does():

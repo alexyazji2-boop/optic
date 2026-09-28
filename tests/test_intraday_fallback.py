@@ -295,8 +295,10 @@ def test_the_request_guard_cannot_loop():
     assert APP.count("function intradayMatches(") == 1
     # Both users of it, and no hand-rolled second copy of the comparison.
     assert function("swingSeries").count("intradayMatches()") == 1
-    assert function("renderSwing").count("intradayMatches()") == 2, \
-        "the fetch guard and the template's own `intra` both go through it"
+    # Three: the fetch guard, the template's own `intra`, and the support and
+    # resistance source, which reads this range's bars under a day.
+    assert function("renderSwing").count("intradayMatches()") == 3, \
+        "the fetch guard, the template and the levels all go through it"
     # The helper's body is the only place those three comparisons are written.
     # `renderSwing` had its own copy, which is how a template could describe a
     # payload the series beside it was not built from.

@@ -1821,6 +1821,29 @@ async def intraday(ticker: str, range: str = Query("1d")) -> Dict[str, Any]:
                     swing, "bullish" if swing.get("high_is_recent") else "bearish",
                     closes[-1])
 
+        # Support and resistance, the band width, and supply and demand, from
+        # these bars as the daily payload has them from daily ones: the same
+        # three functions. Every one was switched off under a day because the
+        # only copies were daily, and a daily shelf months away is off the edge
+        # of a session's chart. Measured on PLTR at every rung: 1-3ms for the
+        # levels, about 10ms for the zones, so they come with the bars rather
+        # than needing a request of their own. Trend lines take 30-280ms and are
+        # fetched on demand, as they are on daily bars.
+        levels: List[Dict[str, Any]] = []
+        atr14 = None
+        zones: Dict[str, Any] = {}
+        if len(swing_rows) >= 30:
+            try:
+                levels = technicals.support_resistance_levels(swing_rows, closes[-1]) or []
+                atr_v = technicals.atr(swing_rows).iloc[-1]
+                atr14 = round(float(atr_v), 4) if atr_v == atr_v else None
+                zones = patterns_mod.analyse(swing_rows, spot=closes[-1]) or {}
+            except Exception as exc:                          # noqa: BLE001
+                # Optional overlays on bars that are already here: a failure
+                # costs the levels, never the chart.
+                logging.getLogger("uvicorn.error").info(
+                    "intraday levels for %s failed: %s", symbol, exc)
+
         # The reference for a percentage change is the first bar of the window,
         # not the previous daily close — the chart shows this window, so the
         # number under it has to describe the same thing.
@@ -1837,6 +1860,9 @@ async def intraday(ticker: str, range: str = Query("1d")) -> Dict[str, Any]:
             "closes": closes,
             "volumes": volumes,
             "fibonacci": fib,
+            "support_resistance": levels,
+            "atr14": atr14,
+            "patterns": zones,
             "bars": len(closes),
             "first": first,
             "last": last,
@@ -2226,17 +2252,35 @@ async def pe_history_panel(ticker: str, years: int = Query(10, ge=2, le=20)) -> 
 
 @app.get("/api/trendlines/{ticker}")
 async def trendlines_panel(ticker: str,
-                           period: str = Query("1y")) -> Dict[str, Any]:
-    """Trend lines fitted to pivots, and whether price has broken one."""
+                           period: str = Query("1y"),
+                           intraday: str = Query("", description="An /api/intraday range key")) -> Dict[str, Any]:
+    """Trend lines fitted to pivots, and whether price has broken one.
+
+    `intraday` fits them to that rung's bars instead of a year of daily ones,
+    with times rather than dates, so the chart can anchor each line on the bar
+    it was fitted to. Off under a day until now, which left Auto trend lines a
+    switch that drew nothing on every size below 1D."""
     sym = ticker.strip().upper()
+    spec = INTRADAY_SPECS.get((intraday or "").lower()) if intraday else None
+    if intraday and not spec:
+        return {"available": False,
+                "reason": "Unknown intraday range {!r}.".format(intraday)}
 
     def build() -> Dict[str, Any]:
-        df = YF_PROVIDER.history(sym, period=period, interval="1d")
+        if spec:
+            df = YF_PROVIDER.intraday_history(sym, period=spec["period"],
+                                              interval=spec["interval"])
+        else:
+            df = YF_PROVIDER.history(sym, period=period, interval="1d")
         out = trendlines_mod.build(df)
         out["ticker"] = sym
-        out["period"] = period
-        out["dates"] = ([str(i.date()) for i in df.index]
-                        if df is not None and len(df) else [])
+        out["period"] = spec["period"] if spec else period
+        if spec:
+            out["intraday"] = intraday
+            out["dates"] = [i.isoformat() for i in df.index] if df is not None and len(df) else []
+        else:
+            out["dates"] = ([str(i.date()) for i in df.index]
+                            if df is not None and len(df) else [])
         return out
     return await _run(build)
 
@@ -2631,6 +2675,7 @@ async def indicator_panel(
     range_: str = Query("2y", alias="range"),
     anchor: str = Query("", description="Anchor date for VWAP, YYYY-MM-DD"),
     intraday: str = Query("", description="An /api/intraday range key, e.g. 5 or 60"),
+    weekly: bool = Query(False, description="Compute on weekly bars"),
 ) -> Dict[str, Any]:
     """Optional indicators, computed only for the ids asked for.
 
@@ -2665,7 +2710,11 @@ async def indicator_panel(
                 return YF_PROVIDER.intraday_history(
                     symbol, period=spec["period"], interval=spec["interval"])
             source = PROVIDER if symbol == sym else YF_PROVIDER
-            return source.history(symbol, period=range_, interval="1d")
+            # Weekly bars for a weekly chart. Daily studies were drawn over it,
+            # lined up from the newest bar, so a 1W chart of two years carried
+            # the last five months of a daily Bollinger band stretched across it.
+            return source.history(symbol, period=range_,
+                                  interval="1wk" if weekly else "1d")
 
         hist = frame_for(sym)
         if hist is None or hist.empty:
@@ -2688,6 +2737,8 @@ async def indicator_panel(
                 result.pop("reading", None)
             out["intraday"] = intraday
             out["interval"] = spec["interval"]
+        elif weekly:
+            out["interval"] = "1wk"
         out["ticker"] = sym
         out["generated_at"] = datetime.now(timezone.utc).isoformat()
         return out

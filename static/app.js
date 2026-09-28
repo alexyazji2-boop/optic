@@ -2617,6 +2617,11 @@ function intradaySeries(intra) {
     ema21: emaSeries(close, 21),
     ema50: emaSeries(close, 50),
     fib: intra.fibonacci || null,
+    // Support and resistance, band width and supply and demand from these bars,
+    // the three the daily payload carries for daily ones.
+    sr: intra.support_resistance || [],
+    atr: intra.atr14,
+    patterns: intra.patterns || null,
     spot: intra.last,
     shown_bars: intra.bars || 0,
     total_bars: intra.bars || 0,
@@ -8517,10 +8522,10 @@ function swingPriceBlock(d, ps, ctx) {
           name: maLabel(id, ps) + (maShortOf(id, ps) ? ` (${maShortOf(id, ps)})` : ''), color,
         }))),
       showFib ? { name: 'Fibonacci level', color: C.refFib, dash: true } : null,
-      showSR && !ps.intraday ? { name: 'Support / resistance', color: C.refSR, dash: true } : null,
+      showSR ? { name: 'Support / resistance', color: C.refSR, dash: true } : null,
       showVbp ? { name: 'Volume by price', color: C.ink2, boxed: true } : null,
-      showInsiders && !ps.intraday ? { name: 'Insider buy', color: C.s3, boxed: true } : null,
-      showInsiders && !ps.intraday ? { name: 'Insider sell', color: C.neg, boxed: true } : null,
+      showInsiders ? { name: 'Insider buy', color: C.s3, boxed: true } : null,
+      showInsiders ? { name: 'Insider sell', color: C.neg, boxed: true } : null,
       // One entry per indicator, not per line. Keltner and Donchian each draw
       // several lines in one colour, and three legend rows reading "Keltner upper /
       // mid / lower" would be longer than the rest of the legend combined for no
@@ -8536,24 +8541,24 @@ function swingPriceBlock(d, ps, ctx) {
       ...emaCloudLegend(ps),
       ...indicatorOverlayLegend(overlayPalette),
     ].filter(Boolean)));
-    // Daily-derived overlays do not belong on an intraday chart: the averages
-    // are not in the intraday series at all, and the Fib and support levels are
-    // anchored to daily swings. Drawing them here would put lines on the chart
-    // that describe a different timeframe from the one on screen.
-    // Fibonacci and support/resistance are drawn as bands now; only the
-    // resistance ceilings stay as lines, because a 52-week high is a single print
-    // rather than a zone.
-    // Fibonacci is the exception on intraday: its grid comes from these bars.
-    const overlayRefs = ps.intraday ? (showFib ? intradayFibLines(ps) : []) : [
+    // Every family on every bar size. Under a day each comes from the bars on
+    // screen -- the intraday Fibonacci grid, support and resistance computed on
+    // these bars (srComputed), the intraday ATR for the band width, trend lines
+    // fitted to this rung -- where they used to be dropped as daily-derived.
+    // Only the resistance ceilings stay as lines, because a 52-week high is a
+    // single print rather than a zone, and a price is a price on any bar.
+    const overlayRefs = [
       ...ceilingRefs,
       // Fibs are lines again, not bands — see fibLines for why.
-      ...(showFib ? fibLines((t.fibonacci || {}).levels, t.spot) : []),
+      ...(showFib ? (ps.intraday ? intradayFibLines(ps)
+        : fibLines((t.fibonacci || {}).levels, t.spot)) : []),
     ];
-    const levelBands = ps.intraday ? [] : [
-      ...(showSR ? srBands(srLevels, (t.volatility || {}).atr14, t.spot) : []),
+    const levelBands = [
+      ...(showSR ? srBands(srLevels, ps.intraday ? ps.atr : (t.volatility || {}).atr14,
+        ps.intraday ? ps.spot : t.spot) : []),
     ];
-    const trendSegs = ps.intraday || !showTrends ? []
-      : trendSegments(STATE.trendlines, ps.dates || []);
+    const trendSegs = !showTrends ? []
+      : trendSegments(trendlinesFor(d.ticker), ps.dates || []);
     mount('chart-price', (w) => lineChart({
       width: w,
       height: 420,
@@ -8627,9 +8632,9 @@ function swingPriceBlock(d, ps, ctx) {
       // the same reason the averages are: the zones are derived from daily bases.
       bands: [
         ...levelBands,
-        ...(showZones && !ps.intraday ? zoneBands(d.patterns) : []),
+        ...(showZones ? zoneBands(ps.intraday ? (ps.patterns || {}) : d.patterns) : []),
       ],
-      events: (showInsiders && !ps.intraday)
+      events: showInsiders
         ? insiderEvents(ps, ((d.company || {}).ownership || {}).recent_transactions) : null,
       // Report dates as dashed verticals. `vMarkers`, not `events`: an earnings
       // date has no direction, so the triangle the insider layer draws would be
@@ -8760,17 +8765,21 @@ function renderSwing(d) {
   // visible but never which levels exist. Pivot strictness drops on weekly:
   // `order` counts neighbouring bars, and 4 weeks either side of a pivot is a
   // far coarser filter than 4 days.
-  const srSource = sliceSeries(
+  // Under a day, from this range's own bars, like the Charting tab's: the
+  // shelves a five-minute chart shows are the ones in its bars.
+  const srIntra = isIntradayRange(chartRange) && intradayMatches()
+    ? intradaySeries(STATE.intraday) : null;
+  const srSource = srIntra || sliceSeries(
     d.technicals && d.technicals.price_series ? d.technicals.price_series : {},
     'all', chartInterval,
   );
   const srSpot = (d.quote || {}).price
     || (srSource.close || []).filter((v) => v !== null).slice(-1)[0];
   const srComputed = computeSRLevels(srSource, srSpot, {
-    order: chartInterval === 'weekly' ? 2 : 4,
+    order: chartInterval === 'weekly' && !srIntra ? 2 : 4,
   });
   // Bars-ago is in the interval's own units, so the table has to say which.
-  const srUnit = chartInterval === 'weekly' ? 'w' : 'd';
+  const srUnit = srIntra ? ' bars' : chartInterval === 'weekly' ? 'w' : 'd';
   const gex = d.gex || {};
   const gk = d.greeks || {};
   const flow = d.flow || {};
@@ -8996,7 +9005,7 @@ function renderSwing(d) {
           <button type="button" data-chart-mode="candle"
             aria-pressed="${chartMode === 'candle'}">Candles</button>
         </div>
-        ${ps.intraday ? '' : stagesToggleHTML()}
+        ${stagesToggleHTML()}
         <details class="lvl-menu">
           <summary aria-label="Indicators">
             <span class="lvl-icon" aria-hidden="true"></span>Indicators${
@@ -9028,10 +9037,9 @@ function renderSwing(d) {
             <i class="cal-caret" aria-hidden="true"></i>
           </summary>
           <div class="lvl-pop" role="group" aria-label="Technical level visibility">
-            ${ps.intraday ? `<p class="lvl-note">On these bars: the averages and clouds
-              are 20-, 50- and 200-bar ones, and Fibonacci levels come from the high and
-              low of these bars. Support, resistance, supply and demand and insider
-              trades are read from daily bars, so they stay on 1M or wider.</p>` : ''}
+            ${ps.intraday ? `<p class="lvl-note">All of these are read from these bars:
+              the averages and clouds are 20-, 50- and 200-bar ones, and the levels, zones
+              and Fibonacci grid come from this range's own highs and lows.</p>` : ''}
             <label class="lvl-opt"><input type="checkbox" data-level-opt="ma"
               ${showMA ? 'checked' : ''}>
               <span class="lvl-key ma"></span>Moving averages</label>
@@ -9039,7 +9047,7 @@ function renderSwing(d) {
               ${showFib ? 'checked' : ''}>
               <span class="lvl-key fib"></span>Fibonacci levels</label>
             <label class="lvl-opt"><input type="checkbox" data-level-opt="sr"
-              ${showSR ? 'checked' : ''} ${ps.intraday ? 'disabled' : ''}>
+              ${showSR ? 'checked' : ''}>
               <span class="lvl-key sr"></span>Support &amp; resistance</label>
             <label class="lvl-opt"><input type="checkbox" data-level-opt="vol"
               ${showVol ? 'checked' : ''}>
@@ -9048,7 +9056,7 @@ function renderSwing(d) {
               ${showVbp ? 'checked' : ''}>
               <span class="lvl-key vbp"></span>Volume by price</label>
             <label class="lvl-opt"><input type="checkbox" data-level-opt="insiders"
-              ${showInsiders ? 'checked' : ''} ${ps.intraday ? 'disabled' : ''}>
+              ${showInsiders ? 'checked' : ''}>
               <span class="lvl-key ins"></span>Insider trades</label>
             <label class="lvl-opt"><input type="checkbox" data-level-opt="ema"
               ${showEMA ? 'checked' : ''}>
@@ -9060,7 +9068,7 @@ function renderSwing(d) {
               ${showCloudSlow ? 'checked' : ''}>
               <span class="lvl-key cloud"></span>EMA 21 / 50 cloud</label>
             <label class="lvl-opt"><input type="checkbox" data-level-opt="zones"
-              ${showZones ? 'checked' : ''} ${ps.intraday ? 'disabled' : ''}>
+              ${showZones ? 'checked' : ''}>
               <span class="lvl-key zone"></span>Supply &amp; demand</label>
             ${levelCount() ? `<button type="button" class="lvl-clear" data-clear-levels>
               Clear all</button>` : ''}
@@ -11722,7 +11730,9 @@ function barIndexForDate(keys, iso) {
  */
 function earningsMarkers(ps, earnings) {
   const dates = ps.dates || [];
-  if (!dates.length || ps.intraday) return [];
+  // Intraday too: a report inside the window lands on the day's bars, the way
+  // insiderEvents snaps a trade; one outside it has no bar and is dropped.
+  if (!dates.length) return [];
   const keys = dates.map((d) => String(d).slice(0, 10));
   const out = [];
   const seen = new Set();
@@ -12330,7 +12340,7 @@ const OVERLAY_DEFS = [
   { id: 'stages', label: 'Weinstein stages', group: 'Trend', color: 'pos', width: 1,
     fixed: 'Colours each bar by the Weinstein stage of its week: light green '
       + 'basing, green advancing, amber topping, red declining. The colours are '
-      + 'the reading, so they are fixed. Weekly, so not drawn on intraday bars.' },
+      + 'the reading, so they are fixed. On intraday bars each takes its week\'s stage.' },
 ];
 
 const OVERLAY_BY_ID = Object.fromEntries(OVERLAY_DEFS.map((d) => [d.id, d]));
@@ -12770,8 +12780,7 @@ async function loadIndicators(force) {
   try {
     payload = await getJSON(
       `/api/indicators/${encodeURIComponent(STATE.ticker)}`
-      + `?ids=${encodeURIComponent(indicatorIds.join(','))}`
-      + (bars === 'daily' ? '' : `&intraday=${encodeURIComponent(bars)}`));
+      + `?ids=${encodeURIComponent(indicatorIds.join(','))}` + studyQuery(bars));
   } catch (err) {
     payload = { available: false, reason: err.message };
   }
@@ -13018,7 +13027,11 @@ function stagesToggleHTML() {
 }
 
 function stageTints(symbol, dates, intraday) {
-  if (!wsOverlayDrawn('stages') || intraday || !symbol) return null;
+  /* Intraday too, each bar in its week's stage. It was left out on the ground
+   * that five-minute bars in one week are one colour, which is true and is what
+   * the stage is: the reading does not change inside a week. `intraday` stays
+   * in the signature for the callers; the Stages button turns it off. */
+  if (!wsOverlayDrawn('stages') || !symbol) return null;
   if (!Array.isArray(dates) || !dates.length) return null;
   const r = stageReading(symbol);
   // `available !== true`: an unavailable reading is a truthy object.
@@ -14453,9 +14466,8 @@ function wsLegend(ps) {
     const sym = (STATE.chartData || {}).ticker;
     const tinted = legStages;
     const r = sym ? (stageSettled.get(sym) || {}).r : null;
-    const why = hidden ? '' : intra ? 'weekly, not on intraday'
-      : !r ? 'loading' : r.available !== true ? 'not enough history'
-        : !tinted ? 'unavailable' : '';
+    const why = hidden ? '' : !r ? 'loading' : r.available !== true ? 'not enough history'
+      : !tinted ? 'unavailable' : intra ? 'by week' : '';
     rows.push(`<div class="ws-leg-row${hidden ? ' is-hidden' : ''}" data-ws-leg="stages"${
   r && r.available !== true && r.reason ? ` title="${esc(r.reason)}"` : ''}>
       <span class="ws-leg-name">Stages${why ? ` <span class="ws-leg-args">(${esc(why)})</span>` : ''}</span>
@@ -14616,7 +14628,7 @@ function wsColorPop() {
   /* Stages colour the candles and the line, so while they are drawn these
    * rows are not what is on the chart, and a swatch that changed nothing
    * would read as broken. Up and down still colour the volume bars. */
-  const staged = wsOverlayDrawn('stages') && !isIntradayRange(chartRange);
+  const staged = wsOverlayDrawn('stages');
   return `<div class="ws-menu-pop ws-colors">
     ${staged ? `<p class="ws-menu-note">Stages is on, so the candles and the line are
       drawn in the colour of their stage. These colour the volume bars now, and
@@ -14915,12 +14927,26 @@ try {
   if (saved && typeof saved === 'object') wsDrawStore = saved;
 } catch (e) { /* private mode, or hand-edited storage */ }
 
+/* Where the drawings for the chart on screen are kept.
+ *
+ * A drawing is a bar index and a price, and a five-minute bar index means a
+ * different moment from a daily one, so each intraday size keeps its own set
+ * under symbol@size. The daily key is the bare symbol, as it always was, so no
+ * drawing anyone has already made moves. This is what lets the tools work
+ * under a day at all: the layer refused to draw there, while a drawing made
+ * there was still saved, into the DAILY set, where it then turned up at an
+ * index that was a different date. */
+function wsDrawKey() {
+  const sym = STATE.chartSymbol || '';
+  return isIntradayRange(chartRange) ? `${sym}@${chartRange}` : sym;
+}
+
 function wsDrawings() {
-  return wsDrawStore[STATE.chartSymbol || ''] || [];
+  return wsDrawStore[wsDrawKey()] || [];
 }
 
 function wsSaveDrawings(list) {
-  wsDrawStore[STATE.chartSymbol || ''] = list;
+  wsDrawStore[wsDrawKey()] = list;
   try { localStorage.setItem(WS_DRAW_KEY, JSON.stringify(wsDrawStore)); }
   catch (e) { /* private mode: the drawings live for the session only */ }
 }
@@ -15644,11 +15670,20 @@ function wsPriceIndicatorIds() {
   return indicatorIds.filter((id) => IND_PRICE_PANE.includes(id));
 }
 
-/* Which bars a study payload was computed on: an intraday range key, or daily.
- * The Charting tab's weekly series is rolled up from daily bars client-side and
- * its studies have always been the daily ones, so weekly shares "daily". */
+/* Which bars a study payload was computed on: an intraday range key, weekly or
+ * daily. Weekly shared the daily payload, and a study lines up with the chart
+ * by counting back from the newest bar, so a two-year weekly chart carried the
+ * last five months of a daily Bollinger band stretched across it. */
 function studyBars() {
-  return isIntradayRange(chartRange) ? chartRange : 'daily';
+  if (isIntradayRange(chartRange)) return chartRange;
+  return chartInterval === 'weekly' ? 'weekly' : 'daily';
+}
+
+/* The query that asks /api/indicators for those bars. */
+function studyQuery(bars) {
+  if (bars === 'daily') return '';
+  if (bars === 'weekly') return '&weekly=true';
+  return '&intraday=' + encodeURIComponent(bars);
 }
 
 async function wsLoadIndicators() {
@@ -15672,8 +15707,7 @@ async function wsLoadIndicators() {
   wsRedrawChart();
   try {
     const data = await getJSON('/api/indicators/' + encodeURIComponent(symbol)
-      + '?ids=' + encodeURIComponent(key)
-      + (bars === 'daily' ? '' : '&intraday=' + encodeURIComponent(bars)));
+      + '?ids=' + encodeURIComponent(key) + studyQuery(bars));
     // The reader may have changed symbol, selection or bar size while this was
     // in flight. Same guard loadIndicators() carries, and for the same measured
     // reason: ticking four boxes quickly starts four requests that do not
@@ -15711,14 +15745,14 @@ function chartBaseColors(ps, candleMode, intraday, marks) {
   const out = marks ? [...(candleMode ? [C.ink] : []), ...marks]
     : candleMode ? [C.ink, chartColor('up'), chartColor('down')]
       : [chartColor('line')];
-  if (showFib && !intraday) out.push(C.refFib);
-  if (showSR && !intraday) out.push(C.refSR);
+  if (showFib) out.push(C.refFib);
+  if (showSR) out.push(C.refSR);
   // Volume-by-price and the volume strip both key in ink2. The strip's bars are
   // actually drawn in the directional pair, but its legend row is ink2, and a
   // study allocated ink2 gives that legend two rows in one colour.
   if (showVbp || showVol) out.push(C.ink2);
-  if (showInsiders && !intraday) out.push(C.s3, C.neg);
-  if (showZones && !intraday) out.push(C.neg, C.s3);
+  if (showInsiders) out.push(C.s3, C.neg);
+  if (showZones) out.push(C.neg, C.s3);
   MA_SERIES_IDS.filter(seriesDrawn).forEach((id) => out.push(ma[id]));
   return out;
 }
@@ -16531,6 +16565,22 @@ function trendSegments(tl, chartDates) {
 }
 
 /** Trend lines load per symbol, on demand — only when the overlay is on. */
+/* Which bars a trend-line payload was fitted to: this rung's under a day, a
+ * year of daily ones otherwise (a weekly chart has always drawn those). */
+function trendBars() {
+  return isIntradayRange(chartRange) ? chartRange : 'daily';
+}
+
+/* The trend lines for the chart on screen, or null. Fitted to a year of daily
+ * pivots, a line anchored months ago was dropped by trendSegments on every
+ * intraday rung for want of a bar at its anchor, so Auto trend lines drew
+ * nothing under a day. Answered only for the symbol and bars it was fitted to. */
+function trendlinesFor(symbol) {
+  const tl = STATE.trendlines;
+  if (!tl || tl.available === false) return null;
+  if (tl.symbol !== symbol || tl.bars !== trendBars()) return null;
+  return tl;
+}
 /* The long-term levels for the charting tab.
  *
  * `/api/longterm` is the Investing tab's endpoint and it returns the whole
@@ -16619,13 +16669,20 @@ function accumLines(holding) {
 async function loadTrendlines(symbol, force) {
   const sym = symbol || STATE.chartSymbol || STATE.ticker;
   if (!sym) return;
-  if (STATE.trendlinesFor === sym && !force) return;
-  STATE.trendlinesFor = sym;
+  const bars = trendBars();
+  const key = `${sym}|${bars}`;
+  if (STATE.trendlinesFor === key && !force) return;
+  STATE.trendlinesFor = key;
+  let data;
   try {
-    STATE.trendlines = await getJSON(`/api/trendlines/${encodeURIComponent(sym)}`);
+    data = await getJSON(`/api/trendlines/${encodeURIComponent(sym)}`
+      + (bars === 'daily' ? '' : `?intraday=${encodeURIComponent(bars)}`));
   } catch (err) {
-    STATE.trendlines = { available: false, reason: err.message };
+    data = { available: false, reason: err.message };
   }
+  // A later size or symbol asked since; its own answer is on the way.
+  if (STATE.trendlinesFor !== key) return;
+  STATE.trendlines = { ...data, symbol: sym, bars };
   if (STATE.view === 'chart') wsRedrawChart();
   else if (STATE.view === 'swing' && STATE.swing) {
     preserveUI(views.swing, () => renderSwing(STATE.swing));
@@ -16701,16 +16758,11 @@ function wsRenderDrawings() {
   const frame = svg && svg.chartFrame;
   if (!frame) { layer.innerHTML = ''; return; }
 
-  /* Nothing is drawn on an intraday range.
-   *
-   * Drawings store a bar index and a price, which is what makes them survive a
-   * resize and a range change (see the chart coordinate note in CLAUDE.md).
-   * Index 120 on a daily series and index 120 on a five-minute series are
-   * different moments in time by a factor of about eighty, so replaying a
-   * trendline onto intraday bars would put it somewhere its author never drew
-   * it — and it would look deliberate. Hidden, not deleted: switch back to a
-   * daily range and every drawing is where it was. */
-  if (isIntradayRange(chartRange)) { layer.innerHTML = ''; return; }
+  /* Intraday draws its own set. Index 120 on a daily series and index 120 on
+   * a five-minute one are different moments by a factor of about eighty, which
+   * is why this used to draw nothing under a day; wsDrawKey now keeps each
+   * size's drawings apart, so every set is replayed only onto the bars it was
+   * drawn on. */
 
   const NS = 'http://www.w3.org/2000/svg';
   const el = (tag, attrs, text) => {
@@ -18153,23 +18205,28 @@ function wsMountChart() {
       // Levels the workspace draws. Fibs as labelled lines, support and
       // resistance as bands, supply and demand as bands — same functions the
       // Swing chart uses, so the two cannot render the same level differently.
-      // On intraday, the Fibonacci grid of these bars rather than nothing: the
-      // Fibs button took the click on every rung under a day and drew no line.
-      refLines: intraday ? (showFib ? intradayFibLines(ps) : []) : [
-        ...(showFib ? fibLines(((d.technicals || {}).fibonacci || {}).levels,
-          (d.technicals || {}).spot) : []),
+      // Under a day, each family from the bars on screen: the intraday
+      // Fibonacci grid, support and resistance and supply and demand from
+      // /api/intraday, and trend lines fitted to this rung. Every one of them
+      // drew nothing below 1D until these existed.
+      refLines: [
+        ...(showFib ? (intraday ? intradayFibLines(ps)
+          : fibLines(((d.technicals || {}).fibonacci || {}).levels,
+            (d.technicals || {}).spot)) : []),
         // The Investing tab's long-term structure, drawn on the same plot so a
         // multi-year level and a multi-week one can be read against each other.
-        // Excluded on intraday with everything else: these are weekly bars.
+        // A price is a price on any bar size, and refLineFit 'clip' drops the
+        // ones that sit off this chart.
         ...(showAccum ? accumLines(STATE.accumZones) : []),
       ],
-      bands: intraday ? [] : [
-        ...(showSR ? srBands(((d.technicals || {}).support_resistance || []),
-          ((d.technicals || {}).volatility || {}).atr14, (d.technicals || {}).spot) : []),
-        ...(showZones ? zoneBands((d.patterns || {})) : []),
+      bands: [
+        ...(showSR ? (intraday ? srBands(ps.sr || [], ps.atr, ps.spot)
+          : srBands(((d.technicals || {}).support_resistance || []),
+            ((d.technicals || {}).volatility || {}).atr14, (d.technicals || {}).spot)) : []),
+        ...(showZones ? zoneBands(intraday ? (ps.patterns || {}) : (d.patterns || {})) : []),
       ],
-      segments: intraday || !showTrends ? []
-        : trendSegments(STATE.trendlines, ps.dates || []),
+      segments: !showTrends ? []
+        : trendSegments(trendlinesFor(d.ticker), ps.dates || []),
       // Same builder as the Swing chart, so the two tabs cannot disagree about
       // where a cloud flips or how wide it is.
       clouds: emaClouds(ps),
@@ -18225,7 +18282,10 @@ function wsMountChart() {
        * Excluded on intraday for the reason the averages are: these are derived
        * from daily bars and would be describing a different timeframe from the
        * one on screen. */
-      events: (showInsiders && !intraday)
+      // insiderEvents snaps each trade to the bar containing it, a minute bar
+      // included, so intraday needs no exclusion: a trade outside the window
+      // simply has no bar.
+      events: showInsiders
         ? insiderEvents(ps, ((d.company || {}).ownership || {}).recent_transactions)
         : null,
       vMarkers: earningsMarkersFor(ps, STATE.chartSymbol),
@@ -23972,6 +24032,11 @@ async function loadSwing(force, opts = {}) {
     if (!silent) revealPanels(views.swing);
     loadPatternRates();
     loadIndicators();
+    /* Its own trend lines. This tab never fetched any: it drew whatever the
+     * Charting tab had last loaded, which could be another company's lines,
+     * since that tab holds its own symbol. trendlinesFor now refuses a payload
+     * for another symbol or bar size, so the tab asks for its own. */
+    if (showTrends) loadTrendlines(STATE.ticker);
     loadSeasonality();
     loadExtras();
     loadRelPerf();
@@ -28009,12 +28074,8 @@ function updateStatus() {
     setStatus(STATE.chartSymbol
       ? [`Chart: ${STATE.chartSymbol}`,
         wsWindow ? `${shown} · zoomed` : `${shown} · ${chartWindowLabel()}`,
-        intra
-          ? 'drawings hidden on intraday'
-          : `${wsDrawings().length} drawing${wsDrawings().length === 1 ? '' : 's'}`,
-        intra
-          ? 'Averages, studies and Fibs are on these bars. Daily levels and drawings are not'
-          : 'Drag to pan, scroll to zoom, shift-drag to measure']
+        `${wsDrawings().length} drawing${wsDrawings().length === 1 ? '' : 's'}`,
+        'Drag to pan, scroll to zoom, shift-drag to measure']
       : ['Chart. Pick a symbol to begin.']);
     return;
   }
@@ -30713,6 +30774,8 @@ document.addEventListener('change', (evt) => {
   if (evt.target.id === 'chart-interval') {
     chartInterval = evt.target.value;
     try { localStorage.setItem(CHART_INTERVAL_KEY, chartInterval); } catch (e) { /* private mode */ }
+    // Weekly bars have weekly studies now.
+    loadIndicators();
   } else {
     return;
   }
@@ -30897,8 +30960,10 @@ document.addEventListener('click', (evt) => {
   if (tf) {
     chartRange = tf.dataset.chartRange;
     try { localStorage.setItem(CHART_RANGE_KEY, chartRange); } catch (e) { /* private mode */ }
-    // Studies are computed per bar size, so a new size may need new ones.
+    // Studies and trend lines are computed per bar size, so a new size may
+    // need new ones.
     loadIndicators();
+    if (showTrends) loadTrendlines(STATE.ticker);
     if (isIntradayRange(chartRange)) { loadIntraday(chartRange); return; }
     if (STATE.swing) preserveUI(views.swing, () => renderSwing(STATE.swing));
     return;
@@ -31354,8 +31419,10 @@ document.addEventListener('click', (evt) => {
     // with the symbol: most sessions never open them, and it is a live call.
     if (isIntradayRange(chartRange)) wsLoadIntraday();
     else wsRedrawChart();
-    // Studies are computed per bar size, so a new size may need new ones.
+    // Studies and trend lines are computed per bar size, so a new size may
+    // need new ones.
     if (wsPriceIndicatorIds().length) wsLoadIndicators();
+    if (showTrends) loadTrendlines(STATE.chartSymbol);
     return;
   }
   if (evt.target.closest('[data-ws-reset]')) {
@@ -31389,8 +31456,10 @@ document.addEventListener('click', (evt) => {
       }
       wsRedrawChart();
     }
-    // Studies are computed per bar size, so a new size may need new ones.
+    // Studies and trend lines are computed per bar size, so a new size may
+    // need new ones.
     if (wsPriceIndicatorIds().length) wsLoadIndicators();
+    if (showTrends) loadTrendlines(STATE.chartSymbol);
     return;
   }
   const wsTl = evt.target.closest('[data-ws-tool]');

@@ -125,9 +125,11 @@ def test_the_end_dot_value_tag_hover_dot_and_swatch_follow_the_bar():
 # ------------------------------------------------------------ the lookup
 
 
-def test_nothing_is_tinted_when_off_hidden_or_intraday():
+def test_nothing_is_tinted_when_off_or_hidden_and_intraday_is_by_week():
+    """Intraday bars take their week's stage: the reading does not change
+    inside a week, which is why a session's bars share one colour."""
     fn = _fn(APP, "stageTints")
-    assert "if (!wsOverlayDrawn('stages') || intraday || !symbol) return null;" in fn
+    assert "if (!wsOverlayDrawn('stages') || !symbol) return null;" in fn
 
 
 def test_an_unavailable_reading_is_not_a_falsy_test():
@@ -197,8 +199,9 @@ def test_the_legends_key_the_stages_instead_of_up_and_down():
 
 def test_the_charting_legend_says_why_nothing_is_coloured():
     leg = _fn(APP, "wsLegend")
-    for why in ("'weekly, not on intraday'", "'loading'", "'not enough history'", "'unavailable'"):
+    for why in ("'by week'", "'loading'", "'not enough history'", "'unavailable'"):
         assert why in leg, why
+    assert "'weekly, not on intraday'" not in leg
 
 
 # ------------------------------------------------------------ the switch
@@ -223,7 +226,8 @@ def test_the_two_charts_without_a_toolbar_menu_have_a_switch_and_it_has_a_handle
     """Both directions, as tests/test_auth_client.py asserts for every control:
     a switch with no handler takes the click and does nothing, and a coloured
     chart with no switch where it is read leaves the reader hunting."""
-    assert "${ps.intraday ? '' : stagesToggleHTML()}" in APP
+    assert "        ${stagesToggleHTML()}" in _fn(APP, "renderSwing"), "the Options toolbar, every size"
+    assert "${ps.intraday ? '' : stagesToggleHTML()}" not in APP
     inst = _fn(APP, "renderInstrument")
     assert "${stagesToggleHTML()}" in inst
     assert "data-stages-toggle" in _fn(APP, "stagesToggleHTML")
@@ -248,7 +252,7 @@ def test_the_style_dialog_offers_no_colour_for_it():
 
 def test_the_colour_picker_says_when_stages_are_what_colour_the_bars():
     pop = _fn(APP, "wsColorPop")
-    assert "const staged = wsOverlayDrawn('stages') && !isIntradayRange(chartRange);" in pop
+    assert "const staged = wsOverlayDrawn('stages');" in pop
     assert "${staged ? `<p class=\"ws-menu-note\">" in pop
 
 
