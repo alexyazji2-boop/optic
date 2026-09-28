@@ -593,7 +593,13 @@ class YFinanceProvider(MarketDataProvider):
     # How many symbols to read at once. The `.info` scrape behind `quote()` is a
     # request per symbol and the macro panel asks for twenty-two, which measured
     # 5.8s serially against 1.34s for the same symbols this way.
-    QUOTE_WORKERS = 8
+    #
+    # Twenty-four, from eight: the whole macro basket in one round rather than
+    # three. Its live prices live thirty seconds, so most ticker loads refetch
+    # them, and on the live site three rounds were the macro leg's 3.3s of a
+    # 3.7s first load (KDP, 2026-09-28). Locally 0.55s became 0.40s. The same
+    # requests, fewer of them waiting their turn.
+    QUOTE_WORKERS = 24
 
     # The close a day's change is measured from, which changes once a session.
     #
@@ -678,7 +684,18 @@ class YFinanceProvider(MarketDataProvider):
             if missing:
                 stamp = datetime.now(timezone.utc).isoformat()
 
+                # The caller's lane, carried onto the pool's threads, which do
+                # not inherit it: the keep-warm loop's prior-close scrapes went
+                # out in the readers' lane and spent the burst it keeps for them.
+                lane = in_background()
+
                 def one(symbol: str):
+                    if lane:
+                        with background():
+                            return fetch_one(symbol)
+                    return fetch_one(symbol)
+
+                def fetch_one(symbol: str):
                     try:
                         ticker = yf.Ticker(symbol)
                         fast = ticker.fast_info

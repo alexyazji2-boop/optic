@@ -218,3 +218,46 @@ def test_the_loop_is_started_and_stopped_with_the_others():
     stop = inspect.getsource(main._stop_tracker)
     assert "app.state.keepwarm_task = asyncio.create_task(_keep_warm_loop())" in start
     assert '"keepwarm_task"' in stop
+
+
+# ------------------------------------------------------------ the live prices
+
+
+def _quote_ticker(seen, pause=0.2):
+    class Ticker:
+        def __init__(self, symbol):
+            self.symbol = symbol
+
+        @property
+        def fast_info(self):
+            seen.append((self.symbol, Y.in_background()))
+            time.sleep(pause)
+            return {"lastPrice": 10.0, "regularMarketPreviousClose": 9.5}
+
+        @property
+        def info(self):
+            return {"regularMarketPreviousClose": 9.5}
+    return Ticker
+
+
+def test_a_jobs_live_prices_are_fetched_in_the_jobs_lane(monkeypatch):
+    seen = []
+    monkeypatch.setattr(Y.yf, "Ticker", _quote_ticker(seen, pause=0.0))
+    provider = Y.YFinanceProvider()
+    with Y.background():
+        provider.batch_quote(["AAA", "BBB", "CCC"])
+    provider.batch_quote(["DDD"])
+    assert sorted(seen) == [("AAA", True), ("BBB", True), ("CCC", True), ("DDD", False)]
+
+
+def test_the_macro_basket_is_fetched_in_one_round(monkeypatch):
+    from app.analytics import macro
+
+    symbols = [i["symbol"] for i in macro.INSTRUMENTS]
+    monkeypatch.setattr(Y.yf, "Ticker", _quote_ticker([], pause=0.2))
+    t0 = time.time()
+    out = Y.YFinanceProvider().batch_quote(symbols)
+    took = time.time() - t0
+    assert len(out) == len(symbols)
+    assert took < 0.4, "%d symbols at 0.2s each took %.2fs: more than one round" % (
+        len(symbols), took)
