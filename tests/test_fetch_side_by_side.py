@@ -117,8 +117,10 @@ def _chain_ticker(listings, fail=()):
 
         @property
         def options(self):
-            listings.append(threading.get_ident())
-            self._listed = True
+            # As yfinance does: fetched on the first read, kept on the object.
+            if not self._listed:
+                listings.append(threading.get_ident())
+                self._listed = True
             return ("2026-10-16", "2026-10-30", "2026-11-20", "2026-12-18")
 
         def option_chain(self, exp):
@@ -187,3 +189,63 @@ def test_the_four_statements_are_fetched_side_by_side(monkeypatch):
     for name in ("income_annual", "income_quarterly", "balance_annual"):
         assert out[name] == {"periods": ["2025-12-31"],
                              "rows": {"Total Revenue": [1.0], "Net Income": [2.0]}}, name
+
+
+# ------------------------------------------------------------ the expiry list
+
+
+def test_the_expiry_list_is_fetched_once_for_the_expiries_and_the_chain(monkeypatch):
+    listings = []
+    monkeypatch.setattr(Y.yf, "Ticker", _chain_ticker(listings))
+    provider = Y.YFinanceProvider()
+    assert provider.expirations("ABC") == EXPIRIES
+    chain = provider.options_chain("ABC", expiries=EXPIRIES)
+    assert len(chain) == 12
+    assert len(listings) == 1, "the list was fetched %d times" % len(listings)
+
+
+def test_a_refused_expiry_list_is_not_remembered_and_halves_the_rate_once(monkeypatch):
+    class Ticker:
+        def __init__(self, symbol):
+            pass
+
+        @property
+        def options(self):
+            raise RuntimeError("Too Many Requests")
+
+    monkeypatch.setattr(Y.yf, "Ticker", Ticker)
+    provider = Y.YFinanceProvider()
+    before = Y._BUCKET["rate"]
+    assert provider.expirations("ABC") == []
+    assert Y._BUCKET["rate"] == pytest.approx(before / 2.0), "one refusal, one halving"
+    assert "exp:ABC" not in Y._CACHE and "optt:ABC" not in Y._CACHE, (
+        "a throttled feed remembered as a stock with no options")
+
+
+# ------------------------------------------------------------ the sector check
+
+
+def test_the_sector_check_reads_the_builds_own_history_and_shared_series(monkeypatch):
+    from app.analytics import sector_confirm
+
+    asked = []
+    idx = pd.bdate_range("2026-03-02", periods=140)
+
+    def history(sym, period="2y", interval="1d"):
+        asked.append((sym, period))
+        step = {"NVDA": 1.0, "XLK": 0.5, "SPY": 0.2}[sym]
+        return pd.DataFrame({"Close": [100.0 + step * i for i in range(len(idx))]}, index=idx)
+
+    provider = types.SimpleNamespace(
+        history=history,
+        batch_history=lambda *a, **k: pytest.fail("one download keyed on the stock again"))
+    monkeypatch.setattr(sector_confirm.sector_board, "build", lambda p: {"rows": []})
+    out = sector_confirm.build(provider, "NVDA", "Technology")
+    # The stock's series under the same key as the ticker build's history leg,
+    # so it is that leg's fetch, not another.
+    assert sorted(asked) == [("NVDA", "2y"), ("SPY", "6mo"), ("XLK", "6mo")]
+    assert out["available"] and out["etf"] == "XLK"
+    expect = lambda step: round(((100 + step * 139) / (100 + step * 118) - 1) * 100, 2)  # noqa: E731
+    assert out["stock_return_pct"] == expect(1.0)
+    assert out["etf_return_pct"] == expect(0.5)
+    assert out["spy_return_pct"] == expect(0.2)

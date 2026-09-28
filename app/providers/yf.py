@@ -285,7 +285,10 @@ def _cached(key: str, ttl: float, producer, gate: bool = True):
         try:
             value = producer()
         except BaseException as exc:
-            if _is_rate_limit(exc):
+            # Only the call that made the request reacts to its refusal. A
+            # refusal re-raised through an ungated wrapper (the expiries over
+            # the shared options Ticker) would otherwise halve the rate twice.
+            if gate and _is_rate_limit(exc):
                 with _PACE_LOCK:
                     _on_throttle()
             raise
@@ -762,7 +765,7 @@ class YFinanceProvider(MarketDataProvider):
         """
         def build() -> List[str]:
             try:
-                return list(yf.Ticker(ticker).options or [])
+                return list(self._options_ticker(ticker).options or [])
             except Exception as exc:
                 if _is_rate_limit(exc):
                     note_throttle(exc)
@@ -770,9 +773,24 @@ class YFinanceProvider(MarketDataProvider):
                 return []
 
         try:
-            return _cached("exp:" + ticker, self.TTL_CHAIN, build)
+            return _cached("exp:" + ticker, self.TTL_CHAIN, build, gate=False)
         except Exception:
             return []
+
+    def _options_ticker(self, ticker: str):
+        """One yf.Ticker per symbol for the option endpoints, its expiry list read.
+
+        option_chain needs that list to turn a date into Yahoo's key, and a
+        fresh Ticker fetches it again, so a first load fetched it twice: once
+        for the expiries and once more inside the chain, on the chain's own
+        critical path. Held as long as the list is.
+        """
+        def build():
+            t = yf.Ticker(ticker)
+            t.options
+            return t
+
+        return _cached("optt:" + ticker, self.TTL_CHAIN, build)
 
     def options_chain(
         self, ticker: str, expiries: Optional[List[str]] = None, max_expiries: int = 4
@@ -800,7 +818,12 @@ class YFinanceProvider(MarketDataProvider):
         def build() -> pd.DataFrame:
             frames: List[pd.DataFrame] = []
             today = pd.Timestamp.today().normalize()
-            t = yf.Ticker(ticker)
+            try:
+                t = self._options_ticker(ticker)
+            except Exception as exc:                            # noqa: BLE001
+                if _is_rate_limit(exc):
+                    note_throttle(exc)
+                return pd.DataFrame()
 
             def one(exp: str):
                 try:
@@ -813,14 +836,9 @@ class YFinanceProvider(MarketDataProvider):
             # The expiries side by side. One after another they were the
             # slowest leg of a first load on the live site, 4.5s for four
             # (FTNT, 2026-09-28), where Yahoo answered ten requests at once in
-            # 1.0s to 1.3s each. The expiry list is read once first: every
-            # option_chain call needs it to turn a date into Yahoo's key, and
+            # 1.0s to 1.3s each. The Ticker arrives with its expiry list read
+            # (see _options_ticker): every option_chain call needs it, and
             # threads that each found it missing would each fetch it.
-            try:
-                t.options
-            except Exception as exc:                            # noqa: BLE001
-                if _is_rate_limit(exc):
-                    note_throttle(exc)
             if len(wanted) > 1:
                 with ThreadPoolExecutor(max_workers=len(wanted)) as pool:
                     chains = list(pool.map(one, wanted))
