@@ -117,6 +117,50 @@ def _load_dotenv() -> None:
 
 _load_dotenv()
 
+# --------------------------------------------------------------- app logging
+#
+# Without this, nothing this application logs is ever seen.
+#
+# `logging.basicConfig` exists in exactly one place in the tree, inside
+# `app/db.py`'s `if __name__ == "__main__"` block, which uvicorn never reaches.
+# Uvicorn configures its own three loggers and leaves the root alone, so every
+# `log.info` in this package propagated to a root logger with no handler at the
+# default WARNING and was dropped on the floor.
+#
+# What that cost, and it is not hypothetical. `app/auth/mailer.py` falls back to
+# writing a verification link to the log when no relay is configured, and says
+# so to the reader: "Email is not configured on this deployment, so the link
+# went to the server log." DEPLOY.md and CLAUDE.md repeat the promise. The line
+# was never emitted, so on a deployment with no SMTP an address could not be
+# confirmed by any route at all -- which also meant `ADMIN_EMAILS` could never
+# take effect, because `is_admin` requires a *verified* address. Measured on a
+# local server with `--log-level info`: registering an account produced zero
+# `[mail:log]` lines.
+#
+# Two trees, not one, and the first attempt at this fix configured the wrong
+# one. Modules here take a logger three ways: `getLogger(__name__)` gives
+# `app.*`, `getLogger("uvicorn.error")` borrows uvicorn's (already configured,
+# which is why warm-up lines have always been visible and hid the problem), and
+# ten call sites use an explicit `optic` or `optic.<area>`. `app/auth/mailer.py`
+# is one of those ten -- its logger is `optic.mail` -- so scoping this to the
+# package tree alone left the exact line this was written to rescue still
+# invisible.
+#
+# Scoped to our own trees rather than the root, so a dependency's INFO chatter
+# does not arrive with it. `propagate = False` because uvicorn's handler is on
+# its own loggers rather than root, and leaving propagation on would print each
+# line twice the moment anything attaches one there.
+for _name in (__package__ or "app", "optic"):
+    _pkg_log = logging.getLogger(_name)
+    if not _pkg_log.handlers:
+        _handler = logging.StreamHandler()
+        _handler.setFormatter(
+            logging.Formatter("%(levelname)s:     %(name)s - %(message)s"))
+        _pkg_log.addHandler(_handler)
+        _pkg_log.setLevel(logging.INFO)
+        _pkg_log.propagate = False
+
+
 app = FastAPI(title="Optic Terminal", version="1.0.0")
 
 # ------------------------------------------------------------------ transfer
