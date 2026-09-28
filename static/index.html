@@ -376,19 +376,29 @@
     <button class="close" id="chat-close" aria-label="Close assistant">&times;</button>
   </div>
 
-  <!-- The response lens. Changes which figures Pulse leads with and how much
-       doubt it carries; never the figures themselves. -->
-  <div class="pulse-persona" id="chat-persona"></div>
+  <!-- Everything between the header and the input scrolls as one.
+       Measured at 900px before this existed: the lens 169px, the notice 208px
+       and the footer 521px were all fixed, so `#chat-log` -- the only thing that
+       scrolled -- was crushed to 28px around 668px of content, and the panel's
+       1,025px overflowed its own height with the input cut off below the fold.
+       A wheel over the lens, the notice or the suggestions moved nothing. The
+       suggestions moved in here from the footer for the same reason: pinned
+       beside the input they were 400px that could never be scrolled past. -->
+  <div class="chat-body" id="chat-body">
+    <!-- The response lens. Changes which figures Pulse leads with and how much
+         doubt it carries; never the figures themselves. -->
+    <div class="pulse-persona" id="chat-persona"></div>
 
-  <!-- Saved conversations. Collapsed by default: it is a drawer you go to, not
-       something between you and the reply. -->
-  <div class="pulse-history" id="pulse-history" hidden></div>
+    <!-- Saved conversations. Collapsed by default: it is a drawer you go to,
+         not something between you and the reply. -->
+    <div class="pulse-history" id="pulse-history" hidden></div>
 
-  <div class="legal-area" id="pulse-legal" role="note"></div>
-  <div class="chat-log" id="chat-log"></div>
+    <div class="legal-area" id="pulse-legal" role="note"></div>
+    <div class="chat-log" id="chat-log"></div>
+    <div class="suggest" id="chat-suggest"></div>
+  </div>
 
   <div class="chat-foot">
-    <div class="suggest" id="chat-suggest"></div>
     <!-- Chips for staged files, cleared once the message is sent. -->
     <div class="chat-attachments" id="chat-attachments"></div>
     <textarea id="chat-input" placeholder="Ask Pulse about the loaded analysis. E.g. &quot;what does the gamma profile imply for a swing long here?&quot;"></textarea>

@@ -27901,8 +27901,9 @@ function pulseResume(id) {
     log.innerHTML = '';
     chatState.messages.forEach((m) => addMsg(m.role === 'user' ? 'user' : 'bot', m.content));
     // A resumed conversation is history, so it opens where it left off rather
-    // than at the top.
-    log.scrollTop = log.scrollHeight;
+    // than at the top -- of the scroller, which is the body now, not the log.
+    const scroller = pulseScroller();
+    scroller.scrollTop = scroller.scrollHeight;
   }
   renderPulseHistory(false);
 }
@@ -28636,9 +28637,10 @@ function addMsg(role, text) {
     <div class="status"></div><div class="sources"></div>`;
   if (savable) wrap.dataset.q = text;
   wrap.querySelector('.bubble').innerHTML = role === 'user' ? esc(text) : mdLite(text || '');
-  const wasPinned = isPinnedToBottom(log) || role === 'user';
+  const scroller = pulseScroller();
+  const wasPinned = isPinnedToBottom(scroller) || role === 'user';
   log.appendChild(wrap);
-  followStream(log, wasPinned);
+  followStream(scroller, wasPinned);
   return wrap;
 }
 
@@ -28674,6 +28676,21 @@ function addMsg(role, text) {
  * fractional scroll heights make an exact equality test never true.
  */
 const SCROLL_STICK_PX = 48;
+
+/* The panel's one scroller, and it is not the log.
+ *
+ * `#chat-log` scrolled on its own while the lens, the notice and the
+ * suggestions around it were fixed, which crushed it to 28px at 900px tall and
+ * left a wheel over most of the panel moving nothing. Everything between the
+ * header and the input now scrolls as `#chat-body`, so "is the reader at the
+ * bottom" has to be asked of that element: asked of the log, which is now
+ * content-sized and never overflows, the answer would always be yes and the
+ * stream would drag a reader back down while they were re-reading.
+ *
+ * The log is still where messages are appended. Only the scroll moved. */
+function pulseScroller() {
+  return $('#chat-body') || $('#chat-log');
+}
 
 function isPinnedToBottom(el) {
   if (!el) return true;
@@ -28854,7 +28871,7 @@ async function streamTo(url, body, node) {
       try { payload = JSON.parse(data); } catch (e) { continue; }
       // Read the mode *before* this event lengthens the log, or the measurement is
       // taken against the new height and always looks scrolled-away.
-      const logEl = $('#chat-log');
+      const logEl = pulseScroller();
       const pinned = isPinnedToBottom(logEl);
 
       if (event === 'delta') {

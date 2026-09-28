@@ -2227,7 +2227,24 @@ body.chat-resizing svg { pointer-events: none; }
 #chat .chat-head .title { font-weight: 600; font-size: var(--t-body); text-transform: uppercase; letter-spacing: 0.04em; }
 #chat .chat-head .close { margin-left: auto; background: none; border: none; color: var(--ink-muted); cursor: pointer; font-size: var(--t-heading); }
 
-#chat .chat-log { flex: 1; overflow-y: auto; padding: var(--space-3) var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+/* The one scroller in the panel. `min-height: 0` because a flex item's
+   automatic minimum is its content height, which would let it grow past the
+   panel instead of scrolling inside it -- the same shape of fault that crushed
+   the log. `overscroll-behavior: contain` so reaching either end does not hand
+   the wheel to the page behind the fixed panel: a reader scrolling Pulse should
+   never find the terminal moving underneath it. */
+#chat .chat-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* Content-sized now. It was the scroller, and `flex: 1` inside a column whose
+   other children were all fixed is what squeezed it to 28px. */
+#chat .chat-log { padding: var(--space-3) var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+/* The inset the footer used to give it, and the log's own horizontal step so
+   the chips line up with the messages above them. */
+#chat .chat-body > .suggest { padding: 0 var(--space-4) var(--space-3); margin-bottom: 0; }
 .msg { font-size: var(--t-base); }
 .msg .who { font-size: var(--t-caption); text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); margin-bottom: var(--space-1); }
 .msg.user .bubble { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-lg); padding: var(--space-2) var(--space-3); }
