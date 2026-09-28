@@ -492,7 +492,18 @@ def _client():
         # wobble — an overloaded_error reached the UI as a raw traceback after
         # two tries. Five attempts costs nothing when the API is healthy and
         # absorbs the short spikes that cause almost all of these.
-        return AsyncAnthropic(max_retries=5)
+        kwargs: Dict[str, Any] = {"max_retries": 5}
+        # A personal API key -- one created as a user, rather than inside a
+        # workspace -- is refused on every call unless the request names a
+        # workspace: "This API key is not scoped to a workspace, so this request
+        # must include the anthropic-workspace-id header". Production hit
+        # exactly that on every chat and every brief, with a valid key and
+        # `enabled: true` reporting all was well. Setting the ID lets that key
+        # work; a workspace-scoped key needs nothing and leaves this unset.
+        workspace = (os.environ.get("ANTHROPIC_WORKSPACE_ID") or "").strip()
+        if workspace:
+            kwargs["default_headers"] = {"anthropic-workspace-id": workspace}
+        return AsyncAnthropic(**kwargs)
     except Exception:
         return None
 
@@ -589,6 +600,19 @@ def _human_error(exc: Exception) -> str:
                 "of minutes; a plain question should not, so try again.")
     if "connection" in blob or "network" in blob:
         return "Could not reach Anthropic's API. Check the machine's connection."
+    # Before the generic 400 below, because it is one, and it is the one
+    # production actually hit. It fell through to "unexpected error... Try
+    # again" -- which told every reader to retry a fault no retry can reach.
+    if "not scoped to a workspace" in blob or "anthropic-workspace-id" in blob:
+        return ("Pulse is not set up correctly on this deployment: its API key needs "
+                "a workspace, and Anthropic refuses every request until it has one. "
+                "Asking again will not help; the key has to be changed.")
+    # A 400 is the API saying the request itself is wrong, so the same request
+    # gets the same answer. Promising otherwise spends the reader's patience --
+    # and, on a metered plan, their allowance -- on a guaranteed failure.
+    if status == 400:
+        return ("The request was rejected as invalid ({}), so asking the same way "
+                "again will get the same answer.".format(name))
     # Unrecognised: keep the type name, which is the one useful part of the repr.
     return "The assistant failed with an unexpected error ({}). Try again.".format(name)
 
