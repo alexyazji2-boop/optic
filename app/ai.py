@@ -28,7 +28,17 @@ import logging
 
 log = logging.getLogger(__name__)
 
-MODEL = "claude-opus-5"
+# Opus 5.5, from Opus 5. Anthropic's pricing page lists `claude-opus-5` under
+# Legacy models at $5 in / $25 out per MTok, and Opus 5.5 as current at $4 /
+# $20: newer and cheaper at once, so there was no trade to weigh. Measured
+# against Pulse's real payload -- `build_context` caps the snapshot at 90,000
+# characters, about 25,000 input tokens once a ticker is loaded, and that is
+# roughly 85% of a message's cost -- the same $100 of credit went from about 680
+# messages to about 850.
+#
+# The one place the model is named. Every call below passes this constant and
+# `tests/test_pulse_model.py` fails on a literal, so a switch is this line.
+MODEL = "claude-opus-5-5"
 
 # Server-side refusal fallback: on a policy decline the API re-runs the request
 # on Anthropic's recommended fallback model inside the same call, so a false
