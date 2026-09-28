@@ -2490,12 +2490,37 @@ const CHART_COLOR_PRESETS = [
 function chartColorDefault(slot) {
   if (slot === 'up') return C.s3;
   if (slot === 'down') return C.s8;
-  return C.brand;                    // the line, in line mode: Optic's gold
+  // The line has no single default: it is green over a rise and red over a
+  // fall (priceLineColor). The rising colour is what the picker's wheel opens on.
+  return C.pos;
 }
 
 /** What to draw with. The override if there is one, the theme otherwise. */
 function chartColor(slot) {
   return chartColors[slot] || chartColorDefault(slot);
+}
+
+/* The price line: green when the price is up over the bars on screen, red when
+ * it is down. Asked for as "whenever a chart is in an increasing matter, make
+ * the line green, and in a decreasing matter, red", and chosen as one colour
+ * for the whole line, the way Robinhood and Google Finance draw it, measured
+ * from the first bar shown to the last, so a zoom or a pan reads it again. It
+ * was Optic's gold on every price chart, and before that one stage colour for
+ * a whole week of bars, so a falling stage-2 day was drawn green. A colour the
+ * reader picked for the line still wins. Fewer than two prices have no
+ * direction, and draw in the neutral ink. */
+function priceLineColor(values) {
+  if (chartColors.line) return chartColors.line;
+  const v = (values || []).filter((x) => Number.isFinite(x));
+  if (v.length < 2) return C.ink2;
+  return v[v.length - 1] >= v[0] ? C.pos : C.neg;
+}
+
+/* Every colour the line may be drawn in, for the averages to keep clear of.
+ * Both of the pair, since a pan can turn the line from one to the other, and an
+ * average that changed colour as the reader scrolled would be worse. */
+function lineMarks() {
+  return chartColors.line ? [chartColors.line] : [C.pos, C.neg];
 }
 
 /** Has the reader chosen anything at all? Drives the Reset button's state. */
@@ -8614,7 +8639,8 @@ function swingPriceBlock(d, ps, ctx) {
     // Before the averages: with Stages on, the mark they must not be mistaken
     // for is drawn in the stage colours. Same lookup as the Charting tab, on
     // this payload's own symbol.
-    const stages = stageTints(d.ticker, ps.dates, ps.intraday);
+    // Candles only. The line's colour is its direction (priceLineColor).
+    const stages = candleMode ? stageTints(d.ticker, ps.dates, ps.intraday) : null;
     const maOn = maColorsOnChart(candleMode, stages && stages.marks);
     const maColors = { fast: maOn.sma20, mid: maOn.sma50, slow: maOn.sma200 };
 
@@ -8652,7 +8678,7 @@ function swingPriceBlock(d, ps, ctx) {
         // and "Up day" would name a period none of them is.
         ? [{ name: ps.intraday ? 'Up bar' : ps.weekly ? 'Up week' : 'Up day', color: chartColor('up') },
           { name: ps.intraday ? 'Down bar' : ps.weekly ? 'Down week' : 'Down day', color: chartColor('down') }]
-        : [{ name: 'Close', color: chartColor('line') }]),
+        : [{ name: 'Close', color: priceLineColor(ps.close) }]),
       /* Derived from the same per-average switches as the series, so the
        * legend cannot name a line that is not on the chart. It previously
        * dropped the 200 entry on weekly while the series still drew it. */
@@ -8730,7 +8756,7 @@ function swingPriceBlock(d, ps, ctx) {
         // candles already draw.
         { name: 'Close',
           values: ps.close,
-          color: candleMode ? C.ink : chartColor('line'),
+          color: candleMode ? C.ink : priceLineColor(ps.close),
           tints: stages ? stages.colors : null,
           hidden: candleMode,
           fill: !candleMode },
@@ -12512,31 +12538,42 @@ const CHART_STYLE_KEY = 'optic.chart.style.v1';
  * deliberate: a settings dialog that offers a control the renderer ignores is
  * worse than no control. */
 const OVERLAY_DEFS = [
-  { id: 'sma20', label: 'SMA 20', group: 'Moving averages', color: 's2',
+  /* The averages have their own palette, --ma-1 to --ma-6, in the one part of
+   * the wheel nothing else on a price chart uses. They were s2, s3, s4, s5, s7
+   * and s6, and measured in CIE76 on the dark theme four of those sat on the
+   * chart's own colours: SMA 50 was the up candle exactly (0.0), EMA 50 was
+   * 17.0 from the green line, SMA 200 19.7 from the stage-3 amber, and SMA 20
+   * and EMA 9 25.7 and 25.4 from the red and the coral. Distance alone was not
+   * the test, either: a bright green clears 30 from the line's green on
+   * lightness and is still green. So the palette is blues, violets and orchids
+   * only; the clearances are in styles.css and asserted in test_ma_palette.py. */
+  { id: 'sma20', label: 'SMA 20', group: 'Moving averages', color: 'ma1',
     width: 1.5, params: { length: 20, offset: 0, source: 'close' } },
-  { id: 'sma50', label: 'SMA 50', group: 'Moving averages', color: 's3',
+  { id: 'sma50', label: 'SMA 50', group: 'Moving averages', color: 'ma2',
     width: 1.5, params: { length: 50, offset: 0, source: 'close' } },
-  { id: 'sma200', label: 'SMA 200', group: 'Moving averages', color: 's4',
+  { id: 'sma200', label: 'SMA 200', group: 'Moving averages', color: 'ma3',
     width: 1.5, params: { length: 200, offset: 0, source: 'close' } },
-  { id: 'ema9', label: 'EMA 9', group: 'Moving averages', color: 's5',
+  { id: 'ema9', label: 'EMA 9', group: 'Moving averages', color: 'ma4',
     width: 1.4, params: { length: 9, offset: 0, source: 'close' } },
-  { id: 'ema21', label: 'EMA 21', group: 'Moving averages', color: 's7',
+  { id: 'ema21', label: 'EMA 21', group: 'Moving averages', color: 'ma5',
     width: 1.4, params: { length: 21, offset: 0, source: 'close' } },
-  { id: 'ema50', label: 'EMA 50', group: 'Moving averages', color: 's6',
+  { id: 'ema50', label: 'EMA 50', group: 'Moving averages', color: 'ma6',
     width: 1.4, params: { length: 50, offset: 0, source: 'close' } },
   /* EMA clouds.
    *
    * `fill: true` marks an overlay that is an area rather than a stroke, which
    * the style dialog reads: a colour picker and a line width are both
-   * meaningless for a ribbon whose two colours are the app's directional pair,
-   * and offering them would be a control the renderer ignores.
+   * meaningless for a ribbon whose two colours are fixed, and offering them
+   * would be a control the renderer ignores. They were the green and red pair,
+   * which is now the price line's own, so a rising cloud under a rising line
+   * was one colour; they are the averages' blue over and orchid under instead.
    *
    * The pairs are the three EMAs the server already sends, taken adjacently.
    * 9/21 is the current leg; 21/50 is the trend it is running inside. */
   { id: 'cloud921', label: 'EMA 9 / 21 cloud', group: 'Moving averages',
-    color: 'pos', fill: true, width: 1 },
+    color: 'cloudUp', fill: true, width: 1 },
   { id: 'cloud2150', label: 'EMA 21 / 50 cloud', group: 'Moving averages',
-    color: 'pos', fill: true, width: 1 },
+    color: 'cloudUp', fill: true, width: 1 },
   { id: 'fib', label: 'Fibonacci', group: 'Levels', color: 'refFib', width: 1 },
   { id: 'sr', label: 'Support & resistance', group: 'Levels', color: 'refSR', width: 1 },
   { id: 'zones', label: 'Supply & demand', group: 'Levels', color: 'neg', width: 1 },
@@ -12748,7 +12785,12 @@ const IND_PRICE_PANE = ['vwap', 'bollinger', 'keltner', 'donchian', 'sec'];
  * including both put Keltner and the regression channel on one colour in the very
  * case this allocator exists to prevent.
  */
-const IND_COLOR_POOL = ['s7', 's5', 'ink2', 's8', 'refSR', 's6'];
+/* Gold first, now the price line is not gold. Coral and lime are out: coral was
+ * 6.2 from the red the line is drawn in over a fall, and lime 17.0 from its
+ * green, so a study in either read as the price. Violet is out as well, since
+ * the averages hold that part of the wheel. Every one left is at least 30 from
+ * each average and 26 from the line's pair (test_ma_palette.py). */
+const IND_COLOR_POOL = ['brand', 'ink2', 's5', 'refSR', 's4'];
 
 /* Last resort when the pool is exhausted.
  *
@@ -12814,7 +12856,7 @@ function overlayColorChosen(id) {
  * hues the moment anyone changed them. With Stages on, the real colours are
  * the four stage colours, and `marks` passes them: measured against up and
  * down instead, SMA 50 was moved off a teal no bar was drawn in, onto blue. */
-const MA_CANDLE_FALLBACKS = ['s1', 's2', 's4', 's5', 's7', 's6', 'ink2', 'refSR'];
+const MA_CANDLE_FALLBACKS = ['ma1', 'ma2', 'ma3', 'ma4', 'ma5', 'ma6', 'ink2'];
 const MA_SERIES_IDS = ['sma20', 'sma50', 'sma200', 'ema9', 'ema21', 'ema50'];
 
 function maColorsOnChart(candleMode, marks) {
@@ -12824,7 +12866,7 @@ function maColorsOnChart(candleMode, marks) {
   // 1. The immovable: the price mark as drawn, then every colour the reader picked.
   const fixed = new Set((marks || (candleMode
     ? [chartColor('up'), chartColor('down')]
-    : [chartColor('line')])).map(lc));
+    : lineMarks())).map(lc));
   MA_SERIES_IDS.forEach((id) => {
     if (!overlayColorChosen(id)) return;
     out[id] = overlayStyle(id).color;
@@ -13277,6 +13319,8 @@ function stageTints(symbol, dates, intraday) {
 /* The Charting tab's stages, from the one set of inputs its chart, legend and
  * study palette all use, so the three cannot disagree about what is drawn. */
 function wsStages(ps) {
+  // Candles only: the line's colour is its direction (priceLineColor).
+  if (!wsCandles(ps)) return null;
   return stageTints((STATE.chartData || {}).ticker, ps.dates, !!ps.intraday);
 }
 
@@ -13313,9 +13357,11 @@ function drawInstrumentChart(d) {
     () => ((STATE.instrument || {}).symbol || '') === stageSym);
   const candles = instrumentMode === 'candle' && d.open && d.high && d.low
     ? { open: d.open, high: d.high, low: d.low, close: d.close } : null;
-  const stages = stageTints(stageSym, d.dates, false);
+  // Candles only: the line's colour is its direction (priceLineColor).
+  const stages = candles ? stageTints(stageSym, d.dates, false) : null;
+  const lineColor = candles ? C.brand : priceLineColor(d.close);
   mount('legend-inst', legend([
-    ...(stages ? stages.key : [{ name: d.label, color: C.brand }]),
+    ...(stages ? stages.key : [{ name: d.label, color: lineColor }]),
     ...(d.volume ? [{ name: 'Volume', color: C.ink2, boxed: true }] : []),
   ]));
   mount('chart-inst', (w) => lineChart({
@@ -13323,7 +13369,7 @@ function drawInstrumentChart(d) {
     height: 380,
     labels: d.dates || [],
     volume: d.volume || null,
-    series: [{ name: d.label, values: d.close, color: C.brand,
+    series: [{ name: d.label, values: d.close, color: lineColor,
       tints: stages ? stages.colors : null,
       hidden: !!candles, fill: !candles }],
     candles,
@@ -14538,8 +14584,8 @@ function emaClouds(ps) {
       name: overlayStyle(id).label,
       fast,
       slow,
-      upColor: C.pos,
-      downColor: C.neg,
+      upColor: C.cloudUp,
+      downColor: C.cloudDown,
       // Low enough that a candle body or a support band underneath still reads
       // through it. The ribbon is context for the price, not a block over it.
       opacity: 0.17,
@@ -14845,23 +14891,29 @@ function markWarnText(contrast) {
 }
 
 function wsColorPop() {
-  /* Stages colour the candles and the line, so while they are drawn these
-   * rows are not what is on the chart, and a swatch that changed nothing
-   * would read as broken. Up and down still colour the volume bars. */
+  /* Stages colour the candles, so while they are drawn the candle rows are not
+   * what is on the chart, and a swatch that changed nothing would read as
+   * broken. Up and down still colour the volume bars. The line is not staged:
+   * its colour is its direction unless one is picked here. */
   const staged = wsOverlayDrawn('stages');
   return `<div class="ws-menu-pop ws-colors">
-    ${staged ? `<p class="ws-menu-note">Stages is on, so the candles and the line are
-      drawn in the colour of their stage. These colour the volume bars now, and
-      the candles and line again with Stages off.</p>` : ''}
+    ${staged ? `<p class="ws-menu-note">Stages is on, so the candles are drawn in the
+      colour of their stage. Up and down colour the volume bars now, and the candles
+      again with Stages off.</p>` : ''}
     ${CHART_COLOR_ROWS.map((row) => {
-    const current = chartColor(row.slot);
     const chosen = !!chartColors[row.slot];
-    const contrast = colorContrast(current);
+    // The line's default is green over a rise and red over a fall, so it has no
+    // single current colour, and no preset may show as pressed for it.
+    const paired = row.slot === 'line' && !chosen;
+    const current = paired ? null : chartColor(row.slot);
+    const contrast = current ? colorContrast(current) : null;
     return `<div class="wc-row">
       <div class="wc-head">
         <span class="wc-label">${esc(row.label)}</span>
-        <span class="wc-now" style="background:${esc(current)}"
-          title="Currently ${esc(current)}"></span>
+        <span class="wc-now" style="background:${esc(paired
+    ? `linear-gradient(90deg, ${C.pos} 50%, ${C.neg} 50%)` : current)}"
+          title="${esc(paired ? 'Green when the price is up over the bars shown, red when it is down'
+    : `Currently ${current}`)}"></span>
         ${chosen ? `<button type="button" class="wc-clear"
           data-ws-mark-clear="${esc(row.slot)}"
           title="Back to the theme colour">Default</button>` : ''}
@@ -14872,7 +14924,7 @@ function wsColorPop() {
       if (!value) return '';
       // aria-pressed rather than a class alone: this is a set of toggles and
       // the current one has to be announced, not just outlined.
-      const on = current.toLowerCase() === String(value).toLowerCase();
+      const on = !!current && current.toLowerCase() === String(value).toLowerCase();
       return `<button type="button" class="wc-swatch${on ? ' on' : ''}"
             style="background:${esc(value)}" aria-pressed="${on}"
             data-ws-mark="${esc(row.slot)}" data-ws-mark-value="${esc(value)}"
@@ -14880,7 +14932,7 @@ function wsColorPop() {
     }).join('')}
         <label class="wc-wheel" title="Any colour">
           <input type="color" data-ws-mark-pick="${esc(row.slot)}"
-            value="${esc(hexish(current))}" aria-label="${esc(row.label)}: pick any colour">
+            value="${esc(hexish(current || chartColor(row.slot)))}" aria-label="${esc(row.label)}: pick any colour">
           <span aria-hidden="true">+</span>
         </label>
       </div>
@@ -15972,7 +16024,7 @@ function chartBaseColors(ps, candleMode, intraday, marks) {
   // With Stages on the mark is drawn in the stage colours, so those are taken.
   const out = marks ? [...(candleMode ? [C.ink] : []), ...marks]
     : candleMode ? [C.ink, chartColor('up'), chartColor('down')]
-      : [chartColor('line')];
+      : lineMarks();
   if (showFib) out.push(C.refFib);
   if (showSR) out.push(C.refSR);
   // Volume-by-price and the volume strip both key in ink2. The strip's bars are
@@ -18471,7 +18523,7 @@ function wsMountChart() {
           // only so the crosshair and tooltip have something to read, and it is
           // not stroked. The reader's line colour applies to line mode, which
           // is the mode where a line is actually drawn.
-          color: wsCandles(ps) ? C.ink : chartColor('line'),
+          color: wsCandles(ps) ? C.ink : priceLineColor(ps.close),
           // Line mode's stage colours. Harmless in candle mode, where this
           // series is not stroked and the candles take the same array.
           tints: stages ? stages.colors : null,
@@ -19893,7 +19945,10 @@ function renderMarket(d) {
   `;
 
   views.market.querySelectorAll('[data-spark]').forEach((host) => {
-    try { host.appendChild(sparkline(JSON.parse(host.dataset.spark), 96, 24, C.brand)); } catch (e) { /* skip */ }
+    try {
+      const vals = JSON.parse(host.dataset.spark);
+      host.appendChild(sparkline(vals, 96, 24, priceLineColor(vals)));
+    } catch (e) { /* skip */ }
   });
   views.market.querySelectorAll('[data-bar]').forEach((host) => {
     host.appendChild(inlineBar(Number(host.dataset.bar), Number(host.dataset.barMax) || sectorMax, 70, 9));
@@ -23799,7 +23854,7 @@ function ltPriceBlock(h, lt, ltLevels) {
     mount('legend-weekly', legend([
       ...(ltCandles
         ? [{ name: `Up ${unit}`, color: C.s3 }, { name: `Down ${unit}`, color: C.s8 }]
-        : [{ name: `${ltSer.monthly ? 'Monthly' : 'Weekly'} close`, color: C.brand }]),
+        : [{ name: `${ltSer.monthly ? 'Monthly' : 'Weekly'} close`, color: priceLineColor(ltSer.close) }]),
       ...(ltMa40 ? [{ name: `40-${unit} average`, color: overlayStyle('sma50').color }] : []),
       ...(ltMa200 ? [{ name: `200-${unit} average`, color: overlayStyle('sma200').color }] : []),
       ...(showVol ? [{ name: 'Volume', color: C.ink2 }] : []),
@@ -23832,7 +23887,7 @@ function ltPriceBlock(h, lt, ltLevels) {
       volume: showVol ? (ltSer.volume || null) : null,
       series: [
         { name: `${ltSer.monthly ? 'Monthly' : 'Weekly'} close`,
-          values: ltSer.close, color: C.brand, hidden: ltCandles, fill: !ltCandles },
+          values: ltSer.close, color: priceLineColor(ltSer.close), hidden: ltCandles, fill: !ltCandles },
         ...(ltMa40 ? [{ name: `40-${unit} average`, values: ltMa40,
           color: overlayStyle('sma50').color, width: overlayStyle('sma50').width,
           marker: false }] : []),

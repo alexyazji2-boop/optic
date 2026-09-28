@@ -99,6 +99,13 @@ const C = {
    * uses: 7.87:1 on the plane and at least 81 points of RGB separation from
    * every series slot, the two reference hues, the grid and the baseline. */
   refSession: '#5ab7d1',
+
+  /* The moving averages and the EMA clouds, dark values; the light ones are
+   * in styles.css. Kept off the categorical slots because four of those sat
+   * on the chart's own colours (see OVERLAY_DEFS in app.js). */
+  ma1: '#648fd8', ma2: '#bd9efa', ma3: '#c461c9',
+  ma4: '#f4c1f6', ma5: '#6b6ff5', ma6: '#a855f7',
+  cloudUp: '#648fd8', cloudDown: '#c461c9',
 };
 
 // Which CSS custom property backs each slot.
@@ -112,6 +119,8 @@ const C_VARS = {
   stage1: '--stage-1', stage2: '--stage-2', stage3: '--stage-3', stage4: '--stage-4',
   accent: '--accent', brand: '--brand',
   refSR: '--ref-sr', refFib: '--ref-fib', refSession: '--ref-session',
+  ma1: '--ma-1', ma2: '--ma-2', ma3: '--ma-3', ma4: '--ma-4', ma5: '--ma-5', ma6: '--ma-6',
+  cloudUp: '--cloud-up', cloudDown: '--cloud-down',
 };
 
 /** Pull the live theme into C. Called at boot and whenever the OS theme flips. */

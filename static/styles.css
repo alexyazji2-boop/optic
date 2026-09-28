@@ -201,6 +201,21 @@
   --s6: #5fa617;
   --s7: #9085e9;
   --s8: #e66767;
+  /* The moving averages, in order SMA 20, 50, 200 and EMA 9, 21, 50, and the
+     EMA clouds over and under. Blues, violets and orchids only: the one part
+     of the wheel no price, candle, stage or level colour uses. Measured in
+     CIE76 each is at least 30 from every chart colour, including the session
+     dividers' cyan and the support-and-resistance magenta, at least 15 degrees
+     of hue from any of them, 4.5:1 or better on --surface, and at least 26
+     from every other average. See tests/test_ma_palette.py. */
+  --ma-1: #648fd8;
+  --ma-2: #bd9efa;
+  --ma-3: #c461c9;
+  --ma-4: #f4c1f6;
+  --ma-5: #6b6ff5;
+  --ma-6: #a855f7;
+  --cloud-up: #648fd8;
+  --cloud-down: #c461c9;
 
   /* diverging poles + neutral midpoint.
      Up is green here rather than blue. The palette's blue was chosen for
@@ -569,6 +584,16 @@
   --s6: #357a0f;
   --s7: #4a3aa7;
   --s8: #e34948;
+  /* The averages' light column: the same families, and the same clearances,
+     at 4.5:1 or better on the light surface. */
+  --ma-1: #29558e;
+  --ma-2: #2f148a;
+  --ma-3: #c124e0;
+  --ma-4: #5d2b73;
+  --ma-5: #2456e0;
+  --ma-6: #461dcd;
+  --cloud-up: #29558e;
+  --cloud-down: #c124e0;
 
   /* --pos and --neg are NOT redeclared here.
    *

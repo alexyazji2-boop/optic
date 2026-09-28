@@ -72,10 +72,12 @@ def test_the_defaults_are_the_slots_each_mark_already_used():
     in the app for readers who never asked for a colour.
 
     The line was s1, blue, on the same argument, until the owner asked for
-    every chart in Optic's own gold: that is someone asking, so it is C.brand
-    now, which follows --btn-primary."""
+    every chart in Optic's own gold, and then for the line to be green when
+    the price is up and red when it is down. That has no single default, so
+    chartColorDefault gives the rising colour, which is where the picker's
+    wheel opens, and priceLineColor draws the line."""
     fn = _fn(APP_JS, "chartColorDefault")
-    assert "C.s3" in fn and "C.s8" in fn and "C.brand" in fn
+    assert "C.s3" in fn and "C.s8" in fn and "return C.pos;" in fn
     assert "C.s1" not in fn
 
 
@@ -106,8 +108,8 @@ def test_both_charts_get_the_same_colours():
     # Both `Close` series, by name. A global count of chartColor('line') was the
     # wrong shape: it is legitimately read by chartBaseColors and by the Swing
     # tab's line-mode legend key as well, so the number moved for good reasons.
-    assert APP_JS.count("color: wsCandles(ps) ? C.ink : chartColor('line')") == 1
-    assert APP_JS.count("color: candleMode ? C.ink : chartColor('line')") == 1
+    assert APP_JS.count("color: wsCandles(ps) ? C.ink : priceLineColor(ps.close)") == 1
+    assert APP_JS.count("color: candleMode ? C.ink : priceLineColor(ps.close)") == 1
 
 
 # ------------------------------------------------------------------ the store

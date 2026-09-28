@@ -180,8 +180,20 @@ def test_each_chart_asks_for_its_own_payloads_symbol():
     to be the stages of the bars being drawn."""
     assert "const stages = wsStages(ps);" in _fn(APP, "wsMountChart")
     assert "stageTints((STATE.chartData || {}).ticker, ps.dates, !!ps.intraday)" in _fn(APP, "wsStages")
-    assert "const stages = stageTints(d.ticker, ps.dates, ps.intraday);" in _fn(APP, "swingPriceBlock")
-    assert "const stages = stageTints(stageSym, d.dates, false);" in _fn(APP, "drawInstrumentChart")
+    assert "stageTints(d.ticker, ps.dates, ps.intraday)" in _fn(APP, "swingPriceBlock")
+    assert "stageTints(stageSym, d.dates, false)" in _fn(APP, "drawInstrumentChart")
+
+
+def test_stages_colour_the_candles_and_the_line_keeps_its_direction():
+    """Asked for afterwards: "whenever a chart is in an increasing matter, make
+    the line green and in a decreasing matter, make the line red". A stage is a
+    week's reading, so a falling day in stage 2 was drawn green; the stage now
+    colours candles only, on all three charts, and the line is priceLineColor."""
+    assert "if (!wsCandles(ps)) return null;" in _fn(APP, "wsStages")
+    assert "const stages = candleMode ? stageTints(d.ticker, ps.dates, ps.intraday) : null;" \
+        in _fn(APP, "swingPriceBlock")
+    assert "const stages = candles ? stageTints(stageSym, d.dates, false) : null;" \
+        in _fn(APP, "drawInstrumentChart")
 
 
 def test_all_three_colour_both_candles_and_line_from_one_array():
@@ -191,7 +203,7 @@ def test_all_three_colour_both_candles_and_line_from_one_array():
 
 def test_the_legends_key_the_stages_instead_of_up_and_down():
     assert "...(stages ? stages.key : candleMode" in _fn(APP, "swingPriceBlock")
-    assert "...(stages ? stages.key : [{ name: d.label, color: C.brand }])" in _fn(APP, "drawInstrumentChart")
+    assert "...(stages ? stages.key : [{ name: d.label, color: lineColor }])" in _fn(APP, "drawInstrumentChart")
     leg = _fn(APP, "wsLegend")
     assert 'data-ws-leg="stages"' in leg
     assert 'data-ws-hide="stages"' in leg and 'data-ws-off="stages"' in leg

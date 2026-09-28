@@ -48,18 +48,19 @@ def test_the_charts_read_the_brand_token_so_the_theme_carries_it():
     assert "--brand: var(--btn-primary);" in CLEAN_CSS
 
 
-def test_the_line_defaults_to_the_gold_and_the_picker_offers_it():
-    assert "return C.brand;" in _fn(APP, "chartColorDefault")
+def test_the_picker_still_offers_the_gold():
+    """A price line is no longer gold by default: it was asked for green over a
+    rise and red over a fall (test_price_line_direction.py). Gold stays the
+    first preset for anyone who wants the old line back."""
     presets = APP[APP.index("CHART_COLOR_PRESETS = ["):]
     assert "{ slot: 'brand', label: 'Gold' }," in presets[:presets.index("];")]
 
 
+# The price lines left this list when they started following their direction:
+# the instrument page, the Investing chart, both their keys, and the Macro
+# table's sparklines. Everything below is a single-series chart of something
+# other than a price, and those are still the gold.
 PRIMARY_IN_APP = [
-    # the instrument page, its key, the Investing chart and its key
-    "series: [{ name: d.label, values: d.close, color: C.brand,",
-    "[{ name: d.label, color: C.brand }]",
-    "values: ltSer.close, color: C.brand, hidden: ltCandles",
-    "`${ltSer.monthly ? 'Monthly' : 'Weekly'} close`, color: C.brand }",
     # single-series charts
     "{ name: 'Trailing P/E', color: C.brand },",
     "values: pts.map((x) => x.pe), color: C.brand,",
@@ -67,7 +68,6 @@ PRIMARY_IN_APP = [
     "values: rel.ratio,\n      color: C.brand, fill: true }",
     "{ name: e.label, values: e.values, color: C.brand, fill: true }",
     "{ name: r.name, values: r.series || [], color: C.brand, fill: true }",
-    "sparkline(JSON.parse(host.dataset.spark), 96, 24, C.brand)",
     "values: pr.series.map((p) => p.balance), color: C.brand }",
     "color: i === 0 ? C.brand : C.s7,",
     # the oscillators, on the Options tab and in the Charting tab's panes
