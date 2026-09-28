@@ -2225,7 +2225,24 @@ body.chat-resizing svg { pointer-events: none; }
   gap: var(--space-2);
 }
 #chat .chat-head .title { font-weight: 600; font-size: var(--t-body); text-transform: uppercase; letter-spacing: 0.04em; }
-#chat .chat-head .close { margin-left: auto; background: none; border: none; color: var(--ink-muted); cursor: pointer; font-size: var(--t-heading); }
+#chat .chat-head .close { background: none; border: none; color: var(--ink-muted); cursor: pointer; font-size: var(--t-heading); }
+/* The chip takes the slack, not the close button.
+ *
+ * `margin-left: auto` sat on `.close`, which pushed only the x to the far edge
+ * and left the history button stranded directly after the chip -- so it moved
+ * every time the chip's text changed length, from "No context" to "NVDA
+ * options" to a list of four. The auto margin now sits on the chip's right, so
+ * everything after it is pushed to the edge as one group and the two buttons
+ * stay side by side whatever the chip says.
+ *
+ * `min-width: 0` and the ellipsis so a long context list shortens itself
+ * instead of shoving the buttons off the panel: the controls must survive the
+ * label, not the other way round. The full list is in the chip's title. */
+#chat .chat-head #chat-ctx { margin-right: auto; min-width: 0; }
+#chat .chat-head #chat-ctx > span:last-child {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#chat .chat-head .icon-btn, #chat .chat-head .close { flex-shrink: 0; }
 
 /* The one scroller in the panel. `min-height: 0` because a flex item's
    automatic minimum is its content height, which would let it grow past the
@@ -6450,6 +6467,27 @@ body.chat-full footer.legal { margin-right: 0; }
  * everything wraps -- but it degrades without overlap or a scrollbar. */
 body.chat-open header.topbar { padding-right: calc(var(--chat-w) + var(--space-5)); }
 body.chat-full header.topbar { padding-right: var(--space-5); }
+
+/* The status line and the session strip: the same fault, a third and fourth
+ * time.
+ *
+ * Both are siblings of `main` inside `.app-main` rather than children of it, so
+ * main's `margin-right` never reached them, and neither had a reservation of
+ * its own. Measured at 1600px with Pulse dragged to 560px, panel edge at
+ * x=1040: the status line and the session strip both ran to 1600, so the
+ * session phase legend and its paragraph were cut off under the panel mid-word.
+ * main, the topbar and the footer all stopped at the edge. With this, both wrap
+ * inside the remaining width instead -- which is what "collapse when Pulse is
+ * dragged to the side" asked for.
+ *
+ * Padding rather than margin, for the reason the topbar records above: both
+ * are painted, full-bleed surfaces, and pulling the box in would leave an
+ * unpainted strip beside the panel. `chat-full` after `chat-open`, because
+ * applyChatWidth adds one alongside the other and source order decides. */
+body.chat-open .statusline,
+body.chat-open .sessionbar { padding-right: calc(var(--chat-w) + var(--space-5)); }
+body.chat-full .statusline,
+body.chat-full .sessionbar { padding-right: var(--space-5); }
 
 .grid { gap: var(--space-4) var(--space-5); }
 

@@ -28103,6 +28103,33 @@ function updateChatContext() {
   const chip = $('#chat-ctx');
   chip.className = 'chip ' + (bits.length ? 'bull' : 'neutral');
   chip.innerHTML = `<span class="dot"></span><span>${bits.length ? esc(cap(bits.join(' · '))) : 'No context'}</span>`;
+  /* What the chip means, said on the chip.
+   *
+   * It lists the data Pulse is handed with every question, one word per set,
+   * and "NVDA options" is the shortest possible name for the biggest one: the
+   * loaded ticker's whole analysis, of which the options chain is only a part.
+   * Asked about directly -- "what does NVDA options mean" -- which is a label
+   * failing at its one job. The title spells each set out, and says the other
+   * half: Pulse cannot see anything that is not in the list. */
+  const CTX_MEANS = {
+    options: 'its analysis: price, momentum, positioning, dealer gamma, options flow and the strike ranker',
+    earnings: 'the earnings record',
+    'macro+sectors': 'the macro regime and sector rotation',
+    indices: 'the index cycle',
+    'roth model': 'the retirement model',
+    'long-term': 'the long-term view',
+    tracker: 'the paper-trading ledger',
+  };
+  const meant = bits.map((b) => {
+    const tail = b.split(' ').slice(1).join(' ');
+    if (tail === 'options') return b.split(' ')[0] + ', ' + CTX_MEANS.options;
+    return CTX_MEANS[b] || b;
+  });
+  chip.title = bits.length
+    ? 'What Pulse reads with every question: ' + meant.join('; ')
+      + '. It cannot see anything not listed here.'
+    : 'Nothing is loaded, so Pulse answers from your question alone. '
+      + 'Load a ticker or open Macro to give it the numbers.';
 
   /* The chip row above the input is now only for follow-ups on a loaded
    * symbol. The empty-state starter cards cover the "what can I ask" job
