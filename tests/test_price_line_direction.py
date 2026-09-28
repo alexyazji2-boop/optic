@@ -118,3 +118,9 @@ def test_the_picker_shows_the_pair_until_a_colour_is_picked():
     assert "const on = !!current && current.toLowerCase()" in pop, \
         "no preset may show as pressed for a default that is two colours"
     assert "the candles and the line are" not in RAW, "Stages no longer colour the line"
+
+
+def test_the_legend_says_stages_colour_the_candles_rather_than_that_they_failed():
+    """In line mode wsStages is null by design; the legend read "unavailable"."""
+    leg = _fn("wsLegend")
+    assert ": !wsCandles(ps) ? 'candles only' : !tinted ? 'unavailable'" in leg

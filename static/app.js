@@ -14732,8 +14732,11 @@ function wsLegend(ps) {
     const sym = (STATE.chartData || {}).ticker;
     const tinted = legStages;
     const r = sym ? (stageSettled.get(sym) || {}).r : null;
+    // "candles only" before "unavailable": in line mode there is no tint by
+    // design, since the line's colour is its direction, and calling a reading
+    // that loaded fine unavailable would send the reader looking for a fault.
     const why = hidden ? '' : !r ? 'loading' : r.available !== true ? 'not enough history'
-      : !tinted ? 'unavailable' : intra ? 'by week' : '';
+      : !wsCandles(ps) ? 'candles only' : !tinted ? 'unavailable' : intra ? 'by week' : '';
     rows.push(`<div class="ws-leg-row${hidden ? ' is-hidden' : ''}" data-ws-leg="stages"${
   r && r.available !== true && r.reason ? ` title="${esc(r.reason)}"` : ''}>
       <span class="ws-leg-name">Stages${why ? ` <span class="ws-leg-args">(${esc(why)})</span>` : ''}</span>
