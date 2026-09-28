@@ -104,8 +104,9 @@ def test_downloads_still_take_the_lock_that_keeps_them_apart():
     import inspect
     src = inspect.getsource(Y.YFinanceProvider.batch_history)
     assert "with _NET_LOCK:\n                    raw = yf.download(" in src
-    assert "with _key_lock(key):" in inspect.getsource(Y._cached)
-    assert "with _NET_LOCK" not in inspect.getsource(Y._cached)
+    path = inspect.getsource(Y._cached) + inspect.getsource(Y._fill)
+    assert "with _key_lock(key):" in path
+    assert "with _NET_LOCK" not in path
 
 
 def test_a_finished_fetch_does_not_wait_behind_callers_waiting_for_a_token():

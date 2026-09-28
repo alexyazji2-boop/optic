@@ -306,7 +306,10 @@ class _Timings:
                server was busy computing rather than waiting on Yahoo; other
                requests running at the same moment count as well.
       <leg>    each fetch, with when it started, how long the rate limiter
-               held it, how long its requests took, and how many it made
+               held it, how long it waited on a lock (the same data already
+               being fetched by another leg, or the download lock), how long
+               its requests took, and how many it made. A wait on the download
+               lock is inside a request, so it counts in both.
     """
 
     def __init__(self) -> None:
@@ -335,9 +338,10 @@ class _Timings:
                 return fn(*args, **kwargs)
             finally:
                 took = time.perf_counter() - began
-                gated, fetching, requests = yf_provider_mod.meter_read()
+                gated, locked, fetching, requests = yf_provider_mod.meter_read()
                 with self._lock:
-                    self.legs.append((name, began - self.t0, took, gated, fetching, requests))
+                    self.legs.append((name, began - self.t0, took, gated, locked,
+                                      fetching, requests))
         return timed
 
     def header(self) -> str:
@@ -356,10 +360,11 @@ class _Timings:
         # " / " inside the description rather than commas: a comma in a quoted
         # desc is legal, but it is also what every hand-rolled reader of this
         # header splits the metrics on, the first one written for it included.
-        for name, at, took, gated, fetching, requests in legs:
-            parts.append('{};dur={};desc="at {} ms / gate {} ms / fetch {} ms / {} req"'.format(
-                name, ms(took), ms(at).split(".")[0], ms(gated).split(".")[0],
-                ms(fetching).split(".")[0], requests))
+        for name, at, took, gated, locked, fetching, requests in legs:
+            parts.append(
+                '{};dur={};desc="at {} ms / gate {} ms / lock {} ms / fetch {} ms / {} req"'.format(
+                    name, ms(took), ms(at).split(".")[0], ms(gated).split(".")[0],
+                    ms(locked).split(".")[0], ms(fetching).split(".")[0], requests))
         return ", ".join(parts)
 
 
@@ -778,6 +783,7 @@ async def ticker_analysis(
     reader's own business and nothing here should assume one.
     """
     wanted = [e.strip() for e in expiries.split(",") if e.strip()] if expiries else None
+    _KEEP_WARM["read_at"] = time.time()
     timings = _Timings()
     payload = await _run(_swing_snapshot, ticker, wanted, max_expiries, macro,
                          include_earnings=True, budget=budget, parallel=True,
@@ -796,6 +802,7 @@ async def quick_quote(ticker: str, response: Response) -> Dict[str, Any]:
     call the build starts with, so asking for it first costs nothing: the
     build's own quote is then served from the cache this filled.
     """
+    _KEEP_WARM["read_at"] = time.time()
     timings = _Timings()
 
     def build() -> Dict[str, Any]:
@@ -1884,6 +1891,53 @@ async def _catalyst_loop() -> None:
         await asyncio.sleep(CATALYST_CHECK_MINUTES * 60)
 
 
+# The data every first load shares, kept fresh while anyone is reading.
+#
+# The macro basket and the sector funds' board are one download each, cached
+# for five minutes, and whichever reader's load found them expired paid for the
+# refetch: the macro leg was 3.0s to 3.2s of loads that were otherwise 1.5s on
+# the live site (ROST, TTWO, 2026-09-28), and the FRED calendar 3.2s of
+# another. Once warm they cost 0.07s, 0.001s and 0.006s. So a loop refetches
+# them in the jobs' lane before they expire (yf.refreshing_early): once at
+# boot, so the first reader after a deploy finds them ready, and after that
+# only while someone has loaded a symbol in the last KEEP_WARM_IDLE seconds,
+# because refetching baskets nobody is reading would be traffic for nothing.
+KEEP_WARM_SECONDS = 60
+KEEP_WARM_IDLE = 15 * 60
+KEEP_WARM_BOOT_DELAY = 5
+_KEEP_WARM: Dict[str, float] = {"read_at": 0.0}
+
+
+def _warm_shared() -> None:
+    """The ticker build's shared legs, each refetched if near its expiry."""
+    log = logging.getLogger("uvicorn.error")
+    with yf_provider_mod.refreshing_early():
+        for name, fn in (("macro", lambda: macro_mod.analyse(YF_PROVIDER)),
+                         ("sector board", lambda: sector_board_mod.build(YF_PROVIDER)),
+                         ("SPY", lambda: YF_PROVIDER.history("SPY", period="6mo", interval="1d")),
+                         ("calendar", _macro_calendar_rows)):
+            try:
+                fn()
+            except Exception as exc:                            # noqa: BLE001
+                log.info("keep-warm %s skipped: %s", name, exc)
+
+
+async def _keep_warm_loop() -> None:
+    _BACKGROUND_JOB.set(True)
+    await asyncio.sleep(KEEP_WARM_BOOT_DELAY)
+    first = True
+    while True:
+        try:
+            if first or time.time() - _KEEP_WARM["read_at"] < KEEP_WARM_IDLE:
+                await _run(_warm_shared)
+            first = False
+        except asyncio.CancelledError:                          # noqa: PERF203
+            raise
+        except Exception as exc:                                # noqa: BLE001
+            logging.getLogger("uvicorn.error").info("keep-warm pass failed: %s", exc)
+        await asyncio.sleep(KEEP_WARM_SECONDS)
+
+
 async def _warm_home() -> None:
     """Build the landing page's two slow payloads at boot, so no reader does.
 
@@ -1903,6 +1957,12 @@ async def _warm_home() -> None:
     for real, and a warm-up that raised would take the process down with it.
     """
     log = logging.getLogger("uvicorn.error")
+    # In the jobs' lane, all of it. Only the board's earnings scan was, and the
+    # homepage build ahead of it spent a reader's allowance at boot: a cold
+    # load a second after another, twelve seconds after a restart, was held
+    # at the limiter for up to 3.9s (STX, 2026-09-28). A reader who opens the
+    # homepage meanwhile fetches what is missing at a reader's priority.
+    _BACKGROUND_JOB.set(True)
     try:
         await asyncio.sleep(2)
         await home_summary()
@@ -1970,6 +2030,7 @@ async def _start_tracker() -> None:
     app.state.warm_task = asyncio.create_task(_warm_home())
     app.state.feedback_task = asyncio.create_task(_flush_feedback())
     app.state.catalyst_task = asyncio.create_task(_catalyst_loop())
+    app.state.keepwarm_task = asyncio.create_task(_keep_warm_loop())
     if TRACKER_AUTO:
         # Held on the app so the reference isn't garbage-collected mid-flight.
         app.state.tracker_task = asyncio.create_task(_tracker_loop())
@@ -1977,11 +2038,12 @@ async def _start_tracker() -> None:
 
 @app.on_event("shutdown")
 async def _stop_tracker() -> None:
-    # All four. A warm-up still sleeping when the server is told to stop would
+    # All five. A warm-up still sleeping when the server is told to stop would
     # otherwise keep the loop alive for its remaining two seconds and log a
     # "task was destroyed but it is pending" on the way out, and the feedback
     # flush sleeps fifteen times longer than that.
-    for name in ("tracker_task", "warm_task", "feedback_task", "catalyst_task"):
+    for name in ("tracker_task", "warm_task", "feedback_task", "catalyst_task",
+                 "keepwarm_task"):
         task = getattr(app.state, name, None)
         if task:
             task.cancel()

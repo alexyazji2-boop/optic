@@ -42,9 +42,14 @@ def _rows(header):
 
 
 def _desc(desc):
-    at, gate, fetch, req = re.match(
-        r"at (\d+) ms / gate (\d+) ms / fetch (\d+) ms / (\d+) req$", desc).groups()
+    at, gate, lock, fetch, req = re.match(
+        r"at (\d+) ms / gate (\d+) ms / lock (\d+) ms / fetch (\d+) ms / (\d+) req$",
+        desc).groups()
     return int(at), int(gate), int(fetch), int(req)
+
+
+def _lock(desc):
+    return int(re.search(r"lock (\d+) ms", desc).group(1))
 
 
 def test_the_ticker_route_sends_the_header(monkeypatch):
@@ -111,8 +116,8 @@ def test_the_meter_is_per_thread():
         t.start()
     for t in threads:
         t.join(5)
-    assert got["held"][0] >= 0.25 and got["held"][2] == 1
-    assert got["free"] == (0.0, 0.0, 0), "another thread's wait was counted here"
+    assert got["held"][0] >= 0.25 and got["held"][3] == 1
+    assert got["free"] == (0.0, 0.0, 0.0, 0), "another thread's wait was counted here"
 
 
 def test_a_fetch_inside_a_fetch_is_counted_once():
@@ -122,7 +127,7 @@ def test_a_fetch_inside_a_fetch_is_counted_once():
 
     Y.meter_reset()
     Y._cached("t:outer", 60, outer)
-    gated, fetching, requests = Y.meter_read()
+    gated, locked, fetching, requests = Y.meter_read()
     assert requests == 2
     assert 0.14 <= fetching < 0.25, "the inner 0.1s was counted twice: %.3f" % fetching
 
@@ -131,10 +136,10 @@ def test_a_failed_fetch_still_counts_its_time():
     Y.meter_reset()
     with pytest.raises(ValueError):
         Y._cached("t:bad", 60, lambda: time.sleep(0.05) or (_ for _ in ()).throw(ValueError()))
-    assert Y.meter_read()[1] >= 0.045
+    assert Y.meter_read()[2] >= 0.045
     Y.meter_reset()
     Y._cached("t:after", 60, lambda: time.sleep(0.02) or 1)
-    assert Y.meter_read()[1] >= 0.015, \
+    assert Y.meter_read()[2] >= 0.015, \
         "the failure left the depth raised, so the next fetch went uncounted"
 
 
@@ -159,3 +164,19 @@ def test_a_scan_pays_nothing_for_it(monkeypatch):
     legs.start("x", fn)
     assert legs._legs["x"][0] is fn
     assert legs.get("x") is marker
+
+
+def test_a_leg_waiting_on_another_legs_fetch_says_so():
+    # The sector check waits on the history leg's fetch of the same series;
+    # before this row existed, that read as a slow request it never made.
+    release = threading.Event()
+    t = threading.Thread(target=lambda: Y._cached("t:shared", 60,
+                                                  lambda: release.wait(2) and 1))
+    t.start()
+    time.sleep(0.05)
+    timings = main._Timings()
+    threading.Timer(0.2, release.set).start()
+    timings.wrap("sector", lambda: Y._cached("t:shared", 60, lambda: 2))()
+    t.join(5)
+    desc = _rows(timings.header())["sector"][1]
+    assert _lock(desc) >= 150 and _desc(desc)[3] == 0, desc

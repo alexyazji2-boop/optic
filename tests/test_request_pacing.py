@@ -124,7 +124,9 @@ def test_every_network_fetch_goes_through_the_gate():
     """One gate is only enough because `_cached` is the single path to the
     network in this module. A method that reached yfinance directly would
     bypass the limiter silently, and nothing about it would look wrong."""
-    src = inspect.getsource(Y._cached)
+    # _cached's miss path is _fill; together they are the one path.
+    src = inspect.getsource(Y._cached) + inspect.getsource(Y._fill)
+    assert "return _fill(" in inspect.getsource(Y._cached)
     assert "_wait_turn()" in src
     # And the limiter reacts to what the call did.
     assert "_on_throttle()" in src and "_on_success()" in src

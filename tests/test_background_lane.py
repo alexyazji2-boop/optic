@@ -162,3 +162,17 @@ def test_the_earnings_scans_run_in_the_jobs_lane_whoever_asks(monkeypatch):
     asyncio.run(main.priority_board())
     asyncio.run(main.earnings_week_calendar(offset=0))
     assert seen == [("board", True), ("week", True)]
+
+
+def test_the_boot_warm_up_runs_in_the_jobs_lane(monkeypatch):
+    async def instant(*a, **k):
+        return None
+
+    async def home():
+        raise _Stop(await main._run(Y.in_background))
+
+    monkeypatch.setattr(main.asyncio, "sleep", instant)
+    monkeypatch.setattr(main, "home_summary", home)
+    with pytest.raises(_Stop) as stop:
+        asyncio.run(main._warm_home())
+    assert stop.value.args == (True,)

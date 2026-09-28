@@ -94,10 +94,13 @@ def build(provider, ticker: str, sector_name: Optional[str]) -> Dict[str, Any]:
         # (2026-09-28). The stock's series is the ticker build's own two-year
         # history, already in flight; the fund and SPY are the same few series
         # for every stock. Only the last RS_WINDOW sessions are read, so the
-        # longer series changes no number.
+        # longer series changes no number. The fund's year is the series the
+        # strategy ideas' sector pair reads (swing._sector_pair_idea): at six
+        # months it was a second request for the same fund, made inside the
+        # build's own work where it waited at the limiter (WDC, 2026-09-28).
         frames = {
             ticker: provider.history(ticker, period="2y", interval="1d"),
-            etf: provider.history(etf, period="6mo", interval="1d"),
+            etf: provider.history(etf, period="1y", interval="1d"),
             "SPY": provider.history("SPY", period="6mo", interval="1d"),
         }
     except Exception as exc:                     # noqa: BLE001

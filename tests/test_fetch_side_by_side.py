@@ -74,7 +74,7 @@ def test_the_limiter_counts_the_one_request_it_lets_out(monkeypatch):
     provider = Y.YFinanceProvider()
     Y.meter_reset()
     provider.quote("ABC"), provider.short_interest("ABC"), provider.profile("ABC")
-    assert Y.meter_read()[2] == 1, "three tokens spent on one request: %r" % (Y.meter_read(),)
+    assert Y.meter_read()[3] == 1, "three tokens spent on one request: %r" % (Y.meter_read(),)
 
 
 def test_a_failed_scrape_still_reads_as_each_one_did(monkeypatch):
@@ -243,9 +243,30 @@ def test_the_sector_check_reads_the_builds_own_history_and_shared_series(monkeyp
     out = sector_confirm.build(provider, "NVDA", "Technology")
     # The stock's series under the same key as the ticker build's history leg,
     # so it is that leg's fetch, not another.
-    assert sorted(asked) == [("NVDA", "2y"), ("SPY", "6mo"), ("XLK", "6mo")]
+    assert sorted(asked) == [("NVDA", "2y"), ("SPY", "6mo"), ("XLK", "1y")]
     assert out["available"] and out["etf"] == "XLK"
     expect = lambda step: round(((100 + step * 139) / (100 + step * 118) - 1) * 100, 2)  # noqa: E731
     assert out["stock_return_pct"] == expect(1.0)
     assert out["etf_return_pct"] == expect(0.5)
     assert out["spy_return_pct"] == expect(0.2)
+
+
+
+def test_the_sector_check_and_the_sector_pair_read_one_fund_series(monkeypatch):
+    # Both ask for the same fund; one key means one request.
+    from app.analytics import sector_confirm, swing
+
+    asked = []
+    idx = pd.bdate_range("2025-09-01", periods=260)
+
+    def history(sym, period="2y", interval="1d"):
+        asked.append((sym, period, interval))
+        return pd.DataFrame({"Close": [100.0 + i for i in range(len(idx))]}, index=idx)
+
+    provider = types.SimpleNamespace(history=history)
+    monkeypatch.setattr(sector_confirm.sector_board, "build", lambda p: {"rows": []})
+    sector_confirm.build(provider, "NVDA", "Technology")
+    swing._sector_pair_idea({"ticker": "NVDA", "sector": "Technology"},
+                            history("NVDA"), provider)
+    fund = [a for a in asked if a[0] == "XLK"]
+    assert len(set(fund)) == 1, "two different requests for the fund: %r" % fund

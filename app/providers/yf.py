@@ -43,7 +43,51 @@ _CACHE: Dict[str, Any] = {}
 # symbol reads are safe together (batch_quote has run eight at once for weeks),
 # so _cached now holds a lock per key instead: a cold start still makes one
 # request per key, and different keys no longer wait on each other.
-_NET_LOCK = threading.RLock()
+class _ReaderFirstLock:
+    """A re-entrant lock whose next holder is a reader when one is waiting.
+
+    The scheduled jobs download too, the homepage board's sector funds among
+    them, and after a deploy a reader's macro and sector legs queued behind
+    them here: a cold VRSK spent about 8s of a 9.4s first load in legs that
+    made no request of their own (2026-09-28). A download already running still
+    finishes first; only who goes next changes.
+
+    A job never blocks inside the lock. It takes it only when it is free and no
+    reader is waiting, and otherwise looks again shortly, so whoever is blocked
+    on it when it comes free is a reader. A job blocked inside it would be
+    woken in no particular order against the reader beside it. After
+    MAX_YIELD_WAIT a job takes it whoever is waiting, so a stream of readers
+    cannot hold a scan up for good.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.RLock()
+        self._guard = threading.Lock()
+        self._readers_waiting = 0
+
+    def __enter__(self) -> "_ReaderFirstLock":
+        began = time.time()
+        if in_background():
+            deadline = began + MAX_YIELD_WAIT
+            while not ((not self._readers_waiting or time.time() >= deadline)
+                       and self._lock.acquire(blocking=False)):
+                time.sleep(0.01)
+        else:
+            with self._guard:
+                self._readers_waiting += 1
+            try:
+                self._lock.acquire()
+            finally:
+                with self._guard:
+                    self._readers_waiting -= 1
+        _METER.locked = float(getattr(_METER, "locked", 0.0)) + time.time() - began
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self._lock.release()
+
+
+_NET_LOCK = _ReaderFirstLock()
 
 # The limiter's state, the token bucket and the throttle window. Held only to
 # take a token or record a refusal, never across a network call or a wait
@@ -97,7 +141,15 @@ def _key_lock(key: str) -> threading.Lock:
 # spends most of the bucket and barely waits. A scan drains it in the first few
 # seconds and is then held at RATE, which is the sustained number Yahoo cares
 # about.
-YF_BURST = float(os.environ.get("YF_BURST", "12"))
+#
+# Twenty-four, from twelve. A cold first load is eleven or twelve requests
+# now (AKAM 12, FFIV 11, 2026-09-28), so twelve barely covered one, and a reader
+# who opened a second symbol a second later waited on the limiter for most of
+# it: a cold MRVL right after LRCX was held for up to 3.8s. Two loads' worth
+# covers that without touching the sustained rate; a third inside two seconds
+# still waits, about 2.5s, which is the limiter doing its job. The jobs' lane
+# waits for a full bucket, so it never spends this; readers do.
+YF_BURST = float(os.environ.get("YF_BURST", "24"))
 YF_RATE = float(os.environ.get("YF_RATE", "2.0"))         # requests/second
 YF_RATE_FLOOR = float(os.environ.get("YF_RATE_FLOOR", "0.25"))
 # How long a gated call will wait for an active backoff before giving up and
@@ -146,15 +198,18 @@ _METER = threading.local()
 
 def meter_reset() -> None:
     _METER.gated = 0.0
+    _METER.locked = 0.0
     _METER.fetching = 0.0
     _METER.requests = 0
 
 
-def meter_read() -> Tuple[float, float, int]:
-    """Seconds held at the gate, seconds inside fetches, and fetches made by
-    this thread since meter_reset."""
-    return (float(getattr(_METER, "gated", 0.0)), float(getattr(_METER, "fetching", 0.0)),
-            int(getattr(_METER, "requests", 0)))
+def meter_read() -> Tuple[float, float, float, int]:
+    """Since meter_reset, on this thread: seconds held at the gate, seconds
+    waiting on a lock (a fetch of the same key already in flight, or the
+    download lock), seconds inside fetches, and fetches made. A wait on the
+    download lock happens inside a fetch, so it is in both of the last two."""
+    return (float(getattr(_METER, "gated", 0.0)), float(getattr(_METER, "locked", 0.0)),
+            float(getattr(_METER, "fetching", 0.0)), int(getattr(_METER, "requests", 0)))
 
 
 # Two lanes through one limiter: a reader's fetches, and the scheduled jobs'.
@@ -194,21 +249,37 @@ def in_background() -> bool:
     return bool(getattr(_LANE, "background", False))
 
 
-def _yield_to_readers() -> None:
-    """Hold a job's fetch until the bucket is full, or MAX_YIELD_WAIT has passed."""
+def _yield_to_readers() -> bool:
+    """Hold a job's fetch until the bucket is full and no backoff is running,
+    then take its token there and then. True when it did; False when
+    MAX_YIELD_WAIT ran out first and the job should queue like anyone else.
+
+    Checked and taken under one hold of the lock, so two jobs cannot both
+    see the same full bucket and each spend it. Measured, that race almost
+    never happens (a job's check and take are microseconds apart and the
+    interpreter rarely switches threads between them), so this is for being
+    right rather than for a number."""
     began = time.time()
     deadline = began + MAX_YIELD_WAIT
+    took = False
     while True:
         with _PACE_LOCK:
             now = time.time()
             rate = max(float(_BUCKET["rate"]), YF_RATE_FLOOR)
             tokens = min(YF_BURST,
                          float(_BUCKET["tokens"]) + (now - float(_BUCKET["last"])) * rate)
-        short = YF_BURST - tokens
-        if short <= 1e-6 or now >= deadline:
+            if tokens >= YF_BURST - 1e-6 and now >= float(_THROTTLE["until"]):
+                _BUCKET["tokens"] = tokens - 1.0
+                _BUCKET["last"] = now
+                took = True
+        if took or now >= deadline:
             break
+        short = max(YF_BURST - tokens, 0.0)
         time.sleep(min(max(short / rate, 0.01), 0.5, max(deadline - now, 0.01)))
     _METER.gated = float(getattr(_METER, "gated", 0.0)) + time.time() - began
+    if took:
+        _METER.requests = int(getattr(_METER, "requests", 0)) + 1
+    return took
 
 
 def _wait_turn() -> None:
@@ -256,25 +327,38 @@ def _cached(key: str, ttl: float, producer, gate: bool = True):
     no request of its own (the quote, the short interest and the profile read
     one shared `.info` scrape). Gated, it would spend a token on a call that
     never reaches the network, and the limiter would count three requests for
-    the one it lets out."""
+    the one it lets out.
+
+    Inside refreshing_early(), an entry past REFRESH_EARLY_AT of its life counts
+    as expired, which is how the keep-warm loop refetches shared data before a
+    reader can find it expired. Nothing is ever served older than `ttl`."""
     now = time.time()
     hit = _CACHE.get(key)
-    if hit is not None and now - hit[0] < ttl:
+    fresh_for = ttl * REFRESH_EARLY_AT if getattr(_EARLY, "on", False) else ttl
+    if hit is not None and now - hit[0] < fresh_for:
         return hit[1]
+    return _fill(key, ttl, producer, gate, fresh_for)
 
-    if gate and in_background():
-        _yield_to_readers()
+
+def _fill(key: str, ttl: float, producer, gate: bool, fresh_for: float):
+    """Fetch `key` into the cache, unless an entry younger than `fresh_for`
+    arrived while this waited for the key."""
+    # A job's token is taken as it yields, outside the key lock; everyone
+    # else's at the gate below.
+    taken = bool(gate and in_background() and _yield_to_readers())
+    waited = time.time()
     with _key_lock(key):
+        _METER.locked = float(getattr(_METER, "locked", 0.0)) + time.time() - waited
         # Re-check: another thread may have populated the key while we waited,
         # which also collapses duplicate fetches on a cold start.
         hit = _CACHE.get(key)
-        if hit is not None and time.time() - hit[0] < ttl:
+        if hit is not None and time.time() - hit[0] < fresh_for:
             return hit[1]
         # Every network fetch in this module goes through here, which is the
         # only reason one gate is enough. A method that reached yfinance
         # directly would bypass the limiter silently. The gate is global; the
         # fetch after it is not (see _NET_LOCK).
-        if gate:
+        if gate and not taken:
             _wait_turn()
         # Outermost fetch only: a producer can call another cached fetch (the
         # quote falls back to the history), and counting both would count the
@@ -301,6 +385,24 @@ def _cached(key: str, ttl: float, producer, gate: bool = True):
             _on_success()
         _CACHE[key] = (time.time(), value)
         return value
+
+
+# How far into an entry's life the keep-warm loop refetches it: three minutes
+# of the macro basket's five, so a loop that runs every minute always lands in
+# the window before the entry expires.
+REFRESH_EARLY_AT = 0.6
+_EARLY = threading.local()
+
+
+@contextmanager
+def refreshing_early():
+    """On this thread, treat entries past REFRESH_EARLY_AT of their life as expired."""
+    prior = getattr(_EARLY, "on", False)
+    _EARLY.on = True
+    try:
+        yield
+    finally:
+        _EARLY.on = prior
 
 
 # ------------------------------------------------------------ throttle state
