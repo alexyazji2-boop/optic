@@ -230,7 +230,10 @@ class _FastInfo(dict):
     pass
 
 
-def _yf_stub(calls, known):
+def _yf_stub(calls, known, scrapes=None, hourly_skew=-30.0):
+    """`known[symbol]` is (last, prior close). The quote scrape answers with the
+    prior close; fast_info's hourly `previousClose` is off by `hourly_skew`, as
+    the real one was on 2026-09-28, so a test reading it gets the wrong number."""
     class _Ticker:
         def __init__(self, symbol):
             self.symbol = symbol
@@ -241,7 +244,14 @@ def _yf_stub(calls, known):
             if self.symbol not in known:
                 raise RuntimeError("possibly delisted")
             last, prev = known[self.symbol]
-            return _FastInfo(lastPrice=last, previousClose=prev)
+            return _FastInfo(lastPrice=last, previousClose=prev + hourly_skew,
+                             regularMarketPreviousClose=prev)
+
+        @property
+        def info(self):
+            if scrapes is not None:
+                scrapes.append(self.symbol)
+            return {"regularMarketPreviousClose": known[self.symbol][1]}
 
     return _Ticker
 
@@ -251,23 +261,83 @@ def yf_adapter(monkeypatch):
     """A YFinanceProvider whose fast_info is a stub, with a clean cache."""
     from app.providers import yf as adapter
 
-    for key in [k for k in adapter._CACHE if k.startswith("fastq:")]:
-        del adapter._CACHE[key]
+    _clear_quote_cache(adapter)
     calls: list = []
     known = {"ES=F": (7680.0, 7672.5), "GC=F": (4350.7, 4367.2),
              "^GSPC": (7600.0, 7585.5), "CL=F": (102.29, 104.78)}
     monkeypatch.setattr(adapter.yf, "Ticker", _yf_stub(calls, known))
     yield adapter.YFinanceProvider(), calls
-    for key in [k for k in adapter._CACHE if k.startswith("fastq:")]:
+    _clear_quote_cache(adapter)
+
+
+def _clear_quote_cache(adapter):
+    for key in [k for k in adapter._CACHE if k.startswith(("fastq:", "prevc:"))]:
         del adapter._CACHE[key]
 
 
-def test_adapter_reads_the_two_numbers_off_fast_info(yf_adapter):
+def test_adapter_reads_the_price_off_fast_info_and_the_prior_close_off_the_quote(yf_adapter):
     provider, _ = yf_adapter
     out = provider.batch_quote(["ES=F"])
     assert out["ES=F"]["last"] == 7680.0
-    assert out["ES=F"]["prev_close"] == 7672.5
+    assert out["ES=F"]["prev_close"] == 7672.5, "the hourly previousClose was read"
     assert out["ES=F"]["as_of"]
+
+
+# Measured on 2026-09-28 at 12:40 ET, E-mini S&P December. Yahoo's quote and
+# its daily bars both put Friday's settlement at 7803.75; fast_info's hourly
+# `previousClose` was Sunday evening's 7773.25.
+ES_LAST, ES_SETTLE, ES_SUNDAY = 7784.5, 7803.75, 7773.25
+
+
+@pytest.fixture()
+def es_adapter(monkeypatch):
+    from app.providers import yf as adapter
+    _clear_quote_cache(adapter)
+    calls, scrapes = [], []
+    monkeypatch.setattr(adapter.yf, "Ticker", _yf_stub(
+        calls, {"ES=F": (ES_LAST, ES_SETTLE)}, scrapes, hourly_skew=ES_SUNDAY - ES_SETTLE))
+    yield adapter, adapter.YFinanceProvider(), calls, scrapes
+    _clear_quote_cache(adapter)
+
+
+def test_the_day_is_measured_from_the_settlement_not_sunday_evening(es_adapter):
+    """The desk printed +0.12% for S&P 500 futures while the index was down
+    0.42%. From the settlement the same price is down, as the index was."""
+    _, provider, _, _ = es_adapter
+    quote = provider.batch_quote(["ES=F"])["ES=F"]
+    assert quote["prev_close"] == ES_SETTLE
+    snap = apply_quote({"chg_1d": 9.9}, quote)
+    assert snap["chg_1d"] == pytest.approx(-0.247, abs=0.001)
+
+
+def test_a_failed_scrape_falls_back_to_the_daily_bars_not_the_hourly_close(es_adapter,
+                                                                           monkeypatch):
+    adapter, provider, _, _ = es_adapter
+    ticker = adapter.yf.Ticker
+
+    class NoScrape(ticker):
+        @property
+        def info(self):
+            # Not a rate-limit message: that one trips the provider's real
+            # backoff, and every later test in the run then waits it out.
+            raise RuntimeError("quoteSummary returned nothing")
+
+    monkeypatch.setattr(adapter.yf, "Ticker", NoScrape)
+    assert provider.batch_quote(["ES=F"])["ES=F"]["prev_close"] == ES_SETTLE
+
+
+def test_the_prior_close_is_scraped_once_a_quarter_hour_and_the_price_every_time(es_adapter,
+                                                                                 monkeypatch):
+    adapter, provider, calls, scrapes = es_adapter
+    provider.batch_quote(["ES=F"])
+    real_time = adapter.time.time
+    monkeypatch.setattr(adapter.time, "time", lambda: real_time() + provider.TTL_QUOTE + 1)
+    provider.batch_quote(["ES=F"])
+    assert calls == ["ES=F", "ES=F"], "the price is refreshed on the quote clock"
+    assert scrapes == ["ES=F"], "the prior close is not"
+    monkeypatch.setattr(adapter.time, "time", lambda: real_time() + provider.TTL_PREV_CLOSE + 1)
+    provider.batch_quote(["ES=F"])
+    assert scrapes == ["ES=F", "ES=F"]
 
 
 def test_overlapping_callers_fetch_each_symbol_once(yf_adapter):

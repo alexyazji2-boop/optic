@@ -6384,9 +6384,22 @@ function morningDesk(data) {
              read into the phrasing should know which. */''}
         <p class="md-voice">${d.voice === 'written'
     ? `Written for today by ${esc(d.written_by || 'the assistant')} from the figures above and nothing else.`
-    : 'Assembled from the figures above. The written version needs the assistant, which is not configured on this deployment.'}</p>
+    : `Assembled from the figures above. ${esc(deskVoiceReason(d))}`}</p>
       </div>` : ''}
     </section>`;
+}
+
+/* Why the desk is in its assembled voice. The written one is left out once the
+ * tape has moved past the figures it quotes, and saying "not configured" for
+ * that, or for a day its note failed to write, was untrue on the live site. */
+function deskVoiceReason(d) {
+  if (d.voice_reason === 'moved') {
+    const at = d.written_at ? stampIn(d.written_at, activeZone()) : '';
+    return `The written version${at ? ` from ${at}` : ''} is not shown, because the market has `
+      + 'moved since it was written and its figures no longer match.';
+  }
+  if (d.voice_reason === 'unwritten') return "Today's written version could not be produced.";
+  return 'The written version needs the assistant, which is not configured on this deployment.';
 }
 
 function whatMattersNow(data) {

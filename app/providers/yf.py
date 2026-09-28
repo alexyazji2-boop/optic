@@ -338,13 +338,58 @@ class YFinanceProvider(MarketDataProvider):
     # 5.8s serially against 1.34s for the same symbols this way.
     QUOTE_WORKERS = 8
 
-    def batch_quote(self, tickers: List[str]) -> Dict[str, Dict[str, Any]]:
-        """Live price and prior settlement for many symbols, off the chart feed.
+    # The close a day's change is measured from, which changes once a session.
+    #
+    # It was `fast_info["previousClose"]`, which yfinance computes as the last
+    # hourly bar of the previous calendar date, extended hours included. For a
+    # future on a Monday that is Sunday evening's price, and on other days it
+    # is late the night before, never the settlement. Measured on 2026-09-28 at
+    # 12:40 ET across the macro strip: 14 of 22 rows disagreed with Yahoo's own
+    # quote. ES=F read 7773.25 against a settlement of 7803.75, NQ=F was out by
+    # 239 points and gold by 2%, so the desk printed S&P 500 futures up 0.12%
+    # while the index was down 0.42%. yfinance's `regularMarketPreviousClose`,
+    # off the daily bars, matched the index futures but not natural gas, copper
+    # or the currency pairs, which settle at other hours or count Sunday as a
+    # day. The quote's own field is right for every row. It is the slow scrape,
+    # which is why it is held for fifteen minutes while `last` stays fast.
+    TTL_PREV_CLOSE = 900
 
-        `fast_info` carries both numbers without the `.info` scrape, which is the
-        whole reason this exists: the cross-asset panels need the prior close for
-        every row, and paying a full quote for each would add six seconds to the
-        home page.
+    def _prior_close(self, symbol: str, ticker: Any, fast: Any) -> Optional[float]:
+        """The previous close from Yahoo's quote, else from the daily bars.
+
+        Never the hourly `previousClose`, for the reason TTL_PREV_CLOSE gives.
+        """
+        entry = _CACHE.get("prevc:" + symbol)
+        if entry is not None and time.time() - entry[0] < self.TTL_PREV_CLOSE:
+            return entry[1]
+        prev = None
+        try:
+            info = ticker.info or {}
+            prev = _f(info.get("regularMarketPreviousClose")) or _f(info.get("previousClose"))
+        except Exception as exc:                                # noqa: BLE001
+            if _is_rate_limit(exc):
+                note_throttle(exc)
+        if not prev:
+            # Right for the index futures, gold, crude and the cash indices, and
+            # near for the rest. A scrape that failed is not a reason to drop
+            # the row to bar arithmetic, which is worse for all of them.
+            try:
+                prev = _f(fast["regularMarketPreviousClose"])
+            except Exception:                                   # noqa: BLE001
+                prev = None
+        if prev:
+            _CACHE["prevc:" + symbol] = (time.time(), prev)
+        return prev
+
+    def batch_quote(self, tickers: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Live price and prior settlement for many symbols.
+
+        The price is off `fast_info`, without the `.info` scrape, which is the
+        whole reason this exists: the cross-asset panels need a fresh price for
+        every row, and paying a full quote for each on every build would add six
+        seconds to the home page. The prior close does come from the scrape, the
+        one number fast_info gets wrong (see TTL_PREV_CLOSE), and is held for
+        fifteen minutes because it only changes once a session.
         """
         def cached(symbol: str):
             """`(hit, quote)`. `hit` is False when absent or expired.
@@ -378,9 +423,10 @@ class YFinanceProvider(MarketDataProvider):
 
                 def one(symbol: str):
                     try:
-                        fast = yf.Ticker(symbol).fast_info
+                        ticker = yf.Ticker(symbol)
+                        fast = ticker.fast_info
                         return symbol, {"last": _f(fast["lastPrice"]),
-                                        "prev_close": _f(fast["previousClose"]),
+                                        "prev_close": self._prior_close(symbol, ticker, fast),
                                         "as_of": stamp}
                     except Exception as exc:                    # noqa: BLE001
                         if _is_rate_limit(exc):

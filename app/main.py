@@ -1041,11 +1041,55 @@ def _desk_prose(desk: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         logging.getLogger("uvicorn.error").warning(
             "morning desk prose unavailable: %s", exc)
         prose = None
+    if prose:
+        # What it was written against, so a later request can tell whether it
+        # still describes the tape (see _desk_moved).
+        prose["tape_marks"] = _desk_tape(desk)
+        prose["written_at"] = datetime.now(timezone.utc).isoformat()
     # One day at a time. Yesterday's note is of no use to anyone and holding it
     # would grow this dict for the life of the process.
     _DESK_PROSE.clear()
     _DESK_PROSE[day] = prose
     return prose
+
+
+# How far the tape may move before the written desk stops describing it.
+#
+# The written voice is written once a day and was served until midnight, so
+# the figures in its lead froze at whatever the first reader of the day saw:
+# a note that said futures were down slightly at 9am still said so after a
+# rally. Past these limits the deterministic desk is shown instead. It is
+# built on every request anyway, so being accurate costs nothing. A tenth of
+# a point is where a printed two-decimal change stops being a rounding matter,
+# and a change of the lead's own word ("up slightly" to "flat") is stale
+# whatever the size.
+DESK_STALE_PCT = 0.1
+DESK_STALE_VIX = 0.5
+
+
+def _desk_tape(desk: Dict[str, Any]) -> Dict[str, Optional[float]]:
+    """The figures the lead quotes: each index future's day change, and the VIX."""
+    tape = desk.get("tape") or {}
+    marks: Dict[str, Optional[float]] = {
+        r["symbol"]: r.get("chg_1d") for r in (tape.get("futures") or []) if r.get("symbol")}
+    marks["^VIX"] = (tape.get("vix") or {}).get("last")
+    return marks
+
+
+def _desk_moved(then: Dict[str, Optional[float]], now: Dict[str, Optional[float]]) -> bool:
+    for sym, was in then.items():
+        cur = now.get(sym)
+        if was is None or cur is None:
+            if was is not cur:
+                return True             # a figure appeared or vanished
+            continue
+        if sym == "^VIX":
+            if abs(cur - was) > DESK_STALE_VIX:
+                return True
+        elif (abs(cur - was) > DESK_STALE_PCT
+              or morning_desk_mod._move_word(cur) != morning_desk_mod._move_word(was)):
+            return True
+    return False
 
 
 def _morning_desk(macro: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -1098,6 +1142,16 @@ def _morning_desk(macro: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     # and a section the model declines to write keeps the deterministic one.
     desk["voice"] = "mechanical"
     prose = _desk_prose(desk)
+    # Why the written voice is not the one showing, for the line under the desk.
+    # It said "not configured on this deployment" for every case, which was
+    # untrue on the live site the day its note failed to write.
+    if prose and _desk_moved(prose.get("tape_marks") or {}, _desk_tape(desk)):
+        desk["voice_reason"] = "moved"
+        desk["written_at"] = prose.get("written_at")
+        prose = None
+    elif not prose:
+        desk["voice_reason"] = ("unconfigured" if ai.available().get("enabled") is not True
+                                else "unwritten")
     if prose:
         desk["voice"] = "written"
         desk["written_by"] = prose.get("written_by")
