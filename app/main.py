@@ -1732,12 +1732,17 @@ def _wants_candidates(text: str) -> bool:
 # one month on the client, and both lists are looked up by the same string:
 # the 1M range pill would have loaded a one-minute chart. See CHART_INTERVALS.
 INTRADAY_SPECS = {
-    "1": {"period": "1d", "interval": "1m"},
-    "5": {"period": "5d", "interval": "5m"},
-    "15": {"period": "1mo", "interval": "15m"},
-    "30": {"period": "1mo", "interval": "30m"},
-    "60": {"period": "3mo", "interval": "60m"},
-    "240": {"period": "1y", "interval": "4h"},
+    # `windows` are the lookbacks each size offers, as 1D offers 1M to All.
+    # Measured on PLTR: the feed serves up to 7 days of 1m bars, 60 days at 5m
+    # to 30m and two years at 1h and 4h. Capped nearer 2,000 bars than the
+    # feed's limit (5m over 60 days is 4,680), because every one is drawn and
+    # redrawn on each zoom step.
+    "1": {"period": "1d", "interval": "1m", "windows": ["1d", "5d"]},
+    "5": {"period": "5d", "interval": "5m", "windows": ["1d", "5d", "1mo"]},
+    "15": {"period": "1mo", "interval": "15m", "windows": ["5d", "1mo", "60d"]},
+    "30": {"period": "1mo", "interval": "30m", "windows": ["5d", "1mo", "60d"]},
+    "60": {"period": "3mo", "interval": "60m", "windows": ["1mo", "3mo", "6mo", "1y"]},
+    "240": {"period": "1y", "interval": "4h", "windows": ["3mo", "6mo", "1y", "2y"]},
     # The two keys the range pills used before the ladder existed. Kept as
     # aliases: a client holding a stored preference or a page mid-session still
     # asks for these, and answering them costs two entries.
@@ -1746,8 +1751,25 @@ INTRADAY_SPECS = {
 }
 
 
+def intraday_spec(key: str, window: str = "") -> Optional[Dict[str, Any]]:
+    """The spec for an intraday size, with its window if it is one of the
+    size's own; None for an unknown size or a window it does not offer. One
+    function for the bars, the studies and the trend lines, so the three are
+    always computed on the same frame."""
+    spec = INTRADAY_SPECS.get((key or "").lower())
+    if not spec:
+        return None
+    win = (window or "").lower()
+    if not win or win == spec["period"]:
+        return spec
+    if win not in spec.get("windows", ()):
+        return None
+    return {**spec, "period": win}
+
+
 @app.get("/api/intraday/{ticker}")
-async def intraday(ticker: str, range: str = Query("1d")) -> Dict[str, Any]:
+async def intraday(ticker: str, range: str = Query("1d"),
+                   window: str = Query("", description="One of the size's windows")) -> Dict[str, Any]:
     """Intraday bars for the short-range chart pills.
 
     Separate from /api/ticker deliberately. That payload is daily bars and the
@@ -1759,8 +1781,14 @@ async def intraday(ticker: str, range: str = Query("1d")) -> Dict[str, Any]:
     splicing them into the same line as regular-hours trade draws gaps and
     spikes that look like price action and are not.
     """
-    spec = INTRADAY_SPECS.get((range or "").lower())
+    spec = intraday_spec(range, window)
     if not spec:
+        known = INTRADAY_SPECS.get((range or "").lower())
+        if known:
+            return {"available": False,
+                    "reason": "{} bars are offered over {}, not {!r}.".format(
+                        known["interval"], ", ".join(known.get("windows") or [known["period"]]),
+                        window)}
         return {"available": False,
                 "reason": "Unknown range {!r}. Expected one of: {}.".format(
                     range, ", ".join(sorted(INTRADAY_SPECS)))}
@@ -1853,6 +1881,7 @@ async def intraday(ticker: str, range: str = Query("1d")) -> Dict[str, Any]:
             "ticker": symbol,
             "range": range,
             "interval": spec["interval"],
+            "window": spec["period"],
             "times": times,
             "opens": opens,
             "highs": highs,
@@ -2292,7 +2321,8 @@ async def weekly_bars(ticker: str) -> Dict[str, Any]:
 @app.get("/api/trendlines/{ticker}")
 async def trendlines_panel(ticker: str,
                            period: str = Query("1y"),
-                           intraday: str = Query("", description="An /api/intraday range key")) -> Dict[str, Any]:
+                           intraday: str = Query("", description="An /api/intraday range key"),
+                           window: str = Query("", description="That size's window")) -> Dict[str, Any]:
     """Trend lines fitted to pivots, and whether price has broken one.
 
     `intraday` fits them to that rung's bars instead of a year of daily ones,
@@ -2300,7 +2330,7 @@ async def trendlines_panel(ticker: str,
     it was fitted to. Off under a day until now, which left Auto trend lines a
     switch that drew nothing on every size below 1D."""
     sym = ticker.strip().upper()
-    spec = INTRADAY_SPECS.get((intraday or "").lower()) if intraday else None
+    spec = intraday_spec(intraday, window) if intraday else None
     if intraday and not spec:
         return {"available": False,
                 "reason": "Unknown intraday range {!r}.".format(intraday)}
@@ -2714,6 +2744,7 @@ async def indicator_panel(
     range_: str = Query("2y", alias="range"),
     anchor: str = Query("", description="Anchor date for VWAP, YYYY-MM-DD"),
     intraday: str = Query("", description="An /api/intraday range key, e.g. 5 or 60"),
+    window: str = Query("", description="That size's window, as /api/intraday takes it"),
     weekly: bool = Query(False, description="Compute on weekly bars"),
 ) -> Dict[str, Any]:
     """Optional indicators, computed only for the ids asked for.
@@ -2738,7 +2769,7 @@ async def indicator_panel(
     def build() -> Dict[str, Any]:
         sym = ticker.upper().strip()
         wanted = [i for i in (ids or "").replace(" ", "").split(",") if i]
-        spec = INTRADAY_SPECS.get((intraday or "").lower()) if intraday else None
+        spec = intraday_spec(intraday, window) if intraday else None
         if intraday and not spec:
             return {"available": False,
                     "reason": "Unknown intraday range {!r}. Expected one of: {}.".format(

@@ -136,11 +136,11 @@ def test_the_panes_recompute_on_intraday_bars():
 
 def test_both_tabs_key_their_studies_to_the_bars():
     bars = _fn("studyBars")
-    assert "if (isIntradayRange(chartRange)) return chartRange;" in bars
+    assert "if (isIntradayRange(chartRange)) return intradayBarsKey();" in bars
     assert "return chartInterval === 'weekly' ? 'weekly' : 'daily';" in bars
     query = _fn("studyQuery")
     assert "if (bars === 'weekly') return '&weekly=true&range=10y';" in query
-    assert "return '&intraday=' + encodeURIComponent(bars);" in query
+    assert "return '&' + intradayQuery(bars);" in query
     ws = _fn("wsLoadIndicators")
     assert "&& wsIndicators.bars === bars && !wsIndicators.loading" in ws
     assert "+ studyQuery(bars));" in ws

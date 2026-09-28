@@ -1802,12 +1802,13 @@ const CHART_INTERVALS = [
    *
    * A count of minutes has no such clash, and it is the notation the rest of
    * the industry already uses for a resolution. */
-  { key: '1', label: '1m', intraday: true, window: '1 day', feed: '1m' },
-  { key: '5', label: '5m', intraday: true, window: '5 days', feed: '5m' },
-  { key: '15', label: '15m', intraday: true, window: '1 month', feed: '15m' },
-  { key: '30', label: '30m', intraday: true, window: '1 month', feed: '30m' },
-  { key: '60', label: '1h', intraday: true, window: '3 months', feed: '60m' },
-  { key: '240', label: '4h', intraday: true, window: '1 year', feed: '4h' },
+  // `period` is the window each size opens on; the others are INTRADAY_WINDOWS.
+  { key: '1', label: '1m', intraday: true, window: '1 day', feed: '1m', period: '1d' },
+  { key: '5', label: '5m', intraday: true, window: '5 days', feed: '5m', period: '5d' },
+  { key: '15', label: '15m', intraday: true, window: '1 month', feed: '15m', period: '1mo' },
+  { key: '30', label: '30m', intraday: true, window: '1 month', feed: '30m', period: '1mo' },
+  { key: '60', label: '1h', intraday: true, window: '3 months', feed: '60m', period: '3mo' },
+  { key: '240', label: '4h', intraday: true, window: '1 year', feed: '4h', period: '1y' },
   { key: 'daily', label: '1D' },
   { key: 'weekly', label: '1W' },
 ];
@@ -1872,7 +1873,67 @@ function chartIntervalLabel() {
  * server actually fetched and is the only part of it a reader can use. */
 function chartWindowLabel() {
   if (!isIntradayRange(chartRange)) return chartRange;
-  return (chartIntervalSpec(chartRange) || {}).window || chartRange;
+  const spec = chartIntervalSpec(chartRange) || {};
+  const win = intradayWindow(chartRange);
+  return (win !== spec.period && WINDOW_WORDS[win]) || spec.window || chartRange;
+}
+
+/* The lookbacks each intraday size offers: the intraday counterpart of 1D's
+ * range pills. The same lists as INTRADAY_SPECS in app/main.py, which refuses
+ * a window a size does not offer, and tests/test_timeframe_parity.py holds the
+ * two to the same lists. Kept apart from CHART_INTERVALS so the ladder's own
+ * entries keep their shape. */
+const INTRADAY_WINDOWS = {
+  1: [{ key: '1d', label: '1D' }, { key: '5d', label: '5D' }],
+  5: [{ key: '1d', label: '1D' }, { key: '5d', label: '5D' }, { key: '1mo', label: '1M' }],
+  15: [{ key: '5d', label: '5D' }, { key: '1mo', label: '1M' }, { key: '60d', label: '60D' }],
+  30: [{ key: '5d', label: '5D' }, { key: '1mo', label: '1M' }, { key: '60d', label: '60D' }],
+  60: [{ key: '1mo', label: '1M' }, { key: '3mo', label: '3M' }, { key: '6mo', label: '6M' },
+    { key: '1y', label: '1Y' }],
+  240: [{ key: '3mo', label: '3M' }, { key: '6mo', label: '6M' }, { key: '1y', label: '1Y' },
+    { key: '2y', label: '2Y' }],
+};
+
+/* The window each intraday size is drawn over: the reader's choice where it is
+ * one the size offers, the size's own default otherwise. Remembered per size,
+ * as 1D remembers its range. */
+const INTRADAY_WINDOW_KEY = 'optic.chart.intradayWindow.v1';
+const WINDOW_WORDS = { '1d': '1 day', '5d': '5 days', '1mo': '1 month', '60d': '60 days',
+  '3mo': '3 months', '6mo': '6 months', '1y': '1 year', '2y': '2 years' };
+let intradayWindows = {};
+try {
+  const saved = JSON.parse(localStorage.getItem(INTRADAY_WINDOW_KEY) || '{}');
+  if (saved && typeof saved === 'object') intradayWindows = saved;
+} catch (e) { /* private mode, or hand-edited storage */ }
+
+function intradayWindow(rung) {
+  const spec = chartIntervalSpec(rung);
+  const offered = INTRADAY_WINDOWS[rung];
+  if (!spec || !offered) return (spec && spec.period) || '';
+  const want = intradayWindows[rung];
+  return offered.some((w) => w.key === want) ? want : spec.period;
+}
+
+function setIntradayWindow(rung, win) {
+  intradayWindows = { ...intradayWindows, [rung]: win };
+  try { localStorage.setItem(INTRADAY_WINDOW_KEY, JSON.stringify(intradayWindows)); }
+  catch (e) { /* private mode: remembered for the session */ }
+}
+
+/* The key for the bars on screen under a day: the size alone on its default
+ * window, so every set of drawings, studies and trend lines made before
+ * windows existed still matches, and size~window on any other. */
+function intradayBarsKey(rung) {
+  const r = rung || chartRange;
+  const win = intradayWindow(r);
+  const spec = chartIntervalSpec(r);
+  return !spec || !spec.period || win === spec.period ? r : `${r}~${win}`;
+}
+
+/* An /api query for those bars: the size, and its window when not the default. */
+function intradayQuery(barsKey) {
+  const [rung, win] = String(barsKey).split('~');
+  return 'intraday=' + encodeURIComponent(rung) + (win ? '&window=' + encodeURIComponent(win) : '');
 }
 
 /* ---------------------------------------------------- client-side indicators
@@ -14898,11 +14959,14 @@ function wsToolbar() {
          weekly halves of it write to different variables -- see the comment
          on CHART_INTERVALS -- but a reader is choosing one thing. */''}
     ${rangePills(CHART_INTERVALS, activeIntervalKey(), 'data-ws-interval', 'Interval')}
-    ${isIntradayRange(chartRange)
-    // The lookback is fixed per intraday size: the server fetches a window
-    // chosen to land near a readable bar count, and the range pills describe
-    // spans of daily bars that this series does not have. Shown disabled
-    // rather than removed so the toolbar does not change shape.
+    ${isIntradayRange(chartRange) && (INTRADAY_WINDOWS[chartRange] || []).length
+    /* Each size's own windows, where 1D has its ranges. This was one disabled
+       pill naming a fixed lookback; the feed serves far more (60 days at 5m,
+       two years at 1h), so each size offers what it can draw readably. */
+    ? rangePills(INTRADAY_WINDOWS[chartRange], intradayWindow(chartRange),
+      'data-ws-iwin', 'Window')
+    : isIntradayRange(chartRange)
+    // A legacy key with no windows of its own: the old fixed pill, disabled.
     ? `<div class="pills" role="group" aria-label="Range"
         title="An intraday size is fetched with the window that keeps it readable">
         <button type="button" class="pill on" disabled aria-pressed="true">${
@@ -15004,7 +15068,7 @@ try {
  * index that was a different date. */
 function wsDrawKey() {
   const sym = STATE.chartSymbol || '';
-  if (isIntradayRange(chartRange)) return `${sym}@${chartRange}`;
+  if (isIntradayRange(chartRange)) return `${sym}@${intradayBarsKey()}`;
   // Weekly bar 120 is a different date from daily bar 120 too.
   return chartInterval === 'weekly' ? `${sym}@1W` : sym;
 }
@@ -15619,8 +15683,8 @@ function wsFullSeries(d) {
 function wsBaseSeries(d) {
   if (isIntradayRange(chartRange)) {
     if (!wsIntraday || wsIntraday.symbol !== STATE.chartSymbol
-        || wsIntraday.range !== chartRange || wsIntraday.loading
-        || wsIntraday.available === false) return { dates: [] };
+        || wsIntraday.range !== chartRange || wsIntraday.window !== intradayWindow(chartRange)
+        || wsIntraday.loading || wsIntraday.available === false) return { dates: [] };
     const intra = intradaySeries(wsIntraday);
     return intra ? wsWithOscillators(intra, null, true) : { dates: [] };
   }
@@ -15666,25 +15730,27 @@ let wsIntraday = null;
 async function wsLoadIntraday() {
   const symbol = STATE.chartSymbol;
   const range = chartRange;
+  const win = intradayWindow(range);
   if (!symbol) return;
   if (wsIntraday && wsIntraday.symbol === symbol && wsIntraday.range === range
-      && !wsIntraday.loading) {
+      && wsIntraday.window === win && !wsIntraday.loading) {
     // Cached, but still repaint. Returning without one meant switching back to
     // a range that had already been fetched left the previous range's chart and
     // legend on screen with the new pill lit.
     wsRedrawChart();
     return;
   }
-  wsIntraday = { symbol, range, loading: true };
+  wsIntraday = { symbol, range, window: win, loading: true };
   wsRedrawChart();
   try {
     const data = await getJSON('/api/intraday/' + encodeURIComponent(symbol)
-      + '?range=' + encodeURIComponent(range));
-    // The reader may have changed symbol or range while this was in flight.
-    if (STATE.chartSymbol !== symbol || chartRange !== range) return;
-    wsIntraday = { ...data, symbol, range };
+      + '?range=' + encodeURIComponent(range)
+      + (win ? '&window=' + encodeURIComponent(win) : ''));
+    // The reader may have changed symbol, size or window while this was in flight.
+    if (STATE.chartSymbol !== symbol || chartRange !== range || intradayWindow(range) !== win) return;
+    wsIntraday = { ...data, symbol, range, window: win };
   } catch (err) {
-    wsIntraday = { symbol, range, available: false, reason: err.message };
+    wsIntraday = { symbol, range, window: win, available: false, reason: err.message };
   }
   wsRedrawChart();
 }
@@ -15743,7 +15809,7 @@ function wsPriceIndicatorIds() {
  * by counting back from the newest bar, so a two-year weekly chart carried the
  * last five months of a daily Bollinger band stretched across it. */
 function studyBars() {
-  if (isIntradayRange(chartRange)) return chartRange;
+  if (isIntradayRange(chartRange)) return intradayBarsKey();
   return chartInterval === 'weekly' ? 'weekly' : 'daily';
 }
 
@@ -15752,7 +15818,7 @@ function studyQuery(bars) {
   if (bars === 'daily') return '';
   // Ten years, the span the weekly chart draws.
   if (bars === 'weekly') return '&weekly=true&range=10y';
-  return '&intraday=' + encodeURIComponent(bars);
+  return '&' + intradayQuery(bars);
 }
 
 async function wsLoadIndicators() {
@@ -15892,7 +15958,8 @@ function wsSeries(d) {
   // daily-derived overlays apply to it — see intradaySeries().
   if (isIntradayRange(chartRange)) {
     if (!wsIntraday || wsIntraday.symbol !== STATE.chartSymbol
-        || wsIntraday.range !== chartRange || wsIntraday.loading) {
+        || wsIntraday.range !== chartRange || wsIntraday.window !== intradayWindow(chartRange)
+        || wsIntraday.loading) {
       return wsIntradayStub(wsIntraday && wsIntraday.loading
         ? 'Loading intraday bars…' : 'Intraday bars not loaded yet.');
     }
@@ -15964,7 +16031,7 @@ function wsCandlesPossible() {
   if (isIntradayRange(chartRange)) {
     const intra = wsIntraday;
     if (!intra || intra.loading || intra.symbol !== STATE.chartSymbol
-        || intra.range !== chartRange) return true;
+        || intra.range !== chartRange || intra.window !== intradayWindow(chartRange)) return true;
     return !!(intra.opens && intra.highs && intra.lows);
   }
   const raw = ((STATE.chartData || {}).technicals || {}).price_series || {};
@@ -16641,7 +16708,7 @@ function trendSegments(tl, chartDates, opts) {
 /* Which bars a trend-line payload was fitted to: this rung's under a day, a
  * year of daily ones otherwise (a weekly chart has always drawn those). */
 function trendBars() {
-  return isIntradayRange(chartRange) ? chartRange : 'daily';
+  return isIntradayRange(chartRange) ? intradayBarsKey() : 'daily';
 }
 
 /* The trend lines for the chart on screen, or null. Fitted to a year of daily
@@ -16749,7 +16816,7 @@ async function loadTrendlines(symbol, force) {
   let data;
   try {
     data = await getJSON(`/api/trendlines/${encodeURIComponent(sym)}`
-      + (bars === 'daily' ? '' : `?intraday=${encodeURIComponent(bars)}`));
+      + (bars === 'daily' ? '' : `?${intradayQuery(bars)}`));
   } catch (err) {
     data = { available: false, reason: err.message };
   }
@@ -31502,6 +31569,17 @@ document.addEventListener('click', (evt) => {
     // wsResetChart pushes its own undo entry first, so this is reversible
     // with the same arrow the drawing tools use.
     wsResetChart();
+    return;
+  }
+  const wsIwin = evt.target.closest('[data-ws-iwin]');
+  if (wsIwin) {
+    setIntradayWindow(chartRange, wsIwin.dataset.wsIwin);
+    wsWindow = null;   // a window pill overrides a manual zoom, as a range pill does
+    wsLoadIntraday();
+    // Studies and trend lines are computed on these bars, so a new window needs
+    // new ones.
+    if (wsPriceIndicatorIds().length) wsLoadIndicators();
+    if (showTrends) loadTrendlines(STATE.chartSymbol);
     return;
   }
   const wsInt = evt.target.closest('[data-ws-interval]');
