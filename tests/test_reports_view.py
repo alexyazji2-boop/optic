@@ -74,10 +74,41 @@ def test_it_has_a_label_rather_than_its_raw_id():
 # ------------------------------------------------- who can see it, and see it
 
 
-def test_the_nav_entry_is_owner_only():
+def test_the_nav_entry_is_for_the_operator_only():
     fn = _code(APP[APP.index("function navVisibleGroups()"):])
     fn = fn[:fn.index("}")]
-    assert "!g.owner || isOwner()" in fn
+    assert "!g.owner || hasOwnerTools()" in fn
+
+
+def test_either_proof_of_operator_hood_opens_it():
+    """Two, because a deployment may only have one. `ADMIN_EMAILS` needs a
+    *verified* address and verification needs a mail relay, so on a deployment
+    with no SMTP nobody can become an admin at all and the group would be
+    unreachable forever. The write token needs no mail."""
+    fn = _code(APP[APP.index("function hasOwnerTools()"):])
+    fn = fn[:fn.index("\n}")]
+    assert "isOwner()" in fn
+    assert "writeToken()" in fn
+
+
+def test_a_refused_read_offers_somewhere_to_put_the_token():
+    """Otherwise the refusal names a credential with nowhere to enter it, and
+    on a deployment with no relay there is no other route in at all. `postJSON`
+    has done this for the four write endpoints all along."""
+    fn = _code(APP[APP.index("async function fetchReports("):])
+    fn = fn[:fn.index("\n}")]
+    assert "window.prompt(" in fn
+    assert "setWriteToken(" in fn
+
+
+def test_it_asks_once_and_never_asks_an_admin():
+    """A second prompt after a rejected token is a loop. An admin seeing a 401
+    has a lapsed session rather than a missing token, so a prompt is a dead end
+    -- the same reasoning `postJSON` records."""
+    fn = _code(APP[APP.index("async function fetchReports("):])
+    fn = fn[:fn.index("\n}")]
+    assert "!retried" in fn
+    assert "!admin" in fn
 
 
 def test_owner_is_read_from_the_server_not_inferred_on_the_client():

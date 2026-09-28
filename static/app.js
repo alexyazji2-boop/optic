@@ -25071,7 +25071,7 @@ async function paperLoadChain(sym) {
  * refused, and retrying a 401 three times just asks the same unauthorised
  * question slower.
  */
-async function fetchReports(limit) {
+async function fetchReports(limit, retried) {
   const headers = {};
   const token = writeToken();
   if (token) headers['X-Optic-Token'] = token;
@@ -25083,6 +25083,25 @@ async function fetchReports(limit) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    /* Ask for the token, the way `postJSON` already does for the four write
+       endpoints. Without this the operator of a deployment with no mail relay
+       meets a refusal naming a credential with nowhere to put it: they cannot
+       become an admin, because that needs a verified address and verification
+       needs the relay they have not got.
+
+       Once only, and never to an admin. A second prompt after a rejected token
+       is a loop, and an admin who sees a 401 has a lapsed session rather than a
+       missing token -- pasting one they may never have set cannot help. */
+    const admin = !!(window.OpticAuth && window.OpticAuth.state().admin);
+    if (res.status === 401 && !retried && !admin) {
+      const supplied = window.prompt(
+        'These are the problem reports readers have filed, so reading them needs '
+        + 'the write token.\nPaste OPTIC_WRITE_TOKEN here.');
+      if (supplied) {
+        setWriteToken(supplied.trim());
+        return fetchReports(limit, true);
+      }
+    }
     const err = new Error(data.detail || ('HTTP ' + res.status));
     err.status = res.status;
     throw err;
@@ -25138,6 +25157,10 @@ async function loadReports(force) {
   try {
     const data = await fetchReports(50);
     STATE.reportsLoaded = true;
+    /* The token may have arrived a moment ago via the prompt above, and the
+       nav was painted before it existed. Without this the reader is looking at
+       their reports with no entry in the rail to come back by. */
+    paintNav(STATE.view || 'reports');
     host.innerHTML = reportsHTML(data);
   } catch (err) {
     STATE.reportsLoaded = false;
@@ -29266,10 +29289,23 @@ function isOwner() {
     && window.OpticAuth.state().admin);
 }
 
+/* Either proof of operator-hood, because there are two and the deployment may
+ * only have one of them.
+ *
+ * `ADMIN_EMAILS` needs a *verified* address, and verification needs a mail
+ * relay -- so on a deployment with no SMTP, nobody can become an admin at all
+ * and the owner's group would be unreachable forever. The write token is the
+ * other half of `_write_guard` and needs no mail, which makes it the way in
+ * while that is true. The server checks both independently; this only decides
+ * whether the entrance is drawn. */
+function hasOwnerTools() {
+  return isOwner() || !!writeToken();
+}
+
 /** The strip shows every group except the off-strip ones, and shows the
  *  owner's group only to the owner. */
 function navVisibleGroups() {
-  return NAV_GROUPS.filter((g) => !g.offStrip && (!g.owner || isOwner()));
+  return NAV_GROUPS.filter((g) => !g.offStrip && (!g.owner || hasOwnerTools()));
 }
 
 function navGroupLabel(group) {
