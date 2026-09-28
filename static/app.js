@@ -12739,6 +12739,7 @@ function renderInstrument(d) {
           aria-pressed="${instrumentMode === 'candle'}">Candles</button>
       </div>
     </div>
+    <div class="stage-row"><span class="stage-chip" id="stage-inst" hidden></span></div>
     <div id="legend-inst"></div>
     <div id="chart-inst"></div>
     <p class="caveat">${gloss('Daily bars from the same feed the cross-asset tables read, so '
@@ -12746,6 +12747,56 @@ function renderInstrument(d) {
     + 'yield proxy and a currency cross are not tradeable instruments. This is the '
     + 'reference series, not a price you could deal at.')}</p>
   </div>`;
+}
+
+/* Weinstein stage, one chip per chart.
+ *
+ * Fetched rather than computed here, because a stage needs two years of weekly
+ * closes and a chart only holds the range on screen: a 3-month chart has about
+ * thirteen weeks against a 30-week average. app/analytics/stage.py has the
+ * rules, the calibration and what it cannot tell you.
+ *
+ * Cached per symbol with the in-flight request shared, because both charts
+ * redraw on every resize and a stage moves weekly. A failed fetch is not
+ * cached: a network blip would otherwise hide the chip for half an hour, where
+ * "unavailable" -- too little history -- is a real answer and is kept.
+ *
+ * Painted only if the symbol is still the one on screen when the answer lands.
+ * A reader can switch symbols mid-fetch, and a late label would put one
+ * instrument's stage under another's name -- the failure CLAUDE.md records for
+ * STATE.ticker and STATE.chartSymbol, arriving by a different route.
+ */
+const STAGE_TTL_MS = 30 * 60 * 1000;
+const stageCache = new Map();
+
+function fetchStage(symbol) {
+  const hit = stageCache.get(symbol);
+  if (hit && Date.now() - hit.at < STAGE_TTL_MS) return hit.promise;
+  const promise = getJSON('/api/stage?symbol=' + encodeURIComponent(symbol))
+    .catch(() => null)
+    .then((r) => {
+      if (!r) stageCache.delete(symbol);
+      return r;
+    });
+  stageCache.set(symbol, { at: Date.now(), promise });
+  return promise;
+}
+
+async function paintStage(hostId, symbol, stillCurrent) {
+  if (!symbol) return;
+  const r = await fetchStage(symbol);
+  if (stillCurrent && !stillCurrent()) return;
+  const host = document.getElementById(hostId);
+  // `available !== true`, not a falsy test: an unavailable reading is a
+  // truthy object, and CLAUDE.md records that bug shipping once.
+  if (!host || !r || r.available !== true) return;
+  host.className = 'stage-chip stage-' + r.stage;
+  host.title = [r.explain, r.transition, r.limits].filter(Boolean).join('\n\n');
+  host.innerHTML = `<span class="stage-dot" aria-hidden="true"></span>Stage ${
+    esc(String(r.stage))}<span class="stage-name"> \u00b7 ${esc(r.name)}</span>${
+    r.transition_short ? `<span class="stage-tag">${esc(r.transition_short)}</span>` : ''}`;
+  host.setAttribute('aria-label', r.label + (r.transition ? '. ' + r.transition : ''));
+  host.hidden = false;
 }
 
 function drawInstrumentChart(d) {
@@ -12759,6 +12810,9 @@ function drawInstrumentChart(d) {
      depending on where the reader had just been, which is worse than either
      answer on its own because it is not repeatable. */
   setChartLive(chartLiveForSymbol((STATE.instrument || {}).symbol || d.symbol));
+  const stageSym = (STATE.instrument || {}).symbol || d.symbol;
+  paintStage('stage-inst', stageSym,
+    () => ((STATE.instrument || {}).symbol || '') === stageSym);
   const candles = instrumentMode === 'candle' && d.open && d.high && d.low
     ? { open: d.open, high: d.high, low: d.low, close: d.close } : null;
   mount('legend-inst', legend([
@@ -14850,6 +14904,7 @@ function renderChartWorkspace(d) {
         <span class="ws-head-name">${esc((d.profile || {}).name || '')}</span>
         <span class="ws-ohlc" id="ws-ohlc">${wsOhlcRow(bar)}</span>
         <span class="${signClass(q.change_pct)}" id="ws-chg">${fmtPct(q.change_pct, 2)}</span>
+        <span class="stage-chip" id="stage-ws" hidden></span>
         <span class="ws-head-state">${esc(cap(marketSessionET()))}</span>
         ${chartPulse(STATE.chartSymbol)}
       </div>
@@ -14876,6 +14931,8 @@ function renderChartWorkspace(d) {
     ${wsWidgetRail()}
   </div>
   ${wsManagePanel()}`;
+  const stageSym = STATE.chartSymbol;
+  paintStage('stage-ws', stageSym, () => STATE.chartSymbol === stageSym);
 }
 
 /** The O/H/L/C row in the chart header.

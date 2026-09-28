@@ -42,6 +42,7 @@ from .analytics import congress as congress_mod
 from . import papertrade as papertrade_mod
 from . import contracts as contracts_mod
 from .analytics import screen as screen_mod
+from .analytics import stage as stage_mod
 from .analytics import screener as screener_mod
 from .analytics import segments as segments_mod
 from . import insiders as insiders_mod
@@ -2508,6 +2509,24 @@ async def global_panel() -> Dict[str, Any]:
         out["cache_age_seconds"] = 0
         return out
     return await _run(build)
+
+
+@app.get("/api/stage")
+async def stage_reading(
+    symbol: str = Query(..., description="Provider symbol, e.g. PLTR or ^GSPC"),
+) -> Dict[str, Any]:
+    """Weinstein stage for one symbol, from two years of weekly closes.
+
+    Its own endpoint rather than a field on each chart payload, because the
+    stage belongs to the instrument and not to the range on screen: a 3-month
+    chart holds about thirteen weeks, far short of a 30-week average, so it
+    fetches its own history whatever the chart shows. A query parameter for the
+    reason `/api/instrument` gives: `^GSPC` and `ES=F` do not survive a path.
+
+    Always YF_PROVIDER, for the same reason as the instrument chart: it is the
+    one feed that carries indices, futures and crypto as well as stocks.
+    """
+    return await _run(stage_mod.for_symbol, YF_PROVIDER, symbol)
 
 
 @app.get("/api/instrument")

@@ -8508,6 +8508,15 @@ body.chat-open .ws-head .ws-head-name,
 .ws-body.narrow .ws-head .ws-head-name,
 body.chat-open .ws-head .ws-head-state,
 .ws-body.narrow .ws-head .ws-head-state { display: none; }
+/* The stage chip shortens rather than vanishes: "Stage 2" survives, the name
+   and the "new" tag go. Measured at 561px, the header 263px wide and nowrap
+   with overflow hidden, the full chip ran 41px past its edge and was cut off
+   mid-word. The number is the reading; the name repeats it in words and the
+   tag is in the title, which is where the rest of the reasoning already is. */
+body.chat-open .ws-head .stage-name,
+.ws-body.narrow .ws-head .stage-name,
+body.chat-open .ws-head .stage-tag,
+.ws-body.narrow .ws-head .stage-tag { display: none; }
 
 /* The legend as a single scrolling line, the way both reference products do it:
    symbol, then each overlay with its value, all on one row. */
@@ -13423,6 +13432,27 @@ body.chat-full .rp { display: none; }
 .rp-note.is-ok { color: var(--pos); }
 .rp-note.is-bad { color: var(--neg); }
 .rp-note.is-warn { color: var(--warn); }
+
+/* Weinstein stage chip. Colour follows the direction the stage describes and
+   nothing else: Stage 2 is an advance and takes --pos, Stage 4 a decline and
+   takes --neg, as every up and down figure in the terminal does. Stage 3 is a
+   caution rather than a direction, so --warn; Stage 1 is neither, so neutral.
+   `cursor: help` because the reasoning and the limits are in the title. */
+.stage-chip {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  padding: var(--space-0) var(--space-2);
+  border: 1px solid var(--border-strong); border-radius: var(--r-pill);
+  font-size: var(--t-caption); font-weight: 600; color: var(--ink-2);
+  white-space: nowrap; cursor: help;
+}
+.stage-chip[hidden] { display: none; }
+.stage-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.stage-chip.stage-1 { color: var(--ink-2); }
+.stage-chip.stage-2 { color: var(--pos); }
+.stage-chip.stage-3 { color: var(--warn); }
+.stage-chip.stage-4 { color: var(--neg); }
+.stage-tag { font-weight: 500; color: var(--ink-muted); }
+.stage-row { margin: var(--space-2) 0 0; }
 
 /* The owner's list of reader-reported problems.
  *
