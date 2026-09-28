@@ -156,45 +156,54 @@ def _sec_header() -> str:
     return _fn("securityHeader")
 
 
-def test_the_dossier_strip_carries_the_chip_beside_the_change():
+def test_the_overview_strip_carries_the_chip_beside_the_change():
     fn = _sec_header()
-    assert 'id="stage-sec-${esc(view)}"' in fn
+    assert 'id="stage-sec-overview"' in fn
     # After the change figure, before the exchange line that is pushed right.
-    # The markup occurrence: `'stage-sec-' + view` in the paint code comes first.
     assert fn.index('class="sec-chg') < fn.index('id="stage-sec-') < fn.index('class="sec-meta"')
 
 
-def test_it_is_in_the_full_strip_only_so_charting_does_not_show_it_twice():
-    """Compact is Charting and Options, and Charting already carries the stage
-    in its own price header. Measured: exactly one visible chip on that tab."""
+def test_only_the_overview_shows_it():
+    """Asked for on Overview only. It first went on every facet sharing the
+    strip -- Financials, News, Earnings and Investing -- and the other facets
+    are about the company's numbers, filings and news, where a trend label
+    repeated over each is a claim restated rather than information added."""
     fn = _sec_header()
-    full = fn[fn.index("${opts.compact ? '' : `<div class=\"sec-id\">"):]
-    assert "stage-sec-" in full
-    assert "if (!opts.compact) {" in fn, "the paint must be skipped when compact"
+    assert "const showStage = !opts.compact && view === 'overview';" in fn
+    assert "${showStage ? '<span class=\"stage-chip\" id=\"stage-sec-overview\"" in fn, \
+        "the host must be drawn only when showStage holds"
+    assert "if (showStage) {" in fn, "and painted only then"
 
 
-def test_each_facet_gets_its_own_id():
-    """Every facet is its own section and a stale header lingers in the hidden
-    ones. One shared id would be duplicated across them, and getElementById
-    would paint whichever came first in the document."""
+def test_no_facet_id_is_left_behind():
+    """While five sections could each hold a copy it was one id per facet; with
+    only Overview holding it, a per-facet id would be dead machinery."""
+    code = _strip(APP)
+    assert "'stage-sec-' + view" not in code
+    assert "stage-sec-${esc(view)}" not in code
+
+
+def test_charting_is_unaffected_and_still_shows_one_chip():
+    """Compact is Charting and Options. Charting keeps its own chip in its
+    price header, so the strip must never add a second there."""
     fn = _sec_header()
-    assert "'stage-sec-' + view" in fn
-    assert 'id="stage-sec"' not in _strip(APP), "a single shared id is back"
+    assert "!opts.compact" in fn[fn.index("const showStage"):fn.index("const showStage") + 80]
 
 
-def test_the_dossier_chip_is_guarded_on_the_dossiers_own_symbol():
+def test_the_overview_chip_is_guarded_on_the_dossiers_own_symbol():
     """STATE.ticker, not STATE.chartSymbol: CLAUDE.md records the two as
     deliberately independent. Proven in a browser -- with TSLA on screen,
     NVDA's late answer painted unguarded read Stage 2 under TSLA's name."""
     fn = _sec_header()
-    assert "() => (STATE.ticker || '') === sym" in fn
-    assert "chartSymbol" not in fn[fn.index("if (!opts.compact) {"):fn.index("return `<header")]
+    block = fn[fn.index("if (showStage) {"):fn.index("return `<header")]
+    assert "() => (STATE.ticker || '') === sym" in block
+    assert "chartSymbol" not in block
 
 
 def test_it_is_painted_after_the_caller_puts_the_strip_in_the_page():
     """securityHeader returns a string; its callers assign it synchronously,
     so a microtask is the first moment the host exists."""
-    assert "queueMicrotask(() => paintStage(stageHost" in _sec_header()
+    assert "queueMicrotask(() => paintStage('stage-sec-overview'" in _sec_header()
 
 
 def test_the_chip_sits_on_the_prices_line():

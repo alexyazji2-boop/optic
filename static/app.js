@@ -9859,24 +9859,29 @@ function securityHeader(view, opts = {}) {
       title="${esc(SUB_TITLES[v] || '')}">${esc(SUB_LABELS[v] || v)}</button>`;
   }).join('');
 
-  /* The Weinstein stage, in the full strip and never the compact one.
+  /* The Weinstein stage, on Overview and nowhere else in the Dossier.
    *
-   * Compact is Charting and Options. Charting already carries the stage in its
-   * own price header, so the full strip only would put it on every other facet
-   * without doubling it up on the one that has it.
+   * It first went on every facet that shares this strip -- Financials, News,
+   * Earnings and Investing too -- on the argument that the strip should be the
+   * same across them. Asked to keep it to Overview, which is where a reading
+   * of the trend belongs: the other facets are about the company's numbers,
+   * its filings and its news, and a trend label repeated over each of them is
+   * a claim restated rather than information added. Charting has its own, in
+   * its price header, and uses the compact strip, so it is unaffected.
    *
-   * One id per facet, not one shared id. Every facet is its own section and a
-   * stale header lingers in the hidden ones, so a single id would be duplicated
-   * across them -- and getElementById would paint whichever came first in the
-   * document, which need not be the facet on screen.
+   * Only one section can hold the host now, so a single id is unique. It was
+   * one id per facet while five sections could each hold a copy, because a
+   * stale header lingers in the hidden ones and getElementById would have
+   * painted whichever came first in the document.
    *
    * A microtask because this returns a string: every caller assigns it to
    * innerHTML synchronously, so by the time the microtask runs the host is in
-   * the page. Guarded on STATE.ticker, which is what the full strip names --
-   * not STATE.chartSymbol, which CLAUDE.md records as deliberately independent. */
-  if (!opts.compact) {
-    const stageHost = 'stage-sec-' + view;
-    queueMicrotask(() => paintStage(stageHost, sym, () => (STATE.ticker || '') === sym));
+   * the page. Guarded on STATE.ticker, which is what the strip names -- not
+   * STATE.chartSymbol, which CLAUDE.md records as deliberately independent. */
+  const showStage = !opts.compact && view === 'overview';
+  if (showStage) {
+    queueMicrotask(() => paintStage('stage-sec-overview', sym,
+      () => (STATE.ticker || '') === sym));
   }
 
   /* Compact drops the price line. Used on Charting, where the toolbar and the
@@ -9889,7 +9894,7 @@ function securityHeader(view, opts = {}) {
       ${has ? `<span class="sec-px">${fmt(q.price, 2)}</span>
         <span class="sec-chg ${dir}">${Number.isFinite(pct)
     ? `${pct >= 0 ? '+' : ''}${fmt(pct, 2)}%` : ''}</span>` : ''}
-      <span class="stage-chip" id="stage-sec-${esc(view)}" hidden></span>
+      ${showStage ? '<span class="stage-chip" id="stage-sec-overview" hidden></span>' : ''}
       ${q.exchange ? `<span class="sec-meta">${esc(q.exchange)}${
     q.sector ? ` \u00b7 ${esc(q.sector)}` : ''}</span>` : ''}
     </div>`}
