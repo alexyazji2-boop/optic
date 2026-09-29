@@ -74,41 +74,55 @@ def test_it_has_a_label_rather_than_its_raw_id():
 # ------------------------------------------------- who can see it, and see it
 
 
-def test_the_nav_entry_is_for_the_operator_only():
+def test_the_nav_entry_is_for_the_signed_in_owner_only():
+    """Not for a browser holding the write token. It used to be either, and a
+    token pasted in once kept the tab on that browser signed out: "im not
+    signed in, why can i see the reports button? it should only show when the
+    domain e-mail is logged in" (2026-09-29).
+
+    The cost, and why the token was the other way in: being the owner needs
+    the address in ADMIN_EMAILS and verified, and with no SMTP configured the
+    verification link is written to the server log rather than emailed."""
     fn = _code(APP[APP.index("function navVisibleGroups()"):])
     fn = fn[:fn.index("}")]
-    assert "!g.owner || hasOwnerTools()" in fn
+    assert "!g.owner || isOwner()" in fn
+    assert "writeToken" not in fn
+    assert "function hasOwnerTools(" not in APP
 
 
-def test_either_proof_of_operator_hood_opens_it():
-    """Two, because a deployment may only have one. `ADMIN_EMAILS` needs a
-    *verified* address and verification needs a mail relay, so on a deployment
-    with no SMTP nobody can become an admin at all and the group would be
-    unreachable forever. The write token needs no mail."""
-    fn = _code(APP[APP.index("function hasOwnerTools()"):])
-    fn = fn[:fn.index("\n}")]
-    assert "isOwner()" in fn
-    assert "writeToken()" in fn
-
-
-def test_a_refused_read_offers_somewhere_to_put_the_token():
-    """Otherwise the refusal names a credential with nowhere to enter it, and
-    on a deployment with no relay there is no other route in at all. `postJSON`
-    has done this for the four write endpoints all along."""
+def test_a_refused_read_does_not_ask_for_the_token():
+    """The page is the signed-in owner's, so a refusal is a lapsed session or
+    the wrong account, and a prompt for the token would reopen the route the
+    nav has just closed."""
     fn = _code(APP[APP.index("async function fetchReports("):])
     fn = fn[:fn.index("\n}")]
-    assert "window.prompt(" in fn
-    assert "setWriteToken(" in fn
+    for gone in ("window.prompt(", "setWriteToken(", "writeToken(", "X-Optic-Token"):
+        assert gone not in fn, gone
 
 
-def test_it_asks_once_and_never_asks_an_admin():
-    """A second prompt after a rejected token is a loop. An admin seeing a 401
-    has a lapsed session rather than a missing token, so a prompt is a dead end
-    -- the same reasoning `postJSON` records."""
-    fn = _code(APP[APP.index("async function fetchReports("):])
+def test_the_page_is_drawn_for_the_signed_in_owner_only():
+    """Checked before the cached list is reused, so reports the owner read are
+    not left on screen for whoever signs out after them. Anyone else is told
+    which of the two things stands in the way, and nothing is fetched."""
+    fn = _code(APP[APP.index("async function loadReports("):])
     fn = fn[:fn.index("\n}")]
-    assert "!retried" in fn
-    assert "!admin" in fn
+    guard = fn.index("if (!isOwner()) {")
+    assert guard < fn.index("if (!force && STATE.reportsLoaded) return;")
+    assert "host.innerHTML = reportsForOwnerHTML();" in fn[guard:guard + 200]
+    assert guard < fn.index("fetchReports(")
+    msg = _code(APP[APP.index("function reportsForOwnerHTML("):])
+    msg = msg[:msg.index("\n}")]
+    assert 'data-auth-open="signin"' in msg
+    assert "has not been verified yet" in msg
+
+
+def test_the_palette_offers_it_to_the_owner_only():
+    places = APP[APP.index("const PALETTE_PLACES = ["):]
+    places = places[:places.index("\n];")]
+    assert "{ view: 'reports', label: 'Problem Reports', owner: true," in places
+    code = _code(APP)
+    assert "PALETTE_PLACES.filter((p) => (!p.owner || isOwner())" in code
+    assert "PALETTE_PLACES.filter((p) => !p.owner || isOwner()).slice(0, 6)" in code
 
 
 def test_owner_is_read_from_the_server_not_inferred_on_the_client():
@@ -124,9 +138,13 @@ def test_owner_is_read_from_the_server_not_inferred_on_the_client():
 def test_the_nav_repaints_when_auth_resolves():
     """`paintNav` runs at boot and `/api/auth/me` answers over the network some
     time after, so the first paint is always made as a guest. Without this the
-    owner's tab is missing until they happen to navigate."""
+    owner's tab is missing until they happen to navigate. And the page itself
+    is redrawn, so signing out on it takes the list off the screen."""
     code = _code(APP)
-    assert "window.OpticAuth.on(() => paintNav(" in code
+    at = code.index("window.OpticAuth.on(() => {")
+    block = code[at:code.index("});", at)]
+    assert "paintNav(STATE.view || 'home');" in block
+    assert "if (STATE.view === 'reports') loadReports(true);" in block
 
 
 def test_the_data_is_guarded_server_side_and_not_only_hidden():

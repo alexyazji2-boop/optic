@@ -6876,7 +6876,7 @@ const PALETTE_PLACES = [
     terms: 'paper desk trades trading simulator practice manual position long short buy sell shares option call put book ticket mock virtual' },
   { view: 'insiders', label: 'Insiders',
     terms: 'insiders insider congress congressional politicians form 4 stock act disclosures pelosi senator representative buying selling' },
-  { view: 'reports', label: 'Problem Reports',
+  { view: 'reports', label: 'Problem Reports', owner: true,
     terms: 'reports problem report feedback bug issue complaints readers inbox support' },
   { view: 'watchlist', label: 'Watchlist', terms: 'watchlist watching follow list' },
   { view: 'alerts', label: 'Alerts', terms: 'alerts alarms notifications fired' },
@@ -7178,7 +7178,7 @@ async function paletteBuild(query) {
       group: 'Actions', lead: '\u2726', label: a.label, detail: a.detail,
       run: () => { closePalette(); a.run(); },
     }));
-    PALETTE_PLACES.slice(0, 6).forEach((p) => rows.push({
+    PALETTE_PLACES.filter((p) => !p.owner || isOwner()).slice(0, 6).forEach((p) => rows.push({
       group: 'Go to', lead: '\u2192', label: p.label,
       run: () => { closePalette(); switchView(p.view); },
     }));
@@ -7199,8 +7199,9 @@ async function paletteBuild(query) {
    * exact place match outranks the ticker guess. A partial one does not:
    * "co" should not beat the ticker CO on its way to "Compare". */
   const words = (text) => String(text).toLowerCase().split(/\s+/);
-  const places = PALETTE_PLACES.filter((p) =>
-    p.label.toLowerCase().includes(lower) || p.terms.includes(lower));
+  // The owner's page is offered to the signed-in owner only, as the nav does.
+  const places = PALETTE_PLACES.filter((p) => (!p.owner || isOwner())
+    && (p.label.toLowerCase().includes(lower) || p.terms.includes(lower)));
   const exactPlace = places.find((p) =>
     p.label.toLowerCase() === lower || words(p.terms).indexOf(lower) !== -1);
 
@@ -26400,10 +26401,11 @@ async function paperLoadChain(sym) {
  * refused, and retrying a 401 three times just asks the same unauthorised
  * question slower.
  */
-async function fetchReports(limit, retried, includeResolved) {
+async function fetchReports(limit, includeResolved) {
+  /* The owner's session and nothing else: no write token, and no prompt for
+   * one. The page is for the signed-in owner (see loadReports), and a token
+   * pasted in once used to keep it open to that browser signed out. */
   const headers = {};
-  const token = writeToken();
-  if (token) headers['X-Optic-Token'] = token;
   const csrf = window.OpticAuth ? window.OpticAuth.csrf() : '';
   if (csrf) headers['X-Optic-CSRF'] = csrf;
   /* Retried like getJSON retries, because this was the one read that was not.
@@ -26434,30 +26436,28 @@ async function fetchReports(limit, retried, includeResolved) {
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    /* Ask for the token, the way `postJSON` already does for the four write
-       endpoints. Without this the operator of a deployment with no mail relay
-       meets a refusal naming a credential with nowhere to put it: they cannot
-       become an admin, because that needs a verified address and verification
-       needs the relay they have not got.
-
-       Once only, and never to an admin. A second prompt after a rejected token
-       is a loop, and an admin who sees a 401 has a lapsed session rather than a
-       missing token -- pasting one they may never have set cannot help. */
-    const admin = !!(window.OpticAuth && window.OpticAuth.state().admin);
-    if (res.status === 401 && !retried && !admin) {
-      const supplied = window.prompt(
-        'These are the problem reports readers have filed, so reading them needs '
-        + 'the write token.\nPaste OPTIC_WRITE_TOKEN here.');
-      if (supplied) {
-        setWriteToken(supplied.trim());
-        return fetchReports(limit, true, includeResolved);
-      }
-    }
     const err = new Error(data.detail || ('HTTP ' + res.status));
     err.status = res.status;
     throw err;
   }
   return data;
+}
+
+/* What the Reports page says to anyone but the signed-in owner. It names the
+ * two ways to be refused, because they call for different things: a guest
+ * signs in, and a signed-in account that is not recognised as the owner's has
+ * either another address or one not yet verified. */
+function reportsForOwnerHTML() {
+  const st = window.OpticAuth && window.OpticAuth.state ? window.OpticAuth.state() : {};
+  const signedIn = !!(st && st.user);
+  return `<div class="panel" data-fixed="1">
+    <h2 tabindex="-1">Problem Reports</h2>
+    <p class="sub">${signedIn
+    ? 'These are for the owner of this site. This account is not the owner\'s, '
+      + 'or its address has not been verified yet.'
+    : 'These are for the owner of this site. Sign in with the owner\'s address to read them.'}</p>
+    ${signedIn ? '' : '<button type="button" class="btn primary" data-auth-open="signin">Sign in</button>'}
+  </div>`;
 }
 
 function reportStamp(iso) {
@@ -26596,16 +26596,22 @@ function reportsToast(err) {
 async function loadReports(force) {
   const host = views.reports;
   if (!host) return;
+  /* The signed-in owner's page. Checked before the cached list is kept, so
+   * reports read by the owner are not left on screen for whoever signs out
+   * after them, and nothing is fetched for anyone else. */
+  if (!isOwner()) {
+    STATE.reportsLoaded = false;
+    host.innerHTML = reportsForOwnerHTML();
+    return;
+  }
   if (!force && STATE.reportsLoaded) return;
   host.innerHTML = `<div class="panel" data-fixed="1"><h2>Problem Reports</h2>
     <p class="sub">Loading.</p></div>`;
   try {
-    const data = await fetchReports(50, false, !!STATE.reportsShowResolved);
+    const data = await fetchReports(50, !!STATE.reportsShowResolved);
+    // Signed out while it loaded: the list is not drawn for a guest.
+    if (!isOwner()) { loadReports(true); return; }
     STATE.reportsLoaded = true;
-    /* The token may have arrived a moment ago via the prompt above, and the
-       nav was painted before it existed. Without this the reader is looking at
-       their reports with no entry in the rail to come back by. */
-    paintNav(STATE.view || 'reports');
     host.innerHTML = reportsHTML(data);
   } catch (err) {
     STATE.reportsLoaded = false;
@@ -30762,7 +30768,12 @@ const NAV_GROUPS = [
    *
    * The flag hides the *entrance*, never the data. `/api/feedback` is guarded
    * server-side by `_write_guard`, so a reader who guesses the view still gets
-   * a refusal from the server rather than other people's words. */
+   * a refusal from the server rather than other people's words.
+   *
+   * Signed in as the owner, and nothing else. A browser holding the write
+   * token used to count as well, and one that had it pasted in once kept the
+   * tab while signed out: "im not signed in, why can i see the reports
+   * button? it should only show when the domain e-mail is logged in". */
   { id: 'reports', label: 'Reports', views: ['reports'], owner: true },
 ];
 
@@ -30778,23 +30789,10 @@ function isOwner() {
     && window.OpticAuth.state().admin);
 }
 
-/* Either proof of operator-hood, because there are two and the deployment may
- * only have one of them.
- *
- * `ADMIN_EMAILS` needs a *verified* address, and verification needs a mail
- * relay -- so on a deployment with no SMTP, nobody can become an admin at all
- * and the owner's group would be unreachable forever. The write token is the
- * other half of `_write_guard` and needs no mail, which makes it the way in
- * while that is true. The server checks both independently; this only decides
- * whether the entrance is drawn. */
-function hasOwnerTools() {
-  return isOwner() || !!writeToken();
-}
-
 /** The strip shows every group except the off-strip ones, and shows the
- *  owner's group only to the owner. */
+ *  owner's group only to the signed-in owner. See `reports` above. */
 function navVisibleGroups() {
-  return NAV_GROUPS.filter((g) => !g.offStrip && (!g.owner || hasOwnerTools()));
+  return NAV_GROUPS.filter((g) => !g.offStrip && (!g.owner || isOwner()));
 }
 
 function navGroupLabel(group) {
@@ -31308,7 +31306,12 @@ paintNav(STATE.view || 'home');
  * navigate. `on()` fires immediately if the answer has already landed, so
  * this costs one extra paint at most. */
 if (window.OpticAuth && window.OpticAuth.on) {
-  window.OpticAuth.on(() => paintNav(STATE.view || 'home'));
+  window.OpticAuth.on(() => {
+    paintNav(STATE.view || 'home');
+    // The Reports page belongs to the signed-in owner: signing out takes the
+    // list off the screen, and signing in as the owner draws it.
+    if (STATE.view === 'reports') loadReports(true);
+  });
 }
 
 // Human names for the views, for the gear's tooltip.
