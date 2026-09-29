@@ -54,6 +54,21 @@ MIN_WEEKS = SMA_WEEKS + SLOPE_WEEKS + PRIOR_WEEKS
 
 NAMES = {1: "Basing", 2: "Advancing", 3: "Topping", 4: "Declining"}
 
+# What each stage means, in the terms _read_at decides it in, for the charts'
+# stage legend. Written here beside the rule so the two cannot drift: the
+# legend was asked for as "what stages 1-4 is", and a definition the rule does
+# not use would be a claim the chart cannot back.
+MEANINGS = {
+    1: ("After a decline, the 30-week average has gone flat or price has crossed "
+        "it against its slope. A base forming."),
+    2: ("Price is above a 30-week average that has risen more than 1% over ten "
+        "weeks. The uptrend."),
+    3: ("After an advance, the 30-week average has gone flat or price has crossed "
+        "it against its slope. A top forming."),
+    4: ("Price is below a 30-week average that has fallen more than 1% over ten "
+        "weeks. The downtrend."),
+}
+
 # Said on every reading, not only when asked: the house rule that a panel
 # states what it cannot tell you.
 LIMITS = ("Weinstein's stages are read off weekly closes against a 30-week "
@@ -253,4 +268,5 @@ def for_symbol(provider, symbol: str) -> Dict[str, Any]:
         # The chart's key names every stage on screen, not only this week's,
         # and this is the one place the four names are written down.
         out["names"] = {str(k): v for k, v in NAMES.items()}
+        out["meanings"] = {str(k): v for k, v in MEANINGS.items()}
     return out

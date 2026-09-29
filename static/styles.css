@@ -13570,6 +13570,29 @@ body.chat-full .rp { display: none; }
 }
 .stage-chip[hidden] { display: none; }
 .stage-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+/* The chip under an instrument's name. */
+.inst-stage { margin: var(--space-2) 0 var(--space-1); }
+
+/* The four stages, spelled out while the chart is coloured by them. */
+.stage-legend { margin: var(--space-3) 0 var(--space-2); padding: var(--space-3);
+  border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-2); }
+.stage-legend[hidden] { display: none; }
+.stage-legend-h { margin: 0 0 var(--space-2); font-size: var(--t-micro); font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted); }
+.stage-legend-list { list-style: none; margin: 0; padding: 0; display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-2) var(--space-4); }
+.stage-legend-item { display: grid; grid-template-columns: auto 1fr; column-gap: var(--space-2);
+  align-items: baseline; font-size: var(--t-small); }
+.stage-legend-item .stage-dot { align-self: center; }
+.stage-legend-name { font-weight: 600; color: var(--ink); }
+.stage-legend-means { grid-column: 2; color: var(--ink-2); line-height: 1.45; }
+.stage-legend-now { margin-left: var(--space-1); font-size: var(--t-micro); font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); }
+.stage-legend-item.stage-1 .stage-dot { background: var(--stage-1); }
+.stage-legend-item.stage-2 .stage-dot { background: var(--stage-2); }
+.stage-legend-item.stage-3 .stage-dot { background: var(--stage-3); }
+.stage-legend-item.stage-4 .stage-dot { background: var(--stage-4); }
 .stage-chip.stage-1 { color: var(--ink-2); }
 .stage-chip.stage-1 .stage-dot { background: var(--stage-1); }
 .stage-chip.stage-2 { color: var(--stage-2); }

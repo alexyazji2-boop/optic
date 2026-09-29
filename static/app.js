@@ -8650,6 +8650,7 @@ function swingPriceBlock(d, ps, ctx) {
     // Drawn as a band under the price, in both modes; the candles and the line
     // keep their own direction (see stageBand in charts.js).
     const stages = stageTints(d.ticker, ps.dates, ps.intraday);
+    paintStageLegend('stage-price-legend', d.ticker, () => (STATE.swing || {}).ticker === d.ticker);
     const maOn = maColorsOnChart(candleMode, stages && stages.marks);
     const maColors = { fast: maOn.sma20, mid: maOn.sma50, slow: maOn.sma200 };
 
@@ -9252,6 +9253,7 @@ function renderSwing(d) {
       <div id="legend-price"></div>
       <div id="chart-price"></div>
       <div id="chart-price-note"></div>
+      <div class="stage-legend" id="stage-price-legend" hidden></div>
 
       <!-- Price location. Rides the same 20s poll as everything else on this
            tab: the server refreshes the forming bar from the live quote before
@@ -13213,6 +13215,10 @@ function renderInstrument(d) {
          reads as a sentence whatever it came from. */''}
     <div class="weekly-kicker">${esc(cap(d.group || 'Cross-asset'))}</div>
     <h2 class="weekly-title">${esc(d.label)}${askPulse('instrument')}</h2>
+    ${/* Up here, under the name, rather than between the chart's controls and
+         its legend, where it was read as one more legend entry. Asked for as
+         "move this up". */''}
+    <div class="stage-row inst-stage"><span class="stage-chip" id="stage-inst" hidden></span></div>
     <p class="weekly-sub">${esc(cap(d.note || ''))} · ${esc(d.symbol)},
       ${fmt((d.dates || []).length, 0)} daily bars.</p>
 
@@ -13242,9 +13248,12 @@ function renderInstrument(d) {
       </div>
       ${stagesToggleHTML()}
     </div>
-    <div class="stage-row"><span class="stage-chip" id="stage-inst" hidden></span></div>
     <div id="legend-inst"></div>
     <div id="chart-inst"></div>
+    ${/* Under the chart, not over it: four definitions on a phone are about
+         500px, and above the chart they pushed it that far from its own
+         controls each time Stages was switched on. */''}
+    <div class="stage-legend" id="stage-inst-legend" hidden></div>
     <p class="caveat">${gloss('Daily bars from the same feed the cross-asset tables read, so '
     + 'the level here and the level in the table are the same number. An index level, a '
     + 'yield proxy and a currency cross are not tradeable instruments. This is the '
@@ -13403,6 +13412,45 @@ async function paintStage(hostId, symbol, stillCurrent) {
   host.hidden = false;
 }
 
+/* What stages 1 to 4 are, under a chart whose bars are coloured by them.
+ *
+ * Asked for as "include a legend of what stages 1-4 is when it is selected":
+ * the chart's own key named only the stages on screen, as colours, and said
+ * nothing of what any of them meant. The definitions are the server's
+ * (stage.MEANINGS, written beside the rule that decides them), so this cannot
+ * describe a stage the classifier does not draw. Shown only while Stages is
+ * on, with the stage the symbol is in now marked. */
+function stageLegendHTML(r) {
+  const names = r.names || {};
+  const meanings = r.meanings || {};
+  return `<p class="stage-legend-h">What the stages mean</p>
+    <ul class="stage-legend-list">${[1, 2, 3, 4].map((n) => `<li class="stage-legend-item stage-${n}${
+    r.stage === n ? ' is-now' : ''}">
+      <span class="stage-dot" aria-hidden="true"></span>
+      <span class="stage-legend-name">Stage ${n} · ${esc(names[n] || '')}${
+    r.stage === n ? ' <span class="stage-legend-now">now</span>' : ''}</span>
+      <span class="stage-legend-means">${esc(meanings[n] || '')}</span>
+    </li>`).join('')}</ul>`;
+}
+
+async function paintStageLegend(hostId, symbol, stillCurrent) {
+  const host = document.getElementById(hostId);
+  if (!host) return;
+  if (!wsOverlayDrawn('stages') || !symbol) {
+    host.hidden = true;
+    host.innerHTML = '';
+    return;
+  }
+  const r = await fetchStage(symbol);
+  if (stillCurrent && !stillCurrent()) return;
+  // Looked up again: the chart may have been redrawn while the fetch was out.
+  const again = document.getElementById(hostId);
+  // `available !== true`: an unavailable reading is a truthy object.
+  if (!again || !r || r.available !== true || !wsOverlayDrawn('stages')) return;
+  again.innerHTML = stageLegendHTML(r);
+  again.hidden = false;
+}
+
 function drawInstrumentChart(d) {
   if (!d || d === 'loading' || !d.available) return;
   const host = document.getElementById('chart-inst');
@@ -13416,6 +13464,8 @@ function drawInstrumentChart(d) {
   setChartLive(chartLiveForSymbol((STATE.instrument || {}).symbol || d.symbol));
   const stageSym = (STATE.instrument || {}).symbol || d.symbol;
   paintStage('stage-inst', stageSym,
+    () => ((STATE.instrument || {}).symbol || '') === stageSym);
+  paintStageLegend('stage-inst-legend', stageSym,
     () => ((STATE.instrument || {}).symbol || '') === stageSym);
   const candles = instrumentMode === 'candle' && d.open && d.high && d.low
     ? { open: d.open, high: d.high, low: d.low, close: d.close } : null;
