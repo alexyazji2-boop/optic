@@ -847,7 +847,11 @@ def momentum(yf_provider, ticker: str) -> Dict[str, Any]:
         signals.append({"label": "Estimate revisions", "read": "falling", "tone": "bad",
                         "detail": "Forecasts are being cut. A long here is fighting the "
                                   "direction estimates are moving."})
-    elif direction:
+    elif direction and direction != "unknown":
+        # "flat" only. "unknown" is _revisions saying there is no revision
+        # history at all, and read as "no clear trend" it made a fund with no
+        # analyst estimates, QQQ, report "Revisions: Unknown" as if the estimates
+        # were there and undecided. No history is no signal.
         signals.append({"label": "Estimate revisions", "read": direction, "tone": "neutral",
                         "detail": "No clear revision trend, so this says nothing either way."})
 

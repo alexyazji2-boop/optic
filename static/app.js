@@ -16730,8 +16730,19 @@ function wsWidgetBody(id) {
       rows.push(['Revenue growth', fmtPct(q.revenue_growth * 100, 1)]);
     }
     const em = (d || {}).earnings_momentum || {};
-    if (em.revision_direction) rows.push(['Revisions', cap(em.revision_direction)]);
-    if (!rows.length) return none(d ? 'No analyst data for this symbol.' : 'Load a symbol.');
+    // "unknown" is no revision history, not a reading of one (see earnings.py).
+    if (em.revision_direction && em.revision_direction !== 'unknown') {
+      rows.push(['Revisions', cap(em.revision_direction)]);
+    }
+    if (!rows.length) {
+      // Said for a fund rather than left as "no data": QQQ has no analysts of
+      // its own because a fund has no earnings to estimate, and "no analyst
+      // data" reads as the feed having failed.
+      const fund = ['ETF', 'MUTUALFUND'].includes(String(q.quote_type || '').toUpperCase());
+      return none(!d ? 'Load a symbol.' : fund
+        ? 'A fund has no earnings, so it has no analyst estimates or price target of its own. Its holdings do.'
+        : 'No analyst data for this symbol.');
+    }
     return `<table class="data narrow"><tbody>${rows.map(([k, val]) =>
       `<tr><td class="name">${esc(k)}</td><td>${val}</td></tr>`).join('')}</tbody></table>
     ${q.analyst_target && q.price ? `<p class="ws-leg-args">${
