@@ -13,10 +13,9 @@ auto` pinned it down. The slack itself never went anywhere: re-measured on a
 900px rail carrying 529px of content, the void had simply moved above the foot
 and was 297px. It was reported a second time, correctly. Pinning the foot
 without growing anything in front of it moves a hole; it does not close one.
-`.rail-recent` now carries `flex: 1` and the list runs down the rail instead
-of wrapping as chips, so the one region that can grow does. Re-measured after
-that: 5px between the recents and the foot, and the leftover sits inside a
-labelled list rather than between two blocks.
+A recent-symbols list with `flex: 1` filled it for a while; the owner has since
+asked for that list to go, so the foot is pinned to the bottom and the space
+above it is the rail's own.
 
 **The cold start.** /api/home is six legs, three of which reach the network.
 Measured on the live server: 7.35s on the first request after a restart, 0.6s
@@ -100,33 +99,6 @@ def test_the_topbar_rule_that_override_exists_for_is_still_there():
     assert "margin-left: auto" in base
 
 
-def test_the_recents_grow_into_the_space_rather_than_sitting_above_it():
-    """The assertion this file was missing, and the reason the same complaint
-    came back twice. Every test here checked that the foot was pinned, which
-    was true and insufficient: with nothing growing in front of it the slack
-    just pooled above the foot instead of below it."""
-    rule = rule_of(".rail-recent")
-    assert re.search(r"flex:\s*1\b", rule), \
-        "nothing in the rail grows, so the slack only moves"
-
-
-def test_the_recents_run_down_the_rail_rather_than_wrapping_as_chips():
-    """Three chips on one line used 28px of a rail that had 371px going spare
-    and read as a leftover row. One symbol per line uses the height."""
-    rule = rule_of(".rail-recent-list")
-    assert "flex-direction: column" in rule
-    assert "flex-wrap: wrap" not in rule, "back to chips"
-
-
-def test_a_recent_row_spans_the_rail():
-    """As an `inline-flex` chip each row was only as wide as its symbol, so a
-    column of them stepped in and out along the left edge instead of lining up
-    with the section labels above."""
-    rule = rule_of(".rail-recent-item")
-    assert "width: 100%" in rule
-    assert "display: inline-flex" not in rule
-
-
 def test_the_rail_rules_do_not_reach_the_phone():
     """Below 560px the rail is a row along the bottom of the screen, where
     `margin-top: auto` pushes nothing useful and the phone block already sets
@@ -141,83 +113,21 @@ def test_the_rail_rules_do_not_reach_the_phone():
     assert ".rail-foot { margin-top: 0;" in CSS
 
 
-def test_the_recents_hide_where_there_is_no_column_to_fill():
-    """Collapsed the rail is icons only, and a row of bare symbols has no icon
-    to collapse to; on the phone it is a row with no vertical space at all.
-
-    Keyed on `body.rail-tight`, which is the class applyRail actually sets. A
-    plausible-looking `.rail.is-collapsed` would have matched nothing and
-    failed silently, which is the whole failure mode of a dead selector."""
-    assert "body.rail-tight .rail .rail-recent { display: none; }" in CSS
-    assert "classList.toggle('rail-tight'" in APP, "the class this depends on"
-    tail = CSS[CSS.index("body.rail-tight .rail .rail-recent"):]
-    assert "@media (max-width: 559px)" in tail
+def test_the_rail_has_no_recent_list():
+    """Removed at the owner's request: "remove the recents tab on the side bar
+    entirely". The markup, its painter, its click handler and its styles all
+    go, so nothing is left to draw an empty heading or to catch a click."""
+    assert "rail-recent" not in HTML and "rail-recent" not in CSS
+    for gone in ("railRecentHTML", "paintRailRecent", "data-recent-symbol", "rail-recent"):
+        assert gone not in APP, gone
 
 
-# ------------------------------------------------- what fills it
-
-
-def test_it_shows_where_you_have_been_not_a_third_watchlist():
-    """The watchlist is already a nav destination and a homepage panel. This
-    app has a written rule about offering the same job twice on one screen --
-    tests/test_home_and_nav_hierarchy.py is entirely about it -- and a third
-    copy would be the clearest possible breach.
-
-    Where you have just been is recorded nowhere on screen: the recents list
-    existed only inside the command palette, behind a keystroke."""
-    fn = function("railRecentHTML")
-    assert "recentSymbols()" in fn
-    assert "watchList()" not in fn and "STATE.watchlist" not in fn
-
-
-def test_it_costs_no_request():
-    """The rail is drawn on every page. Anything here that fetched would be a
-    request per navigation, on the element that is supposed to be instant."""
-    for name in ("railRecentHTML", "paintRailRecent"):
-        fn = function(name)
-        assert "getJSON" not in fn and "fetch(" not in fn, name
-    # recentSymbols reads localStorage and nothing else.
+def test_the_palette_still_remembers_where_you_have_been():
+    """The list the rail showed is the command palette's, and it stays: the
+    palette still offers the symbols you opened."""
     assert "localStorage.getItem(RECENT_KEY)" in function("recentSymbols")
-
-
-def test_an_empty_list_says_so_rather_than_rendering_nothing():
-    """An empty strip with no explanation reads as a panel that failed to load.
-    One sentence makes it a space that is waiting."""
-    fn = function("railRecentHTML")
-    assert "rail-recent-none" in fn
-    assert "Symbols you open show up here." in fn
-
-
-def test_it_is_drawn_at_boot_and_not_only_on_a_view_change():
-    """`switchView` repaints it, but the first page is rendered by `renderHome`
-    directly rather than through switchView -- so on a cold arrival the strip
-    was an empty div with no sentence in it. Measured: innerText was ''."""
-    boot = APP[APP.index("mountPulseMarks();"):]
-    boot = boot[:boot.index("updateStatus();")]
-    assert "paintRailRecent();" in boot
-    assert boot.index("paintRailRecent();") < boot.index("renderHome();")
-
-
-def test_the_list_repaints_when_it_changes():
-    """The rail is drawn once per navigation, not per symbol load, so opening a
-    ticker would not have moved it until the next page change."""
-    assert "paintRailRecent();" in function("rememberSymbol")
-    assert "paintRailRecent();" in function("switchView")
-
-
-def test_a_symbol_opened_from_the_rail_lands_where_a_searched_one_does():
-    """Two entry points to the same destination that disagree is how "it opens
-    the wrong tab" gets reported. loadTicker is the shared one; see
-    SEARCH_LANDING."""
-    i = APP.index("closest('[data-recent-symbol]')")
-    block = APP[i:i + 500]
-    assert "loadTicker(recentBtn.dataset.recentSymbol)" in block
-    assert "SEARCH_LANDING" in APP
-
-
-def test_the_host_exists_for_the_painter_to_find():
-    assert 'id="rail-recent"' in HTML
-    assert "getElementById('rail-recent')" in function("paintRailRecent")
+    assert "localStorage.setItem(RECENT_KEY" in function("rememberSymbol")
+    assert "recentSymbols().slice(0, 5).forEach(" in APP
 
 
 # ------------------------------------------------- the cold start
