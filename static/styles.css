@@ -7240,13 +7240,56 @@ body[data-view="chart"] .sessionbar { display: none; }
   background: color-mix(in srgb, var(--accent) 10%, var(--surface-2));
 }
 /* The interval menu: its button names the size on screen, and the options
-   open as a grid of the same pills the row was, four to a line. */
+   open as a grid that fills the menu, four to a line.
+
+   Asked for as "remove the circular surrounding of the time frames and have
+   it cover the whole box in grids". The options were the row's pills,
+   capsule and all, and the capsule kept around a two-line grid drew a
+   stadium inside the box. Now the grid runs to the menu's edges, one cell
+   per size with a hairline between cells. The lines are cell borders rather
+   than a gap over a filled grid, so the cells stay clear and the menu's
+   glass shows through them as it does in every other menu. The menu clips
+   to its own corners, which a corner cell's fill would otherwise square off.
+
+   Two classes on the menu: `.ws-menu-pop` sets its padding and 210px floor
+   further down at the same weight, and on one class this rule lost to it,
+   as the `min-width: 0` it carried always had. */
 .ws-caret { margin-left: var(--space-1); font-size: 0.8em; opacity: 0.7; }
-.ws-interval-pop { min-width: 0; }
+.ws-menu-pop.ws-interval-pop { min-width: 0; padding: 0; overflow: hidden; }
 .ws-interval-pop .pills {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-1);
+  /* 52px a cell keeps the menu the 210px it was. */
+  grid-template-columns: repeat(4, minmax(52px, 1fr));
+  gap: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+}
+.ws-interval-pop .pill {
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: 0;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  /* The pill's own, restated: a cell's hover is a fill, and it eases in as
+     every other hover does. */
+  transition: background 120ms ease, color 120ms ease;
+}
+/* No line along the menu's own edges, where its border already is: not after
+   the last cell of a line, and not under the last line, however many sizes
+   it holds. */
+.ws-interval-pop .pill:nth-child(4n) { border-right: 0; }
+.ws-interval-pop .pill:nth-last-child(-n+4):nth-child(4n+1),
+.ws-interval-pop .pill:nth-last-child(-n+4):nth-child(4n+1) ~ .pill { border-bottom: 0; }
+.ws-interval-pop .pill:hover { background: var(--surface-2); }
+.ws-interval-pop .pill.on { background: var(--btn-primary); color: var(--btn-primary-ink); }
+/* Inside the cell: the menu's clip would cut an outline drawn outside it. */
+.ws-interval-pop .pill:focus-visible { outline-offset: -2px; }
+@media (prefers-reduced-motion: reduce) {
+  /* At this weight the pill's own reduced-motion rule would lose to the
+     transition above. */
+  .ws-interval-pop .pill { transition: none; }
 }
 
 .ws-count {

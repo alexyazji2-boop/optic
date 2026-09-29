@@ -15380,6 +15380,29 @@ function wsIntervalMenu() {
   </div>`;
 }
 
+/* Keep an open toolbar menu inside the window.
+ *
+ * A menu opens from its button's left edge, and the interval button is the
+ * last thing on the toolbar's first line: measured at 1100px wide, its menu
+ * ran 113px past the window and two of its four columns could not be seen.
+ * So a menu that would cross the right edge opens leftward from its button's
+ * right edge instead, and is held off the left edge if that crosses it.
+ * Measured after it is drawn, because where the button lands depends on how
+ * the toolbar wrapped. On a phone the CSS anchors menus to the toolbar and
+ * they are inside the window already, so nothing here moves them. */
+function wsPlaceMenu() {
+  const pop = views.chart && views.chart.querySelector('.ws-toolbar .ws-menu-pop');
+  if (!pop || !pop.offsetParent) return;
+  const edge = 8;
+  const width = document.documentElement.clientWidth;
+  if (pop.getBoundingClientRect().right <= width - edge) return;
+  const host = pop.offsetParent.getBoundingClientRect();
+  const w = pop.offsetWidth;
+  const x = Math.max(edge, Math.min(host.right - w, width - edge - w));
+  pop.style.left = `${Math.round(x - host.left)}px`;
+  pop.style.right = 'auto';
+}
+
 /* Full screen, on the chart rather than in the toolbar.
  *
  * Asked for as "make this button separate from the rest": it was a text
@@ -15766,6 +15789,7 @@ function renderChartWorkspace(d) {
     ${wsWidgetRail()}
   </div>
   ${wsManagePanel()}`;
+  wsPlaceMenu();
   const stageSym = STATE.chartSymbol;
   paintStage('stage-ws', stageSym, () => STATE.chartSymbol === stageSym);
 }
@@ -19434,6 +19458,7 @@ function wsRedrawChart(opts) {
   if (!(opts && opts.keepToolbar)) {
     const tb = views.chart.querySelector('.ws-toolbar');
     if (tb) tb.outerHTML = wsToolbar();
+    wsPlaceMenu();
   }
 
   // The legend's values change with the range, so it is rebuilt — but it is
@@ -32327,6 +32352,7 @@ document.addEventListener('click', (evt) => {
     wsToolsOpen = !wsToolsOpen;
     const tbt = views.chart.querySelector('.ws-toolbar');
     if (tbt) tbt.outerHTML = wsToolbar();
+    wsPlaceMenu();
     return;
   }
   const wsMenu = evt.target.closest('[data-ws-menu]');
@@ -32337,6 +32363,7 @@ document.addEventListener('click', (evt) => {
     // it to show a menu was redrawing 743px of SVG to reveal six checkboxes.
     const tb2 = views.chart.querySelector('.ws-toolbar');
     if (tb2) tb2.outerHTML = wsToolbar();
+    wsPlaceMenu();
     return;
   }
   /* A button, so it is handled here rather than in the change listener above:

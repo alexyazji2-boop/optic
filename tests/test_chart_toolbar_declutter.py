@@ -199,3 +199,99 @@ def test_explain_chart_becomes_the_pulse_mark_where_its_words_do_not_fit():
     for rule in (".ws-body.narrow .ws-head .chart-pulse-lab { display: none; }",
                  ".ws-body.narrow .ws-head .chart-pulse-ico { display: block; }"):
         assert rule in CSS, rule
+
+
+# --------------------------------------------------------- the size grid
+#
+# Asked for with a screenshot of the open menu: "remove the circular
+# surrounding of the time frames and have it cover the whole box in grids".
+# The sizes were the row's pills, capsule and all, and the capsule kept around
+# a two-line grid drew a stadium inside the box.
+
+
+def css_rule(selector):
+    """The declarations of the first rule written for exactly `selector`."""
+    body = CSS[CSS.index("\n" + selector + " {") + 1:]
+    return re.sub(r"/\*.*?\*/", "", body[:body.index("}")], flags=re.S)
+
+
+def test_the_sizes_fill_the_menu_as_a_grid_with_no_capsule_around_them():
+    pop = css_rule(".ws-menu-pop.ws-interval-pop")
+    for decl in ("min-width: 0;", "padding: 0;", "overflow: hidden;"):
+        assert decl in pop, decl
+    grid = css_rule(".ws-interval-pop .pills")
+    for decl in ("display: grid;", "grid-template-columns: repeat(4, minmax(52px, 1fr));",
+                 "gap: 0;", "padding: 0;", "background: none;", "border: 0;",
+                 "border-radius: 0;"):
+        assert decl in grid, decl
+    cell = css_rule(".ws-interval-pop .pill")
+    for decl in ("border-radius: 0;", "border-right: 1px solid var(--border);",
+                 "border-bottom: 1px solid var(--border);"):
+        assert decl in cell, decl
+    # No line along the menu's own edges, however many sizes there are.
+    assert ".ws-interval-pop .pill:nth-child(4n) { border-right: 0; }" in CSS
+    assert (".ws-interval-pop .pill:nth-last-child(-n+4):nth-child(4n+1),\n"
+            ".ws-interval-pop .pill:nth-last-child(-n+4):nth-child(4n+1) ~ .pill "
+            "{ border-bottom: 0; }") in CSS
+    # The size on screen is still filled, and beats the cell's own background.
+    assert (".ws-interval-pop .pill.on { background: var(--btn-primary); "
+            "color: var(--btn-primary-ink); }") in CSS
+
+
+def test_the_grid_rule_outweighs_the_menu_rule_it_would_have_lost_to():
+    """`.ws-menu-pop` sets padding and a 210px floor further down the file at
+    one class's weight, which is how the old `min-width: 0` never applied."""
+    assert CSS.index(".ws-menu-pop {") > CSS.index(".ws-menu-pop.ws-interval-pop {")
+    assert "\n.ws-interval-pop {" not in CSS
+
+
+def _place(pop, host, width):
+    exe = JSC if os.path.exists(JSC) else shutil.which("jsc")
+    if not exe:
+        pytest.skip("no JavaScriptCore on this machine")
+    src = re.search(r"^function wsPlaceMenu\(\) \{.*?^\}", APP, re.M | re.S).group()
+    script = """
+      var rect = function (l, w) { return { left: l, right: l + w }; };
+      var HOST = %s, POP = %s;
+      var pop = { style: {}, offsetWidth: POP.w,
+                  offsetParent: { getBoundingClientRect: function () { return rect(HOST.l, HOST.w); } },
+                  getBoundingClientRect: function () { return rect(HOST.l + POP.at, POP.w); } };
+      var views = { chart: { querySelector: function () { return pop; } } };
+      var document = { documentElement: { clientWidth: %d } };
+      %s
+      wsPlaceMenu();
+      print('RESULT:' + JSON.stringify(pop.style));
+    """ % (json.dumps(host), json.dumps(pop), width, src)
+    out = subprocess.run([exe, "-e", script], capture_output=True, text=True, timeout=30)
+    assert "RESULT:" in out.stdout, out.stdout + out.stderr
+    return json.loads(out.stdout.split("RESULT:", 1)[1].split("\n")[0])
+
+
+def test_a_menu_that_would_run_off_the_right_opens_leftward_from_its_button():
+    """Measured at 1100px: the interval button at x=1003, its 210px menu
+    ending at 1213, and two of the four columns off the window."""
+    style = _place({"at": 0, "w": 210}, {"l": 1003, "w": 60}, 1100)
+    # Its right edge on the button's: 1063 - 210 = 853, 150px left of it.
+    assert style == {"left": "-150px", "right": "auto"}
+
+
+def test_a_menu_that_fits_is_left_where_it_opened():
+    assert _place({"at": 0, "w": 210}, {"l": 700, "w": 60}, 1440) == {}
+
+
+def test_a_menu_is_never_pushed_off_the_left_edge_either():
+    """A 300px menu under a button at x=100 in a 350px window: leftward would
+    start at -140, so it is held 8px in from the edge instead."""
+    style = _place({"at": 0, "w": 300}, {"l": 100, "w": 60}, 350)
+    assert style == {"left": "-92px", "right": "auto"}
+
+
+def test_every_redraw_that_can_leave_a_menu_open_places_it():
+    toggle = CODE[CODE.index("const wsMenu = evt.target.closest('[data-ws-menu]');"):]
+    toggle = toggle[:toggle.index("return;")]
+    assert toggle.index("tb2.outerHTML = wsToolbar();") < toggle.index("wsPlaceMenu();")
+    tools = CODE[CODE.index("if (evt.target.closest('[data-ws-tools]')) {"):]
+    assert "wsPlaceMenu();" in tools[:tools.index("return;")]
+    assert "if (tb) tb.outerHTML = wsToolbar();\n    wsPlaceMenu();" in CODE
+    render = fn("renderChartWorkspace")
+    assert render.index("${wsManagePanel()}`;") < render.index("wsPlaceMenu();")
