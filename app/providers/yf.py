@@ -29,6 +29,47 @@ import yfinance as yf  # noqa: E402
 from .base import MarketDataProvider
 from .common import clean_iv, pick_swing_expiries
 
+
+def _persist_timezones(data_dir: Optional[str]) -> Optional[str]:
+    """Put yfinance's timezone cache on the disk that survives a deploy.
+
+    Every history read resolves the exchange's timezone first, from a cache in
+    the home directory, and on a miss makes a chart request of its own before
+    the real one. A container's home is wiped by every deploy, so after each
+    one a symbol's first history read was two requests in a row: on the live
+    site the daily bars of a cold symbol took about 1.0s where an isolated read
+    took 0.34s (CRWV, ALAB and CIFR, 2026-09-29). TRACKER_DATA_DIR is the
+    mounted volume (see db.py). Unset, as in the tests and a local run,
+    yfinance keeps its own default.
+    """
+    if not data_dir:
+        return None
+    path = os.path.join(data_dir, "yfinance")
+    try:
+        os.makedirs(path, exist_ok=True)
+        yf.set_tz_cache_location(path)
+    except Exception:                                           # noqa: BLE001
+        return None
+    return path
+
+
+_persist_timezones(os.environ.get("TRACKER_DATA_DIR"))
+
+
+def _remember_timezone(symbol: str, doc: Optional[Dict[str, Any]]) -> None:
+    """The exchange's timezone from a v7 quote, into yfinance's cache, so the
+    symbol's next history read skips the request that would look it up."""
+    try:
+        row = (((doc or {}).get("quoteResponse") or {}).get("result") or [{}])[0]
+        tz = row.get("exchangeTimezoneName")
+        from yfinance import cache as yf_cache, utils as yf_utils
+        if tz and yf_utils.is_valid_timezone(tz):
+            store = yf_cache.get_tz_cache()
+            if store.lookup(symbol) != tz:
+                store.store(symbol, tz)
+    except Exception:                                           # noqa: BLE001
+        pass
+
 _CACHE: Dict[str, Any] = {}
 
 # Where `.info`'s three documents are fetched side by side (_info_documents).
@@ -638,7 +679,9 @@ class YFinanceProvider(MarketDataProvider):
         """The v7 quote: the price, the change, the session and the name."""
         def build():
             source = reads if reads is not None else yf.Ticker(ticker)._quote
-            return source._fetch_additional_info()
+            doc = source._fetch_additional_info()
+            _remember_timezone(ticker, doc)
+            return doc
         return _cached("q7:" + ticker, self.TTL_QUOTE, build, gate=False)
 
     def _peg_ratio(self, ticker: str, data: Any) -> Optional[float]:

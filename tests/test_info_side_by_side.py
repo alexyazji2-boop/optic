@@ -263,3 +263,37 @@ def test_a_stand_in_answers_with_its_own_earnings_dates(monkeypatch):
         earnings_dates = "their frame"
     monkeypatch.setattr(Y.yf, "Ticker", Ticker)
     assert Y.YFinanceProvider()._earnings_dates("ZZZ") == "their frame"
+
+
+# ------------------------------------------------ the exchange's timezone
+
+def test_the_timezone_cache_moves_only_onto_a_configured_volume(monkeypatch, tmp_path):
+    moved = []
+    monkeypatch.setattr(Y.yf, "set_tz_cache_location", lambda path: moved.append(path))
+    assert Y._persist_timezones(None) is None and moved == [], "tests and local runs keep the default"
+    assert Y._persist_timezones(str(tmp_path)) == str(tmp_path / "yfinance")
+    assert moved == [str(tmp_path / "yfinance")] and (tmp_path / "yfinance").is_dir()
+
+
+def test_a_quote_teaches_the_cache_its_timezone(monkeypatch):
+    stored = {}
+
+    class Store:
+        def lookup(self, symbol):
+            return stored.get(symbol)
+
+        def store(self, symbol, tz):
+            stored[symbol] = tz
+    from yfinance import cache as yf_cache
+    monkeypatch.setattr(yf_cache, "get_tz_cache", lambda: Store())
+    doc = {"quoteResponse": {"result": [{"exchangeTimezoneName": "America/New_York"}]}}
+    Y._remember_timezone("ZZZ", doc)
+    assert stored == {"ZZZ": "America/New_York"}
+    Y._remember_timezone("BAD", {"quoteResponse": {"result": [{"exchangeTimezoneName": "Mars/Base"}]}})
+    Y._remember_timezone("NONE", None)
+    assert set(stored) == {"ZZZ"}, "an invalid or absent zone is not stored"
+    calls = []
+    monkeypatch.setattr(Y.yf, "Ticker", _ticker_class(calls, delay=0.0))
+    monkeypatch.setattr(Y, "_remember_timezone", lambda sym, d: calls.append(("tz", sym)))
+    Y.YFinanceProvider()._info("ZZZ")
+    assert ("tz", "ZZZ") in calls, "the quote read passes its document on"
