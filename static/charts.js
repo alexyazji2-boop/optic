@@ -44,6 +44,21 @@ const CW = {
   tag: 700,
 };
 
+/* The stage zones' tint, the strip's height, and the width a stage name is
+ * measured at: 10.5px semibold, about 6px a character, estimated rather than
+ * measured because the node is not in the document yet (the session captions
+ * do the same). The tint is a step under the 0.13 the price bands use: visible
+ * across the plot, and well under a candle's full colour. */
+const STAGE_ZONE_OPACITY = 0.12;
+const STAGE_BAND_H = 4;
+const STAGE_NAME_CHAR = 6;
+
+// Text for the tooltip, which is HTML: a stage's name comes from the server.
+function escapeText(v) {
+  return String(v).replace(/[&<>"']/g, (ch) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+
 const C = {
   ink: '#f5f1ec', ink2: '#c2c6cb', muted: '#9fa3a8',
   grid: '#2c2c2a', baseline: '#383835', surface: '#121010',
@@ -832,7 +847,11 @@ function lineChart(opts) {
      * colour. A line takes the same thing from its series' own `tints`, so the
      * two chart styles are coloured by one array. */
     candleTints = null,
+    /* The Weinstein stage of each bar's week: `stageBand` its colour, and
+     * `stageNames` what to call it ("Stage 4 · Declining"). See the stage
+     * zones below for how they are drawn. */
     stageBand = null,
+    stageNames = null,
     // Sloped lines in (bar index, price) space — trend lines, channels, and any
     // drawing anchored to two points. refLines cannot express these: they are
     // horizontal by construction, which is right for a level and wrong for a
@@ -1043,6 +1062,51 @@ function lineChart(opts) {
   // Scale gridline count with available height — a fixed 4 ticks leaves a tall
   // chart with a sparse, hard-to-read axis. ~65px per tick keeps labels legible.
   const ticks = niceTicks(lo, hi, Math.max(3, Math.min(8, Math.round(priceH / 65))));
+
+  /* Each bar's stage, drawn in three parts.
+   *
+   * A tint behind the price for every run of bars in one stage, a strip in
+   * the stage's own colour along the foot of the price area, and the stage's
+   * name on the strip where the run is wide enough to hold it. Hovering a bar
+   * names its stage too (see the tooltip below).
+   *
+   * Stages used to colour the candles and the line themselves, as the reference
+   * chart draws them, and that hid the one thing a candle is for: NKE in stage 4
+   * drew every candle red, rallies included. So every candle keeps its own
+   * direction. The strip alone came next: four pixels under a 470px chart, it
+   * was asked about as "does stages no longer work on the chart?", which is a
+   * fair reading of a colour that small. The tint is what makes the stage
+   * visible across the whole chart, and it is faint enough that a green candle
+   * inside a red zone still reads as the up day it is.
+   *
+   * One run per stretch of a colour, since a stage lasts weeks. Behind the
+   * grid, because it is background: every line and candle reads over it. */
+  const stageRuns = [];
+  if (Array.isArray(stageBand) && stageBand.length) {
+    const half = n > 1 ? plotW / (n - 1) / 2 : plotW / 2;
+    let start = 0;
+    for (let i = 1; i <= n; i += 1) {
+      if (i < n && stageBand[i] === stageBand[start]) continue;
+      if (stageBand[start]) {
+        const x0 = Math.max(m.l, X(start) - half);
+        const x1 = Math.min(m.l + plotW, X(i - 1) + half);
+        stageRuns.push({ x0, width: Math.max(1, x1 - x0), color: stageBand[start],
+          name: Array.isArray(stageNames) ? stageNames[start] : null });
+      }
+      start = i;
+    }
+  }
+  if (stageRuns.length) {
+    const zoneLayer = s('g', { class: 'stage-zones', 'data-fade': animating ? DRAW_MS * 0.45 : null });
+    root.appendChild(zoneLayer);
+    stageRuns.forEach((r) => zoneLayer.appendChild(s('rect', {
+      x: r.x0, y: m.t, width: r.width, height: priceH,
+      fill: r.color, 'fill-opacity': STAGE_ZONE_OPACITY,
+    })));
+  }
+  // Where the session dividers put their captions along the foot, so a stage
+  // name drawn there afterwards can stand aside instead of printing over one.
+  const footLabels = [];
 
   let lastTickLabel = null;
   const gridLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.45 : null });
@@ -1363,6 +1427,7 @@ function lineChart(opts) {
           const width = String(mk.label).length * 5.2;
           if (x + 3 < lastLabelRight + 6) return;      // no room; line only
           lastLabelRight = x + 3 + width;
+          footLabels.push([x + 3, x + 3 + width]);
           levelLayer.appendChild(s('text', {
             x: x + 3, y: labelY, fill: C.refSession, 'font-size': CF.micro,
             'font-weight': 600, opacity: 0.85,
@@ -1478,32 +1543,36 @@ function lineChart(opts) {
     prevY = r.y;
   });
 
-  /* Each bar's stage, as a band along the foot of the price area.
-   *
-   * Stages used to colour the candles and the line themselves, as the reference
-   * chart draws them, and that hid the one thing a candle is for: NKE in stage 4
-   * drew every candle red, rallies included. The band carries the week's stage
-   * and every candle keeps its own direction. The price domain is padded 8%
-   * below its lowest bar, so the band sits under the data rather than on it.
-   * One rect per run of a colour, since a stage lasts weeks. */
-  if (Array.isArray(stageBand) && stageBand.length) {
+  /* The stage strip and its names. See the stage zones above. The price
+   * domain is padded 8% below its lowest bar, so the strip sits under the data
+   * rather than on it, and a name sits on the strip, in the stage's colour
+   * with a halo of the plane, only where its run can hold it. The full name
+   * first, then "Stage 4" alone, then nothing: a run a few bars wide still
+   * shows its colour, and the tooltip names it. */
+  if (stageRuns.length) {
     const bandLayer = s('g', { class: 'stage-band' });
     root.appendChild(bandLayer);
-    const bandH = 4;
-    const y = m.t + priceH - bandH;
-    const half = n > 1 ? plotW / (n - 1) / 2 : plotW / 2;
-    let start = 0;
-    for (let i = 1; i <= n; i += 1) {
-      if (i < n && stageBand[i] === stageBand[start]) continue;
-      if (stageBand[start]) {
-        const x0 = Math.max(m.l, X(start) - half);
-        const x1 = Math.min(m.l + plotW, X(i - 1) + half);
-        bandLayer.appendChild(s('rect', {
-          x: x0, y, width: Math.max(1, x1 - x0), height: bandH, fill: stageBand[start],
-        }));
-      }
-      start = i;
-    }
+    const y = m.t + priceH - STAGE_BAND_H;
+    stageRuns.forEach((r) => bandLayer.appendChild(s('rect', {
+      x: r.x0, y, width: r.width, height: STAGE_BAND_H, fill: r.color,
+    })));
+    const nameLayer = s('g', { class: 'stage-names', 'aria-hidden': 'true' });
+    root.appendChild(nameLayer);
+    stageRuns.forEach((r) => {
+      if (!r.name) return;
+      const name = String(r.name);
+      const fits = [name, name.split(' \u00b7 ')[0]]
+        .find((t) => t.length * STAGE_NAME_CHAR + 10 <= r.width);
+      if (!fits) return;
+      const x0 = r.x0 + 5;
+      const x1 = x0 + fits.length * STAGE_NAME_CHAR;
+      if (footLabels.some(([a, b]) => x0 < b + 4 && a < x1 + 4)) return;
+      nameLayer.appendChild(s('text', {
+        x: x0, y: y - 4, fill: r.color, 'font-size': CF.micro, 'font-weight': 600,
+        stroke: C.surface, 'stroke-width': 3, 'paint-order': 'stroke',
+        'stroke-linejoin': 'round',
+      }, fits));
+    });
   }
 
   if (candles) {
@@ -2130,6 +2199,12 @@ function lineChart(opts) {
         (valueFormat || yFormat)(v),
       ]);
     });
+    // The stage of the bar's week, by name: the one place a run too narrow
+    // for its name on the strip is still called something.
+    if (Array.isArray(stageNames) && stageNames[i] && Array.isArray(stageBand) && stageBand[i]) {
+      rows.push([`<span style="color:${stageBand[i]}">■</span> Stage`,
+        escapeText(String(stageNames[i]).replace(/^Stage /, ''))]);
+    }
     // Volume for the same bar. Shown in full rather than abbreviated: the point
     // of hovering a bar is to read the actual figure, and "144.3M" is what the
     // axis already told you.

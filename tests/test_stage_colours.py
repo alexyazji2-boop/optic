@@ -203,6 +203,17 @@ def test_all_three_draw_the_band_from_one_array_and_tint_nothing():
     assert "candleTints:" not in APP and "tints: stages" not in APP
 
 
+def test_all_three_name_the_stages_they_draw():
+    """The band's names and the readout's Stage row come from the same pass
+    that picks each bar's colour, so a name cannot belong to another bar."""
+    assert APP.count("stageNames: stages ? stages.labels : null") == 3
+    fn = _fn(APP, "stageTints")
+    assert "labels.push(title(n));" in fn
+    assert "return { colors, labels, key, marks };" in fn
+    # The key and the names say the same thing about the same stage.
+    assert ".map((n) => ({ name: title(n), color: C['stage' + n] }));" in fn
+
+
 def test_the_keys_name_the_candles_colours_and_then_the_bands_stages():
     swing = _fn(APP, "swingPriceBlock")
     assert "...(candleMode" in swing and "...(stages ? stages.key : [])," in swing

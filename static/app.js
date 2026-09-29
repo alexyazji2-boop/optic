@@ -2329,11 +2329,11 @@ const SHOW_TRENDS_KEY = 'optic.chart.trends.v1';
 // move happened.
 let showSessions = false;
 const SHOW_SESSIONS_KEY = 'optic.chart.sessions.v1';
-/* Weinstein stages, as the colour of the price mark: every bar in the stage of
- * its week, the way the reference chart the stage label was built after draws
- * them. On by default, unlike the overlays above, because it is not another
- * line across the chart; it recolours the one mark that is always there, and
- * each chart's legend carries the key so a colour never has to be guessed. */
+/* Weinstein stages, as a tint behind the price: every bar in the stage of its
+ * week, named along the foot of the chart (see stageBand in charts.js). On by
+ * default, unlike the overlays above, because it is not another line across
+ * the chart; it shades what is already there, and each chart's legend carries
+ * the key so a colour never has to be guessed. */
 let showStages = true;
 const SHOW_STAGES_KEY = 'optic.chart.stages.v1';
 const SHOW_MA_KEY = 'optic.chart.ma.v2';
@@ -8642,8 +8642,9 @@ function swingPriceBlock(d, ps, ctx) {
     // Before the averages: with Stages on, the mark they must not be mistaken
     // for is drawn in the stage colours. Same lookup as the Charting tab, on
     // this payload's own symbol.
-    // Drawn as a band under the price, in both modes; the candles and the line
-    // keep their own direction (see stageBand in charts.js).
+    // Drawn as a tint behind the price and a named strip along its foot, in
+    // both modes; the candles and the line keep their own direction (see
+    // stageBand in charts.js).
     const stages = stageTints(d.ticker, ps.dates, ps.intraday);
     paintStageLegend('stage-price-legend', d.ticker, () => (STATE.swing || {}).ticker === d.ticker);
     const maOn = maColorsOnChart(candleMode, stages && stages.marks);
@@ -8792,6 +8793,7 @@ function swingPriceBlock(d, ps, ctx) {
         ? { open: ps.open, high: ps.high, low: ps.low, close: ps.close }
         : null,
       stageBand: stages ? stages.colors : null,
+      stageNames: stages ? stages.labels : null,
       refLines: overlayRefs,
       // Under the levels and under the price, so neither is muted by the fill.
       clouds: emaClouds(ps),
@@ -12710,13 +12712,15 @@ const OVERLAY_DEFS = [
    * retracements of the multi-year range. A chart that offers both says what
    * horizon each belongs to, which is why they are two overlays and not one. */
   { id: 'accum', label: 'Accumulation zones', group: 'Levels', color: 'refSR', width: 1 },
-  /* Stages recolour the price mark rather than draw on it. `fixed` is the
-   * style dialog's cue that there is no colour or width to choose, for the
-   * reason the clouds give: the colours are the reading. */
+  /* Stages shade the chart behind the price rather than draw a line on it.
+   * `fixed` is the style dialog's cue that there is no colour or width to
+   * choose, for the reason the clouds give: the colours are the reading. */
   { id: 'stages', label: 'Weinstein stages', group: 'Trend', color: 'pos', width: 1,
-    fixed: 'Colours each bar by the Weinstein stage of its week: light green '
-      + 'basing, green advancing, amber topping, red declining. The colours are '
-      + 'the reading, so they are fixed. On intraday bars each takes its week\'s stage.' },
+    fixed: 'Shades the chart behind each bar in the colour of its week\'s Weinstein '
+      + 'stage, and names the stage along the foot: light green basing, green advancing, '
+      + 'amber topping, red declining. The candles keep their up and down colours. '
+      + 'The colours are the reading, so they are fixed. On intraday bars each '
+      + 'takes its week\'s stage.' },
 ];
 
 const OVERLAY_BY_ID = Object.fromEntries(OVERLAY_DEFS.map((d) => [d.id, d]));
@@ -13434,19 +13438,24 @@ function stageTints(symbol, dates, intraday) {
   let byWeek = stageWeeks.get(r);
   if (!byWeek) { byWeek = new Map(r.history); stageWeeks.set(r, byWeek); }
   const names = r.names || {};
+  const title = (n) => (n ? `Stage ${n} \u00b7 ${names[n] || ''}`.trim() : 'No stage yet');
   const seen = new Set();
+  // What the chart writes on each run of the strip and in the tooltip, bar
+  // for bar with `colors`.
+  const labels = [];
   const colors = dates.map((iso) => {
     const n = byWeek.get(weekMonday(iso)) || 0;
     seen.add(n);
+    labels.push(title(n));
     return n ? C['stage' + n] : C.muted;
   });
   const key = [1, 2, 3, 4].filter((n) => seen.has(n))
-    .map((n) => ({ name: `Stage ${n} \u00b7 ${names[n] || ''}`.trim(), color: C['stage' + n] }));
-  if (seen.has(0)) key.push({ name: 'No stage yet', color: C.muted });
+    .map((n) => ({ name: title(n), color: C['stage' + n] }));
+  if (seen.has(0)) key.push({ name: title(0), color: C.muted });
   // All four, not only those on screen, so an average's colour does not change
   // as the reader pans a stage into view. See maColorsOnChart.
   const marks = [C.stage1, C.stage2, C.stage3, C.stage4];
-  return { colors, key, marks };
+  return { colors, labels, key, marks };
 }
 
 /* The Charting tab's stages, from the one set of inputs its chart, legend and
@@ -13547,6 +13556,7 @@ function drawInstrumentChart(d) {
       hidden: !!candles, fill: !candles }],
     candles,
     stageBand: stages ? stages.colors : null,
+    stageNames: stages ? stages.labels : null,
     valueTags: true,
   }));
 }
@@ -18848,6 +18858,7 @@ function wsMountChart() {
         low: ps.low || [], close: ps.close || [],
       } : null,
       stageBand: stages ? stages.colors : null,
+      stageNames: stages ? stages.labels : null,
       /* The reader's colours. See chartColor().
        *
        * Candles get an explicit value either way so the default lives in one

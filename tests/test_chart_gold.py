@@ -189,15 +189,15 @@ def test_the_companions_are_far_from_the_gold_in_both_themes():
 
 
 def test_averages_are_measured_against_the_stage_colours_when_those_are_drawn():
-    """The stages are a band under the price now, not the candles' colour, so
-    both are on screen at once and the averages keep clear of both: the price
-    as drawn plus the band's four colours."""
+    """The stages are a tint and a band behind the price now, not the candles'
+    colour, so both are on screen at once and the averages keep clear of both:
+    the price as drawn plus the band's four colours."""
     fn = _fn(APP, "maColorsOnChart")
     assert "function maColorsOnChart(candleMode, marks)" in fn
     assert ": lineMarks()), ...(marks || [])].map(lc));" in fn
     tints = _fn(APP, "stageTints")
     assert "const marks = [C.stage1, C.stage2, C.stage3, C.stage4];" in tints
-    assert "return { colors, key, marks };" in tints
+    assert "return { colors, labels, key, marks };" in tints
     base = _fn(APP, "chartBaseColors")
     assert "maColorsOnChart(candleMode, marks)" in base
     assert "chartColor('down')] : lineMarks()),\n    ...(marks || [])];" in base
