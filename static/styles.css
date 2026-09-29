@@ -1413,6 +1413,13 @@ body:not([data-view="home"]) .brand-mark-dot {
 
 /* The ticker box is the one thing to do on this page, so it gets real weight. */
 .home-search { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-3); }
+/* A layer of its own, above the blocks after it. The results list's z-index
+   80 only counts inside this form, because `.reveal`'s entrance leaves every
+   revealed block a stacking context of its own (fill-mode both keeps the
+   transform). The "Or jump to" chips and the Today card are revealed after
+   this form, so they painted over its results list: ORCL's matches came out
+   under SPY, QQQ and NVDA. */
+.home-search { position: relative; z-index: 6; }
 .home-search input {
   flex: 1 1 240px;
   min-width: 0;
