@@ -6262,7 +6262,8 @@ details.ind-explain[open] > summary .cal-caret { transform: rotate(90deg); }
  *
  * One row. Each section with more than one page opens a menu, by three routes
  * that suit three input devices: hover for a mouse, :focus-within for a
- * keyboard, and an explicit .open class for a tap.
+ * keyboard, and an explicit .open class for a tap. Where there is no hover the
+ * .open class also serves the keyboard (see the hover block below).
  *
  * The tap route was missing, and the first two do not cover for it. A phone has
  * no hover, and Safari does not focus a <button> when you tap it, so on a phone
@@ -6298,7 +6299,6 @@ details.ind-explain[open] > summary .cal-caret { transform: rotate(90deg); }
   opacity: 0.45;
   transition: transform 140ms ease, opacity 140ms ease;
 }
-.nav-item:focus-within .nav-caret,
 .nav-item.open .nav-caret { opacity: 0.9; transform: rotate(180deg); }
 
 .nav-menu {
@@ -6336,7 +6336,6 @@ details.ind-explain[open] > summary .cal-caret { transform: rotate(90deg); }
               transform var(--dur-panel) var(--ease-ui),
               visibility var(--dur-panel);
 }
-.nav-item:focus-within .nav-menu,
 .nav-item.open .nav-menu {
   opacity: 1;
   visibility: visible;
@@ -6350,10 +6349,20 @@ details.ind-explain[open] > summary .cal-caret { transform: rotate(90deg); }
  * navigates, so the menu appeared over the page it had just taken you to. It is
  * also why the bridge below is in here: a 6px invisible strip under every
  * section is a mouse affordance, and on a phone it is 6px of the page content
- * underneath that cannot be tapped. */
+ * underneath that cannot be tapped.
+ *
+ * :focus-within is in here for the same reason. Chrome focuses a button you
+ * tap, so on an Android phone the tap that closed a menu took .open away and
+ * the focus it left behind kept the menu on screen. Measured at 375x812 in
+ * Chrome: after the second tap on Dossier no item was open, the Dossier button
+ * had focus, and its menu was still visible. Where there is no hover the .open
+ * class is the only way in, and a keyboard takes it too: Enter on the section
+ * button is a click, and the click opens the menu. */
 @media (hover: hover) {
-  .nav-item:hover .nav-caret { opacity: 0.9; transform: rotate(180deg); }
-  .nav-item:hover .nav-menu {
+  .nav-item:hover .nav-caret,
+  .nav-item:focus-within .nav-caret { opacity: 0.9; transform: rotate(180deg); }
+  .nav-item:hover .nav-menu,
+  .nav-item:focus-within .nav-menu {
     opacity: 1;
     visibility: visible;
     transform: none;
@@ -14516,6 +14525,22 @@ body.rail-tight .rail nav.tabs-group .nav-menu { left: 56px; }
   nav.tabs-group > .nav-item.menu-right .nav-menu {
     left: var(--space-3);
     right: var(--space-3);
+  }
+  /* The open menu once liftNavMenu has moved it to <body>, out of the strip
+     that clipped it in Safari. Same place and size as the rule above; open,
+     because the `.nav-item.open` rule that shows it no longer reaches it. */
+  nav.tabs.nav-lift { display: contents; }
+  .nav-lift .nav-menu {
+    position: fixed;
+    top: calc(var(--topbar-h, 165px) + var(--rail-h, 0px) + var(--space-1));
+    left: var(--space-3);
+    right: var(--space-3);
+    min-width: 0;
+    max-width: none;
+    margin-left: 0;
+    opacity: 1;
+    visibility: visible;
+    transform: none;
   }
   .rail-label { display: none; }
   /* Square icon buttons, not the full-width rows they are in the column. In a

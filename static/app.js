@@ -30694,6 +30694,9 @@ function paintNav(view) {
   const active = groupForView(view);
   const nav = document.querySelector('nav.tabs-group');
   if (!nav) return;
+  // A menu lifted to <body> (see liftNavMenu) would outlive the strip this
+  // replaces and stay on screen with nothing open under it.
+  returnNavMenus();
 
   // The instrument chart is a transient page attached to whichever group opened
   // it, so it appears inside that group's menu rather than as a fixed entry.
@@ -30879,11 +30882,84 @@ function navMenusOpenOnTap() {
 }
 
 function closeNavMenus() {
+  returnNavMenus();
   document.querySelectorAll('.nav-item.open').forEach((item) => {
     item.classList.remove('open');
     const btn = item.querySelector('button[data-group]');
     if (btn) btn.setAttribute('aria-expanded', 'false');
   });
+}
+
+// The query trackRailHeight and the phone block in styles.css use, so a menu
+// is only lifted where the rule that places it applies.
+const NAV_ROW_QUERY = '(max-width: 559px)';
+
+/* A phone's open section menu, lifted out of the strip until it closes.
+ *
+ * Reported from an iPhone as "the dropdown menu on the phone does not work".
+ * On a phone the strip is a sideways scroller inside a fixed bar that clips,
+ * and the open menu is position: fixed below both, wholly outside the
+ * scroller's box: measured at 375x812, the strip runs 135-179 and the menu
+ * starts at 193.6. Chrome draws a fixed box outside the scroller it sits in,
+ * which is why the menus opened in Chrome's phone emulation. Safari on iOS
+ * clips it to that scroller, a long-standing WebKit behaviour (not reproduced
+ * here: this Mac has no iOS Simulator), and with the menu entirely below the
+ * clip there was nothing left to see.
+ *
+ * On <body> nothing above it can clip it, in either engine. The layer is a
+ * `nav.tabs`, so its page buttons are handled by the same delegated click as
+ * the strip's. Only while the rail is a row: in the column the menus fly out
+ * sideways and nothing clips them. */
+function navRailIsRow() {
+  return typeof matchMedia === 'function' && matchMedia(NAV_ROW_QUERY).matches;
+}
+
+function liftNavMenu(item) {
+  if (!navRailIsRow()) return null;
+  const menu = item.querySelector('.nav-menu');
+  if (!menu) return null;
+  let layer = document.getElementById('nav-lift');
+  if (!layer) {
+    layer = document.createElement('nav');
+    layer.id = 'nav-lift';
+    layer.className = 'tabs nav-lift';
+    layer.setAttribute('aria-label', 'Section pages');
+    document.body.appendChild(layer);
+  }
+  menu._navHome = item;
+  layer.appendChild(menu);
+  return menu;
+}
+
+function returnNavMenus() {
+  const layer = document.getElementById('nav-lift');
+  if (!layer) return;
+  [...layer.children].forEach((menu) => {
+    // Home again, or gone with the strip it came from: paintNav rebuilds the
+    // strip on every switch, and a menu from the old one has nowhere to go.
+    if (menu._navHome && menu._navHome.isConnected) menu._navHome.appendChild(menu);
+    else menu.remove();
+  });
+  layer.remove();
+}
+
+/* The keyboard, once the menu is not next to its button any more.
+ *
+ * Lifted to the end of <body>, the menu is no longer the next stop after its
+ * section button: Tab from Dossier went on along the strip and then through
+ * the whole page before it reached Overview. So a menu opened from the
+ * keyboard takes focus itself, and Tab off either end of it, or Escape, closes
+ * it and puts focus back in the strip at the button. */
+function focusNavPage(menu) {
+  const page = menu.querySelector('.nav-page.current') || menu.querySelector('.nav-page');
+  if (page) page.focus();
+}
+
+function closeLiftedNavMenu(menu) {
+  const home = menu._navHome;
+  closeNavMenus();
+  const btn = home && home.isConnected && home.querySelector('button[data-group]');
+  if (btn) btn.focus();
 }
 
 /* Delegated, because the second row is rebuilt on every switch — a bind-once
@@ -30902,6 +30978,8 @@ document.addEventListener('click', (evt) => {
       if (!wasOpen) {
         item.classList.add('open');
         groupBtn.setAttribute('aria-expanded', 'true');
+        const lifted = liftNavMenu(item);
+        if (lifted && evt.detail === 0) focusNavPage(lifted);
       }
       return;
     }
@@ -30958,13 +31036,41 @@ document.addEventListener('click', (evt) => {
  * this: a hover menu closes itself when the pointer leaves. */
 document.addEventListener('click', (evt) => {
   if (!evt.target || !evt.target.closest) return;
-  if (evt.target.closest('.nav-item')) return;
+  // The lifted menu is part of the strip for this purpose (see liftNavMenu).
+  if (evt.target.closest('.nav-item') || evt.target.closest('#nav-lift')) return;
   closeNavMenus();
 });
 
 document.addEventListener('keydown', (evt) => {
-  if (evt.key === 'Escape') closeNavMenus();
+  const lifted = evt.target && evt.target.closest && evt.target.closest('#nav-lift .nav-menu');
+  if (evt.key === 'Escape') {
+    if (lifted) closeLiftedNavMenu(lifted);
+    else closeNavMenus();
+    return;
+  }
+  if (evt.key === 'Tab' && lifted) {
+    const pages = lifted.querySelectorAll('.nav-page');
+    const edge = evt.shiftKey ? pages[0] : pages[pages.length - 1];
+    if (evt.target === edge) {
+      // Shift+Tab stops on the button, which is what came before the menu.
+      // Tab is left to run from the button, so it lands on whatever came
+      // after the menu when it was still in the strip.
+      if (evt.shiftKey) evt.preventDefault();
+      closeLiftedNavMenu(lifted);
+    }
+  }
 });
+
+/* Turning a phone on its side crosses the breakpoint, and on the other side
+ * of it nothing places a lifted menu. Measured going from 375x812 to 740x360
+ * with Dossier open: the menu stayed on <body>, hidden, and Dossier still
+ * read as open, so the next tap on it closed a menu nobody could see. The
+ * strip changes shape there anyway, so whatever is open closes. */
+if (typeof matchMedia === 'function') {
+  const navRow = matchMedia(NAV_ROW_QUERY);
+  if (navRow.addEventListener) navRow.addEventListener('change', closeNavMenus);
+  else if (navRow.addListener) navRow.addListener(closeNavMenus);
+}
 
 // Last page visited inside each group.
 const NAV_LAST = {};

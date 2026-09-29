@@ -222,14 +222,20 @@ def test_choosing_a_page_closes_the_menu_by_both_routes():
 
 def test_something_outside_the_strip_closes_it():
     """A menu that can only be closed by the control that opened it is a trap on
-    a touchscreen, where there is no pointer to move away."""
+    a touchscreen, where there is no pointer to move away. On a phone the open
+    menu is lifted out of the strip onto <body> (test_phone_nav_lift.py), so a
+    tap inside the lifted menu counts as inside the strip."""
     js = strip_comments(APP_JS)
-    assert re.search(r"closest\('\.nav-item'\)\) return;\s*closeNavMenus\(\)", js)
+    assert re.search(r"closest\('\.nav-item'\) \|\| evt\.target\.closest\('#nav-lift'\)\) "
+                     r"return;\s*closeNavMenus\(\)", js)
 
 
 def test_escape_closes_it():
+    """Wherever the menu is. A lifted one also hands focus back to its button,
+    since focus inside it is at the end of <body>."""
     js = strip_comments(APP_JS)
-    assert re.search(r"key === 'Escape'\) closeNavMenus\(\)", js)
+    assert re.search(r"key === 'Escape'\) \{\s*if \(lifted\) closeLiftedNavMenu\(lifted\);"
+                     r"\s*else closeNavMenus\(\);", js)
 
 
 def test_the_menu_button_starts_out_saying_it_is_closed():
@@ -270,12 +276,24 @@ def test_the_tapped_open_rule_is_not_scoped_to_anything():
     assert ".nav-item.open .nav-menu" not in block
 
 
-def test_the_keyboard_route_is_not_scoped_either():
-    """:focus-within is how this opens without a pointer of any kind, and it has
-    to keep working on both sorts of device."""
+def test_the_keyboard_route_is_scoped_with_hover():
+    """:focus-within opens a menu from the keyboard where there is hover, and
+    only there. Chrome focuses a button you tap, so on an Android phone the tap
+    that closed a menu took .open away and the focus it left behind kept the
+    menu on screen. Measured at 375x812 in Chrome: after the second tap on
+    Dossier no item was open, the Dossier button had focus, and its menu was
+    visible.
+
+    Until 2026-09-28 this test required the opposite, so that the keyboard
+    route would work on both sorts of device. It still does. Without hover the
+    keyboard goes the tap's way, because Enter on the section button is a click
+    and the click sets .open (see test_the_tapped_open_rule_is_not_scoped_to_
+    anything, and test_phone_nav_lift.py for where focus goes once it opens).
+    The menu now opens on Enter rather than as soon as the button gets focus."""
     block = media_block("(hover: hover)")
-    assert ".nav-item:focus-within .nav-menu" in CSS
-    assert ".nav-item:focus-within .nav-menu" not in block
+    for rule in (".nav-item:focus-within .nav-menu", ".nav-item:focus-within .nav-caret"):
+        assert rule in block
+        assert rule not in CSS.replace(block, "")
 
 
 def test_a_tall_menu_fits_the_window_it_opens_in():
