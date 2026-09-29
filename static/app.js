@@ -615,6 +615,16 @@ function buildChartNow(host, builder) {
   return true;
 }
 
+/* A builder that draws on, or does not, as its mount decided. Restores the
+ * flag afterwards, since the next build in the queue has its own answer. */
+function drawnAs(build, animate) {
+  return (w) => {
+    const was = chartAnimationOn();
+    setChartAnimation(animate);
+    try { return build(w); } finally { setChartAnimation(was); }
+  };
+}
+
 function settleHost(host) {
   PENDING_HOSTS.delete(host);
   CHART_BUILDERS.delete(host);
@@ -716,6 +726,13 @@ function mount(id, node) {
     if (node) { host.innerHTML = ''; host.appendChild(node); }
     return;
   }
+  /* Whether it draws on is decided now, when it is asked for, not when the
+   * build runs. Builds wait: a frame each in the queue, and a chart below the
+   * fold until it is scrolled to. The flag they used to read then was whatever
+   * the last thing to touch it had left, so the MACD pane, built two frames
+   * after the price chart it sits under, could draw finished while the price
+   * swept, and a panel scrolled to after any control press never swept. */
+  node = drawnAs(node, chartAnimationOn());
   const token = String(++chartToken);
   host.dataset.chartPending = token;
   // Cleared up front, even though the build is deferred: leaving the old node in
@@ -13308,6 +13325,12 @@ function stageReading(symbol) {
 }
 
 function stagesArrived(symbol) {
+  // An update, not an arrival: redrawn after any sweep in progress rather than
+  // in the middle of it. See afterDrawsSettle in charts.js.
+  afterDrawsSettle(() => stagesRedraw(symbol));
+}
+
+function stagesRedraw(symbol) {
   if (STATE.view === 'chart') {
     const d = STATE.chartData;
     if (d && d !== 'loading' && d.ticker === symbol) wsRedrawChart({ keepToolbar: true });
@@ -15831,6 +15854,17 @@ function wsPanesHTML() {
   </div>`).join('');
 }
 
+/* Which panes draw on in the next wsMountPanes: '*' when a new payload has
+ * arrived, a pane's id when it has just been opened from the Panes menu, and
+ * null otherwise. Read and cleared there.
+ *
+ * Its own signal rather than the chart flag, because the flag is also on when
+ * Line and Candles are switched, which redraws the price as a different mark
+ * and leaves RSI and MACD exactly as they were: replaying their sweep then
+ * would announce a change that did not happen. Opening a pane leaves the
+ * price chart as it was, so that redraws without a sweep. */
+let wsPaneArriving = null;
+
 /* Draw the panes from the same windowed series the price chart used.
  *
  * `ps` is what wsSeries returned, so the arrays are already cut to the visible
@@ -15842,6 +15876,10 @@ function wsMountPanes(ps) {
   if (!wsPanesOpen.length) return;
   const dates = ps.dates || [];
   const unit = barUnit(ps);
+  const arriving = wsPaneArriving;
+  wsPaneArriving = null;
+  const was = chartAnimationOn();
+  const drawOn = (id) => setChartAnimation(arriving === '*' || arriving === id);
 
   if (wsPaneOpen('rsi') && (ps.rsi || []).length) {
     const cross = lastMacdCross(ps.rsi, ps.rsiSignal || []);
@@ -15852,6 +15890,7 @@ function wsMountPanes(ps) {
       <span class="ws-pane-key" style="background:${C.s7}"></span>Signal ${RSI_SIGNAL_PERIOD}${
   cross ? ` <span class="ws-pane-cross ${cross.bullish ? 'up' : 'down'}">${
     cross.bullish ? 'bullish' : 'bearish'} cross</span>` : ''}`);
+    drawOn('rsi');
     mount('ws-pane-rsi', (w) => lineChart({
       width: w,
       height: 132,
@@ -15872,6 +15911,7 @@ function wsMountPanes(ps) {
       ],
       valueTags: true,
     }));
+    setChartAnimation(was);
   }
 
   if (wsPaneOpen('macd') && (ps.macd || []).length) {
@@ -15884,10 +15924,12 @@ function wsMountPanes(ps) {
       <span class="ws-pane-key" style="background:${C.s3}"></span>Histogram${
   cross ? ` <span class="ws-pane-cross ${cross.bullish ? 'up' : 'down'}">${
     cross.bullish ? 'bullish' : 'bearish'} cross</span>` : ''}`);
+    drawOn('macd');
     mount('ws-pane-macd', (w) => macdChart(
       ps.macd, ps.macdSignal || [], ps.macdHist || [], dates, w,
       { cross, unit, height: 132 },
     ));
+    setChartAnimation(was);
   }
 }
 
@@ -18766,6 +18808,9 @@ async function loadChartWorkspace(symbol, force) {
   STATE.chartSymbol = sym;
   STATE.chartData = 'loading';
   renderChartWorkspace('loading');
+  // The stage reading beside the payload rather than after it, so it is
+  // usually in hand for the first draw and nothing redraws behind the sweep.
+  if (wsOverlayDrawn('stages')) fetchStage(sym);
   try {
     const data = await getJSON(`/api/ticker/${encodeURIComponent(sym)}`);
     if (requestId !== chartRequestId || STATE.chartSymbol !== sym) return;
@@ -18775,8 +18820,17 @@ async function loadChartWorkspace(symbol, force) {
     STATE.chartData = { error: err.message };
   }
   if (STATE.view !== 'chart') return;
+  /* A new payload is what the draw-on is for: the price, RSI and MACD sweep
+   * in together. loadView decides the flag before this runs, from the state
+   * of the chart being replaced, so switching symbols on this tab drew every
+   * chart finished. Set for this draw only: mount() keeps the answer, and a
+   * refresh from a control afterwards is a redraw, not an arrival. */
+  setChartAnimation(true);
+  wsPaneArriving = '*';
   renderChartWorkspace(STATE.chartData);
   wsMountChart();
+  setChartAnimation(false);
+  wsPaneArriving = null;
   wsEnsureIntraday();
   // The dock's seasonality widget needs its own request; not awaited so the
   // chart is usable while it lands.
@@ -33676,6 +33730,9 @@ document.addEventListener('change', (evt) => {
   const wsPaneOpt = evt.target.closest('[data-ws-pane-opt]');
   if (wsPaneOpt) {
     wsTogglePane(wsPaneOpt.dataset.wsPaneOpt);
+    // A pane switched on draws on; the rest of the tab redraws as it stands.
+    setChartAnimation(false);
+    wsPaneArriving = wsPaneOpen(wsPaneOpt.dataset.wsPaneOpt) ? wsPaneOpt.dataset.wsPaneOpt : null;
     // A full repaint, not wsRedrawChart: adding a pane adds markup, and the
     // series itself changes because the oscillators are attached only for the
     // panes that are open. The Swing chart is untouched by design.

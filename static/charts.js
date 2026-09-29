@@ -310,6 +310,7 @@ function tipRows(title, rows) {
 let animateNextChart = false;
 
 function setChartAnimation(on) { animateNextChart = on; }
+function chartAnimationOn() { return animateNextChart; }
 
 /* Whether the next chart's leading point should pulse.
  *
@@ -412,6 +413,27 @@ function hasPendingDraws() {
   return deferredDraws.size > 0;
 }
 
+/* Draw-ons in progress, as the promises of their animations.
+ *
+ * So a redraw that only updates a chart can wait for a sweep to finish rather
+ * than cut it off. The stage reading is the case that needed it: it lands a
+ * moment after the payload, and the redraw it causes replaced the price chart,
+ * RSI and MACD with finished copies part-way through their sweep, so on the
+ * Charting tab the panes were seen to appear fully drawn. */
+const runningDraws = new Set();
+
+function trackDraw(anim) {
+  const done = anim.finished.catch(() => {});
+  runningDraws.add(done);
+  done.then(() => runningDraws.delete(done));
+}
+
+/** Run `fn` once no draw-on is in progress: at once if none is. */
+function afterDrawsSettle(fn) {
+  if (!runningDraws.size) { fn(); return; }
+  Promise.all([...runningDraws]).then(() => afterDrawsSettle(fn));
+}
+
 /** Kick off the animation. Must run after the SVG is in the document —
  *  getTotalLength() returns 0 on a detached node.
  *
@@ -475,6 +497,7 @@ function animateChart(root) {
         [{ strokeDashoffset: len }, { strokeDashoffset: 0 }],
         { duration: DRAW_MS, delay, easing: 'cubic-bezier(0.33, 1, 0.68, 1)', fill: 'backwards' },
       );
+      trackDraw(anim);
       anim.finished.then(() => {
         el.style.strokeDasharray = '';
         el.style.strokeDashoffset = '';
@@ -490,6 +513,7 @@ function animateChart(root) {
       // visible flash right as the line completed.
       const anim = el.animate([{ opacity: 0 }, {}],
         { duration: FADE_MS, delay, easing: 'ease-out', fill: 'backwards' });
+      trackDraw(anim);
       anim.finished.then(() => { el.style.opacity = ''; }).catch(() => {});
     });
   };

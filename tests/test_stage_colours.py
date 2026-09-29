@@ -163,7 +163,9 @@ def test_a_failed_fetch_redraws_nothing_so_a_blip_cannot_loop():
 
 
 def test_an_answer_redraws_only_a_chart_still_showing_that_symbol():
-    fn = _fn(APP, "stagesArrived")
+    # After any sweep in progress: see tests/test_oscillator_draw_on.py.
+    assert "afterDrawsSettle(() => stagesRedraw(symbol));" in _fn(APP, "stagesArrived")
+    fn = _fn(APP, "stagesRedraw")
     assert "d.ticker === symbol" in fn
     assert "STATE.swing.ticker === symbol" in fn
     assert "((STATE.instrument || {}).symbol || '') === symbol" in fn

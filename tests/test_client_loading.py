@@ -42,6 +42,9 @@ function entryBudget() { return null; }
 function securityHeader() { return STATE.ticker; }
 function esc(value) { return String(value); }
 function cap(value) { return value.charAt(0).toUpperCase() + value.slice(1); }
+// Stages off, so loadChartWorkspace asks for no stage reading beside the chart:
+// these scenarios count the chart's own requests.
+function wsOverlayDrawn() { return false; }
 /* errorHTML is NOT stubbed. It was, returning a bare sentence, and that is
  * how `loadSecurityFacet` came to append a Try again button of its own: the
  * stub showed no control, so one was added beside the call, and the real page
