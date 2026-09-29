@@ -2544,22 +2544,35 @@ async def catalyst_library(
     limit: int = Query(60, ge=1, le=200),
     fresh: bool = Query(False, description="Skip this copy's cache of the live library"),
 ) -> Dict[str, Any]:
-    """Search the stored catalyst library. Reads only — never generates.
+    """Search the stored catalyst library. Stores nothing and spends nothing.
+
+    A search for one symbol EDGAR lists is a search for that company: its own
+    catalysts are read fresh (catalysts.ticker_catalysts) and come back beside
+    the library's catalysts that link it or reach its sector.
 
     A local copy that cannot write its own (see live_mirror) answers with the
     live site's library, and says so. If the live site cannot be reached it
     falls back to its own store, and says that too.
     """
     def build() -> Dict[str, Any]:
-        mirroring = live_mirror.active()
+        mirroring = catalysts_mod.mirrored()
         if mirroring:
             got = live_mirror.fetch("/api/catalysts", {
                 "q": q, "status": status, "category": category, "sector": sector,
                 "theme": theme, "limit": limit}, fresh=fresh)
             if got is not None:
                 return got
-        out = catalysts_mod.search(query=q, status=status, category=category,
-                                   sector=sector, theme=theme, limit=limit)
+        sym = catalysts_mod.ticker_query(q)
+        if sym:
+            company = catalysts_mod.ticker_catalysts(YF_PROVIDER, sym)
+            out = catalysts_mod.search(status=status, category=category, sector=sector,
+                                       theme=theme, limit=limit, ticker=sym,
+                                       ticker_sector=company.get("sector") or "")
+            out["ticker"] = catalysts_mod.ticker_view(company, out.get("catalysts") or [],
+                                                      category)
+        else:
+            out = catalysts_mod.search(query=q, status=status, category=category,
+                                       sector=sector, theme=theme, limit=limit)
         if mirroring:
             out["mirror_failed"] = {"from": live_mirror.LIVE_URL}
         return out
@@ -2572,19 +2585,20 @@ async def catalyst_refresh(request: Request,
     """Scan recent stories for new catalysts.
 
     A POST and a separate endpoint from the search above, deliberately: this one
-    spends money and writes to the store, and neither of those should happen
-    because somebody opened a tab. The library does not wait on it: the
-    catalyst loop below scans on a schedule whether or not anyone presses this.
+    writes to the store, and under CATALYST_READER=model spends money, and
+    neither should happen because somebody opened a tab. The library does not
+    wait on it: the catalyst loop below scans on a schedule whether or not
+    anyone presses this.
 
-    Open to everyone, one at a time, and for anyone but the owner at most an
-    hour after the library was last scanned and over the default window. See
-    PUBLIC_CATALYST_SCAN_EVERY_S.
+    Open to everyone, one at a time, and for anyone but the owner spaced from
+    the library's last scan and over the default window. See
+    public_catalyst_every_s.
     """
     operator = _is_operator(request)
     # A copy showing the live library has nothing to scan with, and its own
     # store is not what the page shows. The button is not drawn in that case;
     # this is for a page that was open before the key stopped working.
-    if live_mirror.active():
+    if catalysts_mod.mirrored():
         return {"available": False, "mirror": {"from": live_mirror.LIVE_URL},
                 "reason": live_mirror.why() + " The live library rescans itself "
                           "on its own schedule."}
@@ -2594,7 +2608,7 @@ async def catalyst_refresh(request: Request,
     if not operator:
         hours = 168
         since = catalysts_mod.seconds_since_last_scan()
-        wait = _wait_left(since, PUBLIC_CATALYST_SCAN_EVERY_S)
+        wait = _wait_left(since, public_catalyst_every_s())
         if wait:
             raise _cooldown_refusal("The last catalyst scan", since, wait)
 
@@ -2606,8 +2620,8 @@ async def catalyst_refresh(request: Request,
         return await _run(build)
 
 
-# Two presses of Scan for new catalysts at once would each read the news with
-# the model. The second is told the first is running instead.
+# Two presses of Scan for new catalysts at once would each read the news and
+# write the same rows. The second is told the first is running instead.
 _CATALYST_REFRESH_LOCK = asyncio.Lock()
 
 
@@ -3950,12 +3964,23 @@ def _is_operator(request: Request) -> bool:
 #    of any kind keeps it from being run on a loop, and from earning the feed's
 #    rate limit for everyone else on the site.
 #  * Marks re-price the open positions, which is a quote each. Two minutes.
-#  * The catalyst scan reads the news with the model, which is paid for. An
-#    hour since the library was last scanned, by anyone or by the schedule.
+#  * The catalyst scan reads the wires by the published rules, which costs a
+#    read of feeds cached for fifteen minutes, so a scan sooner than that reads
+#    the same stories. Fifteen minutes since the library was last scanned, by
+#    anyone or by the schedule. An hour under CATALYST_READER=model, where each
+#    scan is a paid call.
 PUBLIC_TRACKER_SCAN_EVERY_S = 30 * 60.0
 PUBLIC_MARK_EVERY_S = 2 * 60.0
-PUBLIC_CATALYST_SCAN_EVERY_S = 60 * 60.0
+PUBLIC_CATALYST_SCAN_EVERY_S = 15 * 60.0
+PUBLIC_MODEL_CATALYST_SCAN_EVERY_S = 60 * 60.0
 _PUBLIC_LAST: Dict[str, float] = {}
+
+
+def public_catalyst_every_s() -> float:
+    """How far apart a reader's catalyst scans are, for the reader in use."""
+    if catalysts_mod.READER == "model":
+        return PUBLIC_MODEL_CATALYST_SCAN_EVERY_S
+    return PUBLIC_CATALYST_SCAN_EVERY_S
 
 
 def _wait_left(since_s: Optional[float], every_s: float) -> float:

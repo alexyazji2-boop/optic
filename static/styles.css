@@ -4525,6 +4525,33 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
 .cat-tag.down { color: var(--neg); }
 .cat-tag.flat { color: var(--ink-muted); }
 
+/* One company's own catalysts, above the library's, for a ticker search. */
+.cat-ticker {
+  margin: 0 0 var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.cat-ticker-title { font-size: var(--t-heading); font-weight: 600; margin: 0 0 var(--space-2); }
+.cat-ticker .note { color: var(--ink-muted); margin: 0 0 var(--space-3); }
+.cat-ticker .cat-list { margin-bottom: var(--space-3); }
+.cat-factors { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0 0 var(--space-3); }
+.cat-factor {
+  font-size: var(--t-micro);
+  color: var(--ink-2);
+  padding: var(--space-0) var(--space-2);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.cat-factor strong { color: var(--ink); font-weight: 600; }
+.cat-upcoming, .cat-reach {
+  font-size: var(--t-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.cat-upcoming { color: var(--pos); }
+.cat-reach { color: var(--warn); }
+
 /* ------------------------------------------------- market catalyst mode -- */
 
 .catmode { border-color: color-mix(in srgb, var(--s1) 30%, var(--border)); }

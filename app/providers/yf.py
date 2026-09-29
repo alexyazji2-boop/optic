@@ -1650,9 +1650,47 @@ class YFinanceProvider(MarketDataProvider):
                         "content_type": content.get("contentType"),
                     }
                 )
-            return items
+            return items or self._search_news(ticker, limit)
 
         return _cached("news:" + ticker, self.TTL_NEWS, build)
+
+    @staticmethod
+    def _search_news(ticker: str, limit: int) -> List[Dict[str, Any]]:
+        """Yahoo's search endpoint's headlines for a symbol, when `Ticker.news`
+        has none.
+
+        Measured on 2026-09-29 with yfinance 1.2.0: `Ticker("AAPL").news` and
+        `Ticker("NVDA").news` came back empty, and `Search` for the same symbols
+        returned a dozen stories each. Kept to the stories Yahoo tags with the
+        symbol, since a search also returns market wraps that merely list it.
+        The feed carries no summary, so the relevance rule downstream has the
+        headline to go on.
+        """
+        want = (ticker or "").upper()
+        try:
+            raw = yf.Search(want, max_results=1, news_count=min(max(limit, 1), 50)).news or []
+        except Exception:
+            return []
+        items: List[Dict[str, Any]] = []
+        for entry in raw:
+            tagged = [str(t).upper() for t in entry.get("relatedTickers") or []]
+            if tagged and want not in tagged:
+                continue
+            stamp = entry.get("providerPublishTime")
+            try:
+                published = datetime.fromtimestamp(int(stamp), tz=timezone.utc).isoformat()
+            except (TypeError, ValueError, OverflowError, OSError):
+                published = ""
+            items.append({
+                "id": entry.get("uuid"),
+                "title": entry.get("title") or "",
+                "summary": "",
+                "publisher": entry.get("publisher") or "",
+                "published": published,
+                "url": entry.get("link") or "",
+                "content_type": entry.get("type"),
+            })
+        return items[:limit]
 
 
 PROVIDER = YFinanceProvider()

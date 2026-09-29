@@ -36,6 +36,10 @@ WEEKLY = {"available": True, "headline": "Live week", "paragraphs": ["p"]}
 def local(monkeypatch):
     for name in PLATFORM:
         monkeypatch.delenv(name, raising=False)
+    # The library is mirrored only while the model reads the stories, which is
+    # what these tests are about. Under the rules, the default, a copy without
+    # a key fills its own: see test_catalyst_rules.
+    monkeypatch.setattr(catalysts, "READER", "model")
 
 
 class _Live:

@@ -11502,8 +11502,14 @@ async function loadCatalystMode() {
 /* The catalyst library.
  *
  * Read-only by default. The refresh that scans for new catalysts is a POST
- * behind an explicit button, because it costs a model call and writes to the
- * store, and neither should happen because somebody opened a tab.
+ * behind an explicit button, because it writes to the store, and that should
+ * not happen because somebody opened a tab. It reads the wires by published
+ * rules, not a model, so it costs nothing; the server runs it hourly anyway.
+ *
+ * A search for one ticker is a search for that company: the server reads its
+ * headlines, the wires that name it, its 8-K filings and its next report by the
+ * same rules and sends them back beside the library's own catalysts that link
+ * it or reach its sector, each saying which of those it is.
  *
  * Every company row carries TWO separate judgements — how direct the link is,
  * and how strong the read-through is — shown side by side rather than merged.
@@ -11524,6 +11530,11 @@ function httpUrl(u) {
   return /^https?:\/\//i.test(String(u || '')) ? String(u) : '';
 }
 
+/* Where a card came from, when it is not the library's own scan. */
+const CAT_BASIS = {
+  headline: 'its headline', wire: 'wire story', filing: 'SEC filing', calendar: 'calendar',
+};
+
 function catalystCard(c) {
   const companies = (c.companies || []).map((co) => `<tr>
     <td class="name"><button type="button" class="tkr" data-analyse="${esc(co.ticker)}"
@@ -11538,8 +11549,11 @@ function catalystCard(c) {
     <summary>
       <div class="cat-meta">
         <span class="cat-horizon ${CAT_HORIZON_CLASS[c.horizon] || 'flat'}">${esc(c.horizon)}</span>
-        <span class="cat-cat">${esc((c.category || '').replace('-', ' '))}</span>
+        <span class="cat-cat">${esc(c.factor || (c.category || '').replace('-', ' '))}</span>
         <span class="cat-date">${esc(c.event_date || '')}</span>
+        ${c.upcoming ? '<span class="cat-upcoming">upcoming</span>' : ''}
+        ${CAT_BASIS[c.basis] ? `<span class="cat-cat">${esc(CAT_BASIS[c.basis])}</span>` : ''}
+        ${c.reach === 'sector' ? '<span class="cat-reach">through its sector</span>' : ''}
         ${c.relevant ? '' : '<span class="cat-archived">archived</span>'}
       </div>
       <h3 class="cat-title">${esc(c.title)}</h3>
@@ -11570,8 +11584,9 @@ function catalystCard(c) {
 function catalystScanLine(scan) {
   if (!scan) return '';
   const hours = Number(scan.every_hours);
-  const every = hours > 0 ? ` The library rescans the wires every ${
-    fmt(hours, Number.isInteger(hours) ? 0 : 1)} hour${hours === 1 ? '' : 's'}.` : '';
+  const every = hours === 1 ? ' The library rescans the wires every hour.'
+    : hours > 0 ? ` The library rescans the wires every ${
+      fmt(hours, Number.isInteger(hours) ? 0 : 1)} hours.` : '';
   if (!scan.last_ok_at) return every ? ` · No scan has finished yet.${every}` : '';
   return ` · Last scanned ${esc(stampIn(scan.last_ok_at, activeZone()))} (${
     esc(briefAgo(scan.last_ok_at))}).${every}`;
@@ -11606,6 +11621,10 @@ function catalystMirrorNote(d) {
 
 function catalystEmptyText(d) {
   const scan = d.scan || {};
+  if (d.ticker && d.stored_total) {
+    return `Nothing in the library names ${d.ticker.symbol} or is filed under its sector${
+      d.ticker.sector ? ` (${d.ticker.sector})` : ''} yet.`;
+  }
   if (d.stored_total) return 'Nothing matches these filters.';
   if (scan.last_ok_at) {
     return 'No scan so far has found an event durable enough to keep. The library stores '
@@ -11617,6 +11636,46 @@ function catalystEmptyText(d) {
   }
   return 'Nothing is stored yet. The library only contains events a scan has identified as '
     + 'durable, so run a scan to fill it.';
+}
+
+/* One company's own catalysts, read for this search and not stored. Every card
+ * says where it came from, and a source that could not be read is named
+ * rather than left to look like a quiet week. */
+function catalystTickerHTML(t) {
+  if (!t) return '';
+  const rows = t.rows || [];
+  const factors = (t.factors || []).map((x) => `<span class="cat-factor">${esc(x.factor)} <strong>${
+    fmt(x.count, 0)}</strong></span>`).join('');
+  const missing = (t.sources || []).filter((x) => !x.ok).map((x) => esc(x.label));
+  const count = rows.length
+    ? `${fmt(rows.length, 0)} catalyst${rows.length === 1 ? '' : 's'} across ${
+      fmt((t.factors || []).length, 0)} factor${(t.factors || []).length === 1 ? '' : 's'}.`
+    : 'Nothing in its headlines, the wires, its filings or its calendar reads as a catalyst right now.';
+  return `<div class="cat-ticker">
+    <h3 class="cat-ticker-title"><button type="button" class="tkr" data-analyse="${esc(t.symbol)}"
+      >${esc(t.symbol)}</button> ${esc(t.name || '')}</h3>
+    <p class="note">${count} From its headlines, the wire stories that name it, its SEC filings
+      and its earnings calendar, read by the same rules as the library.</p>
+    ${factors ? `<div class="cat-factors">${factors}</div>` : ''}
+    ${missing.length ? `<p class="caveat">Could not be read this time: ${missing.join(', ')}.</p>` : ''}
+    ${rows.length ? `<div class="cat-list">${rows.map(catalystCard).join('')}</div>` : ''}
+    <p class="caveat">${esc(t.method || '')}</p>
+  </div>`;
+}
+
+/* The library's count line. For a ticker search it says how each catalyst
+ * reaches the company, since a story naming it and a catalyst filed under its
+ * sector are not the same claim. */
+function catalystCountLine(d) {
+  if (d.ticker) {
+    const list = d.catalysts || [];
+    const linked = list.filter((c) => c.reach === 'linked').length;
+    const sector = list.length - linked;
+    return `In the library: ${fmt(linked, 0)} linked to ${esc(d.ticker.symbol)}${
+      d.ticker.sector ? `, ${fmt(sector, 0)} through its sector (${esc(d.ticker.sector)})` : ''}`;
+  }
+  return `${fmt(d.matched, 0)} catalyst${d.matched === 1 ? '' : 's'}${
+    d.stored_total !== d.matched ? ` of ${fmt(d.stored_total, 0)} stored` : ''}`;
 }
 
 function renderCatalysts(d) {
@@ -11666,10 +11725,9 @@ function renderCatalysts(d) {
   }
   const list = d.catalysts || [];
   return head + `<div class="panel span-all">
+    ${catalystTickerHTML(d.ticker)}
     <p class="note" style="color:var(--ink-muted);margin:0 0 var(--space-3)">${
-  fmt(d.matched, 0)} catalyst${d.matched === 1 ? '' : 's'}${
-  d.stored_total !== d.matched ? ` of ${fmt(d.stored_total, 0)} stored` : ''}${
-  catalystScanLine(d.scan)}</p>
+  catalystCountLine(d)}${catalystScanLine(d.scan)}</p>
     ${catalystMirrorNote(d)}
     ${STATE.catalystScan ? `<div class="callout">${esc(STATE.catalystScan)}</div>` : ''}
     ${catalystScanProblem(d.scan)}
@@ -11721,7 +11779,8 @@ async function refreshCatalysts(btn) {
       ? `Scanned ${r.scanned} stories · ${r.identified} catalyst${r.identified === 1 ? '' : 's'} identified${
         r.identified ? `, ${r.new || 0} new` : ''}${
         r.tickers_dropped ? ` · ${r.tickers_dropped} unresolvable ticker${r.tickers_dropped === 1 ? '' : 's'} dropped` : ''}${
-        r.unsourced ? ` · ${r.unsourced} with no story behind ${r.unsourced === 1 ? 'it' : 'them'} dropped` : ''}`
+        r.unsourced ? ` · ${r.unsourced} with no story behind ${r.unsourced === 1 ? 'it' : 'them'} dropped` : ''}${
+        r.known ? ` · ${r.known} already in the library` : ''}`
       : (r.reason || 'The scan could not run.');
   } catch (err) {
     STATE.catalystScan = err.message;

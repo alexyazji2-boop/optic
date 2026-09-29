@@ -49,8 +49,10 @@ def _iso(hours_ago):
 @pytest.fixture(autouse=True)
 def store(tmp_path, monkeypatch):
     """A private store, a known interval, and no attempt left stamped by
-    another test."""
+    another test. The model reader, which is what these tests are about: the
+    rules reader that is now the default is tested in test_catalyst_rules."""
     monkeypatch.setattr(catalysts, "DB_PATH", str(tmp_path / "catalysts.db"))
+    monkeypatch.setattr(catalysts, "READER", "model")
     monkeypatch.setattr(catalysts, "_LAST_ATTEMPT", [0.0])
     monkeypatch.setattr(catalysts, "SCAN_EVERY_HOURS", 6.0)
     monkeypatch.setattr(catalysts, "AUTO", True)
@@ -633,7 +635,7 @@ def test_the_page_says_when_the_library_last_scanned():
       assert(catalystScanLine({last_ok_at: null, every_hours: 6})
              === ' · No scan has finished yet. The library rescans the wires every 6 hours.', 'none yet');
       assert(catalystScanLine({last_ok_at: null, every_hours: null}) === '', 'no schedule, no scan');
-      assert(catalystScanLine({last_ok_at: 'T1', every_hours: 1}).indexOf('every 1 hour.') > 0, 'one hour');
+      assert(catalystScanLine({last_ok_at: 'T1', every_hours: 1}).indexOf('every hour.') > 0, 'one hour');
       assert(catalystScanLine(undefined) === '', 'a payload from before the schedule');
     """)
 

@@ -125,7 +125,10 @@ def test_marks_are_open_two_minutes_apart(scans):
 # ------------------------------------------------------------ catalysts
 
 
-def test_the_catalyst_scan_is_open_an_hour_apart(monkeypatch):
+def test_the_catalyst_scan_is_open_an_hour_apart_under_the_model(monkeypatch):
+    """Where each scan is a paid call. The rules reader, the default, is fifteen
+    minutes apart: test_catalyst_rules."""
+    monkeypatch.setattr(main.catalysts_mod, "READER", "model")
     asked = []
     monkeypatch.setattr(main.live_mirror, "active", lambda: False)
     monkeypatch.setattr(main.catalysts_mod, "refresh",

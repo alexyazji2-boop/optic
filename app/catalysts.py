@@ -37,6 +37,16 @@ nothing and the local one held three catalysts from 2026-08-14. A scan now also
 runs on a schedule, one model call every CATALYST_SCAN_HOURS. That is a fixed,
 bounded cost, so the rule the button existed for still holds: opening a tab
 never spends anything.
+
+**It no longer needs the model at all.** Every scan was a call on the owner's
+key, four a day on the schedule and one per press, and was asked about as "is
+there no way to make the catalyst scan not require my AI credits?". The
+default reader is now published rules (app/catalyst_rules.py) over the same
+stories, and a search for one ticker adds that company's own catalysts: its
+headlines, the wires that name it, its 8-K filings and its next report, read
+by the same rules, plus what in the library reaches its sector. None of it
+spends anything, so the schedule runs everywhere, hourly. CATALYST_READER=model
+puts the model back for anyone who prefers its judgement and will pay for it.
 """
 
 from __future__ import annotations
@@ -52,7 +62,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from . import feeds
+from . import catalyst_rules, feeds
 
 log = logging.getLogger(__name__)
 
@@ -88,11 +98,18 @@ STRENGTH = ["strong", "moderate", "weak"]
 
 MAX_COMPANIES = 8
 
+# What reads the stories: "rules" (app/catalyst_rules.py, free) or "model" (a
+# call on the owner's key per scan). Anything else is the rules.
+READER = "model" if os.environ.get("CATALYST_READER", "rules").strip().lower() == "model" else "rules"
+
 # ------------------------------------------------------------- the schedule
 #
 # Hours between scans. At least one: the loop looks every fifteen minutes, and
-# a zero here would be a model call on every look.
-SCAN_EVERY_HOURS = max(1.0, float(os.environ.get("CATALYST_SCAN_HOURS", "6")))
+# a zero here would be a scan on every look. Hourly by default under the rules,
+# which cost a read of feeds the brief keeps warm anyway; six under the model,
+# where each scan is a paid call.
+SCAN_EVERY_HOURS = max(1.0, float(os.environ.get(
+    "CATALYST_SCAN_HOURS", "6" if READER == "model" else "1")))
 # The wait after a scan that failed. Shorter than the interval, because a
 # failure is usually the API or EDGAR briefly out of reach; not zero, because an
 # outage would otherwise cost a call on every look.
@@ -403,18 +420,32 @@ def scan_due(now: Optional[datetime] = None) -> bool:
     return good is None or now - good >= timedelta(hours=SCAN_EVERY_HOURS)
 
 
+def mirrored() -> bool:
+    """Whether the page shows the live site's library instead of this copy's.
+
+    Only while the model reads the stories. A copy without a key could not
+    write its own library then, and showed the live one; under the rules
+    filling it costs nothing, so a copy fills its own. OPTIC_MIRROR_LIVE=on
+    still means the live one, because that setting says so.
+    """
+    from . import live_mirror               # local: avoids an import cycle
+    if READER != "model" and live_mirror.MODE != "on":
+        return False
+    return live_mirror.active()
+
+
 def scheduled() -> bool:
     """Whether this server refreshes the library on its own.
 
-    Only with a key Anthropic accepts, and not while the page shows the live
-    site's library instead: a copy with an expired key tried every hour and
-    recorded a refusal every time.
+    Not while the page shows the live site's library instead. Under the model,
+    only with a key Anthropic accepts: a copy with an expired key tried every
+    hour and recorded a refusal every time. The rules need nothing.
     """
-    if not AUTO:
+    if not AUTO or mirrored():
         return False
-    from . import ai, live_mirror           # local: avoids an import cycle
-    if live_mirror.active():
-        return False
+    if READER != "model":
+        return True
+    from . import ai                        # local: avoids an import cycle
     return ai.key_usable()
 
 
@@ -473,9 +504,38 @@ def scan_status() -> Dict[str, Any]:
     }
 
 
+METHOD_RULES = (
+    "Every catalyst here traces to a story or release this terminal fetched, and "
+    "the source link is kept. Stories are filed by published rules, not a model: a "
+    "headline qualifies when it says a government, central bank, regulator, court "
+    "or named company did something on a market theme, or that a benchmark broke a "
+    "level, and commentary, speeches and routine notices never do. The title and "
+    "summary are the story's own. A company is linked when the story names it, or "
+    "as the standard read-through for the subject, which says so. Every ticker is "
+    "checked against EDGAR's company directory. Research context, never a "
+    "recommendation."
+)
+METHOD_MODEL = (
+    "Every catalyst here traces to a story or release this terminal "
+    "fetched, and the source link is kept. Which companies are connected, "
+    "how direct the link is and how strong the read-through is are "
+    "judgements, not data. Every ticker is checked against EDGAR's "
+    "company directory and dropped if it does not resolve, but the "
+    "connection itself is an inference. Research context, never a "
+    "recommendation."
+)
+
+
 def search(query: str = "", status: str = "relevant", category: str = "",
-           sector: str = "", theme: str = "", limit: int = 60) -> Dict[str, Any]:
-    """Filter the library. Everything is optional; defaults to what still matters."""
+           sector: str = "", theme: str = "", limit: int = 60,
+           ticker: str = "", ticker_sector: str = "") -> Dict[str, Any]:
+    """Filter the library. Everything is optional; defaults to what still matters.
+
+    With `ticker`, the search is for one company: the catalysts linked to it
+    come first, then the ones filed under its sector (`ticker_sector`), each
+    marked with how it reaches the company, since a sector's catalyst reaching
+    a company is a weaker claim than a story naming it.
+    """
     try:
         with _connect() as conn:
             rows = conn.execute(
@@ -486,7 +546,17 @@ def search(query: str = "", status: str = "relevant", category: str = "",
     items = [_row_to_dict(r) for r in rows]
     total = len(items)
 
-    q = (query or "").lower().strip()
+    sym = (ticker or "").upper().strip()
+    if sym:
+        linked, reached = [], []
+        for c in items:
+            if any(str(x.get("ticker", "")).upper() == sym for x in c.get("companies") or []):
+                linked.append(dict(c, reach="linked"))
+            elif ticker_sector and ticker_sector in (c.get("sectors") or []):
+                reached.append(dict(c, reach="sector"))
+        items = linked + reached
+
+    q = "" if sym else (query or "").lower().strip()
     if q:
         def matches(c: Dict[str, Any]) -> bool:
             hay = " ".join([
@@ -517,15 +587,8 @@ def search(query: str = "", status: str = "relevant", category: str = "",
         "stored_total": total,
         "facets": facets(),
         "scan": scan_status(),
-        "method": (
-            "Every catalyst here traces to a story or release this terminal "
-            "fetched, and the source link is kept. Which companies are connected, "
-            "how direct the link is and how strong the read-through is are "
-            "judgements, not data. Every ticker is checked against EDGAR's "
-            "company directory and dropped if it does not resolve, but the "
-            "connection itself is an inference. Research context, never a "
-            "recommendation."
-        ),
+        "reader": READER,
+        "method": METHOD_MODEL if READER == "model" else METHOD_RULES,
     }
 
 
@@ -695,27 +758,31 @@ def refresh(hours: int = 168, trigger: str = "manual") -> Dict[str, Any]:
 
 
 def _refresh(hours: int, trigger: str) -> Dict[str, Any]:
-    from . import ai                        # local: avoids an import cycle
-
     stories = candidate_stories(hours=hours)
     if not stories:
         return _failed(trigger, "No recent stories to scan.")
     index = _stored_index(stories)
 
-    found = ai.extract_catalysts(_for_model(stories), index["library"])
-    # A failed call comes back as a dict with its reason, the convention every
-    # writer here follows. The scan printed "Catalyst extraction failed on this
-    # attempt" whatever went wrong, including a refused key, which the weekly
-    # update on the same page was already naming correctly.
-    if isinstance(found, dict):
-        return _failed(trigger, str(found.get("reason") or _UNREADABLE),
-                       scanned=len(stories))
-    if found is None:
-        return _failed(trigger, (
-            "The assistant is not configured, so new catalysts cannot be "
-            "identified. Anything already stored is still searchable."
-            if ai.available().get("enabled") is not True else _UNREADABLE),
-            scanned=len(stories))
+    rules = READER != "model"
+    if rules:
+        found = catalyst_rules.extract(stories, reachable=feeds.is_reachable)
+    else:
+        from . import ai                    # local: avoids an import cycle
+        found = ai.extract_catalysts(_for_model(stories), index["library"])
+        # A failed call comes back as a dict with its reason, the convention
+        # every writer here follows. The scan printed "Catalyst extraction
+        # failed on this attempt" whatever went wrong, including a refused
+        # key, which the weekly update on the same page was already naming
+        # correctly.
+        if isinstance(found, dict):
+            return _failed(trigger, str(found.get("reason") or _UNREADABLE),
+                           scanned=len(stories))
+        if found is None:
+            return _failed(trigger, (
+                "The assistant is not configured, so new catalysts cannot be "
+                "identified. Anything already stored is still searchable."
+                if ai.available().get("enabled") is not True else _UNREADABLE),
+                scanned=len(stories))
 
     directory = ticker_directory()
     if not directory:
@@ -726,7 +793,7 @@ def _refresh(hours: int, trigger: str) -> Dict[str, Any]:
     by_id = {s["id"]: s for s in stories}
     by_url = {s["url"]: s for s in stories if s.get("url")}
     rows: List[Dict[str, Any]] = []
-    dropped = unsourced = new = 0
+    dropped = unsourced = new = known = 0
     for c in found:
         if not isinstance(c, dict) or not c.get("title"):
             continue
@@ -736,13 +803,24 @@ def _refresh(hours: int, trigger: str) -> Dict[str, Any]:
             log.info("catalysts: dropped %r, no story in the scan behind it",
                      str(c["title"])[:80])
             continue
-        # The link is the newest story a reader without a subscription can
-        # open, or the newest of all when every one is paywalled, and the date
-        # is that story's. Dated by the newest story cited, the first live
-        # scan put 2026-09-28 on a fuel-economy rollback whose linked story
-        # was from the 26th and a Fed proposal released on the 24th: a card
-        # whose date and link disagree.
-        link = max(cited, key=lambda s: (feeds.is_reachable(s), str(s["published"])))
+        if rules:
+            # A story already filed is not filed again. The rules would write
+            # its headline back over the row, and over a title the model wrote
+            # before the rules took over, which reads better than a headline.
+            if any(s.get("url") in index["by_url"] for s in cited):
+                known += 1
+                continue
+            # The title is the lead story's headline, so the link is that
+            # story: a card whose title and link are two outlets reads wrong.
+            link = cited[0]
+        else:
+            # The link is the newest story a reader without a subscription
+            # can open, or the newest of all when every one is paywalled, and
+            # the date is that story's. Dated by the newest story cited, the
+            # first live scan put 2026-09-28 on a fuel-economy rollback whose
+            # linked story was from the 26th and a Fed proposal released on
+            # the 24th: a card whose date and link disagree.
+            link = max(cited, key=lambda s: (feeds.is_reachable(s), str(s["published"])))
         event_date = str(link["published"])[:10]
         title = _plain(c["title"])[:200]
 
@@ -783,11 +861,255 @@ def _refresh(hours: int, trigger: str) -> Dict[str, Any]:
                  written=written, unsourced=unsourced)
     return {
         "available": True,
+        "reader": READER,
         "scanned": len(stories),
         "identified": len(rows),
         "new": new,
         "written": written,
+        "known": known,
         "tickers_dropped": dropped,
         "unsourced": unsourced,
         "stored_total": count(),
+    }
+
+
+# ------------------------------------------------------------ one company
+#
+# A search for one symbol is a search for that company's catalysts, and the
+# library alone cannot answer it: it keeps events that reach an industry, and a
+# company's own report, filings and deals are not those. So the search reads
+# them fresh, from sources the page already uses and that cost nothing (its
+# Yahoo headlines, the wires the brief keeps, EDGAR and the earnings calendar),
+# by the same rules, and stores none of it. A search is a read, and a library
+# that kept every searched company's headlines would bury the events it is for.
+TICKER_TTL_S = 30 * 60
+TICKER_WIRE_HOURS = 24 * 14
+TICKER_ROWS = 24
+_TICKER_CACHE: Dict[str, Any] = {}
+_TICKER_CACHE_MAX = 200
+_TICKER_LOCK = threading.Lock()
+_SYMBOL = re.compile(r"[A-Z]{1,5}(?:-[A-Z]{1,2})?")
+
+# The order the factors are listed in, strongest claim to be about the
+# company first.
+FACTORS = ["Earnings and guidance", "Deals", "Regulatory and legal", "Management",
+           "Analyst actions", "Capital return", "Restructuring", "Short interest",
+           "Company events", "Company announcements", "Company news", "Policy and macro",
+           "Products"]
+
+
+def ticker_query(query: str) -> Optional[str]:
+    """The symbol a search is for, or None when it is not one EDGAR lists.
+
+    In capitals or behind a $ it is a symbol whatever it spells. In lower case a
+    word the themes are found by is the theme: "oil", "gold" and "ai" are all
+    tickers too, and a reader typing the theme should get the theme.
+    """
+    raw = (query or "").strip()
+    explicit = raw.startswith("$") or (raw.isupper() and " " not in raw)
+    raw = raw.lstrip("$")
+    sym = raw.upper().replace(".", "-")
+    if not _SYMBOL.fullmatch(sym):
+        return None
+    if not explicit and (len(sym) < 2 or catalyst_rules.is_theme_word(raw)):
+        return None
+    return sym if sym in ticker_directory() else None
+
+
+def _names_for(sym: str, edgar_name: str) -> List[re.Pattern]:
+    """How a story names this company: the forms the rules know it by, and
+    EDGAR's name without its corporate suffix."""
+    from . import news                      # local: avoids an import cycle
+    guard = catalyst_rules.NOT_FORMER
+    pats = [re.compile(guard + re.escape(n) + r"(?![A-Za-z0-9])")
+            for n, s in catalyst_rules.NAMES.items() if s == sym]
+    for term in news._match_terms("", edgar_name):
+        if len(term) >= 4:
+            pats.append(re.compile(guard + re.escape(term) + r"\b", re.I))
+    # The symbol itself, in capitals only: "F" and "ALL" are words.
+    if len(sym) >= 3:
+        pats.append(re.compile(r"(?<![A-Za-z0-9$])\$?" + re.escape(sym) + r"(?![A-Za-z0-9])"))
+    return pats
+
+
+def _wire_mentions(sym: str, edgar_name: str) -> List[Dict[str, Any]]:
+    """Wire and macro stories from the last two weeks that name the company."""
+    pats = _names_for(sym, edgar_name)
+    if not pats:
+        return []
+    out: List[Dict[str, Any]] = []
+    failed = []
+    for kind in ("wire", "macro"):
+        try:
+            entries, _status = feeds.load_kind(kind)
+        except Exception as exc:                            # noqa: BLE001
+            log.warning("catalysts: %s feed unavailable for %s: %s", kind, sym, exc)
+            failed.append(kind)
+            continue
+        for e in feeds.within_hours(entries, TICKER_WIRE_HOURS):
+            if any(p.search(str(e.get("title") or "")) for p in pats):
+                out.append(e)
+    if len(failed) == 2:
+        raise RuntimeError("no wire or macro feed could be read")
+    return feeds.dedupe(out)
+
+
+def ticker_catalysts(provider, symbol: str) -> Dict[str, Any]:
+    """One company's catalysts across its factors, read fresh and never stored.
+
+    Cached for half an hour: its headlines and filings are cached upstream for
+    about that long, and a reader paging through filters should not refetch.
+    """
+    sym = (symbol or "").upper().strip()
+    now = time.monotonic()
+    with _TICKER_LOCK:
+        hit = _TICKER_CACHE.get(sym)
+        if hit and now - hit[0] < TICKER_TTL_S:
+            return hit[1]
+    out = _ticker_catalysts(provider, sym)
+    # Not kept when nothing could be read: the next search should try again.
+    if any(s.get("ok") for s in out.get("sources") or []):
+        with _TICKER_LOCK:
+            if len(_TICKER_CACHE) >= _TICKER_CACHE_MAX:
+                oldest = min(_TICKER_CACHE, key=lambda k: _TICKER_CACHE[k][0])
+                _TICKER_CACHE.pop(oldest, None)
+            _TICKER_CACHE[sym] = (now, out)
+    return out
+
+
+def _factors(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    tally: Dict[str, int] = {}
+    for r in rows:
+        tally[r["factor"]] = tally.get(r["factor"], 0) + 1
+    return [{"factor": f, "count": tally[f]} for f in FACTORS if f in tally]
+
+
+def ticker_view(company: Dict[str, Any], library: List[Dict[str, Any]],
+                category: str = "") -> Dict[str, Any]:
+    """The company's own catalysts as the page shows them beside the library's.
+
+    An event the library already filed as this company's is shown there, with
+    its links, and not a second time here: the same story, or another outlet's
+    report of it. `category` is the page's filter, which the company's rows
+    answer to as the library's do."""
+    filed = [c for c in library or [] if c.get("reach", "linked") == "linked"]
+    urls = {c.get("source_url") for c in filed if c.get("source_url")}
+
+    def shown(r: Dict[str, Any]) -> bool:
+        if r.get("source_url") in urls:
+            return False
+        if r.get("basis") in ("headline", "wire") and any(
+                catalyst_rules.same_event(r["title"], str(c.get("title") or "")) for c in filed):
+            return False
+        return not category or r.get("category") == category
+
+    rows = [r for r in company.get("rows") or [] if shown(r)]
+    return dict(company, rows=rows, factors=_factors(rows))
+
+
+def _ticker_catalysts(provider, sym: str) -> Dict[str, Any]:
+    from . import news                      # local: avoids an import cycle
+    from .analytics import filings
+
+    today = datetime.now(timezone.utc).date()
+    edgar_name = ticker_directory().get(sym) or ""
+    name, sector = edgar_name or sym, ""
+    try:
+        quote = provider.quote(sym) or {}
+        sector = catalyst_rules.library_sector(str(quote.get("sector") or ""))
+        name = str(quote.get("name") or "") or name
+    except Exception as exc:                                # noqa: BLE001
+        log.info("catalysts: no quote for %s: %s", sym, exc)
+
+    def kinds(text: str) -> List[Dict[str, Any]]:
+        return news.classify(text)["catalysts"]
+
+    pats = _names_for(sym, edgar_name)
+
+    def leads(title: str) -> bool:
+        """The company is named, and before any other company is. Not as a
+        former employer: "Liam Mallon, Former President of ExxonMobil
+        Upstream" is TMC's board, not Exxon's."""
+        mine = [m.start() for p in pats for m in [p.search(title)] if m
+                and not re.search(r"\b[Ff]ormer\b[^,.;:]{0,40}$", title[:m.start()])]
+        if not mine:
+            return False
+        others = [at for at, who in catalyst_rules.named_positions(title) if who != sym]
+        return all(min(mine) <= at for at in others)
+
+    sources: List[Dict[str, Any]] = []
+    rows: List[Dict[str, Any]] = []
+    earnings = None
+    try:
+        read = news.analyse(provider, sym, limit=20)
+        articles = read.get("articles") or []
+        earnings = read.get("earnings_date")
+        found = catalyst_rules.company_rows(sym, name, sector, articles, today, "headline",
+                                            classify=kinds, leads=leads, rule=False)
+        rows += found
+        sources.append({"id": "headlines", "label": "Its headlines", "ok": True,
+                        "read": len(articles), "found": len(found)})
+    except Exception as exc:                                # noqa: BLE001
+        log.warning("catalysts: headlines unavailable for %s: %s", sym, exc)
+        sources.append({"id": "headlines", "label": "Its headlines", "ok": False})
+
+    try:
+        wires = _wire_mentions(sym, edgar_name or name)
+        items = [{"title": w.get("title"), "summary": w.get("summary"),
+                  "publisher": w.get("source"), "published": w.get("published"),
+                  "url": w.get("url"),
+                  "catalysts": news.classify("{} {}".format(
+                      w.get("title") or "", w.get("summary") or ""))["catalysts"]}
+                 for w in wires]
+        found = catalyst_rules.company_rows(sym, name, sector, items, today, "wire",
+                                            classify=kinds, leads=leads)
+        rows += found
+        sources.append({"id": "wires", "label": "Wire stories naming it", "ok": True,
+                        "read": len(items), "found": len(found)})
+    except Exception as exc:                                # noqa: BLE001
+        log.warning("catalysts: wires unavailable for %s: %s", sym, exc)
+        sources.append({"id": "wires", "label": "Wire stories naming it", "ok": False})
+
+    try:
+        got = filings.recent(sym, limit=40)
+        if got.get("available"):
+            found = catalyst_rules.filing_rows(sym, name, sector, got.get("filings") or [], today)
+            rows += found
+            sources.append({"id": "filings", "label": "Its SEC filings", "ok": True,
+                            "read": len(got.get("filings") or []), "found": len(found)})
+        else:
+            sources.append({"id": "filings", "label": "Its SEC filings", "ok": False,
+                            "reason": got.get("reason")})
+    except Exception as exc:                                # noqa: BLE001
+        log.warning("catalysts: filings unavailable for %s: %s", sym, exc)
+        sources.append({"id": "filings", "label": "Its SEC filings", "ok": False})
+
+    upcoming = catalyst_rules.earnings_row(sym, name, sector, earnings, today)
+    sources.append({"id": "calendar", "label": "Its earnings calendar",
+                    "ok": earnings is not None, "found": 1 if upcoming else 0})
+
+    # The same story arrives from Yahoo and from the wire it was written for,
+    # and the same event from several outlets.
+    unique = sorted(catalyst_rules.merge_events(rows),
+                    key=lambda r: str(r.get("event_date") or ""), reverse=True)
+    unique = ([upcoming] if upcoming else []) + unique[:TICKER_ROWS]
+    for r in unique:
+        r["relevant"] = True
+        r["age_days"] = _age_days(r.get("event_date"))
+
+    return {
+        "symbol": sym,
+        "name": name,
+        "sector": sector,
+        "rows": unique,
+        "factors": _factors(unique),
+        "sources": sources,
+        "method": (
+            "Read now, not stored: this company's headlines, the wire stories that "
+            "name it from the last two weeks, its 8-K filings from the last {} days "
+            "and its next scheduled report. A story counts when the News tab's "
+            "catalyst types or the library's rule find an event in it, and "
+            "commentary never does. A filing counts by the item it was filed "
+            "under, which is the company's own word for what happened."
+        ).format(catalyst_rules.FILING_WINDOW_DAYS),
     }

@@ -104,8 +104,10 @@ def test_the_catalyst_extractor_returns_the_reason_not_none(local, refusing):
 
 def test_the_scan_button_prints_it_and_the_record_keeps_it(local, refusing, tmp_path,
                                                            monkeypatch):
-    """The whole path the button takes, with only the network faked."""
+    """The whole path the button takes, with only the network faked. Under the
+    model reader, the one that spends the key."""
     monkeypatch.setattr(catalysts, "DB_PATH", str(tmp_path / "catalysts.db"))
+    monkeypatch.setattr(catalysts, "READER", "model")
     monkeypatch.setattr(catalysts, "candidate_stories", lambda hours=168: [{
         "id": "s1", "title": "t", "summary": "", "source": "x", "desk": "",
         "published": "2026-09-28T10:00:00+00:00", "url": "https://x.example/1",
@@ -118,6 +120,7 @@ def test_the_scan_button_prints_it_and_the_record_keeps_it(local, refusing, tmp_
 def test_an_answer_the_library_cannot_read_says_so(local, monkeypatch, tmp_path):
     """The one failure left without a named cause still says what happened."""
     monkeypatch.setattr(catalysts, "DB_PATH", str(tmp_path / "catalysts.db"))
+    monkeypatch.setattr(catalysts, "READER", "model")
     monkeypatch.setattr(catalysts, "candidate_stories", lambda hours=168: [{
         "id": "s1", "title": "t", "summary": "", "source": "x", "desk": "",
         "published": "2026-09-28T10:00:00+00:00", "url": "https://x.example/1",

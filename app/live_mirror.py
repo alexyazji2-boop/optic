@@ -11,6 +11,11 @@ written anyway, and a forced rebuild is never passed through.
 Only ever on a local copy. A hosted deployment does not read from another
 server, which is also what stops the live site reading from itself.
 
+The library needs the model only under CATALYST_READER=model. Under the rules
+reader, the default since 2026-09-29, it costs nothing to fill, so a copy fills
+its own and only the weekly update is mirrored, unless the setting below is on
+(catalysts.mirrored).
+
 OPTIC_MIRROR_LIVE decides when:
   auto (the default)  while this copy's own key cannot be used
   on                  always, so a copy with a key does not pay to write what
