@@ -50,6 +50,22 @@ def _series(values: pd.Series, digits: int = 4) -> List[Optional[float]]:
 
 # --------------------------------------------------------------- primitives
 
+def anchor_stamp(index: pd.Index, anchor: str) -> pd.Timestamp:
+    """An anchor date as a stamp `index` can be compared with.
+
+    The daily and weekly bars carry the exchange's timezone, and a bare date
+    compared with them raises: every anchored request came back "Invalid
+    comparison between dtype=datetime64[ns, America/New_York] and Timestamp",
+    so VWAP could only ever start at the first bar it was given. The date is
+    read as midnight on the exchange's calendar, which is where those bars sit.
+    """
+    stamp = pd.Timestamp(anchor)
+    tz = getattr(index, "tz", None)
+    if tz is not None and stamp.tzinfo is None:
+        stamp = stamp.tz_localize(tz)
+    return stamp
+
+
 def vwap(df: pd.DataFrame, anchor: Optional[str] = None) -> pd.Series:
     """Volume-weighted average price, cumulative from the anchor.
 
@@ -62,7 +78,7 @@ def vwap(df: pd.DataFrame, anchor: Optional[str] = None) -> pd.Series:
     typical = (df["High"] + df["Low"] + df["Close"]) / 3.0
     volume = df["Volume"].astype(float) if "Volume" in df else pd.Series(1.0, index=df.index)
     if anchor:
-        mask = df.index >= pd.Timestamp(anchor)
+        mask = df.index >= anchor_stamp(df.index, anchor)
         typical, volume = typical[mask], volume[mask]
     cum_vol = volume.cumsum().replace(0.0, np.nan)
     out = (typical * volume).cumsum() / cum_vol
@@ -478,7 +494,11 @@ def _one(df: pd.DataFrame, key: str, bench: Optional[pd.Series],
 
     if key == "vwap":
         line = vwap(df, anchor=anchor)
-        return {**base, "anchor": anchor or str(df.index[0].date()),
+        # The first bar actually in the average, which is the date to print:
+        # an anchor on a weekend or a holiday starts on the next session.
+        started = line.dropna()
+        return {**base, "anchor": (str(started.index[0].date()) if len(started)
+                                   else anchor or str(df.index[0].date())),
                 "lines": [{"name": "VWAP", "values": _series(line, 2)}],
                 "last": _f(line.dropna().iloc[-1], 2) if line.notna().any() else None}
     if key == "bollinger":

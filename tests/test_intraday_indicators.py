@@ -143,10 +143,11 @@ def test_both_tabs_key_their_studies_to_the_bars():
     assert "return '&' + intradayQuery(bars);" in query
     ws = _fn("wsLoadIndicators")
     assert "&& wsIndicators.bars === bars && !wsIndicators.loading" in ws
-    assert "+ studyQuery(bars));" in ws
+    # And on the VWAP anchor, after the bars: see test_vwap_anchor.
+    assert "+ studyQuery(bars)\n      + vwapAnchorQuery(ids, STATE.chartData));" in ws
     swing = _fn("loadIndicators")
-    assert "const key = `${STATE.ticker}|${indicatorIds.join(',')}|${bars}`;" in swing
-    assert "+ studyQuery(bars));" in swing
+    assert "const key = `${STATE.ticker}|${indicatorIds.join(',')}|${bars}${anchor}`;" in swing
+    assert "+ studyQuery(bars) + anchor);" in swing
     assert "return data && data.bars === studyBars() ? data : null;" in _fn("swingStudies")
     for name in ("indicatorOverlaySeries", "indicatorOverlayLegend", "renderIndicatorPanes",
                  "drawIndicatorCharts"):

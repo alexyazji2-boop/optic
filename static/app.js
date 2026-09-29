@@ -13159,14 +13159,16 @@ async function loadIndicators(force) {
   if (!indicatorIds.length) { STATE.indicators = null; return; }
   // Per bar size as well: on an intraday range these are computed on its bars.
   const bars = studyBars();
-  const key = `${STATE.ticker}|${indicatorIds.join(',')}|${bars}`;
+  // With the VWAP anchor, as the Charting tab keys it: see vwapAnchorFor.
+  const anchor = vwapAnchorQuery(indicatorIds, STATE.swing);
+  const key = `${STATE.ticker}|${indicatorIds.join(',')}|${bars}${anchor}`;
   if (STATE.indicatorsKey === key && !force) return;
   STATE.indicatorsKey = key;
   let payload;
   try {
     payload = await getJSON(
       `/api/indicators/${encodeURIComponent(STATE.ticker)}`
-      + `?ids=${encodeURIComponent(indicatorIds.join(','))}` + studyQuery(bars));
+      + `?ids=${encodeURIComponent(indicatorIds.join(','))}` + studyQuery(bars) + anchor);
   } catch (err) {
     payload = { available: false, reason: err.message };
   }
@@ -16225,6 +16227,35 @@ function studyBars() {
   return chartInterval === 'weekly' ? 'weekly' : 'daily';
 }
 
+/* Where anchored VWAP starts: the first bar of the range on screen.
+ *
+ * It started at the first bar of whatever history the studies were computed
+ * over, which is not what the chart shows: ten years of weekly bars under a
+ * 1W chart of one year, so TSLA's line sat at $148.78 through a year spent
+ * between $300 and $500, and was asked about as "there is no way the anchored
+ * VWAP is at $148 for TSLA". Two years of daily bars under a daily chart had
+ * the same fault, less visibly. The range's first bar is the anchor the chart
+ * can show, and choosing a range moves it; a zoom does not, so panning never
+ * refetches. A weekly anchor is its week's Monday, which is how the server
+ * dates weekly bars. Empty for no payload and on an intraday size, where the
+ * server anchors at the window's first bar already. */
+function vwapAnchorFor(d) {
+  if (!d || !d.technicals || isIntradayRange(chartRange)) return '';
+  const raw = d.technicals.price_series || {};
+  const weekly = chartInterval === 'weekly';
+  const ps = sliceSeries(raw, chartRange, chartInterval, weekly ? weeklySeriesFor(d) : raw);
+  const first = (ps.dates || [])[0];
+  if (!first) return '';
+  return weekly ? (weekMonday(first) || '') : String(first).slice(0, 10);
+}
+
+/* The anchor parameter, for a request that carries VWAP. Only then: every
+ * other study ignores it, and it would refetch them on each new range. */
+function vwapAnchorQuery(ids, d) {
+  const anchor = ids.includes('vwap') ? vwapAnchorFor(d) : '';
+  return anchor ? '&anchor=' + encodeURIComponent(anchor) : '';
+}
+
 /* The query that asks /api/indicators for those bars. */
 function studyQuery(bars) {
   if (bars === 'daily') return '';
@@ -16236,7 +16267,8 @@ function studyQuery(bars) {
 async function wsLoadIndicators() {
   const symbol = STATE.chartSymbol;
   const ids = wsPriceIndicatorIds();
-  const key = ids.join(',');
+  // The VWAP anchor is part of what was asked for: a new range is a new line.
+  const key = ids.join(',') + vwapAnchorQuery(ids, STATE.chartData);
   const bars = studyBars();
   if (!symbol) return;
   if (!ids.length) {
@@ -16254,12 +16286,15 @@ async function wsLoadIndicators() {
   wsRedrawChart();
   try {
     const data = await getJSON('/api/indicators/' + encodeURIComponent(symbol)
-      + '?ids=' + encodeURIComponent(key) + studyQuery(bars));
-    // The reader may have changed symbol, selection or bar size while this was
-    // in flight. Same guard loadIndicators() carries, and for the same measured
-    // reason: ticking four boxes quickly starts four requests that do not
-    // return in order, and without this the slowest one wins.
-    if (STATE.chartSymbol !== symbol || wsPriceIndicatorIds().join(',') !== key
+      + '?ids=' + encodeURIComponent(ids.join(',')) + studyQuery(bars)
+      + vwapAnchorQuery(ids, STATE.chartData));
+    // The reader may have changed symbol, selection, bar size or range while
+    // this was in flight. Same guard loadIndicators() carries, and for the same
+    // measured reason: ticking four boxes quickly starts four requests that do
+    // not return in order, and without this the slowest one wins.
+    const now = wsPriceIndicatorIds();
+    if (STATE.chartSymbol !== symbol
+        || now.join(',') + vwapAnchorQuery(now, STATE.chartData) !== key
         || studyBars() !== bars) return;
     wsIndicators = { ...data, symbol, key, bars };
   } catch (err) {
