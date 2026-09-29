@@ -185,7 +185,7 @@ def submit(message: str, page: str = "", reply_to: str = "",
                       "sent with the next batch."}
 
 
-def log(limit: int = 50) -> Dict[str, Any]:
+def log(limit: int = 50, include_resolved: bool = False) -> Dict[str, Any]:
     """The newest reports and how many there are. What the operator reads.
 
     Distinct from `unsent()`, which is the email backlog and drops a report the
@@ -194,16 +194,56 @@ def log(limit: int = 50) -> Dict[str, Any]:
     report filed since this shipped is in SQLite with no route to it that is
     not a Python shell on the server.
 
+    Open reports only unless `include_resolved`, newest first either way.
+    `total` counts what the list is drawn from and `open` and `resolved` split
+    it, so a page showing the newest fifty can say how many there are.
+
     Carries `configured()` so the answer to "why has none of this been emailed"
     arrives with the reports rather than having to be gone looking for.
     """
+    where = "" if include_resolved else "WHERE resolved_at IS NULL "
     with db.cursor() as conn:
         rows = conn.execute(
-            "SELECT id,message,page,reply_to,user_agent,emailed,created_at "
-            "FROM feedback ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
-        total = conn.execute("SELECT COUNT(*) AS n FROM feedback").fetchone()["n"]
-    return {"reports": [dict(r) for r in rows], "total": total,
+            "SELECT id,message,page,reply_to,user_agent,emailed,created_at,resolved_at "
+            "FROM feedback " + where + "ORDER BY created_at DESC LIMIT ?",
+            (limit,)).fetchall()
+        counts = conn.execute(
+            "SELECT COUNT(*) AS n, "
+            "SUM(CASE WHEN resolved_at IS NULL THEN 1 ELSE 0 END) AS open "
+            "FROM feedback").fetchone()
+    everything = int(counts["n"] or 0)
+    still_open = int(counts["open"] or 0)
+    return {"reports": [dict(r) for r in rows],
+            "total": everything if include_resolved else still_open,
+            "open": still_open, "resolved": everything - still_open,
+            "include_resolved": include_resolved,
             "delivery": configured()}
+
+
+def resolve(report_id: str, resolved: bool = True) -> Optional[Dict[str, Any]]:
+    """Mark one report resolved, or open again. None when there is no such report.
+
+    An update, never a delete: the report is what a reader said, and resolving
+    it is the operator's note that it has been dealt with, which can be wrong.
+    """
+    stamp = datetime.now(timezone.utc).isoformat() if resolved else None
+    with db.cursor(write=True) as conn:
+        cur = conn.execute("UPDATE feedback SET resolved_at = ? WHERE id = ?",
+                           (stamp, report_id))
+        if not cur.rowcount:
+            return None
+    return {"id": report_id, "resolved_at": stamp}
+
+
+def resolve_open() -> Dict[str, Any]:
+    """Mark every open report resolved: the page's Resolve all. The count, and the
+    one timestamp they all share, so the page can say what it did."""
+    stamp = datetime.now(timezone.utc).isoformat()
+    with db.cursor(write=True) as conn:
+        cur = conn.execute("UPDATE feedback SET resolved_at = ? WHERE resolved_at IS NULL",
+                           (stamp,))
+        count = cur.rowcount or 0
+    return {"resolved": count, "resolved_at": stamp if count else None}
 
 
 def unsent(limit: int = 200) -> List[Dict[str, Any]]:

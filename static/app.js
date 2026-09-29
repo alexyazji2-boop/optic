@@ -26108,7 +26108,7 @@ async function paperLoadChain(sym) {
  * refused, and retrying a 401 three times just asks the same unauthorised
  * question slower.
  */
-async function fetchReports(limit, retried) {
+async function fetchReports(limit, retried, includeResolved) {
   const headers = {};
   const token = writeToken();
   if (token) headers['X-Optic-Token'] = token;
@@ -26123,7 +26123,8 @@ async function fetchReports(limit, retried) {
   let res = null;
   for (let i = 0; i <= RETRY_DELAYS_MS.length; i += 1) {
     try {
-      res = await fetch('/api/feedback?limit=' + encodeURIComponent(limit || 50), {
+      res = await fetch('/api/feedback?limit=' + encodeURIComponent(limit || 50)
+        + (includeResolved ? '&resolved=true' : ''), {
         headers,
         credentials: 'same-origin',
       });
@@ -26157,7 +26158,7 @@ async function fetchReports(limit, retried) {
         + 'the write token.\nPaste OPTIC_WRITE_TOKEN here.');
       if (supplied) {
         setWriteToken(supplied.trim());
-        return fetchReports(limit, true);
+        return fetchReports(limit, true, includeResolved);
       }
     }
     const err = new Error(data.detail || ('HTTP ' + res.status));
@@ -26167,43 +26168,137 @@ async function fetchReports(limit, retried) {
   return data;
 }
 
+function reportStamp(iso) {
+  try { return new Date(iso).toLocaleString(); } catch (e) { return iso || ''; }
+}
+
 function reportRowHTML(row) {
-  let when = row.created_at || '';
-  try { when = new Date(row.created_at).toLocaleString(); } catch (e) { /* keep the raw stamp */ }
+  const when = reportStamp(row.created_at || '');
   const meta = [];
   if (row.page) meta.push('Page: ' + row.page);
   if (row.reply_to) meta.push('Reply to: ' + row.reply_to);
   if (row.user_agent) meta.push(row.user_agent);
-  return `<li class="rp-item">
+  /* "Mark resolved" rather than the bare "Resolved" it was asked for as: on a
+     button, one word that names a state reads as the state, and a reader
+     cannot tell whether pressing it will do that or has done it. */
+  const done = !!row.resolved_at;
+  const action = done ? 'Reopen' : 'Mark resolved';
+  return `<li class="rp-item${done ? ' is-resolved' : ''}">
     <div class="rp-item-head">
       <time class="rp-item-when">${esc(when)}</time>
       <span class="rp-item-sent">${row.emailed ? 'Emailed' : 'Stored'}</span>
+      <button type="button" class="btn rp-resolve" data-report-resolve="${esc(row.id || '')}"
+        data-report-to="${done ? 'open' : 'resolved'}"
+        aria-label="${esc(`${action}: the report from ${when}`)}">${action}</button>
     </div>
     <p class="rp-item-msg">${esc(row.message || '')}</p>
     <p class="rp-item-meta">${esc(meta.join(' · '))}</p>
+    ${done ? `<p class="rp-item-resolved">Resolved ${esc(reportStamp(row.resolved_at))}</p>` : ''}
   </li>`;
 }
 
 function reportsHTML(data) {
   const rows = (data && data.reports) || [];
+  const showing = !!(data && data.include_resolved);
+  const open = Number.isFinite(data && data.open) ? data.open : rows.length;
+  const resolved = Number.isFinite(data && data.resolved) ? data.resolved : 0;
+  /* Resolve all is the page's "clear": it takes every open report off the list
+     without deleting a word of any, and asks for a second press first because
+     it is the one control here that acts on more than it is next to. */
+  const tools = [
+    open ? `<button type="button" class="btn" data-reports-resolve-all>Resolve all ${open}</button>` : '',
+    resolved || showing ? `<button type="button" class="btn" data-reports-toggle-resolved
+      aria-pressed="${showing}">${showing ? 'Hide resolved' : `Show resolved (${resolved})`}</button>` : '',
+  ].filter(Boolean).join('');
+  const toolbar = tools ? `<div class="rp-tools">${tools}</div>` : '';
   if (!rows.length) {
-    return emptyHTML('No problem reports yet',
-      'When a reader uses Report a Problem, it lands here.');
+    if (!resolved) {
+      return emptyHTML('No problem reports yet',
+        'When a reader uses Report a Problem, it lands here.');
+    }
+    return `<div class="panel" data-fixed="1">
+      <h2 tabindex="-1">Problem Reports</h2>
+      <p class="sub">Nothing open. ${resolved} resolved report${resolved === 1 ? ' is' : 's are'} kept, and Show resolved lists them.</p>
+      ${toolbar}
+    </div>`;
   }
   const total = data.total || rows.length;
   /* Said rather than implied. The endpoint pages at 50 and a reader who cannot
      see that count reads the page as the whole record. */
+  const counts = `${open} open${resolved ? `, ${resolved} resolved` : ''}.`;
   const shown = rows.length < total
-    ? `Showing the newest ${rows.length} of ${total}.`
-    : `${total} report${total === 1 ? '' : 's'}.`;
-  const delivery = data.delivery && data.delivery.available !== true && data.delivery.reason
-    ? `<p class="rp-delivery">${esc(data.delivery.reason)}</p>` : '';
+    ? `Showing the newest ${rows.length} of ${total}. ${counts}`
+    : counts;
   return `<div class="panel" data-fixed="1">
-    <h2>Problem Reports</h2>
+    <h2 tabindex="-1">Problem Reports</h2>
     <p class="sub">${esc(shown)}</p>
-    ${delivery}
+    ${toolbar}
     <ul class="rp-list">${rows.map(reportRowHTML).join('')}</ul>
   </div>`;
+}
+
+/* Resolve or reopen one report, then redraw the list from the server so the
+   counts are the server's rather than arithmetic on the page. Focus goes back
+   to the same place in the list, or a keyboard reader who pressed the button
+   is dropped at the top of the document. */
+async function resolveReport(btn) {
+  const id = btn.dataset.reportResolve;
+  if (!id || btn.disabled) return;
+  const buttons = [...views.reports.querySelectorAll('[data-report-resolve]')];
+  const at = buttons.indexOf(btn);
+  btn.disabled = true;
+  try {
+    await postJSON(`/api/feedback/${encodeURIComponent(id)}/resolve`,
+      { resolved: btn.dataset.reportTo !== 'open' });
+  } catch (err) {
+    btn.disabled = false;
+    reportsToast(err);
+    return;
+  }
+  await loadReports(true);
+  refocusReports(at);
+}
+
+let reportsConfirmTimer = null;
+async function resolveAllReports(btn) {
+  if (btn.disabled) return;
+  if (btn.dataset.confirm !== '1') {
+    btn.dataset.confirm = '1';
+    btn.dataset.label = btn.textContent;
+    btn.textContent = `${btn.textContent}? Press again to confirm`;
+    clearTimeout(reportsConfirmTimer);
+    reportsConfirmTimer = setTimeout(() => {
+      if (!btn.isConnected) return;
+      btn.dataset.confirm = '';
+      btn.textContent = btn.dataset.label || 'Resolve all';
+    }, 5000);
+    return;
+  }
+  clearTimeout(reportsConfirmTimer);
+  btn.disabled = true;
+  try {
+    await postJSON('/api/feedback/resolve-all', {});
+  } catch (err) {
+    btn.disabled = false;
+    reportsToast(err);
+    return;
+  }
+  await loadReports(true);
+  refocusReports(0);
+}
+
+function refocusReports(at) {
+  const buttons = [...views.reports.querySelectorAll('[data-report-resolve]')];
+  const target = buttons[Math.min(Math.max(at, 0), buttons.length - 1)]
+    || views.reports.querySelector('[data-reports-toggle-resolved]')
+    || views.reports.querySelector('h2');
+  if (target) target.focus({ preventScroll: false });
+}
+
+function reportsToast(err) {
+  const text = `That did not go through: ${(err && err.message) || 'the server did not answer'}.`;
+  if (window.OpticAuth && window.OpticAuth.toast) window.OpticAuth.toast(text, 'bad');
+  else window.alert(text);
 }
 
 async function loadReports(force) {
@@ -26213,7 +26308,7 @@ async function loadReports(force) {
   host.innerHTML = `<div class="panel" data-fixed="1"><h2>Problem Reports</h2>
     <p class="sub">Loading.</p></div>`;
   try {
-    const data = await fetchReports(50);
+    const data = await fetchReports(50, false, !!STATE.reportsShowResolved);
     STATE.reportsLoaded = true;
     /* The token may have arrived a moment ago via the prompt above, and the
        nav was painted before it existed. Without this the reader is looking at
@@ -31242,6 +31337,18 @@ document.addEventListener('click', (evt) => {
     // top of a view that just changed height.
     const again = views.news.querySelector(`[data-catalyst="${CSS.escape(want)}"]`);
     if (again) again.focus({ preventScroll: true });
+    return;
+  }
+  const reportBtn = evt.target.closest('[data-report-resolve]');
+  if (reportBtn) { resolveReport(reportBtn); return; }
+  const allBtn = evt.target.closest('[data-reports-resolve-all]');
+  if (allBtn) { resolveAllReports(allBtn); return; }
+  if (evt.target.closest('[data-reports-toggle-resolved]')) {
+    STATE.reportsShowResolved = !STATE.reportsShowResolved;
+    loadReports(true).then(() => {
+      const again = views.reports.querySelector('[data-reports-toggle-resolved]');
+      if (again) again.focus();
+    });
     return;
   }
   if (evt.target.closest('[data-view-retry]')) {

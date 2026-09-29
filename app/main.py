@@ -3038,7 +3038,10 @@ async def submit_feedback(request: Request,
 
 @app.get("/api/feedback")
 async def read_feedback(request: Request,
-                        limit: int = Query(50, ge=1, le=200)) -> Dict[str, Any]:
+                        limit: int = Query(50, ge=1, le=200),
+                        resolved: bool = Query(
+                            False, description="Include reports already marked resolved"),
+                        ) -> Dict[str, Any]:
     """The reports, for whoever owns the deployment.
 
     `_write_guard` on a read. The guard's real subject is "is this the
@@ -3062,7 +3065,30 @@ async def read_feedback(request: Request,
         # true sentence.
         raise HTTPException(status_code=exc.status_code,
                             detail=_READ_GUARD_COPY.get(exc.status_code, exc.detail))
-    return await _run(feedback_mod.log, limit)
+    return await _run(feedback_mod.log, limit, resolved)
+
+
+# Resolving a report, one or all. The same guard as reading them, because it is
+# the same person, and writes as well: the token, or the signed-in owner with
+# the CSRF header. An update and never a delete (see feedback.resolve).
+@app.post("/api/feedback/resolve-all")
+async def resolve_all_feedback(request: Request) -> Dict[str, Any]:
+    _write_guard(request)
+    return await _run(feedback_mod.resolve_open)
+
+
+@app.post("/api/feedback/{report_id}/resolve")
+async def resolve_feedback(request: Request, report_id: str,
+                           payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """`{"resolved": true}` marks it resolved, `false` opens it again."""
+    _write_guard(request)
+    resolved = payload.get("resolved", True)
+    if not isinstance(resolved, bool):
+        raise HTTPException(status_code=400, detail="resolved is true or false.")
+    out = await _run(feedback_mod.resolve, report_id, resolved)
+    if out is None:
+        raise HTTPException(status_code=404, detail="There is no report with that id.")
+    return out
 
 
 @app.get("/api/econ")

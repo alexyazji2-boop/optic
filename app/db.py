@@ -544,6 +544,18 @@ MIGRATION_6 = [
 ]
 
 
+# A report can be marked resolved, and unmarked. Asked for as "a clear button
+# on the reports page, or a resolved button for each report": resolving is the
+# clear, because it takes a report off the list without deleting the words a
+# reader sent, and a report resolved by mistake comes back with Reopen.
+# NULL is open. The partial index is the list the page opens on.
+MIGRATION_7 = [
+    "ALTER TABLE feedback ADD COLUMN resolved_at TEXT",
+    "CREATE INDEX IF NOT EXISTS idx_feedback_open "
+    "ON feedback(created_at DESC) WHERE resolved_at IS NULL",
+]
+
+
 MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (1, "accounts", MIGRATION_1),
     (2, "oauth_pkce", MIGRATION_2),
@@ -551,6 +563,7 @@ MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (4, "watch_hits", MIGRATION_4),
     (5, "theses", MIGRATION_5),
     (6, "feedback", MIGRATION_6),
+    (7, "feedback_resolved", MIGRATION_7),
 ]
 
 

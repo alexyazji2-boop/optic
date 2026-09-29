@@ -13529,8 +13529,17 @@ body.chat-full .rp { display: none; }
 .rp-item-meta { margin: var(--space-2) 0 0; font-size: var(--t-caption);
   color: var(--ink-muted); overflow-wrap: anywhere; }
 .rp-item-meta:empty { display: none; }
-.rp-delivery { margin: var(--space-2) 0 0; font-size: var(--t-small);
-  color: var(--warn); }
+/* The page's two actions, and each report's own. The button sits on the head
+   row, after the when and the sent tag, so it lines up down the list. */
+.rp-tools { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0 0; }
+.rp-resolve { flex: none; }
+/* Wraps, so on a phone the button drops under the time rather than squeezing
+   the time into two lines beside it: at 375px the head row was four. */
+.rp-item-head { flex-wrap: wrap; row-gap: var(--space-2); }
+.rp-item-when { white-space: nowrap; }
+.rp-item-resolved { margin: var(--space-2) 0 0; font-size: var(--t-caption); color: var(--pos); }
+.rp-item.is-resolved { background: transparent; }
+.rp-item.is-resolved .rp-item-msg { color: var(--ink-2); }
 .rp-note:empty { display: none; }
 
 .rp-caveat {
