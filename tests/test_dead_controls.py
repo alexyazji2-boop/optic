@@ -144,3 +144,11 @@ def test_every_data_attribute_on_a_control_is_read_by_something():
         names.update(re.findall(r"\sdata-([a-z0-9][a-z0-9-]*)", tag))
     unread = sorted(n for n in names if n not in NOT_HANDLERS and not _read_somewhere(n))
     assert not unread, "controls carry attributes nothing reads: " + ", ".join("data-" + n for n in unread)
+
+
+def test_full_screen_charting_takes_the_report_pill_down_with_the_chrome():
+    """It covered the widget rail's Pulse button in a mode that cannot scroll."""
+    css = (ROOT / "static/styles.css").read_text()
+    start = css.index("body.ws-max[data-view=\"chart\"] .rail,")
+    block = css[start:css.index("/* ---------------------------------------------------------- Insiders page")]
+    assert 'body.ws-max[data-view="chart"] .rp { display: none; }' in block

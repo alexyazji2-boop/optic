@@ -14780,6 +14780,14 @@ body.ws-max[data-view="chart"] .legal,
  * in full screen: strip 66-114, toolbar starting at 90. */
 body.ws-max[data-view="chart"] .sec-head { display: none; }
 
+/* And the Report a Problem pill, which is app chrome like the rest and was the
+   one piece left: fixed at the foot of the screen, it sat on the widget rail's
+   last button in a mode that does not scroll. Measured at 1280x900 with Pulse
+   docked: the rail's Pulse button at 912-955 x 859-890 under the pill at
+   728-939 x 835-879, so the button could not be clicked at all. The way out of
+   full screen is one press away, and the pill is back with the rest. */
+body.ws-max[data-view="chart"] .rp { display: none; }
+
 /* No height is set here, deliberately. `.view-workspace.active` already sizes
    itself as the viewport minus `--chrome-h`, and wsSyncChromeHeight measures
    that chrome from where the workspace actually starts rather than assuming a
