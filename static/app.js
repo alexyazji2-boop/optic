@@ -28725,10 +28725,13 @@ function renderSessionBar() {
         * it inside a width query and verify the rule is actually in one. */''}
     ${/* Rendered at every width; `display: none` above 559 keeps it off a
          desktop. Labelled for what it reveals rather than "Details", so it
-         says something before it is pressed. */''}
+         says something before it is pressed -- and so for what it reveals
+         now: with no company to show it opens the hours alone, and "Hours &
+         company" promised one that was not there (reported from Home with
+         no symbol loaded). */''}
     <button type="button" class="ses-detail-btn" id="ses-detail-btn"
       aria-controls="ses-detail" aria-expanded="${sessionDetailOpen()}">
-      Hours &amp; company</button>
+      ${companyBlock ? 'Hours &amp; company' : 'Market hours'}</button>
     <div class="ses-detail${sessionDetailOpen() ? '' : ' is-closed'}" id="ses-detail">
       ${companyBlock}
       <div class="ses-legend">${legend}
