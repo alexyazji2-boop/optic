@@ -8084,7 +8084,8 @@ body[data-view="chart"] .sessionbar { display: none; }
 .ws-draw-svg .ws-dr.on line,
 .ws-draw-svg .ws-dr.on rect { filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.35)); }
 .ws-draw-svg .ws-dr-handle { cursor: grab; pointer-events: all; }
-.ws-draw-svg .ws-dr-pending { pointer-events: none; }
+.ws-draw-svg .ws-dr-pending,
+.ws-draw-svg .ws-dr-pending * { pointer-events: none; }
 /* The invisible grab target. `stroke` rather than `visiblePainted`, because the
    twin is transparent and visiblePainted would refuse to hit an unpainted
    stroke. Cursor matches the visible line so the widened area does not feel
@@ -8094,6 +8095,9 @@ body[data-view="chart"] .sessionbar { display: none; }
    cursor should say so. */
 .ws-canvas.arming .ws-draw-svg,
 .ws-canvas.arming .ws-draw { cursor: crosshair; pointer-events: auto; }
+/* And a finger dragged across the plot draws rather than scrolls the page,
+   while a tool is armed and only then. */
+.ws-canvas.arming .ws-draw { touch-action: none; }
 
 /* The pan cursor.
  *

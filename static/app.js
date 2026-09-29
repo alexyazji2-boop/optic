@@ -17166,12 +17166,38 @@ const DRAW_SNAP_PX = 7;
    enough that two nearby lines stay separately selectable. */
 const DRAW_HIT_WIDTH = 14;
 const DRAW_HANDLE_R = 4.5;
+/* The handle's grab area, bigger than the dot drawn for it. A 9px dot missed
+   by a few pixels went through to the chart, which starts a pan: pressing
+   next to the end of a line to reshape it dragged the whole chart instead. */
+const DRAW_HANDLE_GRAB_R = 11;
 // Fib ratios for the drawn tool. The same set the analysis uses, so a hand-drawn
 // retracement and a computed one are comparable.
 const DRAW_FIBS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1, 1.272, 1.618];
 
 let wsDragging = null;      // { id, part, startPoints } while a pointer is down
 let wsPending = null;       // the drawing being created
+/* Where the pointer is while a tool is armed, as client coordinates. The
+ * layer snaps and draws it on its next frame: the shape being placed follows
+ * the pointer rather than appearing only on the last click, which with nothing
+ * on screen between clicks read as a tool that lagged. */
+let wsHoverAt = null;
+/* The press that placed a point, so releasing somewhere else places the next
+ * one: press, drag and release draws a line, as click, move and click do. */
+let wsDrawPress = null;
+// A drag past this many pixels between press and release is a drawn segment.
+const DRAW_DRAG_PX = 6;
+let wsDrawFrame = 0;
+
+/** Redraw the drawing layer on the next frame, once, however many pointer
+ *  events arrive before it. Pointer moves come at the display's rate or
+ *  faster, and each used to rebuild the layer on its own. */
+function wsScheduleDrawRender() {
+  if (wsDrawFrame) return;
+  wsDrawFrame = requestAnimationFrame(() => {
+    wsDrawFrame = 0;
+    wsRenderDrawings();
+  });
+}
 
 /** How many points each tool needs before the drawing is finished. */
 const TOOL_POINTS = {
@@ -17233,12 +17259,19 @@ function wsRenderDrawings() {
 
   const P = (pt) => [frame.xOf(pt.i), frame.yOf(pt.p)];
   const list = wsDrawings();
+  // The ruler's dates, looked up once per draw rather than once per ruler.
+  let shownDates = null;
+  const seriesDates = () => shownDates || (shownDates = (wsSeries(STATE.chartData).dates || []));
 
-  list.forEach((dr) => {
+  /* One painter for a saved drawing and for the one being placed, so what
+   * follows the pointer is exactly what the last click will leave. */
+  const paint = (dr, preview) => {
     if (dr.hidden) return;
-    const sel = dr.id === wsSelected;
+    const sel = !preview && dr.id === wsSelected;
     const colour = C[dr.color] || C.accent;
-    const g = el('g', { 'data-draw': dr.id, class: 'ws-dr' + (sel ? ' on' : '') });
+    const g = el('g', preview
+      ? { class: 'ws-dr ws-dr-pending', opacity: 0.75 }
+      : { 'data-draw': dr.id, class: 'ws-dr' + (sel ? ' on' : '') });
     const pts = (dr.points || []).map(P);
 
     /* stroke falls back twice on purpose.
@@ -17459,7 +17492,7 @@ function wsRenderDrawings() {
        * correct rather than lazy: a drawing stores bar indices, and the indices
        * only mean anything against the window on screen right now, which is
        * exactly what wsSeries returns. */
-      const dates = (wsSeries(STATE.chartData).dates || []);
+      const dates = seriesDates();
       const lo = a.i <= b.i ? a.i : b.i;
       const hi = a.i <= b.i ? b.i : a.i;
       /* The year goes on BOTH ends or neither.
@@ -17571,7 +17604,7 @@ function wsRenderDrawings() {
      *
      * stroke: transparent still hit-tests, because pointer-events: stroke asks
      * about the stroke's geometry and not whether it was painted. */
-    [...g.querySelectorAll('line')].forEach((ln) => {
+    if (!preview) [...g.querySelectorAll('line')].forEach((ln) => {
       const hit = ln.cloneNode(false);
       hit.setAttribute('stroke', 'transparent');
       hit.setAttribute('stroke-width', DRAW_HIT_WIDTH);
@@ -17585,6 +17618,10 @@ function wsRenderDrawings() {
     if (sel) {
       pts.forEach(([x, y], i) => {
         g.appendChild(el('circle', {
+          cx: x, cy: y, r: DRAW_HANDLE_GRAB_R, fill: 'transparent',
+          class: 'ws-dr-handle ws-dr-grab', 'data-handle': i,
+        }));
+        g.appendChild(el('circle', {
           cx: x, cy: y, r: DRAW_HANDLE_R, fill: C.surface,
           stroke: colour, 'stroke-width': 2,
           class: 'ws-dr-handle', 'data-handle': i,
@@ -17592,18 +17629,27 @@ function wsRenderDrawings() {
       });
     }
     root.appendChild(g);
-  });
+  };
+  list.forEach((dr) => paint(dr, false));
 
-  // The in-progress drawing, so you can see what you are placing.
-  if (wsPending && wsPending.points.length) {
+  /* The drawing being placed: the points clicked so far and the pointer.
+   *
+   * Once they are enough for the tool, the finished shape, so a ruler reads
+   * out and a retracement lays out its levels while the pointer moves. Short
+   * of that (the second of a channel's three points), the points and a dashed
+   * path through them. */
+  const ghost = wsGhost();
+  if (ghost && ghost.points.length >= wsToolNeeds(ghost.kind)) {
+    paint(ghost, true);
+  } else if (ghost) {
     const g = el('g', { class: 'ws-dr ws-dr-pending' });
-    wsPending.points.map(P).forEach(([x, y]) => {
+    const at = ghost.points.map(P);
+    at.forEach(([x, y]) => {
       g.appendChild(el('circle', { cx: x, cy: y, r: 3, fill: C.accent }));
     });
-    if (wsPending.points.length === 2) {
-      const a = P(wsPending.points[0]); const b = P(wsPending.points[1]);
-      g.appendChild(el('line', {
-        x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: C.accent,
+    if (at.length > 1) {
+      g.appendChild(el('polyline', {
+        points: at.map(([x, y]) => `${x},${y}`).join(' '), fill: 'none', stroke: C.accent,
         'stroke-width': 1.4, 'stroke-dasharray': '3 3',
       }));
     }
@@ -17612,6 +17658,19 @@ function wsRenderDrawings() {
 
   layer.innerHTML = '';
   layer.appendChild(root);
+}
+
+/* The drawing being placed, with the pointer as its next point: the points
+ * clicked so far, and where the pointer is on the plot, snapped as a click
+ * there would be. Null with no tool armed, or with nothing placed and the
+ * pointer off the plot. */
+function wsGhost() {
+  if (wsTool === 'cursor') return null;
+  const placed = wsPending ? wsPending.points : [];
+  const hover = wsHoverAt ? wsSnappedPoint(wsHoverAt) : null;
+  const points = hover && placed.length < wsToolNeeds(wsTool) ? [...placed, hover] : placed;
+  if (!points.length) return null;
+  return { kind: wsTool, points, color: 'accent', width: 1.6, text: 'Note' };
 }
 
 /* ------------------------------------------------------- undo and redo
@@ -17821,15 +17880,31 @@ function wsBeginDraw(evt) {
     wsSyncDrawChrome();
     return true;
   }
-  const at = wsPointAt(evt);
-  if (!at) return false;
-  const ps = wsSeries(STATE.chartData);
-  const price = wsSnapPrice(ps, at.i, at.p, at.frame);
+  const pt = wsSnappedPoint(evt);
+  if (!pt) return false;
+  wsPlacePoint(pt);
+  // Not finished: the release may be the next point, if the pointer moves.
+  wsDrawPress = wsPending
+    ? { x: evt.clientX, y: evt.clientY, count: wsPending.points.length } : null;
+  return true;
+}
 
+/** A point on the plot under the pointer, snapped to the bar's nearest OHLC
+ *  value as a click there places it. Null off the plot. */
+function wsSnappedPoint(evt) {
+  const at = wsPointAt(evt);
+  if (!at) return null;
+  const ps = wsSeries(STATE.chartData);
+  return { i: at.i, p: wsSnapPrice(ps, at.i, at.p, at.frame) };
+}
+
+/** Add a point to the drawing being placed, and finish it when the tool has
+ *  all it needs. */
+function wsPlacePoint(pt) {
   if (!wsPending) {
     wsPending = { kind: wsTool, points: [] };
   }
-  wsPending.points.push({ i: at.i, p: price });
+  wsPending.points.push(pt);
 
   if (wsPending.points.length >= wsToolNeeds(wsTool)) {
     const dr = {
@@ -17842,7 +17917,7 @@ function wsBeginDraw(evt) {
     if (dr.kind === 'text') {
       // eslint-disable-next-line no-alert
       const t = window.prompt('Note text');
-      if (!t) { wsPending = null; wsRenderDrawings(); return true; }
+      if (!t) { wsPending = null; wsRenderDrawings(); return; }
       dr.text = t;
     }
     wsPushUndo();
@@ -17855,7 +17930,6 @@ function wsBeginDraw(evt) {
     wsSyncDrawChrome();
   }
   wsRenderDrawings();
-  return true;
 }
 
 function wsHitDrawing(evt) {
@@ -18427,7 +18501,14 @@ document.addEventListener('pointerdown', (evt) => {
   if (STATE.view !== 'chart') return;
   const layer = evt.target.closest && evt.target.closest('#ws-draw');
   if (!layer) return;
-  if (wsBeginDraw(evt)) { evt.preventDefault(); return; }
+  if (wsBeginDraw(evt)) {
+    evt.preventDefault();
+    // So the release lands here even off the plot; see wsDrawPress.
+    if (wsDrawPress) {
+      try { layer.setPointerCapture(evt.pointerId); } catch (e) { /* not capturable */ }
+    }
+    return;
+  }
   const id = wsHitDrawing(evt);
   if (!id) { wsSelected = null; wsRenderDrawings(); return; }
   wsSelected = id;
@@ -18463,8 +18544,29 @@ document.addEventListener('pointermove', (evt) => {
     return { ...pt };
   });
   // Not saved per move: pointermove fires dozens of times a second and
-  // localStorage writes are synchronous. Saved once, on pointerup.
-  wsRenderDrawings();
+  // localStorage writes are synchronous. Saved once, on pointerup. Drawn once
+  // a frame, for the same reason.
+  wsScheduleDrawRender();
+});
+
+/* The pointer, while a tool is armed: the shape being placed follows it. Only
+ * the position is kept here; snapping and drawing happen once a frame. */
+document.addEventListener('pointermove', (evt) => {
+  if (STATE.view !== 'chart' || wsTool === 'cursor' || wsDragging) return;
+  wsHoverAt = { clientX: evt.clientX, clientY: evt.clientY };
+  wsScheduleDrawRender();
+});
+
+/* A release away from the press places the next point, so a drag draws the
+ * segment it traced. A release where the press was is a click, and the next
+ * click places the next point as before. */
+document.addEventListener('pointerup', (evt) => {
+  const press = wsDrawPress;
+  wsDrawPress = null;
+  if (!press || !wsPending || wsPending.points.length !== press.count) return;
+  if (Math.hypot(evt.clientX - press.x, evt.clientY - press.y) < DRAW_DRAG_PX) return;
+  const pt = wsSnappedPoint(evt);
+  if (pt) wsPlacePoint(pt);
 });
 
 function wsEndDrag() {
