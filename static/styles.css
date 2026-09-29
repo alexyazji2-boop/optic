@@ -14612,6 +14612,45 @@ body.rail-tight .rail nav.tabs-group .nav-menu { left: 56px; }
      and the strip only ever took its content width. */
   .rail nav.tabs-group { flex: 1 1 auto; }
 }
+
+/* In the column, the sections never give up height to what is under them.
+ *
+ * With `min-height: 0` and a shrink of 1, a rail with less height than its
+ * content took the shortfall out of the sections, and they draw overflow
+ * rather than clip it (the fly-outs need that), so the last ones slid over the
+ * list below. Reported with a screenshot of Reports printed across RECENT.
+ * Measured at 1280x845 with eight recent symbols: the sections' box 81-437,
+ * their content 440 tall, Reports at 436-484 and the Recent heading at 468.
+ * The recents are the part built to give way: they shrink and scroll. */
+@media (min-width: 560px) {
+  .rail nav.tabs-group { flex-shrink: 0; }
+}
+
+/* A short window, where even the sections, the brand and the foot fill it.
+ *
+ * Under 700px the recents go and the rows tighten, so Settings stays on screen
+ * rather than below the rail's edge, where nothing scrolls to it. Under 520px,
+ * which is a phone on its side, the brand row and the collapse toggle go too:
+ * Home is the first section, and a phone has no use for a narrower rail.
+ *
+ * And the touch floor gives a little there. `pointer: coarse` holds every nav
+ * button and icon button at 44px, and eight of those plus Settings are 420px:
+ * at 740x360 Settings sat at 386-430, below the screen. At 34px, still well
+ * over WCAG's 24px, the whole rail fits with room to spare. */
+@media (min-width: 560px) and (max-height: 699px) {
+  .rail-recent { display: none; }
+  .rail nav.tabs-group .nav-top { padding-top: var(--space-1); padding-bottom: var(--space-1); }
+}
+@media (min-width: 560px) and (max-height: 519px) {
+  .rail > .brand, .rail-foot .rail-toggle { display: none; }
+  /* Without the brand the second section sits level with the top bar, and a
+     fly-out opens from its own top: at 740x360 the Dossier menu ran from 41,
+     under a bar ending at 61 that paints over the rail (50 against 40). Above
+     the bar here, still under Pulse (60). */
+  .rail { padding-top: var(--space-1); padding-bottom: var(--space-1); z-index: 55; }
+  .rail nav.tabs-group .nav-top { padding-top: var(--space-0); padding-bottom: var(--space-0); }
+  .rail nav.tabs-group .nav-top, .rail .rail-foot .icon-btn { min-height: 34px; }
+}
 .app-main > * { min-width: 0; }
 .rail .icon-btn svg,
 .rail .brand-mark { width: 18px; height: 18px; flex: none; }
