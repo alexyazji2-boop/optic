@@ -121,7 +121,10 @@ and an uptime that keeps resetting is the signal.
 
 If OOM recurs on adequate memory, `TRACKER_UNIVERSE=watchlist` drops the screen
 to ten megacaps and removes the peak entirely, at the cost of the thing the
-screen is for.
+screen is for. The default, `curated` (86 large names and index funds, since
+2026-09-29), still runs the NASDAQ-wide screen on each scan, because the Scan,
+Explore and Priority pages read its ranking; `watchlist` skips it, and those
+pages then show a ranking that ages.
 
 ### 4. Sleep
 

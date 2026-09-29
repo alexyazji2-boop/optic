@@ -368,6 +368,8 @@ def search(query: str, limit: int = 10) -> List[Dict[str, Any]]:
 
 
 UNIVERSES = {
+    "curated": "A fixed list of large, widely held stocks and the index, sector and "
+               "leveraged funds that trade like them, 86 names in all.",
     "nasdaq": "Every NASDAQ-listed common stock, from NASDAQ's own daily symbol directory.",
     "watchlist": "A fixed ten-name shortlist of the most liquid megacaps.",
 }

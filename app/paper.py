@@ -22,6 +22,7 @@ what a real account would have made.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sqlite3
 import threading
@@ -68,12 +69,47 @@ MAX_HOLD_DAYS = 45
 
 # One position per ticker at a time, so the record can't be gamed by stacking.
 #
-# The universe the scan draws from. "nasdaq" is every NASDAQ-listed common stock
-# from NASDAQ's own directory — about 3,000 names — put through a cheap price and
-# volume screen before anything expensive runs. "watchlist" is the ten-name list
-# below, kept for quick local testing.
-DEFAULT_UNIVERSE = os.environ.get("TRACKER_UNIVERSE", "nasdaq")
+# The universe the scan draws from. "curated" is the list below, the default
+# since the record restarted on 2026-09-29 at the owner's request: large names a
+# reader recognises, and the index and sector funds that trade like them,
+# leveraged ones included. "nasdaq" is every NASDAQ-listed common stock from
+# NASDAQ's own directory, about 3,000 names, which is what the first record
+# traded. "watchlist" is the ten-name list below, kept for quick local testing.
+# Every universe still goes through the same price and volume screen and then
+# the same analysis, and every book keeps its own entry bar and volatility cap.
+DEFAULT_UNIVERSE = os.environ.get("TRACKER_UNIVERSE", "curated")
 DEFAULT_WATCHLIST = ["SPY", "QQQ", "NVDA", "AAPL", "MSFT", "AMD", "TSLA", "GOOGL", "META", "AMZN"]
+
+# Checked against Yahoo on 2026-09-29: all 86 quote, and the thinnest (TECL)
+# trades about $101M a day, five times the screen's floor. SPCX is Space
+# Exploration Technologies. XYZ is Block, which traded as SQ until 2025.
+CURATED_STOCKS = [
+    # Technology and the platforms
+    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "AMD", "NFLX",
+    "ORCL", "CRM", "ADBE", "PLTR", "INTC", "QCOM", "MU", "ARM", "TSM", "UBER",
+    "SHOP", "PANW", "CRWD", "NOW", "IBM", "CSCO", "DELL", "SMCI", "ANET",
+    # Brokers, payments and crypto
+    "HOOD", "COIN", "PYPL", "XYZ", "MSTR", "SOFI",
+    # Space
+    "SPCX",
+    # Banks and card networks
+    "JPM", "GS", "MS", "BAC", "V", "MA", "BRK-B",
+    # Consumer
+    "WMT", "COST", "HD", "NKE", "DIS", "MCD", "SBUX",
+    # Health care
+    "LLY", "UNH", "JNJ", "PFE", "MRK", "NVO",
+    # Energy and industrials
+    "XOM", "CVX", "BA", "CAT", "GE",
+]
+CURATED_FUNDS = [
+    # The indices, plain and leveraged
+    "SPY", "QQQ", "IWM", "DIA", "TQQQ", "SPXL", "TNA", "SOXL", "TECL",
+    # Sectors and themes
+    "IGV", "SMH", "SOXX", "XLK", "XLF", "XLE", "XLV", "XLY", "XLI", "XBI", "ARKK", "KRE",
+    # Metals, bonds and bitcoin
+    "GLD", "SLV", "TLT", "IBIT",
+]
+CURATED_UNIVERSE = CURATED_STOCKS + CURATED_FUNDS
 
 # How many of the screen's top-ranked names get the full analysis. At roughly four
 # seconds each this is the main cost of a scan, so it's a direct trade of scan
@@ -284,7 +320,8 @@ CREATE TABLE IF NOT EXISTS positions (
     exit_reason   TEXT,
     pnl           REAL,
     pnl_pct       REAL,
-    book          TEXT NOT NULL DEFAULT 'balanced'
+    book          TEXT NOT NULL DEFAULT 'balanced',
+    archived_at   TEXT                    -- set when the record restarted; NULL is live
 );
 CREATE INDEX IF NOT EXISTS idx_positions_status ON positions(status);
 CREATE TABLE IF NOT EXISTS scans (
@@ -296,9 +333,37 @@ CREATE TABLE IF NOT EXISTS scans (
     closed     INTEGER,
     notes      TEXT,
     funnel     TEXT,                         -- JSON: universe, screen counts, shortlist
-    book       TEXT NOT NULL DEFAULT 'balanced'
+    book       TEXT NOT NULL DEFAULT 'balanced',
+    archived_at TEXT
+);
+CREATE TABLE IF NOT EXISTS ledger_meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT
 );
 """
+
+# The live record: every row not set aside by a restart. Every read that feeds
+# the figures, the sizing or the scan filters on it.
+LIVE = "archived_at IS NULL"
+
+# Restarts of the record, oldest first. Each one sets the record to date aside
+# and starts a new one, once, the first time a build that lists it opens the
+# ledger. Nothing is deleted: the rows stay in this file with the time they were
+# archived, and `archived_records` summarises them for the page.
+#
+# The record is the only backtest this app has, which is why there is no reset
+# (see test_books.test_there_is_no_way_to_wipe_the_ledger) and why a restart is
+# a commit rather than an endpoint: it cannot be called by accident or by a
+# token holder, and it shows up in the history with its reason.
+RESTARTS = [
+    {"id": "2026-09-29-big-names",
+     "label": "NASDAQ screen",
+     "reason": "The universe changed from every NASDAQ-listed stock to a list of large "
+               "names and index funds, at the owner's request. The earlier record traded "
+               "a different set of names, so it is kept apart rather than carried on."},
+]
+RESTART_EXIT_REASON = "record restarted"
+
 
 
 def _connect() -> sqlite3.Connection:
@@ -328,15 +393,110 @@ def init_db() -> None:
             conn.execute(
                 "ALTER TABLE positions ADD COLUMN book TEXT NOT NULL DEFAULT 'balanced'")
             conn.execute("UPDATE positions SET book='balanced' WHERE book IS NULL")
+        if "archived_at" not in have:
+            conn.execute("ALTER TABLE positions ADD COLUMN archived_at TEXT")
         have_scans = {r[1] for r in conn.execute("PRAGMA table_info(scans)")}
         if "funnel" not in have_scans:
             conn.execute("ALTER TABLE scans ADD COLUMN funnel TEXT")
         if "book" not in have_scans:
             conn.execute(
                 "ALTER TABLE scans ADD COLUMN book TEXT NOT NULL DEFAULT 'balanced'")
+        if "archived_at" not in have_scans:
+            conn.execute("ALTER TABLE scans ADD COLUMN archived_at TEXT")
         # Only now that the column is guaranteed to exist.
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_positions_book ON positions(book, status)")
+        for restart in RESTARTS:
+            _restart_once(conn, restart)
+
+
+def _restart_once(conn: sqlite3.Connection, restart: Dict[str, Any]) -> None:
+    """Set the live record aside under `restart`, if that has not happened yet.
+
+    Open positions are closed first, at their last mark and with that mark's
+    P&L, so the archived record ends on a number instead of on positions left
+    open forever. Then every live row is stamped. A ledger that had no rows
+    still records the restart, so a later build never mistakes it for one that
+    missed it.
+    """
+    key = "restart:" + restart["id"]
+    if conn.execute("SELECT 1 FROM ledger_meta WHERE key=?", (key,)).fetchone():
+        return
+    if conn.execute("SELECT 1 FROM positions WHERE " + LIVE + " LIMIT 1").fetchone():
+        # Not a row changes without a copy of the ledger as it was. A failed copy
+        # leaves the restart for the next start rather than going ahead.
+        try:
+            _keep_copy(conn, restart["id"])
+        except (OSError, sqlite3.Error) as exc:
+            logging.getLogger("optic.paper").warning(
+                "restart %s postponed, no copy of the ledger: %s", restart["id"], exc)
+            return
+    stamp = _now()
+    for row in conn.execute(
+            "SELECT id, entry_price, entry_spot, mark_price, mark_spot, pnl, pnl_pct "
+            "FROM positions WHERE status='open' AND " + LIVE).fetchall():
+        conn.execute(
+            "UPDATE positions SET status='closed', exit_price=?, exit_spot=?, exit_at=?,"
+            " exit_reason=?, pnl=?, pnl_pct=? WHERE id=?",
+            (row["mark_price"] if row["mark_price"] is not None else row["entry_price"],
+             row["mark_spot"] if row["mark_spot"] is not None else row["entry_spot"],
+             stamp, RESTART_EXIT_REASON, row["pnl"] or 0.0, row["pnl_pct"] or 0.0, row["id"]))
+    conn.execute("UPDATE positions SET archived_at=? WHERE " + LIVE, (stamp,))
+    conn.execute("UPDATE scans SET archived_at=? WHERE " + LIVE, (stamp,))
+    conn.execute("INSERT OR IGNORE INTO ledger_meta (key, value) VALUES (?, ?)", (key, stamp))
+
+
+def _keep_copy(conn: sqlite3.Connection, restart_id: str) -> str:
+    """The whole ledger, as it was, beside it, under a name no pruning touches.
+
+    The daily snapshots keep seven and delete the rest (app/snapshots.py), so a
+    copy taken there would be gone in a week. This one stays until someone
+    removes it by hand, and restoring it is copying it back.
+    """
+    path = os.path.join(os.path.dirname(DB_PATH), "tracker-before-{}.db".format(restart_id))
+    if os.path.exists(path):
+        return path
+    conn.commit()               # the column migrations above, before the copy
+    dst = sqlite3.connect(path)
+    try:
+        conn.backup(dst)
+    finally:
+        dst.close()
+    return path
+
+
+def archived_records() -> List[Dict[str, Any]]:
+    """Each record a restart set aside, with each book's final figures.
+
+    Read only. The page shows these so the earlier results stay in view, and so
+    nobody can mistake the new record for the whole history.
+    """
+    init_db()
+    done = {r["key"][len("restart:"):]: r["value"] for r in _rows(
+        "SELECT key, value FROM ledger_meta WHERE key LIKE 'restart:%'")}
+    out: List[Dict[str, Any]] = []
+    for restart in RESTARTS:
+        stamp = done.get(restart["id"])
+        if not stamp:
+            continue
+        rows = _rows("SELECT book, entry_at, exit_at, pnl FROM positions WHERE archived_at=?",
+                     (stamp,))
+        books = []
+        for b in BOOK_IDS:
+            mine = [r for r in rows if r["book"] == b]
+            if not mine:
+                continue
+            pnl = sum(r["pnl"] or 0.0 for r in mine)
+            books.append({"id": b, "trades": len(mine), "pnl": _f(pnl, 2),
+                          "return_pct": _f(pnl / START_EQUITY * 100.0, 2)})
+        out.append({
+            "id": restart["id"], "label": restart["label"], "reason": restart["reason"],
+            "archived_at": stamp,
+            "from": min((str(r["entry_at"])[:10] for r in rows if r.get("entry_at")),
+                        default=None),
+            "trades": len(rows), "books": books,
+        })
+    return out
 
 
 def _rows(sql: str, params: tuple = ()) -> List[Dict[str, Any]]:
@@ -586,7 +746,7 @@ def _exit_check(pos: Dict[str, Any], price: float, spot: float,
 
 def mark_open_positions(provider, rate: float = 0.0) -> Dict[str, int]:
     """Refresh every open position and close any that hit an exit."""
-    open_rows = _rows("SELECT * FROM positions WHERE status='open'")
+    open_rows = _rows("SELECT * FROM positions WHERE status='open' AND " + LIVE)
     closed = 0
     closed_positions: List[Dict[str, Any]] = []
     for pos in open_rows:
@@ -849,9 +1009,9 @@ def equity_for(book: Optional[str] = None) -> float:
     """
     if book:
         rows = _rows(
-            "SELECT pnl FROM positions WHERE status='closed' AND book=?", (book,))
+            "SELECT pnl FROM positions WHERE status='closed' AND book=? AND " + LIVE, (book,))
     else:
-        rows = _rows("SELECT pnl FROM positions WHERE status='closed'")
+        rows = _rows("SELECT pnl FROM positions WHERE status='closed' AND " + LIVE)
     realised = sum(r["pnl"] or 0.0 for r in rows)
     return START_EQUITY + realised
 
@@ -860,9 +1020,10 @@ def open_risk(book: Optional[str] = None) -> float:
     """Total dollars at risk across open positions, optionally for one book."""
     if book:
         rows = _rows(
-            "SELECT risk_dollars FROM positions WHERE status='open' AND book=?", (book,))
+            "SELECT risk_dollars FROM positions WHERE status='open' AND book=? AND " + LIVE,
+            (book,))
     else:
-        rows = _rows("SELECT risk_dollars FROM positions WHERE status='open'")
+        rows = _rows("SELECT risk_dollars FROM positions WHERE status='open' AND " + LIVE)
     return float(sum(r["risk_dollars"] or 0.0 for r in rows))
 
 
@@ -876,7 +1037,8 @@ def _capacity(equity: float, book: Optional[str] = None) -> Dict[str, Any]:
     momentum bet wearing different tickers.
     """
     cfg = book_config(book)
-    rows = _rows("SELECT id FROM positions WHERE status='open' AND book=?", (cfg["id"],))
+    rows = _rows("SELECT id FROM positions WHERE status='open' AND book=? AND " + LIVE,
+                 (cfg["id"],))
     risk = open_risk(cfg["id"])
     return {
         "book": cfg["id"],
@@ -904,7 +1066,7 @@ def first_entry(book: str) -> Optional[str]:
     from the latest of them.
     """
     rows = _rows(
-        "SELECT entry_at FROM positions WHERE book=? ORDER BY entry_at LIMIT 1",
+        "SELECT entry_at FROM positions WHERE book=? AND " + LIVE + " ORDER BY entry_at LIMIT 1",
         (book,))
     if not rows or not rows[0].get("entry_at"):
         return None
@@ -990,6 +1152,9 @@ def resolve_universe(name: Optional[str]) -> Dict[str, Any]:
     if key == "watchlist":
         return {"symbols": list(DEFAULT_WATCHLIST), "count": len(DEFAULT_WATCHLIST),
                 "name": "watchlist", "source": universe.UNIVERSES["watchlist"]}
+    if key == "curated":
+        return {"symbols": list(CURATED_UNIVERSE), "count": len(CURATED_UNIVERSE),
+                "name": "curated", "source": universe.UNIVERSES["curated"]}
     resolved = universe.nasdaq_symbols()
     return {**resolved, "name": "nasdaq"}
 
@@ -1011,7 +1176,8 @@ def run_scan(snapshot_fn: Callable[[str], Dict[str, Any]], provider,
                   started_at=started, trigger=trigger, note=None)
     try:
         marks = mark_open_positions(provider, rate)
-        held = {r["ticker"] for r in _rows("SELECT ticker FROM positions WHERE status='open'")}
+        held = {r["ticker"] for r in _rows(
+            "SELECT ticker FROM positions WHERE status='open' AND " + LIVE)}
         equity = summary()["equity"]
 
         # Marking a closed market is harmless — it just re-reads the last close.
@@ -1041,11 +1207,25 @@ def run_scan(snapshot_fn: Callable[[str], Dict[str, Any]], provider,
                              "source": "symbols supplied with the request"}
         else:
             universe_info = resolve_universe(universe_name)
+            if universe_info["name"] == "curated":
+                # The exchange-wide ranking is also what the Scan, Explore and
+                # Priority pages read, and this scan is its only producer. A book
+                # that trades the curated list still keeps it fresh for them, and
+                # screens its own list into a file of its own: under the shared
+                # name, 86 symbols would have replaced 3,000 on every one of
+                # those pages. Not for "watchlist", which exists to drop the wide
+                # screen and its memory peak altogether (DEPLOY.md).
+                wide = universe.nasdaq_symbols()
+                _set_progress(stage="screening {} symbols".format(wide["count"]),
+                              total=wide["count"])
+                screen.run(provider, wide["symbols"], top_n=shortlist_size, exclude=held,
+                           progress=lambda done, total: _set_progress(done=done, total=total))
             _set_progress(stage="screening {} symbols".format(universe_info["count"]),
                           total=universe_info["count"])
             screened = screen.run(
                 provider, universe_info["symbols"], top_n=shortlist_size, exclude=held,
                 progress=lambda done, total: _set_progress(done=done, total=total),
+                cache_name=None if universe_info["name"] == "nasdaq" else universe_info["name"],
             )
             candidates_in = [m["symbol"] for m in screened["shortlist"]]
 
@@ -1266,16 +1446,16 @@ def summary(book: Optional[str] = None) -> Dict[str, Any]:
     # Filtered only if a start floor is configured, so the headline figures always
     # reconcile with the months shown in the table.
     closed = _rows(
-        "SELECT * FROM positions WHERE status='closed' AND book=? ORDER BY exit_at DESC",
-        (book,)) if book else _rows(
-        "SELECT * FROM positions WHERE status='closed' ORDER BY exit_at DESC")
+        "SELECT * FROM positions WHERE status='closed' AND book=? AND " + LIVE
+        + " ORDER BY exit_at DESC", (book,)) if book else _rows(
+        "SELECT * FROM positions WHERE status='closed' AND " + LIVE + " ORDER BY exit_at DESC")
     if LEDGER_START:
         closed = [r for r in closed
                   if (_month_key(r.get("exit_at")) or LEDGER_START) >= LEDGER_START]
     open_rows = _rows(
-        "SELECT * FROM positions WHERE status='open' AND book=? ORDER BY entry_at DESC",
-        (book,)) if book else _rows(
-        "SELECT * FROM positions WHERE status='open' ORDER BY entry_at DESC")
+        "SELECT * FROM positions WHERE status='open' AND book=? AND " + LIVE
+        + " ORDER BY entry_at DESC", (book,)) if book else _rows(
+        "SELECT * FROM positions WHERE status='open' AND " + LIVE + " ORDER BY entry_at DESC")
 
     realised = sum(r["pnl"] or 0.0 for r in closed)
     unrealised = sum(r["pnl"] or 0.0 for r in open_rows)
@@ -1358,7 +1538,7 @@ def _month_span() -> List[str]:
     a consistency record — so the range is filled rather than derived only from
     months that happen to contain trades.
     """
-    rows = _rows("SELECT MIN(entry_at) AS first FROM positions")
+    rows = _rows("SELECT MIN(entry_at) AS first FROM positions WHERE " + LIVE)
     first = (rows[0]["first"] if rows else None) or _now()
     start = _month_key(first) or _month_key(_now())
     if LEDGER_START:
@@ -1408,8 +1588,8 @@ def _stats(closed: List[Dict[str, Any]], base_equity: float) -> Dict[str, Any]:
 
 def monthly_breakdown() -> List[Dict[str, Any]]:
     """Per-month results, oldest first, with running equity carried across."""
-    closed = _rows("SELECT * FROM positions WHERE status='closed'")
-    opened = _rows("SELECT entry_at FROM positions")
+    closed = _rows("SELECT * FROM positions WHERE status='closed' AND " + LIVE)
+    opened = _rows("SELECT entry_at FROM positions WHERE " + LIVE)
 
     by_close: Dict[str, List[Dict[str, Any]]] = {}
     for row in closed:
@@ -1440,9 +1620,10 @@ def monthly_breakdown() -> List[Dict[str, Any]]:
 
 def month_detail(key: str) -> Dict[str, Any]:
     """Trades that closed in a month, and positions opened in it."""
-    closed = [r for r in _rows("SELECT * FROM positions WHERE status='closed' ORDER BY exit_at DESC")
+    closed = [r for r in _rows("SELECT * FROM positions WHERE status='closed' AND " + LIVE
+                               + " ORDER BY exit_at DESC")
               if _month_key(r.get("exit_at")) == key]
-    opened = [r for r in _rows("SELECT * FROM positions ORDER BY entry_at DESC")
+    opened = [r for r in _rows("SELECT * FROM positions WHERE " + LIVE + " ORDER BY entry_at DESC")
               if _month_key(r.get("entry_at")) == key]
     still_open = [r for r in opened if r["status"] == "open"]
     return {
@@ -1458,7 +1639,7 @@ def month_detail(key: str) -> Dict[str, Any]:
 def state(limit: int = 60, month: Optional[str] = None,
           book: Optional[str] = None) -> Dict[str, Any]:
     init_db()
-    scans = _rows("SELECT * FROM scans ORDER BY ran_at DESC LIMIT 12")
+    scans = _rows("SELECT * FROM scans WHERE " + LIVE + " ORDER BY ran_at DESC LIMIT 12")
     for scan in scans:
         try:
             scan["notes"] = json.loads(scan["notes"] or "[]")
@@ -1494,17 +1675,21 @@ def state(limit: int = 60, month: Optional[str] = None,
             for b in BOOK_IDS
         ],
         "open": _rows(
-            "SELECT * FROM positions WHERE status='open' AND book=? ORDER BY entry_at DESC",
-            (book or DEFAULT_BOOK,)),
+            "SELECT * FROM positions WHERE status='open' AND book=? AND " + LIVE
+            + " ORDER BY entry_at DESC", (book or DEFAULT_BOOK,)),
         "closed": _rows(
-            "SELECT * FROM positions WHERE status='closed' AND book=? "
-            "ORDER BY exit_at DESC LIMIT ?",
+            "SELECT * FROM positions WHERE status='closed' AND book=? AND " + LIVE
+            + " ORDER BY exit_at DESC LIMIT ?",
             (book or DEFAULT_BOOK, limit),
         ),
         "scans": scans,
+        # The records a restart set aside, kept and shown rather than deleted.
+        "archive": archived_records(),
         "config": {
             "universe": DEFAULT_UNIVERSE,
             "universe_note": universe.UNIVERSES.get(DEFAULT_UNIVERSE, ""),
+            "universe_symbols": (list(CURATED_UNIVERSE) if DEFAULT_UNIVERSE == "curated"
+                                 else None),
             "shortlist_size": SHORTLIST_SIZE,
             "screen_gates": {
                 "min_price": screen.MIN_PRICE,
@@ -1546,13 +1731,16 @@ def state(limit: int = 60, month: Optional[str] = None,
             "options positioning, no news, no fundamentals. It decides what gets a closer look, "
             "not whether a trade is good. Anything it ranks first can still be rejected by the "
             "full analysis, and often is.",
-            "Names trading under ${:,.0f} a day are excluded, which removes most of the "
-            "exchange. Those are real listings, but a simulated fill in one wouldn't survive "
-            "contact with its actual spread.".format(screen.MIN_DOLLAR_VOLUME),
-            "Screening thousands of symbols on a free data feed earns a temporary rate limit, and "
-            "a rate-limited options request comes back looking identical to a stock with no "
+            "Names trading under ${:,.0f} a day are excluded. Every name on the current list "
+            "clears that several times over; the gate is what kept the first record, which "
+            "drew on the whole NASDAQ, out of listings whose real spread a simulated fill "
+            "would not survive.".format(screen.MIN_DOLLAR_VOLUME),
+            "A rate-limited options request comes back looking identical to a stock with no "
             "options at all. Rather than open a shares-only position and record it as what was "
             "recommended, Optic waits for the limit to clear and then skips the name if it "
             "hasn't. A throttled scan therefore takes fewer positions, not wrong ones.",
+            "The record restarted on 2026-09-29, when the list changed to large names and "
+            "index funds. The earlier record is kept, not deleted, and its final figures are "
+            "shown under Earlier records.",
         ],
     }

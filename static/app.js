@@ -423,7 +423,7 @@ const HEADER_DEFS = {
   'open positions': "Trades the terminal currently holds on paper, marked at the latest available price. These P&L numbers move with the market and are not final. Nothing counts until the position closes.",
   'closed trades': "Every completed trade with the reason it ended. The exit reasons are the honest part: a record full of time stops means the signals were early or wrong, not just unlucky.",
   'scan history': "When the terminal last looked for trades, how many tickers it considered and how many it actually took. Most scans should open nothing. A system that finds a trade every time it looks isn't being selective.",
-  'how the shortlist was chosen': "The funnel behind every scan. The universe is the whole NASDAQ, but running the full analysis on 3,000 stocks would take hours, so a cheap price-and-volume screen ranks them first and only the top names get the real work. This panel shows what was dropped at each step and why, so \"we scan the whole exchange\" and \"we analysed thirty names\" are both visible at once rather than one standing in for the other.",
+  'how the shortlist was chosen': "The funnel behind every scan. The universe is a fixed list of large names and index funds (until the record restarted on 2026-09-29 it was the whole NASDAQ). A cheap price-and-volume screen ranks the list first and only the top names get the full analysis. This panel shows what was dropped at each step and why, so \"we scan the list\" and \"we analysed thirty names\" are both visible at once rather than one standing in for the other.",
   'screen ranking': "The screen's own ordering. A trend and momentum score built from price and volume alone. It is not the terminal's verdict and carries no options, news or fundamental input; its only job is to choose what gets a closer look. A name at the top of this table can still be rejected outright by the full analysis.",
   'month by month': "The record split by calendar month, so consistency is visible rather than hidden inside one all-time total. Six steady months and one lucky month can produce the same headline number and mean completely different things, and splitting by month also lines each result up against the market conditions it was trading in.",
   'consistency': "Every month since the record began, including months with no trades at all. Equity carries forward, so each month's return is measured against what the account was worth when that month started. Watch the shape of the run, not the best month.",
@@ -23132,6 +23132,13 @@ function sizeCell(p) {
 }
 
 function trackerUniverseHint(cfg) {
+  if (cfg.universe === 'curated') {
+    return `Universe: <strong>${fmt((cfg.universe_symbols || []).length, 0)} large names and
+      index funds</strong>, leveraged ones included, listed under How these positions are taken.
+      A scan screens all of them on price and volume, then puts the top
+      ${fmt(cfg.shortlist_size, 0)} through the full analysis. It also runs on its own every few
+      hours while the server is up.`;
+  }
   if (cfg.universe !== 'nasdaq') {
     return `Watchlist: ${(cfg.watchlist || []).map((x) => esc(x)).join(', ')}. A scan puts all of
       them through the full analysis.`;
@@ -23184,7 +23191,8 @@ function funnelPanelHTML(f, gates, cfg) {
 
     <div class="funnel">
       ${[
-    ['Listed', sc.universe_size, 'NASDAQ common stocks'],
+    ['Listed', sc.universe_size, f.universe === 'curated' ? 'names on the list'
+      : f.universe === 'nasdaq' ? 'NASDAQ common stocks' : 'symbols'],
     ['Had usable data', sc.with_data, 'a year of daily bars'],
     ['Passed liquidity', sc.passed, `over $${fmtCompact(gates.min_dollar_volume, 0)} a day`],
     ['Analysed', f.shortlist ? (f.shortlist.filter((m) => m.analysed).length || 0) : 0,
@@ -23206,7 +23214,7 @@ function funnelPanelHTML(f, gates, cfg) {
     ${sc.failed_batches ? `<div class="callout">${fmt(sc.failed_batches, 0)} batch(es) of about
       ${fmt(150, 0)} symbols each never returned data, even after a retry. Almost always the free
       feed's rate limit. Those names weren't screened at all, so this ranking covers slightly less
-      than the whole exchange.</div>` : ''}
+      than the whole ${f.universe === 'nasdaq' ? 'exchange' : 'list'}.</div>` : ''}
     ${f.throttled_skips ? `<div class="callout">${fmt(f.throttled_skips, 0)} shortlisted name(s) were
       skipped because the feed was still rate-limiting when their options chain was requested. They
       weren't traded on partial data.</div>` : ''}
@@ -23340,9 +23348,30 @@ function renderBookSelector(d) {
     <p class="caveat">${gloss('They differ in the four things that actually change a risk '
     + 'profile: how selective the entry bar is, how much is risked per trade, which '
     + 'instruments are allowed, and how volatile a name may be. Nothing changes the '
-    + 'analysis. A setup is a setup, and these decide what to do about it. The '
-    + 'existing record belongs to the balanced book because those are the rules that '
-    + 'produced it.')}</p>
+    + 'analysis. A setup is a setup, and these decide what to do about it.')}</p>
+  </div>`;
+}
+
+/* Records a restart set aside. Kept in the ledger rather than deleted, and shown
+ * so the new record is never mistaken for the whole history. */
+function archivePanelHTML(archive) {
+  if (!(archive || []).length) return '';
+  return `<div class="panel span2 gap">
+    <h2>${hg('Earlier records')}</h2>
+    <p class="sub">Set aside when the record restarted, and kept rather than deleted. None of their
+      positions are in the figures above.</p>
+    ${archive.map((r) => `<h3>${esc(r.label)}</h3>
+      <p class="sub">${r.trades ? `${esc(r.from || '')} to ` : ''}${esc(String(r.archived_at || '')
+    .slice(0, 10))}, ${fmt(r.trades, 0)} trade${r.trades === 1 ? '' : 's'}. ${esc(r.reason)}</p>
+      ${(r.books || []).length ? `<div class="table-scroll"><table class="data narrow">
+        <thead><tr><th>Book</th><th class="num">Trades</th><th class="num">Result</th></tr></thead>
+        <tbody>${r.books.map((b) => `<tr><td class="name">${esc(cap(b.id))}</td>
+          <td class="num">${fmt(b.trades, 0)}</td>
+          <td class="num ${signClass(b.pnl)}"><strong>${money(b.pnl, 0)}</strong>
+            <div class="caption">${fmtPct(b.return_pct, 2)}</div></td></tr>`).join('')}
+        </tbody></table></div>
+      <p class="caveat">Positions still open at the restart were closed at their last mark, so each
+        book ends on a number. Each started with its own $100,000.</p>` : ''}`).join('')}
   </div>`;
 }
 
@@ -23540,9 +23569,9 @@ function renderTracker(d) {
     signClass(s.realised_pnl))}
       ${tile('New per scan', fmt(cfg.max_new_per_scan, 0), 'so the book fills over days')}
     </div>
-    <p class="caveat">The caps exist because the universe is the whole exchange. Without them one scan
-      could find thirty qualifying setups and put a third of the account at risk in an afternoon, on
-      names that are mostly the same momentum bet under different tickers.</p>
+    <p class="caveat">The caps exist because one scan can find many qualifying setups at once.
+      Without them it could put a third of the account at risk in an afternoon, on names that are
+      often the same bet under different tickers: TQQQ, QQQ and NVIDIA move together.</p>
   </div>
 
   ${openPositionsPanel(open)}
@@ -23558,7 +23587,10 @@ function renderTracker(d) {
       <span class="tracker-hint">Showing <strong>${esc(mo.label || '—')}</strong>${
     viewingCurrent ? '. Still in progress, so these figures are not final.' : '.'}
         The record runs from ${esc(months.length ? months[0].label : 'this month')} and includes
-        every trade the ledger has taken, nothing excluded.</span>
+        every trade ${(t.archive || []).length ? `taken since it restarted on
+        ${esc(String(t.archive[t.archive.length - 1].archived_at || '').slice(0, 10))}, nothing
+        excluded. The earlier record is kept, under Earlier records.`
+    : 'the ledger has taken, nothing excluded.'}</span>
     </div>
 
     <div class="grid c4" style="margin-bottom:var(--space-3)">
@@ -23652,6 +23684,8 @@ function renderTracker(d) {
     </table>
   </div>` : ''}
 
+  ${archivePanelHTML(t.archive)}
+
   <div class="panel span2 gap">
     <h2>${hg('How these positions are taken')}</h2>
     <p class="sub">Fixed rules, set in advance and applied identically to every ticker. Written down
@@ -23664,7 +23698,8 @@ function renderTracker(d) {
     ['Risk per share trade', fmt(cfg.risk_per_trade_pct, 1) + '% of equity'],
     ['Max risk per option trade', fmt(cfg.max_option_risk_pct, 1) + '% of equity'],
     ['Single-contract exception', 'up to ' + fmt(cfg.option_single_contract_cap_pct, 0) + '% of equity'],
-    ['Share position cap', '25% of equity in notional'],
+    ['Share position cap', fmt(((((t.books || []).find((b) => b.id === (t.book || 'balanced'))
+      || {}).max_notional_pct) || 0.25) * 100, 0) + '% of equity in notional'],
     ['Open positions', 'at most ' + fmt(cfg.max_open_positions, 0)],
     ['Total risk deployed', 'at most ' + fmt(cfg.max_portfolio_risk_pct, 0) + '% of equity'],
     ['New positions per scan', 'at most ' + fmt(cfg.max_new_per_scan, 0)],
@@ -23676,7 +23711,10 @@ function renderTracker(d) {
       <div>
         <h3>Entries and exits</h3>
         ${kv([
-    ['Universe', cfg.universe === 'nasdaq' ? 'every NASDAQ common stock (~3,000)' : 'fixed watchlist'],
+    ['Universe', cfg.universe === 'nasdaq' ? 'every NASDAQ common stock (~3,000)'
+      : cfg.universe === 'curated'
+        ? fmt((cfg.universe_symbols || []).length, 0) + ' large names and index funds, below'
+        : 'fixed watchlist'],
     ['Screened down to', fmt(cfg.shortlist_size, 0) + ' names per scan'],
     ['Takes a trade when', 'composite score ≥ ' + fmt(cfg.min_composite, 0) + ' (either direction)'],
     ['Stop', 'Just beyond the nearest real support or resistance level, or twice the average daily range if none is close'],
@@ -23688,6 +23726,9 @@ function renderTracker(d) {
   ])}
       </div>
     </div>
+    ${cfg.universe === 'curated' && (cfg.universe_symbols || []).length ? `<p class="caveat">The
+      list: ${cfg.universe_symbols.map((x) => esc(x)).join(', ')}. Fixed, so the record cannot drift
+      toward whatever happened to work.</p>` : ''}
     <div class="callout bad" style="margin-top:var(--space-3)">
       <strong>What these numbers are not.</strong>
       <ul style="margin:var(--space-2) 0 0 var(--space-4);padding:0">

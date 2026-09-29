@@ -287,9 +287,20 @@ CACHE_DIR = os.environ.get(
 CACHE_PATH = os.path.join(CACHE_DIR, "screen_ranking.json")
 
 
-def _load_disk_cache(key: str) -> Optional[Dict[str, Any]]:
+def cache_path_for(name: Optional[str]) -> str:
+    """The shared ranking, or a named list's own file beside it.
+
+    The shared file is the exchange-wide ranking every scanner page reads. A
+    list screened under a name of its own must not land there: the cache key is
+    only the list's length and the gates, so it would replace the ranking for
+    all of them.
+    """
+    return CACHE_PATH if not name else os.path.join(CACHE_DIR, "screen_ranking_{}.json".format(name))
+
+
+def _load_disk_cache(key: str, path: str = "") -> Optional[Dict[str, Any]]:
     try:
-        with open(CACHE_PATH) as handle:
+        with open(path or CACHE_PATH) as handle:
             payload = json.load(handle)
     except (OSError, ValueError):
         return None
@@ -301,10 +312,10 @@ def _load_disk_cache(key: str) -> Optional[Dict[str, Any]]:
     return ranking
 
 
-def _save_disk_cache(key: str, ranking: Dict[str, Any]) -> None:
+def _save_disk_cache(key: str, ranking: Dict[str, Any], path: str = "") -> None:
     try:
         os.makedirs(CACHE_DIR, exist_ok=True)
-        with open(CACHE_PATH, "w") as handle:
+        with open(path or CACHE_PATH, "w") as handle:
             json.dump({"key": key, "ranking": ranking}, handle)
     except OSError:
         pass                                    # a read-only disk isn't fatal
@@ -314,22 +325,26 @@ def run(provider, symbols: Sequence[str], top_n: int = 30,
         min_price: float = MIN_PRICE, min_dollar_volume: float = MIN_DOLLAR_VOLUME,
         exclude: Optional[Sequence[str]] = None,
         progress: Optional[Callable[[int, int], None]] = None,
-        force: bool = False) -> Dict[str, Any]:
+        force: bool = False, cache_name: Optional[str] = None) -> Dict[str, Any]:
     """Rank a universe and return the shortlist plus the funnel that produced it.
 
     Exclusions and the shortlist size are applied *after* the cache, so holding a
     position in a name doesn't invalidate the ranking for everything else.
+
+    `cache_name` keeps a named list's ranking in its own file (cache_path_for).
     """
     symbols = [s for s in symbols if s]
     skip = {s.upper() for s in (exclude or [])}
     key = "{}:{}:{}".format(len(symbols), min_price, min_dollar_volume)
+    path = cache_path_for(cache_name)
+    memo = key if not cache_name else cache_name + ":" + key
 
     with _CACHE_LOCK:
-        hit = _CACHE.get(key)
+        hit = _CACHE.get(memo)
         if hit is None:
-            hit = _load_disk_cache(key)
+            hit = _load_disk_cache(key, path)
             if hit is not None:
-                _CACHE[key] = hit
+                _CACHE[memo] = hit
         fresh = bool(hit) and (time.time() - hit["ranked_at"]) < CACHE_TTL_SECONDS
 
     if fresh and not force:
@@ -338,8 +353,8 @@ def run(provider, symbols: Sequence[str], top_n: int = 30,
     else:
         ranking = _rank(provider, symbols, min_price, min_dollar_volume, progress)
         with _CACHE_LOCK:
-            _CACHE[key] = ranking
-            _save_disk_cache(key, ranking)
+            _CACHE[memo] = ranking
+            _save_disk_cache(key, ranking, path)
         age_minutes = 0.0
 
     ranked = ranking["ranked"]
