@@ -371,6 +371,18 @@ def last_scan() -> Optional[Dict[str, Any]]:
     return {"last": dict(last) if last else None, "last_ok": dict(good) if good else None}
 
 
+def seconds_since_last_scan(now: Optional[datetime] = None) -> Optional[float]:
+    """Age of the newest scan, scheduled or pressed for, or None if there is
+    none or the store cannot be read. What a reader's press is spaced from."""
+    info = last_scan()
+    if not info:
+        return None
+    last = _stamp((info.get("last") or {}).get("at"))
+    if not last:
+        return None
+    return max(0.0, ((now or datetime.now(timezone.utc)) - last).total_seconds())
+
+
 def scan_due(now: Optional[datetime] = None) -> bool:
     """Whether the schedule should scan now.
 

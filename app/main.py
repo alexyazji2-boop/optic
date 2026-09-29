@@ -10,6 +10,7 @@ import os
 import re
 import secrets
 import sqlite3
+import math
 import threading
 import time
 from datetime import datetime, timezone
@@ -1585,8 +1586,17 @@ async def tracker_state(
 
 @app.post("/api/tracker/mark")
 async def tracker_mark(request: Request) -> Dict[str, Any]:
-    """Refresh marks on open positions without looking for new entries."""
-    _write_guard(request)
+    """Refresh marks on open positions without looking for new entries.
+
+    Open to everyone, at most every two minutes for anyone but the owner. See
+    PUBLIC_MARK_EVERY_S."""
+    if not _is_operator(request):
+        last = _PUBLIC_LAST.get("mark")
+        since = (time.time() - last) if last else None
+        wait = _wait_left(since, PUBLIC_MARK_EVERY_S)
+        if wait:
+            raise _cooldown_refusal("A refresh", since, wait)
+    _PUBLIC_LAST["mark"] = time.time()
     async with _SCAN_LOCK:
         return await _run(paper.mark_open_positions, PROVIDER, RISK_FREE)
 
@@ -1628,15 +1638,25 @@ async def tracker_scan(request: Request,
     the full analysis — minutes, not seconds. Holding the HTTP request open for
     that long means a proxy timeout decides whether the scan is recorded, so the
     work runs as a task and the tab polls /api/tracker for progress instead.
+
+    Open to everyone, at most every half hour for anyone but the owner. See
+    PUBLIC_TRACKER_SCAN_EVERY_S.
     """
-    _write_guard(request)
+    operator = _is_operator(request)
     tickers = None
-    if payload:
+    # A list of the caller's own is the owner's: anyone else scans the book's
+    # universe, so a visitor cannot put names of their choosing into the record.
+    if payload and operator:
         raw = payload.get("watchlist") or payload.get("tickers")
         if raw:
             tickers = [str(t).upper().strip() for t in raw][:40]
     if _SCAN_LOCK.locked() or paper.progress().get("running"):
         raise HTTPException(status_code=409, detail="A scan is already running. Watch its progress above.")
+    if not operator:
+        since = paper.seconds_since_last_scan()
+        wait = _wait_left(since, PUBLIC_TRACKER_SCAN_EVERY_S)
+        if wait:
+            raise _cooldown_refusal("A scan", since, wait)
 
     # Publish "running" before returning, not from inside the task: otherwise the
     # response says the scan isn't running and a UI that trusts that reply shows
@@ -2555,8 +2575,12 @@ async def catalyst_refresh(request: Request,
     spends money and writes to the store, and neither of those should happen
     because somebody opened a tab. The library does not wait on it: the
     catalyst loop below scans on a schedule whether or not anyone presses this.
+
+    Open to everyone, one at a time, and for anyone but the owner at most an
+    hour after the library was last scanned and over the default window. See
+    PUBLIC_CATALYST_SCAN_EVERY_S.
     """
-    _write_guard(request)
+    operator = _is_operator(request)
     # A copy showing the live library has nothing to scan with, and its own
     # store is not what the page shows. The button is not drawn in that case;
     # this is for a page that was open before the key stopped working.
@@ -2564,12 +2588,27 @@ async def catalyst_refresh(request: Request,
         return {"available": False, "mirror": {"from": live_mirror.LIVE_URL},
                 "reason": live_mirror.why() + " The live library rescans itself "
                           "on its own schedule."}
+    if _CATALYST_REFRESH_LOCK.locked():
+        raise HTTPException(status_code=409,
+                            detail="A catalyst scan is already running. It fills in here when it finishes.")
+    if not operator:
+        hours = 168
+        since = catalysts_mod.seconds_since_last_scan()
+        wait = _wait_left(since, PUBLIC_CATALYST_SCAN_EVERY_S)
+        if wait:
+            raise _cooldown_refusal("The last catalyst scan", since, wait)
 
     def build() -> Dict[str, Any]:
         out = catalysts_mod.refresh(hours=hours, trigger="manual")
         out["generated_at"] = datetime.now(timezone.utc).isoformat()
         return out
-    return await _run(build)
+    async with _CATALYST_REFRESH_LOCK:
+        return await _run(build)
+
+
+# Two presses of Scan for new catalysts at once would each read the news with
+# the model. The second is told the first is running instead.
+_CATALYST_REFRESH_LOCK = asyncio.Lock()
 
 
 @app.get("/api/catalyst-mode")
@@ -2605,10 +2644,12 @@ async def evaluate_signal(force: bool = False) -> Dict[str, Any]:
         if _EVAL_CACHE and not force:
             return _EVAL_CACHE["result"]
         ranking = _cached_ranking()
+        job = _ensure_ranking(ranking)
         rows = (ranking or {}).get("ranked") or []
         if not rows:
-            return {"available": False,
-                    "reason": "The universe ranking has not been built yet."}
+            return {"available": False, "building": job,
+                    "reason": (_building_reason(job) if job else
+                               _unbuilt_reason() or "The universe ranking has not been built yet.")}
         symbols = [r.get("symbol") for r in rows if r.get("symbol")]
         # A fixed seed so the sample — and therefore the measurement — is
         # reproducible. A result that changes every refresh cannot be argued with.
@@ -2666,6 +2707,106 @@ def _cached_ranking() -> Optional[Dict[str, Any]]:
     return (blob or {}).get("ranking") or None
 
 
+# ------------------------------------------------ the ranking, on request
+#
+# The tracker's scheduled scan was the only thing that built the ranking every
+# scanner page reads, and it runs on market days during the session. A ranking
+# that was missing (a new volume, or a file a restart left half-written before
+# the write became a rename) or more than a day old stayed that way until the
+# next session, and every scan said "The universe ranking has not been built
+# yet" to whoever asked. Asked for as "it should work whenever requested", so a
+# scanner page that finds no ranking, or a stale one, starts one building in
+# the background and says how far it has got, and the page fills in when it
+# lands. One at a time, and not while the tracker's own scan is building one.
+_RANKING_BUILD: Dict[str, Any] = {"running": False, "done": 0, "total": 0,
+                                  "started_at": None, "failed_at": None, "error": None}
+_RANKING_BUILD_LOCK = threading.Lock()
+# After a failed build (the feed refusing, most likely), how long before a page
+# may start another: a refusal answered by an immediate retry is a refusal
+# again, and every scanner page would be asking.
+RANKING_RETRY_S = 300.0
+
+
+def _ranking_age_hours(ranking: Optional[Dict[str, Any]]) -> Optional[float]:
+    at = (ranking or {}).get("ranked_at")
+    try:
+        return max(0.0, (time.time() - float(at)) / 3600.0) if at else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _build_ranking_in_background() -> None:
+    try:
+        wide = universe_mod.nasdaq_symbols()
+        symbols = wide.get("symbols") or []
+        _RANKING_BUILD["total"] = len(symbols)
+
+        def progress(done: int, total: int) -> None:
+            _RANKING_BUILD.update(done=done, total=total)
+
+        # The jobs' lane, as the tracker's scan is: a reader loading a symbol
+        # meanwhile does not queue behind three thousand downloads.
+        with yf_provider_mod.background():
+            screen_mod.run(YF_PROVIDER, symbols, progress=progress)
+        _RANKING_BUILD.update(error=None, failed_at=None)
+    except Exception as exc:  # noqa: BLE001 - reported on the page instead
+        _RANKING_BUILD.update(error=str(exc)[:200], failed_at=time.time())
+        logging.getLogger("uvicorn.error").warning("ranking build failed: %s", exc)
+    finally:
+        _RANKING_BUILD["running"] = False
+
+
+def _spawn_ranking_build() -> None:
+    """Run the build on a thread of its own, off the request's worker."""
+    threading.Thread(target=_build_ranking_in_background,
+                     name="ranking-build", daemon=True).start()
+
+
+def _ensure_ranking(ranking: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Start the ranking building when it is missing or stale.
+
+    Returns how far a build has got while one is running, whoever started it,
+    and None otherwise, which is what a page reads as "nothing to wait for".
+    """
+    rows = (ranking or {}).get("ranked") or []
+    age = _ranking_age_hours(ranking)
+    wanted = not rows or (age is not None and age > scanners_mod.STALE_AFTER_HOURS)
+    tracker = paper.progress()
+    tracker_busy = bool(tracker.get("running"))
+    failed = _RANKING_BUILD.get("failed_at")
+    backing_off = bool(failed) and time.time() - failed < RANKING_RETRY_S
+    if wanted and not tracker_busy and not screen_mod.building() and not backing_off:
+        with _RANKING_BUILD_LOCK:
+            if not _RANKING_BUILD["running"]:
+                _RANKING_BUILD.update(running=True, done=0, total=0, started_at=time.time())
+                _spawn_ranking_build()
+    if _RANKING_BUILD["running"]:
+        return {"done": int(_RANKING_BUILD.get("done") or 0),
+                "total": int(_RANKING_BUILD.get("total") or 0)}
+    if tracker_busy or screen_mod.building():
+        return {"done": int(tracker.get("done") or 0), "total": int(tracker.get("total") or 0)}
+    return None
+
+
+def _building_reason(job: Dict[str, Any]) -> str:
+    """What a scanner page says while the ranking it needs is being built."""
+    done, total = int(job.get("done") or 0), int(job.get("total") or 0)
+    counted = (" {:,} of {:,} symbols screened so far.".format(done, total)
+               if total else "")
+    return ("Building the universe ranking now." + counted + " The scans fill in by "
+            "themselves when it finishes, usually within a few minutes.")
+
+
+def _unbuilt_reason() -> Optional[str]:
+    """What to say when there is no ranking and none is being built: the last
+    attempt failed, and another starts once the retry wait is over."""
+    err = _RANKING_BUILD.get("error")
+    if not err:
+        return None
+    return ("The universe ranking could not be built just now: the data feed did not "
+            "answer. Another attempt starts within five minutes of asking again.")
+
+
 # The board, and when it was built. Same shape as _EW_CACHE below, for the same
 # reason and on the same evidence.
 _PRIORITY_CACHE: Dict[str, Any] = {}
@@ -2699,8 +2840,10 @@ async def priority_board() -> Dict[str, Any]:
         # In the jobs' lane whoever asked, a reader or the warm-up after a
         # deploy: its earnings leg is about a hundred and fifty requests, and a
         # reader loading a symbol meanwhile should not queue behind them.
+        ranking = _cached_ranking()
+        _ensure_ranking(ranking)                  # the movers column reads it too
         with yf_provider_mod.background():
-            out = priority_mod.build(YF_PROVIDER, scanners_mod, _cached_ranking())
+            out = priority_mod.build(YF_PROVIDER, scanners_mod, ranking)
         _PRIORITY_CACHE["board"] = {"at": time.time(), "data": out}
         return out
     return await _run(build)
@@ -3398,12 +3541,14 @@ async def scanner_catalogue() -> Dict[str, Any]:
     """The scans on offer, and whether there is a ranking to run them over."""
     def build() -> Dict[str, Any]:
         ranking = _cached_ranking()
+        job = _ensure_ranking(ranking)
         rows = (ranking or {}).get("ranked") or []
         return {
             "scans": scanners_mod.catalogue(),
             "ready": bool(rows),
             "considered": len(rows),
             "universe_size": (ranking or {}).get("universe_size"),
+            "building": job,
         }
     return await _run(build)
 
@@ -3457,14 +3602,22 @@ async def screener_run(payload: Dict[str, Any] = Body(default={})) -> Dict[str, 
     outside _write_guard.
     """
     def build() -> Dict[str, Any]:
+        ranking = _cached_ranking()
+        job = _ensure_ranking(ranking)
         out = screener_mod.run(
-            _cached_ranking(),
+            ranking,
             filters=payload.get("filters"),
             states=payload.get("states"),
             sort=str(payload.get("sort") or "score"),
             direction=str(payload.get("direction") or "desc"),
             limit=int(payload.get("limit") or screener_mod.DEFAULT_LIMIT),
         )
+        if job is not None:
+            out["building"] = job
+            if not out.get("available"):
+                out["reason"] = _building_reason(job)
+        elif not out.get("available") and _unbuilt_reason():
+            out["reason"] = _unbuilt_reason()
         out["generated_at"] = datetime.now(timezone.utc).isoformat()
         return out
     return await _run(build)
@@ -3489,7 +3642,15 @@ async def scanner_run(scan_id: str, limit: int = Query(scanners_mod.DEFAULT_LIMI
         if relperf_mod.scan_by_id(scan_id):
             out = relperf_mod.run_scan(YF_PROVIDER, scan_id, limit=limit)
         else:
-            out = scanners_mod.run(_cached_ranking(), scan_id, limit=limit)
+            ranking = _cached_ranking()
+            job = _ensure_ranking(ranking)
+            out = scanners_mod.run(ranking, scan_id, limit=limit)
+            if job is not None:
+                out["building"] = job
+                if not out.get("available"):
+                    out["reason"] = _building_reason(job)
+            elif not out.get("available") and _unbuilt_reason():
+                out["reason"] = _unbuilt_reason()
         out["generated_at"] = datetime.now(timezone.utc).isoformat()
         return out
     return await _run(build)
@@ -3763,6 +3924,58 @@ WRITE_TOKEN = os.environ.get("OPTIC_WRITE_TOKEN", "").strip()
 # the Secure cookie flag and the OAuth redirect URI, and it cannot import this
 # module because this module imports its router. Re-exported above, so
 # `main.is_hosted()` still resolves.
+
+
+def _is_operator(request: Request) -> bool:
+    """Whether this caller is the owner or holds the write token: _write_guard
+    answered as a yes or no instead of a refusal."""
+    try:
+        _write_guard(request)
+        return True
+    except HTTPException:
+        return False
+
+
+# The scans a reader can start, and how far apart.
+#
+# They needed the write token, so on the live site every "Run a scan now",
+# "Refresh marks" and "Scan for new catalysts" press by anyone but the owner
+# met a prompt for a key they do not have. Asked for as "go through all
+# scanning related buttons and make sure they work without the need of an API
+# key". They are open now, one at a time and at most this often for anyone but
+# the owner, who is never kept waiting:
+#
+#  * The portfolio scan screens three thousand symbols and analyses a
+#    shortlist, and trades the shared record. Half an hour since the last scan
+#    of any kind keeps it from being run on a loop, and from earning the feed's
+#    rate limit for everyone else on the site.
+#  * Marks re-price the open positions, which is a quote each. Two minutes.
+#  * The catalyst scan reads the news with the model, which is paid for. An
+#    hour since the library was last scanned, by anyone or by the schedule.
+PUBLIC_TRACKER_SCAN_EVERY_S = 30 * 60.0
+PUBLIC_MARK_EVERY_S = 2 * 60.0
+PUBLIC_CATALYST_SCAN_EVERY_S = 60 * 60.0
+_PUBLIC_LAST: Dict[str, float] = {}
+
+
+def _wait_left(since_s: Optional[float], every_s: float) -> float:
+    """Seconds until a public run is allowed again, 0 when it is."""
+    if since_s is None:
+        return 0.0
+    return max(0.0, every_s - since_s)
+
+
+def _cooldown_refusal(what: str, since_s: float, wait_s: float) -> HTTPException:
+    """The refusal, in minutes: how long ago rounded down and how long to wait
+    rounded up, so the two never add up to more than the wait itself."""
+    ago_min = int(since_s // 60)
+    left = max(1, int(math.ceil(wait_s / 60.0)))
+    ago = ("less than a minute ago" if ago_min < 1 else
+           "{} minute{} ago".format(ago_min, "" if ago_min == 1 else "s"))
+    return HTTPException(
+        status_code=429,
+        detail="{} ran {}. The next one can start in {} minute{}.".format(
+            what, ago, left, "" if left == 1 else "s"))
 
 
 def _write_guard(request: Request) -> None:

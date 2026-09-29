@@ -4143,6 +4143,23 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
 
 /* The blind-spot note. Muted rather than alarming — it is a standing property of
  * the scan, not a warning that something has gone wrong. */
+/* How far the universe ranking's build has got, under the sentence saying so.
+   See scanBuildBar. */
+.scan-build-bar {
+  height: 6px;
+  margin-top: var(--space-2);
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.scan-build-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+  transition: width var(--dur-ui) var(--ease-ui);
+}
+@media (prefers-reduced-motion: reduce) { .scan-build-bar > span { transition: none; } }
 .scan-blind {
   margin-top: var(--space-4);
   font-size: var(--t-micro);

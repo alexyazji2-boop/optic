@@ -46,6 +46,8 @@ import ordering has to be arranged.
 
 from __future__ import annotations
 
+import sys
+
 import pytest
 
 from app import ai
@@ -119,6 +121,16 @@ def _no_live_calls(monkeypatch):
         raise RuntimeError("the suite does not read the live site: " + url)
 
     monkeypatch.setattr(live_mirror, "_http_get", refuse)
+
+    # Nor does it build the universe ranking. A scanner endpoint that finds no
+    # ranking starts one building on a thread of its own (see _ensure_ranking),
+    # which is three thousand downloads from the real feed in the middle of the
+    # run, and a build lock held across the tests after it. Here the build
+    # never starts; tests/test_public_scans.py fakes it where it is the subject.
+    main = sys.modules.get("app.main")
+    if main is not None:
+        monkeypatch.setattr(main, "_spawn_ranking_build",
+                            lambda: main._RANKING_BUILD.update(running=False))
 
 
 @pytest.fixture(autouse=True)

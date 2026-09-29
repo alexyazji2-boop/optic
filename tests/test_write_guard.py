@@ -20,8 +20,11 @@ from fastapi.testclient import TestClient
 
 client = TestClient(main.app)
 
-WRITES = ("/api/tracker/scan", "/api/tracker/mark", "/api/alerts/clear",
-          "/api/catalysts/refresh")
+# The scans are not here any more. The portfolio scan, its marks and the
+# catalyst scan are open to everyone, spaced out for anyone but the owner, and
+# tests/test_public_scans.py holds them to that. What is left changes the
+# record in ways a reader has no business doing.
+WRITES = ("/api/alerts/clear", "/api/feedback/resolve-all")
 PLATFORM_VARS = ("RAILWAY_ENVIRONMENT", "RAILWAY_GIT_COMMIT_SHA",
                  "RENDER", "FLY_APP_NAME")
 

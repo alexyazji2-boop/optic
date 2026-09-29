@@ -1294,7 +1294,10 @@ async function postJSON(url, body) {
           ? 'The tunnel may have dropped' : 'It may be restarting'}`
         : `${res.statusText || 'request failed'} (HTTP ${res.status})`;
     }
-    throw new Error(detail);
+    // The status rides along, so a caller can tell "wait" from "failed".
+    const err = new Error(detail);
+    err.status = res.status;
+    throw err;
   }
   return res.json();
 }
@@ -27588,6 +27591,15 @@ function screenerCell(col, value) {
   return n;
 }
 
+/** How far the universe ranking's build has got, as a bar, or nothing when
+ *  no build is running or it has not counted anything yet. */
+function scanBuildBar(job) {
+  if (!job || !job.total) return '';
+  const pct = Math.min(100, Math.round((job.done / job.total) * 100));
+  return `<div class="scan-build-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+    aria-valuenow="${pct}" aria-label="Universe ranking built"><span style="width:${pct}%"></span></div>`;
+}
+
 function screenerResultHTML() {
   const res = STATE.screenerResult;
   if (!res) return '';
@@ -27596,7 +27608,7 @@ function screenerResultHTML() {
   }
   if (!res.available) {
     return `<div class="panel span-all"><div class="callout">${
-      esc(res.reason || 'The screen could not run.')}</div></div>`;
+      esc(res.reason || 'The screen could not run.')}${scanBuildBar(res.building)}</div></div>`;
   }
   const cols = res.columns || [];
   /* The funnel, always — not only when the result is empty.
@@ -27653,11 +27665,13 @@ function paintScreenerResult() {
   else paintScreener();
 }
 
-async function runScreener() {
+async function runScreener(quiet) {
   if (screenerBusy) return;
   screenerBusy = true;
-  STATE.screenerResult = 'loading';
-  paintScreenerResult();
+  if (!quiet) {
+    STATE.screenerResult = 'loading';
+    paintScreenerResult();
+  }
   try {
     STATE.screenerResult = await postJSON('/api/screener', screenerSpec());
   } catch (err) {
@@ -27665,6 +27679,29 @@ async function runScreener() {
   }
   screenerBusy = false;
   paintScreener();
+  // The ranking it filters is being built: ask again until it lands.
+  if (STATE.screenerResult && STATE.screenerResult.building) {
+    scanWhenBuilt(() => STATE.view === 'scan' && STATE.scanMode === 'build',
+      () => runScreener(true));
+  }
+}
+
+/* While the universe ranking is being built, ask again every few seconds.
+ *
+ * The server starts a build when a scanner page finds the ranking missing or
+ * stale, and answers with how far it has got (see _ensure_ranking). A page
+ * that said so once and waited to be reloaded would be the dead end it
+ * replaced, so it asks again while the reader is still on it, and stops the
+ * moment they leave or the answer is in. One timer at a time. */
+let scanBuildTimer = null;
+const SCAN_BUILD_POLL_MS = 5000;
+
+function scanWhenBuilt(stillWanted, again) {
+  clearTimeout(scanBuildTimer);
+  scanBuildTimer = setTimeout(() => {
+    scanBuildTimer = null;
+    if (stillWanted()) again();
+  }, SCAN_BUILD_POLL_MS);
 }
 
 function renderScan(cat, res) {
@@ -27721,7 +27758,8 @@ function renderScan(cat, res) {
   }
   if (!res || !res.available) {
     return head + `<div class="panel span-all"><div class="callout">${
-  esc((res && res.reason) || 'This scan is unavailable.')}</div></div>`;
+  esc((res && res.reason) || 'This scan is unavailable.')}${scanBuildBar(res && res.building)}
+    </div></div>`;
   }
 
   const cols = res.columns || [];
@@ -27783,15 +27821,27 @@ async function loadScan(force) {
   await runScan(STATE.scanId);
 }
 
-async function runScan(id) {
+async function runScan(id, quiet) {
   STATE.scanId = id;
-  const cat = STATE.scan || { scans: [] };
+  let cat = STATE.scan || { scans: [] };
   // Paint the pills immediately so the click registers, then fill the results.
-  views.scan.innerHTML = renderScan(cat, 'loading');
-  bindScanPills();
+  // Not when asking again while the ranking builds: the progress line stays up.
+  if (!quiet) {
+    views.scan.innerHTML = renderScan(cat, 'loading');
+    bindScanPills();
+  }
   try {
     const res = await getJSON(`/api/scanners/${encodeURIComponent(id)}`);
     if (STATE.scanId !== id) return;          // a faster click won
+    /* Built while the page waited: the catalogue's counts ("over the N names
+       that cleared the screen's gates") were read before there was a ranking,
+       so they are read again with it. */
+    if (quiet && res.available && !(cat.considered)) {
+      try {
+        STATE.scan = await getJSON('/api/scanners');
+        cat = STATE.scan;
+      } catch (e) { /* the counts are a caption; the rows are what matter */ }
+    }
     // Held so switching to the builder and back repaints rather than refetches.
     STATE.scanResult = res;
     views.scan.innerHTML = renderScan(cat, res);
@@ -27801,6 +27851,11 @@ async function runScan(id) {
   }
   bindScanPills();
   revealPanels(views.scan);
+  if (STATE.scanResult && STATE.scanResult.building) {
+    scanWhenBuilt(() => STATE.view === 'scan' && STATE.scanMode !== 'build' && STATE.scanId === id,
+      () => runScan(id, true));
+    return;
+  }
   loadEvaluation();
 }
 
@@ -28261,7 +28316,15 @@ async function runTrackerAction(kind) {
     STATE.trackerScanning = false;
     if (STATE.tracker) renderTracker(STATE.tracker);
     const bar = document.querySelector('.tracker-bar');
-    if (bar) bar.insertAdjacentHTML('afterend', errorHTML(err.message));
+    /* A scan or refresh that has to wait (the one-at-a-time and how-often
+       limits on the ones anybody can start) is said as a notice. It is not a
+       failure, and errorHTML would open it with "Could not load." */
+    const waiting = err.status === 429 || err.status === 409;
+    if (bar) {
+      bar.insertAdjacentHTML('afterend', waiting
+        ? `<div class="callout" role="status" style="margin-top:var(--space-3)">${esc(err.message)}</div>`
+        : errorHTML(err.message));
+    }
   }
 }
 

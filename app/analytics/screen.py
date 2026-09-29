@@ -276,6 +276,24 @@ CACHE_TTL_SECONDS = float(os.environ.get("SCREEN_CACHE_MINUTES", "90")) * 60.0
 _CACHE: Dict[str, Any] = {}
 _CACHE_LOCK = threading.RLock()
 
+# One build of a ranking file at a time. The tracker's scheduled scan and a
+# rebuild asked for by a scanner page can both arrive at a missing or stale
+# ranking, and two of them would each pull a year of bars for three thousand
+# symbols, which is the load that earns a rate limit. The second waits and then
+# uses what the first built.
+_BUILD_LOCKS: Dict[str, threading.Lock] = {}
+
+
+def _build_lock(path: str) -> threading.Lock:
+    with _CACHE_LOCK:
+        return _BUILD_LOCKS.setdefault(path, threading.Lock())
+
+
+def building(path: str = "") -> bool:
+    """Whether a ranking for this file is being built right now."""
+    lock = _BUILD_LOCKS.get(path or CACHE_PATH)
+    return bool(lock and lock.locked())
+
 # Persisted to disk as well as memory. A restart would otherwise re-download the
 # whole exchange, and on a host that redeploys or wakes from sleep that is exactly
 # when the feed is least willing to answer three thousand requests.
@@ -313,12 +331,32 @@ def _load_disk_cache(key: str, path: str = "") -> Optional[Dict[str, Any]]:
 
 
 def _save_disk_cache(key: str, ranking: Dict[str, Any], path: str = "") -> None:
+    """Replace the file in one step, never rewrite it in place.
+
+    It was opened with "w", which empties it before a byte of the new ranking
+    is written, and a full ranking takes a moment to serialise. Every scanner
+    page reads this file per request, and one that read it in that window got
+    empty or half-written JSON and said "The universe ranking has not been
+    built yet" -- reported with a screenshot of Momentum leaders. A restart in
+    the same window (a deploy lands whenever it lands) left it that way until
+    the next market-hours scan. Written beside it and renamed over it now, so a
+    reader sees the old ranking or the new one and nothing in between.
+    """
+    target = path or CACHE_PATH
+    tmp = "{}.{}.tmp".format(target, os.getpid())
     try:
-        os.makedirs(CACHE_DIR, exist_ok=True)
-        with open(path or CACHE_PATH, "w") as handle:
+        os.makedirs(os.path.dirname(target) or CACHE_DIR, exist_ok=True)
+        with open(tmp, "w") as handle:
             json.dump({"key": key, "ranking": ranking}, handle)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, target)
     except OSError:
-        pass                                    # a read-only disk isn't fatal
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        # A read-only disk isn't fatal: the ranking is still held in memory.
 
 
 def run(provider, symbols: Sequence[str], top_n: int = 30,
@@ -351,11 +389,21 @@ def run(provider, symbols: Sequence[str], top_n: int = 30,
         ranking = hit
         age_minutes = round((time.time() - hit["ranked_at"]) / 60.0, 1)
     else:
-        ranking = _rank(provider, symbols, min_price, min_dollar_volume, progress)
+        # What was there before waiting its turn, so a ranking that turns up
+        # while it waits is known to be someone else's, built just now.
         with _CACHE_LOCK:
-            _CACHE[memo] = ranking
-            _save_disk_cache(key, ranking, path)
-        age_minutes = 0.0
+            seen = (_CACHE.get(memo) or {}).get("ranked_at")
+        with _build_lock(path):
+            with _CACHE_LOCK:
+                again = _CACHE.get(memo)
+            if again and again.get("ranked_at") != seen:
+                ranking = again
+            else:
+                ranking = _rank(provider, symbols, min_price, min_dollar_volume, progress)
+                with _CACHE_LOCK:
+                    _CACHE[memo] = ranking
+                    _save_disk_cache(key, ranking, path)
+        age_minutes = round((time.time() - ranking["ranked_at"]) / 60.0, 1)
 
     ranked = ranking["ranked"]
     shortlist = [m for m in ranked if m["symbol"] not in skip][:top_n]
