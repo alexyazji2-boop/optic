@@ -689,6 +689,15 @@ function runChartQueue() {
 const CHART_BUILDERS = new WeakMap();
 let chartToken = 0;
 
+/* Set while a gesture redraws: a zoom, a pinch or a pan. See mount(). */
+let chartInteractive = false;
+
+/* A redraw a gesture asked for, drawn in the frame it was asked in. */
+function interactiveRedraw(adapter) {
+  chartInteractive = true;
+  try { adapter.redraw(); } finally { chartInteractive = false; }
+}
+
 /* rootMargin gives the chart a screen's warning, so it is drawn before it scrolls
  * into view rather than popping in underneath the reader. */
 const chartObserver = ('IntersectionObserver' in window)
@@ -735,6 +744,19 @@ function mount(id, node) {
   node = drawnAs(node, chartAnimationOn());
   const token = String(++chartToken);
   host.dataset.chartPending = token;
+  /* A gesture's redraw is built now, over the chart already there.
+   *
+   * Queued, as everything else is, each step of a zoom cleared the chart and
+   * left its build for a later frame, and on a trackpad the next step came
+   * first: its token superseded the build before it ran. Reported as "zooming
+   * in/out of the chart is laggy". The chart blinked empty between steps and
+   * ran a frame or two behind the hand, and each pane under it a frame behind
+   * that. The queue exists so a first load arrives progressively; a chart that
+   * is on screen and being moved should just move. The token taken above still
+   * retires any build queued for this host before. */
+  if (chartInteractive && host.firstChild && host.clientWidth) {
+    if (buildChartNow(host, node)) { settleHost(host); return; }
+  }
   // Cleared up front, even though the build is deferred: leaving the old node in
   // place meant a host below the fold kept showing the PREVIOUS ticker's chart
   // until it scrolled into view, and a stale chart under a new heading is worse
@@ -18240,7 +18262,15 @@ document.addEventListener('pointermove', (evt) => {
   const settled = { from, to: from + span };
   if (wsWindow && wsWindow.from === settled.from && wsWindow.to === settled.to) return;
   wsWindow = settled;
-  wsRedrawChart();
+  // Once a frame and drawn in it, as a pan on the plot is. The window is set
+  // now, so a release before the frame still draws where the drag ended.
+  const drag = wsNavDrag;
+  if (!drag.frame) {
+    drag.frame = requestAnimationFrame(() => {
+      drag.frame = 0;
+      interactiveRedraw({ redraw: () => wsRedrawChart() });
+    });
+  }
 });
 
 document.addEventListener('pointerup', () => {
@@ -18463,7 +18493,7 @@ function flushChartWheel() {
     }
   }
   if ((next.from !== cur.from || next.to !== cur.to) && target.adapter.apply(next)) {
-    target.adapter.redraw();
+    interactiveRedraw(target.adapter);
   }
 }
 
@@ -18537,7 +18567,7 @@ document.addEventListener('gesturechange', (evt) => {
   if (g.target.adapter.apply(next)) {
     // One repaint per frame here too.
     if (!g.frame) {
-      g.frame = requestAnimationFrame(() => { g.frame = 0; g.target.adapter.redraw(); });
+      g.frame = requestAnimationFrame(() => { g.frame = 0; interactiveRedraw(g.target.adapter); });
     }
   }
 }, { passive: false });
@@ -18608,8 +18638,17 @@ document.addEventListener('pointermove', (evt) => {
   const bars = Math.round((evt.clientX - wsPan.x) * wsPan.barsPerPx);
   if (!bars && !wsPan.moved) return;
   wsPan.moved = true;
-  if (wsPan.adapter.apply({ from: wsPan.from - bars, to: wsPan.to - bars })) {
-    wsPan.adapter.redraw();
+  /* Once a frame, like the wheel: a mouse reports a hundred moves a second or
+   * more, and each was a whole redraw. The pan is held by the frame rather
+   * than read back from `wsPan`, so a release before the frame still lands the
+   * last move. */
+  const pan = wsPan;
+  pan.next = { from: pan.from - bars, to: pan.to - bars };
+  if (!pan.frame) {
+    pan.frame = requestAnimationFrame(() => {
+      pan.frame = 0;
+      if (pan.adapter.apply(pan.next)) interactiveRedraw(pan.adapter);
+    });
   }
 });
 
@@ -19492,8 +19531,13 @@ function wsRedrawChart(opts) {
    * Reset — rebuild it because they need the pressed state to move. */
   if (!(opts && opts.keepToolbar)) {
     const tb = views.chart.querySelector('.ws-toolbar');
-    if (tb) tb.outerHTML = wsToolbar();
-    wsPlaceMenu();
+    /* A gesture changes one thing on the toolbar, whether Reset zoom is there,
+     * and rebuilding the rest on every step of it was a toolbar's worth of
+     * DOM replaced sixty times a second for nothing. */
+    const same = chartInteractive && tb
+      && !!tb.querySelector('[data-ws-zoom-reset]') === !!wsWindow;
+    if (tb && !same) tb.outerHTML = wsToolbar();
+    if (!same) wsPlaceMenu();
   }
 
   // The legend's values change with the range, so it is rebuilt — but it is

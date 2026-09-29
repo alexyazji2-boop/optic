@@ -292,6 +292,6 @@ def test_every_redraw_that_can_leave_a_menu_open_places_it():
     assert toggle.index("tb2.outerHTML = wsToolbar();") < toggle.index("wsPlaceMenu();")
     tools = CODE[CODE.index("if (evt.target.closest('[data-ws-tools]')) {"):]
     assert "wsPlaceMenu();" in tools[:tools.index("return;")]
-    assert "if (tb) tb.outerHTML = wsToolbar();\n    wsPlaceMenu();" in CODE
+    assert "if (tb && !same) tb.outerHTML = wsToolbar();\n    if (!same) wsPlaceMenu();" in CODE
     render = fn("renderChartWorkspace")
     assert render.index("${wsManagePanel()}`;") < render.index("wsPlaceMenu();")

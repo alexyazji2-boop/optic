@@ -92,8 +92,9 @@ def test_the_pan_moves_the_window_rather_than_resizing_it():
     what a navigator edge-handle does, and doing it here would zoom while
     panning. Both ends move by the same `bars`, which is the whole guarantee."""
     handler = _block(APP, "document.addEventListener('pointermove', (evt) => {\n  if (!wsPan) return;", "\n});")
-    assert "wsPan.adapter.apply({ from: wsPan.from - bars, to: wsPan.to - bars })" in handler
-    assert "wsPan.adapter.redraw();" in handler
+    assert "pan.next = { from: pan.from - bars, to: pan.to - bars };" in handler
+    # Applied and drawn once a frame, in the frame: see test_chart_zoom_lag.
+    assert "if (pan.adapter.apply(pan.next)) interactiveRedraw(pan.adapter);" in handler
 
 
 def test_the_pan_remembers_which_chart_it_started_on():
@@ -109,7 +110,7 @@ def test_the_drag_moves_the_chart_not_a_scrollbar():
     the chart. Subtracting is the whole of that; the sign is the bug."""
     handler = _block(APP, "document.addEventListener('pointermove', (evt) => {\n  if (!wsPan) return;", "\n});")
     assert "(evt.clientX - wsPan.x) * wsPan.barsPerPx" in handler
-    assert "wsPan.from - bars" in handler
+    assert "pan.from - bars" in handler
 
 
 def test_the_hint_names_the_gestures_that_exist():

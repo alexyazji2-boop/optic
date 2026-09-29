@@ -65,9 +65,11 @@ def _run(scenario: str) -> str:
            "var frames = []; function requestAnimationFrame(f) { frames.push(f); return frames.length; }\n"
            "function runFrames() { var f = frames; frames = []; f.forEach(function (g) { g(); }); }\n"
            "var chartWheel = null, chartWheelFrame = 0, chartGesture = null;\n"
+           "var chartInteractive = false;\n"
            + consts + "\n"
            + "\n".join(_raw_fn(n) for n in ("wheelPixels", "queueChartFrame", "zoomedWindow",
-                                             "flushChartWheel", "chartBarsPerPixel", "alignToWindow"))
+                                             "flushChartWheel", "chartBarsPerPixel", "alignToWindow",
+                                             "interactiveRedraw"))
            + "\n" + scenario + "\nprint('TEST_OK');")
     out = subprocess.run([exe, "-e", src], capture_output=True, text=True, timeout=30)
     assert "TEST_OK" in out.stdout, out.stdout + out.stderr
