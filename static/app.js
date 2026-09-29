@@ -21968,10 +21968,10 @@ function renderSettings() {
 
     ${hoursRows ? `
       <h3 style="margin-top:var(--space-4)">${hg('Market hours')}</h3>
-      <table class="data narrow">
+      <div class="table-scroll"><table class="data narrow">
         <thead><tr><th>Session</th><th>Eastern (market)</th><th>Your zone</th></tr></thead>
         <tbody>${hoursRows}</tbody>
-      </table>
+      </table></div>
       <p class="caveat">Overnight straddles midnight, so its two halves share one row. Daylight
         saving shifts these by an hour on different dates in different countries. The conversion
         follows each zone's own calendar rather than assuming a fixed offset.</p>

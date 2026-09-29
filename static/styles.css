@@ -2865,7 +2865,9 @@ body.chat-open footer.legal { padding-right: var(--chat-w); }
   gap: var(--space-1);
   font-size: var(--t-base);
   color: var(--ink);
-  min-width: 220px;
+  /* Never wider than the row: at 320 with Large text the row's content box
+     is under 220px. */
+  min-width: min(220px, 100%);
   flex: 1 1 260px;
 }
 .settings-hint {
@@ -2876,6 +2878,12 @@ body.chat-open footer.legal { padding-right: var(--chat-w); }
 }
 .settings-select {
   flex: 0 1 340px;
+  /* A select's automatic minimum is its longest option, so it would not
+     shrink into its row. Measured at 390x844: the time zone picker was 401px
+     wide in a 314px row, and the panel scrolled sideways to show the rest.
+     A max-width caps that minimum too, so a phone gets a picker the width of
+     its row and a desktop keeps the 401px it had. */
+  max-width: 100%;
   padding: var(--space-2) var(--space-3);
   background: var(--surface);
   border: 1px solid var(--border-strong);
@@ -2907,6 +2915,24 @@ body.chat-open footer.legal { padding-right: var(--chat-w); }
   background: var(--btn-primary);
   border-color: var(--btn-primary);
   color: var(--btn-primary-ink);
+}
+/* A segmented control in a narrow settings row.
+ *
+ * `.seg` clips what does not fit (overflow: hidden, for its rounded ends),
+ * and that overflow also lets it shrink below its buttons. So the last choice
+ * was cut off, not wrapped: at 320x640 the Text size control needed 232px of
+ * a 214px row and lost 18px of "Large", and at 375x812 with Large text it
+ * needed 265px of 257.
+ *
+ * The room it needs grows with the text size, so the test is in em, which in
+ * a container query is the row's own font size and scales with it. Below 14em
+ * the side padding narrows, which fits all three settings at 320 in the
+ * default size and at 375 in Large. Where even that is not enough (320 in
+ * Large) the control scrolls sideways rather than hide a choice. */
+.settings-row { container-type: inline-size; }
+.settings-row .seg { overflow-x: auto; }
+@container (max-width: 14em) {
+  .settings-row .seg button { padding-left: var(--space-2); padding-right: var(--space-2); }
 }
 
 /* Zone note at the end of the session legend. */
@@ -12071,7 +12097,10 @@ body.auth-open { overflow: hidden; }
   color: var(--ink-muted);
 }
 
-.set-row-act { display: flex; gap: var(--space-2); }
+/* Wraps rather than running out of its panel: at 320 with Large text, "Create
+   an account" and "Sign in" side by side ran 35px past the Account panel's
+   edge and the whole panel scrolled sideways. */
+.set-row-act { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .set-row-act .btn { padding: var(--space-1) var(--space-3); font-size: var(--t-caption); }
 
 .set-tag {
