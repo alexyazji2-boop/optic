@@ -125,11 +125,17 @@ def test_escape_takes_the_drawing_before_it_takes_the_chart():
 
 
 def test_the_way_out_stays_on_screen():
-    """In native fullscreen there is no browser chrome and no rail, so a
-    toolbar that scrolled this button off the end would be a trap."""
-    decls = rule('body.ws-max[data-view="chart"] [data-ws-max]')
-    assert "position: sticky" in decls
-    assert "margin-left: auto" in decls
+    """In native fullscreen there is no browser chrome and no rail, so the way
+    out must not be somewhere that scrolls away. It was pinned sticky to the
+    end of the toolbar for that; it is on the chart's own header now, which
+    full screen keeps, and the toolbar has no full-screen control at all."""
+    assert "${wsMaxButton()}" in function("renderChartWorkspace")
+    assert "data-ws-max" not in function("wsToolbar")
+    assert "data-ws-max" in function("wsMaxButton")
+    assert 'body.ws-max[data-view="chart"] .ws-head' not in CSS, "the header is not hidden"
+    # And its state follows entering and leaving, since a redraw leaves the
+    # header alone.
+    assert "querySelector('.ws-full-btn')" in function("wsAfterMaximise")
 
 
 # ------------------------------------------------- what full screen hides
@@ -160,7 +166,8 @@ def test_full_screen_sets_no_height_of_its_own():
     assuming it -- so with the chrome gone the existing calc resolves to the
     whole viewport. A second answer here would drift from the first."""
     start = CSS.index('body.ws-max[data-view="chart"] .rail')
-    block = CSS[start:].split("[data-ws-max]")[0]
+    # To the note where the button's own rule used to be: the end of the block.
+    block = CSS[start:].split("The way out needs no rule of its own here")[0]
     # Comments stripped first. The block explains in prose why it sets no
     # height, and the first version of this test matched its own explanation.
     block = re.sub(r"/\*.*?\*/", "", block, flags=re.S)

@@ -14629,8 +14629,11 @@ function renderRotation(r) {
  * way they are implemented — "is this level real" is one question whether the
  * answer comes from a pivot, a Fibonacci ratio or a volume shelf. */
 const WS_MENUS = [
-  { id: 'fibs', label: 'Fibs', items: ['fib'] },
-  { id: 'trends', label: 'Trends', items: ['trends', 'sr', 'zones', 'accum'] },
+  /* Every level on one menu. Fibs was a button of its own beside a Trends
+   * menu holding the other four, two controls for the one question the
+   * comment above names; OVERLAY_DEFS already groups all five as `Levels`.
+   * Merged when the toolbar was asked to carry fewer buttons. */
+  { id: 'levels', label: 'Levels', items: ['fib', 'trends', 'sr', 'zones', 'accum'] },
   // One item, so it renders as a toggle button rather than a menu.
   { id: 'stages', label: 'Stages', items: ['stages'] },
   { id: 'indicators',
@@ -15203,12 +15206,32 @@ function wsToolbar() {
     </div>`;
   }).join('')}
     ${wsStudiesMenu()}
+    ${/* Panes, beside the other menus. Its own menu rather than an entry in
+         Indicators, because those draw ON the price plot and these are
+         separate plots under it: one is "add a line to this chart" and the
+         other is "add a chart". */''}
+    <div class="ws-menu">
+      <button type="button" class="ws-menu-btn${wsPanesOpen.length ? ' on' : ''}"
+        data-ws-menu="panes" aria-expanded="${wsMenuOpen === 'panes'}"
+        title="Oscillator panes under the chart">Panes${
+  wsPanesOpen.length ? ` <span class="ws-count">${wsPanesOpen.length}</span>` : ''}</button>
+      ${wsMenuOpen === 'panes' ? `<div class="ws-menu-pop">
+        ${WS_PANES.map((pane) => `<label class="ws-opt">
+          <input type="checkbox" data-ws-pane-opt="${esc(pane.id)}"${
+    wsPaneOpen(pane.id) ? ' checked' : ''}>
+          <span>${esc(pane.label)}</span>
+        </label>`).join('')}
+        <p class="ws-menu-note">Drawn under the price chart on the same dates.
+          Computed over the whole history and then cut to the view, so the
+          averages do not warm up on screen.</p>
+      </div>` : ''}
+    </div>
     </div>
     <div class="ws-toolbar-gap"></div>
     ${/* One control for the bar size, one minute to one week. The daily and
          weekly halves of it write to different variables -- see the comment
          on CHART_INTERVALS -- but a reader is choosing one thing. */''}
-    ${rangePills(CHART_INTERVALS, activeIntervalKey(), 'data-ws-interval', 'Interval')}
+    ${wsIntervalMenu()}
     ${isIntradayRange(chartRange) && (INTRADAY_WINDOWS[chartRange] || []).length
     /* Each size's own windows, where 1D has its ranges. This was one disabled
        pill naming a fixed lookback; the feed serves far more (60 days at 5m,
@@ -15249,44 +15272,66 @@ function wsToolbar() {
       + ' and these bars arrived without them, so this range draws as a line."'}
         aria-pressed="${wsCandlesPossible() && chartMode === 'candle'}">Candles</button>
     </div>
-    ${/* Panes, beside the other menus. Its own menu rather than an entry in
-         Indicators, because those draw ON the price plot and these are
-         separate plots under it: one is "add a line to this chart" and the
-         other is "add a chart". */''}
     <div class="ws-tools">
-    <div class="ws-menu">
-      <button type="button" class="ws-menu-btn${wsPanesOpen.length ? ' on' : ''}"
-        data-ws-menu="panes" aria-expanded="${wsMenuOpen === 'panes'}"
-        title="Oscillator panes under the chart">Panes${
-  wsPanesOpen.length ? ` <span class="ws-count">${wsPanesOpen.length}</span>` : ''}</button>
-      ${wsMenuOpen === 'panes' ? `<div class="ws-menu-pop">
-        ${WS_PANES.map((pane) => `<label class="ws-opt">
-          <input type="checkbox" data-ws-pane-opt="${esc(pane.id)}"${
-    wsPaneOpen(pane.id) ? ' checked' : ''}>
-          <span>${esc(pane.label)}</span>
-        </label>`).join('')}
-        <p class="ws-menu-note">Drawn under the price chart on the same dates.
-          Computed over the whole history and then cut to the view, so the
-          averages do not warm up on screen.</p>
-      </div>` : ''}
-    </div>
     <div class="ws-menu">
       <button type="button" class="ws-menu-btn${chartColorsCustom() ? ' on' : ''}"
         data-ws-menu="colors" aria-expanded="${wsMenuOpen === 'colors'}"
         title="Colour of the candles and the line">Colours</button>
       ${wsMenuOpen === 'colors' ? wsColorPop() : ''}
     </div>
-    ${/* Last, because it is the only control here that is not about what the
-         chart shows. Inside `.ws-tools` so a phone folds it into the drawer
-         with the rest rather than leaving one button stranded beside Tools. */''}
-    <button type="button" class="ws-menu-btn${wsIsMaximised() ? ' on' : ''}"
-      data-ws-max aria-pressed="${wsIsMaximised()}"
-      title="${wsIsMaximised()
-    ? 'Back to the rest of the terminal. Escape does this too.'
-    : 'Give the chart the whole window. The tools and drawings come with it.'}">${
-  wsIsMaximised() ? 'Exit full screen' : 'Full screen'}</button>
     </div>
   </div>`;
+}
+
+/* The bar size, as one menu rather than eight buttons.
+ *
+ * Asked for with a screenshot of a three-row toolbar: "try to minimize the
+ * amount of clutter in terms of buttons". The ladder was the widest thing on
+ * it, eight pills for a choice made a few times a session, beside the five
+ * range pills that change far more often and stay as they are. The button
+ * names the size on screen, so the toolbar still says what the bars are at a
+ * glance, and the options keep `data-ws-interval`, so they are handled
+ * exactly as the pills were. */
+function wsIntervalMenu() {
+  const active = activeIntervalKey();
+  const spec = chartIntervalSpec(active);
+  const open = wsMenuOpen === 'interval';
+  return `<div class="ws-menu ws-interval">
+    <button type="button" class="ws-menu-btn ws-interval-btn" data-ws-menu="interval"
+      aria-expanded="${open}" aria-label="Interval: ${esc(spec ? spec.label : chartIntervalLabel())}"
+      title="Bar size">${esc(spec ? spec.label : chartIntervalLabel())}<span class="ws-caret"
+      aria-hidden="true">&#9662;</span></button>
+    ${open ? `<div class="ws-menu-pop ws-interval-pop">
+      ${rangePills(CHART_INTERVALS, active, 'data-ws-interval', 'Interval')}
+    </div>` : ''}
+  </div>`;
+}
+
+/* Full screen, on the chart rather than in the toolbar.
+ *
+ * Asked for as "make this button separate from the rest": it was a text
+ * button at the end of the toolbar's third row, one more among twenty-seven.
+ * It is the one control about the window rather than about the chart, so it
+ * sits in the chart panel's top-right corner as an icon, where a video or a
+ * map keeps it, beside the header rather than in it: the header wraps to three
+ * lines at 1000px and clips to one on a phone, and inside it the icon either
+ * fell to a line of its own or covered Explain chart. The panel stays on
+ * screen in full screen, so the way out cannot scroll off the end of a wrapped
+ * toolbar the way the button once could. */
+const WS_MAX_ICONS = {
+  enter: 'M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4',
+  leave: 'M6 2v4H2M10 2v4h4M10 14v-4h4M6 14v-4H2',
+};
+
+function wsMaxButton() {
+  const on = wsIsMaximised();
+  return `<button type="button" class="ws-full-btn${on ? ' on' : ''}" data-ws-max
+    aria-pressed="${on}" aria-label="${on ? 'Exit full screen' : 'Full screen'}"
+    title="${on ? 'Back to the rest of the terminal. Escape does this too.'
+    : 'Give the chart the whole window. The tools and drawings come with it.'}"><svg
+    viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none"
+    stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+    stroke-linejoin="round"><path d="${on ? WS_MAX_ICONS.leave : WS_MAX_ICONS.enter}"/></svg></button>`;
 }
 
 /* ---------------------------------------------------------------- drawings
@@ -15615,6 +15660,7 @@ function renderChartWorkspace(d) {
   <div class="ws-body">
     ${wsToolRail()}
     <div class="ws-canvas${wsTool === 'cursor' ? '' : ' arming'}">
+      ${wsMaxButton()}
       <div class="ws-head">
         <strong>${esc(STATE.chartSymbol)}</strong>
         <span class="ws-head-name">${esc((d.profile || {}).name || '')}</span>
@@ -19111,11 +19157,13 @@ function wsRequestNativeFullscreen(on) {
  * real height to draw into.
  */
 function wsAfterMaximise() {
+  // The button first, and at once: it is the answer to the press. It is on
+  // the chart's header, which the redraw below leaves alone.
+  const btn = views.chart && views.chart.querySelector('.ws-full-btn');
+  if (btn) btn.outerHTML = wsMaxButton();
   requestAnimationFrame(() => requestAnimationFrame(() => {
     wsSyncChromeHeight();
     wsSyncNarrow();
-    // Rebuilds the toolbar, so the button's own label and pressed state come
-    // from this one call rather than being written twice.
     wsRedrawChart();
   }));
 }
@@ -25243,10 +25291,14 @@ function chartPulsePrompt(symbol) {
  * rather than left as dead code. */
 function chartPulse(symbol) {
   if (!symbol) return '';
+  /* The Pulse mark rides along, hidden until the chart header is too narrow
+   * for the words: there, on one clipped line beside the full-screen icon,
+   * the label was cut to "Ex", and the mark says the same thing in 28px.
+   * The name is on the button itself, so it survives the label going. */
   return `<button type="button" class="chart-pulse is-explain"
-    data-explain-chart="${esc(symbol)}"
-    title="Have Pulse read this chart: trend, levels, momentum, and what breaks it">
-    Explain chart</button>`;
+    data-explain-chart="${esc(symbol)}" aria-label="Explain chart"
+    title="Have Pulse read this chart: trend, levels, momentum, and what breaks it">${
+  pulseMarkHTML('chart-pulse-ico')}<span class="chart-pulse-lab">Explain chart</span></button>`;
 }
 
 /* "Explain chart", as a structured read rather than an essay.
@@ -32282,6 +32334,12 @@ document.addEventListener('click', (evt) => {
   }
   const wsInt = evt.target.closest('[data-ws-interval]');
   if (wsInt) {
+    // Chosen from the Interval menu: it closes, as a picked option should.
+    if (wsMenuOpen === 'interval') {
+      wsMenuOpen = null;
+      const tbi = views.chart.querySelector('.ws-toolbar');
+      if (tbi) tbi.outerHTML = wsToolbar();
+    }
     const key = wsInt.dataset.wsInterval;
     const spec = chartIntervalSpec(key);
     wsWindow = null;   // a size change overrides a manual zoom

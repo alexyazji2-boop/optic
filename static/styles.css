@@ -7168,7 +7168,7 @@ body[data-view="chart"] .sessionbar { display: none; }
   /* Measured at 375x812 before this: nineteen buttons over six rows, 227px of
      toolbar above a 443px chart. Inline now: the range pills, the interval,
      Line/Candles and Reset zoom -- what you reach for constantly. In the
-     drawer: Fibs, Trends, Indicators, the study menus, Panes and Colours. */
+     drawer: Levels, Stages, Indicators, the study menus, Panes and Colours. */
   .ws-tools-btn { display: inline-flex; }
   .ws-tools { display: none; }
   .ws-toolbar.tools-open .ws-tools { display: contents; }
@@ -7195,6 +7195,16 @@ body[data-view="chart"] .sessionbar { display: none; }
   border-color: color-mix(in srgb, var(--accent) 55%, transparent);
   background: color-mix(in srgb, var(--accent) 10%, var(--surface-2));
 }
+/* The interval menu: its button names the size on screen, and the options
+   open as a grid of the same pills the row was, four to a line. */
+.ws-caret { margin-left: var(--space-1); font-size: 0.8em; opacity: 0.7; }
+.ws-interval-pop { min-width: 0; }
+.ws-interval-pop .pills {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-1);
+}
+
 .ws-count {
   display: inline-block;
   min-width: 15px;
@@ -7564,6 +7574,10 @@ body[data-view="chart"] .sessionbar { display: none; }
   align-items: baseline;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-3);
+  /* Ends short of the full-screen button in the panel's corner. A margin and
+     not padding, because the narrow header clips its overflow at its padding
+     edge: padding left room the text still ran into, under the button. */
+  margin-right: calc(28px + var(--space-3));
   font-size: var(--t-small);
   color: var(--ink-2);
   flex-wrap: wrap;
@@ -7571,6 +7585,29 @@ body[data-view="chart"] .sessionbar { display: none; }
 .ws-head strong { font-size: var(--t-heading); color: var(--ink); }
 .ws-head-name { color: var(--ink-muted); }
 .ws-head-state { color: var(--ink-muted); margin-left: auto; }
+/* Full screen, as an icon in the chart panel's top-right corner, beside the
+   header. See wsMaxButton. */
+.ws-full-btn {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-2);
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.ws-full-btn:hover { color: var(--ink); border-color: var(--ink-muted); }
+.ws-full-btn.on {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
 .ws-ohlc { display: flex; gap: var(--space-2); font-variant-numeric: tabular-nums; }
 .ws-ohlc b { color: var(--ink); font-weight: 500; }
 
@@ -8609,6 +8646,14 @@ body.chat-open .ws-head .stage-name,
 .ws-body.narrow .ws-head .stage-name,
 body.chat-open .ws-head .stage-tag,
 .ws-body.narrow .ws-head .stage-tag { display: none; }
+/* And Explain chart becomes the Pulse mark, since on this one clipped line
+   its words were cut to "Ex". The button keeps its name. See chartPulse. */
+body.chat-open .ws-head .chart-pulse,
+.ws-body.narrow .ws-head .chart-pulse { padding: var(--space-1); }
+body.chat-open .ws-head .chart-pulse-lab,
+.ws-body.narrow .ws-head .chart-pulse-lab { display: none; }
+body.chat-open .ws-head .chart-pulse-ico,
+.ws-body.narrow .ws-head .chart-pulse-ico { display: block; }
 
 /* The legend as a single scrolling line, the way both reference products do it:
    symbol, then each overlay with its value, all on one row. */
@@ -9067,6 +9112,7 @@ nav.tabs-group > .nav-item.menu-right .nav-menu { left: auto; right: 0; }
 .suggest button, .tabs-sub button, .tkr, .ws-leg-row, .ws-leg-title, .ws-manage,
 .ws-menu-btn, .ws-news-link, .ws-opt, .ws-tool, .ws-watch-row, .ws-widget,
 #chat-history-btn, .sec-bulk-btn, .sec-chip, .ws-wrail-btn, .ws-wrail-pulse,
+.ws-full-btn,
 details.ind-explain > summary,
 details.read-cal-row > summary,
 .cb-tkr,
@@ -9103,6 +9149,7 @@ table.data tr, *::-webkit-scrollbar-thumb {
 .suggest button, .tabs-sub button, .tkr, .ws-leg-row, .ws-leg-title, .ws-manage,
 .ws-menu-btn, .ws-news-link, .ws-opt, .ws-tool, .ws-watch-row, .ws-widget,
 #chat-history-btn, .sec-bulk-btn, .sec-chip, .ws-wrail-btn, .ws-wrail-pulse,
+.ws-full-btn,
 details.ind-explain > summary,
 details.read-cal-row > summary,
 table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
@@ -9179,6 +9226,7 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
   color: var(--btn-primary-ink);
 }
 .chart-pulse:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.chart-pulse-ico { display: none; width: 18px; height: 18px; flex: none; }
 /* The same live dot the top-bar Pulse button uses, so the two read as one
    feature in two places rather than as two different buttons. */
 
@@ -14839,14 +14887,9 @@ body.ws-max[data-view="chart"] .rp { display: none; }
    question that already has one, and the two would drift. */
 body.ws-max[data-view="chart"] main { padding: 0; }
 
-/* The one affordance that has to survive, because it is how the reader gets
-   out. In native fullscreen there is no browser chrome and no rail, so a
-   toolbar that scrolled this button off the end would be a trap. */
-body.ws-max[data-view="chart"] [data-ws-max] {
-  position: sticky;
-  right: 0;
-  margin-left: auto;
-}
+/* The way out needs no rule of its own here. It used to be the last button
+   in the toolbar, pinned sticky to the end so a wrapped or scrolled bar could
+   not hide it; it is on the chart's header now, which full screen keeps. */
 
 /* ---------------------------------------------------------- Insiders page
  *

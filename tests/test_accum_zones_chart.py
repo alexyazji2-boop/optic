@@ -51,12 +51,13 @@ def test_the_overlay_is_defined_with_a_label():
     assert "label: 'Accumulation zones'" in entry[0]
 
 
-def test_it_is_reachable_from_the_trends_menu():
-    """An overlay defined but not listed in WS_MENUS cannot be switched on."""
+def test_it_is_reachable_from_the_levels_menu():
+    """An overlay defined but not listed in WS_MENUS cannot be switched on. It
+    was on Trends until Trends and Fibs became one Levels menu."""
     menus = _block("const WS_MENUS = [", "\n];")
-    trends = [ln for ln in menus.splitlines() if "id: 'trends'" in ln]
-    assert trends, "the Trends menu is gone"
-    assert "'accum'" in trends[0]
+    levels = [ln for ln in menus.splitlines() if "id: 'levels'" in ln]
+    assert levels, "the Levels menu is gone"
+    assert "'accum'" in levels[0]
 
 
 def test_it_has_a_flag_and_a_setter():
