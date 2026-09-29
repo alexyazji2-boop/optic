@@ -194,6 +194,25 @@ def _load(day: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def built_at(day: str) -> Optional[datetime]:
+    """When `day`'s brief was last built, from the archive. None when there is
+    no row or the archive cannot be read, which callers treat as "not built":
+    OSError as well, because opening it creates its directory first and an
+    unmounted volume raises from os.makedirs."""
+    try:
+        with _connect() as conn:
+            row = conn.execute("SELECT built_at FROM briefs WHERE day = ?", (day,)).fetchone()
+    except (sqlite3.Error, OSError):
+        return None
+    if not row or not row["built_at"]:
+        return None
+    try:
+        stamp = datetime.fromisoformat(row["built_at"])
+    except ValueError:
+        return None
+    return stamp if stamp.tzinfo else stamp.replace(tzinfo=timezone.utc)
+
+
 def archive() -> List[Dict[str, Any]]:
     """Days on record, newest first, for the date picker."""
     try:

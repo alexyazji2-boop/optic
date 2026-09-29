@@ -1698,6 +1698,31 @@ def brief_anchor_due(now_et: datetime, last_anchor_day: Optional[str]) -> Option
     return stamp if now_et.hour >= BRIEF_ANCHOR_HOUR else None
 
 
+def _brief_anchor_day(now_et: datetime) -> Optional[str]:
+    """The Eastern day whose anchor rebuild is known to have run, for brief_anchor_due.
+
+    Held on app.state, which a restart empties, and Railway starts a new process
+    on every deploy: so the loop's first pass, thirty seconds after each one,
+    forced the day's brief again, a build measured at 24.2s on the live site
+    (2026-09-28), several times on a day of several deploys, and while the
+    first readers after the deploy were loading. The brief's own archive is on
+    the volume and records when today's brief was last built, and one built at
+    or after the anchor hour is everything the anchor asks for, whichever
+    process built it. A build before the hour still does not count, and an
+    archive that cannot be read counts as nothing built, which is the old
+    behaviour."""
+    known = getattr(app.state, "brief_anchor_day", None)
+    today = now_et.strftime("%Y-%m-%d")
+    if known == today:
+        return known
+    built = brief_mod.built_at(today)
+    anchor = now_et.replace(hour=BRIEF_ANCHOR_HOUR, minute=0, second=0, microsecond=0)
+    if built is not None and built >= anchor:
+        app.state.brief_anchor_day = today
+        return today
+    return known
+
+
 async def _tracker_loop() -> None:
     """Keep the ledger current on its own so the record accumulates whether or
     not anyone is looking at the page."""
@@ -1774,8 +1799,7 @@ async def _tracker_loop() -> None:
                 # rather than serving a cached brief.
                 try:
                     now_et = datetime.now(timezone.utc).astimezone(session_mod.ET)
-                    stamp = brief_anchor_due(
-                        now_et, getattr(app.state, "brief_anchor_day", None))
+                    stamp = brief_anchor_due(now_et, _brief_anchor_day(now_et))
                     await _run(brief_mod.state, YF_PROVIDER, None, bool(stamp))
                     if stamp:
                         app.state.brief_anchor_day = stamp
