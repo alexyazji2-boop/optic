@@ -30,17 +30,23 @@ import logging
 
 log = logging.getLogger(__name__)
 
-# Opus 5.5, from Opus 5. Anthropic's pricing page lists `claude-opus-5` under
-# Legacy models at $5 in / $25 out per MTok, and Opus 5.5 as current at $4 /
-# $20: newer and cheaper at once, so there was no trade to weigh. Measured
-# against Pulse's real payload -- `build_context` caps the snapshot at 90,000
-# characters, about 25,000 input tokens once a ticker is loaded, and that is
-# roughly 85% of a message's cost -- the same $100 of credit went from about 680
-# messages to about 850.
+# Two models, named here and nowhere else.
 #
-# The one place the model is named. Every call below passes this constant and
-# `tests/test_pulse_model.py` fails on a literal, so a switch is this line.
+# MODEL writes the pieces Optic publishes: the morning desk and its read, the
+# weekly update, the earnings, sector and catalyst reads. Opus 5.5, from Opus 5:
+# Anthropic's pricing page lists `claude-opus-5` under Legacy models at $5 in /
+# $25 out per MTok, and Opus 5.5 as current at $4 / $20, newer and cheaper at
+# once. Each is written once and cached, so its cost is per day or per week.
+#
+# PULSE_MODEL answers Pulse: the chat panel (stream_chat) and the live research
+# it runs (deep_research). Sonnet 5, from Opus 5.5, at the owner's request on
+# 2026-09-29. Pulse is the one per-message cost: `build_context` caps a ticker's
+# snapshot at 90,000 characters, about 25,000 input tokens, on every message.
+#
+# Every call below passes one of these two, and `tests/test_pulse_model.py`
+# fails on a literal anywhere else, so a switch is one of these lines.
 MODEL = "claude-opus-5-5"
+PULSE_MODEL = "claude-sonnet-5"
 
 # Server-side refusal fallback: on a policy decline the API re-runs the request
 # on Anthropic's recommended fallback model inside the same call, so a false
@@ -709,7 +715,8 @@ def available() -> Dict[str, Any]:
     client = _client()
     return {
         "enabled": bool(client is not None and source),
-        "model": MODEL,
+        # What answers in the panel this status is for.
+        "model": PULSE_MODEL,
         "credential_source": source or "none",
         # Two audiences, and the same sentence is wrong for one of them.
         #
@@ -1878,7 +1885,7 @@ async def stream_chat(
         tools.append({"type": "web_search_20260209", "name": "web_search", "max_uses": 5})
 
     kwargs: Dict[str, Any] = {
-        "model": MODEL,
+        "model": PULSE_MODEL,
         "max_tokens": 8000,
         # Four blocks, and the order is deliberate. The base prompt and the
         # format rules are identical on every request, so they carry the cache
@@ -1952,7 +1959,7 @@ async def stream_chat(
         yield _sse(
             "done",
             {
-                "model": getattr(final, "model", MODEL),
+                "model": getattr(final, "model", PULSE_MODEL),
                 "citations": citations,
                 "usage": {
                     "input_tokens": getattr(usage, "input_tokens", None),
@@ -1999,7 +2006,7 @@ async def deep_research(
 
     try:
         async with client.beta.messages.stream(
-            model=MODEL,
+            model=PULSE_MODEL,
             max_tokens=12000,
             system=[
                 {"type": "text", "text": RESEARCH_PROMPT, "cache_control": {"type": "ephemeral"}}
@@ -2050,7 +2057,7 @@ async def deep_research(
                 seen.add(src["url"])
                 unique.append(src)
 
-        yield _sse("done", {"sources": unique[:20], "model": getattr(final, "model", MODEL)})
+        yield _sse("done", {"sources": unique[:20], "model": getattr(final, "model", PULSE_MODEL)})
     except Exception as exc:
         log.warning("research failed: %s: %s", type(exc).__name__, exc)
         yield _sse("error", {"message": _human_error(exc)})
