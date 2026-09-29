@@ -16,6 +16,7 @@ import warnings
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from io import StringIO
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -29,6 +30,12 @@ from .base import MarketDataProvider
 from .common import clean_iv, pick_swing_expiries
 
 _CACHE: Dict[str, Any] = {}
+
+# Where `.info`'s three documents are fetched side by side (_info_documents).
+# Long-lived rather than one pool per call: curl_cffi keeps a connection per
+# thread, so a thread that lives keeps its connection to Yahoo warm. Nothing
+# run here waits on this pool, so it cannot deadlock on itself.
+_DOC_POOL = ThreadPoolExecutor(max_workers=24, thread_name_prefix="yf-doc")
 
 # yf.download is not safe to run twice at once: concurrent calls interfere and
 # silently return frames with most symbols missing, which surfaces as
@@ -381,8 +388,13 @@ def _fill(key: str, ttl: float, producer, gate: bool, fresh_for: float):
             if depth == 0:
                 _METER.fetching = (float(getattr(_METER, "fetching", 0.0))
                                    + time.time() - fetch_began)
-        with _PACE_LOCK:
-            _on_success()
+        # A success is counted where a token was spent. An ungated fill is a
+        # wrapper over a gated one, or one of `.info`'s documents under the
+        # token its caller took, and counting those too would make the rate
+        # recover several times faster than _on_success says it does.
+        if gate:
+            with _PACE_LOCK:
+                _on_success()
         _CACHE[key] = (time.time(), value)
         return value
 
@@ -456,6 +468,49 @@ def throttle_state() -> Dict[str, Any]:
     }
 
 
+def _format_info_value(key: Optional[str], value: Any) -> Any:
+    """yfinance's `_format` from its `.info` builder: raw over fmt, recursively."""
+    if isinstance(value, dict) and "raw" in value and "fmt" in value:
+        return value["fmt"] if key in {"regularMarketTime", "postMarketTime"} else value["raw"]
+    if isinstance(value, list):
+        return [_format_info_value(None, x) for x in value]
+    if isinstance(value, dict):
+        return {k: _format_info_value(k, x) for k, x in value.items()}
+    if isinstance(value, str):
+        return value.replace("\xa0", " ")
+    return value
+
+
+def merge_info(symbol: str, summary: Optional[Dict[str, Any]], quote: Optional[Dict[str, Any]],
+               peg: Any = None) -> Dict[str, Any]:
+    """The dict `yf.Ticker(symbol).info` returns, from the documents it reads.
+
+    The same steps as yfinance's `_fetch_info`: the first result of each
+    document, the quote's fields laid over the summary's, one level of nested
+    modules flattened (dropping None, and reading a maxAge of 1 as a day), then
+    raw over fmt. `trailingPegRatio` is the one field its timeseries read adds.
+    """
+    top: Dict[str, Any] = {}
+    for doc, key in ((summary, "quoteSummary"), (quote, "quoteResponse")):
+        results = ((doc or {}).get(key) or {}).get("result") or []
+        if results:
+            first = dict(results[0])
+            first["symbol"] = symbol
+            top.update(first)
+    flat: Dict[str, Any] = {}
+    for k, v in top.items():
+        if isinstance(v, dict):
+            for k1, v1 in v.items():
+                if v1 is not None:
+                    flat[k1] = 86400 if k1 == "maxAge" and v1 == 1 else v1
+        elif v is not None:
+            flat[k] = v
+    info = {k: _format_info_value(k, v) for k, v in flat.items()}
+    if info:
+        info["trailingPegRatio"] = peg
+    return info
+
+
 def _iso_from_epoch(value: Any) -> Optional[str]:
     """Yahoo's extended-hours timestamps are unix seconds. Kept so the UI can say
     *when* an after-hours price was last struck — a quote from 4:05pm and one from
@@ -480,6 +535,13 @@ class YFinanceProvider(MarketDataProvider):
     # cache TTLs in seconds
     TTL_QUOTE = 30
     TTL_CHAIN = 60
+    # The list of expiry dates, which gains a date when a series is listed and
+    # loses one after it expires. It was on the chain's sixty seconds, so a
+    # symbol loaded again a minute later waited on the list (0.45s to 0.59s on
+    # the live site) before the chain could start. The chain itself keeps its
+    # minute; a date that expired within this half hour is never picked, since
+    # swing expiries need days left (pick_swing_expiries).
+    TTL_EXPIRIES = 30 * 60
     TTL_HISTORY = 300
     TTL_NEWS = 600
     # Data that publishes on a calendar rather than on the tape.
@@ -511,9 +573,92 @@ class YFinanceProvider(MarketDataProvider):
         (FTNT, 2026-09-28), where one scrape alone measured 0.5s to 0.8s. Held
         for the quote's thirty seconds, which is the shortest any of them
         wants; the other two keep their own results for as long as they did.
+
+        Built from its three documents side by side (see _info_documents)
+        rather than by `.info`, which reads them one after another.
         """
-        return _cached("info:" + ticker, self.TTL_QUOTE,
-                       lambda: dict(yf.Ticker(ticker).info or {}))
+        return _cached("info:" + ticker, self.TTL_QUOTE, lambda: self._info_documents(ticker))
+
+    # How long each of `.info`'s documents is worth keeping.
+    #
+    # The summary is fundamentals: the profile, margins and growth, the analyst
+    # target, beta, short interest, the payout. None of it moves intraday, and
+    # every intraday figure it also carries (the day's range, the volume, the
+    # market cap) is laid over by the quote, which is the thirty-second part.
+    # The PEG read is a quarterly figure.
+    TTL_SUMMARY = 15 * 60
+    SUMMARY_MODULES = ("financialData", "quoteType", "defaultKeyStatistics", "assetProfile",
+                       "summaryDetail")
+
+    def _info_documents(self, ticker: str) -> Dict[str, Any]:
+        """`.info`, from its three reads at once.
+
+        yfinance builds `.info` from the quote summary, then the v7 quote, then
+        a fundamentals timeseries read for one field, one after another. Ten
+        isolated quotes measured 0.32s to 0.66s on the live site, and inside a
+        cold ticker load, with a dozen other reads in flight, the same three
+        took 1.6s to 3.2s and were the build's critical path (CLSK and HUT,
+        2026-09-29). At once, the wait is the slowest of the three rather than
+        the sum, and the summary and the PEG are reused for as long as they
+        stay true (TTL_SUMMARY), so a repeat load pays one read.
+
+        Through the Ticker's own reads rather than around them, so the session,
+        cookie and crumb are yfinance's and a stand-in Ticker (the tests use
+        them) answers with its own `.info`. Anything unexpected falls back to
+        `.info` itself. A refusal is not unexpected: it is raised, so the
+        limiter sees it.
+        """
+        t = yf.Ticker(ticker)
+        reads = getattr(t, "_quote", None)
+        data = getattr(t, "_data", None)
+        if reads is None or data is None or not hasattr(reads, "_fetch_additional_info"):
+            return dict(t.info or {})
+        try:
+            futures = {
+                "summary": _DOC_POOL.submit(self._summary_document, ticker, reads),
+                "quote": _DOC_POOL.submit(self._quote_document, ticker, reads),
+                "peg": _DOC_POOL.submit(self._peg_ratio, ticker, data),
+            }
+            got = {name: f.result() for name, f in futures.items()}
+            # Empty when both documents answered and neither knows the symbol,
+            # which is what `.info` would say too, three reads later.
+            return merge_info(ticker, got["summary"], got["quote"], got["peg"])
+        except Exception as exc:                                # noqa: BLE001
+            if _is_rate_limit(exc):
+                raise
+        return dict(yf.Ticker(ticker).info or {})
+
+    def _summary_document(self, ticker: str, reads: Any) -> Optional[Dict[str, Any]]:
+        """The quote summary's five modules, as `.info` asks for them. None for
+        a symbol it does not know, which `.info` also survives."""
+        return _cached("qsum:" + ticker, self.TTL_SUMMARY,
+                       lambda: reads._fetch(modules=list(self.SUMMARY_MODULES)), gate=False)
+
+    def _quote_document(self, ticker: str, reads: Any = None) -> Optional[Dict[str, Any]]:
+        """The v7 quote: the price, the change, the session and the name."""
+        def build():
+            source = reads if reads is not None else yf.Ticker(ticker)._quote
+            return source._fetch_additional_info()
+        return _cached("q7:" + ticker, self.TTL_QUOTE, build, gate=False)
+
+    def _peg_ratio(self, ticker: str, data: Any) -> Optional[float]:
+        """`trailingPegRatio`, the one field `.info` reads a timeseries for."""
+        def build():
+            now = pd.Timestamp.now("UTC")
+            url = ("https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/"
+                   "timeseries/{0}?symbol={0}&type=trailingPegRatio&period1={1}&period2={2}"
+                   .format(ticker, int((now.floor("D") - timedelta(days=365 // 2)).timestamp()),
+                           int(now.ceil("D").timestamp())))
+            try:
+                doc = data.get_raw_json(url)
+                series = ((doc.get("timeseries") or doc.get("finance") or {}).get("result")
+                          or [{}])[0].get("trailingPegRatio") or []
+                return series[-1]["reportedValue"]["raw"] if series else None
+            except Exception as exc:                            # noqa: BLE001
+                if _is_rate_limit(exc):
+                    raise
+                return None
+        return _cached("peg:" + ticker, self.TTL_FILED, build, gate=False)
 
     def quote(self, ticker: str) -> Dict[str, Any]:
         def build() -> Dict[str, Any]:
@@ -627,8 +772,16 @@ class YFinanceProvider(MarketDataProvider):
             return entry[1]
         prev = None
         try:
-            info = ticker.info or {}
-            prev = _f(info.get("regularMarketPreviousClose")) or _f(info.get("previousClose"))
+            # The v7 quote alone: `regularMarketPreviousClose` is its field, and
+            # `ticker.info` reads two more documents, one after another, to
+            # answer it. A Ticker without that read (a stand-in) takes `.info`.
+            reads = getattr(ticker, "_quote", None)
+            if reads is not None and hasattr(reads, "_fetch_additional_info"):
+                doc = self._quote_document(symbol, reads) or {}
+                row = ((doc.get("quoteResponse") or {}).get("result") or [{}])[0]
+            else:
+                row = ticker.info or {}
+            prev = _f(row.get("regularMarketPreviousClose")) or _f(row.get("previousClose"))
         except Exception as exc:                                # noqa: BLE001
             if _is_rate_limit(exc):
                 note_throttle(exc)
@@ -892,7 +1045,7 @@ class YFinanceProvider(MarketDataProvider):
                 return []
 
         try:
-            return _cached("exp:" + ticker, self.TTL_CHAIN, build, gate=False)
+            return _cached("exp:" + ticker, self.TTL_EXPIRIES, build, gate=False)
         except Exception:
             return []
 
@@ -909,7 +1062,7 @@ class YFinanceProvider(MarketDataProvider):
             t.options
             return t
 
-        return _cached("optt:" + ticker, self.TTL_CHAIN, build)
+        return _cached("optt:" + ticker, self.TTL_EXPIRIES, build)
 
     def options_chain(
         self, ticker: str, expiries: Optional[List[str]] = None, max_expiries: int = 4
@@ -1042,10 +1195,48 @@ class YFinanceProvider(MarketDataProvider):
 
         return _cached("short:" + ticker, self.TTL_FILED, build, gate=False)
 
+    EARNINGS_PAGE = "https://finance.yahoo.com/calendar/earnings?symbol={}&offset=0&size=25"
+
+    def _earnings_dates(self, ticker: str) -> Optional[pd.DataFrame]:
+        """`Ticker.earnings_dates`, without parsing the whole page to find it.
+
+        The page is a megabyte of HTML with one table in it, and yfinance hands
+        all of it to BeautifulSoup's pure-Python parser to find that table:
+        67ms to 152ms of a core per symbol at a desk, holding the GIL while the
+        rest of a cold build's legs wait for it. Cut at the table's own tags,
+        the same pd.read_html gives the same frame in 2ms to 6ms (DKNG, RDDT,
+        COIN and AAPL, 2026-09-29). Then yfinance's own steps, so the frame is
+        the one it would have returned. Anything unexpected takes its path.
+        """
+        t = yf.Ticker(ticker)
+        data = getattr(t, "_data", None)
+        if data is None or not hasattr(data, "get"):
+            return t.earnings_dates
+        try:
+            html = data.get(self.EARNINGS_PAGE.format(ticker)).text
+            start = html.find("<table")
+            end = html.find("</table>", start)
+            if start < 0 or end < 0:
+                return None                 # yfinance's answer too: no table, no dates
+            df = pd.read_html(StringIO(html[start:end + len("</table>")]), na_values=["-"])[0]
+            df = df.drop(["Symbol", "Company"], axis=1)
+            df.rename(columns={"Surprise (%)": "Surprise(%)"}, inplace=True)
+            df = df.dropna(subset="Earnings Date")
+            when = (df["Earnings Date"].str.replace("EDT", "America/New_York")
+                    .str.replace("EST", "America/New_York"))
+            parts = when.str.rsplit(" ", n=1, expand=True)
+            stamps = pd.to_datetime(parts[0], format="%B %d, %Y at %I %p")
+            df["Earnings Date"] = pd.Series([d.tz_localize(z) for d, z in zip(stamps, parts[1])])
+            return df.set_index("Earnings Date")
+        except Exception as exc:                                # noqa: BLE001
+            if _is_rate_limit(exc):
+                raise
+            return t.earnings_dates
+
     def earnings_history(self, ticker: str, limit: int = 10) -> List[Dict[str, Any]]:
         def build() -> List[Dict[str, Any]]:
             try:
-                frame = yf.Ticker(ticker).earnings_dates
+                frame = self._earnings_dates(ticker)
             except Exception:
                 return []
             if frame is None or frame.empty:
