@@ -41,10 +41,12 @@ def test_no_route_renders_onto_the_bare_page():
 def test_watchlist_and_alerts_are_panels():
     fn = APP.split("function renderWatchlist() {", 1)[1]
     fn = fn[:fn.index("\nfunction ")]
-    assert '<section class="panel">' in fn
+    # `wv-panel` as well: the panel is the container the rows' two-line layout
+    # queries (see `.wv-panel` in styles.css).
+    assert '<section class="panel wv-panel">' in fn
     # And the list selector stays OUTSIDE it: it chooses which list the card is
     # showing, the same job `.scan-modes` does above the Scan results.
-    assert fn.index("watchListsBar()") < fn.index('<section class="panel">')
+    assert fn.index("watchListsBar()") < fn.index('<section class="panel wv-panel">')
     for marker in ('${loadingHTML(\'scan alerts\')}', '${errorHTML(data.error)}'):
         assert '<section class="panel">' + marker in APP, marker
     assert APP.count('<section class="panel" aria-label="Watches that fired">') == 4

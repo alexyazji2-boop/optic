@@ -4344,7 +4344,7 @@ function renderWatchlist() {
       showing, which is the same job `.scan-modes` does above the Scan
       results and `.sec-index` does above the Optic Portfolio panels. */''}
   ${watchListsBar()}
-  <section class="panel">
+  <section class="panel wv-panel">
     <div class="wv-head">
       <div>
         <h2>${esc((active && active.name) || 'Watchlist')}</h2>
@@ -4389,7 +4389,7 @@ function renderWatchlist() {
 
     <div class="wv-cols" aria-hidden="true">
       <span>Symbol</span><span>Price</span><span>Today</span>
-      <span>What changed</span><span>Signal</span>
+      <span>What changed</span><span>Signal</span><span></span>
     </div>
     <div id="wv-feed">${watchlistFeedHTML({})}</div>
 
@@ -5769,15 +5769,23 @@ function watchRow(r, opts) {
         title="Move down">\u2193</button>
     </span>` : ''}
     <button type="button" class="wl-open" data-watch-open="${esc(r.symbol)}"
-      title="Analyse ${esc(r.symbol)}">
+      title="Analyze ${esc(r.symbol)}" aria-label="Analyze ${esc(r.symbol)}: ${esc(
+  fmt(r.price, 2))}, ${esc(fmtPct(r.change_pct, 2))} today, ${esc(changed ? changed.text : 'no change')}, ${
+  esc(r.signal === 'unknown' ? 'no signal' : r.signal)}">
       <span class="wl-sym">${esc(r.symbol)}</span>
       <span class="wl-price">${fmt(r.price, 2)}</span>
       <span class="wl-chg ${signClass(r.change_pct)}">${fmtPct(r.change_pct, 2)}</span>
+      ${/* "No change", not "quiet": at the width the home page gives this column
+          * it rendered as "q..", which a reader took for a button. */''}
       <span class="wl-changed">${changed
     ? `<span class="wl-changed-text" title="${esc(changed.why)}">${esc(changed.text)}</span>`
-    : '<span class="wl-quiet">quiet</span>'}</span>
+    : '<span class="wl-quiet">No change</span>'}</span>
       <span class="wl-signal is-${esc(r.signal)}" title="${esc(r.signal_why || '')}">${
   esc(r.signal === 'unknown' ? '—' : r.signal)}</span>
+      ${/* What pressing the row does, said on the row. It was a title attribute
+          * only, which a phone never shows, and asked for as "make this button
+          * clearer to analyze AMD". */''}
+      <span class="wl-go" aria-hidden="true"><span class="wl-go-word">Analyze</span> ›</span>
     </button>
     ${o.removable ? watchRemoveBtn(r.symbol) : ''}
   </li>`;

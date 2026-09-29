@@ -9936,11 +9936,28 @@ body.cp-open { overflow: hidden; }
 
 /* One column until there is room for a rail. 940px was the old two-column
    breakpoint and is where a 1fr/1fr split of this content stops being cramped;
-   the rail only earns its narrower third above 1280. */
-@media (min-width: 940px) {
+   the rail only earns its narrower third above 1280.
+
+   Those are window widths, and the board is not the window: with Pulse open
+   the window stays 1280 wide while the board loses the panel's width, and the
+   rail came out 219px, too narrow for a watchlist row. So the split follows
+   the board's own width, at the widths the board measured at those two window
+   widths with Pulse shut (672.8px at 940, 1012.8px at 1280), which leaves every
+   layout without Pulse exactly as it was. The window rules stay for a browser
+   without container queries. */
+#hm-market { container-type: inline-size; container-name: hm-market; }
+@supports not (container-type: inline-size) {
+  @media (min-width: 940px) {
+    .hm-board { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  }
+  @media (min-width: 1280px) {
+    .hm-board { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+  }
+}
+@container hm-market (min-width: 672px) {
   .hm-board { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 }
-@media (min-width: 1280px) {
+@container hm-market (min-width: 1012px) {
   .hm-board { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
 }
 
@@ -10458,7 +10475,7 @@ body.cp-open { overflow: hidden; }
  * 15px. The last track is fixed rather than `auto` for the same reason —
  * `auto` sized itself to "SIGNAL" in the header and "BULLISH" in the rows,
  * which are different widths. */
-:root { --wl-cols: 4.25rem 6rem 5.5rem 1fr 5.5rem; }
+:root { --wl-cols: 4.25rem 6rem 5.5rem 1fr 5.5rem 5.25rem; }
 
 .wl-open {
   flex: 1 1 auto;
@@ -10496,6 +10513,44 @@ body.cp-open { overflow: hidden; }
 .wl-signal.is-bullish { color: var(--pos); }
 .wl-signal.is-bearish { color: var(--neg); }
 .wl-signal.is-neutral, .wl-signal.is-unknown { color: var(--ink-muted); }
+/* The colour of "All of it" above the list, the home page's other way in. */
+.wl-go { text-align: right; font-size: var(--t-small); font-weight: 500; color: var(--s1); white-space: nowrap; }
+.wl-open:hover .wl-go-word, .wl-open:focus-visible .wl-go-word { text-decoration: underline; }
+/* The signal column's header is no longer the last span, so it is aligned by
+   position; the new last one is the Analyze column's, and empty. */
+.wv-cols span:nth-child(5) { text-align: right; }
+
+/* The layout follows the list's own width, not the window's. With Pulse open
+   the window is still desktop-wide while the home page's card is a third of
+   it, and the five fixed columns (340px of them) ran off the card's right edge
+   and under the Pulse panel: BULLISH read as BU. A phone is the same case
+   from the other side, so the two-line layout is one rule for both. */
+#hm-watch, .wv-panel { container-type: inline-size; }
+@container (max-width: 559px) {
+  .wv-cols { display: none; }
+  /* 3.75rem and the smaller gap because the second line is where "what
+     changed" sits: at 4.25rem and 12px gaps a 328px card (Pulse open, 1280px
+     window) left it 62px and "No change" needs 75, so it read "No cha...". A
+     five-letter symbol is about 3.4rem in the row's bold face. */
+  .wl-open {
+    grid-template-columns: 3.75rem minmax(0, 1fr) auto auto;
+    grid-template-areas: 'sym price chg go' 'sym changed signal go';
+    column-gap: var(--space-2);
+    row-gap: 2px;
+  }
+  .wl-sym { grid-area: sym; align-self: center; }
+  .wl-price { grid-area: price; }
+  .wl-chg { grid-area: chg; text-align: right; }
+  .wl-changed { grid-area: changed; }
+  .wl-signal { grid-area: signal; text-align: right; }
+  .wl-go { grid-area: go; align-self: center; }
+}
+/* The word goes last, and only where it would squeeze the numbers. On a 375px
+   phone the list is 285px inside its card, where the word would leave "No
+   change" about 52px of the 75 it needs, so a phone gets the chevron alone. */
+@container (max-width: 329px) {
+  .wl-go-word { display: none; }
+}
 .wl-x {
   flex: none;
   width: 28px;
@@ -10511,18 +10566,27 @@ body.cp-open { overflow: hidden; }
 .wl-none, .wl-loading, .wl-more { margin: var(--space-2) 0 0; }
 
 /* On a phone the change and signal columns drop under the symbol rather than
-   compressing five columns into 343px. */
-@media (max-width: 559px) {
-  .wl-open {
-    grid-template-columns: 4.25rem 1fr auto;
-    grid-template-areas: 'sym price chg' 'sym changed signal';
-    row-gap: 2px;
+   compressing five columns into 343px. The container query beside
+   `#hm-watch, .wv-panel` does this now, for a narrow card at any window width;
+   this is the same layout for a browser without container queries, and it
+   must not run beside that one, because it comes later and its grid has no
+   `go` area: the Analyze chevron fell onto a third line of its own. */
+@supports not (container-type: inline-size) {
+  @media (max-width: 559px) {
+    .wl-open {
+      grid-template-columns: 3.75rem minmax(0, 1fr) auto auto;
+      grid-template-areas: 'sym price chg go' 'sym changed signal go';
+      column-gap: var(--space-2);
+      row-gap: 2px;
+    }
+    .wl-sym { grid-area: sym; align-self: center; }
+    .wl-price { grid-area: price; }
+    .wl-chg { grid-area: chg; text-align: right; }
+    .wl-changed { grid-area: changed; }
+    .wl-signal { grid-area: signal; text-align: right; }
+    .wl-go { grid-area: go; align-self: center; }
+    .wl-go-word { display: none; }
   }
-  .wl-sym { grid-area: sym; align-self: center; }
-  .wl-price { grid-area: price; }
-  .wl-chg { grid-area: chg; text-align: right; }
-  .wl-changed { grid-area: changed; }
-  .wl-signal { grid-area: signal; text-align: right; }
 }
 
 /* ===================================================== watchlist & alerts ===
@@ -10606,8 +10670,8 @@ body.cp-open { overflow: hidden; }
   border-bottom: 1px solid var(--border-strong);
 }
 /* The signal column is right-aligned in the rows, so its header must be too or
-   the word sits to the left of the values under it. */
-.wv-cols span:last-child { text-align: right; }
+   the word sits to the left of the values under it (by position, since the
+   Analyze column's empty header now comes after it). */
 
 .al-list { list-style: none; margin: 0; padding: 0; }
 .al-row {
