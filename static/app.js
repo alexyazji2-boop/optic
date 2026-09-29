@@ -5399,6 +5399,16 @@ function newListId() {
   return 'wl' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
+/* The id of the list a reader has before they have saved any, made once.
+ *
+ * Nothing is stored until the reader changes something, and localLists used to
+ * mint a fresh id on every call. The bar read the lists with one id and the
+ * active id with another, so the only chip never showed as selected, a click
+ * on it switched to a list that did not exist, and Rename looked the active id
+ * up, found nothing and returned without asking. That was every new visitor's
+ * Watchlist page. */
+let firstListId = null;
+
 /** The local store, migrating the flat key on first read. */
 function localLists() {
   try {
@@ -5416,8 +5426,11 @@ function localLists() {
   } catch (e) { /* private mode */ }
   // First run, or a reader who has only ever had the single list. Their symbols
   // become the first named list rather than being replaced by an empty one.
-  const id = newListId();
-  return { lists: [{ id, name: 'Watchlist', symbols: localWatchList() }], activeId: id };
+  if (!firstListId) firstListId = newListId();
+  return {
+    lists: [{ id: firstListId, name: 'Watchlist', symbols: localWatchList() }],
+    activeId: firstListId,
+  };
 }
 
 function localListsSave(state) {
@@ -33613,6 +33626,53 @@ document.addEventListener('change', (evt) => {
   if (wsLearn) {
     wsLearnTerm = wsLearn.value;
     wsRepaintWidget('learn');
+    return;
+  }
+  /* The indicator manager's Width, Length, Offset and Price source.
+   *
+   * Rendered with `data-ws-width` and `data-ws-param` since the workspace
+   * shipped, and read by nothing: the select and the number boxes changed what
+   * they showed while the chart, the legend and the stored style stayed as
+   * they were, and the next repaint put the old value back. setOverlayStyle
+   * already took both patches. This is the caller it never had, with the same
+   * repaint a colour swatch gets. */
+  const wsWidth = evt.target.closest('[data-ws-width]');
+  const wsParam = evt.target.closest('[data-ws-param]');
+  if (wsWidth || wsParam) {
+    const el = wsWidth || wsParam;
+    const id = el.dataset.wsStyle;
+    const key = wsParam ? wsParam.dataset.wsParam : '';
+    if (wsWidth) {
+      setOverlayStyle(id, { width: el.value });
+    } else if (key === 'source') {
+      setOverlayStyle(id, { params: { source: el.value } });
+    } else {
+      // A typed number is not held to min and max, so it is clamped here.
+      const n = Math.round(Number(el.value));
+      if (el.value === '' || !Number.isFinite(n)) return;
+      const lo = Number(el.min), hi = Number(el.max);
+      const v = Math.min(Number.isFinite(hi) ? hi : n, Math.max(Number.isFinite(lo) ? lo : n, n));
+      setOverlayStyle(id, { params: { [key]: v } });
+    }
+    wsRefresh();
+    if (STATE.swing) preserveUI(views.swing, () => renderSwing(STATE.swing));
+    // The repaint replaced the control, so focus goes back to its successor.
+    const again = document.querySelector(`[data-ws-style="${CSS.escape(id)}"]${
+      wsWidth ? '[data-ws-width]' : `[data-ws-param="${CSS.escape(key)}"]`}`);
+    if (again) again.focus({ preventScroll: true });
+    return;
+  }
+  /* The chart checklist's ticks.
+   *
+   * wsSaveCheck was written and never called, so a tick lasted until the next
+   * repaint of the widget and the "N of 8 for SYM" line under it never moved. */
+  const wsCheck = evt.target.closest('[data-ws-check]');
+  if (wsCheck) {
+    const idx = Number(wsCheck.dataset.wsCheck);
+    wsSaveCheck(STATE.chartSymbol || '', idx, wsCheck.checked);
+    wsRepaintWidget('checklist');
+    const again = document.querySelector(`[data-ws-check="${idx}"]`);
+    if (again) again.focus({ preventScroll: true });
     return;
   }
   /* Panes, before the overlays. A distinct attribute because these are not
