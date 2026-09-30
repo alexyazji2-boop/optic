@@ -2264,9 +2264,9 @@ async function loadWeeklyBars(symbol) {
   if (STATE.view === 'chart' && (STATE.chartData || {}).ticker === symbol) {
     // A window was indices into the 105-week stand-in, not these bars.
     wsWindow = null;
-    wsRedrawChart();
+    wsRedrawSettled();
   } else if (STATE.view === 'swing' && STATE.swing && STATE.swing.ticker === symbol) {
-    preserveUI(views.swing, () => renderSwing(STATE.swing));
+    swingRenderSettled();
   }
 }
 
@@ -13212,7 +13212,7 @@ async function loadIndicators(force) {
   // selected, so choosing a pane-only indicator stays a local update.
   if (STATE.swing && STATE.view === 'swing'
       && indicatorIds.some((id) => IND_PRICE_PANE.includes(id))) {
-    preserveUI(views.swing, () => renderSwing(STATE.swing));
+    swingRenderSettled();
   }
 }
 
@@ -16032,6 +16032,49 @@ function wsPanesHTML() {
  * price chart as it was, so that redraws without a sweep. */
 let wsPaneArriving = null;
 
+/* A time frame change sweeps the chart on, as a new symbol does.
+ *
+ * Asked for as "show the chart animation regardless of what time frame you
+ * change it to". A range, bar-size or window press was a plain redraw, on the
+ * grounds that the chart was the same shape at a different span; to the
+ * reader it is new bars, and the sweep is how every other arrival of bars is
+ * shown. The press sets this, and the first redraw with bars to draw spends
+ * it: under a day and on 1W the bars are fetched after the press, and the
+ * first redraw is the loading state. A zoom or a pan never spends it. They
+ * redraw in place and have to stay instant. A number rather than a flag, so
+ * a press cannot be cleared by the one before it. */
+let wsFrameSweep = 0;
+let wsSweepSeq = 0;
+
+/* The time frame on screen, as a press compares it: the range, the bar size
+ * and, under a day, the window. */
+function wsFrameKey() {
+  return `${chartRange}|${chartInterval}|${isIntradayRange(chartRange) ? intradayWindow(chartRange) : ''}`;
+}
+
+/* A redraw for data that arrived, held until a sweep in progress has drawn:
+ * the studies, the trend lines, the zones and the weekly bars all land a
+ * moment after a press, and rebuilding the chart then cut its sweep off
+ * halfway. With nothing sweeping it redraws at once. See stagesArrived. */
+function wsRedrawSettled() {
+  afterDrawsSettle(() => wsRedrawChart());
+}
+
+/* The Options tab's, for the same arrivals: its sweep on a time frame press
+ * is the whole tab re-rendered, and a render mid-sweep cut it off the same
+ * way. */
+function swingRenderSettled() {
+  afterDrawsSettle(() => {
+    if (STATE.view !== 'swing' || !STATE.swing) return;
+    const sweep = !!swingSweepPending;
+    preserveUI(views.swing, () => {
+      if (sweep) setChartAnimation(true);
+      renderSwing(STATE.swing);
+    });
+    if (sweep) setChartAnimation(false);
+  });
+}
+
 /* Draw the panes from the same windowed series the price chart used.
  *
  * `ps` is what wsSeries returned, so the arrays are already cut to the visible
@@ -16296,16 +16339,16 @@ async function wsLoadIndicators() {
   if (!ids.length) {
     // Nothing selected. Clear rather than leave the last payload, or unticking
     // the final box would leave its lines on the chart.
-    if (wsIndicators) { wsIndicators = null; wsRedrawChart(); }
+    if (wsIndicators) { wsIndicators = null; wsRedrawSettled(); }
     return;
   }
   if (wsIndicators && wsIndicators.symbol === symbol && wsIndicators.key === key
       && wsIndicators.bars === bars && !wsIndicators.loading) {
-    wsRedrawChart();
+    wsRedrawSettled();
     return;
   }
   wsIndicators = { symbol, key, bars, loading: true };
-  wsRedrawChart();
+  wsRedrawSettled();
   try {
     const data = await getJSON('/api/indicators/' + encodeURIComponent(symbol)
       + '?ids=' + encodeURIComponent(ids.join(',')) + studyQuery(bars)
@@ -16322,7 +16365,7 @@ async function wsLoadIndicators() {
   } catch (err) {
     wsIndicators = { symbol, key, bars, available: false, reason: err.message };
   }
-  wsRedrawChart();
+  wsRedrawSettled();
 }
 
 /* The price-pane indicator series for this tab's chart.
@@ -17257,10 +17300,8 @@ async function loadAccumZones(symbol, force) {
   } catch (err) {
     STATE.accumZones = { available: false, reason: err.message };
   }
-  if (STATE.view === 'chart') wsRedrawChart();
-  else if (STATE.view === 'swing' && STATE.swing) {
-    preserveUI(views.swing, () => renderSwing(STATE.swing));
-  }
+  if (STATE.view === 'chart') wsRedrawSettled();
+  else if (STATE.view === 'swing' && STATE.swing) swingRenderSettled();
 }
 
 /* Accumulation zones as reference lines.
@@ -17335,10 +17376,8 @@ async function loadTrendlines(symbol, force) {
   // A later size or symbol asked since; its own answer is on the way.
   if (STATE.trendlinesFor !== key) return;
   STATE.trendlines = { ...data, symbol: sym, bars };
-  if (STATE.view === 'chart') wsRedrawChart();
-  else if (STATE.view === 'swing' && STATE.swing) {
-    preserveUI(views.swing, () => renderSwing(STATE.swing));
-  }
+  if (STATE.view === 'chart') wsRedrawSettled();
+  else if (STATE.view === 'swing' && STATE.swing) swingRenderSettled();
 }
 
 /* ==================================================== the drawing layer
@@ -19546,17 +19585,35 @@ function wsRedrawChart(opts) {
   if (leg) leg.outerHTML = wsLegend(ps);
 
   /* A control change is a redraw, not a reveal. The draw-on animation is for
-     content arriving; replaying a 620ms stroke every time someone nudges the
-     range is what "laggy" actually looked like here. So it is off by default
-     and every caller that passes nothing keeps that.
+     content arriving; replaying a 620ms stroke on every overlay, colour or
+     zoom change is what "laggy" actually looked like here. So it is off by
+     default and every caller that passes nothing keeps that. A time frame
+     press is the exception that was asked for, spent here as `sweep`: see
+     wsFrameSweep.
      `animate` is the one exception, for the Line / Candles pair: switching the
      style redraws the series as a different mark, which is the one control
      where the sweep shows the reader what just happened rather than replaying
      an arrival. It has to be set HERE rather than by the caller, because this
      function turned the flag off after the caller had set it: that is why a
      `setChartAnimation(true)` in the mode handler measured no effect at all. */
-  setChartAnimation(!!(opts && opts.animate));
+  const sweep = !!wsFrameSweep && !chartInteractive && (ps.dates || []).length > 0;
+  setChartAnimation(!!(opts && opts.animate) || sweep);
+  if (sweep) {
+    // RSI and MACD sweep with it, as they do when a symbol arrives.
+    wsPaneArriving = '*';
+    // Spent two frames on, once the draw has gone out, not now: the studies'
+    // loading redraw follows every press in the same tick and replaces this
+    // mount before it builds, so it has to sweep as well.
+    const spent = wsFrameSweep;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (wsFrameSweep === spent) wsFrameSweep = 0;
+    }));
+  }
   wsMountChart();
+  if (sweep) {
+    setChartAnimation(false);
+    wsPaneArriving = null;
+  }
   requestAnimationFrame(() => requestAnimationFrame(wsEnsureChart));
   /* The status line states the bar size and whether the view is zoomed, so it
    * follows every redraw. It was refreshed only from the drawing layer's sync,
@@ -28158,6 +28215,56 @@ function bindScanPills() {
 }
 
 
+/* The Options tab's time frame sweep.
+ *
+ * A press re-renders the tab with the draw-on, the way the Line and Candles
+ * pair already did, since a new time frame is new bars. `animateChart` holds
+ * any chart below the fold until it is scrolled to, so what sweeps is what is
+ * on screen. Set inside preserveUI's callback, which clears the flag before
+ * it runs. */
+function sweepSwing(changed) {
+  preserveUI(views.swing, () => {
+    if (changed) setChartAnimation(true);
+    renderSwing(STATE.swing);
+  });
+  if (changed) {
+    // Off again once the charts are asked for: each mount has kept its answer,
+    // and a render after this one that did not ask should not sweep.
+    setChartAnimation(false);
+    markSwingSweep();
+  }
+}
+
+/* Under a day the bars arrive after the press: swept then, once. */
+let swingFrameSweep = false;
+
+function sweepSwingIntraday() {
+  const sweep = swingFrameSweep;
+  swingFrameSweep = false;
+  if (sweep) setChartAnimation(true);
+  renderSwing(STATE.swing);
+  if (sweep) {
+    setChartAnimation(false);
+    markSwingSweep();
+  }
+}
+
+/* A sweep queued and not yet drawn, for two frames after the render that
+ * asked for it. A study or trend line that lands inside them re-renders the
+ * tab, which replaces the charts before they build, so it sweeps as well;
+ * one that lands later waits for the sweep in swingRenderSettled. The same
+ * arrangement as the Charting tab's wsFrameSweep. */
+let swingSweepPending = 0;
+let swingSweepSeq = 0;
+
+function markSwingSweep() {
+  const mark = ++swingSweepSeq;
+  swingSweepPending = mark;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (swingSweepPending === mark) swingSweepPending = 0;
+  }));
+}
+
 /* Intraday bars, fetched only when a reader actually picks 1D or 5D.
  *
  * Not part of /api/ticker: that payload is daily bars and everything built on
@@ -28168,7 +28275,7 @@ async function loadIntraday(range) {
   if (!ticker) return;
   const cached = STATE.intraday;
   if (cached && cached.ticker === ticker && cached.range === range) {
-    if (STATE.swing) renderSwing(STATE.swing);
+    if (STATE.swing) sweepSwingIntraday();
     return;
   }
   STATE.intraday = { ticker, range, loading: true };
@@ -28183,7 +28290,7 @@ async function loadIntraday(range) {
   } catch (err) {
     STATE.intraday = { ticker, range, available: false, reason: err.message };
   }
-  if (STATE.swing) renderSwing(STATE.swing);
+  if (STATE.swing) sweepSwingIntraday();
 }
 
 /* The earnings payload, fetched only for the chart markers.
@@ -28216,8 +28323,8 @@ async function loadEarningsForMarkers() {
 }
 
 function repaintForEarningsMarkers() {
-  if (STATE.view === 'chart') wsRedrawChart();
-  else if (STATE.swing) renderSwing(STATE.swing);
+  if (STATE.view === 'chart') wsRedrawSettled();
+  else if (STATE.swing) afterDrawsSettle(() => { if (STATE.swing) renderSwing(STATE.swing); });
 }
 
 /* The markers for whichever chart is asking, or none.
@@ -31900,14 +32007,13 @@ document.addEventListener('change', (evt) => {
     return;
   }
   if (evt.target.id === 'chart-interval') {
+    const changed = evt.target.value !== chartInterval;
     chartInterval = evt.target.value;
     try { localStorage.setItem(CHART_INTERVAL_KEY, chartInterval); } catch (e) { /* private mode */ }
     // Weekly bars have weekly studies now.
     loadIndicators();
-  } else {
-    return;
+    if (STATE.swing) sweepSwing(changed);
   }
-  if (STATE.swing) preserveUI(views.swing, () => renderSwing(STATE.swing));
 });
 
 document.addEventListener('click', (evt) => {
@@ -32098,21 +32204,36 @@ document.addEventListener('click', (evt) => {
   // only needs to emit rangePills() with its own attribute to be wired up.
   const tf = evt.target.closest('[data-chart-range]');
   if (tf) {
+    // A new time frame sweeps on, as on the Charting tab: see wsFrameSweep.
+    const changed = tf.dataset.chartRange !== chartRange;
     chartRange = tf.dataset.chartRange;
     try { localStorage.setItem(CHART_RANGE_KEY, chartRange); } catch (e) { /* private mode */ }
     // Studies and trend lines are computed per bar size, so a new size may
     // need new ones.
     loadIndicators();
     if (showTrends) loadTrendlines(STATE.ticker);
-    if (isIntradayRange(chartRange)) { loadIntraday(chartRange); return; }
-    if (STATE.swing) preserveUI(views.swing, () => renderSwing(STATE.swing));
+    if (isIntradayRange(chartRange)) {
+      // Swept when the bars land, not on the loading state before them.
+      swingFrameSweep = changed;
+      loadIntraday(chartRange);
+      return;
+    }
+    if (STATE.swing) sweepSwing(changed);
     return;
   }
   const ltTf = evt.target.closest('[data-lt-range]');
   if (ltTf) {
+    const changed = ltTf.dataset.ltRange !== ltRange;
     ltRange = ltTf.dataset.ltRange;
     try { localStorage.setItem(LT_RANGE_KEY, ltRange); } catch (e) { /* private mode */ }
-    if (STATE.long) preserveUI(views.long, () => renderLong(STATE.long));
+    // A new time frame sweeps on here too. Set inside the callback, which
+    // clears the flag before it runs.
+    if (STATE.long) {
+      preserveUI(views.long, () => {
+        if (changed) setChartAnimation(true);
+        renderLong(STATE.long);
+      });
+    }
     return;
   }
   if (evt.target.closest('[data-ws-max]')) {
@@ -32127,8 +32248,8 @@ document.addEventListener('click', (evt) => {
      * `preserveUI` turns the animation off for every control press, and its
      * comment says why: it used to replay across all nineteen charts on this
      * tab, and redrawing something the reader is already looking at should be
-     * instant. That still holds for a timeframe press, where the chart is the
-     * same shape at a different span.
+     * instant. A time frame press sweeps too now, having been asked for: see
+     * sweepSwing.
      *
      * A style change is different in kind: the price series is drawn from
      * scratch as a different mark, which is the one case where the sweep is
@@ -32547,8 +32668,10 @@ document.addEventListener('click', (evt) => {
   }
   const wsRange = evt.target.closest('[data-ws-range]');
   if (wsRange) {
+    const before = wsFrameKey();
     chartRange = wsRange.dataset.wsRange;
     wsWindow = null;   // a range pill overrides a manual zoom
+    if (wsFrameKey() !== before) wsFrameSweep = ++wsSweepSeq;
     try { localStorage.setItem(CHART_RANGE_KEY, chartRange); } catch (e) { /* private mode */ }
     // 1D and 5D come from a different endpoint. Fetched on demand rather than
     // with the symbol: most sessions never open them, and it is a live call.
@@ -32568,8 +32691,10 @@ document.addEventListener('click', (evt) => {
   }
   const wsIwin = evt.target.closest('[data-ws-iwin]');
   if (wsIwin) {
+    const before = wsFrameKey();
     setIntradayWindow(chartRange, wsIwin.dataset.wsIwin);
     wsWindow = null;   // a window pill overrides a manual zoom, as a range pill does
+    if (wsFrameKey() !== before) wsFrameSweep = ++wsSweepSeq;
     wsLoadIntraday();
     // Studies and trend lines are computed on these bars, so a new window needs
     // new ones.
@@ -32587,6 +32712,7 @@ document.addEventListener('click', (evt) => {
     }
     const key = wsInt.dataset.wsInterval;
     const spec = chartIntervalSpec(key);
+    const before = wsFrameKey();
     wsWindow = null;   // a size change overrides a manual zoom
     if (spec && spec.intraday) {
       /* An intraday size selects an intraday RANGE, not an interval. Writing
@@ -32594,6 +32720,7 @@ document.addEventListener('click', (evt) => {
          read that variable as daily-or-weekly. */
       chartRange = key;
       try { localStorage.setItem(CHART_RANGE_KEY, chartRange); } catch (e) { /* private mode */ }
+      if (wsFrameKey() !== before) wsFrameSweep = ++wsSweepSeq;
       wsLoadIntraday();
     } else {
       chartInterval = key;
@@ -32606,6 +32733,7 @@ document.addEventListener('click', (evt) => {
         chartRange = '6m';
         try { localStorage.setItem(CHART_RANGE_KEY, chartRange); } catch (e) { /* private mode */ }
       }
+      if (wsFrameKey() !== before) wsFrameSweep = ++wsSweepSeq;
       wsRedrawChart();
     }
     // Studies and trend lines are computed per bar size, so a new size may

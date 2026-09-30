@@ -424,15 +424,17 @@ def test_the_style_toggle_opts_into_the_animation_through_the_redraw():
     `setChartAnimation(true)` in the handler was overwritten and measured no
     effect at all. The opt-in has to travel as an argument."""
     fn = body_of("wsRedrawChart")
-    assert "setChartAnimation(!!(opts && opts.animate));" in fn
+    # Or a time frame press's sweep: see test_timeframe_sweep.
+    assert "setChartAnimation(!!(opts && opts.animate) || sweep);" in fn
     ws = CODE[CODE.index("const wsMode = evt.target.closest('[data-ws-mode]')"):]
     ws = ws[:ws.index("return;")]
     assert "wsRedrawChart({ animate: changed })" in ws
 
 
 def test_every_other_workspace_control_still_redraws_without_animating():
-    """Range, interval, overlays, colours and the panes all call it with no
-    `animate`, and `!!(opts && opts.animate)` is false for them."""
+    """Overlays, colours and the panes all call it with no `animate`, and
+    `!!(opts && opts.animate)` is false for them. Range and interval presses
+    sweep, as asked for, through wsFrameSweep rather than this argument."""
     for call in ("wsRedrawChart();", "wsRedrawChart({ keepToolbar: true })"):
         assert call in CODE, call
 
