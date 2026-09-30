@@ -41,6 +41,17 @@ MAJORS = {
 DAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
 
 
+def week_label(start, end) -> str:
+    """"Sep 21 – 25" inside one month, "Sep 28 – Oct 2" across two.
+
+    Reported by a user as: it "shows the date as "Sept 28 - 2", it should
+    specify Oct". The end took only its day, so a week that crossed a month
+    read as ending on the 2nd of the month it began in."""
+    if end.month == start.month:
+        return "{} – {}".format(start.strftime("%b %-d"), end.strftime("%-d"))
+    return "{} – {}".format(start.strftime("%b %-d"), end.strftime("%b %-d"))
+
+
 def _num(value: Any) -> Optional[float]:
     if value is None:
         return None
@@ -156,8 +167,7 @@ def build(provider, offset: int = 0, now: Optional[datetime] = None,
     return {
         "available": True,
         "week_of": start.date().isoformat(),
-        "week_label": "{} – {}".format(
-            start.strftime("%b %-d"), (start + timedelta(days=4)).strftime("%-d")),
+        "week_label": week_label(start, start + timedelta(days=4)),
         "offset": offset,
         "days": days,
         "total": total,
