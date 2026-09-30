@@ -3964,11 +3964,11 @@ document.addEventListener('click', (evt) => {
   if (rm) { evt.preventDefault(); evt.stopPropagation(); watchRemove(rm.dataset.watchRemove); return; }
   const go = evt.target.closest('[data-go-view]');
   if (go) { switchView(go.dataset.goView); return; }
-  /* A market question opens Pulse with the question already typed rather than
-   * sending it. Five questions on a page that answers them all on load is five
-   * API calls nobody asked for, and the assistant costs money per call. */
+  /* A market question is asked when it is pressed, and not before: rendering
+   * five of them costs nothing, and a press is the reader asking. It used to be
+   * typed into the box and left, which read as Pulse not answering. */
   const askText = evt.target.closest('[data-ask-text]');
-  if (askText) { openPulseWithText(askText.dataset.askText); }
+  if (askText) { askPulseNow(askText.dataset.askText); }
 });
 
 /** Fill in the footer once /api/health is known — real-time vs delayed feed and
@@ -7202,7 +7202,7 @@ const QUICK_ACTIONS = [
   { label: 'Charting', detail: 'Drawings, studies and intraday',
     run: () => switchView('chart') },
   { label: 'Ask Pulse', detail: 'Put a question to the assistant',
-    run: () => openPulseWithText('') },
+    run: () => openPulse() },
 ];
 
 /* Does this look like a symbol, or like a sentence?
@@ -7503,7 +7503,7 @@ async function paletteBuild(query) {
       .forEach((r) => rows.push({
         group: upper, lead: '\u2727', label: String(r.question || '').slice(0, 60),
         detail: 'Saved research',
-        run: () => { closePalette(); openPulseWithText(r.question || ''); },
+        run: () => { closePalette(); askPulseNow(r.question || ''); },
       }));
   }
 
@@ -7539,7 +7539,7 @@ async function paletteBuild(query) {
       detail: STATE.ticker ? `With ${STATE.ticker} and everything else loaded in context`
         : 'Pulse answers from whatever is loaded',
       tag: isQuestion ? 'enter' : '',
-      run: () => { closePalette(); openPulseWithText(q); },
+      run: () => { closePalette(); askPulseNow(q); },
     };
     if (isQuestion) rows.unshift(ask); else rows.push(ask);
   }
@@ -21231,7 +21231,7 @@ document.addEventListener('click', (evt) => {
     // it was written and the market has moved since; showing it again as though
     // it were current is the one thing a saved-research feature must not do.
     if (row.ticker && row.ticker !== STATE.ticker) loadTicker(row.ticker, 'swing');
-    openPulseWithText(row.question || '');
+    askPulseNow(row.question || '');
     return;
   }
 
@@ -26071,6 +26071,48 @@ function openPulseWithText(text) {
   box.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+/* Pulse, open on an empty box. The palette's Ask Pulse called
+ * openPulseWithText(''), which returns on an empty prompt by design, so the
+ * action closed the palette and opened nothing at all. */
+function openPulse() {
+  document.body.classList.add('chat-open');
+  wsOnChatToggle();
+  loadAllowance();
+  const box = $('#chat-input');
+  if (box && !box.disabled) box.focus();
+}
+
+/* Ask Pulse, rather than leave the question typed in its box.
+ *
+ * Every Explain and Ask button in the terminal opened the panel with its
+ * prompt in the input and stopped there, so pressing Explain chart showed a
+ * paragraph of instructions and no explanation. Reported as "whenever i press
+ * explain chart, there is no explanation that is loaded into pulse", to be
+ * fixed wherever else it applied: the topic buttons (Explain this desk and
+ * the rest), the home page's questions and the follow-ups under a symbol, the
+ * starter cards, a saved question asked again, and a question typed into the
+ * palette. They all send now: one press, one question, one answer.
+ *
+ * Not when it cannot go. With Pulse unavailable or needing an account the
+ * panel opens on the reason with the prompt waiting in the box, and while an
+ * answer is still arriving the new question waits there too, since sendChat
+ * takes one at a time. openPulseWithText stays for opening Pulse on nothing. */
+function askPulseNow(text) {
+  if (!text) return;
+  document.body.classList.add('chat-open');
+  wsOnChatToggle();
+  loadAllowance();
+  const box = $('#chat-input');
+  if (!box) return;
+  if (chatState.busy || box.disabled || pulseBlockedReason()) {
+    openPulseWithText(text);
+    return;
+  }
+  box.value = '';
+  box.dispatchEvent(new Event('input', { bubbles: true }));
+  sendChat(text);
+}
+
 function openPulseWith(topic) {
   const tmpl = PULSE_TOPICS[topic];
   if (!tmpl) return;
@@ -26099,15 +26141,8 @@ function openPulseWith(topic) {
     .replace(/\{thesis\}/g, written
       || '(I have not written one yet, so tell me what a thesis on this name '
          + 'would have to commit to, and what would falsify each part)');
-  document.body.classList.add('chat-open');
-  const box = $('#chat-input');
-  if (!box) return;
-  box.value = text;
-  box.focus();
-  // Put the caret at the end rather than selecting, so Enter sends as-is but
-  // typing edits rather than replaces.
-  box.setSelectionRange(text.length, text.length);
-  box.dispatchEvent(new Event('input', { bubbles: true }));
+  // Asked, not typed in the box and left there. See askPulseNow.
+  askPulseNow(text);
 }
 
 function renderVanna(gex) {
@@ -32616,8 +32651,7 @@ document.addEventListener('click', (evt) => {
   }
   const starter = evt.target.closest('.pulse-card');
   if (starter) {
-    const box = document.getElementById('chat-input');
-    if (box) { box.value = starter.dataset.q; box.focus(); }
+    askPulseNow(starter.dataset.q);
     return;
   }
   const phOpen = evt.target.closest('[data-pulse-open]');
@@ -33307,12 +33341,12 @@ document.addEventListener('click', (evt) => {
    * generic branch would look it up, find nothing and silently do nothing. */
   const explain = evt.target.closest('[data-explain-chart]');
   if (explain) {
-    openPulseWithText(explainChartPrompt(explain.dataset.explainChart));
+    askPulseNow(explainChartPrompt(explain.dataset.explainChart));
     return;
   }
   const askChart = evt.target.closest('[data-ask-chart]');
   if (askChart) {
-    openPulseWithText(chartPulsePrompt(askChart.dataset.askChart));
+    askPulseNow(chartPulsePrompt(askChart.dataset.askChart));
     return;
   }
   /* A free answer, and its close. A click anywhere else closes it too, and
