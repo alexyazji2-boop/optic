@@ -189,9 +189,9 @@ def test_the_companions_are_far_from_the_gold_in_both_themes():
 
 
 def test_averages_are_measured_against_the_stage_colours_when_those_are_drawn():
-    """The stages are a tint and a band behind the price now, not the candles'
-    colour, so both are on screen at once and the averages keep clear of both:
-    the price as drawn plus the band's four colours."""
+    """With Stages on the price is drawn in the four stage colours, and with
+    them off in its own, so the averages keep clear of both: the price's own
+    colours plus the stages' four."""
     fn = _fn(APP, "maColorsOnChart")
     assert "function maColorsOnChart(candleMode, marks)" in fn
     assert ": lineMarks()), ...(marks || [])].map(lc));" in fn

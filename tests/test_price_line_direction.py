@@ -4,9 +4,11 @@ Asked for as "whenever a chart is in an increasing matter, make the line green
 and in a decreasing matter, make the line red", with the Charting tab's AAPL
 one-minute day open, then chosen as one colour for the whole line (the way
 Robinhood and Google Finance draw it) over a line that changes colour as it
-goes. The line had been Optic's gold, and under Stages it was one stage colour
-for the whole week, so a falling day in stage 2 was drawn green: stages now
-colour the candles only (test_stage_colours.py).
+goes. The line had been Optic's gold.
+
+Stages take the line over while they are drawn, as they do the candles: asked
+for later as "and so the same feature with the lines" (test_stage_band.py).
+With Stages off the line is green or red by its own move, as here.
 """
 from __future__ import annotations
 
@@ -117,12 +119,12 @@ def test_the_picker_shows_the_pair_until_a_colour_is_picked():
     assert "linear-gradient(90deg, ${C.pos} 50%, ${C.neg} 50%)" in pop
     assert "const on = !!current && current.toLowerCase()" in pop, \
         "no preset may show as pressed for a default that is two colours"
-    assert "the candles and the line are" not in RAW, "Stages no longer colour the line"
+    assert "Stages is on, so the candles and the line are" in RAW, "it says Stages have the line"
 
 
-def test_the_legend_reads_the_band_the_same_in_both_modes():
+def test_the_legend_reads_the_stages_the_same_in_both_modes():
     """"Candles only" was right for a day: stages coloured the candles alone.
-    They draw a band now, in line mode too, so the row reads the same in both."""
+    They colour the line as well now, so the row reads the same in both."""
     leg = _fn("wsLegend")
     assert "'candles only'" not in leg
     assert ": !tinted ? 'unavailable' : intra ? 'by week' : '';" in leg

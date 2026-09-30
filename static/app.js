@@ -2540,11 +2540,12 @@ const SHOW_TRENDS_KEY = 'optic.chart.trends.v1';
 // move happened.
 let showSessions = false;
 const SHOW_SESSIONS_KEY = 'optic.chart.sessions.v1';
-/* Weinstein stages, as a tint behind the price: every bar in the stage of its
- * week, named along the foot of the chart (see stageBand in charts.js). On by
- * default, unlike the overlays above, because it is not another line across
- * the chart; it shades what is already there, and each chart's legend carries
- * the key so a colour never has to be guessed. */
+/* Weinstein stages, as the reference chart draws them: every candle, or the
+ * line, in the colour of its week's stage, and each run named along the foot
+ * of the chart (see stageBand in charts.js). On by default, unlike the
+ * overlays above, because it is not another line across the chart; it colours
+ * what is already there, each chart's legend carries the key so a colour never
+ * has to be guessed, and turning it off gives every bar its direction back. */
 let showStages = true;
 const SHOW_STAGES_KEY = 'optic.chart.stages.v1';
 const SHOW_MA_KEY = 'optic.chart.ma.v2';
@@ -8876,9 +8877,8 @@ function swingPriceBlock(d, ps, ctx) {
     // Before the averages: with Stages on, the mark they must not be mistaken
     // for is drawn in the stage colours. Same lookup as the Charting tab, on
     // this payload's own symbol.
-    // Drawn as a tint behind the price and a named strip along its foot, in
-    // both modes; the candles and the line keep their own direction (see
-    // stageBand in charts.js).
+    // The candles, or the line, in their week's stage colour, in both modes,
+    // and each run named along the foot (see stageBand in charts.js).
     const stages = stageTints(d.ticker, ps.dates, ps.intraday);
     paintStageLegend('stage-price-legend', d.ticker, () => (STATE.swing || {}).ticker === d.ticker);
     const maOn = maColorsOnChart(candleMode, stages && stages.marks);
@@ -8908,8 +8908,9 @@ function swingPriceBlock(d, ps, ctx) {
     STATE.overlayPalette = overlayPalette;
 
     mount('legend-price', legend([
-      // The candles' own colours, and then the band's stages when it is drawn.
-      ...(candleMode
+      // When the price is coloured by stage, the key says so instead of naming
+      // an up and a down colour, or a line colour, that no bar is drawn in.
+      ...(stages ? stages.key : candleMode
         // The reader's own candle colours, not s3/s8: those are the defaults
         // chartColor() returns anyway, and hardcoding them made the key lie
         // the moment anyone used the Charting tab's colour picker.
@@ -8918,7 +8919,6 @@ function swingPriceBlock(d, ps, ctx) {
         ? [{ name: ps.intraday ? 'Up bar' : ps.weekly ? 'Up week' : 'Up day', color: chartColor('up') },
           { name: ps.intraday ? 'Down bar' : ps.weekly ? 'Down week' : 'Down day', color: chartColor('down') }]
         : [{ name: 'Close', color: priceLineColor(ps.close) }]),
-      ...(stages ? stages.key : []),
       /* Derived from the same per-average switches as the series, so the
        * legend cannot name a line that is not on the chart. It previously
        * dropped the 200 entry on weekly while the series still drew it. */
@@ -8997,6 +8997,9 @@ function swingPriceBlock(d, ps, ctx) {
         { name: 'Close',
           values: ps.close,
           color: candleMode ? C.ink : priceLineColor(ps.close),
+          // Line mode's stage colours. Harmless in candle mode, where this
+          // series is not stroked and the candles take the same array.
+          tints: stages ? stages.colors : null,
           hidden: candleMode,
           fill: !candleMode },
         /* Per-average switches, matching the Charting tab's Indicators menu —
@@ -9026,6 +9029,7 @@ function swingPriceBlock(d, ps, ctx) {
       candles: candleMode
         ? { open: ps.open, high: ps.high, low: ps.low, close: ps.close }
         : null,
+      candleTints: stages ? stages.colors : null,
       stageBand: stages ? stages.colors : null,
       stageNames: stages ? stages.labels : null,
       refLines: overlayRefs,
@@ -12946,13 +12950,13 @@ const OVERLAY_DEFS = [
    * retracements of the multi-year range. A chart that offers both says what
    * horizon each belongs to, which is why they are two overlays and not one. */
   { id: 'accum', label: 'Accumulation zones', group: 'Levels', color: 'refSR', width: 1 },
-  /* Stages shade the chart behind the price rather than draw a line on it.
-   * `fixed` is the style dialog's cue that there is no colour or width to
-   * choose, for the reason the clouds give: the colours are the reading. */
+  /* Stages colour the price rather than draw a line on it. `fixed` is the
+   * style dialog's cue that there is no colour or width to choose, for the
+   * reason the clouds give: the colours are the reading. */
   { id: 'stages', label: 'Weinstein stages', group: 'Trend', color: 'pos', width: 1,
-    fixed: 'Shades the chart behind each bar in the colour of its week\'s Weinstein '
+    fixed: 'Draws each candle, or the line, in the colour of its week\'s Weinstein '
       + 'stage, and names the stage along the foot: light green basing, green advancing, '
-      + 'amber topping, red declining. The candles keep their up and down colours. '
+      + 'amber topping, red declining. Turn it off for up and down colours. '
       + 'The colours are the reading, so they are fixed. On intraday bars each '
       + 'takes its week\'s stage.' },
 ];
@@ -13221,7 +13225,7 @@ function maColorsOnChart(candleMode, marks) {
   const out = {};
 
   // 1. The immovable: the price mark as drawn, then every colour the reader picked.
-  // The price as drawn, plus any colour the chart also draws (the stage band's).
+  // The price as drawn, plus any colour the chart also draws (the stages').
   const fixed = new Set([...(candleMode
     ? [chartColor('up'), chartColor('down')]
     : lineMarks()), ...(marks || [])].map(lc));
@@ -13774,13 +13778,14 @@ function drawInstrumentChart(d) {
     () => ((STATE.instrument || {}).symbol || '') === stageSym);
   const candles = instrumentMode === 'candle' && d.open && d.high && d.low
     ? { open: d.open, high: d.high, low: d.low, close: d.close } : null;
-  // A band under the price; the candles and the line keep their own direction.
+  // The candles, or the line, in their week's stage colour, as on the other
+  // two charts.
   const stages = stageTints(stageSym, d.dates, false);
   const lineColor = candles ? C.brand : priceLineColor(d.close);
   mount('legend-inst', legend([
-    ...(candles ? [{ name: 'Up day', color: C.s3 }, { name: 'Down day', color: C.s8 }]
+    ...(stages ? stages.key : candles
+      ? [{ name: 'Up day', color: C.s3 }, { name: 'Down day', color: C.s8 }]
       : [{ name: d.label, color: lineColor }]),
-    ...(stages ? stages.key : []),
     ...(d.volume ? [{ name: 'Volume', color: C.ink2, boxed: true }] : []),
   ]));
   mount('chart-inst', (w) => lineChart({
@@ -13789,8 +13794,10 @@ function drawInstrumentChart(d) {
     labels: d.dates || [],
     volume: d.volume || null,
     series: [{ name: d.label, values: d.close, color: lineColor,
+      tints: stages ? stages.colors : null,
       hidden: !!candles, fill: !candles }],
     candles,
+    candleTints: stages ? stages.colors : null,
     stageBand: stages ? stages.colors : null,
     stageNames: stages ? stages.labels : null,
     valueTags: true,
@@ -15313,10 +15320,15 @@ function markWarnText(contrast) {
 }
 
 function wsColorPop() {
-  /* Stages draw a band under the price, so these rows are always what the
-   * candles are drawn in. The line's colour is its direction unless one is
-   * picked here. */
+  /* Stages colour the candles and the line, so while they are drawn the price
+   * rows are not what is on the chart, and a swatch that changed nothing would
+   * read as broken. Up and down still colour the volume bars. With Stages off
+   * the line's colour is its direction unless one is picked here. */
+  const staged = wsOverlayDrawn('stages');
   return `<div class="ws-menu-pop ws-colors">
+    ${staged ? `<p class="ws-menu-note">Stages is on, so the candles and the line are
+      drawn in the colour of their stage. Up and down colour the volume bars now, and
+      the price again with Stages off.</p>` : ''}
     ${CHART_COLOR_ROWS.map((row) => {
     const chosen = !!chartColors[row.slot];
     // The line's default is green over a rise and red over a fall, so it has no
@@ -19196,6 +19208,7 @@ function wsMountChart() {
         open: ps.open || [], high: ps.high || [],
         low: ps.low || [], close: ps.close || [],
       } : null,
+      candleTints: stages ? stages.colors : null,
       stageBand: stages ? stages.colors : null,
       stageNames: stages ? stages.labels : null,
       /* The reader's colours. See chartColor().
@@ -19254,6 +19267,7 @@ function wsMountChart() {
           color: wsCandles(ps) ? C.ink : priceLineColor(ps.close),
           // Line mode's stage colours. Harmless in candle mode, where this
           // series is not stroked and the candles take the same array.
+          tints: stages ? stages.colors : null,
           hidden: wsCandles(ps), fill: !wsCandles(ps) },
         /* One entry per average, each gated on its own switch, so the six
          * checkboxes in the Indicators menu mean what they say. On intraday

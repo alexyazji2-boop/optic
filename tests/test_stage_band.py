@@ -1,16 +1,18 @@
-"""Stages behind the price, and candles in their own direction.
+"""Stages in the candles and the line, as the reference chart draws them.
 
-Reported with NKE's hourly chart in stage 4: "why are all candles [red], even
-in uptrends like these?". Stages coloured every candle by its week's stage, as
-the TrendSpider reference draws them, so a rally inside a declining stage was a
-row of red, and the one thing a candle is for was gone. The stage moved to a
-band along the foot of the price area and each candle kept its own up or down
-colour.
+Stages have been drawn three ways. First as the TrendSpider reference does,
+every candle in the colour of its week's stage, which NKE's hourly chart in
+stage 4 had reported as "why are all candles [red], even in uptrends like
+these?". Then as a four-pixel band along the foot of the price, which was
+asked about as "does stages no longer work on the chart?", and then as a
+faint tint behind each run with the band under it.
 
-That band was four pixels under a 470px chart, and the next question was "does
-stages no longer work on the chart?". So each run of a stage is now also a
-faint tint behind the whole price area, the band names the stage where the run
-is wide enough, and hovering a bar names its stage in the readout.
+Now as the reference again, asked for directly: "keep the candles as is with
+the color change as per the reference screenshot attached, and so the same
+feature with the lines". The candles and the line take their week's stage
+colour, the tint and the band are gone, each run is still named along the
+foot, and hovering a bar still names its stage. Stages off gives every bar
+its own direction back, which is the answer to the NKE question now.
 
 The renderer itself is run here, under JavaScriptCore with a recording DOM, and
 what it drew is read back.
@@ -52,30 +54,28 @@ def _draw(opts, hover=None):
         var g = NODES.filter(function (n) { return n.tag === 'g' && n.attrs['class'] === cls; });
         return g.length ? g[0] : null;
       };
-      var attrsOf = function (g) { return g ? g.children.map(function (r) { return r.attrs; }) : []; };
-      var band = NODES.filter(function (n) { return n.tag === 'g' && n.attrs['class'] === 'stage-band'; });
-      var rects = band.length ? band[0].children.map(function (r) { return r.attrs; }) : [];
-      var candles = NODES.filter(function (n) {
-        return n.tag === 'rect' && (n.attrs.fill === '%s' || n.attrs.fill === '%s') && n.attrs.stroke === n.attrs.fill;
+      // A candle's body is the one rect filled and stroked in one colour, and
+      // it comes after its wick, a line in the same colour.
+      var bodies = NODES.filter(function (n) {
+        return n.tag === 'rect' && n.attrs.fill && n.attrs.fill === n.attrs.stroke
+          && n.attrs['stroke-width'] === '1';
       }).map(function (r) { return r.attrs.fill; });
+      var lines = NODES.filter(function (n) {
+        return n.tag === 'polyline' && n.attrs.fill === 'none' && n.attrs.stroke;
+      }).map(function (p) { return { stroke: p.attrs.stroke, points: p.attrs.points.split(' ').length }; });
       var names = group('stage-names');
-      var kids = svg.children || [];
       var f = svg.chartFrame || {};
       var hover = %s;
       if (hover !== null && SCRUBS.length) SCRUBS[0]({ clientX: hover, clientY: 50, pointerType: 'mouse' });
-      print(JSON.stringify({ groups: band.length, rects: rects, candles: candles,
-                             zones: attrsOf(group('stage-zones')),
+      print(JSON.stringify({ bodies: bodies, lines: lines,
+                             zones: !!group('stage-zones'), band: !!group('stage-band'),
                              names: names ? names.children.map(function (t) {
                                return { x: t.attrs.x, y: t.attrs.y, fill: t.attrs.fill, text: t.textContent };
                              }) : [],
-                             zonesAt: kids.indexOf(group('stage-zones')),
-                             gridAt: kids.findIndex(function (k) {
-                               return (k.children || []).some(function (c) { return c.tag === 'line'; });
-                             }),
                              tip: TIPS.length ? TIPS[TIPS.length - 1] : null,
                              top: f.margin ? f.margin.t : 0, priceH: f.priceH || 0,
                              foot: (f.margin ? f.margin.t : 0) + (f.priceH || 0) }));
-    """ % (json.dumps(opts), UP, DOWN, json.dumps(hover)))
+    """ % (json.dumps(opts), json.dumps(hover)))
     out = subprocess.run([exe, "-e", src], capture_output=True, text=True, timeout=30)
     last = out.stdout.strip().splitlines()[-1] if out.stdout.strip() else ""
     assert last.startswith("{"), out.stdout + out.stderr
@@ -84,47 +84,70 @@ def _draw(opts, hover=None):
 
 BASE = {"width": 600, "height": 300, "labels": ["a", "b", "c", "d", "e"],
         "candleUp": UP, "candleDown": DOWN}
+HIDDEN_CLOSE = [{"name": "Close", "values": OHLC["close"], "color": "#123456", "hidden": True}]
 
 
-def test_every_candle_keeps_its_own_direction_under_the_band():
-    got = _draw({**BASE, "candles": OHLC, "stageBand": ["S4"] * 5,
-                 "series": [{"name": "Close", "values": OHLC["close"], "color": "#123456",
-                             "hidden": True}]})
-    # up, up, down, up, down: the closes against their opens, not the stage.
-    assert got["candles"] == [UP, UP, DOWN, UP, DOWN]
+# ------------------------------------------------------------ the candles
 
 
-def test_the_band_is_one_run_per_stage_along_the_foot_of_the_price():
-    got = _draw({**BASE, "candles": OHLC, "stageBand": ["S4", "S4", "S4", "S2", "S2"],
-                 "series": [{"name": "Close", "values": OHLC["close"], "color": "#123456",
-                             "hidden": True}]})
-    assert got["groups"] == 1
-    assert [r["fill"] for r in got["rects"]] == ["S4", "S2"]
-    for r in got["rects"]:
-        assert float(r["y"]) + float(r["height"]) == pytest.approx(got["foot"])
-    # Contiguous: the second run starts where the first stops.
-    a, b = got["rects"]
-    assert float(a["x"]) + float(a["width"]) == pytest.approx(float(b["x"]), abs=0.01)
+def test_with_stages_every_candle_is_in_its_weeks_stage_colour():
+    got = _draw({**BASE, "candles": OHLC, "series": HIDDEN_CLOSE,
+                 "candleTints": ["S4", "S4", "S4", "S2", "S2"],
+                 "stageBand": ["S4", "S4", "S4", "S2", "S2"]})
+    # The reference's rule: the week's stage, whichever way the bar went. Bar
+    # two closed up and bar three down, and both are stage 4's colour.
+    assert got["bodies"] == ["S4", "S4", "S4", "S2", "S2"]
 
 
-def test_the_band_draws_under_a_line_too():
-    got = _draw({**BASE, "stageBand": ["S2"] * 5,
-                 "series": [{"name": "Close", "values": OHLC["close"], "color": "#123456"}]})
-    assert [r["fill"] for r in got["rects"]] == ["S2"]
+def test_without_stages_every_candle_says_which_way_it_went():
+    got = _draw({**BASE, "candles": OHLC, "series": HIDDEN_CLOSE})
+    # up, up, down, up, down: the closes against their opens.
+    assert got["bodies"] == [UP, UP, DOWN, UP, DOWN]
 
 
-def test_no_band_without_stages():
-    got = _draw({**BASE, "candles": OHLC,
-                 "series": [{"name": "Close", "values": OHLC["close"], "color": "#123456",
-                             "hidden": True}]})
-    assert got["groups"] == 0 and got["candles"] == [UP, UP, DOWN, UP, DOWN]
+def test_a_bar_before_the_first_stage_keeps_the_colour_it_is_given():
+    """stageTints gives such a bar the muted colour, so that green on this
+    chart means one thing. A null entry, which no caller sends, would fall back
+    to the direction colour rather than draw nothing."""
+    got = _draw({**BASE, "candles": OHLC, "series": HIDDEN_CLOSE,
+                 "candleTints": ["MUTED", "MUTED", "S2", "S2", None]})
+    assert got["bodies"] == ["MUTED", "MUTED", "S2", "S2", DOWN]
 
 
-# ---------------------------------------------------------------- the tint
+# ------------------------------------------------------------ the line
 
 
-NAMES = {"S1": "Stage 1 \u00b7 Basing", "S2": "Stage 2 \u00b7 Advancing",
-         "S3": "Stage 3 \u00b7 Topping", "S4": "Stage 4 \u00b7 Declining"}
+def test_with_stages_the_line_is_drawn_a_run_per_stage():
+    got = _draw({**BASE, "series": [{"name": "Close", "values": OHLC["close"],
+                                     "color": "#123456", "tints": ["S4", "S4", "S2", "S2", "S2"]}],
+                 "stageBand": ["S4", "S4", "S2", "S2", "S2"]})
+    # Two runs, joined: the segment into bar three takes bar three's stage.
+    assert [l["stroke"] for l in got["lines"]] == ["S4", "S2"]
+    assert [l["points"] for l in got["lines"]] == [2, 4]
+
+
+def test_without_stages_the_line_is_one_colour():
+    got = _draw({**BASE, "series": [{"name": "Close", "values": OHLC["close"], "color": "#123456"}]})
+    assert [l["stroke"] for l in got["lines"]] == ["#123456"]
+
+
+# ------------------------------------------------ nothing drawn behind them
+
+
+def test_no_tint_and_no_band_behind_the_price_any_more():
+    """The candles and the line carry the colour now. A tint of the same
+    colour behind them only took contrast from the candles it sat under."""
+    got = _draw({**BASE, "candles": OHLC, "series": HIDDEN_CLOSE,
+                 "candleTints": ["S4"] * 5, "stageBand": ["S4"] * 5,
+                 "stageNames": ["Stage 4 · Declining"] * 5})
+    assert got["zones"] is False and got["band"] is False
+
+
+# ---------------------------------------------------------------- the names
+
+
+NAMES = {"S1": "Stage 1 · Basing", "S2": "Stage 2 · Advancing",
+         "S3": "Stage 3 · Topping", "S4": "Stage 4 · Declining"}
 
 
 def _staged(stages, **extra):
@@ -132,44 +155,22 @@ def _staged(stages, **extra):
     n = len(stages)
     return {"width": 600, "height": 300, "labels": ["d%d" % i for i in range(n)],
             "series": [{"name": "Close", "values": [10 + (i % 3) * 0.5 for i in range(n)],
-                        "color": "#123456"}],
+                        "color": "#123456", "tints": list(stages)}],
             "stageBand": stages, "stageNames": [NAMES[s] for s in stages], **extra}
 
 
-def test_each_run_is_tinted_behind_the_whole_price_area():
-    got = _draw({**BASE, "candles": OHLC, "stageBand": ["S4", "S4", "S4", "S2", "S2"],
-                 "series": [{"name": "Close", "values": OHLC["close"], "color": "#123456",
-                             "hidden": True}]})
-    zones = got["zones"]
-    assert [z["fill"] for z in zones] == ["S4", "S2"]
-    for z in zones:
-        # A tint: well under the full colour a candle is drawn in.
-        assert 0 < float(z["fill-opacity"]) <= 0.2
-        assert float(z["y"]) == pytest.approx(got["top"])
-        assert float(z["height"]) == pytest.approx(got["priceH"])
-    # The same runs as the band, edge for edge.
-    assert [(z["x"], z["width"]) for z in zones] == [(r["x"], r["width"]) for r in got["rects"]]
-    # Behind the grid, and so behind everything drawn after it.
-    assert 0 <= got["zonesAt"] < got["gridAt"]
-    # And the candles still say which way each bar went.
-    assert got["candles"] == [UP, UP, DOWN, UP, DOWN]
-
-
-def test_a_run_is_named_on_the_band_as_fully_as_it_has_room_for():
+def test_a_run_is_named_along_the_foot_as_fully_as_it_has_room_for():
     # 20 bars across 534px: about 27px a bar.
     got = _draw(_staged(["S4"] * 12 + ["S2"] * 2 + ["S3"] + ["S1"] * 5))
-    widths = [float(z["width"]) for z in got["zones"]]
-    assert widths[0] > 200 and 55 < widths[1] < 110 and widths[2] < 50 and widths[3] > 110
     # Wide: the whole name. Two bars: the number alone. One bar: nothing,
-    # though its colour is still there. Five: the whole name again.
+    # though its colour is still in its bar. Five: the whole name again.
     assert [t["text"] for t in got["names"]] == [
-        "Stage 4 \u00b7 Declining", "Stage 2", "Stage 1 \u00b7 Basing"]
+        "Stage 4 · Declining", "Stage 2", "Stage 1 · Basing"]
     fills = {t["text"]: t["fill"] for t in got["names"]}
-    assert fills["Stage 2"] == "S2" and fills["Stage 1 \u00b7 Basing"] == "S1"
-    # On the band: above it, inside the price area.
-    band_top = got["foot"] - float(got["rects"][0]["height"])
+    assert fills["Stage 2"] == "S2" and fills["Stage 1 · Basing"] == "S1"
+    # Along the foot, inside the price area.
     for t in got["names"]:
-        assert got["top"] < float(t["y"]) < band_top
+        assert got["foot"] - 12 < float(t["y"]) < got["foot"]
 
 
 def test_a_name_stands_aside_for_a_session_caption():
@@ -186,41 +187,43 @@ def test_a_name_stands_aside_for_a_session_caption():
     opts = {**_staged(stages), "labels": days}
     plain = _draw(opts)
     assert [t["text"] for t in plain["names"]] == [
-        "Stage 4 \u00b7 Declining", "Stage 2 \u00b7 Advancing"]
+        "Stage 4 · Declining", "Stage 2 · Advancing"]
     got = _draw({**opts, "sessions": True})
-    assert [t["text"] for t in got["names"]] == ["Stage 4 \u00b7 Declining"]
-    # The tint and the band do not stand aside: only the name does.
-    assert [z["fill"] for z in got["zones"]] == ["S4", "S2"]
+    assert [t["text"] for t in got["names"]] == ["Stage 4 · Declining"]
+    # The line does not stand aside: only the name does.
+    assert [l["stroke"] for l in got["lines"]] == ["S4", "S2"]
 
 
-def test_without_names_the_tint_and_band_still_draw():
+def test_without_names_nothing_is_written():
     opts = _staged(["S4", "S4", "S2", "S2", "S2"])
     del opts["stageNames"]
     got = _draw(opts)
-    assert [z["fill"] for z in got["zones"]] == ["S4", "S2"]
-    assert [r["fill"] for r in got["rects"]] == ["S4", "S2"]
     assert got["names"] == []
+    assert [l["stroke"] for l in got["lines"]] == ["S4", "S2"]
 
 
-def test_no_tint_without_stages():
+def test_no_names_without_stages():
     opts = _staged(["S4"] * 5)
     del opts["stageBand"], opts["stageNames"]
     got = _draw(opts)
-    assert got["zones"] == [] and got["names"] == [] and got["zonesAt"] == -1
+    assert got["names"] == []
+
+
+# ---------------------------------------------------------------- the readout
 
 
 def test_hovering_a_bar_names_its_stage():
     got = _draw(_staged(["S4", "S4", "S2", "S2", "S2"]), hover=0)
-    assert "Stage</span><span>4 \u00b7 Declining</span>" in got["tip"]
+    assert "Stage</span><span>4 · Declining</span>" in got["tip"]
     assert 'style="color:S4"' in got["tip"]
     got = _draw(_staged(["S4", "S4", "S2", "S2", "S2"]), hover=100000)
-    assert "Stage</span><span>2 \u00b7 Advancing</span>" in got["tip"]
+    assert "Stage</span><span>2 · Advancing</span>" in got["tip"]
 
 
 def test_the_readout_is_escaped():
     """A stage's name comes from the server, and the readout is HTML."""
     opts = _staged(["S2"] * 5)
-    opts["stageNames"] = ["Stage 2 \u00b7 <b>x</b>"] * 5
+    opts["stageNames"] = ["Stage 2 · <b>x</b>"] * 5
     got = _draw(opts, hover=0)
     assert "&lt;b&gt;x&lt;/b&gt;" in got["tip"] and "<b>x</b>" not in got["tip"]
 

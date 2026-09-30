@@ -44,13 +44,9 @@ const CW = {
   tag: 700,
 };
 
-/* The stage zones' tint, the strip's height, and the width a stage name is
- * measured at: 10.5px semibold, about 6px a character, estimated rather than
- * measured because the node is not in the document yet (the session captions
- * do the same). The tint is a step under the 0.13 the price bands use: visible
- * across the plot, and well under a candle's full colour. */
-const STAGE_ZONE_OPACITY = 0.12;
-const STAGE_BAND_H = 4;
+/* The width a stage name is measured at: 10.5px semibold, about 6px a
+ * character, estimated rather than measured because the node is not in the
+ * document yet (the session captions do the same). */
 const STAGE_NAME_CHAR = 6;
 
 // Text for the tooltip, which is HTML: a stage's name comes from the server.
@@ -848,8 +844,9 @@ function lineChart(opts) {
      * two chart styles are coloured by one array. */
     candleTints = null,
     /* The Weinstein stage of each bar's week: `stageBand` its colour, and
-     * `stageNames` what to call it ("Stage 4 · Declining"). See the stage
-     * zones below for how they are drawn. */
+     * `stageNames` what to call it ("Stage 4 · Declining"). The candles and
+     * the line are drawn in it through `candleTints` and a series' `tints`;
+     * these name each run along the foot of the price and in the readout. */
     stageBand = null,
     stageNames = null,
     // Sloped lines in (bar index, price) space — trend lines, channels, and any
@@ -1066,24 +1063,19 @@ function lineChart(opts) {
   // chart with a sparse, hard-to-read axis. ~65px per tick keeps labels legible.
   const ticks = niceTicks(lo, hi, Math.max(3, Math.min(8, Math.round(priceH / 65))));
 
-  /* Each bar's stage, drawn in three parts.
+  /* Each run of a stage, for its name along the foot (below).
    *
-   * A tint behind the price for every run of bars in one stage, a strip in
-   * the stage's own colour along the foot of the price area, and the stage's
-   * name on the strip where the run is wide enough to hold it. Hovering a bar
-   * names its stage too (see the tooltip below).
-   *
-   * Stages used to colour the candles and the line themselves, as the reference
-   * chart draws them, and that hid the one thing a candle is for: NKE in stage 4
-   * drew every candle red, rallies included. So every candle keeps its own
-   * direction. The strip alone came next: four pixels under a 470px chart, it
-   * was asked about as "does stages no longer work on the chart?", which is a
-   * fair reading of a colour that small. The tint is what makes the stage
-   * visible across the whole chart, and it is faint enough that a green candle
-   * inside a red zone still reads as the up day it is.
-   *
-   * One run per stretch of a colour, since a stage lasts weeks. Behind the
-   * grid, because it is background: every line and candle reads over it. */
+   * Stages have been drawn three ways here. As the reference chart draws them,
+   * every candle in the colour of its week's stage, which NKE in stage 4 had
+   * reported as "why are all candles [red], even in uptrends like these?".
+   * Then as a four-pixel band along the foot, asked about as "does stages no
+   * longer work on the chart?", and then as a faint tint behind each run. And
+   * now as the reference again, at the reader's word: "keep the candles as is
+   * with the color change as per the reference screenshot, and so the same
+   * feature with the lines". So the candles and the line take the colour
+   * (candleTints, a series' tints), and Stages off gives every bar its own
+   * direction back. What is drawn from these runs is each one's name, which
+   * is what lets a red rally be read as stage 4 rather than as a fall. */
   const stageRuns = [];
   if (Array.isArray(stageBand) && stageBand.length) {
     const half = n > 1 ? plotW / (n - 1) / 2 : plotW / 2;
@@ -1098,14 +1090,6 @@ function lineChart(opts) {
       }
       start = i;
     }
-  }
-  if (stageRuns.length) {
-    const zoneLayer = s('g', { class: 'stage-zones', 'data-fade': animating ? DRAW_MS * 0.45 : null });
-    root.appendChild(zoneLayer);
-    stageRuns.forEach((r) => zoneLayer.appendChild(s('rect', {
-      x: r.x0, y: m.t, width: r.width, height: priceH,
-      fill: r.color, 'fill-opacity': STAGE_ZONE_OPACITY,
-    })));
   }
   // Where the session dividers put their captions along the foot, so a stage
   // name drawn there afterwards can stand aside instead of printing over one.
@@ -1546,19 +1530,14 @@ function lineChart(opts) {
     prevY = r.y;
   });
 
-  /* The stage strip and its names. See the stage zones above. The price
-   * domain is padded 8% below its lowest bar, so the strip sits under the data
-   * rather than on it, and a name sits on the strip, in the stage's colour
-   * with a halo of the plane, only where its run can hold it. The full name
-   * first, then "Stage 4" alone, then nothing: a run a few bars wide still
-   * shows its colour, and the tooltip names it. */
+  /* Each run's name, along the foot of the price area in the stage's colour
+   * with a halo of the plane. The price domain is padded 8% below its lowest
+   * bar, so the names sit under the data rather than on it, and a name is
+   * drawn only where its run can hold it: the full name first, then "Stage 4"
+   * alone, then nothing. A run a few bars wide still shows its colour in its
+   * bars, and the tooltip names it. See the runs above. */
   if (stageRuns.length) {
-    const bandLayer = s('g', { class: 'stage-band' });
-    root.appendChild(bandLayer);
-    const y = m.t + priceH - STAGE_BAND_H;
-    stageRuns.forEach((r) => bandLayer.appendChild(s('rect', {
-      x: r.x0, y, width: r.width, height: STAGE_BAND_H, fill: r.color,
-    })));
+    const y = m.t + priceH - 4;
     const nameLayer = s('g', { class: 'stage-names', 'aria-hidden': 'true' });
     root.appendChild(nameLayer);
     stageRuns.forEach((r) => {
