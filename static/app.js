@@ -85,6 +85,183 @@ const views = {
   settings: $('#view-settings'),
 };
 
+/* ======================================================== DEVICE SESSION ===
+ *
+ * One person's things in this browser at a time.
+ *
+ * Reported from a shared computer: signed out of one account and into another,
+ * the second account opened on the first one's Report a problem text and the
+ * symbols it had been searching. The server was not the leak, every account's
+ * rows there are its own. The browser was: signing in or out never reloaded
+ * the page, so whatever was typed stayed typed, and the stores listed below
+ * live in localStorage, which belongs to the browser rather than to anybody.
+ *
+ * So the browser notes whose things it holds, and when somebody else signs in,
+ * or the account signs out, it puts them away and starts a new page.
+ *
+ * - Put away, not deleted. Drawings, notes, paper trades and Pulse
+ *   conversations exist nowhere else, so each account's go on a shelf of their
+ *   own and come back the next time it signs in here.
+ * - A guest's work goes with the first account signed in over it. That is
+ *   somebody signing up after looking around, and accountLoad brings their
+ *   watchlist and theses across. An account this browser has held before gets
+ *   its own things back instead, and the guest's wait for the next guest.
+ * - Settings stay with the browser. Theme, scale, time zone and how the charts
+ *   are drawn describe the screen, not the person.
+ * - The swap runs at the top of the next load, before any store is read.
+ *   Doing it under the old page would let a write still in flight there, a
+ *   Pulse answer finishing, say, land on the next person's keys.
+ */
+const SESSION_HOLDER_KEY = 'optic.session.holder.v1';
+const SESSION_SHELF_PREFIX = 'optic.session.shelf.';
+const SESSION_NEXT_KEY = 'optic.session.next';    // sessionStorage, so this tab only
+const SESSION_GUEST = 'guest';                     // account ids are UUIDs
+
+/* What a person made, kept or typed. A store added later that holds any of
+ * that belongs here, and tests/test_device_session.py fails until a new key is
+ * listed here or named there as a setting. */
+const PERSONAL_KEYS = [
+  'optic.recent.v1',             // symbols opened, offered back by the search bar
+  'optic.pulse.history.v1',      // Pulse conversations
+  'optic.research.v1',           // saved research, signed out
+  'optic.chart.watch.v1',        // the watchlist, signed out
+  'optic.watchlists.v1',         // named watchlists, signed out
+  'optic.watches.v1',            // watches, signed out
+  'optic.thesis.v1',             // theses, and their backing copy signed in
+  'optic.chart.drawings.v1',
+  'optic.chart.notes.v1',
+  'optic.chart.checks.v1',       // the pre-trade checklist, ticked per symbol
+  'optic.paper.v1',              // paper trades
+  'optic.roth.inputs',           // holdings and contributions
+  'optic.snapshots.v1',          // how a symbol's read has changed
+  'optic.entry.budget.v1',
+  'optic.writeToken',            // the owner's token for writes to the record
+  'optic.auth.passkeyOffered',   // so the next account is offered one as well
+];
+
+let sessionHolderSeen = null;   // whose things this page was loaded with
+let sessionSeen = null;         // who this page last settled on
+let sessionEnding = false;      // a reload into a new session is under way
+let sessionStuck = false;       // this load began with a switch that did not take
+let sessionSaid = '';           // 'in' or 'out', to say once the new page is up
+
+function sessionShelfKey(who) {
+  return SESSION_SHELF_PREFIX + who;
+}
+
+function readSessionShelf(who) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(sessionShelfKey(who)) || 'null');
+    return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : null;
+  } catch (e) { return null; }
+}
+
+/* Put `from`'s things on their shelf and bring `to`'s back.
+ *
+ * Ordered so a full quota part way through leaves every value somewhere. A
+ * live key is removed only once the shelf holding it is written, so if that
+ * write fails this throws with nothing moved. `to`'s shelf is removed only
+ * once all of it is back; anything left on it is merged in when they leave. */
+function swapDeviceSession(from, to) {
+  const leaving = readSessionShelf(from) || {};
+  PERSONAL_KEYS.forEach((key) => {
+    const value = localStorage.getItem(key);
+    if (value !== null) leaving[key] = value;
+  });
+  // Written even when empty: it is also how this browser knows the account.
+  localStorage.setItem(sessionShelfKey(from), JSON.stringify(leaving));
+  PERSONAL_KEYS.forEach((key) => localStorage.removeItem(key));
+  localStorage.setItem(SESSION_HOLDER_KEY, to);
+  const coming = readSessionShelf(to) || {};
+  let whole = true;
+  Object.keys(coming).forEach((key) => {
+    if (PERSONAL_KEYS.indexOf(key) === -1 || typeof coming[key] !== 'string') return;
+    try { localStorage.setItem(key, coming[key]); } catch (e) { whole = false; }
+  });
+  if (whole) localStorage.removeItem(sessionShelfKey(to));
+}
+
+/* Called with every settled auth state. True when the page is about to reload
+ * into a new session, so the caller stops there. */
+function keepDeviceSession(state) {
+  const who = state && state.status === 'user' && state.user && state.user.id
+    ? String(state.user.id) : SESSION_GUEST;
+  const before = sessionSeen;
+  sessionSeen = who;
+  if (sessionEnding) return true;
+  let holder;
+  try { holder = localStorage.getItem(SESSION_HOLDER_KEY); } catch (e) { return false; }
+  if (holder === who) { sessionHolderSeen = holder; return false; }
+  if (holder === null || (holder === SESSION_GUEST && !readSessionShelf(who))) {
+    // Nobody noted yet, or a guest signing in to an account this browser has
+    // never held: what is here is theirs.
+    try {
+      localStorage.setItem(SESSION_HOLDER_KEY, who);
+      sessionHolderSeen = who;
+    } catch (e) { /* storage refused: nothing is kept, so nothing can carry */ }
+    return false;
+  }
+  // The switch this load began with did not take, so storage is refusing
+  // writes and another reload would only come back here.
+  if (sessionStuck) return false;
+  const said = before === null || before === who ? '' : (who === SESSION_GUEST ? 'out' : 'in');
+  try {
+    sessionStorage.setItem(SESSION_NEXT_KEY, JSON.stringify({ to: who, said }));
+  } catch (e) {
+    // No session storage in this tab. Swap under this page instead, and accept
+    // the moment in which a late write could follow.
+    try { swapDeviceSession(holder, who); } catch (err) { return false; }
+  }
+  sessionEnding = true;
+  location.reload();
+  return true;
+}
+
+/* An account deleted from this browser leaves the person at it carrying on as
+ * a guest with what is here, as before. A shelf kept for an account that no
+ * longer exists could never be opened again. */
+function handDeviceSessionToGuest() {
+  try {
+    localStorage.setItem(SESSION_HOLDER_KEY, SESSION_GUEST);
+    sessionHolderSeen = SESSION_GUEST;
+  } catch (e) { /* storage refused */ }
+}
+
+(function beginDeviceSession() {
+  let next = null;
+  try {
+    next = JSON.parse(sessionStorage.getItem(SESSION_NEXT_KEY) || 'null');
+    sessionStorage.removeItem(SESSION_NEXT_KEY);
+  } catch (e) { next = null; }
+  try { sessionHolderSeen = localStorage.getItem(SESSION_HOLDER_KEY); } catch (e) { return; }
+  if (!next || typeof next.to !== 'string' || !next.to) return;
+  try {
+    // Another tab may have made this switch already.
+    if (sessionHolderSeen !== null && sessionHolderSeen !== next.to) {
+      swapDeviceSession(sessionHolderSeen, next.to);
+    }
+    sessionHolderSeen = localStorage.getItem(SESSION_HOLDER_KEY);
+  } catch (e) { /* checked below */ }
+  if (sessionHolderSeen !== next.to) { sessionStuck = true; return; }
+  sessionSaid = next.said === 'in' || next.said === 'out' ? next.said : '';
+  // A browser that restores form fields on reload would put the last person's
+  // words back into these. They are the only fields in the HTML itself.
+  ['rp-text', 'chat-input', 'ticker-input'].forEach((id) => {
+    const field = document.getElementById(id);
+    if (field) field.value = '';
+  });
+}());
+
+// Another tab switched who this browser is for. This one is still showing the
+// last person's page, so it starts again as well.
+window.addEventListener('storage', (evt) => {
+  if (evt.key !== SESSION_HOLDER_KEY || evt.newValue === null || sessionEnding) return;
+  if (sessionHolderSeen === null) { sessionHolderSeen = evt.newValue; return; }
+  if (evt.newValue === sessionHolderSeen) return;
+  sessionEnding = true;
+  location.reload();
+});
+
 /* Views that render without a loaded symbol.
  *
  * An allow-list by omission, so a new view is ticker-specific by default and
@@ -22506,7 +22683,7 @@ function renderSettings() {
       : 'Nothing about you'],
   ])}
     <p class="caveat">${signedIn()
-    ? 'Appearance and chart preferences live in this browser. Your watchlist and saved research live on your account, so clearing site data does not lose them.'
+    ? 'Appearance and chart preferences live in this browser. Your watchlist and saved research live on your account, so clearing site data does not lose them. Recent symbols, Pulse chats, drawings and notes stay in this browser, kept apart for each account, and signing out puts yours away until you sign in here again.'
     : 'Settings live in this browser only. Clearing site data resets them.'}</p>
   </div>
 
@@ -23212,6 +23389,7 @@ document.addEventListener('click', async (evt) => {
       await authApi('/api/auth/delete-account', {
         method: 'POST', body: { confirm_email: typed, password: password },
       });
+      handDeviceSessionToGuest();
       await window.OpticAuth.refresh();
       window.OpticAuth.toast('Account deleted. The terminal stays open.');
       ACCOUNT.ready = false;
@@ -23251,6 +23429,8 @@ if (window.OpticAuth) {
   };
 
   window.OpticAuth.onSignOut = () => {
+    // The page is reloading into a guest session, which starts from nothing.
+    if (sessionEnding) return;
     ACCOUNT.ready = false;
     ACCOUNT.listId = null;
     ACCOUNT.watchlist = null;
@@ -23264,6 +23444,15 @@ if (window.OpticAuth) {
 
   window.OpticAuth.on((state) => {
     if (state.status === 'loading') return;
+    // Before accountLoad, which would otherwise adopt the last person's local
+    // watchlist and theses into this account.
+    if (keepDeviceSession(state)) return;
+    if (sessionSaid) {
+      const said = sessionSaid;
+      sessionSaid = '';
+      window.OpticAuth.toast(said === 'out' ? 'Signed out. The terminal stays open.'
+        : (state.user && state.user.email ? 'Signed in as ' + state.user.email : 'Signed in.'));
+    }
     accountLoad().then(() => {
       if (STATE.view === 'settings') renderSettings();
       if (STATE.view === 'watchlist') { STATE.watchlist = null; loadWatchlist(true); }
