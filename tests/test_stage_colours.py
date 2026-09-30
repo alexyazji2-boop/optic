@@ -172,23 +172,22 @@ def test_an_answer_redraws_only_a_chart_still_showing_that_symbol():
     assert "afterDrawsSettle(() => stagesRedraw(symbol));" in _fn(APP, "stagesArrived")
     fn = _fn(APP, "stagesRedraw")
     assert "d.ticker === symbol" in fn
-    assert "STATE.swing.ticker === symbol" in fn
-    assert "((STATE.instrument || {}).symbol || '') === symbol" in fn
+    # The Charting tab's chart alone: no other chart draws stages.
+    assert "if (STATE.view !== 'chart') return;" in fn
+    assert "swingRedrawChart" not in fn and "drawInstrumentChart" not in fn
     # The colour wheel's OS picker belongs to its input; rebuilding the toolbar
     # under it shuts it.
     assert "wsRedrawChart({ keepToolbar: true })" in fn
 
 
-# ------------------------------------------------------------ the three charts
+# ------------------------------------------------------ the one chart that draws them
 
 
-def test_each_chart_asks_for_its_own_payloads_symbol():
+def test_the_chart_asks_for_its_own_payloads_symbol():
     """STATE.ticker and STATE.chartSymbol are independent, and the colours have
     to be the stages of the bars being drawn."""
     assert "const stages = wsStages(ps);" in _fn(APP, "wsMountChart")
     assert "stageTints((STATE.chartData || {}).ticker, ps.dates, !!ps.intraday)" in _fn(APP, "wsStages")
-    assert "stageTints(d.ticker, ps.dates, ps.intraday)" in _fn(APP, "swingPriceBlock")
-    assert "stageTints(stageSym, d.dates, false)" in _fn(APP, "drawInstrumentChart")
 
 
 def test_with_stages_on_the_candles_and_the_line_take_the_stage_colour():
@@ -199,29 +198,38 @@ def test_with_stages_on_the_candles_and_the_line_take_the_stage_colour():
     [red], even in uptrends like these?"). Stages off is the answer to that
     now: every bar its direction, and the line green or red by its own move."""
     assert "if (!wsCandles(ps)) return null;" not in _fn(APP, "wsStages")
-    assert "const stages = stageTints(d.ticker, ps.dates, ps.intraday);" in _fn(APP, "swingPriceBlock")
-    assert "const stages = stageTints(stageSym, d.dates, false);" in _fn(APP, "drawInstrumentChart")
+    body = _fn(APP, "wsMountChart")
+    assert "candleTints: stages ? stages.colors : null" in body
+    assert "\n          tints: stages ? stages.colors : null" in body
 
 
-def test_all_three_colour_the_candles_the_line_and_the_names_from_one_array():
-    """The candles, the line, the names along the foot and the readout's Stage
-    row are one array on each chart, so a bar cannot be one stage's colour and
-    another's name."""
-    assert APP.count("candleTints: stages ? stages.colors : null") == 3
-    # Case matters: candleTints is the candles', `tints` each chart's line.
-    assert APP.count("tints: stages ? stages.colors : null") == 3, "the three lines"
-    assert APP.count("stageBand: stages ? stages.colors : null") == 3
-    for fn in ("swingPriceBlock", "drawInstrumentChart", "wsMountChart"):
+def test_the_sub_charts_draw_no_stages():
+    """Asked for as "remove the stages from the sub charts. it should be
+    viewing only". The Options chart and the instrument pages coloured their
+    price by stage too, each with its own switch, a key of what the stages
+    mean, and on an instrument page a chip; all of it is gone from both, and
+    they keep the range and Line or Candles. Stages are the Charting tab's."""
+    for fn in ("swingPriceBlock", "drawInstrumentChart", "renderSwing", "renderInstrument"):
         body = _fn(APP, fn)
-        assert "candleTints: stages ? stages.colors : null" in body, fn
-        assert "\n      tints: stages ? stages.colors : null" in body or \
-            "\n          tints: stages ? stages.colors : null" in body, fn
+        for gone in ("stageTints(", "candleTints:", "stageBand:", "stageNames:", "stages.key",
+                     "stagesToggleHTML", "stage-legend", "paintStageLegend", "stage-inst"):
+            assert gone not in body, (fn, gone)
+    for gone in ("function stagesToggleHTML(", "data-stages-toggle", "function paintStageLegend(",
+                 "function stageLegendHTML("):
+        assert gone not in APP, gone
+    assert 'data-inst-mode="candle"' in _fn(APP, "renderInstrument")
+    assert 'data-chart-mode="candle"' in _fn(APP, "renderSwing")
 
 
-def test_all_three_name_the_stages_they_draw():
-    """The band's names and the readout's Stage row come from the same pass
-    that picks each bar's colour, so a name cannot belong to another bar."""
-    assert APP.count("stageNames: stages ? stages.labels : null") == 3
+def test_one_array_colours_the_candles_the_line_and_the_names():
+    """The candles, the line, the names along the foot and the readout's Stage
+    row are one array, so a bar cannot be one stage's colour and another's
+    name."""
+    assert APP.count("candleTints: stages ? stages.colors : null") == 1
+    # Case matters: candleTints is the candles', `tints` the line's.
+    assert APP.count("tints: stages ? stages.colors : null") == 1
+    assert APP.count("stageBand: stages ? stages.colors : null") == 1
+    assert APP.count("stageNames: stages ? stages.labels : null") == 1
     fn = _fn(APP, "stageTints")
     assert "labels.push(title(n));" in fn
     assert "return { colors, labels, key, marks };" in fn
@@ -229,16 +237,14 @@ def test_all_three_name_the_stages_they_draw():
     assert ".map((n) => ({ name: title(n), color: C['stage' + n] }));" in fn
 
 
-def test_the_keys_name_the_stages_instead_of_colours_no_bar_is_drawn_in():
-    """With the price in its stage colours, an Up day and a Down day swatch, or
-    the line's own colour, would name colours nothing on the chart is drawn
-    in."""
+def test_the_charting_legend_names_the_stages_on_screen():
+    """The Charting tab's legend carries the key, with its own hide and remove
+    buttons, and the sub charts' keys name only the up and down colours or the
+    line they draw."""
     swing = _fn(APP, "swingPriceBlock")
-    assert "...(stages ? stages.key : candleMode" in swing
-    assert "...(stages ? stages.key : [])," not in swing
+    assert "...(candleMode" in swing and "stages" not in swing
     inst = _fn(APP, "drawInstrumentChart")
-    assert "...(stages ? stages.key : candles\n      ? [{ name: 'Up day', color: C.s3 }" in inst
-    assert "...(stages ? stages.key : [])," not in inst
+    assert "...(candles ? [{ name: 'Up day', color: C.s3 }, { name: 'Down day', color: C.s8 }]" in inst
     leg = _fn(APP, "wsLegend")
     assert 'data-ws-leg="stages"' in leg
     assert 'data-ws-hide="stages"' in leg and 'data-ws-off="stages"' in leg
@@ -271,26 +277,6 @@ def test_it_is_wired_like_every_other_toggle():
         in setters[:setters.index("};")]
     menus = APP[APP.index("const WS_MENUS = ["):]
     assert "{ id: 'stages', label: 'Stages', items: ['stages'] }," in menus[:menus.index("];")]
-
-
-def test_the_two_charts_without_a_toolbar_menu_have_a_switch_and_it_has_a_handler():
-    """Both directions, as tests/test_auth_client.py asserts for every control:
-    a switch with no handler takes the click and does nothing, and a coloured
-    chart with no switch where it is read leaves the reader hunting."""
-    assert "        ${stagesToggleHTML()}" in _fn(APP, "renderSwing"), "the Options toolbar, every size"
-    assert "${ps.intraday ? '' : stagesToggleHTML()}" not in APP
-    inst = _fn(APP, "renderInstrument")
-    assert "${stagesToggleHTML()}" in inst
-    assert "data-stages-toggle" in _fn(APP, "stagesToggleHTML")
-    handler = APP[APP.index("evt.target.closest('[data-stages-toggle]')"):]
-    handler = handler[:handler.index("return;\n  }")]
-    assert "wsSetOverlay('stages', !on);" in handler
-    assert "setOverlayHidden('stages', false)" in handler, "one press must always change the chart"
-    assert "renderSwing(STATE.swing)" in handler and "renderInstrument(STATE.instrumentData)" in handler
-
-
-def test_the_switch_shows_what_is_drawn_not_what_is_enabled():
-    assert "const on = wsOverlayDrawn('stages');" in _fn(APP, "stagesToggleHTML")
 
 
 def test_the_style_dialog_offers_no_colour_for_it():

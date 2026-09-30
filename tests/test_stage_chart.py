@@ -124,12 +124,18 @@ def test_a_late_answer_for_another_symbol_is_not_painted():
     assert fn.index("await fetchStage(symbol)") < fn.index("!stillCurrent()")
 
 
-def test_both_charts_pass_a_guard_for_their_own_symbol():
+def test_the_chart_passes_a_guard_for_its_own_symbol():
     code = _strip(APP)
     assert "paintStage('stage-ws', stageSym, () => STATE.chartSymbol === stageSym)" in code
-    assert "paintStage('stage-inst', stageSym," in code
-    inst = code[code.index("paintStage('stage-inst'"):]
-    assert "=== stageSym" in inst[:200]
+
+
+def test_an_instrument_page_has_no_stage_chip():
+    """Asked for as "remove the stages from the sub charts. it should be
+    viewing only". The instrument page's chip went with the rest of Stages
+    there; the Charting tab and the overview keep theirs."""
+    code = _strip(APP)
+    assert "stage-inst" not in code
+    assert "paintStage('stage-sec-overview', sym," in code
 
 
 def test_an_unavailable_reading_is_not_a_falsy_test():
@@ -146,10 +152,10 @@ def test_a_failed_fetch_is_not_cached():
     assert re.search(r"if \(!r\) stageCache\.delete", fn)
 
 
-def test_both_hosts_exist_and_start_hidden():
+def test_the_hosts_exist_and_start_hidden():
     code = _strip(APP)
     assert '<span class="stage-chip" id="stage-ws" hidden></span>' in code
-    assert '<span class="stage-chip" id="stage-inst" hidden></span>' in code
+    assert '<span class="stage-chip" id="stage-sec-overview" hidden></span>' in code
 
 
 # -------------------------------------------------------------------- css

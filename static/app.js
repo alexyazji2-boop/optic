@@ -2547,8 +2547,9 @@ const SHOW_SESSIONS_KEY = 'optic.chart.sessions.v1';
  *
  * Off by default, like the overlays above: asked for as "turn stages off by
  * default" once they coloured the price itself. A chart opens with every bar
- * in its own direction, and Stages is a press away on all three charts. The
- * stage chip beside the symbol reads the stage either way. */
+ * in its own direction, and Stages is a press away in the Charting tab's
+ * toolbar, the one chart that draws them. The stage chip beside the symbol
+ * reads the stage either way. */
 let showStages = false;
 const SHOW_STAGES_KEY = 'optic.chart.stages.v1';
 const SHOW_MA_KEY = 'optic.chart.ma.v2';
@@ -8878,14 +8879,8 @@ function swingPriceBlock(d, ps, ctx) {
     // hardcoded s1/s2/s4 that used to live here in candle mode is why the same
     // SMA 20 was a different colour on the two tabs, and why a colour chosen in
     // the dialog was honoured on one of them and dropped on the other.
-    // Before the averages: with Stages on, the mark they must not be mistaken
-    // for is drawn in the stage colours. Same lookup as the Charting tab, on
-    // this payload's own symbol.
-    // The candles, or the line, in their week's stage colour, in both modes,
-    // and each run named along the foot (see stageBand in charts.js).
-    const stages = stageTints(d.ticker, ps.dates, ps.intraday);
-    paintStageLegend('stage-price-legend', d.ticker, () => (STATE.swing || {}).ticker === d.ticker);
-    const maOn = maColorsOnChart(candleMode, stages && stages.marks);
+    // No stage colours here: Stages is the Charting tab's (see drawInstrumentChart).
+    const maOn = maColorsOnChart(candleMode);
     const maColors = { fast: maOn.sma20, mid: maOn.sma50, slow: maOn.sma200 };
 
     // Everything the base chart is already using, so the overlays can take hues
@@ -8904,7 +8899,7 @@ function swingPriceBlock(d, ps, ctx) {
      * on `seriesDrawn(id)` per average. With EMA 9 on and the family flag off
      * the allocator never learned s5 was taken and handed it to Bollinger, so
      * two overlays were drawn in one colour. */
-    const baseColors = chartBaseColors(ps, candleMode, ps.intraday, stages && stages.marks);
+    const baseColors = chartBaseColors(ps, candleMode, ps.intraday);
     const overlayPalette = allocateOverlayColors(baseColors);
     // Kept on STATE so the written explanations below can show the same swatch as
     // the line on the chart. Recomputing it there would drift the moment the base
@@ -8912,9 +8907,8 @@ function swingPriceBlock(d, ps, ctx) {
     STATE.overlayPalette = overlayPalette;
 
     mount('legend-price', legend([
-      // When the price is coloured by stage, the key says so instead of naming
-      // an up and a down colour, or a line colour, that no bar is drawn in.
-      ...(stages ? stages.key : candleMode
+      // The candles' colours, or the line's.
+      ...(candleMode
         // The reader's own candle colours, not s3/s8: those are the defaults
         // chartColor() returns anyway, and hardcoding them made the key lie
         // the moment anyone used the Charting tab's colour picker.
@@ -9001,9 +8995,6 @@ function swingPriceBlock(d, ps, ctx) {
         { name: 'Close',
           values: ps.close,
           color: candleMode ? C.ink : priceLineColor(ps.close),
-          // Line mode's stage colours. Harmless in candle mode, where this
-          // series is not stroked and the candles take the same array.
-          tints: stages ? stages.colors : null,
           hidden: candleMode,
           fill: !candleMode },
         /* Per-average switches, matching the Charting tab's Indicators menu —
@@ -9033,9 +9024,6 @@ function swingPriceBlock(d, ps, ctx) {
       candles: candleMode
         ? { open: ps.open, high: ps.high, low: ps.low, close: ps.close }
         : null,
-      candleTints: stages ? stages.colors : null,
-      stageBand: stages ? stages.colors : null,
-      stageNames: stages ? stages.labels : null,
       refLines: overlayRefs,
       // Under the levels and under the price, so neither is muted by the fill.
       clouds: emaClouds(ps),
@@ -9419,7 +9407,6 @@ function renderSwing(d) {
           <button type="button" data-chart-mode="candle"
             aria-pressed="${chartMode === 'candle'}">Candles</button>
         </div>
-        ${stagesToggleHTML()}
         <details class="lvl-menu">
           <summary aria-label="Indicators">
             <span class="lvl-icon" aria-hidden="true"></span>Indicators${
@@ -9492,7 +9479,6 @@ function renderSwing(d) {
       <div id="legend-price"></div>
       <div id="chart-price"></div>
       <div id="chart-price-note"></div>
-      <div class="stage-legend" id="stage-price-legend" hidden></div>
 
       <!-- Price location. Rides the same 20s poll as everything else on this
            tab: the server refreshes the forming bar from the live quote before
@@ -13517,12 +13503,10 @@ function renderInstrument(d) {
          reads as a sentence whatever it came from. */''}
     <div class="weekly-kicker">${esc(cap(d.group || 'Cross-asset'))}</div>
     <h2 class="weekly-title">${esc(d.label)}${askPulse('instrument')}</h2>
-    ${/* Up here, under the name, rather than between the chart's controls and
-         its legend, where it was read as one more legend entry. Asked for as
-         "move this up". */''}
-    <div class="stage-row inst-stage"><span class="stage-chip" id="stage-inst" hidden></span></div>
-    <p class="weekly-sub">${esc(cap(d.note || ''))} · ${esc(d.symbol)},
-      ${fmt((d.dates || []).length, 0)} daily bars.</p>
+    ${/* What the instrument is, and no more. The symbol and the bar count sat
+         beside it, "^TNX, 252 daily bars", and were asked to go as
+         "unnecessary info". */''}
+    ${d.note ? `<p class="weekly-sub">${esc(cap(d.note))}</p>` : ''}
 
     <div class="inst-stats">
       ${/* The day's change rides on the price rather than taking a tile of its
@@ -13540,6 +13524,10 @@ function renderInstrument(d) {
       ${stat('From 52-week high', fmtPct(s.pct_from_52w_high, 1), signClass(s.pct_from_52w_high))}
     </div>
 
+    ${/* A chart to look at, with nothing to set but how: the range, and Line
+         or Candles. Stages were here as well, with their chip and their key,
+         and were asked to go as "remove the stages from the sub charts. it
+         should be viewing only". They are the Charting tab's. */''}
     <div class="chart-toolbar" style="margin-top:var(--space-4)">
       ${rangePills(INSTRUMENT_RANGES, instrumentRange, 'data-inst-range', 'Timeframe')}
       <div class="seg" role="group" aria-label="Chart style">
@@ -13548,14 +13536,9 @@ function renderInstrument(d) {
         <button type="button" data-inst-mode="candle"
           aria-pressed="${instrumentMode === 'candle'}">Candles</button>
       </div>
-      ${stagesToggleHTML()}
     </div>
     <div id="legend-inst"></div>
     <div id="chart-inst"></div>
-    ${/* Under the chart, not over it: four definitions on a phone are about
-         500px, and above the chart they pushed it that far from its own
-         controls each time Stages was switched on. */''}
-    <div class="stage-legend" id="stage-inst-legend" hidden></div>
     <p class="caveat">${gloss('Daily bars from the same feed the cross-asset tables read, so '
     + 'the level here and the level in the table are the same number. An index level, a '
     + 'yield proxy and a currency cross are not tradeable instruments. This is the '
@@ -13599,12 +13582,15 @@ function fetchStage(symbol) {
   return promise;
 }
 
-/* Every bar's stage, as a colour, for the three charts that draw a price.
+/* Every bar's stage, as a colour, for the Charting tab's price.
  *
- * The charts build synchronously and the reading is a request, so this answers
+ * The one chart that draws stages: the Options chart and the instrument pages
+ * drew them too, until they were asked to be charts for viewing only.
+ *
+ * The chart builds synchronously and the reading is a request, so this answers
  * from what has already landed and starts the fetch if nothing has. The first
  * draw of a new symbol goes out in its up and down colours, and stagesArrived
- * redraws whichever chart is still showing that symbol when the answer comes.
+ * redraws the chart if it is still showing that symbol when the answer comes.
  * A failed fetch redraws nothing, so a network blip cannot start a loop; the
  * next redraw asks again.
  *
@@ -13642,31 +13628,11 @@ function stagesArrived(symbol) {
 }
 
 function stagesRedraw(symbol) {
-  if (STATE.view === 'chart') {
-    const d = STATE.chartData;
-    if (d && d !== 'loading' && d.ticker === symbol) wsRedrawChart({ keepToolbar: true });
-  } else if (STATE.view === 'swing') {
-    if (STATE.swing && STATE.swing.ticker === symbol) swingRedrawChart();
-  } else if (STATE.view === 'instrument') {
-    if (((STATE.instrument || {}).symbol || '') === symbol) drawInstrumentChart(STATE.instrumentData);
-  }
-}
-
-/* The Stages switch on the Options chart and the instrument page. The Charting
- * tab has its own toolbar button; these two have no menu it belongs in, and a
- * chart coloured by stage with no way to turn it off where it is being read
- * would leave the reader hunting for the tab that has one.
- *
- * Pressed means drawn, not merely enabled: hidden from the Charting legend's
- * eye, the colours are off here too, and a lit button over up-and-down bars
- * would be a control disagreeing with the chart under it. */
-function stagesToggleHTML() {
-  const on = wsOverlayDrawn('stages');
-  return `<div class="seg" role="group" aria-label="Price colour">
-    <button type="button" data-stages-toggle aria-pressed="${on}"
-      title="${on ? 'Colour the bars by up and down instead'
-    : 'Colour each bar by the Weinstein stage of its week'}">Stages</button>
-  </div>`;
+  // The Charting tab alone: the Options chart and the instrument pages draw no
+  // stages (see drawInstrumentChart).
+  if (STATE.view !== 'chart') return;
+  const d = STATE.chartData;
+  if (d && d !== 'loading' && d.ticker === symbol) wsRedrawChart({ keepToolbar: true });
 }
 
 function stageTints(symbol, dates, intraday) {
@@ -13725,45 +13691,6 @@ async function paintStage(hostId, symbol, stillCurrent) {
   host.hidden = false;
 }
 
-/* What stages 1 to 4 are, under a chart whose bars are coloured by them.
- *
- * Asked for as "include a legend of what stages 1-4 is when it is selected":
- * the chart's own key named only the stages on screen, as colours, and said
- * nothing of what any of them meant. The definitions are the server's
- * (stage.MEANINGS, written beside the rule that decides them), so this cannot
- * describe a stage the classifier does not draw. Shown only while Stages is
- * on, with the stage the symbol is in now marked. */
-function stageLegendHTML(r) {
-  const names = r.names || {};
-  const meanings = r.meanings || {};
-  return `<p class="stage-legend-h">What the stages mean</p>
-    <ul class="stage-legend-list">${[1, 2, 3, 4].map((n) => `<li class="stage-legend-item stage-${n}${
-    r.stage === n ? ' is-now' : ''}">
-      <span class="stage-dot" aria-hidden="true"></span>
-      <span class="stage-legend-name">Stage ${n} · ${esc(names[n] || '')}${
-    r.stage === n ? ' <span class="stage-legend-now">now</span>' : ''}</span>
-      <span class="stage-legend-means">${esc(meanings[n] || '')}</span>
-    </li>`).join('')}</ul>`;
-}
-
-async function paintStageLegend(hostId, symbol, stillCurrent) {
-  const host = document.getElementById(hostId);
-  if (!host) return;
-  if (!wsOverlayDrawn('stages') || !symbol) {
-    host.hidden = true;
-    host.innerHTML = '';
-    return;
-  }
-  const r = await fetchStage(symbol);
-  if (stillCurrent && !stillCurrent()) return;
-  // Looked up again: the chart may have been redrawn while the fetch was out.
-  const again = document.getElementById(hostId);
-  // `available !== true`: an unavailable reading is a truthy object.
-  if (!again || !r || r.available !== true || !wsOverlayDrawn('stages')) return;
-  again.innerHTML = stageLegendHTML(r);
-  again.hidden = false;
-}
-
 function drawInstrumentChart(d) {
   if (!d || d === 'loading' || !d.available) return;
   const host = document.getElementById('chart-inst');
@@ -13775,20 +13702,11 @@ function drawInstrumentChart(d) {
      depending on where the reader had just been, which is worse than either
      answer on its own because it is not repeatable. */
   setChartLive(chartLiveForSymbol((STATE.instrument || {}).symbol || d.symbol));
-  const stageSym = (STATE.instrument || {}).symbol || d.symbol;
-  paintStage('stage-inst', stageSym,
-    () => ((STATE.instrument || {}).symbol || '') === stageSym);
-  paintStageLegend('stage-inst-legend', stageSym,
-    () => ((STATE.instrument || {}).symbol || '') === stageSym);
   const candles = instrumentMode === 'candle' && d.open && d.high && d.low
     ? { open: d.open, high: d.high, low: d.low, close: d.close } : null;
-  // The candles, or the line, in their week's stage colour, as on the other
-  // two charts.
-  const stages = stageTints(stageSym, d.dates, false);
   const lineColor = candles ? C.brand : priceLineColor(d.close);
   mount('legend-inst', legend([
-    ...(stages ? stages.key : candles
-      ? [{ name: 'Up day', color: C.s3 }, { name: 'Down day', color: C.s8 }]
+    ...(candles ? [{ name: 'Up day', color: C.s3 }, { name: 'Down day', color: C.s8 }]
       : [{ name: d.label, color: lineColor }]),
     ...(d.volume ? [{ name: 'Volume', color: C.ink2, boxed: true }] : []),
   ]));
@@ -13798,12 +13716,8 @@ function drawInstrumentChart(d) {
     labels: d.dates || [],
     volume: d.volume || null,
     series: [{ name: d.label, values: d.close, color: lineColor,
-      tints: stages ? stages.colors : null,
       hidden: !!candles, fill: !candles }],
     candles,
-    candleTints: stages ? stages.colors : null,
-    stageBand: stages ? stages.colors : null,
-    stageNames: stages ? stages.labels : null,
     valueTags: true,
   }));
 }
@@ -33104,21 +33018,6 @@ document.addEventListener('click', (evt) => {
     // The Swing chart shares these flags, so it redraws too or the two tabs
     // disagree about what is switched on.
     if (STATE.swing) preserveUI(views.swing, () => renderSwing(STATE.swing));
-    return;
-  }
-  /* See stagesToggleHTML. Turning it on also un-hides it, so one press always
-   * changes the chart. The whole view re-renders, not only the chart, because
-   * the button's own pressed state is part of the view. */
-  if (evt.target.closest('[data-stages-toggle]')) {
-    const on = wsOverlayDrawn('stages');
-    if (!on && overlayHidden('stages')) setOverlayHidden('stages', false);
-    wsSetOverlay('stages', !on);
-    if (STATE.view === 'swing' && STATE.swing) {
-      preserveUI(views.swing, () => renderSwing(STATE.swing));
-    } else if (STATE.view === 'instrument' && STATE.instrumentData) {
-      views.instrument.innerHTML = renderInstrument(STATE.instrumentData);
-      drawInstrumentChart(STATE.instrumentData);
-    }
     return;
   }
   /* Explore. A screen row opens the Scan view on that screen; a sector row

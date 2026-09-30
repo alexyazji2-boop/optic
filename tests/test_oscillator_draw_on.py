@@ -140,8 +140,10 @@ def test_both_kinds_of_draw_on_are_tracked():
 def test_the_stage_redraw_waits_for_the_sweep():
     assert "afterDrawsSettle(() => stagesRedraw(symbol));" in fn("stagesArrived")
     redraw = fn("stagesRedraw")
-    for view in ("'chart'", "'swing'", "'instrument'"):
-        assert view in redraw
+    # The Charting tab alone: the other charts draw no stages.
+    assert "if (STATE.view !== 'chart') return;" in redraw
+    for view in ("'swing'", "'instrument'"):
+        assert view not in redraw
 
 
 # ---------------------------------------------------- the Charting tab

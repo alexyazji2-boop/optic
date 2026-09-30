@@ -118,7 +118,8 @@ def test_one_resolver_answers_for_both_tabs():
     assert "{ fast: C.s1, mid: C.s2, slow: C.s4 }" not in APP_JS
     assert "const maColors = { fast: maOn.sma20, mid: maOn.sma50, slow: maOn.sma200 };" in APP_JS
     assert "const wsMaColors = maColorsOnChart(wsCandles(ps), stages && stages.marks);" in APP_JS
-    assert "const maOn = maColorsOnChart(candleMode, stages && stages.marks);" in APP_JS
+    # No stages on the Options chart any more, so nothing of theirs to keep clear of.
+    assert "const maOn = maColorsOnChart(candleMode);" in APP_JS
 
 
 def test_a_chosen_colour_is_never_moved():
@@ -154,11 +155,12 @@ def test_both_tabs_seed_the_study_allocator_identically():
     """allocateOverlayColors takes the first colour not already taken, so two
     tabs seeding it differently give the same study two different colours."""
     assert "function chartBaseColors(" in APP_JS
-    # Both pass the stage marks too, so with Stages on neither seeds the
-    # allocator with up and down colours no bar is drawn in.
+    # The Charting tab passes its stage marks, so with Stages on it does not
+    # seed the allocator with up and down colours no bar is drawn in. The
+    # Options chart draws no stages any more, so it has none to pass.
     assert re.search(r"chartBaseColors\(ps, wsCandles\(ps\), isIntradayRange\(chartRange\),"
                      r"\s*stages && stages\.marks\)", APP_JS)
-    assert "chartBaseColors(ps, candleMode, ps.intraday, stages && stages.marks)" in APP_JS
+    assert "chartBaseColors(ps, candleMode, ps.intraday)" in APP_JS
 
 
 def test_the_seed_counts_what_is_drawn_not_the_family_flag():
