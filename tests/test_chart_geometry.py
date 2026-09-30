@@ -48,12 +48,10 @@ def run_js(scenario):
     src = ("var chartRange = '6m';\nvar chartMode = 'line';\n"
            "var STATE = {chartData: null, chartSymbol: 'PLTR'};\n"
            "var wsIntraday = null;\n"
-           "var intradayWindows = {};\n"
            "function assert(v, m) { if (!v) throw new Error(m); }\n"
            + array_const("CHART_RANGES") + "\n"
            # The bars in hand are matched on the window as well as the size.
            + array_const("CHART_INTERVALS") + "\n"
-           + object_const("INTRADAY_WINDOWS") + "\n"
            + "\n".join(function(n) for n in
                        ["isIntradayRange", "chartIntervalSpec", "intradayWindow",
                         "wsCandles", "wsCandlesPossible"])

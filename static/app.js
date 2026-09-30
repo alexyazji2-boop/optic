@@ -2064,7 +2064,7 @@ const CHART_INTERVALS = [
    *
    * A count of minutes has no such clash, and it is the notation the rest of
    * the industry already uses for a resolution. */
-  // `period` is the window each size opens on; the others are INTRADAY_WINDOWS.
+  // `period` is the window each size is drawn over, and the only one it offers.
   { key: '1', label: '1m', intraday: true, window: '1 day', feed: '1m', period: '1d' },
   { key: '5', label: '5m', intraday: true, window: '5 days', feed: '5m', period: '5d' },
   { key: '15', label: '15m', intraday: true, window: '1 month', feed: '15m', period: '1mo' },
@@ -2135,51 +2135,20 @@ function chartIntervalLabel() {
  * server actually fetched and is the only part of it a reader can use. */
 function chartWindowLabel() {
   if (!isIntradayRange(chartRange)) return chartRange;
-  const spec = chartIntervalSpec(chartRange) || {};
-  const win = intradayWindow(chartRange);
-  return (win !== spec.period && WINDOW_WORDS[win]) || spec.window || chartRange;
+  return (chartIntervalSpec(chartRange) || {}).window || chartRange;
 }
 
-/* The lookbacks each intraday size offers: the intraday counterpart of 1D's
- * range pills. The same lists as INTRADAY_SPECS in app/main.py, which refuses
- * a window a size does not offer, and tests/test_timeframe_parity.py holds the
- * two to the same lists. Kept apart from CHART_INTERVALS so the ladder's own
- * entries keep their shape. */
-const INTRADAY_WINDOWS = {
-  1: [{ key: '1d', label: '1D' }, { key: '5d', label: '5D' }],
-  5: [{ key: '1d', label: '1D' }, { key: '5d', label: '5D' }, { key: '1mo', label: '1M' }],
-  15: [{ key: '5d', label: '5D' }, { key: '1mo', label: '1M' }, { key: '60d', label: '60D' }],
-  30: [{ key: '5d', label: '5D' }, { key: '1mo', label: '1M' }, { key: '60d', label: '60D' }],
-  60: [{ key: '1mo', label: '1M' }, { key: '3mo', label: '3M' }, { key: '6mo', label: '6M' },
-    { key: '1y', label: '1Y' }],
-  240: [{ key: '3mo', label: '3M' }, { key: '6mo', label: '6M' }, { key: '1y', label: '1Y' },
-    { key: '2y', label: '2Y' }],
-};
-
-/* The window each intraday size is drawn over: the reader's choice where it is
- * one the size offers, the size's own default otherwise. Remembered per size,
- * as 1D remembers its range. */
-const INTRADAY_WINDOW_KEY = 'optic.chart.intradayWindow.v1';
-const WINDOW_WORDS = { '1d': '1 day', '5d': '5 days', '1mo': '1 month', '60d': '60 days',
-  '3mo': '3 months', '6mo': '6 months', '1y': '1 year', '2y': '2 years' };
-let intradayWindows = {};
-try {
-  const saved = JSON.parse(localStorage.getItem(INTRADAY_WINDOW_KEY) || '{}');
-  if (saved && typeof saved === 'object') intradayWindows = saved;
-} catch (e) { /* private mode, or hand-edited storage */ }
-
+/* The window each intraday size is drawn over: its own default, and no other.
+ *
+ * Each size used to offer a row of windows of its own beside the bar sizes,
+ * 5D, 1M and 60D next to 15m, and remember the one picked. Asked to go, as
+ * "only keep the 1m, 5m, and etc": 1M beside 1m read as the same control
+ * twice. The server still takes a window (INTRADAY_SPECS in app/main.py) and
+ * this always asks for the size's default, so a choice remembered from before
+ * cannot leave a size on a window nothing on screen can change. */
 function intradayWindow(rung) {
   const spec = chartIntervalSpec(rung);
-  const offered = INTRADAY_WINDOWS[rung];
-  if (!spec || !offered) return (spec && spec.period) || '';
-  const want = intradayWindows[rung];
-  return offered.some((w) => w.key === want) ? want : spec.period;
-}
-
-function setIntradayWindow(rung, win) {
-  intradayWindows = { ...intradayWindows, [rung]: win };
-  try { localStorage.setItem(INTRADAY_WINDOW_KEY, JSON.stringify(intradayWindows)); }
-  catch (e) { /* private mode: remembered for the session */ }
+  return (spec && spec.period) || '';
 }
 
 /* The key for the bars on screen under a day: the size alone on its default
@@ -15572,18 +15541,10 @@ function wsToolbar() {
          weekly halves of it write to different variables -- see the comment
          on CHART_INTERVALS -- but a reader is choosing one thing. */''}
     ${wsIntervalMenu()}
-    ${isIntradayRange(chartRange) && (INTRADAY_WINDOWS[chartRange] || []).length
-    /* Each size's own windows, where 1D has its ranges. This was one disabled
-       pill naming a fixed lookback; the feed serves far more (60 days at 5m,
-       two years at 1h), so each size offers what it can draw readably. */
-    ? rangePills(INTRADAY_WINDOWS[chartRange], intradayWindow(chartRange),
-      'data-ws-iwin', 'Window')
-    : isIntradayRange(chartRange)
-    // A legacy key with no windows of its own: the old fixed pill, disabled.
-    ? `<div class="pills" role="group" aria-label="Range"
-        title="An intraday size is fetched with the window that keeps it readable">
-        <button type="button" class="pill on" disabled aria-pressed="true">${
-    esc((chartIntervalSpec(chartRange) || {}).window || 'intraday')}</button></div>`
+    ${/* The ranges for 1D and 1W. A size under a day has none beside it: it is
+         drawn over its own window (see intradayWindow), and its row of 5D, 1M
+         and 60D was asked to go. */''}
+    ${isIntradayRange(chartRange) ? ''
     : rangePills(CHART_RANGES.filter((r) => !r.intraday), chartRange,
       'data-ws-range', 'Range')}
     ${wsWindow ? `<button type="button" class="ws-menu-btn ws-zoom-reset"
@@ -33181,19 +33142,6 @@ document.addEventListener('click', (evt) => {
     // wsResetChart pushes its own undo entry first, so this is reversible
     // with the same arrow the drawing tools use.
     wsResetChart();
-    return;
-  }
-  const wsIwin = evt.target.closest('[data-ws-iwin]');
-  if (wsIwin) {
-    const before = wsFrameKey();
-    setIntradayWindow(chartRange, wsIwin.dataset.wsIwin);
-    wsWindow = null;   // a window pill overrides a manual zoom, as a range pill does
-    if (wsFrameKey() !== before) wsFrameSweep = ++wsSweepSeq;
-    wsLoadIntraday();
-    // Studies and trend lines are computed on these bars, so a new window needs
-    // new ones.
-    if (wsPriceIndicatorIds().length) wsLoadIndicators();
-    if (showTrends) loadTrendlines(STATE.chartSymbol);
     return;
   }
   const wsInt = evt.target.closest('[data-ws-interval]');

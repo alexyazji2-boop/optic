@@ -246,20 +246,19 @@ def test_no_client_function_is_declared_twice():
 # ------------------------------------------------------------ intraday windows
 
 
-def _client_windows():
-    block = APP[APP.index("const INTRADAY_WINDOWS = {"):]
-    block = block[:block.index("\n};")]
-    out = {}
-    for rung, body in re.findall(r"^\s*(\d+): \[(.*?)\],?$", block, re.M | re.S):
-        out[rung] = re.findall(r"key: '([^']+)'", body)
-    return out
-
-
-def test_the_browser_and_the_server_offer_the_same_windows():
-    """The server refuses a window a size does not offer, so a pill the server
-    would refuse is a dead control."""
-    server = {k: v["windows"] for k, v in main.INTRADAY_SPECS.items() if "windows" in v}
-    assert _client_windows() == server
+def test_a_size_under_a_day_is_drawn_over_its_own_window_only():
+    """The row of windows beside each size (5D, 1M and 60D beside 15m) was
+    asked to go, as "only keep the 1m, 5m, and etc". Each size asks for its
+    default, which the server offers, and nothing remembered from before can
+    hold a size on a window no control can change."""
+    fn = _fn("intradayWindow")
+    assert "return (spec && spec.period) || '';" in fn
+    for gone in ("INTRADAY_WINDOWS", "setIntradayWindow", "intradayWindows",
+                 "INTRADAY_WINDOW_KEY", "data-ws-iwin", "WINDOW_WORDS"):
+        assert gone not in APP, gone
+    for key, spec in main.INTRADAY_SPECS.items():
+        if "windows" in spec:
+            assert spec["period"] in spec["windows"], key
 
 
 def test_each_size_opens_on_its_old_window():
@@ -289,19 +288,10 @@ def test_studies_and_trend_lines_are_computed_on_the_same_window(monkeypatch):
     assert feed.intraday_calls.count(("PLTR", "1mo", "5m")) == 2
 
 
-def test_the_toolbar_offers_the_windows_and_they_have_a_handler():
+def test_the_toolbar_offers_ranges_for_a_day_and_nothing_beside_a_smaller_size():
     tb = _fn("wsToolbar")
-    # The branch has to be taken, not merely exist: `${false ?` left the call
-    # in place and the fixed pill on screen.
-    cond = "${isIntradayRange(chartRange) && (INTRADAY_WINDOWS[chartRange] || []).length\n"
-    call = "? rangePills(INTRADAY_WINDOWS[chartRange], intradayWindow(chartRange),\n      'data-ws-iwin', 'Window')"
-    assert cond in tb and call in tb
-    assert tb.index(cond) < tb.index(call) < tb.index(cond) + 400
-    handler = APP[APP.index("const wsIwin = evt.target.closest('[data-ws-iwin]');"):]
-    handler = handler[:handler.index("return;\n  }")]
-    for part in ("setIntradayWindow(chartRange, wsIwin.dataset.wsIwin);", "wsWindow = null;",
-                 "wsLoadIntraday();", "wsLoadIndicators();", "loadTrendlines(STATE.chartSymbol);"):
-        assert part in handler, part
+    assert "${isIntradayRange(chartRange) ? ''\n    : rangePills(CHART_RANGES.filter((r) => !r.intraday), chartRange,\n      'data-ws-range', 'Range')}" in tb
+    assert "'Window')" not in tb and "disabled aria-pressed" not in tb
 
 
 def test_everything_computed_on_the_bars_keys_on_the_window():

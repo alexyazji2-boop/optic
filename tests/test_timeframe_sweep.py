@@ -52,9 +52,6 @@ def test_each_press_marks_a_sweep_only_when_the_time_frame_changes():
     assert rng.index("const before = wsFrameKey();") < rng.index("chartRange = wsRange.dataset.wsRange;")
     assert "if (wsFrameKey() !== before) wsFrameSweep = ++wsSweepSeq;" in rng
     assert rng.index("wsFrameSweep = ++wsSweepSeq") < rng.index("wsRedrawChart();")
-    win = _handler("const wsIwin = evt.target.closest('[data-ws-iwin]');")
-    assert win.index("const before = wsFrameKey();") < win.index("setIntradayWindow(")
-    assert win.index("wsFrameSweep = ++wsSweepSeq") < win.index("wsLoadIntraday();")
     size = _handler("const wsInt = evt.target.closest('[data-ws-interval]');")
     # Both branches, after the size is written and before it is drawn.
     assert size.count("if (wsFrameKey() !== before) wsFrameSweep = ++wsSweepSeq;") == 2
