@@ -13743,7 +13743,8 @@ body.chat-full .rp { display: none; }
 }
 /* The sign-in dialog's close button (.auth-close), in the row rather than
    positioned absolutely: the panel is not a positioned box. */
-.rp-close {
+.rp-close,
+.explain-close {
   flex: none;
   width: 28px;
   height: 28px;
@@ -13756,8 +13757,51 @@ body.chat-full .rp { display: none; }
   cursor: pointer;
   transition: background var(--dur-ui) var(--ease-ui), color var(--dur-ui) var(--ease-ui);
 }
-.rp-close:hover { background: var(--surface-2); color: var(--ink); }
-.rp-close:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.rp-close:hover,
+.explain-close:hover { background: var(--surface-2); color: var(--ink); }
+.rp-close:focus-visible,
+.explain-close:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+/* A chip's free answer, beside the chip (see ASK_EXPLAINERS). In the page, so
+   it scrolls with what it explains, and never wider than the window. */
+.explain-pop {
+  position: absolute;
+  z-index: 80;
+  width: min(460px, calc(100vw - 24px));
+  /* A five-paragraph answer measured 664px tall at 400px wide, past the foot
+     of a 785px window. Wider, and it scrolls inside past 70% of the window. */
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-4) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--elev-2);
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  line-height: 1.55;
+}
+.explain-pop:focus { outline: none; }
+.explain-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.explain-title { font: 600 var(--t-body)/1.35 var(--sans); color: var(--ink); }
+.explain-body p { margin: 0 0 var(--space-2); }
+.explain-more {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: 600 var(--t-small)/1.4 var(--sans);
+  cursor: pointer;
+  transition: color var(--dur-ui) var(--ease-ui);
+}
+.explain-more:hover { color: var(--ink); }
+.explain-cost { margin-left: var(--space-2); font-size: var(--t-caption); color: var(--ink-muted); }
 .rp-label {
   display: block;
   margin-bottom: var(--space-1);

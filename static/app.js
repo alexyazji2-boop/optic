@@ -25696,11 +25696,111 @@ const PULSE_ASK_LABELS = {
   earningsweek: "What's worth watching?",
 };
 
+/* Answers shown free, where the chip asks what something is.
+ *
+ * Reported by a user: "if there's an option like "Why three horizons" next to
+ * the Side by side, the user shouldn't have to use 1 out of 3 chats with Pulse
+ * to do that, it should be free information". Every chip opened Pulse with its
+ * question typed, and a free account has three of those a day. A chip that
+ * asks what something IS has a fixed answer, so it opens that answer beside
+ * itself, with no request, and offers Pulse for a follow-up. A chip about
+ * today's numbers ("What is the flow saying?") still goes to Pulse, the only
+ * thing here that can read them.
+ *
+ * Each answer is the terminal's own wording, never new copy: the glossary
+ * entries the page already shows on hover, or, for the comparison, what
+ * app/analytics/compare.py scores each horizon from and the gap it calls a
+ * close call. */
+const ASK_EXPLAINERS = {
+  compare: {
+    paragraphs: [
+      'A stock can be a good trade and a poor investment at the same time, so the comparison answers three questions separately instead of naming one winner.',
+      'Swing setup, over one to eight weeks: 14-session RSI, implied against 20-session realised volatility, 21-session strength against SPY, and price against its 20- and 50-day averages.',
+      'Position setup, over several weeks to several months: price against its 50- and 200-day averages, 21-session relative strength, and valuation against the company\'s own history.',
+      'Long-term trend, over years: the five-year annualised return and that return per unit of volatility, the current and the worst drawdown from a high, position against the 200-day average, and valuation against its own multi-year range.',
+      'Each horizon is a 0 to 100 score on the same scale, ranked on its own. A name that leads one and trails another is the useful case: it says which question that name answers well. A lead under 8 points is a close call rather than a ranking, and today\'s move is context only, never what orders the position or long-term ranks.',
+    ],
+  },
+  gex: { gloss: ['gex', 'dealer gamma', 'gamma flip'] },
+  iv: { gloss: ['implied volatility', 'iv rank'] },
+  levels: { gloss: ['gamma pin', 'gamma flip'] },
+  pehistory: { gloss: ['p/e', 'forward p/e'] },
+};
+
+/* The answer as HTML. Glossary entries are the page's own constants and are
+ * already written as HTML (an ampersand is &amp; there); anything else is
+ * escaped. */
+function explainerHTML(topic) {
+  const ex = ASK_EXPLAINERS[topic];
+  if (!ex) return '';
+  const parts = ex.paragraphs
+    ? ex.paragraphs.map((p) => esc(p))
+    : (ex.gloss || []).map((k) => GLOSSARY[k]).filter(Boolean);
+  return parts.map((p) => `<p>${p}</p>`).join('');
+}
+
 function askPulse(topic) {
   const label = PULSE_ASK_LABELS[topic] || 'Ask Pulse';
+  if (ASK_EXPLAINERS[topic]) {
+    return `<button type="button" class="ask-pulse" data-explain="${esc(topic)}"
+      aria-haspopup="dialog" aria-expanded="false" title="${esc(label)}">${esc(label)}</button>`;
+  }
   return `<button type="button" class="ask-pulse" data-ask="${esc(topic)}"
     title="Ask Pulse: ${esc(label)}">${esc(label)}</button>`;
 }
+
+/* The answer, beside the chip that asked. In the page rather than fixed to the
+ * window, so it scrolls with the chip. */
+function openExplainer(btn) {
+  closeExplainer(false);
+  const topic = btn.dataset.explain;
+  const body = explainerHTML(topic);
+  if (!body) return;
+  const title = PULSE_ASK_LABELS[topic] || '';
+  const pop = document.createElement('div');
+  pop.className = 'explain-pop';
+  pop.id = 'explain-pop';
+  pop.dataset.topic = topic;
+  pop.setAttribute('role', 'dialog');
+  pop.setAttribute('aria-label', title);
+  pop.tabIndex = -1;
+  pop.innerHTML = `<div class="explain-head">
+      <strong class="explain-title">${esc(title)}</strong>
+      <button type="button" class="explain-close" data-explain-close aria-label="Close">&times;</button>
+    </div>
+    <div class="explain-body">${body}</div>
+    ${PULSE_TOPICS[topic] ? `<button type="button" class="explain-more" data-ask="${esc(topic)}"
+      >Ask Pulse a follow-up</button><span class="explain-cost">Uses a Pulse chat.</span>` : ''}`;
+  document.body.appendChild(pop);
+  const r = btn.getBoundingClientRect();
+  const edge = 12;
+  const w = pop.offsetWidth;
+  const h = pop.offsetHeight;
+  const left = Math.max(edge, Math.min(r.left, document.documentElement.clientWidth - w - edge));
+  let top = r.bottom + 8;
+  if (top + h > window.innerHeight - edge && r.top - h - 8 > edge) top = r.top - h - 8;
+  pop.style.left = `${Math.round(left + window.scrollX)}px`;
+  pop.style.top = `${Math.round(top + window.scrollY)}px`;
+  btn.setAttribute('aria-expanded', 'true');
+  explainerFrom = btn;
+  pop.focus({ preventScroll: true });
+}
+
+let explainerFrom = null;
+
+function closeExplainer(refocus) {
+  const pop = document.getElementById('explain-pop');
+  if (pop) pop.remove();
+  if (explainerFrom) {
+    explainerFrom.setAttribute('aria-expanded', 'false');
+    if (refocus && explainerFrom.isConnected) explainerFrom.focus({ preventScroll: true });
+  }
+  explainerFrom = null;
+}
+
+document.addEventListener('keydown', (evt) => {
+  if (evt.key === 'Escape' && document.getElementById('explain-pop')) closeExplainer(true);
+});
 
 /** Open Pulse with a prompt already typed, ready to send or edit. */
 function openPulseWithText(text) {
@@ -32933,8 +33033,18 @@ document.addEventListener('click', (evt) => {
     openPulseWithText(chartPulsePrompt(askChart.dataset.askChart));
     return;
   }
+  /* A free answer, and its close. A click anywhere else closes it too, and
+     carries on to whatever it was aimed at. */
+  const explainChip = evt.target.closest('[data-explain]');
+  if (explainChip) {
+    if (explainerFrom === explainChip) closeExplainer(true);
+    else openExplainer(explainChip);
+    return;
+  }
+  if (evt.target.closest('[data-explain-close]')) { closeExplainer(true); return; }
+  if (!evt.target.closest('#explain-pop')) closeExplainer(false);
   const ask = evt.target.closest('[data-ask]');
-  if (ask) { openPulseWith(ask.dataset.ask); return; }
+  if (ask) { closeExplainer(false); openPulseWith(ask.dataset.ask); return; }
   const analyse = evt.target.closest('[data-analyse]');
   if (analyse) { loadTicker(analyse.dataset.analyse, 'swing'); return; }
   const drop = evt.target.closest('[data-drop-attach]');

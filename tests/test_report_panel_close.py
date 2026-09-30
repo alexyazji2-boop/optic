@@ -33,9 +33,10 @@ def test_it_closes_the_panel_and_hands_focus_back():
 
 
 def test_it_looks_like_the_sign_in_dialogs_close_button():
-    rule = CSS[CSS.index("\n.rp-close {"):]
+    # Shared with the free explanations' close button since they arrived.
+    rule = CSS[CSS.index("\n.rp-close,\n.explain-close {"):]
     rule = rule[:rule.index("}")]
     for decl in ("width: 28px;", "height: 28px;", "background: none;", "border: 0;",
                  "font: 400 20px/1 var(--sans);", "color: var(--ink-muted);"):
         assert decl in rule, decl
-    assert ".rp-close:hover { background: var(--surface-2); color: var(--ink); }" in CSS
+    assert ".rp-close:hover,\n.explain-close:hover { background: var(--surface-2); color: var(--ink); }" in CSS
