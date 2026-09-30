@@ -157,7 +157,7 @@ def test_a_result_landing_does_not_throw_away_what_is_being_typed():
     assert "opts && opts.full" in fn
     assert "preserveUI(host" in fn
     # And the form is rebuilt when something outside it moved the query.
-    for control in ("data-ins-pick", "data-ins-reset", "data-ins-load"):
+    for control in ("data-ins-pick", "data-ins-reset"):
         i = APP.index("closest('[" + control + "]')")
         assert "renderInsidersFacetHost({ full: true })" in APP[i:i + 900], control
 
@@ -202,34 +202,25 @@ def test_the_filter_form_is_rendered_once():
     assert facet.count("insSymbolForm()") == 1
 
 
-def test_the_window_is_not_part_of_a_saved_search():
+def test_reset_keeps_the_window():
     """`days` is how the reader is reading the chart, not what they are looking
-    for. A saved search that silently rewound the window would change the
-    picture without changing the question."""
-    for anchor in ("data-ins-reset", "data-ins-load"):
-        i = APP.index("closest('[" + anchor + "]')")
-        assert "days: congressQuery.days" in APP[i:i + 700], anchor
+    for. A Reset that silently rewound the window would change the picture
+    without changing the question."""
+    i = APP.index("closest('[data-ins-reset]')")
+    assert "days: congressQuery.days" in APP[i:i + 700]
 
 
-def test_saved_searches_survive_a_browser_without_storage():
-    """Private mode throws on setItem, and an exception in a click handler
-    stops the handler -- the search would be lost AND the page would stop
-    responding to the button."""
-    assert "function congressSaveSearches()" in APP
-    fn = function("congressSaveSearches")
-    assert "catch" in fn
-    # And reading it back cannot trust what is there: something else may have
-    # written the key, or a previous version of this page.
-    block = APP.split("localStorage.getItem(INS_SAVED_KEY)", 1)[1][:300]
-    assert "Array.isArray(raw)" in block
-
-
-def test_a_saved_name_replaces_rather_than_duplicates():
-    """Two chips with the same label doing different things is worse than
-    losing the first one."""
-    i = APP.index("closest('[data-ins-save]')")
-    block = APP[i:i + 900]
-    assert "filter((x) => x.name !== name)" in block
+def test_the_saved_searches_are_gone_and_leave_nothing_behind():
+    """Save this search went with the six-field form (3fd6ad7), and the code
+    behind it stayed: a load that read `INS_SAVED_KEY` after its definition
+    was deleted, so it threw a ReferenceError on every page load that a
+    try/catch swallowed, plus save, load and drop handlers for chips nothing
+    drew any more, and their styles."""
+    for gone in ("INS_SAVED_KEY", "congressSaved", "congressSaveSearches",
+                 "congressQueryLabel", "data-ins-save", "data-ins-load", "data-ins-drop"):
+        assert gone not in APP, gone
+    css = (ROOT / "static/styles.css").read_text()
+    assert ".ins-chip" not in css and ".ins-saved" not in css
 
 
 # ------------------------------------------------- controls and handlers

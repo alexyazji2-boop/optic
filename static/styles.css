@@ -15172,26 +15172,6 @@ body.ws-max[data-view="chart"] main { padding: 0; }
      becoming a sixth column of a different height. */
   grid-column: 1 / -1;
 }
-.ins-saved { grid-column: 1 / -1; display: flex; gap: var(--space-2); flex-wrap: wrap; }
-.ins-chip {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid var(--border);
-  border-radius: var(--r-pill);
-  overflow: hidden;
-}
-.ins-chip button {
-  background: none;
-  border: none;
-  color: var(--ink-2);
-  font: inherit;
-  font-size: var(--t-caption);
-  padding: var(--space-1) var(--space-3);
-  cursor: pointer;
-}
-.ins-chip button { transition: color var(--dur-ui) var(--ease-ui); }
-.ins-chip button:hover { color: var(--ink); }
-.ins-chip-x { border-left: 1px solid var(--border) !important; padding: var(--space-1) var(--space-2) !important; }
 
 .ins-windows { display: flex; gap: var(--space-1); margin-bottom: var(--space-3); }
 

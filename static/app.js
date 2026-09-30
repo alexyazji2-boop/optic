@@ -27443,18 +27443,8 @@ const CONGRESS_WINDOWS = [14, 30, 90];
 
 const CONGRESS_BLANK = { ticker: '', member: '', side: '', since: '', until: '', days: 30 };
 let congressQuery = { ...CONGRESS_BLANK };
-let congressSaved = [];
-try {
-  const raw = JSON.parse(localStorage.getItem(INS_SAVED_KEY) || '[]');
-  if (Array.isArray(raw)) congressSaved = raw.filter((x) => x && typeof x.name === 'string').slice(0, 12);
-} catch (e) { /* private mode, or something else wrote the key */ }
 
-function congressSaveSearches() {
-  try { localStorage.setItem(INS_SAVED_KEY, JSON.stringify(congressSaved)); }
-  catch (e) { /* private mode */ }
-}
-
-/** The query as a URL, and as the thing a saved search stores. */
+/** The query as a URL. */
 function congressQueryString(q) {
   const parts = [`limit=60&activity_days=${encodeURIComponent(q.days || 30)}`];
   if (q.ticker) parts.push('ticker=' + encodeURIComponent(q.ticker.toUpperCase()));
@@ -27468,19 +27458,6 @@ function congressQueryString(q) {
 /** Is anything actually narrowed? Drives the Reset button's disabled state. */
 function congressFiltered(q) {
   return !!(q.ticker || q.member || q.side || q.since || q.until);
-}
-
-/** A saved search, described in words rather than as a query string. */
-function congressQueryLabel(q) {
-  const bits = [];
-  if (q.ticker) bits.push(q.ticker.toUpperCase());
-  if (q.member) bits.push(q.member);
-  const side = CONGRESS_SIDES.find((x) => x.id === q.side);
-  if (side && side.id) bits.push(side.label.toLowerCase());
-  if (q.since && q.until) bits.push(`${q.since} to ${q.until}`);
-  else if (q.since) bits.push(`since ${q.since}`);
-  else if (q.until) bits.push(`up to ${q.until}`);
-  return bits.join(' · ') || 'Everything';
 }
 
 /* ---------------------------------------------------------------- the chart
@@ -32885,35 +32862,6 @@ document.addEventListener('click', (evt) => {
     return;
   }
   if (evt.target.closest('[data-ins-retry]')) { loadInsidersCongress(true); return; }
-  if (evt.target.closest('[data-ins-save]')) {
-    const name = (window.prompt('Name this search', congressQueryLabel(congressQuery)) || '').trim();
-    if (!name) return;
-    // Same name replaces, rather than growing a second chip that looks
-    // identical and does something else.
-    congressSaved = [{ name: name.slice(0, 40), q: { ...congressQuery } },
-      ...congressSaved.filter((x) => x.name !== name)].slice(0, 12);
-    congressSaveSearches();
-    renderInsidersFacetHost({ full: true });
-    return;
-  }
-  const loadSaved = evt.target.closest('[data-ins-load]');
-  if (loadSaved) {
-    const saved = congressSaved[Number(loadSaved.dataset.insLoad)];
-    if (!saved) return;
-    // The window is not part of a saved search, so a saved one does not
-    // silently change how the chart is being read.
-    congressQuery = { ...CONGRESS_BLANK, ...saved.q, days: congressQuery.days };
-    renderInsidersFacetHost({ full: true });
-    loadInsidersCongress(false);
-    return;
-  }
-  const dropSaved = evt.target.closest('[data-ins-drop]');
-  if (dropSaved) {
-    congressSaved.splice(Number(dropSaved.dataset.insDrop), 1);
-    congressSaveSearches();
-    renderInsidersFacetHost({ full: true });
-    return;
-  }
   if (evt.target.closest('[data-ins-refresh]')) {
     STATE.insiders = null;
     renderInsidersFacetHost();
