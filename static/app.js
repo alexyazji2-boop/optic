@@ -2917,9 +2917,29 @@ const HOME_QUICK_PICKS = ['SPY', 'QQQ', 'NVDA', 'AAPL', 'TSLA', 'AMD', 'MSFT', '
  * legal footer read the same variable and an inline style on the panel would
  * only move the panel.
  */
-const CHAT_W_KEY = 'optic.chat.width.v1';
-const CHAT_W_DEFAULT = 382;
+/* Wider by default, and saved only once somebody chooses a width.
+ *
+ * Asked for as "Pulse control panel should be wider, it's a clean and better
+ * look. Better than condensing all the information in a thin frame", and then
+ * "make pulse larger as well when the button is clicked". It opened at 382px.
+ * It opens at 520px now, or 36% of a window too narrow for that, so a small
+ * laptop keeps most of its page.
+ *
+ * The width was saved on every first load, chosen or not, so nearly every
+ * browser that had ever opened the site held 382 under the old key and a new
+ * default would never have reached it. A new key, then; an old value is kept
+ * only when it is not the old default, since anything else was dragged to on
+ * purpose. And the width is saved now when it is chosen (a drag, the keys, a
+ * double-click), never on load. */
+const CHAT_W_KEY = 'optic.chat.width.v2';
+const CHAT_W_OLD_KEY = 'optic.chat.width.v1';
+const CHAT_W_OLD_DEFAULT = 382;
+const CHAT_W_DEFAULT = 520;
 const CHAT_W_MIN = 320;          // below this the composer and its four buttons wrap
+
+function defaultChatWidth() {
+  return Math.min(CHAT_W_DEFAULT, Math.max(CHAT_W_MIN, Math.round(window.innerWidth * 0.36)));
+}
 /* The PAGE's minimum, which is what decides when the split becomes a cover.
  *
  * This was a fraction of the window (0.92) and that left a dead band: at 1153px
@@ -2955,14 +2975,17 @@ function storedChatWidth() {
   try {
     const n = parseInt(localStorage.getItem(CHAT_W_KEY) || '', 10);
     if (Number.isFinite(n) && n >= CHAT_W_MIN) return n;
+    const old = parseInt(localStorage.getItem(CHAT_W_OLD_KEY) || '', 10);
+    if (Number.isFinite(old) && old >= CHAT_W_MIN && old !== CHAT_W_OLD_DEFAULT) return old;
   } catch (e) { /* private mode */ }
-  return CHAT_W_DEFAULT;
+  return defaultChatWidth();
 }
 
 function installChatResize() {
   const grip = document.getElementById('chat-grip');
   if (!grip) return;
-  applyChatWidth(storedChatWidth());
+  // Not saved: this is the width the page opens at, not one anybody chose.
+  applyChatWidth(storedChatWidth(), { transient: true });
 
   let dragging = false;
   /* Pointer capture, so the drag survives the cursor leaving the 10px handle.
@@ -2991,7 +3014,7 @@ function installChatResize() {
     // Persist once, at the end, rather than on every frame of the drag.
     applyChatWidth(parseInt(
       getComputedStyle(document.documentElement).getPropertyValue('--chat-w'), 10)
-      || CHAT_W_DEFAULT);
+      || defaultChatWidth());
   };
   grip.addEventListener('pointerup', end);
   grip.addEventListener('pointercancel', end);
@@ -3000,7 +3023,7 @@ function installChatResize() {
   grip.addEventListener('keydown', (evt) => {
     const cur = parseInt(
       getComputedStyle(document.documentElement).getPropertyValue('--chat-w'), 10)
-      || CHAT_W_DEFAULT;
+      || defaultChatWidth();
     const step = evt.shiftKey ? 96 : 24;
     if (evt.key === 'ArrowLeft') applyChatWidth(cur + step);
     else if (evt.key === 'ArrowRight') applyChatWidth(cur - step);
@@ -3011,7 +3034,7 @@ function installChatResize() {
   });
 
   // Double-click the handle to go back to the default, the way a split does.
-  grip.addEventListener('dblclick', () => applyChatWidth(CHAT_W_DEFAULT));
+  grip.addEventListener('dblclick', () => applyChatWidth(defaultChatWidth()));
 
   /* A window that shrinks below the stored width has to re-clamp, or the panel
    * is wider than the screen and the page is unreachable. `transient` so a
@@ -3019,7 +3042,7 @@ function installChatResize() {
   window.addEventListener('resize', () => {
     const cur = parseInt(
       getComputedStyle(document.documentElement).getPropertyValue('--chat-w'), 10)
-      || CHAT_W_DEFAULT;
+      || defaultChatWidth();
     applyChatWidth(Math.min(cur, chatMaxWidth()), { transient: true });
   });
 }

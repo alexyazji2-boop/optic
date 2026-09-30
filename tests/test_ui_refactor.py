@@ -813,7 +813,8 @@ def test_the_chat_width_has_one_source():
     """There were three numbers for one panel: it was 382px wide, main reserved
     420px and the legal footer reserved 400px, so the page held a 38px strip of
     nothing open beside an already-narrow panel. Everything reads --chat-w."""
-    assert "--chat-w: 382px;" in CSS
+    # 520 since it was widened; see CHAT_W_DEFAULT and test_pulse_panel_width.
+    assert "--chat-w: 520px;" in CSS
     block = NO_COMMENTS[NO_COMMENTS.index("aside#chat {"):]
     block = block[:block.index("}")]
     assert "width: var(--chat-w)" in block

@@ -93,7 +93,7 @@
      there were three numbers: the panel was 382px, main reserved 420px and the
      footer reserved 400px, so the page held open a 38px strip of nothing beside
      an already-narrow panel. Draggable at runtime; see the grip in app.js. */
-  --chat-w: 382px;
+  --chat-w: 520px;
   /* The hover wash. Three rules reached for var(--bg-hover, rgba(...)) and it
      was never declared, so every one of them took its fallback and the hover
      state did not follow the theme. Declared from the surface stack instead of
