@@ -27078,7 +27078,7 @@ async function paperLoadChain(sym) {
  * refused, and retrying a 401 three times just asks the same unauthorised
  * question slower.
  */
-async function fetchReports(limit, includeResolved) {
+async function fetchReports(limit, status) {
   /* The owner's session and nothing else: no write token, and no prompt for
    * one. The page is for the signed-in owner (see loadReports), and a token
    * pasted in once used to keep it open to that browser signed out. */
@@ -27095,7 +27095,7 @@ async function fetchReports(limit, includeResolved) {
   for (let i = 0; i <= RETRY_DELAYS_MS.length; i += 1) {
     try {
       res = await fetch('/api/feedback?limit=' + encodeURIComponent(limit || 50)
-        + (includeResolved ? '&resolved=true' : ''), {
+        + (status ? '&status=' + encodeURIComponent(status) : ''), {
         headers,
         credentials: 'same-origin',
       });
@@ -27166,45 +27166,118 @@ function reportRowHTML(row) {
   </li>`;
 }
 
+/* Open and Resolved, a tab each, and each its own list from the server.
+ *
+ * Asked for in place of Show resolved, a toggle that put the resolved reports
+ * in one list with the open ones and left the page one count to show. Both
+ * counts sit on the tabs now, whichever list is open, and the Resolved tab
+ * asks for resolved reports only, so fifty open ones cannot push the closed
+ * ones past the page's limit. The look is the Dossier's section tabs, so a
+ * tab reads as a tab everywhere in the terminal. */
+const REPORT_TABS = [
+  { id: 'open', label: 'Open' },
+  { id: 'resolved', label: 'Resolved' },
+];
+
+function reportsTabsHTML(tab, counts) {
+  return `<div class="sec-tabs rp-tabs" role="tablist" aria-label="Problem reports">${
+    REPORT_TABS.map((t) => {
+      const on = t.id === tab;
+      return `<button type="button" role="tab" class="sec-tab${on ? ' on' : ''}"
+        id="rp-tab-${t.id}" data-reports-tab="${t.id}" aria-selected="${on}"
+        aria-controls="rp-tabpanel" tabindex="${on ? '0' : '-1'}">${t.label} <span
+        class="rp-tab-n">${counts[t.id]}</span></button>`;
+    }).join('')}</div>`;
+}
+
 function reportsHTML(data) {
   const rows = (data && data.reports) || [];
-  const showing = !!(data && data.include_resolved);
-  const open = Number.isFinite(data && data.open) ? data.open : rows.length;
-  const resolved = Number.isFinite(data && data.resolved) ? data.resolved : 0;
-  /* Resolve all is the page's "clear": it takes every open report off the list
-     without deleting a word of any, and asks for a second press first because
-     it is the one control here that acts on more than it is next to. */
-  const tools = [
-    open ? `<button type="button" class="btn" data-reports-resolve-all>Resolve all ${open}</button>` : '',
-    resolved || showing ? `<button type="button" class="btn" data-reports-toggle-resolved
-      aria-pressed="${showing}">${showing ? 'Hide resolved' : `Show resolved (${resolved})`}</button>` : '',
-  ].filter(Boolean).join('');
-  const toolbar = tools ? `<div class="rp-tools">${tools}</div>` : '';
-  if (!rows.length) {
-    if (!resolved) {
-      return emptyHTML('No problem reports yet',
-        'When a reader uses Report a Problem, it lands here.');
-    }
-    return `<div class="panel" data-fixed="1">
-      <h2 tabindex="-1">Problem Reports</h2>
-      <p class="sub">Nothing open. ${resolved} resolved report${resolved === 1 ? ' is' : 's are'} kept, and Show resolved lists them.</p>
-      ${toolbar}
-    </div>`;
-  }
-  const total = data.total || rows.length;
+  const tab = data && data.status === 'resolved' ? 'resolved' : 'open';
+  const open = Number.isFinite(data && data.open) ? data.open : (tab === 'open' ? rows.length : 0);
+  const resolved = Number.isFinite(data && data.resolved)
+    ? data.resolved : (tab === 'resolved' ? rows.length : 0);
+  const total = Number.isFinite(data && data.total) ? data.total : rows.length;
   /* Said rather than implied. The endpoint pages at 50 and a reader who cannot
      see that count reads the page as the whole record. */
-  const counts = `${open} open${resolved ? `, ${resolved} resolved` : ''}.`;
-  const shown = rows.length < total
-    ? `Showing the newest ${rows.length} of ${total}. ${counts}`
-    : counts;
+  let lead = '';
+  if (!rows.length) {
+    lead = tab === 'resolved' ? 'Nothing resolved yet.'
+      : resolved ? 'Nothing open.'
+        : 'No problem reports yet. When a reader uses Report a Problem, it lands here.';
+  } else if (rows.length < total) {
+    lead = tab === 'resolved'
+      ? `Showing the ${rows.length} most recently resolved of ${total}.`
+      : `Showing the newest ${rows.length} of ${total}.`;
+  }
+  /* Resolve all is the page's "clear": it takes every open report off the list
+     without deleting a word of any, and asks for a second press first because
+     it is the one control here that acts on more than it is next to. On the
+     Open tab only, the one list it acts on. */
+  const tools = tab === 'open' && open
+    ? `<div class="rp-tools"><button type="button" class="btn" data-reports-resolve-all>Resolve all ${
+      open}</button></div>`
+    : '';
   return `<div class="panel" data-fixed="1">
     <h2 tabindex="-1">Problem Reports</h2>
-    <p class="sub">${esc(shown)}</p>
-    ${toolbar}
-    <ul class="rp-list">${rows.map(reportRowHTML).join('')}</ul>
+    ${reportsTabsHTML(tab, { open, resolved })}
+    <div class="rp-tabpanel" id="rp-tabpanel" role="tabpanel" aria-labelledby="rp-tab-${tab}">
+      ${lead ? `<p class="sub">${esc(lead)}</p>` : ''}
+      ${tools}
+      ${rows.length ? `<ul class="rp-list">${rows.map(reportRowHTML).join('')}</ul>` : ''}
+    </div>
   </div>`;
 }
+
+/* A tab pressed, or reached with the arrow keys. The selection moves at once
+ * and the panel says its list is coming; the tabs stay where they are rather
+ * than the page blanking for the round trip. Both counts are redrawn with the
+ * list, from the server. */
+function showReportsTab(tab) {
+  if (tab !== 'open' && tab !== 'resolved') return Promise.resolve();
+  const host = views.reports;
+  const current = STATE.reportsTab === 'resolved' ? 'resolved' : 'open';
+  if (tab === current && STATE.reportsLoaded) {
+    const same = host.querySelector('#rp-tab-' + tab);
+    if (same) same.focus();
+    return Promise.resolve();
+  }
+  STATE.reportsTab = tab;
+  host.querySelectorAll('[data-reports-tab]').forEach((btn) => {
+    const on = btn.dataset.reportsTab === tab;
+    btn.classList.toggle('on', on);
+    btn.setAttribute('aria-selected', String(on));
+    btn.tabIndex = on ? 0 : -1;
+  });
+  const panel = host.querySelector('#rp-tabpanel');
+  if (panel) {
+    panel.setAttribute('aria-labelledby', 'rp-tab-' + tab);
+    panel.innerHTML = '<p class="sub">Loading.</p>';
+  }
+  const chosen = host.querySelector('#rp-tab-' + tab);
+  if (chosen) chosen.focus();
+  return loadReports(true, { inPlace: true }).then(() => {
+    // The redraw replaced the button that had focus. Put it back on the tab,
+    // unless the reader has moved on to something else meanwhile.
+    const active = document.activeElement;
+    if (!active || active === document.body) {
+      const again = host.querySelector('#rp-tab-' + tab);
+      if (again) again.focus();
+    }
+  });
+}
+
+// The arrow keys move between the two tabs, as a tab list is expected to, and
+// Home and End go to the ends. The selection follows the focus.
+document.addEventListener('keydown', (evt) => {
+  const btn = evt.target && evt.target.closest ? evt.target.closest('[data-reports-tab]') : null;
+  if (!btn) return;
+  const ids = REPORT_TABS.map((t) => t.id);
+  const at = ids.indexOf(btn.dataset.reportsTab);
+  const to = { ArrowRight: at + 1, ArrowLeft: at - 1, Home: 0, End: ids.length - 1 }[evt.key];
+  if (to === undefined) return;
+  evt.preventDefault();
+  showReportsTab(ids[(to + ids.length) % ids.length]);
+});
 
 /* Resolve or reopen one report, then redraw the list from the server so the
    counts are the server's rather than arithmetic on the page. Focus goes back
@@ -27224,7 +27297,7 @@ async function resolveReport(btn) {
     reportsToast(err);
     return;
   }
-  await loadReports(true);
+  await loadReports(true, { inPlace: true });
   refocusReports(at);
 }
 
@@ -27252,14 +27325,14 @@ async function resolveAllReports(btn) {
     reportsToast(err);
     return;
   }
-  await loadReports(true);
+  await loadReports(true, { inPlace: true });
   refocusReports(0);
 }
 
 function refocusReports(at) {
   const buttons = [...views.reports.querySelectorAll('[data-report-resolve]')];
   const target = buttons[Math.min(Math.max(at, 0), buttons.length - 1)]
-    || views.reports.querySelector('[data-reports-toggle-resolved]')
+    || views.reports.querySelector('[data-reports-tab][aria-selected="true"]')
     || views.reports.querySelector('h2');
   if (target) target.focus({ preventScroll: false });
 }
@@ -27270,7 +27343,8 @@ function reportsToast(err) {
   else window.alert(text);
 }
 
-async function loadReports(force) {
+let reportsSeq = 0;
+async function loadReports(force, opts = {}) {
   const host = views.reports;
   if (!host) return;
   /* The signed-in owner's page. Checked before the cached list is kept, so
@@ -27282,15 +27356,23 @@ async function loadReports(force) {
     return;
   }
   if (!force && STATE.reportsLoaded) return;
-  host.innerHTML = `<div class="panel" data-fixed="1"><h2>Problem Reports</h2>
+  // In place, a tab change or a resolve keeps the page it already drew.
+  if (!opts.inPlace || !host.querySelector('#rp-tabpanel')) {
+    host.innerHTML = `<div class="panel" data-fixed="1"><h2>Problem Reports</h2>
     <p class="sub">Loading.</p></div>`;
+  }
+  const seq = ++reportsSeq;
   try {
-    const data = await fetchReports(50, !!STATE.reportsShowResolved);
+    const data = await fetchReports(50, STATE.reportsTab === 'resolved' ? 'resolved' : 'open');
+    // A later press owns the page: Open, Resolved and Open again, quickly,
+    // must not end on the Resolved list because it answered last.
+    if (seq !== reportsSeq) return;
     // Signed out while it loaded: the list is not drawn for a guest.
     if (!isOwner()) { loadReports(true); return; }
     STATE.reportsLoaded = true;
     host.innerHTML = reportsHTML(data);
   } catch (err) {
+    if (seq !== reportsSeq) return;
     STATE.reportsLoaded = false;
     /* The server's own sentence, not a generic failure. `_write_guard` and the
        read route between them already say which of the three things is missing
@@ -32514,14 +32596,8 @@ document.addEventListener('click', (evt) => {
   if (reportBtn) { resolveReport(reportBtn); return; }
   const allBtn = evt.target.closest('[data-reports-resolve-all]');
   if (allBtn) { resolveAllReports(allBtn); return; }
-  if (evt.target.closest('[data-reports-toggle-resolved]')) {
-    STATE.reportsShowResolved = !STATE.reportsShowResolved;
-    loadReports(true).then(() => {
-      const again = views.reports.querySelector('[data-reports-toggle-resolved]');
-      if (again) again.focus();
-    });
-    return;
-  }
+  const reportsTab = evt.target.closest('[data-reports-tab]');
+  if (reportsTab) { showReportsTab(reportsTab.dataset.reportsTab); return; }
   if (evt.target.closest('[data-view-retry]')) {
     // The view we are on, refetched. `force` skips the cache, or the retry
     // repaints the same failure it was clicked to clear.

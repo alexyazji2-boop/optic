@@ -5,6 +5,11 @@ each report". Both, and neither deletes anything: a report is what a reader
 said, so resolving takes it off the list the page opens on and keeps it, and
 Reopen puts one back. Resolve all is the clear, behind a second press.
 
+Then asked for as "two different tabs here, one for open and one for resolved
+report tickets", in place of the Show resolved toggle. A tab each, each with
+its count, and each its own list from the server (`status=open|resolved`), so
+fifty open reports cannot push the resolved ones past the page's limit.
+
 Also asked: the line "No FEEDBACK_EMAIL_TO is set, so reports are stored on
 the server and not emailed." is gone from the page. The endpoint still carries
 `delivery` for anyone reading it directly, and each report still says whether
@@ -59,6 +64,45 @@ def test_a_resolved_report_leaves_the_list_and_is_kept(accounts):
     assert every["total"] == 2
 
 
+def _stamp(report_id, when):
+    with accounts_db.cursor(write=True) as conn:
+        conn.execute("UPDATE feedback SET resolved_at = ? WHERE id = ?", (when, report_id))
+
+
+def test_the_resolved_list_is_resolved_reports_most_recently_resolved_first(accounts):
+    a = fb.store("filed first, resolved last")
+    b = fb.store("still open")
+    c = fb.store("filed last, resolved first")
+    _stamp(c["id"], "2026-09-29T10:00:00+00:00")
+    _stamp(a["id"], "2026-09-29T11:00:00+00:00")
+    out = fb.log(status="resolved")
+    assert [r["message"] for r in out["reports"]] == [
+        "filed first, resolved last", "filed last, resolved first"]
+    assert (out["status"], out["total"], out["open"], out["resolved"]) == ("resolved", 2, 1, 2)
+    assert out["include_resolved"] is False
+    opened = fb.log(status="open")
+    assert [r["id"] for r in opened["reports"]] == [b["id"]] and opened["total"] == 1
+
+
+def test_reports_resolved_together_fall_back_to_newest_filed_first(accounts):
+    for i in range(3):
+        fb.store("report %d" % i)
+    fb.resolve_open()
+    assert [r["message"] for r in fb.log(status="resolved")["reports"]] == [
+        "report 2", "report 1", "report 0"]
+
+
+def test_open_is_the_default_and_include_resolved_still_means_all(accounts):
+    a = fb.store("first")
+    fb.store("second")
+    fb.resolve(a["id"])
+    assert fb.log()["status"] == "open"
+    every = fb.log(include_resolved=True)
+    assert every["status"] == "all" and every["include_resolved"] is True and every["total"] == 2
+    assert fb.log(status="all")["reports"] == every["reports"]
+    assert fb.log(status="nonsense")["status"] == "open"
+
+
 def test_reopening_puts_it_back(accounts):
     a = fb.store("first")
     fb.resolve(a["id"])
@@ -111,6 +155,22 @@ def test_the_routes_resolve_and_reopen(accounts, token):
     assert res.json()["resolved_at"] is None
 
 
+def test_the_route_serves_each_tab_its_own_list(accounts, token):
+    a = fb.store("done")
+    fb.store("open")
+    fb.resolve(a["id"])
+    resolved = client.get("/api/feedback?status=resolved", headers=TOKEN).json()
+    assert [r["message"] for r in resolved["reports"]] == ["done"]
+    assert resolved["status"] == "resolved" and (resolved["open"], resolved["resolved"]) == (1, 1)
+    opened = client.get("/api/feedback?status=open", headers=TOKEN).json()
+    assert [r["message"] for r in opened["reports"]] == ["open"]
+
+
+def test_a_bad_status_is_refused_but_only_after_the_guard(accounts, token):
+    assert client.get("/api/feedback?status=closed", headers=TOKEN).status_code == 400
+    assert client.get("/api/feedback?status=closed").status_code == 401
+
+
 def test_resolve_all_route(accounts, token):
     for i in range(2):
         fb.store("open %d" % i)
@@ -161,41 +221,131 @@ var OPEN = { id: 'aaa', message: 'chart froze', emailed: 0, created_at: '2026-09
 var DONE = { id: 'bbb', message: 'typo', emailed: 0, created_at: '2026-09-27T10:00:00Z', resolved_at: '2026-09-28T11:00:00Z' };
 var NOTICE = { available: false, reason: 'No FEEDBACK_EMAIL_TO is set, so reports are stored on the server and not emailed.' };
 """
+# The tabs as the page defines them, not a copy that could drift from it.
+PAGE += re.search(r"^const REPORT_TABS = \[.*?^\];", RAW, re.M | re.S).group() + "\n"
 
 
-def test_the_page_offers_each_action_and_no_longer_shows_the_notice():
-    _js(PAGE, ["reportStamp", "reportRowHTML", "reportsHTML"], """
+def test_the_open_tab_offers_each_action_and_both_counts():
+    _js(PAGE, ["reportStamp", "reportRowHTML", "reportsTabsHTML", "reportsHTML"], """
       var html = reportsHTML({ reports: [OPEN], total: 1, open: 1, resolved: 1,
-                               include_resolved: false, delivery: NOTICE });
-      assert(html.indexOf('FEEDBACK_EMAIL_TO') < 0, 'the notice is still on the page');
+                               status: 'open', delivery: NOTICE });
+      assert(html.indexOf('FEEDBACK_EMAIL_TO') < 0, 'the notice is back on the page');
       assert(html.indexOf('data-report-resolve="aaa"') >= 0 && html.indexOf('>Mark resolved<') >= 0,
              'no button on the report');
       assert(html.indexOf('data-reports-resolve-all>Resolve all 1<') >= 0, 'no Resolve all');
-      assert(html.indexOf('Show resolved (1)') >= 0, 'no way to see the resolved one');
-      assert(html.indexOf('1 open, 1 resolved.') >= 0, 'the counts');
+      assert(/data-reports-tab="open" aria-selected="true"[\\s\\S]*?>Open <span\\s+class="rp-tab-n">1</.test(html),
+             'the Open tab, selected, with its count');
+      assert(/data-reports-tab="resolved" aria-selected="false"[\\s\\S]*?>Resolved <span\\s+class="rp-tab-n">1</.test(html),
+             'the Resolved tab, with its count');
+      assert(html.indexOf('role="tabpanel"') >= 0 && html.indexOf('aria-labelledby="rp-tab-open"') >= 0,
+             'the list is not in the Open panel');
+      assert(html.indexOf('Show resolved') < 0 && html.indexOf('data-reports-toggle-resolved') < 0,
+             'the old toggle is still there');
     """)
 
 
-def test_a_resolved_report_offers_reopen_and_says_when():
-    _js(PAGE, ["reportStamp", "reportRowHTML", "reportsHTML"], """
-      var html = reportsHTML({ reports: [OPEN, DONE], total: 2, open: 1, resolved: 1,
-                               include_resolved: true, delivery: NOTICE });
+def test_the_resolved_tab_lists_them_with_reopen_and_when():
+    _js(PAGE, ["reportStamp", "reportRowHTML", "reportsTabsHTML", "reportsHTML"], """
+      var html = reportsHTML({ reports: [DONE], total: 1, open: 1, resolved: 1,
+                               status: 'resolved', delivery: NOTICE });
       assert(html.indexOf('data-report-resolve="bbb"') >= 0, 'no button on the resolved one');
       assert(/data-report-resolve="bbb"\\s+data-report-to="open"/.test(html), 'it would resolve it again');
       assert(html.indexOf('>Reopen<') >= 0 && html.indexOf('class="rp-item-resolved">Resolved ') >= 0,
              'reopen, and when');
-      assert(html.indexOf('Hide resolved') >= 0, 'no way back to the open list');
+      assert(/data-reports-tab="resolved" aria-selected="true"/.test(html), 'the Resolved tab is not selected');
+      assert(html.indexOf('data-reports-resolve-all') < 0, 'Resolve all has nothing to do here');
+      assert(html.indexOf('aria-labelledby="rp-tab-resolved"') >= 0);
     """)
 
 
-def test_nothing_open_but_some_resolved_says_so_rather_than_no_reports_yet():
-    _js(PAGE, ["reportStamp", "reportRowHTML", "reportsHTML"], """
-      var html = reportsHTML({ reports: [], total: 0, open: 0, resolved: 3, include_resolved: false });
+def test_an_empty_tab_says_so_in_its_own_words():
+    _js(PAGE, ["reportStamp", "reportRowHTML", "reportsTabsHTML", "reportsHTML"], """
+      var html = reportsHTML({ reports: [], total: 0, open: 0, resolved: 3, status: 'open' });
       assert(html.indexOf('<empty>') < 0, 'said there were no reports when three are kept');
-      assert(html.indexOf('Nothing open. 3 resolved reports are kept') >= 0, html);
-      assert(html.indexOf('Show resolved (3)') >= 0, 'no way to reach them');
+      assert(html.indexOf('>Nothing open.<') >= 0, html);
+      assert(/>Resolved <span\\s+class="rp-tab-n">3</.test(html), 'no way to see there are three');
+      var none = reportsHTML({ reports: [], total: 0, open: 2, resolved: 0, status: 'resolved' });
+      assert(none.indexOf('>Nothing resolved yet.<') >= 0, none);
       assert(reportsHTML({ reports: [], open: 0, resolved: 0 }).indexOf('No problem reports yet') >= 0);
     """)
+
+
+def test_a_page_of_a_longer_list_says_which_part_it_is():
+    _js(PAGE, ["reportStamp", "reportRowHTML", "reportsTabsHTML", "reportsHTML"], """
+      var open = reportsHTML({ reports: [OPEN], total: 60, open: 60, resolved: 0, status: 'open' });
+      assert(open.indexOf('Showing the newest 1 of 60.') >= 0, open);
+      var done = reportsHTML({ reports: [DONE], total: 70, open: 0, resolved: 70, status: 'resolved' });
+      assert(done.indexOf('Showing the 1 most recently resolved of 70.') >= 0, done);
+    """)
+
+
+def test_the_fetch_asks_for_one_tabs_list():
+    _js("""
+      var urls = [];
+      var RETRY_DELAYS_MS = [];
+      var window = { OpticAuth: { csrf: function () { return 'c'; } } };
+      function fetch(url) { urls.push(url); return Promise.resolve({ ok: true, json: function () { return Promise.resolve({}); } }); }
+    """, ["fetchReports"], """
+      await fetchReports(50, 'resolved');
+      await fetchReports(50);
+      assert(urls[0] === '/api/feedback?limit=50&status=resolved', urls[0]);
+      assert(urls[1] === '/api/feedback?limit=50', urls[1]);
+    """)
+
+
+LOAD = r"""
+var STATE = { view: 'reports', reportsTab: 'open', reportsLoaded: true };
+function isOwner() { return true; }
+function reportsHTML(data) { return 'drawn:' + data.status; }
+function reportsForOwnerHTML() { return 'not yours'; }
+function errorHTML(m) { return 'error:' + m; }
+function emptyHTML(t) { return 'empty:' + t; }
+var drawnPanel = { id: 'rp-tabpanel' };
+var views = { reports: { innerHTML: 'the page with its tabs',
+  querySelector: function (sel) { return sel === '#rp-tabpanel' ? drawnPanel : null; } } };
+var pending = [];
+var reportsSeq = 0;   // module state beside loadReports
+function fetchReports(limit, status) {
+  var d = {};
+  d.promise = new Promise(function (resolve) { d.resolve = function () { resolve({ status: status }); }; });
+  d.status = status;
+  pending.push(d);
+  return d.promise;
+}
+"""
+
+
+def test_quick_presses_end_on_the_last_tab_pressed():
+    """Open, Resolved and Open again, faster than the server answers: the
+    Resolved answer arriving last must not be the list left on screen."""
+    _js(LOAD, ["loadReports"], """
+      STATE.reportsTab = 'resolved'; var first = loadReports(true, { inPlace: true });
+      STATE.reportsTab = 'open';     var second = loadReports(true, { inPlace: true });
+      assert(pending[0].status === 'resolved' && pending[1].status === 'open', 'asked for each tab');
+      assert(views.reports.innerHTML === 'the page with its tabs', 'in place: the page was blanked');
+      pending[1].resolve(); await second;
+      pending[0].resolve(); await first;
+      assert(views.reports.innerHTML === 'drawn:open', views.reports.innerHTML);
+    """)
+
+
+def test_the_first_load_still_says_it_is_loading():
+    _js(LOAD, ["loadReports"], """
+      views.reports.querySelector = function () { return null; };   // nothing drawn yet
+      var done = loadReports(true, { inPlace: true });
+      assert(/Loading\\./.test(views.reports.innerHTML), views.reports.innerHTML);
+      pending[0].resolve(); await done;
+      assert(views.reports.innerHTML === 'drawn:open');
+    """)
+
+
+def test_the_tabs_move_with_the_arrow_keys():
+    listener = RAW[RAW.index("closest('[data-reports-tab]') : null;"):][:500]
+    assert "ArrowRight: at + 1, ArrowLeft: at - 1, Home: 0, End: ids.length - 1" in listener
+    assert "evt.preventDefault();" in listener and "showReportsTab(" in listener
+    fn = _raw_fn("showReportsTab")
+    assert "btn.tabIndex = on ? 0 : -1;" in fn and "setAttribute('aria-selected'" in fn
+    assert "loadReports(true, { inPlace: true })" in fn
 
 
 ACTIONS = r"""
@@ -253,5 +403,5 @@ def test_every_new_control_has_its_handler():
     listener = RAW[RAW.index("const reportBtn = evt.target.closest('[data-report-resolve]');"):][:600]
     for attr, fn in (("data-report-resolve", "resolveReport("),
                      ("data-reports-resolve-all", "resolveAllReports("),
-                     ("data-reports-toggle-resolved", "STATE.reportsShowResolved")):
+                     ("data-reports-tab", "showReportsTab(")):
         assert "closest('[%s]')" % attr in listener and fn in listener, attr

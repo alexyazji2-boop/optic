@@ -139,6 +139,6 @@ def test_a_connection_that_never_comes_back_is_a_marked_error_not_the_browsers_w
 
 
 def test_the_page_offers_recovery_for_it():
-    fn = RAW[RAW.index("async function loadReports(force) {"):]
+    fn = RAW[RAW.index("async function loadReports("):]
     fn = fn[:fn.index("\n}\n")]
     assert "err.originUnreachable\n      ? errorHTML(err.message, { originUnreachable: true })" in fn

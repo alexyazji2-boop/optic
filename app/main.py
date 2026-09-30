@@ -3198,6 +3198,8 @@ async def read_feedback(request: Request,
                         limit: int = Query(50, ge=1, le=200),
                         resolved: bool = Query(
                             False, description="Include reports already marked resolved"),
+                        status: Optional[str] = Query(
+                            None, description="open, resolved or all"),
                         ) -> Dict[str, Any]:
     """The reports, for whoever owns the deployment.
 
@@ -3222,7 +3224,11 @@ async def read_feedback(request: Request,
         # true sentence.
         raise HTTPException(status_code=exc.status_code,
                             detail=_READ_GUARD_COPY.get(exc.status_code, exc.detail))
-    return await _run(feedback_mod.log, limit, resolved)
+    # Checked after the guard, so a caller who may not read the reports learns
+    # nothing from how a bad value is answered.
+    if status is not None and status not in feedback_mod.STATUSES:
+        raise HTTPException(status_code=400, detail="status is open, resolved or all.")
+    return await _run(feedback_mod.log, limit, resolved, status)
 
 
 # Resolving a report, one or all. The same guard as reading them, because it is

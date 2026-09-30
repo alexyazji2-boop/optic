@@ -185,7 +185,12 @@ def submit(message: str, page: str = "", reply_to: str = "",
                       "sent with the next batch."}
 
 
-def log(limit: int = 50, include_resolved: bool = False) -> Dict[str, Any]:
+# The lists `log` can draw: the Reports page's two tabs, and both at once.
+STATUSES = ("open", "resolved", "all")
+
+
+def log(limit: int = 50, include_resolved: bool = False,
+        status: Optional[str] = None) -> Dict[str, Any]:
     """The newest reports and how many there are. What the operator reads.
 
     Distinct from `unsent()`, which is the email backlog and drops a report the
@@ -194,18 +199,29 @@ def log(limit: int = 50, include_resolved: bool = False) -> Dict[str, Any]:
     report filed since this shipped is in SQLite with no route to it that is
     not a Python shell on the server.
 
-    Open reports only unless `include_resolved`, newest first either way.
-    `total` counts what the list is drawn from and `open` and `resolved` split
-    it, so a page showing the newest fifty can say how many there are.
+    `status` picks the list: "open", the default, "resolved" or "all".
+    `include_resolved` is the older way to ask for all of them and still works.
+    Open reports come newest first. Resolved ones come most recently resolved
+    first, so a report closed a moment ago heads that list rather than sitting
+    wherever it was filed; the thirteen closed by one Resolve all share a
+    stamp and fall back to newest first. `total` counts the list drawn from and
+    `open` and `resolved` split the whole, so a page showing fifty can say how
+    many there are, and both of its tabs can carry a count.
 
     Carries `configured()` so the answer to "why has none of this been emailed"
     arrives with the reports rather than having to be gone looking for.
     """
-    where = "" if include_resolved else "WHERE resolved_at IS NULL "
+    if status not in STATUSES:
+        status = "all" if include_resolved else "open"
+    where = {"open": "WHERE resolved_at IS NULL ",
+             "resolved": "WHERE resolved_at IS NOT NULL ",
+             "all": ""}[status]
+    order = ("ORDER BY resolved_at DESC, created_at DESC " if status == "resolved"
+             else "ORDER BY created_at DESC ")
     with db.cursor() as conn:
         rows = conn.execute(
             "SELECT id,message,page,reply_to,user_agent,emailed,created_at,resolved_at "
-            "FROM feedback " + where + "ORDER BY created_at DESC LIMIT ?",
+            "FROM feedback " + where + order + "LIMIT ?",
             (limit,)).fetchall()
         counts = conn.execute(
             "SELECT COUNT(*) AS n, "
@@ -213,10 +229,11 @@ def log(limit: int = 50, include_resolved: bool = False) -> Dict[str, Any]:
             "FROM feedback").fetchone()
     everything = int(counts["n"] or 0)
     still_open = int(counts["open"] or 0)
+    done = everything - still_open
     return {"reports": [dict(r) for r in rows],
-            "total": everything if include_resolved else still_open,
-            "open": still_open, "resolved": everything - still_open,
-            "include_resolved": include_resolved,
+            "total": {"open": still_open, "resolved": done, "all": everything}[status],
+            "open": still_open, "resolved": done,
+            "status": status, "include_resolved": status == "all",
             "delivery": configured()}
 
 
