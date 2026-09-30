@@ -8309,9 +8309,36 @@ table.data tr.fx-detail td,
 }
 /* `.pulse-persona-lab` lived here. The label moved inside the box so both
    controls wear the same `.oc-field`, and the class went with it. */
-/* The field, not the select: the select no longer draws its own box, so sizing
-   it would size a transparent child inside a sized parent. */
-.pulse-persona .pp-field { flex: 0 1 auto; }
+/* The two controls share the row, and their menus stay inside the panel.
+ *
+ * Asked for as "fix how the dynamic sizing works for optic persona when the
+ * panel becomes smaller". Each box was as wide as its label, so the pair
+ * measured 177px and 144px and changed size with the choice. Each menu was a
+ * fixed 320px opening from its own box's left edge: with Pulse at its 382px
+ * default the persona menu ended 139px past the window, at 460px 61px, and at
+ * 320px, with the boxes stacked, 15px. The rule this replaces sized
+ * `.pp-field`, which is not a child of this row, so it never applied.
+ *
+ * Now the boxes split the row evenly and each takes the whole line once the
+ * panel is too narrow for two; a long label ends in an ellipsis rather than
+ * widening its box; the mode menu opens from the row's left edge and the
+ * persona menu from its right, and neither is wider than the panel. */
+.pulse-persona > .km,
+.pulse-persona > .pp { flex: 1 1 150px; min-width: 0; }
+.pulse-persona .km-btn,
+.pulse-persona .pp-field { width: 100%; min-width: 0; }
+.pulse-persona .km-now,
+.pulse-persona .pp-now {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pulse-persona .km-menu,
+.pulse-persona .oc-menu {
+  max-width: min(calc(var(--chat-w) - 2 * var(--space-3)), calc(100vw - 2 * var(--space-3)));
+}
+.pulse-persona .pp .oc-menu { left: auto; right: 0; }
 /* The blurb takes the whole next line rather than competing for width: at
    200px it truncated to three words and stopped explaining anything. */
 .pulse-persona-blurb {
