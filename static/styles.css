@@ -7673,6 +7673,29 @@ body[data-view="chart"] .sessionbar { display: none; }
   flex-wrap: wrap;
 }
 .ws-head strong { font-size: var(--t-heading); color: var(--ink); }
+/* The symbol, which opens the search. A button that still reads as the
+   heading it replaced: no chrome of its own, the logo beside the ticker, and an
+   underline on hover and on keyboard focus to say it can be pressed. */
+.ws-sym-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  transition: color var(--dur-ui) var(--ease-ui);
+}
+.ws-sym-btn strong {
+  text-decoration: underline 1px transparent;
+  text-underline-offset: 4px;
+  transition: text-decoration-color var(--dur-ui) var(--ease-ui);
+}
+.ws-sym-btn:hover strong, .ws-sym-btn:focus-visible strong { text-decoration-color: currentColor; }
+.ws-sym-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 .ws-head-name { color: var(--ink-muted); }
 .ws-head-state { color: var(--ink-muted); margin-left: auto; }
 /* Full screen, as an icon in the chart panel's top-right corner, beside the

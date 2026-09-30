@@ -16002,7 +16002,15 @@ function renderChartWorkspace(d) {
     <div class="ws-canvas${wsTool === 'cursor' ? '' : ' arming'}">
       ${wsMaxButton()}
       <div class="ws-head">
-        <strong>${esc(STATE.chartSymbol)}</strong>
+        ${/* The symbol opens the search, as the header box and Cmd+K do, with
+             the company's logo beside it: the typeahead's own (tickerMark),
+             which keys on the ticker and so needs nothing this payload lacks.
+             Asked for as "whenever you click on the ticker, go to the search
+             bar, and add the company logo next to the ticker on the chart". */''}
+        <button type="button" class="ws-sym-btn" data-open-palette=""
+          title="Search for another symbol"
+          aria-label="${esc(STATE.chartSymbol)}. Search for another symbol">${
+  tickerMark(STATE.chartSymbol, 26)}<strong>${esc(STATE.chartSymbol)}</strong></button>
         <span class="ws-head-name">${esc((d.profile || {}).name || '')}</span>
         <span class="ws-ohlc" id="ws-ohlc">${wsOhlcRow(bar)}</span>
         <span class="${signClass(q.change_pct)}" id="ws-chg">${fmtPct(q.change_pct, 2)}</span>
