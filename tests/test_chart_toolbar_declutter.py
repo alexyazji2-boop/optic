@@ -87,13 +87,15 @@ def toolbar():
 # ----------------------------------------------------------- fewer buttons
 
 
-def test_the_toolbar_carries_seventeen_controls_at_rest(toolbar):
-    """Tools is the phone's drawer button and is not drawn above 560px."""
+def test_the_toolbar_carries_eighteen_controls_at_rest(toolbar):
+    """Tools is the phone's drawer button and is not drawn above 560px. The
+    eighteenth is the trading-hours menu beside the bar size, asked for as its
+    own dropdown of "regular trading hours" and "extended hours"."""
     got = toolbar["shutButtons"]
     assert got[0] == "Tools"
     assert got[1:] == ["Reset", "Levels", "Stages", "Indicators", "Volume 1", "Events",
-                       "Studies", "Panes", "1D", "1M", "3M", "6M", "1Y", "All",
-                       "Line", "Candles", "Colours"], got
+                       "Studies", "Panes", "1D", "Regular hours", "1M", "3M", "6M", "1Y",
+                       "All", "Line", "Candles", "Colours"], got
 
 
 def test_the_interval_is_one_menu_naming_the_size_on_screen(toolbar):

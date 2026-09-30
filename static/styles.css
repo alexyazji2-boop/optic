@@ -7294,6 +7294,42 @@ body[data-view="chart"] .sessionbar { display: none; }
      transition above. */
   .ws-interval-pop .pill { transition: none; }
 }
+/* The trading-hours menu: the interval menu's cells, one to a line, since each
+   option is a phrase rather than a size. On 1D and 1W the button is disabled,
+   and reads so, as a Line / Candles button does where it cannot apply. */
+/* Outranks the menus' own :hover, so a pointer over it changes nothing. */
+.ws-session .ws-menu-btn:disabled {
+  color: var(--ink-muted);
+  border-color: var(--border-strong);
+  cursor: not-allowed;
+}
+/* The 210px floor every menu has, kept: the options are phrases, and a menu
+   the width of its button cut "Regular trading hours" off at "hou". */
+.ws-menu-pop.ws-session-pop { padding: 0; overflow: hidden; }
+.ws-session-pop .pills {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+}
+.ws-session-pop .pill {
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: 0;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  transition: background 120ms ease, color 120ms ease;
+}
+.ws-session-pop .pill:last-child { border-bottom: 0; }
+.ws-session-pop .pill:hover { background: var(--surface-2); }
+.ws-session-pop .pill.on { background: var(--btn-primary); color: var(--btn-primary-ink); }
+.ws-session-pop .pill:focus-visible { outline-offset: -2px; }
+@media (prefers-reduced-motion: reduce) {
+  .ws-session-pop .pill { transition: none; }
+}
 
 .ws-count {
   display: inline-block;

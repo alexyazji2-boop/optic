@@ -39,7 +39,7 @@ class _Feed:
     def __init__(self, frame):
         self.frame, self.calls = frame, []
 
-    def intraday_history(self, symbol, period="5d", interval="1m"):
+    def intraday_history(self, symbol, period="5d", interval="1m", prepost=False):
         self.calls.append((symbol, period, interval))
         return self.frame
 

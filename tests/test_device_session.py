@@ -445,7 +445,7 @@ SETTINGS = {
     "optic.indicators.v2", "optic.ws.panes",
     "optic.lt.mode", "optic.lt.range", "optic.lt.interval",
     "optic.chart.style.v1", "optic.chart.colors.v1", "optic.chart.mode", "optic.chart.range",
-    "optic.chart.interval", "optic.chart.hidden.v1",
+    "optic.chart.interval", "optic.chart.session", "optic.chart.hidden.v1",
     "optic.chart.legend.v1", "optic.chart.dock.v1", "optic.chart.sessions.v1",
     "optic.chart.stages.v1", "optic.chart.trends.v1", "optic.chart.earnmarks.v1",
     "optic.chart.accum.v1", "optic.chart.cloud921.v1", "optic.chart.cloud2150.v1",

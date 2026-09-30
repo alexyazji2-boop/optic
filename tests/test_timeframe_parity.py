@@ -52,10 +52,11 @@ def _minute_frame(n=240):
 class _Feed:
     def __init__(self, frame=None):
         self.frame = _minute_frame() if frame is None else frame
-        self.intraday_calls, self.daily_calls = [], []
+        self.intraday_calls, self.daily_calls, self.sessions = [], [], []
 
-    def intraday_history(self, symbol, period="5d", interval="1m"):
+    def intraday_history(self, symbol, period="5d", interval="1m", prepost=False):
         self.intraday_calls.append((symbol, period, interval))
+        self.sessions.append(prepost)
         return self.frame
 
     def history(self, symbol, period="2y", interval="1d"):
@@ -248,11 +249,12 @@ def test_no_client_function_is_declared_twice():
 
 def test_a_size_under_a_day_is_drawn_over_its_own_window_only():
     """The row of windows beside each size (5D, 1M and 60D beside 15m) was
-    asked to go, as "only keep the 1m, 5m, and etc". Each size asks for its
-    default, which the server offers, and nothing remembered from before can
-    hold a size on a window no control can change."""
+    asked to go, as "only keep the 1m, 5m, and etc". No window is chosen or
+    remembered: each size loads its `history` and opens on its own window, so
+    nothing remembered from before can hold a size on a window no control can
+    change. tests/test_intraday_history.py has why the history is there."""
     fn = _fn("intradayWindow")
-    assert "return (spec && spec.period) || '';" in fn
+    assert "return (spec && (spec.history || spec.period)) || '';" in fn
     for gone in ("INTRADAY_WINDOWS", "setIntradayWindow", "intradayWindows",
                  "INTRADAY_WINDOW_KEY", "data-ws-iwin", "WINDOW_WORDS"):
         assert gone not in APP, gone
@@ -298,8 +300,11 @@ def test_everything_computed_on_the_bars_keys_on_the_window():
     """Drawings, studies and trend lines made on the default window keep the
     bare size as their key, so nothing made before windows existed moves."""
     key = _fn("intradayBarsKey")
-    assert "return !spec || !spec.period || win === spec.period ? r : `${r}~${win}`;" in key
+    assert "const key = !spec || !spec.period || win === spec.period ? r : `${r}~${win}`;" in key
+    assert "return chartSession === 'extended' ? `${key}~ext` : key;" in key
     load = _fn("wsLoadIntraday")
-    assert "&& wsIntraday.window === win && !wsIntraday.loading" in load
-    assert "+ (win ? '&window=' + encodeURIComponent(win) : ''));" in load, "the request has to ask for it"
-    assert "intradayWindow(range) !== win) return;" in load, "a late reply for another window"
+    assert "&& wsIntraday.window === win && wsIntraday.session === session && !wsIntraday.loading" in load
+    assert "+ (win ? '&window=' + encodeURIComponent(win) : '')" in load, "the request has to ask for it"
+    assert "+ (session === 'extended' ? '&session=extended' : ''));" in load
+    assert ("|| intradayWindow(range) !== win\n        || chartSession !== session) return;"
+            in load), "a late reply for another window or session"

@@ -872,6 +872,10 @@ function lineChart(opts) {
      * at a third of the bars instead of bailing: 126 daily bars produced 42
      * dashed verticals across the plot. */
     sessions = null,
+    /* The bars outside the regular session, one boolean per bar, shaded: the
+     * pre- and post-market stretches of a chart drawn with extended hours, so
+     * the thin-book prints read apart from the session's own. */
+    offHours = null,
     // Daily volume, drawn as a band of bars beneath the price plot. Its own
     // scale, its own strip: sharing the price axis would either flatten the bars
     // to nothing or crush the price into the top third. Bars are tinted by the
@@ -1276,6 +1280,26 @@ function lineChart(opts) {
   // in it still renders *underneath* the data.
   const levelLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.8 : null });
   root.appendChild(levelLayer);
+
+  // Extended hours, under everything: a band for each run of bars outside the
+  // regular session, reaching halfway to the bars either side of it.
+  if (Array.isArray(offHours) && offHours.length === n && n > 1) {
+    const half = plotW / (n - 1) / 2;
+    const shade = s('g', { class: 'off-hours' });
+    for (let i = 0; i < n; i += 1) {
+      if (!offHours[i]) continue;
+      let j = i;
+      while (j + 1 < n && offHours[j + 1]) j += 1;
+      const x0 = Math.max(m.l, X(i) - half);
+      const x1 = Math.min(m.l + plotW, X(j) + half);
+      shade.appendChild(s('rect', {
+        x: x0, y: m.t, width: Math.max(0, x1 - x0), height: priceH,
+        fill: C.ink2, opacity: 0.07,
+      }));
+      i = j;
+    }
+    levelLayer.appendChild(shade);
+  }
 
   // Bands first, so a reference line crossing a zone stays visible on top of it.
   // Clipped to the plot rather than dropped when partly outside: half a zone at

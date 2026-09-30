@@ -75,11 +75,12 @@ class MarketDataProvider:
         return out
 
     def intraday_history(
-        self, ticker: str, period: str = "5d", interval: str = "1m"
+        self, ticker: str, period: str = "5d", interval: str = "1m", prepost: bool = False
     ) -> pd.DataFrame:
         """Minute-resolution bars, tz-aware in US/Eastern.
 
         Same OHLCV column contract as history(). ``period`` covers the last N
         calendar days (subject to the vendor's intraday lookback limit).
+        ``prepost`` adds the pre- and post-market bars to the regular session's.
         """
         raise NotImplementedError

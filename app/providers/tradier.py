@@ -171,11 +171,12 @@ class TradierProvider(MarketDataProvider):
 
         return self._cached(key, self.TTL_HISTORY, build)
 
-    def intraday_history(self, ticker: str, period: str = "5d", interval: str = "1m") -> pd.DataFrame:
+    def intraday_history(self, ticker: str, period: str = "5d", interval: str = "1m",
+                         prepost: bool = False) -> pd.DataFrame:
         """Minute bars via /markets/timesales — genuinely real-time, unlike the
         yfinance fallback, which is why intraday work is worth using Tradier
         for specifically."""
-        key = "intraday:{}:{}:{}".format(ticker, period, interval)
+        key = "intraday:{}:{}:{}{}".format(ticker, period, interval, ":prepost" if prepost else "")
 
         def build() -> pd.DataFrame:
             days = period_to_days(period)
@@ -190,13 +191,14 @@ class TradierProvider(MarketDataProvider):
                     "interval": tradier_interval,
                     "start": start.strftime("%Y-%m-%d %H:%M"),
                     "end": end.strftime("%Y-%m-%d %H:%M"),
-                    "session_filter": "open",
+                    "session_filter": "all" if prepost else "open",
                 },
             )
             rows = self._as_list((data or {}).get("series", {}).get("data")) if data else []
             if not rows:
                 # Fall back to the delayed feed rather than an empty intraday read.
-                return self.fallback.intraday_history(ticker, period=period, interval=interval) if self.fallback else pd.DataFrame()
+                return (self.fallback.intraday_history(ticker, period=period, interval=interval, prepost=prepost)
+                        if self.fallback else pd.DataFrame())
 
             frame = pd.DataFrame(rows)
             frame["time"] = pd.to_datetime(frame["time"])

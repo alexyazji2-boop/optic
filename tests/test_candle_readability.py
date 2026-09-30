@@ -108,7 +108,8 @@ def test_the_count_follows_the_chart_width():
 
 def test_both_paths_open_on_it_and_an_explicit_zoom_overrides_it():
     series = _fn("wsSeries")
-    assert "return wsReadable(full);" in series
+    # Under a day, on the size's own window of the history loaded behind it.
+    assert "const shown = wsReadable(from ? wsSliceWindow(full, { from, to: total }) : full);" in series
     assert "return wsReadable(sliceSeries(raw, chartRange, chartInterval, full));" in series
     assert series.count("wsFit = null;") == 2, "a zoom the reader chose is not trimmed"
     assert "const CANDLE_MIN_SLOT = 5;" in RAW

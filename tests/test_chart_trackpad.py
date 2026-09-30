@@ -232,9 +232,10 @@ def test_the_charting_window_counts_the_bars_on_screen():
     for name in ("wsWindowNow", "wsApplyWindow", "wsRenderNav"):
         assert "wsBaseSeries(" in _fn(name), name
     series = _fn("wsSeries")
-    assert "const win = wsClampWindow(wsWindow, (full.dates || []).length);" in series
+    assert "const total = (full.dates || []).length;\n    const win = wsClampWindow(wsWindow, total);" in series
     assert "if (win) { wsFit = null; return wsSliceWindow(full, win); }" in series
-    assert "return wsReadable(full);" in series
+    # Unzoomed, the size's own window of it: see tests/test_intraday_history.py.
+    assert "const shown = wsReadable(from ? wsSliceWindow(full, { from, to: total }) : full);" in series
 
 
 def test_the_options_window_counts_the_bars_on_screen_and_zooms_intraday():

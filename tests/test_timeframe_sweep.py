@@ -60,8 +60,10 @@ def test_each_press_marks_a_sweep_only_when_the_time_frame_changes():
 
 
 def test_the_time_frame_is_range_size_and_intraday_window():
+    """Under a day the bars' own key, which carries the window and the session:
+    extended hours are other bars, and a switch to them sweeps like a size."""
     key = _raw_fn("wsFrameKey")
-    assert "`${chartRange}|${chartInterval}|${isIntradayRange(chartRange) ? intradayWindow(chartRange) : ''}`" in key
+    assert "`${chartRange}|${chartInterval}|${isIntradayRange(chartRange) ? intradayBarsKey(chartRange) : ''}`" in key
 
 
 def test_the_first_redraw_with_bars_spends_it_and_a_gesture_never_does():

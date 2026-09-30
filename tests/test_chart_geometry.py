@@ -47,7 +47,7 @@ def run_js(scenario):
         pytest.skip("JavaScriptCore is unavailable")
     src = ("var chartRange = '6m';\nvar chartMode = 'line';\n"
            "var STATE = {chartData: null, chartSymbol: 'PLTR'};\n"
-           "var wsIntraday = null;\n"
+           "var wsIntraday = null;\nvar chartSession = 'regular';\n"
            "function assert(v, m) { if (!v) throw new Error(m); }\n"
            + array_const("CHART_RANGES") + "\n"
            # The bars in hand are matched on the window as well as the size.
@@ -81,12 +81,12 @@ def test_the_toolbar_and_the_chart_agree_about_candles():
       assert(wsCandles(daily) === true, 'and the chart must draw them');
 
       chartRange = '15';
-      wsIntraday = {symbol: 'PLTR', range: '15', window: intradayWindow('15'), available: true,
+      wsIntraday = {symbol: 'PLTR', range: '15', window: intradayWindow('15'), session: 'regular', available: true,
                     opens: [1], highs: [2], lows: [0], closes: [1]};
       assert(wsCandlesPossible() === true, 'intraday OHLC must allow candles');
       assert(wsCandles(intra) === true, 'and the chart must draw them');
 
-      wsIntraday = {symbol: 'PLTR', range: '15', window: intradayWindow('15'), available: true, closes: [1]};
+      wsIntraday = {symbol: 'PLTR', range: '15', window: intradayWindow('15'), session: 'regular', available: true, closes: [1]};
       assert(wsCandlesPossible() === false, 'closes alone cannot be candles');
       assert(wsCandles(closesOnly) === false, 'and the chart already knew');
     """)
@@ -102,15 +102,19 @@ def test_every_intraday_rung_offers_candles_once_its_bars_have_ohlc(rung):
       chartMode = 'candle';
       chartRange = '%s';
       STATE.chartData = {technicals: {price_series: {open: [1], high: [2], low: [0]}}};
-      wsIntraday = {symbol: 'PLTR', range: '%s', window: intradayWindow('%s'), available: true,
+      wsIntraday = {symbol: 'PLTR', range: '%s', window: intradayWindow('%s'), session: 'regular', available: true,
                     opens: [1], highs: [2], lows: [0], closes: [1]};
       assert(wsCandlesPossible() === true, 'candles refused on %s');
-      wsIntraday = {symbol: 'PLTR', range: '%s', window: intradayWindow('%s'), available: true, closes: [1]};
+      wsIntraday = {symbol: 'PLTR', range: '%s', window: intradayWindow('%s'), session: 'regular', available: true, closes: [1]};
       assert(wsCandlesPossible() === false, 'candles offered on %s with closes only');
       // Bars for another window of the same size are not this window's.
-      wsIntraday = {symbol: 'PLTR', range: '%s', window: 'another', available: true, closes: [1]};
+      wsIntraday = {symbol: 'PLTR', range: '%s', window: 'another', session: 'regular', available: true, closes: [1]};
       assert(wsCandlesPossible() === true, 'another window answered for this one on %s');
-    """ % ((rung,) * 9))
+      // Nor are the other session's.
+      wsIntraday = {symbol: 'PLTR', range: '%s', window: intradayWindow('%s'), session: 'extended',
+                    available: true, closes: [1]};
+      assert(wsCandlesPossible() === true, 'extended hours answered for regular on %s');
+    """ % ((rung,) * 12))
 
 
 def test_a_daily_payload_without_ohlc_does_not_offer_candles_either():

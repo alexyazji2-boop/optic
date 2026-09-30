@@ -2064,13 +2064,15 @@ const CHART_INTERVALS = [
    *
    * A count of minutes has no such clash, and it is the notation the rest of
    * the industry already uses for a resolution. */
-  // `period` is the window each size is drawn over, and the only one it offers.
-  { key: '1', label: '1m', intraday: true, window: '1 day', feed: '1m', period: '1d' },
-  { key: '5', label: '5m', intraday: true, window: '5 days', feed: '5m', period: '5d' },
-  { key: '15', label: '15m', intraday: true, window: '1 month', feed: '15m', period: '1mo' },
-  { key: '30', label: '30m', intraday: true, window: '1 month', feed: '30m', period: '1mo' },
-  { key: '60', label: '1h', intraday: true, window: '3 months', feed: '60m', period: '3mo' },
-  { key: '240', label: '4h', intraday: true, window: '1 year', feed: '4h', period: '1y' },
+  // `period` is the window each size opens on. `history` is the longer one
+  // loaded behind it, the longest the server offers the size, so a drag, the
+  // wheel and the navigator have earlier bars to reach, as 1D has.
+  { key: '1', label: '1m', intraday: true, window: '1 day', feed: '1m', history: '5d', period: '1d' },
+  { key: '5', label: '5m', intraday: true, window: '5 days', feed: '5m', history: '1mo', period: '5d' },
+  { key: '15', label: '15m', intraday: true, window: '1 month', feed: '15m', history: '60d', period: '1mo' },
+  { key: '30', label: '30m', intraday: true, window: '1 month', feed: '30m', history: '60d', period: '1mo' },
+  { key: '60', label: '1h', intraday: true, window: '3 months', feed: '60m', history: '1y', period: '3mo' },
+  { key: '240', label: '4h', intraday: true, window: '1 year', feed: '4h', history: '2y', period: '1y' },
   { key: 'daily', label: '1D' },
   { key: 'weekly', label: '1W' },
 ];
@@ -2138,17 +2140,21 @@ function chartWindowLabel() {
   return (chartIntervalSpec(chartRange) || {}).window || chartRange;
 }
 
-/* The window each intraday size is drawn over: its own default, and no other.
+/* The window each intraday size is loaded over: the history behind it.
  *
  * Each size used to offer a row of windows of its own beside the bar sizes,
  * 5D, 1M and 60D next to 15m, and remember the one picked. Asked to go, as
  * "only keep the 1m, 5m, and etc": 1M beside 1m read as the same control
- * twice. The server still takes a window (INTRADAY_SPECS in app/main.py) and
- * this always asks for the size's default, so a choice remembered from before
- * cannot leave a size on a window nothing on screen can change. */
+ * twice. So no window is chosen, and none remembered.
+ *
+ * It was each size's own window, which left a drag nothing to reach: every
+ * bar loaded was already on screen, and "the drag feature only works on the
+ * 1D chart" was the report. Each size loads its `history` now and still opens
+ * on its own window (`view_from` in the payload), so nothing changes on screen
+ * until the chart is dragged. */
 function intradayWindow(rung) {
   const spec = chartIntervalSpec(rung);
-  return (spec && spec.period) || '';
+  return (spec && (spec.history || spec.period)) || '';
 }
 
 /* The key for the bars on screen under a day: the size alone on its default
@@ -2158,14 +2164,32 @@ function intradayBarsKey(rung) {
   const r = rung || chartRange;
   const win = intradayWindow(r);
   const spec = chartIntervalSpec(r);
-  return !spec || !spec.period || win === spec.period ? r : `${r}~${win}`;
+  const key = !spec || !spec.period || win === spec.period ? r : `${r}~${win}`;
+  // Extended hours are other bars at other indices, so they keep their own
+  // drawings, studies and trend lines.
+  return chartSession === 'extended' ? `${key}~ext` : key;
 }
 
-/* An /api query for those bars: the size, and its window when not the default. */
+/* An /api query for those bars: the size, its window when not the default, and
+ * the session when it is extended. */
 function intradayQuery(barsKey) {
-  const [rung, win] = String(barsKey).split('~');
-  return 'intraday=' + encodeURIComponent(rung) + (win ? '&window=' + encodeURIComponent(win) : '');
+  const [rung, ...rest] = String(barsKey).split('~');
+  const win = rest.find((part) => part !== 'ext');
+  return 'intraday=' + encodeURIComponent(rung) + (win ? '&window=' + encodeURIComponent(win) : '')
+    + (rest.includes('ext') ? '&session=extended' : '');
 }
+
+/* Regular trading hours or extended hours, for the sizes under a day. Daily
+ * and weekly bars are the regular session's, as the feed builds them. */
+const CHART_SESSION_KEY = 'optic.chart.session';
+const CHART_SESSIONS = [
+  { key: 'regular', label: 'Regular trading hours' },
+  { key: 'extended', label: 'Extended hours' },
+];
+let chartSession = 'regular';
+try {
+  if (localStorage.getItem(CHART_SESSION_KEY) === 'extended') chartSession = 'extended';
+} catch (e) { /* private mode: regular hours for the session */ }
 
 /* ---------------------------------------------------- client-side indicators
  *
@@ -3013,6 +3037,9 @@ function intradaySeries(intra) {
     atr: intra.atr14,
     patterns: intra.patterns || null,
     spot: intra.last,
+    // One flag a bar, true outside the regular session: extended hours only,
+    // and only for a symbol that has them.
+    extended: Array.isArray(intra.extended) ? intra.extended : [],
     shown_bars: intra.bars || 0,
     total_bars: intra.bars || 0,
     intraday: true,
@@ -15473,6 +15500,7 @@ function wsToolbar() {
          weekly halves of it write to different variables -- see the comment
          on CHART_INTERVALS -- but a reader is choosing one thing. */''}
     ${wsIntervalMenu()}
+    ${wsSessionMenu()}
     ${/* The ranges for 1D and 1W. A size under a day has none beside it: it is
          drawn over its own window (see intradayWindow), and its row of 5D, 1M
          and 60D was asked to go. */''}
@@ -15536,6 +15564,31 @@ function wsIntervalMenu() {
       aria-hidden="true">&#9662;</span></button>
     ${open ? `<div class="ws-menu-pop ws-interval-pop">
       ${rangePills(CHART_INTERVALS, active, 'data-ws-interval', 'Interval')}
+    </div>` : ''}
+  </div>`;
+}
+
+/* Regular trading hours or extended hours.
+ *
+ * Asked for as a dropdown, "one for "regular trading hours" and one for
+ * "extended hours"". The session belongs to the bars under a day: daily and
+ * weekly bars are the regular session's, as the feed builds them, so there the
+ * button says Regular hours and is disabled, as Candles is where the bars
+ * cannot be candles, and the choice is kept for the next size under a day. */
+function wsSessionMenu() {
+  const intraday = isIntradayRange(chartRange);
+  const ext = intraday && chartSession === 'extended';
+  const open = intraday && wsMenuOpen === 'session';
+  const label = ext ? 'Extended hours' : 'Regular hours';
+  return `<div class="ws-menu ws-session">
+    <button type="button" class="ws-menu-btn${ext ? ' on' : ''}" data-ws-menu="session"
+      aria-expanded="${open}" aria-label="Trading hours: ${label}"${intraday
+    ? ' title="Trading hours"'
+    // One line: a template literal's indentation ends up inside the tooltip.
+    : ' disabled title="Daily and weekly bars are the regular session. Extended hours are drawn on sizes under a day."'
+}>${label}<span class="ws-caret" aria-hidden="true">&#9662;</span></button>
+    ${open ? `<div class="ws-menu-pop ws-session-pop">
+      ${rangePills(CHART_SESSIONS, chartSession, 'data-ws-session', 'Trading hours')}
     </div>` : ''}
   </div>`;
 }
@@ -16192,7 +16245,7 @@ let wsSweepSeq = 0;
 /* The time frame on screen, as a press compares it: the range, the bar size
  * and, under a day, the window. */
 function wsFrameKey() {
-  return `${chartRange}|${chartInterval}|${isIntradayRange(chartRange) ? intradayWindow(chartRange) : ''}`;
+  return `${chartRange}|${chartInterval}|${isIntradayRange(chartRange) ? intradayBarsKey(chartRange) : ''}`;
 }
 
 /* A redraw for data that arrived, held until a sweep in progress has drawn:
@@ -16306,6 +16359,7 @@ function wsBaseSeries(d) {
   if (isIntradayRange(chartRange)) {
     if (!wsIntraday || wsIntraday.symbol !== STATE.chartSymbol
         || wsIntraday.range !== chartRange || wsIntraday.window !== intradayWindow(chartRange)
+        || wsIntraday.session !== chartSession
         || wsIntraday.loading || wsIntraday.available === false) return { dates: [] };
     const intra = intradaySeries(wsIntraday);
     return intra ? wsWithOscillators(intra, null, true) : { dates: [] };
@@ -16353,26 +16407,30 @@ async function wsLoadIntraday() {
   const symbol = STATE.chartSymbol;
   const range = chartRange;
   const win = intradayWindow(range);
+  const session = chartSession;
   if (!symbol) return;
   if (wsIntraday && wsIntraday.symbol === symbol && wsIntraday.range === range
-      && wsIntraday.window === win && !wsIntraday.loading) {
+      && wsIntraday.window === win && wsIntraday.session === session && !wsIntraday.loading) {
     // Cached, but still repaint. Returning without one meant switching back to
     // a range that had already been fetched left the previous range's chart and
     // legend on screen with the new pill lit.
     wsRedrawChart();
     return;
   }
-  wsIntraday = { symbol, range, window: win, loading: true };
+  wsIntraday = { symbol, range, window: win, session, loading: true };
   wsRedrawChart();
   try {
     const data = await getJSON('/api/intraday/' + encodeURIComponent(symbol)
       + '?range=' + encodeURIComponent(range)
-      + (win ? '&window=' + encodeURIComponent(win) : ''));
-    // The reader may have changed symbol, size or window while this was in flight.
-    if (STATE.chartSymbol !== symbol || chartRange !== range || intradayWindow(range) !== win) return;
-    wsIntraday = { ...data, symbol, range, window: win };
+      + (win ? '&window=' + encodeURIComponent(win) : '')
+      + (session === 'extended' ? '&session=extended' : ''));
+    // The reader may have changed symbol, size, window or session while this
+    // was in flight.
+    if (STATE.chartSymbol !== symbol || chartRange !== range || intradayWindow(range) !== win
+        || chartSession !== session) return;
+    wsIntraday = { ...data, symbol, range, window: win, session };
   } catch (err) {
-    wsIntraday = { symbol, range, window: win, available: false, reason: err.message };
+    wsIntraday = { symbol, range, window: win, session, available: false, reason: err.message };
   }
   wsRedrawChart();
 }
@@ -16613,7 +16671,7 @@ function wsSeries(d) {
   if (isIntradayRange(chartRange)) {
     if (!wsIntraday || wsIntraday.symbol !== STATE.chartSymbol
         || wsIntraday.range !== chartRange || wsIntraday.window !== intradayWindow(chartRange)
-        || wsIntraday.loading) {
+        || wsIntraday.session !== chartSession || wsIntraday.loading) {
       return wsIntradayStub(wsIntraday && wsIntraday.loading
         ? 'Loading intraday bars…' : 'Intraday bars not loaded yet.');
     }
@@ -16626,9 +16684,15 @@ function wsSeries(d) {
     // With the panes' RSI and MACD computed from these bars, as the weekly
     // series does from weeks, and the zoom window applied like the daily one.
     const full = wsWithOscillators(intra, null, true);
-    const win = wsClampWindow(wsWindow, (full.dates || []).length);
+    const total = (full.dates || []).length;
+    const win = wsClampWindow(wsWindow, total);
     if (win) { wsFit = null; return wsSliceWindow(full, win); }
-    return wsReadable(full);
+    // Unzoomed, the size's own window: the newest part of the history loaded,
+    // with the rest behind it for a drag to reach.
+    const from = Math.max(0, Math.min(total - 1, wsIntraday.view_from || 0));
+    const shown = wsReadable(from ? wsSliceWindow(full, { from, to: total }) : full);
+    if (wsFit) wsFit.total = total;
+    return shown;
   }
   const full = wsFullSeries(d);
   const total = (full.dates || []).length;
@@ -16718,7 +16782,8 @@ function wsCandlesPossible() {
   if (isIntradayRange(chartRange)) {
     const intra = wsIntraday;
     if (!intra || intra.loading || intra.symbol !== STATE.chartSymbol
-        || intra.range !== chartRange || intra.window !== intradayWindow(chartRange)) return true;
+        || intra.range !== chartRange || intra.window !== intradayWindow(chartRange)
+        || intra.session !== chartSession) return true;
     return !!(intra.opens && intra.highs && intra.lows);
   }
   const raw = ((STATE.chartData || {}).technicals || {}).price_series || {};
@@ -19202,6 +19267,8 @@ function wsMountChart() {
       clouds: emaClouds(ps),
       // A plain drag pans this chart, and a held press measures. See panDrag.
       panDrag: true,
+      // Pre- and post-market shaded, when extended hours are on.
+      offHours: intraday && (ps.extended || []).some(Boolean) ? ps.extended : null,
       series: [
         { name: 'Close', values: ps.close,
           // C.ink in candle mode is not a colour choice: the series is present
@@ -33121,6 +33188,29 @@ document.addEventListener('click', (evt) => {
     // wsResetChart pushes its own undo entry first, so this is reversible
     // with the same arrow the drawing tools use.
     wsResetChart();
+    return;
+  }
+  const wsSess = evt.target.closest('[data-ws-session]');
+  if (wsSess) {
+    wsMenuOpen = null;
+    const next = wsSess.dataset.wsSession === 'extended' ? 'extended' : 'regular';
+    const before = wsFrameKey();
+    if (next !== chartSession) {
+      chartSession = next;
+      try { localStorage.setItem(CHART_SESSION_KEY, chartSession); } catch (e) { /* private mode */ }
+      // Other bars, so a zoom's indices would land on other times.
+      wsWindow = null;
+    }
+    if (wsFrameKey() === before) {
+      const tbs = views.chart.querySelector('.ws-toolbar');
+      if (tbs) tbs.outerHTML = wsToolbar();
+      return;
+    }
+    wsFrameSweep = ++wsSweepSeq;
+    wsLoadIntraday();
+    // Studies and trend lines are computed on the same bars.
+    if (wsPriceIndicatorIds().length) wsLoadIndicators();
+    if (showTrends) loadTrendlines(STATE.chartSymbol);
     return;
   }
   const wsInt = evt.target.closest('[data-ws-interval]');

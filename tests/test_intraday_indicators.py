@@ -48,7 +48,7 @@ class _Feed:
                                    "Volume": [1000.0 + i for i in range(n)]}, index=idx)
         self.intraday_calls, self.daily_calls = [], []
 
-    def intraday_history(self, symbol, period="5d", interval="1m"):
+    def intraday_history(self, symbol, period="5d", interval="1m", prepost=False):
         self.intraday_calls.append((symbol, period, interval))
         return self.frame
 

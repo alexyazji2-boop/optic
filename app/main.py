@@ -2186,25 +2186,55 @@ INTRADAY_SPECS = {
 }
 
 
-def intraday_spec(key: str, window: str = "") -> Optional[Dict[str, Any]]:
+def intraday_spec(key: str, window: str = "", session: str = "") -> Optional[Dict[str, Any]]:
     """The spec for an intraday size, with its window if it is one of the
     size's own; None for an unknown size or a window it does not offer. One
     function for the bars, the studies and the trend lines, so the three are
-    always computed on the same frame."""
+    always computed on the same frame.
+
+    `view` is the size's own window, the one it opens on, whatever longer
+    history was asked for behind it. `prepost` is the session: "extended" adds
+    the pre- and post-market bars, and anything else is the regular session,
+    which is what every chart drew before there was a choice."""
     spec = INTRADAY_SPECS.get((key or "").lower())
     if not spec:
         return None
+    extra = {"view": spec["period"], "prepost": (session or "").lower() == "extended"}
     win = (window or "").lower()
     if not win or win == spec["period"]:
-        return spec
+        return {**spec, **extra}
     if win not in spec.get("windows", ()):
         return None
-    return {**spec, "period": win}
+    return {**spec, **extra, "period": win}
+
+
+def intraday_view_start(stamps: List[Any], period: str) -> int:
+    """Where a size's own window starts in a longer history: the index of the
+    first bar of `period`, counted back from the newest bar.
+
+    A count of days is a count of sessions, which is how the feed reads "5d"
+    (measured: five dates at 5m); months and years are calendar, as the feed
+    reads "1mo" (the 1st of the month to the 30th)."""
+    if not stamps:
+        return 0
+    m = re.fullmatch(r"(\d+)(d|mo|y)", (period or "").lower())
+    if not m:
+        return 0
+    n, unit = int(m.group(1)), m.group(2)
+    if unit == "d":
+        days = sorted({s.date() for s in stamps})
+        if len(days) <= n:
+            return 0
+        first = days[-n]
+        return next(i for i, s in enumerate(stamps) if s.date() >= first)
+    cutoff = stamps[-1] - pd.DateOffset(months=n * (12 if unit == "y" else 1))
+    return next((i for i, s in enumerate(stamps) if s >= cutoff), 0)
 
 
 @app.get("/api/intraday/{ticker}")
 async def intraday(ticker: str, range: str = Query("1d"),
-                   window: str = Query("", description="One of the size's windows")) -> Dict[str, Any]:
+                   window: str = Query("", description="One of the size's windows"),
+                   session: str = Query("", description="regular, the default, or extended")) -> Dict[str, Any]:
     """Intraday bars for the short-range chart pills.
 
     Separate from /api/ticker deliberately. That payload is daily bars and the
@@ -2212,11 +2242,18 @@ async def intraday(ticker: str, range: str = Query("1d"),
     1D or 5D, and fetching it on every ticker load would be a request per view
     that most readers never look at.
 
-    Regular session only. Pre- and post-market prints come from thin books, and
-    splicing them into the same line as regular-hours trade draws gaps and
-    spikes that look like price action and are not.
+    The regular session unless `session` is "extended". Pre- and post-market
+    prints come from thin books, and spliced into the same line as regular-hours
+    trade they draw gaps and spikes that look like price action and are not, so
+    they are the reader's choice rather than the default, and each one is
+    marked in `extended` for the chart to shade.
+
+    A `window` longer than the size's own is history to pan back through: the
+    chart opens on the size's own window, which starts at `view_from`, and the
+    levels, zones, Fibonacci grid and change are computed over that window, as
+    they were when it was all that came back.
     """
-    spec = intraday_spec(range, window)
+    spec = intraday_spec(range, window, session)
     if not spec:
         known = INTRADAY_SPECS.get((range or "").lower())
         if known:
@@ -2231,7 +2268,7 @@ async def intraday(ticker: str, range: str = Query("1d"),
     def build() -> Dict[str, Any]:
         symbol = ticker.upper().strip()
         frame = YF_PROVIDER.intraday_history(
-            symbol, period=spec["period"], interval=spec["interval"])
+            symbol, period=spec["period"], interval=spec["interval"], prepost=spec["prepost"])
         if frame is None or frame.empty:
             return {"available": False, "ticker": symbol, "range": range,
                     "reason": ("No intraday bars came back. Free intraday history is "
@@ -2245,6 +2282,7 @@ async def intraday(ticker: str, range: str = Query("1d"),
         # A missing value is sent as null rather than guessed, and the chart
         # leaves that one candle out.
         opens, highs, lows, closes, times, volumes = [], [], [], [], [], []
+        stamps: List[Any] = []
 
         def _price(value):
             return None if value is None or value != value else round(float(value), 4)
@@ -2254,6 +2292,7 @@ async def intraday(ticker: str, range: str = Query("1d"),
             if close is None or close != close:
                 continue
             closes.append(round(float(close), 4))
+            stamps.append(stamp)
             opens.append(_price(row.get("Open")))
             highs.append(_price(row.get("High")))
             lows.append(_price(row.get("Low")))
@@ -2275,7 +2314,11 @@ async def intraday(ticker: str, range: str = Query("1d"),
         # That is the rule find_swing_points' own docstring states; the daily
         # grid takes its direction from the composite bias instead, which is
         # not computed on intraday bars.
-        swing_rows = frame.dropna(subset=["High", "Low", "Close"])
+        # The size's own window, which the chart opens on. The overlays below
+        # are computed over it, so a longer history behind it moves none of them.
+        view_from = intraday_view_start(stamps, spec["view"])
+        view = frame[frame.index >= stamps[view_from]] if view_from else frame
+        swing_rows = view.dropna(subset=["High", "Low", "Close"])
         fib: Dict[str, Any] = {}
         if len(swing_rows) >= 2:
             swing = technicals.find_swing_points(swing_rows, lookback=len(swing_rows))
@@ -2310,13 +2353,27 @@ async def intraday(ticker: str, range: str = Query("1d"),
         # The reference for a percentage change is the first bar of the window,
         # not the previous daily close — the chart shows this window, so the
         # number under it has to describe the same thing.
-        first, last = closes[0], closes[-1]
+        first, last = closes[view_from], closes[-1]
+
+        # The bars outside the regular session, for the chart to shade. Only
+        # where the symbol has a pre- and post-market at all (the feed says so):
+        # a future or a coin trades round the clock, and asking for extended
+        # hours there changes nothing, so nothing is marked. The feed splits a
+        # bar at each session edge (an hour bar at 9:00 and another at 9:30), so
+        # where a bar starts says which session it is.
+        extended: List[bool] = []
+        if spec["prepost"] and frame.attrs.get("has_prepost"):
+            opens_at, closes_at = frame.attrs.get("regular_minutes") or (570, 960)
+            extended = [not (opens_at <= s.hour * 60 + s.minute < closes_at) for s in stamps]
         return {
             "available": True,
             "ticker": symbol,
             "range": range,
             "interval": spec["interval"],
             "window": spec["period"],
+            "view_from": view_from,
+            "session": "extended" if spec["prepost"] else "regular",
+            "extended": extended,
             "times": times,
             "opens": opens,
             "highs": highs,
@@ -2332,6 +2389,12 @@ async def intraday(ticker: str, range: str = Query("1d"),
             "last": last,
             "change_pct": round((last / first - 1.0) * 100.0, 3) if first else None,
             "session_note": (
+                ("Regular and extended session bars at {} resolution. Pre- and "
+                 "post-market prints trade on thin books, so they are shaded apart "
+                 "from the regular session's." if extended else
+                 "Extended hours at {} resolution. This symbol has no pre- or "
+                 "post-market session, so every bar is the session's.").format(spec["interval"])
+                if spec["prepost"] else
                 "Regular session bars only, at {} resolution. Pre- and post-market "
                 "prints are excluded: they trade on thin books, and splicing them "
                 "into the same line draws gaps that look like price action and are "
@@ -2977,7 +3040,8 @@ async def weekly_bars(ticker: str) -> Dict[str, Any]:
 async def trendlines_panel(ticker: str,
                            period: str = Query("1y"),
                            intraday: str = Query("", description="An /api/intraday range key"),
-                           window: str = Query("", description="That size's window")) -> Dict[str, Any]:
+                           window: str = Query("", description="That size's window"),
+                           session: str = Query("", description="That chart's session")) -> Dict[str, Any]:
     """Trend lines fitted to pivots, and whether price has broken one.
 
     `intraday` fits them to that rung's bars instead of a year of daily ones,
@@ -2985,7 +3049,7 @@ async def trendlines_panel(ticker: str,
     it was fitted to. Off under a day until now, which left Auto trend lines a
     switch that drew nothing on every size below 1D."""
     sym = ticker.strip().upper()
-    spec = intraday_spec(intraday, window) if intraday else None
+    spec = intraday_spec(intraday, window, session) if intraday else None
     if intraday and not spec:
         return {"available": False,
                 "reason": "Unknown intraday range {!r}.".format(intraday)}
@@ -2993,7 +3057,8 @@ async def trendlines_panel(ticker: str,
     def build() -> Dict[str, Any]:
         if spec:
             df = YF_PROVIDER.intraday_history(sym, period=spec["period"],
-                                              interval=spec["interval"])
+                                              interval=spec["interval"],
+                                              prepost=spec["prepost"])
         else:
             df = YF_PROVIDER.history(sym, period=period, interval="1d")
         out = trendlines_mod.build(df)
@@ -3432,6 +3497,7 @@ async def indicator_panel(
     anchor: str = Query("", description="Anchor date for VWAP, YYYY-MM-DD"),
     intraday: str = Query("", description="An /api/intraday range key, e.g. 5 or 60"),
     window: str = Query("", description="That size's window, as /api/intraday takes it"),
+    session: str = Query("", description="That chart's session, as /api/intraday takes it"),
     weekly: bool = Query(False, description="Compute on weekly bars"),
 ) -> Dict[str, Any]:
     """Optional indicators, computed only for the ids asked for.
@@ -3448,15 +3514,14 @@ async def indicator_panel(
     the candles. Its own parameter rather than a value of `range`, because
     "1d" and "5d" are both a daily period and an intraday key.
 
-    VWAP is anchored at the first bar of the window there: a date anchor
-    compared against a timezone-aware minute index raises, and the window's
-    first bar is what the chart shows. The one-line readings are dropped, as
-    they are written in sessions and a bar is not one.
+    VWAP is anchored at the first bar of the size's own window there, which is
+    where the chart opens, whatever longer history came with it. The one-line
+    readings are dropped, as they are written in sessions and a bar is not one.
     """
     def build() -> Dict[str, Any]:
         sym = ticker.upper().strip()
         wanted = [i for i in (ids or "").replace(" ", "").split(",") if i]
-        spec = intraday_spec(intraday, window) if intraday else None
+        spec = intraday_spec(intraday, window, session) if intraday else None
         if intraday and not spec:
             return {"available": False,
                     "reason": "Unknown intraday range {!r}. Expected one of: {}.".format(
@@ -3465,7 +3530,8 @@ async def indicator_panel(
         def frame_for(symbol: str):
             if spec:
                 return YF_PROVIDER.intraday_history(
-                    symbol, period=spec["period"], interval=spec["interval"])
+                    symbol, period=spec["period"], interval=spec["interval"],
+                    prepost=spec["prepost"])
             source = PROVIDER if symbol == sym else YF_PROVIDER
             # Weekly bars for a weekly chart. Daily studies were drawn over it,
             # lined up from the newest bar, so a 1W chart of two years carried
@@ -3485,8 +3551,14 @@ async def indicator_panel(
             frame = frame_for("SPY")
             if frame is not None and not frame.empty:
                 bench = frame["Close"].astype(float)
+        intraday_anchor = None
+        if spec:
+            # The first bar of the size's own window, where the chart opens,
+            # rather than the start of the longer history behind it.
+            start = intraday_view_start(list(hist.index), spec["view"])
+            intraday_anchor = hist.index[start].isoformat() if start else None
         out = indicators_mod.compute(hist, wanted, bench=bench,
-                                     anchor=None if spec else (anchor or None))
+                                     anchor=intraday_anchor if spec else (anchor or None))
         if spec and out.get("available") is not False:
             # Times, not dates: the chart's x-axis is minutes here.
             out["dates"] = [ts.isoformat() for ts in hist.index]

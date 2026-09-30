@@ -368,6 +368,24 @@ def _wait_turn() -> None:
     _METER.requests = int(getattr(_METER, "requests", 0)) + 1
 
 
+def _session_hours(meta: Dict[str, Any]) -> Dict[str, Any]:
+    """The regular session in the exchange's own minutes of the day, and whether
+    the symbol trades outside it, from a history call's metadata. 9:30 to 16:00
+    when the feed leaves the hours out, which is the US session."""
+    out: Dict[str, Any] = {"has_prepost": bool(meta.get("hasPrePostMarketData")),
+                           "regular_minutes": (570, 960)}
+    regular = (meta.get("currentTradingPeriod") or {}).get("regular") or {}
+    zone = meta.get("exchangeTimezoneName") or "America/New_York"
+    try:
+        start = pd.Timestamp(int(regular["start"]), unit="s", tz="UTC").tz_convert(zone)
+        end = pd.Timestamp(int(regular["end"]), unit="s", tz="UTC").tz_convert(zone)
+        if end > start:
+            out["regular_minutes"] = (start.hour * 60 + start.minute, end.hour * 60 + end.minute)
+    except (KeyError, TypeError, ValueError):
+        pass
+    return out
+
+
 def _cached(key: str, ttl: float, producer, gate: bool = True):
     """Tiny TTL memo. Chains move fast, price history doesn't — callers pick.
 
@@ -1050,21 +1068,34 @@ class YFinanceProvider(MarketDataProvider):
 
         return _cached(key, self.TTL_HISTORY, build)
 
-    def intraday_history(self, ticker: str, period: str = "5d", interval: str = "1m") -> pd.DataFrame:
+    def intraday_history(self, ticker: str, period: str = "5d", interval: str = "1m",
+                         prepost: bool = False) -> pd.DataFrame:
         # Short TTL: this is the one feed on the whole page where a 5-minute-old
         # bar is actually stale, not just "fine for now".
-        key = "intraday:{}:{}:{}".format(ticker, period, interval)
+        key = "intraday:{}:{}:{}{}".format(ticker, period, interval, ":prepost" if prepost else "")
 
         def build() -> pd.DataFrame:
             try:
-                df = yf.Ticker(ticker).history(
-                    period=period, interval=interval, auto_adjust=False, prepost=False
+                handle = yf.Ticker(ticker)
+                df = handle.history(
+                    period=period, interval=interval, auto_adjust=False, prepost=prepost
                 )
             except Exception:
                 return pd.DataFrame()
             if df is None or df.empty:
                 return pd.DataFrame()
-            return df.dropna(subset=["Close"])
+            df = df.dropna(subset=["Close"])
+            if prepost:
+                # Whether this symbol has a pre- and post-market at all, and
+                # where its regular session sits, from the feed's own metadata.
+                # A future or a coin trades round the clock and has neither, so
+                # asking for extended hours adds nothing there to mark.
+                try:
+                    meta = handle.history_metadata or {}
+                except Exception:                              # noqa: BLE001
+                    meta = {}
+                df.attrs.update(_session_hours(meta))
+            return df
 
         return _cached(key, 30, build)
 
