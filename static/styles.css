@@ -13718,6 +13718,15 @@ body.chat-full .rp { display: none; }
    rendered its password form open on every visit to Settings. */
 .rp-panel[hidden] { display: none; }
 
+/* A Settings change crossfades from the old page to the new one (see
+   applySettingInPlace), a little slower than the browser's default so a theme
+   change reads as a fade rather than a flicker. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 260ms;
+  animation-timing-function: ease;
+}
+
 /* The title and its close button, one row: the x sits in the corner, as the
    sign-in dialog's does, and the title keeps its own line length. */
 .rp-head {

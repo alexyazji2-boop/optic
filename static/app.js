@@ -1578,6 +1578,49 @@ function applyUiScale() {
   if (typeof trackTopbarHeight === 'function') trackTopbarHeight();
 }
 
+/* A Settings change applied without moving the page, and faded rather than
+ * swapped.
+ *
+ * Reported by a user as "When changing the Appearance, Text Size, etc, the
+ * screen glitches and it scrolls the page down. It should be a nice and smooth
+ * transition". Each of these re-renders Settings, and a text size changes the
+ * height of everything above the control: measured at 1470x785, Large moved
+ * the button under the cursor 144px down the screen and Default moved it 144px
+ * back up, with the scroll position unchanged, which reads as the page
+ * scrolling. A theme swapped every colour in one frame.
+ *
+ * So the control that was pressed is put back where it was on screen, and
+ * keeps focus if it had it. Where the browser can crossfade one state into the
+ * next (a view transition: Safari 18, Chrome, Edge) the old page fades into
+ * the new one; elsewhere, and for a reader who has asked for less motion, it
+ * changes at once, still without moving. */
+function applySettingInPlace(anchor, change) {
+  const topOf = () => {
+    const el = anchor ? document.querySelector(anchor) : null;
+    return el ? el.getBoundingClientRect().top : null;
+  };
+  const before = topOf();
+  const focused = !!(anchor && document.activeElement && document.activeElement.matches
+    && document.activeElement.matches(anchor));
+  const run = () => {
+    change();
+    const after = topOf();
+    if (before !== null && after !== null && Math.abs(after - before) >= 1) {
+      window.scrollTo({ top: window.scrollY + (after - before), behavior: 'instant' });
+    }
+    if (focused) {
+      const el = document.querySelector(anchor);
+      if (el) el.focus({ preventScroll: true });
+    }
+  };
+  const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!still && typeof document.startViewTransition === 'function') {
+    document.startViewTransition(run);
+  } else {
+    run();
+  }
+}
+
 function setUiScale(id) {
   if (!UI_SCALES.some((s) => s.id === id)) return;
   try { localStorage.setItem(UI_SCALE_KEY, id); } catch (e) { /* private mode */ }
@@ -32029,8 +32072,11 @@ document.addEventListener('change', (evt) => {
     return;
   }
   if (evt.target.id === 'tz-select') {
-    SETTINGS.timezone = evt.target.value;
-    saveTimezone();
+    const zone = evt.target.value;
+    applySettingInPlace('#tz-select', () => {
+      SETTINGS.timezone = zone;
+      saveTimezone();
+    });
     return;
   }
   if (evt.target.id === 'chart-interval') {
@@ -32311,9 +32357,18 @@ document.addEventListener('click', (evt) => {
   // this same listener a dozen lines up, and a duplicate const is a parse error
   // that takes the whole file down rather than just this branch.
   const detailBtn = evt.target.closest('[data-set-mode]');
-  if (detailBtn) { closePanelChooser(); setUiMode(detailBtn.dataset.setMode); return; }
+  if (detailBtn) {
+    closePanelChooser();
+    const mode = detailBtn.dataset.setMode;
+    applySettingInPlace(`[data-set-mode="${mode}"]`, () => setUiMode(mode));
+    return;
+  }
   const scaleBtn = evt.target.closest('[data-set-scale]');
-  if (scaleBtn) { setUiScale(scaleBtn.dataset.setScale); return; }
+  if (scaleBtn) {
+    const id = scaleBtn.dataset.setScale;
+    applySettingInPlace(`[data-set-scale="${id}"]`, () => setUiScale(id));
+    return;
+  }
   if (evt.target.closest('[data-panels-open]')) { openPanelChooser(STATE.view); return; }
   const insOnly = evt.target.closest('[data-ins-only]');
   if (insOnly) {
@@ -32506,8 +32561,11 @@ document.addEventListener('click', (evt) => {
   }
   const themeBtn = evt.target.closest('[data-set-theme]');
   if (themeBtn) {
-    SETTINGS.theme = themeBtn.dataset.setTheme;
-    applyTheme();
+    const theme = themeBtn.dataset.setTheme;
+    applySettingInPlace(`[data-set-theme="${theme}"]`, () => {
+      SETTINGS.theme = theme;
+      applyTheme();
+    });
     return;
   }
   if (evt.target.closest('#tracker-scan')) { runTrackerAction('scan'); return; }

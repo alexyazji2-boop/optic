@@ -113,7 +113,10 @@ def test_both_buttons_still_have_their_handlers():
     assert "closest('[data-panels-open]')" in CODE
     assert "openPanelChooser(STATE.view)" in CODE
     assert "closest('[data-set-mode]')" in CODE
-    assert "setUiMode(detailBtn.dataset.setMode)" in CODE
+    # Through applySettingInPlace since it stopped moving the page: see
+    # test_settings_in_place.
+    assert "const mode = detailBtn.dataset.setMode;" in CODE
+    assert "() => setUiMode(mode)" in CODE
 
 
 # ------------------------------------------------- one Pulse button, not three
