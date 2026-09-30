@@ -29990,7 +29990,7 @@ try {
 } catch (e) { /* private mode */ }
 
 let PULSE_PERSONAS = [
-  { id: 'neutral', glyph: '\u2696', label: 'Neutral analyst',
+  { id: 'neutral', glyph: '\u2696\uFE0F', label: 'Neutral analyst',
     blurb: 'Balanced, cites the numbers.' },
 ];
 /* What choosing a persona does, and the one thing it cannot. From the server,

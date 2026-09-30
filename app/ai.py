@@ -94,9 +94,14 @@ PERSONA_NEVER_CHANGES: List[str] = [
     "The risk warnings, and what Pulse will not do.",
 ]
 
+# A glyph that is a text symbol by default (the scales, the shield, the pawn)
+# carries U+FE0F, the emoji presentation selector. Without it the browser drew
+# it as a small monochrome character in the Optic Persona box, beside the
+# full-size emoji of the Optic mode box, and it was asked about as "make the
+# emojis the same size as the financially literate ones".
 PERSONAS: Dict[str, Dict[str, str]] = {
     "neutral": {
-        "glyph": "\U00002696",          # scales: balanced
+        "glyph": "\U00002696\uFE0F",    # scales: balanced
         "label": "Neutral analyst",
         "blurb": "Balanced, cites the numbers, states the limits. The default.",
         "prompt": "",
@@ -119,7 +124,7 @@ PERSONAS: Dict[str, Dict[str, str]] = {
         ),
     },
     "stoic": {
-        "glyph": "\U0001F6E1",          # shield: what you control
+        "glyph": "\U0001F6E1\uFE0F",    # shield: what you control
         "label": "Risk and process",
         "blurb": "Process over outcome. Talks about what you control, and about "
                  "position size before direction.",
@@ -149,7 +154,7 @@ PERSONAS: Dict[str, Dict[str, str]] = {
         ),
     },
     "skeptic": {
-        "glyph": "\U0000265F",          # pawn: argues the other side
+        "glyph": "\U0000265F\uFE0F",    # pawn: argues the other side
         "label": "Devil's advocate",
         "blurb": "Argues the other side. Names what would have to be true for the "
                  "setup to fail.",
