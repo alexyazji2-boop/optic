@@ -111,3 +111,38 @@ def test_the_home_board_splits_on_its_own_width():
     assert "@media (min-width: 1280px)" in guarded
     loose = re.findall(r"^@media \(min-width: (?:940|1280)px\) \{\s*\.hm-board", CSS, re.M)
     assert not loose, "the window-width split still runs beside the container one"
+
+
+def test_the_home_cards_columns_are_spread_evenly():
+    """Asked for from a screenshot as "center these out evenly". The price and
+    what-changed column was a 1fr track, so it took every spare pixel and the
+    gaps either side of it read 21, 86 and 21 pixels on a 379px card. The rows
+    now share the list's columns, each as wide as its widest entry, with an
+    equal spacer between each pair: measured in a browser at 43px apiece, and
+    16px apiece with a nineteen-letter note, which still fitted whole."""
+    block = _block("@supports (grid-template-columns: subgrid) {")
+    assert "@container (max-width: 559px) {" in block
+    lst = _block(".wl-list.is-compact {", block)
+    tracks = re.search(r"grid-template-columns:\s*([^;]+);", lst).group(1).split()
+    spacer = "minmax(var(--space-2),"
+    # auto, spacer, auto, spacer, auto, spacer, auto: the tokens split the
+    # minmax in two, so rejoin before comparing.
+    joined = " ".join(tracks).replace(spacer + " 1fr)", "SPACER").split()
+    assert joined == ["auto", "SPACER", "auto", "SPACER", "auto", "SPACER", "auto"], joined
+    row = _block(".wl-list.is-compact > .wl-row {", block)
+    button = _block(".wl-list.is-compact .wl-open {", block)
+    for part in (row, button):
+        assert "grid-column: 1 / -1;" in part and "grid-template-columns: subgrid;" in part
+        # Its own gap would replace the list's spacing inside the row.
+        assert "column-gap: normal;" in part
+    assert "'sym . price . chg . go' 'sym . changed . signal . go'" in button
+    assert ".wl-list.is-compact > .wl-row.is-none > .wl-none { grid-column: 3 / -1; }" in block
+
+
+def test_only_the_home_card_takes_the_spread():
+    """The full list has column headers and move and remove buttons, laid out
+    on --wl-cols, and the class is set by the compact feed alone."""
+    assert "<ul class=\"wl-list${o.compact ? ' is-compact' : ''}\">" in RAW
+    assert "watchlistFeedHTML({ compact: true, limit: 6 })" in RAW
+    loose = re.findall(r"^\.wl-list\.is-compact", CSS, re.M)
+    assert not loose, "the spread runs outside its subgrid and container guards"

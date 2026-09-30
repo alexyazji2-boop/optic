@@ -10762,6 +10762,46 @@ body.cp-open { overflow: hidden; }
 @container (max-width: 329px) {
   .wl-go-word { display: none; }
 }
+/* The home card's four columns, spread evenly across it.
+ *
+ * Asked for from a screenshot as "center these out evenly". The price and
+ * what-changed column above is a 1fr track, so it took every spare pixel: its
+ * short text sat against the symbol, the change sat against Analyze, and the
+ * gap between them was wider than both. Each row was its own grid, so a
+ * column could only line up down the list by being a fixed or fr size.
+ *
+ * Here the rows share the list's columns (subgrid), each as wide as its widest
+ * entry, with a spacer track between each pair taking an equal share of what
+ * is left. Measured on a 379px card at a 1512px window: 43px between every
+ * pair, where it was 21, 86 and 21. A longer note narrows all three spacers
+ * alike, and the note is still what gives way first, clipping with its
+ * ellipsis once the spacers are down to their minimum. The home card only:
+ * the full list has its column headers and its move and remove buttons. And
+ * where subgrid is missing, the rows keep the layout above. */
+@supports (grid-template-columns: subgrid) {
+  @container (max-width: 559px) {
+    .wl-list.is-compact {
+      display: grid;
+      grid-template-columns: auto minmax(var(--space-2), 1fr) auto minmax(var(--space-2), 1fr)
+        auto minmax(var(--space-2), 1fr) auto;
+    }
+    .wl-list.is-compact > .wl-row {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: subgrid;
+      column-gap: normal;
+    }
+    .wl-list.is-compact .wl-open {
+      grid-column: 1 / -1;
+      grid-template-columns: subgrid;
+      grid-template-areas: 'sym . price . chg . go' 'sym . changed . signal . go';
+      column-gap: normal;
+    }
+    /* A symbol with no data: its reason runs from the price column to the end. */
+    .wl-list.is-compact > .wl-row.is-none > .wl-sym { grid-column: 1; }
+    .wl-list.is-compact > .wl-row.is-none > .wl-none { grid-column: 3 / -1; }
+  }
+}
 .wl-x {
   flex: none;
   width: 28px;
