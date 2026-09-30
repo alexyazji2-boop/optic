@@ -953,16 +953,16 @@ function lineChart(opts) {
     // Off by default so the panels that are deliberately spare — sparklines,
     // the breadth strip — do not grow a gutter they have no use for.
     valueTags = false,
-    /* The caller pans with shift-drag, so the measurement leaves a shifted
-     * press alone. A plain drag measures on every chart.
+    /* The caller pans this chart on a plain drag, and the measurement takes a
+     * press held still for a moment first, or shift.
      *
-     * Only one gesture can have an unmodified left-drag, and for a while on the
-     * Charting tab it was panning, with the measurement moved to shift-drag.
-     * "the drag feature to see percent change is not working" is what that
-     * looked like to the reader it was built for, so the plain drag measures
-     * again and panning keeps four other ways in: shift-drag, a two-finger
-     * swipe across the trackpad, shift and the scroll wheel, and the strip
-     * under the chart. */
+     * Asked for both ways: "the drag feature to see percent change is not
+     * working", and then "dragging left and right on the chart with a left
+     * click does not move the chart". One button, two gestures, told apart
+     * the way a phone tells a scroll from a press: move within HOLD_MS and it
+     * is a pan, hold still and it is a measurement. A chart that cannot pan
+     * at the moment, its whole history on screen, measures on a plain drag,
+     * which the caller says by leaving `data-pan-armed` off its host. */
     panDrag = false,
   } = opts;
 
@@ -2027,17 +2027,50 @@ function lineChart(opts) {
   const measured = series.find((se) => !se.hidden && (se.values || []).some(
     (v) => v !== null && v !== undefined && isFinite(v))) || series[0];
 
+  /* Hiding the readout and ending the gesture are two things.
+   *
+   * They were one: a move that landed on the bar the drag started on cleared
+   * the anchor as well as the readout, so the rest of the drag measured
+   * nothing. A hand starts a drag with a pixel or two, which is almost always
+   * the same bar, so a drag across the chart usually died on its first move,
+   * and read as the measurement not working at all. Tests that moved in one
+   * long jump never saw it. */
+  const hideMeasure = () => measureGroup.setAttribute('opacity', 0);
   const clearMeasure = () => {
-    measureGroup.setAttribute('opacity', 0);
+    hideMeasure();
     measureAnchor = null;
+    delete root.dataset.measuring;
   };
 
+  /* The anchor alone, while the pointer is still on its bar: where the
+   * measurement will be taken from, and that it has begun. */
+  function markAnchor(i) {
+    const v = measured && measured.values[i];
+    if (v === null || v === undefined || !isFinite(v)) { hideMeasure(); return; }
+    const x = X(i);
+    measureBand.setAttribute('x', x);
+    measureBand.setAttribute('width', 0);
+    [measureA, measureB].forEach((l) => {
+      l.setAttribute('x1', x); l.setAttribute('x2', x); l.setAttribute('stroke', C.ink2);
+    });
+    [measureDotA, measureDotB].forEach((d) => {
+      d.setAttribute('cx', x); d.setAttribute('cy', Y(v)); d.setAttribute('fill', C.ink2);
+    });
+    measureLabel.setAttribute('fill', C.ink2);
+    measureLabel.textContent = `${labels[i] || `#${i + 1}`}   drag to measure`;
+    measureLabel.setAttribute('x', Math.min(Math.max(x, m.l + 90), m.l + plotW - 90));
+    measureGroup.setAttribute('opacity', 1);
+  }
+
   function drawMeasure(i, j) {
-    if (!measured || i === j) { clearMeasure(); return; }
+    if (!measured) { hideMeasure(); return; }
+    // Back on its own bar: a mouse drag keeps its anchor and shows it; two
+    // fingers on one bar have nothing to show.
+    if (i === j) { if (measureAnchor !== null) markAnchor(i); else hideMeasure(); return; }
     const [lo, hi] = i < j ? [i, j] : [j, i];
     const va = measured.values[lo];
     const vb = measured.values[hi];
-    if (va === null || vb === null || !isFinite(va) || !isFinite(vb)) { clearMeasure(); return; }
+    if (va === null || vb === null || !isFinite(va) || !isFinite(vb)) { hideMeasure(); return; }
 
     const xa = X(lo);
     const xb = X(hi);
@@ -2129,19 +2162,48 @@ function lineChart(opts) {
     window.removeEventListener('mouseup', endDrag);
     clearMeasure();
   }
-  overlay.addEventListener('mousedown', (evt) => {
-    if (evt.button !== 0) return;
-    /* A plain drag measures. Shift is the pan's, on a chart that pans with it.
-     *
-     * Returning without preventDefault matters as much as not measuring: the
-     * pan handler is delegated on the document, so the event still reaches it,
-     * and swallowing the default here would break the gesture it is deferring
-     * to. */
-    if (panDrag && evt.shiftKey) return;
-    evt.preventDefault();            // no text-selection drag over the chart
-    measureAnchor = indexFromClientX(evt.clientX);
+  function beginMeasure(at) {
+    measureAnchor = at;
+    // Read by the pan handler, which stands aside for as long as it is set.
+    root.dataset.measuring = '1';
     window.addEventListener('mousemove', onDragMove);
     window.addEventListener('mouseup', endDrag);
+  }
+
+  /* A press on a chart that pans: moved more than HOLD_SLOP within HOLD_MS it
+   * is the pan's, held still that long it is a measurement. The pan handler
+   * waits out the same slop before it moves anything, so a hold never nudges
+   * the chart under the anchor it is about to measure from. */
+  const HOLD_MS = 300;
+  const HOLD_SLOP = 4;
+  let holdTimer = 0;
+  let holdX = 0;
+  const onHoldMove = (evt) => {
+    if (Math.abs(evt.clientX - holdX) > HOLD_SLOP) cancelHold();
+  };
+  function cancelHold() {
+    clearTimeout(holdTimer);
+    holdTimer = 0;
+    window.removeEventListener('mousemove', onHoldMove);
+    window.removeEventListener('mouseup', cancelHold);
+  }
+
+  overlay.addEventListener('mousedown', (evt) => {
+    if (evt.button !== 0) return;
+    evt.preventDefault();            // no text-selection drag over the chart
+    const at = indexFromClientX(evt.clientX);
+    const armed = root.closest ? root.closest('[data-pan-armed]') : null;
+    // Shift, a chart that does not pan, or one with nothing to pan right now:
+    // measure from the press.
+    if (!panDrag || evt.shiftKey || !armed) { beginMeasure(at); return; }
+    holdX = evt.clientX;
+    window.addEventListener('mousemove', onHoldMove);
+    window.addEventListener('mouseup', cancelHold);
+    holdTimer = setTimeout(() => {
+      cancelHold();
+      beginMeasure(at);
+      markAnchor(at);
+    }, HOLD_MS);
   });
 
   bindScrub(overlay, (evt) => {

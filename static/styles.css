@@ -8249,10 +8249,10 @@ body[data-view="chart"] .sessionbar { display: none; }
    while a tool is armed and only then. */
 .ws-canvas.arming .ws-draw { touch-action: none; }
 
-/* The plot's cursor is the measurement's crosshair, which the chart's own
- * overlay sets. It was an open hand while a plain drag panned, and a hand over
- * a chart that measures promises the wrong gesture. The closed hand of a
- * shift-drag pan is `body.ws-panning`, in the chart-navigator section. */
+/* The plot's cursor is the chart's own crosshair, set by its overlay, rather
+ * than an open hand: it points at a bar, which hovering, a held press that
+ * measures and every drawing tool all need. The closed hand, once a drag is
+ * panning, is `body.ws-panning`, in the chart-navigator section. */
 .ws-canvas.arming .ws-chart { cursor: crosshair; }
 .ws-tool:disabled { opacity: 0.3; cursor: default; }
 
@@ -8883,7 +8883,7 @@ body.chat-open .ws-legend,
    they are earned: every element the pointer crosses declares its own cursor —
    text over a label, grab over the plot, pointer over a button — and during a
    drag all of them are wrong. The rule only applies while the class is set,
-   which is only between pointerdown and pointerup. */
+   which is only from a pan's first move to its release. */
 body.ws-panning, body.ws-panning * { cursor: grabbing !important; }
 body.ws-panning { user-select: none; }
 .ws-zoom-reset { color: var(--s1); }

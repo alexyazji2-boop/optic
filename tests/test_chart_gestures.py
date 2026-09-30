@@ -1,16 +1,19 @@
 """Tests for who owns a drag on the price chart.
 
-A left-drag can only mean one thing, and this chart has three candidates: pan,
-measure, and draw. The split has gone both ways. Measuring held the plain drag
-while panning lived only on the navigator strip; then the drag panned and the
-measurement moved to shift-drag, and that was reported as "the drag feature to
-see percent change is not working". So the plain drag measures on every chart
-again, and shift-drag pans, beside the trackpad swipe, shift and the wheel, and
-the navigator strip.
+A left-drag has three candidates on this chart: pan, measure, and draw. The
+split has gone every way. Measuring held the plain drag while panning lived
+only on the navigator strip; then the drag panned and the measurement moved to
+shift-drag, reported as "the drag feature to see percent change is not
+working"; then the drag measured and shift panned, reported as "dragging left
+and right on the chart with a left click does not move the chart".
 
-Nothing here can drive a mouse; what it checks is the wiring that decides which
-handler gets the event. Each assertion stands for a failure that is silent in the
-browser: a gesture that quietly does nothing, or two handlers that both fire.
+Both are wanted, so time tells them apart: a plain drag pans, and a press held
+still for 300ms, or a shifted one, measures. An armed tool draws. A chart with
+nothing to pan measures on a plain drag. tests/test_chart_hold_to_measure.py
+runs the chart's side of this; what is checked here is the wiring that decides
+which handler gets the event. Each assertion stands for a failure that is
+silent in the browser: a gesture that quietly does nothing, or two handlers
+that both fire.
 """
 
 import re
@@ -24,11 +27,18 @@ def _block(source, marker, end="\n}"):
     return source[start:source.index(end, start)]
 
 
-def test_only_the_workspace_chart_leaves_its_shifted_drag_to_the_pan():
-    """Every chart measures on a plain drag. The Charting tab's also gives a
-    shifted one to the pan handler, where the Options chart, whose pan claims
-    the pointer before its mousedown can fire, has no need to say so."""
-    assert APP.count("panDrag: true") == 1
+def test_every_chart_that_pans_says_so():
+    """The pan no longer claims the pointer before the chart's mousedown, so a
+    chart that pans has to know to wait out a hold rather than measure at once.
+    Every registered chart passes panDrag, and nothing else does."""
+    hosts = re.findall(r"^registerChartZoom\('([\w-]+)'", APP, re.M)
+    assert sorted(hosts) == ["chart-price", "chart-weekly", "ws-chart"]
+    assert APP.count("panDrag: true") == len(hosts)
+    for host in ("chart-price", "chart-weekly"):
+        opts = _block(APP, "mount('%s', (w) => lineChart({" % host, "\n    }")
+        assert "panDrag: true," in opts, host
+    ws = _block(APP, "function wsMountChart(", "\n}")
+    assert "panDrag: true," in ws
 
 
 def test_line_chart_defaults_to_measuring_on_a_plain_drag():
@@ -37,23 +47,25 @@ def test_line_chart_defaults_to_measuring_on_a_plain_drag():
     assert "\n    panDrag = false,\n" in CHARTS
 
 
-def test_measure_defers_before_it_swallows_the_default():
-    """Load-bearing ordering. The pan handler runs on pointerdown and calls
-    preventDefault, which suppresses the compatibility mousedown entirely — so
-    on a pannable chart this listener is usually never reached. It IS reached
-    when the pan declines the gesture, which happens when the whole history is
-    already on screen. Calling preventDefault before the guard would eat the
-    event on behalf of a measurement that is not going to happen."""
+def test_a_press_measures_at_once_unless_the_pan_has_armed_the_chart():
+    """The pan arms the chart's host on pointerdown, which comes before the
+    mousedown, and only when it can move the chart. Shift, a chart that does
+    not pan, and one with its whole history on screen measure from the press.
+    Otherwise the press waits: held still it measures, moved it is the pan's."""
     handler = _block(CHARTS, "overlay.addEventListener('mousedown'", "\n  });")
-    guard = handler.index("if (panDrag && evt.shiftKey) return;")
-    default = handler.index("evt.preventDefault();")
-    assert guard < default, "preventDefault runs before the guard"
+    assert "const armed = root.closest ? root.closest('[data-pan-armed]') : null;" in handler
+    assert "if (!panDrag || evt.shiftKey || !armed) { beginMeasure(at); return; }" in handler
+    assert "}, HOLD_MS);" in handler
+    # Every press, so no text is selected under a pan or a measurement.
+    assert handler.index("evt.preventDefault();") < handler.index("if (!panDrag")
+    assert "const HOLD_MS = 300;" in CHARTS and "const HOLD_SLOP = 4;" in CHARTS
 
 
 def test_panning_yields_to_every_more_specific_gesture():
-    """A plain drag means measure, an armed tool means draw, and a drag that
-    started on a drawing means move that drawing. Panning takes only a shifted
-    drag, and each of these has to be checked before it claims the event.
+    """Shift means measure, an armed tool means draw, and a drag that
+    started on a drawing means move that drawing. Panning takes a plain drag
+    that moves before the hold is up, and each of these has to be checked
+    before it claims the event.
 
     The three checks now live in three places, because the handler is shared by
     every chart that registers for it rather than hardcoded to the workspace:
@@ -63,8 +75,12 @@ def test_panning_yields_to_every_more_specific_gesture():
     at all.
     """
     handler = _block(APP, "let wsPan = null;\n\ndocument.addEventListener('pointerdown'", "\n});")
-    assert "if (!evt.shiftKey) return;" in handler
-    assert handler.index("if (!evt.shiftKey) return;") < handler.index("evt.preventDefault();")
+    assert "if (evt.shiftKey) return;" in handler
+    assert handler.index("if (evt.shiftKey) return;") < handler.index("chartZoomTarget(evt)")
+    # No preventDefault: it would suppress the mousedown that times the hold.
+    code = re.sub(r"/\*.*?\*/", " ", handler, flags=re.S)
+    assert "preventDefault" not in code
+    assert "target.host.dataset.panArmed = '1';" in handler
     assert "const target = chartZoomTarget(evt);" in handler
     assert "if (!target) return;" in handler
     # The workspace adapter still declines while a tool is armed.
@@ -76,9 +92,8 @@ def test_panning_yields_to_every_more_specific_gesture():
 
 
 def test_panning_declines_touch_so_the_page_can_still_scroll():
-    """preventDefault on a touch pointerdown cancels the scroll the gesture
-    would have become, which pins the page under a finger dragged down the
-    chart."""
+    """A finger dragged across a chart is scrolling the page. Panning it too
+    would move two things under one finger."""
     handler = _block(APP, "let wsPan = null;\n\ndocument.addEventListener('pointerdown'", "\n});")
     assert "evt.pointerType !== 'mouse' && evt.pointerType !== 'pen'" in handler
 
@@ -116,14 +131,42 @@ def test_the_drag_moves_the_chart_not_a_scrollbar():
     assert "pan.from - bars" in handler
 
 
+def test_the_pan_waits_out_a_hold_and_stands_aside_for_a_measurement():
+    """The pan moves nothing until the pointer has gone further than a hold
+    allows, the same few pixels the chart's timer allows, so a press held still
+    never nudges the chart under the anchor it measures from. Once the chart
+    reports a measurement, anywhere in the host, the rest of the drag is its."""
+    handler = _block(APP, "document.addEventListener('pointermove', (evt) => {\n  if (!wsPan) return;", "\n});")
+    measuring = handler.index("if (wsPan.host.querySelector('[data-measuring]')) return;")
+    slop = handler.index("Math.abs(evt.clientX - wsPan.x) <= PAN_SLOP) return;")
+    assert measuring < slop < handler.index("pan.next =")
+    assert "const PAN_SLOP = 4;" in APP
+    # The closed hand only once it pans, not for a press that may measure.
+    assert "if (!wsPan.moved) document.body.classList.add('ws-panning');" in handler
+    down = _block(APP, "let wsPan = null;\n\ndocument.addEventListener('pointerdown'", "\n});")
+    assert "ws-panning" not in down
+
+
+def test_a_pan_never_selects_text_and_leaves_nothing_armed():
+    assert "document.addEventListener('selectstart', (evt) => { if (wsPan) evt.preventDefault(); });" in APP
+    end = _block(APP, "function wsEndPan() {", "\n}")
+    assert "delete wsPan.host.dataset.panArmed;" in end
+    # A release the page never saw is cleared by the next press.
+    down = _block(APP, "let wsPan = null;\n\ndocument.addEventListener('pointerdown'", "\n});")
+    assert down.index("wsEndPan();") < down.index("if (evt.button !== 0) return;")
+
+
 def test_the_hint_names_the_gestures_that_exist():
     """The status strip is the only place the gestures are written down, and it
-    described the arrangement this replaced."""
-    assert "'Drag to measure, scroll to zoom, shift-drag to pan'" in APP
+    described the arrangements this replaced."""
+    assert "'Drag to pan, hold then drag to measure, scroll to zoom'" in APP
+    assert "'Drag to measure, scroll to zoom, shift-drag to pan'" not in APP
     assert "'Drag to pan, scroll to zoom, shift-drag to measure'" not in APP
 
 
-def test_the_plot_does_not_offer_a_hand_for_a_drag_that_measures():
+def test_the_plot_keeps_its_crosshair():
+    """It points at a bar, which hovering, a held press and the drawing tools
+    all need. The closed hand is for a pan under way."""
     css = open("static/styles.css", encoding="utf-8").read()
     assert ".ws-chart { cursor: grab; }" not in css
     assert "body.ws-panning, body.ws-panning * { cursor: grabbing !important; }" in css

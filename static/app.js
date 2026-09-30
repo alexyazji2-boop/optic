@@ -8967,6 +8967,8 @@ function swingPriceBlock(d, ps, ctx) {
     mount('chart-price', (w) => lineChart({
       width: w,
       height: 420,
+      // It pans on a plain drag, and a held press measures. See panDrag.
+      panDrag: true,
       // Four lines converge here; the value at the end of each is what a reader
       // was previously hovering or cross-referencing a tile to find.
       valueTags: true,
@@ -15945,10 +15947,9 @@ function renderChartWorkspace(d) {
            line up with it, and above the navigator because the navigator is
            about the window rather than about the bars. */''}
       ${wsPanesHTML()}
-      <!-- The navigator. Panning gets its own visible control so the plot's
-           drag is free to measure, which is the gesture people expect from a
-           price chart. Dragging inside the window moves it, dragging an edge
-           resizes it, clicking outside jumps there. -->
+      <!-- The navigator: where the view sits in the whole history. Dragging
+           inside the window moves it, dragging an edge resizes it, clicking
+           outside jumps there. -->
       <div id="ws-nav" class="ws-nav" title="Drag to move the view. Drag an edge to resize it"></div>
     </div>
     <div class="ws-dock" id="ws-dock">${wsDock()}</div>
@@ -18473,18 +18474,22 @@ document.addEventListener('pointerup', () => {
  * chart node dies on the next re-render, which is the bug the drawing handlers
  * already carry a long comment about.
  *
- * A plain drag measures, the Stocks-style span with the change in dollars and
- * percent, and shift-drag pans. Only one of the two can own a plain drag.
+ * A plain drag pans, and the Stocks-style measurement, the span with the
+ * change in dollars and percent, takes a press held still first, or shift.
  *
- * This has gone both ways. The plot's drag measured first, with panning only
- * on the navigator strip; then it panned, on the argument that drag-to-pan is
- * what every charting tool does, and the measurement moved to shift-drag. The
- * reader this is built for reported that as "the drag feature to see percent
- * change is not working": the drag they had learned now moved the chart. So
- * the drag measures again, on every chart, and panning keeps four ways in that
- * do not need it: shift-drag, a two-finger swipe across the trackpad, shift
- * and the scroll wheel, and the navigator strip. Two-finger touch measures, as
- * it always has, and the ruler in the tool rail leaves a measurement behind.
+ * Both were asked for with the same button. "the drag feature to see percent
+ * change is not working", and then "dragging left and right on the chart with
+ * a left click does not move the chart". They are told apart the way a phone
+ * tells a scroll from a press: moved more than a few pixels within 300ms it is
+ * a pan, held still that long it is a measurement (see HOLD_MS in charts.js).
+ * The pan waits out the same few pixels, so a hold cannot nudge the chart
+ * under the anchor it measures from, and it stands aside while the chart
+ * reports `data-measuring`.
+ *
+ * A chart with nothing to pan, its whole history on screen, measures on a
+ * plain drag: this handler arms a host with `data-pan-armed` only when it can
+ * move it. The trackpad's sideways swipe, shift and the wheel, and the
+ * navigator strip pan too, and two fingers on a touch screen measure.
  */
 function wsBarUnderCursor(evt) {
   const host = document.getElementById('ws-chart');
@@ -18777,19 +18782,19 @@ function wsBarsPerPixel() {
 let wsPan = null;
 
 document.addEventListener('pointerdown', (evt) => {
+  // A release the page never saw leaves no pan, and no armed chart, behind.
+  wsEndPan();
   if (evt.button !== 0) return;
   /* Mouse and pen only.
    *
-   * Panning has to preventDefault to stop the drag selecting text, and on a
-   * touch device that also cancels the scroll the gesture would otherwise have
-   * become — so a finger dragged down the chart would pin the page instead of
-   * moving it. Touch keeps the two-finger measurement it already had, and the
-   * navigator strip is still there to move the window. */
+   * A finger dragged across a chart is scrolling the page, and moving the
+   * chart under it as well would be two gestures at once. Touch keeps the
+   * two-finger measurement it already had, and the navigator strip is still
+   * there to move the window. */
   if (evt.pointerType && evt.pointerType !== 'mouse' && evt.pointerType !== 'pen') return;
-  // Shift pans. A plain drag is the measurement's, which each chart's own
-  // mousedown answers, and an armed drawing tool draws, which each adapter
-  // reports through `enabled`.
-  if (!evt.shiftKey) return;
+  // Shift measures, which each chart's own mousedown answers, and an armed
+  // drawing tool draws, which each adapter reports through `enabled`.
+  if (evt.shiftKey) return;
   /* A drawing lives in #ws-draw, a SIBLING of #ws-chart, so a hit on one of its
    * strokes resolves no zoom target here and the drawing handler keeps the
    * drag. That is a property of the markup, not of this test. */
@@ -18802,19 +18807,32 @@ document.addEventListener('pointerdown', (evt) => {
   // rather than clamping later leaves the cursor alone, so the chart does not
   // offer a grab hand for a gesture that cannot move anything.
   if (win.to - win.from >= win.total) return;
-  evt.preventDefault();                   // no text selection dragged over the plot
+  /* No preventDefault here. It would suppress the mousedown the chart's own
+   * handler needs to time a hold, so the text selection it used to stop is
+   * stopped by the selectstart handler below instead. The host is armed so the
+   * chart knows a quick drag is the pan's. */
+  target.host.dataset.panArmed = '1';
   wsPan = { x: evt.clientX, from: win.from, to: win.to, barsPerPx,
-            moved: false, adapter: target.adapter };
-  document.body.classList.add('ws-panning');
+            moved: false, adapter: target.adapter, host: target.host };
 });
+
+// No text selected by a drag that pans, wherever in the chart it started.
+document.addEventListener('selectstart', (evt) => { if (wsPan) evt.preventDefault(); });
+
+const PAN_SLOP = 4;                       // HOLD_SLOP in charts.js, the same few pixels
 
 document.addEventListener('pointermove', (evt) => {
   if (!wsPan) return;
+  // A press held still became a measurement, and the rest of the drag is its.
+  if (wsPan.host.querySelector('[data-measuring]')) return;
+  // And a press that has not moved further than a hold allows is no pan yet.
+  if (!wsPan.moved && Math.abs(evt.clientX - wsPan.x) <= PAN_SLOP) return;
   // Positive dx drags the paper right, which shows earlier bars. Inverting this
   // is the difference between moving the chart and moving a scrollbar, and the
   // chart is what is under the finger.
   const bars = Math.round((evt.clientX - wsPan.x) * wsPan.barsPerPx);
   if (!bars && !wsPan.moved) return;
+  if (!wsPan.moved) document.body.classList.add('ws-panning');
   wsPan.moved = true;
   /* Once a frame, like the wheel: a mouse reports a hundred moves a second or
    * more, and each was a whole redraw. The pan is held by the frame rather
@@ -18832,6 +18850,7 @@ document.addEventListener('pointermove', (evt) => {
 
 function wsEndPan() {
   if (!wsPan) return;
+  delete wsPan.host.dataset.panArmed;
   wsPan = null;
   document.body.classList.remove('ws-panning');
 }
@@ -19181,7 +19200,7 @@ function wsMountChart() {
       // Same builder as the Swing chart, so the two tabs cannot disagree about
       // where a cloud flips or how wide it is.
       clouds: emaClouds(ps),
-      // Shift-drag pans this chart, so the measurement leaves it alone. See panDrag.
+      // A plain drag pans this chart, and a held press measures. See panDrag.
       panDrag: true,
       series: [
         { name: 'Close', values: ps.close,
@@ -24665,6 +24684,8 @@ function ltPriceBlock(h, lt, ltLevels) {
 
     mount('chart-weekly', (w) => lineChart({
       valueTags: true,
+      // It pans on a plain drag, and a held press measures. See panDrag.
+      panDrag: true,
       width: w,
       // Matches the Swing chart. This was 340 against Swing's 420, so the
       // longest-horizon view on the terminal had the shortest plot.
@@ -29655,7 +29676,7 @@ function updateStatus() {
           : wsFit ? `${shown} · newest ${wsFit.shown} of ${wsFit.total} candles, scroll for more`
             : `${shown} · ${chartWindowLabel()}`,
         `${wsDrawings().length} drawing${wsDrawings().length === 1 ? '' : 's'}`,
-        'Drag to measure, scroll to zoom, shift-drag to pan']
+        'Drag to pan, hold then drag to measure, scroll to zoom']
       : ['Chart. Pick a symbol to begin.']);
     return;
   }
