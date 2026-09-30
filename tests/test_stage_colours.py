@@ -254,9 +254,13 @@ def test_the_charting_legend_says_why_nothing_is_coloured():
 # ------------------------------------------------------------ the switch
 
 
-def test_it_is_on_until_someone_turns_it_off():
-    assert "let showStages = true;" in APP
-    assert "showStages = localStorage.getItem(SHOW_STAGES_KEY) !== 'off';" in APP
+def test_it_is_off_until_someone_turns_it_on():
+    """Asked for as "turn stages off by default", once Stages coloured the
+    candles and the line themselves. A browser that never pressed it stored
+    nothing, so it opens off as well; one that turned it on keeps it on."""
+    assert "let showStages = false;" in APP
+    assert "showStages = localStorage.getItem(SHOW_STAGES_KEY) === 'on';" in APP
+    assert "showStages = localStorage.getItem(SHOW_STAGES_KEY) !== 'off';" not in APP
 
 
 def test_it_is_wired_like_every_other_toggle():

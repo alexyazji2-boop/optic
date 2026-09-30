@@ -2542,11 +2542,14 @@ let showSessions = false;
 const SHOW_SESSIONS_KEY = 'optic.chart.sessions.v1';
 /* Weinstein stages, as the reference chart draws them: every candle, or the
  * line, in the colour of its week's stage, and each run named along the foot
- * of the chart (see stageBand in charts.js). On by default, unlike the
- * overlays above, because it is not another line across the chart; it colours
- * what is already there, each chart's legend carries the key so a colour never
- * has to be guessed, and turning it off gives every bar its direction back. */
-let showStages = true;
+ * of the chart (see stageBand in charts.js). Each chart's legend carries the
+ * key so a colour never has to be guessed.
+ *
+ * Off by default, like the overlays above: asked for as "turn stages off by
+ * default" once they coloured the price itself. A chart opens with every bar
+ * in its own direction, and Stages is a press away on all three charts. The
+ * stage chip beside the symbol reads the stage either way. */
+let showStages = false;
 const SHOW_STAGES_KEY = 'optic.chart.stages.v1';
 const SHOW_MA_KEY = 'optic.chart.ma.v2';
 
@@ -2864,8 +2867,9 @@ try {
   showEMA = localStorage.getItem(SHOW_EMA_KEY) === 'on';
   showCloudFast = localStorage.getItem(SHOW_CLOUD_FAST_KEY) === 'on';
   showCloudSlow = localStorage.getItem(SHOW_CLOUD_SLOW_KEY) === 'on';
-  // `!== 'off'`, as volume: a default-on flag is only off when someone said so.
-  showStages = localStorage.getItem(SHOW_STAGES_KEY) !== 'off';
+  // `=== 'on'`, as the overlays: off until someone turns it on. A browser that
+  // was left on by default stored nothing, so it opens with Stages off too.
+  showStages = localStorage.getItem(SHOW_STAGES_KEY) === 'on';
   loadSeriesFlags();
 } catch (e) { /* private mode */ }
 
@@ -18232,11 +18236,10 @@ function wsRedo() { wsRestore(wsRedoStack, wsUndoStack); }
  * declutter that silently deleted an hour of annotation would be the worst
  * bug on this tab. Volume stays for the reason the defaults comment gives:
  * it is a strip under the price rather than a line across it, so it costs
- * nothing in legibility. Stages stay because they are how the chart opens:
- * they colour the price rather than add to it, and a Reset that changed the
- * colour of every bar would be the opposite of a declutter.
+ * nothing in legibility. Stages go, now that the chart opens without them:
+ * Reset is the way back to that chart, bars in their own direction.
  */
-const WS_RESET_KEEP = ['vol', 'stages'];
+const WS_RESET_KEEP = ['vol'];
 
 /** Is the chart already the one it opens on? Drives the Reset button's
  *  disabled state, because a control that would change nothing should say so
