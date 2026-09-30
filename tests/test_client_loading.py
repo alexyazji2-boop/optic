@@ -75,8 +75,14 @@ var wsDockOpen = [], showTrends = false, showAccum = false;
 function wsPriceIndicatorIds() { return []; }
 """
 
+# Counted rather than a bare no-op. chromeView('swing') -- collapsing, the mode
+# filter and the jump index -- is bolted onto renderSwing by the wrapper at the
+# foot of app.js, so "how many times did renderSwing run" is also "did the
+# Options tab get its chrome, and did it get it twice".
+STUBS += "var rendered = 0;\nfunction renderSwing() { rendered++; }\n"
+
 for name in ["beginLoad", "endLoad", "revealPanels", "writeSnapshot", "setChartLive",
-             "setChartAnimation", "renderSwing", "loadPatternRates", "loadIndicators",
+             "setChartAnimation", "loadPatternRates", "loadIndicators",
              "loadSeasonality", "loadExtras", "loadRelPerf", "mountRelativeChart",
              "updateStatus", "updateChatContext", "wsMountChart", "wsEnsureIntraday"]:
     STUBS += "function " + name + "() {}\n"
@@ -88,8 +94,8 @@ def run_js(scenario):
         pytest.skip("JavaScriptCore is unavailable")
     setup = "\n".join(declaration(name) for name in [
         "ORIGIN_DOWN_RE",
-        "swingRequestId", "swingLoading", "chartRequestId", "SESSION_LABEL",
-        "AUTO_REFRESH_VIEWS", "autoRefreshPending"])
+        "swingRequestId", "swingLoading", "swingInFlight", "chartRequestId",
+        "SESSION_LABEL", "AUTO_REFRESH_VIEWS", "autoRefreshPending"])
     loaders = "\n".join(function(name) for name in [
         "errorHTML",
         "loadSwing", "loadSecurityFacet", "loadChartWorkspace", "tickAutoRefresh",
@@ -118,9 +124,20 @@ def test_old_symbol_cannot_replace_new_symbol_or_its_error(older_fails):
 
 
 def test_newer_request_wins_even_when_symbol_is_the_same():
+    """Two live requests for one symbol, and the older one must not land last.
+
+    The scenario used to be two plain forced loads. It cannot be any more:
+    those share one request now, which is a stronger guarantee than this test
+    was asking for and is asserted separately below. Same symbol, two genuinely
+    different requests, is still reachable through the cost limit -- `budget`
+    rides on the URL, so changing it while a load is open starts a second one.
+    That is the case `swingRequestId` still exists for.
+    """
     run_js("""
       var old = loadSwing(true, {silent: true});
+      entryBudget = function() { return 500; };  // the reader moved the cost limit
       var current = loadSwing(true, {silent: true});
+      assert(pending.length === 2, 'a changed cost limit reused the open request');
       pending[1].resolve({ticker: 'AAPL', revision: 2}); await current;
       pending[0].resolve({ticker: 'AAPL', revision: 1}); await old;
       assert(STATE.swing.revision === 2, 'older same-symbol response won');
@@ -203,4 +220,106 @@ def test_chart_ignores_old_responses_and_cached_data_for_another_symbol():
       assert(pending.length === 3, 'old cached chart was reused for a new symbol');
       pending[2].resolve({ticker: 'AAPL'}); await changed;
       assert(STATE.chartData.ticker === 'AAPL', 'new chart did not load');
+    """)
+
+
+def test_one_request_serves_every_facet_that_asks_while_it_is_open():
+    """A tab change costs one request even when the last one has not landed.
+
+    Measured in a browser at 880px, NVDA, with the response held open: loading
+    the symbol and then clicking News, Financials and Options fired four
+    identical `GET /api/ticker/NVDA?max_expiries=4&macro=true`, 70.1 KB each,
+    all four in flight at once. One per click, because `loadSecurityFacet`
+    tests freshness with `STATE.swing.ticker === STATE.ticker` and that is
+    still false while the first request is in the air. Same run after the fix:
+    one request.
+
+    The reported diagnosis was overlapping refresh timers. It was not -- the
+    interval is registered once and fires once every 20 seconds, measured over
+    eleven facet switches. The spacing that looked like a timer was the
+    reader's own click cadence.
+    """
+    run_js("""
+      STATE.view = 'overview'; var overview = loadSecurityFacet('overview', false);
+      STATE.view = 'news';     var news = loadSecurityFacet('news', false);
+      STATE.view = 'swing';    var swing = loadSwing(false);
+      // A forced load joins too: a response still in the air cannot be staler
+      // than one started now.
+      var forced = loadSwing(true, {silent: true});
+      STATE.view = 'financials'; var financials = loadSecurityFacet('financials', false);
+      assert(pending.length === 1, 'one payload, ' + pending.length + ' requests');
+      pending[0].resolve({ticker: 'AAPL'});
+      await Promise.all([overview, news, swing, forced, financials]);
+      assert(STATE.swing.ticker === 'AAPL', 'the shared payload never reached STATE');
+      assert(views.financials.innerHTML === 'loaded AAPL', 'the facet on screen did not paint');
+      // chromeView('swing') rides on renderSwing. Once, not five times and not
+      // never: the Options tab's jump index is rebuilt from that pass.
+      assert(rendered === 1, 'renderSwing ran ' + rendered + ' times for one payload');
+      assert(!swingLoading && swingInFlight === null, 'the shared request was never released');
+    """)
+
+
+def test_a_facet_that_joined_an_open_request_still_sees_its_failure():
+    """Joining must carry the failure across, not just the payload.
+
+    `propagateError` is per-caller: `loadSecurityFacet` passes it so a first
+    load can say what went wrong, and the plain Options tab does not. The
+    request is shared but that choice is not, so a joiner has to re-apply its
+    own. Without it the facet the reader is actually looking at keeps its
+    "Loading AAPL..." panel forever on a 503, which reads as a hung tab rather
+    than a failed one.
+    """
+    run_js("""
+      STATE.view = 'overview'; var overview = loadSecurityFacet('overview', false);
+      STATE.view = 'news';     var news = loadSecurityFacet('news', false);
+      assert(pending.length === 1, 'the second facet opened its own request');
+      pending[0].reject(new Error('HTTP 503'));
+      await Promise.all([overview, news]);
+      assert(views.news.innerHTML.includes('HTTP 503'), 'the joined facet lost the failure');
+      assert(views.news.innerHTML.includes('data-view-retry'), 'no way back from the failure');
+      assert(!painted.length, 'a failed request painted a facet anyway');
+    """)
+
+
+def test_joining_a_request_that_a_new_symbol_supersedes_does_not_hang():
+    """The shared promise settles even when its own request is abandoned.
+
+    The owner returns early when a newer symbol has superseded it, and the
+    tempting shape -- settle only while still the open request -- leaves every
+    joiner awaiting a promise that nothing will ever resolve. The facet does
+    not error and does not paint; it sits on its loading panel for the rest of
+    the session. Settled unconditionally, released conditionally.
+    """
+    run_js("""
+      STATE.view = 'overview'; var first = loadSecurityFacet('overview', false);
+      STATE.view = 'news';     var joiner = loadSecurityFacet('news', false);
+      assert(pending.length === 1, 'the joiner opened its own request');
+      STATE.ticker = 'MSFT';
+      STATE.view = 'overview'; var newer = loadSecurityFacet('overview', true);
+      assert(pending.length === 2, 'a new symbol reused the open request');
+      pending[1].resolve({ticker: 'MSFT'}); await newer;
+      pending[0].resolve({ticker: 'AAPL'});
+      await Promise.all([first, joiner]);
+      assert(STATE.swing.ticker === 'MSFT', 'the abandoned response replaced MSFT');
+    """)
+
+
+def test_the_refresh_tick_still_fires_after_a_shared_load():
+    """Sharing a request must not turn the 20-second refresh into a no-op.
+
+    The point of the fix is that a tab change costs nothing extra, not that the
+    tape stops arriving. Once the shared request is released the next tick has
+    to open a genuinely new one, because by then the payload it would reuse is
+    the thing being refreshed.
+    """
+    run_js("""
+      STATE.view = 'swing';
+      var load = loadSwing(false), joined = loadSwing(false);
+      assert(pending.length === 1, 'the second caller opened its own request');
+      pending[0].resolve({ticker: 'AAPL', revision: 1});
+      await Promise.all([load, joined]);
+      var tick = tickAutoRefresh();
+      assert(pending.length === 2, 'the refresh tick was swallowed by the finished request');
+      pending[1].resolve({ticker: 'AAPL', revision: 2}); await tick;
+      assert(STATE.swing.revision === 2, 'the refresh never landed');
     """)

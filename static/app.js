@@ -25167,6 +25167,25 @@ async function loadPatternRates() {
 let swingRequestId = 0;
 let swingLoading = false;
 
+/* One request per URL, shared by everyone who asks while it is still open.
+ *
+ * Measured at 880px: loading NVDA and then clicking three Dossier facets before
+ * the first response landed fired four identical
+ * `GET /api/ticker/NVDA?max_expiries=4&macro=true`, 70.2 KB each, all four in
+ * flight together. Every facet is a different reading of one payload and
+ * `loadSecurityFacet` already says so — but its freshness test is
+ * `STATE.swing.ticker === STATE.ticker`, which is still false while the first
+ * request is in the air, so each facet opened its own. `swingLoading` existed
+ * for exactly this and only `tickAutoRefresh` ever read it.
+ *
+ * Keyed on the URL, so a change of symbol or of the cost limit still starts a
+ * genuinely new request. A forced load joins an open one for the same URL
+ * rather than racing it: a response that has not arrived yet cannot be staler
+ * than one started now. The 20-second tick keeps its own cadence either way —
+ * it only fires when nothing is in flight, which is what `swingLoading` is.
+ */
+let swingInFlight = null;
+
 async function loadSwing(force, opts = {}) {
   const silent = !!opts.silent;
   if (STATE.swing && STATE.swing.ticker === STATE.ticker && !force) {
@@ -25174,20 +25193,53 @@ async function loadSwing(force, opts = {}) {
     return STATE.swing;
   }
   const ticker = STATE.ticker;
+  /* The cost limit rides on the request, so the server does the filtering.
+     It decides which contract is `recommended`, and that one drives the
+     headline, the order ticket and the risk block, none of which the client
+     could correct after the fact. */
+  const cap = entryBudget();
+  const url = `/api/ticker/${encodeURIComponent(ticker)}?max_expiries=4&macro=true${
+    cap ? `&budget=${encodeURIComponent(cap)}` : ''}`;
+
+  /* Joining, not starting. The owner does the rendering and the bookkeeping;
+     this only has to apply the parts of the tail that belong to *this* caller,
+     because `silent` and `propagateError` are per-caller and the owner's are
+     whatever the first facet through the door happened to pass. */
+  if (swingInFlight && swingInFlight.url === url) {
+    if (!silent) beginLoad(views.swing, `options analytics for ${ticker}`);
+    const outcome = await swingInFlight.promise;
+    if (STATE.ticker !== ticker) return null;   // the reader moved on
+    if (outcome.error) {
+      if (opts.propagateError) throw outcome.error;
+      if (!silent) {
+        endLoad(views.swing);
+        views.swing.innerHTML = errorHTML(outcome.error.message,
+          { originUnreachable: outcome.error.originUnreachable });
+      }
+      return null;
+    }
+    if (!silent && outcome.data) revealPanels(views.swing);
+    return outcome.data;
+  }
+
   const requestId = ++swingRequestId;
   swingLoading = true;
   if (!silent) beginLoad(views.swing, `options analytics for ${STATE.ticker}`);
+  /* Published before the first await, so a caller in this same tick — which is
+     exactly what a second facet click is — finds it instead of opening its own. */
+  let settle;
+  const shared = { url, promise: new Promise((resolve) => { settle = resolve; }) };
+  swingInFlight = shared;
+  /* What the joiners get. A superseded request leaves it at `{ data: null }`,
+     which is the same "a newer request owns the screen" that this function
+     returns to its own caller. */
+  let outcome = { data: null };
   try {
-    /* The cost limit rides on the request, so the server does the filtering.
-       It decides which contract is `recommended`, and that one drives the
-       headline, the order ticket and the risk block, none of which the client
-       could correct after the fact. */
-    const cap = entryBudget();
-    const data = await getJSON(`/api/ticker/${encodeURIComponent(ticker)}?max_expiries=4&macro=true${
-  cap ? `&budget=${encodeURIComponent(cap)}` : ''}`);
+    const data = await getJSON(url);
     // AAPL can finish after MSFT. Neither its data nor its failure may replace
     // the newer request, including two overlapping refreshes of one symbol.
     if (requestId !== swingRequestId || STATE.ticker !== ticker) return null;
+    outcome = { data };
     STATE.swing = data;
     /* Read the prior snapshot BEFORE writing the new one, or the diff is
      * always empty: writing first overwrites the thing being compared against.
@@ -25244,6 +25296,11 @@ async function loadSwing(force, opts = {}) {
     return null;
   } finally {
     if (requestId === swingRequestId) swingLoading = false;
+    /* Cleared only if this request is still the open one — a newer symbol has
+       already replaced it — but settled unconditionally, because a joiner
+       waiting on a superseded promise would otherwise never resume. */
+    if (swingInFlight === shared) swingInFlight = null;
+    settle(outcome);
   }
 }
 
