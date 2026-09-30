@@ -50,7 +50,8 @@ def test_the_home_page_keeps_its_typeahead():
     cascade are all still live through it -- this removed a caller, not a
     feature."""
     assert "attachTypeahead('home-input', 'home-results')" in APP
-    assert "function attachTypeahead(inputId, listId) {" in APP
+    # With an optional pick handler since the Compare boxes use it too.
+    assert "function attachTypeahead(inputId, listId, onChoose) {" in APP
     assert 'id="home-results"' in APP, "rendered by the home page, not index.html"
 
 

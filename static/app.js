@@ -21213,11 +21213,22 @@ function comparePicksHTML() {
   </div>`;
 }
 
+/* Each box suggests as it is typed in, from the same search as the top bar.
+ *
+ * Reported by a user: "When someone is doing Side-by-Side comparison,
+ * searching the ticker box should give them recommended tickers based on
+ * their search. And I should be able to type Amazon and that ticker will show
+ * up as an option". The boxes took a symbol or nothing. Now "Amazon" offers
+ * AMZN, as it does in the top bar, and a pick fills the box and moves to the
+ * next empty one rather than leaving the tab. */
 function renderCompare(c) {
-  const inputs = (STATE.compareInputs || ['', '']).map((v, i) => `
-    <input class="cmp-input" data-cmp-input="${i}" value="${esc(v)}"
-      placeholder="TICKER ${i + 1}" spellcheck="false" autocomplete="off"
-      aria-label="Ticker ${i + 1}">`).join('');
+  const inputs = (STATE.compareInputs || ['', '']).map((v, i) => `<div class="combo cmp-combo">
+    <input class="cmp-input" id="cmp-input-${i}" data-cmp-input="${i}" value="${esc(v)}"
+      placeholder="Ticker ${i + 1} or company" spellcheck="false" autocomplete="off"
+      aria-label="Ticker ${i + 1}, or a company name" role="combobox" aria-expanded="false"
+      aria-autocomplete="list" aria-controls="cmp-results-${i}">
+    <ul class="combo-list" id="cmp-results-${i}" role="listbox" hidden></ul>
+  </div>`).join('');
 
   /* Controls first, then the answer.
    *
@@ -21344,9 +21355,25 @@ function seedCompareFromContext() {
 
 async function loadCompare(force) {
   seedCompareFromContext();
-  if (STATE.compare && !force) { views.compare.innerHTML = renderCompare(STATE.compare); return; }
-  views.compare.innerHTML = renderCompare(STATE.compare || null);
+  if (STATE.compare && !force) { mountCompare(STATE.compare); return; }
+  mountCompare(STATE.compare || null);
   revealPanels(views.compare);
+}
+
+/* The Compare view, drawn and wired: its boxes are new elements on every
+ * render, so each render attaches their suggestions again. */
+function mountCompare(c) {
+  views.compare.innerHTML = renderCompare(c);
+  (STATE.compareInputs || ['', '']).forEach((_v, i) => {
+    attachTypeahead(`cmp-input-${i}`, `cmp-results-${i}`, (pick) => {
+      const next = [...(STATE.compareInputs || [])];
+      next[i] = pick.symbol;
+      STATE.compareInputs = next;
+      const empty = [...views.compare.querySelectorAll('[data-cmp-input]')]
+        .find((el) => !el.value.trim());
+      if (empty) empty.focus();
+    });
+  });
 }
 
 async function runCompare() {
@@ -21354,16 +21381,16 @@ async function runCompare() {
     .map((v) => String(v || '').toUpperCase().trim()).filter(Boolean);
   if (wanted.length < 2) {
     STATE.compare = { available: false, reason: 'Give at least two tickers.' };
-    views.compare.innerHTML = renderCompare(STATE.compare);
+    mountCompare(STATE.compare);
     return;
   }
-  views.compare.innerHTML = renderCompare('loading');
+  mountCompare('loading');
   try {
     STATE.compare = await getJSON(`/api/compare?tickers=${encodeURIComponent(wanted.join(','))}`);
   } catch (err) {
     STATE.compare = { available: false, reason: err.message };
   }
-  views.compare.innerHTML = renderCompare(STATE.compare);
+  mountCompare(STATE.compare);
   revealPanels(views.compare);
 }
 
@@ -31942,7 +31969,9 @@ watchWidth(document.querySelector('main'));
  */
 const SEARCH_DEBOUNCE_MS = 160;
 
-function attachTypeahead(inputId, listId) {
+/* `onChoose`, when given, is what a pick does instead of opening the symbol:
+ * the Compare boxes keep the symbol and move on to the next box. */
+function attachTypeahead(inputId, listId, onChoose) {
   const input = document.getElementById(inputId);
   const list = document.getElementById(listId);
   if (!input || !list) return;
@@ -31965,7 +31994,8 @@ function attachTypeahead(inputId, listId) {
     if (!pick) return;
     input.value = pick.symbol;
     close();
-    loadTicker(pick.symbol, SEARCH_LANDING);
+    if (onChoose) onChoose(pick);
+    else loadTicker(pick.symbol, SEARCH_LANDING);
   };
 
   const highlight = (text, query) => {
@@ -33082,17 +33112,17 @@ document.addEventListener('click', (evt) => {
     else if (inputs.length < 4) inputs.push(cmpPick.dataset.cmpPick);
     else return;
     STATE.compareInputs = inputs;
-    views.compare.innerHTML = renderCompare(STATE.compare);
+    mountCompare(STATE.compare);
     return;
   }
   if (evt.target.closest('[data-cmp-add]')) {
     STATE.compareInputs = [...(STATE.compareInputs || []), ''];
-    views.compare.innerHTML = renderCompare(STATE.compare);
+    mountCompare(STATE.compare);
     return;
   }
   if (evt.target.closest('[data-cmp-drop]')) {
     STATE.compareInputs = (STATE.compareInputs || []).slice(0, -1);
-    views.compare.innerHTML = renderCompare(STATE.compare);
+    mountCompare(STATE.compare);
     return;
   }
   const ewBtn = evt.target.closest('[data-ew-offset]');
@@ -34327,7 +34357,10 @@ document.addEventListener('keydown', (evt) => {
     return;
   }
   if (evt.key === 'Escape' && wsManageOpen) { wsManageOpen = false; wsRefresh(); return; }
-  if (evt.key === 'Enter' && evt.target.closest('[data-cmp-input]')) runCompare();
+  // Unless it picked a suggestion, which the box handles and marks.
+  if (evt.key === 'Enter' && !evt.defaultPrevented && evt.target.closest('[data-cmp-input]')) {
+    runCompare();
+  }
   // A row advertised as role="button" has to work from the keyboard, or the
   // affordance is a lie to anyone not using a mouse.
   const row = evt.target.closest('[data-instrument]');
