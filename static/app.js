@@ -27137,12 +27137,16 @@ function reportsForOwnerHTML() {
   </div>`;
 }
 
+/* A stamp in the reader's own clock. Blank for a row with no time on it, and
+   the server's own text for one that does not parse, rather than the
+   "Invalid Date" that toLocaleString makes of either. */
 function reportStamp(iso) {
-  try { return new Date(iso).toLocaleString(); } catch (e) { return iso || ''; }
+  const at = new Date(iso || '');
+  return Number.isNaN(at.getTime()) ? String(iso || '') : at.toLocaleString();
 }
 
 function reportRowHTML(row) {
-  const when = reportStamp(row.created_at || '');
+  const when = reportStamp(row.created_at);
   const meta = [];
   if (row.page) meta.push('Page: ' + row.page);
   if (row.reply_to) meta.push('Reply to: ' + row.reply_to);
@@ -27152,17 +27156,24 @@ function reportRowHTML(row) {
      cannot tell whether pressing it will do that or has done it. */
   const done = !!row.resolved_at;
   const action = done ? 'Reopen' : 'Mark resolved';
+  /* Both dates say what they are. The filing time sat at the top of every
+     report with no word beside it, and on a resolved one, over "Resolved" and
+     its own time, it read as just a time rather than when the reader sent it:
+     asked for as "show the date each resolved report was filed too". */
   return `<li class="rp-item${done ? ' is-resolved' : ''}">
     <div class="rp-item-head">
-      <time class="rp-item-when">${esc(when)}</time>
+      ${when ? `<span class="rp-item-when">Filed <time datetime="${esc(row.created_at)}">${
+    esc(when)}</time></span>` : ''}
       <span class="rp-item-sent">${row.emailed ? 'Emailed' : 'Stored'}</span>
       <button type="button" class="btn rp-resolve" data-report-resolve="${esc(row.id || '')}"
         data-report-to="${done ? 'open' : 'resolved'}"
-        aria-label="${esc(`${action}: the report from ${when}`)}">${action}</button>
+        aria-label="${esc(when ? `${action}: the report filed ${when}` : `${action}: this report`)}"
+        >${action}</button>
     </div>
     <p class="rp-item-msg">${esc(row.message || '')}</p>
     <p class="rp-item-meta">${esc(meta.join(' · '))}</p>
-    ${done ? `<p class="rp-item-resolved">Resolved ${esc(reportStamp(row.resolved_at))}</p>` : ''}
+    ${done ? `<p class="rp-item-resolved">Resolved <time datetime="${esc(row.resolved_at)}">${
+    esc(reportStamp(row.resolved_at))}</time></p>` : ''}
   </li>`;
 }
 

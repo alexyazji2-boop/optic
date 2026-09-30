@@ -258,6 +258,34 @@ def test_the_resolved_tab_lists_them_with_reopen_and_when():
     """)
 
 
+def test_a_resolved_report_says_when_it_was_filed_as_well_as_when_it_was_resolved():
+    """Asked for as "show the date each resolved report was filed too". The
+    filing time was already at the top of every report, with no word beside
+    it, and over "Resolved" and its own time it read as just a time."""
+    _js(PAGE, ["reportStamp", "reportRowHTML"], """
+      var html = reportRowHTML(DONE);
+      var filed = new Date(DONE.created_at).toLocaleString();
+      var closed = new Date(DONE.resolved_at).toLocaleString();
+      var at = html.indexOf('Filed <time datetime="' + DONE.created_at + '">' + filed + '</time>');
+      var then = html.indexOf('Resolved <time datetime="' + DONE.resolved_at + '">' + closed + '</time>');
+      assert(at >= 0, 'no filing date: ' + html);
+      assert(then > at, 'no resolved date after it: ' + html);
+      var open = reportRowHTML(OPEN);
+      assert(open.indexOf('Filed <time') >= 0 && open.indexOf('Resolved <time') < 0,
+             'an open one is filed and not resolved');
+      assert(open.indexOf('the report filed ' + new Date(OPEN.created_at).toLocaleString()) >= 0,
+             'the button names the report the way the page does');
+    """)
+
+
+def test_a_report_with_no_time_says_nothing_rather_than_invalid_date():
+    _js(PAGE, ["reportStamp", "reportRowHTML"], """
+      var html = reportRowHTML({ id: 'ccc', message: 'x', created_at: null, resolved_at: null });
+      assert(html.indexOf('Invalid Date') < 0 && html.indexOf('Filed') < 0, html);
+      assert(reportStamp('not a time') === 'not a time', 'the text it was given, not Invalid Date');
+    """)
+
+
 def test_an_empty_tab_says_so_in_its_own_words():
     _js(PAGE, ["reportStamp", "reportRowHTML", "reportsTabsHTML", "reportsHTML"], """
       var html = reportsHTML({ reports: [], total: 0, open: 0, resolved: 3, status: 'open' });
