@@ -18575,20 +18575,18 @@ document.addEventListener('pointerup', () => {
  * chart node dies on the next re-render, which is the bug the drawing handlers
  * already carry a long comment about.
  *
- * Drag pans, and the Stocks-style measurement moves to shift-drag. Only one of
- * the two can own a plain drag, and pan is the one people reach for first on a
- * chart with a scroll wheel. Two-finger touch still measures, untouched.
+ * A plain drag measures, the Stocks-style span with the change in dollars and
+ * percent, and shift-drag pans. Only one of the two can own a plain drag.
  *
- * This went the other way for a while: the plot's drag measured and panning
- * lived only on the navigator strip, on the theory that a gesture needing a
- * held key is a rule you have to be told. What that missed is that a gesture
- * on a surface you did not think to look at is a rule you have to be told
- * twice. Drag-to-pan is what every charting tool does, so it is what a hand
- * tries first, and finding it does something else reads as broken.
- *
- * Measuring keeps two ways in, which is why it can afford to give up the plain
- * drag: shift-drag, and the ruler in the tool rail, which unlike the gesture
- * leaves a drawing that stays on the chart. The navigator still pans too.
+ * This has gone both ways. The plot's drag measured first, with panning only
+ * on the navigator strip; then it panned, on the argument that drag-to-pan is
+ * what every charting tool does, and the measurement moved to shift-drag. The
+ * reader this is built for reported that as "the drag feature to see percent
+ * change is not working": the drag they had learned now moved the chart. So
+ * the drag measures again, on every chart, and panning keeps four ways in that
+ * do not need it: shift-drag, a two-finger swipe across the trackpad, shift
+ * and the scroll wheel, and the navigator strip. Two-finger touch measures, as
+ * it always has, and the ruler in the tool rail leaves a measurement behind.
  */
 function wsBarUnderCursor(evt) {
   const host = document.getElementById('ws-chart');
@@ -18890,10 +18888,10 @@ document.addEventListener('pointerdown', (evt) => {
    * moving it. Touch keeps the two-finger measurement it already had, and the
    * navigator strip is still there to move the window. */
   if (evt.pointerType && evt.pointerType !== 'mouse' && evt.pointerType !== 'pen') return;
-  // Shift measures. An armed drawing tool draws, which each adapter reports
-  // through `enabled`. Both are deliberate acts; panning is what is left when
-  // the reader has not asked for anything in particular.
-  if (evt.shiftKey) return;
+  // Shift pans. A plain drag is the measurement's, which each chart's own
+  // mousedown answers, and an armed drawing tool draws, which each adapter
+  // reports through `enabled`.
+  if (!evt.shiftKey) return;
   /* A drawing lives in #ws-draw, a SIBLING of #ws-chart, so a hit on one of its
    * strokes resolves no zoom target here and the drawing handler keeps the
    * drag. That is a property of the markup, not of this test. */
@@ -19284,7 +19282,7 @@ function wsMountChart() {
       // Same builder as the Swing chart, so the two tabs cannot disagree about
       // where a cloud flips or how wide it is.
       clouds: emaClouds(ps),
-      // Drag pans this chart, so the measurement takes shift. See panDrag.
+      // Shift-drag pans this chart, so the measurement leaves it alone. See panDrag.
       panDrag: true,
       series: [
         { name: 'Close', values: ps.close,
@@ -29722,7 +29720,7 @@ function updateStatus() {
           : wsFit ? `${shown} · newest ${wsFit.shown} of ${wsFit.total} candles, scroll for more`
             : `${shown} · ${chartWindowLabel()}`,
         `${wsDrawings().length} drawing${wsDrawings().length === 1 ? '' : 's'}`,
-        'Drag to pan, scroll to zoom, shift-drag to measure']
+        'Drag to measure, scroll to zoom, shift-drag to pan']
       : ['Chart. Pick a symbol to begin.']);
     return;
   }

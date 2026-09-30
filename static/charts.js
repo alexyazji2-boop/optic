@@ -956,13 +956,16 @@ function lineChart(opts) {
     // Off by default so the panels that are deliberately spare — sparklines,
     // the breadth strip — do not grow a gutter they have no use for.
     valueTags = false,
-    /* The caller owns the plain drag, so measuring moves to shift-drag here.
+    /* The caller pans with shift-drag, so the measurement leaves a shifted
+     * press alone. A plain drag measures on every chart.
      *
-     * Only one gesture can have an unmodified left-drag. On the Charting tab it
-     * is panning, because that is what a reader reaches for on a chart they can
-     * zoom, and the measurement has two other ways in: shift-drag, and the ruler
-     * in the tool rail, which leaves a drawing that stays put. The Swing chart
-     * has no zoom and no pan, so it leaves this off and keeps the plain drag. */
+     * Only one gesture can have an unmodified left-drag, and for a while on the
+     * Charting tab it was panning, with the measurement moved to shift-drag.
+     * "the drag feature to see percent change is not working" is what that
+     * looked like to the reader it was built for, so the plain drag measures
+     * again and panning keeps four other ways in: shift-drag, a two-finger
+     * swipe across the trackpad, shift and the scroll wheel, and the strip
+     * under the chart. */
     panDrag = false,
   } = opts;
 
@@ -2149,13 +2152,13 @@ function lineChart(opts) {
   }
   overlay.addEventListener('mousedown', (evt) => {
     if (evt.button !== 0) return;
-    /* On a pannable chart this needs shift; everywhere else a plain drag does it.
+    /* A plain drag measures. Shift is the pan's, on a chart that pans with it.
      *
      * Returning without preventDefault matters as much as not measuring: the
      * pan handler is delegated on the document, so the event still reaches it,
      * and swallowing the default here would break the gesture it is deferring
      * to. */
-    if (panDrag && !evt.shiftKey) return;
+    if (panDrag && evt.shiftKey) return;
     evt.preventDefault();            // no text-selection drag over the chart
     measureAnchor = indexFromClientX(evt.clientX);
     window.addEventListener('mousemove', onDragMove);

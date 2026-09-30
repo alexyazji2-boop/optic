@@ -8226,19 +8226,10 @@ body[data-view="chart"] .sessionbar { display: none; }
    while a tool is armed and only then. */
 .ws-canvas.arming .ws-draw { touch-action: none; }
 
-/* The pan cursor.
- *
- * An open hand on the plot is the only thing that says the chart can be dragged
- * before anyone drags it, which matters more here than usual: the gesture used
- * to measure, so a reader who has used this before has a wrong expectation to
- * overwrite.
- *
- * The closed hand is NOT declared here. A `body.ws-panning` rule was already in
- * the file, left behind by the first version of drag-to-pan and dormant for as
- * long as nothing added that class — see the chart-navigator section. It won on
- * !important anyway, so a second declaration here was two rules for one state
- * with only one of them in effect. */
-.ws-chart { cursor: grab; }
+/* The plot's cursor is the measurement's crosshair, which the chart's own
+ * overlay sets. It was an open hand while a plain drag panned, and a hand over
+ * a chart that measures promises the wrong gesture. The closed hand of a
+ * shift-drag pan is `body.ws-panning`, in the chart-navigator section. */
 .ws-canvas.arming .ws-chart { cursor: crosshair; }
 .ws-tool:disabled { opacity: 0.3; cursor: default; }
 

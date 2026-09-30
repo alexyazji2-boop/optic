@@ -1,10 +1,12 @@
 """Tests for who owns a drag on the price chart.
 
 A left-drag can only mean one thing, and this chart has three candidates: pan,
-measure, and draw. The split is deliberate and has already been reversed once —
-measuring held the plain drag while panning lived only on the navigator strip
-below the chart, which read as "the chart cannot be dragged" to anyone who
-reached for the gesture every other charting tool has.
+measure, and draw. The split has gone both ways. Measuring held the plain drag
+while panning lived only on the navigator strip; then the drag panned and the
+measurement moved to shift-drag, and that was reported as "the drag feature to
+see percent change is not working". So the plain drag measures on every chart
+again, and shift-drag pans, beside the trackpad swipe, shift and the wheel, and
+the navigator strip.
 
 Nothing here can drive a mouse; what it checks is the wiring that decides which
 handler gets the event. Each assertion stands for a failure that is silent in the
@@ -22,10 +24,10 @@ def _block(source, marker, end="\n}"):
     return source[start:source.index(end, start)]
 
 
-def test_only_the_pannable_chart_gives_up_its_plain_drag():
-    """The Swing chart has no zoom and no pan, so a plain drag there still
-    measures. Setting panDrag on both would leave that chart with a gesture that
-    demands a modifier for no reason, and no gesture at all without one."""
+def test_only_the_workspace_chart_leaves_its_shifted_drag_to_the_pan():
+    """Every chart measures on a plain drag. The Charting tab's also gives a
+    shifted one to the pan handler, where the Options chart, whose pan claims
+    the pointer before its mousedown can fire, has no need to say so."""
     assert APP.count("panDrag: true") == 1
 
 
@@ -43,15 +45,15 @@ def test_measure_defers_before_it_swallows_the_default():
     already on screen. Calling preventDefault before the guard would eat the
     event on behalf of a measurement that is not going to happen."""
     handler = _block(CHARTS, "overlay.addEventListener('mousedown'", "\n  });")
-    guard = handler.index("if (panDrag && !evt.shiftKey) return;")
+    guard = handler.index("if (panDrag && evt.shiftKey) return;")
     default = handler.index("evt.preventDefault();")
     assert guard < default, "preventDefault runs before the guard"
 
 
 def test_panning_yields_to_every_more_specific_gesture():
-    """Shift means measure, an armed tool means draw, and a drag that started on
-    a drawing means move that drawing. Panning is the fallback, so each of these
-    has to be checked before it claims the event.
+    """A plain drag means measure, an armed tool means draw, and a drag that
+    started on a drawing means move that drawing. Panning takes only a shifted
+    drag, and each of these has to be checked before it claims the event.
 
     The three checks now live in three places, because the handler is shared by
     every chart that registers for it rather than hardcoded to the workspace:
@@ -61,7 +63,8 @@ def test_panning_yields_to_every_more_specific_gesture():
     at all.
     """
     handler = _block(APP, "let wsPan = null;\n\ndocument.addEventListener('pointerdown'", "\n});")
-    assert "if (evt.shiftKey) return;" in handler
+    assert "if (!evt.shiftKey) return;" in handler
+    assert handler.index("if (!evt.shiftKey) return;") < handler.index("evt.preventDefault();")
     assert "const target = chartZoomTarget(evt);" in handler
     assert "if (!target) return;" in handler
     # The workspace adapter still declines while a tool is armed.
@@ -116,13 +119,19 @@ def test_the_drag_moves_the_chart_not_a_scrollbar():
 def test_the_hint_names_the_gestures_that_exist():
     """The status strip is the only place the gestures are written down, and it
     described the arrangement this replaced."""
-    assert "'Drag to pan, scroll to zoom, shift-drag to measure'" in APP
-    assert "drag the chart to measure" not in APP
+    assert "'Drag to measure, scroll to zoom, shift-drag to pan'" in APP
+    assert "'Drag to pan, scroll to zoom, shift-drag to measure'" not in APP
+
+
+def test_the_plot_does_not_offer_a_hand_for_a_drag_that_measures():
+    css = open("static/styles.css", encoding="utf-8").read()
+    assert ".ws-chart { cursor: grab; }" not in css
+    assert "body.ws-panning, body.ws-panning * { cursor: grabbing !important; }" in css
 
 
 def test_measuring_keeps_a_second_way_in():
-    """Giving up the plain drag is only affordable because the ruler in the tool
-    rail measures too, and unlike the gesture it leaves a drawing behind."""
+    """The ruler in the tool rail measures too, and unlike the gesture it leaves
+    a drawing behind."""
     rail = _block(APP, "const WS_TOOLS = [", "\n];")
     assert "id: 'ruler'" in rail
 
