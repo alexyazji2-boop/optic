@@ -22293,6 +22293,10 @@ function installReportPanel() {
   });
   const cancel = $('#rp-cancel');
   if (cancel) cancel.addEventListener('click', closeReportPanel);
+  // The x in the corner. Focus goes back to the button that opened it, as it
+  // does on Escape, so a keyboard reader is not left on a hidden panel.
+  const close = $('#rp-close');
+  if (close) close.addEventListener('click', () => { closeReportPanel(); btn.focus(); });
   const send = $('#rp-send');
   if (send) send.addEventListener('click', sendReport);
   const box = $('#rp-text');

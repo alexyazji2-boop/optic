@@ -319,7 +319,14 @@
 <div class="rp" id="report-problem">
   <div class="rp-panel" id="rp-panel" hidden role="dialog"
        aria-labelledby="rp-title">
-    <h2 class="rp-title" id="rp-title">Report a problem</h2>
+    <!-- A close button of its own, top right. Asked for by a user: "There
+         should be an X button on the Report a problem box so I can close it,
+         the user shouldn't need to press cancel". Cancel stays beside Send. -->
+    <div class="rp-head">
+      <h2 class="rp-title" id="rp-title">Report a problem</h2>
+      <button type="button" class="rp-close" id="rp-close"
+        aria-label="Close Report a problem">&times;</button>
+    </div>
     <label class="rp-label" for="rp-text">What went wrong?</label>
     <textarea id="rp-text" class="rp-text" rows="4" maxlength="2000"
       placeholder="What you saw, and what you expected instead."></textarea>
