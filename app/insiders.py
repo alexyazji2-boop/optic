@@ -248,6 +248,14 @@ def index(count: int = INDEX_COUNT, force: bool = False,
             "index_url": href,
             "title": title,
         })
+    # The company's own CIK, which its list states. The list is every Form 4
+    # the company is a party to, as the issuer or as the owner reporting: HOOD's
+    # carries Robinhood Markets' own trades as a 10% owner of Robinhood Ventures
+    # Fund I (RVI), 25 of 99 filings, and they were shown as HOOD's insiders'.
+    # `latest` keeps the filings whose issuer is this CIK.
+    company = None
+    if symbol:
+        company = _cik(root.findtext(_ATOM + "company-info/" + _ATOM + "cik"))
     if symbol and not rows:
         # EDGAR answers an unknown symbol with an empty feed, so this is the
         # only place the two can be told apart, and only by saying both.
@@ -255,7 +263,14 @@ def index(count: int = INDEX_COUNT, force: bool = False,
                 "note": ("No Form 4 filings found for {}. Either nobody has "
                          "filed one, or EDGAR does not index that symbol."
                          ).format(symbol)}
-    return {"available": True, "rows": rows, "ticker": symbol or None}
+    return {"available": True, "rows": rows, "ticker": symbol or None, "cik": company}
+
+
+def _cik(raw: Optional[str]) -> Optional[str]:
+    """A CIK as digits without the leading zeros EDGAR pads it with in some
+    places and not others, or None."""
+    digits = (raw or "").strip()
+    return str(int(digits)) if digits.isdigit() else None
 
 
 def _filing_folder(index_url: str) -> str:
@@ -304,6 +319,7 @@ def parse_filing(index_url: str, accession: str) -> Dict[str, Any]:
         "accession": accession,
         "ticker": (_text(issuer, "issuerTradingSymbol") or "").upper() or None,
         "issuer": _text(issuer, "issuerName"),
+        "issuer_cik": _cik(_text(issuer, "issuerCik")),
         "insider": _text(owner, "reportingOwnerId/rptOwnerName"),
         "roles": roles,
         "transactions": [],
@@ -357,14 +373,20 @@ def latest(limit: int = 40, only_purchases: bool = True, force: bool = False,
                 "codes": CODES}
 
     listed = idx["rows"]
+    company = idx.get("cik")
     rows: List[Dict[str, Any]] = []
     fetched = 0
     unread = 0
     failed = 0
+    elsewhere = 0
 
     for entry in listed:
         acc = entry["accession"]
         cached = feeds.cached_json("insider:parsed:" + acc)
+        # A parse from before the issuer's CIK was kept is read again, when a
+        # company's own filings have to be told from its trades elsewhere.
+        if company and cached and cached.get("available") and "issuer_cik" not in cached:
+            cached = None
         parsed = cached
         if parsed is None:
             if fetched >= max(0, int(budget)):
@@ -382,6 +404,9 @@ def latest(limit: int = 40, only_purchases: bool = True, force: bool = False,
             feeds.store_json("insider:parsed:" + acc, parsed, )
         if not parsed.get("available"):
             failed += 1
+            continue
+        if company and parsed.get("issuer_cik") != company:
+            elsewhere += 1
             continue
 
         for tx in parsed.get("transactions", []):
@@ -411,9 +436,10 @@ def latest(limit: int = 40, only_purchases: bool = True, force: bool = False,
         "rows": rows[:max(1, min(int(limit), 200))],
         "matched": len(rows),
         "filings_listed": len(listed),
-        "filings_read": len(listed) - unread - failed,
+        "filings_read": len(listed) - unread - failed - elsewhere,
         "filings_unread": unread,
         "filings_failed": failed,
+        "filings_elsewhere": elsewhere,
         "fetched_now": fetched,
         "only_purchases": mode == "buys",
         "show": mode,

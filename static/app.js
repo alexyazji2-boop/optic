@@ -27994,7 +27994,9 @@ function renderInsiderFeed() {
       filings are being read now, a batch at a time` : `. ${fmt(d.filings_unread, 0)} more
       filings are listed and not read yet: each one is a separate request, so they
       fill in as you come back rather than holding this page`) : ''}${
-  d.filings_failed ? `. ${fmt(d.filings_failed, 0)} could not be parsed` : ''}.${
+  d.filings_failed ? `. ${fmt(d.filings_failed, 0)} could not be parsed` : ''}${
+  d.filings_elsewhere ? `. ${fmt(d.filings_elsewhere, 0)} more of ${esc(d.ticker || '')}'s
+      filings are its own trades in another company's shares, and are left out` : ''}.${
   rows.length && rows.length < d.matched ? ` The newest ${fmt(rows.length, 0)} are below.` : ''}</p>
     ${/* Both wrappers. scroll-y caps the height so sixty rows do not push the
         * caveats off the page, and table-scroll is the repo's own horizontal

@@ -240,3 +240,95 @@ def test_every_control_still_has_its_handler():
     block = APP.split("closest('[data-ins-show]')", 1)[1][:700]
     assert "insiderShow = want;" in block and "loadInsiderFeed(false);" in block
     assert "INSIDER_SHOWS.some((v) => v.key === want)" in block, "an unknown view is ignored"
+
+
+# ------------------------------------------- the company's own filings only
+#
+# A company's EDGAR list is every Form 4 it is a party to, as the issuer or as
+# the owner reporting. HOOD's carried Robinhood Markets' own sales as a 10%
+# owner of Robinhood Ventures Fund I (RVI): 25 of its 99 filings, measured,
+# shown among HOOD's insiders with RVI in the symbol column. Told apart by the
+# issuer's CIK, not its symbol, which a share class can spell otherwise.
+
+
+HOOD_CIK = "1783879"
+
+
+@pytest.fixture
+def hood_and_rvi(monkeypatch):
+    parsed = {"a1": {**_filing("a1", "S"), "issuer_cik": HOOD_CIK},
+              "a2": {**_filing("a2", "P"), "issuer_cik": HOOD_CIK},
+              "a3": {**_filing("a3", "S"), "ticker": "RVI", "issuer": "Robinhood Ventures Fund I",
+                     "insider": "Robinhood Markets, Inc.", "issuer_cik": "1924368"}}
+    listing = {"available": True, "ticker": "HOOD", "note": None, "cik": HOOD_CIK,
+               "rows": [{"accession": a, "filed_at": "2026-09-2%sT16:00:00-04:00" % a[1],
+                         "form": "4", "index_url": "https://www.sec.gov/x/" + a} for a in parsed]}
+    monkeypatch.setattr(insiders, "index", lambda force=False, ticker=None: listing)
+    monkeypatch.setattr(insiders.feeds, "cached_json", lambda key: parsed.get(key.split(":")[-1]))
+    monkeypatch.setattr(insiders.feeds, "store_json", lambda key, value: parsed.update({key.split(":")[-1]: value}))
+    return parsed, listing
+
+
+def test_a_companys_history_is_its_own_stock(hood_and_rvi):
+    out = insiders.latest(ticker="HOOD", show="all")
+    assert {r["ticker"] for r in out["rows"]} == {"HOOD"}
+    assert out["filings_elsewhere"] == 1 and out["filings_read"] == 2
+    assert out["matched"] == 2
+
+
+def test_the_market_wide_list_keeps_every_issuer(hood_and_rvi):
+    _, listing = hood_and_rvi
+    listing["cik"] = None
+    out = insiders.latest(show="all")
+    assert {r["ticker"] for r in out["rows"]} == {"HOOD", "RVI"} and out["filings_elsewhere"] == 0
+
+
+def test_a_parse_from_before_the_issuer_was_kept_is_read_again(hood_and_rvi, monkeypatch):
+    parsed, _ = hood_and_rvi
+    del parsed["a3"]["issuer_cik"]
+    read = []
+
+    def fresh(index_url, acc):
+        read.append(acc)
+        return {**_filing(acc, "S"), "ticker": "RVI", "issuer_cik": "1924368"}
+    monkeypatch.setattr(insiders, "parse_filing", fresh)
+    out = insiders.latest(ticker="HOOD", show="all")
+    assert read == ["a3"] and out["filings_elsewhere"] == 1
+    assert parsed["a3"]["issuer_cik"] == "1924368", "and kept, so it is read once"
+
+
+def test_the_list_states_the_companys_cik(monkeypatch):
+    atom = """<?xml version="1.0" encoding="ISO-8859-1" ?>
+      <feed xmlns="http://www.w3.org/2005/Atom">
+        <company-info><cik>0001783879</cik><conformed-name>Robinhood Markets, Inc.</conformed-name></company-info>
+        <title>Robinhood Markets, Inc.  (0001783879)</title>
+        <entry><title>4  - Statement of changes in beneficial ownership of securities</title>
+          <link href="https://www.sec.gov/Archives/edgar/data/1783879/000178387926000140/0001783879-26-000140-index.htm"/>
+          <updated>2026-09-02T16:28:44-04:00</updated></entry>
+      </feed>"""
+    monkeypatch.setattr(insiders.feeds, "CONTACT_OK", True)
+    monkeypatch.setattr(insiders.feeds, "fetch_text", lambda *a, **k: atom)
+    out = insiders.index(ticker="HOOD")
+    assert out["cik"] == HOOD_CIK and len(out["rows"]) == 1
+    assert insiders._cik("0001783879") == HOOD_CIK and insiders._cik("") is None
+
+
+def test_a_filing_records_its_issuers_cik(monkeypatch):
+    doc = """<SEC-DOCUMENT><ownershipDocument>
+      <issuer><issuerCik>0001783879</issuerCik><issuerName>Robinhood Markets, Inc.</issuerName>
+        <issuerTradingSymbol>HOOD</issuerTradingSymbol></issuer>
+      <reportingOwner><reportingOwnerId><rptOwnerName>Tenev Vladimir</rptOwnerName></reportingOwnerId></reportingOwner>
+    </ownershipDocument></SEC-DOCUMENT>"""
+    monkeypatch.setattr(insiders.feeds, "fetch_text", lambda *a, **k: doc)
+    out = insiders.parse_filing("https://www.sec.gov/Archives/edgar/data/1/x/acc-index.htm", "acc")
+    assert out["issuer_cik"] == HOOD_CIK and out["ticker"] == "HOOD"
+
+
+def test_the_panel_says_what_it_left_out():
+    got = _app("""
+      STATE.insiders = { available: true, ticker: 'HOOD', rows: [], matched: 0,
+                         filings_read: 74, filings_unread: 0, filings_elsewhere: 25 };
+      print('RESULT:' + JSON.stringify({ html: renderInsiderFeed() }));
+    """)
+    assert ("25 more of HOOD's\n      filings are its own trades in another company's shares, "
+            "and are left out.") in got["html"]
