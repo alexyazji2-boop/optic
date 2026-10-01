@@ -26471,7 +26471,25 @@ async function runReadSearch(query) {
  * between them is itself worth seeing.
  */
 
-let insiderPurchasesOnly = true;
+/* Which transactions the feed shows, by the SEC's codes.
+ *
+ * Open-market buys and sells by default: the two codes that are an insider
+ * choosing to trade. It was purchases alone, which for a company whose
+ * insiders only sell is an empty table, and was reported on HOOD as "no
+ * insider buys/sells on HOOD? not true". Grants, exercises, tax withholding
+ * and conversions are still kept out of the default, and are one press away.
+ * The server's SHOWS (app/insiders.py) is the same list. */
+const INSIDER_SHOWS = [
+  { key: 'trades', label: 'Buys and sells', one: 'open-market buy or sell',
+    many: 'open-market buys or sells' },
+  { key: 'buys', label: 'Buys only', one: 'open-market purchase',
+    many: 'open-market purchases' },
+  { key: 'all', label: 'Everything filed', one: 'transaction', many: 'transactions' },
+];
+let insiderShow = 'trades';
+function insiderShowSpec() {
+  return INSIDER_SHOWS.find((v) => v.key === insiderShow) || INSIDER_SHOWS[0];
+}
 /* The symbol the feed is scoped to, or '' for the whole market.
  *
  * Served by a different EDGAR action rather than by filtering the rows on
@@ -27863,9 +27881,14 @@ function congressResults() {
       </table></div>
       <p class="caveat">${esc(c.caveat || '')}</p>
     </div>`
-    : `<div class="panel" data-fixed="1"><h2>${hg('No filings match')}</h2>
+    : `<div class="panel" data-fixed="1"><h2>${hg(q.ticker
+    // Which record is empty. "No filings match" over a symbol read as no
+    // filings at all, with the company's own insiders' filings just below it.
+    ? `No House trades in ${q.ticker.toUpperCase()}` : 'No filings match')}</h2>
       <p class="sub">${narrowed
-    ? 'Nothing in the record read so far matches those filters. That is an absence of a disclosure, not evidence that nothing was traded.'
+    ? `Nothing in the House disclosures read so far matches ${q.ticker
+      ? esc(q.ticker.toUpperCase()) : 'those filters'}. That is an absence of a disclosure, not evidence that nothing was traded.${
+  q.ticker ? ' The company\u2019s own insiders file separately, under Insider filings below.' : ''}`
     : 'No House filings have been parsed yet. They are fetched a few at a time rather than in one burst at a government file server, so this fills in as you come back.'}</p>
       ${narrowed ? '<div class="empty-acts"><button type="button" class="btn" data-ins-reset>Clear the filters</button></div>' : ''}</div>`}
     <p class="caveat">${c.index_at ? `Indexed ${esc(shortWhen(c.index_at))}. ` : ''}${
@@ -27945,6 +27968,7 @@ function renderInsiderFeed() {
       <div class="callout">${esc(d.reason || 'EDGAR did not answer.')}</div></div>`;
   }
   const rows = d.rows || [];
+  const view = insiderShowSpec();
   return `<div class="panel span-all">
     <h2>${hg('Insider filings')}</h2>
     <p class="sub">Form 4s across the market, newest filing first. The time is
@@ -27952,10 +27976,8 @@ function renderInsiderFeed() {
       says the trade happened.</p>
     <div class="wv-filters" role="group" aria-label="Which transactions">
       <span class="wv-filter-label">Show</span>
-      <button type="button" class="pill${insiderPurchasesOnly ? ' on' : ''}"
-        data-ins-only="1" aria-pressed="${insiderPurchasesOnly}">Open-market buys</button>
-      <button type="button" class="pill${insiderPurchasesOnly ? '' : ' on'}"
-        data-ins-only="0" aria-pressed="${!insiderPurchasesOnly}">Everything filed</button>
+      ${INSIDER_SHOWS.map((v) => `<button type="button" class="pill${v.key === view.key ? ' on' : ''}"
+        data-ins-show="${v.key}" aria-pressed="${v.key === view.key}">${esc(v.label)}</button>`).join('')}
       <button type="button" class="pill" data-ins-refresh>Refresh</button>
     </div>
     ${/* The feed's own symbol box is gone. The box at the top of this page
@@ -27966,12 +27988,14 @@ function renderInsiderFeed() {
       the market-wide list above.</p>` : ''}
     ${d.note ? `<div class="callout">${esc(d.note)}</div>` : ''}
     <p class="note" style="color:var(--ink-muted);margin:0 0 var(--space-2)">
-      ${fmt(d.matched, 0)} ${insiderPurchasesOnly ? 'open-market purchase' : 'transaction'}${
-  d.matched === 1 ? '' : 's'} from ${fmt(d.filings_read, 0)} filings read${
-  d.filings_unread ? `. ${fmt(d.filings_unread, 0)} more filings are listed and not
-      read yet: each one is a separate request, so they fill in as you come back
-      rather than holding this page` : ''}${
-  d.filings_failed ? `. ${fmt(d.filings_failed, 0)} could not be parsed` : ''}.</p>
+      ${fmt(d.matched, 0)} ${d.matched === 1 ? view.one : view.many} from ${
+  fmt(d.filings_read, 0)} filings read${
+  d.filings_unread ? (d.ticker ? `. ${fmt(d.filings_unread, 0)} more of ${esc(d.ticker)}'s
+      filings are being read now, a batch at a time` : `. ${fmt(d.filings_unread, 0)} more
+      filings are listed and not read yet: each one is a separate request, so they
+      fill in as you come back rather than holding this page`) : ''}${
+  d.filings_failed ? `. ${fmt(d.filings_failed, 0)} could not be parsed` : ''}.${
+  rows.length && rows.length < d.matched ? ` The newest ${fmt(rows.length, 0)} are below.` : ''}</p>
     ${/* Both wrappers. scroll-y caps the height so sixty rows do not push the
         * caveats off the page, and table-scroll is the repo's own horizontal
         * one — eight columns including two dates overflowed the panel and the
@@ -27981,33 +28005,59 @@ function renderInsiderFeed() {
         <th class="num">Shares</th><th class="num">Price</th><th class="num">Value</th>
         <th>Trade date</th></tr></thead>
       <tbody>${rows.map(insiderFeedRow).join('')}</tbody>
-    </table></div>` : d.note ? '' : `<div class="callout">No ${
-  insiderPurchasesOnly ? 'open-market purchases' : 'transactions'}${
-  d.ticker ? ` for ${esc(d.ticker)}` : ''} in the filings read so far.
-      Open-market buying is genuinely rare next to grants and scheduled selling,
-      so an empty list here is usually the answer rather than a fault${
-  insiderPurchasesOnly ? ' \u2014 try "Everything filed"' : ''}.</div>`}
+    </table></div>` : d.note ? '' : `<div class="callout">No ${view.many}${
+  d.ticker ? ` for ${esc(d.ticker)}` : ''} in the filings read so far.${
+  view.key === 'buys' ? ` Open-market buying is genuinely rare next to grants and
+      scheduled selling, so an empty list here is usually the answer rather than a
+      fault. "Buys and sells" adds the sales, and "Everything filed" the rest.`
+    : view.key === 'trades' ? ` Grants, option exercises and the rest are under
+      "Everything filed".` : ''}</div>`}
     <div class="callout scan-blind"><strong>What this cannot see.</strong>
       ${esc(d.blind_spot || '')}</div>
     <p class="caveat">${esc(d.method || '')}</p>
   </div>`;
 }
 
-async function loadInsiderFeed(force) {
-  if (STATE.insiders && !force) return;
+/* A symbol's own history, read to the end.
+ *
+ * Each request reads twelve filings, one EDGAR request apiece, and said the
+ * rest would "fill in as you come back". A company with a hundred listed showed
+ * its newest twelve, and HOOD was reported as having no insider trades. With a
+ * symbol asked for, the page keeps reading in the background, a batch at a
+ * time, until every listed filing is read or the reader moves on. The whole
+ * market's list stays as it was: it is the newest hundred filings of any
+ * company, and turns over faster than it could be read to the end. */
+const INSIDER_MORE_ROUNDS = 9;
+let insiderMoreTimer = 0;
+
+async function loadInsiderFeed(force, round = 0) {
+  if (STATE.insiders && !force && !round) return;
+  clearTimeout(insiderMoreTimer);
+  const ticker = insiderTicker;
+  const show = insiderShow;
+  let data;
   try {
-    STATE.insiders = await getJSON('/api/insiders/latest?limit=60&purchases='
-      + (insiderPurchasesOnly ? 'true' : 'false')
-      + (insiderTicker ? '&ticker=' + encodeURIComponent(insiderTicker) : '')
+    // A company's history to the server's limit, the market's newest sixty.
+    // Measured: HOOD's ninety-nine listed filings carry 226 buys and sells.
+    data = await getJSON('/api/insiders/latest?limit=' + (ticker ? 200 : 60)
+      + '&show=' + encodeURIComponent(show)
+      + (ticker ? '&ticker=' + encodeURIComponent(ticker) : '')
       + (force ? '&force=true' : ''));
   } catch (err) {
-    STATE.insiders = { available: false, reason: err.message };
+    data = { available: false, reason: err.message };
   }
+  // Another symbol or view was asked for while this was in flight.
+  if (ticker !== insiderTicker || show !== insiderShow) return;
+  STATE.insiders = data;
   // The feed moved off Optic's Read and onto the Insiders page, where it sits
   // beside the congressional filings that answer the same question from the
   // other end. It repaints into the facet host rather than into its old
   // `span-all` slot at the foot of the Read.
   renderInsidersFacetHost();
+  if (ticker && data.available && data.filings_unread > 0
+      && round < INSIDER_MORE_ROUNDS && STATE.view === 'insiders') {
+    insiderMoreTimer = setTimeout(() => loadInsiderFeed(false, round + 1), 600);
+  }
 }
 
 function renderBrief(d) {
@@ -32830,11 +32880,11 @@ document.addEventListener('click', (evt) => {
     return;
   }
   if (evt.target.closest('[data-panels-open]')) { openPanelChooser(STATE.view); return; }
-  const insOnly = evt.target.closest('[data-ins-only]');
-  if (insOnly) {
-    const want = insOnly.dataset.insOnly === '1';
-    if (want === insiderPurchasesOnly) return;
-    insiderPurchasesOnly = want;
+  const insShow = evt.target.closest('[data-ins-show]');
+  if (insShow) {
+    const want = insShow.dataset.insShow;
+    if (want === insiderShow || !INSIDER_SHOWS.some((v) => v.key === want)) return;
+    insiderShow = want;
     // The filter is applied server-side, so switching is a refetch. Cheap: the
     // filings are already parsed and cached, so this re-reads the cache.
     STATE.insiders = null;

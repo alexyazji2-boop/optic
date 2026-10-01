@@ -49,12 +49,18 @@ def test_every_code_is_explained():
         assert "buy" in meta, code
 
 
-def test_the_default_view_is_purchases_only():
-    """8 of 46 on a live run. The default has to be the 8."""
+def test_the_default_view_is_trades_and_never_a_grant():
+    """8 of 46 on a live run were open-market purchases, and showing all 46 as
+    insider buying would have been wrong about 38 of them. The page's default
+    is buys and sells now, asked for on HOOD, whose insiders sell and do not
+    buy: still never a grant, an exercise or shares withheld for tax. A caller
+    that names no view still gets purchases. tests/test_insider_symbol_history.py
+    has the rest."""
     import inspect
     sig = inspect.signature(insiders.latest)
     assert sig.parameters["only_purchases"].default is True
-    assert "insiderPurchasesOnly = true" in APP_JS
+    assert insiders.SHOWS["trades"] == ("P", "S")
+    assert "let insiderShow = 'trades';" in APP_JS
 
 
 # --------------------------------------------------------------- the index
@@ -303,7 +309,7 @@ def test_the_row_shows_a_date_and_a_time():
 
 
 @pytest.mark.parametrize("attr,handler", [
-    ("data-ins-only", "insiderPurchasesOnly"),
+    ("data-ins-show", "insiderShow"),
     ("data-ins-refresh", "loadInsiderFeed(true)"),
 ])
 def test_every_control_has_a_handler(attr, handler):

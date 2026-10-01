@@ -36,7 +36,7 @@ import re
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from . import feeds
 
@@ -100,6 +100,20 @@ CODES: Dict[str, Dict[str, Any]] = {
     "J": {"label": "Other", "buy": False,
           "note": "The filer chose 'other' and the explanation is in the "
                   "footnotes, which this does not read."},
+}
+
+# What each view of the feed keeps, by code. "trades" is the default: an
+# open-market purchase and an open-market sale are the two codes that are an
+# insider choosing to trade, and a company's history is mostly the second, so a
+# view of purchases alone showed nothing for a name whose insiders only sell.
+# Reported on HOOD, whose chief executive files sales under a 10b5-1 plan most
+# weeks, as "no insider buys/sells on HOOD? not true". Grants, exercises, tax
+# withholding, conversions and gifts stay out of it, for the reason `buy` is P
+# alone: none of them is a trade.
+SHOWS: Dict[str, Optional[Tuple[str, ...]]] = {
+    "trades": ("P", "S"),
+    "buys": ("P",),
+    "all": None,
 }
 
 # Module constants rather than inline strings, so a test can assert the value
@@ -328,11 +342,15 @@ def parse_filing(index_url: str, accession: str) -> Dict[str, Any]:
 
 
 def latest(limit: int = 40, only_purchases: bool = True, force: bool = False,
-           budget: int = ENRICH_BUDGET, ticker: Optional[str] = None) -> Dict[str, Any]:
+           budget: int = ENRICH_BUDGET, ticker: Optional[str] = None,
+           show: Optional[str] = None) -> Dict[str, Any]:
     """Recent Form 4 transactions, newest filing first.
 
-    Market-wide, or one company's when `ticker` is given.
+    Market-wide, or one company's when `ticker` is given. `show` is one of
+    SHOWS; without it, `only_purchases` picks purchases or everything, as it
+    did before there were three.
     """
+    mode = show if show in SHOWS else ("buys" if only_purchases else "all")
     idx = index(force=force, ticker=ticker)
     if not idx.get("available"):
         return {"available": False, "reason": idx.get("reason"), "rows": [],
@@ -379,8 +397,9 @@ def latest(limit: int = 40, only_purchases: bool = True, force: bool = False,
                 **tx,
             })
 
-    if only_purchases:
-        rows = [r for r in rows if r.get("is_purchase")]
+    keep = SHOWS[mode]
+    if keep is not None:
+        rows = [r for r in rows if r.get("code") in keep]
 
     # Filing time first, transaction date second. Both are shown because they
     # are different facts: a purchase made on Monday and filed on Wednesday is
@@ -396,7 +415,8 @@ def latest(limit: int = 40, only_purchases: bool = True, force: bool = False,
         "filings_unread": unread,
         "filings_failed": failed,
         "fetched_now": fetched,
-        "only_purchases": bool(only_purchases),
+        "only_purchases": mode == "buys",
+        "show": mode,
         "ticker": idx.get("ticker"),
         "note": idx.get("note"),
         "codes": {k: {"label": v["label"], "buy": v["buy"], "note": v["note"]}

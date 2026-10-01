@@ -3661,6 +3661,7 @@ async def segments_panel(ticker: str,
 @app.get("/api/insiders/latest")
 async def insiders_latest(limit: int = Query(40, ge=1, le=200),
                           purchases: bool = Query(True),
+                          show: str = Query("", description="trades, buys or all"),
                           ticker: str = Query("", max_length=10),
                           force: bool = Query(False)) -> Dict[str, Any]:
     """Form 4 transactions across the market, newest filing first.
@@ -3668,9 +3669,10 @@ async def insiders_latest(limit: int = Query(40, ge=1, le=200),
     Enrichment is capped per call and cached per accession, so a cold cache
     returns what it managed and reports how many filings it has not read yet
     rather than holding the page for half a minute. See app/insiders.py.
+    `show` overrides `purchases`, which is kept for a page that still sends it.
     """
     return await _run(insiders_mod.latest, limit, purchases, force,
-                      insiders_mod.ENRICH_BUDGET, ticker)
+                      insiders_mod.ENRICH_BUDGET, ticker, show or None)
 
 
 @app.get("/api/screener/fields")
