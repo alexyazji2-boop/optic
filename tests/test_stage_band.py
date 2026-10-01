@@ -173,9 +173,11 @@ def test_a_run_is_named_along_the_foot_as_fully_as_it_has_room_for():
         assert got["foot"] - 12 < float(t["y"]) < got["foot"]
 
 
-def test_a_name_stands_aside_for_a_session_caption():
-    """Session dividers caption the foot of the plot as well. A stage run that
-    starts on a month line would print its name over the month's."""
+def test_a_name_no_longer_stands_aside_for_a_session_divider():
+    """Session dividers captioned the foot of the plot as well, and a stage
+    name starting on a month line stood aside rather than print over the
+    month's. The dividers carry no caption now (see
+    tests/test_session_dividers.py), so both names are written."""
     days = []
     d = date(2026, 1, 5)
     while len(days) < 60:
@@ -189,8 +191,8 @@ def test_a_name_stands_aside_for_a_session_caption():
     assert [t["text"] for t in plain["names"]] == [
         "Stage 4 · Declining", "Stage 2 · Advancing"]
     got = _draw({**opts, "sessions": True})
-    assert [t["text"] for t in got["names"]] == ["Stage 4 · Declining"]
-    # The line does not stand aside: only the name does.
+    assert [t["text"] for t in got["names"]] == [
+        "Stage 4 · Declining", "Stage 2 · Advancing"]
     assert [l["stroke"] for l in got["lines"]] == ["S4", "S2"]
 
 

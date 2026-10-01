@@ -3867,11 +3867,10 @@ document.addEventListener('click', (evt) => {
   if (rm) { evt.preventDefault(); evt.stopPropagation(); watchRemove(rm.dataset.watchRemove); return; }
   const go = evt.target.closest('[data-go-view]');
   if (go) { switchView(go.dataset.goView); return; }
-  /* A market question is asked when it is pressed, and not before: rendering
-   * five of them costs nothing, and a press is the reader asking. It used to be
-   * typed into the box and left, which read as Pulse not answering. */
+  /* A market question goes into Pulse's box when it is pressed, for the reader
+   * to edit and send (see draftPulse). */
   const askText = evt.target.closest('[data-ask-text]');
-  if (askText) { askPulseNow(askText.dataset.askText); }
+  if (askText) { draftPulse(askText.dataset.askText); }
 });
 
 /** Fill in the footer once /api/health is known — real-time vs delayed feed and
@@ -7458,7 +7457,7 @@ async function paletteBuild(query) {
       .forEach((r) => rows.push({
         group: upper, lead: '\u2727', label: String(r.question || '').slice(0, 60),
         detail: 'Saved research',
-        run: () => { closePalette(); askPulseNow(r.question || ''); },
+        run: () => { closePalette(); draftPulse(r.question || ''); },
       }));
   }
 
@@ -7494,7 +7493,7 @@ async function paletteBuild(query) {
       detail: STATE.ticker ? `With ${STATE.ticker} and everything else loaded in context`
         : 'Pulse answers from whatever is loaded',
       tag: isQuestion ? 'enter' : '',
-      run: () => { closePalette(); askPulseNow(q); },
+      run: () => { closePalette(); draftPulse(q); },
     };
     if (isQuestion) rows.unshift(ask); else rows.push(ask);
   }
@@ -16135,7 +16134,12 @@ function wsRepaintWithPanes() {
  *
  * A legend row per pane rather than one shared legend, because each pane has
  * its own y-scale and its own reading: "RSI 43.9" belongs to the RSI pane the
- * way the OHLC row belongs to the price plot. */
+ * way the OHLC row belongs to the price plot.
+ *
+ * Its remove button sits right after the reading and shows on hover, as each
+ * row of the price legend's does. It sat alone at the far right of the pane,
+ * always on, where nobody looked for it: asked for as "whenever i hover over
+ * RSI or any add-on pane in the terminal, include a remove button". */
 function wsPanesHTML() {
   const open = WS_PANES.filter((p) => wsPaneOpen(p.id));
   if (!open.length) return '';
@@ -16143,7 +16147,7 @@ function wsPanesHTML() {
     <div class="ws-pane-head">
       <span class="ws-pane-legend" id="ws-pane-legend-${esc(p.id)}"></span>
       <button type="button" class="ws-pane-close" data-ws-pane-close="${esc(p.id)}"
-        title="Hide the ${esc(p.label)} pane" aria-label="Hide the ${esc(p.label)} pane">&times;</button>
+        title="Remove ${esc(p.label)}" aria-label="Remove the ${esc(p.label)} pane">&times;</button>
     </div>
     <div class="ws-pane-plot" id="ws-pane-${esc(p.id)}"></div>
   </div>`).join('');
@@ -16248,6 +16252,8 @@ function wsMountPanes(ps) {
         { value: 30, label: '', color: C.refSR, emphasis: true },
       ],
       valueTags: true,
+      // The price chart's dividers, down through this pane at the same x.
+      sessions: showSessions ? dates : null,
     }));
     setChartAnimation(was);
   }
@@ -16265,7 +16271,8 @@ function wsMountPanes(ps) {
     drawOn('macd');
     mount('ws-pane-macd', (w) => macdChart(
       ps.macd, ps.macdSignal || [], ps.macdHist || [], dates, w,
-      { cross, unit, height: 132 },
+      // The price chart's value-tag gutter, so its bars sit under the price's.
+      { cross, unit, height: 132, sessions: showSessions, marginRight: 74 },
     ));
     setChartAnimation(was);
   }
@@ -21206,7 +21213,7 @@ document.addEventListener('click', (evt) => {
     // it was written and the market has moved since; showing it again as though
     // it were current is the one thing a saved-research feature must not do.
     if (row.ticker && row.ticker !== STATE.ticker) loadTicker(row.ticker, 'swing');
-    askPulseNow(row.question || '');
+    draftPulse(row.question || '');
     return;
   }
 
@@ -26056,35 +26063,27 @@ function openPulse() {
   if (box && !box.disabled) box.focus();
 }
 
-/* Ask Pulse, rather than leave the question typed in its box.
+/* Open Pulse with a button's question in its box, to be edited and sent.
  *
- * Every Explain and Ask button in the terminal opened the panel with its
- * prompt in the input and stopped there, so pressing Explain chart showed a
- * paragraph of instructions and no explanation. Reported as "whenever i press
- * explain chart, there is no explanation that is loaded into pulse", to be
- * fixed wherever else it applied: the topic buttons (Explain this desk and
+ * Every Ask and Explain button in the terminal comes through here: Explain
+ * chart and the chart's own asks, the topic buttons (Explain this desk and
  * the rest), the home page's questions and the follow-ups under a symbol, the
- * starter cards, a saved question asked again, and a question typed into the
- * palette. They all send now: one press, one question, one answer.
+ * starter cards, the suggestions over the box, a saved question asked again,
+ * and a question typed into the palette.
  *
- * Not when it cannot go. With Pulse unavailable or needing an account the
- * panel opens on the reason with the prompt waiting in the box, and while an
- * answer is still arriving the new question waits there too, since sendChat
- * takes one at a time. openPulseWithText stays for opening Pulse on nothing. */
-function askPulseNow(text) {
+ * They sent the question on the press for a while, after "whenever i press
+ * explain chart, there is no explanation that is loaded into pulse". Reversed
+ * at the owner's request: "it should put the prompted text into the text box,
+ * not automatically send it to pulse incase the user wants to make any edits.
+ * fix this issue across all ask pulse buttons for the entire terminal". A
+ * press spends nothing now; Send does. The panel opens the way the Pulse
+ * button opens it, and where Pulse cannot answer it opens on the reason with
+ * the question waiting. */
+function draftPulse(text) {
   if (!text) return;
-  document.body.classList.add('chat-open');
+  openPulseWithText(text);
   wsOnChatToggle();
   loadAllowance();
-  const box = $('#chat-input');
-  if (!box) return;
-  if (chatState.busy || box.disabled || pulseBlockedReason()) {
-    openPulseWithText(text);
-    return;
-  }
-  box.value = '';
-  box.dispatchEvent(new Event('input', { bubbles: true }));
-  sendChat(text);
 }
 
 function openPulseWith(topic) {
@@ -26115,8 +26114,8 @@ function openPulseWith(topic) {
     .replace(/\{thesis\}/g, written
       || '(I have not written one yet, so tell me what a thesis on this name '
          + 'would have to commit to, and what would falsify each part)');
-  // Asked, not typed in the box and left there. See askPulseNow.
-  askPulseNow(text);
+  // Into the box, to be edited and sent. See draftPulse.
+  draftPulse(text);
 }
 
 function renderVanna(gex) {
@@ -32872,7 +32871,7 @@ document.addEventListener('click', (evt) => {
   }
   const starter = evt.target.closest('.pulse-card');
   if (starter) {
-    askPulseNow(starter.dataset.q);
+    draftPulse(starter.dataset.q);
     return;
   }
   const phOpen = evt.target.closest('[data-pulse-open]');
@@ -33570,12 +33569,12 @@ document.addEventListener('click', (evt) => {
    * generic branch would look it up, find nothing and silently do nothing. */
   const explain = evt.target.closest('[data-explain-chart]');
   if (explain) {
-    askPulseNow(explainChartPrompt(explain.dataset.explainChart));
+    draftPulse(explainChartPrompt(explain.dataset.explainChart));
     return;
   }
   const askChart = evt.target.closest('[data-ask-chart]');
   if (askChart) {
-    askPulseNow(chartPulsePrompt(askChart.dataset.askChart));
+    draftPulse(chartPulsePrompt(askChart.dataset.askChart));
     return;
   }
   /* A free answer, and its close. A click anywhere else closes it too, and
@@ -33748,7 +33747,7 @@ $('#chat-input').addEventListener('keydown', (evt) => {
 });
 $('#chat-suggest').addEventListener('click', (evt) => {
   const btn = evt.target.closest('button[data-q]');
-  if (btn) sendChat(btn.dataset.q);
+  if (btn) draftPulse(btn.dataset.q);
 });
 
 document.addEventListener('keydown', (evt) => {

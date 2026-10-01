@@ -790,33 +790,73 @@ function periodDividers(labels, n) {
    * `key` returns a string that is constant within a period, so a boundary is
    * simply "the key changed" — the same test at every granularity. */
   if (step < 0.9) {
-    return { grain: 'day', key: (d) => d.toISOString().slice(0, 10),
-      label: (d) => d.toUTCString().slice(0, 11).trim() };
+    return { grain: 'day', key: (d) => d.toISOString().slice(0, 10) };
   }
   if (step < 5) {
     // Daily bars. Months give ~1 per 21 bars: 6 on a six-month chart, 12 on a
     // year. Weeks would give 26 and 52, which is the fence again.
-    return { grain: 'month', key: (d) => d.toISOString().slice(0, 7),
-      label: (d) => MONTHS[d.getUTCMonth()] + (d.getUTCMonth() === 0
-        ? " '" + String(d.getUTCFullYear()).slice(2) : '') };
+    return { grain: 'month', key: (d) => d.toISOString().slice(0, 7) };
   }
   if (step < 45) {
     // Weekly bars: quarters on a short span, years on a long one.
     const years = (last - first) / 86400000 / 365;
     if (years > 3) {
-      return { grain: 'year', key: (d) => String(d.getUTCFullYear()),
-        label: (d) => String(d.getUTCFullYear()) };
+      return { grain: 'year', key: (d) => String(d.getUTCFullYear()) };
     }
     return { grain: 'quarter',
-      key: (d) => d.getUTCFullYear() + 'Q' + Math.floor(d.getUTCMonth() / 3),
-      label: (d) => 'Q' + (Math.floor(d.getUTCMonth() / 3) + 1) };
+      key: (d) => d.getUTCFullYear() + 'Q' + Math.floor(d.getUTCMonth() / 3) };
   }
-  return { grain: 'year', key: (d) => String(d.getUTCFullYear()),
-    label: (d) => String(d.getUTCFullYear()) };
+  return { grain: 'year', key: (d) => String(d.getUTCFullYear()) };
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/* Where the period dividers fall: a bar index per boundary, or none.
+ *
+ * Shared by the price chart and the RSI and MACD panes under it, so a boundary
+ * is drawn at one x down the whole stack. Collected before anything is drawn,
+ * so the count is checked first: the old code decided per line and capped
+ * mid-loop, which is how it ended up drawing a fence and then stopping. */
+function dividerMarks(labels, n) {
+  const spec = periodDividers(labels, n);
+  if (!spec) return [];
+  const marks = [];
+  let prev = null;
+  for (let i = 0; i < n; i += 1) {
+    const raw = String(labels[i] || '');
+    const d = new Date(raw.length <= 10 ? raw + 'T00:00:00Z' : raw);
+    if (Number.isNaN(d.getTime())) continue;
+    const k = spec.key(d);
+    if (prev === null) { prev = k; continue; }
+    if (k === prev) continue;
+    prev = k;
+    marks.push(i);
+  }
+  /* Draw nothing rather than a fence.
+   *
+   * If the chosen granularity still produces a line every few bars the
+   * feature is not adding orientation, it is adding noise, so it stands down
+   * instead of capping. One line per four bars is the floor. */
+  return marks.length <= Math.max(2, Math.floor(n / 4)) ? marks : [];
+}
+
+/* The dividers, as asked for with a reference chart: "this is how the session
+ * dividers should look like". A dashed line the full height of the plot and
+ * nothing else. They were a sparse dotted line over the price area alone,
+ * each with its own caption at the foot, and the captions said again what the
+ * date axis under the chart already says: the axis names the boundaries.
+ *
+ * Dashes of 4 on 4, a pattern no other line on these charts uses: fine dots
+ * are the ratio levels and 6 on 4 the structural ones. */
+function drawDividers(layer, marks, X, top, bottom) {
+  marks.forEach((i) => {
+    const x = X(i);
+    layer.appendChild(s('line', {
+      x1: x, y1: top, x2: x, y2: bottom,
+      stroke: C.refSession, 'stroke-width': 1,
+      'stroke-dasharray': '4 4',
+      opacity: 0.55,
+    }));
+  });
+}
 
 function lineChart(opts) {
   const {
@@ -1095,10 +1135,6 @@ function lineChart(opts) {
       start = i;
     }
   }
-  // Where the session dividers put their captions along the foot, so a stage
-  // name drawn there afterwards can stand aside instead of printing over one.
-  const footLabels = [];
-
   let lastTickLabel = null;
   const gridLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.45 : null });
   root.appendChild(gridLayer);
@@ -1372,81 +1408,11 @@ function lineChart(opts) {
 
   /* Session dividers.
    *
-   * Drawn from the labels rather than from a separate array: the label already
-   * carries the timestamp, and taking the date part of it is what "a new session
-   * started here" means. Behind the price line and the drawings, in front of the
-   * grid — it is orientation, not data.
-   */
-  if (sessions && n > 1) {
-    const spec = periodDividers(labels, n);
-    const toDate = (i) => {
-      const raw = String(labels[i] || '');
-      const d = new Date(raw.length <= 10 ? raw + 'T00:00:00Z' : raw);
-      return Number.isNaN(d.getTime()) ? null : d;
-    };
-    if (spec) {
-      // Collected first, then drawn, so the count can be checked BEFORE
-      // anything is painted. The old code decided per line and capped mid-loop,
-      // which is how it ended up drawing a fence and then stopping.
-      const marks = [];
-      let prev = null;
-      for (let i = 0; i < n; i += 1) {
-        const d = toDate(i);
-        if (!d) continue;
-        const k = spec.key(d);
-        if (prev === null) { prev = k; continue; }
-        if (k === prev) continue;
-        prev = k;
-        marks.push({ i, label: spec.label(d) });
-      }
-      /* Draw nothing rather than a fence.
-       *
-       * If the chosen granularity still produces a line every few bars the
-       * feature is not adding orientation, it is adding noise — so it stands
-       * down instead of capping. One line per four bars is the floor. */
-      if (marks.length && marks.length <= Math.max(2, Math.floor(n / 4))) {
-        /* Labels sit at the FOOT of the price plot, not the top.
-         *
-         * At the top they ran straight through the chart legend, which is an
-         * HTML overlay pinned to the top-left corner — so the SVG cannot
-         * measure it and cannot dodge it. On an "all" range the month labels
-         * crossed six rows of legend text. The foot of the price plot is empty
-         * whatever the legend is doing, and it is above the volume strip so it
-         * does not fight the date axis either.
-         */
-        const labelY = m.t + priceH - 4;
-        /* And they are skipped when they would collide with each other.
-         *
-         * 24 dividers across a 700px plot is ~29px per label, and "Jan '25" is
-         * wider than that. The line still gets drawn — the boundary is real —
-         * but the caption is dropped rather than overprinted. Measured from an
-         * estimate rather than getComputedTextLength because the node is not in
-         * the document yet, and 5.2px per character at 9px semibold is close
-         * enough to protect a gap this size. */
-        let lastLabelRight = -Infinity;
-        marks.forEach((mk) => {
-          const x = X(mk.i);
-          levelLayer.appendChild(s('line', {
-            x1: x, y1: m.t, x2: x, y2: m.t + priceH,
-            stroke: C.refSession, 'stroke-width': 1,
-            // A long dash, distinct from the fine dots the ratio levels use and
-            // the medium dashes the structural levels use. Three dash patterns,
-            // three families.
-            'stroke-dasharray': '2 6',
-            opacity: 0.7,
-          }));
-          const width = String(mk.label).length * 5.2;
-          if (x + 3 < lastLabelRight + 6) return;      // no room; line only
-          lastLabelRight = x + 3 + width;
-          footLabels.push([x + 3, x + 3 + width]);
-          levelLayer.appendChild(s('text', {
-            x: x + 3, y: labelY, fill: C.refSession, 'font-size': CF.micro,
-            'font-weight': 600, opacity: 0.85,
-          }, mk.label));
-        });
-      }
-    }
-  }
+   * Behind the price line and the drawings, in front of the grid: it is
+   * orientation, not data. Through the volume strip as well as the price, and
+   * the panes under the chart draw the same marks (see dividerMarks), so one
+   * boundary is one line down the whole stack. */
+  if (sessions && n > 1) drawDividers(levelLayer, dividerMarks(labels, n), X, m.t, m.t + plotH);
 
   /* Sloped segments.
    *
@@ -1571,8 +1537,6 @@ function lineChart(opts) {
         .find((t) => t.length * STAGE_NAME_CHAR + 10 <= r.width);
       if (!fits) return;
       const x0 = r.x0 + 5;
-      const x1 = x0 + fits.length * STAGE_NAME_CHAR;
-      if (footLabels.some(([a, b]) => x0 < b + 4 && a < x1 + 4)) return;
       nameLayer.appendChild(s('text', {
         x: x0, y: y - 4, fill: r.color, 'font-size': CF.micro, 'font-weight': 600,
         stroke: C.surface, 'stroke-width': 3, 'paint-order': 'stroke',
@@ -2503,7 +2467,11 @@ function macdChart(macd, signal, hist, labels, width = 720, opts = {}) {
      thick stroke. The charting workspace's pane asks for less because it is one
      of a stack under a price chart rather than a panel of its own. */
   const W = width, H = opts.height || 210;
-  const m = { t: 10, r: 58, b: 22, l: 8 };  // b leaves room for the date row
+  /* b leaves room for the date row. r is the caller's when it is stacked under
+     a chart with value tags, whose gutter is 74: at 58 this plot ran 16px
+     further right than the price above it, so its bars and dividers did not
+     line up with the price's. */
+  const m = { t: 10, r: opts.marginRight || 58, b: 22, l: 8 };
   const plotW = W - m.l - m.r, plotH = H - m.t - m.b;
   const all = [...macd, ...signal, ...hist].filter((v) => v !== null && isFinite(v));
   if (!all.length) return document.createTextNode('');
@@ -2528,6 +2496,8 @@ function macdChart(macd, signal, hist, labels, width = 720, opts = {}) {
     gridLayer.appendChild(s('text', { x: m.l + plotW + 6, y: Y(t) + 3.5, fill: C.ink2, 'font-size': CF.tick, 'font-weight': CW.tick }, fmt(t, 2)));
   });
   gridLayer.appendChild(s('line', { x1: m.l, y1: Y(0), x2: m.l + plotW, y2: Y(0), stroke: C.baseline, 'stroke-width': 1 }));
+  // The price chart's dividers, carried down through this pane.
+  if (opts.sessions && n > 1) drawDividers(gridLayer, dividerMarks(labels, n), X, m.t, m.t + plotH);
 
   // The histogram is data, so it arrives with the lines rather than with the
   // frame — one fade for the whole set, not 126 individually animated columns.

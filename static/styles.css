@@ -7543,8 +7543,10 @@ body[data-view="chart"] .sessionbar { display: none; }
 .ws-pane-cross { color: var(--ink-2); }
 .ws-pane-cross.up { color: var(--pos); }
 .ws-pane-cross.down { color: var(--neg); }
+/* Remove, right after the reading, shown while the pane is hovered or the
+   button has focus: the price legend's rows do the same with theirs. With no
+   hover to reveal it, on a touch screen, it is always shown. */
 .ws-pane-close {
-  margin-left: auto;
   flex: 0 0 auto;
   background: none;
   border: 0;
@@ -7554,10 +7556,16 @@ body[data-view="chart"] .sessionbar { display: none; }
   line-height: 1;
   padding: var(--space-0) var(--space-1);
   border-radius: var(--r-sm);
-  transition: color var(--dur-ui) var(--ease-ui);
+  opacity: 0;
+  transition: color var(--dur-ui) var(--ease-ui), opacity 120ms ease;
 }
+.ws-pane:hover .ws-pane-close,
+.ws-pane-close:focus-visible { opacity: 1; }
 .ws-pane-close:hover,
 .ws-pane-close:focus-visible { color: var(--ink); }
+@media (hover: none) {
+  .ws-pane-close { opacity: 1; }
+}
 .ws-pane-plot { min-width: 0; min-height: 0; }
 
 .ws-menu-note {
@@ -9156,7 +9164,7 @@ nav.tabs-group > .nav-item.menu-right .nav-menu { left: auto; right: 0; }
 .msg .sources a, .nav-page, .panel, .panel > h2.is-toggle, .ph-del, .ph-item,
 .pulse-card, .pulse-more, .read-cal-what a, .read-lead-title a, .read-nav a,
 .sector-read-btn, .seg button, .seg-opt, .ses-co-link, .ses-co-more, .sub-close,
-.suggest button, .tabs-sub button, .tkr, .ws-leg-row, .ws-leg-title, .ws-manage,
+.suggest button, .tabs-sub button, .tkr, .ws-leg-row, .ws-leg-title, .ws-manage, .ws-pane,
 .ws-menu-btn, .ws-news-link, .ws-opt, .ws-tool, .ws-watch-row, .ws-widget,
 #chat-history-btn, .sec-bulk-btn, .sec-chip, .ws-wrail-btn, .ws-wrail-pulse,
 .ws-full-btn,
@@ -9193,7 +9201,7 @@ table.data tr, *::-webkit-scrollbar-thumb {
 .msg .sources a, .nav-page, .panel, .panel > h2.is-toggle, .ph-del, .ph-item,
 .pulse-card, .pulse-more, .read-cal-what a, .read-lead-title a, .read-nav a,
 .sector-read-btn, .seg button, .seg-opt, .ses-co-link, .ses-co-more, .sub-close,
-.suggest button, .tabs-sub button, .tkr, .ws-leg-row, .ws-leg-title, .ws-manage,
+.suggest button, .tabs-sub button, .tkr, .ws-leg-row, .ws-leg-title, .ws-manage, .ws-pane,
 .ws-menu-btn, .ws-news-link, .ws-opt, .ws-tool, .ws-watch-row, .ws-widget,
 #chat-history-btn, .sec-bulk-btn, .sec-chip, .ws-wrail-btn, .ws-wrail-pulse,
 .ws-full-btn,

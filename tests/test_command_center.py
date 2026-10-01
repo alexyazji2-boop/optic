@@ -290,16 +290,15 @@ def test_the_questions_share_the_ranking_with_the_list():
     assert "all.sort((a, b) => Math.abs(b.chg_1d)" not in APP_JS
 
 
-def test_a_question_is_asked_when_pressed_and_not_before():
+def test_a_question_goes_into_the_box_when_pressed_and_not_before():
     """Five questions answered on load would be five API calls nobody asked
-    for, so rendering them sends nothing. A press is the reader asking, and it
-    used to type the question into the box and stop, which read as Pulse not
-    answering (see tests/test_pulse_asks.py)."""
+    for, so rendering them sends nothing. A press puts the question in Pulse's
+    box to be edited and sent (see tests/test_pulse_asks.py)."""
     assert "data-ask-text" in APP_JS
     handler = APP_JS[APP_JS.index("closest('[data-ask-text]')"):]
     handler = handler[:handler.index("});")]
-    assert "askPulseNow(askText.dataset.askText)" in handler
-    assert "sendChat" not in _fn("marketQuestions") and "askPulseNow" not in _fn("marketQuestions")
+    assert "draftPulse(askText.dataset.askText)" in handler
+    assert "sendChat" not in _fn("marketQuestions") and "draftPulse" not in _fn("marketQuestions")
 
 
 def test_the_market_level_ask_topic_exists():

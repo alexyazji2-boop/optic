@@ -61,43 +61,29 @@ def test_a_boundary_is_a_key_change_at_every_granularity():
     assert len(re.findall(r"key: \(d\)", fn)) == len(grains)
 
 
-def test_january_carries_the_year():
-    """On a two-year daily chart every divider says a month name, and without
-    this there is nothing marking where one year ends."""
-    fn = _fn("periodDividers")
-    assert "getUTCMonth() === 0" in fn
-
-
 def test_the_marks_are_counted_before_anything_is_drawn():
     """The old loop decided per line and capped mid-way, so it painted a fence
-    and then stopped. 126 daily bars produced 42 verticals."""
-    block = CHARTS[CHARTS.index("if (sessions && n > 1) {"):]
-    block = block[:block.index("/* Sloped segments.")]
-    assert "const marks = [];" in block
-    assert "marks.push(" in block
-    # The guard must sit between collecting and drawing.
-    guard = block.index("marks.length <=")
-    assert guard < block.index("marks.forEach("), "the cap must precede the draw"
-
+    and then stopped. 126 daily bars produced 42 verticals. The marks are
+    collected whole and checked before any is drawn."""
+    fn = _fn("dividerMarks")
+    assert "const marks = [];" in fn and "marks.push(i);" in fn
+    assert fn.index("marks.push(i);") < fn.index("marks.length <= Math.max(2, Math.floor(n / 4))")
+    assert "appendChild" not in fn, "counting draws nothing"
 
 def test_it_stands_down_rather_than_capping():
     """If the chosen granularity still yields a line every few bars the feature
     is adding noise, not orientation."""
-    block = CHARTS[CHARTS.index("if (sessions && n > 1) {"):]
-    block = block[:block.index("/* Sloped segments.")]
-    assert "Math.max(2, Math.floor(n / 4))" in block
+    fn = _fn("dividerMarks")
+    assert "return marks.length <= Math.max(2, Math.floor(n / 4)) ? marks : [];" in fn
     assert "drawn > n / 3" not in CHARTS, "the old capping guard must be gone"
-
 
 def test_dividers_are_not_drawn_in_the_axis_colour():
     """C.baseline is the axis line. A time boundary painted in it is
     indistinguishable from chart furniture, which is what "make it distinct"
     was about."""
-    block = CHARTS[CHARTS.index("if (sessions && n > 1) {"):]
-    block = block[:block.index("/* Sloped segments.")]
-    assert "stroke: C.refSession" in block
-    assert "C.baseline" not in block
-
+    fn = _fn("drawDividers")
+    assert "stroke: C.refSession" in fn
+    assert "C.baseline" not in fn
 
 def test_the_divider_colour_is_a_theme_token_in_both_themes():
     """A hardcoded hex would not follow a theme switch, and the light theme
@@ -108,22 +94,108 @@ def test_the_divider_colour_is_a_theme_token_in_both_themes():
     assert hits[0] != hits[1], "both themes cannot use the same cyan"
 
 
-def test_each_divider_is_labelled():
-    """A line with no label says a boundary exists but not which one. The label
-    is the difference between a divider and a stray vertical."""
-    block = CHARTS[CHARTS.index("if (sessions && n > 1) {"):]
-    block = block[:block.index("/* Sloped segments.")]
-    assert "mk.label" in block
-    assert "s('text'" in block
-
+def test_the_date_axis_names_the_boundaries_not_a_caption_on_each_line():
+    """Asked for with a reference chart: "this is how the session dividers
+    should look like", a dashed line the height of the chart and nothing else.
+    Each line used to carry its own caption at the foot of the price, saying
+    again what the date axis under it already says."""
+    assert "s('text'" not in _fn("drawDividers")
+    assert "label:" not in _fn("periodDividers"), "nothing reads a caption now"
+    assert "footLabels" not in CHARTS
 
 def test_the_dash_pattern_is_its_own():
     """Three level families, three patterns: fine dots for ratios, medium dashes
     for structure, and this. Sharing one makes them one family visually."""
-    assert "'stroke-dasharray': '2 6'" in CHARTS
-    # The other two patterns must still exist and differ.
-    assert "'6 4'" in CHARTS
+    assert "'stroke-dasharray': '4 4'" in _fn("drawDividers")
+    assert CHARTS.count("'4 4'") == 1, "no other line is dashed this way"
+    assert "'6 4'" in CHARTS and "'2 6'" not in CHARTS
+
+def test_the_month_names_went_with_the_captions():
+    """They were the captions' only reader."""
+    assert "const MONTHS = [" not in CHARTS
 
 
-def test_the_month_names_are_defined_once():
-    assert CHARTS.count("const MONTHS = [") == 1
+# ------------------------------------------------- drawn, and measured
+
+
+def _drawn(script):
+    import json
+    import os
+    import shutil
+    import subprocess
+    import pytest
+    jsc = "/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc"
+    exe = jsc if os.path.exists(jsc) else shutil.which("jsc")
+    if not exe:
+        pytest.skip("no JavaScriptCore on this machine")
+    src = (open("tests/support/recording_dom.js", encoding="utf-8").read() + CHARTS + """
+      var days = [], d = new Date(Date.UTC(2026, 6, 1));
+      while (days.length < 65) {
+        if (d.getUTCDay() % 6) days.push(d.toISOString().slice(0, 10));
+        d = new Date(d.getTime() + 86400000);
+      }
+      var closes = days.map(function (_, i) { return 100 + Math.sin(i / 5) * 4; });
+      var dividers = function (from) {
+        return NODES.slice(from).filter(function (n) {
+          return n.tag === 'line' && n.attrs['stroke-dasharray'] === '4 4';
+        }).map(function (n) {
+          return { x: +n.attrs.x1, y1: +n.attrs.y1, y2: +n.attrs.y2, stroke: n.attrs.stroke };
+        });
+      };
+    """ + script)
+    out = subprocess.run([exe, "-e", src], capture_output=True, text=True, timeout=30)
+    assert "RESULT:" in out.stdout, (out.stdout + out.stderr)[-2000:]
+    return json.loads(out.stdout.split("RESULT:", 1)[1].strip().splitlines()[0])
+
+
+def test_a_divider_runs_the_full_height_and_through_the_panes_at_one_x():
+    """Three months of daily bars, July to September: two month lines. On the
+    price chart they run from the top of the plot through the volume strip,
+    with no caption beside them, and the MACD pane under it draws them at the
+    same x when it is given the chart's gutter."""
+    got = _drawn("""
+      var vols = days.map(function () { return 1000000; });
+      var svg = lineChart({ width: 900, height: 420, labels: days, valueTags: true,
+        series: [{ name: 'Close', values: closes }], volume: vols, sessions: days });
+      var f = svg.chartFrame;
+      var price = dividers(0);
+      // A caption was text in the dividers' own colour; the date axis's
+      // labels are in the axis ink and stay.
+      var stroke = price.length ? price[0].stroke : null;
+      var texts = NODES.filter(function (n) { return n.tag === 'text' && n.attrs.fill === stroke; })
+        .map(function (n) { return n.textContent; });
+      var axis = NODES.filter(function (n) { return n.tag === 'text'; })
+        .map(function (n) { return n.textContent; });
+      var mark = NODES.length;
+      macdChart(closes, closes, closes.map(function () { return 0; }), days, 900,
+        { height: 132, sessions: true, marginRight: 74 });
+      var macd = dividers(mark);
+      print('RESULT:' + JSON.stringify({ price: price, macd: macd, top: f.margin.t,
+        plotBottom: f.height - f.margin.b, priceBottom: f.margin.t + f.priceH, texts: texts,
+        axis: axis }));
+    """)
+    assert len(got["price"]) == 2 and len(got["macd"]) == 2
+    for line in got["price"]:
+        assert line["y1"] == got["top"]
+        assert line["y2"] == got["plotBottom"] > got["priceBottom"], "through the volume strip"
+    assert [round(l["x"], 1) for l in got["price"]] == [round(l["x"], 1) for l in got["macd"]]
+    assert got["texts"] == [], "no caption on the line"
+    assert "Aug" in got["axis"] and "Sep" in got["axis"], "the date axis names them"
+
+
+def test_with_dividers_off_nothing_is_drawn():
+    got = _drawn("""
+      lineChart({ width: 900, height: 300, labels: days, series: [{ name: 'Close', values: closes }] });
+      var mark = NODES.length;
+      macdChart(closes, closes, closes.map(function () { return 0; }), days, 900, { height: 132 });
+      print('RESULT:' + JSON.stringify({ all: dividers(0).length }));
+    """)
+    assert got["all"] == 0
+
+
+def test_the_panes_are_given_the_dividers_and_the_charts_gutter():
+    app = open("static/app.js", encoding="utf-8").read()
+    fn = app[app.index("function wsMountPanes(ps) {"):]
+    fn = fn[:fn.index("\nfunction ")]
+    assert "sessions: showSessions ? dates : null," in fn
+    assert "{ cross, unit, height: 132, sessions: showSessions, marginRight: 74 }" in fn

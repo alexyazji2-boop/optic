@@ -1,19 +1,18 @@
-"""Every button that asks Pulse something sends it, and an answer comes back.
+"""Every button that asks Pulse something puts it in the box, and sends nothing.
 
-Reported with HOOD's chart: "whenever i press explain chart, there is no
-explanation that is loaded into pulse, fix this and go across the whole
-terminal and fix this issue wherever applicable". Explain chart opened the
-panel with its prompt typed into the box and stopped there, and so did every
-other way of asking: the topic buttons (Explain this desk, the gamma and IV
-ones), the home page's questions and the follow-ups beside a symbol, the
-starter cards in an empty panel, a saved question asked again, and a question
-typed into the palette. The palette's own Ask Pulse opened nothing at all: it
-passed an empty prompt to a function that returns on one.
+Reported with Explain chart's question already sent and Pulse "thinking":
+"whenever this button is clicked, it should put the prompted text into the
+text box, not automatically send it to pulse incase the user wants to make any
+edits. fix this issue across all ask pulse buttons for the entire terminal".
 
-askPulseNow sends, and falls back to typing the question in only where it
-cannot go: Pulse unavailable or needing an account, or an answer still
-arriving. Checked in a browser: Explain chart on the Charting tab put the
-question in the conversation and an answer streaming under it.
+They had sent on the press since "whenever i press explain chart, there is no
+explanation that is loaded into pulse". Every way of asking goes through one
+function, draftPulse, which opens the panel the way the Pulse button does and
+leaves the question in the box with the cursor at its end: Explain chart and
+the chart's own asks, the topic buttons, the home page's questions and the
+follow-ups beside a symbol, the starter cards, the suggestions over the box, a
+saved question asked again, and a question typed into the palette. A press
+spends nothing; Send does.
 """
 from __future__ import annotations
 
@@ -39,18 +38,18 @@ def _fn(name):
 
 HARNESS = """
 function assert(v, m) { if (!v) throw new Error(m); }
-var sent = [], toggles = 0, allowances = 0, blocked = null;
+var sent = [], toggles = 0, allowances = 0;
 var chatState = { busy: false };
 function sendChat(text) { sent.push(text); }
 function wsOnChatToggle() { toggles++; }
 function loadAllowance() { allowances++; }
-function pulseBlockedReason() { return blocked; }
 var classes = new Set();
 var document = { body: { classList: { add: function (c) { classes.add(c); } } } };
 function Event(type) { this.type = type; }
-var box = { value: 'half a question', disabled: false, focused: false, events: 0,
+var box = { value: 'half a question', disabled: false, focused: false, events: 0, sel: null,
   focus: function () { this.focused = true; },
-  setSelectionRange: function () {}, dispatchEvent: function () { this.events++; } };
+  setSelectionRange: function (a, b) { this.sel = [a, b]; },
+  dispatchEvent: function () { this.events++; } };
 function $(sel) { return sel === '#chat-input' ? box : null; }
 """
 
@@ -59,47 +58,37 @@ def _run(scenario):
     exe = JSC if os.path.exists(JSC) else shutil.which("jsc")
     if not exe:
         pytest.skip("no JavaScriptCore on this machine")
-    src = (HARNESS + "\n".join(_fn(n) for n in ("openPulseWithText", "openPulse", "askPulseNow"))
+    src = (HARNESS + "\n".join(_fn(n) for n in ("openPulseWithText", "openPulse", "draftPulse"))
            + "\n" + scenario + "\nprint('TEST_OK');")
     out = subprocess.run([exe, "-e", src], capture_output=True, text=True, timeout=30)
     assert "TEST_OK" in out.stdout, out.stdout + out.stderr
 
 
-def test_a_press_sends_the_question_and_opens_the_panel():
+def test_a_press_puts_the_question_in_the_box_and_sends_nothing():
     _run("""
-      askPulseNow('Read my HOOD chart');
-      assert(sent.length === 1 && sent[0] === 'Read my HOOD chart', 'sent: ' + sent);
+      draftPulse('Read my SPY chart');
+      assert(sent.length === 0, 'nothing sent: ' + sent);
+      assert(box.value === 'Read my SPY chart', 'in the box: ' + box.value);
+      assert(box.focused && box.sel[0] === 17 && box.sel[1] === 17, 'cursor at the end, ready to edit');
+      assert(box.events === 1, 'the box is told, so it grows to fit');
       assert(classes.has('chat-open'), 'the panel opened');
-      assert(box.value === '', 'nothing left typed in the box');
       assert(toggles === 1 && allowances === 1, 'opened the way the Pulse button opens it');
     """)
 
 
-def test_while_an_answer_arrives_the_question_waits_in_the_box():
+def test_while_an_answer_arrives_it_still_only_fills_the_box():
     _run("""
       chatState.busy = true;
-      askPulseNow('Explain vanna');
-      assert(sent.length === 0, 'sendChat takes one at a time');
-      assert(box.value === 'Explain vanna' && box.focused, 'kept, ready to send');
-    """)
-
-
-def test_where_pulse_cannot_answer_it_opens_on_the_reason_with_the_prompt_kept():
-    _run("""
-      blocked = { text: 'Pulse needs a free account.' };
-      askPulseNow('Explain this desk');
-      assert(sent.length === 0, 'nothing sent that would be refused');
-      assert(classes.has('chat-open') && box.value === 'Explain this desk', 'open, prompt kept');
-      blocked = null; box.disabled = true;
-      askPulseNow('Explain gamma');
-      assert(sent.length === 0, 'a disabled box is not sent from either');
+      draftPulse('Explain vanna');
+      assert(sent.length === 0 && box.value === 'Explain vanna', 'kept, ready to send');
     """)
 
 
 def test_an_empty_prompt_asks_nothing():
     _run("""
-      askPulseNow('');
-      assert(sent.length === 0 && !classes.has('chat-open'), 'nothing to ask');
+      draftPulse('');
+      assert(sent.length === 0 && !classes.has('chat-open') && box.value === 'half a question',
+             'nothing to ask, and the box is left alone');
     """)
 
 
@@ -121,28 +110,31 @@ def test_the_palettes_ask_pulse_opens_pulse():
 # ------------------------------------------------ every way in goes through it
 
 
-def test_every_button_that_asks_sends():
+def test_every_button_that_asks_only_fills_the_box():
     handler = APP[APP.index("const explain = evt.target.closest('[data-explain-chart]');"):][:500]
-    assert "askPulseNow(explainChartPrompt(explain.dataset.explainChart));" in handler
-    assert "askPulseNow(chartPulsePrompt(askChart.dataset.askChart));" in handler
-    # The topic buttons, Explain this desk among them, build their prompt and send it.
+    assert "draftPulse(explainChartPrompt(explain.dataset.explainChart));" in handler
+    assert "draftPulse(chartPulsePrompt(askChart.dataset.askChart));" in handler
     topic = _fn("openPulseWith")
-    assert topic.rstrip().endswith("askPulseNow(text);\n}")
-    assert "box.value = text;" not in topic
-    # The home page's questions, and the follow-ups that use the same attribute.
+    assert topic.rstrip().endswith("draftPulse(text);\n}")
     ask_text = APP[APP.index("const askText = evt.target.closest('[data-ask-text]');"):][:120]
-    assert "askPulseNow(askText.dataset.askText)" in ask_text
+    assert "draftPulse(askText.dataset.askText)" in ask_text
     starter = APP[APP.index("const starter = evt.target.closest('.pulse-card');"):][:120]
-    assert "askPulseNow(starter.dataset.q);" in starter
+    assert "draftPulse(starter.dataset.q);" in starter
     reask = APP[APP.index("const open = evt.target.closest('[data-research-open]');"):][:700]
-    assert "askPulseNow(row.question || '');" in reask
-    assert "run: () => { closePalette(); askPulseNow(r.question || ''); }," in APP
-    assert "run: () => { closePalette(); askPulseNow(q); }," in APP
+    assert "draftPulse(row.question || '');" in reask
+    assert "run: () => { closePalette(); draftPulse(r.question || ''); }," in APP
+    assert "run: () => { closePalette(); draftPulse(q); }," in APP
+    suggest = APP[APP.index("$('#chat-suggest').addEventListener('click'"):][:200]
+    assert "if (btn) draftPulse(btn.dataset.q);" in suggest
 
 
-def test_nothing_else_leaves_a_question_typed_and_unsent():
-    """The one caller left is askPulseNow itself, for the case it cannot send."""
-    callers = [m.start() for m in re.finditer(r"openPulseWithText\(", CODE)]
-    defs = CODE.index("function openPulseWithText(")
-    uses = [c for c in callers if c != defs + len("function ")]
-    assert len(uses) == 1 and uses[0] > CODE.index("function askPulseNow("), uses
+def test_only_send_and_deep_research_send():
+    """No button but the panel's own Send sends a question: the old sending
+    function is gone, and sendChat is called from nowhere else."""
+    assert "askPulseNow" not in CODE
+    calls = [m.start() for m in re.finditer(r"\bsendChat\(", CODE)]
+    defined = CODE.index("async function sendChat(") + len("async function ")
+    send = CODE[CODE.index("$('#chat-send').addEventListener('click'"):][:200]
+    assert [c for c in calls if c != defined] == [CODE.index("sendChat(text);",
+                                                             CODE.index("$('#chat-send')"))]
+    assert "sendChat(text);" in send

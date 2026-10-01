@@ -471,3 +471,23 @@ def test_preserve_ui_still_suppresses_the_animation_by_default():
     # call says nothing about a second, and a `true` placed after the `false`
     # would switch the animation on for every control press on this view.
     assert "setChartAnimation(true)" not in fn
+
+
+def test_a_pane_offers_remove_beside_its_reading_on_hover():
+    """Asked for as "whenever i hover over RSI or any add-on pane in the
+    terminal, include a remove button". It was there, alone at the far right
+    of the pane and always on, where nobody looked for it. It sits right after
+    the reading now and shows on hover, as the price legend's row buttons do,
+    and is always shown where there is no hover."""
+    fn = body_of("wsPanesHTML")
+    legend = fn.index('<span class="ws-pane-legend" id="ws-pane-legend-${esc(p.id)}"></span>')
+    button = fn.index('<button type="button" class="ws-pane-close" data-ws-pane-close="${esc(p.id)}"')
+    assert legend < button < fn.index("</div>", legend), "right after the reading"
+    assert 'title="Remove ${esc(p.label)}" aria-label="Remove the ${esc(p.label)} pane"' in fn
+    css = open("static/styles.css", encoding="utf-8").read()
+    rule = css[css.index(".ws-pane-close {"):]
+    rule = rule[:rule.index("}")]
+    assert "opacity: 0;" in rule and "margin-left: auto" not in rule
+    assert ".ws-pane:hover .ws-pane-close,\n.ws-pane-close:focus-visible { opacity: 1; }" in css
+    touch = css[css.index("@media (hover: none) {\n  .ws-pane-close"):]
+    assert "opacity: 1;" in touch[:touch.index("}")]
