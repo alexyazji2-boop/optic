@@ -7276,6 +7276,14 @@ body[data-view="chart"] .sessionbar { display: none; }
 .cr-note { margin: var(--space-2) 0; font-size: var(--t-caption); color: var(--ink-muted); line-height: 1.5; }
 .cr-explain { width: 100%; justify-content: center; }
 
+/* The quick set at the top of Indicators, ruled off from the single lines. */
+.ws-presets {
+  padding-bottom: var(--space-1);
+  margin-bottom: var(--space-1);
+  border-bottom: 1px solid var(--border);
+}
+.ws-presets-h { margin: 0 0 var(--space-1); padding: 0 var(--space-2); }
+
 @media (max-width: 559px) {
   /* The toolbar menus are anchored to the TOOLBAR here, not to their button.
    *

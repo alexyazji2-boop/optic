@@ -14881,6 +14881,35 @@ const WS_MENUS = [
   { id: 'events', label: 'Events', items: ['insiders', 'earnmarks', 'sessions'] },
 ];
 
+/* The five most asked-for studies, one press each, at the top of Indicators.
+ *
+ * Asked for with another product's list, "have these indicators as well":
+ * Volume, MA (20, 50, 200), EMA (9, 21), RSI (14) and MACD (12, 26, 9). Each
+ * was here already, but spread over three menus and, for the averages, one
+ * line at a time. A preset switches its whole set on or off, and reads as on
+ * only when all of it is; the menus below keep each one on its own. */
+const WS_PRESETS = [
+  { id: 'volume', label: 'Volume', overlays: ['vol'] },
+  { id: 'ma', label: 'MA (20, 50, 200)', overlays: ['sma20', 'sma50', 'sma200'] },
+  { id: 'ema', label: 'EMA (9, 21)', overlays: ['ema9', 'ema21'] },
+  { id: 'rsi', label: 'RSI (14)', pane: 'rsi' },
+  { id: 'macd', label: 'MACD (12, 26, 9)', pane: 'macd' },
+];
+
+function wsPresetOn(preset) {
+  return preset.pane ? wsPaneOpen(preset.pane) : preset.overlays.every(wsOverlayOn);
+}
+
+function wsPresetsHTML() {
+  return `<div class="ws-presets" role="group" aria-label="Quick set">
+    <div class="ws-menu-note ws-presets-h">Quick set</div>
+    ${WS_PRESETS.map((p) => `<label class="ws-opt">
+      <input type="checkbox" data-ws-preset="${esc(p.id)}"${wsPresetOn(p) ? ' checked' : ''}>
+      <span>${esc(p.label)}</span>
+    </label>`).join('')}
+  </div>`;
+}
+
 /* Which global flag each toggle drives. The flags are the ones the Swing chart
  * already uses, so a toggle here moves that chart too — which is the point of
  * sharing the settings rather than duplicating them. */
@@ -15547,6 +15576,7 @@ function wsToolbar() {
         ${esc(m.label)}${activeCount ? ` <span class="ws-count">${activeCount}</span>` : ''}
       </button>
       ${wsMenuOpen === m.id ? `<div class="ws-menu-pop">
+        ${m.id === 'indicators' ? wsPresetsHTML() : ''}
         ${m.items.map((id) => {
     const st = overlayStyle(id);
     return `<label class="ws-opt">
@@ -35574,6 +35604,29 @@ document.addEventListener('change', (evt) => {
     // series itself changes because the oscillators are attached only for the
     // panes that are open. The Swing chart is untouched by design.
     wsRepaintWithPanes();
+    return;
+  }
+  /* A preset: its whole set on or off, then the toolbar drawn again so the
+   * menu's own boxes say the same as the chart. */
+  const wsPreset = evt.target.closest('[data-ws-preset]');
+  if (wsPreset) {
+    const preset = WS_PRESETS.find((p) => p.id === wsPreset.dataset.wsPreset);
+    if (!preset) return;
+    const on = wsPreset.checked;
+    if (preset.pane) {
+      if (wsPaneOpen(preset.pane) !== on) wsTogglePane(preset.pane);
+      // As the Panes menu does: the pane switched on draws on, the rest stands.
+      setChartAnimation(false);
+      wsPaneArriving = on ? preset.pane : null;
+      wsRepaintWithPanes();
+    } else {
+      preset.overlays.forEach((id) => wsSetOverlay(id, on));
+      wsRedrawChart();
+      if (STATE.swing) preserveUI(views.swing, () => renderSwing(STATE.swing));
+      const tb2 = views.chart.querySelector('.ws-toolbar');
+      if (tb2) tb2.outerHTML = wsToolbar();
+      wsPlaceMenu();
+    }
     return;
   }
   const wsOpt = evt.target.closest('[data-ws-opt]');
