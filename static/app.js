@@ -15790,7 +15790,7 @@ function wsToolbar() {
     ${isIntradayRange(chartRange) ? ''
     : rangePills(CHART_RANGES.filter((r) => !r.intraday), chartRange,
       'data-ws-range', 'Range')}
-    ${wsWindow ? `<button type="button" class="ws-menu-btn ws-zoom-reset"
+    ${wsZoomed() ? `<button type="button" class="ws-menu-btn ws-zoom-reset"
       data-ws-zoom-reset title="Back to the ${esc(chartRange)} range">Reset zoom</button>` : ''}
     ${/* The same Line / Candles pair the Options chart uses, rather than one
          button that flipped. That button was labelled with the state it was
@@ -16376,6 +16376,35 @@ function wsHoverReadout(i) {
  * already index-aligned, so a window is two integers and needs no lookup. */
 let wsWindow = null;
 const WS_MIN_BARS = 12;   // below this the x-axis has nothing to say
+
+/* How far the price scale is stretched by dragging it: 1 is the range the
+ * bars on screen ask for, 2 is half of it about its middle, 0.5 twice it.
+ * Asked for as "be able to zoom in/out of this tab by dragging the price up
+ * or down". The chart applies it to its own range (lineChart's yZoom), so it
+ * follows a pan. Cleared where the window is: by Reset zoom, a range pill, a
+ * bar size and a session, which each ask a new question about how much to
+ * look at; and a double press on the scale puts it back alone. */
+let wsYZoom = 1;
+const WS_Y_ZOOM_MIN = 0.25;
+const WS_Y_ZOOM_MAX = 12;
+let wsYZoomFrame = 0;
+
+function wsSetYZoom(factor) {
+  const next = Math.min(WS_Y_ZOOM_MAX, Math.max(WS_Y_ZOOM_MIN, Number(factor) || 1));
+  // A drag that ends a hair from the bars' own range is that range.
+  wsYZoom = Math.abs(next - 1) < 0.02 ? 1 : next;
+  // Once a frame, as a pan is: a drag reports a move far more often than that.
+  if (wsYZoomFrame) return;
+  wsYZoomFrame = requestAnimationFrame(() => {
+    wsYZoomFrame = 0;
+    interactiveRedraw({ redraw: () => wsRedrawChart() });
+  });
+}
+
+/* Zoomed either way, in time or in price: what Reset zoom answers. */
+function wsZoomed() {
+  return !!wsWindow || wsYZoom !== 1;
+}
 
 /* ---- oscillator panes -------------------------------------------------------
  *
@@ -19178,6 +19207,8 @@ document.addEventListener('pointerdown', (evt) => {
   // Shift measures, which each chart's own mousedown answers, and an armed
   // drawing tool draws, which each adapter reports through `enabled`.
   if (evt.shiftKey) return;
+  // A press on the price scale stretches it, and is not a pan. See onYZoom.
+  if (evt.target.closest && evt.target.closest('[data-price-scale]')) return;
   /* A drawing lives in #ws-draw, a SIBLING of #ws-chart, so a hit on one of its
    * strokes resolves no zoom target here and the drawing handler keeps the
    * drag. That is a property of the markup, not of this test. */
@@ -19284,8 +19315,9 @@ document.addEventListener('pointerup', wsEndPan);
 document.addEventListener('pointercancel', wsEndPan);
 
 function wsResetZoom() {
-  if (wsWindow === null) return;
+  if (wsWindow === null && wsYZoom === 1) return;
   wsWindow = null;
+  wsYZoom = 1;
   wsRedrawChart();
 }
 
@@ -19585,6 +19617,9 @@ function wsMountChart() {
       clouds: emaClouds(ps),
       // A plain drag pans this chart, and a held press measures. See panDrag.
       panDrag: true,
+      // Dragging the price scale stretches it. See wsYZoom.
+      yZoom: wsYZoom,
+      onYZoom: wsSetYZoom,
       // Pre- and post-market shaded, when extended hours are on.
       offHours: intraday && (ps.extended || []).some(Boolean) ? ps.extended : null,
       series: [
@@ -20125,7 +20160,7 @@ function wsRedrawChart(opts) {
      * and rebuilding the rest on every step of it was a toolbar's worth of
      * DOM replaced sixty times a second for nothing. */
     const same = chartInteractive && tb
-      && !!tb.querySelector('[data-ws-zoom-reset]') === !!wsWindow;
+      && !!tb.querySelector('[data-ws-zoom-reset]') === wsZoomed();
     if (tb && !same) tb.outerHTML = wsToolbar();
     if (!same) wsPlaceMenu();
   }
@@ -30758,7 +30793,7 @@ function updateStatus() {
     const shown = chartIntervalLabel();
     setStatus(STATE.chartSymbol
       ? [`Chart: ${STATE.chartSymbol}`,
-        wsWindow ? `${shown} · zoomed`
+        wsZoomed() ? `${shown} · zoomed`
           : wsFit ? `${shown} · newest ${wsFit.shown} of ${wsFit.total} candles, scroll for more`
             : `${shown} · ${chartWindowLabel()}`,
         `${wsDrawings().length} drawing${wsDrawings().length === 1 ? '' : 's'}`,
@@ -34224,6 +34259,7 @@ document.addEventListener('click', (evt) => {
     const before = wsFrameKey();
     chartRange = wsRange.dataset.wsRange;
     wsWindow = null;   // a range pill overrides a manual zoom
+    wsYZoom = 1;
     if (wsFrameKey() !== before) wsFrameSweep = ++wsSweepSeq;
     try { localStorage.setItem(CHART_RANGE_KEY, chartRange); } catch (e) { /* private mode */ }
     // 1D and 5D come from a different endpoint. Fetched on demand rather than
@@ -34252,6 +34288,7 @@ document.addEventListener('click', (evt) => {
       try { localStorage.setItem(CHART_SESSION_KEY, chartSession); } catch (e) { /* private mode */ }
       // Other bars, so a zoom's indices would land on other times.
       wsWindow = null;
+      wsYZoom = 1;
     }
     if (wsFrameKey() === before) {
       const tbs = views.chart.querySelector('.ws-toolbar');
@@ -34277,6 +34314,7 @@ document.addEventListener('click', (evt) => {
     const spec = chartIntervalSpec(key);
     const before = wsFrameKey();
     wsWindow = null;   // a size change overrides a manual zoom
+    wsYZoom = 1;
     if (spec && spec.intraday) {
       /* An intraday size selects an intraday RANGE, not an interval. Writing
          it to `chartInterval` would hand "5m" to the twenty-six places that

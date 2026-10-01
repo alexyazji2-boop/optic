@@ -154,9 +154,11 @@ def test_a_drag_on_the_navigator_redraws_once_a_frame():
 
 def test_a_gesture_rebuilds_the_toolbar_only_when_reset_zoom_comes_or_goes():
     redraw = _raw_fn("wsRedrawChart")
+    # wsZoomed: the window, or the price scale stretched by dragging it.
     assert ("const same = chartInteractive && tb\n"
-            "      && !!tb.querySelector('[data-ws-zoom-reset]') === !!wsWindow;") in redraw
+            "      && !!tb.querySelector('[data-ws-zoom-reset]') === wsZoomed();") in redraw
     assert "if (tb && !same) tb.outerHTML = wsToolbar();" in redraw
     # And Reset zoom is the one thing on it a window changes.
     toolbar = _raw_fn("wsToolbar")
-    assert toolbar.count("wsWindow") == 1 and "data-ws-zoom-reset" in toolbar
+    assert toolbar.count("wsZoomed()") == 1 and "wsWindow" not in toolbar
+    assert "data-ws-zoom-reset" in toolbar

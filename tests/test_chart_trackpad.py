@@ -261,5 +261,6 @@ def test_studies_follow_the_window_not_the_newest_bars():
 
 def test_the_status_line_follows_the_zoom_on_every_rung():
     assert "updateStatus();" in _fn("wsRedrawChart")
-    assert "wsWindow ? `${shown} · zoomed`" in APP
+    # Zoomed in time or in price (tests/test_price_scale_drag.py).
+    assert "wsZoomed() ? `${shown} · zoomed`" in APP
     assert ": wsFit ? `${shown} · newest ${wsFit.shown} of ${wsFit.total} candles, scroll for more`" in APP

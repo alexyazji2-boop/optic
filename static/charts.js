@@ -1060,6 +1060,14 @@ function lineChart(opts) {
      * me to a sub-tab of the insider buys/sells for that specific stock". */
     onEventClick = null,
     eventHint = '',
+    /* How far the price scale is stretched, and what to call as it is dragged.
+     * `yZoom` divides the range the data asks for about its middle: 2 shows
+     * half of it, so moves look larger, and 0.5 twice it. With `onYZoom` the
+     * axis gutter is a handle: up stretches, down squeezes, a double press
+     * asks for 1. Asked for as "be able to zoom in/out of this tab by
+     * dragging the price up or down". */
+    yZoom = 1,
+    onYZoom = null,
   } = opts;
 
   const W = width;
@@ -1173,10 +1181,39 @@ function lineChart(opts) {
     }
   }
 
+  // The scale as dragged, about the middle of the range it would have had.
+  const yZoomed = !yDomain && isFinite(yZoom) && yZoom > 0 && yZoom !== 1;
+  if (yZoomed) {
+    const mid = (lo + hi) / 2;
+    const half = (hi - lo) / 2 / yZoom;
+    lo = mid - half;
+    hi = mid + half;
+  }
+
   const X = (i) => m.l + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW);
   const Y = (v) => m.t + priceH - ((v - lo) / (hi - lo)) * priceH;
 
   const root = svgRoot(W, H);
+
+  /* Stretched past its range, the price is cut at the plot's edges, where it
+   * would otherwise be drawn over the dates, the volume and the header. Each
+   * layer of the price area takes the clip rather than one group holding them
+   * all, so the order they are drawn in is the order it was. */
+  let clipRef = null;
+  if (yZoomed && yZoom > 1) {
+    lineChart.clips = (lineChart.clips || 0) + 1;
+    const id = 'plot-clip-' + lineChart.clips;
+    const defs = s('defs', {});
+    const clip = s('clipPath', { id });
+    clip.appendChild(s('rect', { x: m.l - 1, y: m.t, width: plotW + 2, height: priceH }));
+    defs.appendChild(clip);
+    root.appendChild(defs);
+    clipRef = `url(#${id})`;
+  }
+  const clipped = (el) => {
+    if (clipRef && el && el.setAttribute) el.setAttribute('clip-path', clipRef);
+    return el;
+  };
 
   // Captured once per chart so a flag flipped mid-render can't half-animate it.
   const animating = animateNextChart && !reducedMotion();
@@ -1231,7 +1268,7 @@ function lineChart(opts) {
    */
   if (volumeProfile && volumeProfile.length) {
     const vpLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.4 : null });
-    root.appendChild(vpLayer);
+    root.appendChild(clipped(vpLayer));
     const maxVol = Math.max(...volumeProfile.map((b) => b.volume || 0), 1);
     const maxW = plotW * profileShare;
     const sorted = volumeProfile.map((b) => b.price).filter(isFinite).sort((a, b) => a - b);
@@ -1362,7 +1399,7 @@ function lineChart(opts) {
    */
   if (clouds.length) {
     const cloudLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.7 : null });
-    root.appendChild(cloudLayer);
+    root.appendChild(clipped(cloudLayer));
     clouds.forEach((cl) => {
       const fastVals = cl.fast || [];
       const slowVals = cl.slow || [];
@@ -1429,7 +1466,7 @@ function lineChart(opts) {
   // price is there to annotate. Created here, ahead of the series, so everything
   // in it still renders *underneath* the data.
   const levelLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.8 : null });
-  root.appendChild(levelLayer);
+  root.appendChild(clipped(levelLayer));
 
   // Extended hours, under everything: a band for each run of bars outside the
   // regular session, reaching halfway to the bars either side of it.
@@ -1624,7 +1661,8 @@ function lineChart(opts) {
   // grey is unreadable — those labels fall back to the muted ink instead.
   const readable = (color) => (!color || color === C.baseline || color === C.grid ? C.ink2 : color);
   const labeled = visibleRefs
-    .filter((r) => r.label)
+    // Stretched, a level off the scale has no line on the plot to label.
+    .filter((r) => r.label && (!yZoomed || (r.value >= lo && r.value <= hi)))
     .map((r) => ({ text: r.label, color: readable(r.color), lineY: Y(r.value) }))
     .sort((a, b) => a.lineY - b.lineY);
 
@@ -1709,6 +1747,8 @@ function lineChart(opts) {
     flush();
   }
 
+  // Where the series start among the root's children, for the clip below.
+  const seriesFrom = root.children.length;
   series.forEach((se, si) => {
     if (se.hidden) return;  // present for hover/tooltip only, not drawn
     const pts = [];
@@ -1821,6 +1861,7 @@ function lineChart(opts) {
    * Grouped with the axis labels so the whole textual frame — level tags and
    * dates — resolves after the line is drawn. Reading numbers off an axis while
    * the series is still moving is the one part of this that looked unfinished. */
+  if (clipRef) Array.from(root.children).slice(seriesFrom).forEach(clipped);
   const annotLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.85 : null });
   root.appendChild(annotLayer);
 
@@ -1894,6 +1935,8 @@ function lineChart(opts) {
     // Into the same list, so one collision pass positions everything and the
     // price cannot be pushed off the axis or drawn over.
     if (priceTag) tags.push(priceTag);
+    // Stretched, a value off the scale is tagged at the edge it left by.
+    if (yZoomed) tags.forEach((t) => { t.y = Math.min(Math.max(t.y, m.t + 8), m.t + priceH - 8); });
     tags.sort((a, b) => a.y - b.y);
 
     const TAG_H = 15;
@@ -1994,7 +2037,7 @@ function lineChart(opts) {
   const eventHits = [];
   if (events && events.length) {
     const evLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.9 : null });
-    root.appendChild(evLayer);
+    root.appendChild(clipped(evLayer));
     const closes = (candles && candles.close) || (series[0] && series[0].values) || [];
     const standOn = (e) => {
       const buy = e.kind === 'buy';
@@ -2068,7 +2111,10 @@ function lineChart(opts) {
         w: EVENT_W + 2, h: Math.abs(base - mk.y) + 8 };
       occupied.push(mk.box);
       mk.events = mk.items.map((it) => it.e);
-      eventHits.push({ ...mk.box, events: mk.events });
+      // On the scale, or stretched off it by onYZoom and clipped: then it has
+      // no badge and nothing to click.
+      mk.onScale = mk.y >= m.t && mk.y <= m.t + priceH;
+      if (mk.onScale) eventHits.push({ ...mk.box, events: mk.events });
     });
 
     const cap = Math.max(2, Math.min(8, Math.floor(plotW / 150)));
@@ -2080,7 +2126,7 @@ function lineChart(opts) {
         && r.y < o.y + o.h + 3 && o.y < r.y + r.h + 3);
     let badges = 0;
     [...marks].sort((a, b) => b.total - a.total).forEach((mk) => {
-      if (badges >= cap || !mk.text) return;
+      if (badges >= cap || !mk.text || !mk.onScale) return;
       const w = mk.text.length * 6 + 14;
       const h = 17;
       const left = Math.min(Math.max(m.l + 2, mk.x - w / 2), m.l + plotW - w - 2);
@@ -2173,7 +2219,7 @@ function lineChart(opts) {
   root.appendChild(cross);
   const dots = series.map((se) => {
     const d = s('circle', { r: 4, fill: se.color, stroke: C.surface, 'stroke-width': 2, opacity: 0 });
-    root.appendChild(d);
+    root.appendChild(clipped(d));
     return d;
   });
 
@@ -2514,6 +2560,41 @@ function lineChart(opts) {
   });
   root.appendChild(overlay);
 
+  /* The price scale as a handle, for onYZoom. Up stretches the prices, down
+   * squeezes them, a double press puts back the range the bars ask for. A
+   * strip of its own over the axis gutter and above the overlay, so a press
+   * there is neither a pan nor a measurement (the page's pan handler stands
+   * aside for `data-price-scale`). The window carries the drag, as it does a
+   * pan's: every step of it redraws this chart, and this strip with it. */
+  if (onYZoom) {
+    const grip = s('rect', {
+      x: m.l + plotW, y: m.t, width: Math.max(0, W - m.l - plotW), height: priceH,
+      fill: 'transparent', style: 'cursor:ns-resize;touch-action:none',
+      'data-price-scale': '1',
+    });
+    grip.addEventListener('pointerdown', (evt) => {
+      if (evt.button !== 0) return;
+      evt.preventDefault();
+      hideTip();
+      const startY = evt.clientY;
+      const from = yZoom;
+      const move = (e) => onYZoom(from * Math.exp((startY - e.clientY) / Y_ZOOM_PX));
+      const end = () => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', end);
+        window.removeEventListener('pointercancel', end);
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', end);
+      window.addEventListener('pointercancel', end);
+    });
+    grip.addEventListener('dblclick', (evt) => {
+      evt.preventDefault();
+      onYZoom(1);
+    });
+    root.appendChild(grip);
+  }
+
   /* The coordinate frame, hung on the node.
    *
    * A drawing layer has to convert between screen pixels and (bar index, price),
@@ -2708,6 +2789,10 @@ const EVENT_W = 14;
 const EVENT_H = 12;
 const EVENT_OFF = 10;
 const EVENT_GAP = EVENT_W + 2;
+
+// Pixels of drag on the price scale that stretch it by a factor of e, about
+// 2.7: a full-height drag on a 400px plot is about 12 times.
+const Y_ZOOM_PX = 160;
 
 const MACD_HIST_POS = C.s3;
 const MACD_HIST_NEG = C.neg;
