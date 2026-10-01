@@ -34,6 +34,7 @@ published file. The House is the half that is offered openly.
 from __future__ import annotations
 
 import io
+import json
 import logging
 import os
 import re
@@ -65,12 +66,35 @@ INDEX_TTL = float(os.environ.get("CONGRESS_INDEX_TTL", "21600"))     # 6 hours
 # How many unseen filings to pull per refresh. 400 PDFs is 32MB and several
 # minutes against a government file server that owes us nothing, so the
 # backlog fills over successive refreshes instead of in one burst.
+#
+# Those refreshes used to come only from readers, one batch per visit at most
+# every six hours, so the year was never read: 113 of 403 filings on the day
+# Nancy Pelosi's July purchases of BE were asked about and not found. The
+# server reads the backlog itself now, a batch at a time with a pause between
+# (see _congress_loop in app/main.py), and a reader never waits on a download.
 FETCH_BUDGET = int(os.environ.get("CONGRESS_FETCH_BUDGET", "25"))
 REQUEST_GAP = float(os.environ.get("CONGRESS_REQUEST_GAP", "0.4"))
 TIMEOUT = 25
+# A filing that would not download is left alone for this long before it is
+# asked for again, so a broken one cannot hold the backlog open.
+RETRY_AFTER = float(os.environ.get("CONGRESS_RETRY_AFTER", "21600"))
 
 _LOCK = threading.RLock()
-_MEM: Dict[str, Any] = {"at": 0.0, "trades": [], "index_at": None, "parsed": 0, "known": 0}
+# One refresh at a time. A reader's request and the server's own backfill
+# would otherwise download the same filings side by side.
+_REFRESHING = threading.Lock()
+_MEM: Dict[str, Any] = {"at": 0.0, "trades": [], "index_at": None, "parsed": 0, "known": 0,
+                        "backlog": 0}
+_FAILED: Dict[str, float] = {}
+
+# A filing never changes once the Clerk publishes it, so it is parsed once.
+# The rows are kept beside the PDF, so a restart reads them back rather than
+# parsing the year again: 23 to 114ms a filing, measured, which every refresh
+# spent on every filing on disk, the better part of a minute of pypdf at 400.
+# PARSE_VERSION is the parser's: changing what it reads changes this, and
+# every filing is read again.
+PARSE_VERSION = 1
+_PARSED: Dict[str, Dict[str, Any]] = {}
 
 # A ticker in the asset column, and nothing that merely looks like one. Bonds
 # carry a 9-character CUSIP in the same parentheses and must not become symbols.
@@ -160,6 +184,37 @@ def _parse_pdf(path: str) -> Dict[str, Any]:
             "rows": rows, "error": None}
 
 
+def _parsed(year: int, doc: str) -> Dict[str, Any]:
+    """One filing's rows, parsed once and kept, in memory and beside the PDF.
+
+    A parse that failed is kept in memory only: the PDF will not change, but
+    the reason might (pypdf missing on this machine), and a stored failure
+    would outlive the fix."""
+    key = "%s/%s" % (year, doc)
+    hit = _PARSED.get(key)
+    if hit is not None:
+        return hit
+    pdf = _cache_path(year, doc)
+    side = pdf[:-len(".pdf")] + ".json"
+    try:
+        with open(side, encoding="utf-8") as fh:
+            stored = json.load(fh)
+        if stored.get("v") == PARSE_VERSION and isinstance(stored.get("out"), dict):
+            _PARSED[key] = stored["out"]
+            return stored["out"]
+    except (OSError, ValueError, AttributeError):
+        pass
+    out = _parse_pdf(pdf)
+    if not out.get("error"):
+        try:
+            with open(side, "w", encoding="utf-8") as fh:
+                json.dump({"v": PARSE_VERSION, "out": out}, fh)
+        except OSError:
+            pass
+    _PARSED[key] = out
+    return out
+
+
 def _member_name(entry: Dict[str, str], from_pdf: Optional[str]) -> str:
     """The filer's name, from the structured index rather than the PDF header.
 
@@ -202,8 +257,25 @@ def refresh(year: Optional[int] = None, budget: Optional[int] = None) -> Dict[st
 
     Returns what is parseable now rather than waiting for the whole backlog:
     a partial answer from a public record is more useful than a spinner, and
-    the next refresh continues where this one stopped.
+    the next refresh continues where this one stopped. A refresh already
+    running answers for both: this returns what is read so far instead.
     """
+    if not _REFRESHING.acquire(blocking=False):
+        return summary()
+    try:
+        return _refresh(year, budget)
+    finally:
+        _REFRESHING.release()
+
+
+def backlog() -> int:
+    """Filings in the index not yet on disk, as of the last refresh, leaving
+    out the ones that would not download and are waiting to be asked again."""
+    with _LOCK:
+        return int(_MEM["backlog"])
+
+
+def _refresh(year: Optional[int], budget: Optional[int]) -> Dict[str, Any]:
     year = year or datetime.now(timezone.utc).year
     budget = FETCH_BUDGET if budget is None else budget
     sess = _session()
@@ -217,30 +289,38 @@ def refresh(year: Optional[int] = None, budget: Optional[int] = None) -> Dict[st
                 "source": SOURCE_PAGE}
 
     fetched = 0
+    now = time.time()
     for entry in sorted(index, key=lambda e: _iso(e["filed"]) or "", reverse=True):
         path = _cache_path(year, entry["doc_id"])
         if os.path.exists(path):
+            continue
+        if now - _FAILED.get(entry["doc_id"], 0.0) < RETRY_AFTER:
             continue
         if fetched >= budget:
             break
         try:
             r = sess.get(HOUSE_PTR.format(year=year, doc=entry["doc_id"]), timeout=TIMEOUT)
             if r.status_code != 200 or not r.content.startswith(b"%PDF"):
+                _FAILED[entry["doc_id"]] = time.time()
                 continue
             with open(path, "wb") as fh:
                 fh.write(r.content)
             fetched += 1
             time.sleep(REQUEST_GAP)
         except Exception as exc:
+            _FAILED[entry["doc_id"]] = time.time()
             log.warning("congress filing %s: %s", entry["doc_id"], exc)
 
     trades: List[Dict[str, Any]] = []
     parsed = 0
+    waiting = 0
     for entry in index:
         path = _cache_path(year, entry["doc_id"])
         if not os.path.exists(path):
+            if time.time() - _FAILED.get(entry["doc_id"], 0.0) >= RETRY_AFTER:
+                waiting += 1
             continue
-        out = _parse_pdf(path)
+        out = _parsed(year, entry["doc_id"])
         if out.get("error") and not out["rows"]:
             continue
         parsed += 1
@@ -260,7 +340,7 @@ def refresh(year: Optional[int] = None, budget: Optional[int] = None) -> Dict[st
     trades.sort(key=lambda t: (t["traded_iso"] or "", t["filed"] or ""), reverse=True)
     with _LOCK:
         _MEM.update(at=time.time(), trades=trades, index_at=datetime.now(timezone.utc).isoformat(),
-                    parsed=parsed, known=len(index))
+                    parsed=parsed, known=len(index), backlog=waiting)
     return summary()
 
 

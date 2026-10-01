@@ -27889,7 +27889,7 @@ function congressResults() {
     ? `Nothing in the House disclosures read so far matches ${q.ticker
       ? esc(q.ticker.toUpperCase()) : 'those filters'}. That is an absence of a disclosure, not evidence that nothing was traded.${
   q.ticker ? ' The company\u2019s own insiders file separately, under Insider filings below.' : ''}`
-    : 'No House filings have been parsed yet. They are fetched a few at a time rather than in one burst at a government file server, so this fills in as you come back.'}</p>
+    : 'No House filings have been read yet. The server reads them a batch at a time rather than in one burst at a government file server, so the year fills in over the first few minutes after it starts.'}</p>
       ${narrowed ? '<div class="empty-acts"><button type="button" class="btn" data-ins-reset>Clear the filters</button></div>' : ''}</div>`}
     <p class="caveat">${c.index_at ? `Indexed ${esc(shortWhen(c.index_at))}. ` : ''}${
   c.latest_filed ? `Latest disclosure ${esc(dayLabel(c.latest_filed))}. ` : ''}${

@@ -1907,6 +1907,16 @@ CATALYST_CHECK_MINUTES = 15
 # this is racing nobody.
 CATALYST_BOOT_DELAY = 90
 
+# The House disclosures, read to the end of the year by the server itself.
+# Off with CONGRESS_BACKFILL=false, which puts the downloads back on readers'
+# requests, a batch per stale read, as they were.
+CONGRESS_BACKFILL = os.environ.get("CONGRESS_BACKFILL", "true").strip().lower() != "false"
+CONGRESS_BOOT_DELAY = 20
+# Between batches while there is a backlog. A batch is FETCH_BUDGET filings
+# with a REQUEST_GAP between each, about fifteen seconds, so the whole year of
+# 400 is read in about ten minutes and never in one burst.
+CONGRESS_BATCH_PAUSE = 20
+
 
 async def _catalyst_loop() -> None:
     """Keep the catalyst library current whether or not anyone presses Scan.
@@ -1964,6 +1974,32 @@ def _warm_shared() -> None:
                 fn()
             except Exception as exc:                            # noqa: BLE001
                 log.info("keep-warm %s skipped: %s", name, exc)
+
+
+async def _congress_loop() -> None:
+    """Read the year's House disclosures through, then keep up with new ones.
+
+    The backlog was filled only by readers, one batch per visit at most every
+    six hours, and was never finished: 113 of 403 filings were read on the day
+    Nancy Pelosi's July purchases of BE were asked about, and her June and
+    January filings had not been fetched at all. A batch, a pause, the next
+    batch, until nothing is left; then the index is checked every six hours,
+    as it was. Off the event loop, like every other fetch here.
+    """
+    log = logging.getLogger("uvicorn.error")
+    _BACKGROUND_JOB.set(True)
+    await asyncio.sleep(CONGRESS_BOOT_DELAY)
+    while True:
+        try:
+            out = await _run(congress_mod.refresh)
+            if out.get("available") is False:
+                log.info("congress backfill: %s", out.get("reason"))
+        except asyncio.CancelledError:                          # noqa: PERF203
+            raise
+        except Exception as exc:                                # noqa: BLE001
+            log.info("congress backfill pass failed: %s", exc)
+        await asyncio.sleep(CONGRESS_BATCH_PAUSE if congress_mod.backlog()
+                            else congress_mod.INDEX_TTL)
 
 
 async def _keep_warm_loop() -> None:
@@ -2075,6 +2111,8 @@ async def _start_tracker() -> None:
     app.state.feedback_task = asyncio.create_task(_flush_feedback())
     app.state.catalyst_task = asyncio.create_task(_catalyst_loop())
     app.state.keepwarm_task = asyncio.create_task(_keep_warm_loop())
+    if CONGRESS_BACKFILL:
+        app.state.congress_task = asyncio.create_task(_congress_loop())
     if TRACKER_AUTO:
         # Held on the app so the reference isn't garbage-collected mid-flight.
         app.state.tracker_task = asyncio.create_task(_tracker_loop())
@@ -2579,14 +2617,15 @@ async def congress_trades(
     Free and public: the Clerk of the House publishes both the index and the
     filings, so there is no key here and no vendor in the path.
 
-    The refresh is bounded and lazy. 400 filings a year is a backlog to fill
-    over successive calls rather than a burst to fire at a government file
-    server, so a stale read pulls the index plus a budget of new filings and
-    answers with whatever is parsed -- `filings_parsed` against
-    `filings_known` says how much of the record that is.
+    The refresh is bounded. 400 filings a year is a backlog to fill a batch at
+    a time rather than a burst to fire at a government file server, and the
+    server fills it itself (_congress_loop), so a stale read here re-reads the
+    index and what is on disk and downloads nothing: a reader does not wait on
+    the Clerk's server. `filings_parsed` against `filings_known` says how much
+    of the record is read.
     """
     if congress_mod.stale():
-        await _run(congress_mod.refresh)
+        await _run(congress_mod.refresh, None, 0 if CONGRESS_BACKFILL else None)
     # Filtering happens here, not in the browser. The archive is thousands of
     # rows and the page shows sixty, so a client filter would mean shipping
     # everything in order to narrow it -- and the counts, the per-day series
