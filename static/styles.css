@@ -4113,33 +4113,22 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
 
 /* ---------------------------------------------------------- scanners ------ */
 
-.scan-pills {
-  display: flex;
+/* The group's scans: the chart pages' own tab strip (`.sec-tabs`), with a
+ * rule under it so the open tab's results read as the strip's, and the
+ * results themselves in the same panel below. */
+.scan-tabs {
+  margin-top: var(--space-4);
+  border-bottom: 1px solid var(--border);
+  /* Wrapped rather than scrolled, as the chart pages' strip is: a scan's name
+     is a phrase ("Extended. Stretched from the mean"), and the strip's hidden
+     scrollbar cut the last one off mid-word with nothing to say there was
+     more. */
   flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
 }
-.scan-pill {
-  font: inherit;
-  font-size: var(--t-small);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--r-pill);
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--ink-2);
-  cursor: pointer;
-  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
-}
-.scan-pill:hover { border-color: var(--border-strong); color: var(--ink); }
-.scan-pill:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-/* The selected scan is marked by weight and a filled background as well as
- * colour, so which one is active survives a greyscale screen. */
-.scan-pill.on {
-  border-color: var(--s1);
-  background: color-mix(in srgb, var(--s1) 14%, transparent);
-  color: var(--ink);
-  font-weight: 600;
-}
+.scan-tabs .sec-tab { margin-bottom: -1px; }
+.sec-tab:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.scan-result { padding-top: var(--space-3); }
+.scan-reads-h { margin: var(--space-4) 0 var(--space-1); font-size: var(--t-body); }
 
 /* The blind-spot note. Muted rather than alarming — it is a standing property of
  * the scan, not a warning that something has gone wrong. */
@@ -9053,8 +9042,8 @@ h1 .num, h2 .num, h3 .num,
  * which is the one radius a pill must not have: the rule above this block
  * says the curve belongs on "panels, buttons, pills", and 10px on a 29px-tall
  * control is a rounded rectangle. `.pill` carries --r-pill in its own rule and
- * now keeps it, which is also what `.chip`, `.scan-pill` and `.wd-chip` beside
- * it already render at. */
+ * now keeps it, which is also what `.chip` and `.wd-chip` beside it already
+ * render at. */
 .btn, .ws-menu-btn {
   border-radius: var(--r-ctl);
 }

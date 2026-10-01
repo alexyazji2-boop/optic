@@ -185,7 +185,9 @@ def test_no_selector_is_given_two_different_radii_at_the_same_width():
 # because it sits in a row of chips, and that is the whole argument for it
 # having their corner.
 FAMILIES = {
-    "pill":   [".chip", ".pill", ".scan-pill", ".wd-chip", ".sec-chip"],
+    # `.scan-pill` was one until the scans became tabs (`.sec-tab`), which
+    # have no corner to keep.
+    "pill":   [".chip", ".pill", ".wd-chip", ".sec-chip"],
     "button": [".btn", ".icon-btn", ".ws-menu-btn"],
     "card":   [".panel", ".home-card", ".tile"],
 }

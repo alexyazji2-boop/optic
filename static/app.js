@@ -28538,10 +28538,17 @@ function renderScan(cat, res) {
       <span class="sg-blurb">${esc(g.blurb)}</span>
     </button>`).join('');
 
+  /* The group's scans are tabs over their results, as the chart pages'
+   * sections are tabs over theirs: the strip is the same `sec-tabs`, and what
+   * a tab opens is drawn under it in the same panel. They were pills, and each
+   * result was a panel of its own below them, headed with the scan's name, one
+   * more thing to open; asked for as "a sub tab similar to the charts instead
+   * of another dropdown". */
   const members = (activeGroup || {}).scans || (cat.scans || []);
   const tabs = members.map((sc) => `
-    <button type="button" class="scan-pill${sc.id === STATE.scanId ? ' on' : ''}"
-      data-scan="${esc(sc.id)}" title="${esc(sc.looks_for || '')}">${esc(sc.name)}</button>`).join('');
+    <button type="button" role="tab" class="sec-tab${sc.id === STATE.scanId ? ' on' : ''}"
+      data-scan="${esc(sc.id)}" aria-selected="${sc.id === STATE.scanId}"
+      title="${esc(sc.looks_for || '')}">${esc(sc.name)}</button>`).join('');
 
   /* Named scans and the builder are two answers to one question, so they are
    * modes rather than two panels stacked. Both on screen at once meant two
@@ -28559,24 +28566,26 @@ function renderScan(cat, res) {
       <div id="sc-builder" class="span-all">${screenerBuilder()}</div>`;
   }
 
-  const head = `${renderResearchHub()}${modeBar}
+  // The page, with what the open tab shows in its place under the strip.
+  const page = (shown) => `${renderResearchHub()}${modeBar}
   <div class="panel span-all">
     <h2>${hg('Scanners')}</h2>
     <p class="sub">Named scans over the ${cat.considered ? fmt(cat.considered, 0) : ''} names that
       cleared the screen's gates, out of a ${cat.universe_size ? fmt(cat.universe_size, 0) : ''}-symbol
       universe. Pick a question; the answer is already computed.</p>
     ${groupCards ? `<div class="scan-groups">${groupCards}</div>` : ''}
-    <div class="scan-pills">${tabs}</div>
+    <nav class="sec-tabs scan-tabs" role="tablist" aria-label="Scans">${tabs}</nav>
+    <div class="scan-result" role="tabpanel">${shown}</div>
     ${STATE.scanGroupNote ? `<p class="caveat">${gloss(STATE.scanGroupNote)}</p>` : ''}
   </div>`;
 
   if (res === 'loading') {
-    return head + `<div class="panel span-all"><p class="sub">Running the scan…</p></div>`;
+    return page('<p class="sub">Running the scan…</p>');
   }
   if (!res || !res.available) {
-    return head + `<div class="panel span-all"><div class="callout">${
+    return page(`<div class="callout">${
   esc((res && res.reason) || 'This scan is unavailable.')}${scanBuildBar(res && res.building)}
-    </div></div>`;
+    </div>`);
   }
 
   const cols = res.columns || [];
@@ -28588,14 +28597,8 @@ function renderScan(cat, res) {
     ${cols.map((c) => `<td class="num">${scanCell(c.kind, r[c.key])}</td>`).join('')}
   </tr>`).join('');
 
-  return head + `${readingsPanel({
-    title: 'What this screen returned',
-    sub: 'A reading of the rows below, and only of the rows below.',
-    cls: 'span-all',
-    rows: scanReadings(res),
-  })}
-  <div class="panel span-all">
-    <h2>${esc(res.name)}</h2>
+  const readings = scanReadings(res) || [];
+  return page(`
     <p class="sub">${esc(res.looks_for)}</p>
     ${res.stale ? `<div class="callout warn">The ranking behind this is
       ${fmt(res.age_hours, 0)} hours old, so these are yesterday's positions rather than
@@ -28604,16 +28607,18 @@ function renderScan(cat, res) {
       ${fmt(res.matched, 0)} matched${res.matched > res.shown
     ? `, showing the first ${fmt(res.shown, 0)}` : ''}${res.age_hours !== null
     ? ` · ranking ${fmt(res.age_hours, 1)}h old` : ''}</p>
-    ${rows ? `<table class="data">
+    ${rows ? `<div class="table-scroll"><table class="data">
       <thead><tr><th>Symbol</th><th class="num">Price</th>${
   cols.map((c) => `<th class="num">${esc(c.label)}</th>`).join('')}</tr></thead>
       <tbody>${rows}</tbody>
-    </table>` : `<div class="callout">Nothing currently matches this scan. That is a
+    </table></div>` : `<div class="callout">Nothing currently matches this scan. That is a
       result, not a failure. These conditions are meant to be selective.</div>`}
+    ${readings.length ? `<h3 class="scan-reads-h">What this screen returned</h3>
+    <p class="sub">A reading of the rows above, and only of the rows above.</p>
+    <div class="lead-reads">${readings.map(readingRow).join('')}</div>` : ''}
     <div class="callout scan-blind"><strong>What this scan cannot see.</strong>
       ${esc(res.blind_spot)}</div>
-    <p class="caveat">${gloss(res.method || '')}</p>
-  </div>
+    <p class="caveat">${gloss(res.method || '')}</p>`) + `
   <div id="eval-host" class="span-all">${
   STATE.evaluation ? renderEvaluation(STATE.evaluation) : ''}</div>`;
 }
