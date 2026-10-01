@@ -3673,6 +3673,17 @@ async def stage_reading(
     return await _run(stage_mod.for_symbol, YF_PROVIDER, symbol)
 
 
+# The instrument page's tiles describe the instrument, not the stretch of it on
+# screen, so they come from one year of daily bars whatever range the chart is
+# on. They were computed from the chart's own bars: on 1M the snapshot had 22
+# and gave up ("insufficient history"), leaving four of the five tiles blank,
+# and on 3M "From 52-week high" was measured from the high of three months and
+# the 200-day average had nothing to average. A year is what the macro panel
+# computes the same figures from, so a tile also agrees with the row clicked to
+# reach it.
+INSTRUMENT_STATS_PERIOD = "1y"
+
+
 @app.get("/api/instrument")
 async def instrument_chart(
     symbol: str = Query(..., description="Provider symbol, e.g. ^VIX or DX-Y.NYB"),
@@ -3698,12 +3709,20 @@ async def instrument_chart(
             raise HTTPException(status_code=404,
                                 detail="No history for '{}'.".format(sym))
         meta = known.get(sym, {})
+        # A year of bars for the tiles (INSTRUMENT_STATS_PERIOD), the chart's
+        # own when it is on a year, and the chart's own as well if the year
+        # cannot be had, which is what the tiles were computed from before.
+        stats = frame
+        if range_ != INSTRUMENT_STATS_PERIOD:
+            year = YF_PROVIDER.history(sym, period=INSTRUMENT_STATS_PERIOD, interval="1d")
+            if year is not None and not year.empty:
+                stats = year
         # Same quote reconciliation the strip applies, and for the same reason
         # twice over: the figure is wrong on a futures row without it, and a
         # drill-down that recomputed it from the bars would disagree with the
         # row the reader clicked to get here.
         snap = series_stats_mod.apply_quote(
-            macro_mod.snapshot(frame, meta.get("label") or sym),
+            macro_mod.snapshot(stats, meta.get("label") or sym),
             series_stats_mod.live_quotes(YF_PROVIDER, [sym]).get(sym))
         close = frame["Close"].astype(float)
         wanted = [i for i in (ids or "").replace(" ", "").split(",") if i]
