@@ -98,6 +98,7 @@ FEATURES: Dict[str, str] = {
     "catalyst_scan": "Catalyst scan",
     "pulse": "Pulse chat",
     "research": "Deep research",
+    "scan": "Scan requests",
 }
 
 # List prices in USD per million tokens, from Anthropic's pricing page as read
@@ -126,14 +127,31 @@ _PRUNED = [0.0]
 _PRUNE_LOCK = threading.Lock()
 
 
+# Files whose schema this process has already set up. Once per file rather than
+# on every connection: switching a new file to WAL takes an exclusive lock, and
+# requests arriving together on a fresh file each tried it, so some were told
+# the database was locked and fell back to counting in memory, where a write
+# another had claimed on disk could be claimed again.
+_READY: set = set()
+_READY_LOCK = threading.Lock()
+
+
 def _connect() -> sqlite3.Connection:
     directory = os.path.dirname(DB_PATH)
     if directory:
         os.makedirs(directory, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=15)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.executescript(SCHEMA)
+    if DB_PATH not in _READY:
+        with _READY_LOCK:
+            if DB_PATH not in _READY:
+                try:
+                    conn.execute("PRAGMA journal_mode=WAL")
+                    conn.executescript(SCHEMA)
+                except sqlite3.Error:
+                    conn.close()
+                    raise
+                _READY.add(DB_PATH)
     return conn
 
 

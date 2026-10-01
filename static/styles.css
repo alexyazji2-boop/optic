@@ -13305,6 +13305,45 @@ a.cc-story-t:focus-visible { color: var(--ink-2); text-decoration: underline; }
    The builder. Rows of field + bounds, which is a form, so it gets form
    spacing rather than the panel grid. */
 .scan-modes { display: flex; gap: var(--space-2); margin-bottom: var(--space-3); }
+
+/* Find stocks: a request in words, its reading and its matches. The box is a
+   plain field in the page's own surface, the two answers to it side by side. */
+.sc-ask-form {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin: var(--space-2) 0;
+}
+.sc-ask-text {
+  flex: 1 1 360px;
+  min-width: 0;
+  min-height: 52px;
+  resize: vertical;
+  font: inherit;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.sc-ask-text:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.sc-ask-actions { display: flex; flex-direction: column; gap: var(--space-1); }
+.sc-ask-examples, .sc-ask-read {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: var(--space-2) 0;
+}
+.sc-ask-chip {
+  padding: var(--space-0) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font-size: var(--t-caption);
+  color: var(--ink-2);
+}
+.sc-ask-missing { margin: var(--space-1) 0; font-size: var(--t-caption); color: var(--ink-muted); }
 .sc-filters { display: flex; flex-direction: column; gap: var(--space-2); margin: var(--space-3) 0; }
 .sc-filter {
   display: flex;

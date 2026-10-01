@@ -1901,6 +1901,77 @@ def write_morning_read(facts: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         ),
     }
 
+SCAN_PROMPT = """You turn a trader's description of the stocks they want into filters \
+for a screener. The screener runs over liquid US stocks ranked on daily price and \
+volume, and it can filter on the fields and the states listed in VOCABULARY and on \
+nothing else.
+
+Return JSON only:
+{"filters": [{"field": "<field id>", "min": <number or null>, "max": <number or null>}],
+ "states": ["<state id>"], "sort": "<field id>", "direction": "desc" or "asc",
+ "unsupported": ["<each part of the request the vocabulary cannot express, in a few words>"]}
+
+Rules:
+- Use only the ids in VOCABULARY. Never invent a field or a state.
+- Units are as given: a percent field takes 5 for 5%, the 52-week range position runs \
+0 to 100, the volume field is a ratio where 1.3 means 30% above normal.
+- "On", "at" or "near" a moving average means within 3% either side unless the request \
+gives a number.
+- Do not stand in for what is missing. RSI, sectors, earnings, valuation and news are not \
+in the vocabulary: list them under unsupported and leave them out of the filters.
+- Sort by what best answers the request, and by the trend score when nothing does.
+- If nothing can be expressed, return empty filters and states with everything under \
+unsupported."""
+
+
+def read_scan_request(text: str, vocabulary: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """A request in words as screener filters, read by the model, or a failure.
+
+    Called only for what `app/analytics/scan_request.py` could not read itself,
+    and only for a reader allowed an assistant message; the route keeps what it
+    reads, so the same request is not paid for twice. The screener validates
+    every id it returns against its own vocabulary before anything runs."""
+    try:
+        from anthropic import Anthropic
+    except ImportError:
+        return {"available": False, "reason": "The anthropic package is not installed."}
+    if available().get("enabled") is not True:
+        return {"available": False, "reason": "The assistant is not configured here."}
+    try:
+        client = Anthropic(max_retries=2)
+    except Exception as exc:                                    # noqa: BLE001
+        return {"available": False, "reason": _human_error(exc)}
+    try:
+        msg = _ask(
+            client, "scan",
+            model=PULSE_MODEL, max_tokens=600,
+            system=[{"type": "text", "text": SCAN_PROMPT}],
+            messages=[{"role": "user", "content":
+                       "VOCABULARY:\n" + json.dumps(vocabulary) + "\n\nREQUEST: " + text}],
+        )
+    except Exception as exc:                                    # noqa: BLE001
+        log.warning("scan request failed: %s: %s", type(exc).__name__, exc)
+        return {"available": False, "reason": _human_error(exc)}
+    raw = "".join(getattr(b, "text", "") for b in (msg.content or []))
+    start, end = raw.find("{"), raw.rfind("}")
+    try:
+        parsed = json.loads(raw[start:end + 1], strict=False) if 0 <= start < end else None
+    except ValueError:
+        parsed = None
+    if not isinstance(parsed, dict):
+        _thrown_away("no usable JSON in the answer")
+        return {"available": False, "reason": "The request could not be read this time."}
+    return {
+        "available": True,
+        "filters": parsed.get("filters") if isinstance(parsed.get("filters"), list) else [],
+        "states": parsed.get("states") if isinstance(parsed.get("states"), list) else [],
+        "sort": str(parsed.get("sort") or "score"),
+        "direction": "asc" if str(parsed.get("direction")).lower() == "asc" else "desc",
+        "unsupported": [str(x)[:80] for x in (parsed.get("unsupported") or [])
+                        if str(x).strip()][:6],
+    }
+
+
 async def stream_chat(
     history: List[Dict[str, str]],
     context: Optional[Dict[str, Any]] = None,

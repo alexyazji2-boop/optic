@@ -59,6 +59,12 @@ def _between(html, start, end):
     return html[html.index(start):html.index(end, html.index(start))]
 
 
+def _scanner_panels(html):
+    """Panels on the page other than Find stocks, the request box above the
+    scans (see tests/test_scan_request.py), which is a feature of its own."""
+    return html.count('<div class="panel') - html.count('<div class="panel span-all sc-ask">')
+
+
 def test_the_scans_are_the_chart_pages_tab_strip():
     html = _render(RESULT)
     strip = _between(html, '<nav class="sec-tabs scan-tabs" role="tablist"', "</nav>")
@@ -76,7 +82,7 @@ def test_the_open_tabs_results_are_under_it_in_the_same_panel():
     assert "30 matched, showing the first 2" in tabpanel
     # No second panel headed with the scan's name, and no separate panel for
     # the reading of its rows: one panel, the Scanners one.
-    assert html.count('<div class="panel') == 1
+    assert _scanner_panels(html) == 1
     assert "<h2>Top gainers with volume</h2>" not in html
     assert '<h3 class="scan-reads-h">What this screen returned</h3>' in tabpanel
     assert "A reading of the rows above" in tabpanel
@@ -90,7 +96,7 @@ def test_waiting_and_failing_are_shown_in_the_tab_too():
     failed = _render({"available": False, "reason": "The ranking is being built."})
     tabpanel = failed[failed.index('role="tabpanel"'):]
     assert "The ranking is being built." in tabpanel
-    assert loading.count('<div class="panel') == 1 and failed.count('<div class="panel') == 1
+    assert _scanner_panels(loading) == 1 and _scanner_panels(failed) == 1
 
 
 def test_the_tabs_look_like_the_chart_pages_and_wrap_rather_than_hide():

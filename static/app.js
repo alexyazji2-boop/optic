@@ -28725,7 +28725,6 @@ function screenerResultHTML() {
     return `<div class="panel span-all"><div class="callout">${
       esc(res.reason || 'The screen could not run.')}${scanBuildBar(res.building)}</div></div>`;
   }
-  const cols = res.columns || [];
   /* The funnel, always — not only when the result is empty.
    *
    * The biggest cut is one the reader never set: the liquidity gates drop
@@ -28750,7 +28749,15 @@ function screenerResultHTML() {
       is why the ranked count is ${fmt(res.considered, 0)} and not
       ${fmt(res.universe, 0)}.</p>` : ''}
     ${funnel ? `<ul class="sc-funnel">${funnel}</ul>` : ''}
-    ${(res.rows || []).length ? `<table class="data">
+    ${screenerTableHTML(res)}
+  </div>`;
+}
+
+/* The matches as a table, or the line saying there are none. Shared by Build a
+ * screen and the request box, which run the same screen. */
+function screenerTableHTML(res) {
+  const cols = res.columns || [];
+  return (res.rows || []).length ? `<div class="table-scroll"><table class="data">
       <thead><tr><th>Symbol</th>${cols.map((c) =>
     `<th class="num">${esc(c.label)}</th>`).join('')}</tr></thead>
       <tbody>${res.rows.map((r) => `<tr>
@@ -28758,10 +28765,8 @@ function screenerResultHTML() {
           >${esc(r.symbol)}</button></td>
         ${cols.map((c) => `<td class="num">${screenerCell(c, r[c.id])}</td>`).join('')}
       </tr>`).join('')}</tbody>
-    </table>` : `<div class="callout">Nothing clears every condition. That is a
-      result rather than a failure \u2014 the funnel above says which bound emptied
-      it.</div>`}
-  </div>`;
+    </table></div>` : `<div class="callout">Nothing clears every condition. That is a
+      result rather than a failure: the funnel says which bound emptied it.</div>`;
 }
 
 /* Repaint the builder and its result, not the whole Scan view.
@@ -28800,6 +28805,151 @@ async function runScreener(quiet) {
       () => runScreener(true));
   }
 }
+
+/* ========================================================== FIND STOCKS ===
+ *
+ * A request in words, answered with the symbols that match it.
+ *
+ * Asked for with another terminal's scanner box: "add this in the discover ->
+ * scan tab for users to look for stocks based on their requests", and "include
+ * two options like this", one to find the symbols at once and one for the
+ * assistant. The server reads the request into the screener's own filters
+ * (app/analytics/scan_request.py), by itself where it can and with Pulse for
+ * the words it cannot, and runs them over the ranking the named scans share.
+ * The reading is shown as well as the matches, so a reader can see how their
+ * words were taken, and open it in the builder to change it.
+ *
+ * Ask Pulse puts the request, the reading and the matches in Pulse's box, to
+ * be edited and sent: Pulse is given nothing else about the ranking, so the
+ * matches have to travel in the question. */
+// Each is read in full by the screen's own reader, so trying one costs nothing
+// (tests/test_scan_request.py holds them to that).
+const SCAN_ASK_EXAMPLES = [
+  'Strong stocks on the 200-day average right now',
+  'Near 52-week highs on heavy volume',
+  'Pullbacks in strong uptrends',
+  'Under $20 and up 20% in the last 3 months',
+];
+
+function scanAskHTML() {
+  const ask = STATE.scanAsk || {};
+  return `<div class="panel span-all sc-ask">
+    <h2>${hg('Find stocks')}</h2>
+    <p class="sub">Describe what you are looking for, however simple or specific. The
+      screener finds the names that match, and shows how it read your words.</p>
+    <form class="sc-ask-form" data-sc-ask-form>
+      <textarea id="sc-ask-text" class="sc-ask-text" rows="2" maxlength="300"
+        aria-label="What you are looking for"
+        placeholder="Strong stocks on the 200-day average right now">${esc(ask.text || '')}</textarea>
+      <div class="sc-ask-actions">
+        <button type="submit" class="btn primary">Find symbols now</button>
+        <button type="button" class="btn" data-sc-ask-pulse
+          title="Put the request and its matches in Pulse's box, to edit and send">Ask Pulse</button>
+      </div>
+    </form>
+    <div class="sc-ask-examples" role="group" aria-label="Examples">
+      <span class="wv-filter-label">Examples</span>
+      ${SCAN_ASK_EXAMPLES.map((q) => `<button type="button" class="pill" data-sc-ask-example="${
+  esc(q)}">${esc(q)}</button>`).join('')}
+    </div>
+    <div id="sc-ask-result">${scanAskResultHTML()}</div>
+  </div>`;
+}
+
+function scanAskResultHTML() {
+  const ask = STATE.scanAsk || {};
+  const r = ask.response;
+  if (ask.busy) return '<p class="sub">Reading the request and screening…</p>';
+  if (!r) return '';
+  if (r.error) return `<div class="callout">${esc(r.error)}</div>`;
+  const chips = (r.understood || []).map((u) => `<span class="sc-ask-chip">${esc(u)}</span>`).join('');
+  const missing = [...(r.unsupported || []), ...((r.unread || []).length
+    ? [`not read: ${(r.unread || []).join(' ')}`] : [])];
+  const by = r.read_by === 'pulse' ? 'Read by Pulse' : 'Read by the screener';
+  const head = `<div class="sc-ask-read">
+      <span class="wv-filter-label">${esc(by)}</span>
+      ${chips || '<span class="muted">Nothing in that could be read as a screen.</span>'}
+      ${chips ? `<button type="button" class="pill" data-sc-ask-edit
+        title="Open this reading in Build a screen, to change it">Edit as filters</button>` : ''}
+    </div>
+    ${missing.length ? `<p class="sc-ask-missing">The screen cannot ask about: ${
+  esc(missing.join('; '))}. It filters on price, returns, the 52-week range, volume, the
+      daily range and the 20-, 50- and 200-day averages.</p>` : ''}
+    ${r.note ? `<p class="sc-ask-missing">${esc(r.note)}</p>` : ''}`;
+  const res = r.result;
+  if (!res) return head;
+  if (!res.available) {
+    return `${head}<div class="callout">${esc(res.reason || 'The screen could not run.')}${
+      scanBuildBar(res.building)}</div>`;
+  }
+  return `${head}<p class="note" style="color:var(--ink-muted);margin:var(--space-2) 0">${
+    fmt(res.matched, 0)} of ${fmt(res.considered, 0)} ranked names match${
+  res.matched > res.limit ? `, showing the first ${fmt(res.limit, 0)}` : ''}${
+  res.ranking_age_hours !== null && res.ranking_age_hours !== undefined
+    ? ` · ranking ${fmt(res.ranking_age_hours, 1)}h old` : ''}.</p>
+    ${screenerTableHTML(res)}`;
+}
+
+function paintScanAsk() {
+  const host = document.getElementById('sc-ask-result');
+  if (host) host.innerHTML = scanAskResultHTML();
+}
+
+let scanAskSeq = 0;
+async function runScanAsk(text) {
+  const words = String(text || '').trim();
+  if (!words) return null;
+  STATE.scanAsk = { text: words, busy: true, response: null };
+  paintScanAsk();
+  const seq = ++scanAskSeq;
+  let response;
+  try {
+    response = await postJSON('/api/screener/ask', { text: words });
+  } catch (err) {
+    response = { error: err.message || 'The request could not be read.' };
+  }
+  if (seq !== scanAskSeq) return null;
+  STATE.scanAsk = { text: words, busy: false, response };
+  paintScanAsk();
+  return response;
+}
+
+/* The question for Pulse: the request, how it was read, and the matches with
+ * their numbers, which is all Pulse will know about them. */
+function scanAskPulsePrompt(text, r) {
+  const res = (r && r.result) || null;
+  const lines = [`I'm looking for: ${text}`];
+  if (r && (r.understood || []).length) {
+    lines.push(`Optic's screener read that as: ${r.understood.join('; ')}.`);
+  }
+  if (res && res.available && (res.rows || []).length) {
+    const cols = (res.columns || []).slice(0, 4);
+    lines.push(`${res.matched} of ${res.considered} ranked names matched. The first ${
+      Math.min(res.rows.length, 15)}, with ${cols.map((c) => c.label.toLowerCase()).join(', ')}:`);
+    res.rows.slice(0, 15).forEach((row) => {
+      lines.push(`${row.symbol}: ${cols.map((c) => screenerCell(c, row[c.id])).join(', ')}`);
+    });
+    lines.push('Which of these fit what I asked for best, and what would make each stop fitting?');
+  } else {
+    lines.push('Nothing in the ranking matched. What would you look for instead, and why?');
+  }
+  return lines.join('\n');
+}
+
+document.addEventListener('submit', (evt) => {
+  const form = evt.target.closest && evt.target.closest('[data-sc-ask-form]');
+  if (!form) return;
+  evt.preventDefault();
+  const box = form.querySelector('#sc-ask-text');
+  runScanAsk(box ? box.value : '');
+});
+
+// Enter runs it, as a search box does; Shift-Enter is a new line.
+document.addEventListener('keydown', (evt) => {
+  if (evt.key !== 'Enter' || evt.shiftKey || !evt.target || evt.target.id !== 'sc-ask-text') return;
+  evt.preventDefault();
+  runScanAsk(evt.target.value);
+});
 
 /* While the universe ranking is being built, ask again every few seconds.
  *
@@ -28860,12 +29010,12 @@ function renderScan(cat, res) {
   </div>`;
 
   if (mode === 'build') {
-    return `${renderResearchHub()}${modeBar}
+    return `${renderResearchHub()}${scanAskHTML()}${modeBar}
       <div id="sc-builder" class="span-all">${screenerBuilder()}</div>`;
   }
 
   // The page, with what the open tab shows in its place under the strip.
-  const page = (shown) => `${renderResearchHub()}${modeBar}
+  const page = (shown) => `${renderResearchHub()}${scanAskHTML()}${modeBar}
   <div class="panel span-all">
     <h2>${hg('Scanners')}</h2>
     <p class="sub">Named scans over the ${cat.considered ? fmt(cat.considered, 0) : ''} names that
@@ -28989,7 +29139,36 @@ async function runScan(id, quiet) {
 document.addEventListener('click', (evt) => {
   if (!evt.target || !evt.target.closest) return;
 
-  const mode = evt.target.closest('[data-scan-mode]');
+  /* The request box: an example fills it and runs, Ask Pulse runs it if it has
+   * not been and drafts the question, and Edit as filters opens the reading in
+   * Build a screen with its matches. */
+  const askExample = evt.target.closest('[data-sc-ask-example]');
+  if (askExample) {
+    const box = document.getElementById('sc-ask-text');
+    if (box) box.value = askExample.dataset.scAskExample;
+    runScanAsk(askExample.dataset.scAskExample);
+    return;
+  }
+  if (evt.target.closest('[data-sc-ask-pulse]')) {
+    const box = document.getElementById('sc-ask-text');
+    const text = String((box && box.value) || '').trim();
+    if (!text) { if (box) box.focus(); return; }
+    const ask = STATE.scanAsk || {};
+    const done = ask.text === text && ask.response && !ask.response.error
+      ? Promise.resolve(ask.response) : runScanAsk(text);
+    done.then((response) => { if (response) draftPulse(scanAskPulsePrompt(text, response)); });
+    return;
+  }
+  const askEdit = evt.target.closest('[data-sc-ask-edit]');
+  if (askEdit) {
+    const r = (STATE.scanAsk || {}).response;
+    if (!r || !r.spec) return;
+    STATE.screener = { ...r.spec, filters: (r.spec.filters || []).map((f) => ({ ...f })),
+      states: [...(r.spec.states || [])], limit: 50 };
+    STATE.screenerResult = r.result || null;
+  }
+  const mode = askEdit ? { dataset: { scanMode: 'build' } }
+    : evt.target.closest('[data-scan-mode]');
   if (mode) {
     STATE.scanMode = mode.dataset.scanMode;
     const paint = () => {

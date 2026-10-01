@@ -50,6 +50,7 @@ from . import contracts as contracts_mod
 from .analytics import screen as screen_mod
 from .analytics import stage as stage_mod
 from .analytics import screener as screener_mod
+from .analytics import scan_request as scan_request_mod
 from .analytics import segments as segments_mod
 from . import insiders as insiders_mod
 from . import analysts as analysts_mod
@@ -3844,6 +3845,92 @@ async def analysts_latest(days: int = Query(7, ge=1, le=45),
 async def analysts_for(ticker: str, limit: int = Query(20, ge=1, le=100)) -> Dict[str, Any]:
     """One name's latest analyst actions, read directly, whatever the name."""
     return await _run(analysts_mod.for_symbol, YF_PROVIDER, ticker, limit)
+
+
+# A request in words, read as the screener's filters (app/analytics/scan_request.py).
+SCAN_REQUEST_MAX = 300
+
+
+@app.post("/api/screener/ask")
+async def screener_ask(request: Request,
+                       payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Find the symbols a request in words describes.
+
+    Asked for as a box on the Scan tab: "add this in the discover -> scan tab
+    for users to look for stocks based on their requests". The screener does the
+    finding over the ranking the named scans share; this reads the request into
+    its filters and says what it read and what it could not.
+
+    Read here first, which costs nothing. Words left over go to Pulse, behind
+    the allowance Pulse's chat has, and what it reads is kept, so a request is
+    paid for once. Without the assistant (a guest, or none configured) the
+    reading is what could be read here, and the words it could not are named.
+    """
+    text = re.sub(r"\s+", " ", str(payload.get("text") or "")).strip()[:SCAN_REQUEST_MAX]
+    if not text:
+        raise HTTPException(status_code=400, detail="Describe what you are looking for.")
+    reading = await _run(scan_request_mod.read, text)
+    read_by, unread, unsupported, note = "terminal", list(reading["leftover"]), [], None
+    if unread:
+        key = scan_request_mod.cache_key(text)
+        stored = await _run(ai_store.kept, "scan", key)
+        if stored:
+            reading, read_by, unread = stored[0], "pulse", []
+            unsupported = list(reading.get("unsupported") or [])
+        elif ai.available().get("enabled") is not True:
+            note = "Pulse is not configured here, so only this screen's own reading was used."
+        else:
+            try:
+                _spend_guard(request)
+            except HTTPException as exc:
+                note = str(exc.detail)
+            else:
+                got = await _run(ai.read_scan_request, text, screener_mod.describe())
+                if got and got.get("available"):
+                    reading = {
+                        "filters": screener_mod.parse_filters(got.get("filters")),
+                        "states": screener_mod.parse_states(got.get("states")),
+                        "sort": got.get("sort") if got.get("sort") in screener_mod.FIELD_BY_ID
+                        else "score",
+                        "direction": got.get("direction") or "desc",
+                        "unsupported": got.get("unsupported") or [],
+                    }
+                    read_by, unread = "pulse", []
+                    unsupported = list(reading["unsupported"])
+                    await _run(ai_store.keep, "scan", key, reading)
+                else:
+                    note = (got or {}).get("reason") or "Pulse could not read it this time."
+
+    filters, states = reading.get("filters") or [], reading.get("states") or []
+    spec = {"filters": filters, "states": states, "sort": reading.get("sort") or "score",
+            "direction": reading.get("direction") or "desc"}
+    out: Dict[str, Any] = {
+        "text": text, "read_by": read_by, "spec": spec,
+        "understood": (reading.get("understood") if read_by == "terminal"
+                       else scan_request_mod.labels(filters, states)) or [],
+        "unread": unread, "unsupported": unsupported, "note": note,
+    }
+    if not filters and not states:
+        # Run with nothing set, the screen would answer with every ranked name,
+        # which is not what was asked for.
+        out["result"] = None
+        return out
+
+    def build() -> Dict[str, Any]:
+        ranking = _cached_ranking()
+        job = _ensure_ranking(ranking)
+        res = screener_mod.run(ranking, filters=filters, states=states,
+                               sort=spec["sort"], direction=spec["direction"])
+        if job is not None:
+            res["building"] = job
+            if not res.get("available"):
+                res["reason"] = _building_reason(job)
+        elif not res.get("available") and _unbuilt_reason():
+            res["reason"] = _unbuilt_reason()
+        return res
+
+    out["result"] = await _run(build)
+    return out
 
 
 @app.get("/api/screener/fields")
