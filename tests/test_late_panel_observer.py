@@ -95,16 +95,17 @@ def test_the_note_still_carries_the_panel_class():
     assert "note.className = 'panel mode-note'" in fn
 
 
-def test_the_note_leads_the_panels_rather_than_trailing_them():
+def test_the_note_is_at_the_front_of_the_tab():
     """`host.appendChild` put it last, which on the Options tab is the far end
-    of a 10,600px view: a reader needs to know nine panels are hidden before
-    scrolling the page, not once they reach the bottom."""
+    of a 10,600px view, and before the first panel was still under the read and
+    the blocks around it: "why is this hidden in the middle? make it visible at
+    the front". Straight under the header and the price strip, or first."""
     fn = body_of("applyUiMode")
-    assert "host.insertBefore(note, firstPanel)" in fn
-    assert "el.classList.contains('panel') && el !== note" in fn, (
-        "the note would be inserted before itself")
-    assert "else host.appendChild(note);" in fn, (
-        "a view with no panel at all must still get its note")
+    assert "if (!el.matches('.sec-head, .px-head')) break;" in fn
+    assert "if (el === note) continue;" in fn, "the note would be placed after itself"
+    assert "if (after) after.insertAdjacentElement('afterend', note);" in fn
+    assert "else host.insertBefore(note, host.firstChild);" in fn, (
+        "a tab with no header still gets its note, first")
 
 
 def test_both_buttons_still_have_their_handlers():

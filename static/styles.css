@@ -15574,3 +15574,35 @@ body.ws-max[data-view="chart"] main { padding: 0; }
 /* The seconds a symbol's first load has been waiting, beside "Loading HOOD...".
    Tabular figures so the count does not shuffle the line as it grows. */
 .load-elapsed { margin-left: 6px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+
+
+/* "Optic has been updated", for a page opened before the latest deploy. Fixed
+   at the foot of the window, clear of the Report a Problem button's corner. */
+.build-notice {
+  position: fixed;
+  left: 50%;
+  bottom: var(--space-4);
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: calc(100vw - 2 * var(--space-4));
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--raised);
+  color: var(--ink);
+  font-size: var(--t-small);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.35);
+}
+.build-x {
+  background: none;
+  border: 0;
+  color: var(--ink-muted);
+  cursor: pointer;
+  font-size: var(--t-base);
+  line-height: 1;
+  transition: color var(--dur-ui) var(--ease-ui);
+}
+.build-x:hover { color: var(--ink); }

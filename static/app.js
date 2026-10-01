@@ -34504,15 +34504,22 @@ function applyUiMode(view) {
    * Verified by clicking at measured coordinates on the live site: the click
    * landed on a chart legend two panels away.
    *
-   * Before the first panel rather than at the very top, so it sits under the
-   * ticker header and the section index instead of above them: those are
-   * sticky, and a banner pushed above sticky chrome scrolls away from the thing
-   * it belongs to. Falls back to appending, so a view with no panel at all
-   * still gets its note. */
-  const firstPanel = [...host.children].find(
-    (el) => el.classList.contains('panel') && el !== note);
-  if (firstPanel) host.insertBefore(note, firstPanel);
-  else host.appendChild(note);
+   * At the front of the tab, straight under its header and the price strip:
+   * asked for as "why is this hidden in the middle? make it visible at the
+   * front so the user can choose as soon as the tab is opened". It went before
+   * the first panel, and the Options tab opens on blocks that are not panels
+   * (the read, what is pulling hardest, what matters next, follow-ups), so on
+   * a page whose chart panel was not first the note landed under all of them.
+   * The header and the price strip are what every symbol tab starts with; a
+   * tab with neither gets it first of all. */
+  let after = null;
+  for (const el of host.children) {
+    if (el === note) continue;
+    if (!el.matches('.sec-head, .px-head')) break;
+    after = el;
+  }
+  if (after) after.insertAdjacentElement('afterend', note);
+  else host.insertBefore(note, host.firstChild);
 }
 
 /* The chooser.
@@ -35673,6 +35680,76 @@ function watchColorScheme() {
   else if (query.addListener) query.addListener(onChange);   // older Safari
 }
 
+/* ============================================================ NEW VERSIONS ===
+ *
+ * A page left open keeps the code it loaded, deploy after deploy: Optic is one
+ * page and never reloads itself. Reported twice as a change that had not
+ * happened, "wheres this?" and "the issue is still occurring" about a ticker
+ * that still opened Options, both times on a page opened before the deploy
+ * that changed it. So the page asks the server which version it is on when it
+ * comes back into view and every ten minutes, and when that is not the one it
+ * loaded it says so and offers a reload that comes back to the same place. It
+ * never reloads by itself: a reload drops whatever is half typed. */
+const OPTIC_BUILD = (() => {
+  const tag = document.querySelector('script[src*="app.js?v="]');
+  const m = tag && /[?&]v=(\d+)/.exec(tag.getAttribute('src') || '');
+  return m ? m[1] : null;
+})();
+const RELOAD_PLACE_KEY = 'optic.reload.place';   // sessionStorage, this tab only
+let buildNoticeShown = false;
+
+async function checkForNewBuild() {
+  if (!OPTIC_BUILD || buildNoticeShown) return;
+  let build = null;
+  try {
+    const res = await fetch('/api/build', { cache: 'no-store', credentials: 'same-origin' });
+    if (res.ok) build = (await res.json()).build;
+  } catch (e) {
+    return;
+  }
+  if (!build || String(build) === OPTIC_BUILD) return;
+  buildNoticeShown = true;
+  const bar = document.createElement('div');
+  bar.className = 'build-notice';
+  bar.setAttribute('role', 'status');
+  bar.innerHTML = `<span>Optic has been updated since this page was opened.</span>
+    <button type="button" class="btn primary" data-build-reload>Reload</button>
+    <button type="button" class="build-x" data-build-dismiss aria-label="Dismiss">&times;</button>`;
+  document.body.appendChild(bar);
+}
+
+document.addEventListener('click', (evt) => {
+  if (!evt.target || !evt.target.closest) return;
+  if (evt.target.closest('[data-build-reload]')) {
+    try {
+      sessionStorage.setItem(RELOAD_PLACE_KEY,
+        JSON.stringify({ view: STATE.view, ticker: STATE.ticker || null }));
+    } catch (e) { /* private mode: the reload lands on Home */ }
+    location.reload();
+    return;
+  }
+  const dismiss = evt.target.closest('[data-build-dismiss]');
+  if (dismiss) dismiss.closest('.build-notice').remove();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') checkForNewBuild();
+});
+setInterval(checkForNewBuild, 10 * 60 * 1000);
+
+/** After a reload from the notice, back to the view and symbol it was on. */
+function restoreReloadPlace() {
+  let place = null;
+  try {
+    place = JSON.parse(sessionStorage.getItem(RELOAD_PLACE_KEY) || 'null');
+    sessionStorage.removeItem(RELOAD_PLACE_KEY);
+  } catch (e) {
+    place = null;
+  }
+  if (!place || !place.view || place.view === 'home') return;
+  if (place.ticker) loadTicker(place.ticker, place.view);
+  else switchView(place.view);
+}
+
 (async function boot() {
   /* The header box has no typeahead: focusing it opens the palette, so no
    * keystroke ever reaches it and the list it used to own could not open.
@@ -35729,6 +35806,7 @@ function watchColorScheme() {
   mountPulseMarks();
   mountMobileTabs();
   renderHome();
+  restoreReloadPlace();
   updateStatus();
   try {
     const health = await getJSON('/api/health');

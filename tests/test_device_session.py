@@ -455,6 +455,9 @@ SETTINGS = {
     "optic.auth.passkeyMade",
     # The session machinery itself.
     "optic.session.holder.v1", "optic.session.next",
+    # Where a reload from "Optic has been updated" returns to: this tab only,
+    # in sessionStorage, and removed when the next load reads it.
+    "optic.reload.place",
 }
 
 

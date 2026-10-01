@@ -4802,6 +4802,14 @@ def _asset_version() -> str:
     return str(stamp)
 
 
+@app.get("/api/build")
+async def build_stamp() -> Dict[str, Any]:
+    """The front end's current version, for a page left open to compare with
+    the one it loaded (see `checkForNewBuild` in app.js). The same stamp the
+    asset tags carry, nine file stats and nothing else."""
+    return {"build": _asset_version()}
+
+
 class _NoCacheHTML(StaticFiles):
     """Revalidate HTML every time; let ETag turn that into a cheap 304.
 
