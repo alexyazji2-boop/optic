@@ -15206,6 +15206,17 @@ body.ws-max[data-view="chart"] main { padding: 0; }
 .ct-sell { background: var(--neg); }
 
 .ins-side { font-weight: 600; }
+
+/* Analyst actions: the action and the firm's rating carry the row, so they
+   take the weight; the colour is the global up/down, by which way each went. */
+.an-action, .an-rating { font-weight: 600; }
+.an-table td { white-space: nowrap; }
+.ws-sub-h {
+  margin: var(--space-3) 0 var(--space-1);
+  font-size: var(--t-caption);
+  font-weight: 600;
+  color: var(--ink-2);
+}
 .ins-row .ins-more { white-space: nowrap; font-size: var(--t-caption); }
 /* The filer's own words about the trade, which run to a sentence about an
    option's strike and expiry: wrapped in a column of its own width rather

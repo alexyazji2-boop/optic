@@ -1499,6 +1499,50 @@ class YFinanceProvider(MarketDataProvider):
 
         return _cached("analyst:" + ticker, 3600, build)
 
+    def analyst_actions(self, ticker: str) -> List[Dict[str, Any]]:
+        """Each firm's rating and price-target actions on a name, newest first.
+
+        Yahoo's upgrade and downgrade history: the firm, its rating before and
+        after, what it did (up, down, init, main or reit), and its price target
+        before and after, with what it did to that (Raises, Lowers, Maintains,
+        Announces). Years of it for a large name, 969 rows for AAPL on
+        2026-09-30, so callers keep the recent end. A target of 0 is Yahoo's
+        "none given" and comes back as None."""
+
+        def build() -> List[Dict[str, Any]]:
+            frame = yf.Ticker(ticker).upgrades_downgrades
+            if frame is None or getattr(frame, "empty", True):
+                return []
+            rows: List[Dict[str, Any]] = []
+            for at, row in frame.iterrows():
+                stamp = pd.Timestamp(at)
+                if stamp.tzinfo is not None:
+                    stamp = stamp.tz_convert("UTC").tz_localize(None)
+
+                def text(name: str) -> str:
+                    value = row.get(name)
+                    return "" if value is None or (isinstance(value, float) and math.isnan(value)) \
+                        else str(value).strip()
+
+                def target(name: str) -> Optional[float]:
+                    value = _f(row.get(name))
+                    return value if value else None
+
+                rows.append({
+                    "at": stamp.strftime("%Y-%m-%dT%H:%M:%S") + "+00:00",
+                    "firm": text("Firm"),
+                    "to_grade": text("ToGrade"),
+                    "from_grade": text("FromGrade"),
+                    "action": text("Action").lower(),
+                    "pt_action": text("priceTargetAction"),
+                    "pt": target("currentPriceTarget"),
+                    "prior_pt": target("priorPriceTarget"),
+                })
+            rows.sort(key=lambda r: r["at"], reverse=True)
+            return rows
+
+        return _cached("actions:" + ticker, 3600, build)
+
     def financials(self, ticker: str) -> Dict[str, Any]:
         """Annual and quarterly statement lines, keyed by the labels yfinance uses."""
 

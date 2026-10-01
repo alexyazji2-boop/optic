@@ -80,6 +80,7 @@ const views = {
   watchlist: $('#view-watchlist'),
   alerts: $('#view-alerts'),
   insiders: $('#view-insiders'),
+  analysts: $('#view-analysts'),
   paper: $('#view-paper'),
   reports: $('#view-reports'),
   usage: $('#view-usage'),
@@ -286,7 +287,7 @@ const TICKERLESS_VIEWS = [
   'home', 'market', 'indices', 'roth', 'tracker', 'settings', 'brief',
   'scan', 'explore', 'compare', 'instrument', 'chart',
   'overview', 'financials', 'news', 'earnings',
-  'watchlist', 'alerts', 'insiders', 'paper', 'reports', 'usage',
+  'watchlist', 'alerts', 'insiders', 'analysts', 'paper', 'reports', 'usage',
 ];
 
 /* The security workspace: the facets of one company, in reading order.
@@ -7068,6 +7069,8 @@ const PALETTE_PLACES = [
     /* The old label stays in `terms`: renaming a destination must not make it
        unfindable by the word it used to be called. */
     terms: 'paper desk trades trading simulator practice manual position long short buy sell shares option call put book ticket mock virtual' },
+  { view: 'analysts', label: 'Analyst actions',
+    terms: 'analysts analyst ratings rating upgrades downgrades upgrade downgrade price targets target initiations estimates firms' },
   { view: 'insiders', label: 'Insiders',
     terms: 'insiders insider congress congressional politicians form 4 stock act disclosures pelosi senator representative buying selling' },
   { view: 'reports', label: 'Problem Reports', owner: true,
@@ -15714,6 +15717,7 @@ function wsToggleWidget(id, on) {
   on = wsIsNarrow() ? wsNarrowWidget === id : wsDockOpen.includes(id);
   // Two widgets need data the page has not necessarily fetched yet.
   if (on && id === 'seasonality') loadSeasonality(false, STATE.chartSymbol);
+  if (on && id === 'analysts') loadAnalystActions(false, STATE.chartSymbol);
   if (on && id === 'trading' && !STATE.tracker) wsLoadTracker();
   if (on && id === 'alerts') loadAlerts(true);
 }
@@ -17150,12 +17154,20 @@ function wsWidgetBody(id) {
         ? 'A fund has no earnings, so it has no analyst estimates or price target of its own. Its holdings do.'
         : 'No analyst data for this symbol.');
     }
+    /* Who moved it, and when: the firm's latest actions on this name. */
+    const acts = STATE.analystActionsFor === sym ? STATE.analystActions : null;
+    const latest = acts && acts.available && (acts.rows || []).length
+      ? `<h4 class="ws-sub-h">Latest actions</h4>
+        <div class="table-scroll"><table class="data narrow an-table"><tbody>${
+  acts.rows.map((r) => analystRowHTML(r, { symbol: false })).join('')}</tbody></table></div>`
+      : '';
     return `<table class="data narrow"><tbody>${rows.map(([k, val]) =>
       `<tr><td class="name">${esc(k)}</td><td>${val}</td></tr>`).join('')}</tbody></table>
     ${q.analyst_target && q.price ? `<p class="ws-leg-args">${
   fmtPct(((q.analyst_target - q.price) / q.price) * 100, 1)} to the mean target. A target
       is a forecast, and the record of them as a group is poor. Read it as
-      sentiment, not as a level.</p>` : ''}`;
+      sentiment, not as a level.</p>` : ''}
+    ${latest}`;
   }
 
   if (id === 'seasonality') {
@@ -19361,6 +19373,7 @@ async function loadChartWorkspace(symbol, force) {
   // The dock's seasonality widget needs its own request; not awaited so the
   // chart is usable while it lands.
   if (wsDockOpen.includes('seasonality')) loadSeasonality(false, sym);
+  if (wsDockOpen.includes('analysts')) loadAnalystActions(false, sym);
   if (showTrends) loadTrendlines(sym);
   // Same rule: only if the overlay is on, and only when the symbol changes.
   if (showAccum) loadAccumZones(sym);
@@ -27410,6 +27423,146 @@ async function loadReports(force, opts = {}) {
   }
 }
 
+/* ======================================================== ANALYST ACTIONS ===
+ *
+ * Each firm's rating and price-target actions across the market, newest first.
+ *
+ * Asked for with a screenshot of another terminal's feed: "if not yet
+ * included, include analyst estimates as well". The server reads the actions
+ * of the curated large caps and the most traded names the scanner ranks every
+ * few hours and keeps the recent ones (app/analysts.py), so this page is one
+ * request and downloads nothing itself. A name's own actions are in the
+ * Analysts widget beside its chart, whatever the name. */
+const ANALYST_SHOWS = [
+  { key: '', label: 'All' },
+  { key: 'upgrades', label: 'Upgrades' },
+  { key: 'downgrades', label: 'Downgrades' },
+  { key: 'initiated', label: 'Initiations' },
+  { key: 'raised', label: 'Target raised' },
+  { key: 'lowered', label: 'Target lowered' },
+];
+const ANALYST_RATINGS = [
+  { key: '', label: 'Any rating' },
+  { key: 'buy', label: 'Buy' },
+  { key: 'hold', label: 'Hold' },
+  { key: 'sell', label: 'Sell' },
+];
+const ANALYST_DAYS = [1, 7, 30];
+const analystQuery = { show: '', rating: '', days: 7 };
+let analystSeq = 0;
+
+async function loadAnalysts(force) {
+  const host = views.analysts;
+  if (!host) return;
+  if (STATE.analysts && !force) { host.innerHTML = analystsHTML(STATE.analysts); return; }
+  host.innerHTML = analystsHTML(null);
+  const seq = ++analystSeq;
+  let data;
+  try {
+    data = await getJSON('/api/analysts/latest?days=' + analystQuery.days
+      + (analystQuery.show ? '&show=' + encodeURIComponent(analystQuery.show) : '')
+      + (analystQuery.rating ? '&rating=' + encodeURIComponent(analystQuery.rating) : ''));
+  } catch (err) {
+    data = { available: false, reason: err.message };
+  }
+  // A later press owns the page.
+  if (seq !== analystSeq) return;
+  STATE.analysts = data;
+  host.innerHTML = analystsHTML(data);
+  revealPanels(host);
+}
+
+/* A target, or the word for none: an initiation has no prior one. */
+function analystTarget(v) {
+  return v === null || v === undefined ? '<span class="muted">None</span>' : fmt(v, 2);
+}
+
+/* One action. The rating is the firm's own word, coloured by its class; the
+ * new target by which way it moved. */
+function analystRowHTML(r, opts = {}) {
+  const tone = r.action === 'up' ? 'up' : r.action === 'down' ? 'down' : '';
+  const cls = r.rating_class === 'buy' ? 'up' : r.rating_class === 'sell' ? 'down' : '';
+  const moved = r.target_action === 'Raises' ? 'up' : r.target_action === 'Lowers' ? 'down' : '';
+  const changed = r.prior_rating && r.prior_rating !== r.rating;
+  return `<tr>
+    <td>${esc(dayLabel(String(r.at || '').slice(0, 10)))}</td>
+    ${opts.symbol === false ? '' : `<td><button type="button" class="tkr"
+      data-analyse="${esc(r.ticker)}">${esc(r.ticker)}</button></td>`}
+    <td class="name">${esc(r.firm)}</td>
+    <td class="num">${analystTarget(r.prior_target)}</td>
+    <td class="num ${moved}">${analystTarget(r.target)}</td>
+    <td><span class="an-action ${tone}">${esc(r.action_label)}</span></td>
+    <td><span class="an-rating ${cls}"${changed ? ` title="${esc(`From ${r.prior_rating}`)}"` : ''}>${
+  esc(r.rating || '')}</span></td>
+  </tr>`;
+}
+
+function analystsHTML(d) {
+  const pills = (list, key, attr) => list.map((v) => {
+    const on = String(analystQuery[key]) === String(v.key);
+    return `<button type="button" class="pill${on ? ' on' : ''}" ${attr}="${esc(String(v.key))}"
+      aria-pressed="${on}">${esc(v.label)}</button>`;
+  }).join('');
+  const filters = `<div class="wv-filters" role="group" aria-label="Which actions">
+      <span class="wv-filter-label">Show</span>${pills(ANALYST_SHOWS, 'show', 'data-an-show')}
+    </div>
+    <div class="wv-filters" role="group" aria-label="Which ratings, over how long">
+      <span class="wv-filter-label">Rating</span>${pills(ANALYST_RATINGS, 'rating', 'data-an-rating')}
+      <span class="wv-filter-label">Last</span>${pills(ANALYST_DAYS.map((n) => ({
+    key: n, label: n === 1 ? 'Day' : `${n} days` })), 'days', 'data-an-days')}
+    </div>`;
+  const head = `<h2 tabindex="-1">Analyst actions</h2>`;
+  if (!d) {
+    return `<div class="panel span-all">${head}${filters}<p class="sub">Loading.</p></div>`;
+  }
+  if (!d.available) {
+    return `<div class="panel span-all">${head}${filters}
+      <div class="callout">${esc(d.reason || 'The analyst feed did not answer.')}</div></div>`;
+  }
+  const rows = d.rows || [];
+  let lead;
+  if (!d.covered) {
+    lead = 'The server is reading the analyst actions for the first time. They fill in here '
+      + 'over the next few minutes.';
+  } else if (!rows.length) {
+    lead = `Nothing matching in the last ${d.days === 1 ? 'day' : `${d.days} days`}, across `
+      + `${fmt(d.covered, 0)} names.`;
+  } else {
+    lead = `${fmt(d.count, 0)} action${d.count === 1 ? '' : 's'} in the last ${
+      d.days === 1 ? 'day' : `${d.days} days`}, across ${fmt(d.covered, 0)} names, newest first`
+      + (rows.length < d.count ? `. Showing the newest ${fmt(rows.length, 0)}.` : '.');
+  }
+  return `<div class="panel span-all">${head}
+    <p class="sub">What each firm did to its rating and its price target. ${esc(lead)}</p>
+    ${filters}
+    ${rows.length ? `<div class="table-scroll"><table class="data an-table">
+      <thead><tr><th>Date</th><th>Symbol</th><th>Analyst</th><th>Prior target</th>
+        <th>Target</th><th>Action</th><th>Rating</th></tr></thead>
+      <tbody>${rows.map((r) => analystRowHTML(r)).join('')}</tbody>
+    </table></div>` : ''}
+    <p class="caveat">${esc(d.method || '')}</p>
+  </div>`;
+}
+
+/* One name's latest actions, for the Analysts widget beside its chart. */
+async function loadAnalystActions(force, symbol) {
+  const sym = symbol || STATE.chartSymbol;
+  if (!sym) return;
+  if (STATE.analystActionsFor === sym && !force) return;
+  STATE.analystActionsFor = sym;
+  STATE.analystActions = null;
+  let data;
+  try {
+    data = await getJSON(`/api/analysts/${encodeURIComponent(sym)}?limit=6`);
+  } catch (err) {
+    data = { available: false, reason: err.message };
+  }
+  if (STATE.analystActionsFor !== sym) return;
+  STATE.analystActions = data;
+  const dockHost = document.getElementById('ws-w-analysts');
+  if (dockHost && STATE.view === 'chart') dockHost.innerHTML = wsWidgetBody('analysts');
+}
+
 /* ============================================================ CLAUDE USAGE ===
  *
  * What the model has cost this deployment, by feature, for the owner.
@@ -29469,6 +29622,7 @@ function loadView(view, force) {
   }
   if (view === 'paper') return loadPaper(force);
   if (view === 'insiders') return loadInsiders(force);
+  if (view === 'analysts') return loadAnalysts(force);
   if (view === 'reports') return loadReports(force);
   if (view === 'usage') return loadUsage(force);
   if (view === 'swing') return loadSwing(force);
@@ -31808,7 +31962,7 @@ const NAV_GROUPS = [
    * They answer different questions and are still two separate pages -- what
    * changed is that they stopped each costing a slot in the top row for it.
    * Both are "I do not have a symbol yet", which is one destination. */
-  { id: 'discover', label: 'Discover', views: ['explore', 'scan', 'insiders'] },
+  { id: 'discover', label: 'Discover', views: ['explore', 'scan', 'insiders', 'analysts'] },
   /* The group is "Positions"; the view inside it keeps the name "Optic's
    * Positions". Both are deliberate.
    *
@@ -31897,7 +32051,7 @@ const SUB_LABELS = {
   swing: 'Options', earnings: 'Earnings', compare: 'Compare', long: 'Investing',
   brief: 'Read', market: 'Macro', indices: 'Indices',
   watchlist: 'Watchlist', alerts: 'Alerts',
-  explore: 'Explore', scan: 'Scan', insiders: 'Insiders',
+  explore: 'Explore', scan: 'Scan', insiders: 'Insiders', analysts: 'Analysts',
   reports: 'Problem Reports', usage: 'Claude usage',
   tracker: "Optic Portfolio", paper: 'Paper Desk', roth: 'Retirement',
 };
@@ -31919,6 +32073,7 @@ const SUB_TITLES = {
   alerts: 'Alerts. What fired, and why it was worth telling you',
   explore: 'Explore. Browse sectors, themes and what is moving, with no symbol',
   insiders: 'Insiders. Company Form 4s and what members of the House disclosed',
+  analysts: 'Analysts. Rating and price-target actions by firm, newest first',
   reports: 'Problem Reports. What readers have told you is broken',
   usage: 'Claude usage. What the model has cost, by feature',
   paper: 'Paper Desk. Your own book, entered by hand and priced by the terminal',
@@ -33155,6 +33310,12 @@ document.addEventListener('click', (evt) => {
     loadInsidersCongress(false);
     return;
   }
+  const anShow = evt.target.closest('[data-an-show]');
+  if (anShow) { analystQuery.show = anShow.dataset.anShow; loadAnalysts(true); return; }
+  const anRating = evt.target.closest('[data-an-rating]');
+  if (anRating) { analystQuery.rating = anRating.dataset.anRating; loadAnalysts(true); return; }
+  const anDays = evt.target.closest('[data-an-days]');
+  if (anDays) { analystQuery.days = Number(anDays.dataset.anDays) || 7; loadAnalysts(true); return; }
   const symPick = evt.target.closest('[data-ins-pick]');
   if (symPick) {
     const sym = symPick.dataset.insPick || '';

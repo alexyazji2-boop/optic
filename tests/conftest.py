@@ -53,6 +53,7 @@ import pytest
 
 from app import ai
 from app import ai_store
+from app import analysts
 from app import alerts as alert_inbox
 from app import catalysts
 from app import db as accounts_db
@@ -105,6 +106,10 @@ def _real_data_out_of_the_way(tmp_path_factory):
         # reaches data/, and given a fresh file per test below.
         patch.setattr(ai_store, "DB_PATH",
                       str(tmp_path_factory.mktemp("ai") / "ai.db"))
+        # The analyst feed the server keeps. Tests that fill it give it a
+        # file of their own.
+        patch.setattr(analysts, "DB_PATH",
+                      str(tmp_path_factory.mktemp("analysts") / "analysts.db"))
         yield
 
 

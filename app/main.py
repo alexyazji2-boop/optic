@@ -52,6 +52,7 @@ from .analytics import stage as stage_mod
 from .analytics import screener as screener_mod
 from .analytics import segments as segments_mod
 from . import insiders as insiders_mod
+from . import analysts as analysts_mod
 from .analytics import regime as regime_mod
 from .analytics import relperf as relperf_mod
 from .analytics import compare as compare_mod
@@ -1962,6 +1963,17 @@ CONGRESS_BOOT_DELAY = 20
 # 400 is read in about ten minutes and never in one burst.
 CONGRESS_BATCH_PAUSE = 20
 
+# The analyst actions feed, read by the server the same way: a batch of names,
+# a pause, the next batch, until every covered name has been read within
+# analysts_mod.REFRESH_HOURS; then a look every ANALYSTS_IDLE seconds for names
+# falling due. A name is one request through the provider's limiter, which
+# puts a background job behind any reader. Off with ANALYSTS_FEED=false.
+ANALYSTS_FEED = os.environ.get("ANALYSTS_FEED", "true").strip().lower() != "false"
+ANALYSTS_BOOT_DELAY = 90
+ANALYSTS_BATCH = 20
+ANALYSTS_BATCH_PAUSE = 15
+ANALYSTS_IDLE = 1800
+
 
 async def _catalyst_loop() -> None:
     """Keep the catalyst library current whether or not anyone presses Scan.
@@ -2045,6 +2057,32 @@ async def _congress_loop() -> None:
             log.info("congress backfill pass failed: %s", exc)
         await asyncio.sleep(CONGRESS_BATCH_PAUSE if congress_mod.backlog()
                             else congress_mod.INDEX_TTL)
+
+
+def _analyst_coverage() -> List[str]:
+    """The names the analyst feed reads: the curated large caps, then the
+    ranked names by dollar volume (see analysts_mod.coverage)."""
+    ranked = (_cached_ranking() or {}).get("ranked") or []
+    return analysts_mod.coverage(ranked, paper.CURATED_STOCKS)
+
+
+async def _analysts_loop() -> None:
+    """Keep the analyst feed read through, a batch at a time."""
+    log = logging.getLogger("uvicorn.error")
+    _BACKGROUND_JOB.set(True)
+    await asyncio.sleep(ANALYSTS_BOOT_DELAY)
+    while True:
+        pause = ANALYSTS_IDLE
+        try:
+            symbols = await _run(_analyst_coverage)
+            out = await _run(analysts_mod.refresh, YF_PROVIDER, symbols, ANALYSTS_BATCH)
+            if out.get("read") and await _run(analysts_mod.due, symbols):
+                pause = ANALYSTS_BATCH_PAUSE
+        except asyncio.CancelledError:                          # noqa: PERF203
+            raise
+        except Exception as exc:                                # noqa: BLE001
+            log.info("analyst feed pass failed: %s", exc)
+        await asyncio.sleep(pause)
 
 
 async def _keep_warm_loop() -> None:
@@ -2158,6 +2196,8 @@ async def _start_tracker() -> None:
     app.state.keepwarm_task = asyncio.create_task(_keep_warm_loop())
     if CONGRESS_BACKFILL:
         app.state.congress_task = asyncio.create_task(_congress_loop())
+    if ANALYSTS_FEED:
+        app.state.analysts_task = asyncio.create_task(_analysts_loop())
     if TRACKER_AUTO:
         # Held on the app so the reference isn't garbage-collected mid-flight.
         app.state.tracker_task = asyncio.create_task(_tracker_loop())
@@ -3786,6 +3826,24 @@ async def insiders_latest(limit: int = Query(40, ge=1, le=200),
     """
     return await _run(insiders_mod.latest, limit, purchases, force,
                       insiders_mod.ENRICH_BUDGET, ticker, show or None)
+
+
+@app.get("/api/analysts/latest")
+async def analysts_latest(days: int = Query(7, ge=1, le=45),
+                          show: str = Query("", description="upgrades, downgrades, initiated, "
+                                                            "raised or lowered"),
+                          rating: str = Query("", description="buy, hold or sell"),
+                          limit: int = Query(200, ge=1, le=500)) -> Dict[str, Any]:
+    """Analysts' rating and price-target actions across the covered names,
+    newest first. Read from the feed the server keeps (see app/analysts.py);
+    a request downloads nothing."""
+    return await _run(analysts_mod.feed, days, show or None, rating or None, limit)
+
+
+@app.get("/api/analysts/{ticker}")
+async def analysts_for(ticker: str, limit: int = Query(20, ge=1, le=100)) -> Dict[str, Any]:
+    """One name's latest analyst actions, read directly, whatever the name."""
+    return await _run(analysts_mod.for_symbol, YF_PROVIDER, ticker, limit)
 
 
 @app.get("/api/screener/fields")
