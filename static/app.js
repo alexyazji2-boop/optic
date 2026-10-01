@@ -3863,7 +3863,7 @@ document.addEventListener('click', (evt) => {
   // already guards the same way.
   if (!evt.target || !evt.target.closest) return;
   const open = evt.target.closest('[data-watch-open]');
-  if (open) { loadTicker(open.dataset.watchOpen, 'swing'); return; }
+  if (open) { loadTicker(open.dataset.watchOpen, SEARCH_LANDING); return; }
   const rm = evt.target.closest('[data-watch-remove]');
   if (rm) { evt.preventDefault(); evt.stopPropagation(); watchRemove(rm.dataset.watchRemove); return; }
   const go = evt.target.closest('[data-go-view]');
@@ -21226,7 +21226,7 @@ document.addEventListener('click', (evt) => {
     // Re-asking rather than replaying a stored answer. The answer was true when
     // it was written and the market has moved since; showing it again as though
     // it were current is the one thing a saved-research feature must not do.
-    if (row.ticker && row.ticker !== STATE.ticker) loadTicker(row.ticker, 'swing');
+    if (row.ticker && row.ticker !== STATE.ticker) loadTicker(row.ticker, SEARCH_LANDING);
     draftPulse(row.question || '');
     return;
   }
@@ -33075,9 +33075,11 @@ function tickerMark(symbol, size) {
  * opened a twenty-four panel options page.
  *
  * Overview is the workspace's front door and the only one of those answers
- * that does not assume what the question was. The other routes into a symbol
- * keep their own destinations on purpose -- a holding in the ledger and a
- * watchlist row both mean "show me why", which is the swing read.
+ * that does not assume what the question was. A click on a ticker lands there
+ * as well, wherever it is: a scan or analyst row, a holding in the ledger, a
+ * watchlist or alert row, a saved question. Those kept the Options tab for a
+ * while, on the grounds that they meant "show me why", until "whenever i click
+ * on a ticker, it goes straight to the options tab. change it".
  */
 const SEARCH_LANDING = 'overview';
 
@@ -33100,12 +33102,14 @@ function loadTicker(raw, destination) {
   STATE.session = null;
   loadSession(true);
   // Coming from home there's nothing to show on home, so land on the analysis.
-  // `destination` is for callers that must leave their own tab. Clicking a
-  // holding in Optic Portfolio means "show me why", which is the swing read,
-  // not a re-render of the ledger you were already looking at.
+  // `destination` is for callers that must leave their own tab.
   /* Overview rather than swing, now that the workspace has a front door. The
    * analysis page is twenty-four panels deep; opening a symbol there was the
-   * app answering a question nobody had asked yet. */
+   * app answering a question nobody had asked yet. Every click on a ticker
+   * lands there too (SEARCH_LANDING): a scan or analyst row, a holding, a
+   * watchlist or alert row and a saved question all opened Options, asked
+   * about as "whenever i click on a ticker, it goes straight to the options
+   * tab... take it straight to the overview tab". */
   const target = destination || (STATE.view === 'home' ? 'overview' : STATE.view);
 
   /* Landing on Charting has to move the chart's own symbol.
@@ -33996,7 +34000,7 @@ document.addEventListener('click', (evt) => {
   const ask = evt.target.closest('[data-ask]');
   if (ask) { closeExplainer(false); openPulseWith(ask.dataset.ask); return; }
   const analyse = evt.target.closest('[data-analyse]');
-  if (analyse) { loadTicker(analyse.dataset.analyse, 'swing'); return; }
+  if (analyse) { loadTicker(analyse.dataset.analyse, SEARCH_LANDING); return; }
   const drop = evt.target.closest('[data-drop-attach]');
   if (drop) {
     attachState.splice(Number(drop.dataset.dropAttach), 1);

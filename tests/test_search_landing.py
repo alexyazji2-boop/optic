@@ -18,10 +18,11 @@ nothing. Verified in a browser on all seven routes: the top bar form, the home
 form, the home typeahead (which fires on `mousedown`, not click), the palette's
 exact-match row, its recents, its symbol results, and the home quick-picks.
 
-What deliberately did not change: a watchlist row and a holding in the ledger
-still open the swing read, because clicking one means "show me why" rather than
-"show me this name". Checked in the same browser run -- a watchlist row still
-lands on `swing`.
+A watchlist row and a holding in the ledger were left opening the swing read,
+on the grounds that clicking one meant "show me why". Reported later as
+"whenever i click on a ticker, it goes straight to the options tab. change it.
+take it straight to the overview tab in the dossier", so every click on a
+ticker lands on the Overview now as well.
 """
 
 from __future__ import annotations
@@ -65,13 +66,14 @@ def test_every_way_of_typing_a_ticker_passes_a_destination():
         assert call in code, call
 
 
-def test_the_other_routes_into_a_symbol_keep_their_own_destination():
-    """A watchlist row and a ledger holding mean "show me why", which is the
-    swing read. Sweeping those into the same landing would have been the easy
-    over-correction."""
+def test_every_click_on_a_ticker_lands_on_the_overview_too():
+    """A ticker button in any table (scans, analysts, the ledger's holdings),
+    a watchlist or alert row, and a saved question re-asked."""
     code = _code()
-    assert "loadTicker(row.ticker, 'swing')" in code, "the ledger holding"
-    assert "loadTicker(open.dataset.watchOpen, 'swing')" in code, "the watchlist row"
+    assert "loadTicker(analyse.dataset.analyse, SEARCH_LANDING)" in code, "a ticker in a table"
+    assert "loadTicker(open.dataset.watchOpen, SEARCH_LANDING)" in code, "a watchlist row"
+    assert "loadTicker(row.ticker, SEARCH_LANDING)" in code, "a saved question"
+    assert not re.search(r"loadTicker\([^)]*'swing'\)", code), "nothing opens Options"
 
 
 def test_the_fallback_still_exists_for_callers_that_pass_nothing():
