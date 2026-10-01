@@ -15354,6 +15354,112 @@ let wsToolsOpen = false;
  * the breakpoint, so on a desktop the flex row is exactly what it was: the
  * children become flex items of the toolbar again and the wrapper contributes
  * no box of its own. */
+/* ============================================================ CHART READ ===
+ *
+ * What the chart says, in a few lines, from numbers the terminal has already
+ * computed: the trend and the facts it rests on, the nearest support and
+ * resistance, and where RSI and MACD stand. Asked for with another product's
+ * panel ("add this feature to the charting tab"); the words, the name and the
+ * look here are Optic's.
+ *
+ * **Nothing is asked of a model, and nothing is fetched.** Every figure is in
+ * the payload the chart already loaded (`technicals`): the averages with their
+ * side of price and their ten-session slope, whether they are stacked, RSI and
+ * MACD with their states, and the support and resistance bands Levels draws.
+ * So it opens instantly and costs nothing; Explain chart is the button for a
+ * written read, and this offers it at the foot.
+ *
+ * **Daily, whatever the bars on screen.** The technicals are computed on
+ * completed daily sessions, so the title says Daily and the note says so, on
+ * a five-minute chart as on a daily one. */
+function chartReadModel(d) {
+  const t = (d && d.technicals) || {};
+  const ma = t.moving_averages || {};
+  const s20 = ma.sma20 || {};
+  const s50 = ma.sma50 || {};
+  const s200 = ma.sma200 || {};
+  if (!Number.isFinite(s200.value) || !Number.isFinite(s50.value)) return null;
+  const above = (m) => m.position === 'above';
+  const st = t.structure || {};
+
+  let trend = 'Mixed trend';
+  if (above(s200) && s50.value > s200.value) trend = 'Uptrend';
+  else if (!above(s200) && s50.value < s200.value) trend = 'Downtrend';
+
+  const side = (m, n) => (Number.isFinite(m.distance_pct)
+    ? `Price is ${fmt(Math.abs(m.distance_pct), 1)}% ${above(m) ? 'above' : 'below'} the ${n}-day average.`
+    : null);
+  const facts = [side(s200, 200), side(s50, 50), side(s20, 20)].filter(Boolean);
+  if (st.stacked_bullish) facts.push('The 20, 50 and 200-day averages are stacked in rising order.');
+  else if (st.stacked_bearish) facts.push('The 20, 50 and 200-day averages are stacked in falling order.');
+  else facts.push('The averages are not stacked in order, so the trend is not settled.');
+  if (Number.isFinite(s50.slope_10d_pct)) {
+    facts.push(`The 50-day average is ${s50.slope_10d_pct >= 0 ? 'rising' : 'falling'}, `
+      + `${fmt(Math.abs(s50.slope_10d_pct), 2)}% over ten sessions.`);
+  }
+  if (st.cross_event) {
+    facts.push(/golden/.test(st.cross_event)
+      ? 'The 50-day crossed above the 200-day in the last five sessions.'
+      : 'The 50-day crossed below the 200-day in the last five sessions.');
+  }
+
+  // The nearest band either side of price, from the zones Levels draws.
+  const zones = Array.isArray(t.support_resistance) ? t.support_resistance : [];
+  const nearest = (role, below) => zones
+    .filter((z) => z.role === role && Number.isFinite(z.distance_pct)
+      && (below ? z.distance_pct <= 0 : z.distance_pct >= 0))
+    .sort((a, b) => Math.abs(a.distance_pct) - Math.abs(b.distance_pct))[0] || null;
+
+  const r = t.rsi || {};
+  const RSI_WORDS = { overbought: 'Overbought', oversold: 'Oversold', bullish: 'Firm',
+    bearish: 'Soft', neutral: 'Neutral' };
+  const m = t.macd || {};
+  const MACD_EVENTS = {
+    'bullish crossover today': 'Crossed above its signal today',
+    'bearish crossover today': 'Crossed below its signal today',
+    'histogram expanding up': 'Momentum building',
+    'histogram expanding down': 'Momentum fading',
+  };
+  return {
+    trend,
+    facts,
+    support: nearest('support', true),
+    resistance: nearest('resistance', false),
+    rsi: Number.isFinite(r.value)
+      ? `${RSI_WORDS[r.state] || 'Neutral'}, ${fmt(r.value, 0)}` : null,
+    macd: MACD_EVENTS[m.event]
+      || (m.state === 'bullish' ? 'Above its signal'
+        : m.state === 'bearish' ? 'Below its signal' : null),
+  };
+}
+
+function chartReadHTML() {
+  const sym = STATE.chartSymbol || '';
+  const d = STATE.chartData && STATE.chartData !== 'loading' ? STATE.chartData : null;
+  const model = chartReadModel(d);
+  const head = `<div class="cr-head">Chart read · ${esc(sym)} · Daily</div>`;
+  if (!model) {
+    return `${head}<p class="cr-note">${d ? 'Not enough daily history for a 200-day average yet.'
+      : 'Load a symbol to read its chart.'}</p>`;
+  }
+  const band = (z) => (z ? `${fmt(z.band_low, 2)} – ${fmt(z.band_high, 2)}`
+    : '<span class="muted">None in range</span>');
+  const tone = model.trend === 'Uptrend' ? 'up' : model.trend === 'Downtrend' ? 'down' : '';
+  return `${head}
+    <div class="cr-trend ${tone}">${esc(model.trend)}</div>
+    <ul class="cr-facts">${model.facts.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>
+    <dl class="cr-rows">
+      <dt>Nearest support</dt><dd>${band(model.support)}</dd>
+      <dt>Nearest resistance</dt><dd>${band(model.resistance)}</dd>
+      <dt>RSI (14)</dt><dd>${esc(model.rsi || 'Not in the data')}</dd>
+      <dt>MACD (12, 26, 9)</dt><dd>${esc(model.macd || 'Not in the data')}</dd>
+    </dl>
+    <p class="cr-note">From completed daily sessions, whatever the bars on screen. The
+      zones are the ones Levels draws. Research only, not a recommendation.</p>
+    <button type="button" class="ws-menu-btn cr-explain" data-explain-chart="${esc(sym)}"
+      title="Put a question about this chart in Pulse's box">Explain chart with Pulse</button>`;
+}
+
 function wsToolbar() {
   return `<div class="ws-toolbar${wsToolsOpen ? ' tools-open' : ''}">
     <button type="button" class="ws-menu-btn ws-tools-btn" data-ws-tools
@@ -15364,6 +15470,14 @@ function wsToolbar() {
     <button type="button" class="ws-menu-btn ws-reset" data-ws-reset
       ${wsChartIsClean() ? 'disabled' : ''}
       title="Back to price and volume. Your drawings are kept.">Reset</button>
+    ${/* Outside the drawer too: the read is wanted most on a phone, where
+         everything else here is folded away. */''}
+    <div class="ws-menu ws-read">
+      <button type="button" class="ws-menu-btn" data-ws-menu="read"
+        aria-expanded="${wsMenuOpen === 'read'}"
+        title="The trend, the nearest levels, RSI and MACD, from daily sessions">Chart read</button>
+      ${wsMenuOpen === 'read' ? `<div class="ws-menu-pop ws-read-pop">${chartReadHTML()}</div>` : ''}
+    </div>
     <div class="ws-tools">
     ${WS_MENUS.map((m) => {
     const activeCount = m.items.filter(wsOverlayOn).length;
