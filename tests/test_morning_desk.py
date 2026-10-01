@@ -364,13 +364,17 @@ def test_the_prose_is_an_overlay_and_never_touches_a_figure():
 
 def test_the_prose_is_written_once_a_day_and_the_failure_is_cached_too():
     """The home page is the most requested endpoint here, so a call per view
-    would be a call per reader. Caching the failure matters as much: an
-    unavailable model at 9am must not be retried on every request all day."""
+    would be a call per reader. Holding the failure matters as much: an
+    unavailable model at 9am must not be retried on every request all day.
+    Both are kept on disk now, so a deploy does not pay again either; the
+    behaviour is in tests/test_ai_credits.py."""
     main_src = open("app/main.py").read()
     block = main_src[main_src.index("def _desk_prose("):]
-    block = block[:block.index("\ndef _morning_desk")]
+    block = block[:block.index("\n# How far the tape may move")]
     code = _code(block)
-    assert "if day in _DESK_PROSE:" in code
+    assert "if _DESK_PROSE.get(day) is not None:" in code
+    assert 'ai_store.kept("desk", day)' in code
+    assert 'ai_store.claim("desk", day, DESK_MAX_ATTEMPTS, DESK_RETRY_SECONDS)' in code
     assert "_DESK_PROSE[day] = prose" in code
     assert "_DESK_PROSE.clear()" in code, "one day at a time, or it grows forever"
 

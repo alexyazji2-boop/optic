@@ -39,7 +39,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
-from . import ai, events, feeds, news
+from . import ai, ai_store, events, feeds, news
+from . import session as session_mod
 from .analytics import regime
 from .analytics import global_markets
 from .analytics.sectors import SECTORS, THEMES
@@ -56,6 +57,41 @@ DB_PATH = os.environ.get("BRIEF_DB", os.path.join(_DATA_DIR, "brief.db"))
 # for 15 minutes independently, so this mostly governs how often the overview's
 # prices are refreshed.
 REBUILD_AFTER_SECONDS = int(os.environ.get("BRIEF_REBUILD_MINUTES", "20")) * 60
+
+# Optic's Read is written by the model once per edition, not once per build.
+#
+# Every rebuild used to call the model, and the tracker loop asks for the brief
+# every twenty minutes around the clock, so that was about 72 calls a day, each
+# carrying ~10,000 tokens of facts: the largest standing cost on the account
+# when it was looked for on 2026-09-30. Every archived Read from 2026-09-15 to
+# that day was the mechanical note, so most of those answers were likely paid
+# for and thrown away (see `ai.READ_MAX_TOKENS`). The figures on the page still
+# refresh on every build; what the model writes is kept per edition, on disk in
+# `app/ai_store.py`, so a deploy does not pay for it again either.
+#
+#   overnight   midnight to the 9:00 anchor, every day
+#   morning     the anchor to fifteen minutes after the close, on a trading
+#               day: written before the open, which is what the prompt has
+#               always described
+#   close       fifteen minutes after the close to midnight. The fifteen minutes
+#               let the closing prints settle before the day is written up.
+#   closed      the anchor to midnight on a weekend day or a market holiday, so
+#               the 9:00 rebuild the Read tab promises "every day, weekends
+#               included" still brings a newly written read
+#
+# Three a trading day and two on a closed day, nineteen a week where there were
+# about five hundred.
+READ_ANCHOR_HOUR = int(os.environ.get("BRIEF_ANCHOR_HOUR", "9"))
+READ_CLOSE_SETTLE_MINUTES = 15
+# A write that fails is tried again after an hour, three times an edition at
+# most, rather than on every rebuild. Counted on disk (`ai_store.claim`), so a
+# deploy does not reset the count, and one process's count is every process's.
+READ_RETRY_SECONDS = 3600.0
+READ_MAX_ATTEMPTS = 3
+# A build that arrives while the edition is being written waits for it, as the
+# weekly update does, and serves it rather than the mechanical note.
+READ_WAIT_SECONDS = 90.0
+_READ_LOCK = threading.Lock()
 
 # Section sizes. Enough to be a brief, not a wire terminal.
 MACRO_LIMIT = int(os.environ.get("BRIEF_MACRO_LIMIT", "12"))
@@ -697,11 +733,11 @@ def _morning_read(overview: Dict[str, Any], macro: Dict[str, Any],
     interprets: it can say a soft print plus cooling employment is a Fed story,
     which is the part a reader actually wants and which no threshold can produce.
 
-    The written one is preferred, generated once per Eastern day as part of the
-    cached brief, so it is one API call a day shared by everyone rather than one
-    per page view. Whenever it is unavailable or comes back malformed, the
-    mechanical narrative stands in — a drier note is much better than none, and
-    much better than a fabricated one.
+    The written one is preferred, and written once per edition of the brief
+    (see `read_edition`) rather than on every rebuild, so it is three calls a
+    trading day, shared by everyone. Whenever it is unavailable or comes back
+    malformed, the mechanical narrative stands in — a drier note is much better
+    than none, and much better than a fabricated one.
     """
     mechanical = _narrative(overview, wires)
 
@@ -734,16 +770,57 @@ def _morning_read(overview: Dict[str, Any], macro: Dict[str, Any],
         "global_correlation_note": (global_context or {}).get("method"),
     }
 
-    try:
-        written = ai.write_morning_read(facts)
-    except Exception as exc:                        # never lose the brief over this
-        log.warning("morning read failed: %s: %s", type(exc).__name__, exc)
-        written = None
+    written = _edition_read(read_edition(), facts)
+    return written or mechanical
 
-    if written:
-        written["fallback_available"] = True
-        return written
-    return mechanical
+
+def read_edition(now: Optional[datetime] = None) -> str:
+    """The edition of Optic's Read in force at `now`, as "YYYY-MM-DD:name"."""
+    et = (now or datetime.now(timezone.utc)).astimezone(ET)
+    day = et.date().isoformat()
+    minutes = et.hour * 60 + et.minute
+    if minutes < READ_ANCHOR_HOUR * 60:
+        return day + ":overnight"
+    if et.weekday() >= 5 or session_mod.holiday_name(et):
+        return day + ":closed"
+    # The close is 1pm on a half day, and the session module knows which.
+    if minutes < session_mod._regular_end(et) + READ_CLOSE_SETTLE_MINUTES:
+        return day + ":morning"
+    return day + ":close"
+
+
+def _edition_read(edition: str, facts: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """This edition's written Read, kept or written now, or None for the mechanical one."""
+    # Taken whether or not this build will write: a build that arrives while
+    # another is writing the edition waits for that one and serves it. With no
+    # write in flight the lock is free and this costs nothing.
+    if not _READ_LOCK.acquire(timeout=READ_WAIT_SECONDS):
+        return None
+    try:
+        # Kept already, or by the write this build waited behind.
+        stored = ai_store.kept("read", edition)
+        if stored:
+            return _served(stored[0])
+        if not ai_store.claim("read", edition, READ_MAX_ATTEMPTS, READ_RETRY_SECONDS):
+            return None
+        try:
+            written = ai.write_morning_read(facts)
+        except Exception as exc:                    # never lose the brief over this
+            log.warning("morning read failed: %s: %s", type(exc).__name__, exc)
+            written = None
+        if not written:
+            return None
+        written["edition"] = edition.split(":", 1)[1]
+        written["written_at"] = datetime.now(timezone.utc).isoformat()
+        ai_store.keep("read", edition, written)
+        return _served(written)
+    finally:
+        _READ_LOCK.release()
+
+
+def _served(written: Dict[str, Any]) -> Dict[str, Any]:
+    """A kept Read as the brief carries it: a copy, so the kept one is not altered."""
+    return {**written, "fallback_available": True}
 
 def _headline(spy_day: Optional[float], breadth: Optional[float],
               mag7: List[Dict[str, Any]]) -> str:

@@ -82,6 +82,7 @@ const views = {
   insiders: $('#view-insiders'),
   paper: $('#view-paper'),
   reports: $('#view-reports'),
+  usage: $('#view-usage'),
   settings: $('#view-settings'),
 };
 
@@ -285,7 +286,7 @@ const TICKERLESS_VIEWS = [
   'home', 'market', 'indices', 'roth', 'tracker', 'settings', 'brief',
   'scan', 'explore', 'compare', 'instrument', 'chart',
   'overview', 'financials', 'news', 'earnings',
-  'watchlist', 'alerts', 'insiders', 'paper', 'reports',
+  'watchlist', 'alerts', 'insiders', 'paper', 'reports', 'usage',
 ];
 
 /* The security workspace: the facets of one company, in reading order.
@@ -7040,6 +7041,8 @@ const PALETTE_PLACES = [
     terms: 'insiders insider congress congressional politicians form 4 stock act disclosures pelosi senator representative buying selling' },
   { view: 'reports', label: 'Problem Reports', owner: true,
     terms: 'reports problem report feedback bug issue complaints readers inbox support' },
+  { view: 'usage', label: 'Claude usage', owner: true,
+    terms: 'usage credits spend cost bill billing anthropic claude tokens api model' },
   { view: 'watchlist', label: 'Watchlist', terms: 'watchlist watching follow list' },
   { view: 'alerts', label: 'Alerts', terms: 'alerts alarms notifications fired' },
   { view: 'compare', label: 'Compare', terms: 'compare versus vs side by side' },
@@ -27379,6 +27382,163 @@ async function loadReports(force, opts = {}) {
   }
 }
 
+/* ============================================================ CLAUDE USAGE ===
+ *
+ * What the model has cost this deployment, by feature, for the owner.
+ *
+ * Asked as "what in the terminal is currently using up my $100 worth of
+ * credits". The Console shows the total and cannot say which part of the
+ * terminal spent it, so every call now records the tokens the API reported
+ * (`app/ai_store.py`), and this page adds them up at list prices. Beside
+ * Problem Reports in the owner's group, on the same terms: the entrance is
+ * hidden from everyone else, and `/api/ai/usage` is behind `_write_guard`. */
+async function fetchUsage() {
+  const headers = {};
+  const csrf = window.OpticAuth ? window.OpticAuth.csrf() : '';
+  if (csrf) headers['X-Optic-CSRF'] = csrf;
+  let res = null;
+  for (let i = 0; i <= RETRY_DELAYS_MS.length; i += 1) {
+    try {
+      res = await fetch('/api/ai/usage', { headers, credentials: 'same-origin' });
+      break;
+    } catch (e) {
+      if (i < RETRY_DELAYS_MS.length) {
+        await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[i]));
+      }
+    }
+  }
+  if (!res) {
+    const err = new Error(`the connection dropped after ${RETRY_DELAYS_MS.length + 1} attempts`);
+    err.originUnreachable = true;
+    throw err;
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.detail || ('HTTP ' + res.status));
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+/* Dollars to the cent, and a call too small to show at that precision says so
+   rather than reading as free. A model with no listed price is not guessed. */
+function usageUSD(bucket) {
+  const usd = Number(bucket && bucket.cost_usd) || 0;
+  const unpriced = bucket && bucket.unpriced ? ' + unpriced' : '';
+  if (usd > 0 && usd < 0.005) return '<$0.01' + unpriced;
+  return '$' + usd.toFixed(2) + unpriced;
+}
+
+function usageCount(n) {
+  return Number(n || 0).toLocaleString('en-US');
+}
+
+function usageRowHTML(label, entry) {
+  const month = entry.month || {};
+  return `<tr>
+    <td class="name">${esc(label)}</td>
+    <td>${usageUSD(entry.today)}</td>
+    <td>${usageUSD(entry.week)}</td>
+    <td>${usageUSD(month)}</td>
+    <td>${usageCount(month.calls)}</td>
+    <td>${usageCount(month.unused)}</td>
+    <td>${usageCount(month.failed)}</td>
+  </tr>`;
+}
+
+/* One line per call, newest first: when, what, and what came of it. */
+function usageCallHTML(call) {
+  const zone = activeZone();
+  const when = `${dayIn(call.at, zone)} ${timeIn(call.at, zone)}`;
+  let result = 'Used';
+  if (call.stop_reason === 'error') result = 'Failed';
+  else if (!call.used) result = 'Thrown away';
+  const why = call.note ? `: ${call.note}` : '';
+  return `<tr>
+    <td class="name">${esc(when)}</td>
+    <td class="name">${esc(call.label || call.feature || '')}</td>
+    <td class="name">${esc(call.model || '')}</td>
+    <td>${usageCount(call.input_tokens)}</td>
+    <td>${usageCount(call.output_tokens)}</td>
+    <td>${call.cost_usd === null || call.cost_usd === undefined
+    ? 'no price' : usageUSD({ cost_usd: call.cost_usd })}</td>
+    <td class="name" title="${esc(result + why)}">${esc(result)}</td>
+  </tr>`;
+}
+
+function usageHTML(data) {
+  if (!data || data.available === false) {
+    return `<div class="panel" data-fixed="1"><h2 tabindex="-1">Claude usage</h2>
+      <p class="sub">${esc((data && data.reason) || 'The usage ledger could not be read.')}</p></div>`;
+  }
+  const features = data.features || [];
+  const totals = data.totals || {};
+  const since = data.since ? stampIn(data.since, activeZone()) : '';
+  const lead = features.length
+    ? `What the model has cost this deployment, by feature. Recorded since ${esc(since)}.`
+    : 'No calls recorded yet. Every call to Claude is recorded here from this deploy on.';
+  const table = features.length ? `<div class="table-scroll"><table class="data usage-table">
+      <thead><tr><th>Feature</th><th>Today</th><th>7 days</th><th>30 days</th>
+        <th title="Calls in the last 30 days">Calls</th>
+        <th title="Answers paid for and thrown away, in the last 30 days">Unused</th>
+        <th title="Calls that returned no answer, which are not billed">Failed</th></tr></thead>
+      <tbody>${features.map((f) => usageRowHTML(f.label || f.feature, f)).join('')}</tbody>
+      <tfoot>${usageRowHTML('Total', totals)}</tfoot>
+    </table></div>` : '';
+  const recent = data.recent || [];
+  const calls = recent.length ? `<div class="panel" data-fixed="1">
+    <h2>Latest calls</h2>
+    <div class="table-scroll"><table class="data usage-table">
+      <thead><tr><th>When</th><th>Feature</th><th>Model</th><th>Input</th><th>Output</th>
+        <th>Cost</th><th>Result</th></tr></thead>
+      <tbody>${recent.map(usageCallHTML).join('')}</tbody>
+    </table></div>
+  </div>` : '';
+  return `<div class="panel" data-fixed="1">
+    <h2 tabindex="-1">Claude usage</h2>
+    <p class="sub">${lead}</p>
+    ${table}
+    <p class="caveat">${esc(data.method || '')}</p>
+  </div>
+  ${calls}`;
+}
+
+let usageSeq = 0;
+async function loadUsage(force) {
+  const host = views.usage;
+  if (!host) return;
+  /* The owner's page, checked before anything is fetched or a cached copy is
+     kept on screen, as the reports are. */
+  if (!isOwner()) {
+    STATE.usageLoaded = false;
+    host.innerHTML = `<div class="panel" data-fixed="1"><h2 tabindex="-1">Claude usage</h2>
+      <p class="sub">This is for the owner of this site. Sign in with the owner's address to read it.</p></div>`;
+    return;
+  }
+  if (!force && STATE.usageLoaded) return;
+  host.innerHTML = `<div class="panel" data-fixed="1"><h2>Claude usage</h2>
+    <p class="sub">Loading.</p></div>`;
+  const seq = ++usageSeq;
+  try {
+    const data = await fetchUsage();
+    if (seq !== usageSeq) return;
+    if (!isOwner()) { loadUsage(true); return; }
+    STATE.usageLoaded = true;
+    host.innerHTML = usageHTML(data);
+  } catch (err) {
+    if (seq !== usageSeq) return;
+    STATE.usageLoaded = false;
+    host.innerHTML = err.originUnreachable
+      ? errorHTML(err.message, { originUnreachable: true })
+      : emptyHTML(
+        err.status === 401 || err.status === 403 || err.status === 503
+          ? 'This is not yours to read'
+          : 'Could not load the usage',
+        err.message || 'Try again shortly.');
+  }
+}
+
 function loadPaper() {
   renderPaperView();
   return paperMark();
@@ -28075,7 +28235,9 @@ function renderBrief(d) {
       ${briefProse(summary.paragraphs)
         || '<p class="sub">Market moves were not available on this refresh.</p>'}
     </div>
-    <p class="caveat">${esc(summary.method || '')} ${esc(o.note || '')}</p>
+    <p class="caveat">${summary.written_at ? `This read was written ${
+  esc(stampIn(summary.written_at, activeZone()))}. ` : ''}${esc(summary.method || '')} ${
+  esc(o.note || '')}</p>
     ${readRebuildHTML()}
     <div id="read-results"></div>
     ${legalBanner('brief')}
@@ -29280,6 +29442,7 @@ function loadView(view, force) {
   if (view === 'paper') return loadPaper(force);
   if (view === 'insiders') return loadInsiders(force);
   if (view === 'reports') return loadReports(force);
+  if (view === 'usage') return loadUsage(force);
   if (view === 'swing') return loadSwing(force);
   if (view === 'earnings') return loadEarnings(force);
   if (view === 'compare') return loadCompare(force);
@@ -31667,7 +31830,7 @@ const NAV_GROUPS = [
    * token used to count as well, and one that had it pasted in once kept the
    * tab while signed out: "im not signed in, why can i see the reports
    * button? it should only show when the domain e-mail is logged in". */
-  { id: 'reports', label: 'Reports', views: ['reports'], owner: true },
+  { id: 'reports', label: 'Reports', views: ['reports', 'usage'], owner: true },
 ];
 
 /** Whether this browser is signed in as the owner of the deployment.
@@ -31698,7 +31861,7 @@ const SUB_LABELS = {
   brief: 'Read', market: 'Macro', indices: 'Indices',
   watchlist: 'Watchlist', alerts: 'Alerts',
   explore: 'Explore', scan: 'Scan', insiders: 'Insiders',
-  reports: 'Problem Reports',
+  reports: 'Problem Reports', usage: 'Claude usage',
   tracker: "Optic Portfolio", paper: 'Paper Desk', roth: 'Retirement',
 };
 
@@ -31720,6 +31883,7 @@ const SUB_TITLES = {
   explore: 'Explore. Browse sectors, themes and what is moving, with no symbol',
   insiders: 'Insiders. Company Form 4s and what members of the House disclosed',
   reports: 'Problem Reports. What readers have told you is broken',
+  usage: 'Claude usage. What the model has cost, by feature',
   paper: 'Paper Desk. Your own book, entered by hand and priced by the terminal',
   scan: 'Scan. Named screens over the ranked universe',
   tracker: "Optic Portfolio. The terminal's own paper-traded record",
@@ -32208,6 +32372,7 @@ if (window.OpticAuth && window.OpticAuth.on) {
     // The Reports page belongs to the signed-in owner: signing out takes the
     // list off the screen, and signing in as the owner draws it.
     if (STATE.view === 'reports') loadReports(true);
+    if (STATE.view === 'usage') loadUsage(true);
   });
 }
 

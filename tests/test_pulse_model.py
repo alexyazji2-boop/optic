@@ -72,15 +72,32 @@ def test_no_call_names_a_model_of_its_own():
     assert not offenders, "a call bypasses MODEL: {}".format(offenders)
 
 
+def _price_list_keys(tree):
+    """The model ids that are keys of `PRICES` in `app/ai_store.py`.
+
+    A price list names models without calling any of them: the usage page
+    needs a price for whichever model answered, including a fallback model the
+    API chose, so it lists more than the two this file pins."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AnnAssign) and getattr(node.target, "id", None) == "PRICES" \
+                and isinstance(node.value, ast.Dict):
+            return {id(key) for key in node.value.keys}
+    return set()
+
+
 def test_no_module_hardcodes_a_claude_model_id():
     """The other way a third model gets in: a string constant somewhere that
     a call later reads. Only `app/ai.py` may define one, and only as MODEL or
-    PULSE_MODEL."""
+    PULSE_MODEL. The one exception is the price list's keys, which no call
+    reads (see `_price_list_keys`)."""
     pattern = re.compile(r"^claude-(opus|sonnet|haiku|fable)[-0-9a-z.]*$")
     found = []
     for path in SOURCES:
         tree = ast.parse(path.read_text(), filename=str(path))
+        prices = _price_list_keys(tree) if path.name == "ai_store.py" else set()
         for node in ast.walk(tree):
+            if id(node) in prices:
+                continue
             if isinstance(node, ast.Constant) and isinstance(node.value, str) \
                     and pattern.match(node.value):
                 found.append("{}:{} {!r}".format(path.name, node.lineno, node.value))

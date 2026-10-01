@@ -46,11 +46,13 @@ import ordering has to be arranged.
 
 from __future__ import annotations
 
+import itertools
 import sys
 
 import pytest
 
 from app import ai
+from app import ai_store
 from app import alerts as alert_inbox
 from app import catalysts
 from app import db as accounts_db
@@ -99,7 +101,35 @@ def _real_data_out_of_the_way(tmp_path_factory):
         # its own schema too.
         patch.setattr(weekly_store, "DB_PATH",
                       str(tmp_path_factory.mktemp("weekly") / "weekly.db"))
+        # What the model wrote and what each call cost. Moved here so nothing
+        # reaches data/, and given a fresh file per test below.
+        patch.setattr(ai_store, "DB_PATH",
+                      str(tmp_path_factory.mktemp("ai") / "ai.db"))
         yield
+
+
+_AI_STORE_FILES = itertools.count()
+
+
+@pytest.fixture(scope="session")
+def _ai_store_dir(tmp_path_factory):
+    return tmp_path_factory.mktemp("ai-each")
+
+
+@pytest.fixture(autouse=True)
+def _no_written_piece_carried_over(monkeypatch, _ai_store_dir):
+    """Each test starts with nothing the model wrote kept and an empty ledger.
+
+    `app/ai_store.py` keeps written pieces on disk precisely so that a restart
+    does not pay for them again, which is also exactly how one test's fake desk
+    or Read would become the next test's answer. A file per test, and created
+    only by a test that touches the store."""
+    monkeypatch.setattr(ai_store, "DB_PATH",
+                        str(_ai_store_dir / "ai-{}.db".format(next(_AI_STORE_FILES))))
+    monkeypatch.setattr(ai_store, "_MEMORY", {})
+    monkeypatch.setattr(ai, "_EARNINGS_CACHE", {})
+    monkeypatch.setattr(ai, "_SECTOR_CACHE", {})
+    monkeypatch.setattr(ai, "_CATREAD_CACHE", {})
 
 
 @pytest.fixture(autouse=True)

@@ -31,6 +31,7 @@ from .auth import admin as auth_admin
 from .auth import deps as auth_deps
 from .auth import ratelimit as auth_ratelimit
 from . import feedback as feedback_mod
+from . import ai_store
 from .auth import routes as auth_routes
 from .auth import store as auth_store
 from .runtime import is_hosted
@@ -1258,25 +1259,55 @@ async def home_summary() -> Dict[str, Any]:
     return await _run(build)
 
 
-# Today's desk prose, written once and shared. Keyed on the Eastern date, which
+# Today's desk prose, written once and shared. Keyed on the desk's date, which
 # is what makes an AI-written note affordable at all: the home page is the most
 # requested endpoint in the app, and a call per view would be a call per reader.
+#
+# Kept on disk as well (`app/ai_store.py`). This dict was the only copy, and
+# Railway starts a new process on every deploy, so a day of twenty deploys paid
+# for twenty desks.
 _DESK_PROSE: Dict[str, Any] = {}
+# A desk that fails to write is tried once more an hour later, and that is all
+# for the day. The failure used to be held until midnight, but by the process
+# alone, so every deploy tried again. The attempts are claimed on disk in one
+# statement (`ai_store.claim`), which is also what stops two readers arriving
+# together on a new day from each paying for the same desk.
+DESK_MAX_ATTEMPTS = 2
+DESK_RETRY_SECONDS = 3600.0
 
 
 def _desk_prose(desk: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """The written voice for today, or None to keep the deterministic one.
 
-    Cached on the date and nothing else, including the failure: if the model is
-    unavailable at 9am the page does not retry it on every request for the rest
-    of the day. `None` is a legitimate answer here rather than an error, because
-    `morning_desk.build` has already written a correct note.
+    Cached on the date and nothing else. A failure is held by its attempts,
+    counted on disk, so an unavailable model at 9am is not retried on every
+    request for the rest of the day, or on every deploy. `None` is a legitimate
+    answer here rather than an error, because `morning_desk.build` has already
+    written a correct note.
     """
     day = desk.get("date")
     if not day:
         return None
-    if day in _DESK_PROSE:
+    if _DESK_PROSE.get(day) is not None:
         return _DESK_PROSE[day]
+    stored = ai_store.kept("desk", day)
+    if stored:
+        prose = stored[0]
+    elif ai_store.claim("desk", day, DESK_MAX_ATTEMPTS, DESK_RETRY_SECONDS):
+        prose = _write_desk_prose(desk, day)
+    else:
+        # Being written for another request, or failed within the hour, or
+        # twice today: the assembled desk, without paying or waiting.
+        prose = None
+    # One day at a time. Yesterday's note is of no use to anyone and holding it
+    # would grow this dict for the life of the process.
+    _DESK_PROSE.clear()
+    _DESK_PROSE[day] = prose
+    return prose
+
+
+def _write_desk_prose(desk: Dict[str, Any], day: str) -> Optional[Dict[str, Any]]:
+    """One attempt at the desk's prose, already claimed, kept when it is written."""
     try:
         prose = ai.write_morning_desk(desk)
     except Exception as exc:                                    # noqa: BLE001
@@ -1288,10 +1319,7 @@ def _desk_prose(desk: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         # still describes the tape (see _desk_moved).
         prose["tape_marks"] = _desk_tape(desk)
         prose["written_at"] = datetime.now(timezone.utc).isoformat()
-    # One day at a time. Yesterday's note is of no use to anyone and holding it
-    # would grow this dict for the life of the process.
-    _DESK_PROSE.clear()
-    _DESK_PROSE[day] = prose
+        ai_store.keep("desk", day, prose)
     return prose
 
 
@@ -3350,6 +3378,35 @@ async def read_feedback(request: Request,
     if status is not None and status not in feedback_mod.STATUSES:
         raise HTTPException(status_code=400, detail="status is open, resolved or all.")
     return await _run(feedback_mod.log, limit, resolved, status)
+
+
+# Refusals for the usage ledger, in its own words rather than the reports'.
+_USAGE_GUARD_COPY = {
+    401: "This is what the model has cost this deployment, so reading it needs "
+         "the owner's sign-in or the write token.",
+    403: _READ_GUARD_COPY[403],
+    503: "Claude usage is readable by the operator, and this deployment has no "
+         "OPTIC_WRITE_TOKEN set to tell who that is. Set one in the platform's "
+         "variables. The calls are recorded either way.",
+}
+
+
+@app.get("/api/ai/usage")
+async def ai_usage(request: Request) -> Dict[str, Any]:
+    """What the model has cost this deployment, by feature, for the owner.
+
+    Asked as "what in the terminal is currently using up my $100 worth of
+    credits". Every call records the tokens the API reported in
+    `app/ai_store.py`; this adds them up at list prices for today, seven days
+    and thirty, with the latest calls. The same guard as the reports: it is the
+    operator's account, not a reader's business.
+    """
+    try:
+        _write_guard(request)
+    except HTTPException as exc:
+        raise HTTPException(status_code=exc.status_code,
+                            detail=_USAGE_GUARD_COPY.get(exc.status_code, exc.detail))
+    return await _run(ai_store.usage)
 
 
 # Resolving a report, one or all. The same guard as reading them, because it is

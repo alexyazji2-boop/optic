@@ -43,7 +43,8 @@ def test_it_is_in_the_views_map():
 
 def test_it_is_in_a_nav_group():
     code = _code(APP)
-    assert "{ id: 'reports', label: 'Reports', views: ['reports'], owner: true }" in code
+    assert ("{ id: 'reports', label: 'Reports', views: ['reports', 'usage'], owner: true }"
+            in code)
 
 
 def test_switchview_dispatches_to_its_loader():

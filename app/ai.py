@@ -23,7 +23,7 @@ import time
 from datetime import date, datetime, timezone
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
-from . import knowledge, weekly_store
+from . import ai_store, knowledge, weekly_store
 from .runtime import is_hosted
 
 import logging
@@ -521,6 +521,45 @@ def _client():
         return None
 
 
+# ------------------------------------------------------------------ the ledger
+#
+# Every call below goes through _ask, or records its own usage when it streams,
+# so `app/ai_store.py` holds one row per call with what the API said it used:
+# the answer to "what in the terminal is using up my credits", which until then
+# was a guess from the code. A writer runs its call and judges the answer on
+# the same worker thread, so the row to mark when that answer is thrown away is
+# held per thread.
+_LAST_CALL = threading.local()
+
+
+def _ask(client: Any, feature: str, **kwargs: Any) -> Any:
+    """`client.messages.create(**kwargs)`, recorded in the ledger under `feature`."""
+    _LAST_CALL.id = None
+    try:
+        msg = client.messages.create(**kwargs)
+    except Exception as exc:
+        ai_store.record(feature, kwargs.get("model"), None, stop_reason="error",
+                        note="{}: {}".format(type(exc).__name__, exc))
+        raise
+    _LAST_CALL.id = ai_store.record(
+        feature, getattr(msg, "model", None) or kwargs.get("model"),
+        getattr(msg, "usage", None), stop_reason=getattr(msg, "stop_reason", None))
+    return msg
+
+
+def _thrown_away(why: str) -> None:
+    """The answer to this thread's last call was paid for and not used."""
+    ai_store.unused(getattr(_LAST_CALL, "id", None), why)
+    _LAST_CALL.id = None
+
+
+def _streamed(feature: str, final: Any, fallback_model: str) -> None:
+    """Record a streamed call from its final message."""
+    ai_store.record(feature, getattr(final, "model", None) or fallback_model,
+                    getattr(final, "usage", None),
+                    stop_reason=getattr(final, "stop_reason", None))
+
+
 # ------------------------------------------------------------------ attachments
 
 # What may be sent. Images and PDFs are what the API accepts natively, and they
@@ -931,6 +970,13 @@ def write_earnings_brief(ticker: str, facts: Dict[str, Any]) -> Optional[Dict[st
     hit = _EARNINGS_CACHE.get(key)
     if hit and (time.time() - hit["at"]) < EARNINGS_TTL:
         return hit["brief"]
+    # Kept on disk as well, for the same six hours: a deploy restarts the
+    # process, and each one used to pay for the next reader's brief again.
+    stored = ai_store.kept("earnings", key, EARNINGS_TTL)
+    if stored:
+        brief, written = stored
+        _EARNINGS_CACHE[key] = {"at": written, "brief": brief}
+        return brief
 
     try:
         from anthropic import Anthropic
@@ -952,7 +998,8 @@ def write_earnings_brief(ticker: str, facts: Dict[str, Any]) -> Optional[Dict[st
 
     body = json.dumps(_prune(facts), default=str)[:60000]
     try:
-        msg = client.messages.create(
+        msg = _ask(
+            client, "earnings",
             model=MODEL,
             # Five sections of real prose. At 2000 this truncated mid-array on the
             # first live ticker tried, and a truncated JSON object has no closing
@@ -970,11 +1017,13 @@ def write_earnings_brief(ticker: str, facts: Dict[str, Any]) -> Optional[Dict[st
     truncated = getattr(msg, "stop_reason", None) == "max_tokens"
     parsed = _parse_brief_json(text, truncated, ticker)
     if parsed is None:
+        _thrown_away("no usable JSON in the answer")
         return None
 
     paragraphs = [str(x).strip() for x in (parsed.get("paragraphs") or []) if str(x).strip()]
     if not paragraphs:
         log.warning("earnings brief skipped: JSON parsed but paragraphs empty")
+        _thrown_away("no paragraphs in the answer")
         return None
     # A heading with nothing under it is the tail of a truncated response. Drop
     # it rather than render a section that promises content and delivers none.
@@ -982,6 +1031,7 @@ def write_earnings_brief(ticker: str, facts: Dict[str, Any]) -> Optional[Dict[st
         paragraphs.pop()
     if not paragraphs:
         log.warning("earnings brief skipped: only headings survived truncation")
+        _thrown_away("only headings survived the cut-off")
         return None
 
     stance = str(parsed.get("stance") or "").strip().lower()
@@ -1014,6 +1064,7 @@ def write_earnings_brief(ticker: str, facts: Dict[str, Any]) -> Optional[Dict[st
         oldest = min(_EARNINGS_CACHE, key=lambda k: _EARNINGS_CACHE[k]["at"])
         _EARNINGS_CACHE.pop(oldest, None)
     _EARNINGS_CACHE[key] = {"at": time.time(), "brief": brief}
+    ai_store.keep("earnings", key, brief)
     return brief
 
 
@@ -1080,6 +1131,11 @@ def write_sector_read(symbol: str, facts: Dict[str, Any]) -> Optional[Dict[str, 
     hit = _SECTOR_CACHE.get(key)
     if hit and (time.time() - hit["at"]) < SECTOR_TTL:
         return hit["read"]
+    stored = ai_store.kept("sector", key, SECTOR_TTL)
+    if stored:
+        read, written = stored
+        _SECTOR_CACHE[key] = {"at": written, "read": read}
+        return read
 
     try:
         from anthropic import Anthropic
@@ -1100,7 +1156,8 @@ def write_sector_read(symbol: str, facts: Dict[str, Any]) -> Optional[Dict[str, 
 
     body = json.dumps(_prune(facts), default=str)[:40000]
     try:
-        msg = client.messages.create(
+        msg = _ask(
+            client, "sector",
             model=MODEL, max_tokens=SECTOR_MAX_TOKENS,
             system=[{"type": "text", "text": SECTOR_PROMPT}],
             messages=[{"role": "user", "content": "DATA for {}:\n{}".format(key, body)}],
@@ -1112,12 +1169,14 @@ def write_sector_read(symbol: str, facts: Dict[str, Any]) -> Optional[Dict[str, 
     text = "".join(getattr(b, "text", "") for b in (msg.content or []))
     parsed = _parse_brief_json(text, getattr(msg, "stop_reason", None) == "max_tokens", key)
     if parsed is None:
+        _thrown_away("no usable JSON in the answer")
         return {"available": False,
                 "reason": "The model's reply could not be read as the expected format. "
                           "The levels and rotation on the board are unaffected."}
     paragraphs = [str(x).strip() for x in (parsed.get("paragraphs") or []) if str(x).strip()]
     if not paragraphs:
         log.warning("sector read skipped for %s: no paragraphs", key)
+        _thrown_away("no paragraphs in the answer")
         return {"available": False,
                 "reason": "The model returned an empty read."}
 
@@ -1145,6 +1204,7 @@ def write_sector_read(symbol: str, facts: Dict[str, Any]) -> Optional[Dict[str, 
     if len(_SECTOR_CACHE) >= SECTOR_CACHE_MAX:
         _SECTOR_CACHE.pop(min(_SECTOR_CACHE, key=lambda k: _SECTOR_CACHE[k]["at"]), None)
     _SECTOR_CACHE[key] = {"at": time.time(), "read": read}
+    ai_store.keep("sector", key, read)
     return read
 
 
@@ -1263,7 +1323,8 @@ def _write_weekly(client: Any, week_key: str, facts: Dict[str, Any]) -> Dict[str
     """One model call: kept when it produced a piece, remembered when it did not."""
     body = json.dumps(_prune(facts), default=str)[:80000]
     try:
-        msg = client.messages.create(
+        msg = _ask(
+            client, "weekly",
             model=MODEL, max_tokens=WEEKLY_MAX_TOKENS,
             system=[{"type": "text", "text": WEEKLY_PROMPT}],
             messages=[{"role": "user", "content": "DATA:\n" + body}],
@@ -1276,12 +1337,14 @@ def _write_weekly(client: Any, week_key: str, facts: Dict[str, Any]) -> Dict[str
     parsed = _parse_brief_json(text, getattr(msg, "stop_reason", None) == "max_tokens",
                               "weekly")
     if parsed is None:
+        _thrown_away("no usable JSON in the answer")
         return _weekly_failed(week_key, _WEEKLY_UNUSABLE)
     paragraphs = [str(x).strip() for x in (parsed.get("paragraphs") or []) if str(x).strip()]
     while paragraphs and paragraphs[-1].lstrip().startswith("##"):
         paragraphs.pop()
     if not paragraphs:
         log.warning("weekly update skipped: no paragraphs survived")
+        _thrown_away("no paragraphs in the answer")
         return _weekly_failed(week_key, _WEEKLY_UNUSABLE)
 
     written = {
@@ -1458,7 +1521,8 @@ def extract_catalysts(stories: List[Dict[str, Any]],
     body = ("LIBRARY:\n" + json.dumps(library or [], default=str)
             + "\n\nSTORIES:\n" + json.dumps(stories, default=str))
     try:
-        msg = client.messages.create(
+        msg = _ask(
+            client, "catalyst_scan",
             model=MODEL, max_tokens=8000,
             system=[{"type": "text", "text": CATALYST_PROMPT}],
             messages=[{"role": "user", "content": body}],
@@ -1471,10 +1535,12 @@ def extract_catalysts(stories: List[Dict[str, Any]],
     parsed = _parse_brief_json(text, getattr(msg, "stop_reason", None) == "max_tokens",
                               "catalysts")
     if parsed is None:
+        _thrown_away("no usable JSON in the answer")
         return None
     found = parsed.get("catalysts")
     if not isinstance(found, list):
         log.warning("catalyst extraction: JSON parsed but no catalysts list")
+        _thrown_away("no catalysts list in the answer")
         return None
     return found
 
@@ -1521,6 +1587,12 @@ def write_catalyst_read(key: str, facts: Dict[str, Any]) -> Optional[Dict[str, A
     hit = _CATREAD_CACHE.get(key)
     if hit and (time.time() - hit["at"]) < CATREAD_TTL:
         return hit["read"]
+    stored = ai_store.kept("catalyst_read", key, CATREAD_TTL)
+    if stored:
+        read, written = stored
+        _CATREAD_CACHE.clear()
+        _CATREAD_CACHE[key] = {"at": written, "read": read}
+        return read
 
     try:
         from anthropic import Anthropic
@@ -1538,7 +1610,8 @@ def write_catalyst_read(key: str, facts: Dict[str, Any]) -> Optional[Dict[str, A
 
     body = json.dumps(_prune(facts), default=str)[:40000]
     try:
-        msg = client.messages.create(
+        msg = _ask(
+            client, "catalyst_read",
             model=MODEL, max_tokens=3000,
             system=[{"type": "text", "text": CATALYST_READ_PROMPT}],
             messages=[{"role": "user", "content": "DATA:\n" + body}],
@@ -1551,11 +1624,13 @@ def write_catalyst_read(key: str, facts: Dict[str, Any]) -> Optional[Dict[str, A
     parsed = _parse_brief_json(text, getattr(msg, "stop_reason", None) == "max_tokens",
                               "catalyst read")
     if parsed is None:
+        _thrown_away("no usable JSON in the answer")
         return None
     paragraphs = [str(x).strip() for x in (parsed.get("paragraphs") or []) if str(x).strip()]
     while paragraphs and paragraphs[-1].lstrip().startswith("##"):
         paragraphs.pop()
     if not paragraphs:
+        _thrown_away("no paragraphs in the answer")
         return None
 
     read = {
@@ -1570,6 +1645,7 @@ def write_catalyst_read(key: str, facts: Dict[str, Any]) -> Optional[Dict[str, A
     }
     _CATREAD_CACHE.clear()
     _CATREAD_CACHE[key] = {"at": time.time(), "read": read}
+    ai_store.keep("catalyst_read", key, read)
     return read
 
 
@@ -1638,11 +1714,26 @@ The lead is two or three paragraphs. Scenarios may be an empty list. Plain text,
 markdown."""
 
 
+# The two morning notes' output limits. Both were 1,600 tokens, and every
+# archived Read from 2026-09-15 to 2026-09-30 ended in the mechanical note,
+# while the home desk said "unwritten". The catalyst read (3,000) and the
+# earnings brief (4,000) wrote fine on the same key over the same days, which
+# leaves the limit as the likeliest cause: an answer cut off there has no
+# closing brace, so it was paid for in full and thrown away, every twenty
+# minutes in the Read's case. A limit is a ceiling rather than a charge, since
+# only the tokens written are billed, so a higher one costs nothing on an answer
+# that fits. The ledger records each call's stop reason (`/api/ai/usage`), so
+# whether this was the cause is now on the record rather than inferred.
+READ_MAX_TOKENS = int(os.environ.get("MORNING_READ_TOKENS", "4000"))
+DESK_MAX_TOKENS = int(os.environ.get("MORNING_DESK_TOKENS", "4000"))
+
+
 def write_morning_desk(facts: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """The desk note in prose, or None to keep the deterministic one.
 
-    Same economics as `write_morning_read`: one call per Eastern day, shared by
-    every reader, because the desk is assembled server-side and cached.
+    One call per desk date, shared by every reader and kept on disk by the
+    caller (`_desk_prose` in `app/main.py`), because the desk is assembled
+    server-side.
 
     The fallback is not a degraded mode. `morning_desk.build` already writes the
     whole note from templates that branch on what is actually happening, and it
@@ -1674,9 +1765,10 @@ def write_morning_desk(facts: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
     body = json.dumps(_prune(facts), default=str)[:60000]
     try:
-        msg = client.messages.create(
+        msg = _ask(
+            client, "desk",
             model=MODEL,
-            max_tokens=1600,
+            max_tokens=DESK_MAX_TOKENS,
             system=[{"type": "text", "text": DESK_PROMPT}],
             messages=[{"role": "user", "content": "DATA:\n" + body}],
         )
@@ -1685,9 +1777,12 @@ def write_morning_desk(facts: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return None
 
     text = "".join(getattr(b, "text", "") for b in (msg.content or []))
+    stop = getattr(msg, "stop_reason", None)
     start, end = text.find("{"), text.rfind("}")
     if start < 0 or end <= start:
-        log.warning("morning desk prose skipped: no JSON in %d chars", len(text))
+        log.warning("morning desk prose skipped: no JSON in %d chars (stop reason %s)",
+                    len(text), stop)
+        _thrown_away("no JSON object in the answer (stop reason {})".format(stop))
         return None
     try:
         # strict=False for the same reason as the morning note: the model writes
@@ -1695,12 +1790,14 @@ def write_morning_desk(facts: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         # inside them, which failed silently on otherwise well-formed JSON.
         parsed = json.loads(text[start:end + 1], strict=False)
     except ValueError as exc:
-        log.warning("morning desk prose unparseable: %s", exc)
+        log.warning("morning desk prose unparseable (stop reason %s): %s", stop, exc)
+        _thrown_away("the JSON did not parse (stop reason {})".format(stop))
         return None
 
     lead = [str(x).strip() for x in (parsed.get("lead") or []) if str(x).strip()]
     if not lead:
         log.warning("morning desk prose skipped: parsed but lead empty")
+        _thrown_away("no lead in the answer")
         return None
 
     scenarios = []
@@ -1724,10 +1821,12 @@ def write_morning_desk(facts: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 def write_morning_read(facts: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """A written morning note from the brief's own numbers, or None.
 
-    Deliberately synchronous and deliberately called once per Eastern day: the
-    brief is built server-side and cached, so this is one request a day shared by
-    every reader rather than one per page view. That is the only reason a written
-    note is affordable at all.
+    Deliberately synchronous, and called once per edition of the brief (see
+    `brief.read_edition`): overnight, before the open and after the close on a
+    trading day, overnight and at 9:00 on a day the market is shut. The brief
+    is rebuilt every twenty minutes, and this used to be called on every
+    rebuild, about 72 paid calls a day around the clock; the caller keeps what
+    it writes on disk.
 
     Returns None whenever it cannot produce something trustworthy — no
     credentials, a refused call, malformed JSON. The caller keeps its mechanical
@@ -1753,9 +1852,10 @@ def write_morning_read(facts: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
     body = json.dumps(_prune(facts), default=str)[:60000]
     try:
-        msg = client.messages.create(
+        msg = _ask(
+            client, "read",
             model=MODEL,
-            max_tokens=1600,
+            max_tokens=READ_MAX_TOKENS,
             system=[{"type": "text", "text": MORNING_PROMPT}],
             messages=[{"role": "user", "content": "DATA:\n" + body}],
         )
@@ -1764,38 +1864,40 @@ def write_morning_read(facts: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return None
 
     text = "".join(getattr(b, "text", "") for b in (msg.content or []))
-    # The model was asked for JSON; a stray fence or preamble should not lose the
-    # whole note, so the object is located rather than assumed to be the response.
-    start, end = text.find("{"), text.rfind("}")
-    if start < 0 or end <= start:
-        log.warning("morning note skipped: no JSON object in %d chars of output", len(text))
-        return None
-    try:
-        # strict=False permits literal newlines and tabs inside strings. The model
-        # writes multi-line paragraphs, and the strict parser rejects raw control
-        # characters — which failed silently and fell back to the mechanical note
-        # every time, on JSON that was otherwise perfectly well formed.
-        parsed = json.loads(text[start:end + 1], strict=False)
-    except ValueError as exc:
-        log.warning("morning note JSON unparseable: %s", exc)
+    stop = getattr(msg, "stop_reason", None)
+    # Located rather than assumed to be the whole response, so a stray fence or
+    # preamble does not lose the note, and parsed with strict=False, because the
+    # model writes multi-line paragraphs and the strict parser rejects the raw
+    # newlines inside them. Through the same parser as the earnings brief, so an
+    # answer cut off at its limit keeps its complete paragraphs rather than
+    # being thrown away whole.
+    parsed = _parse_brief_json(text, stop == "max_tokens", "morning note")
+    if parsed is None:
+        _thrown_away("no usable JSON in the answer (stop reason {})".format(stop))
         return None
 
     paragraphs = [str(x).strip() for x in (parsed.get("paragraphs") or []) if str(x).strip()]
+    # A heading with nothing under it is the tail of a cut-off answer.
+    while paragraphs and paragraphs[-1].lstrip().startswith("##"):
+        paragraphs.pop()
     headline = str(parsed.get("headline") or "").strip()
     if not paragraphs:
         log.warning("morning note skipped: JSON parsed but paragraphs empty")
+        _thrown_away("no paragraphs in the answer")
         return None
     return {
         "headline": headline,
         "paragraphs": paragraphs,
         "written_by": MODEL,
         "method": (
-            "Written from the figures in this brief and nothing else. The same "
-            "index levels, sector moves, breadth, regime score and released "
-            "statistics shown elsewhere on this page. It is model-written prose, "
-            "not a mechanical template, so it interprets rather than only "
-            "describing. It is generated once per trading day and shared by every "
-            "reader, and it is not a recommendation to trade."
+            "Written from this brief's figures as they stood when it was written, "
+            "and nothing else: the same index levels, sector moves, breadth, "
+            "regime score and released statistics shown elsewhere on this page, "
+            "which keep refreshing after it. It is model-written prose, not a "
+            "mechanical template, so it interprets rather than only describing. "
+            "It is written overnight, before the open and after the close on a "
+            "trading day, overnight and at 9:00 Eastern on a day the market is "
+            "shut, and shared by every reader. It is not a recommendation to trade."
         ),
     }
 
@@ -1930,6 +2032,7 @@ async def stream_chat(
                     if getattr(delta, "type", "") == "text_delta":
                         yield _sse("delta", {"text": delta.text})
             final = await stream.get_final_message()
+        _streamed("pulse", final, PULSE_MODEL)
 
         # A refusal is a successful HTTP response with empty or partial content,
         # so it has to be checked explicitly rather than caught.
@@ -1977,6 +2080,8 @@ async def stream_chat(
         )
     except Exception as exc:  # surfaced to the UI rather than swallowed
         log.warning("chat failed: %s: %s", type(exc).__name__, exc)
+        ai_store.record("pulse", PULSE_MODEL, None, stop_reason="error",
+                        note="{}: {}".format(type(exc).__name__, exc))
         yield _sse("error", {"message": _human_error(exc)})
 
 
@@ -2036,6 +2141,7 @@ async def deep_research(
                     if getattr(delta, "type", "") == "text_delta":
                         yield _sse("delta", {"text": delta.text})
             final = await stream.get_final_message()
+        _streamed("research", final, PULSE_MODEL)
 
         if getattr(final, "stop_reason", None) == "refusal":
             yield _sse("error", {"message": "The research request was declined by safety classifiers."})
@@ -2065,4 +2171,6 @@ async def deep_research(
         yield _sse("done", {"sources": unique[:20], "model": getattr(final, "model", PULSE_MODEL)})
     except Exception as exc:
         log.warning("research failed: %s: %s", type(exc).__name__, exc)
+        ai_store.record("research", PULSE_MODEL, None, stop_reason="error",
+                        note="{}: {}".format(type(exc).__name__, exc))
         yield _sse("error", {"message": _human_error(exc)})
