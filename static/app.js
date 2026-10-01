@@ -16571,6 +16571,39 @@ function wsZoomed() {
   return !!wsWindow || wsYZoom !== 1;
 }
 
+/* The Charting tab opens on hourly bars.
+ *
+ * Asked for as "when the chart tab loads, load it into the 1h chart". Each
+ * time the tab is opened (switchView), not on the refresh tick that reloads it
+ * every twenty seconds while it is open, so a size chosen on it holds until
+ * the reader leaves. The range is shared with the Options chart, so the one
+ * the hour replaced is put back when the tab is left still on it: opening the
+ * Chart tab is not a choice about the Options tab. A size or range pressed on
+ * the tab is one, and stands, as it always has (wsKeepSize). Not stored, for
+ * the same reason: it is where the tab starts, not something chosen. */
+const WS_OPEN_SIZE = '60';
+let wsOpenedOver = null;   // the range the hour replaced, while it stands
+
+function wsOpenOnHour() {
+  wsOpenedOver = null;
+  if (chartRange === WS_OPEN_SIZE) return false;
+  wsOpenedOver = chartRange;
+  chartRange = WS_OPEN_SIZE;
+  wsWindow = null;
+  wsYZoom = 1;
+  return true;
+}
+
+function wsLeaveHour() {
+  if (wsOpenedOver !== null && chartRange === WS_OPEN_SIZE) chartRange = wsOpenedOver;
+  wsOpenedOver = null;
+}
+
+/* A size or range pressed on the tab: the reader's, so leaving keeps it. */
+function wsKeepSize() {
+  wsOpenedOver = null;
+}
+
 /* ---- oscillator panes -------------------------------------------------------
  *
  * RSI and MACD as panes stacked under the price chart, sharing its x-axis, the
@@ -33142,6 +33175,10 @@ function switchView(view, force) {
   if (view !== 'paper') paperResetArmed = false;
   // Captured before STATE.view is overwritten.
   if (view === 'settings' && STATE.view !== 'settings') viewBeforeSettings = STATE.view;
+  // Into and out of the Charting tab, which opens on hourly bars. See wsOpenOnHour.
+  const was = STATE.view;
+  if (was === 'chart' && view !== 'chart') wsLeaveHour();
+  const reopened = view === 'chart' && was !== 'chart' && wsOpenOnHour();
   STATE.view = view;
   // Published to CSS so a rule can depend on which page this is. The header
   // logo blinks everywhere except Home, where the big one is already doing it
@@ -33172,6 +33209,12 @@ function switchView(view, force) {
   }
 
   loadView(view, !!force);
+  // Studies and trend lines are per bar size, as a size pressed on the tab
+  // asks again for them; loadChartWorkspace has set the symbol by now.
+  if (reopened) {
+    if (wsPriceIndicatorIds().length) wsLoadIndicators();
+    if (showTrends) loadTrendlines(STATE.chartSymbol);
+  }
   /* Sweep the view we just switched to, rather than relying on its loader to
      remember. Every view that calls revealPanels gets this for free; the ones
      whose loader does not (a cached render, a view with no async leg at all)
@@ -34422,6 +34465,7 @@ document.addEventListener('click', (evt) => {
   const wsRange = evt.target.closest('[data-ws-range]');
   if (wsRange) {
     const before = wsFrameKey();
+    wsKeepSize();
     chartRange = wsRange.dataset.wsRange;
     wsWindow = null;   // a range pill overrides a manual zoom
     wsYZoom = 1;
@@ -34478,6 +34522,7 @@ document.addEventListener('click', (evt) => {
     const key = wsInt.dataset.wsInterval;
     const spec = chartIntervalSpec(key);
     const before = wsFrameKey();
+    wsKeepSize();
     wsWindow = null;   // a size change overrides a manual zoom
     wsYZoom = 1;
     if (spec && spec.intraday) {
