@@ -32,8 +32,9 @@ RANGE_PER_SIGMA = 1.6
 # `name` and `about` are for an instrument's own page, which headed DXY "DXY"
 # over "US dollar index" in small type and was asked to make "clearer that this
 # subchart for the ticker DXY is for the US dollar index", and then to do the
-# same for VIX, HYG, LQD and TLT. The heading is the name with the label after
-# it, and `about` says what the thing measures and how to read a move in it.
+# same for VIX, HYG, LQD, TLT and VVIX. The heading is the name with the label
+# after it, and `about` says what the thing measures and how to read a move in
+# it.
 # The tables and the strip keep the short label and the note.
 INSTRUMENTS: List[Dict[str, str]] = [
     {"symbol": "^VIX", "label": "VIX", "group": "volatility", "note": "S&P 30-day implied vol",
@@ -41,7 +42,11 @@ INSTRUMENTS: List[Dict[str, str]] = [
      "about": "The 30-day volatility that S&P 500 options are pricing, as an annual "
               "percentage. A rising VIX means investors are paying more for "
               "protection, which usually happens when stocks fall."},
-    {"symbol": "^VVIX", "label": "VVIX", "group": "volatility", "note": "vol of vol"},
+    {"symbol": "^VVIX", "label": "VVIX", "group": "volatility", "note": "vol of vol",
+     "name": "Cboe VIX of VIX Index",
+     "about": "The 30-day volatility that the VIX's own options are pricing, so how "
+              "far the VIX itself is expected to move. A rising VVIX means investors "
+              "are paying more to hedge a jump in volatility."},
     {"symbol": "DX-Y.NYB", "label": "DXY", "group": "fx", "note": "US dollar index",
      "name": "US Dollar Index",
      "about": "The US dollar against a basket of six major currencies: the euro "

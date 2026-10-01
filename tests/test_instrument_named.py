@@ -165,14 +165,16 @@ def test_the_levels_are_the_ones_the_changes_are_measured_from():
 
 
 def test_vix_and_the_credit_funds_are_named_too():
-    """Asked for next: "do the same full-name heading for VIX, HYG, LQD and TLT".
-    The official names, and a line saying what each measures."""
+    """Asked for next: "do the same full-name heading for VIX, HYG, LQD and TLT",
+    and then "do the same for VVIX". The official names, and a line saying what
+    each measures."""
     named = {i["label"]: i for i in macro.INSTRUMENTS if i.get("name")}
     assert {k: v["name"] for k, v in named.items() if k != "DXY"} == {
         "VIX": "Cboe Volatility Index",
         "HYG": "iShares iBoxx $ High Yield Corporate Bond ETF",
         "LQD": "iShares iBoxx $ Investment Grade Corporate Bond ETF",
         "TLT": "iShares 20+ Year Treasury Bond ETF",
+        "VVIX": "Cboe VIX of VIX Index",
     }
     for label, inst in named.items():
         assert inst["label"] == label, "the tables keep the short label"
@@ -181,3 +183,4 @@ def test_vix_and_the_credit_funds_are_named_too():
     assert "below investment grade" in named["HYG"]["about"]
     assert "Treasury yields" in named["LQD"]["about"]
     assert "20 years" in named["TLT"]["about"]
+    assert "VIX's own options" in named["VVIX"]["about"]
