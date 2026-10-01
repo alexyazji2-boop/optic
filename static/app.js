@@ -2435,13 +2435,27 @@ function computeSRLevels(ps, spot, opts = {}) {
  * app/analytics/stage.py keys each week's stage on that same Monday: two
  * copies of this arithmetic would be two chances for a bar to look up a week
  * that is not its own. Null for anything that is not a date, where the
- * roll-up's inline version threw from toISOString. */
+ * roll-up's inline version threw from toISOString.
+ *
+ * Kept by date once worked out. The stage colours ask for every bar's Monday
+ * on each redraw, and the All range is 16,296 bars on IBM's chart, about 15ms
+ * of date arithmetic three times a frame. A property of the function rather
+ * than a `const` beside it, which a call before its line would throw on. */
 function weekMonday(iso) {
-  const d = new Date(String(iso).slice(0, 10) + 'T00:00:00Z');
-  if (Number.isNaN(d.getTime())) return null;
-  const day = (d.getUTCDay() + 6) % 7;             // Monday = 0
-  d.setUTCDate(d.getUTCDate() - day);              // back to that week's Monday
-  return d.toISOString().slice(0, 10);
+  const key = String(iso).slice(0, 10);
+  const memo = weekMonday.memo || (weekMonday.memo = new Map());
+  if (memo.has(key)) return memo.get(key);
+  const d = new Date(key + 'T00:00:00Z');
+  let out = null;
+  if (!Number.isNaN(d.getTime())) {
+    const day = (d.getUTCDay() + 6) % 7;           // Monday = 0
+    d.setUTCDate(d.getUTCDate() - day);            // back to that week's Monday
+    out = d.toISOString().slice(0, 10);
+  }
+  // The calendar is every symbol's, so this is about a key a day ever drawn.
+  if (memo.size > 50000) memo.clear();
+  memo.set(key, out);
+  return out;
 }
 
 function aggregateWeekly(ps) {
@@ -2559,6 +2573,107 @@ function weeklySeriesFor(d) {
   }
   if (sym && (!w || w.symbol !== sym)) loadWeeklyBars(sym);
   return aggregateWeekly(((d && d.technicals) || {}).price_series || {});
+}
+
+/* ---------------------------------------------------------- the whole history
+ *
+ * Every bar since the listing, for the All range. All drew whatever the other
+ * ranges had loaded: two years of daily bars from the ticker payload, ten years
+ * of weekly ones, twelve on the Investing chart. NVDA's began in October 2024,
+ * and was reported as "NVDA did not IPO in 2024, this is not accurate to the
+ * ALL button". These come from /api/daily-bars and /api/weekly-bars?span=max
+ * when All is first drawn for a symbol, with the bars the other ranges use
+ * standing in until they land, as the roll-up stands in for the weekly bars.
+ * Only All reads them, so every other range draws what it did.
+ *
+ * One slot per bar size, so moving between 1D and 1W on All asks once for each. */
+const allBars = { daily: null, weekly: null };
+const allSeriesCache = { daily: null, weekly: null };
+
+function allBarsSize() {
+  return chartInterval === 'weekly' ? 'weekly' : 'daily';
+}
+
+async function loadAllBars(symbol, size) {
+  if (!symbol) return;
+  const held = allBars[size];
+  if (held && held.symbol === symbol) return;   // here, or on its way
+  allBars[size] = { symbol, loading: true };
+  let data;
+  try {
+    data = await getJSON(size === 'weekly'
+      ? '/api/weekly-bars/' + encodeURIComponent(symbol) + '?span=max'
+      : '/api/daily-bars/' + encodeURIComponent(symbol));
+  } catch (err) {
+    data = { available: false, reason: err.message };
+  }
+  if (!allBars[size] || allBars[size].symbol !== symbol) return;
+  allBars[size] = { ...data, symbol };
+  allSeriesCache[size] = null;
+  allBarsArrived(symbol, size);
+}
+
+/* Redraw whichever chart is waiting on these bars. A window was indices into
+ * the stand-in, not these. The studies are asked again because the anchored
+ * VWAP starts at the first bar on screen, which is now the listing; the request
+ * is skipped when nothing it asks for has changed. */
+function allBarsArrived(symbol, size) {
+  if (STATE.view === 'long') {
+    if (size === 'weekly' && ltRange === 'all'
+        && ((STATE.long || {}).holding || {}).ticker === symbol) {
+      ltWindow = null;
+      ltRedrawChart();
+    }
+    return;
+  }
+  if (chartRange !== 'all' || allBarsSize() !== size) return;
+  if (STATE.view === 'chart' && (STATE.chartData || {}).ticker === symbol) {
+    wsWindow = null;
+    // wsLoadIndicators redraws whether or not it asks, so it is the redraw.
+    if (wsPriceIndicatorIds().length) wsLoadIndicators();
+    else wsRedrawSettled();
+  } else if (STATE.view === 'swing' && STATE.swing && STATE.swing.ticker === symbol) {
+    swingWindow = null;
+    if (indicatorIds.length) loadIndicators();
+    swingRenderSettled();
+  }
+}
+
+/* The whole history at a size, if it is here and longer than what stands in
+ * for it; null otherwise, having asked for it. */
+function allBarsFor(symbol, size, standInBars) {
+  const b = allBars[size];
+  if (b && b.symbol === symbol && b.available === true && Array.isArray(b.close)
+      && b.close.length && b.close.length >= (standInBars || 0)) return b;
+  if (symbol && (!b || b.symbol !== symbol)) loadAllBars(symbol, size);
+  return null;
+}
+
+/* Daily bars as a price_series, with the averages computed over every one of
+ * them, as weeklyFromBars does for weeks: the 200-day line starts 200 sessions
+ * after the listing, not 200 sessions into the two years the payload holds. */
+function dailyFromBars(b) {
+  const close = b.close || [];
+  return {
+    dates: b.dates || [], open: b.open || [], high: b.high || [], low: b.low || [],
+    close, volume: b.volume || [],
+    sma20: smaSeries(close, 20), sma50: smaSeries(close, 50), sma200: smaSeries(close, 200),
+    ema9: emaSeries(close, 9), ema21: emaSeries(close, 21), ema50: emaSeries(close, 50),
+    weekly: false,
+  };
+}
+
+/* The All range's series for a payload at the size on screen; null on any
+ * other range, and until the bars land. `standIn` is what draws until then. */
+function allSeriesFor(d, standIn) {
+  if (chartRange !== 'all') return null;
+  const size = allBarsSize();
+  const b = allBarsFor(d && d.ticker, size, ((standIn || {}).dates || []).length);
+  if (!b) return null;
+  if (!allSeriesCache[size] || allSeriesCache[size].src !== b) {
+    allSeriesCache[size] = { src: b, series: size === 'weekly' ? weeklyFromBars(b) : dailyFromBars(b) };
+  }
+  return allSeriesCache[size].series;
 }
 
 // 'line' or 'candle'. Persisted because it's a viewing preference, not state
@@ -8610,7 +8725,9 @@ function swingFullSeries(d) {
   const raw = ((d.technicals || {}).price_series) || {};
   // Aggregate before windowing, for the same reason sliceSeries does: rolling
   // up after cutting produces a partial first bar.
-  return chartInterval === 'weekly' ? weeklySeriesFor(d) : raw;
+  const standIn = chartInterval === 'weekly' ? weeklySeriesFor(d) : raw;
+  // All's whole history once it is here. See allSeriesFor.
+  return allSeriesFor(d, standIn) || standIn;
 }
 
 /* The bars the Options chart's window indexes: this range's intraday bars
@@ -9169,6 +9286,10 @@ function renderSwing(d) {
   // window shows so their warm-up happens off-screen instead of leaving a gap at
   // the left edge of the chart.
   const weeklyAll = chartInterval === 'weekly' ? weeklySeriesFor(d) : null;
+  // All's whole history once it is here, for the RSI and MACD below, which are
+  // otherwise two years or ten long and would stop partway along it. Not for
+  // the levels: those stay what they are on every range.
+  const allNow = allSeriesFor(d, weeklyAll || t.price_series || {});
   // Levels come from the full series at this interval, so zooming changes what's
   // visible but never which levels exist. Pivot strictness drops on weekly:
   // `order` counts neighbouring bars, and 4 weeks either side of a pivot is a
@@ -9809,8 +9930,9 @@ function renderSwing(d) {
     // nine bars in — the same gap the RSI line itself used to have.
     // Weekly and intraday bars get their own RSI; the server's is daily.
     const rsiSource = ps.intraday ? rsiSeries(ps.close || [], 14)
-      : ps.weekly ? rsiSeries((weeklyAll || {}).close || [], 14)
-        : (t.rsi.series || []);
+      : allNow ? rsiSeries(allNow.close || [], 14)
+        : ps.weekly ? rsiSeries((weeklyAll || {}).close || [], 14)
+          : (t.rsi.series || []);
     const rsiSignalSource = smaSeries(rsiSource, RSI_SIGNAL_PERIOD);
     const rsiZoom = momentumBars(ps.shown_bars, rsiSource.length);
     const rsiVals = tailTo(rsiSource, rsiZoom);
@@ -9888,10 +10010,10 @@ function renderSwing(d) {
   }
 
   if ((t.macd || {}).series) {
-    const full = (ps.weekly || ps.intraday)
+    const full = (ps.weekly || ps.intraday || allNow)
       ? (() => {
-        // Recomputed on the bars on screen, weekly or intraday, as the RSI is.
-        const m = macdSeries(ps.intraday ? (ps.close || []) : weeklyAll.close);
+        // Recomputed on the bars on screen, weekly, intraday or All's, as the RSI is.
+        const m = macdSeries(ps.intraday ? (ps.close || []) : (allNow || weeklyAll).close);
         return {
           macd: tailTo(m.macd, ps.shown_bars),
           signal: tailTo(m.signal, ps.shown_bars),
@@ -16264,11 +16386,24 @@ function wsTogglePane(id) {
 /** Attach the oscillator arrays to a full-length series.
  *
  * `recompute` is for bars that are not the server's daily ones, weekly or
- * intraday, where its RSI and MACD are indexed by a different bar. */
+ * intraday, where its RSI and MACD are indexed by a different bar.
+ *
+ * The last answer is kept while it was asked of the same objects. A redraw
+ * asks for the full series eight times, and on the All range each asking
+ * recomputed RSI and MACD over every session since the listing, on every
+ * frame of a pan however far in it was zoomed. The bars are never changed in
+ * place, so the same object is the same bars; intraday ones are built afresh
+ * on each asking and are never kept. */
+let wsOscMemo = null;
+
 function wsWithOscillators(base, d, recompute) {
   if (!wsPanesOpen.length) return base;
   const closes = base.close || [];
   if (closes.length < 30) return base;
+  const panes = wsPanesOpen.join(',');
+  const memo = wsOscMemo;
+  if (memo && memo.base === base && memo.d === d && memo.recompute === !!recompute
+      && memo.panes === panes) return memo.out;
   const t = (d && d.technicals) || {};
   const out = { ...base };
 
@@ -16290,6 +16425,7 @@ function wsWithOscillators(base, d, recompute) {
     out.macdSignal = m.signal;
     out.macdHist = m.hist;
   }
+  if (!base.intraday) wsOscMemo = { base, d, recompute: !!recompute, panes, out };
   return out;
 }
 
@@ -16464,10 +16600,12 @@ function wsFullSeries(d) {
   // Aggregate before windowing, for the same reason sliceSeries does: rolling
   // up after cutting produces a partial first bar.
   const weekly = chartInterval === 'weekly';
-  const base = weekly ? weeklySeriesFor(d) : raw;
+  const standIn = weekly ? weeklySeriesFor(d) : raw;
+  // All's whole history once it is here. See allSeriesFor.
+  const base = allSeriesFor(d, standIn) || standIn;
   // After the roll-up and before the window: the oscillators have to be as long
   // as the bars they annotate, and still full-length when wsSeries slices.
-  return wsWithOscillators(base, d, weekly);
+  return wsWithOscillators(base, d, base !== raw);
 }
 
 /* The full-length series a Charting-tab window indexes: the intraday bars on an
@@ -16610,6 +16748,8 @@ function wsPriceIndicatorIds() {
  * last five months of a daily Bollinger band stretched across it. */
 function studyBars() {
   if (isIntradayRange(chartRange)) return intradayBarsKey();
+  // All's whole history is bars of its own. See allSeriesFor.
+  if (chartRange === 'all') return chartInterval === 'weekly' ? 'weekly-all' : 'daily-all';
   return chartInterval === 'weekly' ? 'weekly' : 'daily';
 }
 
@@ -16629,7 +16769,9 @@ function vwapAnchorFor(d) {
   if (!d || !d.technicals || isIntradayRange(chartRange)) return '';
   const raw = d.technicals.price_series || {};
   const weekly = chartInterval === 'weekly';
-  const ps = sliceSeries(raw, chartRange, chartInterval, weekly ? weeklySeriesFor(d) : raw);
+  const standIn = weekly ? weeklySeriesFor(d) : raw;
+  // On All, the listing once the whole history is here. See allBarsArrived.
+  const ps = sliceSeries(raw, chartRange, chartInterval, allSeriesFor(d, standIn) || standIn);
   const first = (ps.dates || [])[0];
   if (!first) return '';
   return weekly ? (weekMonday(first) || '') : String(first).slice(0, 10);
@@ -16647,6 +16789,9 @@ function studyQuery(bars) {
   if (bars === 'daily') return '';
   // Ten years, the span the weekly chart draws.
   if (bars === 'weekly') return '&weekly=true&range=10y';
+  // The whole history, the span All draws.
+  if (bars === 'daily-all') return '&range=max';
+  if (bars === 'weekly-all') return '&weekly=true&range=max';
   return '&' + intradayQuery(bars);
 }
 
@@ -24695,7 +24840,16 @@ function ltWindowKey() {
  * arrays of two different lengths. Asking ltSlice for the 'all' range is how
  * this gets the base without duplicating the roll-up. */
 function ltFullSeries(lt) {
-  return ltSlice(lt.series, 'all', ltInterval);
+  return ltSlice(ltSource(lt), 'all', ltInterval);
+}
+
+/* The weeks before any roll-up: the payload's twelve years, and on All every
+ * week since the listing once they are here. See allBarsFor. */
+function ltSource(lt) {
+  const base = lt.series || {};
+  if (ltRange !== 'all') return base;
+  const sym = ((STATE.long || {}).holding || {}).ticker;
+  return allBarsFor(sym, 'weekly', (base.dates || []).length) || base;
 }
 
 function ltSeries(lt) {
@@ -24710,7 +24864,7 @@ function ltSeries(lt) {
   const total = (full.dates || []).length;
   const win = (ltWindow && ltWindow.key === ltWindowKey())
     ? wsClampWindow(ltWindow, total) : null;
-  if (!win) return ltSlice(lt.series, ltRange, ltInterval);
+  if (!win) return ltSlice(ltSource(lt), ltRange, ltInterval);
   // Slice every array, including the `ma` object's members, which are series
   // too — a named list goes stale the moment the payload gains a field.
   const out = { ...full };

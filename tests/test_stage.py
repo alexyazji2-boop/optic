@@ -176,12 +176,12 @@ class _Provider:
 
 
 def test_it_fetches_its_own_weekly_history_not_the_charts_range():
-    """The stage belongs to the instrument, not to the range on screen. Ten
-    years, because the longest coloured range is five years of daily bars
-    and each of those weeks needs 53 behind it."""
+    """The stage belongs to the instrument, not to the range on screen. Every
+    week since the listing, because the All range draws every bar since it,
+    and ten years left NVDA's first seventeen on All as "No stage yet"."""
     p = _Provider(_ramp(50, 1.0, LONG))
     stage.for_symbol(p, "PLTR")
-    assert p.calls == [("PLTR", "10y", "1wk")]
+    assert p.calls == [("PLTR", "max", "1wk")]
 
 
 def test_the_payload_carries_a_stage_for_every_week_that_has_one():

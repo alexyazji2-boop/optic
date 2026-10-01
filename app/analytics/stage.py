@@ -13,16 +13,17 @@ price is on -- price above a falling average is a bounce, not an advance.
 **Why it fetches its own history.** A chart's visible range decides how many
 bars it holds, and a 3-month chart has about thirteen weeks -- far short of a
 30-week average. The stage is a property of the instrument, not of the range
-the reader happens to be looking at, so it is computed from two years of
-weekly closes whatever the chart shows.
+the reader happens to be looking at, so it is computed from the instrument's
+own weekly closes whatever the chart shows.
 
-**Why ten years of weeks, and a stage for every one of them.** The charts
-colour each bar by the stage of its week, and the longest daily range on
-screen is five years (the instrument page). A week needs 53 weeks behind it
-before it has a stage, so five years of coloured bars needs six of history;
-ten leaves room and is about 520 rows. Each week is read from the closes up to
-and including its own and never a later one, so an old bar is coloured by what
-its stage was then rather than by what hindsight makes it.
+**Why every week since the listing, and a stage for every one of them.** The
+charts colour each bar by the stage of its week, and the All range draws every
+bar since the listing. This read ten years, enough for the five-year instrument
+page, and All left the seventeen years before them on NVDA's chart as "No stage
+yet". A week needs 53 weeks behind it before it has a stage, and is read from
+the closes up to and including its own and never a later one, so an old bar is
+coloured by what its stage was then rather than by what hindsight makes it, and
+a longer history changes no week's stage: it only gives the older weeks one.
 
 **Why the slope is measured over ten weeks.** Calibrated on live data before
 this was written. Over four weeks the S&P 500's steady uptrend read +1.5%,
@@ -249,11 +250,11 @@ def _week_dates(frame) -> Optional[List[date]]:
 
 
 def for_symbol(provider, symbol: str) -> Dict[str, Any]:
-    """Fetch ten years of weekly closes, classify them, and stage every week."""
+    """Fetch every weekly close, classify them, and stage every week."""
     sym = (symbol or "").strip()
     if not sym:
         return {"available": False, "reason": "No symbol.", "limits": LIMITS}
-    frame = provider.history(sym, period="10y", interval="1wk")
+    frame = provider.history(sym, period="max", interval="1wk")
     if frame is None or getattr(frame, "empty", True):
         return {"available": False,
                 "reason": "No weekly history for {}.".format(sym),

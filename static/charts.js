@@ -208,6 +208,23 @@ function svgRoot(width, height) {
   return root;
 }
 
+/* The smallest and largest of a list, read in a loop.
+ *
+ * `Math.min(...list)` passes every value as an argument, and engines cap
+ * arguments by stack: Chrome 152 threw "Maximum call stack size exceeded"
+ * between 100,000 and 125,000 of them. The price chart pools every series it
+ * draws before asking, and on the All range that is IBM's 16,296 sessions in
+ * each of ten lines, 162,960 values, so the chart would not have drawn. */
+function extentOf(list) {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let i = 0; i < list.length; i += 1) {
+    if (list[i] < lo) lo = list[i];
+    if (list[i] > hi) hi = list[i];
+  }
+  return [lo, hi];
+}
+
 function niceTicks(min, max, count = 4) {
   if (!(isFinite(min) && isFinite(max)) || min === max) return [min];
   const span = max - min;
@@ -794,7 +811,13 @@ function periodDividers(labels, n) {
   }
   if (step < 5) {
     // Daily bars. Months give ~1 per 21 bars: 6 on a six-month chart, 12 on a
-    // year. Weeks would give 26 and 52, which is the fence again.
+    // year. Weeks would give 26 and 52, which is the fence again. Years over
+    // a long span, as on weekly bars: the All range draws every session since
+    // the listing, and months there are 333 lines on NVDA's 27 years.
+    const years = (last - first) / 86400000 / 365;
+    if (years > 3) {
+      return { grain: 'year', key: (d) => String(d.getUTCFullYear()) };
+    }
     return { grain: 'month', key: (d) => d.toISOString().slice(0, 7) };
   }
   if (step < 45) {
@@ -1046,8 +1069,7 @@ function lineChart(opts) {
   } else if (all.length) {
     // Let a level just outside the data range in, measured against the span the
     // data itself occupies.
-    const dLo = Math.min(...all);
-    const dHi = Math.max(...all);
+    const [dLo, dHi] = extentOf(all);
     const slack = (dHi - dLo) * refLineSlack;
     refLines.forEach((r) => {
       if (isFinite(r.value) && r.value >= dLo - slack && r.value <= dHi + slack) all.push(r.value);
@@ -1079,8 +1101,7 @@ function lineChart(opts) {
   if (yDomain) {
     [lo, hi] = yDomain;
   } else {
-    lo = Math.min(...all);
-    hi = Math.max(...all);
+    [lo, hi] = extentOf(all);
     const padY = (hi - lo) * 0.08 || Math.abs(hi) * 0.08 || 1;
     lo -= padY; hi += padY;
   }
@@ -1202,18 +1223,26 @@ function lineChart(opts) {
    */
   // Indexed by bar so the crosshair can light the one under the cursor. A
   // reader scrubbing the price line is asking about that day, and the volume
-  // for that day is part of the answer.
+  // for that day is part of the answer. `volLit` is the one lit, so a move
+  // relights two bars rather than every bar: on the All range that was 16,296
+  // of them on IBM's chart, about 40ms a move.
   const volBars = [];
+  let volLit = -1;
+  const lightVol = (i) => {
+    if (i === volLit) return;
+    if (volBars[volLit]) volBars[volLit].setAttribute('opacity', 0.42);
+    if (volBars[i]) volBars[i].setAttribute('opacity', 0.95);
+    volLit = i;
+  };
   if (volRows) {
     const volTop = m.t + priceH + volGap;
-    const volMax = Math.max(...volRows.map((v) => (v === null || !isFinite(v) ? 0 : v)), 1);
+    const volMax = Math.max(extentOf(volRows.map((v) => (v === null || !isFinite(v) ? 0 : v)))[1], 1);
     const volLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.5 : null });
     root.appendChild(volLayer);
 
     const closes = (candles && candles.close) || (series[0] && series[0].values) || [];
     const barW = Math.max(1, (plotW / Math.max(n, 1)) - 1.5);
-    volRows.forEach((v, i) => {
-      if (v === null || !isFinite(v) || v <= 0) return;
+    const drawBar = (i, v, x, w) => {
       const h = Math.max(1, (v / volMax) * volH);
       // Direction from the close-to-close change, falling back to neutral on the
       // first bar where there is no prior close to compare against.
@@ -1222,14 +1251,42 @@ function lineChart(opts) {
       const up = (prev === null || prev === undefined || cur === null || cur === undefined)
         ? null : cur >= prev;
       const bar = s('rect', {
-        x: X(i) - barW / 2, y: volTop + volH - h, width: barW, height: h,
+        x, y: volTop + volH - h, width: w, height: h,
         fill: up === null ? C.muted
           : (up ? (volUp || C.pos) : (volDown || C.neg)),
-        opacity: 0.42, rx: Math.min(1.5, barW / 2),
+        opacity: 0.42, rx: Math.min(1.5, w / 2),
       });
-      volBars[i] = bar;
       volLayer.appendChild(bar);
-    });
+      return bar;
+    };
+    /* One bar a pixel column where there are more than three bars to a pixel:
+     * the tallest of them, in its own direction, lit by any bar in it. Every
+     * session since the listing is that, 16,296 bars across about 1,200 pixels
+     * on IBM's All, and drawn one a bar they were 16,296 overlapping 1px rects
+     * that doubled the cost of every frame for no mark a reader could see. */
+    if (n > plotW * 3) {
+      const cols = new Map();
+      volRows.forEach((v, i) => {
+        if (v === null || !isFinite(v) || v <= 0) return;
+        const c = Math.floor(X(i));
+        const held = cols.get(c);
+        if (!held) {
+          cols.set(c, { i, v, bars: [i] });
+        } else {
+          held.bars.push(i);
+          if (v > held.v) { held.v = v; held.i = i; }
+        }
+      });
+      cols.forEach((col, c) => {
+        const bar = drawBar(col.i, col.v, c, 1);
+        col.bars.forEach((i) => { volBars[i] = bar; });
+      });
+    } else {
+      volRows.forEach((v, i) => {
+        if (v === null || !isFinite(v) || v <= 0) return;
+        volBars[i] = drawBar(i, v, X(i) - barW / 2, barW);
+      });
+    }
     // One quiet label so the strip is identifiable without a legend entry.
     volLayer.appendChild(s('text', {
       x: m.l + 2, y: volTop + 9, fill: C.ink2, 'font-size': CF.tick,
@@ -1553,13 +1610,10 @@ function lineChart(opts) {
     // the honest rendering at that density.
     const slot = n > 1 ? plotW / (n - 1) : plotW;
     const body = Math.max(1, Math.min(11, slot * 0.62));
-    for (let i = 0; i < n; i += 1) {
-      const oo = o[i], hh = h[i], ll = l[i], cc = c[i];
-      if ([oo, hh, ll, cc].some((v) => v === null || v === undefined || !isFinite(v))) continue;
+    const drawCandle = (x, oo, hh, ll, cc, i) => {
       const up = cc >= oo;
       const colour = (candleTints && candleTints[i])
         || (up ? (candleUp || C.s3) : (candleDown || C.s8));
-      const x = X(i);
       levelLayer.appendChild(s('line', {
         x1: x, y1: Y(hh), x2: x, y2: Y(ll), stroke: colour, 'stroke-width': 1,
       }));
@@ -1574,7 +1628,28 @@ function lineChart(opts) {
         x: x - body / 2, y: top, width: body, height,
         fill: colour, stroke: colour, 'stroke-width': 1,
       }));
+    };
+    /* One candle a pixel column past three bars to a pixel, as the volume
+     * strip draws: the column's first open, its high and low, and its last
+     * close, tinted as its last bar is. That is the candle of those sessions
+     * taken together, and the All range is 16,296 of them on IBM's chart in
+     * about 1,200 pixels, two elements apiece one a bar. */
+    const pooled = n > plotW * 3;
+    let col = null;
+    const flush = () => { if (col) drawCandle(col.cx + 0.5, col.o, col.h, col.l, col.c, col.last); };
+    for (let i = 0; i < n; i += 1) {
+      const oo = o[i], hh = h[i], ll = l[i], cc = c[i];
+      if ([oo, hh, ll, cc].some((v) => v === null || v === undefined || !isFinite(v))) continue;
+      if (!pooled) { drawCandle(X(i), oo, hh, ll, cc, i); continue; }
+      const cx = Math.floor(X(i));
+      if (col && col.cx === cx) {
+        col.h = Math.max(col.h, hh); col.l = Math.min(col.l, ll); col.c = cc; col.last = i;
+      } else {
+        flush();
+        col = { cx, o: oo, h: hh, l: ll, c: cc, last: i };
+      }
     }
+    flush();
   }
 
   series.forEach((se, si) => {
@@ -2245,10 +2320,7 @@ function lineChart(opts) {
       if (vv !== null && vv !== undefined && isFinite(vv)) {
         rows.push(['Volume', Math.round(vv).toLocaleString()]);
       }
-      volBars.forEach((b, k) => {
-        if (!b) return;
-        b.setAttribute('opacity', k === i ? 0.95 : 0.42);
-      });
+      lightVol(i);
     }
     showTip(tipRows(barLabelText(labels[i]) || `#${i + 1}`, rows), evt);
     // Tell the caller which bar is under the cursor, so a header or legend can
@@ -2259,7 +2331,7 @@ function lineChart(opts) {
     hideTip();
     cross.setAttribute('opacity', 0);
     dots.forEach((d) => d.setAttribute('opacity', 0));
-    volBars.forEach((b) => b && b.setAttribute('opacity', 0.42));
+    lightVol(-1);
     // null means "cursor gone" — distinct from bar 0, which is a real bar.
     if (onHover) onHover(null);
   });
@@ -2475,7 +2547,8 @@ function macdChart(macd, signal, hist, labels, width = 720, opts = {}) {
   const plotW = W - m.l - m.r, plotH = H - m.t - m.b;
   const all = [...macd, ...signal, ...hist].filter((v) => v !== null && isFinite(v));
   if (!all.length) return document.createTextNode('');
-  let lo = Math.min(...all, 0), hi = Math.max(...all, 0);
+  let [lo, hi] = extentOf(all);
+  lo = Math.min(lo, 0); hi = Math.max(hi, 0);
   const pad = (hi - lo) * 0.1 || 1;
   lo -= pad; hi += pad;
   const n = macd.length;
@@ -2504,19 +2577,42 @@ function macdChart(macd, signal, hist, labels, width = 720, opts = {}) {
   const histLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.55 : null });
   root.appendChild(histLayer);
   const bw = Math.max(1.5, (plotW / n) - 2); // 2px surface gap between columns
-  hist.forEach((v, i) => {
-    if (v === null || !isFinite(v)) return;
+  const histBar = (v, x, w) => {
     const y0 = Y(0), y1 = Y(v);
     const h = Math.abs(y1 - y0);
     histLayer.appendChild(s('rect', {
-      x: X(i) - bw / 2, y: Math.min(y0, y1), width: bw, height: Math.max(h, 1),
+      x, y: Math.min(y0, y1), width: w, height: Math.max(h, 1),
       // Green above zero rather than the MACD line's blue. The bars and the line
       // are different quantities and must not share a hue; green/red also matches
       // the sign convention the histogram is already encoding.
       fill: v >= 0 ? MACD_HIST_POS : MACD_HIST_NEG, opacity: 0.5,
-      rx: Math.min(2, bw / 2),
+      rx: Math.min(2, w / 2),
     }));
-  });
+  };
+  if (n > plotW * 3) {
+    /* One a pixel column past three bars to a pixel, as the price chart's
+     * volume strip does: the column's highest bar above zero and its lowest
+     * below, the outline its bars drawn one by one made. The All range is
+     * 16,296 of them on IBM's pane, in about 1,200 pixels. */
+    const cols = new Map();
+    hist.forEach((v, i) => {
+      if (v === null || !isFinite(v)) return;
+      const c = Math.floor(X(i));
+      const held = cols.get(c) || { up: null, down: null };
+      if (v >= 0) held.up = held.up === null ? v : Math.max(held.up, v);
+      else held.down = held.down === null ? v : Math.min(held.down, v);
+      cols.set(c, held);
+    });
+    cols.forEach((col, c) => {
+      if (col.up !== null) histBar(col.up, c, 1);
+      if (col.down !== null) histBar(col.down, c, 1);
+    });
+  } else {
+    hist.forEach((v, i) => {
+      if (v === null || !isFinite(v)) return;
+      histBar(v, X(i) - bw / 2, bw);
+    });
+  }
 
   /* Mark the last crossover. This is the one event the panel exists to show, and
    * finding it by eye on overlapping lines is exactly what it shouldn't require. */

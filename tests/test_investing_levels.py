@@ -399,8 +399,11 @@ def test_the_window_slices_the_same_rolled_up_base_the_averages_came_from():
     points and spanned the full plot width.
     """
     body = body_of("ltFullSeries")
-    assert "ltSlice(lt.series, 'all', ltInterval)" in body, \
+    # ltSource is the payload's weeks, or every week since the listing on All
+    # (tests/test_all_range_history.py): the window and the range read the same.
+    assert "ltSlice(ltSource(lt), 'all', ltInterval)" in body, \
         "the base has to come from the same function that built the averages"
+    assert "if (!win) return ltSlice(ltSource(lt), ltRange, ltInterval);" in body_of("ltSeries")
 
 
 def test_the_zoom_slices_the_average_arrays_too():

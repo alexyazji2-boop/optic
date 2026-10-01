@@ -3172,8 +3172,28 @@ async def pe_history_panel(ticker: str, years: int = Query(10, ge=2, le=20)) -> 
     return await _run(build)
 
 
+def _bars_body(sym: str, df, digits: int) -> Dict[str, Any]:
+    """A frame of bars as the charts read them: one array per column."""
+    df = df.dropna(subset=["Close"])
+
+    def col(name, places=digits):
+        if name not in df:
+            return None
+        return [None if v != v else round(float(v), places) for v in df[name]]
+    return {
+        "available": True,
+        "ticker": sym,
+        "dates": [str(i.date()) for i in df.index],
+        "open": col("Open"), "high": col("High"), "low": col("Low"),
+        "close": col("Close"), "volume": col("Volume", 0),
+        "bars": int(len(df)),
+    }
+
+
 @app.get("/api/weekly-bars/{ticker}")
-async def weekly_bars(ticker: str) -> Dict[str, Any]:
+async def weekly_bars(ticker: str,
+                      span: str = Query("10y", description="10y, or max for the whole history")
+                      ) -> Dict[str, Any]:
     """Ten years of weekly bars for the charts' 1W size.
 
     `/api/weekly-bars`, not `/api/weekly/{ticker}`: `/api/weekly` is the Weekly
@@ -3186,28 +3206,46 @@ async def weekly_bars(ticker: str) -> Dict[str, Any]:
     Ten years is about 520 weeks. Labelled by each week's Monday, as the feed
     labels them, which is also what makes a mid-week trade snap to its own week
     rather than the one before.
+
+    `span=max` is every week since the listing, for the All range. See
+    daily_bars: All drew the ten years, and called them all.
+    """
+    sym = ticker.strip().upper()
+    period = "max" if span == "max" else "10y"
+
+    def build() -> Dict[str, Any]:
+        df = YF_PROVIDER.history(sym, period=period, interval="1wk")
+        if df is None or df.empty:
+            return {"available": False, "ticker": sym,
+                    "reason": "No weekly history for {}.".format(sym)}
+        return _bars_body(sym, df, 4)
+    return await _run(build)
+
+
+@app.get("/api/daily-bars/{ticker}")
+async def daily_bars(ticker: str) -> Dict[str, Any]:
+    """Every daily bar since the listing, for the charts' All range.
+
+    The ticker payload carries two years of daily bars, which is what every
+    other range draws, and All drew those two years as well: NVDA's began in
+    October 2024, reported as "NVDA did not IPO in 2024, this is not accurate to
+    the ALL button". Its own request, made when All is drawn on daily bars,
+    because the whole history is thousands of bars (6,966 for NVDA, back to its
+    first session in January 1999; 16,296 for IBM, to 1962) and most charts
+    never ask for it.
+
+    Split-adjusted, as the feed's history is, so a 1999 NVDA close is four
+    cents: prices to six places, as the ticker payload sends them, where four
+    would round that close by a tenth of a percent.
     """
     sym = ticker.strip().upper()
 
     def build() -> Dict[str, Any]:
-        df = YF_PROVIDER.history(sym, period="10y", interval="1wk")
+        df = YF_PROVIDER.history(sym, period="max", interval="1d")
         if df is None or df.empty:
             return {"available": False, "ticker": sym,
-                    "reason": "No weekly history for {}.".format(sym)}
-        df = df.dropna(subset=["Close"])
-
-        def col(name, digits=4):
-            if name not in df:
-                return None
-            return [None if v != v else round(float(v), digits) for v in df[name]]
-        return {
-            "available": True,
-            "ticker": sym,
-            "dates": [str(i.date()) for i in df.index],
-            "open": col("Open"), "high": col("High"), "low": col("Low"),
-            "close": col("Close"), "volume": col("Volume", 0),
-            "bars": int(len(df)),
-        }
+                    "reason": "No daily history for {}.".format(sym)}
+        return _bars_body(sym, df, 6)
     return await _run(build)
 
 
@@ -3621,7 +3659,7 @@ async def global_panel() -> Dict[str, Any]:
 async def stage_reading(
     symbol: str = Query(..., description="Provider symbol, e.g. PLTR or ^GSPC"),
 ) -> Dict[str, Any]:
-    """Weinstein stage for one symbol, from two years of weekly closes.
+    """Weinstein stage for one symbol, from every weekly close since its listing.
 
     Its own endpoint rather than a field on each chart payload, because the
     stage belongs to the instrument and not to the range on screen: a 3-month
@@ -3736,7 +3774,10 @@ async def indicator_panel(
                 return YF_PROVIDER.intraday_history(
                     symbol, period=spec["period"], interval=spec["interval"],
                     prepost=spec["prepost"])
-            source = PROVIDER if symbol == sym else YF_PROVIDER
+            # `max`, the All range's whole history, from the feed the chart's
+            # bars came from (daily_bars, weekly_bars). The brokerage feed is
+            # asked for a number of days, and would have read `max` as a year.
+            source = PROVIDER if symbol == sym and range_ != "max" else YF_PROVIDER
             # Weekly bars for a weekly chart. Daily studies were drawn over it,
             # lined up from the newest bar, so a 1W chart of two years carried
             # the last five months of a daily Bollinger band stretched across it.

@@ -118,7 +118,9 @@ def test_the_oscillators_are_attached_before_the_window_not_after():
     and its signal line began nine bars in. Attaching to the full-length series
     means the window cuts an already-warm line."""
     fn = body_of("wsFullSeries")
-    assert "wsWithOscillators(base, d, weekly)" in fn
+    # Recomputed whenever the bars are not the payload's own: weekly, or All's
+    # whole history (tests/test_all_range_history.py).
+    assert "wsWithOscillators(base, d, base !== raw)" in fn
     # Attached to the rolled-up series, and returned at full length: nothing in
     # here may slice.
     assert "slice(" not in fn

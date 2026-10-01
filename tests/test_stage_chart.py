@@ -81,11 +81,13 @@ def test_the_endpoint_answers_with_a_stage(monkeypatch):
     assert body["symbol"] == "PLTR"
 
 
-def test_it_asks_for_ten_years_of_weekly_bars_whatever_the_chart_shows(monkeypatch):
+def test_it_asks_for_every_weekly_bar_whatever_the_chart_shows(monkeypatch):
+    """Every week since the listing, which is what the All range draws. Ten
+    years left NVDA's first seventeen on All as "No stage yet"."""
     feed = _Weekly([50 + i for i in range(80)])
     monkeypatch.setattr(main, "YF_PROVIDER", feed)
     TestClient(main.app).get("/api/stage", params={"symbol": "^GSPC"})
-    assert feed.calls == [("^GSPC", "10y", "1wk")]
+    assert feed.calls == [("^GSPC", "max", "1wk")]
 
 
 def test_the_endpoint_sends_every_weeks_stage_keyed_on_its_monday(monkeypatch):

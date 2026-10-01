@@ -176,10 +176,10 @@ def test_the_menus_offer_them_under_a_day():
 
 def test_the_options_momentum_panels_use_the_bars_on_screen():
     assert "const rsiSource = ps.intraday ? rsiSeries(ps.close || [], 14)" in APP
-    assert "const m = macdSeries(ps.intraday ? (ps.close || []) : weeklyAll.close);" in APP
+    assert "const m = macdSeries(ps.intraday ? (ps.close || []) : (allNow || weeklyAll).close);" in APP
     # The branch has to be taken on intraday, not merely contain the call: a
     # mutation that routed intraday back to the daily series left it in place.
-    assert "const full = (ps.weekly || ps.intraday)" in APP
+    assert "const full = (ps.weekly || ps.intraday || allNow)" in APP
     assert "macdCrossSentence(cross, wk, macdDates, barUnit(ps), zoom)" in APP
 
 
