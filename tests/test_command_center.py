@@ -179,8 +179,10 @@ def test_the_questions_name_real_numbers():
     are in `MARKET_QUESTION_POOL` now; the property they were asserting is
     unchanged and is checked across the whole pool below."""
     fn = _fn("marketQuestions")
-    assert "rankedMoves(data)[0]" in fn
-    assert "biggest.label" in fn and "biggest.chg_1d" in fn
+    assert "const moves = rankedMoves(data);" in fn and "const biggest = moves[0];" in fn
+    assert "add(moveQuestion(biggest), biggest.group);" in fn
+    move = _fn("moveQuestion")
+    assert "m.label" in move and "m.chg_1d" in move and "return null" in move
     pool = _pool()
     assert "vix.last" in pool
     assert "(d.macro || {}).regime" in pool
@@ -286,7 +288,7 @@ def test_the_questions_share_the_ranking_with_the_list():
     assert APP_JS.count("rankedMoves(data)") == 3
     assert "function rankedMoves(data)" in APP_JS
     assert "rankedMoves(data)" in _fn("whatMattersNow")
-    assert "rankedMoves(data)[0]" in _fn("marketQuestions")
+    assert "const moves = rankedMoves(data);" in _fn("marketQuestions")
     assert "all.sort((a, b) => Math.abs(b.chg_1d)" not in APP_JS
 
 

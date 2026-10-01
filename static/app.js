@@ -6904,6 +6904,7 @@ function marketDayKey(data) {
 const MARKET_QUESTION_POOL = [
   {
     id: 'vix',
+    covers: 'volatility',
     make: (d) => {
       const vix = stripInstrument(d, 'volatility', 'VIX');
       if (!vix || vix.last === null || vix.last === undefined) return null;
@@ -6950,6 +6951,7 @@ const MARKET_QUESTION_POOL = [
   },
   {
     id: 'curve',
+    covers: 'rates',
     make: (d) => {
       const c = (d.macro || {}).curve_3m10y;
       if (c === null || c === undefined || !isFinite(c)) return null;
@@ -6960,6 +6962,7 @@ const MARKET_QUESTION_POOL = [
   },
   {
     id: 'credit',
+    covers: 'credit',
     make: (d) => {
       const hyg = stripInstrument(d, 'credit', 'HYG');
       if (!hyg || hyg.chg_20d === null || hyg.chg_20d === undefined) return null;
@@ -6970,6 +6973,7 @@ const MARKET_QUESTION_POOL = [
   },
   {
     id: 'commodity',
+    covers: 'commodities',
     make: (d) => {
       const rows = (((d.macro || {}).groups) || {}).commodities || [];
       const ok = rows.filter((r) => r.chg_20d !== null && r.chg_20d !== undefined);
@@ -6982,6 +6986,7 @@ const MARKET_QUESTION_POOL = [
   },
   {
     id: 'dollar',
+    covers: 'fx',
     make: (d) => {
       const dxy = stripInstrument(d, 'fx', 'DXY') || stripInstrument(d, 'fx', 'Dollar');
       if (!dxy || dxy.chg_20d === null || dxy.chg_20d === undefined) return null;
@@ -6992,6 +6997,7 @@ const MARKET_QUESTION_POOL = [
   },
   {
     id: 'fed',
+    covers: 'fed',
     // Standing, and deliberately so: it is the question a reader asks on a day
     // when nothing in the payload has moved enough to be worth naming.
     make: () => 'What is the market expecting from the Fed?',
@@ -7021,29 +7027,120 @@ function sessionQuestion(data) {
   return null;
 }
 
-function marketQuestions(data) {
-  // Same ranking the list above uses. Two sorts would drift, and the question
-  // would name an instrument that is not the one at the top of the list.
-  const biggest = rankedMoves(data)[0];
+/* A move as a question, in the words its kind of market is asked about in.
+ * A yield, a currency and a barrel of oil are not asked the same thing, and
+ * one template for all of them was most of why the panel read the same every
+ * day with the numbers changed. */
+const MOVE_ASKS = {
+  equity: (m, dir, x) => `Why is the ${m.label} ${dir} ${x}% today?`,
+  futures: (m, dir, x) => `${m.label} are ${dir} ${x}%. What are they pricing in?`,
+  volatility: (m, dir, x) => (dir === 'up'
+    ? `${m.label} is up ${x}% today. What is the market bracing for?`
+    : `${m.label} is down ${x}% today. Is the market getting complacent?`),
+  rates: (m, dir, x) => `The ${m.label} yield is ${dir} ${x}% today. What is moving rates?`,
+  fx: (m, dir, x) => `Why is ${m.label} ${dir} ${x}% today?`,
+  commodities: (m, dir, x) => `${m.label} is ${dir} ${x}% today. Is that supply or demand?`,
+  credit: (m, dir, x) => `${m.label} is ${dir} ${x}% today. Is credit agreeing with stocks?`,
+  crypto: (m, dir, x) => `Why is ${m.label} ${dir} ${x}% today?`,
+};
 
-  const qs = [];
-  /* Pinned first, not rotated. It is the one question that is already
-     different every day on its own -- a different instrument and a different
-     number -- and it is the most topical thing on the page. The four below it
-     are what rotate. */
-  if (biggest) {
-    qs.push(`Why is ${biggest.label} ${biggest.chg_1d >= 0 ? 'up' : 'down'} `
-      + `${Math.abs(biggest.chg_1d).toFixed(1)}% today?`);
+function moveQuestion(m) {
+  if (!m || !m.label || m.chg_1d === null || m.chg_1d === undefined || !isFinite(m.chg_1d)) {
+    return null;
   }
+  const ask = MOVE_ASKS[m.group] || MOVE_ASKS.fx;
+  return ask(m, m.chg_1d >= 0 ? 'up' : 'down', Math.abs(m.chg_1d).toFixed(1));
+}
+
+/* Today's top story, as the question it raises: the first of the Read's
+ * stories (ranked on the server by news.rank_wire, as the Home page lists
+ * them) short enough to read as a question. A different headline every day,
+ * which is the point. */
+function storyQuestion(data) {
+  const stories = ((data || {}).read || {}).stories || [];
+  const top = stories.find((st) => st && st.title && String(st.title).trim().length <= 110);
+  if (!top) return null;
+  const title = String(top.title).trim().replace(/[\s.!?:;,]+$/, '');
+  return `${title}: what does that mean for markets?`;
+}
+
+/* The next big release, as the question a reader has before it and after.
+ * From the desk's catalyst, the one release it is written around, when that
+ * is today or tomorrow and matters (medium impact or above). */
+const RELEASE_NAMES = {
+  Jobs: 'The jobs report', CPI: 'CPI', PPI: 'PPI', FOMC: 'The Fed decision',
+  JOLTS: 'JOLTS', ECI: 'The employment cost index',
+};
+
+function catalystQuestion(data) {
+  const c = (((data || {}).morning_desk) || {}).catalyst;
+  if (!c || !c.title || !(Number(c.importance) >= 5)) return null;
+  const name = RELEASE_NAMES[c.short] || c.title;
+  const fed = c.short === 'FOMC';
+  const at = c.time_label ? ` at ${c.time_label}` : '';
+  if (c.days_away === 1) {
+    return fed ? `${name} is tomorrow${at}. What is priced in?`
+      : `${name} is out tomorrow${at}. What would a hot or a cool number do?`;
+  }
+  if (c.days_away !== 0) return null;
+  const due = Date.parse(c.at || '');
+  const now = Date.parse((((data || {}).session) || {}).now_et || '');
+  if (isFinite(due) && isFinite(now) && now >= due) {
+    return `${name} came out today. What did it change?`;
+  }
+  return fed ? `${name} is today${at}. What is priced in?`
+    : `${name} is out today${at}. What would surprise the market?`;
+}
+
+/* What the Fed is asked about already, so the standing Fed question is not a
+ * second ask of it. */
+const FED_WORDS = /\b(fed|fomc|powell|rate cut|rate hike|rates on hold)\b/i;
+
+function marketQuestions(data) {
+  /* Same ranking the list above uses. Two sorts would drift, and a question
+   * would name an instrument that is not the one at the top of the list. */
+  const moves = rankedMoves(data);
+  const biggest = moves[0];
+
+  /* What happened today first, and the standing questions only after it.
+   *
+   * Asked for as "these are relatively the same each day with different
+   * numbers, alter these every day based on what goes on this day". The day's
+   * biggest move led and four standing templates rotated under it, most of
+   * them on twenty-day changes, which hardly move from one day to the next.
+   * Now the day's own events come first: the biggest move, the session when
+   * it is shut, the day's top story, the release due today or tomorrow, and
+   * any other move bigger than its instrument's ordinary day in a market not
+   * already asked about. The pool fills what is left, skipping a standing
+   * question that one above already asks (`covers`). All from the payload,
+   * so nothing is written for it and nothing is spent. */
+  const qs = [];
+  const asked = new Set();
+  const add = (q, kind) => {
+    if (!q || qs.includes(q)) return;
+    qs.push(q);
+    if (kind) asked.add(kind);
+  };
+  if (biggest) add(moveQuestion(biggest), biggest.group);
 
   const shut = sessionQuestion(data);
-  if (shut) qs.push(shut);
+  if (shut) add(shut, 'session');
+
+  const story = storyQuestion(data);
+  add(story, story && FED_WORDS.test(story) ? 'fed' : 'story');
+  const release = catalystQuestion(data);
+  add(release, release && FED_WORDS.test(release) ? 'fed' : 'release');
+  moves.slice(1)
+    .filter((m) => m.rel >= 1 && !asked.has(m.group))
+    .slice(0, 2)
+    .forEach((m) => add(moveQuestion(m), m.group));
 
   const day = marketDayKey(data);
   const pool = MARKET_QUESTION_POOL;
   const offset = day === null ? 0 : ((day % pool.length) + pool.length) % pool.length;
   for (let i = 0; i < pool.length; i += 1) {
     const entry = pool[(offset + i) % pool.length];
+    if (entry.covers && asked.has(entry.covers)) continue;
     let q = null;
     // One bad entry must not empty the panel.
     try { q = entry.make(data); } catch (e) { q = null; }
