@@ -83,6 +83,11 @@ CLASSES = ("buy", "hold", "sell")
 
 _LOCK = threading.Lock()
 
+METHOD = ("Each firm's rating and price-target actions as Yahoo Finance lists them. "
+          "The rating is the firm's own word; buy, hold and sell group firms' words "
+          "that mean the same. A target is a forecast, and the record of them as a "
+          "group is poor.")
+
 
 def grade_class(grade: Optional[str]) -> Optional[str]:
     """buy, hold or sell for a firm's rating word, or None for one in no class.
@@ -133,8 +138,24 @@ def shaped(ticker: str, row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def for_symbol(provider, ticker: str, limit: int = 20) -> Dict[str, Any]:
-    """One name's latest actions, read directly rather than from the feed."""
+def _matches(row: Dict[str, Any], show: Optional[str], rating: Optional[str]) -> bool:
+    """Whether an action passes the page's Show and Rating filters."""
+    action = (row.get("action") or "").lower()
+    target = row.get("pt_action") or ""
+    wanted = {"upgrades": action == "up", "downgrades": action == "down",
+              "initiated": action == "init", "raised": target == "Raises",
+              "lowered": target == "Lowers"}
+    if show in wanted and not wanted[show]:
+        return False
+    return rating not in CLASSES or grade_class(row.get("to_grade")) == rating
+
+
+def for_symbol(provider, ticker: str, limit: int = 20, days: Optional[int] = None,
+               show: Optional[str] = None, rating: Optional[str] = None,
+               now: Optional[float] = None) -> Dict[str, Any]:
+    """One name's latest actions, read directly rather than from the feed, so
+    any name, covered by the feed or not. The page's search reads through this
+    with its filters; the Analysts widget beside a chart, with none."""
     sym = (ticker or "").upper().strip()
     try:
         rows = provider.analyst_actions(sym) or []
@@ -142,8 +163,17 @@ def for_symbol(provider, ticker: str, limit: int = 20) -> Dict[str, Any]:
         log.warning("analyst actions unavailable for %s: %s", sym, exc)
         return {"available": False, "ticker": sym,
                 "reason": "The analyst actions could not be read just now."}
-    return {"available": True, "ticker": sym,
-            "rows": [shaped(sym, r) for r in rows[:max(1, limit)]]}
+    if days:
+        now = time.time() if now is None else now
+        since = (datetime.fromtimestamp(now, timezone.utc)
+                 - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")
+        rows = [r for r in rows if (r.get("at") or "") >= since]
+    rows = [r for r in rows if _matches(r, show, rating)]
+    return {"available": True, "ticker": sym, "count": len(rows), "days": days,
+            "show": show if show in FILTERS else None,
+            "rating": rating if rating in CLASSES else None,
+            "rows": [shaped(sym, r) for r in rows[:max(1, limit)]],
+            "method": METHOD}
 
 
 def coverage(ranked: Iterable[Dict[str, Any]], curated: Iterable[str]) -> List[str]:
@@ -252,10 +282,6 @@ def feed(days: int = 7, show: Optional[str] = None, rating: Optional[str] = None
         "covered": int(covered[0] or 0),
         "read_at": (datetime.fromtimestamp(covered[1], timezone.utc).isoformat()
                     if covered[1] else None),
-        "method": ("Each firm's rating and price-target actions as Yahoo Finance "
-                   "lists them, read every {:g} hours for the curated large caps and "
-                   "the most traded names the scanner ranks. The rating is the firm's "
-                   "own word; buy, hold and sell group firms' words that mean the same. "
-                   "A target is a forecast, and the record of them as a group is "
-                   "poor.").format(REFRESH_HOURS),
+        "method": ("Read every {:g} hours for the curated large caps and the most "
+                   "traded names the scanner ranks. ").format(REFRESH_HOURS) + METHOD,
     }

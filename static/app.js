@@ -27449,27 +27449,49 @@ const ANALYST_RATINGS = [
   { key: 'sell', label: 'Sell' },
 ];
 const ANALYST_DAYS = [1, 7, 30];
-const analystQuery = { show: '', rating: '', days: 7 };
+// One name's history goes back years, where the feed keeps 45 days, so a
+// searched name can be read over a year as well.
+const ANALYST_TICKER_DAYS = [1, 7, 30, 365];
+const analystQuery = { show: '', rating: '', days: 7, ticker: '' };
 let analystSeq = 0;
+
+/* The page, drawn and wired: its search box is a new element on every draw,
+ * so each draw attaches its suggestions again, as Compare's boxes do. A pick
+ * searches at once. */
+function mountAnalysts(data) {
+  const host = views.analysts;
+  if (!host) return;
+  host.innerHTML = analystsHTML(data);
+  attachTypeahead('an-ticker', 'an-ticker-results', (pick) => {
+    analystQuery.ticker = pick.symbol;
+    loadAnalysts(true);
+  });
+}
 
 async function loadAnalysts(force) {
   const host = views.analysts;
   if (!host) return;
-  if (STATE.analysts && !force) { host.innerHTML = analystsHTML(STATE.analysts); return; }
-  host.innerHTML = analystsHTML(null);
+  if (STATE.analysts && !force) { mountAnalysts(STATE.analysts); return; }
+  mountAnalysts(null);
   const seq = ++analystSeq;
+  const filters = '&days=' + analystQuery.days
+    + (analystQuery.show ? '&show=' + encodeURIComponent(analystQuery.show) : '')
+    + (analystQuery.rating ? '&rating=' + encodeURIComponent(analystQuery.rating) : '');
   let data;
   try {
-    data = await getJSON('/api/analysts/latest?days=' + analystQuery.days
-      + (analystQuery.show ? '&show=' + encodeURIComponent(analystQuery.show) : '')
-      + (analystQuery.rating ? '&rating=' + encodeURIComponent(analystQuery.rating) : ''));
+    /* A searched name is read directly, so any name works, covered by the
+       feed or not; otherwise the feed the server keeps. */
+    data = analystQuery.ticker
+      ? await getJSON(`/api/analysts/${encodeURIComponent(analystQuery.ticker)}?limit=200`
+        + filters)
+      : await getJSON('/api/analysts/latest?' + filters.slice(1));
   } catch (err) {
     data = { available: false, reason: err.message };
   }
   // A later press owns the page.
   if (seq !== analystSeq) return;
   STATE.analysts = data;
-  host.innerHTML = analystsHTML(data);
+  mountAnalysts(data);
   revealPanels(host);
 }
 
@@ -27504,15 +27526,31 @@ function analystsHTML(d) {
     return `<button type="button" class="pill${on ? ' on' : ''}" ${attr}="${esc(String(v.key))}"
       aria-pressed="${on}">${esc(v.label)}</button>`;
   }).join('');
-  const filters = `<div class="wv-filters" role="group" aria-label="Which actions">
+  const sym = analystQuery.ticker;
+  const windows = sym ? ANALYST_TICKER_DAYS : ANALYST_DAYS;
+  const span = (n) => (n === 1 ? 'day' : n === 365 ? 'year' : `${n} days`);
+  /* The search, first: asked for as "include a search ticker bar in here".
+     A ticker or a company name, with the suggestions the top bar gives. */
+  const search = `<form class="an-search" data-an-search role="search">
+      <div class="combo an-combo">
+        <input id="an-ticker" class="an-ticker" value="${esc(sym)}" spellcheck="false"
+          autocomplete="off" placeholder="Search a ticker or company"
+          aria-label="Search a ticker or company" role="combobox" aria-expanded="false"
+          aria-autocomplete="list" aria-controls="an-ticker-results">
+        <ul class="combo-list" id="an-ticker-results" role="listbox" hidden></ul>
+      </div>
+      <button type="submit" class="btn">Search</button>
+      ${sym ? '<button type="button" class="pill" data-an-clear>All names</button>' : ''}
+    </form>`;
+  const filters = `${search}<div class="wv-filters" role="group" aria-label="Which actions">
       <span class="wv-filter-label">Show</span>${pills(ANALYST_SHOWS, 'show', 'data-an-show')}
     </div>
     <div class="wv-filters" role="group" aria-label="Which ratings, over how long">
       <span class="wv-filter-label">Rating</span>${pills(ANALYST_RATINGS, 'rating', 'data-an-rating')}
-      <span class="wv-filter-label">Last</span>${pills(ANALYST_DAYS.map((n) => ({
-    key: n, label: n === 1 ? 'Day' : `${n} days` })), 'days', 'data-an-days')}
+      <span class="wv-filter-label">Last</span>${pills(windows.map((n) => ({
+    key: n, label: n === 1 ? 'Day' : n === 365 ? 'Year' : `${n} days` })), 'days', 'data-an-days')}
     </div>`;
-  const head = `<h2 tabindex="-1">Analyst actions</h2>`;
+  const head = `<h2 tabindex="-1">Analyst actions${sym ? `: ${esc(sym)}` : ''}</h2>`;
   if (!d) {
     return `<div class="panel span-all">${head}${filters}<p class="sub">Loading.</p></div>`;
   }
@@ -27522,7 +27560,14 @@ function analystsHTML(d) {
   }
   const rows = d.rows || [];
   let lead;
-  if (!d.covered) {
+  if (sym) {
+    const n = Number(d.count) || 0;
+    lead = n
+      ? `${fmt(n, 0)} action${n === 1 ? '' : 's'} on ${sym} in the last ${span(analystQuery.days)}`
+        + (rows.length < n ? `. Showing the newest ${fmt(rows.length, 0)}.` : '.')
+      : `Nothing on ${sym} matching in the last ${span(analystQuery.days)}. A longer window, `
+        + 'or All under Show, may have some.';
+  } else if (!d.covered) {
     lead = 'The server is reading the analyst actions for the first time. They fill in here '
       + 'over the next few minutes.';
   } else if (!rows.length) {
@@ -28936,6 +28981,17 @@ function scanAskPulsePrompt(text, r) {
   }
   return lines.join('\n');
 }
+
+// The Analysts page's search: what is typed, as a ticker. A suggestion picked
+// with the keyboard or the mouse searches without reaching here.
+document.addEventListener('submit', (evt) => {
+  const form = evt.target.closest && evt.target.closest('[data-an-search]');
+  if (!form) return;
+  evt.preventDefault();
+  const box = form.querySelector('#an-ticker');
+  analystQuery.ticker = String((box && box.value) || '').trim().toUpperCase().slice(0, 12);
+  loadAnalysts(true);
+});
 
 document.addEventListener('submit', (evt) => {
   const form = evt.target.closest && evt.target.closest('[data-sc-ask-form]');
@@ -33498,6 +33554,13 @@ document.addEventListener('click', (evt) => {
   if (anRating) { analystQuery.rating = anRating.dataset.anRating; loadAnalysts(true); return; }
   const anDays = evt.target.closest('[data-an-days]');
   if (anDays) { analystQuery.days = Number(anDays.dataset.anDays) || 7; loadAnalysts(true); return; }
+  if (evt.target.closest('[data-an-clear]')) {
+    analystQuery.ticker = '';
+    // The feed keeps 45 days, so a year asked of one name falls back to 30.
+    if (!ANALYST_DAYS.includes(analystQuery.days)) analystQuery.days = 30;
+    loadAnalysts(true);
+    return;
+  }
   const symPick = evt.target.closest('[data-ins-pick]');
   if (symPick) {
     const sym = symPick.dataset.insPick || '';

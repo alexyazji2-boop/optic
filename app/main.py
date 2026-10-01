@@ -3892,9 +3892,15 @@ async def analysts_latest(days: int = Query(7, ge=1, le=45),
 
 
 @app.get("/api/analysts/{ticker}")
-async def analysts_for(ticker: str, limit: int = Query(20, ge=1, le=100)) -> Dict[str, Any]:
-    """One name's latest analyst actions, read directly, whatever the name."""
-    return await _run(analysts_mod.for_symbol, YF_PROVIDER, ticker, limit)
+async def analysts_for(ticker: str, limit: int = Query(20, ge=1, le=200),
+                       days: Optional[int] = Query(None, ge=1, le=3650),
+                       show: str = Query("", description="as /api/analysts/latest"),
+                       rating: str = Query("", description="buy, hold or sell")
+                       ) -> Dict[str, Any]:
+    """One name's analyst actions, read directly, whatever the name: the
+    Analysts page's search, and the widget beside a chart."""
+    return await _run(analysts_mod.for_symbol, YF_PROVIDER, ticker, limit, days,
+                      show or None, rating or None)
 
 
 # A request in words, read as the screener's filters (app/analytics/scan_request.py).

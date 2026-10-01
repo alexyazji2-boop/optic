@@ -270,3 +270,63 @@ def test_a_names_widget_lists_its_latest_actions():
     assert "Citigroup" in html and 'data-analyse="INTC"' not in html, "its own name, no symbol column"
     assert "loadAnalystActions(false, STATE.chartSymbol);" in APP
     assert "if (wsDockOpen.includes('analysts')) loadAnalystActions(false, sym);" in APP
+
+
+# ------------------------------------------------------------- the search
+
+
+def test_a_searched_name_is_read_with_the_pages_filters(store):
+    """Asked for as "include a search ticker bar in here". Any name, read
+    directly, so one the feed does not cover works the same."""
+    def firms(**kw):
+        out = analysts.for_symbol(store, "INTC", now=NOW, **kw)
+        return [r["firm"] for r in out["rows"]], out["count"]
+    assert firms(limit=50) == (["Citigroup", "Jefferies", "Needham"], 3)
+    assert firms(limit=50, days=3) == (["Citigroup"], 1), "the window, from now"
+    assert firms(limit=50, show="downgrades") == (["Jefferies"], 1)
+    assert firms(limit=50, show="initiated") == (["Needham"], 1)
+    assert firms(limit=50, rating="buy") == (["Needham"], 1)
+    assert firms(limit=1) == (["Citigroup"], 3), "the count is all that matched"
+    old = analysts.for_symbol(store, "AAPL", limit=50, days=365, now=NOW)
+    assert old["count"] == 3, "a year reaches past the feed's 45 days"
+
+
+def test_the_endpoint_passes_the_filters(store, monkeypatch):
+    monkeypatch.setattr(main, "YF_PROVIDER", store)
+    client = TestClient(main.app)
+    out = client.get("/api/analysts/INTC", params={"days": 30, "show": "upgrades",
+                                                   "rating": "hold"}).json()
+    assert [r["firm"] for r in out["rows"]] == ["Citigroup"]
+    assert out["show"] == "upgrades" and out["rating"] == "hold" and out["days"] == 30
+
+
+def test_the_page_has_a_search_bar_with_suggestions():
+    out = _jsc("""
+      analystQuery.ticker = 'INTC'; analystQuery.days = 365;
+      var one = analystsHTML({ available: true, ticker: 'INTC', count: 1, days: 365, rows: [%s] });
+      analystQuery.ticker = ''; analystQuery.days = 7;
+      var all = analystsHTML({ available: true, days: 7, count: 0, covered: 400, rows: [] });
+      print('RESULT:' + JSON.stringify({ one: one, all: all }));
+    """ % json.dumps(ROW))
+    one, every = out["one"], out["all"]
+    assert '<form class="an-search" data-an-search role="search">' in one
+    assert 'id="an-ticker" class="an-ticker" value="INTC"' in one
+    assert 'aria-controls="an-ticker-results"' in one and 'id="an-ticker-results"' in one
+    assert "data-an-clear>All names</button>" in one and "data-an-clear" not in every
+    assert "Analyst actions: INTC</h2>" in one
+    assert "1 action on INTC in the last year." in one
+    assert 'data-an-days="365"' in one and 'data-an-days="365"' not in every
+    assert 'value=""' in every
+
+
+def test_the_search_reads_one_name_directly_and_clears_back_to_the_feed():
+    fn = APP[APP.index("async function loadAnalysts(force) {"):]
+    fn = fn[:fn.index("\n}")]
+    assert "await getJSON(`/api/analysts/${encodeURIComponent(analystQuery.ticker)}?limit=200`" in fn
+    mount = APP[APP.index("function mountAnalysts(data) {"):]
+    mount = mount[:mount.index("\n}")]
+    assert "attachTypeahead('an-ticker', 'an-ticker-results', (pick) => {" in mount
+    clear = APP[APP.index("if (evt.target.closest('[data-an-clear]')) {"):][:300]
+    assert "if (!ANALYST_DAYS.includes(analystQuery.days)) analystQuery.days = 30;" in clear
+    submit = APP[APP.index("const form = evt.target.closest && evt.target.closest('[data-an-search]');"):][:400]
+    assert "analystQuery.ticker = String((box && box.value) || '').trim().toUpperCase()" in submit
