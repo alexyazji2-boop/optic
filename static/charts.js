@@ -225,6 +225,29 @@ function extentOf(list) {
   return [lo, hi];
 }
 
+/* The page's ink or its surface, whichever reads better on a fill.
+ *
+ * For the insider badges, filled in the trade's colour in either theme. The
+ * surface (near black) is the one on the dark theme's red and green, about
+ * 4.9:1 and 5.5:1; on the light theme's green the surface (near white) was
+ * 2.8:1 and its ink is 6.6:1. A colour this cannot read gets the ink. */
+function inkOn(fill) {
+  const lum = (hex) => {
+    const m6 = /^#([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+    if (!m6) return null;
+    const v = parseInt(m6[1], 16);
+    return [v >> 16, (v >> 8) & 255, v & 255].reduce((sum, c, k) => {
+      const x = c / 255;
+      const lin = x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+      return sum + lin * [0.2126, 0.7152, 0.0722][k];
+    }, 0);
+  };
+  const ratio = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  const f = lum(fill), ink = lum(C.ink), surface = lum(C.surface);
+  if (f === null || ink === null || surface === null) return C.ink;
+  return ratio(f, surface) >= ratio(f, ink) ? C.surface : C.ink;
+}
+
 function niceTicks(min, max, count = 4) {
   if (!(isFinite(min) && isFinite(max)) || min === max) return [min];
   const span = max - min;
@@ -1031,6 +1054,12 @@ function lineChart(opts) {
      * at the moment, its whole history on screen, measures on a plain drag,
      * which the caller says by leaving `data-pan-armed` off its host. */
     panDrag = false,
+    /* Called with a marker's events when one is clicked, a press and release
+     * that did not move or hold; the hover readout for its bar ends with
+     * `eventHint`. Asked for as "whenever i click in the insider trades, take
+     * me to a sub-tab of the insider buys/sells for that specific stock". */
+    onEventClick = null,
+    eventHint = '',
   } = opts;
 
   const W = width;
@@ -1115,6 +1144,34 @@ function lineChart(opts) {
   const volH = volRows ? Math.round(plotH * volumeShare) : 0;
   const volGap = volRows ? 6 : 0;
   const priceH = plotH - volH - volGap;
+
+  /* Room for the insider markers on their side of the price. Insiders sell
+   * into strength, so their sales sit at the top of the range, where there
+   * was nowhere above for a triangle and its badge: the badge went beside the
+   * triangle, or off the plot. The range grows by what a marker and badge
+   * need and no more, only where one is near an edge, and not on a plot too
+   * short to spare it. A sell is measured from the high it stands over on a
+   * candle chart, a buy from the low. */
+  if (!yDomain && events && events.length && priceH > 0) {
+    const need = (EVENT_OFF + EVENT_H + 4 + 17 + 2) / priceH;
+    if (need < 0.35) {
+      const closesAt = (candles && candles.close) || (series[0] && series[0].values) || [];
+      const priced = (kind) => events.filter((e) => e.kind === kind && Number.isFinite(e.index))
+        .map((e) => {
+          const wick = candles && (kind === 'buy' ? candles.low : candles.high);
+          const v = wick && wick[e.index] !== null && isFinite(wick[e.index])
+            ? wick[e.index] : closesAt[e.index];
+          return v === null || v === undefined || !isFinite(v) ? null : v;
+        }).filter((v) => v !== null);
+      const sells = priced('sell');
+      const buys = priced('buy');
+      // Twice, because each widening moves the other end's share of the range.
+      for (let pass = 0; pass < 2; pass += 1) {
+        if (sells.length) hi = Math.max(hi, (extentOf(sells)[1] - need * lo) / (1 - need));
+        if (buys.length) lo = Math.min(lo, (extentOf(buys)[0] - need * hi) / (1 - need));
+      }
+    }
+  }
 
   const X = (i) => m.l + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW);
   const Y = (v) => m.t + priceH - ((v - lo) / (hi - lo)) * priceH;
@@ -1901,84 +1958,152 @@ function lineChart(opts) {
     liveMarks.forEach((el) => root.appendChild(el));
   }
 
-  /* Dated events pinned to the price line — insider transactions, in practice.
+  /* Dated events pinned to the price line: insider transactions, in practice.
    *
-   * A triangle at the price on the day, pointing the way the trade went, with a
-   * stem down to the axis so the date is findable. Buys and sells are the same
-   * shape flipped rather than two different glyphs: the direction IS the
+   * A triangle off the price on the day, pointing the way the trade went, on a
+   * stem from a dot where the trade sits on the price. Buys and sells are the
+   * same shape flipped rather than two different glyphs: the direction IS the
    * information, and a reader should not have to learn a legend to see it.
+   * Above a candle's high for a sell and below its low for a buy, so it never
+   * sits on the wick it is annotating.
    *
-   * Labels are only drawn for the largest few. Ten insider prints on a
-   * three-month chart, each labelled, is a wall of text over the price, so size
-   * decides who gets named.
+   * Asked to be "more visible on the chart". The triangles were 10px, their
+   * stems a hairline at half strength and their labels coloured text on a dark
+   * box, three at most, and red marks on a green area fill were easy to miss.
+   * Now the triangle is 14px and ringed in the surface colour, which cuts it
+   * out of whatever is behind it, and its label is a solid badge in the
+   * trade's colour.
    *
-   * Every marker carries a <title> regardless, which is what makes the
-   * unlabelled ones readable. This comment used to claim the hover tooltip
-   * carried them and nothing did: insiderEvents built a detail string with the
-   * insider's name and position, and no code ever rendered it. An unlabelled
-   * triangle was therefore mute, which is indistinguishable from decoration.
+   * Trades closer than a marker's width, the same way, are one marker: the
+   * largest stands on its own bar, the others are dots on theirs, and the badge
+   * gives their count and total. Overlapping triangles read as one mark under
+   * the label of only the biggest.
    *
-   * A native <title> rather than the chart's own tooltip: it needs no listener,
-   * survives every redraw, and works on a marker only a few pixels wide, where
-   * a scrub binding competes with the crosshair underneath it.
-   */
+   * As many badges as fit, largest first, where one would not cover another
+   * badge or a marker, up to one for every 150px of plot; three, whatever the
+   * width, was the old rule. Every trade is also named in the crosshair readout
+   * for its bar. That is where a reader can get at who traded: the hover layer
+   * covers the whole plot, so the <title> on a marker, kept for a screen
+   * reader, never showed under a mouse.
+   *
+   * Colours are read here, not held in a constant: one taken at load kept the
+   * dark theme's red and green on the light theme. */
+  const eventsAt = new Map();
+  // Where each marker and badge was drawn, and the trades it stands for, so a
+  // press on one can be told apart from a press on the plot (onEventClick).
+  const eventHits = [];
   if (events && events.length) {
     const evLayer = s('g', { 'data-fade': animating ? DRAW_MS * 0.9 : null });
     root.appendChild(evLayer);
     const closes = (candles && candles.close) || (series[0] && series[0].values) || [];
-    // Label the three biggest by value; the rest are marks only.
-    const ranked = [...events]
-      .filter((e) => Number.isFinite(e.index) && e.index >= 0 && e.index < n)
-      .sort((a, b) => (b.value || 0) - (a.value || 0));
-    const named = new Set(ranked.slice(0, 3).map((e) => e.index));
-
-    ranked.forEach((e) => {
-      const price = closes[e.index];
-      if (price === null || price === undefined || !isFinite(price)) return;
-      const x = X(e.index);
-      const y = Y(price);
+    const standOn = (e) => {
       const buy = e.kind === 'buy';
-      const colour = buy ? EVENT_BUY : EVENT_SELL;
-      // Below the price for a buy, above for a sell, so the marker never sits on
-      // the line it is annotating.
-      const tip = buy ? y + 9 : y - 9;
-      const base = buy ? y + 20 : y - 20;
-      // One group per event so the triangle, its stem and the title move
-      // together, and so the hover target is the whole marker rather than five
-      // pixels of a path.
-      const mark = s('g', { style: 'cursor:help' });
-      // The shape flips through tip/base rather than through two path strings:
-      // for a buy, tip sits below base, which turns the same three points into
-      // an upward triangle.
-      mark.appendChild(s('path', {
-        d: `M ${x} ${tip} L ${x - 5} ${base} L ${x + 5} ${base} Z`,
-        fill: colour, opacity: 0.92,
-      }));
+      const wick = candles && (buy ? candles.low : candles.high);
+      const v = wick && isFinite(wick[e.index]) && wick[e.index] !== null ? wick[e.index] : closes[e.index];
+      return v === null || v === undefined || !isFinite(v) ? null : v;
+    };
+    // Largest first, so a large trade claims its place and a smaller one near
+    // it joins the nearest marker going its way.
+    const marks = [];
+    events
+      .filter((e) => Number.isFinite(e.index) && e.index >= 0 && e.index < n && standOn(e) !== null)
+      .sort((a, b) => (b.value || 0) - (a.value || 0))
+      .forEach((e) => {
+        if (!eventsAt.has(e.index)) eventsAt.set(e.index, []);
+        eventsAt.get(e.index).push(e);
+        const at = { e, buy: e.kind === 'buy', x: X(e.index), y: Y(standOn(e)) };
+        let near = null;
+        marks.forEach((mk) => {
+          const gap = Math.abs(mk.x - at.x);
+          if (mk.buy === at.buy && gap < EVENT_GAP && (!near || gap < Math.abs(near.x - at.x))) near = mk;
+        });
+        if (near) near.items.push(at);
+        else marks.push({ buy: at.buy, x: at.x, y: at.y, items: [at] });
+      });
+
+    const occupied = [];
+    marks.forEach((mk) => {
+      const colour = mk.buy ? C.s3 : C.neg;
+      const away = mk.buy ? 1 : -1;               // below the price for a buy
+      // A sell at the top of the range is let down a pixel or two rather than
+      // drawn off the plot, never closer than 3px to the price.
+      const drop = mk.buy ? 0 : Math.min(EVENT_OFF - 3,
+        Math.max(0, 1 - (mk.y - EVENT_OFF - EVENT_H)));
+      const tip = mk.y + away * EVENT_OFF + drop;
+      const base = mk.y + away * (EVENT_OFF + EVENT_H) + drop;
+      const total = mk.items.reduce((sum, it) => sum + (it.e.value || 0), 0);
+      const many = mk.items.length > 1;
+      const word = mk.buy ? 'buys' : 'sells';
+      Object.assign(mk, {
+        colour, base, total,
+        text: many ? `${mk.items.length} ${word}${total ? ` · $${fmtCompact(total)}` : ''}`
+          : mk.items[0].e.label,
+      });
+      const mark = s('g', {});
+      // The other trades it stands for, each a dot on its own bar.
+      mk.items.slice(1).forEach((it) => {
+        mark.appendChild(s('circle', {
+          cx: it.x, cy: it.y, r: 2.5, fill: colour, stroke: C.surface, 'stroke-width': 1,
+        }));
+      });
       mark.appendChild(s('line', {
-        x1: x, y1: y, x2: x, y2: tip, stroke: colour, 'stroke-width': 1, opacity: 0.5,
+        x1: mk.x, y1: mk.y, x2: mk.x, y2: tip, stroke: colour, 'stroke-width': 1.5, opacity: 0.85,
       }));
-      // A wider invisible target: a 10px triangle is a hard thing to hit.
-      mark.appendChild(s('rect', {
-        x: x - 8, y: Math.min(y, base) - 4, width: 16,
-        height: Math.abs(base - y) + 8, fill: 'transparent',
+      mark.appendChild(s('circle', {
+        cx: mk.x, cy: mk.y, r: 3.5, fill: colour, stroke: C.surface, 'stroke-width': 1.5,
       }));
-      if (e.detail || e.label) {
-        mark.appendChild(s('title', {}, e.detail || e.label));
+      // The shape flips through tip and base rather than through two path
+      // strings: for a buy the tip sits above the base, an upward triangle.
+      mark.appendChild(s('path', {
+        d: `M ${mk.x} ${tip} L ${mk.x - EVENT_W / 2} ${base} L ${mk.x + EVENT_W / 2} ${base} Z`,
+        fill: colour, stroke: C.surface, 'stroke-width': 1.5, 'stroke-linejoin': 'round',
+      }));
+      const detail = mk.items.map((it) => it.e.detail || it.e.label).filter(Boolean);
+      if (detail.length) {
+        mark.appendChild(s('title', {}, (many ? [`${mk.items.length} insider ${word}`] : [])
+          .concat(detail).join('\n')));
       }
       evLayer.appendChild(mark);
-      if (named.has(e.index) && e.label) {
-        const w = e.label.length * 5.4 + 10;
-        const lx = Math.min(Math.max(m.l + 2, x - w / 2), m.l + plotW - w - 2);
-        const ly = buy ? base + 13 : base - 5;
-        evLayer.appendChild(s('rect', {
-          x: lx, y: ly - 9.5, width: w, height: 13, rx: 3,
-          fill: C.surface, opacity: 0.88,
-        }));
-        evLayer.appendChild(s('text', {
-          x: lx + 5, y: ly, fill: colour, 'font-size': CF.label,
-          'font-weight': CW.label,
-        }, e.label));
-      }
+      mk.box = { x: mk.x - EVENT_W / 2 - 1, y: Math.min(mk.y, base) - 4,
+        w: EVENT_W + 2, h: Math.abs(base - mk.y) + 8 };
+      occupied.push(mk.box);
+      mk.events = mk.items.map((it) => it.e);
+      eventHits.push({ ...mk.box, events: mk.events });
+    });
+
+    const cap = Math.max(2, Math.min(8, Math.floor(plotW / 150)));
+    // Inside the price plot, off the volume strip, and clear of every badge
+    // and marker but its own.
+    const clear = (r, own) => r.y >= m.t && r.y + r.h <= m.t + priceH && r.x >= m.l
+      && r.x + r.w <= m.l + plotW
+      && !occupied.some((o) => o !== own && r.x < o.x + o.w + 3 && o.x < r.x + r.w + 3
+        && r.y < o.y + o.h + 3 && o.y < r.y + r.h + 3);
+    let badges = 0;
+    [...marks].sort((a, b) => b.total - a.total).forEach((mk) => {
+      if (badges >= cap || !mk.text) return;
+      const w = mk.text.length * 6 + 14;
+      const h = 17;
+      const left = Math.min(Math.max(m.l + 2, mk.x - w / 2), m.l + plotW - w - 2);
+      // Past the triangle, on its side of the price. Where that runs off the
+      // plot or onto another marker, the other side of the price, then beside
+      // the triangle: a sell at the top of a short chart has no room above.
+      const past = { x: left, y: mk.buy ? mk.base + 4 : mk.base - 4 - h, w, h };
+      const facing = { x: left, y: mk.buy ? mk.y - 8 - h : mk.y + 8, w, h };
+      const mid = (mk.y + mk.base) / 2 - h / 2;
+      const right = { x: mk.x + EVENT_W / 2 + 4, y: mid, w, h };
+      const leftward = { x: mk.x - EVENT_W / 2 - 4 - w, y: mid, w, h };
+      const at = [past, facing, right, leftward].find((r) => clear(r, mk.box));
+      if (!at) return;
+      occupied.push(at);
+      eventHits.push({ ...at, events: mk.events });
+      badges += 1;
+      evLayer.appendChild(s('rect', {
+        x: at.x, y: at.y, width: w, height: h, rx: h / 2, fill: mk.colour,
+      }));
+      evLayer.appendChild(s('text', {
+        x: at.x + w / 2, y: at.y + 12.5, fill: inkOn(mk.colour), 'font-size': CF.label,
+        'font-weight': CW.tag, 'text-anchor': 'middle',
+      }, mk.text));
     });
   }
 
@@ -2269,6 +2394,41 @@ function lineChart(opts) {
     }, HOLD_MS);
   });
 
+  /* A click on an insider marker, for onEventClick: a press and release no
+   * further apart than HOLD_SLOP and sooner than HOLD_MS, which no pan, hold
+   * or measurement is. The overlay sits over the markers, so it is asked where
+   * the press landed rather than each marker carrying a listener the overlay
+   * would never let reach it. */
+  const eventAt = (clientX, clientY) => {
+    if (!eventHits.length) return null;
+    const box = root.getBoundingClientRect();
+    if (!box.width || !box.height) return null;
+    // The SVG is scaled to its box and centred in it (xMidYMid meet).
+    const k = Math.min(box.width / W, box.height / H);
+    const px = (clientX - box.left - (box.width - W * k) / 2) / k;
+    const py = (clientY - box.top - (box.height - H * k) / 2) / k;
+    // The last drawn is on top, and answers first.
+    for (let j = eventHits.length - 1; j >= 0; j -= 1) {
+      const r = eventHits[j];
+      if (px >= r.x - 2 && px <= r.x + r.w + 2 && py >= r.y - 2 && py <= r.y + r.h + 2) return r;
+    }
+    return null;
+  };
+  if (onEventClick) {
+    let pressed = null;
+    overlay.addEventListener('pointerdown', (evt) => {
+      pressed = { x: evt.clientX, y: evt.clientY, t: Date.now() };
+    });
+    overlay.addEventListener('click', (evt) => {
+      const p = pressed;
+      pressed = null;
+      if (!p || Math.abs(evt.clientX - p.x) > HOLD_SLOP || Math.abs(evt.clientY - p.y) > HOLD_SLOP
+          || Date.now() - p.t > HOLD_MS) return;
+      const hit = eventAt(evt.clientX, evt.clientY);
+      if (hit) onEventClick(hit.events, evt);
+    });
+  }
+
   bindScrub(overlay, (evt) => {
     const box = root.getBoundingClientRect();
     const scale = W / box.width;
@@ -2278,6 +2438,10 @@ function lineChart(opts) {
     cross.setAttribute('x1', X(i));
     cross.setAttribute('x2', X(i));
     cross.setAttribute('opacity', 0.45);
+    // A hand over a marker that opens something, the crosshair elsewhere.
+    if (onEventClick) {
+      overlay.style.cursor = eventAt(evt.clientX, evt.clientY) ? 'pointer' : 'crosshair';
+    }
     const rows = [];
     // Open, high and low first, when the caller supplied candles. The series
     // loop below only sees closing values, so on a candle chart the readout
@@ -2322,6 +2486,19 @@ function lineChart(opts) {
       }
       lightVol(i);
     }
+    // The insider trades on this bar, who and how much, largest first. See
+    // the events layer: this is the one place the details can be read.
+    const traded = eventsAt.get(i) || [];
+    traded.slice(0, 4).forEach((e) => {
+      const buy = e.kind === 'buy';
+      rows.push([
+        `<span style="color:${buy ? C.s3 : C.neg}">${buy ? '▲' : '▼'}</span> ${
+          escapeText(e.who || (buy ? 'Insider buy' : 'Insider sell'))}`,
+        escapeText(e.label || (buy ? 'Buy' : 'Sell')),
+      ]);
+    });
+    if (traded.length > 4) rows.push(['', `${traded.length - 4} more insider trades`]);
+    if (traded.length && eventHint) rows.push([`<span class="t-hint">${escapeText(eventHint)}</span>`, '']);
     showTip(tipRows(barLabelText(labels[i]) || `#${i + 1}`, rows), evt);
     // Tell the caller which bar is under the cursor, so a header or legend can
     // track it. Index only: this function knows nothing about what the caller
@@ -2523,9 +2700,14 @@ function sparkline(values, width = 96, height = 26, color = C.brand) {
  * and the MACD line rendered identically and the legend carried two matching
  * blue swatches. Green above zero and red below also states the sign the bars
  * already encode, which the blue never did. */
-// Buy/sell green and red, NOT C.pos — which is blue and the same hex as C.s1.
-const EVENT_BUY = C.s3;
-const EVENT_SELL = C.neg;
+/* The insider markers' geometry: a triangle 14px wide whose tip stands 10px
+ * off the price. Two closer than EVENT_GAP would overlap, and are drawn as one.
+ * Their colours are C.s3 and C.neg, read when drawn: green and red, NOT C.pos,
+ * which is blue and the same hex as C.s1. */
+const EVENT_W = 14;
+const EVENT_H = 12;
+const EVENT_OFF = 10;
+const EVENT_GAP = EVENT_W + 2;
 
 const MACD_HIST_POS = C.s3;
 const MACD_HIST_NEG = C.neg;

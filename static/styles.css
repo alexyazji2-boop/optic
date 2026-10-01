@@ -2115,6 +2115,8 @@ table.data td.name.num { font-variant-numeric: tabular-nums; }
 .tooltip.on { opacity: 1; }
 .tooltip .t-title { color: var(--ink); font-weight: 600; margin-bottom: var(--space-1); }
 .tooltip .t-row { color: var(--ink-2); display: flex; justify-content: space-between; gap: var(--space-3); }
+/* The line under a bar's insider trades saying a click opens them. */
+.tooltip .t-hint { color: var(--ink-muted); }
 
 /* ------------------------------------------------------------- trade ideas */
 

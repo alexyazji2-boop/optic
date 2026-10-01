@@ -7144,13 +7144,35 @@ async function homeMovers() {
     today's move. Volume is the twenty-day average against the sixty-day.</p>`;
 }
 
+/* The brief's opening prose, as plain text for the Home card.
+ *
+ * The brief's section headings ("## What happened, and what it means") and
+ * its list items are paragraphs of their own, which the Read draws as
+ * headings and lists (briefProse). The card took the first paragraph as it
+ * came, and the heading's markdown was its summary, reported as "remove this
+ * if there is no purpose for it". This is the first paragraph of prose, with
+ * the emphasis marks taken off, which gloss would print as asterisks. */
+function readLead(paragraphs) {
+  for (const raw of paragraphs || []) {
+    const prose = String(raw || '').split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line && !/^#{1,6}\s/.test(line) && !/^[-*•]\s/.test(line))
+      .join(' ');
+    if (prose) {
+      return prose.replace(/\*\*([^*]+)\*\*/g, '$1')
+        .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1$2');
+    }
+  }
+  return '';
+}
+
 /** The day's narrative, from the already-written brief. Never generated here. */
 function homeRead(data) {
   const read = data.read;
   const summary = read && read.summary;
   if (!summary) return '';
   const headline = summary.headline || '';
-  const para = (summary.paragraphs || [])[0] || '';
+  const para = readLead(summary.paragraphs);
   if (!headline && !para) return '';
   return `<section class="hm-block">
     <div class="hm-block-head">
@@ -9161,7 +9183,11 @@ function swingPriceBlock(d, ps, ctx) {
         ...(showZones ? zoneBands(ps.intraday ? (ps.patterns || {}) : d.patterns) : []),
       ],
       events: showInsiders
-        ? insiderEvents(ps, ((d.company || {}).ownership || {}).recent_transactions) : null,
+        ? insiderEvents(ps, ((d.company || {}).ownership || {}).recent_transactions,
+          barAfterWindow(swingBaseSeries(d), swingWindowNow(d))) : null,
+      // A marker opens the Insiders page on this symbol. See openInsidersFor.
+      onEventClick: showInsiders ? () => openInsidersFor(d.ticker) : null,
+      eventHint: showInsiders ? insiderClickHint(d.ticker) : '',
       // Report dates as dashed verticals. `vMarkers`, not `events`: an earnings
       // date has no direction, so the triangle the insider layer draws would be
       // claiming one. See earningsMarkers().
@@ -12503,10 +12529,23 @@ function earningsMarkers(ps, earnings) {
   return out;
 }
 
-function insiderEvents(ps, transactions) {
+/* The date of the first bar past a window into `full`, or '' when the window
+ * reaches the newest bar. What insiderEvents is handed as `after`. */
+function barAfterWindow(full, win) {
+  const dates = (full && full.dates) || [];
+  return win && win.to < dates.length ? String(dates[win.to] || '') : '';
+}
+
+/* `after` is the first bar past the window on screen, or nothing when the
+ * window runs to the newest bar (see barAfterWindow). A trade on or after it
+ * belongs to a bar that is not drawn. Without it, every trade later than the
+ * window snapped to its last bar: panned back to June, NVDA's September sales
+ * were drawn on June 30. */
+function insiderEvents(ps, transactions, after) {
   const dates = ps.dates || [];
   if (!dates.length || !(transactions || []).length) return null;
   const keys = dates.map((d) => String(d).slice(0, 10));
+  const past = after ? String(after).slice(0, 10) : '';
 
   /* Snap a transaction to the bar whose period contains it, rather than
    * demanding an exact date match.
@@ -12533,7 +12572,9 @@ function insiderEvents(ps, transactions) {
     // Only actual purchases and sales. "other" covers option exercises, grants
     // and gifts, which are compensation events rather than a view on the price.
     if (action !== 'purchase' && action !== 'sale') return;
-    const i = barFor(String(t.date || '').slice(0, 10));
+    const iso = String(t.date || '').slice(0, 10);
+    if (past && iso >= past) return;
+    const i = barFor(iso);
     if (i === undefined) return;
     const value = Number(t.value) || 0;
     out.push({
@@ -12541,6 +12582,9 @@ function insiderEvents(ps, transactions) {
       kind: action === 'purchase' ? 'buy' : 'sell',
       value,
       label: value ? `${action === 'purchase' ? 'Buy' : 'Sell'} $${fmtCompact(value)}` : null,
+      // Who, for the crosshair readout on the trade's bar, as the Insiders
+      // widget names them.
+      who: [t.insider, t.position].filter(Boolean).join(', '),
       /* The hover text for the marker.
        *
        * Says "Insider" explicitly. On the chart a bare "Buy $9.0M" could be
@@ -19598,8 +19642,12 @@ function wsMountChart() {
       // included, so intraday needs no exclusion: a trade outside the window
       // simply has no bar.
       events: showInsiders
-        ? insiderEvents(ps, ((d.company || {}).ownership || {}).recent_transactions)
+        ? insiderEvents(ps, ((d.company || {}).ownership || {}).recent_transactions,
+          barAfterWindow(wsBaseSeries(d), wsWindowNow(d)))
         : null,
+      // A marker opens the Insiders page on this symbol. See openInsidersFor.
+      onEventClick: showInsiders ? () => openInsidersFor(d.ticker) : null,
+      eventHint: showInsiders ? insiderClickHint(d.ticker) : '',
       vMarkers: earningsMarkersFor(ps, STATE.chartSymbol),
       volumeProfile: showVbp ? volumeByPrice(ps) : null,
       // Drop a level that sits outside the plotted price range rather than
@@ -28620,6 +28668,52 @@ async function loadInsidersCongress(force) {
   renderInsidersFacetHost();
 }
 
+/* The Insiders page on one symbol, opened from an insider marker on a chart.
+ *
+ * Asked for as "whenever i click in the insider trades, take me to a sub-tab
+ * of the insider buys/sells for that specific stock". Discover's Insiders page
+ * already reads one company's own Form 4 history when it is given a symbol,
+ * so it is set the way its Symbol box sets it, on Buys and sells, and
+ * scrolled to the company's filings, which are what the marker was. The
+ * House trades and the contracts in the same symbol come with it, as they do
+ * when the symbol is typed there. */
+let insidersScrollPending = false;
+
+/* The last line of the hover readout on a bar with insider trades. */
+function insiderClickHint(symbol) {
+  return symbol ? `Click the marker for ${symbol}'s insider buys and sells` : '';
+}
+
+function openInsidersFor(symbol) {
+  const sym = String(symbol || '').trim().toUpperCase();
+  if (!sym) return;
+  congressQuery = { ...CONGRESS_BLANK, ticker: sym, days: congressQuery.days };
+  insiderTicker = sym;
+  insiderShow = 'trades';
+  STATE.insiders = null;
+  STATE.contracts = null;
+  insidersScrollPending = true;
+  switchView('insiders');
+  showInsiderFilings(false);
+}
+
+/* Bring the company's filings into view, once the feed has landed (`landed`)
+ * and before it, so the page opens on the panel that is filling in. */
+function showInsiderFilings(landed) {
+  const panel = document.getElementById('ins-filings');
+  if (!panel || STATE.view !== 'insiders') {
+    // Left before it landed: nothing to scroll to later, either.
+    if (landed) insidersScrollPending = false;
+    return;
+  }
+  panel.scrollIntoView({ block: 'start', behavior: landed ? 'smooth' : 'auto' });
+  if (landed) {
+    insidersScrollPending = false;
+    panel.classList.add('ex-flash');
+    setTimeout(() => panel.classList.remove('ex-flash'), 1600);
+  }
+}
+
 function loadInsiders(force) {
   renderInsidersView();
   // All three, always. The page shows the filing regimes together, so opening
@@ -28632,15 +28726,15 @@ function loadInsiders(force) {
 
 function renderInsiderFeed() {
   const d = STATE.insiders;
-  if (!d) return `<div class="panel span-all"><h2>${hg('Insider filings')}</h2>
+  if (!d) return `<div class="panel span-all" id="ins-filings"><h2>${hg('Insider filings')}</h2>
     <p class="sub">Reading the latest Form 4s\u2026</p></div>`;
   if (!d.available) {
-    return `<div class="panel span-all"><h2>${hg('Insider filings')}</h2>
+    return `<div class="panel span-all" id="ins-filings"><h2>${hg('Insider filings')}</h2>
       <div class="callout">${esc(d.reason || 'EDGAR did not answer.')}</div></div>`;
   }
   const rows = d.rows || [];
   const view = insiderShowSpec();
-  return `<div class="panel span-all">
+  return `<div class="panel span-all" id="ins-filings">
     <h2>${hg('Insider filings')}</h2>
     <p class="sub">Form 4s across the market, newest filing first. The time is
       EDGAR's own acceptance timestamp; the last column is the date the insider
@@ -28727,6 +28821,7 @@ async function loadInsiderFeed(force, round = 0) {
   // other end. It repaints into the facet host rather than into its old
   // `span-all` slot at the foot of the Read.
   renderInsidersFacetHost();
+  if (insidersScrollPending) showInsiderFilings(true);
   if (ticker && data.available && data.filings_unread > 0
       && round < INSIDER_MORE_ROUNDS && STATE.view === 'insiders') {
     insiderMoreTimer = setTimeout(() => loadInsiderFeed(false, round + 1), 600);
