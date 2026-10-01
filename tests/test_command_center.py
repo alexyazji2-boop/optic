@@ -71,12 +71,29 @@ def test_the_strip_keeps_the_plain_language_reading():
 
 
 def test_the_strip_scrolls_rather_than_wrapping():
-    """Eight cells need ~1050px. A strip that becomes three rows is not a
-    strip, and a hard-cut last cell reads as a layout bug."""
-    block = CSS[CSS.index(".ms-strip {"):]
-    block = block[:block.index("}")]
-    assert "overflow-x: auto" in block
-    assert "mask-image" in CSS[CSS.index(".ms-strip"):CSS.index(".ms-cell {")]
+    """Eight cells need ~930px. A strip that becomes three rows is not a
+    strip, and a hard-cut last cell reads as a layout bug, so the cells scroll
+    on a track inside the box and the track fades at the right while there is
+    more to see.
+
+    The fade was on the box and always on, so the border and the rounded
+    corner faded at every width: "it looks like the box is fading away". The
+    box keeps its edge now and holds no mask of its own."""
+    box = CSS[CSS.index(".ms-strip {"):]
+    box = box[:box.index("}")]
+    assert "overflow: hidden" in box and "mask-image" not in box
+    track = CSS[CSS.index(".ms-track {"):]
+    track = track[:track.index("}")]
+    assert "overflow-x: auto" in track
+    rules = CSS[CSS.index(".ms-strip {"):CSS.index(".ms-cell {")]
+    assert ".ms-strip.ms-more .ms-track {" in rules and "mask-image" in rules
+    fn = _fn("marketStripHTML")
+    assert 'class="ms-track">${cells}</div></div>' in fn
+    fade = _fn("stripFade")
+    assert "box.classList.toggle('ms-more'," in fade
+    assert "track.scrollWidth - track.scrollLeft - track.clientWidth > 1" in fade
+    assert "track.addEventListener('scroll', update, { passive: true });" in fade
+    assert "new ResizeObserver(update)" in fade
 
 
 # --------------------------------------------------------- what matters now

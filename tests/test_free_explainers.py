@@ -5,6 +5,11 @@ Side by side, the user shouldn't have to use 1 out of 3 chats with Pulse to do
 that, it should be free information". Checked in a browser at 1470x785 on the
 Compare tab: the chip opened its answer beneath itself, Pulse stayed shut, and
 the page made no request at all.
+
+That chip itself is gone since: its follow-up sent Pulse a question about a
+comparison it had not been given, and the owner asked for it to be removed
+("remove the three horizons chatbot button as well"). The definition chips that
+remain answer from the glossary.
 """
 from __future__ import annotations
 
@@ -15,8 +20,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
-from app.analytics import compare
 
 ROOT = Path(__file__).resolve().parent.parent
 RAW = (ROOT / "static/app.js").read_text()
@@ -47,9 +50,9 @@ def _run(scenario):
 
 def test_a_definition_chip_opens_its_answer_and_a_live_one_still_asks_pulse():
     _run("""
-      var free = askPulse('compare');
-      assert(free.indexOf('data-explain="compare"') > 0 && free.indexOf('data-ask') < 0, free);
-      assert(free.indexOf('aria-haspopup="dialog"') > 0 && free.indexOf('>Why three horizons?<') > 0, 'named');
+      var free = askPulse('gex');
+      assert(free.indexOf('data-explain="gex"') > 0 && free.indexOf('data-ask') < 0, free);
+      assert(free.indexOf('aria-haspopup="dialog"') > 0, 'a dialog');
       var live = askPulse('flow');
       assert(live.indexOf('data-ask="flow"') > 0 && live.indexOf('data-explain') < 0, live);
       ['gex', 'iv', 'levels', 'pehistory'].forEach(function (t) {
@@ -62,22 +65,21 @@ def test_the_answers_are_the_terminals_own_words():
     _run("""
       assert(explainerHTML('gex') === '<p>' + GLOSSARY['gex'] + '</p><p>' + GLOSSARY['dealer gamma']
              + '</p><p>' + GLOSSARY['gamma flip'] + '</p>', 'the glossary, verbatim');
-      var c = explainerHTML('compare');
-      assert(c.split('<p>').length - 1 === 5, 'five paragraphs');
-      assert(c.indexOf('company&#39;s') > 0 || c.indexOf("company's") > 0, 'escaped as text');
       assert(explainerHTML('flow') === '', 'no answer for a live question');
     """)
 
 
-def test_the_comparison_answer_matches_what_the_comparison_scores():
-    explainers = _block("ASK_EXPLAINERS")
-    swing, position, longterm = (h["basis"] for h in compare.HORIZONS)
-    for phrase in ("14-session RSI", "20-session realised volatility", "21-session"):
-        assert phrase in explainers and phrase in swing, phrase
-    assert "50- and 200-day averages" in explainers and "50- and 200-day averages" in position
-    assert "Five-year annualised return" in longterm and "five-year annualised return" in explainers
-    assert "A lead under 8 points is a close call" in explainers
-    assert "const decisive = gap >= 8;" in RAW, "the same threshold the bars use"
+def test_the_comparison_has_no_chip_and_no_question_left_behind():
+    """Removed with everything it opened, so no other button can send the
+    question it asked."""
+    fn = RAW[RAW.index("function renderCompare(c) {"):]
+    fn = fn[:fn.index("\n}\n")]
+    assert "<h2 class=\"weekly-title\">Side-by-side</h2>" in fn
+    assert "askPulse(" not in fn
+    for block in ("PULSE_TOPICS", "PULSE_ASK_LABELS", "ASK_EXPLAINERS"):
+        body = re.search(r"^const %s = \{.*?^\};" % block, RAW, re.M | re.S).group()
+        assert "\n  compare:" not in body, block
+    assert "'Why three horizons?'" not in RAW, "the label, as a string the page could print"
 
 
 def test_it_closes_on_the_x_a_click_elsewhere_or_escape_and_pulse_is_one_press_away():

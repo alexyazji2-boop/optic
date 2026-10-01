@@ -3760,9 +3760,12 @@ async function loadHomeMarket(opts = {}) {
   // it is the cheapest thing to paint and the highest thing on the page.
   const strip = document.getElementById('cc-strip');
   if (strip) {
-    const scrollLeft = strip.firstElementChild ? strip.firstElementChild.scrollLeft : 0;
+    const was = strip.querySelector('.ms-track');
+    const scrollLeft = was ? was.scrollLeft : 0;
     strip.innerHTML = marketStripHTML(data);
-    if (strip.firstElementChild) strip.firstElementChild.scrollLeft = scrollLeft;
+    const track = strip.querySelector('.ms-track');
+    if (track) track.scrollLeft = scrollLeft;
+    stripFade(strip);
     // One fade for the whole band rather than a stagger per cell: it is a
     // single reading of the market, and eight cells arriving one after another
     // would read as eight separate updates.
@@ -6463,8 +6466,37 @@ function marketStripHTML(data) {
   /* Scrollable rather than wrapped. Eight cells do not fit a phone, and a strip
    * that wraps to three rows stops being a strip; `overflow-x` keeps it one
    * band at every width and the order means the indices are the ones on screen
-   * before you scroll. */
-  return `<div class="ms-strip" role="group" aria-label="Market snapshot">${cells}</div>`;
+   * before you scroll. The cells scroll on a track inside the box, so the box
+   * keeps its border while they move (see stripFade). */
+  return `<div class="ms-strip" role="group" aria-label="Market snapshot"><div
+    class="ms-track">${cells}</div></div>`;
+}
+
+/* The fade at the strip's right edge, only while there is more to scroll to.
+ *
+ * It was always on: a mask over the last 28px of the bordered box, kept on
+ * the grounds that it cost nothing when the strip fitted. It cost the box its
+ * right edge. The border and the rounded corner faded out at every width, and
+ * so did a figure that reached that far: "make this section on the home page
+ * a little smaller, as it looks like the box is fading away". The fade is on
+ * the track inside the box now, and only while the track has more to the
+ * right than it shows. */
+let stripResize = null;
+function stripFade(host) {
+  const box = host && host.querySelector('.ms-strip');
+  const track = box && box.querySelector('.ms-track');
+  if (!track) return;
+  const update = () => {
+    box.classList.toggle('ms-more',
+      track.scrollWidth - track.scrollLeft - track.clientWidth > 1);
+  };
+  update();
+  track.addEventListener('scroll', update, { passive: true });
+  if (typeof ResizeObserver === 'function') {
+    if (stripResize) stripResize.disconnect();
+    stripResize = new ResizeObserver(update);
+    stripResize.observe(track);
+  }
 }
 
 /* What matters now: the day's largest cross-asset moves, ranked.
@@ -21326,9 +21358,14 @@ function comparePicksHTML() {
  * AMZN, as it does in the top bar, and a pick fills the box and moves to the
  * next empty one rather than leaving the tab. */
 function renderCompare(c) {
+  /* "Ticker 1", not "Ticker 1 or company". The box is 130px and uppercased, so
+     the longer one was cut to "TICKER 1 O", and the stray letter was reported
+     as "remove the O's in each box". A company name still works, and the hover
+     and the screen-reader label still say so. */
   const inputs = (STATE.compareInputs || ['', '']).map((v, i) => `<div class="combo cmp-combo">
     <input class="cmp-input" id="cmp-input-${i}" data-cmp-input="${i}" value="${esc(v)}"
-      placeholder="Ticker ${i + 1} or company" spellcheck="false" autocomplete="off"
+      placeholder="Ticker ${i + 1}" title="A ticker, or a company name"
+      spellcheck="false" autocomplete="off"
       aria-label="Ticker ${i + 1}, or a company name" role="combobox" aria-expanded="false"
       aria-autocomplete="list" aria-controls="cmp-results-${i}">
     <ul class="combo-list" id="cmp-results-${i}" role="listbox" hidden></ul>
@@ -21346,7 +21383,7 @@ function renderCompare(c) {
    */
   const head = `<div class="panel span-all">
     <div class="weekly-kicker">Compare tickers</div>
-    <h2 class="weekly-title">Side-by-side${askPulse('compare')}</h2>
+    <h2 class="weekly-title">Side-by-side</h2>
     <p class="weekly-sub">Two to four stocks or ETFs ranked across momentum, technical
       structure, volatility and longer-term value. The three horizons are scored separately,
       so a name can lead one and trail another. That disagreement is the useful part.</p>
@@ -21496,6 +21533,8 @@ async function runCompare() {
   }
   mountCompare(STATE.compare);
   revealPanels(views.compare);
+  // The context chip names the comparison once Pulse can read it.
+  updateChatContext();
 }
 
 /* A company logo, high-resolution where one exists, with a monogram underneath.
@@ -25632,7 +25671,6 @@ const PULSE_TOPICS = {
   morning_desk: 'Walk me through this morning desk. What is the fed funds figure actually measuring, why is it basis points priced into a month rather than the odds on a meeting, and why does this compare releases to their own previous print instead of to what was expected?',
   global: 'Explain the overnight worldwide panel. Why are the markets ordered by session, what does the correlation to the S&P actually tell me, and should I read across from a big move in Korea or China to the US open?',
   patterns: 'Explain the chart patterns panel in plain language. What does it mean that a pattern is confirmed or not, what is a supply or demand zone as opposed to support, and how should I read the fact that most of these patterns measure close to a coin toss?',
-  compare: 'Explain the side-by-side comparison. Why are the three horizons ranked separately, and what does it mean when a name is best on one and worst on another?',
   calendar: 'Explain the economic calendar in plain language. What do prev, est and actual mean, why is the estimate column always empty, and which of the releases showing here actually moves the market?',
   earningsweek: "Explain the earnings week calendar. What does the street's consensus EPS mean, why is there no before-open or after-close split, and which of these reports actually moves the index?",
   books: 'Explain the three books. What actually differs between conservative, balanced and aggressive, and what does comparing them tell me that one book alone would not?',
@@ -25874,7 +25912,6 @@ const PULSE_ASK_LABELS = {
   morning: 'What period is this?',
   global: 'Why this order?',
   patterns: 'How reliable are these?',
-  compare: 'Why three horizons?',
   calendar: 'Prev vs est?',
   books: 'What differs?',
   priority: 'Which column matters?',
@@ -25910,19 +25947,14 @@ const PULSE_ASK_LABELS = {
  * thing here that can read them.
  *
  * Each answer is the terminal's own wording, never new copy: the glossary
- * entries the page already shows on hover, or, for the comparison, what
- * app/analytics/compare.py scores each horizon from and the gap it calls a
- * close call. */
+ * entries the page already shows on hover.
+ *
+ * The chip that prompted all this, "Why three horizons?" beside Side-by-side,
+ * is gone: its follow-up sent Pulse a question about a comparison it had not
+ * been given, and the answer said so ("this response makes no sense"), so the
+ * owner asked for the chip to go. The panel's own subtitle and its three
+ * horizon cards say what it said. */
 const ASK_EXPLAINERS = {
-  compare: {
-    paragraphs: [
-      'A stock can be a good trade and a poor investment at the same time, so the comparison answers three questions separately instead of naming one winner.',
-      'Swing setup, over one to eight weeks: 14-session RSI, implied against 20-session realised volatility, 21-session strength against SPY, and price against its 20- and 50-day averages.',
-      'Position setup, over several weeks to several months: price against its 50- and 200-day averages, 21-session relative strength, and valuation against the company\'s own history.',
-      'Long-term trend, over years: the five-year annualised return and that return per unit of volatility, the current and the worst drawdown from a high, position against the 200-day average, and valuation against its own multi-year range.',
-      'Each horizon is a 0 to 100 score on the same scale, ranked on its own. A name that leads one and trails another is the useful case: it says which question that name answers well. A lead under 8 points is a close call rather than a ranking, and today\'s move is context only, never what orders the position or long-term ranks.',
-    ],
-  },
   gex: { gloss: ['gex', 'dealer gamma', 'gamma flip'] },
   iv: { gloss: ['implied volatility', 'iv rank'] },
   levels: { gloss: ['gamma pin', 'gamma flip'] },
@@ -25930,15 +25962,12 @@ const ASK_EXPLAINERS = {
 };
 
 /* The answer as HTML. Glossary entries are the page's own constants and are
- * already written as HTML (an ampersand is &amp; there); anything else is
- * escaped. */
+ * already written as HTML (an ampersand is &amp; there). */
 function explainerHTML(topic) {
   const ex = ASK_EXPLAINERS[topic];
   if (!ex) return '';
-  const parts = ex.paragraphs
-    ? ex.paragraphs.map((p) => esc(p))
-    : (ex.gloss || []).map((k) => GLOSSARY[k]).filter(Boolean);
-  return parts.map((p) => `<p>${p}</p>`).join('');
+  return (ex.gloss || []).map((k) => GLOSSARY[k]).filter(Boolean)
+    .map((p) => `<p>${p}</p>`).join('');
 }
 
 function askPulse(topic) {
@@ -30500,6 +30529,13 @@ function chatContextPayload() {
     };
   }
   if (STATE.long) ctx.long_term = STATE.long;
+  /* The comparison, once one has been run: its scores, ranks, the basis of
+   * each horizon and the take, about 4KB for two names. It was never in here,
+   * so a question asked from the Compare page went out with whatever else was
+   * loaded, and Pulse, handed the paper-trading ledger, answered that this
+   * "isn't actually a side-by-side horizon comparison": reported with the
+   * answer as "this response makes no sense". */
+  if (STATE.compare && STATE.compare.available === true) ctx.compare = STATE.compare;
   // Summary and open positions only. The full closed-trade list can run to
   // dozens of rows and would crowd out the analysis the question is about.
   if (STATE.tracker) {
@@ -30606,6 +30642,7 @@ function updateChatContext() {
   if (STATE.indices) bits.push('indices');
   if (STATE.roth) bits.push('roth model');
   if (STATE.long) bits.push('long-term');
+  if (STATE.compare && STATE.compare.available === true) bits.push('comparison');
   if (STATE.tracker) bits.push('tracker');
   const chip = $('#chat-ctx');
   chip.className = 'chip ' + (bits.length ? 'bull' : 'neutral');
@@ -30625,6 +30662,7 @@ function updateChatContext() {
     indices: 'the index cycle',
     'roth model': 'the retirement model',
     'long-term': 'the long-term view',
+    comparison: 'the side-by-side comparison you ran',
     tracker: 'the paper-trading ledger',
   };
   const meant = bits.map((b) => {

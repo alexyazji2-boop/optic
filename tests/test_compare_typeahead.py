@@ -28,7 +28,12 @@ def test_each_box_is_a_combobox_with_its_own_list():
     assert 'id="cmp-input-${i}" data-cmp-input="${i}"' in fn
     assert 'role="combobox" aria-expanded="false"' in fn and 'aria-controls="cmp-results-${i}"' in fn
     assert '<ul class="combo-list" id="cmp-results-${i}" role="listbox" hidden></ul>' in fn
-    assert 'placeholder="Ticker ${i + 1} or company"' in fn
+    # "Ticker 1": the longer placeholder was cut to "TICKER 1 O" in a 130px
+    # uppercased box ("remove the O's in each box"). The hint lives on in the
+    # hover title and the label a screen reader announces.
+    assert 'placeholder="Ticker ${i + 1}" title="A ticker, or a company name"' in fn
+    assert 'aria-label="Ticker ${i + 1}, or a company name"' in fn
+    assert 'placeholder="Ticker ${i + 1} or company"' not in fn
     assert ".cmp-combo { flex: 0 1 auto; }" in CSS
 
 

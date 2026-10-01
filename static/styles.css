@@ -10316,24 +10316,33 @@ body.cp-open { overflow: hidden; }
    indices first so those are what is on screen before anyone scrolls.
    `scrollbar-width: none` because the band is short enough that a visible bar
    doubles its height on the platforms that reserve space for one. */
+/* The box, and the track that scrolls inside it. The box holds the border and
+   clips the track to its rounded corners, so the border stays whole while the
+   cells move. */
 .ms-strip {
-  display: flex;
-  gap: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
   margin: 0 0 var(--space-5);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   background: var(--raised);
+  overflow: hidden;
 }
-.ms-strip::-webkit-scrollbar { display: none; }
+.ms-track {
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ms-track::-webkit-scrollbar { display: none; }
 
-/* The right edge fades, because the strip scrolls and nothing else says so.
-   Eight cells need ~1050px and the scrollbar is hidden, so at any narrower
-   width the last cell is simply cut off with a hard edge that reads as a
-   layout bug rather than as more content. A mask is the cheapest honest
-   affordance: no extra element, no scroll listener, and it costs nothing when
-   the strip does fit because the cut edge is then the container edge anyway.
+/* The right edge fades while there is more to scroll to, because the
+   scrollbar is hidden and nothing else says so: a last cell cut off with a
+   hard edge reads as a layout bug rather than as more content.
+
+   Only then, and only on the track. This mask was on the box itself and always
+   on, on the grounds that it cost nothing when the strip fitted, and it took
+   the border and the rounded corner with it at every width: "it looks like the
+   box is fading away". `.ms-more` is set by `stripFade` in app.js while the
+   track has more to the right than it shows.
 
    Guarded on `mask-image` support so browsers without it get the plain
    overflow rather than an invisible strip.
@@ -10345,7 +10354,7 @@ body.cp-open { overflow: hidden; }
    thing. */
 @supports (mask-image: linear-gradient(#000, #000)) or
           (-webkit-mask-image: linear-gradient(#000, #000)) {
-  .ms-strip {
+  .ms-strip.ms-more .ms-track {
     -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
     mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
   }
@@ -10379,8 +10388,12 @@ body.cp-open { overflow: hidden; }
      phone: the cells hold their width and the strip scrolls, rather than eight
      figures crushing into 375px. */
   flex: 1 0 auto;
-  min-width: 132px;
-  padding: var(--space-2) var(--space-3);
+  /* A little smaller than it was (132px, the figure at --t-base, and 9px by
+     14px of padding), asked for with the strip in a screenshot: eight cells
+     now need about 930px where they needed about 1,070, so the strip fits
+     the column on a 1280px screen instead of scrolling. */
+  min-width: 112px;
+  padding: calc(var(--space-1) + var(--space-0)) var(--space-2);
   border: 0;
   border-right: 1px solid var(--border);
   background: none;
@@ -10400,7 +10413,7 @@ body.cp-open { overflow: hidden; }
 /* Tabular figures so the strip does not jitter as quotes update, and so the
    values line up against each other when scanned. */
 .ms-last {
-  font: 600 var(--t-base)/1.2 var(--sans);
+  font: 600 var(--t-body)/1.2 var(--sans);
   font-variant-numeric: tabular-nums;
   color: var(--ink);
 }
