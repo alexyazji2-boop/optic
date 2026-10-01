@@ -6654,7 +6654,8 @@ function deskVoiceReason(d) {
   if (d.voice_reason === 'moved') {
     const at = d.written_at ? stampIn(d.written_at, activeZone()) : '';
     return `The written version${at ? ` from ${at}` : ''} is not shown, because the market has `
-      + 'moved since it was written and its figures no longer match.';
+      + 'moved since it was written and its figures no longer match.'
+      + (d.rewriting ? ' A new one is being written against the figures above.' : '');
   }
   if (d.voice_reason === 'unwritten') return "Today's written version could not be produced.";
   return 'The written version needs the assistant, which is not configured on this deployment.';
@@ -29010,12 +29011,14 @@ function renderScan(cat, res) {
   </div>`;
 
   if (mode === 'build') {
-    return `${renderResearchHub()}${scanAskHTML()}${modeBar}
+    return `${scanAskHTML()}${renderResearchHub()}${modeBar}
       <div id="sc-builder" class="span-all">${screenerBuilder()}</div>`;
   }
 
-  // The page, with what the open tab shows in its place under the strip.
-  const page = (shown) => `${renderResearchHub()}${scanAskHTML()}${modeBar}
+  // The page, with what the open tab shows in its place under the strip. The
+  // request box first, above Start an investigation: it sat under that block
+  // and below the fold, and was asked after as "wheres this?".
+  const page = (shown) => `${scanAskHTML()}${renderResearchHub()}${modeBar}
   <div class="panel span-all">
     <h2>${hg('Scanners')}</h2>
     <p class="sub">Named scans over the ${cat.considered ? fmt(cat.considered, 0) : ''} names that

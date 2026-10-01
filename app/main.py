@@ -1325,6 +1325,53 @@ def _write_desk_prose(desk: Dict[str, Any], day: str) -> Optional[Dict[str, Any]
     return prose
 
 
+# A written desk the tape has moved past is written again: "just have it update
+# whenever necessary". Necessary is the same test that hides it (_desk_moved),
+# so a rewrite happens exactly when the written one stops matching the figures.
+# On a reader's request, so a quiet night costs nothing, and in the background,
+# so that reader is shown the assembled desk rather than kept waiting. At most
+# one rewrite each DESK_REWRITE_SECONDS, and DESK_REWRITES_PER_DAY in a day,
+# both counted on disk so a deploy or a second process cannot add to them: a
+# choppy tape crosses the line every few minutes, and each rewrite is a paid
+# call of about six cents.
+DESK_REWRITE_SECONDS = float(os.environ.get("DESK_REWRITE_MINUTES", "30")) * 60
+DESK_REWRITES_PER_DAY = int(os.environ.get("DESK_REWRITES_PER_DAY", "12"))
+
+
+def _rewrite_desk_soon(desk: Dict[str, Any]) -> bool:
+    """Start writing the desk again, unless one was started too recently or the
+    day's are used up. True when one was started."""
+    day = desk.get("date")
+    if not day or ai.available().get("enabled") is not True:
+        return False
+    slot = int(time.time() // DESK_REWRITE_SECONDS)
+    if not ai_store.claim("desk-rewrite", "{}:{}".format(day, slot), 1, 0.0):
+        return False
+    if not ai_store.claim("desk-rewrites", day, DESK_REWRITES_PER_DAY, 0.0):
+        return False
+    threading.Thread(target=_rewrite_desk, args=(desk, day), name="desk-rewrite",
+                     daemon=True).start()
+    return True
+
+
+def _rewrite_desk(desk: Dict[str, Any], day: str) -> None:
+    """One rewrite. The written desk it replaces stays until this one is kept."""
+    try:
+        prose = ai.write_morning_desk(desk)
+    except Exception as exc:                                    # noqa: BLE001
+        logging.getLogger("uvicorn.error").warning("morning desk rewrite failed: %s", exc)
+        return
+    if not prose:
+        return
+    prose["tape_marks"] = _desk_tape(desk)
+    prose["written_at"] = datetime.now(timezone.utc).isoformat()
+    ai_store.keep("desk", day, prose)
+    # Into memory too, unless the date has moved on while this was writing.
+    if day in _DESK_PROSE or not _DESK_PROSE:
+        _DESK_PROSE.clear()
+        _DESK_PROSE[day] = prose
+
+
 # How far the tape may move before the written desk stops describing it.
 #
 # The written voice is written once a day and was served until midnight, so
@@ -1420,6 +1467,9 @@ def _morning_desk(macro: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     if prose and _desk_moved(prose.get("tape_marks") or {}, _desk_tape(desk)):
         desk["voice_reason"] = "moved"
         desk["written_at"] = prose.get("written_at")
+        # And written again, against the tape as it is now, so the written
+        # voice comes back describing it (see _rewrite_desk_soon).
+        desk["rewriting"] = _rewrite_desk_soon(desk)
         prose = None
     elif not prose:
         desk["voice_reason"] = ("unconfigured" if ai.available().get("enabled") is not True

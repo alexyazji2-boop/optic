@@ -89,6 +89,8 @@ def desk_parts(monkeypatch):
         "date": "2026-09-28", "tape": live["tape"], "lead": ["assembled lead"],
         "scenarios": [], "note": "assembled note", "overall": "assembled overall"})
     monkeypatch.setattr(main.ai, "available", lambda: {"enabled": True})
+    # A stale desk is written again in the background; never for real here.
+    monkeypatch.setattr(main.ai, "write_morning_desk", lambda desk: None)
     return live, monkeypatch
 
 
@@ -160,3 +162,87 @@ def test_the_line_under_the_desk_says_why_it_is_the_assembled_one():
       print('TEST_OK');""")
     out = subprocess.run([exe, "-e", src], capture_output=True, text=True, timeout=30)
     assert "TEST_OK" in out.stdout, out.stdout + out.stderr
+
+
+# ------------------------------------------------------------- written again
+
+
+def _settle():
+    """Wait for any rewrite started in the background to finish."""
+    import threading
+    for t in [t for t in threading.enumerate() if t.name == "desk-rewrite"]:
+        t.join(timeout=5)
+
+
+@pytest.fixture
+def rewrites(desk_parts, monkeypatch):
+    """The desk with a counting writer: the nth write's lead says n."""
+    live, patch = desk_parts
+    patch.setattr(main, "_DESK_PROSE", {})
+    written = []
+
+    def write(desk):
+        written.append(dict(desk["tape"]))
+        return {"lead": ["written {}".format(len(written))], "scenarios": [], "note": "",
+                "overall": "", "written_by": "claude"}
+    patch.setattr(main.ai, "write_morning_desk", write)
+    return live, patch, written
+
+
+def test_a_desk_the_tape_has_moved_past_is_written_again(rewrites):
+    """Asked for as "just have it update whenever necessary". Necessary is the
+    same test that hides it: once the futures or the VIX have moved past what
+    the written desk says, a new one is written against the tape as it is."""
+    live, patch, written = rewrites
+    first = main._morning_desk(None)
+    assert first["voice"] == "written" and first["lead"] == ["written 1"]
+    live["tape"] = _tape(es=0.12, nq=0.19, rty=0.23, vix=15.91)
+    moved = main._morning_desk(None)
+    # The reader who found it stale is not kept waiting for the rewrite.
+    assert moved["voice"] == "mechanical" and moved["voice_reason"] == "moved"
+    assert moved["rewriting"] is True
+    _settle()
+    again = main._morning_desk(None)
+    assert again["voice"] == "written" and again["lead"] == ["written 2"]
+    assert len(written) == 2 and written[1] == live["tape"], "written against the new tape"
+
+
+def test_one_rewrite_a_half_hour_at_most(rewrites):
+    live, patch, written = rewrites
+    main._morning_desk(None)
+    live["tape"] = _tape(es=0.12, nq=0.19, rty=0.23, vix=15.91)
+    main._morning_desk(None)
+    _settle()
+    live["tape"] = _tape(es=-0.4, nq=-0.5, rty=-0.6, vix=17.2)
+    later = main._morning_desk(None)
+    assert later["voice_reason"] == "moved" and later["rewriting"] is False
+    assert len(written) == 2, "the second move inside the same half hour waits"
+    assert main.DESK_REWRITE_SECONDS == 1800
+
+
+def test_and_a_dozen_a_day_at_most(rewrites):
+    live, patch, written = rewrites
+    assert main.DESK_REWRITES_PER_DAY == 12
+    patch.setattr(main, "DESK_REWRITE_SECONDS", 0.000001)     # every request its own slot
+    patch.setattr(main, "DESK_REWRITES_PER_DAY", 2)
+    main._morning_desk(None)
+    for es in (0.5, 1.0, 1.5, 2.0):
+        live["tape"] = _tape(es=es, nq=es, rty=es, vix=15.0 + es)
+        main._morning_desk(None)
+        _settle()
+    assert len(written) == 1 + 2, "the first write, then two rewrites"
+
+
+def test_no_assistant_no_rewrite(rewrites):
+    live, patch, written = rewrites
+    main._morning_desk(None)
+    patch.setattr(main.ai, "available", lambda: {"enabled": False})
+    live["tape"] = _tape(es=0.12, nq=0.19, rty=0.23, vix=15.91)
+    assert main._morning_desk(None)["rewriting"] is False
+    _settle()
+    assert len(written) == 1
+
+
+def test_the_line_under_the_desk_says_a_new_one_is_coming():
+    fn = _raw_fn("deskVoiceReason")
+    assert "(d.rewriting ? ' A new one is being written against the figures above.' : '')" in fn

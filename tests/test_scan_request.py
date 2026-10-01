@@ -232,4 +232,5 @@ def test_ask_pulse_drafts_and_never_sends():
 def test_the_box_is_on_the_scan_page_in_both_modes():
     fn = APP[APP.index("function renderScan(cat, res) {"):]
     fn = fn[:fn.index("\nasync function loadScan(")]
-    assert fn.count("${renderResearchHub()}${scanAskHTML()}${modeBar}") == 2
+    # First on the page, above Start an investigation, where it was looked for.
+    assert fn.count("${scanAskHTML()}${renderResearchHub()}${modeBar}") == 2
