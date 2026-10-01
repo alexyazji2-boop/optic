@@ -3396,126 +3396,11 @@ if (homeNarrowQuery && homeNarrowQuery.addEventListener) {
   });
 }
 
-/* The landing cards, grouped exactly as the navigation is.
- *
- * They drifted twice: once when the tab strip was reordered, and again when the
- * nav was regrouped — Roth kept a card of its own after moving inside Optic's
- * Positions, while Read and Scan had no card at all despite being two of the
- * five sections. A landing page that describes a different terminal from the one
- * the bar navigates is worse than no landing page.
- *
- * Grouping them under the same headings is the fix that keeps them honest: a new
- * section has to be placed somewhere, so it cannot be silently omitted. */
-const HOME_SECTIONS = [
-  {
-    group: 'security',
-    label: 'Analyse a ticker',
-    note: 'Load a symbol and these three work it from different angles.',
-    cards: [
-      {
-        view: 'swing',
-        color: 'var(--s1)',
-        title: 'Options',
-        body: 'Composite verdict from technicals, dealer gamma, vanna and charm, flow and news, plus a strike and expiry recommendation with an entry trigger, and whether the sector agrees.',
-      },
-      {
-        view: 'earnings',
-        color: 'var(--s5)',
-        title: 'Earnings',
-        body: 'A written pre-earnings brief, surprise history against how the stock actually traded afterwards, estimate revisions, and whether the options market is overcharging for the event.',
-      },
-      {
-        view: 'long',
-        color: 'var(--s4)',
-        title: 'Investing',
-        body: 'For buying and holding the shares themselves: ten-year structure, drawdown history, accumulation zones, valuation against its own history, and a conviction score. No options here.',
-      },
-    ],
-  },
-  {
-    group: 'market',
-    label: 'Read the market',
-    note: 'No ticker needed. What happened, what is scheduled, and what kind of tape this is.',
-    cards: [
-      {
-        view: 'brief',
-        color: 'var(--s6, var(--s3))',
-        title: 'Read',
-        body: 'The release moving the tape right now with its cross-asset reaction, a weekly market update, fear and greed with every input shown, the macro calendar including opex and VIX expiry, and a searchable library of catalysts with the companies connected to them.',
-      },
-      {
-        view: 'market',
-        color: 'var(--s3)',
-        title: 'Macro & Sectors',
-        body: 'Cross-asset regime from VIX, the dollar, rates and commodities. Every sector against its overnight levels and whether money is rotating in or out, plus implied correlation. How much the market is paying for names to move together.',
-      },
-      {
-        view: 'indices',
-        color: 'var(--s7)',
-        title: 'Indices',
-        body: 'The major index ETFs against their prior-session range with a written read on each, then where the indices sit in their own long-run cycle: multi-year returns, drawdown from the high, and whether the average stock is keeping pace with the megacaps.',
-      },
-    ],
-  },
-  {
-    group: 'discover',
-    label: 'Find candidates',
-    note: 'Named questions asked of the whole ranked universe.',
-    cards: [
-      {
-        view: 'scan',
-        color: 'var(--s2)',
-        title: 'Scan',
-        body: 'Seven named scans over the names that clear the screen\'s liquidity and history gates. Breakouts, pullbacks, unusual volume, steady trends, and the weak side too. Each one states what it cannot see.',
-      },
-      {
-        view: 'scan',
-        color: 'var(--s8)',
-        title: 'Does the score work?',
-        body: 'The one panel here that tests a claim instead of making one. It replays the screen\'s score through history and reports whether it predicted anything, measured against a random score and against a single raw momentum number.',
-      },
-    ],
-  },
-  {
-    group: 'portfolio',
-    label: 'Track a book',
-    note: 'The terminal\'s own record, and a long-horizon baseline.',
-    cards: [
-      {
-        view: 'tracker',
-        color: 'var(--s2)',
-        title: "Optic Portfolio",
-        body: "The terminal's own paper-traded record. When a scan finds a setup good enough it takes the trade. As shares and as the option it recommended, with a stop, a target and a size, then holds it to the exit. Book-level risk sits above it: whether those positions are separate bets or one bet with several tickets.",
-      },
-      {
-        view: 'tracker',
-        color: 'var(--s8)',
-        title: 'Roth IRA model',
-        body: 'Inside Optic Portfolio. A rules-based model allocation of low-cost index funds from your horizon and risk tolerance, with cost, correlation and a contribution projection. Not advice. A baseline to compare your own plan against.',
-      },
-    ],
-  },
-];
-
-
 function renderHome() {
   hideTip();
   const quick = HOME_QUICK_PICKS
     .map((t) => `<button type="button" data-pick="${t}">${t}</button>`)
     .join('');
-
-  // Clickable: a card that describes a destination should be a way to reach it.
-  const cards = HOME_SECTIONS.map((sec) => `
-    <section class="home-sec">
-      <h2 class="home-sec-title">${esc(sec.label)}</h2>
-      <p class="home-sec-note">${esc(sec.note)}</p>
-      <div class="home-cards">${sec.cards.map((c) => `
-        <button type="button" class="home-card" data-goto-view="${esc(c.view)}"
-          style="--accent:${c.color}">
-          <h3>${esc(c.title)}</h3>
-          <p>${esc(c.body)}</p>
-        </button>`).join('')}</div>
-    </section>`).join('');
 
   views.home.innerHTML = `
   <div class="home">
@@ -3607,27 +3492,13 @@ function renderHome() {
         * day. */''}
     ${knowledgeOnboardingHTML()}
 
-    ${/* The market, above the product tour. Painted empty and filled by
-        * renderHomeMarket once /api/home lands — the alternative is holding the
-        * whole page back on a request that touches four feeds. */''}
+    ${/* The market. Painted empty and filled by renderHomeMarket once
+        * /api/home lands — the alternative is holding the whole page back on a
+        * request that touches four feeds.
+        *
+        * The product tour that sat under it, "What Optic can do", is gone:
+        * asked for as "remove this from the home page, unnecessary". */''}
     <div id="hm-market" class="hm-market"></div>
-
-    ${/* Below the fold on purpose. These are for a first visit; the market is
-        * for every other one. */''}
-    <details class="home-tour" id="home-tour">
-      <summary>What Optic can do</summary>
-      <p class="home-lede">
-        A market research workbench. Load a ticker and Optic works through the
-        structure, the options, the earnings and the macro, then tells you where
-        those inputs disagree.
-      </p>
-      <p class="home-proto">
-        <strong>Prototype.</strong> A personal research project, still being built.
-        Expect rough edges, gaps in the data and figures that lag the market. It is
-        a tool for forming a view, not a recommendation to act on one.
-      </p>
-      <div class="home-cards">${cards}</div>
-    </details>
 
     <div class="home-foot" id="home-foot">
       <span class="dot-sep"><span class="chip neutral" style="padding:var(--space-0) var(--space-2)"><span class="dot"></span>Checking data source…</span></span>
@@ -3911,7 +3782,7 @@ async function loadHomeMarket(opts = {}) {
    */
   const html = `
     <div class="hm-greet">
-      <h2 class="hm-hello">${esc(homeGreeting())}.</h2>
+      <h2 class="hm-hello">${esc(homeHello())}</h2>
       <span class="hm-session is-${session.is_open ? 'open' : 'shut'}">
         ${esc(holiday ? holiday + ' \u00b7 market closed' : (session.label || ''))}
       </span>
@@ -6279,6 +6150,17 @@ function homeGreeting() {
   if (hour < 12) return 'Good morning';
   if (hour < 17) return 'Good afternoon';
   return 'Good evening';
+}
+
+/* The greeting as the page says it: with the reader's first name once they are
+ * signed in. Asked for as "when logged in, say "good evening, 'users first
+ * name'"". The account's own first name, so a sign-in that never gave one is
+ * greeted as a guest is, and nothing is guessed from an email address. */
+function homeHello() {
+  const auth = window.OpticAuth && window.OpticAuth.state();
+  const user = auth && auth.status === 'user' ? auth.user || {} : {};
+  const first = String(user.first_name || '').trim().slice(0, 40);
+  return `${homeGreeting()}${first ? `, ${first}` : ''}.`;
 }
 
 /* What a move in volatility or the long end actually means, in a few words.
@@ -32276,6 +32158,10 @@ paintNav(STATE.view || 'home');
 if (window.OpticAuth && window.OpticAuth.on) {
   window.OpticAuth.on(() => {
     paintNav(STATE.view || 'home');
+    // The greeting names whoever is signed in, and the answer can land after
+    // the home page has drawn.
+    const hello = document.querySelector('.hm-hello');
+    if (hello) hello.textContent = homeHello();
     // The Reports page belongs to the signed-in owner: signing out takes the
     // list off the screen, and signing in as the owner draws it.
     if (STATE.view === 'reports') loadReports(true);

@@ -67,7 +67,8 @@ def test_the_hero_still_comes_before_the_market():
     home = _fn("renderHome")
     assert home.index('class="home-brand"') < home.index('id="hm-market"')
     assert home.index('id="home-input"') < home.index('id="hm-market"')
-    assert home.index('id="hm-market"') < home.index('id="home-tour"')
+    # The tour that sat below both is gone. See test_command_center.
+    assert 'id="home-tour"' not in home
 
 
 # ------------------------------------------------- one Dossier navigation

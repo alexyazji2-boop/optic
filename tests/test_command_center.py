@@ -334,13 +334,14 @@ def test_the_phone_no_longer_keeps_a_hero_of_its_own():
     assert ".home-title { font-size: var(--t-d2); }" not in CSS
 
 
-def test_the_lede_survives_in_the_tour():
-    """It is a good paragraph and the right thing to read once. Removed from
-    above the fold, not deleted."""
-    assert "A market research workbench" in APP_JS
-    tour = APP_JS[APP_JS.index('<details class="home-tour"'):]
-    tour = tour[:tour.index("</details>")]
-    assert "A market research workbench" in tour
+def test_the_tour_is_gone_and_nothing_it_needed_is_left():
+    """The lede lived on in a collapsed tour at the foot of the page, "What
+    Optic can do", until that was asked to go too: "remove this from the home
+    page, unnecessary". Its cards, their data and their styles went with it."""
+    assert "<summary>What Optic can do</summary>" not in APP_JS
+    assert 'class="home-tour"' not in APP_JS and "HOME_SECTIONS" not in APP_JS
+    for name in ("home-tour", "home-lede", "home-proto", "home-cards", "home-card", "home-sec"):
+        assert name not in CSS, name
 
 
 def test_the_superseded_four_tile_block_is_gone_not_orphaned():

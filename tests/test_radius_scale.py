@@ -189,7 +189,8 @@ FAMILIES = {
     # have no corner to keep.
     "pill":   [".chip", ".pill", ".wd-chip", ".sec-chip"],
     "button": [".btn", ".icon-btn", ".ws-menu-btn"],
-    "card":   [".panel", ".home-card", ".tile"],
+    # `.home-card` was one until the home page's tour went.
+    "card":   [".panel", ".tile"],
 }
 
 

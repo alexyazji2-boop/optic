@@ -1304,21 +1304,15 @@ body:not([data-view="home"]) .brand-mark-dot {
 }
 .home-logo,
 .home-title,
-.home-proto,
-.home-lede,
 .home-search,
 .home-quick,
-.home-cards,
 .home-foot {
   animation: fade-up 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 .home-logo   { animation-delay: 0s; }
 .home-title  { animation-delay: 0.08s; }
-.home-proto  { animation-delay: 0.16s; }
-.home-lede   { animation-delay: 0.24s; }
 .home-search { animation-delay: 0.32s; }
 .home-quick  { animation-delay: 0.40s; }
-.home-cards  { animation-delay: 0.48s; }
 .home-foot   { animation-delay: 0.56s; }
 
 /* Every animation above is decorative — nothing in them carries information
@@ -1333,11 +1327,8 @@ body:not([data-view="home"]) .brand-mark-dot {
   .brand-mark-line,
   .brand-mark-dot,
   .home-title,
-  .home-proto,
-  .home-lede,
   .home-search,
   .home-quick,
-  .home-cards,
   .home-foot {
     animation: none;
     opacity: 1;
@@ -1371,14 +1362,6 @@ body:not([data-view="home"]) .brand-mark-dot {
  * colours. */
 .home-title span { font-weight: 400; }
 
-.home-lede {
-  font-size: var(--t-lead);
-  color: var(--ink-2);
-  line-height: 1.5;
-  max-width: 660px;
-  margin: 0 0 var(--space-6);
-}
-
 /* The hovered bar's date, shown in the chart header only while scrubbing.
    Tabular figures so the row does not jitter as the digits change under the
    cursor — the whole point is to read it while moving, and a header that
@@ -1389,26 +1372,6 @@ body:not([data-view="home"]) .brand-mark-dot {
   margin-right: var(--space-1);
 }
 .ws-ohlc { font-variant-numeric: tabular-nums; }
-
-/* Prototype notice. Deliberately not dismissible: it is the first thing a
-   first-time visitor needs to know about what they are looking at, and the one
-   reader who would dismiss it is the one who already knows. Follows the
-   .legal-area precedent below — a block with a bold lead-in rather than a flex
-   row, because flex items shrink to min-content and broke to one word per line
-   in narrow containers. */
-.home-proto {
-  max-width: 660px;
-  margin: 0 0 var(--space-4);
-  padding: var(--space-2) var(--space-3);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-left: 2px solid var(--warn);
-  border-radius: var(--r-md);
-  font-size: var(--t-caption);
-  line-height: 1.65;
-  color: var(--ink-2);
-}
-.home-proto strong { color: var(--ink); margin-right: var(--space-0); }
 
 
 /* The ticker box is the one thing to do on this page, so it gets real weight. */
@@ -1452,38 +1415,6 @@ body:not([data-view="home"]) .brand-mark-dot {
 }
 .home-quick button:hover { color: var(--ink); border-color: var(--s1); }
 
-.home-cards { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(232px, 1fr)); }
-.home-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--accent, var(--s1));
-  border-radius: var(--r-lg);   /* was var(--radius), an alias with one consumer */
-  padding: var(--space-4) var(--space-4);
-  transition: border-color 0.12s ease, background-color 0.12s ease;
-}
-.home-card:hover { background: var(--surface-2); }
-/* The heading carries the accent too. A 2px stripe alone was easy to miss, which
-   defeated the point of giving each card its own colour. */
-.home-card h3 {
-  margin: 0 0 var(--space-1);
-  font-size: var(--t-body);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--accent, var(--ink));
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.home-card h3::before {
-  content: '';
-  width: 7px;
-  height: 7px;
-  border-radius: var(--r-xs);
-  background: var(--accent, var(--s1));
-  flex: none;
-}
-.home-card p { margin: 0; font-size: var(--t-small); color: var(--ink-2); line-height: 1.5; }
-
 .home-foot {
   margin-top: var(--space-7);
   padding-top: var(--space-5);
@@ -1516,12 +1447,6 @@ body:not([data-view="home"]) .brand-mark-dot {
 
 @media (max-width: 640px) {
   .home { padding: var(--space-3) var(--space-0) var(--space-9); }
-  /* The brand row is one 30px line at every width now, so the phone override
-     that shrank a 92px mark to 68px and a --t-d1 title to --t-d2 has nothing
-     left to shrink. Left as a no-op would have been worse than removed: it
-     was still setting a 68px mark, which is why the phone kept a hero long
-     after the desktop lost one. */
-  .home-lede { font-size: var(--t-lead); }
 }
 
 /* Segmented control — chart style toggle. */
@@ -4876,47 +4801,6 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
 .eval-h .cal-caret { position: absolute; right: 14px; top: 15px; }
 .eval-h table { margin: 0 var(--space-4) var(--space-3); width: calc(100% - 28px); }
 .callout.warn { border-left-color: var(--warn); }
-
-/* ------------------------------------------------- home, grouped cards --- */
-
-.home-sec { margin-top: var(--space-6); }
-.home-sec-title {
-  font-size: var(--t-micro);
-  letter-spacing: 0.01em;
-  color: var(--ink);
-  font-weight: 600;
-  margin: 0;
-}
-.home-sec-note {
-  margin: var(--space-1) 0 var(--space-3);
-  font-size: var(--t-small);
-  color: var(--ink-muted);
-}
-.home-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: var(--space-3);
-  align-items: start;
-}
-
-/* The cards are buttons now, so they need their button-ness removed and their
- * affordance put back — a card that navigates should say so on hover. */
-button.home-card {
-  font: inherit;
-  text-align: left;
-  width: 100%;
-  cursor: pointer;
-  transition: border-color 130ms ease, transform 130ms ease;
-}
-button.home-card:hover {
-  border-color: var(--accent);
-  transform: translateY(-1px);
-}
-button.home-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-
-@media (prefers-reduced-motion: reduce) {
-  button.home-card:hover { transform: none; }
-}
 
 /* -------------------------------------------- staged attachment tiles ---- */
 
@@ -9171,15 +9055,9 @@ table.data th,
   .statusline { padding: var(--space-2) var(--space-3); gap: var(--space-3); }
   main { padding: var(--space-5) var(--space-4) var(--space-8); }
 
-  /* 11px is under the size at which small print stays readable at arm's length,
-     and this particular small print is the notice saying the figures may be
-     wrong. It gets the body size on a phone. */
-  .home-proto { font-size: var(--t-small); }
-
-  /* One column. auto-fit with a 232px minimum gives two cramped columns at 375
-     minus padding, which is 343 — enough for the grid to try and not enough for
-     either card to hold a sentence. */
-  .home-cards,
+  /* One column. auto-fit gives two cramped columns at 375 minus padding, which
+     is 343 — enough for the grid to try and not enough for either side to hold
+     a sentence. */
   .grid,
   .grid.c2, .grid.c3, .grid.c4 { grid-template-columns: 1fr; }
 
@@ -9268,7 +9146,7 @@ nav.tabs-group > .nav-item.menu-right .nav-menu { left: auto; right: 0; }
 }
 
 .att-x, .brief-head a, .cal-pill, .cat-card > summary, .chart-pulse, .chart-pulse.is-explain, .combo-list li,
-.hm-more, .home-tour > summary, .wl-open, .wl-x,
+.hm-more, .wl-open, .wl-x,
 .al-sym, .mtab, .msg-save, .rh-open, .rh-route,
 .cp-row,
 .pl-reason > details > summary,
@@ -9305,7 +9183,7 @@ table.data tr, *::-webkit-scrollbar-thumb {
    care that the movement was only a colour fade. */
 @media (prefers-reduced-motion: reduce) {
   .att-x, .brief-head a, .cal-pill, .cat-card > summary, .chart-pulse, .chart-pulse.is-explain, .combo-list li,
-.hm-more, .home-tour > summary, .wl-open, .wl-x,
+.hm-more, .wl-open, .wl-x,
 .al-sym, .mtab, .msg-save, .rh-open, .rh-route,
 .cp-row,
 .pl-reason > details > summary,
@@ -10704,20 +10582,6 @@ body.cp-open { overflow: hidden; }
 .hm-alerts li { display: flex; gap: var(--space-3); align-items: baseline; }
 .hm-alert-sym { flex: none; width: 5ch; font-weight: 600; font-size: var(--t-small); }
 .hm-alert-text { font-size: var(--t-small); color: var(--ink-2); }
-
-/* The product tour, collapsed. It is for a first visit. */
-.home-tour { margin-top: var(--space-6); border-top: 1px solid var(--border); padding-top: var(--space-4); }
-.home-tour > summary {
-  cursor: pointer;
-  font-size: var(--t-small);
-  color: var(--ink-muted);
-  list-style: none;
-  padding: var(--space-2) 0;
-}
-.home-tour > summary::-webkit-details-marker { display: none; }
-.home-tour > summary::before { content: '▸ '; }
-.home-tour[open] > summary::before { content: '▾ '; }
-.home-tour > summary:hover { color: var(--ink); }
 
 /* ============================================================== watchlist ===
  *
@@ -14221,7 +14085,7 @@ h1, .hero, .home-title {
  * introduces, which is the "generic card, weak hierarchy" reading.
  *
  * A display size is for the one thing a page is about. These repeat. */
-h2, .hm-h, .home-sec-title, .md-h3 {
+h2, .hm-h, .md-h3 {
   font-family: var(--display);
   font-size: var(--t-title);
   font-weight: 400;
@@ -14233,7 +14097,7 @@ h3 { font-weight: 400; letter-spacing: -0.01em; }
 
 /* Prose to a reading measure. The reference runs 480-640px; panels here are
    often twice that, which is what makes a paragraph in one look like a wall. */
-.panel > p.sub, .hm-block > p, .md-p, .home-sec-note, .brief-summary p {
+.panel > p.sub, .hm-block > p, .md-p, .brief-summary p {
   max-width: 640px;
 }
 
@@ -14286,14 +14150,14 @@ main { padding-top: var(--space-7); }
   /* A page title drops to the panel-heading size here rather than to another
      literal. 21px was 0.3px off `--t-heading` at the default scale and frozen
      at every other. */
-  h2, .panel > h2, .panel > .wv-head h2, .hm-h, .home-sec-title, .md-h3 {
+  h2, .panel > h2, .panel > .wv-head h2, .hm-h, .md-h3 {
     font-size: var(--t-heading);
   }
   .pl-lede { font-size: var(--t-heading); line-height: 1.3; }
 
   /* The measure cap is wider than the screen here, so it does nothing but
      stop the text using the width it has. */
-  .panel > p.sub, .hm-block > p, .md-p, .home-sec-note, .brief-summary p {
+  .panel > p.sub, .hm-block > p, .md-p, .brief-summary p {
     max-width: none;
   }
 
