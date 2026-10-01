@@ -1,21 +1,24 @@
 """Alerts: a record of things the terminal noticed, and why.
 
-**What this is and is not.** It is a rules engine plus a stored inbox. It is not
-a delivery mechanism — nothing here sends an email or a text, and the reason is
-worth stating rather than hiding behind a TODO. Delivery needs two things: a
-credential (an SMTP password or a provider key, which belongs in .env and which
-the operator has to create) and a server that is awake whenever the market is.
-An alert that silently misses the move it was created for is worse than no
-alert, because you would have stopped watching.
+**What this is.** A rules engine, a stored inbox, and email delivery of what
+the inbox records. Delivery needs a mail server, a recipient and a server that
+is awake whenever the market is. An alert that silently misses the move it was
+created for is worse than no alert, because you would have stopped watching.
 
-The second requirement used to be the hard one: this ran on a laptop behind a
-temporary tunnel. It is on a hosting platform now, so `status()` reads where it
-is running rather than asserting it, and the remaining blocker on the deployed
-site is the credential and the `ALERT_ALWAYS_ON` acknowledgement.
+It was a rules engine and an inbox only, with `deliver()` left as a refusal:
+this ran on a laptop behind a temporary tunnel, and a send that worked in
+testing and dropped messages whenever the lid closed was the version to avoid.
+It runs on a hosting platform now, and the alerts panel asked to "fix this
+issue" over a box that said nothing would ever be emailed. So delivery is real,
+and built so it cannot drop one silently: every alert is stored first and
+emailed second, one message per scan with everything that fired, and one that
+fails to send stays pending for the next scan. It goes through the mailer the
+sign-in and problem-report emails use (app/auth/mailer.py), not a second set
+of mail settings, which is what the ALERT_SMTP_URL and ALERT_EMAIL_KEY this
+used to ask for would have been: nothing ever read them.
 
 So: rules are evaluated whenever the ledger scans, hits are written to the
-database, and the UI shows them. When there is a host and a key, `deliver()` is
-the single function that needs a body.
+database, the UI shows them, and `deliver_pending()` emails them.
 
 **On what counts as an alert.** Deliberately not "price crossed a number". That
 is the easiest rule to write and the least useful thing this terminal knows.
@@ -30,10 +33,11 @@ import json
 import os
 import sqlite3
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from .runtime import is_hosted
+from .auth import mailer
+from .runtime import base_url, is_hosted
 
 DB_PATH = os.path.join("data", "alerts.db")
 
@@ -279,56 +283,106 @@ def from_capacity(book: str, capacity: Dict[str, Any], day: str) -> int:
 
 # ---------------------------------------------------------------- delivery
 
+# How long an alert stays worth emailing. Delivery that comes on, or comes back
+# after an outage, sends what fired since then, not every alert the inbox ever
+# recorded: the live inbox had a backlog nobody should get as a flood of mail.
+DELIVER_WITHIN_HOURS = 24
+# One message per scan carries everything it raised, so this is a ceiling on
+# one message's length rather than a rate.
+DELIVER_LIMIT = 50
+
+
+def _recipient() -> str:
+    """Where alerts go: ALERT_EMAIL_TO, or the address problem reports already
+    go to, which is the same operator's. Never a literal: the repository is
+    public."""
+    return (os.environ.get("ALERT_EMAIL_TO")
+            or os.environ.get("FEEDBACK_EMAIL_TO") or "").strip()
+
+
+def _always_on() -> bool:
+    """A hosting platform keeps this process up, so it is always on there. A
+    local process is only if the operator says so."""
+    return is_hosted() or os.environ.get("ALERT_ALWAYS_ON", "").strip().lower() == "true"
+
+
 def delivery_status() -> Dict[str, Any]:
-    """What delivery would need, checked rather than assumed.
+    """What delivery needs, checked rather than assumed.
 
     Reported to the UI so the alerts panel can say precisely what is missing
-    instead of a vague "not configured" — the two blockers are different in kind
+    instead of a vague "not configured": the blockers are different in kind,
     and only one of them is a credential.
     """
-    smtp = bool(os.environ.get("ALERT_SMTP_URL"))
-    api = bool(os.environ.get("ALERT_EMAIL_KEY"))
-    to = bool(os.environ.get("ALERT_EMAIL_TO"))
-    always_on = os.environ.get("ALERT_ALWAYS_ON", "").strip().lower() == "true"
+    mail = bool(mailer.available().get("available"))
+    to = bool(_recipient())
+    always_on = _always_on()
     return {
-        "enabled": (smtp or api) and to and always_on,
-        "has_credential": smtp or api,
+        "enabled": mail and to and always_on,
+        "has_credential": mail,
         "has_recipient": to,
         "declared_always_on": always_on,
         "blockers": [b for b in [
-            None if (smtp or api) else
-            "No sending credential. Set ALERT_SMTP_URL (an SMTP app password) or "
-            "ALERT_EMAIL_KEY (Resend/Postmark) in .env.",
-            None if to else "No recipient. Set ALERT_EMAIL_TO in .env.",
+            None if mail else (
+                "No mail server. Set SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD and "
+                "EMAIL_FROM on the server: the settings sign-in and problem-report "
+                "emails use."),
+            None if to else (
+                "No recipient. Set ALERT_EMAIL_TO, or FEEDBACK_EMAIL_TO, which "
+                "problem reports already go to."),
+            # Where this is running is read, not asserted. On a hosting
+            # platform it stays up between scans, and that is not something the
+            # operator should have to confirm.
             None if always_on else (
-                # Where this is running is read, not asserted. The original text
-                # said "it currently runs on a laptop behind a temporary tunnel",
-                # which was true when it was written and is now wrong on the
-                # deployed site: it tells the operator to wait for a deployment
-                # that already happened.
-                "The server is not declared always-on. Alerts fire only while "
-                "this process is running. This one is on a hosting platform, so "
-                "it stays up between scans: set ALERT_ALWAYS_ON=true to confirm "
-                "that and let delivery enable itself."
-                if is_hosted() else
                 "The server is not declared always-on. Alerts fire only while "
                 "this process is running, and this one is a local process that "
                 "stops when you close it, so anything that happens while it is "
                 "down is missed silently. Set ALERT_ALWAYS_ON=true once it is "
-                "deployed somewhere that stays up."
-            ),
+                "deployed somewhere that stays up."),
         ] if b],
     }
 
 
-def deliver(alert: Dict[str, Any]) -> bool:
-    """Send one alert. Deliberately unimplemented.
+def _digest(rows: List[Dict[str, Any]]) -> Dict[str, str]:
+    """One email for everything a scan raised, oldest first, each with what
+    tripped it."""
+    subject = ("Optic alert: " + rows[0]["title"] if len(rows) == 1
+               else "Optic alerts: {} new".format(len(rows)))
+    lines: List[str] = []
+    for row in rows:
+        label = KINDS.get(row["kind"], {}).get("label", row["kind"])
+        lines.append("{}: {}".format(label, row["title"]))
+        if row.get("body"):
+            lines.append("    " + row["body"])
+        lines.append("")
+    lines.append("Every alert and the readings behind it: " + base_url())
+    return {"subject": subject[:150], "body": "\n".join(lines)}
 
-    The single function a delivery layer needs. It is left as a refusal rather
-    than a half-working SMTP call because a half-working one is the dangerous
-    version: it would appear to work in testing, then drop messages whenever the
-    process was down, and the failure would be invisible exactly when it
-    mattered. On a hosting platform that is a restart or a redeploy rather than
-    a laptop lid, which is a shorter window and not a smaller problem.
+
+def deliver_pending(limit: int = DELIVER_LIMIT) -> Dict[str, Any]:
+    """Email what has fired and not been sent, as one message.
+
+    Stored before sent: an alert is in the inbox whether or not this works, and
+    one that fails to send stays pending for the next scan rather than being
+    dropped. Only alerts from the last DELIVER_WITHIN_HOURS. Blocking: the
+    caller runs it off the event loop.
     """
-    return False
+    status = delivery_status()
+    if not status["enabled"]:
+        return {"sent": 0, "reason": " ".join(status["blockers"])}
+    init()
+    since = (datetime.now(timezone.utc) - timedelta(hours=DELIVER_WITHIN_HOURS)).isoformat()
+    with _conn() as conn:
+        rows = [dict(r) for r in conn.execute(
+            "SELECT id, created_at, kind, ticker, title, body FROM alerts "
+            "WHERE delivered = 0 AND created_at >= ? ORDER BY created_at ASC, id ASC LIMIT ?",
+            (since, max(1, int(limit))))]
+    if not rows:
+        return {"sent": 0}
+    mail = _digest(rows)
+    if not mailer.send(_recipient(), mail["subject"], mail["body"]):
+        return {"sent": 0, "pending": len(rows),
+                "reason": "The mail server did not accept the message."}
+    with _conn() as conn:
+        conn.executemany("UPDATE alerts SET delivered = 1 WHERE id = ?",
+                         [(row["id"],) for row in rows])
+    return {"sent": len(rows)}

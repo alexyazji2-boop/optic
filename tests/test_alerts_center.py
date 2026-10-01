@@ -272,3 +272,46 @@ def test_an_empty_filter_result_is_distinguished_from_an_empty_inbox():
                                  ".al-blockers"])
 def test_the_centre_is_styled(cls):
     assert re.search(re.escape(cls) + r"[\s,{:]", STYLES), f"{cls} has no rule"
+
+
+def _note(admin, delivery):
+    import json
+    import os
+    import shutil
+    import subprocess
+    jsc = "/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc"
+    exe = jsc if os.path.exists(jsc) else shutil.which("jsc")
+    if not exe:
+        pytest.skip("no JavaScriptCore on this machine")
+    script = """
+      load('tests/support/browser_stubs.js');
+      document.documentElement.style = document.documentElement.style || {};
+      document.documentElement.style.setProperty = function () {};
+      document.documentElement.style.removeProperty = function () {};
+      try { load('static/charts.js'); load('static/app.js'); } catch (e) {}
+      window.OpticAuth = { state: function () { return { status: 'user', admin: %s }; } };
+      print('RESULT:' + JSON.stringify({ html: alertDeliveryNote(%s) }));
+    """ % (json.dumps(admin), json.dumps(delivery))
+    out = subprocess.run([exe, "-e", script], capture_output=True, text=True,
+                         timeout=120, cwd=str(ROOT))
+    assert "RESULT:" in out.stdout, (out.stdout + out.stderr)[-2000:]
+    return json.loads(out.stdout.split("RESULT:", 1)[1].split("\n")[0])["html"]
+
+
+def test_the_delivery_box_is_the_owners():
+    """The alerts go to the operator's address, and a visitor was shown server
+    settings to change that were never theirs to set."""
+    off = {"enabled": False, "blockers": ["No mail server. Set SMTP_HOST on the server."]}
+    assert _note(False, off) == ""
+    owner = _note(True, off)
+    assert "These stay in this inbox." in owner and "No mail server." in owner
+    assert "texted" not in owner, "nothing here texts anyone"
+    on = _note(True, {"enabled": True, "blockers": []})
+    assert "Emailed to you." in on and "one email" in on
+    assert _note(False, {"enabled": True, "blockers": []}) == ""
+
+
+def test_the_second_delivery_line_is_the_owners_too():
+    body = APP_JS[APP_JS.index("function alertsBody() {"):]
+    body = body[:body.index("\n}\n")]
+    assert "${isOwner() ? `<div class=\"alert-delivery\">" in body

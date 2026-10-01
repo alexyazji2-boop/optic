@@ -219,10 +219,12 @@ def test_the_alerts_blocker_reads_where_it_is_running(monkeypatch, alerts_module
     local = " ".join(alerts_module.delivery_status()["blockers"])
     assert "local process that stops when you close it" in local
 
+    # On a hosting platform it is always on, and says nothing about it: the
+    # operator was asked to "confirm" what the platform already does.
     monkeypatch.setenv("RAILWAY_ENVIRONMENT", "production")
     importlib.reload(alerts_module)
     hosted = " ".join(alerts_module.delivery_status()["blockers"])
-    assert "on a hosting platform" in hosted
+    assert "always-on" not in hosted
     assert "laptop" not in hosted
 
 

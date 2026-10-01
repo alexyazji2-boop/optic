@@ -133,30 +133,134 @@ def test_clear_removes_everything():
 
 
 # ------------------------------------------------------------------ delivery
+#
+# Delivery was a refusal (`deliver()` returned False) while this ran on a laptop,
+# and the panel said nothing would be emailed. Asked to "fix this issue", it is
+# real now: through the mailer sign-in and problem reports use, one message per
+# scan, stored before sent so a failed send stays pending.
 
-def test_delivery_is_off_without_credentials(monkeypatch):
-    for var in ("ALERT_SMTP_URL", "ALERT_EMAIL_KEY", "ALERT_EMAIL_TO",
+
+@pytest.fixture
+def mail(monkeypatch):
+    """A mail server that accepts, and records, what it is given."""
+    sent = []
+    box = {"accept": True}
+    monkeypatch.setattr(alerts.mailer, "available", lambda: {"available": True})
+
+    def send(to, subject, body, link=None):
+        sent.append({"to": to, "subject": subject, "body": body})
+        return box["accept"]
+    monkeypatch.setattr(alerts.mailer, "send", send)
+    monkeypatch.setenv("ALERT_EMAIL_TO", "ops@example.test")
+    monkeypatch.setenv("RAILWAY_ENVIRONMENT", "production")
+    box["sent"] = sent
+    return box
+
+
+def _local(monkeypatch):
+    for var in ("RAILWAY_ENVIRONMENT", "RAILWAY_GIT_COMMIT_SHA", "RENDER", "FLY_APP_NAME",
                 "ALERT_ALWAYS_ON"):
         monkeypatch.delenv(var, raising=False)
+
+
+def test_delivery_is_off_without_a_mail_server_a_recipient_or_a_server_that_stays_up(monkeypatch):
+    _local(monkeypatch)
+    for var in ("ALERT_EMAIL_TO", "FEEDBACK_EMAIL_TO"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setattr(alerts.mailer, "available", lambda: {"available": False})
     d = alerts.delivery_status()
     assert d["enabled"] is False
     assert len(d["blockers"]) == 3
+    joined = " ".join(d["blockers"])
+    # The settings the mailer actually reads, not ones nothing reads.
+    assert "SMTP_HOST" in joined and "EMAIL_FROM" in joined and "ALERT_SMTP_URL" not in joined
 
 
-def test_the_always_on_blocker_survives_having_a_credential(monkeypatch):
-    """The important one. Someone who adds an SMTP password should still be told
-    that alerts will miss anything happening while the laptop sleeps — that is a
-    different problem from a missing key and it does not go away by adding one."""
-    monkeypatch.setenv("ALERT_SMTP_URL", "smtp://user:pass@host:587")
-    monkeypatch.setenv("ALERT_EMAIL_TO", "someone@example.com")
-    monkeypatch.delenv("ALERT_ALWAYS_ON", raising=False)
+def test_the_always_on_blocker_survives_having_a_mail_server(monkeypatch):
+    """Someone who sets up mail on a local process should still be told it
+    misses anything that happens while it is closed: a different problem from a
+    missing password, and it does not go away by adding one."""
+    _local(monkeypatch)
+    monkeypatch.setattr(alerts.mailer, "available", lambda: {"available": True})
+    monkeypatch.setenv("ALERT_EMAIL_TO", "ops@example.test")
     d = alerts.delivery_status()
-    assert d["enabled"] is False
-    assert d["has_credential"] is True
+    assert d["enabled"] is False and d["has_credential"] is True
     assert any("always-on" in b for b in d["blockers"])
 
 
-def test_delivery_refuses_rather_than_half_working():
-    """A half-implemented SMTP call is the dangerous version: it looks fine in
-    testing and drops messages exactly when the machine sleeps."""
-    assert alerts.deliver({"title": "x"}) is False
+def test_a_hosting_platform_is_always_on_without_being_told(mail):
+    d = alerts.delivery_status()
+    assert d["enabled"] is True and d["blockers"] == []
+
+
+def test_the_recipient_falls_back_to_the_problem_report_address(mail, monkeypatch):
+    monkeypatch.delenv("ALERT_EMAIL_TO", raising=False)
+    monkeypatch.setenv("FEEDBACK_EMAIL_TO", "reports@example.test")
+    alerts.raise_alert("closed", "NVDA closed at its target", ticker="NVDA", dedupe_key="c1")
+    assert alerts.deliver_pending()["sent"] == 1
+    assert mail["sent"][0]["to"] == "reports@example.test"
+
+
+def _age(alert_title, hours):
+    with alerts._conn() as conn:
+        conn.execute("UPDATE alerts SET created_at = ? WHERE title = ?",
+                     ((alerts.datetime.now(alerts.timezone.utc)
+                       - alerts.timedelta(hours=hours)).isoformat(), alert_title))
+
+
+def test_a_scan_is_one_email_of_what_fired_and_each_is_sent_once(mail):
+    alerts.raise_alert("idea", "AMD new long shares", ticker="AMD", body="Composite 64.",
+                       dedupe_key="i1")
+    alerts.raise_alert("closed", "NVDA closed at its target", ticker="NVDA", dedupe_key="c1")
+    alerts.raise_alert("pattern", "PLTR double bottom confirmed", ticker="PLTR", dedupe_key="p1")
+    out = alerts.deliver_pending()
+    assert out == {"sent": 3}
+    assert len(mail["sent"]) == 1
+    msg = mail["sent"][0]
+    assert msg["to"] == "ops@example.test" and msg["subject"] == "Optic alerts: 3 new"
+    body = msg["body"]
+    assert body.index("New trade idea: AMD new long shares") < body.index("Position closed: NVDA")
+    assert "    Composite 64." in body and "Pattern confirmed: PLTR double bottom confirmed" in body
+    # Sent once.
+    assert alerts.deliver_pending() == {"sent": 0} and len(mail["sent"]) == 1
+    assert all(r["delivered"] for r in alerts.recent())
+
+
+def test_one_alert_is_its_own_subject(mail):
+    alerts.raise_alert("closed", "NVDA closed at its target", ticker="NVDA", dedupe_key="c1")
+    alerts.deliver_pending()
+    assert mail["sent"][0]["subject"] == "Optic alert: NVDA closed at its target"
+
+
+def test_turning_delivery_on_does_not_mail_the_backlog(mail):
+    alerts.raise_alert("idea", "Old idea", dedupe_key="old")
+    _age("Old idea", 48)
+    alerts.raise_alert("idea", "New idea", dedupe_key="new")
+    assert alerts.deliver_pending() == {"sent": 1}
+    assert "Old idea" not in mail["sent"][0]["body"]
+
+
+def test_a_send_that_fails_leaves_them_pending_for_the_next_scan(mail):
+    alerts.raise_alert("closed", "NVDA closed at its target", dedupe_key="c1")
+    mail["accept"] = False
+    out = alerts.deliver_pending()
+    assert out["sent"] == 0 and out["pending"] == 1
+    assert not any(r["delivered"] for r in alerts.recent())
+    mail["accept"] = True
+    assert alerts.deliver_pending() == {"sent": 1}
+
+
+def test_nothing_is_sent_while_delivery_is_off(monkeypatch):
+    _local(monkeypatch)
+    monkeypatch.setattr(alerts.mailer, "available", lambda: {"available": False})
+    monkeypatch.setattr(alerts.mailer, "send", lambda *a, **k: pytest.fail("sent while off"))
+    alerts.raise_alert("idea", "x", dedupe_key="x")
+    out = alerts.deliver_pending()
+    assert out["sent"] == 0 and "SMTP_HOST" in out["reason"]
+
+
+def test_every_scan_emails_what_it_raised_off_the_scan_lock():
+    src = open("app/main.py", encoding="utf-8").read()
+    fn = src[src.index("def _raise_scan_alerts("):src.index("def _deliver_alerts(")]
+    assert 'threading.Thread(target=_deliver_alerts, name="alert-mail", daemon=True).start()' in fn
+    assert "alerts_mod.deliver_pending()" in src

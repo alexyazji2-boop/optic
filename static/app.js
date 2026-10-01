@@ -4632,13 +4632,23 @@ function alertRow(a, kinds) {
   </li>`;
 }
 
-/** What delivery would still need, named rather than left as "not configured". */
+/* Whether these are emailed, for the one reader they are emailed to.
+ *
+ * The owner's: the alerts go to the operator's address, and a visitor was
+ * shown a box of server settings to change ("Set ALERT_SMTP_URL in .env") that
+ * were never theirs to set. Signed in as the owner it says what is missing,
+ * named rather than left as "not configured", or that the scan's alerts
+ * arrive by email. */
 function alertDeliveryNote(delivery) {
-  if (!delivery || delivery.enabled) return '';
+  if (!delivery || !isOwner()) return '';
+  if (delivery.enabled) {
+    return `<div class="callout info"><strong>Emailed to you.</strong> Each scan's
+      new alerts arrive as one email, and stay here as well.</div>`;
+  }
   const blockers = delivery.blockers || [];
   if (!blockers.length) return '';
   return `<div class="callout"><strong>These stay in this inbox.</strong>
-    Nothing here is emailed or texted yet.
+    Nothing here is emailed yet.
     <ul class="al-blockers">${blockers.map((b) =>
     `<li>${esc(b)}</li>`).join('')}</ul></div>`;
 }
@@ -4716,7 +4726,7 @@ function renderAlerts() {
       all.length === 1 ? '' : 's'} matches this filter.
       <button type="button" class="auth-link" data-alert-kind="all">Show all</button></p>`
       : `<p class="wv-none">Nothing has fired. Alerts come from the
-      scheduled scan, so this fills in during market hours \u2014 and an empty list
+      scheduled scan, so this fills in during market hours, and an empty list
       genuinely means nothing crossed a threshold, which is the common case.</p>`}
   </section>`;
 }
@@ -16969,13 +16979,14 @@ function alertsBody() {
     : `<p class="ws-none">Nothing yet. Alerts are recorded when a scan opens or
        closes a position, so the first ones arrive after the next scan.</p>`;
 
+  // The owner's, as on the alerts page: see alertDeliveryNote.
   return `${list}
-  <div class="alert-delivery">
+  ${isOwner() ? `<div class="alert-delivery">
     <strong>${d.enabled ? 'Delivery is on.' : 'Nothing is being sent to you.'}</strong>
     ${d.enabled ? '' : `
       <ul class="alert-blockers">${(d.blockers || []).map((b) =>
     `<li>${esc(b)}</li>`).join('')}</ul>`}
-  </div>`;
+  </div>` : ''}`;
 }
 
 /* One insider filing, with the amounts on it.

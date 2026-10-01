@@ -1627,6 +1627,23 @@ def _raise_scan_alerts(result: Dict[str, Any]) -> None:
             logging.getLogger("uvicorn.error").info("alerts: recorded %s", made)
     except Exception as exc:  # noqa: BLE001 - never break a scan over an alert
         logging.getLogger("uvicorn.error").warning("alerts failed: %s", exc)
+    # Emailed on a thread of its own: a mail server that is slow to answer must
+    # not hold the scan lock, and the alerts are already stored either way.
+    threading.Thread(target=_deliver_alerts, name="alert-mail", daemon=True).start()
+
+
+def _deliver_alerts() -> None:
+    """Email whatever the scan raised. See alerts.deliver_pending."""
+    log = logging.getLogger("uvicorn.error")
+    try:
+        out = alerts_mod.deliver_pending()
+    except Exception as exc:  # noqa: BLE001 - the inbox has them; mail is second
+        log.warning("alert delivery failed: %s", exc)
+        return
+    if out.get("sent"):
+        log.info("alerts: emailed %s", out["sent"])
+    elif out.get("pending"):
+        log.warning("alerts: %s not emailed: %s", out["pending"], out.get("reason"))
 
 
 @app.post("/api/tracker/scan")
