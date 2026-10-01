@@ -7635,7 +7635,7 @@ function paletteGroupsHTML(rows) {
  * Optic; a page name goes there. Ask Pulse is appended last for anything with
  * more than one word, which is what makes the field impossible to dead-end.
  */
-async function paletteBuild(query) {
+async function paletteBuild(query, early) {
   const q = (query || '').trim();
   const rows = [];
   if (!q) {
@@ -7749,7 +7749,9 @@ async function paletteBuild(query) {
   places.forEach((p) => { if (p !== exactPlace) rows.push(placeRow(p)); });
 
   // Symbols from the live universe. Awaited after the synchronous rows are in
-  // place so the palette is never empty while the request is out.
+  // place so the palette is never empty while the request is out, and those
+  // rows handed over first, for an Enter pressed before the answer.
+  if (typeof early === 'function') early(rows.slice());
   const seq = ++paletteSeq;
   let results = [];
   try {
@@ -7892,11 +7894,17 @@ function openPalette(seed) {
   const input = document.getElementById('cp-input');
   if (input) {
     input.value = paletteQuery;
-    /* Focused on the next frame, and again after it.
+    /* Focused now, and again on the next frame.
      *
-     * The Pulse panel focuses its own textarea when it opens, and whichever of
-     * the two runs last wins. Claiming focus after a frame puts the palette
-     * last, which is correct: it is modal and it was just summoned. */
+     * Now, so the keys typed straight after the click that opened it land in
+     * it: focused on the frame alone, a frame held up by a chart's redraw let
+     * them reach the header box behind it, and a search for INTC from NVDA's
+     * chart ran the palette's empty first row, NVDA again. On the next frame
+     * too, because the Pulse panel focuses its own textarea when it opens,
+     * and whichever runs last wins: the palette is modal and was just
+     * summoned, so it should be last. */
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
     requestAnimationFrame(() => {
       if (!paletteOpen) return;
       input.focus();
@@ -7915,12 +7923,28 @@ function closePalette() {
   if (host) host.innerHTML = '';
 }
 
+/* The query the rows on hand were built for, so Enter never runs rows built
+ * for what was typed before (see paletteRefresh). */
+let paletteRowsFor = null;
+
 async function paletteRefresh() {
-  const rows = await paletteBuild(paletteQuery);
+  const query = paletteQuery;
+  /* The rows that need no request go in as soon as they are built.
+   *
+   * The build awaits /api/search before it returns, and until it did the rows
+   * on hand were the last query's: INTC typed and Enter pressed inside that
+   * wait ran the rows for "", whose first is the most recent symbol. "Open
+   * INTC" is known without the request, so it is the row Enter finds. */
+  const show = (rows) => {
+    if (!paletteOpen || paletteQuery !== query) return;
+    paletteRows = rows;
+    paletteRowsFor = query;
+    paletteIndex = Math.max(0, Math.min(paletteIndex, rows.length - 1));
+    paintPaletteList();
+  };
+  const rows = await paletteBuild(query, show);
   if (rows === null || !paletteOpen) return;      // superseded, or closed while out
-  paletteRows = rows;
-  paletteIndex = Math.max(0, Math.min(paletteIndex, rows.length - 1));
-  paintPaletteList();
+  show(rows);
 }
 
 function paletteMove(delta) {
@@ -7961,7 +7985,26 @@ document.addEventListener('keydown', (evt) => {
   if (key === 'escape') { evt.preventDefault(); closePalette(); return; }
   if (key === 'arrowdown') { evt.preventDefault(); paletteMove(1); return; }
   if (key === 'arrowup') { evt.preventDefault(); paletteMove(-1); return; }
-  if (key === 'enter') { evt.preventDefault(); paletteRun(); }
+  if (key === 'enter') {
+    evt.preventDefault();
+    // Rows built for what was typed before are not this query's. A build for
+    // this one hands over its first rows at once (paletteRefresh).
+    if (paletteRowsFor !== paletteQuery) {
+      // Once, from whichever rows come first: the early ones, or the whole
+      // build where there are none (an empty query has no request to wait on).
+      let ran = false;
+      const go = (rows) => {
+        if (ran || !paletteOpen || !rows || !rows.length) return;
+        ran = true;
+        paletteRows = rows;
+        paletteRowsFor = paletteQuery;
+        paletteRun(0);
+      };
+      paletteBuild(paletteQuery, go).then(go);
+      return;
+    }
+    paletteRun();
+  }
 }, true);
 
 document.addEventListener('input', (evt) => {
@@ -8001,7 +8044,32 @@ document.addEventListener('focusin', (evt) => {
   if (paletteOpen) return;
   const box = evt.target;
   if (!box || box.id !== 'ticker-input') return;
+  paletteBoxWas = box.value;
   openPalette('');
+});
+
+/* Typing that reached the header box after it had opened the palette.
+ *
+ * Reported as "i type INTC into the search bar and it stays on NVDA": INTC
+ * went into the box behind the palette, the palette's own field stayed empty,
+ * and Enter ran its first row, which with nothing typed is the most recent
+ * symbol. Whatever reaches the box while the palette is open is moved into the
+ * palette's field, and the box goes back to the symbol that is loaded. */
+let paletteBoxWas = '';
+document.addEventListener('input', (evt) => {
+  if (!paletteOpen || evt.target.id !== 'ticker-input') return;
+  const box = evt.target;
+  const field = document.getElementById('cp-input');
+  if (!field) return;
+  const typed = paletteBoxWas && box.value.startsWith(paletteBoxWas)
+    ? box.value.slice(paletteBoxWas.length) : box.value;
+  box.value = paletteBoxWas;
+  field.value += typed;
+  field.focus();
+  field.setSelectionRange(field.value.length, field.value.length);
+  paletteQuery = field.value;
+  paletteIndex = 0;
+  paletteRefresh();
 });
 
 /* ======================================================== the Optic loop ====
