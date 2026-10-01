@@ -1893,6 +1893,53 @@ function initLegalFooter() {
 /* Views listed here keep all their code but disappear from the UI — the nav tab,
  * the home card, and the auto-refresh tick. Delete a name to bring it back. */
 
+/* Declared up here, ahead of the code that reads the saved chart styles at
+ * load: a `const` used before its line throws, and inside those try blocks
+ * the throw would be swallowed with the rest of the saved settings. */
+/* Candles, a line or an area: the chart style, as icons, on every chart that
+ * offers the choice. Asked for with a picture of three icon buttons, "have the
+ * line/candles feature look like this across all graphs, with the addition of
+ * the third selected tab". Two text buttons were there; the third, Area, is the
+ * line with the ground under it filled, and Line is a plain line now so that
+ * the two read apart (it carried a faint fill of its own).
+ *
+ * One control for the four charts (Options, Charting, an instrument, the
+ * Investing chart), each passing its own attribute so its own handler sets
+ * its own mode. `candlesOff` is the reason Candles cannot be drawn, for the
+ * Charting tab's bars that arrive without an open, high and low: the button is
+ * disabled and says why, and the line it draws instead reads as the choice. */
+const CHART_STYLES = ['candle', 'line', 'area'];
+const CHART_STYLE_LABELS = { candle: 'Candles', line: 'Line', area: 'Area' };
+const CHART_STYLE_ICONS = {
+  candle: '<path d="M5 2.5v2.5M5 11v2.5M11 2v3M11 10.5v3.5"/>'
+    + '<rect x="3.5" y="5" width="3" height="6" rx="0.6"/><rect x="9.5" y="5" width="3" height="5.5" rx="0.6"/>',
+  line: '<path d="M2 11.5 6 7.5l3 2.5 5-6"/>',
+  area: '<path d="M2 11.5 6 7.5l3 2.5 5-6V14H2Z" fill="currentColor" fill-opacity="0.3" stroke="none"/>'
+    + '<path d="M2 11.5 6 7.5l3 2.5 5-6"/>',
+};
+// The fill under an area: strong enough to read as one, faint enough that the
+// averages and levels drawn over it stay clear.
+const AREA_FILL_OPACITY = 0.22;
+
+function chartStyleMode(raw) {
+  return CHART_STYLES.includes(raw) ? raw : 'line';
+}
+
+function chartStyleSeg(attr, current, opts = {}) {
+  const off = opts.candlesOff || '';
+  // What is on screen: a line when candles were chosen and cannot be drawn.
+  const shown = off && current === 'candle' ? 'line' : current;
+  return `<div class="seg chart-style" role="group" aria-label="Chart style">${
+    CHART_STYLES.map((k) => {
+      const disabled = k === 'candle' && off;
+      return `<button type="button" ${attr}="${k}" aria-pressed="${shown === k}"
+        aria-label="${CHART_STYLE_LABELS[k]}" title="${esc(disabled ? off : CHART_STYLE_LABELS[k])}"${
+  disabled ? ' disabled' : ''}><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"
+        fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"
+        stroke-linejoin="round">${CHART_STYLE_ICONS[k]}</svg></button>`;
+    }).join('')}</div>`;
+}
+
 const CHART_MODE_KEY = 'optic.chart.mode';
 const SHOW_FIB_KEY = 'optic.chart.fib.v2';
 const SHOW_SR_KEY = 'optic.chart.sr.v2';
@@ -1952,7 +1999,7 @@ let ltRange = '5y';
 let ltInterval = 'weekly';
 try {
   const m = localStorage.getItem(LT_MODE_KEY);
-  if (m === 'line' || m === 'candle') ltMode = m;
+  if (CHART_STYLES.includes(m)) ltMode = m;
   const r = localStorage.getItem(LT_RANGE_KEY);
   if (LT_RANGES.some((x) => x.key === r)) ltRange = r;
   const i = localStorage.getItem(LT_INTERVAL_KEY);
@@ -2855,7 +2902,7 @@ const SHOW_ZONES_KEY = 'optic.chart.zones.v2';
 const SHOW_ACCUM_KEY = 'optic.chart.accum.v1';
 const SHOW_EMA_KEY = 'optic.chart.ema.v2';
 try {
-  chartMode = localStorage.getItem(CHART_MODE_KEY) === 'candle' ? 'candle' : 'line';
+  chartMode = chartStyleMode(localStorage.getItem(CHART_MODE_KEY));
   const savedRange = localStorage.getItem(CHART_RANGE_KEY);
   if (CHART_RANGES.some((r) => r.key === savedRange)) chartRange = savedRange;
   const savedInterval = localStorage.getItem(CHART_INTERVAL_KEY);
@@ -8955,7 +9002,7 @@ function swingPriceBlock(d, ps, ctx) {
           values: ps.close,
           color: candleMode ? C.ink : priceLineColor(ps.close),
           hidden: candleMode,
-          fill: !candleMode },
+          fill: !candleMode && chartMode === 'area', fillOpacity: AREA_FILL_OPACITY },
         /* Per-average switches, matching the Charting tab's Indicators menu —
          * the flags are shared, so the two tabs cannot disagree about which
          * averages are on. Labels keep this tab's bar-unit naming. */
@@ -9360,12 +9407,7 @@ function renderSwing(d) {
           </select>
         </label>
         ${rangePills(SWING_RANGES, chartRange, 'data-chart-range', 'Timeframe')}
-        <div class="seg" role="group" aria-label="Chart style">
-          <button type="button" data-chart-mode="line"
-            aria-pressed="${chartMode === 'line'}">Line</button>
-          <button type="button" data-chart-mode="candle"
-            aria-pressed="${chartMode === 'candle'}">Candles</button>
-        </div>
+        ${chartStyleSeg('data-chart-mode', chartMode)}
         <details class="lvl-menu">
           <summary aria-label="Indicators">
             <span class="lvl-icon" aria-hidden="true"></span>Indicators${
@@ -13494,12 +13536,7 @@ function renderInstrument(d) {
          should be viewing only". They are the Charting tab's. */''}
     <div class="chart-toolbar" style="margin-top:var(--space-4)">
       ${rangePills(INSTRUMENT_RANGES, instrumentRange, 'data-inst-range', 'Timeframe')}
-      <div class="seg" role="group" aria-label="Chart style">
-        <button type="button" data-inst-mode="line"
-          aria-pressed="${instrumentMode === 'line'}">Line</button>
-        <button type="button" data-inst-mode="candle"
-          aria-pressed="${instrumentMode === 'candle'}">Candles</button>
-      </div>
+      ${chartStyleSeg('data-inst-mode', instrumentMode)}
     </div>
     <div id="legend-inst"></div>
     <div id="chart-inst"></div>
@@ -13680,7 +13717,8 @@ function drawInstrumentChart(d) {
     labels: d.dates || [],
     volume: d.volume || null,
     series: [{ name: d.label, values: d.close, color: lineColor,
-      hidden: !!candles, fill: !candles }],
+      hidden: !!candles, fill: !candles && instrumentMode === 'area',
+      fillOpacity: AREA_FILL_OPACITY }],
     candles,
     valueTags: true,
   }));
@@ -15573,15 +15611,9 @@ function wsToolbar() {
 
          Disabled rather than removed, for the reason the range pills above
          give: the toolbar keeps its shape. */''}
-    <div class="seg" role="group" aria-label="Chart style">
-      <button type="button" data-ws-mode="line"
-        aria-pressed="${!wsCandlesPossible() || chartMode === 'line'}">Line</button>
-      <button type="button" data-ws-mode="candle"${wsCandlesPossible() ? ''
-    // One line: a template literal's indentation ends up inside the tooltip.
-    : ' disabled title="Candles need an open, high and low for every bar,'
-      + ' and these bars arrived without them, so this range draws as a line."'}
-        aria-pressed="${wsCandlesPossible() && chartMode === 'candle'}">Candles</button>
-    </div>
+    ${chartStyleSeg('data-ws-mode', chartMode, { candlesOff: wsCandlesPossible() ? ''
+    : 'Candles need an open, high and low for every bar, and these bars arrived '
+      + 'without them, so this range draws as a line.' })}
     <div class="ws-tools">
     <div class="ws-menu">
       <button type="button" class="ws-menu-btn${chartColorsCustom() ? ' on' : ''}"
@@ -19346,7 +19378,8 @@ function wsMountChart() {
           // Line mode's stage colours. Harmless in candle mode, where this
           // series is not stroked and the candles take the same array.
           tints: stages ? stages.colors : null,
-          hidden: wsCandles(ps), fill: !wsCandles(ps) },
+          hidden: wsCandles(ps), fill: !wsCandles(ps) && chartMode === 'area',
+          fillOpacity: AREA_FILL_OPACITY },
         /* One entry per average, each gated on its own switch, so the six
          * checkboxes in the Indicators menu mean what they say. On intraday
          * they are the bars' own averages, from intradaySeries. */
@@ -24773,10 +24806,7 @@ function ltPriceBlock(h, lt, ltLevels) {
           <select id="lt-interval">${LT_INTERVALS.map((i) => `<option value="${i.key}"${
         i.key === ltInterval ? ' selected' : ''}>${i.label}</option>`).join('')}</select></span>
         ${rangePills(LT_RANGES, ltRange, 'data-lt-range', 'Timeframe')}
-        <span class="seg">
-          <button type="button" data-lt-mode="line" aria-pressed="${ltMode !== 'candle'}">Line</button>
-          <button type="button" data-lt-mode="candle" aria-pressed="${ltMode === 'candle'}">Candles</button>
-        </span>
+        ${chartStyleSeg('data-lt-mode', ltMode)}
         ${/* Technical Levels, the same menu the Options chart carries.
              Three toggles rather than the ten over there, and only these three
              because a control has to do something: this chart can honour
@@ -24880,7 +24910,8 @@ function ltPriceBlock(h, lt, ltLevels) {
       volume: showVol ? (ltSer.volume || null) : null,
       series: [
         { name: `${ltSer.monthly ? 'Monthly' : 'Weekly'} close`,
-          values: ltSer.close, color: priceLineColor(ltSer.close), hidden: ltCandles, fill: !ltCandles },
+          values: ltSer.close, color: priceLineColor(ltSer.close), hidden: ltCandles,
+          fill: !ltCandles && ltMode === 'area', fillOpacity: AREA_FILL_OPACITY },
         ...(ltMa40 ? [{ name: `40-${unit} average`, values: ltMa40,
           color: overlayStyle('sma50').color, width: overlayStyle('sma50').width,
           marker: false }] : []),
@@ -25892,7 +25923,7 @@ const PULSE_TOPICS = {
 function chartStateWords(symbol) {
   const bits = [];
   const rangeLabel = (CHART_RANGES.find((r) => r.key === chartRange) || {}).label || chartRange;
-  bits.push(`${chartMode === 'candle' ? 'candlestick' : 'line'} chart`);
+  bits.push(`${chartMode === 'candle' ? 'candlestick' : chartMode === 'area' ? 'area' : 'line'} chart`);
   bits.push(`${chartInterval} bars`);
   bits.push(wsWindow ? 'zoomed in from the ' + rangeLabel + ' range' : 'covering ' + rangeLabel);
 
@@ -33455,7 +33486,7 @@ document.addEventListener('click', (evt) => {
   }
   const instModeBtn = evt.target.closest('[data-inst-mode]');
   if (instModeBtn) {
-    instrumentMode = instModeBtn.dataset.instMode === 'candle' ? 'candle' : 'line';
+    instrumentMode = chartStyleMode(instModeBtn.dataset.instMode);
     preserveUI(views.instrument, () => {
       views.instrument.innerHTML = renderInstrument(STATE.instrumentData);
       drawInstrumentChart(STATE.instrumentData);
@@ -33504,7 +33535,7 @@ document.addEventListener('click', (evt) => {
   }
   const modeBtn = evt.target.closest('[data-chart-mode]');
   if (modeBtn) {
-    const want = modeBtn.dataset.chartMode === 'candle' ? 'candle' : 'line';
+    const want = chartStyleMode(modeBtn.dataset.chartMode);
     /* Switching the style redraws the line, so let it draw.
      *
      * `preserveUI` turns the animation off for every control press, and its
@@ -33537,7 +33568,7 @@ document.addEventListener('click', (evt) => {
   }
   const ltBtn = evt.target.closest('[data-lt-mode]');
   if (ltBtn) {
-    ltMode = ltBtn.dataset.ltMode === 'candle' ? 'candle' : 'line';
+    ltMode = chartStyleMode(ltBtn.dataset.ltMode);
     try { localStorage.setItem(LT_MODE_KEY, ltMode); } catch (e) { /* private mode */ }
     if (STATE.long) preserveUI(views.long, () => renderLong(STATE.long));
     return;
@@ -33881,8 +33912,8 @@ document.addEventListener('click', (evt) => {
     // Same reasoning as the Options pair above, and simpler here: this path
     // does not go through preserveUI, and the workspace has one price chart
     // rather than nineteen, so there is nothing to defer.
-    const changed = wsMode.dataset.wsMode !== chartMode;
-    chartMode = wsMode.dataset.wsMode;
+    const changed = chartStyleMode(wsMode.dataset.wsMode) !== chartMode;
+    chartMode = chartStyleMode(wsMode.dataset.wsMode);
     try { localStorage.setItem(CHART_MODE_KEY, chartMode); } catch (e) { /* private mode */ }
     // Through the option, not the flag: wsRedrawChart sets the flag itself
     // immediately before mounting, so setting it out here was overwritten.

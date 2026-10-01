@@ -164,8 +164,9 @@ def test_the_charting_tab_selects_a_style_rather_than_flipping():
     opposite when clicked: in candles it read "Candles", and switching to line
     meant pressing a button that said Candles. Two buttons say what they
     select and which is active."""
-    assert 'data-ws-mode="line"' in APP_JS
-    assert 'data-ws-mode="candle"' in APP_JS
+    assert "chartStyleSeg('data-ws-mode', chartMode" in APP_JS
+    assert "const CHART_STYLES = ['candle', 'line', 'area'];" in APP_JS
+    assert 'return `<button type="button" ${attr}="${k}" aria-pressed="${shown === k}"' in APP_JS
     assert 'data-ws-mode="${chartMode === \'candle\' ? \'line\' : \'candle\'}"' not in APP_JS
 
 
@@ -181,7 +182,7 @@ def test_the_charting_tab_keeps_its_own_handler():
     # Swing view.
     assert "wsRedrawChart({" in ws
     assert "renderSwing" not in ws
-    assert "chartMode = wsMode.dataset.wsMode" in ws
+    assert "chartMode = chartStyleMode(wsMode.dataset.wsMode)" in ws
 
 
 def test_the_thesis_panel_is_hidden_but_still_wired():

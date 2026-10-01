@@ -65,7 +65,10 @@ def toolbar():
       function buttons(html) {
         var out = [];
         html.replace(/<button[^>]*>([\\s\\S]*?)<\\/button>/g, function (m, inner) {
-          out.push(inner.replace(/<[^>]*>/g, '').replace(/&#9662;/g, '').replace(/\\s+/g, ' ').trim());
+          var text = inner.replace(/<[^>]*>/g, '').replace(/&#9662;/g, '').replace(/\\s+/g, ' ').trim();
+          // An icon button is read by its label, as a screen reader reads it.
+          var label = (m.match(/aria-label="([^"]*)"/) || [])[1];
+          out.push(text || label || '');
           return m;
         });
         return out;
@@ -87,17 +90,18 @@ def toolbar():
 # ----------------------------------------------------------- fewer buttons
 
 
-def test_the_toolbar_carries_nineteen_controls_at_rest(toolbar):
+def test_the_toolbar_carries_twenty_controls_at_rest(toolbar):
     """Tools is the phone's drawer button and is not drawn above 560px. The
     eighteenth is the trading-hours menu beside the bar size, asked for as its
     own dropdown of "regular trading hours" and "extended hours"; the
     nineteenth is Chart read, beside Reset and outside the drawer (see
-    tests/test_chart_read.py)."""
+    tests/test_chart_read.py); the twentieth is Area, the third chart style
+    beside Candles and Line, all three as icons."""
     got = toolbar["shutButtons"]
     assert got[0] == "Tools"
     assert got[1:] == ["Reset", "Chart read", "Levels", "Stages", "Indicators", "Volume 1", "Events",
                        "Studies", "Panes", "1D", "Regular hours", "1M", "3M", "6M", "1Y",
-                       "All", "Line", "Candles", "Colours"], got
+                       "All", "Candles", "Line", "Area", "Colours"], got
 
 
 def test_the_interval_is_one_menu_naming_the_size_on_screen(toolbar):

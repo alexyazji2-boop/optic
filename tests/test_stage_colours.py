@@ -217,8 +217,8 @@ def test_the_sub_charts_draw_no_stages():
     for gone in ("function stagesToggleHTML(", "data-stages-toggle", "function paintStageLegend(",
                  "function stageLegendHTML("):
         assert gone not in APP, gone
-    assert 'data-inst-mode="candle"' in _fn(APP, "renderInstrument")
-    assert 'data-chart-mode="candle"' in _fn(APP, "renderSwing")
+    assert "chartStyleSeg('data-inst-mode', instrumentMode)" in _fn(APP, "renderInstrument")
+    assert "chartStyleSeg('data-chart-mode', chartMode)" in _fn(APP, "renderSwing")
 
 
 def test_one_array_colours_the_candles_the_line_and_the_names():

@@ -1615,7 +1615,7 @@ function lineChart(opts) {
           root.appendChild(s('path', {
             d: `M${part[0].split(',')[0]},${base} L${part.join(' L')} L${
               part[part.length - 1].split(',')[0]},${base} Z`,
-            fill: run.color, opacity: 0.1, stroke: 'none',
+            fill: run.color, opacity: se.fillOpacity || 0.1, stroke: 'none',
             'data-fade': animating ? DRAW_MS * 0.55 : null,
           }));
         }
@@ -1631,7 +1631,7 @@ function lineChart(opts) {
         const base = Y(Math.max(lo, 0));
         root.appendChild(s('path', {
           d: `M${pts[0].split(',')[0]},${base} L${pts.join(' L')} L${pts[pts.length - 1].split(',')[0]},${base} Z`,
-          fill: se.color, opacity: 0.1, stroke: 'none',
+          fill: se.color, opacity: se.fillOpacity || 0.1, stroke: 'none',
           // Fades rather than sweeps: an area clipped to a growing width reads as a
           // curtain, and it would race the line it sits under.
           'data-fade': animating ? DRAW_MS * 0.55 : null,

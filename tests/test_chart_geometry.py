@@ -157,34 +157,36 @@ def test_the_pills_read_what_is_on_screen():
     what is drawn. The stored preference is untouched -- leaving the intraday
     range has to put candles back without the reader asking twice."""
     fn = function("wsToolbar")
-    seg = fn[fn.index('aria-label="Chart style"'):]
-    seg = seg[:seg.index("</div>")]
-    assert "!wsCandlesPossible() || chartMode === 'line'" in seg, \
+    call = fn[fn.index("chartStyleSeg('data-ws-mode', chartMode, { candlesOff: wsCandlesPossible() ? ''"):]
+    call = call[:call.index("})}")]
+    seg = function("chartStyleSeg")
+    assert "const shown = off && current === 'candle' ? 'line' : current;" in seg, \
         "Line must read as active when it is what is drawn"
-    assert "wsCandlesPossible() && chartMode === 'candle'" in seg, \
+    assert 'aria-pressed="${shown === k}"' in seg, \
         "Candles must not read as active when it cannot be honoured"
-    assert "disabled" in seg, "and it must not be clickable either"
-    # An ASSIGNMENT, not a comparison. `chartMode =` is a substring of
-    # `chartMode === 'line'`, which is three lines up and entirely correct.
-    assert not re.search(r"chartMode\s*=\s*[^=]", seg), \
-        "the toolbar must not overwrite the reader's stored choice"
+    assert "const disabled = k === 'candle' && off;" in seg and "' disabled'" in seg, \
+        "and it must not be clickable either"
+    # An ASSIGNMENT, not a comparison: the stored choice is left alone.
+    for body in (call, seg):
+        assert not re.search(r"chartMode\s*=\s*[^=]", body), \
+            "the toolbar must not overwrite the reader's stored choice"
 
 
 def test_the_disabled_control_says_why():
     """A greyed-out control with no explanation is a bug report waiting to be
     filed. The range pills beside it set the pattern."""
-    fn = function("wsToolbar")
-    seg = fn[fn.index('aria-label="Chart style"'):]
-    seg = seg[:seg.index("</div>")]
-    assert "title=" in seg, "no tooltip on the disabled control"
-    # The RENDERED string, not the source. The tooltip is built by joining
+    seg = function("chartStyleSeg")
+    assert 'title="${esc(disabled ? off : CHART_STYLE_LABELS[k])}"' in seg, \
+        "no tooltip on the disabled control"
+    # The RENDERED string, not the source. The reason is built by joining
     # single-quoted fragments across two source lines, so the source holds a
     # newline the reader never sees. Joining them is what the engine does, and
     # it is the result that has to be one line -- the first draft used a
     # template literal and the title really did render with a newline and ten
     # spaces of indentation inside it.
-    branch = seg[seg.index("' disabled title="):]
-    branch = branch[:branch.index("}")]
+    fn = function("wsToolbar")
+    branch = fn[fn.index("chartStyleSeg('data-ws-mode', chartMode, { candlesOff:"):]
+    branch = branch[branch.index(": '") + 1:branch.index("})}")]
     text = "".join(re.findall(r"'([^']*)'", branch))
     assert "open, high and low" in text, text
     assert "\n" not in text, "the tooltip carries the source's line break"

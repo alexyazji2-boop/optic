@@ -1521,6 +1521,19 @@ body:not([data-view="home"]) .brand-mark-dot {
   color: var(--btn-primary-ink);
 }
 
+/* The chart style as three icons: candles, a line, an area. The segmented
+   control's own look, with the glyphs centred in square-ish cells and the
+   selected one filled the way a selected word is. */
+.seg.chart-style button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-1) var(--space-2);
+  min-width: 34px;
+}
+.seg.chart-style button svg { display: block; }
+.seg.chart-style button[disabled] { opacity: 0.4; cursor: not-allowed; }
+
 /* Term-and-definition list used under the composite-score tables. */
 .factor-defs { margin: var(--space-3) 0 0; font-size: var(--t-small); }
 .factor-defs dt {
