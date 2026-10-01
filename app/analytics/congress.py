@@ -93,7 +93,7 @@ _FAILED: Dict[str, float] = {}
 # spent on every filing on disk, the better part of a minute of pypdf at 400.
 # PARSE_VERSION is the parser's: changing what it reads changes this, and
 # every filing is read again.
-PARSE_VERSION = 1
+PARSE_VERSION = 2
 _PARSED: Dict[str, Dict[str, Any]] = {}
 
 # A ticker in the asset column, and nothing that merely looks like one. Bonds
@@ -103,6 +103,13 @@ _ROW = re.compile(
     r"(?P<tx>P|S \(partial\)|S|E)\s+"
     r"(?P<date>\d{2}/\d{2}/\d{4})\s+(?P<notified>\d{2}/\d{2}/\d{4})\s+"
     r"\$(?P<low>[\d,]+)\s*-\s*\$(?P<high>[\d,]+)")
+# Whose a row is: the Owner column, which the Clerk's text puts at the head of
+# the asset's first line. SP spouse, JT joint, DC dependent child; blank is the
+# member's own.
+_OWNER_LINE = re.compile(r"(?m)^(SP|JT|DC)[ \t]")
+# The row's description, under it on the form ("Purchased 10,000 shares.").
+# The label prints as a D and NULs, as every label on the form does.
+_DESC = re.compile(r"D\x00+\s*:[ \t]*")
 _NAME = re.compile(r"Name:\s*(.+?)\s*Status:")
 _DIST = re.compile(r"State/District:\s*([A-Z]{2}\d{2})")
 # Asset types worth keeping. ST stock, OP option, CS corporate security.
@@ -149,6 +156,49 @@ def _fetch_index(year: int, sess: requests.Session) -> List[Dict[str, str]]:
     return out
 
 
+def _flatten(raw: str):
+    """The text with each run of whitespace made one space, and where in the
+    raw text each of its characters came from, so a row found in the flat text
+    can be looked up in the lines it was printed on."""
+    out: List[str] = []
+    where: List[int] = []
+    gap = False
+    for i, ch in enumerate(raw):
+        if ch.isspace():
+            if gap:
+                continue
+            out.append(" ")
+            gap = True
+        else:
+            out.append(ch)
+            gap = False
+        where.append(i)
+    return "".join(out), where
+
+
+def _description(raw: str, start: int, stop: int) -> Optional[str]:
+    """A row's description, from after the row to before the next one.
+
+    One line, or several where the form wrapped it: Pelosi's January filing
+    breaks "with an expiration date of" from "1/16/26." A line carries on the
+    sentence only if the sentence has not ended and the line could not be the
+    next thing on the form: a label, an owner, or an asset's name, which starts
+    with a capital."""
+    m = _DESC.search(raw, start, stop)
+    if not m:
+        return None
+    lines = raw[m.end():stop].split("\n")
+    text = lines[0].strip()
+    for line in lines[1:]:
+        line = line.strip()
+        if (not line or text.endswith(".") or "\x00" in line or _OWNER_LINE.match(line)
+                or not re.match(r"[a-z0-9$(\-,]", line)):
+            break
+        text += " " + line
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[:300] or None
+
+
 def _parse_pdf(path: str) -> Dict[str, Any]:
     """Rows out of one filing. Import is local so a missing pypdf degrades this
     module rather than breaking the import graph of everything that reads it."""
@@ -158,17 +208,31 @@ def _parse_pdf(path: str) -> Dict[str, Any]:
         return {"member": None, "district": None, "rows": [], "error": "pypdf not installed"}
     try:
         reader = PdfReader(path)
-        text = re.sub(r"\s+", " ", "\n".join((p.extract_text() or "") for p in reader.pages))
+        raw = "\n".join((p.extract_text() or "") for p in reader.pages)
     except Exception as exc:
         return {"member": None, "district": None, "rows": [], "error": str(exc)[:120]}
+    return _parse_text(raw)
+
+
+def _parse_text(raw: str) -> Dict[str, Any]:
+    """Rows out of one filing's text, as pypdf returns it, lines and all."""
+    text, where = _flatten(raw)
 
     name = _NAME.search(text)
     dist = _DIST.search(text)
     rows = []
-    for m in _ROW.finditer(text):
+    found = list(_ROW.finditer(text))
+    for k, m in enumerate(found):
         if m.group("kind") not in _EQUITY_KINDS:
             continue
         tx = m.group("tx")
+        # The row's span in the raw text, and the gaps either side of it: the
+        # owner is in the one before (after the previous row), the
+        # description in the one after (before the next row).
+        start, end = where[m.start()], where[m.end() - 1] + 1
+        after_prev = where[found[k - 1].end() - 1] + 1 if k else 0
+        before_next = where[found[k + 1].start()] if k + 1 < len(found) else len(raw)
+        owners = _OWNER_LINE.findall(raw, after_prev, start)
         rows.append({
             "ticker": m.group("ticker"),
             "asset_kind": m.group("kind"),
@@ -178,6 +242,8 @@ def _parse_pdf(path: str) -> Dict[str, Any]:
             "notified": m.group("notified"),
             "amount_low": int(m.group("low").replace(",", "")),
             "amount_high": int(m.group("high").replace(",", "")),
+            "owner": owners[-1] if owners else None,
+            "description": _description(raw, end, before_next),
         })
     return {"member": name.group(1) if name else None,
             "district": dist.group(1) if dist else None,

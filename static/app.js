@@ -11227,11 +11227,16 @@ function renderFinancialsLead(co) {
 function congressRow(t) {
   const band = `$${fmtCompact(t.amount_low, 0)} – $${fmtCompact(t.amount_high, 0)}`;
   const lag = t.disclosure_lag_days;
-  return `<tr>
+  // Whose, and what the filer said: the Insiders page's columns, by the same table.
+  const owner = CONGRESS_OWNERS[t.owner] || { label: 'Self', title: "The member's own account" };
+  return `<tr class="ins-row">
     <td class="name">${esc(t.member || '')}${
   t.district ? ` <span class="muted">${esc(t.district)}</span>` : ''}</td>
+    <td title="${esc(owner.title)}">${esc(owner.label)}</td>
     <td class="${t.side === 'buy' ? 'pos' : t.side === 'sell' ? 'neg' : ''}">${
   esc(cap(t.transaction || ''))}</td>
+    <td class="ins-desc">${t.description ? esc(t.description)
+    : '<span class="muted">None given</span>'}</td>
     <td>${esc(t.traded_iso || t.traded || '')}</td>
     <td class="${lag !== null && lag !== undefined && lag > 30 ? 'muted' : ''}">${
   lag === null || lag === undefined ? '—' : `${fmt(lag, 0)}d`}</td>
@@ -11253,12 +11258,12 @@ function renderCongress(c) {
     <p class="sub">${fmt(c.count, 0)} disclosed trade${c.count === 1 ? '' : 's'} ·
       ${fmt(c.buys, 0)} bought, ${fmt(c.sells, 0)} sold · reported total
       $${fmtCompact(c.amount_low, 0)} – $${fmtCompact(c.amount_high, 0)}</p>
-    <table class="data">
-      <thead><tr><th>Member</th><th>Transaction</th><th>Traded</th>
+    <div class="table-scroll"><table class="data">
+      <thead><tr><th>Member</th><th>Owner</th><th>Transaction</th><th>Description</th><th>Traded</th>
         <th title="Days between the trade and the filing">Filed after</th>
         <th>Amount</th></tr></thead>
       <tbody>${(c.trades || []).map(congressRow).join('')}</tbody>
-    </table>
+    </table></div>
     <p class="caveat">${esc(c.caveat || '')}
       ${c.complete ? '' : `Read so far: ${fmt(c.filings_parsed, 0)} of ${
   fmt(c.filings_known, 0)} filings this year.`}
@@ -27684,8 +27689,19 @@ function congressTopList(rows) {
 
 /* -------------------------------------------------------------- the table */
 
+/* Whose a trade was, from the form's Owner column. A member files for a
+ * spouse and dependent children as well as for themselves, so "Nancy Pelosi
+ * bought" is, on her filings, almost always her husband. Blank on the form is
+ * the member's own. */
+const CONGRESS_OWNERS = {
+  SP: { label: 'Spouse', title: "The member's spouse" },
+  JT: { label: 'Joint', title: 'Held jointly with the member' },
+  DC: { label: 'Child', title: "A dependent child's account" },
+};
+
 function insCongressRow(t) {
   const band = `$${fmtCompact(t.amount_low, 0)} – $${fmtCompact(t.amount_high, 0)}`;
+  const owner = CONGRESS_OWNERS[t.owner] || { label: 'Self', title: "The member's own account" };
   const lag = t.disclosure_lag_days;
   const tone = t.side === 'buy' ? 'pos' : t.side === 'sell' ? 'neg' : '';
   /* 45 days is the statutory deadline, so past it is the fact worth marking --
@@ -27698,9 +27714,12 @@ function insCongressRow(t) {
    * missing feature. tests/test_insiders_page.py audits the pair. */
   return `<tr class="ins-row">
     <td class="name">${esc(t.member || '')}</td>
+    <td title="${esc(owner.title)}">${esc(owner.label)}</td>
     <td><button type="button" class="ct-sym" data-ins-pick="${esc(t.ticker || '')}"
       >${esc(t.ticker || '—')}</button></td>
     <td><span class="ins-side ${tone}">${esc(cap(t.transaction || t.side || ''))}</span></td>
+    <td class="ins-desc">${t.description ? esc(t.description)
+    : '<span class="muted">None given</span>'}</td>
     <td class="num">${band}</td>
     <td>${esc(dayLabel(t.traded_iso) || t.traded || '')}</td>
     <td>${esc(dayLabel(t.filed) || '')}</td>
@@ -27873,7 +27892,8 @@ function congressResults() {
       <h2>${hg('The filings')}${n > (c.trades || []).length ? `<span class="th-plain">
         · newest ${fmt((c.trades || []).length, 0)} of ${fmt(n, 0)}</span>` : ''}</h2>
       <div class="scroll-y table-scroll"><table class="data">
-        <thead><tr><th>Member</th><th>Symbol</th><th>Transaction</th>
+        <thead><tr><th>Member</th><th title="Whose account: the member's own, a spouse's, a joint one or a dependent child's">Owner</th>
+          <th>Symbol</th><th>Transaction</th><th>Description</th>
           <th class="num">Amount</th><th>Traded</th><th>Disclosed</th>
           <th class="num" title="Days between the trade and the filing. The STOCK Act allows 45.">Filed after</th>
           <th></th></tr></thead>

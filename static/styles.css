@@ -15309,6 +15309,16 @@ body.ws-max[data-view="chart"] main { padding: 0; }
 
 .ins-side { font-weight: 600; }
 .ins-row .ins-more { white-space: nowrap; font-size: var(--t-caption); }
+/* The filer's own words about the trade, which run to a sentence about an
+   option's strike and expiry: wrapped in a column of its own width rather
+   than stretching the table a sentence wide. */
+.ins-row .ins-desc {
+  white-space: normal;
+  min-width: 14rem;
+  max-width: 24rem;
+  font-size: var(--t-caption);
+  color: var(--ink-2);
+}
 
 /* --------------------------------------------------------- the rail's space
  *
