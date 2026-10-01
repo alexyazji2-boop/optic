@@ -28,13 +28,20 @@ RULE_OF_16 = 16.0
 RANGE_PER_SIGMA = 1.6
 
 # Yahoo symbols for the macro complex. Grouped so the UI can lay them out.
+#
+# `name` and `about` are for an instrument's own page, which headed DXY "DXY"
+# over "US dollar index" in small type and was asked to make "clearer that this
+# subchart for the ticker DXY is for the US dollar index", and then to do the
+# same for VIX, HYG, LQD and TLT. The heading is the name with the label after
+# it, and `about` says what the thing measures and how to read a move in it.
+# The tables and the strip keep the short label and the note.
 INSTRUMENTS: List[Dict[str, str]] = [
-    {"symbol": "^VIX", "label": "VIX", "group": "volatility", "note": "S&P 30-day implied vol"},
+    {"symbol": "^VIX", "label": "VIX", "group": "volatility", "note": "S&P 30-day implied vol",
+     "name": "Cboe Volatility Index",
+     "about": "The 30-day volatility that S&P 500 options are pricing, as an annual "
+              "percentage. A rising VIX means investors are paying more for "
+              "protection, which usually happens when stocks fall."},
     {"symbol": "^VVIX", "label": "VVIX", "group": "volatility", "note": "vol of vol"},
-    # `name` and `about` are for the instrument's own page, whose heading read
-    # "DXY" over "US dollar index" in small type, and was asked to make "clearer
-    # that this subchart for the ticker DXY is for the US dollar index". The
-    # tables and the strip keep the short label.
     {"symbol": "DX-Y.NYB", "label": "DXY", "group": "fx", "note": "US dollar index",
      "name": "US Dollar Index",
      "about": "The US dollar against a basket of six major currencies: the euro "
@@ -49,9 +56,21 @@ INSTRUMENTS: List[Dict[str, str]] = [
     {"symbol": "NG=F", "label": "Nat Gas", "group": "commodities", "note": "natural gas"},
     {"symbol": "GC=F", "label": "Gold", "group": "commodities", "note": "gold"},
     {"symbol": "HG=F", "label": "Copper", "group": "commodities", "note": "growth bellwether"},
-    {"symbol": "HYG", "label": "HYG", "group": "credit", "note": "high-yield credit"},
-    {"symbol": "LQD", "label": "LQD", "group": "credit", "note": "investment grade"},
-    {"symbol": "TLT", "label": "TLT", "group": "credit", "note": "20y+ treasuries"},
+    {"symbol": "HYG", "label": "HYG", "group": "credit", "note": "high-yield credit",
+     "name": "iShares iBoxx $ High Yield Corporate Bond ETF",
+     "about": "A fund of US dollar corporate bonds rated below investment grade, so "
+              "its price carries default risk as well as interest rates. It is read "
+              "as credit appetite, and equities rarely rally against falling credit."},
+    {"symbol": "LQD", "label": "LQD", "group": "credit", "note": "investment grade",
+     "name": "iShares iBoxx $ Investment Grade Corporate Bond ETF",
+     "about": "A fund of US dollar investment-grade corporate bonds. Defaults are "
+              "rare at that grade, so it moves mostly with Treasury yields, falling "
+              "when they rise."},
+    {"symbol": "TLT", "label": "TLT", "group": "credit", "note": "20y+ treasuries",
+     "name": "iShares 20+ Year Treasury Bond ETF",
+     "about": "A fund of US Treasury bonds with more than 20 years left to maturity. "
+              "Its price moves opposite to long-term yields, and further than a "
+              "shorter bond's would."},
     {"symbol": "BTC-USD", "label": "Bitcoin", "group": "crypto", "note": "risk appetite proxy"},
     {"symbol": "^GSPC", "label": "S&P 500", "group": "equity", "note": "benchmark"},
     {"symbol": "^NDX", "label": "Nasdaq 100", "group": "equity", "note": "growth"},

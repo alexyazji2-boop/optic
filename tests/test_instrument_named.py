@@ -162,3 +162,22 @@ def test_the_levels_are_the_ones_the_changes_are_measured_from():
     assert snap["high_52w"] == pytest.approx(close.tail(252).max(), abs=1e-3)
     short = snapshot(pd.DataFrame({"Close": close.tail(60)}), "X")
     assert short["sma200"] is None and short["vs_sma200"] is None
+
+
+def test_vix_and_the_credit_funds_are_named_too():
+    """Asked for next: "do the same full-name heading for VIX, HYG, LQD and TLT".
+    The official names, and a line saying what each measures."""
+    named = {i["label"]: i for i in macro.INSTRUMENTS if i.get("name")}
+    assert {k: v["name"] for k, v in named.items() if k != "DXY"} == {
+        "VIX": "Cboe Volatility Index",
+        "HYG": "iShares iBoxx $ High Yield Corporate Bond ETF",
+        "LQD": "iShares iBoxx $ Investment Grade Corporate Bond ETF",
+        "TLT": "iShares 20+ Year Treasury Bond ETF",
+    }
+    for label, inst in named.items():
+        assert inst["label"] == label, "the tables keep the short label"
+        assert inst["about"].endswith(".") and "—" not in inst["about"], label
+    assert "S&P 500 options" in named["VIX"]["about"]
+    assert "below investment grade" in named["HYG"]["about"]
+    assert "Treasury yields" in named["LQD"]["about"]
+    assert "20 years" in named["TLT"]["about"]
