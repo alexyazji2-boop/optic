@@ -191,10 +191,12 @@ def test_density_has_four_rungs_not_two():
 
 
 def test_the_readers_own_choice_still_beats_the_level():
-    """The level decides what a view opens with, never what it may contain."""
-    fn = APP_JS.split("function panelIsHidden(", 1)[1].split("\n}", 1)[0]
-    assert fn.index("hasOwnProperty.call(chosen, id)") < fn.index("knowledgeLevel()")
-
+    """The level decides what a view opens with, never what it may contain: a
+    panel above it starts collapsed, and one the reader opened stays open."""
+    fn = APP_JS.split("function makePanelsCollapsible(", 1)[1].split("\nfunction ", 1)[0]
+    assert fn.index("knowledgeLevel()") < fn.index("hasOwnProperty.call(saved, id) ? !!saved[id]")
+    hidden = APP_JS.split("function panelIsHidden(", 1)[1].split("\n}", 1)[0]
+    assert "knowledgeLevel" not in hidden, "the level hides nothing"
 
 def test_the_two_original_rungs_render_exactly_as_before():
     """Nobody's page moved when this shipped."""

@@ -32,14 +32,13 @@ def _fn(name: str) -> str:
 
 # ------------------------------------------------------------- the resolution
 
-def test_a_choice_beats_the_preset():
+def test_only_the_reader_takes_a_panel_off_the_page():
+    """The level took panels off too, with a note counting them, until "remove
+    the 9 panels are hidden tab, show everything but keep it collapsed". The
+    chooser's choice is the only thing that hides one now."""
     body = _fn("panelIsHidden")
-    assert "hasOwnProperty.call(chosen, id)" in body, \
-        "an explicit choice must win over the mode"
-    # The level decides what a view *opens with*; it never decides what the
-    # view is allowed to contain, which is why the choice is read first.
-    assert "knowledgeLevel() < panelMinLevel(view, title)" in body
-
+    assert "hasOwnProperty.call(chosen, id) && !!chosen[id]" in body
+    assert "knowledgeLevel" not in body and "panelMinLevel" not in body
 
 def test_no_opinion_and_explicitly_shown_stay_distinguishable():
     """Storing `false` for "show this" is not the same as storing nothing: the
@@ -84,27 +83,20 @@ def test_private_mode_does_not_break_it():
 # ------------------------------------------------------------------ the pass
 
 def test_the_pass_runs_in_both_modes():
-    """A panel can be hidden in Pro now, so there is no mode in which
-    applyUiMode can return early."""
+    """A panel can be hidden in Pro, so there is no mode in which applyUiMode
+    can return early."""
     body = _fn("applyUiMode")
-    assert "panelIsHidden(view, title)" in body
+    assert "panelIsHidden(view, headingName(head))" in body
     assert "classList.toggle('is-advanced', hide)" in body
     assert "panel.hidden = hide" in body
 
-
-def test_the_note_says_which_of_the_two_hid_them():
-    """The remedies are different: one is a mode switch, the other is a choice
-    this reader made. A single count would offer the wrong fix for half of it."""
+def test_there_is_no_note_counting_hidden_panels():
+    """The note went with the level's hiding. One left by an earlier render is
+    still taken down."""
     body = _fn("applyUiMode")
-    assert "byMode" in body and "mine" in body
-    assert "by Simple mode and" in body
-    assert "you chose to hide" in body
-
-
-def test_the_note_only_offers_the_mode_switch_when_the_mode_did_it():
-    body = _fn("applyUiMode")
-    assert 'byMode ? ` \\u00b7 <button' in body or "byMode ?" in body
-    assert "data-panels-open" in body, "no way into the chooser from the note"
+    assert "querySelectorAll('[data-mode-note]').forEach((n) => n.remove());" in body
+    assert "createElement" not in body and "panels hidden" not in body.lower()
+    assert "mode-note" not in body.replace("[data-mode-note]", "")
 
 
 # ---------------------------------------------------------------- the dialog

@@ -135,30 +135,12 @@ def test_nothing_that_states_a_limitation_is_ever_hidden():
 
 # ------------------------------------------------------------------- the note
 
-def test_the_view_says_how_many_it_hid():
-    body = APP_JS.split("function applyUiMode(", 1)[1].split("\nfunction ", 1)[0]
-    assert "data-mode-note" in body
-    assert "${hidden}" in body
-    assert "data-set-mode=\"pro\"" in body, "no way back from the note"
-
-
-def test_the_note_describes_what_it_hid_per_view():
-    """It said "options and positioning" everywhere, which was written for
-    Analysis and was untrue on Long-Term (a valuation panel) and Macro (ratio
-    pairs). A note that misdescribes what it hid is worse than a generic one."""
-    assert "const ADVANCED_NOUN = {" in APP_JS
-    block = APP_JS.split("const ADVANCED_NOUN = {", 1)[1].split("\n};", 1)[0]
-    for view in ADVANCED_VIEWS:
-        assert f"{view}:" in block, view
-    body = APP_JS.split("function applyUiMode(", 1)[1].split("\nfunction ", 1)[0]
-    assert "advancedNoun(view)" in body
-    assert "options and positioning panel" not in body
-
-
-def test_there_is_no_note_when_nothing_was_hidden():
-    """Earnings has no advanced set. A "0 panels hidden" note is noise."""
-    body = APP_JS.split("function applyUiMode(", 1)[1].split("\nfunction ", 1)[0]
-    assert "if (!hidden) return;" in body
+def test_the_level_collapses_rather_than_hides():
+    """Every panel is on the page at every level; above the reader's level it
+    starts collapsed, and what they opened or closed themselves holds."""
+    body = APP_JS.split("function makePanelsCollapsible(", 1)[1].split("\nfunction ", 1)[0]
+    assert "const isDefaultOpen = panelMinLevel(view, title) <= knowledgeLevel()" in body
+    assert "Object.prototype.hasOwnProperty.call(saved, id) ? !!saved[id] : isDefaultOpen" in body
 
 
 def test_every_panel_is_asked_in_both_modes():
@@ -167,9 +149,8 @@ def test_every_panel_is_asked_in_both_modes():
     reader's own choices in play a panel can be hidden in Pro too, so there is
     no mode in which the pass can be skipped."""
     body = APP_JS.split("function applyUiMode(", 1)[1].split("\nfunction ", 1)[0]
-    assert "panelIsHidden(view, title)" in body
+    assert "panelIsHidden(view, headingName(head))" in body
     assert "if (!simple) {" not in body, "Pro still short-circuits the pass"
-
 
 def test_both_the_attribute_and_the_class_track_the_decision():
     """An author `display` beats the UA stylesheet's [hidden] { display: none }

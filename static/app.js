@@ -23244,14 +23244,15 @@ function renderSettings() {
   <div class="panel span2 gap">
     <h2>${hg('How much to show')}</h2>
     <p class="sub">The Analysis tab renders twenty-two panels and nine of them are
-      derivatives positioning. Simple leaves those out; nothing else changes, and
-      every panel that says what it cannot tell you keeps saying it.</p>
+      derivatives positioning. Simple starts those collapsed; every panel is on
+      the page either way, and every panel that says what it cannot tell you
+      keeps saying it.</p>
     <div class="settings-row">
       <div class="settings-label">Detail
         <span class="settings-hint">Pro is what the terminal has always shown.
-          Simple hides the derivatives and positioning panels on Options, two dense
-          valuation panels on Investing and five ratio panels on Macro, and says
-          so where they were.</span></div>
+          Simple starts the derivatives and positioning panels on Options, two
+          dense valuation panels on Investing and five ratio panels on Macro
+          collapsed, one press from open.</span></div>
       <div class="seg">${UI_MODES.map((m) => `<button type="button"
         class="seg-opt${uiMode() === m ? ' on' : ''}" data-set-mode="${m}"
         aria-pressed="${uiMode() === m}">${m === 'pro' ? 'Pro' : 'Simple'}</button>`).join('')}</div>
@@ -30743,6 +30744,75 @@ function sessionDescHTML(phase, description) {
   </details>`;
 }
 
+/* The strip's clock line at `now`: the day and time in the reader's zone, ET
+ * beside them where that is not the reader's zone, and the next session.
+ *
+ * Reported with the strip reading "Thu 5:05 pm EDT" beside a menu bar at
+ * 5:19: "time should always be updating". The line printed the server's
+ * `now_et`, the moment of the last fetch, and on Home with no symbol loaded
+ * nothing fetched again after the page opened. It reads the browser's clock
+ * now and is redrawn every second (tickSessionBar). The phase, the segments
+ * and when the next session starts are still the server's. */
+function sessionClockLine(sess, now) {
+  const iso = new Date(now).toISOString();
+  const zone = activeZone();
+  const et = viewerOnMarketTime() ? ''
+    : ` · ${dayIn(iso, 'America/New_York')} ${timeIn(iso, 'America/New_York')} ET`;
+  const next = sess.next || {};
+  const starts = Date.parse(next.starts_at || '');
+  // Whole minutes left, rounded down, as the server counts them.
+  const minutes = Number.isFinite(starts)
+    ? Math.max(0, Math.floor((starts - now) / 60000)) : next.minutes_away;
+  // "Overnight in any moment" read wrong, and the strip now shows that moment
+  // for as long as the server takes to say the session has changed.
+  const upcoming = !next.label ? ''
+    : minutes < 1 ? ` · ${next.label} starting now`
+      : ` · ${next.label} in ${humanCountdown(minutes)}`;
+  return `${dayIn(iso, zone)} ${timeIn(iso, zone)} ${zoneAbbrev(zone)}${et}${upcoming}`;
+}
+
+/** Where `now` sits on the ET day, in percent, as the server's day_pct has it. */
+function sessionDayPct(now) {
+  const map = {};
+  new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', hourCycle: 'h23',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(new Date(now)).forEach((part) => { map[part.type] = part.value; });
+  const minutes = (Number(map.hour) % 24) * 60 + Number(map.minute) + Number(map.second) / 60;
+  return Math.round(minutes / (24 * 60) * 10000) / 100;
+}
+
+/* The clock line and the marker, once a second, and nothing else: a full
+ * render would rebuild the strip's folds under the reader's cursor. When the
+ * next session's start has passed, the server is asked which session it is,
+ * at most every fifteen seconds, so a browser clock ahead of the server's does
+ * not ask on every tick until the server agrees. */
+let sessionAskedAt = 0;
+
+function tickSessionBar() {
+  const sess = (STATE.session || {}).session;
+  if (!sess) return;
+  const now = Date.now();
+  const line = document.getElementById('ses-clock');
+  if (line) {
+    const text = sessionClockLine(sess, now);
+    if (line.textContent !== text) line.textContent = text;
+  }
+  const mark = document.querySelector('#sessionbar .ses-now');
+  if (mark) mark.style.left = `${sessionDayPct(now)}%`;
+  const starts = Date.parse((sess.next || {}).starts_at || '');
+  if (Number.isFinite(starts) && now >= starts && now - sessionAskedAt > 15000) {
+    sessionAskedAt = now;
+    refreshSession();
+  }
+}
+
+/** The session again: with the symbol's prices where one is loaded. */
+function refreshSession() {
+  if (STATE.ticker) loadSession(true);
+  else loadCalendarSession(true);
+}
+
 function renderSessionBar() {
   const host = $('#sessionbar');
   if (!host) return;
@@ -30783,7 +30853,8 @@ function renderSessionBar() {
   }).join('');
 
   // Where "now" sits on the 24-hour strip — the same marker TradingView draws.
-  const marker = `<span class="ses-now" style="left:${sess.day_pct}%"></span>`;
+  const now = Date.now();
+  const marker = `<span class="ses-now" style="left:${sessionDayPct(now)}%"></span>`;
 
   const tickerRelevant = TICKER_VIEWS.includes(STATE.view);
 
@@ -30830,10 +30901,6 @@ function renderSessionBar() {
       feed for this symbol.</p>`}
   </div>` : '';
 
-  const nextText = (sess.next && sess.next.label)
-    ? `${esc(sess.next.label)} in ${humanCountdown(sess.next.minutes_away)}`
-    : '';
-
   host.hidden = false;
   host.innerHTML = `
     ${/* The company block used to sit here, above everything.
@@ -30857,10 +30924,7 @@ function renderSessionBar() {
       <span class="ses-dot p-${esc(phase)}"></span>
       <div class="ses-head">
         <span class="ses-phase">${esc(sess.label || '')}</span>
-        <span class="ses-sub">${esc(dayIn(sess.now_et, zone))} ${
-    esc(timeIn(sess.now_et, zone))} ${esc(zoneTag)}${
-    onMarketTime ? '' : ` · ${esc(sess.weekday || '')} ${esc(sess.now_et_label || '')} ET`}${
-    nextText ? ` · ${nextText}` : ''}</span>
+        <span class="ses-sub" id="ses-clock">${esc(sessionClockLine(sess, now))}</span>
       </div>
       ${closeBlock}
       ${nowBlock}
@@ -30980,7 +31044,10 @@ async function loadSession(force) {
 
 // Re-fetch on the minute so the phase and countdown stay honest across a session
 // boundary — the difference between "after hours" and "overnight" is a real one.
-setInterval(() => { if (STATE.ticker) loadSession(true); }, 60000);
+// With no symbol loaded as well: Home asked for the session once, at boot, and
+// kept that answer for as long as the page stayed open.
+setInterval(refreshSession, 60000);
+setInterval(tickSessionBar, 1000);
 
 function updateStatus() {
   // Home is the landing page. Whatever symbol is still in memory isn't what this
@@ -31222,13 +31289,13 @@ function marketHolidayName() {
  * every reader of STATE.session keeps working. A per-ticker load later
  * overwrites this with the same session plus its price pair.
  */
-async function loadCalendarSession() {
-  if (STATE.session) return;
+async function loadCalendarSession(force) {
+  if (STATE.session && !force) return;
   try {
     const data = await getJSON('/api/session');
     // Do not clobber a per-ticker payload that landed while this was in flight:
     // that one carries the close-versus-current pair as well.
-    if (!STATE.session) STATE.session = { session: data };
+    if (!STATE.session || !STATE.session.ticker) STATE.session = { session: data };
   } catch (err) {
     // The clock fallback still answers. Weekends stay right; a holiday reverts
     // to reading as a normal session, which is the pre-existing behaviour
@@ -35035,17 +35102,18 @@ function clearHiddenPanels(view) {
   } catch (e) { /* private mode */ }
 }
 
-/** Whether this panel should be on the page: the reader's choice, else the mode. */
+/* Whether this panel is off the page: only if the reader took it off.
+ *
+ * The level used to take panels off as well, with a note at the top of the
+ * tab, "9 panels hidden on this tab", and a button to put them back. Asked
+ * for as "remove the 9 panels are hidden tab, show everything but keep it
+ * collapsed": every panel is on the page at every level, and the ones above
+ * the reader's level start collapsed (makePanelsCollapsible). The chooser's
+ * unticked panels are still the reader's to take off. */
 function panelIsHidden(view, title) {
   const chosen = hiddenPanels();
   const id = panelId(view, title);
-  if (Object.prototype.hasOwnProperty.call(chosen, id)) return !!chosen[id];
-  /* The reader's own choice wins, and only then the level. That order is the
-     whole contract of the panel chooser: somebody who opened a panel by hand
-     keeps it when they change level, and somebody who closed one does not get
-     it back. The level decides what a view *opens with*, never what it is
-     allowed to contain. */
-  return knowledgeLevel() < panelMinLevel(view, title);
+  return Object.prototype.hasOwnProperty.call(chosen, id) && !!chosen[id];
 }
 
 /* Panels Simple mode leaves out, by heading substring, per view.
@@ -35117,20 +35185,6 @@ const PANELS_ADVANCED = {
   financials: [],
 };
 
-/* What the hidden panels are, per view. The note said "options and positioning"
- * everywhere, which was written for the options tab and was untrue on Investing
- * (a valuation panel) and Macro (ratio pairs). A note that misdescribes what it
- * hid is worse than a generic one. */
-const ADVANCED_NOUN = {
-  swing: 'options and positioning',
-  long: 'dense valuation',
-  market: 'ratio and sub-industry',
-};
-
-function advancedNoun(view) {
-  return ADVANCED_NOUN[view] || 'specialist';
-}
-
 function isAdvancedPanel(view, title) {
   const needle = String(title || '').toLowerCase();
   return (PANELS_ADVANCED[view] || []).some((k) => needle.includes(k));
@@ -35146,82 +35200,26 @@ function panelMinLevel(view, title) {
   return 0;                                    // always
 }
 
-/** Hide the specialist panels, and say so where they were. */
+/* Take off the page the panels the reader took off in the chooser, and only
+ * those. The note that counted what was hidden went with the level's hiding:
+ * see panelIsHidden. Notes from a render before this one are still removed, so
+ * a view rendered before the change cannot keep one. */
 function applyUiMode(view) {
   const host = views[view];
   if (!host) return;
-  const simple = uiMode() === 'simple';
-  document.body.classList.toggle('mode-simple', simple);
+  document.body.classList.toggle('mode-simple', uiMode() === 'simple');
   host.querySelectorAll('[data-mode-note]').forEach((n) => n.remove());
-
-  /* Every panel is asked, in both modes.
-   *
-   * An earlier version returned early in Pro and only unhid what it had hidden,
-   * which was right while the preset was the only input. With the reader's own
-   * choices in play a panel can be hidden in Pro too, so there is no mode in
-   * which this can skip the pass. */
-  let hidden = 0;
-  let byMode = 0;
   host.querySelectorAll('.panel').forEach((panel) => {
     const head = panel.querySelector(':scope > h2');
     if (!head) return;
-    const title = headingName(head);
-    const hide = panelIsHidden(view, title);
+    const hide = panelIsHidden(view, headingName(head));
     panel.classList.toggle('is-advanced', hide);
     /* `hidden` as well as the class, because an author `display` beats the UA
      * stylesheet's [hidden] rule whatever the specificity — CLAUDE.md, after
      * .set-pw rendered a password form open on every visit to Settings. The
      * class carries the display:none and the attribute carries the semantics. */
     panel.hidden = hide;
-    if (!hide) return;
-    hidden += 1;
-    if (simple && isAdvancedPanel(view, title)) byMode += 1;
   });
-  if (!hidden) return;
-
-  // Names which of the two hid them, because the remedies are different: one is
-  // a mode switch and the other is a choice this reader made.
-  const mine = hidden - byMode;
-  const why = byMode && mine
-    ? `${byMode} by Simple mode and ${mine} by you`
-    : byMode ? `${byMode} ${advancedNoun(view)} panel${byMode === 1 ? '' : 's'}`
-      : `${mine} you chose to hide`;
-
-  const note = document.createElement('div');
-  note.className = 'panel mode-note';
-  note.setAttribute('data-mode-note', '1');
-  note.innerHTML = `<p class="sub"><strong>${hidden} panel${
-    hidden === 1 ? '' : 's'} hidden</strong> on this tab: ${esc(why)}.
-    <button type="button" class="auth-link" data-panels-open>Choose panels</button>${
-  byMode ? ` \u00b7 <button type="button" class="auth-link" data-set-mode="pro"
-      >Show everything</button>` : ''}</p>`;
-  /* Above the panels, not after them.
-   *
-   * `host.appendChild` put it last, which on the Options tab is the far end of
-   * a 10,600px view. Two things were wrong with that. A reader needs to know
-   * nine panels are hidden *before* scrolling the page, not once they reach the
-   * bottom; and the buttons were effectively unclickable, because the view
-   * re-renders on the twenty-second refresh and the one place guaranteed to
-   * move under the cursor is the end of a page whose length keeps changing.
-   * Verified by clicking at measured coordinates on the live site: the click
-   * landed on a chart legend two panels away.
-   *
-   * At the front of the tab, straight under its header and the price strip:
-   * asked for as "why is this hidden in the middle? make it visible at the
-   * front so the user can choose as soon as the tab is opened". It went before
-   * the first panel, and the Options tab opens on blocks that are not panels
-   * (the read, what is pulling hardest, what matters next, follow-ups), so on
-   * a page whose chart panel was not first the note landed under all of them.
-   * The header and the price strip are what every symbol tab starts with; a
-   * tab with neither gets it first of all. */
-  let after = null;
-  for (const el of host.children) {
-    if (el === note) continue;
-    if (!el.matches('.sec-head, .px-head')) break;
-    after = el;
-  }
-  if (after) after.insertAdjacentElement('afterend', note);
-  else host.insertBefore(note, host.firstChild);
 }
 
 /* The chooser.
@@ -35286,7 +35284,7 @@ function panelChooserHTML(view) {
         <span class="subnote">${rows.filter((r) => !r.hidden).length} of ${
   rows.length} shown</span>
         <button type="button" class="btn" data-panels-reset="${esc(view)}"
-          >Reset to ${uiMode() === 'simple' ? 'Simple' : 'Pro'}</button>
+          >Show all</button>
       </div>
     </div>
   </div>`;
@@ -35886,7 +35884,10 @@ function makePanelsCollapsible(view) {
     const title = headingName(head);
     if (!title) return;
     const id = panelId(view, title);
-    const isDefaultOpen = openByDefault.some((k) => title.toLowerCase().includes(k));
+    // A panel above the reader's level is on the page and starts collapsed;
+    // one they have opened or closed themselves keeps what they chose.
+    const isDefaultOpen = panelMinLevel(view, title) <= knowledgeLevel()
+      && openByDefault.some((k) => title.toLowerCase().includes(k));
     const open = Object.prototype.hasOwnProperty.call(saved, id) ? !!saved[id] : isDefaultOpen;
 
     panel.dataset.collapsible = '1';

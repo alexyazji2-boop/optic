@@ -86,28 +86,6 @@ def test_the_observer_still_fires_for_a_real_late_panel():
     assert "requestAnimationFrame" in fn, "the coalescing frame is gone"
 
 
-def test_the_note_still_carries_the_panel_class():
-    """It is styled as one. The fix is in the observer rather than by renaming
-    the note's class, because `.panel mode-note` is what gives it the card it
-    is drawn as, and a class rename would be a styling change dressed up as a
-    bug fix."""
-    fn = body_of("applyUiMode")
-    assert "note.className = 'panel mode-note'" in fn
-
-
-def test_the_note_is_at_the_front_of_the_tab():
-    """`host.appendChild` put it last, which on the Options tab is the far end
-    of a 10,600px view, and before the first panel was still under the read and
-    the blocks around it: "why is this hidden in the middle? make it visible at
-    the front". Straight under the header and the price strip, or first."""
-    fn = body_of("applyUiMode")
-    assert "if (!el.matches('.sec-head, .px-head')) break;" in fn
-    assert "if (el === note) continue;" in fn, "the note would be placed after itself"
-    assert "if (after) after.insertAdjacentElement('afterend', note);" in fn
-    assert "else host.insertBefore(note, host.firstChild);" in fn, (
-        "a tab with no header still gets its note, first")
-
-
 def test_both_buttons_still_have_their_handlers():
     """Both directions, which is the house rule. A dead control does not error;
     it takes the click and nothing happens, which reads as a slow app."""

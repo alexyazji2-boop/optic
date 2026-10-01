@@ -193,13 +193,3 @@ def test_the_hiding_is_driven_by_the_class_the_js_already_sets():
     assert ".grid" not in body
 
 
-def test_the_hidden_panel_note_is_not_inside_a_wrapper():
-    """It says how many panels are hidden and offers the chooser. A child of
-    the view itself, so hiding a wrapper cannot take the explanation with it:
-    after the view's own header and price strip, or first of all."""
-    app = open("static/app.js", encoding="utf-8").read()
-    at = app.index("function applyUiMode(")
-    body = app[at:app.index("\nfunction ", at + 1)]
-    assert "for (const el of host.children) {" in body, "only the view's own children"
-    assert "after.insertAdjacentElement('afterend', note)" in body
-    assert "host.insertBefore(note, host.firstChild)" in body

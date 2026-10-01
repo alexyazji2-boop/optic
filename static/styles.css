@@ -1806,6 +1806,8 @@ table.data.narrow { min-width: 0; }
      need more than that. */
   padding: var(--space-4) var(--space-3);
   background: var(--surface-2);
+  /* The scroll shadows' covers, in the tile's own fill: see `.panel .grid > *`. */
+  --scroll-cover: var(--surface-2);
   border: 0;
   border-radius: var(--r-md);
   text-align: center;
@@ -3488,8 +3490,8 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
 .scroll-y,
 .panel .grid > * {
   background-image:
-    linear-gradient(to right, var(--surface) 40%, transparent),
-    linear-gradient(to left, var(--surface) 40%, transparent),
+    linear-gradient(to right, var(--scroll-cover, var(--surface)) 40%, transparent),
+    linear-gradient(to left, var(--scroll-cover, var(--surface)) 40%, transparent),
     linear-gradient(to right, var(--scroll-shade), transparent),
     linear-gradient(to left, var(--scroll-shade), transparent);
   background-repeat: no-repeat;
@@ -3497,6 +3499,15 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
   background-position: 0 0, 100% 0, 0 0, 100% 0;
   background-attachment: local, local, scroll, scroll;
 }
+/* The covers are the box's own fill.
+ *
+ * They hide the shades by matching what is under them, so they have to be the
+ * colour of the box they sit in. A tile is a box with a fill of its own, and in
+ * the panel's colour the covers painted a 34px fade over both edges of every
+ * tile in a panel grid: 53 of them across Options, Earnings, Investing, Macro
+ * and Indices. Reported as "these boxes are fading away, fix this and keep the
+ * text within the boxes": with the edges faded, the box read narrower than its
+ * text. A box with its own fill names it as --scroll-cover, as `.tile` does. */
 
 /* `.scroll-y` also scrolls vertically, so it needs the horizontal pair plus a
    matching pair on the y axis — otherwise a 340px-capped box gives no hint that
