@@ -13802,6 +13802,24 @@ function instrumentBackHTML() {
     Back to ${esc(label)}</button>`;
 }
 
+/* What the instrument page calls its instrument: "US Dollar Index (DXY)" where
+ * the catalogue has a name for it, the label alone where it does not. Asked
+ * for as "make it clearer that this subchart for the ticker DXY is for the US
+ * dollar index", over a heading that read "DXY" with the name in small type. */
+function instrumentTitle(d) {
+  if (!d) return '';
+  return d.name ? `${d.name} (${d.label})` : (d.label || d.symbol || '');
+}
+
+/* The instrument the page's chip asks Pulse about: the one on screen, named as
+ * its heading names it once the page has loaded. */
+function instrumentSubject() {
+  const inst = STATE.instrument || {};
+  const d = STATE.instrumentData;
+  if (d && d.available && d.symbol === inst.symbol) return instrumentTitle(d);
+  return inst.label || inst.symbol || 'this instrument';
+}
+
 function renderInstrument(d) {
   if (!d) return '<div class="panel span-all"><p class="sub">Pick an instrument.</p></div>';
   if (d === 'loading') {
@@ -13817,11 +13835,16 @@ function renderInstrument(d) {
   /* label / value / delta, which is the shape both reference dashboards use
      and this had as label / value. Tremor's KPI card is "Unique visitors /
      10,450 / -12.5%"; the delta is what turns a reading into a change. */
+  /* Three lines in every tile, the third empty where a tile has nothing to
+     put there, so the captions, the figures and the third lines each run
+     along one line of the row. See .inst-stats. */
   const stat = (label, value, cls, note, delta) => `<div class="tile">
     <span class="label">${hg(label)}</span>
     <span class="value ${cls || ''}">${value}</span>
     ${delta ? `<span class="delta ${esc(delta.dir)}">${esc(delta.text)}</span>` : ''}
-    ${note ? `<span class="note">${esc(note)}</span>` : ''}</div>`;
+    ${note || !delta ? `<span class="note">${note ? esc(note) : ''}</span>` : ''}</div>`;
+  // The level a change is measured from, under the change.
+  const level = (word, v) => (typeof v === 'number' ? `${word} ${fmt(v, decimals)}` : null);
 
   return `<div class="panel span-all">
     ${/* The way back, named.
@@ -13838,12 +13861,15 @@ function renderInstrument(d) {
     ${/* cap(), because this is a field from the instrument catalogue rendered
          straight out -- "equity", "rates", "fx" -- and a label starting a line
          reads as a sentence whatever it came from. */''}
-    <div class="weekly-kicker">${esc(cap(d.group || 'Cross-asset'))}</div>
-    <h2 class="weekly-title">${esc(d.label)}${askPulse('instrument')}</h2>
+    <div class="inst-head">
+    <div class="weekly-kicker">${esc(d.group === 'fx' ? 'FX' : cap(d.group || 'Cross-asset'))}</div>
+    <h2 class="weekly-title">${esc(instrumentTitle(d))}${askPulse('instrument')}</h2>
     ${/* What the instrument is, and no more. The symbol and the bar count sat
          beside it, "^TNX, 252 daily bars", and were asked to go as
-         "unnecessary info". */''}
-    ${d.note ? `<p class="weekly-sub">${esc(cap(d.note))}</p>` : ''}
+         "unnecessary info". Where the heading names it, the line says what it
+         measures instead of repeating the name. */''}
+    ${d.about || d.note ? `<p class="weekly-sub">${esc(cap(d.about || d.note))}</p>` : ''}
+    </div>
 
     <div class="inst-stats">
       ${/* The day's change rides on the price rather than taking a tile of its
@@ -13854,11 +13880,12 @@ function renderInstrument(d) {
       ${stat('Last', fmt(s.last, decimals), '', null,
     s.chg_1d === null || s.chg_1d === undefined ? null
       : { dir: signClass(s.chg_1d) || 'flat', text: fmtPct(s.chg_1d, 2) + ' today' })}
-      ${stat('20 days', fmtPct(s.chg_20d, 2), signClass(s.chg_20d))}
-      ${stat('vs 200-day', fmtPct(s.vs_sma200, 1), signClass(s.vs_sma200))}
+      ${stat('20 days', fmtPct(s.chg_20d, 2), signClass(s.chg_20d), level('from', s.close_20d_ago))}
+      ${stat('vs 200-day', fmtPct(s.vs_sma200, 1), signClass(s.vs_sma200), level('average', s.sma200))}
       ${stat('RSI', fmt(s.rsi, 0), '',
     s.rsi >= 70 ? 'Overbought territory' : s.rsi <= 30 ? 'Oversold territory' : 'Mid-range')}
-      ${stat('From 52-week high', fmtPct(s.pct_from_52w_high, 1), signClass(s.pct_from_52w_high))}
+      ${stat('From 52-week high', fmtPct(s.pct_from_52w_high, 1), signClass(s.pct_from_52w_high),
+    level('high', s.high_52w))}
     </div>
 
     ${/* A chart to look at, with nothing to set but how: the range, and Line
@@ -26713,7 +26740,10 @@ function draftPulse(text) {
 function openPulseWith(topic) {
   const tmpl = PULSE_TOPICS[topic];
   if (!tmpl) return;
-  const ticker = STATE.ticker || 'the market';
+  /* The instrument page's chip is about the instrument on screen. It read
+     STATE.ticker like every other topic, which is the Analysis tab's stock, so
+     "What is this?" on DXY drafted "Explain what NVDA actually is". */
+  const ticker = topic === 'instrument' ? instrumentSubject() : (STATE.ticker || 'the market');
   /* {thesis} is filled from what the reader actually wrote.
    *
    * Four labelled fields, not one blob: the thesis form asks for the bull case,

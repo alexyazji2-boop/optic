@@ -171,6 +171,11 @@ def snapshot(df: pd.DataFrame, label: str = "") -> Dict[str, Any]:
         "rsi": _f(rsi14.dropna().iloc[-1], 2) if not rsi14.dropna().empty else None,
         "pct_from_52w_high": _f((last / high_252 - 1.0) * 100.0, 2) if high_252 else None,
         "pct_from_52w_low": _f((last / low_252 - 1.0) * 100.0, 2) if low_252 else None,
+        # The levels three of those are measured from, for the instrument page's
+        # tiles, which print each change over the figure it is a change from.
+        "close_20d_ago": _f(close.iloc[-21]) if len(close) > 20 else None,
+        "sma200": _f(sma200.dropna().iloc[-1]) if not sma200.dropna().empty else None,
+        "high_52w": _f(high_252),
         "dist_to_20d_high": _f((last / float(close.tail(20).max()) - 1.0) * 100.0, 2),
         "dist_to_60d_high": _f((last / float(close.tail(60).max()) - 1.0) * 100.0, 2),
         "squeeze_percentile": squeeze_pct,

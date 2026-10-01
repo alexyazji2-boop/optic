@@ -80,7 +80,9 @@ def test_the_instrument_kicker_is_not_printed_in_lower_case():
     code = _js_code()
     kicker = re.search(r'<div class="weekly-kicker">\$\{esc\(([^)]*\))\)\}</div>', code)
     assert kicker, "the instrument kicker changed shape"
-    assert kicker.group(1).startswith("cap("), \
+    # "fx" is an acronym, so it is the one group cap() would get wrong ("Fx").
+    expr = kicker.group(1).replace("d.group === 'fx' ? 'FX' : ", "")
+    assert expr.startswith("cap("), \
         "the catalogue's own casing reaches the page: " + kicker.group(1)
 
 

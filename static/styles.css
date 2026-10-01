@@ -5903,6 +5903,30 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
   gap: var(--space-3);
   margin-top: var(--space-4);
 }
+/* The captions on one line across the row, the figures on the next, the third
+ * lines on the one after, and every tile centred.
+ *
+ * Asked for as "center all of the text as well and keep them horizontally
+ * aligned", over a row where Last and RSI carried a third line and the other
+ * three did not. Centring each tile on its own content put the two kinds at
+ * different heights: the captions 15px apart, the figures 14px. Every tile has
+ * a third line now, and the three lines are rows of the row itself (a
+ * subgrid), so a caption that wraps or a third line that is missing moves its
+ * line in every tile together, and no tile has space the others do not. */
+.inst-stats .tile {
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  justify-content: normal;
+}
+/* The rows do the reserving the two-line caption did, and a caption sits on
+   its figure rather than at the top of a taller row. */
+.inst-stats .tile .label { min-height: 0; align-self: end; }
+.inst-stats .tile .delta, .inst-stats .tile .note { line-height: 1.5; }
+
+/* The instrument page's heading, centred over its row of centred tiles. */
+.inst-head { text-align: center; }
+.inst-head .weekly-sub { margin-inline: auto; }
 
 /* ---------------------------------------------- chrome under magnification ----
  *

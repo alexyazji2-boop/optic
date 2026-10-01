@@ -31,7 +31,15 @@ RANGE_PER_SIGMA = 1.6
 INSTRUMENTS: List[Dict[str, str]] = [
     {"symbol": "^VIX", "label": "VIX", "group": "volatility", "note": "S&P 30-day implied vol"},
     {"symbol": "^VVIX", "label": "VVIX", "group": "volatility", "note": "vol of vol"},
-    {"symbol": "DX-Y.NYB", "label": "DXY", "group": "fx", "note": "US dollar index"},
+    # `name` and `about` are for the instrument's own page, whose heading read
+    # "DXY" over "US dollar index" in small type, and was asked to make "clearer
+    # that this subchart for the ticker DXY is for the US dollar index". The
+    # tables and the strip keep the short label.
+    {"symbol": "DX-Y.NYB", "label": "DXY", "group": "fx", "note": "US dollar index",
+     "name": "US Dollar Index",
+     "about": "The US dollar against a basket of six major currencies: the euro "
+              "(about 58%), Japanese yen, British pound, Canadian dollar, Swedish "
+              "krona and Swiss franc. A rising index means a stronger dollar."},
     {"symbol": "USDJPY=X", "label": "USD/JPY", "group": "fx", "note": "yen carry proxy"},
     {"symbol": "EURUSD=X", "label": "EUR/USD", "group": "fx", "note": "euro"},
     {"symbol": "^TNX", "label": "US 10Y", "group": "rates", "note": "10-year yield"},
