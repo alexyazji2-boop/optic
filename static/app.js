@@ -20387,6 +20387,36 @@ function mountEconChart() {
   }));
 }
 
+/* The S&P's daily move as its options price it, against what the index does.
+ *
+ * Asked for as "use the ATR, calculating VIX/16 for expected S&P volatility
+ * being price from its options". Full width under the first row, so the two
+ * columns above keep ending on one line. The third tile is the comparison:
+ * the ATR is a range and VIX/16 a close-to-close move, so the range is put on
+ * the same footing first (RANGE_PER_SIGMA in app/analytics/macro.py). */
+function macroExpectedMove(em) {
+  if (!em || !em.implied_pct) return '';
+  return `<div class="panel gap">
+    <h2>${hg('Expected S&P move')} <span class="th-plain">· from the VIX</span></h2>
+    <p class="sub">${esc(em.reading || '')}</p>
+    <div class="grid c4">
+      ${tile('Options price', `±${fmt(em.implied_pct, 2)}% a day`,
+    `VIX ${fmt(em.vix, 1)} ÷ 16 · ±${fmt(em.implied_points, 0)} points`)}
+      ${tile('The S&P moves', `${fmt(em.atr_pct, 2)}% a day`,
+    `ATR 14 · ${fmt(em.atr14, 0)} points high to low`)}
+      ${em.ratio ? tile('On one footing', `${fmt(em.ratio, 1)}×`,
+    `options against ±${fmt(em.realized_pct, 2)}%, the range ÷ 1.6`) : ''}
+    </div>
+    <p class="macro-why"><strong>Why VIX ÷ 16.</strong> The VIX is the S&P's
+      implied volatility for a year. A year has about 252 trading days, and the
+      square root of 252 is close to 16, so the VIX over 16 is the daily move
+      its options price: one standard deviation, which about two days in three
+      should close inside. The ATR is the index's own average day, high to low,
+      and a day's range runs about 1.6 times its close-to-close move, which is
+      why the third tile divides by it.</p>
+  </div>`;
+}
+
 function renderMarket(d) {
   hideTip();
   const m = d.macro || {};
@@ -20491,6 +20521,8 @@ function renderMarket(d) {
     </div>` : ''}
     </div>
   </div>
+
+  ${macroExpectedMove(m.expected_move)}
 
   <div id="rotation-host" class="span-all">${renderRotation(STATE.rotation)}</div>
 

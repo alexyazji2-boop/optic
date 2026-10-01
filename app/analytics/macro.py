@@ -12,6 +12,20 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 
 from .series_stats import _f, apply_quote, live_quotes, snapshot
+from .technicals import atr
+
+# The rule of 16. The VIX is the S&P's implied volatility for a year, and a year
+# has about 252 trading days, whose square root (15.9) is close to 16: so the
+# VIX over 16 is the one-standard-deviation daily move the options price.
+# Asked for as "calculating VIX/16 for expected S&P volatility being price from
+# its options", beside the ATR.
+RULE_OF_16 = 16.0
+# A day's true range runs wider than its close-to-close move. For a random walk
+# the expected high-to-low range is sqrt(8/pi), about 1.6 standard deviations
+# (Parkinson, 1980), so the ATR over 1.6 puts the index's own days on the
+# footing VIX/16 is on. Without it a 0.9% ATR beside a 1.0% VIX/16 reads as
+# options pricing what the tape delivers, when they are pricing nearly twice.
+RANGE_PER_SIGMA = 1.6
 
 # Yahoo symbols for the macro complex. Grouped so the UI can lay them out.
 INSTRUMENTS: List[Dict[str, str]] = [
@@ -84,6 +98,49 @@ RATIOS: List[Dict[str, Any]] = [
         "reads": "growth vs broad market leadership",
     },
 ]
+
+
+def _expected_move(snaps: Dict[str, Dict[str, Any]], frames: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The S&P's daily move as its options price it (VIX / 16), against the
+    index's own average day (ATR 14), on one footing. None without the VIX, the
+    S&P or a month of its bars."""
+    vix = (snaps.get("^VIX") or {}).get("last")
+    spot = (snaps.get("^GSPC") or {}).get("last")
+    frame = frames.get("^GSPC")
+    if not vix or not spot or frame is None or len(frame) < 30:
+        return None
+    try:
+        range_now = float(atr(frame, 14).iloc[-1])
+        close = float(frame["Close"].iloc[-1])
+    except (KeyError, IndexError, TypeError, ValueError):
+        return None
+    if not np.isfinite(range_now) or not close:
+        return None
+    implied_pct = vix / RULE_OF_16
+    atr_pct = range_now / close * 100.0
+    realized_pct = atr_pct / RANGE_PER_SIGMA
+    ratio = implied_pct / realized_pct if realized_pct else None
+    if ratio is None:
+        reading = "The index has not moved enough lately to compare."
+    elif ratio > 1.25:
+        reading = ("Options are pricing about {:.1f} times the movement the index has been "
+                   "delivering. Protection is dear against what the tape is doing.".format(ratio))
+    elif ratio < 0.8:
+        reading = ("Options are pricing less movement than the index has been delivering. "
+                   "Protection is cheap against what the tape is doing.")
+    else:
+        reading = "Options are pricing about the movement the index has been delivering."
+    return {
+        "vix": _f(vix, 2),
+        "spot": _f(spot, 2),
+        "implied_pct": _f(implied_pct, 3),
+        "implied_points": _f(spot * implied_pct / 100.0, 1),
+        "atr14": _f(range_now, 2),
+        "atr_pct": _f(atr_pct, 3),
+        "realized_pct": _f(realized_pct, 3),
+        "ratio": _f(ratio, 2) if ratio is not None else None,
+        "reading": reading,
+    }
 
 
 def _score_component(name: str, value: Optional[float], weight: float, invert: bool = False):
@@ -322,6 +379,7 @@ def analyse(provider) -> Dict[str, Any]:
         "score_attributed": round(attributed, 1),
         "score_unattributed": round(score - attributed, 1),
         "curve_3m10y": curve,
+        "expected_move": _expected_move(snaps, frames),
         "instruments": snaps,
         "groups": grouped,
         "ratios": ratio_rows,
