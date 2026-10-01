@@ -157,6 +157,11 @@ def _no_live_calls(monkeypatch):
 
     monkeypatch.setattr(live_mirror, "_http_get", refuse)
 
+    # Nor FRED, from the macro panel: no high-yield spread unless a test gives
+    # one, so the credit term is HYG's, as it is whenever FRED is out.
+    from app.analytics import macro as _macro
+    monkeypatch.setattr(_macro, "_hy_spread_rows", lambda: [])
+
     # Nor does it build the universe ranking. A scanner endpoint that finds no
     # ranking starts one building on a thread of its own (see _ensure_ranking),
     # which is three thousand downloads from the real feed in the middle of the

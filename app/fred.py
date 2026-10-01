@@ -101,16 +101,19 @@ def _num(value: Any) -> Optional[float]:
     return None if out != out else out
 
 
-def observations(series: str) -> List[Tuple[str, float]]:
+def observations(series: str, timeout: Optional[float] = None) -> List[Tuple[str, float]]:
     """(date, value) pairs for a FRED series, oldest first.
 
     FRED writes "." for a missing observation rather than an empty field, so a
     naive float() over the column raises on perfectly normal data.
+
+    `timeout` is for a caller that cannot wait the feed's full timeout on a
+    miss: the macro panel reads the high-yield spread on every load.
     """
     try:
         # Empty string = send no User-Agent. FRED hangs on ours; see feeds._fetch.
         raw = feeds.fetch_text(CSV_URL.format(series=series), TTL_SECONDS,
-                               key="fred:" + series, user_agent="")
+                               key="fred:" + series, user_agent="", timeout=timeout)
     except Exception as exc:
         log.warning("FRED series %s unavailable: %s", series, exc)
         return []

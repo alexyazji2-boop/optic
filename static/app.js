@@ -21250,6 +21250,9 @@ function renderMarket(d) {
           ${toneChip(r.signal)}
         </div>
         <div style="color:var(--ink-muted);font-size:var(--t-small);margin:var(--space-0) 0 var(--space-2)">${esc(r.reads)}</div>
+        ${/* "Rates-led" says the ratio moved on rates rather than on what it
+             reads; the note says which way, so the chip is not a riddle. */''}
+        ${r.signal_note ? `<p class="caveat" style="margin:0 0 var(--space-2)">${esc(r.signal_note)}</p>` : ''}
         <div style="display:flex;gap:var(--space-4);font-size:var(--t-small);font-variant-numeric:tabular-nums;margin-bottom:var(--space-1)">
           <span>5d <span class="${signClass(r.chg_5d)}">${fmtPct(r.chg_5d, 1)}</span></span>
           <span>20d <span class="${signClass(r.chg_20d)}">${fmtPct(r.chg_20d, 1)}</span></span>

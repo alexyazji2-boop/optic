@@ -7,10 +7,12 @@ from the cross-asset signals that actually lead equities.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+import time
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
+from .. import fred
 from .series_stats import _f, apply_quote, live_quotes, snapshot
 from .technicals import atr
 
@@ -114,6 +116,9 @@ RATIOS: List[Dict[str, Any]] = [
         "denom": "TLT",
         "risk_on_when": "rising",
         "reads": "credit appetite vs duration safety; equities rarely rally against falling credit",
+        # TLT is twenty-year Treasuries and HYG is short-dated junk, so a move in
+        # rates moves TLT several times as far. See `_rates_led`.
+        "duration_leg": "denom",
     },
     {
         "name": "Russell / S&P",
@@ -173,6 +178,94 @@ def _expected_move(snaps: Dict[str, Dict[str, Any]], frames: Dict[str, Any]) -> 
         "ratio": _f(ratio, 2) if ratio is not None else None,
         "reading": reading,
     }
+
+
+# ------------------------------------------------------------------ bonds
+#
+# Asked "does the macro tab take into account whats going on with the bond
+# markets right now?" on 1 October 2026, with the 10-year at 5.29%, up half a
+# point in September, the 2-year up as much and the high-yield spread 46bp
+# wider. The bonds were most of a -12.2 score and still undercounted: the
+# 10-year term was scored on the yield's percent change and capped at -4, which
+# a quarter point reaches, so half the month went uncounted; the credit term was
+# HYG's price, which moves with Treasury yields as well as with default risk;
+# HYG / TLT read "risk-on" because Treasuries fell faster than junk bonds; and
+# the notes said nothing about bonds.
+#
+# So the 10-year is scored in basis points, credit on the spread itself where
+# FRED has it, the ratio says when its move is rates, and a move this size is
+# written into the notes.
+
+YIELD_SESSIONS = 20
+# Per basis point of the 10-year's move over YIELD_SESSIONS. A rise counts in
+# full and a fall counts half: a fast fall in yields is as often a flight to
+# safety as relief, and the VIX and the spread carry which of the two it is.
+YIELD_RISE_PER_BP, YIELD_RISE_CAP = 0.2, 10.0      # a half-point month reaches it
+YIELD_FALL_PER_BP, YIELD_FALL_CAP = 0.1, 5.0
+# A move the notes mention, and how close to its 52-week high the yield has to
+# be for them to say "near its 52-week high", both in basis points.
+YIELD_NOTE_BP, YIELD_NEAR_HIGH_BP = 25.0, 10.0
+
+# ICE BofA US High Yield option-adjusted spread, daily, in percent: the yield
+# junk bonds pay over Treasuries, so default risk without the rates in HYG.
+HY_SPREAD_SERIES = "BAMLH0A0HYM2"
+SPREAD_PER_BP, SPREAD_CAP = 0.1, 12.5              # the cap is HYG's, reached at 125bp
+SPREAD_NOTE_BP = 25.0
+# Read on every macro load. FRED's copy is cached for six hours, but a miss
+# waits on the network, so it gets a short timeout and, after a failure,
+# fifteen minutes before it is tried again; HYG stands in meanwhile.
+HY_TIMEOUT_SECONDS = 4.0
+HY_RETRY_SECONDS = 15 * 60
+_HY_FAILED_AT = [0.0]
+
+
+def _hy_spread_rows() -> List[Tuple[str, float]]:
+    """The high-yield spread's daily values from FRED, or [] while it is out."""
+    now = time.time()
+    if now - _HY_FAILED_AT[0] < HY_RETRY_SECONDS:
+        return []
+    rows = fred.observations(HY_SPREAD_SERIES, timeout=HY_TIMEOUT_SECONDS)
+    if not rows:
+        _HY_FAILED_AT[0] = now
+    return rows
+
+
+def _bp_move(values: List[float], sessions: int) -> Optional[float]:
+    """The change over `sessions` observations, in basis points of a percent."""
+    if len(values) <= sessions:
+        return None
+    return round((float(values[-1]) - float(values[-1 - sessions])) * 100.0, 1)
+
+
+def _yield_factor(bp: float) -> Tuple[float, str]:
+    if bp > 0:
+        contribution = -min(bp * YIELD_RISE_PER_BP, YIELD_RISE_CAP)
+    else:
+        contribution = min(-bp * YIELD_FALL_PER_BP, YIELD_FALL_CAP)
+    rule = "{} {:.0f}bp in {} sessions; -{:.1f} per bp up, capped at -{:.0f}, " \
+           "+{:.1f} per bp down, capped at +{:.0f}".format(
+               "up" if bp > 0 else "down", abs(bp), YIELD_SESSIONS, YIELD_RISE_PER_BP,
+               YIELD_RISE_CAP, YIELD_FALL_PER_BP, YIELD_FALL_CAP)
+    return contribution, rule
+
+
+def _rates_led(spec: Dict[str, Any], a_chg: Optional[float], b_chg: Optional[float]) -> Optional[str]:
+    """Why a credit-versus-duration ratio's move is rates, or None.
+
+    When both legs move the same way and the duration leg moves further, the
+    ratio moves because of rates. On 1 October HYG was down 2.8% over twenty
+    sessions and TLT down 5.2%, so HYG / TLT rose 2.5% and read "risk-on": junk
+    bonds were not in demand, Treasuries were falling faster.
+    """
+    if spec.get("duration_leg") != "denom" or a_chg is None or b_chg is None:
+        return None
+    if a_chg < 0 and b_chg < 0 and b_chg < a_chg:
+        return ("Both fell over 20 sessions and Treasuries fell further, so the "
+                "ratio's rise is rates, not credit appetite.")
+    if a_chg > 0 and b_chg > 0 and b_chg > a_chg:
+        return ("Both rose over 20 sessions and Treasuries rose further, so the "
+                "ratio's fall is rates, not a move to safety.")
+    return None
 
 
 def _score_component(name: str, value: Optional[float], weight: float, invert: bool = False):
@@ -259,6 +352,16 @@ def analyse(provider) -> Dict[str, Any]:
             risk_on = rising if spec["risk_on_when"] == "rising" else not rising
             trend = "risk-on" if risk_on else "risk-off"
 
+        def leg_chg(col: str) -> Optional[float]:
+            leg = joined[col]
+            if len(leg) <= 20 or leg.iloc[-21] == 0:
+                return None
+            return float((leg.iloc[-1] / leg.iloc[-21] - 1.0) * 100.0)
+
+        why_rates = _rates_led(spec, leg_chg("a"), leg_chg("b")) if trend else None
+        if why_rates:
+            trend = "rates-led"
+
         ratio_rows.append(
             {
                 "name": spec["name"],
@@ -268,6 +371,7 @@ def analyse(provider) -> Dict[str, Any]:
                 "chg_20d": chg_20,
                 "chg_60d": chg(60),
                 "signal": trend,
+                "signal_note": why_rates,
                 "series": [_f(v, 6) for v in line.tail(90)],
                 "dates": [str(i.date()) for i in line.tail(90).index],
             }
@@ -309,8 +413,6 @@ def analyse(provider) -> Dict[str, Any]:
     for symbol, name, weight, invert in (
         ("^GSPC", "S&P 500 20-day", 2.0, False),
         ("DX-Y.NYB", "Dollar 20-day", 1.5, True),
-        ("^TNX", "10-year yield 20-day", 0.8, True),
-        ("HYG", "High-yield credit 20-day", 2.5, False),
         ("HG=F", "Copper 20-day", 1.0, False),
         ("BTC-USD", "Bitcoin 20-day", 0.4, False),
         ("^RUT", "Russell 2000 20-day", 1.0, False),
@@ -354,6 +456,54 @@ def analyse(provider) -> Dict[str, Any]:
             adj, band = 0, "inside the -15% to +3% band, so no adjustment"
         score += adj
         factors.append(_step("Crude 20-day", oil_20, adj, band))
+
+    # The 10-year, in basis points. See YIELD_RISE_PER_BP.
+    tnx_frame = frames.get("^TNX")
+    tnx_bars = ([float(v) for v in tnx_frame["Close"].dropna()]
+                if tnx_frame is not None and not tnx_frame.empty else [])
+    y10_bp = _bp_move(tnx_bars, YIELD_SESSIONS)
+    if y10_bp is not None:
+        adj, rule = _yield_factor(y10_bp)
+        score += adj
+        factors.append({"factor": "10-year yield 20-day", "value": y10_bp, "unit": "bp",
+                        "contribution": round(adj, 2), "rule": rule, "kind": "scaled"})
+        tnx = snaps.get("^TNX", {})
+        if abs(y10_bp) >= YIELD_NOTE_BP and tnx.get("last") is not None:
+            high = tnx.get("high_52w")
+            near_high = (y10_bp > 0 and high is not None
+                         and (high - tnx_bars[-1]) * 100.0 <= YIELD_NEAR_HIGH_BP)
+            notes.append("10-year yield {:.2f}%, {} {:.0f}bp in {} sessions{}. {}".format(
+                tnx["last"], "up" if y10_bp > 0 else "down", abs(y10_bp), YIELD_SESSIONS,
+                ", near its 52-week high" if near_high else "",
+                "Bonds are selling off" if y10_bp > 0 else "Bonds are rallying"))
+
+    # Credit: the high-yield spread where FRED has it, HYG's price where not.
+    spread_rows = _hy_spread_rows()
+    spread_bp = _bp_move([v for _, v in spread_rows], YIELD_SESSIONS)
+    if spread_bp is not None:
+        level, as_of = spread_rows[-1][1], spread_rows[-1][0]
+        adj = float(np.clip(-spread_bp * SPREAD_PER_BP, -SPREAD_CAP, SPREAD_CAP))
+        score += adj
+        factors.append({
+            "factor": "High-yield spread 20-day", "value": spread_bp, "unit": "bp",
+            "contribution": round(adj, 2), "level": level, "as_of": as_of,
+            "rule": "{:.2f}% on {}, {:.0f}bp {} in {} sessions; -{:.1f} per bp wider, "
+                    "capped at {:.1f} either way".format(
+                        level, as_of, abs(spread_bp),
+                        "wider" if spread_bp > 0 else "tighter", YIELD_SESSIONS,
+                        SPREAD_PER_BP, SPREAD_CAP),
+            "kind": "scaled"})
+        if abs(spread_bp) >= SPREAD_NOTE_BP:
+            notes.append("High-yield spread {:.2f}%, {:.0f}bp {} in {} sessions. {}".format(
+                level, abs(spread_bp), "wider" if spread_bp > 0 else "tighter", YIELD_SESSIONS,
+                "Credit is pricing more default risk" if spread_bp > 0
+                else "Credit appetite is strong"))
+    else:
+        contrib, row = _score_component("High-yield credit 20-day",
+                                        snaps.get("HYG", {}).get("chg_20d"), 2.5)
+        score += contrib
+        if row:
+            factors.append(row)
 
     # Curve shape from the yield proxies we have.
     y10 = snaps.get("^TNX", {}).get("last")
