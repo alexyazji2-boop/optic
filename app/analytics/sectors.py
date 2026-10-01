@@ -294,18 +294,17 @@ def _equal_weight_breadth(provider) -> Dict[str, Any]:
     chg_63 = _f((line.iloc[-1] / line.iloc[-64] - 1.0) * 100.0, 2)
     chg_252 = _f((line.iloc[-1] / line.iloc[-253] - 1.0) * 100.0, 2) if len(line) > 253 else None
 
+    # The reading without the figures, which the page shows beside it: the
+    # note stated the three-month change the tile under it showed again, and
+    # the panel was asked for with "no repetition".
     if chg_63 is not None and chg_63 < -2:
-        note = (
-            "Equal-weight lagging cap-weight by {:.1f}% over 3 months. The index is being carried "
-            "by its largest names. Concentration risk.".format(abs(chg_63))
-        )
+        note = ("The average stock is falling behind the index, so the index is being "
+                "carried by its largest names. Concentration risk.")
     elif chg_63 is not None and chg_63 > 2:
-        note = (
-            "Equal-weight outperforming by {:.1f}% over 3 months. Broad participation, "
-            "a healthier advance.".format(chg_63)
-        )
+        note = ("The average stock is ahead of the index. Broad participation, "
+                "a healthier advance.")
     else:
-        note = "Equal-weight roughly tracking cap-weight. No unusual concentration."
+        note = "The average stock is keeping pace with the index. No unusual concentration."
 
     return {
         "rsp_spy_ratio": _f(line.iloc[-1], 5),

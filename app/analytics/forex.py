@@ -11,6 +11,9 @@ cannot:
   These are genuinely different mechanisms and they respond to different news.
 * **What a move means for equities**, where there is a defensible link. Several
   pairs have none, and those say so rather than inventing one.
+* **Why it matters** — the reason to watch it at all: who it reaches, when it
+  trades, or what it shows that nothing else on the screen does. Asked for as
+  "for the currencies, include why they are important as well".
 
 **On direction.** Every pair is quoted base/quote, so the price is "how many
 units of the quote currency buys one unit of the base". Rising EUR/USD is euro
@@ -44,6 +47,9 @@ PAIRS: List[Dict[str, Any]] = [
         "base": "Euro", "quote": "US dollar",
         "up_means": "euro stronger, dollar weaker",
         "driver": "rate differential",
+        "why": "The dollar and the euro are the two main reserve and invoicing "
+               "currencies, so this rate is the backdrop to trade and borrowing "
+               "between two of the world's three largest economies.",
         "what": "The most traded pair in the world and the largest weight in the "
                 "dollar index at roughly 58%, so the dollar index and this pair "
                 "are close to the same trade with the sign flipped.",
@@ -60,6 +66,9 @@ PAIRS: List[Dict[str, Any]] = [
         "base": "US dollar", "quote": "Japanese yen",
         "up_means": "dollar stronger, yen weaker",
         "driver": "carry",
+        "why": "The size of the yen carry trade is published nowhere, so this pair "
+               "is the nearest thing to a live reading of how much borrowed yen is "
+               "at work in other markets, and of how fast it could be called home.",
         "what": "The market's main carry trade: borrow in yen at near-zero, hold "
                 "something yielding more. That makes the pair a leverage gauge as "
                 "much as a currency.",
@@ -77,6 +86,10 @@ PAIRS: List[Dict[str, Any]] = [
         "base": "British pound", "quote": "US dollar",
         "up_means": "pound stronger, dollar weaker",
         "driver": "rate differential",
+        "why": "Sterling is the fourth-largest reserve currency and London the "
+               "largest centre for currency trading, so a disorderly pound reaches "
+               "funding markets well beyond Britain. September 2022, when the pair "
+               "hit a record low days after a budget, is the reference.",
         "what": "Sterling against the dollar, historically called cable after the "
                 "transatlantic telegraph the rate was quoted over.",
         "moves_on": "UK inflation prints and Bank of England expectations against "
@@ -92,6 +105,9 @@ PAIRS: List[Dict[str, Any]] = [
         "base": "US dollar", "quote": "Swiss franc",
         "up_means": "dollar stronger, franc weaker",
         "driver": "risk appetite",
+        "why": "It shows fear the dollar can hide. Money that wants out of risk "
+               "but not into dollars goes to francs, so a falling pair can flag a "
+               "flight to safety that the dollar index does not.",
         "what": "The franc is the developed world's other haven, alongside the "
                 "yen and the dollar itself.",
         "moves_on": "Risk aversion, which bids the franc and pushes this pair "
@@ -106,6 +122,9 @@ PAIRS: List[Dict[str, Any]] = [
         "base": "Australian dollar", "quote": "US dollar",
         "up_means": "Aussie stronger, dollar weaker",
         "driver": "terms of trade",
+        "why": "It trades heavily while Asia is awake, so it is often the first "
+               "liquid market to react to news out of China, hours before US "
+               "stocks open.",
         "what": "The cleanest liquid proxy for Chinese industrial demand: "
                 "Australia sells iron ore and coal, and China is the buyer.",
         "moves_on": "Iron ore, Chinese credit and property data, and the Reserve "
@@ -120,6 +139,9 @@ PAIRS: List[Dict[str, Any]] = [
         "base": "US dollar", "quote": "Canadian dollar",
         "up_means": "dollar stronger, loonie weaker",
         "driver": "terms of trade",
+        "why": "About three-quarters of Canada's exports go to the US, so US trade "
+               "policy is priced here as directly as anywhere, and an oil move and "
+               "a tariff move can pull the pair opposite ways at once.",
         "what": "Two closely integrated economies, so the pair is quieter than "
                 "most and mostly expresses oil and the rate gap.",
         "moves_on": "WTI crude. Canada is a net exporter, so higher oil pushes "
@@ -134,6 +156,9 @@ PAIRS: List[Dict[str, Any]] = [
         "base": "New Zealand dollar", "quote": "US dollar",
         "up_means": "kiwi stronger, dollar weaker",
         "driver": "terms of trade",
+        "why": "New Zealand opens the trading week, so this pair is often where "
+               "weekend news is priced first, before the larger markets are "
+               "trading.",
         "what": "Smaller and less liquid than the Aussie, and it mostly follows "
                 "it. Dairy rather than metals.",
         "moves_on": "Chinese demand, dairy auctions, and the RBNZ. Its lower "
@@ -147,6 +172,9 @@ PAIRS: List[Dict[str, Any]] = [
         "base": "Euro", "quote": "Japanese yen",
         "up_means": "euro stronger, yen weaker",
         "driver": "risk appetite",
+        "why": "When the Fed and the ECB move together and EUR/USD goes quiet, "
+               "this pair still moves on risk, so it keeps working as a gauge when "
+               "the dollar pairs stop.",
         "what": "A cross with no dollar in it, which is what makes it useful: it "
                 "strips out the dollar and leaves the risk signal.",
         "moves_on": "Global risk appetite. The euro is funded and the yen is a "
@@ -160,6 +188,9 @@ PAIRS: List[Dict[str, Any]] = [
         "base": "British pound", "quote": "Japanese yen",
         "up_means": "pound stronger, yen weaker",
         "driver": "risk appetite",
+        "why": "Set against EUR/JPY it measures leverage: when this falls much "
+               "faster than that, positions are being cut rather than views "
+               "changed.",
         "what": "The same risk trade as EUR/JPY with more leverage in it. Wide "
                 "ranges, and a long-standing nickname among traders for the size "
                 "of its moves.",
@@ -173,6 +204,9 @@ PAIRS: List[Dict[str, Any]] = [
         "base": "Euro", "quote": "British pound",
         "up_means": "euro stronger, pound weaker",
         "driver": "rate differential",
+        "why": "It tells a British problem from a dollar story. A pound falling "
+               "against the euro as well is about Britain; one falling against the "
+               "dollar alone is about the dollar.",
         "what": "Two neighbouring economies. A tight range most of the time, "
                 "which is what makes a breakout meaningful.",
         "moves_on": "The ECB against the Bank of England, and UK-specific fiscal "
@@ -185,6 +219,8 @@ PAIRS: List[Dict[str, Any]] = [
         "base": "Australian dollar", "quote": "Japanese yen",
         "up_means": "Aussie stronger, yen weaker",
         "driver": "risk appetite",
+        "why": "It trades through the Asian session while US stocks are shut, so "
+               "it is the closest live read on global risk appetite overnight.",
         "what": "High-yielder against the funding currency. The textbook carry "
                 "pair, and historically one of the tightest FX correlations to "
                 "global equities.",
@@ -200,6 +236,9 @@ PAIRS: List[Dict[str, Any]] = [
         "base": "US dollar", "quote": "Chinese yuan",
         "up_means": "dollar stronger, yuan weaker",
         "driver": "policy",
+        "why": "China is the world's largest exporter, so the level Beijing allows "
+               "feeds into goods prices everywhere. A weaker yuan makes Chinese "
+               "exports cheaper and presses on inflation abroad.",
         "what": "Managed, not floating. The People's Bank of China sets a daily "
                 "fix and the rate trades in a band around it, so this is a policy "
                 "signal rather than a market price.",
@@ -214,6 +253,9 @@ PAIRS: List[Dict[str, Any]] = [
         "base": "US dollar", "quote": "Mexican peso",
         "up_means": "dollar stronger, peso weaker",
         "driver": "carry",
+        "why": "Its high yield keeps carry money crowded into it, and crowded "
+               "positions move furthest when sentiment turns, which is why its "
+               "spikes are so large.",
         "what": "A high-carry emerging currency with deep enough liquidity to be "
                 "used as a proxy for emerging-market risk appetite generally.",
         "moves_on": "The carry (Mexican rates are high) plus US trade policy "
@@ -226,6 +268,10 @@ PAIRS: List[Dict[str, Any]] = [
         "base": "US dollar", "quote": "Indian rupee",
         "up_means": "dollar stronger, rupee weaker",
         "driver": "policy",
+        "why": "India is among the fastest-growing large economies and the "
+               "third-largest oil importer, so a weaker rupee is how an oil shock "
+               "becomes an inflation problem for one of the market's main growth "
+               "stories.",
         "what": "Heavily managed by the Reserve Bank of India, which smooths the "
                 "rate. The result is a long, slow drift with occasional steps.",
         "moves_on": "Oil, because India imports most of what it burns, plus RBI "
@@ -239,6 +285,9 @@ PAIRS: List[Dict[str, Any]] = [
         "base": "US dollar", "quote": "basket",
         "up_means": "dollar stronger against a basket",
         "driver": "rate differential",
+        "why": "It is the number policy makers, commodity desks and foreign "
+               "borrowers all mean by the dollar, so a turn in it is felt across "
+               "nearly every other market on this page.",
         "what": "Not a pair. A trade-weighted basket that is roughly 58% euro, "
                 "14% yen and 12% sterling. Which means it is mostly EUR/USD "
                 "upside down, and it says almost nothing about Asia or emerging "

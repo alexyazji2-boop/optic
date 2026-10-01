@@ -19908,6 +19908,7 @@ function renderForex(fx) {
     <tr class="fx-detail"><td colspan="7">
       <div class="fx-read"><strong>${esc(p.reading)}</strong></div>
       <div class="fx-grid">
+        ${p.why ? `<div><span class="fx-lab">Why it matters</span>${esc(p.why)}</div>` : ''}
         <div><span class="fx-lab">What it is</span>${esc(p.what)}</div>
         <div><span class="fx-lab">What moves it</span>${esc(p.moves_on)}</div>
         <div><span class="fx-lab">Read across to equities</span>${esc(p.equities)}</div>
@@ -20550,7 +20551,7 @@ function renderMarket(d) {
   </tr>`;
 
   views.market.innerHTML = `
-  <div class="grid c2 gap">
+  <div class="grid c2 gap macro-row">
     <div class="panel">
       <h2>${hg('Macro regime')}</h2>
       <p class="sub">${esc(m.stance || '')}</p>
@@ -20571,15 +20572,20 @@ function renderMarket(d) {
       ${macroFactors(m)}
     </div>
 
-    <!-- Breadth and rotation only. Equal-weight vs cap-weight moved to its own
-         full-width panel below: this panel was carrying three separate topics and
-         ran 832px against the 315px macro-regime panel beside it, which is where
-         the 447x517 void on this tab came from. Splitting it balances the row and
-         gives the chart the width it actually wants. -->
+    <!-- Breadth and rotation, with equal-weight vs cap-weight under them in a
+         panel of its own. It was one panel once, three topics running 832px
+         beside a 315px regime panel; then a full-width panel five sections
+         down. The regime panel carries its twelve-term breakdown now and is
+         the tall one, so the right column stood empty beside it: asked for as
+         "clear this gap in the macro section", and the panel as "move this up
+         in the macro tab". -->
+    <div class="macro-side">
     <div class="panel">
       <h2>${hg('Market breadth')}</h2>
       <p class="sub">${gloss((s.breadth || {}).note || '')}</p>
-      <div class="grid c2">
+      ${/* c4, whose 210px columns hold two tiles side by side in a half-width
+           column; c2's 420px stacked them, a tile's height spent twice. */''}
+      <div class="grid c4">
         ${tile('Sectors above 200-day', fmt((s.breadth || {}).pct_sectors_above_200sma, 0) + '%')}
         ${tile('Sectors above 50-day', fmt((s.breadth || {}).pct_sectors_above_50sma, 0) + '%')}
       </div>
@@ -20587,6 +20593,20 @@ function renderMarket(d) {
       <p style="color:var(--ink-2);font-size:var(--t-body);margin:0">${gloss(s.rotation_note || '')}</p>
       ${(s.suggested_pair || {}).long ? `<div class="callout info">Cleanest expression right now:
         <strong>long ${esc(s.suggested_pair.long)} / short ${esc(s.suggested_pair.short)}</strong>. ${esc(s.suggested_pair.note)}</div>` : ''}
+    </div>
+    ${evc.note ? `<div class="panel">
+      <h2>${hg('Equal-weight vs cap-weight (RSP / SPY)')} <span class="th-plain">· daily bars</span></h2>
+      <p class="sub">${gloss(evc.note)}</p>
+      <p class="macro-why"><strong>Why it matters.</strong> SPY weights each company
+        by its size and RSP holds all 500 at the same weight, so the line between
+        them says whether a move is broad or narrow. A narrow one rests on a few
+        names, and turns faster when they do.</p>
+      <div class="grid c4">
+        ${tile('3 months', fmtPct(evc.chg_3m_pct, 1), '', signClass(evc.chg_3m_pct))}
+        ${tile('1 year', fmtPct(evc.chg_1y_pct, 1), '', signClass(evc.chg_1y_pct))}
+      </div>
+      <div id="chart-breadth"></div>
+    </div>` : ''}
     </div>
   </div>
 
@@ -20597,16 +20617,6 @@ function renderMarket(d) {
   <div id="stockmap-host" class="span-all">${renderStockMap(STATE.stockMap)}</div>
 
   <div id="forex-host" class="span-all">${renderForex(STATE.forex)}</div>
-
-  ${evc.note ? `<div class="panel gap">
-    <h2>${hg('Equal-weight vs cap-weight (RSP / SPY)')} <span class="th-plain">· daily bars</span></h2>
-    <p class="sub">${gloss(evc.note)}</p>
-    <div class="grid c4">
-      ${tile('RSP / SPY over 3 months', fmtPct(evc.chg_3m_pct, 1), 'equal-weight vs cap-weight', signClass(evc.chg_3m_pct))}
-      ${tile('Over 1 year', fmtPct(evc.chg_1y_pct, 1), 'equal-weight vs cap-weight', signClass(evc.chg_1y_pct))}
-    </div>
-    <div id="chart-breadth"></div>
-  </div>` : ''}
 
   <div class="panel gap">
     <h2>${hg('Cross-asset dashboard')} <span class="th-plain">· daily bars</span></h2>

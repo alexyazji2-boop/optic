@@ -8281,6 +8281,19 @@ body[data-view="chart"] .sessionbar { display: none; }
 .ws-canvas.arming .ws-chart { cursor: crosshair; }
 .ws-tool:disabled { opacity: 0.3; cursor: default; }
 
+/* The Macro tab's right column: breadth, then equal-weight vs cap-weight,
+   stacked so the column runs as long as the regime panel beside it. */
+.macro-side { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
+.macro-side > .panel { margin: 0; }
+/* And the two columns end on one line. `.grid.c2` sizes panels to their own
+   content, which is right where one panel has far less to say than the other;
+   here they are within a tile's height of each other at most widths, and the
+   difference was the gap. The shorter side's last panel takes it up. */
+.grid.c2.macro-row { align-items: stretch; }
+.macro-side > .panel:last-child { flex: 1 0 auto; }
+.macro-why { color: var(--ink-2); font-size: var(--t-small); margin: 0 0 var(--space-3); }
+.macro-why strong { color: var(--ink); }
+
 /* ---- currencies -------------------------------------------------------- */
 .fx-sub { color: var(--ink-muted); font-size: var(--t-caption); }
 .fx-driver {

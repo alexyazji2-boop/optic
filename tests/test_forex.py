@@ -127,3 +127,23 @@ def test_a_flat_month_is_reported_as_flat_not_as_a_direction():
 def test_missing_history_does_not_invent_a_reading():
     pair = forex.PAIR_BY_SYMBOL["EURUSD=X"]
     assert "No recent history" in forex._reading(pair, {})
+
+
+def test_every_pair_says_why_it_matters():
+    """Asked for as "for the currencies, include why they are important as
+    well". Its own reason, not the other three fields again: who a pair
+    reaches, when it trades, or what it shows that nothing else does."""
+    for p in forex.PAIRS:
+        why = p.get("why") or ""
+        assert len(why) > 40, "%s: no reason to watch it" % p["label"]
+        assert "—" not in why, p["label"]
+        for field in ("what", "moves_on", "equities"):
+            assert why != p[field], "%s repeats %s" % (p["label"], field)
+
+
+def test_the_page_leads_each_pair_with_why_it_matters():
+    app = open("static/app.js", encoding="utf-8").read()
+    row = app[app.index("function renderForex(fx) {"):]
+    grid = row[row.index('<div class="fx-grid">'):row.index("Read across to equities")]
+    assert grid.index("Why it matters") < grid.index("What it is") < grid.index("What moves it")
+    assert "${esc(p.why)}" in grid
