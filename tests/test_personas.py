@@ -119,11 +119,14 @@ def test_the_format_prompt_only_suggests_things_the_app_can_do():
     assert "cannot route an order" in f
 
 
-def test_the_format_prompt_exempts_short_questions():
-    """Structure applied to a one-line question is noise."""
-    f = ai.FORMAT_PROMPT.lower()
+def test_the_format_prompt_exempts_short_questions_from_structure_but_not_follow_ups():
+    """Structure applied to a one-line question is noise. The follow-ups are not
+    structure: asked for as "make sure that pulse asks follow ups as well based
+    on the prompt", they come after a one-line answer too."""
+    f = " ".join(ai.FORMAT_PROMPT.lower().split())
     assert "short factual question" in f
-    assert "ignore all of the above" in f
+    assert "ignore the structure above and answer in a sentence" in f
+    assert "the follow-ups below still come after it" in f
 
 
 def test_the_format_prompt_asks_for_a_bottom_line_and_follow_ups():

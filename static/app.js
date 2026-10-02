@@ -19978,6 +19978,7 @@ async function loadChartWorkspace(symbol, force) {
   const requestId = ++chartRequestId;
   STATE.chartSymbol = sym;
   STATE.chartData = 'loading';
+  syncTabTitle();
   renderChartWorkspace('loading');
   // The stage reading beside the payload rather than after it, so it is
   // usually in hand for the first draw and nothing redraws behind the sweep.
@@ -19990,6 +19991,7 @@ async function loadChartWorkspace(symbol, force) {
     if (requestId !== chartRequestId || STATE.chartSymbol !== sym) return;
     STATE.chartData = { error: err.message };
   }
+  syncTabTitle();
   if (STATE.view !== 'chart') return;
   /* A new payload is what the draw-on is for: the price, RSI and MACD sweep
    * in together. loadView decides the flag before this runs, from the state
@@ -32341,6 +32343,52 @@ function mountPulseMarks() {
   });
 }
 
+/* The follow-ups at the end of a reply, taken out of the prose.
+ *
+ * Pulse ends every answer with two or three lines starting "→ " (FORMAT_PROMPT
+ * in app/ai.py). They read as plain lines in the bubble, which left the reader
+ * to retype a question that was already written, so they are lifted out and
+ * shown as the same question rows the Home page uses. Pressing one puts its
+ * words in the message box to be edited and sent, like every other ask. Only
+ * the lines at the very end count: an arrow in the middle of an answer is an
+ * arrow. */
+function splitFollowUps(text) {
+  const lines = String(text || '').split('\n');
+  const ups = [];
+  let end = lines.length;
+  while (end > 0) {
+    const line = lines[end - 1].trim();
+    if (!line) { end -= 1; continue; }
+    const hit = line.match(/^(?:\u2192|->)\s+(\S.*)$/);
+    if (!hit) break;
+    ups.unshift(hit[1].trim());
+    end -= 1;
+  }
+  if (!ups.length) return { body: String(text || ''), ups };
+  return { body: lines.slice(0, end).join('\n').replace(/\s+$/, ''), ups: ups.slice(0, 4) };
+}
+
+/** The follow-up rows for a reply, or null when it ends without any. */
+function followUpsHTML(ups) {
+  if (!ups || !ups.length) return null;
+  const host = document.createElement('div');
+  host.className = 'pulse-ups';
+  host.innerHTML = ups.map((q) => `<button type="button" class="cc-q" data-ask-text="${
+    esc(q)}">${esc(q)}</button>`).join('');
+  return host;
+}
+
+/** Show a reply's text in its bubble with its follow-ups under it. */
+function paintReply(bubble, text) {
+  const { body, ups } = splitFollowUps(text);
+  bubble.innerHTML = mdLite(body);
+  const wrap = bubble.parentElement;
+  if (!wrap) return;
+  wrap.querySelectorAll(':scope > .pulse-ups').forEach((n) => n.remove());
+  const rows = followUpsHTML(ups);
+  if (rows) bubble.insertAdjacentElement('afterend', rows);
+}
+
 function addMsg(role, text) {
   const log = $('#chat-log');
   const wrap = document.createElement('div');
@@ -32358,7 +32406,9 @@ function addMsg(role, text) {
         title="Keep this question in Research">Save</button>` : ''}
     <div class="status"></div><div class="sources"></div>`;
   if (savable) wrap.dataset.q = text;
-  wrap.querySelector('.bubble').innerHTML = role === 'user' ? esc(text) : mdLite(text || '');
+  const bubbleEl = wrap.querySelector('.bubble');
+  if (role === 'assistant') paintReply(bubbleEl, text || '');
+  else bubbleEl.innerHTML = role === 'user' ? esc(text) : mdLite(text || '');
   const scroller = pulseScroller();
   const wasPinned = isPinnedToBottom(scroller) || role === 'user';
   log.appendChild(wrap);
@@ -32486,8 +32536,17 @@ function createStreamRenderer(bubble) {
       shown = target.length;
       if (frame !== null) { cancelAnimationFrame(frame); frame = null; }
       settledLen = target.length;
-      settledEl.innerHTML = mdLite(target);
       tailEl.textContent = '';
+      // The reply and, under it, the follow-ups it ended with. The bubble's own
+      // children are the two elements made above, so the text goes in the first.
+      const { body, ups } = splitFollowUps(target);
+      settledEl.innerHTML = mdLite(body);
+      const wrap = bubble.parentElement;
+      if (wrap) {
+        wrap.querySelectorAll(':scope > .pulse-ups').forEach((n) => n.remove());
+        const rows = followUpsHTML(ups);
+        if (rows) bubble.insertAdjacentElement('afterend', rows);
+      }
     },
     text() { return target; },
   };
@@ -33262,6 +33321,32 @@ window.addEventListener('resize', () => {
 
 let viewBeforeSettings = 'home';
 
+/* The browser tab's title.
+ *
+ * Asked for with a picture of a tab reading "GOOGL: 344.15 (+1.75...": "have
+ * the tab change to something like this when the charting tab is open". On the
+ * Charting tab the title is the symbol on the chart, its price and the day's
+ * change, so a reader with the chart in a background tab can read the price off
+ * the tab strip; on every other page it is the app's name. The price is the
+ * quote the tab was loaded with, which the tab's 20-second refresh replaces
+ * while the market is live. */
+const APP_TITLE = 'Optic Terminal';
+
+function chartTabTitle() {
+  const d = STATE.chartData;
+  const q = d && d !== 'loading' ? d.quote : null;
+  if (!q || !Number.isFinite(q.price) || !STATE.chartSymbol || d.ticker !== STATE.chartSymbol) {
+    return STATE.chartSymbol ? `${STATE.chartSymbol} \u00b7 ${APP_TITLE}` : APP_TITLE;
+  }
+  const pct = Number.isFinite(q.change_pct) ? ` (${fmtPct(q.change_pct, 2)})` : '';
+  return `${STATE.chartSymbol}: ${fmt(q.price, 2)}${pct}`;
+}
+
+function syncTabTitle() {
+  const title = STATE.view === 'chart' ? chartTabTitle() : APP_TITLE;
+  if (document.title !== title) document.title = title;
+}
+
 function switchView(view, force) {
   if (view !== 'tracker') stopTrackerPoll();
   /* Full screen belongs to the chart, so leaving the chart ends it.
@@ -33282,6 +33367,7 @@ function switchView(view, force) {
   if (was === 'chart' && view !== 'chart') wsLeaveHour();
   const reopened = view === 'chart' && was !== 'chart' && wsOpenOnHour();
   STATE.view = view;
+  syncTabTitle();
   // Published to CSS so a rule can depend on which page this is. The header
   // logo blinks everywhere except Home, where the big one is already doing it
   // and two marks blinking out of phase reads as a fault.
@@ -34438,7 +34524,7 @@ document.addEventListener('click', (evt) => {
   const wsLoad = evt.target.closest('[data-ws-load]');
   if (wsLoad) {
     const sym = wsLoad.dataset.wsLoad;
-    if (!sym) { STATE.chartSymbol = ''; STATE.chartData = null; renderChartWorkspace(null); }
+    if (!sym) { STATE.chartSymbol = ''; STATE.chartData = null; syncTabTitle(); renderChartWorkspace(null); }
     else loadChartWorkspace(sym);
     return;
   }

@@ -71,6 +71,7 @@ var renderOverviewView = paintFacet, renderNewsView = paintFacet, renderFinancia
 function loadHomeMarket() { refreshed.push('home'); return Promise.resolve(); }
 function loadMarket() { refreshed.push('market'); return Promise.resolve(); }
 function renderChartWorkspace(data) { painted.push({header: STATE.chartSymbol, payload: data && data.ticker}); }
+function syncTabTitle() {}   // the browser tab's title; tests/test_chart_tab_title.py
 var wsDockOpen = [], showTrends = false, showAccum = false;
 function wsPriceIndicatorIds() { return []; }
 """

@@ -2280,6 +2280,9 @@ body.chat-resizing svg { pointer-events: none; }
 .msg .bubble strong { color: var(--ink); }
 .msg .bubble code { background: var(--surface-2); padding: var(--space-0) var(--space-1); border-radius: var(--r-xs); font-size: var(--t-small); }
 .msg .status { font-size: var(--t-small); color: var(--ink-muted); font-style: italic; }
+/* What to ask next, under a reply. The Home page's question rows, one per line,
+   with room above them so they read as a separate thing from the answer. */
+.msg .pulse-ups { display: flex; flex-direction: column; gap: var(--space-1); margin-top: var(--space-3); }
 .msg .sources { margin-top: var(--space-2); font-size: var(--t-caption); }
 .msg .sources a { color: var(--s1); display: block; text-decoration: none; margin-bottom: var(--space-0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .msg .sources a:hover { text-decoration: underline; }
