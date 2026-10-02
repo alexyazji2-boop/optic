@@ -603,6 +603,10 @@ class YFinanceProvider(MarketDataProvider):
     TTL_EXPIRIES = 30 * 60
     TTL_HISTORY = 300
     TTL_NEWS = 600
+    # How long an empty news answer stands before the next read asks again, and
+    # how long the last list that had stories in it stands in for one. See news().
+    TTL_NEWS_EMPTY = 120
+    NEWS_STALE_FOR = 6 * 3600
     # Data that publishes on a calendar rather than on the tape.
     #
     # These five were all on 3600, the same hour as a news feed, and they are
@@ -1698,41 +1702,112 @@ class YFinanceProvider(MarketDataProvider):
     # -------------------------------------------------------------- news
 
     def news(self, ticker: str, limit: int = 12) -> List[Dict[str, Any]]:
-        def build() -> List[Dict[str, Any]]:
+        """The symbol's stories, from whichever of Yahoo's feeds answers.
+
+        Reported as "no news on coinbase? hard to believe, fix this issue across
+        all tickers": the live News tab had nothing for COIN while NVDA, AAPL and
+        MSTR had a dozen each, and a search for "COIN" from here found 21 stories
+        tagged with it. Three things made an empty page out of a feed with news
+        in it. `Ticker.news` has been empty for every symbol since September, so
+        every page rested on a search for the bare symbol, which for a symbol
+        that is also a word ("COIN", "ALL", "F") is a search for the word. An
+        error from the first feed returned before the search was tried. And
+        whatever came back, empty included, was kept for ten minutes.
+
+        So the company's name is searched as well when the symbol finds few, a
+        feed that fails hands on to the next, and an empty answer stands for two
+        minutes, with the last list that had stories in it shown meanwhile for
+        up to six hours: an empty answer where there were stories this morning
+        is more likely the feed than the company out of the news.
+        """
+        key = "news:" + ticker
+        try:
+            items = _cached(key, self.TTL_NEWS, lambda: self._gather_news(ticker, limit))
+        except Exception:
+            items = []
+        now = time.time()
+        if items:
+            _NEWS_GOOD[key] = (now, items)
+            return items
+        hit = _CACHE.get(key)
+        if hit is not None and now - hit[0] >= self.TTL_NEWS_EMPTY:
+            _CACHE.pop(key, None)
+        good = _NEWS_GOOD.get(key)
+        if good is not None and now - good[0] < self.NEWS_STALE_FOR:
+            return good[1]
+        return []
+
+    def _gather_news(self, ticker: str, limit: int) -> List[Dict[str, Any]]:
+        """Every feed's stories for the symbol, merged; raises only if all failed."""
+        found: List[Dict[str, Any]] = []
+        seen = set()
+        errors: List[BaseException] = []
+
+        def add(rows: List[Dict[str, Any]]) -> None:
+            for row in rows:
+                mark = row.get("id") or " ".join(str(row.get("title") or "").lower().split())
+                if mark and mark not in seen and row.get("title"):
+                    seen.add(mark)
+                    found.append(row)
+
+        for fetch in (lambda: self._ticker_news(ticker, limit),
+                      lambda: self._search_news(ticker, limit)):
             try:
-                raw = yf.Ticker(ticker).news or []
-            except Exception:
-                return []
+                add(fetch())
+            except Exception as exc:                        # noqa: BLE001
+                errors.append(exc)
+        # A third of the request short, the company's own name: a search for
+        # "COIN" is a search for the word, one for "Coinbase Global" is not.
+        if len(found) < limit * 2 // 3:
+            query = _search_name(self._news_name(ticker))
+            if query and query.upper() != (ticker or "").upper():
+                try:
+                    add(self._search_news(ticker, limit, query=query))
+                except Exception as exc:                    # noqa: BLE001
+                    errors.append(exc)
+        if not found and errors:
+            raise errors[-1]
+        return found[:limit]
 
-            items: List[Dict[str, Any]] = []
-            for entry in raw[:limit]:
-                content = entry.get("content", entry) or {}
-                provider = content.get("provider") or {}
-                url = ""
-                for candidate in ("canonicalUrl", "clickThroughUrl"):
-                    node = content.get(candidate) or {}
-                    if isinstance(node, dict) and node.get("url"):
-                        url = node["url"]
-                        break
-                items.append(
-                    {
-                        "id": content.get("id") or entry.get("id"),
-                        "title": content.get("title") or "",
-                        "summary": content.get("summary") or content.get("description") or "",
-                        "publisher": provider.get("displayName") or "",
-                        "published": content.get("pubDate") or content.get("displayTime") or "",
-                        "url": url,
-                        "content_type": content.get("contentType"),
-                    }
-                )
-            return items or self._search_news(ticker, limit)
-
-        return _cached("news:" + ticker, self.TTL_NEWS, build)
+    def _news_name(self, ticker: str) -> str:
+        try:
+            return str((self.quote(ticker) or {}).get("name") or "")
+        except Exception:                                   # noqa: BLE001
+            return ""
 
     @staticmethod
-    def _search_news(ticker: str, limit: int) -> List[Dict[str, Any]]:
+    def _ticker_news(ticker: str, limit: int) -> List[Dict[str, Any]]:
+        """`Ticker.news`, Yahoo's own per-symbol feed. Raises on failure."""
+        raw = yf.Ticker(ticker).news or []
+        items: List[Dict[str, Any]] = []
+        for entry in raw[:limit]:
+            content = entry.get("content", entry) or {}
+            provider = content.get("provider") or {}
+            url = ""
+            for candidate in ("canonicalUrl", "clickThroughUrl"):
+                node = content.get(candidate) or {}
+                if isinstance(node, dict) and node.get("url"):
+                    url = node["url"]
+                    break
+            items.append(
+                {
+                    "id": content.get("id") or entry.get("id"),
+                    "title": content.get("title") or "",
+                    "summary": content.get("summary") or content.get("description") or "",
+                    "publisher": provider.get("displayName") or "",
+                    "published": content.get("pubDate") or content.get("displayTime") or "",
+                    "url": url,
+                    "content_type": content.get("contentType"),
+                }
+            )
+        return items
+
+    @staticmethod
+    def _search_news(ticker: str, limit: int, query: Optional[str] = None) -> List[Dict[str, Any]]:
         """Yahoo's search endpoint's headlines for a symbol, when `Ticker.news`
-        has none.
+        has none. `query` searches for something else, the company's name, and
+        keeps the same rule about which stories are the symbol's. Raises on
+        failure, so the caller can tell a failed feed from an empty one.
 
         Measured on 2026-09-29 with yfinance 1.2.0: `Ticker("AAPL").news` and
         `Ticker("NVDA").news` came back empty, and `Search` for the same symbols
@@ -1742,10 +1817,8 @@ class YFinanceProvider(MarketDataProvider):
         headline to go on.
         """
         want = (ticker or "").upper()
-        try:
-            raw = yf.Search(want, max_results=1, news_count=min(max(limit, 1), 50)).news or []
-        except Exception:
-            return []
+        raw = yf.Search(query or want, max_results=1,
+                        news_count=min(max(limit, 1), 50)).news or []
         items: List[Dict[str, Any]] = []
         for entry in raw:
             tagged = [str(t).upper() for t in entry.get("relatedTickers") or []]
@@ -1764,8 +1837,26 @@ class YFinanceProvider(MarketDataProvider):
                 "published": published,
                 "url": entry.get("link") or "",
                 "content_type": entry.get("type"),
+                # The symbols Yahoo tagged the story with. See news.tagged_about.
+                "tickers": tagged,
             })
         return items[:limit]
+
+
+# The last news list with stories in it, per symbol, as (when, items).
+_NEWS_GOOD: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
+
+# What a company's name loses before it is searched for: "Coinbase Global,
+# Inc." is searched as "Coinbase Global", "The Walt Disney Company" as "Walt
+# Disney".
+_SEARCH_NAME_NOISE = re.compile(
+    r"[,.()]|\b(?:inc|incorporated|corp|corporation|co|company|ltd|limited|plc|llc"
+    r"|lp|holdings?|group|class\s+[a-c]|sa|nv|ag|se|the)\b", re.I)
+
+
+def _search_name(name: str) -> str:
+    cleaned = " ".join(_SEARCH_NAME_NOISE.sub(" ", name or "").split())
+    return cleaned if len(cleaned) >= 3 else ""
 
 
 PROVIDER = YFinanceProvider()

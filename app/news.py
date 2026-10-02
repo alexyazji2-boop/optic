@@ -234,6 +234,14 @@ def _match_terms(ticker: str, name: str) -> List[str]:
         if (len(head) >= 5 and head.lower() != cleaned.lower()
                 and head.lower() not in _GENERIC_HEADS):
             terms.append(head)
+        # A company whose name begins with its symbol, written as a word:
+        # "Meta Platforms" is META and "Uber Technologies" is UBER, and their
+        # headlines say "Meta" and "Uber". The symbol itself is matched in
+        # capitals only (mentions_company), so the word is a term of its own,
+        # matched in any case. "ON Semiconductor" writes it in capitals and
+        # gains nothing, which keeps "on" from matching every headline.
+        elif ticker and head.lower() == ticker.strip().lower() and head != head.upper():
+            terms.append(head)
     return [t for t in dict.fromkeys(terms) if len(t) >= 2]
 
 
@@ -248,10 +256,43 @@ def mentions_company(text: str, ticker: str, name: str) -> bool:
     instead of implying a precision it does not have.
     """
     blob = text or ""
+    symbol = (ticker or "").strip().upper()
     for term in _match_terms(ticker, name):
-        if re.search(r"\b" + re.escape(term) + r"\b", blob, re.I):
+        # The symbol as headlines write it, in capitals. Matched in any case,
+        # COIN's page took "October Rate Hike Odds Fell Below a Coin Flip" for a
+        # story about Coinbase, and ALL, NOW, ON and F are words the same way.
+        flags = 0 if term == symbol else re.I
+        if re.search(r"\b" + re.escape(term) + r"\b", blob, flags):
             return True
     return False
+
+
+def _name_words(name: str) -> List[str]:
+    """The words of a company's name that could stand for it alone."""
+    cleaned = _NAME_NOISE.sub(" ", name or "")
+    cleaned = re.sub(r"[^\w\s&'-]", " ", cleaned)
+    return [w for w in dict.fromkeys(cleaned.split())
+            if len(w) >= 4 and w.lower() not in _GENERIC_HEADS]
+
+
+def tagged_about(item: Dict[str, Any], ticker: str, text: str, words: List[str]) -> bool:
+    """Yahoo tagged the story with this symbol and no other, and it uses a word
+    of the company's name.
+
+    The name rule reads "The Walt Disney Company" as "Walt Disney" and "Ford
+    Motor Company" as "Ford Motor", and their headlines say "Disney" and
+    "Ford": measured on 2 October, 13 of the 17 stories tagged with DIS alone,
+    "Disney TV restructuring targets hundreds of jobs" among them, and 9 of
+    Ford's 12, "Ford US Vehicle Sales Drop 6.6% in Q3", were dropped as
+    off-topic. The tag alone is not enough: Yahoo tagged "Breakthrough T1D
+    Walks Bring Communities Together" with F and nothing else. Both together
+    are, because a name word in a story about something else is not the same
+    as a name word in a story Yahoo filed under the company and no other.
+    """
+    tags = [str(t).upper() for t in item.get("tickers") or []]
+    if tags != [(ticker or "").strip().upper()] or not words:
+        return False
+    return any(re.search(r"\b" + re.escape(w) + r"\b", text or "", re.I) for w in words)
 
 
 # --------------------------------------------------------------- the filter
@@ -723,6 +764,7 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
     except Exception:
         company_name = ""
 
+    name_words = _name_words(company_name)
     scored: List[Dict[str, Any]] = []
     dropped: Dict[str, int] = {"filler": 0, "off-topic": 0}
     for item in items:
@@ -743,7 +785,8 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
 
         cats = _catalysts(blob)
         placed = tier_for(age, cats)
-        about = mentions_company(blob, ticker, company_name)
+        about = (mentions_company(blob, ticker, company_name)
+                 or tagged_about(item, ticker, blob, name_words))
 
         # Before the row is built, and before it reaches the sentiment
         # average. Filing an off-topic item under Market context still let it

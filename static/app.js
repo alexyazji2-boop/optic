@@ -11012,9 +11012,11 @@ function newsTierLegend(news, matched) {
     <p>Grouping comes first: a fresh, major headline about a different company
       is still about a different company.${matched ? ` Matched on ${matched}.` : ''}</p>
     <p class="nw-limit"><strong>What this cannot do.</strong> The grouping reads
-      the headline and summary for the symbol or the company name, so a headline
-      that means this company without naming it sits under Market context, and a
-      company whose name is an ordinary English word will over-match. A headline
+      the headline and summary for the symbol, in capitals, or the company name,
+      and also counts a story the feed tagged with this symbol alone when it uses
+      a word of the name. So a headline that means this company
+      without naming it sits under Market context, and a company whose name is
+      an ordinary English word will over-match. A headline
       that names neither this company nor anything market-wide is dropped, which
       means a genuinely relevant story about a supplier or a rival is dropped
       with it: there is no supply-chain map here to tell one from the other. Tiers rank
