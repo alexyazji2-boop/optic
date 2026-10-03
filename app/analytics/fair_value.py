@@ -53,6 +53,10 @@ BELOW, INSIDE, ABOVE = "below its range", "inside its range", "above its range"
 # the hundreds and back. "Inside its range" over 78 to 423 says nothing.
 WIDE_RANGE = 0.6
 WIDE = "too wide to call"
+# A price this many times its own usual value, or this fraction of it, says the
+# earnings have moved, not the price. Intel on 3 October 2026: trailing EPS near
+# nothing, a "fair value" of $2.69 against a $119 price.
+OFF_SCALE = 3.0
 
 # The dividend's four parts, each out of this.
 PART_MAX = 25.0
@@ -104,7 +108,8 @@ def fair_value(pe: Dict[str, Any], price: Optional[float]) -> Dict[str, Any]:
     else:
         position = INSIDE
     width = round((high - low) / mid, 2)
-    wide = width > WIDE_RANGE
+    off_scale = price > mid * OFF_SCALE or price < mid / OFF_SCALE
+    wide = width > WIDE_RANGE or off_scale
     if wide:
         position = WIDE
     gap = round((price / mid - 1.0) * 100.0, 1)
@@ -117,9 +122,13 @@ def fair_value(pe: Dict[str, Any], price: Optional[float]) -> Dict[str, Any]:
         "position": position,
         "range_width": width,
         "wide": wide,
-        "wide_note": ("Its multiple has swung too far for the range to say anything: the "
-                      "25th to 75th percentile spans {:.0f}% of the middle value. The "
-                      "numbers are shown, with no verdict.".format(width * 100)) if wide else None,
+        "wide_note": (("Its trailing earnings are far from their usual level, so its usual "
+                       "multiple of them says nothing: the price is {:.1f} times the middle "
+                       "value. The numbers are shown, with no verdict.".format(price / mid))
+                      if off_scale else
+                      ("Its multiple has swung too far for the range to say anything: the "
+                       "25th to 75th percentile spans {:.0f}% of the middle value. The "
+                       "numbers are shown, with no verdict.".format(width * 100))) if wide else None,
         "ttm_eps": eps,
         "multiples": {"low": lo_pe, "mid": mid_pe, "high": hi_pe,
                       "now": _f(pe.get("pe_current"), 1), "years": years},
@@ -136,6 +145,58 @@ def fair_value(pe: Dict[str, Any], price: Optional[float]) -> Dict[str, Any]:
             "did will look cheap or dear here when it is not.",
         ],
         "source": pe.get("source"),
+    }
+
+
+# ---------------------------------------------------------- Optic stars
+#
+# Asked for as "build the optic star rating for stocks", after Morningstar's
+# own rating turned out to be in the feed for mutual funds only. Morningstar's
+# stars for a stock are its price against its own fair value estimate; these
+# are the price against the fair value range above, the company's own usual
+# multiple, in five steps. A valuation reading from its own history, not a
+# recommendation, and it says so.
+
+# Within this share of the middle either way, it is priced at its usual multiple.
+STAR_MID_BAND = 0.03
+
+STAR_WORDS = {
+    5: "Below its usual valuation range",
+    4: "Below its usual valuation",
+    3: "At its usual valuation",
+    2: "Above its usual valuation",
+    1: "Above its usual valuation range",
+}
+
+
+def star_rating(fair: Dict[str, Any]) -> Dict[str, Any]:
+    """One to five stars from where the price sits in its fair value range."""
+    if not fair or not fair.get("available"):
+        return {"available": False,
+                "reason": "No fair value range to rate the price against."}
+    if fair.get("wide"):
+        return {"available": False,
+                "reason": "Its fair value range says too little to rate the price against."}
+    price, low, mid, high = (fair.get(k) for k in ("price", "low", "mid", "high"))
+    if price < low:
+        stars = 5
+    elif price > high:
+        stars = 1
+    elif price < mid * (1 - STAR_MID_BAND):
+        stars = 4
+    elif price > mid * (1 + STAR_MID_BAND):
+        stars = 2
+    else:
+        stars = 3
+    return {
+        "available": True,
+        "stars": stars,
+        "word": STAR_WORDS[stars],
+        "rule": ("5 stars below the fair value range, 4 below its middle, 3 within "
+                 "{:.0f}% of the middle, 2 above it, 1 above the range.".format(STAR_MID_BAND * 100)),
+        "note": ("Optic's rating, from the price against this company's own usual "
+                 "valuation. More stars is cheaper against its own past, not better, "
+                 "and not a recommendation to buy or sell."),
     }
 
 
@@ -351,10 +412,12 @@ def build(provider, ticker: str) -> Dict[str, Any]:
             return {"available": False, "reason": "Could not be worked out right now."}
 
     pe = attempt("multiples", lambda: pe_history_mod.build(provider, sym, years=10))
+    fair = attempt("fair value", lambda: fair_value(pe, price))
     return {
         "ticker": sym,
         "price": price,
-        "fair_value": attempt("fair value", lambda: fair_value(pe, price)),
+        "fair_value": fair,
+        "stars": attempt("stars", lambda: star_rating(fair)),
         "analysts": attempt("analysts", lambda: analysts_view(provider.analyst_view(sym), price)),
         "dividend": attempt("dividend", lambda: dividend_score(
             extras_mod.corporate_actions(provider, sym), price,

@@ -161,6 +161,7 @@ def test_each_block_fails_on_its_own():
     out = fv.build(Provider(), "xyz")
     assert out["ticker"] == "XYZ"
     assert out["morningstar"]["available"] is False, "asked of every symbol, and a stock has none"
+    assert out["stars"]["available"] is False, "rated from the fair value, which a bare quote has none of"
     assert out["analysts"] == {"available": False, "reason": "Could not be worked out right now."}
     assert set(out) >= {"fair_value", "dividend", "generated_at"}
 
@@ -178,7 +179,8 @@ def _run(script):
 
     pieces = "\n".join(piece(h) for h in (
         "function fvPct(", "function renderFairValueBlock(", "function renderAnalystsBlock(",
-        "function renderDividendBlock(", "function renderMorningstarBlock(", "function renderFairValue("))
+        "function renderDividendBlock(", "function renderMorningstarBlock(", "function starsText(",
+        "function renderStarBlock(", "function renderFairValue("))
     prelude = """
       function esc(v) { return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
       function cap(v) { return v.charAt(0).toUpperCase() + v.slice(1); }
@@ -277,8 +279,10 @@ def _run_ms(script):
     exe = JSC if os.path.exists(JSC) else shutil.which("jsc")
     if not exe:
         pytest.skip("no JavaScriptCore on this machine")
-    at = APP.index("function renderMorningstarBlock(")
-    fn = APP[at:APP.index("\n}\n", at) + 3]
+    fn = ""
+    for head in ("function starsText(", "function renderMorningstarBlock("):
+        at = APP.index(head)
+        fn += APP[at:APP.index("\n}\n", at) + 3]
     prelude = """
       function esc(v) { return String(v); }
       function hg(v) { return v; }
@@ -288,3 +292,48 @@ def _run_ms(script):
                          timeout=60, cwd=str(ROOT))
     assert "RESULT:" in out.stdout, (out.stdout + out.stderr)[-1500:]
     return json.loads(out.stdout.split("RESULT:", 1)[1].split("\n")[0])
+
+
+# ------------------------------------------------------------- Optic stars
+#
+# "build the optic star rating for stocks", after Morningstar's own turned out
+# to be in the feed for funds only. Five steps of the price against the fair
+# value range. Measured on 3 October 2026: Apple 1 star (above its range),
+# Coca-Cola 3, Microsoft 4, Alphabet 5 (a P/E of 17 against its own 27), and
+# none for Amazon, whose usual multiple ran 35x to 91x, nor for Intel, whose
+# earnings have all but gone and whose "fair value" came out at $2.69.
+
+@pytest.mark.parametrize("price,stars", [
+    (230.0, 5), (243.0, 5), (243.01, 4), (260.0, 4), (266.0, 3), (272.62, 3), (280.0, 3), (290.0, 2), (303.98, 2), (310.0, 1)])
+def test_the_stars_follow_the_price_through_the_range(price, stars):
+    out = fv.star_rating(fv.fair_value(_pe(), price))
+    assert out["available"] is True and out["stars"] == stars
+    assert out["word"] == fv.STAR_WORDS[stars]
+    assert "not a recommendation" in out["note"] and "5 stars below the fair value range" in out["rule"]
+
+
+def test_no_stars_without_a_range_or_with_one_that_says_nothing():
+    assert fv.star_rating({"available": False})["available"] is False
+    wide = fv.fair_value(_pe(eps=1.08, bands=(72.5, 197.4, 391.4)), 370.59)
+    assert fv.star_rating(wide)["available"] is False
+
+
+def test_earnings_far_from_their_usual_level_get_no_verdict():
+    gone = fv.fair_value(_pe(eps=0.09, bands=(24.8, 29.9, 35.8)), 119.33)
+    assert gone["wide"] is True and gone["position"] == "too wide to call"
+    assert "far from their usual level" in gone["wide_note"] and "44.4 times" in gone["wide_note"]
+    assert fv.star_rating(gone)["available"] is False
+    cheap = fv.fair_value(_pe(eps=50.0, bands=(27.9, 31.3, 34.9)), 300.0)
+    assert cheap["wide"] is True, "a third of its usual value is the same doubt the other way"
+
+
+def test_the_star_panel_sits_above_the_range_and_is_optics():
+    out = _run("print('RESULT:' + JSON.stringify(renderFairValue(%s)));" % json.dumps({
+        "stars": fv.star_rating(fv.fair_value(_pe(), 333.69)), "fair_value": fv.fair_value(_pe(), 333.69),
+        "analysts": {"available": False}, "dividend": {"available": False}}))
+    assert out.index("Optic star rating") < out.index("Fair value")
+    assert "★☆☆☆☆" in out and "Above its usual valuation range" in out
+    assert "not a recommendation" in out
+    none = _run("print('RESULT:' + JSON.stringify(renderFairValue(%s)));" % json.dumps({
+        "stars": {"available": False}, "fair_value": {"available": False, "reason": "x"}}))
+    assert "Optic star rating" not in none

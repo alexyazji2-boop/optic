@@ -15753,3 +15753,7 @@ body.ws-max[data-view="chart"] main { padding: 0; }
 @media (max-width: 719px) { .fv-score { grid-template-columns: 1fr; } }
 /* The stars in the terminal's gold, so the rating reads at a glance. */
 .ms-stars { color: var(--warn); letter-spacing: 0.08em; }
+/* Optic's star rating: the stars large, the reading beside them. */
+.os-row { display: flex; align-items: center; gap: var(--space-5); flex-wrap: wrap; }
+.os-stars { font-size: var(--t-d3); line-height: 1.1; }
+.os-read { flex: 1 1 260px; min-width: 0; }

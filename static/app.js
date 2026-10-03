@@ -14338,7 +14338,7 @@ function renderDividendBlock(d) {
    Nothing at all for a stock or an ETF, which the feed carries no rating for. */
 function renderMorningstarBlock(m) {
   if (!m || !m.available) return '';
-  const stars = '\u2605'.repeat(m.stars) + '\u2606'.repeat(5 - m.stars);
+  const stars = starsText(m.stars);
   return `<div class="panel">
     <h2>${hg('Morningstar rating')}</h2>
     <p class="sub">Morningstar's own rating of this fund, not Optic's.</p>
@@ -14351,11 +14351,36 @@ function renderMorningstarBlock(m) {
   </div>`;
 }
 
+/** Five stars as text, filled to `n`. */
+function starsText(n) {
+  return '\u2605'.repeat(n) + '\u2606'.repeat(5 - n);
+}
+
+/* Optic's own star rating for a stock: the price against its fair value range,
+   in five steps. Shown above the range it comes from, and named as Optic's. */
+function renderStarBlock(r) {
+  if (!r || !r.available) return '';
+  return `<div class="panel span-all os-panel">
+    <div class="os-row">
+      <div>
+        <div class="hero-label">Optic star rating</div>
+        <span class="ms-stars os-stars" aria-label="${r.stars} of 5 stars">${starsText(r.stars)}</span>
+      </div>
+      <div class="os-read">
+        <strong>${esc(r.word)}</strong>
+        <p class="sub" style="margin:var(--space-1) 0 0">${esc(r.rule)}</p>
+      </div>
+    </div>
+    <p class="caveat">${esc(r.note)}</p>
+  </div>`;
+}
+
 function renderFairValue(d) {
   if (!d) return '';
   const blocks = [renderMorningstarBlock(d.morningstar), renderFairValueBlock(d.fair_value),
     renderAnalystsBlock(d.analysts)].filter(Boolean);
-  return `${blocks.length ? `<div class="grid c2 gap">${blocks.join('')}</div>` : ''}${
+  const stars = renderStarBlock(d.stars);
+  return `${stars}${blocks.length ? `<div class="grid c2 gap">${blocks.join('')}</div>` : ''}${
     renderDividendBlock(d.dividend)}`;
 }
 
