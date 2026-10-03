@@ -39,7 +39,7 @@ def test_equal_weight_sits_under_breadth_beside_the_regime():
 
 def test_the_columns_end_on_one_line():
     assert ".grid.c2.macro-row { align-items: stretch; }" in CSS
-    assert ".macro-side > .panel:last-child { flex: 1 0 auto; }" in CSS
+    assert ".macro-side > .panel.is-open:last-child { flex: 1 0 auto; }" in CSS
     # Two tiles side by side in a half-width column, not stacked.
     side = _market()
     side = side[side.index('<div class="macro-side">'):side.index('<div id="rotation-host"')]
@@ -65,3 +65,16 @@ def test_the_reading_leaves_the_figures_to_the_tiles():
     assert "{:.1f}" not in joined and "%" not in joined.replace("{:.1f}%", "")
     assert "The average stock is falling behind the index" in joined
     assert notes, "the readings are still there"
+
+
+def test_a_shut_panel_in_the_column_keeps_the_height_of_its_heading():
+    """Reported with the regime panel tall and equal-weight vs cap-weight shut:
+    "fix this UI issue in the macro tab as well". The last panel stretched to
+    the row's height whether or not it was open, a heading over a column of
+    empty box. Only an open one takes up the difference, and it is open unless
+    the reader shut it."""
+    assert ".macro-side > .panel.is-closed { flex: 0 0 auto; }" in CSS
+    assert ".macro-side > .panel:last-child {" not in CSS
+    defaults = APP[APP.index("  market: ['macro regime', 'market breadth',"):]
+    defaults = defaults[:defaults.index("],")]
+    assert "'equal-weight vs cap-weight'" in defaults

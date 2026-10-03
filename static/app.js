@@ -35486,8 +35486,11 @@ const PANELS_OPEN_BY_DEFAULT = {
      Investing it opened nothing. `return & risk` is the half of the lead the
      conviction score does not carry, and it is here. */
   long: ['long-term view', 'return & risk', 'valuation vs its own history'],
-  market: ['macro regime', 'market breadth', 'sector rotation', 'stock maps',
-    'currencies', 'economic data'],
+  /* 'equal-weight vs cap-weight' is the second panel of the Macro tab's right
+     column, under breadth. Opened, its chart fills the column beside the regime
+     panel; shut by default it was a heading over empty space. */
+  market: ['macro regime', 'market breadth', 'equal-weight vs cap-weight',
+    'sector rotation', 'stock maps', 'currencies', 'economic data'],
   /* Read is a newspaper, so almost all of it opens.
    *
    * The other views here are analysis: a verdict at the top and evidence below

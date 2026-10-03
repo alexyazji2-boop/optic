@@ -8278,7 +8278,13 @@ body[data-view="chart"] .sessionbar { display: none; }
    here they are within a tile's height of each other at most widths, and the
    difference was the gap. The shorter side's last panel takes it up. */
 .grid.c2.macro-row { align-items: stretch; }
-.macro-side > .panel:last-child { flex: 1 0 auto; }
+.macro-side > .panel.is-open:last-child { flex: 1 0 auto; }
+/* Only while it is open. Closed, a panel is its heading and nothing else, and
+   stretching it to the regime panel's height drew a column of empty box under a
+   one-line heading: reported with the 12-term breakdown, a tall regime panel
+   and equal-weight vs cap-weight shut beside it, as "fix this UI issue in the
+   macro tab". A shut panel keeps the height of its heading. */
+.macro-side > .panel.is-closed { flex: 0 0 auto; }
 .macro-why { color: var(--ink-2); font-size: var(--t-small); margin: 0 0 var(--space-3); }
 .macro-why strong { color: var(--ink); }
 
