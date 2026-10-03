@@ -14206,6 +14206,117 @@ async function loadGlobal() {
   mountPanel('global-host', renderGlobal(STATE.globalOvernight));
 }
 
+/* ====================================== fair value, analysts, dividend score ===
+ *
+ * Three panels on the Investing tab, under the multiple history they are built
+ * from. Asked for with a list of what another app puts behind a paid tier
+ * ("stock picks chosen by experts", a rating, research reports, model
+ * portfolios, "fair value analysis + dividend scores"): "add these features to
+ * the optic terminal wherever applicable". Model portfolios and stock ideas
+ * were here already (Optic Portfolio, Scan). These are the parts that were not:
+ * a fair value range, the analysts' own view beside it, and a dividend score.
+ * app/analytics/fair_value.py says how each is worked out; each panel says it
+ * again in the reader's words, and what it cannot tell them. */
+
+/** Where a value falls along a bar, as a percentage. */
+function fvPct(v, lo, hi) {
+  return Math.max(0, Math.min(100, ((v - lo) / (hi - lo)) * 100));
+}
+
+function renderFairValueBlock(f) {
+  if (!f) return '';
+  if (!f.available) {
+    return `<div class="panel">
+      <h2>${hg('Fair value')}${askPulse('fairvalue')}</h2>
+      <p class="sub">${esc(f.reason || 'Unavailable.')}</p></div>`;
+  }
+  // The axis runs a little past whichever of the range and the price is
+  // further out, so the marker is never on the edge.
+  const axLo = Math.min(f.low, f.price) * 0.96;
+  const axHi = Math.max(f.high, f.price) * 1.04;
+  const above = f.gap_to_mid_pct > 0;
+  const tone = f.wide ? '' : (above ? 'down' : 'up');
+  const verdict = f.wide ? 'Too wide to call'
+    : f.position === 'inside its range' ? 'Inside its range'
+      : cap(f.position);
+  return `<div class="panel">
+    <h2>${hg('Fair value')}${askPulse('fairvalue')}</h2>
+    <p class="sub">What it would be worth at the price-to-earnings the market has usually
+      given it. A range to read the price against, not a target.</p>
+    <div class="grid c4" style="margin-top:var(--space-3)">
+      ${tile('Fair value, middle', usd(f.mid), `${fmt(f.multiples.mid, 1)}\u00d7 its own median`)}
+      ${tile('Range', `${usd(f.low, 0)} to ${usd(f.high, 0)}`,
+    `${fmt(f.multiples.low, 1)}\u00d7 to ${fmt(f.multiples.high, 1)}\u00d7`)}
+      ${tile('Price now', usd(f.price), `${fmt(f.multiples.now, 1)}\u00d7 today`)}
+      ${tile(verdict, fmtPct(f.gap_to_mid_pct, 1), 'price against the middle', tone)}
+    </div>
+    <div class="fv-bar" aria-hidden="true">
+      <span class="fv-band" style="left:${fvPct(f.low, axLo, axHi).toFixed(1)}%;width:${
+  (fvPct(f.high, axLo, axHi) - fvPct(f.low, axLo, axHi)).toFixed(1)}%"></span>
+      <span class="fv-mid" style="left:${fvPct(f.mid, axLo, axHi).toFixed(1)}%"></span>
+      <span class="fv-now ${tone}" style="left:${fvPct(f.price, axLo, axHi).toFixed(1)}%"></span>
+    </div>
+    <div class="fv-key"><span>${usd(f.low, 0)}</span><span>middle ${usd(f.mid, 0)}</span>
+      <span>${usd(f.high, 0)}</span></div>
+    ${f.wide ? `<div class="callout">${esc(f.wide_note)}</div>` : ''}
+    <p class="caveat">${esc(f.basis)}</p>
+    <ul class="reasons">${(f.limits || []).map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
+  </div>`;
+}
+
+function renderAnalystsBlock(a) {
+  if (!a || !a.available) return '';
+  const total = a.analyst_count || 0;
+  const share = (n) => (total ? ((n / total) * 100).toFixed(1) : 0);
+  return `<div class="panel">
+    <h2>${hg('What analysts say')}${askPulse('analystsview')}</h2>
+    <p class="sub">The firms that cover it, as they published. Not an Optic pick.</p>
+    <div class="grid c4" style="margin-top:var(--space-3)">
+      ${tile('Mean target', usd(a.target_mean),
+    a.upside_pct === null || a.upside_pct === undefined ? '' : `${fmtPct(a.upside_pct, 1)} from here`,
+    signClass(a.upside_pct))}
+      ${tile('Target range', `${usd(a.target_low, 0)} to ${usd(a.target_high, 0)}`, 'lowest to highest')}
+      ${tile('Buy / hold / sell', total ? `${a.buys} \u00b7 ${a.holds} \u00b7 ${a.sells}` : '\u2014',
+    total ? `${fmt(total, 0)} analysts` : '')}
+      ${tile('Say buy', a.buy_share_pct === null || a.buy_share_pct === undefined
+    ? '\u2014' : fmt(a.buy_share_pct, 0) + '%', 'of those rating it')}
+    </div>
+    ${total ? `<div class="fv-split" aria-hidden="true">
+      <span class="up" style="width:${share(a.buys)}%"></span>
+      <span class="flat" style="width:${share(a.holds)}%"></span>
+      <span class="down" style="width:${share(a.sells)}%"></span></div>` : ''}
+    <p class="caveat">${esc(a.note || '')}</p>
+  </div>`;
+}
+
+function renderDividendBlock(d) {
+  if (!d || !d.available) return '';
+  const tone = d.band === 'strong' || d.band === 'solid' ? 'up' : d.band === 'weak' ? 'down' : '';
+  return `<div class="panel span-all">
+    <h2>${hg('Dividend score')}${askPulse('divscore')}</h2>
+    <p class="sub">How safe and how steady the dividend looks from its payment record.</p>
+    <div class="fv-score">
+      <div><span class="fv-score-n ${tone}">${fmt(d.score, 0)}</span><span class="fv-score-of">/ 100</span>
+        <div class="fv-score-band">${esc(cap(d.band))}</div></div>
+      <table class="data narrow"><thead><tr><th>Part</th><th>Reads</th><th>Points</th><th>Why</th></tr></thead>
+        <tbody>${d.parts.map((x) => `<tr>
+          <td class="name">${esc(x.label)}</td>
+          <td>${esc(x.value)}</td>
+          <td>${x.points === null || x.points === undefined ? '<span class="muted">not scored</span>'
+    : `${fmt(x.points, 0)} of 25`}</td>
+          <td class="name muted" style="white-space:normal">${esc(x.why)}</td></tr>`).join('')}</tbody></table>
+    </div>
+    <p class="caveat">${esc(d.method || '')}</p>
+  </div>`;
+}
+
+function renderFairValue(d) {
+  if (!d) return '';
+  const blocks = [renderFairValueBlock(d.fair_value), renderAnalystsBlock(d.analysts)].filter(Boolean);
+  return `${blocks.length ? `<div class="grid c2 gap">${blocks.join('')}</div>` : ''}${
+    renderDividendBlock(d.dividend)}`;
+}
+
 function renderPeHistory(p) {
   if (!p) return '';
   if (!p.available) {
@@ -25559,6 +25670,9 @@ function renderLong(d) {
 
     <div id="pe-host" class="span-all">${renderPeHistory(STATE.peHistory)}</div>
 
+    <div id="fv-host" class="span-all">${STATE.fairValueFor === STATE.ticker
+    ? renderFairValue(STATE.fairValue) : ''}</div>
+
     ${vh.available ? `<div class="panel">
       <h2>${hg('Valuation vs its own history')}</h2>
       <p class="sub">A multiple only means something against a yardstick. The one that needs
@@ -25777,6 +25891,28 @@ async function loadPeHistory(force) {
   if (host && STATE.view === 'long') {
     host.innerHTML = renderPeHistory(STATE.peHistory);
     drawPeChart(STATE.peHistory);
+    revealPanels(host);
+  }
+}
+
+async function loadFairValue(force) {
+  const sym = STATE.ticker;
+  if (!sym) return;
+  if (STATE.fairValueFor === sym && !force) return;
+  STATE.fairValueFor = sym;
+  STATE.fairValue = null;
+  let data;
+  try {
+    data = await getJSON(`/api/fair-value/${encodeURIComponent(sym)}`);
+  } catch (err) {
+    data = { fair_value: { available: false, reason: err.message } };
+  }
+  // A late answer for a symbol that is no longer the one on screen is dropped.
+  if (STATE.ticker !== sym) return;
+  STATE.fairValue = data;
+  const host = document.getElementById('fv-host');
+  if (host && STATE.view === 'long') {
+    host.innerHTML = renderFairValue(data);
     revealPanels(host);
   }
 }
@@ -26332,6 +26468,15 @@ const PULSE_TOPICS = {
     + 'price matter more than an intraday one, and what exactly has to hold?',
   feargreed: 'Explain the Fear & Greed reading in plain language. What are the five inputs, what is it actually measuring, and how much weight should I put on an extreme reading?',
   indicators: 'Explain the optional indicators in plain language. VWAP, ADX, Keltner versus Bollinger, on-balance volume, the relative strength line. Which of these do institutions actually use, and for what?',
+  fairvalue: 'Explain the fair value panel for {t}. How is the range worked out from its own '
+    + 'past P/E and its trailing earnings, why is it a range to read the price against and not a '
+    + 'target, and when would a fair value built this way be badly wrong?',
+  analystsview: 'Explain the analyst panel for {t}. What does the buy, hold and sell split tell me, '
+    + 'why can a mean price target sit far from the price, and how much weight should I give the '
+    + 'sell side?',
+  divscore: 'Explain the dividend score for {t}. What do the four parts measure, what can a score '
+    + 'built only from the payment record and trailing earnings not see, and what would make me '
+    + 'doubt a high one?',
   pehistory: 'Explain the multiple and revenue history panel. What is a trailing P/E, why does it matter that earnings are attached to the filing date rather than the quarter end, and what does it mean when revenue is growing while the multiple falls?',
   morning: 'Explain the morning desk. What period does it cover, why does the window change between a Monday and a Tuesday, and what does it deliberately not tell me about the geopolitical headlines it lists?',
   morning_desk: 'Walk me through this morning desk. What is the fed funds figure actually measuring, why is it basis points priced into a month rather than the odds on a meeting, and why does this compare releases to their own previous print instead of to what was expected?',
@@ -26575,6 +26720,9 @@ const PULSE_ASK_LABELS = {
   morning_desk: 'Explain this desk',
   indicators: 'Explain these',
   pehistory: 'What is a trailing P/E?',
+  fairvalue: 'How is this worked out?',
+  analystsview: 'How much weight does this get?',
+  divscore: 'How is this scored?',
   morning: 'What period is this?',
   global: 'Why this order?',
   patterns: 'How reliable are these?',
@@ -30296,6 +30444,7 @@ async function loadLong(force, opts = {}) {
     endLoad(views.long);
     if (!silent) revealPanels(views.long);
     loadPeHistory();
+    loadFairValue();
     updateStatus();
     updateChatContext();
   } catch (err) {

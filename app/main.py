@@ -61,6 +61,7 @@ from .analytics import correlation as correlation_mod
 from .analytics import global_markets as global_mod
 from .analytics import indicators as indicators_mod
 from .analytics import patterns as patterns_mod
+from .analytics import fair_value as fair_value_mod
 from .analytics import pe_history as pe_history_mod
 from .analytics import pattern_stats as pattern_stats_mod
 from .analytics import portfolio_risk as portfolio_risk_mod
@@ -3170,6 +3171,13 @@ async def pe_history_panel(ticker: str, years: int = Query(10, ge=2, le=20)) -> 
         out["generated_at"] = datetime.now(timezone.utc).isoformat()
         return out
     return await _run(build)
+
+
+@app.get("/api/fair-value/{ticker}")
+async def fair_value_panel(ticker: str) -> Dict[str, Any]:
+    """A fair value range against the name's own multiple, what analysts say,
+    and a dividend score. Each block says on its own when it has nothing."""
+    return await _run(fair_value_mod.build, YF_PROVIDER, ticker)
 
 
 def _bars_body(sym: str, df, digits: int) -> Dict[str, Any]:

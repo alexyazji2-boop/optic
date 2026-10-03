@@ -15708,3 +15708,36 @@ body.ws-max[data-view="chart"] main { padding: 0; }
   transition: color var(--dur-ui) var(--ease-ui);
 }
 .build-x:hover { color: var(--ink); }
+
+
+/* ---------------------------------------- fair value, analysts, dividend score
+ * The range bar under the fair value tiles: the 25th to 75th percentile as a
+ * band, the middle as a tick and today's price as a dot. Paint-level only. */
+.fv-bar { position: relative; height: 8px; margin: var(--space-4) var(--space-2) var(--space-1);
+  border-radius: var(--r-pill); background: var(--surface-2); border: 1px solid var(--border); }
+.fv-band { position: absolute; top: 0; bottom: 0; border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--s1) 38%, transparent); }
+.fv-mid { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink-muted);
+  transform: translateX(-1px); }
+.fv-now { position: absolute; top: 50%; width: 12px; height: 12px; border-radius: var(--r-pill);
+  background: var(--ink); border: 2px solid var(--surface); transform: translate(-50%, -50%); }
+.fv-now.up { background: var(--pos); }
+.fv-now.down { background: var(--neg); }
+.fv-key { display: flex; justify-content: space-between; color: var(--ink-muted);
+  font-size: var(--t-caption); margin: 0 var(--space-2) var(--space-3);
+  font-variant-numeric: tabular-nums; }
+/* Buys, holds and sells as one bar of the analysts who rate it. */
+.fv-split { display: flex; height: 8px; margin-top: var(--space-4); border-radius: var(--r-pill);
+  overflow: hidden; background: var(--surface-2); }
+.fv-split .up { background: var(--pos); }
+.fv-split .flat { background: var(--ink-muted); opacity: 0.55; }
+.fv-split .down { background: var(--neg); }
+.fv-score { display: grid; grid-template-columns: minmax(120px, 160px) 1fr; gap: var(--space-5);
+  align-items: center; margin-top: var(--space-3); }
+.fv-score-n { font-size: var(--t-d1, 44px); font-weight: 700; font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em; }
+.fv-score-n.up { color: var(--pos); }
+.fv-score-n.down { color: var(--neg); }
+.fv-score-of { color: var(--ink-muted); margin-left: var(--space-1); }
+.fv-score-band { color: var(--ink-2); font-size: var(--t-small); }
+@media (max-width: 719px) { .fv-score { grid-template-columns: 1fr; } }
