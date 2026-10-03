@@ -14334,9 +14334,27 @@ function renderDividendBlock(d) {
   </div>`;
 }
 
+/* Morningstar's own star rating, for a mutual fund, credited to Morningstar.
+   Nothing at all for a stock or an ETF, which the feed carries no rating for. */
+function renderMorningstarBlock(m) {
+  if (!m || !m.available) return '';
+  const stars = '\u2605'.repeat(m.stars) + '\u2606'.repeat(5 - m.stars);
+  return `<div class="panel">
+    <h2>${hg('Morningstar rating')}</h2>
+    <p class="sub">Morningstar's own rating of this fund, not Optic's.</p>
+    <div class="grid c4" style="margin-top:var(--space-3)">
+      ${tile('Overall rating', `<span class="ms-stars" aria-label="${m.stars} of 5 stars">${stars}</span>`,
+    `${m.stars} of 5 stars`)}
+      ${m.risk_word ? tile('Risk rating', esc(m.risk_word), `${m.risk} of 5`) : ''}
+    </div>
+    <p class="caveat">${esc(m.note || '')} Source: ${esc(m.source || '')}.</p>
+  </div>`;
+}
+
 function renderFairValue(d) {
   if (!d) return '';
-  const blocks = [renderFairValueBlock(d.fair_value), renderAnalystsBlock(d.analysts)].filter(Boolean);
+  const blocks = [renderMorningstarBlock(d.morningstar), renderFairValueBlock(d.fair_value),
+    renderAnalystsBlock(d.analysts)].filter(Boolean);
   return `${blocks.length ? `<div class="grid c2 gap">${blocks.join('')}</div>` : ''}${
     renderDividendBlock(d.dividend)}`;
 }

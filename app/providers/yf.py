@@ -795,6 +795,10 @@ class YFinanceProvider(MarketDataProvider):
                 "analyst_target": _f(info.get("targetMeanPrice")),
                 "recommendation": info.get("recommendationKey"),
                 "short_percent_float": _f(info.get("shortPercentOfFloat")),
+                # Morningstar's star rating and risk rating, 1 to 5. Yahoo carries
+                # them for mutual funds only; a stock or an ETF has neither.
+                "morningstar_rating": _f(info.get("morningStarOverallRating")),
+                "morningstar_risk": _f(info.get("morningStarRiskRating")),
                 "as_of": datetime.now(timezone.utc).isoformat(),
             }
 

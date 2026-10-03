@@ -15751,3 +15751,5 @@ body.ws-max[data-view="chart"] main { padding: 0; }
 .fv-score-of { color: var(--ink-muted); margin-left: var(--space-1); }
 .fv-score-band { color: var(--ink-2); font-size: var(--t-small); }
 @media (max-width: 719px) { .fv-score { grid-template-columns: 1fr; } }
+/* The stars in the terminal's gold, so the rating reads at a glance. */
+.ms-stars { color: var(--warn); letter-spacing: 0.08em; }

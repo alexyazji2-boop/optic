@@ -160,6 +160,7 @@ def test_each_block_fails_on_its_own():
 
     out = fv.build(Provider(), "xyz")
     assert out["ticker"] == "XYZ"
+    assert out["morningstar"]["available"] is False, "asked of every symbol, and a stock has none"
     assert out["analysts"] == {"available": False, "reason": "Could not be worked out right now."}
     assert set(out) >= {"fair_value", "dividend", "generated_at"}
 
@@ -177,7 +178,7 @@ def _run(script):
 
     pieces = "\n".join(piece(h) for h in (
         "function fvPct(", "function renderFairValueBlock(", "function renderAnalystsBlock(",
-        "function renderDividendBlock(", "function renderFairValue("))
+        "function renderDividendBlock(", "function renderMorningstarBlock(", "function renderFairValue("))
     prelude = """
       function esc(v) { return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
       function cap(v) { return v.charAt(0).toUpperCase() + v.slice(1); }
@@ -234,3 +235,56 @@ def test_it_loads_under_the_multiple_history_and_drops_another_symbols_answer():
     assert "    loadPeHistory();\n    loadFairValue();" in APP
     for topic in ("fairvalue", "analystsview", "divscore"):
         assert "  %s: '" % topic in APP
+
+
+# ---------------------------------------------------------------- Morningstar
+#
+# "add the morningstar rating too". Morningstar's rating is licensed, and the
+# only copy the terminal can read is in Yahoo's quote, for mutual funds only:
+# on 3 October 2026 VFIAX and FXAIX had 4 stars and Average risk, and AAPL, KO,
+# SPY and QQQ had no field. Shown as Morningstar's, never worked out here.
+
+def test_a_funds_morningstar_rating_is_shown_as_morningstars():
+    out = fv.morningstar({"morningstar_rating": 4.0, "morningstar_risk": 3.0})
+    assert (out["stars"], out["risk"], out["risk_word"]) == (4, 3, "Average")
+    assert out["source"] == "Morningstar, via Yahoo Finance" and "not a forecast" in out["note"]
+    assert fv.morningstar({"morningstar_rating": 5, "morningstar_risk": None})["risk_word"] is None
+
+
+@pytest.mark.parametrize("quote", [{}, {"morningstar_rating": None}, {"morningstar_rating": 0},
+                                   {"morningstar_rating": 7}, {"morningstar_rating": "n/a"}])
+def test_no_rating_in_the_feed_is_no_rating_and_none_is_made_up(quote):
+    out = fv.morningstar(quote)
+    assert out["available"] is False and "only in the feed for mutual funds" in out["reason"]
+
+
+def test_the_quote_carries_it_and_the_page_shows_stars_only_when_there_are_some():
+    src = (ROOT / "app/providers/yf.py").read_text()
+    assert '"morningstar_rating": _f(info.get("morningStarOverallRating")),' in src
+    assert '"morningstar_risk": _f(info.get("morningStarRiskRating")),' in src
+    rated = fv.morningstar({"morningstar_rating": 4, "morningstar_risk": 3})
+    out = _run_ms("print('RESULT:' + JSON.stringify([renderMorningstarBlock(%s), renderMorningstarBlock(%s)]));"
+                  % (json.dumps(rated), json.dumps(fv.morningstar({}))))
+    shown, none = out
+    assert "Morningstar rating" in shown and "★★★★☆" in shown
+    assert "4 of 5 stars" in shown and "Risk rating|Average|3 of 5" in shown
+    assert "not Optic's" in shown and "Source: Morningstar, via Yahoo Finance." in shown
+    assert none == ""
+    assert "renderMorningstarBlock(d.morningstar), renderFairValueBlock(d.fair_value)" in APP
+
+
+def _run_ms(script):
+    exe = JSC if os.path.exists(JSC) else shutil.which("jsc")
+    if not exe:
+        pytest.skip("no JavaScriptCore on this machine")
+    at = APP.index("function renderMorningstarBlock(")
+    fn = APP[at:APP.index("\n}\n", at) + 3]
+    prelude = """
+      function esc(v) { return String(v); }
+      function hg(v) { return v; }
+      function tile(label, value, note) { return label + '|' + value + '|' + (note || ''); }
+    """
+    out = subprocess.run([exe, "-e", prelude + fn + script], capture_output=True, text=True,
+                         timeout=60, cwd=str(ROOT))
+    assert "RESULT:" in out.stdout, (out.stdout + out.stderr)[-1500:]
+    return json.loads(out.stdout.split("RESULT:", 1)[1].split("\n")[0])

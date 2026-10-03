@@ -289,6 +289,47 @@ def _days_ago(date_text: Optional[str], today: datetime) -> Optional[int]:
     return (today - when).days
 
 
+# ---------------------------------------------------------- Morningstar
+
+
+# What Morningstar's risk rating's five steps are called.
+RISK_WORDS = {1: "Low", 2: "Below average", 3: "Average", 4: "Above average", 5: "High"}
+
+
+def morningstar(quote: Dict[str, Any]) -> Dict[str, Any]:
+    """Morningstar's own ratings, as Yahoo carries them, or that there are none.
+
+    Asked for as "add the morningstar rating too". It is Morningstar's licensed
+    rating, and the only copy the terminal can read is the one in Yahoo's
+    quote, which carries it for mutual funds and for nothing else: on 3
+    October 2026 VFIAX and FXAIX had 4 stars, and AAPL, KO, SPY and QQQ had no
+    field at all. It is shown as Morningstar's, never worked out here.
+    """
+    stars = quote.get("morningstar_rating")
+    try:
+        stars = int(stars) if stars is not None else None
+    except (TypeError, ValueError):
+        stars = None
+    if not stars or not 1 <= stars <= 5:
+        return {"available": False,
+                "reason": "Morningstar's rating is only in the feed for mutual funds."}
+    risk = quote.get("morningstar_risk")
+    try:
+        risk = int(risk) if risk is not None else None
+    except (TypeError, ValueError):
+        risk = None
+    return {
+        "available": True,
+        "stars": stars,
+        "risk": risk if risk in RISK_WORDS else None,
+        "risk_word": RISK_WORDS.get(risk),
+        "note": ("Morningstar's Overall Rating, out of five stars: how the fund's past "
+                 "returns compare with others in its category after costs and risk. It "
+                 "looks backward and is not a forecast. Shown as Yahoo carries it."),
+        "source": "Morningstar, via Yahoo Finance",
+    }
+
+
 # ---------------------------------------------------------------- entry
 
 
@@ -319,5 +360,6 @@ def build(provider, ticker: str) -> Dict[str, Any]:
             extras_mod.corporate_actions(provider, sym), price,
             quote.get("trailing_pe"), quote.get("dividend_yield"),
             quote_type=quote.get("quote_type"))),
+        "morningstar": attempt("morningstar", lambda: morningstar(quote)),
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
