@@ -108,7 +108,8 @@ def test_a_group_with_one_page_still_renders_without_a_menu():
 def test_the_section_bar_is_still_the_one_that_remains():
     """Flattening the rail entry only works if the other navigation exists."""
     assert "function securityHeader(" in APP
-    assert "SECURITY_VIEWS" in _fn("securityHeader")
+    assert "securityViewsFor(sym)" in _fn("securityHeader")
+    assert "SECURITY_VIEWS" in _fn("securityViewsFor"), "every facet, less Financials for a fund"
 
 
 # ------------------------------------------------- one session summary

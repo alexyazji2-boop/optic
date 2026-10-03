@@ -7532,12 +7532,21 @@ body[data-view="chart"] .sessionbar { display: none; }
 .ws-rail {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: var(--space-1);
-  padding: var(--space-2) var(--space-1);
+  /* Room either side of the icons. At --space-1 a side the 30px buttons met
+     the rail's edge, and the scrollbar a short window gives it took its width
+     from them: asked for as "have a bit more space for this section". */
+  padding: var(--space-2) var(--space-2);
+  min-width: 48px;
   border-right: 1px solid var(--border);
   background: var(--surface);
   overflow-y: auto;
+  /* Still scrolls by wheel and touch when the tools outrun the height; the
+     bar itself took width the icons need. */
+  scrollbar-width: none;
 }
+.ws-rail::-webkit-scrollbar { display: none; }
 .ws-rail-gap { flex: 1 1 auto; min-height: var(--s4); }
 
 /* A widget button that cannot act says so.
@@ -7550,8 +7559,9 @@ body[data-view="chart"] .sessionbar { display: none; }
   cursor: not-allowed;
 }
 .ws-tool {
-  width: 30px;
-  height: 30px;
+  flex: none;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
   border: 1px solid transparent;

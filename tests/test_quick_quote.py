@@ -135,6 +135,9 @@ def _js(prelude, names, scenario):
 
 HEADER = r"""
 var SECURITY_VIEWS = ['overview', 'news'];
+// The strip asks which facets a symbol has; a fund's has no Financials
+// (tests/test_chart_arrival_rail_funds.py). Every symbol here has them all.
+function securityViewsFor(sym) { return SECURITY_VIEWS; }
 var SUB_TITLES = {}, SUB_LABELS = { overview: 'Overview', news: 'News' };
 function esc(s) { return String(s); }
 function fmt(v, d) { return Number(v).toFixed(d); }

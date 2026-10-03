@@ -10639,6 +10639,29 @@ function trackSecurityHeader() {
 
 const syncSecurityHeader = trackSecurityHeader();
 
+/* A fund has no statements of its own.
+ *
+ * "whenever the user inputs an ETF, hide the financials tab, as it is not
+ * applicable": SPY's Financials tab was a column of panels with nothing to say
+ * (short interest, an earnings record, statements, segments). The quote names
+ * the instrument's type, and a fund's strip leaves the tab out; anything that
+ * still opens it for a fund lands on Overview. Until the quote is in the type
+ * is not known, and the tab shows. */
+const FUND_TYPES = ['ETF', 'MUTUALFUND'];
+
+function symbolIsFund(sym) {
+  if (!sym) return false;
+  const swingQ = STATE.swing && STATE.swing.ticker === sym ? STATE.swing.quote : null;
+  const quick = STATE.quickQuote && STATE.quickQuote.ticker === sym ? STATE.quickQuote.quote : null;
+  const type = String(((swingQ || quick) || {}).quote_type || '').toUpperCase();
+  return FUND_TYPES.includes(type);
+}
+
+/** The facets this symbol has, in the strip's order. */
+function securityViewsFor(sym) {
+  return symbolIsFund(sym) ? SECURITY_VIEWS.filter((v) => v !== 'financials') : SECURITY_VIEWS;
+}
+
 function securityHeader(view, opts = {}) {
   /* Which company the strip is about.
    *
@@ -10662,7 +10685,7 @@ function securityHeader(view, opts = {}) {
   const dir = !Number.isFinite(pct) || Math.abs(pct) < 0.005
     ? 'flat' : (pct > 0 ? 'up' : 'down');
 
-  const tabs = SECURITY_VIEWS.map((v) => {
+  const tabs = securityViewsFor(sym).map((v) => {
     const on = v === view;
     return `<button type="button" role="tab" class="sec-tab${on ? ' on' : ''}"
       data-sec-view="${esc(v)}" data-sec-sym="${esc(sym)}" aria-selected="${on}"
@@ -11571,6 +11594,7 @@ async function loadCongress(force) {
 }
 
 function renderFinancialsView(force) {
+  if (symbolIsFund(STATE.ticker)) { switchView('overview'); return; }
   const d = STATE.swing || {};
   const co = d.company;
   views.financials.innerHTML = `${securityHeader('financials')}
@@ -17087,6 +17111,12 @@ async function wsLoadIntraday() {
     return;
   }
   wsIntraday = { symbol, range, window: win, session, loading: true };
+  /* New bars sweep on when they land. The tab opens on hourly bars, so the
+     draw-on a new symbol is given went to the daily chart behind the loading
+     state and the bars the reader sees arrived without it: "make sure to add
+     the chart pop-up animation when it loads, it is not there anymore". Only
+     a fetch counts; a cached repaint above, a zoom and a pan stay instant. */
+  wsFrameSweep = ++wsSweepSeq;
   wsRedrawChart();
   try {
     const data = await getJSON('/api/intraday/' + encodeURIComponent(symbol)
