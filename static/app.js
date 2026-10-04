@@ -32729,18 +32729,34 @@ const PULSE_SOURCES = {
 const PULSE_SRC_RE = /\s?\[\[src ([a-z_]{2,20})\]\]/g;
 
 function pulseSourcesIn(html) {
-  return html.replace(PULSE_SRC_RE, (m, key) => {
-    const src = PULSE_SOURCES[key];
-    if (!src) return '';
-    return ` <button type="button" class="pulse-src" data-src-view="${src[1]}"
+  /* One chip per panel per paragraph. Pulse is asked to tag a source once a
+   * paragraph and in a live answer tagged the same one twice, so the second
+   * "Dealer gamma" a few words after the first is dropped here rather than
+   * left to the model. Two keys that name one panel (the two kinds of options
+   * idea) count as one. */
+  return html.split(/(\n\s*\n)/).map((para) => {
+    const seen = new Set();
+    return para.replace(PULSE_SRC_RE, (m, key) => {
+      const src = PULSE_SOURCES[key];
+      if (!src || seen.has(src[0])) return '';
+      seen.add(src[0]);
+      return ` <button type="button" class="pulse-src" data-src-view="${src[1]}"
       title="From ${esc(src[0])}. Open it">${esc(src[0])}</button>`;
-  });
+    });
+  }).join('');
 }
 
 /** The same reply with its source tags as words, for Copy and Save. */
 function pulseSourcesAsText(text) {
-  return String(text || '').replace(PULSE_SRC_RE, (m, key) => (PULSE_SOURCES[key]
-    ? ` (${PULSE_SOURCES[key][0]})` : ''));
+  return String(text || '').split(/(\n\s*\n)/).map((para) => {
+    const seen = new Set();
+    return para.replace(PULSE_SRC_RE, (m, key) => {
+      const src = PULSE_SOURCES[key];
+      if (!src || seen.has(src[0])) return '';
+      seen.add(src[0]);
+      return ` (${src[0]})`;
+    });
+  }).join('');
 }
 
 function mountPulseCharts(root) {

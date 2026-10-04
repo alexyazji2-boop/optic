@@ -86,3 +86,16 @@ def test_chips_render_open_their_panel_and_leave_copy_and_save_readable():
     assert "${pulseSourcesAsText(t.content)}" in _fn("function pulseExport() {")
     assert ".replace(/\\s?\\[\\[[^\\]\\n]*\\]\\]/g, '')" in APP, "no brackets flash past while streaming"
     assert ".pulse-src {" in CSS
+
+
+def test_a_panel_is_one_chip_a_paragraph():
+    """A live answer tagged Dealer gamma twice in one paragraph."""
+    html, text = _run("""
+      var t = 'GEX +$118m [[src gex]], flip $318 [[src gex]], ideas [[src naked_ideas]] [[src strategy_ideas]].'
+        + '\\n\\nCall wall $340 [[src gex]].';
+      print('RESULT:' + JSON.stringify([pulseSourcesIn(t), pulseSourcesAsText(t)]));
+    """)
+    first, second = html.split("\n\n")
+    assert first.count(">Dealer gamma</button>") == 1 and first.count(">Options ideas</button>") == 1
+    assert second.count(">Dealer gamma</button>") == 1, "a new paragraph names it again"
+    assert text == "GEX +$118m (Dealer gamma), flip $318, ideas (Options ideas).\n\nCall wall $340 (Dealer gamma)."

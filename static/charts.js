@@ -765,22 +765,25 @@ function timeTicks(labels, X, minGap) {
  * "25. Jul ... 4. Sep" and then "2027" when it crosses.
  *
  * `prev` is the previous tick that survived striding, not the previous bar —
- * see build(). The first tick has no predecessor and is treated as a fresh
- * year, so a chart always names its era once at the left.
+ * see build(). The first tick has no predecessor; on a year axis it names its
+ * year, and on a month, week or day axis its month. It used to name the year
+ * there too, so a 3-month chart in Pulse read "2026, Sep, Oct", where the one
+ * label left of the turn said the year and not which month the line starts in.
+ * A year the axis crosses is still named where it turns, and the hover names
+ * every bar's year.
  */
 function tickLabel(d, unitId, prev) {
   const newYear = !prev || prev.getFullYear() !== d.getFullYear();
   const newMonth = newYear || !prev || prev.getMonth() !== d.getMonth();
   if (unitId === 'year') return String(d.getFullYear());
-  if (unitId === 'month') return newYear ? String(d.getFullYear()) : MONTH_SHORT[d.getMonth()];
+  if (unitId === 'month') return newYear && prev ? String(d.getFullYear()) : MONTH_SHORT[d.getMonth()];
   if (unitId === 'week' || unitId === 'day') {
     /* The leftmost tick names the month, not the year.
      *
-     * `newYear` is true for the first tick because it has no predecessor, which
-     * is right when the ticks are months — a 6-month axis reading "2026, May,
-     * Jun" is correct. It is over-specified when the ticks are days: a 1-month
-     * axis came back "2026, 17, 24, 31", where the one label that should have
-     * told you the month told you the year instead. */
+     * `newYear` is true for the first tick because it has no predecessor. A
+     * 1-month axis came back "2026, 17, 24, 31", where the one label that
+     * should have told you the month told you the year instead. Months now
+     * start the same way (above). */
     if (newYear) return prev ? String(d.getFullYear()) : MONTH_SHORT[d.getMonth()];
     return newMonth ? MONTH_SHORT[d.getMonth()] : String(d.getDate());
   }
