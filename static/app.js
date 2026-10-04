@@ -4097,21 +4097,32 @@ function renderHomeStatus(health) {
  * two things, which is the same fault the nav group comments already record
  * fixing for "Optic Portfolio". A reader moving between a laptop and a phone
  * was being asked to learn the product twice. */
+/* The phone's bottom bar: the one navigation on a phone.
+ *
+ * Asked for as "It is tough to use on the phone as a first time user, make the
+ * structure simple and understandable". Measured at 375x812 on a stock page:
+ * the top bar, a scrolling strip of sections, a status line and the market
+ * hours took 470px before the company's name, and Home, the Dossier, Pulse and
+ * Settings were each in two navigations at once. The strip and the status line
+ * are gone on a phone and this bar is the way round: four places and More.
+ * Pulse is the button in the top bar, which is where every page already shows
+ * it, and Watchlist, Alerts, Positions, Compare and Settings are in More.
+ *
+ * `group` lands on the page last used inside that section, as the desktop
+ * rail does, and the section's other pages are chips under the top bar. */
 const MOBILE_TABS = [
-  { view: 'home', label: 'Home', icon: '&#9750;' },
+  { view: 'home', label: 'Home', icon: '&#8962;' },
+  // The desktop's word for it, so a reader learns the product once.
   { view: 'overview', label: 'Dossier', icon: '&#9683;' },
-  { view: 'watchlist', label: 'Watchlist', icon: '&#9776;' },
-  { view: 'alerts', label: 'Alerts', icon: '&#9873;' },
-  // The mark rather than a four-pointed star, which was standing in for it.
-  { view: 'ask', label: 'Pulse', icon: null, mark: 'pulse' },
-  // The gear used to be in the top bar, which is sticky, so a phone always had
-  // it on screen. It lives in the rail now -- and on a phone the rail is
-  // `order: 2`, which puts it at the very end of the document: measured at
-  // 375x812 on the home page, the rail sat at y=6520 of a 6583px page. A
-  // destination 6,500px down is the palette-only case this file's own
-  // `test_the_palette_is_not_the_only_way_to_reach_a_view` calls a bug.
-  { view: 'settings', label: 'Settings', icon: '&#9881;' },
+  { group: 'market', label: 'Markets', icon: '&#8599;' },
+  { group: 'discover', label: 'Discover', icon: '&#8981;' },
+  { more: true, label: 'More', icon: '&#8943;' },
 ];
+
+/** What a bottom-bar button stands for, as its data-mtab. */
+function mtabKey(t) {
+  return t.more ? 'more' : t.group ? 'g:' + t.group : t.view;
+}
 
 function mountMobileTabs() {
   if (document.getElementById('mtabs')) return;
@@ -4120,7 +4131,7 @@ function mountMobileTabs() {
   nav.className = 'mtabs';
   nav.setAttribute('aria-label', 'Primary');
   nav.innerHTML = MOBILE_TABS.map((t) => `<button type="button" class="mtab"
-    data-mtab="${esc(t.view)}" aria-label="${esc(t.label)}">
+    data-mtab="${esc(mtabKey(t))}" aria-label="${esc(t.label)}">
     <span class="mtab-ico" aria-hidden="true">${t.mark === 'pulse' ? pulseMarkHTML('pulse-glyph-sm') : t.icon}</span>
     <span class="mtab-lab">${esc(t.label)}</span>
   </button>`).join('');
@@ -4141,7 +4152,8 @@ function mountMobileTabs() {
  * to the deployment rather than to them, and counting somebody else's alerts on
  * their tab would be the badge lying about whose news it is. */
 function paintWatchHitBadge() {
-  const tab = document.querySelector('[data-mtab="alerts"]');
+  // On More, which is where Alerts is on a phone now.
+  const tab = document.querySelector('[data-mtab="more"]');
   if (!tab) return;
   const n = (STATE.watchHits || {}).unseen || 0;
   let dot = tab.querySelector('.mtab-badge');
@@ -4159,10 +4171,12 @@ function paintWatchHitBadge() {
 function paintMobileTabs(view) {
   const nav = document.getElementById('mtabs');
   if (!nav) return;
-  const inDossier = groupForView(view) === 'security';
+  const group = groupForView(view);
+  // More is lit for every section the other four do not stand for.
+  const own = { home: 'home', security: 'overview', market: 'g:market', discover: 'g:discover' };
+  const lit = own[group] || 'more';
   nav.querySelectorAll('[data-mtab]').forEach((btn) => {
-    const on = btn.dataset.mtab === view
-      || (btn.dataset.mtab === 'overview' && inDossier);
+    const on = btn.dataset.mtab === lit;
     btn.classList.toggle('on', on);
     btn.setAttribute('aria-current', on ? 'page' : 'false');
   });
@@ -4173,15 +4187,78 @@ document.addEventListener('click', (evt) => {
   const tab = evt.target.closest('[data-mtab]');
   if (!tab) return;
   const view = tab.dataset.mtab;
-  // "Ask" is not a view. It opens the palette, which is the single entry point
-  // for asking anything — putting a chat panel behind a tab would make the
-  // assistant a destination again.
-  if (view === 'ask') { openPalette(''); return; }
+  if (view === 'more') { openMoreSheet(); return; }
+  if (view.startsWith('g:')) {
+    const g = NAV_GROUPS.find((x) => x.id === view.slice(2));
+    if (!g) return;
+    const remembered = NAV_LAST[g.id];
+    switchView(g.views.includes(remembered) ? remembered : g.views[0]);
+    return;
+  }
   /* Analyse with nothing loaded would land on the "No ticker loaded" panel,
    * which is a dead end. The palette is the way in, so that is where it goes —
    * the tab means "look at a name", and with no name yet that means pick one. */
   if (view === 'overview' && !STATE.ticker) { openPalette(''); return; }
   switchView(view);
+});
+
+/* More: every page the bottom bar does not name, in its sections, with what
+ * each one is for. A sheet from the bottom, where the thumb already is. */
+function moreSheetHTML() {
+  const named = ['home', 'security', 'market', 'discover'];
+  const groups = navVisibleGroups().filter((g) => !named.includes(g.id));
+  // A title is "Name. What it is for", or just what it is for (Compare's).
+  const what = (v) => {
+    const parts = String(SUB_TITLES[v] || '').split('. ');
+    return parts.length > 1 ? parts.slice(1).join('. ') : parts[0];
+  };
+  const row = (v, label) => `<button type="button" class="more-row" data-more-view="${esc(v)}">
+      <span class="more-lab">${esc(label)}</span>
+      ${what(v) ? `<span class="more-what">${esc(what(v))}</span>` : ''}</button>`;
+  return `<div class="more-back" data-more-close>
+    <div class="more-sheet" role="dialog" aria-label="More pages">
+      <div class="more-head"><strong>More</strong>
+        <button type="button" class="pch-x" data-more-close aria-label="Close">\u00d7</button></div>
+      ${groups.map((g) => `<div class="more-group">
+        ${g.views.length > 1 ? `<div class="more-glab">${esc(navGroupLabel(g))}</div>` : ''}
+        ${g.views.map((v) => row(v, SUB_LABELS[v] || navGroupLabel(g))).join('')}
+      </div>`).join('')}
+      <div class="more-group">${row('settings', 'Settings')}${
+  /* Sign in lives here on a phone, where the top bar keeps its width for the
+     search box. Only for a guest: a signed-in reader's avatar stays up top. */
+  document.querySelector('#account-slot .acct-signin')
+    ? `<button type="button" class="more-row" data-auth-open="signin" data-more-close>
+        <span class="more-lab">Sign in</span>
+        <span class="more-what">A free account, for Pulse and your saved watchlist</span></button>` : ''}</div>
+    </div>
+  </div>`;
+}
+
+function openMoreSheet() {
+  closeMoreSheet();
+  const holder = document.createElement('div');
+  holder.innerHTML = moreSheetHTML();
+  document.body.appendChild(holder.firstElementChild);
+}
+
+function closeMoreSheet() {
+  document.querySelectorAll('.more-back').forEach((n) => n.remove());
+}
+
+document.addEventListener('click', (evt) => {
+  if (!evt.target || !evt.target.closest) return;
+  const go = evt.target.closest('[data-more-view]');
+  if (go) { closeMoreSheet(); switchView(go.dataset.moreView); return; }
+  // The backdrop itself, the close button, or a row that does its own thing
+  // (Sign in opens its dialog) -- never a press that only landed inside the sheet.
+  if (evt.target.matches('[data-more-close]')
+      || evt.target.closest('.pch-x[data-more-close], .more-row[data-more-close]')) {
+    closeMoreSheet();
+  }
+});
+
+document.addEventListener('keydown', (evt) => {
+  if (evt.key === 'Escape') closeMoreSheet();
 });
 
 /* ================================================= options intelligence ====
@@ -7882,6 +7959,23 @@ function paintPaletteList() {
     const active = paletteRows[paletteIndex] ? 'cp-row-' + paletteIndex : '';
     input.setAttribute('aria-activedescendant', active);
   }
+}
+
+/* On a phone the search box says what it is for. "Search or ask ⌘K" names a
+   key a phone does not have. */
+const PHONE_SEARCH_HINT = 'Search a stock or company';
+
+function syncSearchHint() {
+  const box = document.getElementById('ticker-input');
+  if (!box) return;
+  if (!box.dataset.wideHint) box.dataset.wideHint = box.placeholder;
+  const phone = window.matchMedia && window.matchMedia('(max-width: 559px)').matches;
+  box.placeholder = phone ? PHONE_SEARCH_HINT : box.dataset.wideHint;
+}
+syncSearchHint();
+if (window.matchMedia) {
+  const mq = window.matchMedia('(max-width: 559px)');
+  if (mq.addEventListener) mq.addEventListener('change', syncSearchHint);
 }
 
 function openPalette(seed) {
@@ -33512,9 +33606,20 @@ function paintNav(view) {
     </div>`;
   }).join('');
 
-  // The second row is gone, so anything still holding it must not reserve space.
+  /* The second row is gone on a desktop, where the rail's menus carry a
+   * section's pages, and CSS keeps it off there. On a phone the rail is gone
+   * instead, so this row is how a reader moves between a section's pages:
+   * Read, Macro and Indices under Markets. A section of one page, and the
+   * Dossier, which has its own strip, have none. */
   const sub = document.getElementById('subnav');
-  if (sub) { sub.innerHTML = ''; sub.hidden = true; }
+  if (sub) {
+    const g = NAV_GROUPS.find((x) => x.id === active);
+    const pages = g && g.id !== 'security' && g.id !== 'home'
+      ? [...g.views.map((v) => ({ view: v, label: SUB_LABELS[v] || v })), ...extraFor(g.id)] : [];
+    sub.innerHTML = pages.length > 1 ? pages.map((p) => `<button type="button" role="tab"
+      data-view="${esc(p.view)}" aria-selected="${p.view === view}">${esc(p.label)}</button>`).join('') : '';
+    sub.hidden = pages.length < 2;
+  }
 
   navMenuSides();
 }

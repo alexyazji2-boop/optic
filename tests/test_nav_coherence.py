@@ -65,7 +65,7 @@ def test_the_palette_is_not_the_only_way_to_reach_a_view():
     on_strip = set(re.findall(r"'([a-z]+)'", NAV_GROUPS))
     in_dossier = set(re.findall(r"'([a-z]+)'", APP.split(
         "const SECURITY_VIEWS = [", 1)[1].split("]", 1)[0]))
-    on_mobile = {v for v, _ in _mobile_tabs()}
+    on_mobile = {v for v, _ in _mobile_tabs()} | {"settings"}   # More's last row
     # 'instrument' is a transient page opened from a link, not a destination.
     # 'settings' used to be exempt here on the grounds that the gear was a
     # header button rather than a nav entry. The gear moved into the rail, and
@@ -90,8 +90,9 @@ def test_the_phone_uses_the_desktop_words():
     labels = dict(_mobile_tabs())
     assert labels.get("overview") == "Dossier", \
         "the strip calls this group Dossier"
-    assert labels.get("ask") == "Pulse", \
-        "the header button calls this Pulse"
+    # Pulse left the bottom bar for the top bar on a phone, where it is the
+    # same button, with the same word, as on a desktop.
+    assert "ask" not in labels and "label: 'Ask'" not in MOBILE_TABS
     assert "Analyse" not in MOBILE_TABS
 
 
@@ -198,7 +199,11 @@ def test_settings_is_reachable_on_a_phone():
 
     This is the fault this file is named for, arriving from the other
     direction: a destination with a permanent desktop home and no phone one."""
-    assert "settings" in {v for v, _ in _mobile_tabs()}
+    # In More, the bottom bar's last tab, on every page.
+    sheet = APP[APP.index("function moreSheetHTML() {"):]
+    sheet = sheet[:sheet.index("\n}\n")]
+    assert "row('settings', 'Settings')" in sheet
+    assert "{ more: true, label: 'More'" in MOBILE_TABS
     html = open("static/index.html", encoding="utf-8").read()
     foot = html.split('<div class="rail-foot">', 1)[1].split("</div>", 1)[0]
     assert 'data-view="settings"' in foot, "and a desktop home in the rail"

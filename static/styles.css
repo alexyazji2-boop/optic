@@ -15757,3 +15757,107 @@ body.ws-max[data-view="chart"] main { padding: 0; }
 .os-row { display: flex; align-items: center; gap: var(--space-5); flex-wrap: wrap; }
 .os-stars { font-size: var(--t-d3); line-height: 1.1; }
 .os-read { flex: 1 1 260px; min-width: 0; }
+
+/* ================================================================ the phone ===
+ *
+ * Asked for as "It is tough to use on the phone as a first time user, make the
+ * structure simple and understandable". Measured at 375x812 on AAPL: the top
+ * bar, the sections strip, the status line and the market hours took 470px
+ * before the company's name, and four destinations were in two navigations at
+ * once. On a phone there is now one of each thing:
+ *
+ *   - one navigation, the bottom bar (Home, Stocks, Markets, Discover, More);
+ *     the sections strip and the status line are not drawn
+ *   - one search box, in the top bar beside Pulse, and on Home not even that,
+ *     because Home's own search is the page's first thing
+ *   - the market hours as one line: the session and when the next one starts
+ *   - a section's pages as chips under the top bar, and a stock's sections as
+ *     tabs that wrap onto a second line rather than scroll out of sight
+ *
+ * Last in the file, so it wins every tie with the rules above it. */
+@media (max-width: 559px) {
+  #rail.rail { display: none; }
+  #statusline.statusline { display: none; }
+
+  header.topbar { flex-wrap: wrap; gap: var(--space-2); padding: var(--space-2) var(--space-3); }
+  header.topbar #ticker-form { order: -1; flex: 1 1 0; min-width: 0; }
+  header.topbar #ticker-form button[type="submit"] { display: none; }
+  header.topbar .account-slot { margin-left: auto; }
+  header.topbar .account-slot:has(.acct-signin) { display: none; }
+  body[data-view="home"] header.topbar #ticker-form { display: none; }
+
+  /* A section's pages: Read, Macro and Indices under Markets. */
+  header.topbar #subnav:not([hidden]) {
+    display: flex !important;
+    flex: 1 0 100%;
+    gap: var(--space-1);
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin: 0;
+  }
+  header.topbar #subnav::-webkit-scrollbar { display: none; }
+  header.topbar #subnav button {
+    flex: none;
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--r-pill);
+    border: 1px solid var(--border);
+    background: none;
+    color: var(--ink-2);
+    font: 500 var(--t-small)/1.4 var(--sans);
+  }
+  header.topbar #subnav button[aria-selected="true"] {
+    color: var(--ink);
+    border-color: var(--btn-primary);
+    background: color-mix(in srgb, var(--btn-primary) 14%, transparent);
+  }
+
+  /* The market hours, one line. The day's timeline, the legend and the
+     company block are a desktop's; the session and the countdown stay. */
+  .sessionbar { padding: var(--space-2) var(--space-3); }
+  .sessionbar .ses-main { gap: var(--space-2) var(--space-3); }
+  .sessionbar .ses-strip,
+  .sessionbar .ses-detail-btn,
+  .sessionbar .ses-detail { display: none; }
+  /* The dot beside the words, not on a line of its own above them. */
+  .sessionbar .ses-head { flex: 1 1 0; min-width: 0; }
+
+  /* The new-build notice, across the screen above the bottom bar. Centred by
+     `left: 50%` it was sized against half the screen and wrapped one word to a
+     line. */
+  .build-notice {
+    left: var(--space-3); right: var(--space-3); transform: none;
+    bottom: calc(60px + env(safe-area-inset-bottom));
+    max-width: none;
+  }
+
+  /* A stock's sections, every one in sight. */
+  .sec-head .sec-tabs { flex-wrap: wrap; overflow: visible; row-gap: 0; }
+  .sec-head .sec-tab { padding: var(--space-2) var(--space-2); }
+
+  /* More. */
+  .more-back {
+    position: fixed; inset: 0; z-index: 90;
+    background: var(--scrim);
+    display: flex; align-items: flex-end;
+  }
+  .more-sheet {
+    width: 100%; max-height: 80vh; overflow-y: auto;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    padding: var(--space-3) var(--space-3) calc(var(--space-5) + env(safe-area-inset-bottom));
+  }
+  .more-head { display: flex; align-items: center; justify-content: space-between;
+    padding: var(--space-1) var(--space-1) var(--space-2); }
+  .more-group { border-top: 1px solid var(--border); padding: var(--space-2) 0; }
+  .more-glab { color: var(--ink-muted); font-size: var(--t-caption); padding: var(--space-1) var(--space-2); }
+  .more-row {
+    display: grid; gap: 2px; width: 100%; text-align: left;
+    padding: var(--space-2); border: 0; border-radius: var(--r-sm);
+    background: none; color: var(--ink); font: inherit; cursor: pointer;
+    transition: background-color var(--dur-ui) var(--ease-ui);
+  }
+  .more-row:active, .more-row:hover { background: var(--surface-2); }
+  .more-lab { font-weight: 600; font-size: var(--t-body); }
+  .more-what { color: var(--ink-muted); font-size: var(--t-small); }
+}

@@ -95,7 +95,8 @@ def test_the_phone_tab_carries_the_unseen_count():
     """The bottom bar is the only route to this inbox on a phone, and a tab that
     looks identical whether or not something fired is one nobody taps."""
     fn = body_of("paintWatchHitBadge")
-    assert "[data-mtab=\"alerts\"]" in fn
+    # On More, which is where Alerts is on a phone since the bar was cut to five.
+    assert "[data-mtab=\"more\"]" in fn
     assert "STATE.watchHits" in fn
 
 
