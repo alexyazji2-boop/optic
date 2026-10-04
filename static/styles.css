@@ -15860,4 +15860,97 @@ body.ws-max[data-view="chart"] main { padding: 0; }
   .more-row:active, .more-row:hover { background: var(--surface-2); }
   .more-lab { font-weight: 600; font-size: var(--t-body); }
   .more-what { color: var(--ink-muted); font-size: var(--t-small); }
+
+  /* Pulse covers the screen on a phone, and the bottom bar sat on top of its
+     box to type into. Closing Pulse brings it back. */
+  body.chat-open .mtabs { display: none; }
 }
+
+/* ================================================================ Pulse ===
+ *
+ * Asked for with a picture of another broker's assistant: "make pulse look
+ * like this". Its ideas in Optic's colours: the reader's question a filled
+ * bubble at the right and the answer plain text across the panel; what Pulse
+ * is doing as a short list ticked step by step; a chart inside an answer; Copy
+ * and Retry under it; and a rounded box to type into. */
+#chat .msg.user, #chat .msg.assistant { display: flex; flex-direction: column; }
+#chat .msg.user .who, #chat .msg.assistant .who { display: none; }
+#chat .msg.user .bubble {
+  align-self: flex-end;
+  max-width: 88%;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg) var(--r-lg) var(--r-xs) var(--r-lg);
+  padding: var(--space-2) var(--space-3);
+}
+#chat .msg.user .msg-save { align-self: flex-end; }
+#chat .msg.assistant .bubble { background: none; border: 0; padding: 0; }
+
+/* What Pulse is doing. */
+.pulse-steps {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2);
+  font-style: normal;
+}
+.pulse-steps summary {
+  display: flex; align-items: center; gap: var(--space-2);
+  cursor: pointer; list-style: none;
+  font-size: var(--t-caption); font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--ink-2);
+}
+.pulse-steps summary::-webkit-details-marker { display: none; }
+.ps-list { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; gap: var(--space-1); }
+.ps-list li {
+  display: flex; align-items: center; gap: var(--space-2);
+  font-size: var(--t-small); color: var(--ink-muted);
+}
+.ps-list li::before {
+  content: ""; flex: none; width: 14px; height: 14px; border-radius: 50%;
+  border: 1.5px solid var(--border-strong);
+}
+.ps-list li.on { color: var(--ink); }
+.ps-list li.on::before { border-color: var(--btn-primary); border-right-color: transparent;
+  animation: spin 0.8s linear infinite; }
+.ps-list li.done { color: var(--ink-2); }
+.ps-list li.done::before {
+  border-color: var(--pos);
+  background: var(--pos)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8.5l2.5 2.5L12 5.5' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 12px no-repeat;
+}
+.ps-list li.fail::before { border-color: var(--neg); background: var(--neg); }
+
+/* A chart inside an answer. */
+.pulse-chart {
+  margin: var(--space-3) 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--raised);
+  white-space: normal;
+}
+.pulse-chart .pc-plot { min-height: 190px; }
+.pulse-chart .pc-cap { color: var(--ink-muted); font-size: var(--t-caption); margin-top: var(--space-1); }
+
+/* Under an answer. */
+.pulse-acts { display: flex; gap: var(--space-1); margin-top: var(--space-2); }
+.pa-btn {
+  padding: var(--space-0) var(--space-2);
+  border: 1px solid transparent; border-radius: var(--r-sm);
+  background: none; color: var(--ink-muted);
+  font: 500 var(--t-caption)/1.6 var(--sans); cursor: pointer;
+  transition: color var(--dur-ui) var(--ease-ui), border-color var(--dur-ui) var(--ease-ui);
+}
+.pa-btn:hover { color: var(--ink); border-color: var(--border); }
+
+/* The box to type into. */
+#chat .chat-foot { border-top: 0; }
+#chat .chat-foot textarea {
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  padding: var(--space-3);
+}
+#chat .chat-actions #chat-send { border-radius: var(--r-pill); }

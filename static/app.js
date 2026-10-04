@@ -32691,6 +32691,160 @@ function mountPulseMarks() {
  * words in the message box to be edited and sent, like every other ask. Only
  * the lines at the very end count: an arrow in the middle of an answer is an
  * arrow. */
+/* ============================================================ Pulse, redrawn
+ *
+ * Asked for with a picture of another broker's assistant: "make pulse look
+ * like this". What it showed, done in Optic's own colours and words: the
+ * reader's question as a filled bubble and the answer as plain text; a chart
+ * drawn inside an answer; a short list of what Pulse is doing while it works,
+ * each step ticked as the next begins; Copy and Retry under an answer; and New
+ * and Save at the top of the panel. Every step is an event the server sends
+ * (app/ai.py's `status` events), never a made-up one. */
+
+/* The steps, as the server names them, in the reader's words. */
+const PULSE_STEP_WORDS = {
+  thinking: 'Thinking it through',
+  'searching the web': 'Searching the web',
+  'searching': 'Searching live sources',
+};
+
+function pulseStepsStart(node, first) {
+  const host = node.querySelector('.status');
+  if (!host) return;
+  host.innerHTML = `<details class="pulse-steps" open>
+    <summary><span class="spinner"></span><span class="ps-title">Working</span></summary>
+    <ol class="ps-list"></ol></details>`;
+  node.pulseSteps = [];
+  pulseStepAdd(node, first);
+}
+
+function pulseStepAdd(node, label) {
+  const list = node.querySelector('.pulse-steps .ps-list');
+  if (!list || !label) return;
+  const steps = node.pulseSteps || [];
+  if (steps[steps.length - 1] === label) return;
+  list.querySelectorAll('li.on').forEach((li) => { li.className = 'done'; });
+  const li = document.createElement('li');
+  li.className = 'on';
+  li.textContent = label;
+  list.appendChild(li);
+  steps.push(label);
+  node.pulseSteps = steps;
+}
+
+function pulseStepsDone(node, failed) {
+  const box = node.querySelector('.pulse-steps');
+  if (!box || box.dataset.done) return;
+  box.dataset.done = '1';
+  box.querySelectorAll('li.on').forEach((li) => { li.className = failed ? 'fail' : 'done'; });
+  const n = (node.pulseSteps || []).length;
+  box.querySelector('summary').innerHTML = `<span class="ps-title">${failed ? 'Stopped'
+    : `Worked through ${n} step${n === 1 ? '' : 's'}`}</span>`;
+  box.open = false;
+}
+
+/* A chart inside an answer.
+ *
+ * Pulse writes `[[chart SPY 3m]]` on a line of its own (FORMAT_PROMPT) and the
+ * terminal draws the symbol's daily closes over that span from its own bars,
+ * so the chart is the terminal's data and never the model's. */
+const PULSE_CHART_RE = /\[\[chart ([A-Z0-9.^=-]{1,12}) (1m|3m|6m|1y|5y)\]\]/g;
+const PULSE_CHART_BARS = { '1m': 21, '3m': 63, '6m': 126, '1y': 252, '5y': 1260 };
+const PULSE_CHART_WORDS = { '1m': 'month', '3m': '3 months', '6m': '6 months', '1y': 'year', '5y': '5 years' };
+const pulseChartBars = new Map();
+let pulseChartSeq = 0;
+
+function pulseChartsIn(html) {
+  return html.replace(PULSE_CHART_RE, (m, sym, span) => `<div class="pulse-chart" data-sym="${
+    sym}" data-span="${span}"><div class="pc-plot"></div><div class="pc-cap">${sym}, daily close over the last ${
+    PULSE_CHART_WORDS[span]}</div></div>`);
+}
+
+function mountPulseCharts(root) {
+  (root || document).querySelectorAll('.pulse-chart:not([data-mounted])').forEach((box) => {
+    box.dataset.mounted = '1';
+    const sym = box.dataset.sym;
+    const span = box.dataset.span;
+    const plot = box.querySelector('.pc-plot');
+    plot.id = 'pulse-chart-' + (++pulseChartSeq);
+    if (!pulseChartBars.has(sym)) {
+      pulseChartBars.set(sym, getJSON('/api/daily-bars/' + encodeURIComponent(sym)).catch(() => null));
+    }
+    pulseChartBars.get(sym).then((bars) => {
+      if (!document.getElementById(plot.id)) return;
+      if (!bars || !bars.available || !(bars.close || []).length) {
+        plot.innerHTML = '<p class="caveat">No price history for ' + esc(sym) + '.</p>';
+        return;
+      }
+      const n = PULSE_CHART_BARS[span] || 63;
+      const close = bars.close.slice(-n);
+      mount(plot.id, (w) => lineChart({
+        width: w, height: 190, valueTags: true,
+        labels: bars.dates.slice(-n),
+        series: [{ name: sym, values: close, color: C.brand, fill: true }],
+      }));
+    });
+  });
+}
+
+/* Copy and Ask again under an answer.
+ *
+ * Ask again puts the question back in the box rather than sending it: every
+ * button that asks Pulse something drafts it for the reader to edit and send
+ * (see draftPulse), and this one is no exception. */
+function addReplyActions(node, text, question) {
+  let row = node.querySelector('.pulse-acts');
+  if (!row) {
+    row = document.createElement('div');
+    row.className = 'pulse-acts';
+    node.appendChild(row);
+  }
+  row.innerHTML = `<button type="button" class="pa-btn" data-pulse-copy>Copy</button>
+    ${question ? '<button type="button" class="pa-btn" data-pulse-again>Ask again</button>' : ''}`;
+  node.dataset.reply = text;
+  if (question) node.dataset.question = question;
+}
+
+/* The conversation as a Markdown file, for keeping or sharing. */
+function pulseExport() {
+  const turns = chatState.messages || [];
+  if (!turns.length) return;
+  const md = ['# Pulse conversation', '', `Saved ${new Date().toLocaleString()}`, '']
+    .concat(turns.map((t) => `**${t.role === 'user' ? 'You' : 'Pulse'}:** ${t.content}\n`))
+    .join('\n');
+  const url = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `pulse-${new Date().toISOString().slice(0, 10)}.md`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+document.addEventListener('click', (evt) => {
+  if (!evt.target || !evt.target.closest) return;
+  const copy = evt.target.closest('[data-pulse-copy]');
+  if (copy) {
+    const node = copy.closest('.msg');
+    const text = splitFollowUps((node && node.dataset.reply) || '').body;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(() => {
+        copy.textContent = 'Copied';
+        setTimeout(() => { copy.textContent = 'Copy'; }, 1500);
+      }).catch(() => {});
+    }
+    return;
+  }
+  const again = evt.target.closest('[data-pulse-again]');
+  if (again) {
+    const node = again.closest('.msg');
+    if (node && node.dataset.question) draftPulse(node.dataset.question);
+    return;
+  }
+  if (evt.target.closest('[data-pulse-export]')) pulseExport();
+});
+
 function splitFollowUps(text) {
   const lines = String(text || '').split('\n');
   const ups = [];
@@ -32720,7 +32874,8 @@ function followUpsHTML(ups) {
 /** Show a reply's text in its bubble with its follow-ups under it. */
 function paintReply(bubble, text) {
   const { body, ups } = splitFollowUps(text);
-  bubble.innerHTML = mdLite(body);
+  bubble.innerHTML = pulseChartsIn(mdLite(body));
+  mountPulseCharts(bubble);
   const wrap = bubble.parentElement;
   if (!wrap) return;
   wrap.querySelectorAll(':scope > .pulse-ups').forEach((n) => n.remove());
@@ -32740,10 +32895,11 @@ function addMsg(role, text) {
    * saving stores the question and re-asks it when reopened. */
   const savable = role === 'user' && text && text.length > 12;
   wrap.innerHTML = `<div class="who">${role === 'user' ? 'You' : role === 'err' ? 'Error' : ASSISTANT_NAME}</div>
+    <div class="status"></div>
     <div class="bubble"></div>${savable
     ? `<button type="button" class="msg-save" data-save-research
         title="Keep this question in Research">Save</button>` : ''}
-    <div class="status"></div><div class="sources"></div>`;
+    <div class="sources"></div>`;
   if (savable) wrap.dataset.q = text;
   const bubbleEl = wrap.querySelector('.bubble');
   if (role === 'assistant') paintReply(bubbleEl, text || '');
@@ -32835,7 +32991,8 @@ function createStreamRenderer(bubble) {
     const cut = visible.lastIndexOf('\n\n');
     if (cut + 2 > settledLen) {
       settledLen = cut + 2;
-      settledEl.innerHTML = mdLite(target.slice(0, settledLen));
+      settledEl.innerHTML = pulseChartsIn(mdLite(target.slice(0, settledLen)));
+      mountPulseCharts(settledEl);
     }
     // Cheapest possible write for the part that changes every frame.
     tailEl.textContent = visible.slice(settledLen);
@@ -32879,7 +33036,8 @@ function createStreamRenderer(bubble) {
       // The reply and, under it, the follow-ups it ended with. The bubble's own
       // children are the two elements made above, so the text goes in the first.
       const { body, ups } = splitFollowUps(target);
-      settledEl.innerHTML = mdLite(body);
+      settledEl.innerHTML = pulseChartsIn(mdLite(body));
+      mountPulseCharts(settledEl);
       const wrap = bubble.parentElement;
       if (wrap) {
         wrap.querySelectorAll(':scope > .pulse-ups').forEach((n) => n.remove());
@@ -32996,17 +33154,19 @@ async function streamTo(url, body, node) {
 
       if (event === 'delta') {
         acc += payload.text || '';
-        statusEl.textContent = '';
+        if (node.pulseSteps) pulseStepsDone(node); else statusEl.textContent = '';
         render.push(payload.text || '');
       } else if (event === 'status') {
-        statusEl.innerHTML = `<span class="spinner"></span>${esc(payload.state || '')}…`;
+        const state = String(payload.state || '');
+        if (node.pulseSteps) pulseStepAdd(node, PULSE_STEP_WORDS[state] || cap(state));
+        else statusEl.innerHTML = `<span class="spinner"></span>${esc(state)}…`;
       } else if (event === 'error') {
         node.classList.add('err');
-        statusEl.textContent = '';
+        if (node.pulseSteps) pulseStepsDone(node, true); else statusEl.textContent = '';
         render.flush();
         bubble.innerHTML = mdLite(payload.message || 'Unknown error.');
       } else if (event === 'done') {
-        statusEl.textContent = '';
+        if (node.pulseSteps) pulseStepsDone(node); else statusEl.textContent = '';
         render.flush();
         const list = payload.sources || payload.citations || [];
         if (list.length) {
@@ -33179,7 +33339,7 @@ async function sendChat(text) {
   addMsg('user', text + fileNote);
   chatState.messages.push({ role: 'user', content: text + fileNote });
   const node = addMsg('assistant', '');
-  node.querySelector('.status').innerHTML = '<span class="spinner"></span>thinking…';
+  pulseStepsStart(node, 'Reading what is on your screen');
 
   try {
     const reply = await streamTo('/api/chat', {
@@ -33194,11 +33354,14 @@ async function sendChat(text) {
       mode: window.OpticKnowledge ? window.OpticKnowledge.mode() : 'literate',
     }, node);
     clearAttachments();
-    if (reply) chatState.messages.push({ role: 'assistant', content: reply });
+    if (reply) {
+      chatState.messages.push({ role: 'assistant', content: reply });
+      addReplyActions(node, reply, text);
+    }
     pulsePersist();
   } catch (err) {
     node.classList.add('err');
-    node.querySelector('.status').textContent = '';
+    pulseStepsDone(node, true);
     node.querySelector('.bubble').textContent = err.message;
   } finally {
     chatState.busy = false;
@@ -33232,7 +33395,7 @@ async function runResearch() {
   addMsg('user', label);
   $('#chat-input').value = '';
   const node = addMsg('assistant', '');
-  node.querySelector('.status').innerHTML = '<span class="spinner"></span>searching…';
+  pulseStepsStart(node, 'Searching live sources');
 
   try {
     await streamTo('/api/research', {
@@ -33243,7 +33406,7 @@ async function runResearch() {
   } catch (err) {
     node.classList.add('err');
     // Kill the spinner too: it kept saying "searching…" beneath the failure.
-    node.querySelector('.status').textContent = '';
+    pulseStepsDone(node, true);
     node.querySelector('.bubble').textContent = err.message;
   } finally {
     chatState.busy = false;
