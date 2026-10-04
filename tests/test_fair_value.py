@@ -337,3 +337,57 @@ def test_the_star_panel_sits_above_the_range_and_is_optics():
     none = _run("print('RESULT:' + JSON.stringify(renderFairValue(%s)));" % json.dumps({
         "stars": {"available": False}, "fair_value": {"available": False, "reason": "x"}}))
     assert "Optic star rating" not in none
+
+
+# ------------------------------------------------- the stars on the Overview
+#
+# "show the star rating on the overview tab too". The Investing card carries
+# the stars once the rating is in and the P/E until then; checked in a browser:
+# MSFT's card went from "28.8" to "★★★★☆ Optic star rating · Below its usual
+# valuation · P/E 28.8", AMZN (no rating) kept its P/E, and SPY's Overview had
+# no Financials card, as its strip has no Financials tab.
+
+def _overview(script):
+    exe = JSC if os.path.exists(JSC) else shutil.which("jsc")
+    if not exe:
+        pytest.skip("no JavaScriptCore on this machine")
+    fns = ""
+    for head in ("function starsText(", "function overviewCard(", "function ovInvestingCard("):
+        at = APP.index(head)
+        fns += APP[at:APP.index("\n}\n", at) + 3]
+    prelude = """
+      var STATE = { ticker: 'MSFT', swing: { ticker: 'MSFT', quote: { trailing_pe: 28.83 } },
+                    fairValue: null, fairValueFor: null };
+      function esc(v) { return String(v); }
+      function fmt(v, d) { return Number(v).toFixed(d); }
+    """
+    out = subprocess.run([exe, "-e", prelude + fns + script], capture_output=True, text=True,
+                         timeout=60, cwd=str(ROOT))
+    assert "RESULT:" in out.stdout, (out.stdout + out.stderr)[-1500:]
+    return json.loads(out.stdout.split("RESULT:", 1)[1].split("\n")[0])
+
+
+def test_the_overview_card_shows_the_stars_once_they_are_in():
+    rated = fv.star_rating(fv.fair_value(_pe(), 260.0))
+    out = _overview("""
+      var before = ovInvestingCard();
+      STATE.fairValueFor = 'MSFT'; STATE.fairValue = { stars: %s }; var after = ovInvestingCard();
+      STATE.fairValueFor = 'AAPL'; var stale = ovInvestingCard();
+      STATE.fairValueFor = 'MSFT'; STATE.fairValue = { stars: { available: false } }; var none = ovInvestingCard();
+      print('RESULT:' + JSON.stringify([before, after, stale, none]));
+    """ % json.dumps(rated))
+    before, after, stale, none = out
+    assert ">28.8</span>" in before and "trailing P/E" in before
+    assert "★★★★☆" in after and "Optic star rating · Below its usual valuation · P/E 28.8" in after
+    assert "★" not in stale, "another symbol's rating is not this one's"
+    assert ">28.8</span>" in none and "★" not in none
+
+
+def test_the_overview_asks_for_the_rating_and_a_fund_has_no_financials_card():
+    view = APP[APP.index("function renderOverviewView() {"):]
+    view = view[:view.index("\n}\n")]
+    assert "${ovInvestingCard()}" in view and "  loadFairValue();" in view
+    assert "${symbolIsFund(STATE.ticker) ? '' : overviewCard('financials', 'Financials'," in view
+    load = APP[APP.index("async function loadFairValue(force) {"):]
+    load = load[:load.index("\n}\n")]
+    assert "if (card && STATE.view === 'overview') card.outerHTML = ovInvestingCard();" in load

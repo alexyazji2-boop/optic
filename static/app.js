@@ -11652,6 +11652,27 @@ function overviewCard(view, label, value, note) {
   </button>`;
 }
 
+/* The Investing card: the Optic star rating once it is in, the P/E until then.
+ *
+ * Asked for as "show the star rating on the overview tab too". The rating is
+ * worked out with the fair value on its own request (loadFairValue), so the
+ * card shows the P/E it always did and is swapped for the stars when they
+ * land. A stock with no rating, and every fund, keeps the P/E. */
+function ovInvestingCard() {
+  const q = (STATE.swing || {}).quote || {};
+  const pe = Number.isFinite(q.trailing_pe) ? `P/E ${fmt(q.trailing_pe, 1)}` : null;
+  const fv = STATE.fairValueFor === STATE.ticker ? STATE.fairValue : null;
+  const r = fv && fv.stars;
+  if (r && r.available) {
+    return overviewCard('long', 'Investing',
+      `<span class="ms-stars" aria-label="${r.stars} of 5 stars">${starsText(r.stars)}</span>`,
+      `Optic star rating \u00b7 ${r.word}${pe ? ` \u00b7 ${pe}` : ''}`);
+  }
+  return overviewCard('long', 'Investing',
+    Number.isFinite(q.trailing_pe) ? fmt(q.trailing_pe, 1) : null,
+    'trailing P/E, valuation and holding case');
+}
+
 function renderOverviewView() {
   const d = STATE.swing || {};
   const q = d.quote || {};
@@ -11690,16 +11711,14 @@ function renderOverviewView() {
         ${overviewCard('earnings', 'Earnings',
     news.earnings_date ? esc(news.earnings_date) : null,
     days !== null && days !== undefined ? `in ${days} days` : 'no date published')}
-        ${overviewCard('financials', 'Financials',
+        ${symbolIsFund(STATE.ticker) ? '' : overviewCard('financials', 'Financials',
     Number.isFinite(growth) ? `${(growth * 100).toFixed(1)}%` : null,
     Number.isFinite(margin) ? `revenue growth \u00b7 ${(margin * 100).toFixed(1)}% margin`
       : 'revenue growth')}
         ${overviewCard('news', 'News',
     news.article_count ? String(news.article_count) : null,
     news.overall_tone ? `headlines \u00b7 ${news.overall_tone}` : 'headlines')}
-        ${overviewCard('long', 'Investing',
-    Number.isFinite(q.trailing_pe) ? fmt(q.trailing_pe, 1) : null,
-    'trailing P/E, valuation and holding case')}
+        ${ovInvestingCard()}
       </div>
     </div>
     ${heads.length ? `<div class="panel">
@@ -11711,6 +11730,7 @@ function renderOverviewView() {
     </div>` : ''}
     ${fin.available === false && fin.notes ? `<p class="caveat">${esc(fin.notes)}</p>` : ''}`;
   revealPanels(views.overview);
+  loadFairValue();
 }
 
 /* ------------------------------------------------------------ company panel */
@@ -25988,6 +26008,9 @@ async function loadFairValue(force) {
     host.innerHTML = renderFairValue(data);
     revealPanels(host);
   }
+  // The Overview's Investing card takes the stars in place.
+  const card = views.overview && views.overview.querySelector('.ov-card[data-sec-view="long"]');
+  if (card && STATE.view === 'overview') card.outerHTML = ovInvestingCard();
 }
 
 async function loadPatternRates() {
