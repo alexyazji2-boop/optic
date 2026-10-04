@@ -84,6 +84,7 @@ const views = {
   paper: $('#view-paper'),
   reports: $('#view-reports'),
   usage: $('#view-usage'),
+  accounts: $('#view-accounts'),
   settings: $('#view-settings'),
 };
 
@@ -287,7 +288,7 @@ const TICKERLESS_VIEWS = [
   'home', 'market', 'indices', 'roth', 'tracker', 'settings', 'brief',
   'scan', 'explore', 'compare', 'instrument', 'chart',
   'overview', 'financials', 'news', 'earnings',
-  'watchlist', 'alerts', 'insiders', 'analysts', 'paper', 'reports', 'usage',
+  'watchlist', 'alerts', 'insiders', 'analysts', 'paper', 'reports', 'usage', 'accounts',
 ];
 
 /* The security workspace: the facets of one company, in reading order.
@@ -7512,6 +7513,8 @@ const PALETTE_PLACES = [
     terms: 'reports problem report feedback bug issue complaints readers inbox support' },
   { view: 'usage', label: 'Claude usage', owner: true,
     terms: 'usage credits spend cost bill billing anthropic claude tokens api model' },
+  { view: 'accounts', label: 'Accounts', owner: true,
+    terms: 'accounts users signups sign ups members people registered emails readers' },
   { view: 'watchlist', label: 'Watchlist', terms: 'watchlist watching follow list' },
   { view: 'alerts', label: 'Alerts', terms: 'alerts alarms notifications fired' },
   { view: 'compare', label: 'Compare', terms: 'compare versus vs side by side' },
@@ -28688,6 +28691,109 @@ async function loadUsage(force) {
   }
 }
 
+/* ============================================================== ACCOUNTS ===
+ *
+ * Everyone who has made an account, for the owner and nobody else.
+ *
+ * Asked for as "build the accounts page instead for my domain account only to
+ * view", in place of reading the database over a Railway shell. Beside
+ * Problem Reports and Claude usage in the owner's group, whose entrance only
+ * the owner sees; `/api/admin/accounts` answers only the signed-in owner (not
+ * the write token), and the list is never cached, here or by the browser. */
+let accountsSeq = 0;
+
+async function fetchAccounts() {
+  const headers = {};
+  const csrf = window.OpticAuth ? window.OpticAuth.csrf() : '';
+  if (csrf) headers['X-Optic-CSRF'] = csrf;
+  const res = await fetch('/api/admin/accounts', { headers, credentials: 'same-origin', cache: 'no-store' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.detail || ('HTTP ' + res.status));
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+/* "Aug 14, 2026, 11:00 AM": the day and the year, since a signup can be months
+   old and a weekday alone would not say which week. */
+function accountStamp(iso, zone) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const opts = { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' };
+  try { return d.toLocaleString('en-US', { ...opts, timeZone: zone }); }
+  catch (e) { return d.toLocaleString('en-US', opts); }
+}
+
+function accountRowHTML(a, zone) {
+  const name = `${a.first_name || ''} ${a.last_name || ''}`.trim() || '(no name)';
+  const joined = a.created_at ? accountStamp(a.created_at, zone) : '';
+  const seen = a.last_login_at ? accountStamp(a.last_login_at, zone) : 'Never';
+  let status = a.email_verified ? 'Verified' : 'Not verified';
+  if (!a.is_active) status = 'Deactivated';
+  return `<tr>
+    <td class="name">${esc(name)}</td>
+    <td class="name">${esc(a.email || '')}</td>
+    <td class="name">${esc(joined)}</td>
+    <td class="name">${esc(seen)}</td>
+    <td class="name">${esc((a.methods || []).join(', ') || 'None')}</td>
+    <td class="name">${esc(status)}</td>
+  </tr>`;
+}
+
+function accountsHTML(data) {
+  const list = (data && data.accounts) || [];
+  const zone = activeZone();
+  const n = Number(data && data.total) || 0;
+  const lead = n
+    ? `${n.toLocaleString('en-US')} account${n === 1 ? '' : 's'}. ${
+      Number(data.last_7_days || 0)} new in the last 7 days, ${
+      Number(data.last_30_days || 0)} in the last 30. ${
+      Number(data.verified || 0)} with a verified email.`
+    : 'Nobody has made an account yet.';
+  const table = list.length ? `<div class="table-scroll"><table class="data accounts-table">
+      <thead><tr><th>Name</th><th>Email</th><th>Joined</th><th>Last sign-in</th>
+        <th>Signs in with</th><th>Status</th></tr></thead>
+      <tbody>${list.map((a) => accountRowHTML(a, zone)).join('')}</tbody>
+    </table></div>` : '';
+  return `<div class="panel" data-fixed="1">
+    <h2 tabindex="-1">Accounts</h2>
+    <p class="sub">${esc(lead)}</p>
+    ${table}
+    <p class="caveat">Newest first, times in your time zone. Only this account can open
+      this page. Passwords and sign-in tokens are never shown or sent here.</p>
+  </div>`;
+}
+
+async function loadAccounts(force) {
+  const host = views.accounts;
+  if (!host) return;
+  if (!isOwner()) {
+    STATE.accountsLoaded = false;
+    host.innerHTML = `<div class="panel" data-fixed="1"><h2 tabindex="-1">Accounts</h2>
+      <p class="sub">This is for the owner of this site. Sign in with the owner's address to read it.</p></div>`;
+    return;
+  }
+  if (!force && STATE.accountsLoaded) return;
+  host.innerHTML = `<div class="panel" data-fixed="1"><h2>Accounts</h2>
+    <p class="sub">Loading.</p></div>`;
+  const seq = ++accountsSeq;
+  try {
+    const data = await fetchAccounts();
+    if (seq !== accountsSeq) return;
+    if (!isOwner()) { loadAccounts(true); return; }
+    STATE.accountsLoaded = true;
+    host.innerHTML = accountsHTML(data);
+  } catch (err) {
+    if (seq !== accountsSeq) return;
+    STATE.accountsLoaded = false;
+    host.innerHTML = emptyHTML(
+      err.status === 401 || err.status === 403 ? 'This is not yours to read' : 'Could not load the accounts',
+      err.message || 'Try again shortly.');
+  }
+}
+
 function loadPaper() {
   renderPaperView();
   return paperMark();
@@ -30833,6 +30939,9 @@ function loadView(view, force) {
   if (view === 'analysts') return loadAnalysts(force);
   if (view === 'reports') return loadReports(force);
   if (view === 'usage') return loadUsage(force);
+  // Fetched on every visit rather than kept: the point of the page is who has
+  // signed up since you last looked.
+  if (view === 'accounts') return loadAccounts(true);
   if (view === 'swing') return loadSwing(force);
   if (view === 'earnings') return loadEarnings(force);
   if (view === 'compare') return loadCompare(force);
@@ -33589,7 +33698,7 @@ const NAV_GROUPS = [
    * token used to count as well, and one that had it pasted in once kept the
    * tab while signed out: "im not signed in, why can i see the reports
    * button? it should only show when the domain e-mail is logged in". */
-  { id: 'reports', label: 'Reports', views: ['reports', 'usage'], owner: true },
+  { id: 'reports', label: 'Reports', views: ['reports', 'usage', 'accounts'], owner: true },
 ];
 
 /** Whether this browser is signed in as the owner of the deployment.
@@ -33620,7 +33729,7 @@ const SUB_LABELS = {
   brief: 'Read', market: 'Macro', indices: 'Indices',
   watchlist: 'Watchlist', alerts: 'Alerts',
   explore: 'Explore', scan: 'Scan', insiders: 'Insiders', analysts: 'Analysts',
-  reports: 'Problem Reports', usage: 'Claude usage',
+  reports: 'Problem Reports', usage: 'Claude usage', accounts: 'Accounts',
   tracker: "Optic Portfolio", paper: 'Paper Desk', roth: 'Retirement',
 };
 
@@ -33644,6 +33753,7 @@ const SUB_TITLES = {
   analysts: 'Analysts. Rating and price-target actions by firm, newest first',
   reports: 'Problem Reports. What readers have told you is broken',
   usage: 'Claude usage. What the model has cost, by feature',
+  accounts: 'Accounts. Everyone who has signed up, newest first',
   paper: 'Paper Desk. Your own book, entered by hand and priced by the terminal',
   scan: 'Scan. Named screens over the ranked universe',
   tracker: "Optic Portfolio. The terminal's own paper-traded record",
@@ -34181,6 +34291,7 @@ if (window.OpticAuth && window.OpticAuth.on) {
     // list off the screen, and signing in as the owner draws it.
     if (STATE.view === 'reports') loadReports(true);
     if (STATE.view === 'usage') loadUsage(true);
+    if (STATE.view === 'accounts') loadAccounts(true);
   });
 }
 

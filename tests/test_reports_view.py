@@ -43,7 +43,7 @@ def test_it_is_in_the_views_map():
 
 def test_it_is_in_a_nav_group():
     code = _code(APP)
-    assert ("{ id: 'reports', label: 'Reports', views: ['reports', 'usage'], owner: true }"
+    assert ("{ id: 'reports', label: 'Reports', views: ['reports', 'usage', 'accounts'], owner: true }"
             in code)
 
 

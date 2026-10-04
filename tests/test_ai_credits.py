@@ -431,7 +431,7 @@ HTML = (ROOT / "static/index.html").read_text()
 def test_the_page_sits_beside_the_reports_for_the_owner_only():
     assert 'id="view-usage"' in HTML
     assert "usage: $('#view-usage')," in APP
-    assert "{ id: 'reports', label: 'Reports', views: ['reports', 'usage'], owner: true }" in APP
+    assert "{ id: 'reports', label: 'Reports', views: ['reports', 'usage', 'accounts'], owner: true }" in APP
     assert "if (view === 'usage') return loadUsage(force);" in APP
     assert "{ view: 'usage', label: 'Claude usage', owner: true," in APP
     assert "usage: 'Claude usage'," in APP

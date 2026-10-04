@@ -3557,6 +3557,35 @@ async def ai_usage(request: Request) -> Dict[str, Any]:
     return await _run(ai_store.usage)
 
 
+@app.get("/api/admin/accounts")
+async def admin_accounts(request: Request) -> JSONResponse:
+    """Everyone who has made an account, for the owner's Accounts page.
+
+    Asked for as "build the accounts page instead for my domain account only to
+    view". So the signed-in owner and nobody else: not `_write_guard`, whose
+    write token would let anyone holding that string read every reader's email.
+    The owner is ADMIN_EMAILS with a verified address (auth/admin.py), and the
+    CSRF header is required as on every owner request made with a cookie.
+    Nobody else learns anything from the refusal but that the page is not
+    theirs."""
+    refusal = HTTPException(status_code=403, detail="This page is for the owner of this site.")
+    if not auth_admin.configured():
+        raise refusal
+    try:
+        user = auth_deps.current_user(request)
+    except (sqlite3.Error, OSError):
+        raise HTTPException(status_code=503, detail="The accounts database is unavailable.")
+    if not user:
+        raise HTTPException(status_code=401,
+                            detail="Sign in with the owner's account to see this page.")
+    if not auth_admin.is_admin(user):
+        raise refusal
+    auth_deps.csrf_guard(request)
+    out = await _run(auth_store.accounts_overview)
+    # Never kept by a browser or a proxy: it is a list of people's addresses.
+    return JSONResponse(content=out, headers={"Cache-Control": "no-store"})
+
+
 # Resolving a report, one or all. The same guard as reading them, because it is
 # the same person, and writes as well: the token, or the signed-in owner with
 # the CSRF header. An update and never a delete (see feedback.resolve).

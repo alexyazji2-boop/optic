@@ -495,6 +495,59 @@ def auth_methods(user_id: str) -> Dict[str, Any]:
     }
 
 
+# ------------------------------------------------------------- accounts page
+
+
+def accounts_overview() -> Dict[str, Any]:
+    """Everyone who has made an account, for the owner's Accounts page.
+
+    Asked for as "build the accounts page instead for my domain account only to
+    view". The columns a person would recognise and nothing that works as a key:
+    no ids, no password hashes, no session or provider tokens, no provider
+    subject ids. How each person signs in is given as names (Password, Google,
+    a passkey count), which is what `auth_methods` already reports to the
+    person themselves. Newest first."""
+    # Imported here: linking imports this module at its top.
+    from .linking import label
+    rows = db.rows(
+        "SELECT u.id, u.email, u.first_name, u.last_name, u.email_verified, u.is_active, "
+        "u.created_at, u.last_login_at, "
+        "EXISTS(SELECT 1 FROM user_passwords p WHERE p.user_id = u.id) AS has_password, "
+        "(SELECT COUNT(*) FROM passkeys k WHERE k.user_id = u.id) AS passkeys "
+        "FROM users u ORDER BY u.created_at DESC")
+    providers: Dict[str, List[str]] = {}
+    for ident in db.rows("SELECT user_id, provider FROM auth_identities WHERE provider != 'email'"):
+        providers.setdefault(ident["user_id"], [])
+        if ident["provider"] not in providers[ident["user_id"]]:
+            providers[ident["user_id"]].append(ident["provider"])
+
+    week = db.in_seconds(-7 * 24 * 3600)
+    month = db.in_seconds(-30 * 24 * 3600)
+    people = []
+    for r in rows:
+        methods = (["Password"] if r["has_password"] else []) + [
+            label(p) for p in sorted(providers.get(r["id"], []))]
+        if r["passkeys"]:
+            methods.append("Passkey" if r["passkeys"] == 1 else "{} passkeys".format(r["passkeys"]))
+        people.append({
+            "email": r["email"],
+            "first_name": r["first_name"] or "",
+            "last_name": r["last_name"] or "",
+            "email_verified": bool(r["email_verified"]),
+            "is_active": bool(r["is_active"]),
+            "created_at": r["created_at"],
+            "last_login_at": r["last_login_at"],
+            "methods": methods,
+        })
+    return {
+        "total": len(people),
+        "last_7_days": sum(1 for p in people if p["created_at"] >= week),
+        "last_30_days": sum(1 for p in people if p["created_at"] >= month),
+        "verified": sum(1 for p in people if p["email_verified"]),
+        "accounts": people,
+    }
+
+
 # ------------------------------------------------------------- preferences
 
 
