@@ -10386,48 +10386,6 @@ body.cp-open { overflow: hidden; }
   color: var(--ink-muted);
 }
 
-/* ------------------------------------------------------ what changed */
-
-/* Sits between the price and the reads. Bordered rather than filled: it is
-   about the page it is on rather than a separate object, and a filled card here
-   competed with the price header directly above it. */
-.wc-block {
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  padding: var(--space-3) var(--space-4);
-}
-
-.wc-since { font-size: var(--t-caption); color: var(--ink-muted); }
-
-.wc-list {
-  list-style: none;
-  margin: var(--space-2) 0 0;
-  padding: 0;
-  display: grid;
-  gap: var(--space-0);
-}
-
-/* Label column fixed so the readings line up. On a phone it stacks, because a
-   14ch label plus "improving to deteriorating" does not fit 375px. */
-.wc-list li {
-  display: grid;
-  grid-template-columns: minmax(0, 16ch) minmax(0, 1fr);
-  align-items: baseline;
-  gap: var(--space-2);
-}
-
-.wc-label {
-  font-size: var(--t-caption);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--ink-muted);
-}
-.wc-text { font-variant-numeric: tabular-nums; color: var(--ink); }
-
-@media (max-width: 559px) {
-  .wc-list li { grid-template-columns: minmax(0, 1fr); gap: 0; }
-}
-
 /* ------------------------------------------------ market command centre */
 
 /* The strip. A band, not a row of cards.
@@ -15958,3 +15916,18 @@ body.ws-max[data-view="chart"] main { padding: 0; }
 /* Who filed a report, above the page and browser it came from. */
 .rp-item-from { margin: var(--space-2) 0 0; font-size: var(--t-small); color: var(--ink-2); }
 .rp-item-from a { color: var(--ink); }
+
+/* Key stats on the Overview: label and figure in rows, four columns on a
+   desktop and two on a phone. */
+.ks-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0 var(--space-5); margin: var(--space-2) 0 0; }
+.ks-row { display: flex; justify-content: space-between; gap: var(--space-3);
+  padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
+.ks-row dt { color: var(--ink-muted); font-size: var(--t-small); }
+.ks-row dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 600;
+  font-size: var(--t-small); text-align: right; }
+@media (max-width: 559px) {
+  .ks-grid { grid-template-columns: 1fr 1fr; gap: 0 var(--space-3); }
+  .ks-row { flex-direction: column; gap: 2px; }
+  .ks-row dd { text-align: left; }
+}

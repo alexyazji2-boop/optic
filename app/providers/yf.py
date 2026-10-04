@@ -779,6 +779,9 @@ class YFinanceProvider(MarketDataProvider):
                 "beta": _f(info.get("beta")),
                 "trailing_pe": _f(info.get("trailingPE")),
                 "forward_pe": _f(info.get("forwardPE")),
+                # Earnings per share, for the Overview's key stats beside the P/E.
+                "trailing_eps": _f(info.get("trailingEps")),
+                "forward_eps": _f(info.get("forwardEps")),
                 "price_to_book": _f(info.get("priceToBook")),
                 "peg_ratio": _f(info.get("pegRatio") or info.get("trailingPegRatio")),
                 "profit_margin": _f(info.get("profitMargins")),

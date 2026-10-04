@@ -662,6 +662,82 @@ const HEADER_DEFS = {
 
 /** Wrap a section heading so hovering it explains what the section is and how
  *  it relates to the market. Unknown headings pass through as plain text. */
+/* Title case on every heading.
+ *
+ * Asked for as "capitalize all titles across the terminal", over "Claude
+ * usage" and "Latest calls". The terminal's headings are written about three
+ * hundred ways (through hg, as literals, from data such as an instrument's
+ * name), so rather than rewrite each, every h1, h2 and h3 is put in title case
+ * as it reaches the page, and a heading added tomorrow comes out the same.
+ *
+ * The rules a style guide would give: every word capitalised but the small
+ * ones (a, and, of, the, vs...) unless first or after a colon; each part of a
+ * hyphenated word ("52-Week"); a word that already carries a capital or starts
+ * with something other than a letter is left as written (GEX, P/E, $SPY,
+ * iShares, 3m/10y). Only the heading's own words: a button inside it, such as
+ * an ask chip, and the muted qualifier after it are not titles. */
+const TITLE_SMALL = new Set(['a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'in', 'into',
+  'nor', 'of', 'on', 'or', 'per', 'the', 'to', 'vs', 'via', 'with']);
+
+function titleCase(text) {
+  let first = true;
+  return String(text).replace(/(\s*)(\S+)/g, (m, space, word) => {
+    const out = word.split('-').map((part, i) => {
+      const bare = part.replace(/^[^A-Za-z]+/, '');
+      const lead = part.slice(0, part.length - bare.length);
+      if (!bare || lead.length || /[A-Z]/.test(bare)) return part;
+      const lower = bare.toLowerCase();
+      if (TITLE_SMALL.has(lower.replace(/[^a-z]/g, '')) && !(first && i === 0)) return part;
+      return bare.charAt(0).toUpperCase() + bare.slice(1);
+    }).join('-');
+    first = /:$/.test(word);
+    return space + out;
+  });
+}
+
+const TITLE_SKIP = 'button:not(.gloss-term), input, select, .th-plain, .chip, .ask-pulse, .nw-count, .set-count, .rh-count, .pri-count, .al-group-n, time';
+
+function titleCaseHeading(h) {
+  const walk = document.createTreeWalker(h, NodeFilter.SHOW_TEXT);
+  let firstWord = true;
+  for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+    const el = n.parentElement;
+    if (!el || (el !== h && el.closest(TITLE_SKIP) && h.contains(el.closest(TITLE_SKIP)))) continue;
+    if (!/[a-z]/.test(n.data)) continue;
+    // A later text node in the same heading is not the first word.
+    const lead = firstWord ? n.data : 'x ' + n.data;
+    let next = titleCase(lead);
+    if (!firstWord) next = next.slice(2);
+    if (next !== n.data) n.data = next;
+    if (/\S/.test(n.data)) firstWord = false;
+  }
+}
+
+function titleCaseIn(root) {
+  if (!root || root.nodeType !== 1) return;
+  if (/^H[123]$/.test(root.tagName)) titleCaseHeading(root);
+  root.querySelectorAll('h1, h2, h3').forEach(titleCaseHeading);
+}
+
+(function watchHeadings() {
+  if (typeof MutationObserver !== 'function' || typeof document === 'undefined' || !document.body) return;
+  /* Straight from the observer's callback, which runs before the browser paints,
+     so a heading is never seen in its old case; and not on an animation frame,
+     which a tab in the background never gets. Changing a text node's data is not
+     a childList change, so the recasing does not wake the observer again. */
+  new MutationObserver((records) => {
+    const roots = new Set();
+    // Whatever arrives, and the heading it lands in: a glossary term or new text
+    // put inside a heading that is already there is that heading's to recase.
+    records.forEach((r) => r.addedNodes.forEach((n) => {
+      const el = n.nodeType === 1 ? n : n.parentElement;
+      if (el) roots.add((el.closest && el.closest('h1, h2, h3')) || el);
+    }));
+    roots.forEach(titleCaseIn);
+  }).observe(document.body, { childList: true, subtree: true });
+  titleCaseIn(document.body);
+}());
+
 function hg(title) {
   const def = HEADER_DEFS[String(title).toLowerCase().replace(/\s+/g, ' ').trim()];
   if (!def) return esc(title);
@@ -8191,171 +8267,10 @@ function pulseBar(value, direction) {
   return `<span class="pl-bar tone-${tone}" aria-hidden="true">${cells}</span>`;
 }
 
-/* ------------------------------------------------------------ what changed
- *
- * What moved on a symbol since the last time it was opened.
- *
- * **Built from a snapshot this file writes, because nothing on the server keeps
- * one.** `/api/snapshots` is ledger backups, not per-symbol state. So on every
- * ticker load a handful of comparable readings are stored under the symbol, and
- * the next visit diffs against them. Local, like the recents list: it is a
- * record of where one browser has been, it is worthless on another machine, and
- * a server-side version means a write on every ticker open plus a migration.
- * The shape is flat and versioned so moving it into SQL later is a copy.
- *
- * **What is compared, and what deliberately is not.** Price, the stance, the
- * conviction, the chart bias and trend score, the analyst-revision direction
- * and the earnings date. Every one is a reading the app already displays and
- * already stands behind.
- *
- * `verdict.composite_score` is NOT compared, even though it is the obvious
- * candidate and sits right beside the rest. The app's own evaluate module
- * reports that the composite "does not beat a single raw momentum number at 3
- * of 3 horizons", so a line reading "the score moved from 48 to 55" would be
- * reporting movement in a number the app has measured to be decoration. The
- * stance survives that finding; the total does not.
- */
-const SNAP_KEY = 'optic.snapshots.v1';
-const SNAP_MAX = 40;
-// Under this, "since you last looked" is the same session and there is nothing
-// to say. Four hours rather than a day so an overnight gap counts.
-const SNAP_MIN_AGE_MS = 4 * 3600 * 1000;
-
-function snapshotStore() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(SNAP_KEY) || '{}');
-    return (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
-  } catch (e) { return {}; }
-}
-
-/** The comparable readings, pulled out of a ticker payload. */
-function snapshotOf(d) {
-  const v = d.verdict || {};
-  const t = d.technicals || {};
-  const em = d.earnings_momentum || {};
-  return {
-    at: new Date().toISOString(),
-    price: (d.quote || {}).price,
-    stance: v.stance || null,
-    conviction: v.conviction || null,
-    bias: t.bias || null,
-    trend: t.trend_score,
-    revisions: em.available ? (em.read || null) : null,
-    earnings: d.next_earnings_date || null,
-  };
-}
-
-/** The snapshot from the previous visit, or null when there is nothing to say. */
-function priorSnapshot(symbol) {
-  const prev = snapshotStore()[String(symbol || '').toUpperCase()];
-  if (!prev || !prev.at) return null;
-  const age = Date.now() - Date.parse(prev.at);
-  // NaN age means a corrupted timestamp: treated as no snapshot rather than as
-  // an infinitely old one, which would report every reading as "changed".
-  if (!Number.isFinite(age) || age < SNAP_MIN_AGE_MS) return null;
-  return prev;
-}
-
-function writeSnapshot(symbol, snap) {
-  const sym = String(symbol || '').toUpperCase();
-  if (!sym || !snap) return;
-  const store = snapshotStore();
-  store[sym] = snap;
-  /* Trimmed oldest-first so the store cannot grow without bound on a machine
-   * that opens a lot of symbols. Sorted on the timestamp rather than on
-   * insertion order, because object key order is not a reliable record of it
-   * after a round trip through JSON. */
-  const keys = Object.keys(store);
-  if (keys.length > SNAP_MAX) {
-    keys.sort((a, b) => Date.parse(store[a].at || 0) - Date.parse(store[b].at || 0))
-      .slice(0, keys.length - SNAP_MAX)
-      .forEach((k) => delete store[k]);
-  }
-  try { localStorage.setItem(SNAP_KEY, JSON.stringify(store)); }
-  catch (e) { /* private mode: no history, so no what-changed block */ }
-}
-
-/* The differences worth a line, in the order they matter.
- *
- * Each entry decides for itself whether it changed, so a reading that was
- * missing on either visit is skipped rather than reported as a change from
- * nothing. That is the whole reason this is a list of small functions instead
- * of a loop over keys: "undefined became bullish" is not news.
- */
-function changesBetween(prev, now) {
-  const out = [];
-  const both = (a, b) => a !== null && a !== undefined && b !== null && b !== undefined;
-
-  if (both(prev.price, now.price) && prev.price) {
-    const pct = ((now.price - prev.price) / prev.price) * 100;
-    // Below a quarter of a percent this is noise and saying so is worse than
-    // saying nothing: it fills the block on a day nothing happened.
-    if (Math.abs(pct) >= 0.25) {
-      out.push({ label: 'Price', text: `${fmtPct(pct, 1)} to ${fmt(now.price, 2)}`,
-        tone: pct >= 0 ? 'up' : 'down' });
-    }
-  }
-  if (both(prev.stance, now.stance) && prev.stance !== now.stance) {
-    out.push({ label: 'Stance', text: `${prev.stance} to ${now.stance}`, tone: '' });
-  }
-  if (both(prev.conviction, now.conviction) && prev.conviction !== now.conviction) {
-    out.push({ label: 'Conviction', text: `${prev.conviction} to ${now.conviction}`, tone: '' });
-  }
-  if (both(prev.bias, now.bias) && prev.bias !== now.bias) {
-    out.push({ label: 'Chart bias', text: `${prev.bias} to ${now.bias}`, tone: '' });
-  }
-  if (both(prev.trend, now.trend) && Math.abs(now.trend - prev.trend) >= 10) {
-    out.push({ label: 'Trend score',
-      text: `${fmt(prev.trend, 0)} to ${fmt(now.trend, 0)}`,
-      tone: now.trend >= prev.trend ? 'up' : 'down' });
-  }
-  if (both(prev.revisions, now.revisions) && prev.revisions !== now.revisions) {
-    out.push({ label: 'Estimate revisions',
-      text: `${prev.revisions} to ${now.revisions}`, tone: '' });
-  }
-  if (both(prev.earnings, now.earnings) && prev.earnings !== now.earnings) {
-    out.push({ label: 'Next earnings',
-      text: `moved to ${now.earnings}`, tone: '' });
-  }
-  return out;
-}
-
-/** How long ago, in words. */
-function sinceWords(iso) {
-  const ms = Date.now() - Date.parse(iso);
-  if (!Number.isFinite(ms)) return 'earlier';
-  const hours = ms / 3600000;
-  if (hours < 36) return 'yesterday';
-  const days = Math.round(hours / 24);
-  if (days < 14) return `${days} days ago`;
-  const weeks = Math.round(days / 7);
-  return weeks < 9 ? `${weeks} weeks ago` : `${Math.round(days / 30)} months ago`;
-}
-
-/* The panel. Renders nothing at all when there is no prior visit or nothing
- * moved, rather than an empty card saying "no changes": a block that is always
- * there and usually empty is furniture. */
-function renderWhatChanged(d) {
-  const prev = STATE.priorSnapshot;
-  if (!prev) return '';
-  const changes = changesBetween(prev, snapshotOf(d));
-  if (!changes.length) return '';
-  return `<section class="pl-block span-all wc-block" aria-label="What changed">
-    <div class="hm-block-head">
-      <h2 class="pl-h">What changed${askPulse('whatchanged')}</h2>
-      <span class="wc-since">since you last opened ${esc(d.ticker || 'this')},
-        ${esc(sinceWords(prev.at))}</span>
-    </div>
-    <ul class="wc-list">${changes.map((c) => `<li>
-      <span class="wc-label">${esc(c.label)}</span>
-      <span class="wc-text ${esc(c.tone)}">${esc(c.text)}</span>
-    </li>`).join('')}</ul>
-    <p class="cc-method">Compared against the readings stored the last time this
-      symbol was opened in this browser, not against a fixed window. The
-      composite score is left out on purpose: Optic's own backtest reports it
-      does not beat a single momentum number, so a move in it is not news.</p>
-  </section>`;
-}
+/* What changed since the last visit to a symbol used to sit here. It was taken
+ * out when the reader said it was not useful; the readings it stored in this
+ * browser are cleared once so they do not linger. */
+try { localStorage.removeItem('optic.snapshots.v1'); } catch (e) { /* private mode */ }
 
 /* The stance panel.
  *
@@ -9614,12 +9529,6 @@ function renderSwing(d) {
 
   const html = `
   ${renderPriceHead(d, extQ)}
-  ${/* Above the reads, below the price.
-      * The first question on a return visit is "what did I miss", and the
-      * answer has to arrive before the panels that would have to be re-read to
-      * work it out. Renders nothing when there is no prior visit, so a first
-      * look at a symbol is unchanged. */''}
-  ${renderWhatChanged(d)}
   ${renderOpticPulse(d)}
   ${renderWhyMoving(d)}
   ${renderWhatsNext(d)}
@@ -11767,6 +11676,45 @@ function ovInvestingCard() {
     'trailing P/E, valuation and holding case');
 }
 
+/* The numbers people look a stock up for, in one place at the top.
+ *
+ * From a problem report: "I like the clean easy interface of yahoo finance to
+ * look up statistics and metrics on each stock such as PE ratio. I couldnt find
+ * that for a stock here". Every one of these was in the terminal, spread over
+ * the price header, the Investing tab and the Financials tab. They are here as
+ * a plain list of label and figure, first thing under the stock's name. A
+ * figure the feed does not carry is left out rather than shown as a dash: an
+ * ETF has no P/E, and eight dashes would read as a broken panel. */
+function keyStatsHTML(q) {
+  if (!q || q.price === null || q.price === undefined) return '';
+  const has = (v) => v !== null && v !== undefined && Number.isFinite(Number(v));
+  const money = (v) => (Math.abs(v) >= 1e6 ? '$' + fmtCompact(v, 2) : usd(v));
+  const rows = [
+    ['Market cap', has(q.market_cap) ? money(q.market_cap) : null],
+    ['P/E (trailing)', has(q.trailing_pe) && q.trailing_pe > 0 ? fmt(q.trailing_pe, 1) : null],
+    ['P/E (forward)', has(q.forward_pe) && q.forward_pe > 0 ? fmt(q.forward_pe, 1) : null],
+    ['EPS (trailing)', has(q.trailing_eps) ? usd(q.trailing_eps) : null],
+    ['EPS (forward)', has(q.forward_eps) ? usd(q.forward_eps) : null],
+    ['Dividend yield', has(q.dividend_yield) && q.dividend_yield > 0
+      ? fmt(q.dividend_yield * 100, 2) + '%' : null],
+    ['52-week range', has(q.fifty_two_low) && has(q.fifty_two_high)
+      ? `${usd(q.fifty_two_low)} to ${usd(q.fifty_two_high)}` : null],
+    ['Day range', has(q.day_low) && has(q.day_high)
+      ? `${usd(q.day_low)} to ${usd(q.day_high)}` : null],
+    ['Beta', has(q.beta) ? fmt(q.beta, 2) : null],
+    ['Volume', has(q.volume) ? fmtCompact(q.volume, 1) : null],
+    ['Average volume', has(q.avg_volume) ? fmtCompact(q.avg_volume, 1) : null],
+    ['Profit margin', has(q.profit_margin) ? fmt(q.profit_margin * 100, 1) + '%' : null],
+    ['Revenue growth', has(q.revenue_growth) ? fmtPct(q.revenue_growth * 100, 1) : null],
+  ].filter((r) => r[1] !== null);
+  if (!rows.length) return '';
+  return `<section class="panel ks-panel" data-fixed="1" aria-label="Key stats">
+    <h2>${hg('Key stats')}</h2>
+    <dl class="ks-grid">${rows.map(([k, v]) => `<div class="ks-row"><dt>${
+    esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
+  </section>`;
+}
+
 function renderOverviewView() {
   const d = STATE.swing || {};
   const q = d.quote || {};
@@ -11790,7 +11738,7 @@ function renderOverviewView() {
 
   views.overview.innerHTML = `${securityHeader('overview')}
     ${renderOpticPulse(d)}
-    ${renderWhatChanged(d)}
+    ${keyStatsHTML(q)}
     <div class="panel">
       <h2>${hg('The rest of this ticker')}</h2>
       <p class="sub">One reading from each facet, so the row says what is there
@@ -26198,16 +26146,6 @@ async function loadSwing(force, opts = {}) {
     if (requestId !== swingRequestId || STATE.ticker !== ticker) return null;
     outcome = { data };
     STATE.swing = data;
-    /* Read the prior snapshot BEFORE writing the new one, or the diff is
-     * always empty: writing first overwrites the thing being compared against.
-     *
-     * Held on STATE rather than passed down, because renderSwing composes a
-     * dozen panels and threading one extra argument through all of them to
-     * reach one of them is worse than a field. Re-read on every load so a
-     * silent refresh does not resurrect a diff the reader has already seen: it
-     * is set to null once the age threshold stops being met. */
-    STATE.priorSnapshot = priorSnapshot(data.ticker || STATE.ticker);
-    writeSnapshot(data.ticker || STATE.ticker, snapshotOf(data));
     if (data.macro && !data.macro.error) {
       STATE.market = STATE.market || {};
       STATE.market.macro = data.macro;
@@ -26710,9 +26648,6 @@ const PULSE_TOPICS = {
   /* The market-level counterpart to `whymoving`, for the command centre's
    * "What matters now". Asks about the cross-asset ranking that section shows
    * rather than about a single ticker, because that section has no ticker. */
-  whatchanged: 'Take what changed on {t} since I last looked at it. Which of these '
-    + 'moves actually alters the case, which is noise, and is there anything that '
-    + 'changed which this list would not have caught?',
   whatmatters: 'Look at today\'s cross-asset moves and the day\'s read. Which of these '
     + 'moves actually matters for someone holding US equities, which is noise, and what '
     + 'is the one thing on this list I should be watching tomorrow?',
@@ -26928,7 +26863,6 @@ const PULSE_ASK_LABELS = {
   // Situational reads: what do today's numbers mean?
   optionsactivity: 'What is the flow saying?',
   whatsnext: 'Which one matters most?',
-  whatchanged: 'Which of these matters?',
   whatmatters: 'Which move matters?',
   whymoving: 'How confident is this?',
   setup: 'Check my work',
