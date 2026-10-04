@@ -393,7 +393,7 @@
         ? credential.getClientExtensionResults() : {},
     };
     var signed = await api('/api/auth/passkeys/login/verify', {
-      method: 'POST', body: { credential: assertion },
+      method: 'POST', body: { credential: assertion, remember: rememberChoice() },
     });
     await refresh();
     return signed;
@@ -585,6 +585,7 @@
       + '<input type="email" name="email" autocomplete="username webauthn" required '
       + 'spellcheck="false"></label>'
       + passwordField('auth-password', 'Password', 'current-password')
+      + rememberField()
       + '<div class="auth-error" data-error hidden></div>'
       + '<button type="submit" class="btn primary auth-submit">Sign in</button>'
       + '<button type="button" class="auth-link" data-mode="forgot">'
@@ -592,6 +593,21 @@
       + '</form>'
       + '<p class="auth-alt">Do not have an account? '
       + '<button type="button" data-mode="signup">Create one</button></p>';
+  }
+
+  /* Remember me. Ticked, a sign-in lasts thirty days from the last visit, as
+   * every sign-in did before the box; unticked, it ends when the browser closes
+   * (or a day unused). Applies to every way in from this form: the password,
+   * a passkey, Google and Apple. The choice itself is not stored anywhere: the
+   * box starts ticked each time. */
+  function rememberField() {
+    return '<label class="auth-remember"><input type="checkbox" name="remember" checked>'
+      + '<span>Remember me</span></label>';
+  }
+
+  function rememberChoice() {
+    var box = modal && modal.querySelector('input[name="remember"]');
+    return box ? box.checked : true;
   }
 
   function paint() {
@@ -769,7 +785,8 @@
       var name = provider.getAttribute('data-provider');
       // A full-page redirect, not a popup: a popup is blocked as often as it
       // works, and Apple will not render inside one.
-      var query = '?next=' + encodeURIComponent(location.pathname + location.search);
+      var query = '?next=' + encodeURIComponent(location.pathname + location.search)
+        + (rememberChoice() ? '' : '&remember=0');
       location.href = '/api/auth/' + name + '/start' + query;
       return;
     }
@@ -823,7 +840,7 @@
         busy(form, true, 'Signing in...');
         var signed = await api('/api/auth/login', {
           method: 'POST',
-          body: { email: data.email, password: data['auth-password'] },
+          body: { email: data.email, password: data['auth-password'], remember: rememberChoice() },
         });
         await finish(signed);
         toast('Signed in as ' + signed.user.email);

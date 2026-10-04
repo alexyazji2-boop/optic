@@ -12035,6 +12035,18 @@ body.auth-open { overflow: hidden; }
 
 .auth-field { display: flex; flex-direction: column; gap: var(--space-2); }
 
+/* Remember me, between the password and the button. */
+.auth-remember {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--t-caption);
+  color: var(--ink-2);
+  cursor: pointer;
+  user-select: none;
+}
+.auth-remember input { width: 16px; height: 16px; margin: 0; accent-color: var(--brand); cursor: pointer; }
+
 .auth-field > span {
   font: 500 var(--t-caption)/1 var(--sans);
   color: var(--ink-2);
@@ -15768,6 +15780,9 @@ body.ws-max[data-view="chart"] main { padding: 0; }
     border-color: var(--btn-primary);
     background: color-mix(in srgb, var(--btn-primary) 14%, transparent);
   }
+  /* The gold outline says which page this is. The blue underline every
+     selected tab in nav.tabs carries drew a second mark under the chip. */
+  header.topbar #subnav button[aria-selected="true"]::after { content: none; }
 
   /* The market hours, one line. The day's timeline, the legend and the
      company block are a desktop's; the session and the countdown stay. */

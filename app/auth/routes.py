@@ -75,17 +75,24 @@ async def _send(to: str, subject: str, body: str, link: Optional[str] = None) ->
 # ------------------------------------------------------------------ state
 
 
-def _sign_in(response: Response, request: Request, user: Dict[str, Any]) -> None:
+def _remember(payload: Dict[str, Any]) -> bool:
+    """The "Remember me" box. Only an explicit false turns it off, so a caller
+    that does not send it (registering, a reset link) keeps the long session."""
+    return payload.get("remember") is not False
+
+
+def _sign_in(response: Response, request: Request, user: Dict[str, Any],
+             remember: bool = True) -> None:
     """Issue a session and the CSRF cookie, and record the login.
 
     A fresh session row every time rather than reusing one: that is the token
     rotation that matters, and it means the Settings list shows one entry per
     device instead of one entry that moves."""
     meta = deps.request_meta(request)
-    token, _session = store.create_session(user["id"], config.SESSION_TTL,
-                                           meta["ip"], meta["user_agent"])
+    token, _session = store.create_session(user["id"], config.session_ttl(remember),
+                                           meta["ip"], meta["user_agent"], remember)
     response.set_cookie(config.COOKIE_NAME, token,
-                        **config.cookie_kwargs(config.SESSION_TTL))
+                        **config.session_cookie_kwargs(remember))
     deps.issue_csrf(response)
     store.touch_login(user["id"])
 
@@ -143,10 +150,13 @@ async def me(request: Request, response: Response) -> Dict[str, Any]:
         # Slide the expiry forward at both ends: the row and the cookie. Guarded
         # on the token being present rather than assuming it, because setting the
         # cookie to an empty string would sign the reader out.
+        # A session signed in without Remember me keeps its short expiry and its
+        # browser-session cookie; sliding it to thirty days would undo the box.
         if session and token:
-            store.touch_session(session["id"], config.SESSION_TTL)
+            remember = bool(session.get("remember", 1))
+            store.touch_session(session["id"], config.session_ttl(remember))
             response.set_cookie(config.COOKIE_NAME, token,
-                                **config.cookie_kwargs(config.SESSION_TTL))
+                                **config.session_cookie_kwargs(remember))
     response.headers["Cache-Control"] = "no-store"
     return payload
 
@@ -237,7 +247,7 @@ async def login(request: Request, response: Response,
     if not user.get("is_active"):
         raise HTTPException(status_code=403, detail="That account is not active.")
 
-    _sign_in(response, request, user)
+    _sign_in(response, request, user, _remember(payload))
     ratelimit.clear("login", ratelimit.client_ip(request), ratelimit.key_bucket(email))
     return {"ok": True, "user": store.public_user(user),
             "methods": store.auth_methods(user["id"])}
@@ -626,7 +636,7 @@ async def passkey_login_verify(request: Request, response: Response,
         user, _passkey = passkeys_mod.verify_authentication(credential)
     except passkeys_mod.PasskeyError as exc:
         raise HTTPException(status_code=401, detail=str(exc))
-    _sign_in(response, request, user)
+    _sign_in(response, request, user, _remember(payload))
     return {"ok": True, "user": store.public_user(user),
             "methods": store.auth_methods(user["id"])}
 
@@ -743,7 +753,8 @@ def _home(code: str, provider: str = "", redirect_to: str = "") -> RedirectRespo
 @router.get("/{provider}/start")
 async def oauth_start(provider: str, request: Request,
                       link: int = Query(0),
-                      next: str = Query("", max_length=200)) -> Any:
+                      next: str = Query("", max_length=200),
+                      remember: int = Query(1)) -> Any:
     provider = _clean(provider, 20).lower()
     if provider not in ("google", "apple"):
         raise HTTPException(status_code=404, detail="Unknown sign-in provider.")
@@ -755,6 +766,10 @@ async def oauth_start(provider: str, request: Request,
         # comes from the session, never from the query string.
         user = deps.require_user(request)
         link_user_id = user["id"]
+        # Connecting a provider signs in afresh at the end, and that session
+        # keeps whatever this one was rather than the query's default.
+        session, _user = deps.session_and_user(request)
+        remember = int((session or {}).get("remember", 1))
 
     state = tokens.new_token()
     nonce = tokens.new_token()
@@ -764,7 +779,7 @@ async def oauth_start(provider: str, request: Request,
         log.info("%s sign-in unavailable: %s", provider, exc)
         return _home("config", provider)
     store.store_state(state, provider, nonce, next or None, link_user_id,
-                      config.OAUTH_STATE_TTL, verifier)
+                      config.OAUTH_STATE_TTL, verifier, remember=bool(remember))
     return RedirectResponse(url, status_code=303)
 
 
@@ -802,7 +817,7 @@ async def _finish_oauth(provider: str, request: Request,
 
     user = outcome["user"]
     response = _home("ok", provider, found.get("redirect_to") or "")
-    _sign_in(response, request, user)
+    _sign_in(response, request, user, bool(found.get("remember", 1)))
     return response
 
 

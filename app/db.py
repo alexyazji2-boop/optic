@@ -567,6 +567,19 @@ MIGRATION_8 = [
 ]
 
 
+# Remember me. Asked for as "include a remember me for next time on the log-in
+# page". A remembered session is what every session was before: thirty days,
+# slid forward on use, in a cookie that outlives the browser. One that is not
+# lives in a cookie the browser drops when it closes, and expires on the server
+# a day after it was last used in case the browser restores it. Existing
+# sessions are remembered, which is what they were issued as. The choice is
+# carried through a Google or Apple round trip on the state row.
+MIGRATION_9 = [
+    "ALTER TABLE sessions ADD COLUMN remember INTEGER NOT NULL DEFAULT 1",
+    "ALTER TABLE oauth_states ADD COLUMN remember INTEGER NOT NULL DEFAULT 1",
+]
+
+
 MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (1, "accounts", MIGRATION_1),
     (2, "oauth_pkce", MIGRATION_2),
@@ -576,6 +589,7 @@ MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (6, "feedback", MIGRATION_6),
     (7, "feedback_resolved", MIGRATION_7),
     (8, "feedback_reporter", MIGRATION_8),
+    (9, "remember_me", MIGRATION_9),
 ]
 
 

@@ -196,7 +196,8 @@ def clear_password(user_id: str) -> None:
 def create_session(user_id: str,
                    ttl_seconds: int,
                    ip_address: Optional[str] = None,
-                   user_agent: Optional[str] = None) -> Tuple[str, Dict[str, Any]]:
+                   user_agent: Optional[str] = None,
+                   remember: bool = True) -> Tuple[str, Dict[str, Any]]:
     """(token, session row). The token is returned once and never stored; only
     its hash goes to the database."""
     token = tokens.new_token()
@@ -204,9 +205,10 @@ def create_session(user_id: str,
     sid = db.new_id()
     db.execute(
         "INSERT INTO sessions (id,user_id,session_token_hash,expires_at,created_at,"
-        "last_used_at,ip_address,user_agent) VALUES (?,?,?,?,?,?,?,?)",
+        "last_used_at,ip_address,user_agent,remember) VALUES (?,?,?,?,?,?,?,?,?)",
         (sid, user_id, tokens.token_hash(token), db.in_seconds(ttl_seconds), now, now,
-         (ip_address or "")[:64] or None, (user_agent or "")[:300] or None))
+         (ip_address or "")[:64] or None, (user_agent or "")[:300] or None,
+         1 if remember else 0))
     found = db.row("SELECT * FROM sessions WHERE id = ?", (sid,))
     assert found is not None
     return token, found
@@ -446,13 +448,14 @@ def take_challenge(challenge: str, kind: str) -> Optional[Dict[str, Any]]:
 
 def store_state(state: str, provider: str, nonce: str,
                 redirect_to: Optional[str], link_user_id: Optional[str],
-                ttl_seconds: int, code_verifier: Optional[str] = None) -> None:
+                ttl_seconds: int, code_verifier: Optional[str] = None,
+                remember: bool = True) -> None:
     db.execute_many([
         ("DELETE FROM oauth_states WHERE expires_at < ?", (db.utcnow(),)),
         ("INSERT INTO oauth_states (state,provider,nonce,redirect_to,link_user_id,"
-         "code_verifier,expires_at,created_at) VALUES (?,?,?,?,?,?,?,?)",
+         "code_verifier,expires_at,created_at,remember) VALUES (?,?,?,?,?,?,?,?,?)",
          (state, provider, nonce, redirect_to, link_user_id, code_verifier,
-          db.in_seconds(ttl_seconds), db.utcnow())),
+          db.in_seconds(ttl_seconds), db.utcnow(), 1 if remember else 0)),
     ])
 
 

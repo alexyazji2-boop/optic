@@ -28,6 +28,24 @@ CSRF_COOKIE = "optic_csrf"
 # can be revoked from Settings and is destroyed by a password change.
 SESSION_TTL = int(os.environ.get("SESSION_TTL_SECONDS", str(30 * 24 * 3600)))
 
+# A session signed in without "Remember me": its cookie goes when the browser
+# closes, and the server lets it go after a day unused, because a browser that
+# restores its tabs restores session cookies with them.
+SHORT_SESSION_TTL = int(os.environ.get("SHORT_SESSION_TTL_SECONDS", str(24 * 3600)))
+
+
+def session_ttl(remember: bool) -> int:
+    return SESSION_TTL if remember else SHORT_SESSION_TTL
+
+
+def session_cookie_kwargs(remember: bool) -> Dict[str, Any]:
+    """The session cookie's settings. Without Remember me it has no max_age,
+    which is what makes it a browser-session cookie."""
+    kwargs = cookie_kwargs(SESSION_TTL)
+    if not remember:
+        kwargs.pop("max_age")
+    return kwargs
+
 # One-time links. Fifteen minutes for a reset is short enough that a link sitting
 # in a mailbox is not a standing key; a day for verification because people read
 # a signup email later.

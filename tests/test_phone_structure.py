@@ -100,3 +100,10 @@ def test_the_update_notice_spans_the_screen_above_the_bar():
     phone = _phone()
     assert "left: var(--space-3); right: var(--space-3); transform: none;" in phone
     assert "bottom: calc(60px + env(safe-area-inset-bottom));" in phone
+
+
+def test_a_selected_page_chip_has_no_blue_underline():
+    """Asked for as "remove this blue line", circled under Problem Reports: the
+    underline nav.tabs gives a selected tab, drawn under a chip already outlined
+    in gold. Checked at phone width: Macro's ::after content read none."""
+    assert 'header.topbar #subnav button[aria-selected="true"]::after { content: none; }' in _phone()
