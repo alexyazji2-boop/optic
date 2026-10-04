@@ -15983,6 +15983,7 @@ body.ws-max[data-view="chart"] main { padding: 0; }
   background: var(--surface);
   box-shadow: 1px 0 0 var(--grid);
 }
+.accounts-table tr { transition: background 90ms ease; }
 .accounts-table tr:hover td.ac-who { background: var(--surface-2); }
 table.data.accounts-table td.ac-who { white-space: normal; min-width: 120px; width: min(240px, 40vw); max-width: min(240px, 40vw); }
 .ac-name { display: block; color: var(--ink); }
