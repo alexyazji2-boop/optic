@@ -44,7 +44,10 @@ def _run(script):
     if not exe:
         pytest.skip("no JavaScriptCore on this machine")
     consts = APP[APP.index("const PULSE_CHART_RE ="):APP.index("const pulseChartBars")]
-    prelude = consts + _fn("function pulseChartsIn(html) {")
+    # The chart pass hands on to the source chips (test_pulse_sources).
+    sources = APP[APP.index("const PULSE_SOURCES = {"):APP.index("function pulseSourcesIn(")]
+    prelude = ("function esc(s) { return String(s); }\n" + consts + sources
+               + _fn("function pulseChartsIn(html) {") + _fn("function pulseSourcesIn(html) {"))
     out = subprocess.run([exe, "-e", prelude + script], capture_output=True, text=True,
                          timeout=60, cwd=str(ROOT))
     assert "RESULT:" in out.stdout, (out.stdout + out.stderr)[-1500:]

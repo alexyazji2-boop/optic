@@ -32691,9 +32691,56 @@ const pulseChartBars = new Map();
 let pulseChartSeq = 0;
 
 function pulseChartsIn(html) {
-  return html.replace(PULSE_CHART_RE, (m, sym, span) => `<div class="pulse-chart" data-sym="${
+  return pulseSourcesIn(html.replace(PULSE_CHART_RE, (m, sym, span) => `<div class="pulse-chart" data-sym="${
     sym}" data-span="${span}"><div class="pc-plot"></div><div class="pc-cap">${sym}, daily close over the last ${
-    PULSE_CHART_WORDS[span]}</div></div>`);
+    PULSE_CHART_WORDS[span]}</div></div>`));
+}
+
+/* Where a figure came from.
+ *
+ * Pulse tags a figure it takes from CONTEXT with `[[src KEY]]`, the top-level
+ * CONTEXT key that holds it (FORMAT_PROMPT), and the tag becomes a chip naming
+ * the panel, which opens that panel. The keys are the ones chatContextPayload
+ * sends, so a chip can only ever point at something the terminal computed and
+ * the reader can go and look at. A key not in this list is dropped rather than
+ * shown, so a tag the model made up never becomes a chip to nowhere. */
+const PULSE_SOURCES = {
+  quote: ['Quote', 'overview'],
+  verdict: ["Optic's read", 'overview'],
+  company: ['Company', 'overview'],
+  chart: ['Chart', 'chart'],
+  technicals: ['Technicals', 'swing'],
+  gex: ['Dealer gamma', 'swing'],
+  greeks: ['Greeks', 'swing'],
+  flow: ['Options flow', 'swing'],
+  entry_plan: ['Entry plan', 'swing'],
+  naked_ideas: ['Options ideas', 'swing'],
+  strategy_ideas: ['Options ideas', 'swing'],
+  long_term: ['Investing', 'long'],
+  earnings: ['Earnings', 'earnings'],
+  news: ['News', 'news'],
+  macro: ['Macro', 'market'],
+  sectors: ['Sectors', 'market'],
+  indices: ['Indices', 'indices'],
+  read: ['The Read', 'brief'],
+  compare: ['Compare', 'compare'],
+  tracker: ['Positions', 'tracker'],
+};
+const PULSE_SRC_RE = /\s?\[\[src ([a-z_]{2,20})\]\]/g;
+
+function pulseSourcesIn(html) {
+  return html.replace(PULSE_SRC_RE, (m, key) => {
+    const src = PULSE_SOURCES[key];
+    if (!src) return '';
+    return ` <button type="button" class="pulse-src" data-src-view="${src[1]}"
+      title="From ${esc(src[0])}. Open it">${esc(src[0])}</button>`;
+  });
+}
+
+/** The same reply with its source tags as words, for Copy and Save. */
+function pulseSourcesAsText(text) {
+  return String(text || '').replace(PULSE_SRC_RE, (m, key) => (PULSE_SOURCES[key]
+    ? ` (${PULSE_SOURCES[key][0]})` : ''));
 }
 
 function mountPulseCharts(root) {
@@ -32746,7 +32793,7 @@ function pulseExport() {
   const turns = chatState.messages || [];
   if (!turns.length) return;
   const md = ['# Pulse conversation', '', `Saved ${new Date().toLocaleString()}`, '']
-    .concat(turns.map((t) => `**${t.role === 'user' ? 'You' : 'Pulse'}:** ${t.content}\n`))
+    .concat(turns.map((t) => `**${t.role === 'user' ? 'You' : 'Pulse'}:** ${pulseSourcesAsText(t.content)}\n`))
     .join('\n');
   const url = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }));
   const a = document.createElement('a');
@@ -32763,7 +32810,7 @@ document.addEventListener('click', (evt) => {
   const copy = evt.target.closest('[data-pulse-copy]');
   if (copy) {
     const node = copy.closest('.msg');
-    const text = splitFollowUps((node && node.dataset.reply) || '').body;
+    const text = pulseSourcesAsText(splitFollowUps((node && node.dataset.reply) || '').body);
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text).then(() => {
         copy.textContent = 'Copied';
@@ -32776,6 +32823,14 @@ document.addEventListener('click', (evt) => {
   if (again) {
     const node = again.closest('.msg');
     if (node && node.dataset.question) draftPulse(node.dataset.question);
+    return;
+  }
+  // A source chip opens its panel. On a phone Pulse covers the page, so it
+  // closes to show it; on a wider screen it stays open beside the panel.
+  const src = evt.target.closest('[data-src-view]');
+  if (src) {
+    if (window.matchMedia('(max-width: 559px)').matches) $('#chat-close').click();
+    switchView(src.dataset.srcView);
     return;
   }
   if (evt.target.closest('[data-pulse-export]')) pulseExport();
@@ -32930,8 +32985,11 @@ function createStreamRenderer(bubble) {
       settledEl.innerHTML = pulseChartsIn(mdLite(target.slice(0, settledLen)));
       mountPulseCharts(settledEl);
     }
-    // Cheapest possible write for the part that changes every frame.
-    tailEl.textContent = visible.slice(settledLen);
+    // Cheapest possible write for the part that changes every frame. A source
+    // tag or chart line, whole or half-typed, waits for the paragraph to settle
+    // rather than flashing past as brackets.
+    tailEl.textContent = visible.slice(settledLen)
+      .replace(/\s?\[\[[^\]\n]*\]\]/g, '').replace(/\s?\[\[?[^\]\n]*$/, '');
   };
 
   const tick = () => {
@@ -34414,7 +34472,11 @@ function loadTicker(raw, destination) {
    * watchlist or alert row and a saved question all opened Options, asked
    * about as "whenever i click on a ticker, it goes straight to the options
    * tab... take it straight to the overview tab". */
-  const target = destination || (STATE.view === 'home' ? 'overview' : STATE.view);
+  /* Except from the chart. Someone searching while charting wants the next
+   * symbol's chart, not its Overview and a click back to Chart, so a search
+   * from there stays there. */
+  const landing = destination === SEARCH_LANDING && STATE.view === 'chart' ? 'chart' : destination;
+  const target = landing || (STATE.view === 'home' ? 'overview' : STATE.view);
 
   /* Landing on Charting has to move the chart's own symbol.
    *

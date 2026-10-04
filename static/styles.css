@@ -15881,6 +15881,28 @@ body.ws-max[data-view="chart"] main { padding: 0; }
 .ps-list li.fail::before { border-color: var(--neg); background: var(--neg); }
 
 /* A chart inside an answer. */
+/* A source chip after a figure in a Pulse answer: names the panel it came
+   from and opens it. Small and quiet so a paragraph with three of them still
+   reads as prose. */
+.pulse-src {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 0 2px;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: var(--t-caption);
+  line-height: 1.5;
+  vertical-align: baseline;
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.pulse-src:hover,
+.pulse-src:focus-visible { color: var(--ink); border-color: var(--ink-muted); }
+
 .pulse-chart {
   margin: var(--space-3) 0;
   padding: var(--space-3);

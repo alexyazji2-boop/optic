@@ -81,4 +81,15 @@ def test_the_fallback_still_exists_for_callers_that_pass_nothing():
     from places that are not a search."""
     code = _code()
     fn = code[code.index("function loadTicker(raw, destination) {"):]
-    assert "destination ||" in fn[:2000]
+    assert "const target = landing || (STATE.view === 'home' ? 'overview' : STATE.view);" in fn[:3000]
+
+
+def test_a_search_from_the_chart_stays_on_the_chart():
+    """Asked for as searching from the Chart tab keeping you on it. Checked in a
+    browser: MSFT searched on AAPL's chart charted MSFT, NVDA searched from
+    Earnings opened its Overview."""
+    code = open("static/app.js").read()
+    assert ("const landing = destination === SEARCH_LANDING && STATE.view === 'chart' ? 'chart' : destination;"
+            in code)
+    assert "const target = landing || (STATE.view === 'home' ? 'overview' : STATE.view);" in code
+    assert code.index("const landing =") < code.index("if (target === 'chart') STATE.chartSymbol = next;")
