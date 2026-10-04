@@ -23325,25 +23325,30 @@ function reportContextLine() {
     'Window: ' + size].join(' | ');
 }
 
-/* Where a report goes, which is not always where the page came from.
-
-   The POST was relative, so it followed the build rather than the product: a
-   report filed from a laptop dev server was written to that laptop's SQLite,
-   and one filed from a tunnel preview died with the tunnel. The button worked,
-   the reader was thanked, and the report never left the machine. It goes to
-   the live site from anywhere else now, and falls back to the relative path
-   when that cannot be reached, because a report kept on the wrong machine
-   still beats one dropped on the floor. */
-const REPORT_HOME = 'https://theopticterminal.com';
-const REPORT_HOME_HOSTS = ['theopticterminal.com', 'www.theopticterminal.com'];
-
-function reportTargets() {
-  const host = ((typeof location !== 'undefined' && location.hostname) || '').toLowerCase();
-  /* Relative on the live site itself: same-origin, so no preflight and no
-     dependence on the CORS allow-list being right. */
-  if (REPORT_HOME_HOSTS.indexOf(host) !== -1) return ['/api/feedback'];
-  return [REPORT_HOME + '/api/feedback', '/api/feedback'];
+/* A report needs an account.
+ *
+ * Asked for as "make sure that when someone wants to report a problem, they
+ * need to login with their account. when they submit a report, it should show
+ * their email here". A guest sees Sign in in place of the form; a signed-in
+ * reader sees which address the report will carry. The server checks as well:
+ * this is the page being honest about it, not the gate. */
+function reportAccount() {
+  const st = window.OpticAuth ? window.OpticAuth.state() : null;
+  return st && st.user && st.user.email ? st.user : null;
 }
+
+function paintReportGate() {
+  const gate = $('#rp-gate');
+  const form = $('#rp-form');
+  if (!gate || !form) return;
+  const who = reportAccount();
+  gate.hidden = !!who;
+  form.hidden = !who;
+  const line = $('#rp-who');
+  if (line) line.textContent = who ? `Sent from ${who.email}.` : '';
+}
+
+if (window.OpticAuth && window.OpticAuth.on) window.OpticAuth.on(paintReportGate);
 
 /* Opened from the pill, from Settings and from the footer, so the three cannot
  * drift into three different forms. */
@@ -23353,8 +23358,9 @@ function openReportPanel() {
   if (!panel || !btn) return;
   panel.hidden = false;
   btn.setAttribute('aria-expanded', 'true');
+  paintReportGate();
   const box = $('#rp-text');
-  if (box) box.focus();
+  if (box && reportAccount()) box.focus();
   reportCount();
 }
 
@@ -23398,30 +23404,30 @@ async function sendReport() {
     message: text + '\n\n' + reportContextLine(),
     page: STATE.view || '',
   });
-  const targets = reportTargets();
+  /* To this site, with the session. A report needs the account behind it, and
+     a session cookie only travels to its own site, so the cross-site post to
+     the live site from a test build is gone: a test build files to itself. */
   let data = null;
-  let reached = -1;
   let failure = null;
-
-  for (let i = 0; i < targets.length; i++) {
-    try {
-      const res = await fetch(targets[i], {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        /* Omitted rather than defaulted: cross-origin fetch sends no cookie
-           unless asked, and saying so here keeps it that way if this is ever
-           copied to a call that is same-origin. */
-        credentials: 'omit',
-        body: body,
-      });
-      const parsed = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(parsed.detail || ('HTTP ' + res.status));
-      data = parsed;
-      reached = i;
-      break;
-    } catch (err) {
-      failure = err;
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    const csrf = window.OpticAuth ? window.OpticAuth.csrf() : '';
+    if (csrf) headers['X-Optic-CSRF'] = csrf;
+    const res = await fetch('/api/feedback', {
+      method: 'POST', headers, credentials: 'same-origin', body,
+    });
+    const parsed = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      send.disabled = false;
+      paintReportGate();
+      note.className = 'rp-note is-bad';
+      note.textContent = parsed.detail || 'Sign in to report a problem.';
+      return;
     }
+    if (!res.ok) throw new Error(parsed.detail || ('HTTP ' + res.status));
+    data = parsed;
+  } catch (err) {
+    failure = err;
   }
   send.disabled = false;
 
@@ -23436,15 +23442,6 @@ async function sendReport() {
      "Thanks, we got it" over a report that went nowhere is the same lie the
      mailer refuses to tell about a verification link. Stored is still a win
      for the reader: it is kept and goes out with the next batch. */
-  if (reached > 0) {
-    /* The fallback answered, so this build could not reach the live site. The
-       text is left in the box on purpose: it was stored somewhere the operator
-       does not read, and the reader is the only one who can still act on it. */
-    note.className = 'rp-note is-warn';
-    note.textContent = 'Could not reach theopticterminal.com, so this is saved on '
-      + 'the build you are using rather than sent. Your text is still here.';
-    return;
-  }
   note.className = 'rp-note is-ok';
   note.textContent = data.emailed
     ? 'Sent. Thank you.'
@@ -28181,6 +28178,11 @@ function reportRowHTML(row) {
         >${action}</button>
     </div>
     <p class="rp-item-msg">${esc(row.message || '')}</p>
+    ${/* Who sent it: the signed-in account a report now needs, so the owner
+         can write back. Older reports were filed before an account was. */''}
+    <p class="rp-item-from">${row.reporter_email
+    ? `From <a href="mailto:${esc(row.reporter_email)}">${esc(row.reporter_email)}</a>`
+    : '<span class="muted">No account: sent before reports needed one</span>'}</p>
     <p class="rp-item-meta">${esc(meta.join(' · '))}</p>
     ${done ? `<p class="rp-item-resolved">Resolved <time datetime="${esc(row.resolved_at)}">${
     esc(reportStamp(row.resolved_at))}</time></p>` : ''}

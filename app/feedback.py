@@ -121,6 +121,8 @@ def _body(row: Dict[str, Any]) -> str:
     lines = [row["message"], "", "---"]
     if row.get("page"):
         lines.append("Page: {}".format(row["page"]))
+    if row.get("reporter_email"):
+        lines.append("From: {}".format(row["reporter_email"]))
     if row.get("reply_to"):
         lines.append("Reply to: {}".format(row["reply_to"]))
     if row.get("user_agent"):
@@ -131,8 +133,12 @@ def _body(row: Dict[str, Any]) -> str:
 
 
 def store(message: str, page: str = "", reply_to: str = "",
-          user_agent: str = "") -> Optional[Dict[str, Any]]:
-    """Write one report. None when the message is empty after trimming."""
+          user_agent: str = "", reporter: Optional[Dict[str, Any]] = None
+          ) -> Optional[Dict[str, Any]]:
+    """Write one report. None when the message is empty after trimming.
+
+    `reporter` is the signed-in account that filed it; its email and id are
+    kept with the report."""
     text = _clip(message, MAX_MESSAGE)
     if not text:
         return None
@@ -143,13 +149,15 @@ def store(message: str, page: str = "", reply_to: str = "",
         "reply_to": _clip(reply_to, MAX_REPLY_TO),
         "user_agent": _clip(user_agent, MAX_USER_AGENT),
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "reporter_email": _clip((reporter or {}).get("email"), MAX_REPLY_TO) or None,
+        "reporter_id": _clip((reporter or {}).get("id"), 64) or None,
     }
     with db.cursor(write=True) as conn:
         conn.execute(
-            "INSERT INTO feedback (id,message,page,reply_to,user_agent,emailed,created_at) "
-            "VALUES (?,?,?,?,?,0,?)",
+            "INSERT INTO feedback (id,message,page,reply_to,user_agent,emailed,created_at,"
+            "reporter_email,reporter_id) VALUES (?,?,?,?,?,0,?,?,?)",
             (row["id"], row["message"], row["page"], row["reply_to"],
-             row["user_agent"], row["created_at"]))
+             row["user_agent"], row["created_at"], row["reporter_email"], row["reporter_id"]))
     return row
 
 
@@ -159,14 +167,14 @@ def mark_emailed(report_id: str) -> None:
 
 
 def submit(message: str, page: str = "", reply_to: str = "",
-           user_agent: str = "") -> Dict[str, Any]:
+           user_agent: str = "", reporter: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Store a report, then try to email it.
 
     Blocking on the mail send, like the auth routes: the caller runs it off the
     event loop. A send that fails leaves `emailed = 0` and the row intact, so
     nothing is lost and the backlog can go out later.
     """
-    row = store(message, page, reply_to, user_agent)
+    row = store(message, page, reply_to, user_agent, reporter)
     if row is None:
         return {"stored": False, "emailed": False,
                 "reason": "The report was empty, so there was nothing to send."}
@@ -220,8 +228,8 @@ def log(limit: int = 50, include_resolved: bool = False,
              else "ORDER BY created_at DESC ")
     with db.cursor() as conn:
         rows = conn.execute(
-            "SELECT id,message,page,reply_to,user_agent,emailed,created_at,resolved_at "
-            "FROM feedback " + where + order + "LIMIT ?",
+            "SELECT id,message,page,reply_to,user_agent,emailed,created_at,resolved_at,"
+            "reporter_email FROM feedback " + where + order + "LIMIT ?",
             (limit,)).fetchall()
         counts = conn.execute(
             "SELECT COUNT(*) AS n, "

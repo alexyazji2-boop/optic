@@ -20,6 +20,8 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
+from app.auth import config as auth_config
+
 import app.main as main
 from app import feedback as fb
 from app.auth import mailer, ratelimit
@@ -359,39 +361,66 @@ def test_the_preflight_refuses_a_stranger(accounts):
     assert "access-control-allow-origin" not in res.headers
 
 
-def test_a_cross_origin_report_is_accepted_and_stored(accounts):
-    res = client.post("/api/feedback", json={"message": "The chart is blank."},
-                      headers={"Origin": "http://localhost:5173"})
-    assert res.status_code == 200
-    assert res.json()["stored"] is True
-    assert res.headers["access-control-allow-origin"] == "http://localhost:5173"
-    assert [r["message"] for r in fb.unsent()] == ["The chart is blank."]
+def _sign_in(email="reporter@example.com"):
+    client.cookies.clear()
+    client.post("/api/auth/register", json={
+        "first_name": "Rae", "email": email,
+        "password": "tungsten-carbide-9", "confirm_password": "tungsten-carbide-9"})
+    return {"X-Optic-CSRF": client.cookies.get(auth_config.CSRF_COOKIE) or ""}
 
+
+def test_a_report_needs_an_account_and_stores_nothing_without_one(accounts):
+    """Asked for as "make sure that when someone wants to report a problem,
+    they need to login with their account. when they submit a report, it
+    should show their email here"."""
+    client.cookies.clear()
+    res = client.post("/api/feedback", json={"message": "The chart is blank."})
+    assert res.status_code == 401
+    assert res.json()["detail"] == "Sign in to report a problem, so we can write back to you."
+    assert fb.unsent() == []
+
+
+def test_a_signed_in_report_carries_the_accounts_email(accounts):
+    csrf = _sign_in()
+    res = client.post("/api/feedback", json={"message": "The chart is blank."}, headers=csrf)
+    assert res.status_code == 200 and res.json()["stored"] is True
+    row = fb.log()["reports"][0]
+    assert row["message"] == "The chart is blank." and row["reporter_email"] == "reporter@example.com"
+    client.cookies.clear()
+
+
+def test_a_signed_in_report_without_the_csrf_pair_is_refused(accounts):
+    """A session cookie rides on this now, so it is checked like every other
+    signed-in write."""
+    _sign_in()
+    res = client.post("/api/feedback", json={"message": "forged"})
+    assert res.status_code == 403
+    assert fb.unsent() == []
+    client.cookies.clear()
 
 def test_a_refused_report_still_carries_the_allow_header(accounts):
     """The subtle one, and the reason this route renders its own responses.
 
     An HTTPException is rendered by Starlette's own handler, which never sees
-    the route's response object. Raised, a 400 or a 429 reaches a cross-origin
+    the route's response object. Raised, a 401 or a 429 reaches a cross-origin
     caller stripped of its allow header, the browser reports an opaque CORS
     failure, and the reader is told the report did not send rather than why."""
-    res = client.post("/api/feedback", json={"message": "   "},
+    client.cookies.clear()
+    res = client.post("/api/feedback", json={"message": "x"},
                       headers={"Origin": "http://localhost:5173"})
-    assert res.status_code == 400
-    assert res.json()["detail"] == "A report needs a message."
+    assert res.status_code == 401
     assert res.headers["access-control-allow-origin"] == "http://localhost:5173"
-
 
 def test_the_rate_limit_refusal_also_carries_it(accounts):
     """The same hazard on the path a reader is most likely to actually meet."""
+    csrf = _sign_in()
+    headers = dict(csrf, Origin="http://localhost:5173")
     for i in range(10):
-        client.post("/api/feedback", json={"message": "report {}".format(i)},
-                    headers={"Origin": "http://localhost:5173"})
-    res = client.post("/api/feedback", json={"message": "one too many"},
-                      headers={"Origin": "http://localhost:5173"})
+        client.post("/api/feedback", json={"message": "report {}".format(i)}, headers=headers)
+    res = client.post("/api/feedback", json={"message": "one too many"}, headers=headers)
     assert res.status_code == 429
     assert res.headers["access-control-allow-origin"] == "http://localhost:5173"
-
+    client.cookies.clear()
 
 def test_the_response_varies_on_origin(accounts):
     """The body is identical for every origin but the allow header is not, and
@@ -474,54 +503,27 @@ def test_the_log_limit_is_bounded(accounts):
 # ------------------------------------------------- client wiring, routing
 
 
-def test_a_report_is_sent_to_the_live_site_from_any_other_build():
-    code = _code(APP_JS)
-    fn = code[code.index("function reportTargets()"):]
-    fn = fn[:fn.index("\nfunction openReportPanel")]
-    assert "REPORT_HOME + '/api/feedback'" in fn
-    assert "https://theopticterminal.com" in _code(APP_JS[:APP_JS.index("function reportTargets()")]) \
-        or "REPORT_HOME = 'https://theopticterminal.com'" in code
-
-
-def test_the_live_site_posts_to_itself(accounts):
-    """Relative there: same-origin, so no preflight and no dependence on the
-    allow-list being right on the one build that matters most."""
-    code = _code(APP_JS)
-    fn = code[code.index("function reportTargets()"):]
-    fn = fn[:fn.index("\nfunction openReportPanel")]
-    assert "location.hostname" in fn
-    assert "REPORT_HOME_HOSTS" in fn
-    assert "return ['/api/feedback']" in fn
-    for host in fb.CANONICAL_HOSTS:
-        assert "'{}'".format(host) in code, \
-            "the client and the server must agree on what the live site is"
-
-
-def test_sendreport_uses_the_targets_rather_than_a_relative_path():
-    """The defect was the relative path. A second one left behind in the send
-    path would restore it for every reader."""
+def test_a_report_is_sent_to_this_site_with_the_session():
+    """A report needs the account behind it and a session cookie only travels
+    to its own site, so the cross-site post to the live site from a test build
+    is gone: a build files to itself, with the CSRF pair."""
     fn = _code(APP_JS[APP_JS.index("async function sendReport()"):])
     fn = fn[:fn.index("\nfunction installReportPanel")]
-    assert "reportTargets()" in fn
-    assert "fetch('/api/feedback'" not in fn, "the relative path is back"
+    assert "fetch('/api/feedback', {" in fn and "credentials: 'same-origin'" in fn
+    assert "headers['X-Optic-CSRF'] = csrf;" in fn
+    assert "function reportTargets()" not in APP_JS and "credentials: 'omit'" not in fn
 
-
-def test_a_report_that_cannot_reach_the_live_site_is_not_lost_or_called_sent():
-    """Both halves matter. Falling back keeps the report; saying so keeps the
-    reader from believing it arrived when it is sitting on their own machine,
-    which is why the text is left in the box on that path alone."""
-    fn = APP_JS[APP_JS.index("async function sendReport()"):]
-    fn = fn[:fn.index("\nfunction installReportPanel")]
-    code = _code(fn)
-    assert "for (let i = 0; i < targets.length; i++)" in code, "no fallback loop"
-    assert "is-warn" in code
-    assert "Could not reach theopticterminal.com" in fn
-    # `box.value = ''` must not run on the fallback branch: it is the reader's
-    # only remaining copy of what they wrote.
-    warn = code[code.index("is-warn"):]
-    assert warn.index("return;") < warn.index("box.value = ''"), \
-        "the fallback branch clears the reader's text"
-
+def test_a_guest_is_asked_to_sign_in_and_a_reader_told_which_address_it_carries():
+    gate = INDEX[INDEX.index('id="rp-gate"'):INDEX.index('id="rp-form"')]
+    assert "Sign in to report a problem, so we can write back to you." in gate
+    assert 'data-auth-open="signin"' in gate
+    paint = _code(APP_JS[APP_JS.index("function paintReportGate()"):])
+    paint = paint[:paint.index("\n}\n")]
+    assert "gate.hidden = !!who;" in paint and "form.hidden = !who;" in paint
+    assert "`Sent from ${who.email}.`" in paint
+    send = APP_JS[APP_JS.index("async function sendReport()"):]
+    send = send[:send.index("\nfunction installReportPanel")]
+    assert "if (res.status === 401) {" in send and "paintReportGate();" in send
 
 def test_the_warn_state_has_a_colour():
     """A class the send path sets and the stylesheet has never heard of renders

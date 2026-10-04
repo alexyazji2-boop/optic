@@ -3460,6 +3460,17 @@ async def submit_feedback(request: Request,
     """
     cors = _feedback_cors(request)
     try:
+        # An account first. Asked for as "make sure that when someone wants to
+        # report a problem, they need to login with their account", so the
+        # operator knows who filed it and can write back. A session cookie
+        # rides on this now, so the CSRF pair is checked as on every other
+        # signed-in write.
+        reporter = auth_deps.current_user(request)
+        if not reporter:
+            raise HTTPException(
+                status_code=401,
+                detail="Sign in to report a problem, so we can write back to you.")
+        auth_deps.csrf_guard(request)
         auth_ratelimit.guard(request, "feedback", auth_ratelimit.client_ip(request))
         message = payload.get("message")
         if not isinstance(message, str) or not message.strip():
@@ -3471,7 +3482,7 @@ async def submit_feedback(request: Request,
         # User-Agent is just another string the reporter typed.
         agent = request.headers.get("user-agent") or ""
 
-        out = await _run(feedback_mod.submit, message, page, reply, agent)
+        out = await _run(feedback_mod.submit, message, page, reply, agent, reporter)
         auth_ratelimit.record("feedback", auth_ratelimit.client_ip(request))
     except HTTPException as exc:
         return JSONResponse(status_code=exc.status_code,

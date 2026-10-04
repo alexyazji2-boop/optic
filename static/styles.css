@@ -15954,3 +15954,7 @@ body.ws-max[data-view="chart"] main { padding: 0; }
   padding: var(--space-3);
 }
 #chat .chat-actions #chat-send { border-radius: var(--r-pill); }
+
+/* Who filed a report, above the page and browser it came from. */
+.rp-item-from { margin: var(--space-2) 0 0; font-size: var(--t-small); color: var(--ink-2); }
+.rp-item-from a { color: var(--ink); }

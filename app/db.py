@@ -556,6 +556,17 @@ MIGRATION_7 = [
 ]
 
 
+# Who filed a report. Asked for as "make sure that when someone wants to report
+# a problem, they need to login with their account. when they submit a report,
+# it should show their email here": a report now needs an account, and carries
+# the account's email and id, so the operator knows who to write back to. Older
+# reports, filed before an account was needed, have neither.
+MIGRATION_8 = [
+    "ALTER TABLE feedback ADD COLUMN reporter_email TEXT",
+    "ALTER TABLE feedback ADD COLUMN reporter_id TEXT",
+]
+
+
 MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (1, "accounts", MIGRATION_1),
     (2, "oauth_pkce", MIGRATION_2),
@@ -564,6 +575,7 @@ MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (5, "theses", MIGRATION_5),
     (6, "feedback", MIGRATION_6),
     (7, "feedback_resolved", MIGRATION_7),
+    (8, "feedback_reporter", MIGRATION_8),
 ]
 
 

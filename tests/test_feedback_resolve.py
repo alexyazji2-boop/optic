@@ -134,11 +134,16 @@ def test_an_existing_database_gains_the_column_with_every_report_open(tmp_path, 
     before = [m for m in accounts_db.MIGRATIONS if m[0] <= 6]
     monkeypatch.setattr(accounts_db, "MIGRATIONS", before)
     accounts_db.migrate()
-    fb.store("filed before this shipped")
+    # As the store of the day wrote it, before reports carried an account.
+    with accounts_db.cursor(write=True) as conn:
+        conn.execute("INSERT INTO feedback (id,message,page,reply_to,user_agent,emailed,created_at) "
+                     "VALUES ('old','filed before this shipped','','','',0,'2026-09-01T00:00:00+00:00')")
     monkeypatch.undo()
     monkeypatch.setattr(accounts_db, "DB_PATH", str(tmp_path / "accounts.db"))
-    assert 7 in accounts_db.migrate()
-    assert [r["message"] for r in fb.log()["reports"]] == ["filed before this shipped"]
+    assert {7, 8} <= set(accounts_db.migrate())
+    reports = fb.log()["reports"]
+    assert [r["message"] for r in reports] == ["filed before this shipped"]
+    assert reports[0]["reporter_email"] is None, "no account on a report from before"
 
 
 # ------------------------------------------------------------ the routes
@@ -433,3 +438,16 @@ def test_every_new_control_has_its_handler():
                      ("data-reports-resolve-all", "resolveAllReports("),
                      ("data-reports-tab", "showReportsTab(")):
         assert "closest('[%s]')" % attr in listener and fn in listener, attr
+
+
+def test_a_report_shows_who_sent_it():
+    """"when they submit a report, it should show their email here": the
+    account's address, as a link to write back on, and a plain word on a report
+    from before an account was needed."""
+    _js(PAGE, ["reportStamp", "reportRowHTML"], """
+      var html = reportRowHTML({ id: 'a', message: 'x', created_at: null, reporter_email: 'rae@example.com' });
+      assert(html.indexOf('From <a href="mailto:rae@example.com">rae@example.com</a>') >= 0, html);
+      assert(html.indexOf('rp-item-from') < html.indexOf('rp-item-meta'), 'above the page and browser');
+      var old = reportRowHTML({ id: 'b', message: 'x', created_at: null });
+      assert(old.indexOf('No account: sent before reports needed one') >= 0, old);
+    """)
