@@ -15968,3 +15968,27 @@ body.ws-max[data-view="chart"] main { padding: 0; }
   .ks-row { flex-direction: column; gap: 2px; }
   .ks-row dd { text-align: left; }
 }
+
+/* ================================================================ accounts ===
+   The owner's Accounts table. It scrolls sideways inside its panel on a narrow
+   screen, and the first column (name over email) stays put while it does, so
+   the dates and status scrolled into view still sit beside whose they are. */
+.ac-scroll { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
+.ac-scroll:focus-visible { outline: 2px solid var(--focus, var(--brand)); outline-offset: 2px; }
+.accounts-table th:first-child,
+.accounts-table td.ac-who {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface);
+  box-shadow: 1px 0 0 var(--grid);
+}
+.accounts-table tr:hover td.ac-who { background: var(--surface-2); }
+table.data.accounts-table td.ac-who { white-space: normal; min-width: 120px; width: min(240px, 40vw); max-width: min(240px, 40vw); }
+.ac-name { display: block; color: var(--ink); }
+.ac-email {
+  display: block;
+  color: var(--ink-muted);
+  font-size: var(--t-caption);
+  overflow-wrap: anywhere;
+}

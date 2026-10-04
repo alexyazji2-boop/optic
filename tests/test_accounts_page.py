@@ -114,3 +114,19 @@ def test_dates_carry_the_year():
     stamp = APP[APP.index("function accountStamp(iso, zone) {"):]
     assert "year: 'numeric'" in stamp[:stamp.index("\n}\n")]
     assert "accountStamp(a.created_at, zone)" in APP and "accountStamp(a.last_login_at, zone)" in APP
+
+
+def test_the_table_scrolls_sideways_with_the_person_pinned():
+    """Asked for as "make sure the table is scrollable", over a phone screenshot
+    scrolled to Status with the names and emails out of sight. Checked at 375px:
+    scrolled fully right, the person column sat at the left edge and a long
+    email wrapped at its dots inside it."""
+    CSS = (ROOT / "static/styles.css").read_text()
+    assert '<div class="table-scroll ac-scroll" tabindex="0" role="region"' in APP, "keys scroll it too"
+    assert ".ac-scroll { overflow-x: auto;" in CSS
+    sticky = CSS[CSS.index(".accounts-table th:first-child,\n.accounts-table td.ac-who {"):]
+    sticky = sticky[:sticky.index("}")]
+    assert "position: sticky;" in sticky and "left: 0;" in sticky and "background: var(--surface);" in sticky
+    assert "table.data.accounts-table td.ac-who { white-space: normal;" in CSS, (
+        "beats table.data td's nowrap, or a long email runs over the next column")
+    assert "${esc(a.email || '').replace(/@/g, '<wbr>@')" in APP, "escaped first, then the break points"

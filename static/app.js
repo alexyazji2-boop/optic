@@ -28733,8 +28733,8 @@ function accountRowHTML(a, zone) {
   let status = a.email_verified ? 'Verified' : 'Not verified';
   if (!a.is_active) status = 'Deactivated';
   return `<tr>
-    <td class="name">${esc(name)}</td>
-    <td class="name">${esc(a.email || '')}</td>
+    <td class="name ac-who"><span class="ac-name">${esc(name)}</span>
+      <span class="ac-email">${esc(a.email || '').replace(/@/g, '<wbr>@').replace(/\./g, '.<wbr>')}</span></td>
     <td class="name">${esc(joined)}</td>
     <td class="name">${esc(seen)}</td>
     <td class="name">${esc((a.methods || []).join(', ') || 'None')}</td>
@@ -28752,8 +28752,13 @@ function accountsHTML(data) {
       Number(data.last_30_days || 0)} in the last 30. ${
       Number(data.verified || 0)} with a verified email.`
     : 'Nobody has made an account yet.';
-  const table = list.length ? `<div class="table-scroll"><table class="data accounts-table">
-      <thead><tr><th>Name</th><th>Email</th><th>Joined</th><th>Last sign-in</th>
+  /* Scrolls sideways where the screen is narrower than the table, with the
+     person pinned on the left so a row scrolled to its Status still says whose
+     it is. Focusable, so the arrow keys scroll it as well as a swipe or a
+     trackpad. */
+  const table = list.length ? `<div class="table-scroll ac-scroll" tabindex="0" role="region"
+      aria-label="Accounts table, scrolls sideways"><table class="data accounts-table">
+      <thead><tr><th>Person</th><th>Joined</th><th>Last sign-in</th>
         <th>Signs in with</th><th>Status</th></tr></thead>
       <tbody>${list.map((a) => accountRowHTML(a, zone)).join('')}</tbody>
     </table></div>` : '';
