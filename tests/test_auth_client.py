@@ -618,21 +618,27 @@ def test_intraday_ranges_on_the_workspace_use_the_intraday_endpoint():
     assert "/api/intraday/" in APP_JS
 
 
-def test_each_bar_size_keeps_its_own_drawings():
-    """Drawings store a bar index. Index 120 on a daily series and on a
-    five-minute series are different moments by a factor of about eighty, so
-    they were hidden under a day, while one drawn there was still saved into
-    the daily set and turned up on the daily chart at the wrong date. Each
-    intraday size keeps its own set now, and the daily key is unchanged so no
-    existing drawing moves."""
+def test_a_drawing_never_lands_on_another_bar_sizes_dates():
+    """The property this protected is unchanged: a drawing made on one bar size
+    must not turn up on another at the wrong date.
+
+    It used to be met by keeping each bar size's drawings apart, because a
+    drawing was a bar index and index 120 is a different moment on a daily and
+    a five-minute series. Drawings are a time and a price now (WS_DRAW_KEY_V2),
+    which means the same moment on every bar size, so one set per symbol is
+    drawn on all of them -- at its own dates, instead of vanishing when the bar
+    size changes. The per-size keys survive only to find a legacy set and
+    migrate it while its own bar size is on screen, the one place its indices
+    still mean what they meant."""
+    assert "return wsDrawStore[STATE.chartSymbol || ''] || [];" in APP_JS
+    assert "wsDrawStore[STATE.chartSymbol || ''] = list;" in APP_JS
     key = APP_JS[APP_JS.index("function wsDrawKey()"):]
     key = key[:key.index("\n}")]
-    # Per window too, as each window's bar indices are its own; the default
-    # window keeps the bare size, so drawings made before windows still match.
     assert "if (isIntradayRange(chartRange)) return `${sym}@${intradayBarsKey()}`;" in key
     assert "return chartInterval === 'weekly' ? `${sym}@1W` : sym;" in key
-    assert "return wsDrawStore[wsDrawKey()] || [];" in APP_JS
-    assert "wsDrawStore[wsDrawKey()] = list;" in APP_JS
+    migrate = APP_JS[APP_JS.index("function wsMigrateLegacy(axis)"):]
+    migrate = migrate[:migrate.index("\n}")]
+    assert "const key = wsDrawKey();" in migrate, "only the set for the size on screen"
     block = APP_JS[APP_JS.index("function wsRenderDrawings()"):]
     block = block[:block.index("const NS =")]
     assert "if (isIntradayRange(chartRange)) { layer.innerHTML = ''; return; }" not in block
@@ -676,8 +682,13 @@ def test_the_span_on_screen_is_named_in_something_a_reader_knows():
     """`chartRange` is a bare minute count on an intraday rung, so the legend
     read "4h · 240". The window is what the server actually fetched."""
     assert "function chartWindowLabel()" in APP_JS
-    assert APP_JS.count("chartWindowLabel()") >= 3, \
-        "definition plus the legend and the status line"
+    # The legend's title stopped repeating the header (see wsLegend), so the
+    # status line is the one place the window is named in words.
+    assert APP_JS.count("chartWindowLabel()") >= 2, \
+        "definition plus the status line"
+    status = APP_JS[APP_JS.index("function updateStatus()"):]
+    status = status[:status.index("\nfunction ")]
+    assert "chartWindowLabel()" in status
     ladder = APP_JS.split("const CHART_INTERVALS = [", 1)[1]
     ladder = ladder[:ladder.index("\n];")]
     for ln in ladder.splitlines():

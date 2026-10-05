@@ -68,6 +68,7 @@ def _run(scenario: str) -> str:
            "var chartInteractive = false;\n"
            + consts + "\n"
            + "\n".join(_raw_fn(n) for n in ("wheelPixels", "queueChartFrame", "zoomedWindow",
+                                             "zoomedWindowAt", "chartMayAct",
                                              "flushChartWheel", "chartBarsPerPixel", "alignToWindow",
                                              "interactiveRedraw"))
            + "\n" + scenario + "\nprint('TEST_OK');")
@@ -207,7 +208,8 @@ def test_the_handler_routes_pinch_swipe_and_scroll():
 def test_a_gesture_mid_redraw_stays_with_the_chart():
     fn = APP[APP.index("document.addEventListener('wheel', (evt) => {"):]
     fn = fn[:fn.index("}, { passive: false });")]
-    assert "const held = chartZoomHost(evt);" in fn
+    # `wheel: true`: a gesture held over a drawing is still this chart's.
+    assert "const held = chartZoomHost(evt, { wheel: true });" in fn
     assert "if (!held || !chartWheel || chartWheel.target.host !== held.host) return;" in fn
     # and the flush re-reads the frame, since the old SVG measures zero wide
     assert "const svg = w.target.host.querySelector('svg.chart');" in _fn("flushChartWheel")

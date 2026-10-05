@@ -126,10 +126,13 @@ def test_the_amounts_are_tabular_so_the_column_compares():
 def test_a_one_item_menu_is_a_button_not_a_dropdown():
     """Fibs held a single checkbox, so switching Fibonacci levels on took two
     clicks and a dropdown that existed to show one row."""
-    toolbar = _fn("wsToolbar")
+    # wsMenuHTML renders every overlay menu, on the bar and in the drawer, so
+    # the rule is written once for both.
+    toolbar = _fn("wsMenuHTML")
     assert "if (m.items.length === 1 && !m.manage) {" in toolbar
     assert 'data-ws-toggle="${esc(id)}"' in toolbar
     assert 'aria-pressed="${on}"' in toolbar
+    assert "map(wsMenuHTML)" in _fn("wsToolbar")
 
 
 def test_the_toggle_has_a_click_handler_not_a_change_one():
@@ -148,7 +151,7 @@ def test_the_toggle_has_a_click_handler_not_a_change_one():
 def test_the_rule_is_about_the_item_count_not_about_fibs():
     """So a menu that loses its options becomes a button and one that gains a
     second becomes a dropdown again, with nothing to remember."""
-    toolbar = _fn("wsToolbar")
+    toolbar = _fn("wsToolbar") + _fn("wsMenuHTML")
     assert "'fibs'" not in toolbar and '"fibs"' not in toolbar
     # Stages is the single-item menu, a plain on/off overlay with nothing else
     # to put in a dropdown, which is what makes rendering it as a button safe.
@@ -163,4 +166,4 @@ def test_the_rule_is_about_the_item_count_not_about_fibs():
 def test_a_manage_menu_stays_a_dropdown():
     """The Indicators menu needs somewhere to put "Manage indicators…" even if
     it were down to one item."""
-    assert "!m.manage" in _fn("wsToolbar")
+    assert "!m.manage" in _fn("wsMenuHTML")

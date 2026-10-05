@@ -90,10 +90,13 @@ def test_the_pointer_is_only_noted_as_it_moves():
 
 
 def test_a_ruler_does_not_look_up_the_window_per_drawing():
+    """Still true, and more so. The ruler used to read the window's dates once
+    per draw through a cached lookup; it reads none now, because each end
+    carries the time it is anchored to. The one thing per draw that reads the
+    series is the time axis, built once and shared by every drawing."""
     body = fn("wsRenderDrawings")
-    assert body.count("wsSeries(STATE.chartData)") == 1
-    assert "shownDates || (shownDates =" in body
-    assert "const dates = seriesDates();" in body
+    assert body.count("wsTimeAxis()") == 1
+    assert "wsSeries(" not in body, "the painter reads the series per drawing again"
 
 
 # ------------------------------------------------ the shape follows
@@ -101,7 +104,9 @@ def test_a_ruler_does_not_look_up_the_window_per_drawing():
 
 def test_one_painter_draws_the_saved_drawings_and_the_one_being_placed():
     body = fn("wsRenderDrawings")
-    assert "const paint = (dr, preview) => {" in body
+    assert "const paint = (stored, preview) => {" in body
+    # Converted once, at the top, from the times the drawing keeps.
+    assert "const dr = { ...stored, points: (stored.points || []).map(toIdx) };" in body
     assert "list.forEach((dr) => paint(dr, false));" in body
     assert "paint(ghost, true);" in body
     # A preview is not selectable and carries no grab targets.

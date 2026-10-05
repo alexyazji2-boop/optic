@@ -90,18 +90,40 @@ def toolbar():
 # ----------------------------------------------------------- fewer buttons
 
 
-def test_the_toolbar_carries_twenty_controls_at_rest(toolbar):
-    """Tools is the phone's drawer button and is not drawn above 560px. The
-    eighteenth is the trading-hours menu beside the bar size, asked for as its
-    own dropdown of "regular trading hours" and "extended hours"; the
-    nineteenth is Chart read, beside Reset and outside the drawer (see
-    tests/test_chart_read.py); the twentieth is Area, the third chart style
-    beside Candles and Line, all three as icons."""
-    got = toolbar["shutButtons"]
-    assert got[0] == "Tools"
-    assert got[1:] == ["Reset", "Chart read", "Levels", "Stages", "Indicators", "Volume 1", "Events",
-                       "Studies", "Panes", "1D", "Regular hours", "1M", "3M", "6M", "1Y",
-                       "All", "Candles", "Line", "Area", "Colours"], got
+def _labels(html):
+    """Button names in order, as the fixture's own helper reads them."""
+    out = []
+    for m in re.finditer(r"<button[^>]*>([\s\S]*?)</button>", html):
+        text = " ".join(re.sub(r"<[^>]*>", "", m.group(1)).replace("&#9662;", "").split())
+        label = re.search(r'aria-label="([^"]*)"', m.group(0))
+        out.append(text or (label.group(1) if label else ""))
+    return out
+
+
+def _bar_and_drawer(html):
+    """What is on the bar, and what is behind More. The drawer is everything
+    from its wrapper up to the spacer, which follows it directly."""
+    at = html.index('<div class="ws-tools">')
+    gap = html.index('<div class="ws-toolbar-gap">')
+    return _labels(html[:at] + html[gap:]), _labels(html[at:gap])
+
+
+def test_the_bar_carries_fifteen_controls_and_more_holds_seven(toolbar):
+    """Asked for as a chart-first workspace with "secondary settings in a
+    compact menu". At 1440x900 the bar was two rows of twenty controls over
+    the chart. On it now: what changes the chart often and what says what the
+    chart is. Behind More: the layers you set up once. Every option is still
+    there, and More's count says how many of those layers are on.
+
+    The eighteenth control of the old count, the trading-hours menu, stays on
+    the bar beside the bar size, as asked for ("regular trading hours" and
+    "extended hours"); Chart read stays beside Reset and outside the drawer
+    (see tests/test_chart_read.py); Fit is new, fit-to-data beside Reset zoom."""
+    bar, drawer = _bar_and_drawer(toolbar["shut"])
+    assert bar == ["Indicators", "More 1", "Chart read", "Reset", "1D", "Regular hours",
+                   "1M", "3M", "6M", "1Y", "All", "Fit", "Candles", "Line", "Area"], bar
+    assert drawer == ["Levels", "Stages", "Volume 1", "Events", "Studies", "Panes",
+                      "Colours"], drawer
 
 
 def test_the_interval_is_one_menu_naming_the_size_on_screen(toolbar):
@@ -139,9 +161,12 @@ def test_every_level_is_on_one_menu():
 
 
 def test_panes_sit_with_the_other_things_that_go_on_the_chart(toolbar):
+    """In the drawer with the other layers, and Colours with them now: the
+    drawer is one wrapper since it became the desktop's menu too."""
     shut = toolbar["shut"]
-    assert shut.index('data-ws-menu="panes"') < shut.index('class="ws-toolbar-gap"')
-    assert shut.index('data-ws-menu="colors"') > shut.index('class="ws-toolbar-gap"')
+    drawer = shut[shut.index('<div class="ws-tools">'):shut.index('<div class="ws-toolbar-gap">')]
+    assert 'data-ws-menu="panes"' in drawer and 'data-ws-menu="colors"' in drawer
+    assert 'data-ws-menu="indicators"' not in drawer, "Indicators stays on the bar"
 
 
 # ------------------------------------------------------- full screen apart

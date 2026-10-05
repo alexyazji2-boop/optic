@@ -1929,6 +1929,12 @@ function lineChart(opts) {
     const tags = series
       .map((se, si) => {
         if (se.tag === false || se.hidden) return null;
+        /* The price is tagged once, by the price tag above. In candle mode its
+         * series is hidden and skipped anyway; in line mode it is drawn, and
+         * took a second tag of its own: measured on SPY weekly, two pills
+         * reading 769.64 stacked 17px apart beside the last close, the lower
+         * one pushed down by the collision pass below. */
+        if (priceTag && se === priceSeries) return null;
         const li = se.values.reduce((acc, v, i) => (v !== null && isFinite(v) ? i : acc), -1);
         if (li < 0) return null;
         return { si, color: (se.tints && se.tints[li]) || se.color,
@@ -2575,6 +2581,9 @@ function lineChart(opts) {
       fill: 'transparent', style: 'cursor:ns-resize;touch-action:none',
       'data-price-scale': '1',
     });
+    // Neither gesture is visible on the axis, so it says what they are.
+    grip.appendChild(s('title', {}, 'Drag up or down to stretch the price scale. '
+      + 'Double-click to fit it to the bars on screen.'));
     grip.addEventListener('pointerdown', (evt) => {
       if (evt.button !== 0) return;
       evt.preventDefault();
@@ -2618,6 +2627,11 @@ function lineChart(opts) {
     yOf: (v) => Y(v),
     indexAt: (px) => (n <= 1 ? 0
       : Math.round(((px - m.l) / plotW) * (n - 1))),
+    // The same inverse without the rounding, and without clamping to the bars.
+    // A drawing placed between two candles, or dragged past the last one, has
+    // to keep the position it was given: rounding to a whole bar is snapping,
+    // and snapping is the reader's choice rather than this function's.
+    indexAtExact: (px) => (n <= 1 ? 0 : ((px - m.l) / plotW) * (n - 1)),
     priceAt: (py) => hi - ((py - m.t) / priceH) * (hi - lo),
   };
 

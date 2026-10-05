@@ -451,6 +451,9 @@ SETTINGS = {
     "optic.chart.accum.v1", "optic.chart.cloud921.v1", "optic.chart.cloud2150.v1",
     "optic.chart.zones.v2", "optic.chart.vol.v2", "optic.chart.vbp.v2", "optic.chart.sr.v2",
     "optic.chart.ma.v2", "optic.chart.ema.v2", "optic.chart.fib.v2", "optic.chart.insiders.v2",
+    # Whether drawing points snap to a candle's O/H/L/C. A preference about the
+    # tool, like the chart style beside it, not anything the reader made.
+    "optic.chart.snap.v1",
     # A fact about this browser's authenticator, needed before anyone signs in.
     "optic.auth.passkeyMade",
     # The session machinery itself.
@@ -491,3 +494,7 @@ def test_what_the_report_named_is_personal():
     personal = _personal()
     assert {"optic.recent.v1", "optic.pulse.history.v1", "optic.research.v1"} <= personal
     assert {"optic.chart.drawings.v1", "optic.paper.v1", "optic.roth.inputs"} <= personal
+    # The time-anchored store holds the same drawings as the one it replaced,
+    # so it is wiped on the same change of reader. Missing it here would leave
+    # one person's trend lines on the next person's chart.
+    assert "optic.chart.drawings.v2" in personal

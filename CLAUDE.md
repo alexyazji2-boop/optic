@@ -157,9 +157,8 @@ error; it takes the click and nothing happens, which reads as a slow app.
 **`sliceSeries` on an intraday range returns everything.** `spec.daily` is undefined
 on an intraday spec, `Math.min(undefined, total)` is NaN, and `arr.slice(NaN)` is
 `slice(0)`. The 1D and 5D pills on the Charting tab drew the full daily history for
-months. Intraday now comes from `/api/intraday` via `wsIntraday`, and drawings are
-hidden on it because a stored bar index means a different moment on a five-minute
-series.
+months. Intraday now comes from `/api/intraday` via `wsIntraday`. Drawings show on
+it too, now that they are stored as times (see the chart coordinate note below).
 
 **The assistant must survive the accounts database being gone.** `_spend_guard` reads
 the daily allowance out of SQLite and catches `(sqlite3.Error, OSError)` — OSError as
@@ -350,9 +349,17 @@ condition vacuously true and leaves the selector's subject live. A dead-code pas
 **CSS specificity:** `table.data td` (0,1,2) beats `.fx-detail td` (0,1,1). A declaration
 on an element always beats an inherited value.
 
-**Chart coordinate system.** `svg.chartFrame` carries `{margin, plotW, bars, indexAt}`.
-Drawings store bar index + price, never pixels, so they survive a resize. The drawing
-layer sits *over* the chart because the chart is rebuilt on every redraw.
+**Chart coordinate system.** `svg.chartFrame` carries `{margin, plotW, bars, indexAt,
+indexAtExact}`. Drawings store `{t, p}`, a time in epoch ms and a price, per symbol
+(`optic.chart.drawings.v2`), and `wsTimeAxis()` turns a time into a fractional index on
+the bars on screen at draw time. They were `{i, p}`, and the index was into the slice on
+screen when the drawing was placed, so every pan, zoom, range change and resize moved
+the candles out from under it: 243px after a 150-bar pan on SPY hourly. A stored index
+is only meaningful against the exact slice it was read from, and nothing records which
+slice that was; convert at the boundary and never keep one. Past the last bar the axis
+counts trading days, across the session for intraday bars (`wsSessionWindow`), so a
+point in the empty space on the right lands on its candle when that candle arrives.
+The drawing layer sits *over* the chart because the chart is rebuilt on every redraw.
 `.ws-draw-svg { pointer-events: none }` is load-bearing — without it the overlay swallows
 the crosshair, tooltip, hover and measure gestures.
 

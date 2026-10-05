@@ -87,8 +87,12 @@ def test_panning_yields_to_every_more_specific_gesture():
     ws = _block(APP, "registerChartZoom('ws-chart', {", "});")
     assert "wsTool === 'cursor'" in ws
     # And resolution is by registered host id, so only a registered chart pans.
-    resolver = _block(APP, "function chartZoomTarget(evt) {", "\n}")
+    resolver = _block(APP, "function chartHostFor(", "\n}")
     assert "evt.target.closest('#' + hostId)" in resolver
+    # The drawing overlay resolves to its chart for the wheel only. A press on
+    # a drawing must still find no target, or the pan would take the drag that
+    # moves the drawing; tests/test_chart_wheel_routing.py drives both.
+    assert "if (wheel && adapter.overlay && evt.target.closest(adapter.overlay))" in resolver
 
 
 def test_panning_declines_touch_so_the_page_can_still_scroll():

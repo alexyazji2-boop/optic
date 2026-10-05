@@ -131,7 +131,8 @@ const PERSONAL_KEYS = [
   'optic.watchlists.v1',         // named watchlists, signed out
   'optic.watches.v1',            // watches, signed out
   'optic.thesis.v1',             // theses, and their backing copy signed in
-  'optic.chart.drawings.v1',
+  'optic.chart.drawings.v1',     // drawings as bar indices, until migrated
+  'optic.chart.drawings.v2',     // drawings as times; see WS_DRAW_KEY_V2
   'optic.chart.notes.v1',
   'optic.chart.checks.v1',       // the pre-trade checklist, ticked per symbol
   'optic.paper.v1',              // paper trades
@@ -15877,8 +15878,8 @@ function wsLegend(ps) {
    *
    * The legend sits ON the chart, so with a full indicator set it covers the
    * top-left corner — which on a rising series is exactly where the reader is
-   * looking. Collapsed it keeps the one thing worth having at all times (which
-   * symbol, which timeframe) plus a count, so nothing is hidden without a trace.
+   * looking. Collapsed it keeps a count, so nothing is hidden without a trace;
+   * which symbol and which timeframe is the header's job.
    *
    * The header is the toggle rather than a separate control: it is already the
    * widest target in the box and a 12px chevron beside it would be the smaller,
@@ -15894,10 +15895,10 @@ function wsLegend(ps) {
       aria-expanded="${wsLegendOpen}"
       title="${wsLegendOpen ? 'Collapse' : 'Expand'} the indicator list">
       <span class="ws-leg-caret">${wsLegendOpen ? '&#9662;' : '&#9656;'}</span>
-      ${esc(STATE.chartSymbol || '')}
-      <span class="ws-leg-args">${esc(chartIntervalLabel())} · ${esc(chartWindowLabel())}</span>
-      ${wsLegendOpen ? '' : `<span class="ws-leg-count">${n} overlay${
-  n === 1 ? '' : 's'}${draws ? ` · ${draws} drawing${draws === 1 ? '' : 's'}` : ''}</span>`}
+      ${/* The count only. The symbol and bar size were here as well, a third
+           and fourth copy of what the header now says beside the price. */''}
+      <span class="ws-leg-count">${n} overlay${
+  n === 1 ? '' : 's'}${draws ? ` · ${draws} drawing${draws === 1 ? '' : 's'}` : ''}</span>
     </button>
     ${wsLegendOpen ? `<div class="ws-leg-body">
       ${rows.join('') || '<div class="ws-leg-empty">No overlays. Add one from the toolbar</div>'}
@@ -15935,6 +15936,13 @@ function wsToolRail() {
   wsTool === t.id ? ' on' : ''}" data-ws-tool="${t.id}" title="${esc(t.hint)}"
       aria-pressed="${wsTool === t.id}">${t.glyph}</button>`).join('')}
     <div class="ws-rail-gap"></div>
+    <button type="button" class="ws-tool ws-snap${wsSnapOn ? ' on' : ''}" data-ws-snap
+      aria-pressed="${wsSnapOn}" title="${wsSnapOn
+    ? 'Snapping on: points land on a candle and its open, high, low or close. Click to place freely.'
+    : 'Snapping off: points land exactly where you click. Click to snap to candles.'}"
+      ><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none"
+      stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path
+      d="M4 2v6a4 4 0 0 0 8 0V2M4 5h2.5M9.5 5H12"/></svg></button>
     <button type="button" class="ws-tool" data-ws-undo
       ${wsUndoStack.length ? '' : 'disabled'}
       title="Undo (${navigator.platform.startsWith('Mac') ? '\u2318Z' : 'Ctrl+Z'})">&#8630;</button>
@@ -16113,36 +16121,31 @@ function wsStudiesMenu() {
   </div>`;
 }
 
-/* Whether the narrow-screen tool drawer is open.
+/* Whether the More drawer is open.
  *
  * A module variable rather than a class on the element, because the toolbar is
  * rebuilt wholesale (`tb.outerHTML = wsToolbar()`) every time a dropdown opens
- * or closes. A DOM-only flag would be thrown away by the next menu click.
- *
- * Only consulted below 560px; above it the drawer is `display: contents` and
- * this does nothing. */
+ * or closes. A DOM-only flag would be thrown away by the next menu click. */
 let wsToolsOpen = false;
 
-/* The toolbar, with the tool groups drawer-able on a phone.
+/* The toolbar: what you reach for constantly on the bar, the rest behind More.
  *
- * Measured at 375x812 on the Charting tab: nineteen buttons wrapping to six
- * rows, 227px of controls above a chart that got 443. More than a third of the
- * screen was toolbar, which is the "mobile chart controls create unusable
- * layouts" report.
+ * On a phone first. Measured at 375x812: nineteen buttons wrapping to six
+ * rows, 227px of controls above a chart that got 443, which was the "mobile
+ * chart controls create unusable layouts" report. Then on a desktop, asked for
+ * as a chart-first workspace with "secondary settings in a compact menu": at
+ * 1440x900 the bar was still two rows, eleven controls, and the chart under it
+ * 590px of a 900px window.
  *
- * What stays inline is what you reach for constantly and what tells you what
- * you are looking at: the range pills, the interval, Line/Candles, and Reset
- * zoom when there is a zoom to reset. What goes in the drawer is the set you
- * open, use once and close: Fibs, Trends, Indicators, the study menus, Panes
- * and Colours.
+ * On the bar: Indicators, Chart read, Reset, the interval, the session, the
+ * range pills, Reset zoom when there is a zoom to reset, and Line/Candles --
+ * what changes the chart often, and what tells you what you are looking at.
+ * Behind More: Levels, Stages, Volume, Events, the studies, Panes and Colours,
+ * the set you open, use once and close. Its button counts what in there is on.
  *
- * **Two wrappers, not one, and they are not reordered.** The tool groups are
- * not contiguous in this toolbar -- Panes and Colours sit after the pills --
- * and moving them together would change the desktop layout to fix a phone.
- * Both wrappers carry the same class and both are `display: contents` above
- * the breakpoint, so on a desktop the flex row is exactly what it was: the
- * children become flex items of the toolbar again and the wrapper contributes
- * no box of its own. */
+ * One drawer at every width, drawn two ways by CSS. On a phone it opens into
+ * the toolbar's own rows, as it always has. Above that it floats under the
+ * bar, so opening it does not shrink the chart and make every candle jump. */
 /* ============================================================ CHART READ ===
  *
  * What the chart says, in a few lines, from numbers the terminal has already
@@ -16249,16 +16252,83 @@ function chartReadHTML() {
       title="Put a question about this chart in Pulse's box">Explain chart with Pulse</button>`;
 }
 
+/* One overlay menu, or a direct toggle when it holds a single item.
+ *
+ * Lifted out of wsToolbar's loop when Indicators came out of the drawer and the
+ * other menus stayed in it: two call sites now, and they must render a menu the
+ * same way or the drawer's Levels and the toolbar's Indicators drift apart. */
+function wsMenuHTML(m) {
+  const activeCount = m.items.filter(wsOverlayOn).length;
+  /* A menu with one option is not a menu.
+   *
+   * Fibs held a single checkbox, so switching Fibonacci levels on took two
+   * clicks and a dropdown that existed to show one row. It toggles directly
+   * now. Written as a rule about the item count rather than a special case
+   * for `fibs`, so a menu that loses its options becomes a button and one
+   * that gains a second becomes a dropdown again, with nothing to remember.
+   *
+   * `manage` menus are excluded: the Indicators menu would still need
+   * somewhere to put "Manage indicators…" even at one item.
+   *
+   * No count badge here. `1` beside a single lit toggle says nothing the lit
+   * state does not, and aria-pressed carries it for a screen reader, which
+   * aria-expanded would have got wrong: this opens nothing. */
+  if (m.items.length === 1 && !m.manage) {
+    const id = m.items[0];
+    const on = wsOverlayOn(id);
+    const st = overlayStyle(id);
+    return `<button type="button" class="ws-menu-btn${on ? ' on' : ''}"
+      data-ws-toggle="${esc(id)}" aria-pressed="${on}"
+      title="${on ? 'Hide' : 'Show'} ${esc(st.label)}">${esc(m.label)}</button>`;
+  }
+  return `<div class="ws-menu">
+    <button type="button" class="ws-menu-btn${activeCount ? ' on' : ''}"
+      data-ws-menu="${m.id}" aria-expanded="${wsMenuOpen === m.id}">
+      ${esc(m.label)}${activeCount ? ` <span class="ws-count">${activeCount}</span>` : ''}
+    </button>
+    ${wsMenuOpen === m.id ? `<div class="ws-menu-pop">
+      ${m.id === 'indicators' ? wsPresetsHTML() : ''}
+      ${m.items.map((id) => {
+  const st = overlayStyle(id);
+  return `<label class="ws-opt">
+        <input type="checkbox" data-ws-opt="${esc(id)}"${wsOverlayOn(id) ? ' checked' : ''}>
+        <span class="ws-swatch" style="background:${st.color}"></span>
+        <span>${esc(st.label)}</span>
+      </label>`;
+}).join('')}
+      ${m.manage ? `<button type="button" class="ws-manage" data-ws-manage>
+        Manage indicators…</button>` : ''}
+    </div>` : ''}
+  </div>`;
+}
+
+/* The menus folded into More. Everything but Indicators: see wsToolbar. */
+function wsTuckedMenus() {
+  return WS_MENUS.filter((m) => m.id !== 'indicators');
+}
+
+/* How many things inside More are drawing, for the count on its button. A
+ * closed drawer that hid what was switched on would make a lit overlay
+ * impossible to trace back to its control. Colours are left out: a colour is
+ * a look, not something drawn on the chart. */
+function wsTuckedOn() {
+  const studies = IND_FALLBACK_CATALOGUE.filter((r) => IND_PRICE_PANE.includes(r.id)
+    && indicatorIds.includes(r.id)).length;
+  return wsTuckedMenus().reduce((n, m) => n + m.items.filter(wsOverlayOn).length, 0)
+    + studies + wsPanesOpen.length;
+}
+
 function wsToolbar() {
+  const inside = wsTuckedOn();
   return `<div class="ws-toolbar${wsToolsOpen ? ' tools-open' : ''}">
-    <button type="button" class="ws-menu-btn ws-tools-btn" data-ws-tools
+    ${/* Indicators stays on the bar at every width: it is the menu a chart is
+         set up from, and the one a reader opens most. */''}
+    ${WS_MENUS.filter((m) => m.id === 'indicators').map(wsMenuHTML).join('')}
+    <button type="button" class="ws-menu-btn ws-tools-btn${inside ? ' on' : ''}" data-ws-tools
       aria-expanded="${wsToolsOpen}"
-      title="Drawing tools, studies, panes and colours">Tools</button>
-    ${/* Beside Tools rather than inside `.ws-tools`, which is the drawer on a
-         phone: a declutter is most wanted when the drawer is shut. */''}
-    <button type="button" class="ws-menu-btn ws-reset" data-ws-reset
-      ${wsChartIsClean() ? 'disabled' : ''}
-      title="Back to price and volume. Your drawings are kept.">Reset</button>
+      title="Levels, stages, volume, events, studies, panes and colours">More${
+  inside ? ` <span class="ws-count">${inside}</span>` : ''}<span class="ws-caret"
+      aria-hidden="true">&#9662;</span></button>
     ${/* Outside the drawer too: the read is wanted most on a phone, where
          everything else here is folded away. */''}
     <div class="ws-menu ws-read">
@@ -16267,51 +16337,13 @@ function wsToolbar() {
         title="The trend, the nearest levels, RSI and MACD, from daily sessions">Chart read</button>
       ${wsMenuOpen === 'read' ? `<div class="ws-menu-pop ws-read-pop">${chartReadHTML()}</div>` : ''}
     </div>
+    ${/* Beside More rather than inside `.ws-tools`, the drawer: a declutter
+         is most wanted when the drawer is shut. */''}
+    <button type="button" class="ws-menu-btn ws-reset" data-ws-reset
+      ${wsChartIsClean() ? 'disabled' : ''}
+      title="Back to price and volume. Your drawings are kept.">Reset</button>
     <div class="ws-tools">
-    ${WS_MENUS.map((m) => {
-    const activeCount = m.items.filter(wsOverlayOn).length;
-    /* A menu with one option is not a menu.
-     *
-     * Fibs held a single checkbox, so switching Fibonacci levels on took two
-     * clicks and a dropdown that existed to show one row. It toggles directly
-     * now. Written as a rule about the item count rather than a special case
-     * for `fibs`, so a menu that loses its options becomes a button and one
-     * that gains a second becomes a dropdown again, with nothing to remember.
-     *
-     * `manage` menus are excluded: the Indicators menu would still need
-     * somewhere to put "Manage indicators…" even at one item.
-     *
-     * No count badge here. `1` beside a single lit toggle says nothing the lit
-     * state does not, and aria-pressed carries it for a screen reader, which
-     * aria-expanded would have got wrong: this opens nothing. */
-    if (m.items.length === 1 && !m.manage) {
-      const id = m.items[0];
-      const on = wsOverlayOn(id);
-      const st = overlayStyle(id);
-      return `<button type="button" class="ws-menu-btn${on ? ' on' : ''}"
-        data-ws-toggle="${esc(id)}" aria-pressed="${on}"
-        title="${on ? 'Hide' : 'Show'} ${esc(st.label)}">${esc(m.label)}</button>`;
-    }
-    return `<div class="ws-menu">
-      <button type="button" class="ws-menu-btn${activeCount ? ' on' : ''}"
-        data-ws-menu="${m.id}" aria-expanded="${wsMenuOpen === m.id}">
-        ${esc(m.label)}${activeCount ? ` <span class="ws-count">${activeCount}</span>` : ''}
-      </button>
-      ${wsMenuOpen === m.id ? `<div class="ws-menu-pop">
-        ${m.id === 'indicators' ? wsPresetsHTML() : ''}
-        ${m.items.map((id) => {
-    const st = overlayStyle(id);
-    return `<label class="ws-opt">
-          <input type="checkbox" data-ws-opt="${esc(id)}"${wsOverlayOn(id) ? ' checked' : ''}>
-          <span class="ws-swatch" style="background:${st.color}"></span>
-          <span>${esc(st.label)}</span>
-        </label>`;
-  }).join('')}
-        ${m.manage ? `<button type="button" class="ws-manage" data-ws-manage>
-          Manage indicators…</button>` : ''}
-      </div>` : ''}
-    </div>`;
-  }).join('')}
+    ${wsTuckedMenus().map(wsMenuHTML).join('')}
     ${wsStudiesMenu()}
     ${/* Panes, beside the other menus. Its own menu rather than an entry in
          Indicators, because those draw ON the price plot and these are
@@ -16333,6 +16365,12 @@ function wsToolbar() {
           averages do not warm up on screen.</p>
       </div>` : ''}
     </div>
+    <div class="ws-menu">
+      <button type="button" class="ws-menu-btn${chartColorsCustom() ? ' on' : ''}"
+        data-ws-menu="colors" aria-expanded="${wsMenuOpen === 'colors'}"
+        title="Colour of the candles and the line">Colours</button>
+      ${wsMenuOpen === 'colors' ? wsColorPop() : ''}
+    </div>
     </div>
     <div class="ws-toolbar-gap"></div>
     ${/* One control for the bar size, one minute to one week. The daily and
@@ -16346,6 +16384,13 @@ function wsToolbar() {
     ${isIntradayRange(chartRange) ? ''
     : rangePills(CHART_RANGES.filter((r) => !r.intraday), chartRange,
       'data-ws-range', 'Range')}
+    ${/* Fit-to-data: every bar loaded, the price scale fitted to them. Reset
+         zoom goes back to the range; this goes out to everything there is,
+         which on a size under a day had no control at all -- it has no range
+         pills, and zooming out by wheel stops at what the wheel reaches. */''}
+    <button type="button" class="ws-menu-btn ws-fit" data-ws-fit
+      ${wsShowsAll() ? 'disabled' : ''}
+      title="Fit every loaded bar on screen, with the price scale fitted to them">Fit</button>
     ${wsZoomed() ? `<button type="button" class="ws-menu-btn ws-zoom-reset"
       data-ws-zoom-reset title="Back to the ${esc(chartRange)} range">Reset zoom</button>` : ''}
     ${/* The same Line / Candles pair the Options chart uses, rather than one
@@ -16366,14 +16411,6 @@ function wsToolbar() {
     ${chartStyleSeg('data-ws-mode', chartMode, { candlesOff: wsCandlesPossible() ? ''
     : 'Candles need an open, high and low for every bar, and these bars arrived '
       + 'without them, so this range draws as a line.' })}
-    <div class="ws-tools">
-    <div class="ws-menu">
-      <button type="button" class="ws-menu-btn${chartColorsCustom() ? ' on' : ''}"
-        data-ws-menu="colors" aria-expanded="${wsMenuOpen === 'colors'}"
-        title="Colour of the candles and the line">Colours</button>
-      ${wsMenuOpen === 'colors' ? wsColorPop() : ''}
-    </div>
-    </div>
   </div>`;
 }
 
@@ -16478,46 +16515,279 @@ function wsMaxButton() {
 
 /* ---------------------------------------------------------------- drawings
  *
- * Stored per symbol in localStorage, as data rather than as pixels: each drawing
- * keeps the bar index and the price it was anchored to, so it stays attached to
- * the same place on the chart when the range, interval or window size changes.
- * Storing screen coordinates was the alternative and it would put every drawing
- * in the wrong place the first time the panel was resized.
+ * Stored per symbol in localStorage as a time and a price: `{t, p}`, with `t`
+ * in epoch milliseconds. Every timeframe draws the same set.
+ *
+ * **What this replaced, and the measurement that condemned it.** Drawings were
+ * `{i, p}` -- a bar index -- and the comment here claimed that kept them
+ * "attached to the same place on the chart when the range, interval or window
+ * size changes". It did not. The index was relative to whatever slice of bars
+ * was on screen when the drawing was placed: wsSnappedPoint stored
+ * `frame.indexAt(px)` as it came, wsSliceWindow records no offset, and the
+ * painter fed the index straight back into `frame.xOf`. Measured on SPY hourly:
+ * a trend line anchored on the 2026-09-02 14:30 candle drew 243px away from it
+ * after a 150-bar pan, because the anchor kept its screen position while the
+ * candles moved under it. Zoom, pan, range and resize all did this -- resize
+ * too, because wsReadable sizes the default slice from the chart's pixel width.
+ *
+ * A time is the one coordinate that means the same thing on every slice and
+ * every timeframe. The painter converts it to an index against the bars on
+ * screen at draw time (wsTimeAxis), so the geometry below still works in index
+ * space and no tool had to learn a new coordinate system.
+ *
+ * Per symbol, not per timeframe. The per-timeframe sets existed because an
+ * index meant a different moment on a different bar size; a time does not, so
+ * a trend line drawn on the daily chart now appears on the weekly and the
+ * hourly at the same dates, instead of vanishing when the bar size changes.
  */
+const WS_DRAW_KEY_V2 = 'optic.chart.drawings.v2';
+// The old store: `{i, p}` sets keyed per timeframe (see wsDrawKey). Read once,
+// then drained set by set as each is migrated -- see wsMigrateLegacy.
 const WS_DRAW_KEY = 'optic.chart.drawings.v1';
 let wsTool = 'cursor';
 let wsMenuOpen = null;
 let wsDrawStore = {};
+let wsLegacyDrawStore = {};
 let wsSelected = null;
 try {
-  const saved = JSON.parse(localStorage.getItem(WS_DRAW_KEY) || '{}');
+  const saved = JSON.parse(localStorage.getItem(WS_DRAW_KEY_V2) || '{}');
   if (saved && typeof saved === 'object') wsDrawStore = saved;
 } catch (e) { /* private mode, or hand-edited storage */ }
+try {
+  const legacy = JSON.parse(localStorage.getItem(WS_DRAW_KEY) || '{}');
+  if (legacy && typeof legacy === 'object') wsLegacyDrawStore = legacy;
+} catch (e) { /* as above */ }
 
-/* Where the drawings for the chart on screen are kept.
- *
- * A drawing is a bar index and a price, and a five-minute bar index means a
- * different moment from a daily one, so each intraday size keeps its own set
- * under symbol@size. The daily key is the bare symbol, as it always was, so no
- * drawing anyone has already made moves. This is what lets the tools work
- * under a day at all: the layer refused to draw there, while a drawing made
- * there was still saved, into the DAILY set, where it then turned up at an
- * index that was a different date. */
+/* The key the OLD store used for the chart on screen. Kept only to find a
+ * legacy set to migrate: an index meant something only against bars of the
+ * size it was drawn on, so a legacy set may be converted only while that size
+ * is the one on screen. */
 function wsDrawKey() {
   const sym = STATE.chartSymbol || '';
   if (isIntradayRange(chartRange)) return `${sym}@${intradayBarsKey()}`;
-  // Weekly bar 120 is a different date from daily bar 120 too.
   return chartInterval === 'weekly' ? `${sym}@1W` : sym;
 }
 
 function wsDrawings() {
-  return wsDrawStore[wsDrawKey()] || [];
+  return wsDrawStore[STATE.chartSymbol || ''] || [];
 }
 
 function wsSaveDrawings(list) {
-  wsDrawStore[wsDrawKey()] = list;
-  try { localStorage.setItem(WS_DRAW_KEY, JSON.stringify(wsDrawStore)); }
+  wsDrawStore[STATE.chartSymbol || ''] = list;
+  try { localStorage.setItem(WS_DRAW_KEY_V2, JSON.stringify(wsDrawStore)); }
   catch (e) { /* private mode: the drawings live for the session only */ }
+}
+
+/* Move the legacy set for the chart on screen into the time-based store.
+ *
+ * The index it holds was relative to a slice that was never recorded, so the
+ * date it was meant for cannot be recovered. What can be kept is where it is
+ * drawn RIGHT NOW: converting against the slice on screen pins each drawing to
+ * the dates it currently sits over, so nothing visibly jumps at the upgrade,
+ * and from then on it stays on those dates. That is the most faithful reading
+ * available of data that was never stored. */
+function wsMigrateLegacy(axis) {
+  const key = wsDrawKey();
+  const old = wsLegacyDrawStore[key];
+  if (!Array.isArray(old) || !old.length || !axis || !axis.ok) return;
+  const moved = old.map((dr) => ({
+    ...dr,
+    points: (dr.points || []).map((pt) => (Number.isFinite(pt.t) ? pt
+      : { t: axis.timeOf(Number(pt.i) || 0), p: pt.p })),
+  }));
+  wsDrawStore[STATE.chartSymbol || ''] = [...wsDrawings(), ...moved];
+  delete wsLegacyDrawStore[key];
+  try {
+    localStorage.setItem(WS_DRAW_KEY_V2, JSON.stringify(wsDrawStore));
+    localStorage.setItem(WS_DRAW_KEY, JSON.stringify(wsLegacyDrawStore));
+  } catch (e) { /* private mode */ }
+}
+
+/* ------------------------------------------------- the time axis of a chart
+ *
+ * Time to a fractional bar index on the slice on screen, and back.
+ *
+ * Inside the loaded history the mapping is exact: the slice is located inside
+ * the FULL series for its timeframe (every path that builds the slice cuts the
+ * full series, so its first bar is found exactly), a time becomes a global
+ * index by interpolating between the two bars around it, and the slice's
+ * offset is subtracted. So an anchor that has scrolled off screen still sits at
+ * the right distance from the candles that are on it.
+ *
+ * Beyond the loaded history -- a daily trend line viewed on a three-month
+ * hourly chart, whose April anchor predates every hourly bar -- it extrapolates
+ * in TRADING days, converted to bars at this timeframe's own rate. Not in clock
+ * time: hourly bars are about seven to a session, so counting one bar per hour
+ * of calendar would put that April anchor roughly five times too far left and
+ * draw the visible part of the line at a fifth of its real slope. Holidays are
+ * not modelled -- calendar logic stays on the server, per CLAUDE.md -- so an
+ * extrapolated point can sit a bar off across one. Inside the data, never.
+ */
+const WS_DAY_MS = 86400000;
+
+/** A series date to epoch ms. A bare day is read as noon UTC: the same calendar
+ *  date in New York and in UTC, before the open, so a daily anchor viewed on an
+ *  intraday chart lands at the start of its own session rather than at the end
+ *  of the previous one (midnight UTC is 8pm the evening before, Eastern). */
+function wsParseTime(raw) {
+  if (raw === null || raw === undefined) return NaN;
+  if (typeof raw === 'number') return raw;
+  const text = String(raw);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return Date.parse(`${text}T12:00:00Z`);
+  return Date.parse(text);
+}
+
+// Day 0 of the Unix epoch was a Thursday, so (day + 4) mod 7 is 0 on a Sunday.
+function wsIsTradingDay(day) {
+  const w = (((day + 4) % 7) + 7) % 7;
+  return w !== 0 && w !== 6;
+}
+
+/** Weekdays in [epoch, day). Five in every whole week, then the remainder. */
+function wsWeekdaysBefore(day) {
+  const weeks = Math.floor(day / 7);
+  let n = weeks * 5;
+  for (let k = weeks * 7; k < day; k += 1) if (wsIsTradingDay(k)) n += 1;
+  return n;
+}
+
+/** A continuous count of trading days: whole weekdays, plus the elapsed part of
+ *  the current one. A weekend sits at the seam between Friday and Monday.
+ *
+ *  `sess` is the session intraday bars are drawn from (wsSessionWindow), and
+ *  the part of a day that has elapsed is measured across it rather than across
+ *  all twenty-four hours. Across the whole day, the space right of the last
+ *  candle was off by most of a night: measured on hourly bars, a point placed
+ *  three bars past Friday's 15:30 bar was stored as 05:47 UTC on Monday, and
+ *  when Monday's bars arrived it drew 0.9 of a bar past Friday's instead of on
+ *  Monday's third. Across the session it is stored as Monday 11:30 Eastern, the
+ *  bar it was placed over. Before the open counts as the open, after the close
+ *  as the close. Daily and weekly bars pass no session: a whole day is theirs. */
+function wsTradingDays(ms, sess) {
+  const day = Math.floor(ms / WS_DAY_MS);
+  const before = wsWeekdaysBefore(day);
+  if (!wsIsTradingDay(day)) return before;
+  const into = ms - day * WS_DAY_MS;
+  return before + (sess
+    ? Math.min(1, Math.max(0, (into - sess.start) / sess.len))
+    : into / WS_DAY_MS);
+}
+
+/** The inverse of wsTradingDays. Always lands on a weekday, inside the session
+ *  when there is one, so the round trip from this side is exact. */
+function wsFromTradingDays(x, sess) {
+  const whole = Math.floor(x);
+  let day = (Math.floor(whole / 5) - 1) * 7;      // safely before the answer
+  while (wsWeekdaysBefore(day) < whole || !wsIsTradingDay(day)) day += 1;
+  const part = x - whole;
+  return day * WS_DAY_MS + (sess ? sess.start + part * sess.len : part * WS_DAY_MS);
+}
+
+/** The session intraday bars cover, read off the newest trading day: its first
+ *  bar is the open, and the session is as long as a day's bars at their own
+ *  spacing. Read from the newest day rather than the earliest bar of all, so a
+ *  window that spans a clock change takes the side of it the future is on.
+ *  Null when the bars give no spacing to read, and the day is used whole. */
+function wsSessionWindow(times, perDay) {
+  const n = times.length;
+  if (n < 2) return null;
+  const dayOf = (t) => Math.floor(t / WS_DAY_MS);
+  const lastDay = dayOf(times[n - 1]);
+  let k = n - 1;
+  while (k > 0 && dayOf(times[k - 1]) === lastDay) k -= 1;
+  const start = times[k] - lastDay * WS_DAY_MS;
+  const gaps = [];
+  for (let j = 1; j < n; j += 1) {
+    if (dayOf(times[j]) === dayOf(times[j - 1])) gaps.push(times[j] - times[j - 1]);
+  }
+  if (!gaps.length) return null;
+  gaps.sort((a, b) => a - b);
+  const len = Math.min(WS_DAY_MS - start, perDay * gaps[gaps.length >> 1]);
+  return len > 0 ? { start, len } : null;
+}
+
+/** Bars per trading day on an intraday series: the median count over the days
+ *  loaded, so a half-day at either end of the window does not skew it. */
+function wsBarsPerDay(times) {
+  const counts = new Map();
+  times.forEach((t) => {
+    const day = Math.floor(t / WS_DAY_MS);
+    counts.set(day, (counts.get(day) || 0) + 1);
+  });
+  const sorted = [...counts.values()].sort((a, b) => a - b);
+  return sorted.length ? Math.max(1, sorted[Math.floor(sorted.length / 2)]) : 1;
+}
+
+/** Largest k with times[k] <= t, by bisection. */
+function wsFloorIndex(times, t) {
+  let lo = 0; let hi = times.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (times[mid] <= t) lo = mid; else hi = mid - 1;
+  }
+  return lo;
+}
+
+/** The date a stored time falls on, in market time, as YYYY-MM-DD. */
+function wsAnchorDate(t) {
+  if (!Number.isFinite(t)) return '';
+  try {
+    return new Date(t).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  } catch (e) {
+    return new Date(t).toISOString().slice(0, 10);
+  }
+}
+
+/** The time axis for the chart on screen. `ok` is false with no bars. */
+function wsTimeAxis() {
+  const d = STATE.chartData;
+  const full = ((wsBaseSeries(d) || {}).dates || []).map(wsParseTime);
+  const shown = ((wsSeries(d) || {}).dates || []).map(wsParseTime);
+  let base = full;
+  let offset = -1;
+  if (shown.length && full.length) {
+    const k = wsFloorIndex(full, shown[0]);
+    if (full[k] === shown[0]) offset = k;
+  }
+  // The slice could not be placed inside the full series: map against the
+  // slice alone. Exact for everything on screen; extrapolated beyond it.
+  if (offset < 0) { base = shown; offset = 0; }
+  const n = base.length;
+  if (!n || base.some((t) => !Number.isFinite(t))) {
+    return { ok: false, indexOf: () => NaN, timeOf: () => NaN };
+  }
+  const intraday = isIntradayRange(chartRange);
+  const perDay = intraday ? wsBarsPerDay(base) : chartInterval === 'weekly' ? 0.2 : 1;
+  const sess = intraday ? wsSessionWindow(base, perDay) : null;
+  const td = (t) => wsTradingDays(t, sess);
+  const tdFirst = td(base[0]);
+  const tdLast = td(base[n - 1]);
+  return {
+    ok: true,
+    /** A stored time as a fractional index on the frame on screen. */
+    indexOf(t) {
+      if (!Number.isFinite(t)) return NaN;
+      let g;
+      if (t < base[0]) g = -(tdFirst - td(t)) * perDay;
+      else if (t > base[n - 1]) g = (n - 1) + (td(t) - tdLast) * perDay;
+      else {
+        const k = wsFloorIndex(base, t);
+        const span = k < n - 1 ? base[k + 1] - base[k] : 0;
+        g = span > 0 ? k + (t - base[k]) / span : k;
+      }
+      return g - offset;
+    },
+    /** A fractional index on the frame on screen as a time to store. */
+    timeOf(i) {
+      const g = i + offset;
+      if (!Number.isFinite(g)) return NaN;
+      if (g < 0) return wsFromTradingDays(tdFirst + g / perDay, sess);
+      if (g > n - 1) return wsFromTradingDays(tdLast + (g - (n - 1)) / perDay, sess);
+      const k = Math.floor(g);
+      if (k >= n - 1) return base[n - 1];
+      return base[k] + (g - k) * (base[k + 1] - base[k]);
+    },
+  };
 }
 
 
@@ -16814,6 +17084,7 @@ function renderChartWorkspace(d) {
           title="Search for another symbol"
           aria-label="${esc(STATE.chartSymbol)}. Search for another symbol">${
   tickerMark(STATE.chartSymbol, 26)}<strong>${esc(STATE.chartSymbol)}</strong></button>
+        <span class="ws-head-tf" id="ws-head-tf">${wsHeadFrame(ps)}</span>
         <span class="ws-head-name">${esc((d.profile || {}).name || '')}</span>
         <span class="ws-ohlc" id="ws-ohlc">${wsOhlcRow(bar)}</span>
         <span class="${signClass(q.change_pct)}" id="ws-chg">${fmtPct(q.change_pct, 2)}</span>
@@ -16848,6 +17119,36 @@ function renderChartWorkspace(d) {
   paintStage('stage-ws', stageSym, () => STATE.chartSymbol === stageSym);
 }
 
+/* "1h · Candles": what the bars are and how they are drawn, beside the symbol.
+ *
+ * The header is the one place a reader looks for what the chart is, and it
+ * said only the symbol. The bar size was on the interval button and in the
+ * legend's title and the status strip, and the style only on the lit half of
+ * Line/Candles, so working out "what am I looking at" meant reading three
+ * places. The legend no longer repeats it (see wsLegend). */
+function wsHeadFrame(ps) {
+  const style = wsCandles(ps) ? 'Candles' : chartMode === 'area' ? 'Area' : 'Line';
+  // The style in a span of its own, so a narrow header can fold it and keep
+  // the bar size: the lit Line/Candles pair says it too. See .ws-head-style.
+  return `${esc(chartIntervalLabel())}<span class="ws-head-style"> · ${style}</span>`;
+}
+
+/* The header after a redraw: the frame label, and the readout back on the
+ * newest bar.
+ *
+ * wsRedrawChart rebuilds the toolbar and the legend and never touched the
+ * header, so the readout kept whatever the crosshair last pointed at. Measured:
+ * hourly to weekly through the bar-size menu left "O — H — L — C —" over a
+ * chart whose last bar was 768.35 / 772.65 / 758.79 / 769.64, because the
+ * hovered index belonged to 449 hourly bars and the weekly series has 26. */
+function wsSyncHead() {
+  const d = STATE.chartData;
+  if (!d || d === 'loading' || d.error) return;
+  const tf = document.getElementById('ws-head-tf');
+  if (tf) tf.innerHTML = wsHeadFrame(wsSeries(d));
+  wsHoverReadout(null);
+}
+
 /** The O/H/L/C row in the chart header.
  *
  * Extracted so the hover handler and the initial render produce the same markup
@@ -16861,8 +17162,12 @@ function wsOhlcRow(bar, dateLabel) {
     `<span>H <b>${fmt(bar.high, 2)}</b></span>`,
     `<span>L <b>${fmt(bar.low, 2)}</b></span>`,
     `<span>C <b class="${signClass(chg)}">${fmt(bar.close, 2)}</b></span>`,
+    /* Compact, with the exact count on hover. "V 7,160,248" was 30px wider
+     * than "V 7.16M", which is what pushed Explain chart onto a second header
+     * line at 1440px and took 47px from the plot. */
     bar.volume !== null && bar.volume !== undefined
-      ? `<span>V <b>${Math.round(bar.volume).toLocaleString()}</b></span>` : '',
+      ? `<span title="${Math.round(bar.volume).toLocaleString()} shares">V <b>${
+        fmtCompact(bar.volume, 2)}</b></span>` : '',
   ].join('');
 }
 
@@ -17857,10 +18162,14 @@ try {
   if (localStorage.getItem(WS_LEGEND_KEY) === 'open') wsLegendOpen = true;
 } catch (e) { /* private mode */ }
 const WS_DOCK_KEY = 'optic.chart.dock.v1';
-// Four to start. Opening all fourteen would put 3,000px of widgets beside a
-// chart nobody could then see, and which four you want is personal — the rail
-// on the right adds the rest in one click and remembers the arrangement.
-let wsDockOpen = ['watchlist', 'levels', 'news', 'seasonality'];
+/* None to start. This opened four -- watchlist, levels, news, seasonality --
+ * and at 1440x900 they were a 245px column beside an 800px chart, competing
+ * with it for the reader's eye on the one tab that is about the chart. Asked
+ * for as a chart-first workspace: "remove redundant labels and competing
+ * panels". The rail on the right is unchanged, names every widget, opens any of
+ * them in one click and remembers the arrangement, so a reader who wants the
+ * four back pays for it once. A stored arrangement is honoured as it was. */
+let wsDockOpen = [];
 try {
   const saved = JSON.parse(localStorage.getItem(WS_DOCK_KEY) || 'null');
   if (Array.isArray(saved)) wsDockOpen = saved.filter((x) => WS_WIDGETS.some((w) => w.id === x));
@@ -18599,16 +18908,53 @@ function wsToolNeeds(tool) { return TOOL_POINTS[tool] || 0; }
 
 /** Nearest interesting price on a bar, for snapping. */
 function wsSnapPrice(ps, index, price, frame) {
+  return wsSnapTarget(ps, index, price, frame).price;
+}
+
+/* Snapping is the reader's choice, and it says when it has acted.
+ *
+ * It was always on and silent: within seven pixels of a high, low, open or
+ * close the point moved to it, with nothing to say it had. Which is fine
+ * until the level being drawn is a round number a few cents from a candle's
+ * high, and the line lands on the high instead with no indication why. So a
+ * toggle on the tool rail, remembered, and on by default -- that is how it
+ * always behaved -- plus the field it snapped to, which the placement preview
+ * marks. */
+const WS_SNAP_KEY = 'optic.chart.snap.v1';
+let wsSnapOn = true;
+try { if (localStorage.getItem(WS_SNAP_KEY) === 'off') wsSnapOn = false; }
+catch (e) { /* private mode: on, as it always was */ }
+
+function wsSetSnap(on) {
+  wsSnapOn = !!on;
+  try { localStorage.setItem(WS_SNAP_KEY, wsSnapOn ? 'on' : 'off'); }
+  catch (e) { /* private mode */ }
+}
+
+/** Nearest O/H/L/C on a bar within the snap radius: {price, field}, field null
+ *  when nothing was close enough and the price is the pointer's own. */
+function wsSnapTarget(ps, index, price, frame) {
   const at = (arr) => (Array.isArray(arr) && Number.isFinite(arr[index]) ? arr[index] : null);
-  const candidates = [at(ps.high), at(ps.low), at(ps.close), at(ps.open)]
-    .filter((v) => v !== null);
-  let best = price;
+  const candidates = [['H', at(ps.high)], ['L', at(ps.low)], ['C', at(ps.close)],
+    ['O', at(ps.open)]].filter(([, v]) => v !== null);
+  let best = null;
   let bestPx = Infinity;
-  candidates.forEach((c) => {
+  candidates.forEach(([field, c]) => {
     const px = Math.abs(frame.yOf(c) - frame.yOf(price));
-    if (px < bestPx) { bestPx = px; best = c; }
+    if (px < bestPx) { bestPx = px; best = { price: c, field }; }
   });
-  return bestPx <= DRAW_SNAP_PX ? best : price;
+  return best && bestPx <= DRAW_SNAP_PX ? best : { price, field: null };
+}
+
+/* An index and a price, snapped when snapping is on: to the nearest whole bar,
+ * and then to that bar's O/H/L/C within the radius. Off the slice there are no
+ * bars to snap to, so the point is left where it is. */
+function wsSnapIndexPrice(i, p, frame) {
+  if (!wsSnapOn || !frame) return { i, p, snap: null };
+  const k = Math.round(i);
+  if (k < 0 || k > frame.bars - 1) return { i, p, snap: null };
+  const hit = wsSnapTarget(wsSeries(STATE.chartData), k, p, frame);
+  return { i: k, p: hit.price, snap: hit.field ? hit : null };
 }
 
 function wsDrawId() {
@@ -18625,11 +18971,11 @@ function wsRenderDrawings() {
   const frame = svg && svg.chartFrame;
   if (!frame) { layer.innerHTML = ''; return; }
 
-  /* Intraday draws its own set. Index 120 on a daily series and index 120 on
-   * a five-minute one are different moments by a factor of about eighty, which
-   * is why this used to draw nothing under a day; wsDrawKey now keeps each
-   * size's drawings apart, so every set is replayed only onto the bars it was
-   * drawn on. */
+  /* Times to indices against the bars on screen, once per draw. Every
+   * timeframe reads the same set now -- see the note above WS_DRAW_KEY_V2. */
+  const axis = wsTimeAxis();
+  if (!axis.ok) { layer.innerHTML = ''; return; }
+  wsMigrateLegacy(axis);
 
   const NS = 'http://www.w3.org/2000/svg';
   const el = (tag, attrs, text) => {
@@ -18641,21 +18987,44 @@ function wsRenderDrawings() {
     return node;
   };
 
-  const root = el('svg', {
+  const svgRootEl = el('svg', {
     class: 'ws-draw-svg', viewBox: `0 0 ${frame.width} ${frame.height}`,
     width: '100%', height: frame.height, preserveAspectRatio: 'xMidYMid meet',
   });
+  /* Clipped to the price pane, as the price series already is.
+   *
+   * With anchors in time, a line whose anchor has scrolled off the slice is
+   * drawn from where that anchor really is -- off the plot -- and without the
+   * clip it ran across the price axis, over the volume strip and through the
+   * header. Inside the pane only, which is where every drawing means
+   * something. */
+  const clipId = 'ws-draw-clip';
+  const defs = el('defs');
+  const clip = el('clipPath', { id: clipId });
+  clip.appendChild(el('rect', {
+    x: frame.margin.l, y: frame.margin.t, width: frame.plotW, height: frame.priceH,
+  }));
+  defs.appendChild(clip);
+  svgRootEl.appendChild(defs);
+  const root = el('g', { 'clip-path': `url(#${clipId})` });
+  svgRootEl.appendChild(root);
 
   const P = (pt) => [frame.xOf(pt.i), frame.yOf(pt.p)];
+  // A stored point, {t, p}, as an index on the slice on screen. Kept as the
+  // geometry's coordinate so no tool below had to change. `t` rides along for
+  // the labels, which should name the date anchored, not the bar under it.
+  const toIdx = (pt) => ({
+    i: Number.isFinite(pt.t) ? axis.indexOf(pt.t) : Number(pt.i),
+    p: pt.p,
+    t: pt.t,
+  });
   const list = wsDrawings();
-  // The ruler's dates, looked up once per draw rather than once per ruler.
-  let shownDates = null;
-  const seriesDates = () => shownDates || (shownDates = (wsSeries(STATE.chartData).dates || []));
 
   /* One painter for a saved drawing and for the one being placed, so what
    * follows the pointer is exactly what the last click will leave. */
-  const paint = (dr, preview) => {
-    if (dr.hidden) return;
+  const paint = (stored, preview) => {
+    if (stored.hidden) return;
+    const dr = { ...stored, points: (stored.points || []).map(toIdx) };
     const sel = !preview && dr.id === wsSelected;
     const colour = C[dr.color] || C.accent;
     const g = el('g', preview
@@ -18720,7 +19089,7 @@ function wsRenderDrawings() {
         { 'stroke-dasharray': '5 4' }));
       g.appendChild(el('text', {
         x: x + 4, y: frame.margin.t + 12, fill: colour, 'font-size': 10,
-      }, (frame.labels[Math.round(dr.points[0].i)] || '').slice(0, 10)));
+      }, wsAnchorDate(dr.points[0].t)));
     } else if (dr.kind === 'channel' && pts.length === 3) {
       // Two parallel lines: the base through the first two points, and a copy
       // shifted to pass through the third. Parallel by construction rather than
@@ -18873,44 +19242,34 @@ function wsRenderDrawings() {
        * points landed on rather than an offset.
        */
       const dPct = a.p ? ((b.p - a.p) / a.p) * 100 : 0;
-      const bars = Math.abs(b.i - a.i);
-      /* Dates come from the series the chart is currently showing.
+      const bars = Math.round(Math.abs(b.i - a.i));
+      /* Dates from the times the two ends are anchored to.
        *
-       * wsRenderDrawings has `frame` but not `ps` — it runs against the mounted
-       * SVG rather than inside the render that built it. Reading STATE here is
-       * correct rather than lazy: a drawing stores bar indices, and the indices
-       * only mean anything against the window on screen right now, which is
-       * exactly what wsSeries returns. */
-      const dates = seriesDates();
-      const lo = a.i <= b.i ? a.i : b.i;
-      const hi = a.i <= b.i ? b.i : a.i;
+       * They were looked up in the series on screen by the bar under each end,
+       * which was right while a drawing was a bar index and wrong once the
+       * window moved: an end scrolled off screen had no date at all, and the
+       * readout fell back to "210 bars". A time names its own date wherever it
+       * is drawn, on screen or not. */
+      const early = (a.t <= b.t) ? a : b;
+      const late = early === a ? b : a;
       /* The year goes on BOTH ends or neither.
        *
        * The first version appended it to the end date only, which produced
        * "Nov 19 – Sep 24 2025" for a span starting in November 2024 — it reads
        * as though both dates are 2025. A year on one end of a range is worse
-       * than none, because it looks like information.
-       *
-       * So: omit it when the span sits inside one year (the date axis under the
-       * chart already says which), and put it on both when it crosses one. */
-      const crossesYear = dates[lo] && dates[hi]
-        && String(dates[lo]).slice(0, 4) !== String(dates[hi]).slice(0, 4);
-      const stamp = (i) => {
-        const raw = String(dates[i] || '');
-        if (!raw) return null;
-        const d = new Date(raw.length <= 10 ? raw + 'T00:00:00Z' : raw);
-        if (Number.isNaN(d.getTime())) return raw.slice(0, 10);
-        return d.toLocaleDateString(undefined, {
-          day: 'numeric', month: 'short', timeZone: 'UTC',
+       * than none, because it looks like information. */
+      const crossesYear = Number.isFinite(a.t) && Number.isFinite(b.t)
+        && wsAnchorDate(a.t).slice(0, 4) !== wsAnchorDate(b.t).slice(0, 4);
+      const stamp = (t) => {
+        if (!Number.isFinite(t)) return null;
+        return new Date(t).toLocaleDateString(undefined, {
+          day: 'numeric', month: 'short', timeZone: 'America/New_York',
           ...(crossesYear ? { year: 'numeric' } : {}),
         });
       };
-      const from = stamp(lo);
-      const to = stamp(hi);
-      const span = (from && to) ? `${from} – ${to}`
-        // A drawing anchored outside the visible window has no dates to show:
-        // its indices only mean something against the series on screen.
-        : `${bars} bars`;
+      const from = stamp(early.t);
+      const to = stamp(late.t);
+      const span = (from && to) ? `${from} – ${to}` : `${bars} bars`;
       /* Centred on the range and pinned just under the top of the plot.
        *
        * It used to sit above the higher of the two points, which with a
@@ -19032,7 +19391,7 @@ function wsRenderDrawings() {
     paint(ghost, true);
   } else if (ghost) {
     const g = el('g', { class: 'ws-dr ws-dr-pending' });
-    const at = ghost.points.map(P);
+    const at = ghost.points.map(toIdx).map(P);
     at.forEach(([x, y]) => {
       g.appendChild(el('circle', { cx: x, cy: y, r: 3, fill: C.accent }));
     });
@@ -19045,8 +19404,33 @@ function wsRenderDrawings() {
     root.appendChild(g);
   }
 
+  /* Snap feedback: a ring on the price the point moved to, and which one.
+   *
+   * Without it a level a few cents from a candle's high landed on the high
+   * with nothing to say so. "H 772.65" names the field and the value, and the
+   * ring sits on the snapped price rather than the pointer, so the gap between
+   * the two is visible as it happens. */
+  if (ghost && ghost.snap && ghost.hover) {
+    const [hx, hy] = P(toIdx(ghost.hover));
+    const ring = el('g', { class: 'ws-snap-mark' });
+    ring.appendChild(el('circle', {
+      cx: hx, cy: hy, r: 6, fill: 'none', stroke: C.accent, 'stroke-width': 1.6,
+    }));
+    const label = `${ghost.snap.field} ${fmt(ghost.snap.price, 2)}`;
+    const lx = Math.min(hx + 10, frame.margin.l + frame.plotW - 70);
+    ring.appendChild(el('rect', {
+      x: lx - 3, y: hy - 22, width: label.length * 6.4 + 6, height: 15, rx: 3,
+      fill: C.surface, stroke: C.accent, 'stroke-width': 1,
+    }));
+    ring.appendChild(el('text', {
+      x: lx, y: hy - 11, fill: C.ink, 'font-size': 10.5, 'font-weight': 600,
+      'font-variant-numeric': 'tabular-nums',
+    }, label));
+    root.appendChild(ring);
+  }
+
   layer.innerHTML = '';
-  layer.appendChild(root);
+  layer.appendChild(svgRootEl);
 }
 
 /* The drawing being placed, with the pointer as its next point: the points
@@ -19059,7 +19443,8 @@ function wsGhost() {
   const hover = wsHoverAt ? wsSnappedPoint(wsHoverAt) : null;
   const points = hover && placed.length < wsToolNeeds(wsTool) ? [...placed, hover] : placed;
   if (!points.length) return null;
-  return { kind: wsTool, points, color: 'accent', width: 1.6, text: 'Note' };
+  return { kind: wsTool, points, color: 'accent', width: 1.6, text: 'Note',
+    hover, snap: hover ? hover.snap : null };
 }
 
 /* ------------------------------------------------------- undo and redo
@@ -19227,20 +19612,29 @@ function wsSyncDrawChrome() {
 /* ------------------------------------------------------- pointer handling */
 
 /** Chart coordinates from a pointer event, or null if outside the plot. */
-function wsPointAt(evt) {
+function wsPointAt(evt, opts = {}) {
   const host = document.getElementById('ws-chart');
   const svg = host && host.querySelector('svg.chart');
   const frame = svg && svg.chartFrame;
   if (!frame) return null;
   const box = svg.getBoundingClientRect();
   // The SVG is scaled to its container, so pointer pixels have to be converted
-  // into viewBox units before the frame's scales mean anything.
+  // into viewBox units before the frame's scales mean anything. Through the
+  // bounding box, which already includes any browser zoom, so the same
+  // arithmetic holds at 100% and at 150%.
   const scale = box.width / frame.width;
   const px = (evt.clientX - box.left) / scale;
   const py = (evt.clientY - box.top) / scale;
-  if (px < frame.margin.l || px > frame.margin.l + frame.plotW) return null;
-  if (py < frame.margin.t || py > frame.margin.t + frame.priceH) return null;
-  const i = Math.max(0, Math.min(frame.bars - 1, frame.indexAt(px)));
+  /* Placement stays on the plot. A drag does not have to: with the pointer
+   * captured, a handle pulled past the last candle kept stopping dead at the
+   * edge because this returned null there. `free` lets it continue, and the
+   * anchor goes wherever the pointer is -- in time, so it stays there. */
+  if (!opts.free) {
+    if (px < frame.margin.l || px > frame.margin.l + frame.plotW) return null;
+    if (py < frame.margin.t || py > frame.margin.t + frame.priceH) return null;
+  }
+  // Unrounded. Whether to land on a whole bar is the snap setting's call.
+  const i = frame.indexAtExact(px);
   return { i, p: frame.priceAt(py), frame, px, py };
 }
 
@@ -19282,8 +19676,12 @@ function wsBeginDraw(evt) {
 function wsSnappedPoint(evt) {
   const at = wsPointAt(evt);
   if (!at) return null;
-  const ps = wsSeries(STATE.chartData);
-  return { i: at.i, p: wsSnapPrice(ps, at.i, at.p, at.frame) };
+  const axis = wsTimeAxis();
+  if (!axis.ok) return null;
+  const snapped = wsSnapIndexPrice(at.i, at.p, at.frame);
+  // `snap` is for the preview to show what happened. wsPlacePoint stores only
+  // the time and the price.
+  return { t: axis.timeOf(snapped.i), p: snapped.p, snap: snapped.snap };
 }
 
 /** Add a point to the drawing being placed, and finish it when the tool has
@@ -19292,7 +19690,7 @@ function wsPlacePoint(pt) {
   if (!wsPending) {
     wsPending = { kind: wsTool, points: [] };
   }
-  wsPending.points.push(pt);
+  wsPending.points.push({ t: pt.t, p: pt.p });
 
   if (wsPending.points.length >= wsToolNeeds(wsTool)) {
     const dr = {
@@ -19548,25 +19946,51 @@ function registerChartZoom(hostId, adapter) {
   CHART_ZOOM.set(hostId, adapter);
 }
 
+/* Which registered chart an event is over, and whether it may act.
+ *
+ * `wheel` is the wheel and the pinch, which are allowed two things a press is
+ * not. Over a drawing: those live in an overlay that is a SIBLING of the host
+ * (`adapter.overlay`), so the wheel resolved no chart there and scrolled the
+ * page instead -- measured, fourteen notches over a selected trend line's
+ * handle left the chart at 195 bars. And while a tool is armed
+ * (`adapter.wheelEnabled`): zooming in to find a trend line's second point is
+ * not a drawing gesture, and the placed first point is a time and a price, so
+ * it stays where it was put. A press keeps both restrictions, because a press
+ * over a drawing grabs it and a press with a tool armed places a point; see
+ * the pan handler. */
+function chartHostFor(evt, hostId, adapter, wheel) {
+  const own = evt.target.closest('#' + hostId);
+  if (own) return own;
+  if (wheel && adapter.overlay && evt.target.closest(adapter.overlay)) {
+    return document.getElementById(hostId);
+  }
+  return null;
+}
+
+function chartMayAct(adapter, wheel) {
+  const gate = (wheel && adapter.wheelEnabled) || adapter.enabled;
+  return !gate || !!gate();
+}
+
 /* The chart under the pointer even when it has no frame to aim at yet: it
  * swaps its SVG between frames on every redraw. See the wheel handler. */
-function chartZoomHost(evt) {
+function chartZoomHost(evt, opts = {}) {
   if (!evt.target || !evt.target.closest) return null;
   for (const [hostId, adapter] of CHART_ZOOM) {
-    const host = evt.target.closest('#' + hostId);
+    const host = chartHostFor(evt, hostId, adapter, opts.wheel);
     if (!host) continue;
-    if (adapter.enabled && !adapter.enabled()) return null;
+    if (!chartMayAct(adapter, opts.wheel)) return null;
     return { host, adapter };
   }
   return null;
 }
 
-function chartZoomTarget(evt) {
+function chartZoomTarget(evt, opts = {}) {
   if (!evt.target || !evt.target.closest) return null;
   for (const [hostId, adapter] of CHART_ZOOM) {
-    const host = evt.target.closest('#' + hostId);
+    const host = chartHostFor(evt, hostId, adapter, opts.wheel);
     if (!host) continue;
-    if (adapter.enabled && !adapter.enabled()) return null;
+    if (!chartMayAct(adapter, opts.wheel)) return null;
     const svg = host.querySelector('svg.chart');
     const frame = svg && svg.chartFrame;
     if (!frame) return null;
@@ -19647,6 +20071,26 @@ function zoomedWindow(cur, bar, nextSpan) {
   return { from, to: from + nextSpan };
 }
 
+/* Zoom about a held point: `abs` is the position under the pointer, over the
+ * whole series and fractional, and `fx` how far across the plot the pointer
+ * is. The window is whole bars, so each step can land half a bar either side;
+ * holding `abs` for the gesture keeps that from adding up. See the wheel
+ * handler for the measurement. */
+function zoomedWindowAt(abs, fx, nextSpan) {
+  const from = Math.round(abs - fx * (nextSpan - 1));
+  return { from, to: from + nextSpan };
+}
+
+/* How far across the plot the pointer is, 0 to 1, or null off it. */
+function chartPointerFraction(target, evt) {
+  const { svg, frame } = target;
+  const box = svg.getBoundingClientRect();
+  if (!box.width || !frame.plotW) return null;
+  const px = (evt.clientX - box.left) / (box.width / frame.width);
+  const fx = (px - frame.margin.l) / frame.plotW;
+  return fx < 0 || fx > 1 ? null : fx;
+}
+
 function flushChartWheel() {
   const w = chartWheel;
   if (!w) return;
@@ -19656,14 +20100,16 @@ function flushChartWheel() {
   const frame = svg && svg.chartFrame;
   if (!frame) { queueChartFrame(); return; }
   const target = { ...w.target, svg, frame };
-  if (target.adapter.enabled && !target.adapter.enabled()) { chartWheel = null; return; }
+  if (!chartMayAct(target.adapter, true)) { chartWheel = null; return; }
   const cur = target.adapter.window();
   const span = cur.to - cur.from;
   let next = { from: cur.from, to: cur.to };
   if (w.zoomLog) {
     const want = Math.max(WS_MIN_BARS, Math.min(cur.total, Math.round(span * Math.exp(w.zoomLog))));
     if (want !== span) {
-      next = zoomedWindow(cur, Math.min(w.bar, span - 1), want);
+      next = Number.isFinite(w.abs)
+        ? zoomedWindowAt(w.abs, w.fx, want)
+        : zoomedWindow(cur, Math.min(w.bar, span - 1), want);
       w.zoomLog -= Math.log(want / span);
     }
     // At either limit there is nowhere to go; carrying the rest would make the
@@ -19677,6 +20123,8 @@ function flushChartWheel() {
       if (bars) {
         next = { from: next.from + bars, to: next.to + bars };
         w.panPx -= bars / barsPerPx;
+        // The paper moved under the pointer, so the point it is over did too.
+        if (Number.isFinite(w.abs)) w.abs += bars;
       }
     } else {
       w.panPx = 0;
@@ -19685,11 +20133,15 @@ function flushChartWheel() {
   if ((next.from !== cur.from || next.to !== cur.to) && target.adapter.apply(next)) {
     interactiveRedraw(target.adapter);
   }
+  // What this gesture left the window at, so the next event can tell its own
+  // last step from a window something else has moved since.
+  w.win = target.adapter.window();
 }
 
 document.addEventListener('wheel', (evt) => {
-  let target = chartZoomTarget(evt);
+  let target = chartZoomTarget(evt, { wheel: true });
   let bar = target ? chartBarUnderCursor(target, evt) : null;
+  let fresh = true;      // false when aimed from the last event; see below
   if (!target) {
     /* Mid-redraw. The chart swaps its SVG between frames, and for that moment
      * there is no frame to aim at. Measured: during a stream of wheel events
@@ -19698,10 +20150,11 @@ document.addEventListener('wheel', (evt) => {
      * because an unblocked ctrl+wheel is the browser zooming the whole page.
      * So a gesture already under way on this chart keeps the event, and it is
      * applied at the last bar it was aimed at. */
-    const held = chartZoomHost(evt);
+    const held = chartZoomHost(evt, { wheel: true });
     if (!held || !chartWheel || chartWheel.target.host !== held.host) return;
     target = chartWheel.target;
     bar = chartWheel.bar;
+    fresh = false;
   } else if (bar === null) {
     return;
   }
@@ -19716,6 +20169,29 @@ document.addEventListener('wheel', (evt) => {
   }
   chartWheel.target = target;
   chartWheel.bar = bar;
+  /* The point to zoom about, taken where the pointer is and held while it
+   * stays there and nothing else moves the window.
+   *
+   * Read afresh on every event it was the bar under the pointer rounded to a
+   * whole bar, and each notch re-centred on a slightly different moment.
+   * Measured on SPY hourly, sixteen notches at a still pointer: the time under
+   * it wandered 0.52, 0.18 and 0.81 of a bar on the way from 195 bars to 21,
+   * 43px at that zoom, which reads as the chart sliding sideways under the
+   * cursor. Not held across a pan by drag or a range pill, which move the
+   * window themselves: the anchor would be a point no longer under the pointer
+   * and the next notch would jump to it. */
+  if (fresh) {
+    const fx = chartPointerFraction(target, evt);
+    const cur = target.adapter.window();
+    const ours = chartWheel.win && chartWheel.win.from === cur.from && chartWheel.win.to === cur.to;
+    const still = Number.isFinite(chartWheel.x) && Math.abs(evt.clientX - chartWheel.x) <= 1;
+    if (fx !== null && !(ours && still && Number.isFinite(chartWheel.abs))) {
+      chartWheel.abs = cur.from + fx * Math.max(0, cur.to - cur.from - 1);
+      chartWheel.fx = fx;
+      chartWheel.x = evt.clientX;
+      chartWheel.win = cur;
+    }
+  }
   if (evt.ctrlKey) {
     // A trackpad pinch, delivered as ctrl+wheel. Out is negative: zoom in.
     chartWheel.zoomLog += dy * PINCH_PER_PX;
@@ -19737,7 +20213,7 @@ document.addEventListener('wheel', (evt) => {
  * simply never called elsewhere. The window is recomputed from the one the
  * pinch began on, so scale is not applied twice. */
 document.addEventListener('gesturestart', (evt) => {
-  const target = chartZoomTarget(evt);
+  const target = chartZoomTarget(evt, { wheel: true });
   if (!target) return;
   const bar = chartBarUnderCursor(target, evt);
   if (bar === null) return;
@@ -19882,6 +20358,10 @@ function wsEndPan() {
 registerChartZoom('ws-chart', {
   enabled: () => STATE.view === 'chart' && !!STATE.chartData
     && STATE.chartData !== 'loading' && wsTool === 'cursor',
+  // The wheel, with a tool armed too, and over the drawings. See chartHostFor.
+  wheelEnabled: () => STATE.view === 'chart' && !!STATE.chartData
+    && STATE.chartData !== 'loading',
+  overlay: '#ws-draw',
   window: () => wsWindowNow(STATE.chartData),
   apply: (win) => wsApplyWindow(win),
   redraw: () => wsRedrawChart(),
@@ -19916,6 +20396,26 @@ function wsResetZoom() {
   wsRedrawChart();
 }
 
+/* Whether every loaded bar is on screen already, at the price scale the bars
+ * ask for. Then Fit has nothing to do, and says so by being disabled. */
+function wsShowsAll() {
+  const d = STATE.chartData;
+  if (!d || d === 'loading' || d.error) return true;
+  const w = wsWindowNow(d);
+  return w.from === 0 && w.to === w.total && wsYZoom === 1;
+}
+
+/* Fit-to-data. A window rather than a range: the range pills stay as they
+ * were, so Reset zoom returns to the one lit. Drawings need nothing here; they
+ * are times and prices, and the new window draws them where they were. */
+function wsFitAll() {
+  const total = ((wsBaseSeries(STATE.chartData).dates) || []).length;
+  if (!total || wsShowsAll()) return;
+  wsWindow = { from: 0, to: total };
+  wsYZoom = 1;
+  wsRedrawChart();
+}
+
 function wsInstallDrawHandlers() {
   // Kept as a no-op so the call sites do not have to change. The listeners below
   // are installed once at parse time.
@@ -19943,7 +20443,7 @@ document.addEventListener('pointerdown', (evt) => {
   wsDragging = {
     id,
     part: handle ? Number(handle.dataset.handle) : 'all',
-    from: wsPointAt(evt),
+    from: wsPointAt(evt, { free: true }),
     original: JSON.parse(JSON.stringify(dr.points)),
   };
   // Captured on the layer so a fast drag that leaves the plot keeps sending
@@ -19955,17 +20455,31 @@ document.addEventListener('pointerdown', (evt) => {
 
 document.addEventListener('pointermove', (evt) => {
   if (!wsDragging) return;
-  const at = wsPointAt(evt);
+  const at = wsPointAt(evt, { free: true });
   if (!at || !wsDragging.from) return;
   const dr = wsDrawings().find((x) => x.id === wsDragging.id);
   if (!dr) return;
-  const di = at.i - wsDragging.from.i;
+  const axis = wsTimeAxis();
+  if (!axis.ok) return;
+  /* In index space for the arithmetic, then back to time to store.
+   *
+   * The original is converted against the slice on screen NOW rather than
+   * kept as indices from the press, so a drag that runs while the chart
+   * re-renders under it -- a live tick, a resize -- still moves the drawing
+   * by the distance the pointer moved. Moving a whole drawing with snapping
+   * on moves it by whole bars, so anchors on candles stay on candles; an
+   * endpoint being edited snaps to a bar's O/H/L/C like a fresh placement. */
+  const whole = wsDragging.part === 'all';
+  let di = at.i - wsDragging.from.i;
+  if (whole && wsSnapOn) di = Math.round(di);
   const dp = at.p - wsDragging.from.p;
   dr.points = wsDragging.original.map((pt, idx) => {
-    if (wsDragging.part === 'all' || wsDragging.part === idx) {
-      return { i: Math.max(0, pt.i + di), p: pt.p + dp };
-    }
-    return { ...pt };
+    if (!whole && wsDragging.part !== idx) return { ...pt };
+    const i0 = Number.isFinite(pt.t) ? axis.indexOf(pt.t) : Number(pt.i) || 0;
+    let ni = i0 + di;
+    let np = pt.p + dp;
+    if (!whole) ({ i: ni, p: np } = wsSnapIndexPrice(ni, np, at.frame));
+    return { t: axis.timeOf(ni), p: np };
   });
   // Not saved per move: pointermove fires dozens of times a second and
   // localStorage writes are synchronous. Saved once, on pointerup. Drawn once
@@ -20021,6 +20535,24 @@ function wsDrawKeys(evt) {
     wsSelected = null;
     wsRenderDrawings();
     wsSyncDrawChrome();
+    return;
+  }
+  if (evt.key === 'Escape' && wsDragging) {
+    /* Mid-drag, Escape undoes the drag rather than finishing it. It was
+     * missing from the ladder below, so the drawing kept following the
+     * pointer and the release committed it wherever it had got to. */
+    const dr = wsDrawings().find((x) => x.id === wsDragging.id);
+    if (dr) dr.points = wsDragging.original;
+    wsDragging = null;
+    wsRenderDrawings(); wsSyncDrawChrome();
+    return;
+  }
+  if (evt.key === 'Escape' && (wsMenuOpen || wsToolsOpen)) {
+    // An open menu or More is the innermost thing on screen, so it shuts
+    // before anything on the chart is cancelled.
+    wsMenuOpen = null; wsToolsOpen = false;
+    const tbk = views.chart.querySelector('.ws-toolbar');
+    if (tbk) tbk.outerHTML = wsToolbar();
     return;
   }
   if (evt.key === 'Escape') {
@@ -20797,6 +21329,7 @@ function wsRedrawChart(opts) {
     setChartAnimation(false);
     wsPaneArriving = null;
   }
+  wsSyncHead();
   requestAnimationFrame(() => requestAnimationFrame(wsEnsureChart));
   /* The status line states the bar size and whether the view is zoomed, so it
    * follows every redraw. It was refreshed only from the drawing layer's sync,
@@ -35366,6 +35899,14 @@ document.addEventListener('click', (evt) => {
     // and swallowing it would mean every first click after opening a menu did
     // nothing but close it.
   }
+  // More, the same way, now that it floats over the chart. A click inside it
+  // is left alone: its own menus and toggles are in there.
+  if (wsToolsOpen && STATE.view === 'chart'
+      && !evt.target.closest('.ws-tools, [data-ws-tools]')) {
+    wsToolsOpen = false;
+    const tbm = views.chart.querySelector('.ws-toolbar');
+    if (tbm) tbm.outerHTML = wsToolbar();
+  }
   /* The narrow-screen tool drawer. Before [data-ws-menu] so the two cannot be
      confused, and it rebuilds the toolbar only -- opening a drawer does not
      change the chart, and redrawing the SVG to reveal six buttons is the same
@@ -35398,6 +35939,7 @@ document.addEventListener('click', (evt) => {
     return;
   }
   if (evt.target.closest('[data-ws-zoom-reset]')) { wsResetZoom(); return; }
+  if (evt.target.closest('[data-ws-fit]')) { wsFitAll(); return; }
   /* The one-item menus, which are buttons rather than checkboxes.
    *
    * A separate attribute from `data-ws-opt` on purpose. That one is handled in
@@ -35615,6 +36157,12 @@ document.addEventListener('click', (evt) => {
     // Legend only. Collapsing a list is not a reason to redraw 743px of SVG.
     const leg = views.chart.querySelector('.ws-legend');
     if (leg) leg.outerHTML = wsLegend(wsSeries(STATE.chartData));
+    return;
+  }
+  if (evt.target.closest('[data-ws-snap]')) {
+    wsSetSnap(!wsSnapOn);
+    wsSyncDrawChrome();
+    wsRenderDrawings();
     return;
   }
   if (evt.target.closest('[data-ws-undo]')) { wsUndo(); return; }

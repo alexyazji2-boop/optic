@@ -654,46 +654,50 @@ def test_the_header_logo_blinks_everywhere_except_home():
     assert ".brand-mark-eye," in rm and ".brand-mark-line," in rm
 
 
-def test_the_chart_toolbar_has_a_phone_drawer_and_a_desktop_that_ignores_it():
-    """Measured at 375x812 on the Charting tab: nineteen buttons wrapping to
-    six rows, 227px of toolbar above a chart that got 443. More than a third
-    of the screen was controls, which is the "mobile chart controls create
-    unusable layouts" report.
+def test_the_chart_toolbar_has_one_drawer_drawn_two_ways():
+    """Measured at 375x812 on the Charting tab: nineteen buttons wrapping to six
+    rows, 227px of toolbar above a chart that got 443. More than a third of the
+    screen was controls, which is the "mobile chart controls create unusable
+    layouts" report. That was the phone drawer.
 
-    Inline now: the range pills, the interval, Line/Candles, Reset zoom. In
-    the drawer: Fibs, Trends, Indicators, the study menus, Panes, Colours --
-    the set you open, use once and close. Re-measured: 141px over three rows
-    closed, 227px and twenty buttons open, and 54px on a desktop, unchanged.
+    Then the desktop got it too, asked for as a chart-first workspace with
+    "secondary settings in a compact menu": at 1440x900 the bar was two rows
+    and eleven controls. On the bar now: Indicators, More, Chart read, Reset,
+    the interval, the session, the ranges, Fit, Reset zoom and the chart style.
+    Behind More: Levels, Stages, Volume, Events, the studies, Panes and
+    Colours. Re-measured: one 53px row at 1100, 1152, 1280 and 1440 wide; on
+    the phone 139px over three rows shut and 261px open, against the 141 and
+    227 this test recorded before.
     """
     fn = APP.split("function wsToolbar() {", 1)[1].split("\nfunction ", 1)[0]
     assert 'class="ws-tools"' in fn
     assert "data-ws-tools" in fn
-    # Two wrappers, because the tool groups are not contiguous: Panes and
-    # Colours sit after the pills, and reordering them would have changed the
-    # desktop to fix the phone.
-    assert fn.count('<div class="ws-tools">') == 2
+    # One wrapper. It was two, because Colours sat after the range pills and
+    # moving it would have changed the desktop to fix the phone; now the
+    # desktop is meant to change, and Colours sits in the drawer beside Panes.
+    assert fn.count('<div class="ws-tools">') == 1
 
     # State survives the rebuild. The toolbar is replaced wholesale on every
     # menu toggle, so a class on the element alone would be thrown away.
     assert "let wsToolsOpen = false;" in APP
     assert "wsToolsOpen ? ' tools-open' : ''" in fn
 
-    # `display: contents` is what makes this free above the breakpoint: the
-    # wrapper stops generating a box and its children go back to being flex
-    # items of the toolbar.
-    # Leading newline, or this matches the tail of
-    # `.ws-toolbar.tools-open .ws-tools { display: contents; }` in the phone
-    # block and passes while the desktop rule says something else entirely.
-    # A mutation to `display: flex` survived the bare substring.
-    assert "\n.ws-tools { display: contents; }" in NO_COMMENTS
-    assert "\n.ws-tools-btn { display: none; }" in NO_COMMENTS
-    phone = phone_block_with(NO_COMMENTS, ".ws-tools-btn")
-    assert ".ws-tools { display: none; }" in phone
-    assert ".ws-toolbar.tools-open .ws-tools { display: contents; }" in phone
+    # Shut at rest at every width, with the button that opens it always drawn.
+    # Leading newlines, so the bare rules are what match and not the tail of a
+    # longer selector that says something else.
+    assert "\n.ws-tools { display: none; }" in NO_COMMENTS
+    assert "\n.ws-tools-btn { display: inline-flex;" in NO_COMMENTS
+    # Above the phone it floats under the bar, so opening it does not make the
+    # bar a row taller and every candle move.
+    tray = NO_COMMENTS[NO_COMMENTS.index("\n.ws-toolbar.tools-open .ws-tools {"):]
+    tray = tray[:tray.index("}")]
+    assert "position: absolute;" in tray and "display: flex;" in tray
+    # On the phone it opens into the bar's own rows, as it always did: a tray
+    # floating over a 375px chart would cover most of it.
+    phone = phone_block_with(NO_COMMENTS, ".ws-toolbar.tools-open .ws-tools { display: contents; }")
     # A flexible spacer on a wrapping row is a row of its own, and it was one
     # of the six.
     assert ".ws-toolbar-gap { display: none; }" in phone
-
 
 def test_no_panel_is_capped_into_a_nested_scroll_container():
     """Reported as "scrolling up and down is messed up", and it was.
