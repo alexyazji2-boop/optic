@@ -1748,6 +1748,53 @@ function timeIn(iso, zone, opts = {}) {
  * Tokyo — the day and the clock disagreeing by a whole date. Whichever zone the
  * time is shown in has to supply the day too.
  */
+/* The extended-hours print, but only when it belongs to the session on screen.
+ *
+ * Reported on a Sunday night: COIN showed "AFTER HOURS 183.24 +0.13% vs the
+ * close" beside a session strip reading OVERNIGHT. The print was from Friday
+ * 19:59 ET and the page was 73 hours later. Nothing was stale -- TTL_QUOTE is
+ * 30 seconds and the quote had just been fetched -- the newest print Yahoo
+ * holds for a single stock simply is Friday's, because this feed carries no
+ * overnight tape. The server published `post_market_time` the whole time and
+ * the client never read it: measured, zero occurrences in app.js.
+ *
+ * The test is the ET calendar date, not an age in hours. Extended-hours prints
+ * only happen inside one ET day -- after hours 16:00-20:00, pre-market
+ * 04:00-09:30 -- so a print from today is from the session you are looking at,
+ * and one from any other day is not. An hours threshold would have to be
+ * retuned for every weekend and holiday; this one does not.
+ *
+ * A missing timestamp shows the price anyway. The field is populated in
+ * practice, and refusing to render a live after-hours quote because a provider
+ * dropped one field is a worse failure than the one being fixed: it would hide
+ * a real price during the session it belongs to.
+ */
+function etDate(value) {
+  if (!value) return '';
+  try {
+    // en-CA gives YYYY-MM-DD, which compares as a string.
+    return new Date(value).toLocaleDateString('en-CA',
+      { timeZone: 'America/New_York' });
+  } catch (e) {
+    return '';
+  }
+}
+
+function freshExtended(quote) {
+  const q = quote || {};
+  const today = etDate(Date.now());
+  const usable = (price, pct, at, kind) => {
+    if (pct === null || pct === undefined) return null;
+    const stamped = etDate(at);
+    if (stamped && today && stamped !== today) return null;
+    return { kind, price, pct, at };
+  };
+  return usable(q.post_market_price, q.post_market_change_pct,
+    q.post_market_time, 'After hours')
+    || usable(q.pre_market_price, q.pre_market_change_pct,
+      q.pre_market_time, 'Pre-market');
+}
+
 function dayIn(iso, zone) {
   if (!iso) return '';
   try {
@@ -9476,13 +9523,7 @@ function renderSwing(d) {
     const inRegular = STATE.session && STATE.session.session
       && STATE.session.session.is_regular;
     if (inRegular) return null;
-    if (q.post_market_change_pct !== null && q.post_market_change_pct !== undefined) {
-      return { kind: 'After hours', price: q.post_market_price, pct: q.post_market_change_pct };
-    }
-    if (q.pre_market_change_pct !== null && q.pre_market_change_pct !== undefined) {
-      return { kind: 'Pre-market', price: q.pre_market_price, pct: q.pre_market_change_pct };
-    }
-    return null;
+    return freshExtended(q);
   })();
   const v = d.verdict || {};
   const t = d.technicals || {};
@@ -31576,15 +31617,16 @@ function updateStatus() {
     parts.push(`<span class="${signClass(quote.change_pct)}">${fmtPct(quote.change_pct, 2)}</span>`);
   }
   // Outside the session the regular-hours change is yesterday's news; the
-  // extended-hours print is where the price actually is.
-  const extPct = quote.post_market_change_pct !== undefined && quote.post_market_change_pct !== null
-    ? quote.post_market_change_pct : quote.pre_market_change_pct;
-  const extPrice = quote.post_market_price || quote.pre_market_price;
-  if (extPct !== undefined && extPct !== null) {
-    const which = quote.post_market_change_pct !== undefined
-      && quote.post_market_change_pct !== null ? 'after hrs' : 'pre-mkt';
-    parts.push(`${which} ${extPrice ? fmt(extPrice, 2) + ' ' : ''}<span class="${
-      signClass(extPct)}">${fmtPct(extPct, 2)}</span>`);
+  // extended-hours print is where the price actually is -- when there is one.
+  // Through freshExtended, so this strip and the price header above it cannot
+  // disagree about whether a print belongs to the session on screen. The strip
+  // was the other half of the Sunday-night report: "after hrs 183.24 +0.13%"
+  // on its top line, from Friday.
+  const ext = freshExtended(quote);
+  if (ext) {
+    const which = ext.kind === 'After hours' ? 'after hrs' : 'pre-mkt';
+    parts.push(`${which} ${ext.price ? fmt(ext.price, 2) + ' ' : ''}<span class="${
+      signClass(ext.pct)}">${fmtPct(ext.pct, 2)}</span>`);
   }
 
   // One line per view, saying what that view actually knows.
