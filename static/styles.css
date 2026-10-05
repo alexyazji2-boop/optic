@@ -2502,9 +2502,11 @@ body.chat-resizing svg { pointer-events: none; }
 /* 24-hour strip with the four sessions laid out to scale, and a marker at now. */
 .ses-strip {
   position: relative;
-  flex: 1 1 200px;
+  /* Shrinks before anything wraps: measured at 1024 with the fold button on
+     the row, a 200px basis pushed the button onto a line of its own. */
+  flex: 1 1 120px;
   height: 6px;
-  min-width: 160px;
+  min-width: 120px;
   border-radius: var(--r-xs);
   background: var(--surface-2);
   overflow: hidden;
@@ -2582,6 +2584,9 @@ body.chat-resizing svg { pointer-events: none; }
   align-items: center;
   gap: var(--space-2);
   flex: none;
+  /* Right-hand end of the row whatever wraps: below 900px the strip takes a
+     row of its own and this stays beside the phase rather than below it. */
+  margin-left: auto;
   padding: var(--space-1) var(--space-2);
   background: none;
   border: 1px solid transparent;

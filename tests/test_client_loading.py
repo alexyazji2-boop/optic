@@ -100,7 +100,7 @@ def run_js(scenario):
     loaders = "\n".join(function(name) for name in [
         "errorHTML",
         "loadSwing", "loadSecurityFacet", "loadChartWorkspace", "tickAutoRefresh",
-        "liveIndicatorHTML"])
+        "liveIndicatorHTML", "trimPhase"])
     script = STUBS + setup + loaders + "\n(async function() {\n" + scenario + """
     })().then(function() { print('TEST_OK'); }, function(err) { print(err.stack); });
     """
@@ -204,6 +204,18 @@ def test_status_only_claims_auto_refresh_for_views_that_refresh():
       }
       phase = 'overnight';
       assert(!liveIndicatorHTML().includes('refreshing'), 'overnight refresh claim');
+    """)
+
+
+def test_the_status_chip_drops_the_phase_the_session_strip_already_names():
+    """The strip under the status line prints OVERNIGHT; the chip beside it
+    said "Overnight · index futures are live..." The chip keeps only its half."""
+    run_js("""
+      phase = 'overnight';
+      var full = liveIndicatorHTML(), trimmed = liveIndicatorHTML({ phaseShown: true });
+      assert(full.includes('Overnight'), 'the unqualified chip lost its phase');
+      assert(!trimmed.includes('Overnight') && trimmed.includes('Index futures are live'),
+             'the phase is still repeated: ' + trimmed);
     """)
 
 

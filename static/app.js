@@ -31481,7 +31481,7 @@ function updateStatus() {
       STATE.ticker
         ? `${esc(STATE.ticker)} is loaded. Pick a tab above, or search another symbol.`
         : 'Search a ticker or company name to begin.',
-      liveIndicatorHTML(),
+      statusFeedChip(),
     ]);
     return;
   }
@@ -31538,14 +31538,13 @@ function updateStatus() {
     // sync with reality.
     const host = views[STATE.view];
     const busy = !!(host && host.querySelector('.loading'));
-    // A bare symbol on a dossier page repeats the header under it.
-    const named = SECURITY_VIEWS.includes(STATE.view) && !busy;
+    /* Only "Loading" earns a word here. A bare symbol on a dossier page
+     * repeats the header under it, a symbol on a market-wide page names
+     * something that page is not about, and "Ready." said nothing at all. */
+    const own = SECURITY_VIEWS.includes(STATE.view) && STATE.ticker;
     setStatus([
-      named ? null
-        : STATE.ticker
-          ? `${esc(STATE.ticker)}${busy ? '. Loading…' : ''}`
-          : (busy ? 'Loading…' : 'Ready.'),
-      liveIndicatorHTML(),
+      busy ? (own ? `${esc(STATE.ticker)}. Loading…` : 'Loading…') : null,
+      statusFeedChip(),
     ].filter(Boolean));
     return;
   }
@@ -31648,7 +31647,7 @@ function updateStatus() {
   if (quote.market_state && !STATE.session) {
     parts.push(`Market: ${esc(friendlyMarketState(quote.market_state))}`);
   }
-  parts.push(liveIndicatorHTML());
+  parts.push(statusFeedChip());
   setStatus(parts);
 }
 
@@ -31842,7 +31841,23 @@ const SESSION_LABEL = {
 const AUTO_REFRESH_VIEWS = ['home', 'overview', 'swing', 'market'];
 let autoRefreshPending = false;
 
-function liveIndicatorHTML() {
+/* The feed chip for the status line. Once the session strip is drawn under
+ * it, that strip names the phase in capitals a few pixels below, so the chip
+ * drops its own first word ("Overnight · ", "Pre-market · ") and keeps the
+ * half only it carries: whether prices are refreshing, or why not. A holiday
+ * keeps its name, which the strip does not print. */
+function statusFeedChip() {
+  const shown = !!STATE.session && STATE.view !== 'chart';
+  return liveIndicatorHTML({ phaseShown: shown });
+}
+
+function trimPhase(label, phaseShown) {
+  if (!phaseShown) return label;
+  const at = label.indexOf(' · ');
+  return at < 0 ? label : cap(label.slice(at + 3));
+}
+
+function liveIndicatorHTML(opts = {}) {
   const session = marketSessionET();
   if (session === 'closed') {
     // Name the holiday when there is one. "Market closed" on a Monday reads as
@@ -31852,7 +31867,8 @@ function liveIndicatorHTML() {
       return `<span class="chip neutral"><span class="dot"></span>${
         esc(holiday)} · market closed</span>`;
     }
-    return '<span class="chip neutral"><span class="dot"></span>Market closed · auto-refresh paused</span>';
+    return `<span class="chip neutral"><span class="dot"></span>${
+      trimPhase('Market closed · auto-refresh paused', opts.phaseShown)}</span>`;
   }
   // Extended hours get the same pulse but their own label, so "live" never
   // implies regular-session liquidity.
@@ -31869,7 +31885,7 @@ function liveIndicatorHTML() {
   // Falls back to the phase's own name rather than to undefined: a phase added
   // server-side should degrade to "Overnight", never to a rendered "undefined".
   return `<span class="chip ${tone}"><span class="dot"${beat}></span>${
-    esc(label)}</span>`;
+    esc(trimPhase(label, opts.phaseShown))}</span>`;
 }
 
 async function tickAutoRefresh() {
@@ -36187,8 +36203,12 @@ const PANELS_OPEN_BY_DEFAULT = {
   /* 'equal-weight vs cap-weight' is the second panel of the Macro tab's right
      column, under breadth. Opened, its chart fills the column beside the regime
      panel; shut by default it was a heading over empty space. */
+  /* 'currencies' is not here. Open, it was six FX tables and 5,696px at
+     1024 wide, 48% of the whole tab, between Economic Data and the
+     cross-asset panels; it is reference to look up, not a reading to
+     arrive at. Shut, it is one row in the index and one click. */
   market: ['macro regime', 'market breadth', 'equal-weight vs cap-weight',
-    'sector rotation', 'stock maps', 'currencies', 'economic data'],
+    'sector rotation', 'stock maps', 'economic data'],
   /* Read is a newspaper, so almost all of it opens.
    *
    * The other views here are analysis: a verdict at the top and evidence below
@@ -36226,8 +36246,12 @@ const PANELS_OPEN_BY_DEFAULT = {
    * Dossier after Options, which has ten chips. What opens is what the tab is
    * named for; short interest, the earnings record, the filing list, the
    * insider table and corporate actions are all reference you come to this
-   * tab for one at a time. */
-  financials: ['financials', 'segments and geography', 'congressional disclosures'],
+   * tab for one at a time.
+   *
+   * Congressional disclosures joined this list when the feature shipped and
+   * is the same kind of reference as the insider table beside it: open, it
+   * was 1,801px on AAPL, longer than the statements the tab is named for. */
+  financials: ['financials', 'segments and geography'],
 };
 
 const COLLAPSE_KEY = 'optic.panels.open';
@@ -37216,6 +37240,32 @@ const CHROMED_VIEWS = ['swing', 'earnings', 'market', 'indices', 'roth',
 });
 
 watchForLateChrome();
+
+/* The clamp, on every page rather than the nine with a render pass.
+ *
+ * markClampedCaveats ran from chromeView, from a panel opening and from
+ * switchView. Pages outside CHROMED_VIEWS fill in from their own requests
+ * after switchView has already run (Overview, News, Compare, Insiders,
+ * Analysts, Explore, Scan, Watchlist, Alerts, the Paper Desk, Settings and
+ * the owner's pages), so their caveats and ledes were never measured and
+ * always ran at full length: the same paragraph clamped on Macro and open on
+ * Insiders. One observer on the page column, debounced, judging only the
+ * active view; the pass skips anything it has already decided.
+ *
+ * A timer rather than requestAnimationFrame: a frame never comes in a
+ * background tab, and the measurement can wait 150ms either way. */
+(function watchProseForClamp() {
+  const main = document.querySelector('main');
+  if (!main || typeof MutationObserver !== 'function') return;
+  let timer = null;
+  new MutationObserver(() => {
+    if (timer) return;
+    timer = setTimeout(() => {
+      timer = null;
+      markClampedCaveats(views[STATE.view]);
+    }, 150);
+  }).observe(main, { childList: true, subtree: true });
+}());
 
 /* Follow the OS theme.
  *

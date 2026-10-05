@@ -299,14 +299,17 @@
 <!-- Persistent, not dismissible. The home-page notice can be hidden and only
      appears on one tab; this has to be present wherever a number is on screen. -->
 <footer class="legal" id="legal-footer">
+  <!-- Two sentences, and the full text one press away. The paragraph that
+       stood here was five lines at the foot of every page, and every claim
+       in it is also in LEGAL.full in app.js, which "Full disclaimer" opens
+       directly beneath: not advice or a solicitation, not a broker-dealer or
+       adviser, nothing personalised, data that may be wrong, the risk of
+       loss, past performance, and seeing a professional. What stays on
+       screen is the part a reader must not miss on any page. -->
   <p class="legal-line">
-    <strong>Not financial advice.</strong> Optic Terminal is an independent research tool for
-    informational and educational purposes only. Nothing here is a recommendation, solicitation or
-    offer to buy or sell any security or option. The operator is not a broker-dealer and not a
-    registered investment adviser, and no output is tailored to your circumstances. Data may be
-    delayed or wrong. Trading involves substantial risk of loss; options can expire worthless.
-    Past performance does not predict future results. Consult a licensed professional before
-    investing.
+    <strong>Not financial advice.</strong> Optic Terminal is an independent research tool,
+    not a broker-dealer or investment adviser. Data may be delayed or wrong, and trading
+    involves substantial risk of loss.
     <button type="button" id="legal-more">Full disclaimer</button>
   </p>
   <div class="legal-full" id="legal-full" hidden></div>
