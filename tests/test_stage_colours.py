@@ -120,7 +120,10 @@ def test_the_end_dot_value_tag_hover_dot_and_swatch_follow_the_bar():
     the base colour names a line that is not on the chart."""
     fn = _chart_fn()
     assert "const endColor = (se.tints && se.tints[lastIdx]) || se.color;" in fn
-    assert fn.count("stroke: endColor") == 1 and fn.count("fill: endColor") == 1
+    # The end dot, and the live marker's two ripples round it (filled and
+    # ringed, so the blink is visible: see .live-halo in styles.css).
+    assert fn.count("stroke: endColor") == 1 and fn.count("fill: endColor") == 2
+    assert "fill: endColor, 'fill-opacity': 0.28, stroke: endColor" in fn
     assert "color: (se.tints && se.tints[li]) || se.color" in fn
     assert "const hue = (se.tints && se.tints[i]) || se.color;" in fn
     assert "dots[k].setAttribute('fill', hue);" in fn

@@ -3755,30 +3755,43 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
 
 /* Live marker on the leading point of a chart's primary series.
  *
- * The halo expands and fades on a loop; the dot itself breathes very slightly.
- * Set only while the session is open — see setChartLive(). A blinking dot on a
- * closed market would be claiming movement that isn't happening. */
+ * Two ripples spread from it and fade, half a beat apart, and the dot swells
+ * and glows with the beat. Set only while the session is open — see
+ * setChartLive(). A blinking dot on a closed market would be claiming movement
+ * that isn't happening.
+ *
+ * Stronger than it was, on request ("make the chart blink more visible, pop
+ * out more"): the halo was one 1.5px outline reaching 2.6 times the dot from
+ * 55% opacity, and the dot grew 14%, which on a line of the same colour over a
+ * near-black plot read as a slightly thicker line end. Filled ripples from 90%
+ * to 4.2 times, a dot that grows by a third, and a glow in its own colour
+ * (`color` on the circle, so currentColor follows a tinted line). */
 .live-halo {
   transform-box: fill-box;
   transform-origin: center;
-  animation: live-halo 1.9s ease-out infinite;
+  animation: live-halo 1.6s cubic-bezier(0.2, 0.6, 0.35, 1) infinite;
 }
+.live-halo-late { animation-delay: -0.8s; }
 @keyframes live-halo {
-  0%   { transform: scale(1);   opacity: 0.55; }
-  70%  { transform: scale(2.6); opacity: 0; }
-  100% { transform: scale(2.6); opacity: 0; }
+  0%   { transform: scale(1);   opacity: 0.9; }
+  80%  { transform: scale(4.2); opacity: 0; }
+  100% { transform: scale(4.2); opacity: 0; }
 }
 .live-dot {
   transform-box: fill-box;
   transform-origin: center;
-  animation: live-dot 1.9s ease-in-out infinite;
+  animation: live-dot 1.6s ease-in-out infinite;
+  filter: drop-shadow(0 0 4px currentColor);
 }
 @keyframes live-dot {
-  0%, 100% { transform: scale(1); }
-  50%      { transform: scale(1.14); }
+  0%, 100% { transform: scale(1);    filter: drop-shadow(0 0 3px currentColor); }
+  50%      { transform: scale(1.32); filter: drop-shadow(0 0 7px currentColor); }
 }
+/* Still for a reader who asked for less motion, and still easy to find: one
+   ring held at its widest useful size, and the glow without the beat. */
 @media (prefers-reduced-motion: reduce) {
-  .live-halo { animation: none; opacity: 0.4; }
+  .live-halo { animation: none; opacity: 0.45; transform: scale(2); }
+  .live-halo-late { display: none; }
   .live-dot { animation: none; }
 }
 
