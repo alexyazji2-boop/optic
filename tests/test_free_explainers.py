@@ -74,7 +74,7 @@ def test_the_comparison_has_no_chip_and_no_question_left_behind():
     question it asked."""
     fn = RAW[RAW.index("function renderCompare(c) {"):]
     fn = fn[:fn.index("\n}\n")]
-    assert "<h2 class=\"weekly-title\">Side-by-side</h2>" in fn
+    assert "<h2 class=\"weekly-title\">Compare</h2>" in fn
     assert "askPulse(" not in fn
     for block in ("PULSE_TOPICS", "PULSE_ASK_LABELS", "ASK_EXPLAINERS"):
         body = re.search(r"^const %s = \{.*?^\};" % block, RAW, re.M | re.S).group()

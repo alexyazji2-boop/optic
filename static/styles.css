@@ -2642,7 +2642,7 @@ body.chat-resizing svg { pointer-events: none; }
 .ses-key.live i { opacity: 1; }
 
 .ses-warn {
-  margin-top: var(--space-2);
+  margin: var(--space-2) 0 0;
   font-size: var(--t-caption);
   line-height: 1.5;
   color: var(--ink-2);
@@ -4134,6 +4134,10 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
 
 /* Sits beside a heading, so it must not compete with it: normal weight, muted
  * until hovered. It is an offer, not a call to action. */
+/* Outlined only on hover. Every panel heading on a dossier page carries one
+   of these, and as bordered pills they were a second row of chips competing
+   with the headings they sit beside; at rest they are muted text now, which is
+   all a question needs to be until it is pointed at. */
 .ask-pulse {
   font: inherit;
   font-size: var(--t-micro);
@@ -4142,7 +4146,7 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
   margin-left: var(--space-3);
   padding: var(--space-1) var(--space-2);
   border-radius: var(--r-pill);
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
   background: transparent;
   color: var(--ink-muted);
   cursor: pointer;
@@ -6437,6 +6441,13 @@ details.ind-explain[open] > summary .cal-caret { transform: rotate(90deg); }
   border-radius: 2px;
   background: var(--accent, var(--s1));
 }
+
+/* Home has its own search, the page's main control, 120px below this one.
+   Two search boxes on one screen was the first thing the clutter pass of
+   2026-10-04 found; the phone layout already hid this one on Home for the
+   same reason, and the desktop now matches it. ⌘K still opens the palette
+   from anywhere, including here. */
+body[data-view="home"] header.topbar #ticker-form { display: none; }
 
 /* A section's pages, in the top bar beside the search box.
  *
@@ -14194,14 +14205,8 @@ body.chat-full .rp { display: none; }
   padding-top: var(--space-3);
   border-top: 1px solid var(--border);
 }
-.md-limits-h {
-  display: block;
-  margin-bottom: var(--space-1);
-  font-size: var(--t-micro);
-  letter-spacing: 0.01em;
-  color: var(--ink-muted);
-}
-.md-limits ul { margin: 0; padding-left: var(--space-4); }
+.md-limits-fold { margin-top: 0; }
+.md-limits ul { margin: var(--space-2) 0 0; padding-left: var(--space-4); }
 .md-limits li {
   font-size: var(--t-caption);
   line-height: 1.6;
@@ -15868,6 +15873,22 @@ body.ws-max[data-view="chart"] main { padding: 0; }
   /* The gold outline says which page this is. The blue underline every
      selected tab in nav.tabs carries drew a second mark under the chip. */
   header.topbar #subnav button[aria-selected="true"]::after { content: none; }
+
+  /* The section strip keeps its chips and Panels. Expand all and Collapse
+     all took half its width at 375 and left one chip name visible; every
+     panel still folds from its own heading. */
+  .sec-bulk [data-bulk] { display: none; }
+
+  /* Home's quick picks, one row that scrolls. Wrapped, the eight symbols
+     were three rows and 170px between the search box and the day's events. */
+  .home-quick {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin-bottom: var(--space-5);
+  }
+  .home-quick::-webkit-scrollbar { display: none; }
+  .home-quick > * { flex: none; }
 
   /* The market hours, one line. The day's timeline, the legend and the
      company block are a desktop's; the session and the countdown stay. */

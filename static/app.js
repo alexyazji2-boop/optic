@@ -6957,8 +6957,16 @@ function morningDesk(data) {
       ${cal}
       ${d.overall ? `<p class="md-p md-overall">${gloss(d.overall)}</p>` : ''}
       ${(d.limits || []).length ? `<div class="md-limits">
-        <span class="md-limits-h">What this does not tell you</span>
-        <ul>${(d.limits || []).map((l) => `<li>${gloss(l)}</li>`).join('')}</ul>
+        ${/* Folded, with the count in the label. Open, the list was five
+             to seven bullets under every desk, and on a quiet day it was
+             longer than the desk it qualified. The label still says, on
+             arrival, that there are things this does not tell you and how
+             many, which is the half of the convention a reader needs before
+             reading; the list is one press away. */''}
+        <details class="ind-explain md-limits-fold">
+          <summary>What this does not tell you (${(d.limits || []).length})<i class="cal-caret" aria-hidden="true"></i></summary>
+          <ul>${(d.limits || []).map((l) => `<li>${gloss(l)}</li>`).join('')}</ul>
+        </details>
         ${/* Which voice wrote it, stated rather than left to be guessed.
              The figures are identical either way: the prose is an overlay and
              the numbers come from the same payload as the strip above. What
@@ -22323,9 +22331,11 @@ function renderCompare(c) {
    *
    * Every other view in the app is controls-then-result. This one now is too.
    */
+  /* Titled with the name the rail and the palette use. It was "Side-by-side"
+   * under a "Compare tickers" kicker: three names for one page, two of them
+   * on the page itself. */
   const head = `<div class="panel span-all">
-    <div class="weekly-kicker">Compare tickers</div>
-    <h2 class="weekly-title">Side-by-side</h2>
+    <h2 class="weekly-title">Compare</h2>
     <p class="weekly-sub">Two to four stocks or ETFs ranked across momentum, technical
       structure, volatility and longer-term value. The three horizons are scored separately,
       so a name can lead one and trail another. That disagreement is the useful part.</p>
@@ -31359,7 +31369,7 @@ function renderSessionBar() {
     ${/* The stale-print warning sits outside the fold: it qualifies the
          extended-hours price on the row above, and a caveat on a figure
          belongs where the figure is, not behind a button. */''}
-    ${tickerRelevant && p.stale_note ? `<div class="ses-warn">${gloss(p.stale_note)}</div>` : ''}
+    ${tickerRelevant && p.stale_note ? `<p class="ses-warn">${gloss(p.stale_note)}</p>` : ''}
     ${/* The legend, the company and the description, folded by default
          at every width; see sessionDetailOpen for the measurement. The
          button on the row above is labelled for what it reveals: with no
@@ -31378,6 +31388,9 @@ function renderSessionBar() {
     </div>`;
 
   dedupeGlossTerms(host);
+  // The stale-print warning clamps like a caveat: one line on a desktop, and
+  // four on a phone before this, ahead of the price it qualifies.
+  markClampedCaveats(host);
 
   /* Hide the "More" on the description when it already fits — a button that
    * expands nothing is worse than no button.
@@ -31506,9 +31519,13 @@ function updateStatus() {
       : ['Chart. Pick a symbol to begin.']);
     return;
   }
-  if (!STATE.ticker
-      && !['market', 'indices', 'roth', 'tracker', 'settings', 'brief',
-        'compare', 'earnings', 'instrument'].includes(STATE.view)) {
+  /* Only the dossier is about one loaded symbol. This was an allow-list of
+   * pages exempt from the nag, and every page added since (Explore, Scan,
+   * Insiders, Analysts, the Paper Desk, Watchlist, Alerts) was missing from
+   * it, so each of them opened with "No symbol loaded" over a page that has
+   * never needed one. Earnings stays exempt: it shows the week's calendar
+   * with nothing loaded. */
+  if (!STATE.ticker && SECURITY_VIEWS.includes(STATE.view) && STATE.view !== 'earnings') {
     setStatus(['No symbol loaded. Search for one to begin.']);
     return;
   }
@@ -31574,7 +31591,7 @@ function updateStatus() {
   // One line per view, saying what that view actually knows.
   if (STATE.view === 'brief') {
     const degraded = (d.degraded_sources || []).length;
-    parts.push(`Read for ${esc(d.day || '')}`);
+    // No "Read for <day>": the page's title is "Optic's Read: <day>".
     const stories = ((d.wires || {}).desks || [])
       .reduce((n, k) => n + (k.entries || []).length, 0);
     parts.push(`${stories} stor${stories === 1 ? 'y' : 'ies'} · ${
@@ -37042,7 +37059,7 @@ document.addEventListener('click', (evt) => {
  * characters, each one between a heading and the numbers it introduces. The
  * same rule as the caveats: only what overflows is clamped, by measurement,
  * and the rest is one click or one Enter away. */
-const CLAMP_PROSE = 'p.caveat, .panel > p.sub, p.pl-method, p.cc-method, p.sc-note';
+const CLAMP_PROSE = 'p.caveat, .panel > p.sub, p.pl-method, p.cc-method, p.sc-note, p.ses-warn';
 
 function markClampedCaveats(host) {
   if (!host) return;
