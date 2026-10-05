@@ -46,6 +46,7 @@ import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional, Tuple
 
 from .. import feeds
+from .. import segment_store
 from . import sec_facts
 
 log = logging.getLogger(__name__)
@@ -218,8 +219,9 @@ def filings(ticker: str, force: bool = False) -> Dict[str, Any]:
 
 def parse_instance(url: str) -> Dict[str, Any]:
     """Dimensioned revenue and operating income out of one instance document."""
+    # Not kept: the parse below is, by accession, in app/segment_store.py.
     body = feeds.fetch_text(url, FILING_TTL, key="seg:doc:" + url,
-                            timeout=INSTANCE_TIMEOUT)
+                            timeout=INSTANCE_TIMEOUT, store=False)
     try:
         root = ET.fromstring(body.encode("utf-8", "replace"))
     except ET.ParseError as exc:
@@ -384,6 +386,32 @@ def _fill_fourth_quarters(cells: Dict[Tuple[str, str, str], float]
     return cells, derived
 
 
+# Where the shared feed cache kept these: parses under the first prefix, the raw
+# megabyte documents under the second.
+SHARED_PREFIX = "seg:parsed:"
+SHARED_DOC_PREFIX = "seg:doc:"
+_SHARED_CLEARED = False
+
+
+def _clear_shared_cache_once() -> None:
+    """Give the shared feed cache back the slots the raw documents held.
+
+    Once per process, on the first build. Up to sixty entries of a cache every
+    feed shares were megabyte XBRL documents that nothing reads twice, and the
+    whole file is rewritten on every store; nothing puts them there now
+    (`store=False` in parse_instance), and this removes the ones already in it
+    rather than waiting for them to age out. The parses are left, because
+    build() moves each across to the store as it meets it."""
+    global _SHARED_CLEARED
+    if _SHARED_CLEARED:
+        return
+    _SHARED_CLEARED = True
+    try:
+        feeds.forget_prefix(SHARED_DOC_PREFIX)
+    except Exception as exc:                                  # noqa: BLE001
+        log.info("segments: could not clear the shared cache (%s)", exc)
+
+
 def build(ticker: str, force: bool = False, budget: int = PARSE_BUDGET,
           wanted: int = FILINGS_WANTED) -> Dict[str, Any]:
     """Quarterly breakdowns for one ticker, as tables per axis."""
@@ -399,9 +427,20 @@ def build(ticker: str, force: bool = False, budget: int = PARSE_BUDGET,
     failed = 0
     fetched = 0
 
+    _clear_shared_cache_once()
+    # Every filing already read, from the store that outlives a restart. The
+    # shared feed cache held these before, where sixty entries of every feed's
+    # traffic evicted them; see app/segment_store.py for what that cost.
+    kept = segment_store.load_many(entry["accession"] for entry in rows)
     for entry in rows:
-        key = "seg:parsed:" + entry["accession"]
-        parsed = feeds.cached_json(key)
+        acc = entry["accession"]
+        parsed = kept.get(acc)
+        if parsed is None:
+            # A parse left in the shared cache from before the store existed is
+            # moved across rather than read from EDGAR again.
+            parsed = feeds.cached_json(SHARED_PREFIX + acc)
+            if parsed is not None:
+                segment_store.save(acc, parsed)
         if parsed is None:
             if fetched >= max(0, int(budget)):
                 unread += 1
@@ -410,10 +449,12 @@ def build(ticker: str, force: bool = False, budget: int = PARSE_BUDGET,
             try:
                 parsed = parse_instance(entry["instance_url"])
             except Exception as exc:                          # noqa: BLE001
-                log.info("segments: %s failed (%s)", entry["accession"], exc)
+                # Not kept: a timeout or a 403 is worth trying again next visit,
+                # where a document that does not parse is not.
+                log.info("segments: %s failed (%s)", acc, exc)
                 failed += 1
                 continue
-            feeds.store_json(key, parsed)
+            segment_store.save(acc, parsed)
         if not parsed.get("available"):
             failed += 1
             continue

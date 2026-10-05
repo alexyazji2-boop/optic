@@ -176,13 +176,14 @@ def test_quarters_from_another_series_are_not_borrowed():
 
 def test_parsing_is_capped_and_cached():
     """An instance document is about a megabyte and the last nine filings are
-    nine of them."""
+    nine of them. Kept in app/segment_store.py now, not the shared feed cache,
+    which evicted them; tests/test_segments_kept.py drives that end to end."""
     assert segments.PARSE_BUDGET <= 5
     block = SRC.split("def build(", 1)[1]
     assert "fetched >= max(0, int(budget))" in block
     assert "unread += 1" in block
-    assert 'feeds.store_json(key, parsed)' in block
-    assert 'feeds.cached_json(key)' in block
+    assert "segment_store.save(acc, parsed)" in block
+    assert "segment_store.load_many(" in block
 
 
 def test_the_panel_reports_what_it_has_not_read():
@@ -266,7 +267,10 @@ def test_a_slow_response_cannot_land_on_another_symbol():
     """Nine megabytes is not a fast request, and the reader may load something
     else while it runs."""
     body = APP_JS.split("async function loadSegments(", 1)[1].split("\n}\n", 1)[0]
-    assert "if (STATE.segmentsFor !== STATE.ticker) return;" in body
+    # Against the symbol this request was for, both ways: a further batch for
+    # one ticker must not land on the next one either.
+    assert "if (STATE.segmentsFor !== sym || STATE.ticker !== sym) return;" in body
+    assert body.index("STATE.ticker !== sym) return;") < body.index("STATE.segments = data;")
 
 
 def test_a_negative_segment_is_normal_not_an_error():

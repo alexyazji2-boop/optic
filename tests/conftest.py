@@ -59,6 +59,7 @@ from app import catalysts
 from app import db as accounts_db
 from app import live_mirror
 from app import paper
+from app import segment_store
 from app import weekly_store
 
 
@@ -110,6 +111,10 @@ def _real_data_out_of_the_way(tmp_path_factory):
         # file of their own.
         patch.setattr(analysts, "DB_PATH",
                       str(tmp_path_factory.mktemp("analysts") / "analysts.db"))
+        # Parsed filings for the segment tables. Makes its own schema, and a
+        # test that reads one back gives it a file of its own.
+        patch.setattr(segment_store, "DB_PATH",
+                      str(tmp_path_factory.mktemp("segments") / "segments.db"))
         yield
 
 

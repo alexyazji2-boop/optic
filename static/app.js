@@ -11243,9 +11243,11 @@ function renderSegments() {
       right.</p>
     <p class="note" style="color:var(--ink-muted);margin:0 0 var(--space-3)">
       ${fmt(d.filings_read, 0)} of ${fmt(d.filings_listed, 0)} filings read${
-  d.filings_unread ? `. ${fmt(d.filings_unread, 0)} more to go: each is a
-      megabyte of XBRL, so they are read a few per visit rather than all at once
-      \u2014 come back and the history lengthens` : ''}${
+  !d.filings_unread ? ''
+    : STATE.segmentsMore ? `. ${fmt(d.filings_unread, 0)} more being read now, a few
+      at a time: each is a megabyte of XBRL`
+      : `. ${fmt(d.filings_unread, 0)} more to go: each is a megabyte of XBRL, read
+      a few at a time, and the rest are read on your next visit`}${
   d.q4_derived ? `. ${fmt(d.q4_derived, 0)} fourth quarter${
     d.q4_derived === 1 ? '' : 's'} derived from the annual figure` : ''}.</p>
     ${tables.length ? tables.map((t) => `<h3>${hg(t.metric_label)} \u00b7 ${
@@ -11271,12 +11273,28 @@ function renderSegments() {
   </div>`;
 }
 
-async function loadSegments(force) {
+/* The rest of a ticker's filings, read while the reader is on the page.
+ *
+ * The server reads three instance documents a request, each about a megabyte,
+ * and said "come back and the history lengthens". Coming back was the only way
+ * to get the rest, and it rarely worked, because the parses it kept were
+ * evicted from a shared cache (see app/segment_store.py). So the panel asks
+ * again itself, a batch at a time, while there is something left that the last
+ * request made progress on and the reader is still here. Six rounds: thirteen
+ * filings is five batches, and one for a filing that fails. */
+const SEGMENT_MORE_ROUNDS = 6;
+let segmentMoreTimer = 0;
+
+async function loadSegments(force, round = 0) {
   const sym = STATE.ticker;
   if (!sym) return;
-  if (STATE.segmentsFor === sym && !force) return;
+  if (!round && STATE.segmentsFor === sym && !force) return;
+  if (round && (STATE.view !== 'financials' || STATE.segmentsFor !== sym)) return;
+  clearTimeout(segmentMoreTimer);
   STATE.segmentsFor = sym;
-  STATE.segments = null;
+  // Left as it is between batches, so a repaint mid-request still says the
+  // rest are being read rather than that they wait for the next visit.
+  if (!round) STATE.segmentsMore = false;
   const paint = () => {
     const host = document.getElementById('seg-host');
     if (host && STATE.view === 'financials') {
@@ -11284,17 +11302,31 @@ async function loadSegments(force) {
       revealPanels(host);
     }
   };
-  paint();
+  // A further batch keeps the table on screen and adds to it. Blanked between
+  // batches it would flash empty on every one of the way to full.
+  if (!round) {
+    STATE.segments = null;
+    paint();
+  }
+  let data;
   try {
-    STATE.segments = await getJSON(`/api/segments/${encodeURIComponent(sym)}`
-      + (force ? '?force=true' : ''));
+    data = await getJSON(`/api/segments/${encodeURIComponent(sym)}`
+      + (force && !round ? '?force=true' : ''));
   } catch (err) {
-    STATE.segments = { available: false, reason: err.message };
+    // A batch that fails leaves the ones already read where they are.
+    if (round) { paint(); return; }
+    data = { available: false, reason: err.message };
   }
   // The reader may have moved on, or loaded another symbol, while EDGAR was
   // being read: nine megabytes is not a fast request.
-  if (STATE.segmentsFor !== STATE.ticker) return;
+  if (STATE.segmentsFor !== sym || STATE.ticker !== sym) return;
+  STATE.segments = data;
+  STATE.segmentsMore = !!(data.available && data.filings_unread > 0 && data.fetched_now > 0
+    && round < SEGMENT_MORE_ROUNDS && STATE.view === 'financials');
   paint();
+  if (STATE.segmentsMore) {
+    segmentMoreTimer = setTimeout(() => loadSegments(false, round + 1), 400);
+  }
 }
 
 /* ---- Financials facet -----------------------------------------------------

@@ -619,12 +619,18 @@ def fetch_json(url: str, ttl_seconds: float, key: Optional[str] = None) -> Any:
 
 def fetch_text(url: str, ttl_seconds: float, key: Optional[str] = None,
                user_agent: Optional[str] = None,
-               timeout: Optional[float] = None) -> str:
+               timeout: Optional[float] = None, store: bool = True) -> str:
     """Cached plain-text GET, sharing the polite fetch and the disk cache.
 
     Separate from fetch_json because FRED serves CSV: parsing it as JSON would
     fail, and asking each caller to decode bytes would spread the encoding
     decision around the codebase.
+
+    `store=False` fetches politely and keeps nothing, for a document that is
+    only ever read once to get something smaller out of it. An XBRL instance is
+    about a megabyte, and kept here each one took a sixty-entry cache's slot
+    and its rewrite time for a text nobody asked for twice: its parse is what
+    is kept, in app/segment_store.py.
     """
     cache_key = key or ("text:" + url)
     now = time.time()
@@ -638,8 +644,28 @@ def fetch_text(url: str, ttl_seconds: float, key: Optional[str] = None,
     body = _fetch(url, "text/csv, text/plain, */*", user_agent=user_agent,
                   timeout=timeout)
     text = body.decode("utf-8", "replace")
-    _store(cache_key, {"at": now, "text": text, "error": None})
+    if store:
+        _store(cache_key, {"at": now, "text": text, "error": None})
     return text
+
+
+def forget_prefix(prefix: str) -> int:
+    """Drop every entry whose key starts with `prefix`, from memory and disk.
+
+    The file is rewritten only when something was dropped. For a kind of entry
+    that should no longer be in this cache at all, so the slots it holds go
+    back to the feeds that use them rather than waiting to age out."""
+    with _LOCK:
+        for key in [k for k in _MEM if k.startswith(prefix)]:
+            _MEM.pop(key, None)
+    disk = _load_disk()
+    with _DISK_LOCK:
+        gone = [k for k in disk if k.startswith(prefix)]
+        for key in gone:
+            disk.pop(key, None)
+        if gone:
+            _save_disk(disk)
+    return len(gone)
 
 
 # The disk cache as this process last read or wrote it: read from the file
