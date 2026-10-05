@@ -12,6 +12,17 @@ import pandas as pd
 import pytest
 
 from app.analytics import seasonality
+from app.analytics import sec_facts
+
+
+@pytest.fixture(autouse=True)
+def _no_filing_dates(monkeypatch):
+    """Every build here asked SEC for "T", which is AT&T, to find its reporting
+    months: a real fetch of EDGAR's ticker directory and AT&T's company facts
+    on every run. These tests are about the calendar, so the filings answer
+    "none", as they do for a symbol EDGAR does not know."""
+    monkeypatch.setattr(sec_facts, "history",
+                        lambda ticker, force=False: {"available": False, "reason": "not in this test"})
 
 
 # ------------------------------------------------------------ fake provider

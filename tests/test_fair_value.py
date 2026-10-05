@@ -26,6 +26,7 @@ from pathlib import Path
 import pytest
 
 from app.analytics import fair_value as fv
+from app.analytics import sec_facts
 
 ROOT = Path(__file__).resolve().parent.parent
 APP = (ROOT / "static/app.js").read_text()
@@ -150,7 +151,13 @@ def test_no_score_for_a_name_that_pays_nothing_stopped_or_is_a_fund(kwargs, why)
     assert out["available"] is False and why in out["reason"]
 
 
-def test_each_block_fails_on_its_own():
+def test_each_block_fails_on_its_own(monkeypatch):
+    # "XYZ" is Block's ticker, so the multiples block fetched Block's company
+    # facts from SEC on every run. It is meant to fail here on its own; the
+    # filings are made to fail with it rather than be fetched.
+    monkeypatch.setattr(sec_facts, "history",
+                        lambda ticker, force=False: {"available": False, "reason": "not in this test"})
+
     class Provider:
         def quote(self, sym):
             return {"price": 100.0, "quote_type": "EQUITY", "trailing_pe": 20.0, "dividend_yield": 0.02}

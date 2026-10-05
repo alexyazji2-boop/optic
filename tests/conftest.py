@@ -57,10 +57,12 @@ from app import analysts
 from app import alerts as alert_inbox
 from app import catalysts
 from app import db as accounts_db
+from app import feeds
 from app import live_mirror
 from app import paper
 from app import segment_store
 from app import weekly_store
+from app.analytics import sec_facts
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -115,6 +117,17 @@ def _real_data_out_of_the_way(tmp_path_factory):
         # test that reads one back gives it a file of its own.
         patch.setattr(segment_store, "DB_PATH",
                       str(tmp_path_factory.mktemp("segments") / "segments.db"))
+        # And the two file caches, which are data/ as much as the databases are.
+        # Neither was moved, and with the network open a full run in a fresh
+        # worktree left a 9.1MB data/feed_cache.json holding SEC's ticker
+        # directory and AT&T's and Block's company facts, and a data/sec_facts/
+        # beside it: tests/test_seasonality.py asked sec_facts for "T" and
+        # tests/test_fair_value.py for "XYZ". `sec_facts.CACHE_DIR` is a
+        # relative path as well, so it lands in whatever directory pytest is
+        # run from. See _no_live_feeds below for the half that stops the fetch.
+        patch.setattr(feeds, "CACHE_PATH",
+                      str(tmp_path_factory.mktemp("feeds") / "feed_cache.json"))
+        patch.setattr(sec_facts, "CACHE_DIR", str(tmp_path_factory.mktemp("sec_facts")))
         yield
 
 
@@ -176,6 +189,35 @@ def _no_live_calls(monkeypatch):
     if main is not None:
         monkeypatch.setattr(main, "_spawn_ranking_build",
                             lambda: main._RANKING_BUILD.update(running=False))
+
+
+@pytest.fixture(autouse=True)
+def _no_live_feeds(monkeypatch):
+    """No test fetches through app.feeds, and one that tries fails by name.
+
+    Every feed in the app (SEC, FRED, the RSS sources, the calendars) goes out
+    through `feeds._fetch`, and nothing here stopped it: eleven tests reached
+    sec.gov on every run, which made the suite 370s instead of 85s when SEC was
+    slow and wrote what it fetched into data/ (see the session fixture above).
+    Found by refusing this call and logging who made it.
+
+    Refusing alone is not enough to keep it that way. The app catches its own
+    fetch errors, as it should for a feed that is down, so a refused call reads
+    as an outage and the test passes in silence. So the refusal is recorded
+    and the test fails at teardown, naming the URL. A test of the fetch itself
+    patches `feeds._fetch` with its own and never reaches this one."""
+    reached = []
+
+    def refuse(url, *args, **kwargs):
+        reached.append(url)
+        raise RuntimeError("the suite does not fetch feeds: " + url)
+
+    monkeypatch.setattr(feeds, "_fetch", refuse)
+    yield
+    if reached:
+        pytest.fail("reached the network through app.feeds._fetch: {}. Stub the provider, "
+                    "or monkeypatch feeds._fetch in the test.".format(
+                        ", ".join(sorted(set(reached))[:3])), pytrace=False)
 
 
 @pytest.fixture(autouse=True)
