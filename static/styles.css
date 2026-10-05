@@ -1273,6 +1273,14 @@ main { padding: var(--space-6) var(--space-6) var(--space-8); isolation: isolate
  * unanimated it stayed lit through the blink, so the closed lid had a gold
  * speck floating over it.
  */
+/* And on Home too while the sidebar is collapsed. Asked for with a screenshot
+ * of the collapsed rail on Home: "the optic logo should be blinking when the
+ * side bar is collapsed". Collapsed, the mark is all the brand the rail has
+ * left, without the OPTIC TERMINAL beside it, and a still logo there read as
+ * the terminal having stopped. The reason it held still on Home holds only
+ * for marks out of phase, so the two are put on one clock rather than one
+ * held still: see syncLogoBlinks() in app.js. */
+body.rail-tight .brand-mark-eye,
 body:not([data-view="home"]) .brand-mark-eye {
   animation: eye-blink 6s ease-in-out -4.25s infinite;
   /* fill-box, so the lid closes on the eye's own centre rather than the
@@ -1280,10 +1288,12 @@ body:not([data-view="home"]) .brand-mark-eye {
   transform-box: fill-box;
   transform-origin: center;
 }
+body.rail-tight .brand-mark-line,
 body:not([data-view="home"]) .brand-mark-line {
   stroke-dasharray: 100;
   animation: line-redraw 6s ease-in-out -4.25s infinite;
 }
+body.rail-tight .brand-mark-dot,
 body:not([data-view="home"]) .brand-mark-dot {
   animation: dot-reveal 6s ease-in-out -4.25s infinite;
 }

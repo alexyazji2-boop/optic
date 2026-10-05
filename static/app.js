@@ -3677,8 +3677,30 @@ function trackRailHeight() {
  * point of collapsing it is that the reader wanted the width back. */
 const RAIL_KEY = 'optic.rail.tight';
 
+/* Every blinking Optic mark on one clock.
+ *
+ * The header mark and the home page's share keyframes, a 6s cycle and a
+ * -4.25s delay, but a CSS animation's clock starts when its rule first applies:
+ * at load for one, at the last render of Home for the other, at the press of
+ * Collapse for a third. So on Home with the rail collapsed the two marks blinked
+ * seconds apart, which is the fault the header's stillness on Home was there to
+ * avoid. Pinning every one of them to the document timeline's start puts them in
+ * phase whenever they began, and a mark that has only just begun blinking joins
+ * the others mid-cycle rather than starting a cycle of its own. */
+const LOGO_BLINKS = new Set(['eye-blink', 'line-redraw', 'dot-reveal']);
+function syncLogoBlinks() {
+  if (typeof document.getAnimations !== 'function') return;
+  document.querySelectorAll('.brand-mark-eye, .brand-mark-line, .brand-mark-dot, '
+    + '.home-logo-eye, .home-logo-line, .home-logo-dot').forEach((el) => {
+    el.getAnimations().forEach((a) => {
+      if (LOGO_BLINKS.has(a.animationName) && a.startTime !== 0) a.startTime = 0;
+    });
+  });
+}
+
 function applyRail(tight) {
   document.body.classList.toggle('rail-tight', tight);
+  syncLogoBlinks();
   const btn = document.getElementById('rail-toggle');
   if (btn) {
     btn.setAttribute('aria-pressed', String(tight));
@@ -3885,6 +3907,8 @@ function renderHome() {
   const input = $('#home-input');
   // renderHome rebuilds this markup, so the typeahead is re-attached each time.
   attachTypeahead('home-input', 'home-results');
+  // A new home mark is a new animation, on a clock of its own until told.
+  syncLogoBlinks();
 }
 
 
@@ -34764,9 +34788,12 @@ function switchView(view, force) {
   STATE.view = view;
   syncTabTitle();
   // Published to CSS so a rule can depend on which page this is. The header
-  // logo blinks everywhere except Home, where the big one is already doing it
-  // and two marks blinking out of phase reads as a fault.
+  // logo blinks everywhere except Home, where the big one is already doing it,
+  // and on Home as well once the rail is collapsed (body.rail-tight), with the
+  // two kept in phase by syncLogoBlinks.
   document.body.dataset.view = view;
+  // Leaving Home starts the header mark blinking; in step with the others.
+  syncLogoBlinks();
   Object.entries(views).forEach(([k, node]) => node.classList.toggle('active', k === view));
   /* Prose rendered while its view was hidden had no height to measure, so
    * markClampedCaveats left all of it unjudged: a facet prefetched in the

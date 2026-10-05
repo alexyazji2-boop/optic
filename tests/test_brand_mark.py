@@ -117,3 +117,35 @@ def test_the_header_mark_did_not_grow():
     # Anchored on the whole declaration: `.brand-mark {` on its own also
     # matches `.brand:hover .brand-mark {`, which is the colour rule.
     assert "\n.brand-mark { width: 34px; height: 34px;" in CSS
+
+
+# ------------------------------------------------------- the collapsed rail
+
+
+def test_the_collapsed_rail_blinks_on_every_page_home_included():
+    """Asked for with a screenshot of the collapsed rail on Home: "the optic
+    logo should be blinking when the side bar is collapsed". Collapsed, the
+    mark is all the brand the rail has left. Expanded on Home it still holds
+    still, as the test above says."""
+    for part in ("eye", "line", "dot"):
+        assert ("body.rail-tight .brand-mark-{0},\n"
+                'body:not([data-view="home"]) .brand-mark-{0} {{').format(part) in CSS, part
+
+
+def test_the_marks_are_put_on_one_clock_wherever_they_start():
+    """Measured with the rail collapsed on Home: both marks blinking, at the
+    same point in the cycle. Without this a mark's clock starts when its rule
+    first applies, so a rail collapsed ten seconds after Home rendered blinks
+    out of step with the home mark: the fault the stillness was for."""
+    fn = APP[APP.index("function syncLogoBlinks()"):]
+    fn = fn[:fn.index("\n}\n")]
+    assert "if (LOGO_BLINKS.has(a.animationName) && a.startTime !== 0) a.startTime = 0;" in fn
+    assert "const LOGO_BLINKS = new Set(['eye-blink', 'line-redraw', 'dot-reveal']);" in APP
+    # Called wherever a mark can start blinking: a collapse, a new home mark,
+    # and a page change that switches the header's on.
+    rail = APP[APP.index("function applyRail(tight) {"):]
+    assert "syncLogoBlinks();" in rail[:rail.index("\n}\n")]
+    home = APP[APP.index("function renderHome() {"):]
+    assert "syncLogoBlinks();" in home[:home.index("\n}\n")]
+    switch = APP[APP.index("  document.body.dataset.view = view;"):][:200]
+    assert "syncLogoBlinks();" in switch
