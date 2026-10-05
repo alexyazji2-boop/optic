@@ -184,3 +184,89 @@ def test_the_strip_and_the_header_share_one_rule():
     assert "freshExtended(quote)" in status
     assert "quote.post_market_price || quote.pre_market_price" not in status, \
         "the strip must not re-derive the rule either"
+
+
+# ------------------------------------------------------- the overnight print
+#
+# Added with app/providers/overnight.py. The session payload is polled once a
+# minute and the swing payload is not refreshed overnight at all, so the client
+# reads whichever is fresher -- and without that, the session bar moved every
+# minute while the header and strip above it sat on the page-load price.
+
+OVERNIGHT_SESSION = {
+    "ticker": "COIN",
+    "session": {"phase": "overnight", "is_regular": False},
+    "prices": {"extended": {"kind": "overnight", "price": 186.42,
+                            "change_pct": 1.8689, "as_of": "2026-10-05T01:31:25Z",
+                            "venue": "Bruce ATS"}},
+}
+SWING_QUOTE = {
+    "ticker": "COIN", "price": 183.0,
+    "overnight_price": 186.99, "overnight_change_pct": 2.18,
+    "overnight_time": "2026-10-05T01:30:14Z", "overnight_venue": "Blue Ocean ATS",
+    "post_market_price": 183.24, "post_market_change_pct": 0.13,
+    "post_market_time": "2026-10-02T23:59:50+00:00",
+}
+
+
+@pytest.fixture(scope="module")
+def night():
+    """Each case sets STATE.session the way /api/session sets it, so
+    marketSessionET answers from the same field it reads in production."""
+    exe = _jsc()
+    if not exe:
+        pytest.skip("no JavaScriptCore on this machine")
+    script = """
+      load('tests/support/browser_stubs.js');
+      try { load('static/charts.js'); load('static/app.js'); } catch (e) {}
+      var pinned = new Date(%s).getTime();
+      Date.now = function () { return pinned; };
+      var sess = %s, quote = %s, out = {};
+      function run(session, q) {
+        STATE.session = session;
+        return freshExtended(q) || null;
+      }
+      out.fresher = run(sess, quote);
+      out.quoteOnly = run({ticker: 'COIN', session: {phase: 'overnight'}, prices: {}}, quote);
+      out.otherTicker = run(Object.assign({}, sess, {ticker: 'NVDA'}), quote);
+      out.pastFourAm = run({ticker: 'COIN', session: {phase: 'pre'}, prices: {}}, quote);
+      // The live indicator is asserted in tests/test_client_loading.py, whose
+      // harness extracts the late `const`s it reads. Loaded whole, as here,
+      // app.js stops part-way on a stub and AUTO_REFRESH_VIEWS never leaves its
+      // temporal dead zone -- a harness limit, not a production one.
+      print('RESULT:' + JSON.stringify(out));
+    """ % (json.dumps(NOW), json.dumps(OVERNIGHT_SESSION), json.dumps(SWING_QUOTE))
+    proc = subprocess.run([exe, "-e", script], capture_output=True, text=True,
+                          timeout=180)
+    blob = proc.stdout + proc.stderr
+    assert "RESULT:" in blob, blob[-1500:]
+    return json.loads(blob.split("RESULT:", 1)[1].split("\n")[0])
+
+
+def test_the_fresher_session_copy_wins(night):
+    """Two copies, refreshed at different rates. The minute-polled one wins,
+    or the header and the session bar show two overnight prices at once."""
+    got = night["fresher"]
+    assert got["kind"] == "Overnight"
+    assert got["price"] == 186.42, "the page-load price beat the minute poll"
+    assert got["venue"] == "Bruce ATS"
+
+
+def test_the_swing_copy_is_used_when_the_session_has_none(night):
+    assert night["quoteOnly"]["price"] == 186.99
+    assert night["quoteOnly"]["venue"] == "Blue Ocean ATS"
+
+
+def test_another_names_session_payload_is_not_borrowed(night):
+    """STATE.session can be about a different symbol for a moment while a
+    switch is in flight. Showing NVDA's overnight price under COIN would be
+    the worst version of this bug."""
+    assert night["otherTicker"]["price"] == 186.99
+
+
+def test_an_overnight_print_is_not_shown_after_four(night):
+    """A page left open past 4am still holds last night's print. Shown during
+    pre-market it would be Sunday's trade presented as Monday's -- the bug
+    this exists to fix, from the other side. Friday's after-hours print is not
+    today's either, so nothing shows."""
+    assert night["pastFourAm"] is None

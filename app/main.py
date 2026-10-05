@@ -52,6 +52,7 @@ from .analytics import stage as stage_mod
 from .analytics import screener as screener_mod
 from .analytics import scan_request as scan_request_mod
 from .analytics import segments as segments_mod
+from .providers import overnight as overnight_mod
 from . import insiders as insiders_mod
 from . import analysts as analysts_mod
 from .analytics import regime as regime_mod
@@ -793,9 +794,37 @@ async def ticker_analysis(
     payload = await _run(_swing_snapshot, ticker, wanted, max_expiries, macro,
                          include_earnings=True, budget=budget, parallel=True,
                          timings=timings)
+    # After the snapshot, not inside it, and onto a copy of the quote. The
+    # payload is built fresh per request but its `quote` is the provider's
+    # cached dict itself -- `_cached` returns the stored object, not a copy --
+    # so attaching in place would write tonight's price into the shared cache.
+    # Off the event loop because it is a network call, and a no-op outside the
+    # overnight session: the window check comes first and costs no request.
+    await _run(_with_overnight, payload)
     timings.finish()
     response.headers["Server-Timing"] = timings.header()
     return payload
+
+
+def _with_overnight(payload: Dict[str, Any]) -> None:
+    """Attach tonight's overnight print to the payload's quote, if there is one.
+
+    Never raises into the request. See app/providers/overnight.py for the
+    source, why it was chosen, and what it is not."""
+    try:
+        started = session_mod.overnight_started_at()
+        if not started:
+            return
+        quote = (payload or {}).get("quote")
+        symbol = str((payload or {}).get("ticker") or "").upper()
+        if not isinstance(quote, dict) or not symbol:
+            return
+        found = overnight_mod.quotes([symbol]).get(symbol)
+        own = dict(quote)                  # never the cached object; see above
+        if overnight_mod.attach(own, started, found):
+            payload["quote"] = own
+    except Exception as exc:                              # noqa: BLE001
+        logging.getLogger("optic").info("overnight print skipped: %s", exc)
 
 
 @app.get("/api/quote/{ticker}")
@@ -1573,6 +1602,20 @@ async def session_prices(ticker: str) -> Dict[str, Any]:
     def build() -> Dict[str, Any]:
         symbol = ticker.upper().strip()
         quote = PROVIDER.quote(symbol)
+        # Tonight's overnight print, on a copy. This endpoint is polled every
+        # minute by every tab, which makes it the refresh for the overnight line
+        # at no extra request -- and `price_view` below is what draws the "AT
+        # THE CLOSE / AFTER HOURS" block, the third place that showed Friday's
+        # print as current on a Sunday night.
+        started = session_mod.overnight_started_at()
+        if started:
+            try:
+                found = overnight_mod.quotes([symbol]).get(symbol)
+                own = dict(quote or {})
+                if overnight_mod.attach(own, started, found):
+                    quote = own
+            except Exception as exc:                      # noqa: BLE001
+                logging.getLogger("optic").info("overnight print skipped: %s", exc)
         # The profile rides along here rather than getting its own request: this
         # endpoint already fires on every ticker load from every tab, and a
         # business description is cached for a day so it costs nothing after the

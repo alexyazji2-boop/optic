@@ -56,19 +56,25 @@ def test_a_missing_key_can_never_render_as_undefined_again():
 
 
 def test_overnight_does_not_claim_to_be_refreshing():
-    """The feed has no Blue Ocean tape for single stocks. session.py says so as
-    feed_covers_phase, and the chip must not say the opposite two inches away.
+    """The chip must never imply a single stock's price is moving when it is a
+    4pm close. That property is unchanged; the fact under it moved.
 
-    It used to read "this feed does not carry the overnight tape", which was
-    true and was the whole message. The index futures *are* carried and are live
-    through this window, so the chip names both halves now: what is live and
-    what is not. The property this protects is unchanged, that the chip never
-    implies a single stock's price is moving when it is a 4pm close."""
+    This read "single stocks are not [live]" because the feed had no overnight
+    tape for them. It does now, for the names an overnight venue has printed --
+    app/providers/overnight.py, measured live across twenty names on
+    2026-10-04, all twenty printed within minutes. So "single stocks are not"
+    became false for most of them, and whether one is live is a fact about
+    that name rather than about the session.
+
+    So the static label, which is what a view about no single name falls back
+    to, now claims only what is true of the session: the futures. The per-name
+    claim -- live with the venue named for a name that printed, "no venue has
+    printed this name tonight" for one that did not -- is asserted by running
+    liveIndicatorHTML in tests/test_client_loading.py."""
     label = _labels()["overnight"].lower()
     assert "refreshing" not in label
-    # Still says what is not live, rather than only advertising what is.
-    assert "single stocks are not" in label
     assert "futures are live" in label
+    assert "stocks are live" not in label, "the session label claims every stock"
 
 
 def test_the_live_tape_predicate_excludes_overnight():
@@ -110,9 +116,13 @@ def test_the_two_consumers_share_one_predicate():
 
 def test_only_a_covered_session_gets_the_beating_dot():
     """The pulse is the page's one animated element and it means prices are
-    arriving. Overnight they are not."""
+    arriving. Overnight they arrive for a name a venue has printed tonight, and
+    for nothing else -- so the overnight guard is tied to that print rather
+    than to the phase alone. Exercised for real in tests/test_client_loading.py;
+    this checks the guard is still keyed on the print."""
     body = APP_JS.split("function liveIndicatorHTML(", 1)[1].split("\nfunction ", 1)[0]
-    assert "session === 'overnight' ? ''" in body, "overnight still pulses"
+    assert "session === 'overnight' && !night ? ''" in body, \
+        "overnight pulses without a print, or never pulses with one"
 
 
 def test_the_covered_sessions_still_do():

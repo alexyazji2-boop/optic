@@ -10,8 +10,9 @@ every page, for the life of the account.
 The reason it could not simply be hidden is in the copy itself, in
 app/session.py. Three of the six phase descriptions are not background:
 
-    overnight  "this feed carries no overnight tape for them, so a single
-                stock still shows its 4pm close"
+    overnight  "where none has [printed], the close is the last price
+                there is" -- it read "this feed carries no overnight tape"
+                until an overnight source was added; still a warning
     holiday    "the last price shown is the previous session's close"
     closed     "Nothing trades until the overnight session reopens on Sunday"
 

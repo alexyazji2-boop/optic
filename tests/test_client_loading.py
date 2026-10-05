@@ -96,11 +96,13 @@ def run_js(scenario):
     setup = "\n".join(declaration(name) for name in [
         "ORIGIN_DOWN_RE",
         "swingRequestId", "swingLoading", "swingInFlight", "chartRequestId",
-        "SESSION_LABEL", "AUTO_REFRESH_VIEWS", "autoRefreshPending"])
+        "SESSION_LABEL", "AUTO_REFRESH_VIEWS", "autoRefreshPending",
+        # liveIndicatorHTML asks whether the loaded name has an overnight print.
+        "TICKER_VIEWS"])
     loaders = "\n".join(function(name) for name in [
         "errorHTML",
         "loadSwing", "loadSecurityFacet", "loadChartWorkspace", "tickAutoRefresh",
-        "liveIndicatorHTML", "trimPhase"])
+        "overnightPrint", "liveIndicatorHTML", "trimPhase"])
     script = STUBS + setup + loaders + "\n(async function() {\n" + scenario + """
     })().then(function() { print('TEST_OK'); }, function(err) { print(err.stack); });
     """
@@ -216,6 +218,46 @@ def test_the_status_chip_drops_the_phase_the_session_strip_already_names():
       assert(full.includes('Overnight'), 'the unqualified chip lost its phase');
       assert(!trimmed.includes('Overnight') && trimmed.includes('Index futures are live'),
              'the phase is still repeated: ' + trimmed);
+    """)
+
+
+def test_overnight_says_live_only_for_a_name_a_venue_has_printed():
+    """It read "Overnight · index futures are live, single stocks are not" for
+    every stock. Single stocks do trade overnight, on alternative venues, and
+    app/providers/overnight.py now carries those prints -- so whether a name is
+    live overnight is a fact about that name, and the label says it per name.
+
+    The dot pulses only where prices are arriving, which is the argument
+    setChartLive's own comment makes: a pulse on a price that is not moving
+    tells the reader something untrue."""
+    run_js("""
+      phase = 'overnight';
+      STATE.view = 'swing'; STATE.ticker = 'COIN';
+      STATE.swing = {ticker: 'COIN', quote: {ticker: 'COIN', price: 183.0}};
+      STATE.session = {ticker: 'COIN', session: {phase: 'overnight'},
+        prices: {extended: {kind: 'overnight', price: 186.42, change_pct: 1.87,
+                            as_of: '2026-10-05T01:31:25Z', venue: 'Bruce ATS'}}};
+      var live = liveIndicatorHTML();
+      assert(live.includes('Bruce ATS'), 'venue not named: ' + live);
+      assert(live.includes('updates every minute'), 'cadence not stated: ' + live);
+      assert(live.includes('pulse-beat'), 'a moving price did not pulse');
+      // Beside a session strip that already says OVERNIGHT, the chip drops the
+      // phase (trimPhase, added upstream in the same release) and keeps the
+      // venue and cadence -- the per-name half is the part only it knows.
+      var beside = liveIndicatorHTML({ phaseShown: true });
+      assert(!beside.includes('Overnight'), 'phase repeated: ' + beside);
+      assert(beside.includes('Bruce ATS') && beside.includes('updates every minute'),
+             'the per-name half was trimmed away: ' + beside);
+
+      STATE.session = {ticker: 'COIN', session: {phase: 'overnight'}, prices: {}};
+      var none = liveIndicatorHTML();
+      assert(none.includes('no venue has printed this name tonight'), 'no-print label: ' + none);
+      assert(!none.includes('pulse-beat'), 'pulsed with nothing arriving');
+
+      STATE.view = 'home';
+      var home = liveIndicatorHTML();
+      assert(home.includes('index futures are live'), 'home lost the futures note: ' + home);
+      assert(!home.includes('single stocks are not'), 'the false claim is back');
     """)
 
 

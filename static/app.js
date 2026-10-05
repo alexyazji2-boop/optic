@@ -1780,7 +1780,41 @@ function etDate(value) {
   }
 }
 
+/* Tonight's overnight print, from whichever payload is fresher.
+ *
+ * Two carry it and they refresh at different rates. The session payload is
+ * polled once a minute by every tab; the swing payload is not refreshed
+ * overnight at all, by design -- re-requesting the whole analysis every twenty
+ * seconds would return the same chains and technicals all night. So the
+ * session's copy wins whenever it is about the same symbol, and without that
+ * the session bar would move every minute while the header and the status
+ * strip above it sat on the price from page load: two overnight prices on one
+ * screen.
+ *
+ * Gated on the phase as well as the field. The server only attaches the print
+ * inside tonight's window, but a page left open past 4am still holds it, and a
+ * Sunday-night trade shown as current during Monday's pre-market is the bug
+ * this exists to fix, arriving from the other side. */
+function overnightPrint(quote) {
+  if (marketSessionET() !== 'overnight') return null;
+  const q = quote || {};
+  const s = STATE.session;
+  const view = s && s.ticker && q.ticker && s.ticker === q.ticker
+    ? (s.prices || {}).extended : null;
+  if (view && view.kind === 'overnight' && view.price) {
+    return { kind: 'Overnight', price: view.price, pct: view.change_pct,
+      at: view.as_of, venue: view.venue };
+  }
+  if (q.overnight_price) {
+    return { kind: 'Overnight', price: q.overnight_price, pct: q.overnight_change_pct,
+      at: q.overnight_time, venue: q.overnight_venue };
+  }
+  return null;
+}
+
 function freshExtended(quote) {
+  const night = overnightPrint(quote);
+  if (night) return night;
   const q = quote || {};
   const today = etDate(Date.now());
   const usable = (price, pct, at, kind) => {
@@ -8843,7 +8877,8 @@ function renderPriceHead(d, extQ) {
       </div>
       ${extQ && extQ.price !== null && extQ.price !== undefined ? `
         <div class="px-ext ${(extQ.pct || 0) >= 0 ? 'up' : 'down'}">
-          <span class="px-ext-kind">${esc(extQ.kind)}</span>
+          <span class="px-ext-kind">${esc(extQ.kind)}${
+  extQ.venue ? ` \u00b7 ${esc(extQ.venue)}` : ''}</span>
           <span class="px-ext-px">${fmt(extQ.price, 2)}</span>
           <span class="px-ext-pct">${(extQ.pct || 0) >= 0 ? '+' : ''}${
     fmt(extQ.pct, 2)}%</span>
@@ -31486,6 +31521,22 @@ function renderSessionBar() {
   }
 }
 
+/* Repaint the price header alone, in place.
+ *
+ * For the overnight session, where the once-a-minute session poll is the one
+ * source of a moving price and a full renderSwing would rebuild a page of
+ * charts and chains to change one number. Same inputs renderSwing gives it,
+ * through the same freshExtended rule, so the two paths cannot disagree. */
+function refreshPriceHead() {
+  const d = STATE.swing;
+  const host = views.swing && views.swing.querySelector('.px-head');
+  if (!d || !host) return;
+  const inRegular = STATE.session && STATE.session.session
+    && STATE.session.session.is_regular;
+  const html = renderPriceHead(d, inRegular ? null : freshExtended(d.quote || {}));
+  if (html) host.outerHTML = html;
+}
+
 async function loadSession(force) {
   if (!STATE.ticker) { STATE.session = null; renderSessionBar(); return; }
   if (STATE.session && STATE.session.ticker === STATE.ticker && !force) {
@@ -31501,6 +31552,12 @@ async function loadSession(force) {
     // The Quote panel keys its extended-hours block off the session phase, and
     // the swing view usually paints before this request lands.
     if (firstLoad && STATE.view === 'swing' && STATE.swing) renderSwing(STATE.swing);
+    // Overnight, this once-a-minute poll is the only thing carrying a moving
+    // price -- the swing payload is deliberately not refetched in this window --
+    // so the price header is repainted from it, alone, rather than waiting for
+    // a full renderSwing that will not come until 4am.
+    else if (marketSessionET() === 'overnight' && STATE.view === 'swing') refreshPriceHead();
+    updateStatus();
   } catch (err) {
     console.warn('Session strip unavailable:', err.message);
   }
@@ -31624,7 +31681,8 @@ function updateStatus() {
   // on its top line, from Friday.
   const ext = freshExtended(quote);
   if (ext) {
-    const which = ext.kind === 'After hours' ? 'after hrs' : 'pre-mkt';
+    const which = ext.kind === 'Overnight' ? 'overnight'
+      : ext.kind === 'After hours' ? 'after hrs' : 'pre-mkt';
     parts.push(`${which} ${ext.price ? fmt(ext.price, 2) + ' ' : ''}<span class="${
       signClass(ext.pct)}">${fmtPct(ext.pct, 2)}</span>`);
   }
@@ -31875,9 +31933,11 @@ const SESSION_LABEL = {
   regular: 'Market open · refreshing every 20s',
   pre: 'Pre-market · refreshing every 20s',
   after: 'After hours · refreshing every 20s',
-  // No "refreshing" claim: yfinance carries no Blue Ocean tape, so nothing
-  // arrives to refresh. session.py publishes the same fact as feed_covers_phase.
-  overnight: 'Overnight · index futures are live, single stocks are not',
+  // The fallback, for a view that is not about one name or a name no overnight
+  // venue has printed tonight. A name that has printed gets its own label in
+  // liveIndicatorHTML, because whether a single stock is live overnight is a
+  // fact about that stock and not about the session.
+  overnight: 'Overnight · index futures are live',
 };
 
 const AUTO_REFRESH_VIEWS = ['home', 'overview', 'swing', 'market'];
@@ -31916,14 +31976,21 @@ function liveIndicatorHTML(opts = {}) {
   // implies regular-session liquidity.
   const refreshing = AUTO_REFRESH_VIEWS.includes(STATE.view);
   const tone = session === 'regular' && refreshing ? 'bull' : 'neutral';
-  // The beat means "prices are arriving". Overnight they are not, and a pulsing
-  // dot next to a label that says the feed does not carry this session would
-  // contradict the sentence it sits beside.
-  const beat = session === 'overnight' ? ''
-    : refreshing ? ' style="animation:pulse-beat 1.8s ease-in-out infinite"' : '';
-  const label = session === 'overnight' || refreshing
-    ? (SESSION_LABEL[session] || cap(session))
-    : `${(SESSION_LABEL[session] || cap(session)).split(' · ')[0]} · snapshot`;
+  // Overnight, a single stock is live when a venue has printed it tonight and
+  // not otherwise. Asked of the loaded name, on the views that are about it.
+  const night = session === 'overnight' && TICKER_VIEWS.includes(STATE.view)
+    ? overnightPrint((STATE.swing || {}).quote) : null;
+  // The beat means "prices are arriving". Overnight they are only arriving for
+  // a name with a print, so the dot pulses for that and not for the session.
+  const beat = session === 'overnight' && !night ? ''
+    : refreshing || night ? ' style="animation:pulse-beat 1.8s ease-in-out infinite"' : '';
+  const label = night
+    ? `Overnight · ${night.venue || 'overnight venue'} · updates every minute`
+    : session === 'overnight' && TICKER_VIEWS.includes(STATE.view) && STATE.swing
+      ? 'Overnight · no venue has printed this name tonight'
+      : session === 'overnight' || refreshing
+        ? (SESSION_LABEL[session] || cap(session))
+        : `${(SESSION_LABEL[session] || cap(session)).split(' · ')[0]} · snapshot`;
   // Falls back to the phase's own name rather than to undefined: a phase added
   // server-side should degrade to "Overnight", never to a rendered "undefined".
   return `<span class="chip ${tone}"><span class="dot"${beat}></span>${

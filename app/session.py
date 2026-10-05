@@ -67,11 +67,13 @@ DESCRIPTIONS = {
                "other price gets compared against.",
     "after": "Post-market trading. This is where a company that reports after the bell gets "
              "its first verdict, on a fraction of regular-session volume.",
-    "overnight": "The overnight session. US equities barely trade and this feed carries no "
-                 "overnight tape for them, so a single stock still shows its 4pm close. The "
-                 "index figures are the futures, which do trade right through this window and "
-                 "are live. A future is not the index: it carries basis and its own expiry, so "
-                 "read it as where the market is leaning rather than as a price.",
+    "overnight": "The overnight session. Single stocks trade on alternative venues on a "
+                 "sliver of daytime volume; where one has printed tonight, that price shows "
+                 "beside the 4pm close with the venue named, and where none has, the close "
+                 "is the last price there is. The index figures are the futures, which trade "
+                 "right through this window and are live. A future is not the index: it "
+                 "carries basis and its own expiry, so read it as where the market is "
+                 "leaning rather than as a price.",
     "pre": "Pre-market trading. Volume builds toward the open, and levels set here often move "
            "again once the bell brings real liquidity.",
     "holiday": "A market holiday. US equities do not trade at all today, in any session, and "
@@ -364,6 +366,29 @@ LABELS = {
 }
 
 
+def overnight_started_at(now: Optional[datetime] = None) -> Optional[datetime]:
+    """When the overnight session now in progress began, or None if none is.
+
+    For one question: does a print belong to *tonight's* session. The overnight
+    window crosses midnight, which is why the calendar-date rule the client
+    uses for after-hours and pre-market cannot be used here -- a trade at 23:59
+    Sunday and a reading at 00:05 Monday are the same session on two dates.
+
+    So the window is resolved here, beside the constants that define it, and
+    from `_phase` rather than from the clock alone: Friday night is not an
+    overnight session and Sunday night is, and `_phase` already knows which.
+    """
+    when = (now or datetime.now(timezone.utc)).astimezone(ET)
+    if _phase(when) != "overnight":
+        return None
+    start = when.replace(hour=OVERNIGHT_START // 60, minute=OVERNIGHT_START % 60,
+                         second=0, microsecond=0)
+    if _minutes(when) < OVERNIGHT_END:
+        # Past midnight: tonight's session opened yesterday evening.
+        start -= timedelta(days=1)
+    return start
+
+
 def state(now: Optional[datetime] = None) -> Dict[str, Any]:
     """The current session, what's next, and the strip the UI draws."""
     when = (now or datetime.now(timezone.utc)).astimezone(ET)
@@ -422,6 +447,10 @@ def state(now: Optional[datetime] = None) -> Dict[str, Any]:
         "segments": segments,
         "next": _next_change(when),
         # The one thing a reader has to know before trusting an off-hours price.
+        # Overnight is covered for the single stocks Blue Ocean prints, which is
+        # most large caps on a weekday night and few small ones. Still false
+        # here, because this is a statement about the market and not about one
+        # name: the per-symbol answer is whether `price_view` found a print.
         "feed_covers_phase": phase != "overnight",
         # Alongside rather than merged into `phase`. They are two different
         # markets on two different calendars, and the whole point of adding it
@@ -446,7 +475,16 @@ def price_view(quote: Dict[str, Any], now: Optional[datetime] = None) -> Dict[st
     pre_pct = quote.get("pre_market_change_pct")
 
     extended: Optional[Dict[str, Any]] = None
-    if pre_pct is not None and phase == "pre":
+    # Tonight's overnight print first, when there is one. `quote` only carries
+    # these fields if `overnight.attach` put them there, and it does that only
+    # inside the current overnight window -- so their presence is the check,
+    # and a Friday after-hours print can no longer stand in for a live price.
+    if phase == "overnight" and quote.get("overnight_price"):
+        extended = {"kind": "overnight", "price": quote.get("overnight_price"),
+                    "change_pct": quote.get("overnight_change_pct"),
+                    "as_of": quote.get("overnight_time"),
+                    "venue": quote.get("overnight_venue")}
+    elif pre_pct is not None and phase == "pre":
         extended = {"kind": "pre-market", "price": quote.get("pre_market_price"),
                     "change_pct": pre_pct, "as_of": quote.get("pre_market_time")}
     elif post_pct is not None:
@@ -475,12 +513,15 @@ def price_view(quote: Dict[str, Any], now: Optional[datetime] = None) -> Dict[st
 
         # An overnight or weekend request gets the last after-hours print, hours or
         # days old. Calling that "current" without the qualifier is the whole
-        # thing this function exists to prevent.
-        if phase == "overnight":
+        # thing this function exists to prevent. A live overnight print is the
+        # exception, and is the only one that needs no note.
+        if extended["kind"] == "overnight":
+            pass
+        elif phase == "overnight":
             out["stale_note"] = (
                 "This is the last print from the after-hours session, not a live overnight "
-                "quote. The free feed doesn't carry the overnight tape. It's the most recent "
-                "price that exists here, and it may be several hours old."
+                "quote. No overnight venue has printed this name tonight, so this is the "
+                "most recent price there is, and it may be several hours old."
             )
         elif phase == "closed":
             out["stale_note"] = (
