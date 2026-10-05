@@ -17677,8 +17677,17 @@ function wsBaseSeries(d) {
 function wsSliceWindow(full, win) {
   const total = (full.dates || []).length;
   const out = { ...full };
+  /* Every array with one entry per bar, not every array.
+   *
+   * An intraday series also carries `sr`, its support and resistance levels: a
+   * list of eight, not a value per bar. Cut like a series to bars 1284-1736 of
+   * SPY's hourly year, it came out empty, so Support & resistance drew nothing
+   * on any chart under a day: reported as "these two dont work on charting".
+   * Measured: /api/intraday sent eight levels and the chart was handed none.
+   * Matched on length rather than named, for the reason the comment above
+   * gives: a named list goes stale when the payload gains a field. */
   Object.keys(out).forEach((k) => {
-    if (Array.isArray(out[k])) out[k] = out[k].slice(win.from, win.to);
+    if (Array.isArray(out[k]) && out[k].length === total) out[k] = out[k].slice(win.from, win.to);
   });
   return { ...out, shown_bars: win.to - win.from, total_bars: total,
            weekly: !!full.weekly, zoomed: true };
@@ -18763,11 +18772,40 @@ function trendSegments(tl, chartDates, opts) {
   // Where each chart bar sits in the server's frame, and vice versa.
   const posInChart = new Map();
   chartDates.forEach((d, i) => posInChart.set(d, i));
+  const posInSrc = new Map();
+  srcDates.forEach((d, i) => posInSrc.set(d, i));
+  const lastSrc = srcDates.length - 1;
+  /* The server bar under a chart bar: its own, or on a weekly chart the first
+   * daily bar of its week. Past the server's last bar it counts on, one bar a
+   * bar, for bars that have arrived since the lines were fitted. */
+  const srcIndexAt = (chartIndex) => {
+    const date = chartDates[chartIndex];
+    if (posInSrc.has(date)) return posInSrc.get(date);
+    if (date > srcDates[lastSrc]) {
+      const lastOnChart = posInChart.has(srcDates[lastSrc]) ? posInChart.get(srcDates[lastSrc]) : null;
+      return lastOnChart === null ? lastSrc : lastSrc + (chartIndex - lastOnChart);
+    }
+    for (let k = 0; k <= lastSrc; k += 1) if (srcDates[k] >= date) return k;
+    return lastSrc;
+  };
 
   return (tl.lines || []).map((l) => {
     const d1 = srcDates[l.start_index];
     const d2 = srcDates[l.end_index];
     if (!d1 || !d2) return null;
+    /* The line's own price at a server bar.
+     *
+     * The ends used to be the anchor's price at the first chart bar at or
+     * after the anchor, and the line's price now at the last. Right only when
+     * the anchor is on screen. Measured on SPY hourly: both support lines were
+     * anchored on 7 April at 651.06 and the window opens on 6 July, so each was
+     * drawn from 651.06 at July's edge to 772.78 at October's, a slope that is
+     * not the line's, crossing a plot that runs 720 to 790: the lines fell off
+     * the chart. Read from the line instead, each end is where the line is on
+     * that bar, whatever part of it is in view. */
+    const span = Math.max(1, l.end_index - l.start_index);
+    const lineAt = (si) => Math.round((l.start_price
+      + (l.price_now - l.start_price) * (si - l.start_index) / span) * 100) / 100;
     // A weekly chart has no bar for most daily dates, so fall back to the
     // nearest chart bar at or after the anchor.
     const nearest = (anchor) => {
@@ -18785,8 +18823,8 @@ function trendSegments(tl, chartDates, opts) {
     const holding = !l.broken;
     const bullish = l.kind === 'support' ? holding : !holding;
     return {
-      x1, y1: l.start_price,
-      x2, y2: l.price_now,
+      x1, y1: lineAt(srcIndexAt(x1)),
+      x2, y2: lineAt(srcIndexAt(x2)),
       color: bullish ? C.pos : C.neg,
       width: l.broken ? 1.4 : 1.8,
       dash: l.broken ? '5 4' : null,
