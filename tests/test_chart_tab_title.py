@@ -218,3 +218,32 @@ def test_the_live_tick_runs_in_a_background_tab_and_never_redraws_under_the_hand
     hand = _piece("function chartUnderHand() {")
     for flag in ("wsPan", "wsDragging", "wsMenuOpen", ":hover"):
         assert flag in hand, flag
+
+
+def test_fresh_bars_reset_the_live_price_so_the_title_follows_the_chart():
+    """Found on the live site: reopening the Charting tab switches to hourly
+    bars, and the title went on naming the last tick's 116.88 over a new bar
+    whose close was 116.872. Bars fetched now are newer than the tick."""
+    load = _piece("async function wsLoadIntraday() {")
+    landed = load[load.index("wsIntraday = { ...data, symbol, range, window: win, session };"):]
+    assert landed.index("chartLive.price = null;") < landed.index("} catch (err) {")
+    assert "syncTabTitle();" in load
+    out = _run("""
+      STATE.view = 'chart'; STATE.chartSymbol = 'INTC'; chartRange = '60';
+      var d = { ticker: 'INTC', quote: { price: 116.88, prev_close: 119.32 } };
+      STATE.chartData = d;
+      wsIntraday = { symbol: 'INTC', available: true, closes: [116.95, 116.872] };
+      chartLive.data = d; chartLive.price = 116.88; syncTabTitle(); var stale = document.title;
+      chartLive.price = null; syncTabTitle(); var fresh = document.title;
+      print('RESULT:' + JSON.stringify({ stale: stale, fresh: fresh }));
+    """)
+    assert out == {"stale": "INTC: 116.88 (-2.04%)", "fresh": "INTC: 116.87 (-2.05%)"}
+
+
+def test_the_live_state_is_declared_before_anything_reads_it():
+    """A `const` read before its line has run throws, and the title is synced
+    from the bar loader, which sits seventeen thousand lines above the title."""
+    decl = APP.index("const chartLive = {")
+    for reader in ("async function wsLoadIntraday() {", "function chartTabPrice(d) {",
+                   "async function chartLiveTick() {"):
+        assert decl < APP.index(reader), reader

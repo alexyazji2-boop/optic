@@ -17890,6 +17890,14 @@ function wsClampWindow(win, total) {
  */
 let wsIntraday = null;
 
+/* The Charting tab's live state (see chartLiveTick), beside the bars it
+ * writes into, and ahead of every function that reads it. The live price
+ * belongs to one payload and one set of bars: a chart reloaded hours later
+ * must not name the morning's price, and with the market shut no tick would
+ * come to replace it. */
+const CHART_LIVE_MS = 15000;
+const chartLive = { data: null, price: null, busy: false, refetching: false, owed: false };
+
 async function wsLoadIntraday() {
   const symbol = STATE.chartSymbol;
   const range = chartRange;
@@ -17922,9 +17930,15 @@ async function wsLoadIntraday() {
     if (STATE.chartSymbol !== symbol || chartRange !== range || intradayWindow(range) !== win
         || chartSession !== session) return;
     wsIntraday = { ...data, symbol, range, window: win, session };
+    /* Bars fetched now are newer than the last live tick, so the title takes
+     * their last close until the next tick writes a fresh price into them.
+     * Found on the live site: reopening the tab switches to hourly bars, and
+     * the title went on naming the tick's 116.88 over a new bar at 116.872. */
+    chartLive.price = null;
   } catch (err) {
     wsIntraday = { symbol, range, window: win, session, available: false, reason: err.message };
   }
+  syncTabTitle();
   wsRedrawChart();
 }
 
@@ -35157,14 +35171,6 @@ let viewBeforeSettings = 'home';
  * quote the tab was loaded with, which the tab's 20-second refresh replaces
  * while the market is live. */
 const APP_TITLE = 'Optic Terminal';
-
-/* The Charting tab's live state (see chartLiveTick). Declared here, ahead of
- * every function that reads it, so nothing can reach it in its dead zone. The
- * live price belongs to one payload: a chart reloaded hours later must not
- * name the morning's price until a tick replaces it, and with the market shut
- * no tick would. */
-const CHART_LIVE_MS = 15000;
-const chartLive = { data: null, price: null, busy: false, refetching: false, owed: false };
 
 /* The price the tab names: the one the chart is showing.
  *
