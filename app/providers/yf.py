@@ -752,13 +752,29 @@ class YFinanceProvider(MarketDataProvider):
                 if div_yield > 0.20:
                     div_yield = None  # implausible; drop rather than mis-price
 
+            # The day's change, derived when Yahoo's own figure is missing and
+            # the two numbers it is made from are not. `.info` is three requests
+            # in yfinance 1.x, and on 2026-10-05 at 1pm ET NVDA came back with
+            # price 237.13 and previous close 233.95 but no change at all: the
+            # Dossier showed none and Optic's read said NVIDIA "has not printed
+            # a change today" while it was up 1.36%. Yahoo's figure wins when
+            # it is there, and this is Yahoo's own formula when it is not.
+            prev_close = _f(info.get("regularMarketPreviousClose"))
+            change = _f(info.get("regularMarketChange"))
+            change_pct = _f(info.get("regularMarketChangePercent"))
+            if price is not None and prev_close:
+                if change is None:
+                    change = price - prev_close
+                if change_pct is None:
+                    change_pct = (price / prev_close - 1.0) * 100.0
+
             return {
                 "ticker": ticker.upper(),
                 "name": info.get("longName") or info.get("shortName") or ticker.upper(),
                 "price": price,
-                "prev_close": _f(info.get("regularMarketPreviousClose")),
-                "change": _f(info.get("regularMarketChange")),
-                "change_pct": _f(info.get("regularMarketChangePercent")),
+                "prev_close": prev_close,
+                "change": change,
+                "change_pct": change_pct,
                 "day_high": _f(info.get("regularMarketDayHigh")),
                 "day_low": _f(info.get("regularMarketDayLow")),
                 # Extended-hours trade. This is where an earnings reaction first

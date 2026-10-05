@@ -144,6 +144,10 @@ function fmt(v, d) { return Number(v).toFixed(d); }
 function queueMicrotask() {}
 var STATE = { ticker: 'HOOD', swing: null, quickQuote: null };
 function priceIn(html) { var m = /sec-px">([^<]*)</.exec(html); return m ? m[1] : null; }
+// The header's own satellites, driven by tests/test_ux_system.py; stubbed so
+// this harness measures which price the header picks and nothing else.
+function secDataStateHTML() { return ''; }
+function secActionsHTML() { return ''; }
 """
 
 
@@ -156,6 +160,23 @@ def test_the_header_takes_the_quick_price_while_the_full_one_is_on_its_way():
       assert(html.indexOf('+2.50%') >= 0 && html.indexOf('Robinhood') >= 0, 'with its change and name');
       STATE.swing = { ticker: 'HOOD', quote: { price: 41.35, change_pct: 2.9 } };
       assert(priceIn(securityHeader('news')) === '41.35', 'the full payload wins once it lands');
+    """)
+
+
+def test_a_full_payload_without_a_price_does_not_erase_the_quick_one():
+    """Measured on NVDA after hours: the full load landed with `price: null`
+    because one Yahoo leg came back empty. Preferring the full quote whole
+    dropped the quick quote's price (and its name and change) for nothing,
+    until the session payload's close arrived to stand in. The merge is field
+    by field, so a blank field defers and a filled one wins."""
+    _js(HEADER, ["securityHeader"], """
+      STATE.quickQuote = { ticker: 'HOOD', quote: { name: 'Robinhood', price: 41.2, change_pct: 2.5 } };
+      STATE.swing = { ticker: 'HOOD', quote: { price: null, change_pct: null, exchange: 'NMS' } };
+      var html = securityHeader('news');
+      assert(priceIn(html) === '41.20', 'the quick price survives a blank one: ' + html);
+      assert(html.indexOf('+2.50%') >= 0, 'and so does its change');
+      assert(html.indexOf('Robinhood') >= 0, 'and its name');
+      assert(html.indexOf('NMS') >= 0, 'while the full payload still adds what it has');
     """)
 
 

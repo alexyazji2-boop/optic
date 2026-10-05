@@ -4019,7 +4019,7 @@ function homeTodayHTML(p) {
   if (!cols.length) return '';
   const horizon = Number(p.horizon_days) || 0;
   return `<div class="ht-head">
-      <h2 class="ht-title">Today</h2>
+      <h2 class="ht-title">What matters today</h2>
       ${horizon ? `<span class="ht-sub">Next ${fmt(horizon, 0)} days</span>` : ''}
       <button type="button" class="ht-more" data-goto-view="brief"
         >The full read \u2192</button>
@@ -4956,6 +4956,7 @@ function renderWatchlist() {
       </form>
     </div>
 
+    <div id="wv-pulse">${watchPulseHTML(((STATE.watchlist || {}).rows) || [])}</div>
     <div class="wv-sorts" role="group" aria-label="Sort the watchlist">
       ${WATCH_SORTS.map((sp) => `<button type="button"
         class="pill${watchSort === sp.id ? ' on' : ''}" data-watch-sort="${esc(sp.id)}"
@@ -6512,10 +6513,35 @@ function renderWatchlistHost() {
   if (home) home.innerHTML = watchlistFeedHTML({ compact: true, limit: 6 });
   const full = document.getElementById('wv-feed');
   if (full) full.innerHTML = watchlistFeedHTML({});
+  const pulse = document.getElementById('wv-pulse');
+  if (pulse) pulse.innerHTML = watchPulseHTML(((STATE.watchlist || {}).rows) || []);
   const count = document.getElementById('wv-count');
   if (count) count.textContent = watchCountLabel();
   const shownNote = document.getElementById('wv-shown');
   if (shownNote) shownNote.textContent = watchShownLabel();
+}
+
+/* The list in one line before the rows: how many moved which way, the
+ * biggest move, and how many changed state since the last visit. The rows say
+ * all of it; this is the answer to "anything I need to look at?" before
+ * reading them. Counts the whole list, not the filtered view, and says so. */
+function watchPulseHTML(rows) {
+  const priced = rows.filter((r) => Number.isFinite(r.change_pct));
+  if (!priced.length) return '';
+  const up = priced.filter((r) => r.change_pct > 0.005).length;
+  const down = priced.filter((r) => r.change_pct < -0.005).length;
+  const big = priced.slice().sort((a, b) => Math.abs(b.change_pct) - Math.abs(a.change_pct))[0];
+  const changed = rows.filter((r) => r.changed).length;
+  const bull = rows.filter((r) => r.signal === 'bullish').length;
+  const bear = rows.filter((r) => r.signal === 'bearish').length;
+  const cell = (label, value, cls) => `<div class="wv-pulse-cell"><span class="eyebrow">${label}</span>
+    <strong class="num ${cls || ''}">${value}</strong></div>`;
+  return `<div class="wv-pulse" role="group" aria-label="The whole list at a glance">
+    ${cell('Up / down', `${fmt(up, 0)} <span class="wv-pulse-of">/</span> ${fmt(down, 0)}`)}
+    ${cell('Biggest move', `${esc(big.symbol || big.ticker || '')} ${fmtPct(big.change_pct, 2)}`, signClass(big.change_pct))}
+    ${cell('Changed', changed ? `${fmt(changed, 0)} name${changed === 1 ? '' : 's'}` : 'Nothing')}
+    ${cell('Signal', `${fmt(bull, 0)} bullish \u00b7 ${fmt(bear, 0)} bearish`)}
+  </div>`;
 }
 
 function watchlistFeedHTML(opts) {
@@ -10791,6 +10817,135 @@ function securityViewsFor(sym) {
   return symbolIsFund(sym) ? SECURITY_VIEWS.filter((v) => v !== 'financials') : SECURITY_VIEWS;
 }
 
+/* Whether the number on screen is live, delayed or the close, and when it
+ * was taken. Every price in the Dossier hangs off this header, so this is the
+ * one place the reader learns how far to trust them.
+ *
+ * Outside the regular session the header's figure is not a moving quote. On
+ * the free feed it is the regular-session close (the session strip carries
+ * any extended-hours print, through freshExtended); on Tradier it is the last
+ * trade, which can be an extended-hours one. "Delayed ~15 min" beside a
+ * Friday close read on a Sunday would describe the feed, not the number. */
+function secDataStateHTML(q) {
+  const session = marketSessionET();
+  /* Real-time only when the feed is and this quote came from it. Tradier
+   * falls back to yfinance per quote and records it in `quote_source`, so a
+   * real-time deployment can still be showing a delayed number. */
+  const fellBack = /yfinance/i.test(String((q && q.quote_source) || ''));
+  const realtime = !!(STATE.health && STATE.health.realtime_chain) && !fellBack;
+  const at = q && q.as_of ? timeIn(q.as_of, activeZone()) : '';
+  let label;
+  let tone;
+  let why;
+  if (session !== 'regular') {
+    label = realtime ? 'Last trade' : 'At the close';
+    tone = 'is-closed';
+    why = realtime
+      ? 'The most recent trade the feed holds, which outside the regular session can be an extended-hours one'
+      : 'The regular-session close. Any extended-hours print is on the session strip';
+  } else {
+    label = realtime ? 'Live' : 'Delayed ~15 min';
+    tone = realtime ? 'is-live' : 'is-delayed';
+    why = realtime ? 'Quotes from a real-time feed'
+      : 'Quotes come from a free feed and run about 15 minutes behind the exchange';
+  }
+  const stamp = session === 'regular' || realtime ? at : '';
+  return `<span class="data-state ${tone}" title="${esc(why)}">
+    <span class="dot" aria-hidden="true"></span>${esc(label)}${stamp ? ` · ${esc(stamp)}` : ''}</span>`;
+}
+
+/* The three things a reader does to a security from anywhere in the Dossier:
+ * keep it, be told about it, and ask about it. They were each reachable, from
+ * three different pages; now they sit on the header that names the symbol. */
+function secActionsHTML(sym) {
+  const watched = watchList().includes(String(sym).toUpperCase());
+  return `<div class="sec-actions" role="group" aria-label="Actions for ${esc(sym)}">
+    <button type="button" class="btn sm sec-act${watched ? ' on' : ''}" data-sec-watch="${esc(sym)}"
+      aria-pressed="${watched}" title="${watched ? 'Remove from your watchlist' : 'Add to your watchlist'}"
+      ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.6 2.5 5.3 5.7.7-4.2 3.9 1.1 5.7L12 16.4l-5.1 2.8L8 13.5 3.8 9.6l5.7-.7Z"/></svg
+      ><span class="sec-act-label">${watched ? 'Watching' : 'Watch'}</span></button>
+    <button type="button" class="btn sm sec-act" data-sec-alert="${esc(sym)}"
+      title="Set a condition Optic checks for ${esc(sym)}"
+      ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2H4.5Z"/><path d="M10 21h4"/></svg
+      ><span class="sec-act-label">Alert</span></button>
+    <button type="button" class="btn sm primary sec-act" data-sec-pulse="${esc(sym)}"
+      title="Open Pulse with ${esc(sym)} as the context"
+      >${pulseMarkHTML('pulse-glyph-sm')}<span class="sec-act-label">Ask Pulse</span></button>
+  </div>`;
+}
+
+document.addEventListener('click', (evt) => {
+  if (!evt.target || !evt.target.closest) return;
+  const w = evt.target.closest('[data-sec-watch]');
+  if (w) {
+    const sym = String(w.dataset.secWatch || '').toUpperCase();
+    const on = watchList().includes(sym);
+    if (on) watchRemove(sym); else watchAdd(sym);
+    /* Every copy of the header, not just the one pressed: each Dossier
+     * section keeps its own, and the hidden ones would otherwise say
+     * "Watch" for a name that is now on the list. */
+    document.querySelectorAll('[data-sec-watch]').forEach((b) => {
+      if (String(b.dataset.secWatch || '').toUpperCase() !== sym) return;
+      b.classList.toggle('on', !on);
+      b.setAttribute('aria-pressed', String(!on));
+      b.title = on ? 'Add to your watchlist' : 'Remove from your watchlist';
+      const label = b.querySelector('.sec-act-label');
+      if (label) label.textContent = on ? 'Watch' : 'Watching';
+    });
+    return;
+  }
+  const a = evt.target.closest('[data-sec-alert]');
+  if (a) {
+    watchDraft.symbol = a.dataset.secAlert;
+    switchView('alerts');
+    focusWatchBuilderSoon();
+    return;
+  }
+  const p = evt.target.closest('[data-sec-pulse]');
+  if (p) openPulse();
+});
+
+/* Bring the watch builder into view and focus its condition, once it exists.
+ *
+ * Not on a timer. loadAlertsFeed waits for the watch catalogue and the fired
+ * watches before it renders at all, then renders again when /api/alerts
+ * lands, and each render replaces the form. Measured on a local server: no
+ * form at 900ms after the press, and the one that appeared later was swapped
+ * out again. So the Alerts view is watched for a few seconds and the focus
+ * re-applied after each render -- until the reader clicks or types there, at
+ * which point it is theirs and is left alone. */
+const WATCH_FOCUS_MS = 6000;
+
+function focusWatchBuilderSoon() {
+  const host = views.alerts;
+  if (!host) return;
+  let done = false;
+  let obs = null;
+  const stop = () => {
+    if (done) return;
+    done = true;
+    if (obs) obs.disconnect();
+    host.removeEventListener('pointerdown', stop, true);
+    host.removeEventListener('keydown', stop, true);
+  };
+  const apply = () => {
+    if (done || STATE.view !== 'alerts') { stop(); return; }
+    const form = document.getElementById('wd-new-form');
+    if (!form) return;
+    form.scrollIntoView({ block: 'center' });
+    const kind = form.querySelector('[data-watch-kind]');
+    if (kind && document.activeElement !== kind) kind.focus({ preventScroll: true });
+  };
+  host.addEventListener('pointerdown', stop, true);
+  host.addEventListener('keydown', stop, true);
+  apply();
+  if (typeof MutationObserver === 'function') {
+    obs = new MutationObserver(apply);
+    obs.observe(host, { childList: true });
+  }
+  setTimeout(stop, WATCH_FOCUS_MS);
+}
+
 function securityHeader(view, opts = {}) {
   /* Which company the strip is about.
    *
@@ -10808,7 +10963,19 @@ function securityHeader(view, opts = {}) {
   const swingQ = STATE.swing && (!STATE.swing.ticker || STATE.swing.ticker === sym)
     ? STATE.swing.quote : null;
   const quick = STATE.quickQuote && STATE.quickQuote.ticker === sym ? STATE.quickQuote.quote : null;
-  const q = (sym === STATE.ticker ? (swingQ || quick) : null) || {};
+  /* Field by field, not object by object. The full payload can land with a
+   * null price -- measured on NVDA after hours, when one Yahoo leg came back
+   * empty -- and preferring it whole dropped the quick quote's name, change
+   * and price for the session close, or for nothing before the session
+   * payload had landed. A blank field defers to the quick quote; a filled
+   * one wins. Never another symbol's: both sources are checked against sym. */
+  const q = {};
+  if (sym === STATE.ticker) {
+    Object.assign(q, quick || {});
+    Object.entries(swingQ || {}).forEach(([k, v]) => {
+      if (v !== null && v !== undefined && v !== '') q[k] = v;
+    });
+  }
   /* The session strip's prices, for whatever the facet's quote lacks. The
    * strip used to print its own "At the close" figure on Options, Investing
    * and Earnings, and on two of those it was the only place the day's change
@@ -10858,18 +11025,25 @@ function securityHeader(view, opts = {}) {
   /* Compact drops the price line. Used on Charting, where the toolbar and the
    * status strip already carry the symbol and the last price twice over, and
    * where a third copy would cost rows from a deliberately full-height chart. */
-  return `<header class="sec-head${opts.compact ? ' compact' : ''}">
+  return `<header class="sec-head${opts.compact ? ' compact' : ''}${view === 'chart' ? '' : ' has-acts'}">
     ${opts.compact ? '' : `<div class="sec-id">
       <span class="sec-sym">${esc(sym)}</span>
       ${q.name ? `<span class="sec-name">${esc(q.name)}</span>` : ''}
       ${has ? `<span class="sec-px">${fmt(price, 2)}</span>
         <span class="sec-chg ${dir}">${Number.isFinite(pct)
-    ? `${pct >= 0 ? '+' : ''}${fmt(pct, 2)}%` : ''}</span>` : ''}
+    ? `${pct >= 0 ? '+' : ''}${fmt(pct, 2)}%` : ''}</span>` : `<span class="sec-px-none"
+        >${STATE.swing && STATE.swing.ticker === sym ? 'No price in the feed' : 'Loading price'}</span>`}
       ${showStage ? '<span class="stage-chip" id="stage-sec-overview" hidden></span>' : ''}
       ${q.exchange ? `<span class="sec-meta">${esc(q.exchange)}${
     q.sector ? ` \u00b7 ${esc(q.sector)}` : ''}</span>` : ''}
+      ${has ? secDataStateHTML(q) : ''}
     </div>`}
     <nav class="sec-tabs" role="tablist" aria-label="Dossier sections">${tabs}</nav>
+    ${/* On every facet but Charting, compact included: Options drops the
+         identity row because its price card says it, but the actions are not
+         on that card. Charting has its own toolbar and every row there comes
+         off the chart. */''}
+    ${view === 'chart' ? '' : secActionsHTML(sym)}
   </header>`;
 }
 
@@ -28641,6 +28815,117 @@ function paperStatsHTML() {
 
 /* ------------------------------------------------------------- the render */
 
+/* Portfolio health: what the open book is exposed to, in plain words, before
+ * the table of it. Everything is computed from the positions and the marks
+ * already on this page -- nothing is fetched, nothing is estimated -- and the
+ * panel says what it does not cover rather than implying it does.
+ *
+ * Exposure is the cost of each position (entry x size x 100 for a contract),
+ * because a mark can be missing and a cost never is. */
+const PAPER_EXPIRY_DAYS = 7;
+const PAPER_CONCENTRATED = 0.4;
+
+function paperHealth() {
+  const open = paperBook.open;
+  if (!open.length) return null;
+  const bySym = {};
+  let long = 0;
+  let short = 0;
+  let pnl = 0;
+  let marked = 0;
+  const review = [];
+  /* Days to expiry in ET calendar days, the exchange's own. The first draft
+   * parsed the expiry as local 16:00, which put a reader in Tokyo a day out. */
+  const todayET = etDate(Date.now());
+  const dayMs = 86400000;
+  open.forEach((pos) => {
+    const cost = Math.abs(paperCost(pos)) || 0;
+    bySym[pos.ticker] = (bySym[pos.ticker] || 0) + cost;
+    if (pos.direction === 'short') short += cost; else long += cost;
+    const m = paperMarks[pos.id] || {};
+    if (m.pnl !== null && m.pnl !== undefined && isFinite(m.pnl)) { pnl += m.pnl; marked += 1; }
+    const why = [];
+    const r = paperR(pos, m.pnl);
+    if (r !== null && r <= -0.75) why.push(`${paperRText(r)}, within a quarter of its stop`);
+    if (pos.instrument === 'option' && pos.expiry && todayET) {
+      const days = Math.round((Date.parse(String(pos.expiry).slice(0, 10) + 'T00:00:00Z')
+        - Date.parse(todayET + 'T00:00:00Z')) / dayMs);
+      if (days < 0) why.push('expired and still open');
+      else if (days === 0) why.push('expires today');
+      else if (days <= PAPER_EXPIRY_DAYS) why.push(`expires in ${days} day${days === 1 ? '' : 's'}`);
+    }
+    // One row per position, every reason on it.
+    if (why.length) review.push({ pos, why: why.join('; ') });
+  });
+  const total = long + short;
+  const ranked = Object.entries(bySym).sort((a, b) => b[1] - a[1]);
+  const top = ranked[0];
+  const topShare = total ? top[1] / total : 0;
+  const top3 = total ? ranked.slice(0, 3).reduce((a, x) => a + x[1], 0) / total : 0;
+  return { open, total, long, short, pnl, marked, ranked, top, topShare, top3, review };
+}
+
+/* Whether the P&L beside it is priced, and from what. All marked, it says
+ * which feed; any unmarked, it counts them rather than summing them as zero. */
+function paperMarkStateHTML(h) {
+  if (h.marked < h.open.length) {
+    return `<span class="data-state is-unavailable"><span class="dot" aria-hidden="true"></span>${
+      fmt(h.open.length - h.marked, 0)} of ${fmt(h.open.length, 0)} not marked</span>`;
+  }
+  const realtime = !!(STATE.health && STATE.health.realtime_chain);
+  return `<span class="data-state ${realtime ? 'is-live' : 'is-delayed'}"><span class="dot" aria-hidden="true"></span>${
+    realtime ? 'Marked from live quotes' : 'Marked from delayed quotes'}</span>`;
+}
+
+function paperHealthHTML() {
+  const h = paperHealth();
+  if (!h) return '';
+  const names = h.ranked.length;
+  const concentrated = h.topShare >= PAPER_CONCENTRATED && names > 1;
+  const lean = !h.total ? 'flat'
+    : h.short === 0 ? 'all long' : h.long === 0 ? 'all short'
+      : h.long >= h.short ? `net long, ${fmt(Math.round(h.long / h.total * 100), 0)}% of exposure`
+        : `net short, ${fmt(Math.round(h.short / h.total * 100), 0)}% of exposure`;
+  const lead = [
+    names === 1 ? `One name, ${esc(h.top[0])}, is the whole book.`
+      : concentrated ? `${esc(h.top[0])} is ${fmt(Math.round(h.topShare * 100), 0)}% of the book, which is concentrated.`
+        : `Spread across ${fmt(names, 0)} names; the largest, ${esc(h.top[0])}, is ${fmt(Math.round(h.topShare * 100), 0)}%.`,
+    `It is ${esc(lean)}.`,
+    h.review.length ? `${fmt(h.review.length, 0)} position${h.review.length === 1 ? ' needs' : 's need'} a look.`
+      : 'Nothing is near its stop or its expiry.',
+  ].join(' ');
+  const tone = (v) => (v >= 0 ? 'pos' : 'neg');
+  return `<section class="panel ph" data-fixed="1" aria-label="Portfolio health">
+    <div class="hm-block-head"><h2>Portfolio health</h2>
+      ${paperMarkStateHTML(h)}</div>
+    <p class="ph-lead">${lead}</p>
+    <div class="ph-grid">
+      <div class="ph-cell"><span class="eyebrow">Exposure</span>
+        <strong class="num">$${fmtCompact(h.total, 1)}</strong>
+        <span class="ph-sub">at cost, ${fmt(h.open.length, 0)} position${h.open.length === 1 ? '' : 's'}</span></div>
+      <div class="ph-cell"><span class="eyebrow">Open P&amp;L</span>
+        <strong class="num ${h.marked ? tone(h.pnl) : ''}">${h.marked
+  ? `${h.pnl >= 0 ? '+' : '−'}$${fmtCompact(Math.abs(h.pnl), 2)}` : '—'}</strong>
+        <span class="ph-sub">${h.marked ? 'a quote, not a result' : 'waiting on marks'}</span></div>
+      <div class="ph-cell"><span class="eyebrow">Largest name</span>
+        <strong class="num">${fmt(Math.round(h.topShare * 100), 0)}%</strong>
+        <span class="ph-sub">${esc(h.top[0])}${names > 3 ? ` · top three ${fmt(Math.round(h.top3 * 100), 0)}%` : ''}</span></div>
+    </div>
+    <div class="ph-bar" role="img" aria-label="Exposure by name">${h.ranked.map(([sym, v], i) => `<span
+      class="ph-seg" style="flex-grow:${(v / (h.total || 1)).toFixed(4)};--seg:var(--s${(i % 8) + 1})"
+      title="${esc(sym)} ${fmt(Math.round(v / (h.total || 1) * 100), 0)}%"></span>`).join('')}</div>
+    <ul class="ph-legend">${h.ranked.slice(0, 6).map(([sym, v], i) => `<li><i style="--seg:var(--s${(i % 8) + 1})"></i>${
+  esc(sym)} <span class="num">${fmt(Math.round(v / (h.total || 1) * 100), 0)}%</span></li>`).join('')}</ul>
+    ${h.review.length ? `<h3 class="pt-h3">Needs review</h3>
+      <ul class="ph-review">${h.review.map((x) => `<li><span class="ph-review-pos">${paperPosLabel(x.pos)}</span>
+        <span class="ph-review-why">${esc(x.why)}</span></li>`).join('')}</ul>` : ''}
+    <p class="caveat">Computed from this book alone. It does not see sectors, upcoming
+      earnings or how these names move together, and it does not know about
+      anything you hold elsewhere.</p>
+  </section>`;
+}
+
+
 function renderPaperView() {
   const open = paperBook.open;
   views.paper.innerHTML = `<div class="panel pt-head" data-fixed="1">
@@ -28650,6 +28935,7 @@ function renderPaperView() {
         copy, and no connection to Optic Portfolio, which is the terminal's own
         record and stays untouched.</p>
     </div>
+    ${paperHealthHTML()}
     ${paperTicketHTML()}
     <div class="panel">
       <h2>${hg('Open')}${open.length ? `<span class="th-plain"> · ${
@@ -33048,10 +33334,84 @@ function updateChatContext() {
     'Does the short interest or insider activity change the read?',
     'How does the earnings record affect holding through the print?',
   ] : [];
+  const modes = $('#pulse-modes');
+  if (modes) modes.innerHTML = pulseModesHTML();
   $('#chat-suggest').innerHTML = suggestions
     .map((q) => `<button type="button" data-q="${esc(q)}">${esc(q.length > 46 ? q.slice(0, 44) + '…' : q)}</button>`)
     .join('');
 }
+
+/* What the reader is looking at, in the words Pulse should hear it in. One
+ * answer per view, so the modes below are about the screen and not a generic
+ * chatbot's opening offer. */
+function pulseSubject() {
+  const v = STATE.view;
+  if (v === 'chart' && STATE.chartSymbol) return { kind: 'chart', sym: STATE.chartSymbol, label: `${STATE.chartSymbol} chart` };
+  if (SECURITY_VIEWS.includes(v) && STATE.ticker) {
+    return { kind: 'security', sym: STATE.ticker, label: `${STATE.ticker} \u00b7 ${SUB_LABELS[v] || v}` };
+  }
+  if (['tracker', 'paper', 'roth'].includes(v)) return { kind: 'portfolio', label: VIEW_NAMES[v] || 'Positions' };
+  if (['watchlist', 'alerts'].includes(v)) return { kind: 'watchlist', label: 'Your watchlist' };
+  if (['scan', 'explore', 'insiders', 'analysts'].includes(v)) return { kind: 'screen', label: VIEW_NAMES[v] || 'Discover' };
+  return { kind: 'market', label: 'The market today' };
+}
+
+/* The research modes. Each drafts a question into the box rather than
+ * sending it: a press here should never spend a Pulse call the reader has not
+ * seen. Deep research is the one that searches the web, and its button says
+ * so; the mode only writes its brief. */
+function pulseModes() {
+  const sub = pulseSubject();
+  const t = sub.sym;
+  if (sub.kind === 'security') {
+    return [
+      { id: 'quick', label: 'Quick read', text: `In three sentences: what matters for ${t} right now, and what would change that view?` },
+      { id: 'catalyst', label: 'Catalysts', text: `What are the next catalysts for ${t} (earnings, macro releases, company events)? How has it reacted to similar events before, and what looks priced in?` },
+      { id: 'thesis', label: 'Thesis check', text: `Test the thesis on ${t}: give the strongest bull case and the strongest bear case from the loaded data, and the evidence that would prove each one wrong.` },
+      { id: 'risk', label: 'Risk review', text: `If I held ${t}, what are the main risks over the next month: event risk, volatility, positioning, and how it moves with the market?` },
+      { id: 'deep', label: 'Deep research', deep: true, text: `Deep research on ${t}: what has changed in the last two weeks, with sources, and does it change the thesis?` },
+    ];
+  }
+  if (sub.kind === 'chart') {
+    return [
+      { id: 'chart', label: 'Read this chart', text: `Read the ${t} chart: the trend, the levels that matter, and what the most recent bars say about momentum.` },
+      { id: 'levels', label: 'Key levels', text: `Which support and resistance levels on ${t} matter most, and what happens on a break of each?` },
+      { id: 'catalyst', label: 'Catalysts', text: `What upcoming events could move ${t} through those levels?` },
+    ];
+  }
+  if (sub.kind === 'portfolio' || sub.kind === 'watchlist') {
+    const what = sub.kind === 'portfolio' ? 'these positions' : 'my watchlist';
+    return [
+      { id: 'risk', label: 'Portfolio risk', text: `Review the risk in ${what}: concentration, shared sector and factor exposure, and anything that would hit several names at once.` },
+      { id: 'events', label: 'Event risk', text: `Which earnings, dividends or macro releases in the next two weeks affect ${what}, and which matter most?` },
+      { id: 'review', label: 'What needs review', text: `Which names in ${what} have changed the most since last week, and which deserve a closer look?` },
+    ];
+  }
+  if (sub.kind === 'screen') {
+    return [
+      { id: 'screen', label: 'Explain these results', text: 'What do the names on this screen have in common, and which stand out from the rest?' },
+      { id: 'pick', label: 'Compare the leaders', text: 'Compare the top few names here on momentum, valuation and event risk. Which are worth a closer look?' },
+    ];
+  }
+  return [
+    { id: 'quick', label: 'Market read', text: 'What is driving the market today, and what would change the picture this week?' },
+    { id: 'catalyst', label: 'This week\u2019s catalysts', text: 'Which economic releases and earnings this week matter most, and what outcome is the market positioned for?' },
+    { id: 'deep', label: 'Deep research', deep: true, text: 'Give me a sourced brief on the market right now: direction, drivers, notable movers, and what traders are watching.' },
+  ];
+}
+
+function pulseModesHTML() {
+  const sub = pulseSubject();
+  return `<div class="pulse-modes" role="group" aria-label="Research modes for ${esc(sub.label)}">
+    <p class="pulse-modes-h">Ask about <strong>${esc(sub.label)}</strong></p>
+    <div class="pulse-modes-row">${pulseModes().map((m) => `<button type="button"
+      class="pulse-mode${m.deep ? ' is-deep' : ''}" data-q="${esc(m.text)}"${m.deep ? ' data-deep="1"' : ''}
+      title="${esc(m.deep ? 'Writes the brief. Press Deep research to run it with web sources' : 'Writes the question into the box. Nothing is sent until you press Send')}"
+      >${esc(m.label)}</button>`).join('')}</div>
+  </div>`;
+}
+
+
 
 /* ------------------------------------------------- Pulse: persona and starters
  *
@@ -34268,6 +34628,8 @@ function initAttachments() {
 }
 
 async function sendChat(text) {
+  // A mode's highlight is a hint about the next press, not a lasting state.
+  if ($('#chat-research')) $('#chat-research').classList.remove('is-suggested');
   if (chatState.busy || !text.trim()) return;
   chatState.busy = true;
   $('#chat-send').disabled = true;
@@ -34314,6 +34676,8 @@ async function sendChat(text) {
 }
 
 async function runResearch() {
+  // A mode's highlight is a hint about the next press, not a lasting state.
+  if ($('#chat-research')) $('#chat-research').classList.remove('is-suggested');
   if (chatState.busy) return;
   chatState.busy = true;
   $('#chat-send').disabled = true;
@@ -34794,15 +35158,216 @@ let viewBeforeSettings = 'home';
  * while the market is live. */
 const APP_TITLE = 'Optic Terminal';
 
+/* The Charting tab's live state (see chartLiveTick). Declared here, ahead of
+ * every function that reads it, so nothing can reach it in its dead zone. The
+ * live price belongs to one payload: a chart reloaded hours later must not
+ * name the morning's price until a tick replaces it, and with the market shut
+ * no tick would. */
+const CHART_LIVE_MS = 15000;
+const chartLive = { data: null, price: null, busy: false, refetching: false, owed: false };
+
+/* The price the tab names: the one the chart is showing.
+ *
+ * It was the quote the tab was loaded with, while the chart's price label is
+ * the newest bar's close, fetched separately and later: reported with a tab
+ * reading "INTC: 117.43" over a chart labelled 117.48. Now it is the chart's
+ * own last close (the whole series, not the zoomed window, which can be
+ * months back), or the live quote once chartLiveTick has one, which writes
+ * that same price into the newest bar so the two cannot part again. */
+function chartTabPrice(d) {
+  const sym = STATE.chartSymbol;
+  if (chartLive.data === d && Number.isFinite(chartLive.price)) return chartLive.price;
+  const lastOf = (arr) => {
+    if (!Array.isArray(arr)) return null;
+    for (let i = arr.length - 1; i >= 0; i -= 1) if (Number.isFinite(arr[i])) return arr[i];
+    return null;
+  };
+  if (isIntradayRange(chartRange) && wsIntraday && wsIntraday.symbol === sym
+      && !wsIntraday.loading && wsIntraday.available !== false) {
+    const last = lastOf(wsIntraday.closes);
+    if (last !== null) return last;
+  }
+  const daily = lastOf((((d || {}).technicals || {}).price_series || {}).close);
+  if (daily !== null && !isIntradayRange(chartRange)) return daily;
+  const q = (d && d.quote) || {};
+  return Number.isFinite(q.price) ? q.price : null;
+}
+
 function chartTabTitle() {
   const d = STATE.chartData;
   const q = d && d !== 'loading' ? d.quote : null;
-  if (!q || !Number.isFinite(q.price) || !STATE.chartSymbol || d.ticker !== STATE.chartSymbol) {
+  const price = q && d.ticker === STATE.chartSymbol ? chartTabPrice(d) : null;
+  if (!STATE.chartSymbol || price === null) {
     return STATE.chartSymbol ? `${STATE.chartSymbol} \u00b7 ${APP_TITLE}` : APP_TITLE;
   }
-  const pct = Number.isFinite(q.change_pct) ? ` (${fmtPct(q.change_pct, 2)})` : '';
-  return `${STATE.chartSymbol}: ${fmt(q.price, 2)}${pct}`;
+  // The day's change for that same price, so the two in the title agree.
+  const prev = Number(q.prev_close);
+  const pctNow = prev > 0 ? (price / prev - 1) * 100 : q.change_pct;
+  const pct = Number.isFinite(pctNow) ? ` (${fmtPct(pctNow, 2)})` : '';
+  return `${STATE.chartSymbol}: ${fmt(price, 2)}${pct}`;
 }
+
+/* The Charting tab, live.
+ *
+ * It had no refresh at all. The 20-second tick refreshes Home, the Overview,
+ * Options and Macro and skips this tab, so a chart opened at 10:00 still
+ * showed 10:00's price at 15:00 with its live marker pulsing beside it, and a
+ * tab title meant to be read from a background tab never moved.
+ *
+ * Every CHART_LIVE_MS while the instrument's market is open it asks
+ * /api/quote (the server caches it for 30 seconds, so this costs at most one
+ * upstream request per symbol per half minute however many tabs ask), then:
+ * the quote's moving fields are merged into the payload; the price goes into
+ * the newest bar, intraday or daily, if that bar is still forming; a bar that
+ * has closed brings the next one in with a quiet refetch; and the title,
+ * header and chart repaint.
+ *
+ * It keeps running while the tab is hidden, because a hidden tab is exactly
+ * where its title is read. The chart itself is not redrawn under the reader's
+ * hand: mid-drag, mid-pan or with the pointer on the plot it waits, and the
+ * next tick draws what arrived. */
+
+/* Fields that move during a session. The rest of the quote (name, sector,
+ * ratios) comes from the full payload and is not replaced by a lighter one. */
+const CHART_LIVE_FIELDS = ['price', 'change', 'change_pct', 'prev_close', 'day_high', 'day_low',
+  'volume', 'as_of', 'market_state', 'post_market_price', 'post_market_change_pct',
+  'post_market_time', 'pre_market_price', 'pre_market_change_pct', 'pre_market_time'];
+
+function chartBarMinutes(interval) {
+  const m = /^(\d+)\s*(m|h|d)$/i.exec(String(interval || '').trim());
+  if (!m) return null;
+  const n = Number(m[1]);
+  return m[2].toLowerCase() === 'h' ? n * 60 : m[2].toLowerCase() === 'd' ? n * 1440 : n;
+}
+
+/* Write a price into the newest bar if that bar is still forming. Returns
+ * 'updated', 'closed' (the bar's period is over and the next one is due from
+ * the server) or 'skipped'. Regular-hours charts take no price outside the
+ * regular session: Tradier's last can be an extended-hours trade, and it does
+ * not belong on the 15:45 bar. */
+function chartLiveBar(price, nowMs) {
+  const sym = STATE.chartSymbol;
+  const roundTheClock = /-USD$|=F$/.test(sym);
+  if (!roundTheClock && chartSession !== 'extended' && marketSessionET() !== 'regular') return 'skipped';
+  const put = (closes, highs, lows, i) => {
+    closes[i] = price;
+    if (Array.isArray(highs) && Number.isFinite(highs[i]) && price > highs[i]) highs[i] = price;
+    if (Array.isArray(lows) && Number.isFinite(lows[i]) && price < lows[i]) lows[i] = price;
+  };
+  if (isIntradayRange(chartRange)) {
+    const w = wsIntraday;
+    if (!w || w.symbol !== sym || w.loading || w.available === false || !Array.isArray(w.closes)) {
+      return 'skipped';
+    }
+    const i = w.closes.length - 1;
+    const start = Date.parse((w.times || [])[i]);
+    const span = chartBarMinutes(w.interval);
+    if (i < 0 || !Number.isFinite(start) || !span) return 'skipped';
+    if (nowMs >= start + span * 60000) return 'closed';
+    put(w.closes, w.highs, w.lows, i);
+    w.last = price;
+    return 'updated';
+  }
+  // Daily only: the weekly and all-history series are built from their own
+  // bar sets, and today's bar is in this one during the session.
+  if (chartInterval !== 'daily' || chartRange === 'all') return 'skipped';
+  const ps = (((STATE.chartData || {}).technicals || {}).price_series) || {};
+  const dates = ps.dates || [];
+  const i = dates.length - 1;
+  if (i < 0 || String(dates[i]).slice(0, 10) !== etDate(nowMs) || !Array.isArray(ps.close)) return 'skipped';
+  put(ps.close, ps.high, ps.low, i);
+  return 'updated';
+}
+
+/* The next bar, without the loading state wsLoadIntraday paints: the reader
+ * is looking at this chart, and a "Loading intraday bars" flash every fifteen
+ * minutes would be worse than a bar that arrives a tick late. */
+async function chartLiveRefetchBars() {
+  const cur = wsIntraday;
+  if (chartLive.refetching || !cur || cur.loading || cur.available === false) return;
+  const { symbol, range, window: win, session } = cur;
+  chartLive.refetching = true;
+  try {
+    const data = await getJSON('/api/intraday/' + encodeURIComponent(symbol)
+      + '?range=' + encodeURIComponent(range)
+      + (win ? '&window=' + encodeURIComponent(win) : '')
+      + (session === 'extended' ? '&session=extended' : ''));
+    if (wsIntraday !== cur || STATE.chartSymbol !== symbol || chartRange !== range
+        || intradayWindow(range) !== win || chartSession !== session) return;
+    if (!data || data.available === false) return;
+    wsIntraday = { ...data, symbol, range, window: win, session };
+    chartLive.owed = true;
+  } catch (err) {
+    /* the next tick asks again */
+  } finally {
+    chartLive.refetching = false;
+  }
+}
+
+function chartUnderHand() {
+  const host = document.getElementById('ws-chart');
+  return !!(wsPan || wsDragging || wsMenuOpen
+    || (host && host.matches && host.matches(':hover')));
+}
+
+function chartLiveRepaint() {
+  syncTabTitle();
+  if (STATE.view !== 'chart' || document.hidden || chartUnderHand()) {
+    chartLive.owed = true;
+    return;
+  }
+  chartLive.owed = false;
+  wsHoverReadout(null);
+  wsRedrawSettled();
+}
+
+async function chartLiveTick() {
+  if (STATE.view !== 'chart' || chartLive.busy) return;
+  const sym = STATE.chartSymbol;
+  const d = STATE.chartData;
+  if (!sym || !d || d === 'loading' || d.error || d.ticker !== sym) return;
+  if (!chartLiveForSymbol(sym)) {
+    if (chartLive.owed) chartLiveRepaint();
+    return;
+  }
+  chartLive.busy = true;
+  try {
+    const res = await fetch('/api/quote/' + encodeURIComponent(sym));
+    const r = res.ok ? await res.json() : null;
+    if (!r || r.available !== true || !r.quote) return;
+    if (STATE.chartSymbol !== sym || STATE.chartData !== d) return;   // the reader moved on
+    const q = d.quote || (d.quote = {});
+    CHART_LIVE_FIELDS.forEach((k) => {
+      const v = r.quote[k];
+      if (v !== null && v !== undefined && v !== '') q[k] = v;
+    });
+    const price = Number(r.quote.price);
+    if (Number.isFinite(price)) {
+      chartLive.data = d;
+      chartLive.price = price;
+      if (chartLiveBar(price, Date.now()) === 'closed') {
+        await chartLiveRefetchBars();
+        // The fresh bar takes the same price, so the label and the title agree.
+        chartLiveBar(price, Date.now());
+      }
+    }
+    chartLiveRepaint();
+  } catch (err) {
+    /* a dropped request; the next tick tries again */
+  } finally {
+    chartLive.busy = false;
+  }
+}
+
+setInterval(chartLiveTick, CHART_LIVE_MS);
+
+/* A redraw owed while the tab was hidden is drawn the moment it is shown,
+ * not up to a tick later. (A tab hidden for more than a few minutes is
+ * throttled by the browser to roughly one timer a minute, so its title moves
+ * that often; nothing a page does can ask for more.) */
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && chartLive.owed && STATE.view === 'chart') chartLiveRepaint();
+});
 
 function syncTabTitle() {
   const title = STATE.view === 'chart' ? chartTabTitle() : APP_TITLE;
@@ -34889,6 +35454,8 @@ function switchView(view, force) {
   // rather than wait for the next 20-second refresh tick.
   updateStatus();
   renderSessionBar();
+  // Pulse's research modes are about the page on screen, so they follow it.
+  if (document.getElementById('chat-suggest')) updateChatContext();
 }
 
 /* A tap is not a hover, and the caret has been promising otherwise.
@@ -36506,10 +37073,15 @@ $('#chat-input').addEventListener('keydown', (evt) => {
     $('#chat-send').click();
   }
 });
-$('#chat-suggest').addEventListener('click', (evt) => {
+function onPulseSuggestion(evt) {
   const btn = evt.target.closest('button[data-q]');
-  if (btn) draftPulse(btn.dataset.q);
-});
+  if (!btn) return;
+  draftPulse(btn.dataset.q);
+  const research = $('#chat-research');
+  if (research) research.classList.toggle('is-suggested', btn.dataset.deep === '1');
+}
+$('#chat-suggest').addEventListener('click', onPulseSuggestion);
+if ($('#pulse-modes')) $('#pulse-modes').addEventListener('click', onPulseSuggestion);
 
 document.addEventListener('keydown', (evt) => {
   if ((evt.metaKey || evt.ctrlKey) && evt.key === 'k') {

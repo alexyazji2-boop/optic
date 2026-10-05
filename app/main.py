@@ -725,7 +725,10 @@ async def health() -> Dict[str, Any]:
     return {
         "status": "ok",
         "provider": PROVIDER.name,
-        "realtime_chain": PROVIDER.name == "tradier",
+        # Tradier's sandbox serves the same API fifteen minutes late, so a
+        # sandbox token is not a real-time feed and the page must not say so.
+        "realtime_chain": PROVIDER.name == "tradier"
+        and "sandbox." not in str(getattr(PROVIDER, "base", "")),
         "assistant": ai.available(),
         "server_time": now.isoformat(),
         "commit": deployed_commit(),

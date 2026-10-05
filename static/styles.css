@@ -804,17 +804,35 @@ header.topbar {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--btn-primary) 16%, transparent);
 }
 
+/* The base button, restyled for the Optic system (see the block of that
+   name at the foot of this file, which defines the --sys-* and --ctl-*
+   tokens). It is restyled HERE rather than overridden there on purpose: a
+   `.btn` rule at the foot wins by source order over every single-class rule
+   written for a particular button, and the first draft did exactly that --
+   `.pt-danger` lost its red, `.auth-submit` its 44px touch target, and
+   `.acct-signin`, `.wd-check` and `.pt-close` their own padding and type. In
+   this position every one of those still comes later and still wins. */
 .btn {
-  padding: var(--space-2) var(--space-3);
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--ctl-h);
+  padding: 0 var(--space-3);
+  font: inherit;
+  font-size: var(--t-small);
+  font-weight: 500;
+  color: var(--sys-ink);
+  background: var(--sys-fill);
+  border: 1px solid var(--sys-line-strong);
   border-radius: var(--r-md);
   cursor: pointer;
   white-space: nowrap;
-  transition: background-color 0.12s ease, border-color 0.12s ease, filter 0.12s ease;
+  transition: background-color 0.12s ease, border-color 0.12s ease, filter 0.12s ease,
+              color 0.12s ease;
 }
-.btn:hover { background: var(--surface-2); }
-.btn:active { filter: brightness(0.94); }
+.btn:hover { background: var(--sys-fill-hover); border-color: color-mix(in srgb, var(--ink) 26%, transparent); }
+.btn:active { background: var(--sys-fill-active); filter: brightness(0.94); }
 /* .btn.primary is defined once, further down with the other button rules.
    It used to be declared here too, as var(--s1) with white text, and again
    later as var(--accent) — same selector, same specificity, so the later one
@@ -16291,4 +16309,283 @@ table.data.accounts-table td.ac-who { white-space: normal; min-width: 120px; wid
   color: var(--ink-muted);
   font-size: var(--t-caption);
   overflow-wrap: anywhere;
+}
+
+/* ==================================================== the Optic system ====
+   Tokens and the few shared components the Dossier header, Pulse's research
+   modes, Portfolio health and the watchlist summary are built from. It sits
+   last on purpose, and so it restyles no base class: a base class restyled
+   from the foot wins by source order over every single-class rule written for
+   one instance of it (see the note above `.btn`). Built from the existing
+   tokens rather than new hex values, so the light theme follows. */
+
+:root {
+  /* Surfaces and lines, from the ink so both themes get them. */
+  --sys-line: color-mix(in srgb, var(--ink) 9%, transparent);
+  --sys-line-strong: color-mix(in srgb, var(--ink) 16%, transparent);
+  --sys-fill: color-mix(in srgb, var(--ink) 4%, transparent);
+  --sys-fill-hover: color-mix(in srgb, var(--ink) 7%, transparent);
+  --sys-fill-active: color-mix(in srgb, var(--ink) 11%, transparent);
+  /* Text, three steps and no more. */
+  --sys-ink: var(--ink);
+  --sys-ink-2: var(--ink-2);
+  --sys-ink-3: var(--ink-muted);
+  /* Data states. Every figure is one of these, and the chip that says so
+     uses exactly this colour, with the word printed beside it. */
+  --state-live: var(--pos);
+  --state-delayed: var(--warn);
+  --state-cached: var(--s1);
+  --state-closed: var(--ink-muted);
+  --state-unavailable: var(--neg);
+  --state-premium: var(--asset-brand);
+  /* Motion for things that move; --dur-ui stays the hover duration. */
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  /* One control height, so a button, an input and a tab in a row agree. */
+  --ctl-h: calc(32px * var(--ui-scale));
+  --ctl-h-sm: calc(26px * var(--ui-scale));
+}
+
+/* ------------------------------------------------------------ typography */
+
+/* Section headings at one size and a real weight. Measured at 1440x900 on
+   2026-10-05: a Home block title was 32px at weight 400 (the Asset restyle's
+   page-title size) while a Dossier panel title beside the same kind of
+   content was 20.7px at 600, so "Your watchlist" outweighed the prices in
+   it and a panel heading did not. Above the phone only; the phone block
+   sets its own sizes and an unmediated rule here would discard them. */
+@media (min-width: 560px) {
+  .panel > h2, .hm-h, .wv-head h2, .ht-title, .hm-block-head > h2 {
+    font-family: var(--display);
+    font-size: calc(19px * var(--ui-scale));
+    font-weight: 600;
+    letter-spacing: -0.012em;
+    line-height: 1.25;
+  }
+}
+
+/* The eyebrow: the small uppercase label over a figure. */
+.eyebrow {
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sys-ink-3);
+}
+
+/* Figures that sit in a column or update in place do not jitter sideways. */
+.num, .sec-px, .sec-chg, .data-state, .wv-pulse-cell strong, .ph-cell strong {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Direction colour for `pos` and `neg`, which the markup has always used --
+   the Paper Desk's P&L and R cells, its long/short tags -- and nothing has
+   ever coloured outside six component rules. Zero specificity, so any rule
+   that colours a particular `pos` element still wins. */
+:where(.pos) { color: var(--pos); }
+:where(.neg) { color: var(--neg); }
+
+/* ---------------------------------------------------------------- controls */
+
+.btn.sm { min-height: var(--ctl-h-sm); padding: 0 var(--space-2); font-size: var(--t-caption); gap: var(--space-1); }
+.btn[hidden] { display: none; }
+
+/* The focus ring an input shows while it is being typed into. */
+.search input:focus-visible, .wd-param input:focus-visible, .wd-param select:focus-visible {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 22%, transparent);
+  outline: none;
+}
+
+/* ----------------------------------------------------------- data states */
+
+/* Live, delayed, closed, unavailable: one chip, a colour per state, and the
+   word always printed so the colour never carries the meaning alone. */
+.data-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  min-height: calc(22px * var(--ui-scale));
+  border-radius: var(--r-pill);
+  border: 1px solid var(--sys-line);
+  background: var(--sys-fill);
+  font-size: var(--t-caption);
+  color: var(--sys-ink-2);
+  white-space: nowrap;
+  --state: var(--state-closed);
+}
+.data-state > .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--state);
+  flex: none;
+}
+.data-state.is-live { --state: var(--state-live); }
+.data-state.is-live > .dot { animation: pulse-beat 1.8s ease-in-out infinite; }
+.data-state.is-delayed { --state: var(--state-delayed); }
+.data-state.is-cached { --state: var(--state-cached); }
+.data-state.is-closed { --state: var(--state-closed); }
+.data-state.is-unavailable { --state: var(--state-unavailable); }
+.data-state.is-premium { --state: var(--state-premium); }
+
+/* --------------------------------------------- empty, loading and errors */
+
+/* An empty state is a next step, not an announcement: a mark, the sentence
+   of what would fill it, and the action that does, filled so it reads as
+   the thing to press. */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  border-style: dashed;
+  border-color: var(--sys-line-strong);
+  background: transparent;
+}
+.empty-state[hidden] { display: none; }
+.empty-state::before {
+  content: "";
+  width: calc(36px * var(--ui-scale));
+  height: calc(36px * var(--ui-scale));
+  margin-bottom: var(--space-2);
+  border-radius: 50%;
+  border: 1.5px solid var(--sys-line-strong);
+  background:
+    radial-gradient(circle at 50% 50%, var(--asset-brand) 0 3px, transparent 3.5px),
+    var(--sys-fill);
+}
+.empty-state > h2 { margin: 0; }
+.empty-state > .sub { color: var(--sys-ink-2); }
+.empty-acts { margin-top: var(--space-3); }
+.empty-acts .btn { background: var(--btn-primary); color: var(--btn-primary-ink); border-color: transparent; font-weight: 600; }
+
+/* A view arriving fades in. Opacity only: a transform on `.view` would make
+   it the containing block for every fixed-position child inside it. */
+.view.active { animation: sys-view-in var(--dur-base) var(--ease-out); }
+@keyframes sys-view-in { from { opacity: 0.001; } to { opacity: 1; } }
+
+/* ---------------------------------------------------- the Dossier header */
+
+.sec-sym { font-family: var(--display); font-size: calc(22px * var(--ui-scale)); }
+.sec-px { font-family: var(--display); font-size: calc(26px * var(--ui-scale)); font-weight: 600; letter-spacing: -0.02em; }
+.sec-chg {
+  padding: var(--space-0) var(--space-2);
+  border-radius: var(--r-sm);
+  font-size: var(--t-body);
+  background: var(--sys-fill);
+}
+.sec-chg.up { background: color-mix(in srgb, var(--pos) 14%, transparent); }
+.sec-chg.down { background: color-mix(in srgb, var(--neg) 14%, transparent); }
+/* No change figure in the feed leaves the element empty, and an empty pill is
+   a grey lozenge beside the price that means nothing. Seen on a phone when the
+   full payload landed with `change_pct: null`. */
+.sec-chg:empty { display: none; }
+.sec-px-none { font-size: var(--t-small); color: var(--sys-ink-3); }
+.sec-id .data-state { align-self: center; }
+
+/* Identity on the first row; the section bar and the actions share the
+   second, so the actions cost no height of their own. The header answers to
+   its own width, not the window's: with Pulse open the main column is about
+   760px on a 1440px screen, and below 820px of header the actions take a row
+   of their own rather than clipping the tabs. */
+.sec-head.has-acts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  column-gap: var(--space-4);
+  container-type: inline-size;
+  container-name: sechead;
+}
+.sec-head.has-acts > .sec-id { grid-column: 1 / -1; }
+.sec-actions { display: flex; gap: var(--space-1); padding-bottom: var(--space-2); }
+.sec-act svg {
+  width: 14px; height: 14px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 1.8;
+  stroke-linejoin: round; stroke-linecap: round;
+}
+.sec-act.on { color: var(--asset-brand); border-color: color-mix(in srgb, var(--asset-brand) 45%, transparent); }
+.sec-act.on svg { fill: currentColor; }
+.sec-act .pulse-glyph-sm { width: 14px; height: 14px; }
+/* The brand gold is a fill colour; as text on the light surface it measured
+   about 2:1, so there the watched state mixes it toward the ink. */
+:root[data-theme="light"] .sec-act.on { color: color-mix(in srgb, var(--asset-brand) 45%, var(--ink)); }
+@container sechead (max-width: 820px) {
+  .sec-actions { grid-column: 1 / -1; grid-row: 2; padding: 0 0 var(--space-1); }
+  .sec-tabs { grid-column: 1 / -1; }
+}
+@container sechead (max-width: 480px) {
+  .sec-actions .sec-act { flex: 1 1 0; }
+}
+
+/* ----------------------------------------------------------------- Pulse */
+
+/* What Pulse can do for the thing on screen, as one row above the input.
+   Drafts only: the box shows the brief before anything is sent. One
+   scrolling line on a narrow panel, so it never pushes the input down. */
+.pulse-modes { margin: 0 0 var(--space-2); }
+.pulse-modes-h { margin: 0 0 var(--space-1); font-size: var(--t-caption); color: var(--sys-ink-3); }
+.pulse-modes-h strong { color: var(--sys-ink); font-weight: 600; }
+.pulse-modes-row {
+  display: flex;
+  gap: var(--space-1);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.pulse-modes-row::-webkit-scrollbar { display: none; }
+.pulse-mode {
+  flex: none;
+  min-height: var(--ctl-h-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--sys-line-strong);
+  border-radius: var(--r-pill);
+  background: var(--sys-fill);
+  color: var(--sys-ink);
+  font: inherit;
+  font-size: var(--t-small);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-ui), border-color var(--dur-fast) var(--ease-ui);
+}
+.pulse-mode:hover { background: var(--sys-fill-hover); border-color: var(--asset-brand); }
+.pulse-mode.is-deep { border-style: dashed; }
+#chat-research.is-suggested {
+  border-color: var(--asset-brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--asset-brand) 22%, transparent);
+}
+
+/* --------------------------------------------------- portfolio health */
+
+.ph-lead { margin: 0 0 var(--space-4); font-size: var(--t-base); color: var(--sys-ink); max-width: 68ch; line-height: 1.5; }
+.ph-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-3); }
+.ph-cell { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-3) var(--space-4); border-radius: var(--r-md); background: var(--sys-fill); }
+.ph-cell strong { font-family: var(--display); font-size: var(--t-d3); font-weight: 600; letter-spacing: -0.01em; }
+.ph-sub { font-size: var(--t-caption); color: var(--sys-ink-3); }
+.ph-bar { display: flex; gap: 2px; height: 8px; margin: var(--space-4) 0 var(--space-2); border-radius: var(--r-pill); overflow: hidden; }
+.ph-seg { flex-basis: 0; min-width: 3px; background: var(--seg); }
+.ph-legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); margin: 0; padding: 0; list-style: none; font-size: var(--t-small); color: var(--sys-ink-2); }
+.ph-legend i { display: inline-block; width: 8px; height: 8px; margin-right: var(--space-1); border-radius: 2px; background: var(--seg); }
+.ph-review { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--space-1); }
+.ph-review li { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); align-items: baseline; padding: var(--space-2) var(--space-3); border-radius: var(--r-sm); background: color-mix(in srgb, var(--warn) 9%, transparent); font-size: var(--t-small); }
+.ph-review-pos { font-weight: 600; }
+.ph-review-why { color: var(--sys-ink-2); }
+
+/* ------------------------------------------------ the watchlist summary */
+
+.wv-pulse {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+}
+.wv-pulse-cell { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2) var(--space-3); border-radius: var(--r-md); background: var(--sys-fill); }
+.wv-pulse-cell strong { font-size: var(--t-lead); font-weight: 600; }
+.wv-pulse-of { color: var(--sys-ink-3); font-weight: 400; }
+
+@media (prefers-reduced-motion: reduce) {
+  .view.active { animation: none; }
+  .data-state.is-live > .dot { animation: none; }
 }

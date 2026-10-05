@@ -124,8 +124,12 @@ def test_every_button_that_asks_only_fills_the_box():
     assert "draftPulse(row.question || '');" in reask
     assert "run: () => { closePalette(); draftPulse(r.question || ''); }," in APP
     assert "run: () => { closePalette(); draftPulse(q); }," in APP
-    suggest = APP[APP.index("$('#chat-suggest').addEventListener('click'"):][:200]
-    assert "if (btn) draftPulse(btn.dataset.q);" in suggest
+    # The follow-ups and the research modes share one handler, and it drafts.
+    handler = _fn("onPulseSuggestion")
+    assert "draftPulse(btn.dataset.q);" in handler
+    assert "sendChat" not in handler and "runResearch" not in handler
+    assert "$('#chat-suggest').addEventListener('click', onPulseSuggestion);" in APP
+    assert "$('#pulse-modes').addEventListener('click', onPulseSuggestion);" in APP
 
 
 def test_only_send_and_deep_research_send():
