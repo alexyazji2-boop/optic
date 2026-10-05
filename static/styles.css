@@ -2281,13 +2281,26 @@ body.chat-resizing svg { pointer-events: none; }
 /* The inset the footer used to give it, and the log's own horizontal step so
    the chips line up with the messages above them. */
 #chat .chat-body > .suggest { padding: 0 var(--space-4) var(--space-3); margin-bottom: 0; }
-/* The notice above the conversation, inset like the messages under it.
+/* The notice above the conversation, as a card centred in the panel.
    `.legal-area` carries no padding of its own, because everywhere else it
    sits inside a panel that has some; here its parent is the bare scroller, so
    the paragraph ran from one edge of the panel to the other: reported as "it
-   goes exactly from border to border". The log's own step on both sides, so it
-   sits centred in the panel and lines up with the replies. */
-#chat .chat-body > .legal-area { padding: var(--space-3) var(--space-4) 0; }
+   goes exactly from border to border", and again, with a screenshot, as "it is
+   still on the border, center it more". So it is a card now: the log's step
+   clear of each edge, its own padding inside, and a measure that holds it to
+   the middle when Pulse is dragged wide. The width leaves the margins in place
+   at any panel size; `margin: auto` alone resolves to nothing once the panel
+   is narrower than the measure and puts it back on the border. */
+#chat .chat-body > .legal-area {
+  box-sizing: border-box;
+  width: calc(100% - 2 * var(--space-4));
+  max-width: 72ch;
+  margin: var(--space-3) auto var(--space-1);
+  padding: var(--space-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
 .msg { font-size: var(--t-base); }
 .msg .who { font-size: var(--t-caption); text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); margin-bottom: var(--space-1); }
 .msg.user .bubble { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-lg); padding: var(--space-2) var(--space-3); }
