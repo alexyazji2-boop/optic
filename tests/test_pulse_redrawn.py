@@ -109,11 +109,20 @@ def test_under_an_answer_copy_and_ask_again_and_neither_sends():
     assert "navigator.clipboard.writeText(text)" in APP
 
 
-def test_new_and_save_at_the_top_of_the_panel():
+def test_no_new_or_save_buttons_at_the_top_of_the_panel():
+    """A pencil (New conversation) and an arrow (Save as a file) shipped in the
+    panel's header on 2026-10-04 and were removed the next day on the reader's
+    call: bare glyphs whose meaning was only in a tooltip, asked about as
+    "what are these two buttons on pulse?". Save was reachable from nowhere
+    else, so it went whole; a new conversation is still the New button in
+    Saved conversations, which predates both."""
     head = HTML[HTML.index('<div class="chat-head">'):HTML.index('<div class="chat-body"')]
-    assert "data-pulse-new" in head and "data-pulse-export" in head
-    exp = _fn("function pulseExport() {")
-    assert "new Blob([md], { type: 'text/markdown' })" in exp and "a.download = `pulse-" in exp
+    assert "data-pulse-new" not in head and "data-pulse-export" not in head
+    assert "pulseExport" not in APP and "data-pulse-export" not in APP, \
+        "no handler left behind without its control"
+    drawer = _fn("function renderPulseHistory(open) {")
+    assert 'data-pulse-new>New</button>' in drawer
+    assert "if (evt.target.closest('[data-pulse-new]')) { pulseNewConversation(); return; }" in APP
 
 
 def test_the_look():

@@ -79,11 +79,10 @@ def test_pulse_is_told_when_to_tag_and_when_not_to():
     assert "—" not in ai.FORMAT_PROMPT
 
 
-def test_chips_render_open_their_panel_and_leave_copy_and_save_readable():
+def test_chips_render_open_their_panel_and_leave_copy_readable():
     assert "return pulseSourcesIn(html.replace(PULSE_CHART_RE," in APP, "every reply path renders them"
     assert "if (window.matchMedia('(max-width: 559px)').matches) $('#chat-close').click();\n    switchView(src.dataset.srcView);" in APP
     assert "pulseSourcesAsText(splitFollowUps(" in APP
-    assert "${pulseSourcesAsText(t.content)}" in _fn("function pulseExport() {")
     assert ".replace(/\\s?\\[\\[[^\\]\\n]*\\]\\]/g, '')" in APP, "no brackets flash past while streaming"
     assert ".pulse-src {" in CSS
 

@@ -34111,22 +34111,6 @@ function addReplyActions(node, text, question) {
   if (question) node.dataset.question = question;
 }
 
-/* The conversation as a Markdown file, for keeping or sharing. */
-function pulseExport() {
-  const turns = chatState.messages || [];
-  if (!turns.length) return;
-  const md = ['# Pulse conversation', '', `Saved ${new Date().toLocaleString()}`, '']
-    .concat(turns.map((t) => `**${t.role === 'user' ? 'You' : 'Pulse'}:** ${pulseSourcesAsText(t.content)}\n`))
-    .join('\n');
-  const url = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `pulse-${new Date().toISOString().slice(0, 10)}.md`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
 
 document.addEventListener('click', (evt) => {
   if (!evt.target || !evt.target.closest) return;
@@ -34156,7 +34140,6 @@ document.addEventListener('click', (evt) => {
     switchView(src.dataset.srcView);
     return;
   }
-  if (evt.target.closest('[data-pulse-export]')) pulseExport();
 });
 
 function splitFollowUps(text) {
