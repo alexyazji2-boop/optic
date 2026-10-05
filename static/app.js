@@ -7034,7 +7034,12 @@ function morningDesk(data) {
   const d = (data || {}).morning_desk;
   if (!d || d.available !== true) return '';
   const lead = (d.lead || []).map((p) => `<p class="md-p">${gloss(p)}</p>`).join('');
+  /* Two plain headings, for a reader who has never seen a desk note: what the
+   * branches are, and which line is the summary. Asked for as a desk "anyone,
+   * regardless of financial and economic knowledge can understand"; unlabelled,
+   * a row of "If yields stall around 5.328" conditions read as more numbers. */
   const scenarios = (d.scenarios || []).length ? `
+    <h3 class="md-h3">What could happen next</h3>
     <div class="md-branches">
       ${(d.scenarios || []).map((s) => `<div class="md-branch">
         <span class="md-branch-label">${esc(s.label)}</span>
@@ -7042,7 +7047,7 @@ function morningDesk(data) {
       </div>`).join('')}
     </div>` : '';
   const cal = (d.calendar || []).length ? `
-    <h3 class="md-h3">Economic calendar</h3>
+    <h3 class="md-h3">Today's reports</h3>
     ${(d.calendar || []).map((r) => `<div class="md-rel">
       <div class="md-rel-head">
         <span class="md-rel-title">${esc(r.title)}</span>
@@ -7061,7 +7066,7 @@ function morningDesk(data) {
       ${scenarios}
       ${d.note ? `<p class="md-note"><strong>Note:</strong> ${gloss(d.note)}</p>` : ''}
       ${cal}
-      ${d.overall ? `<p class="md-p md-overall">${gloss(d.overall)}</p>` : ''}
+      ${d.overall ? `<p class="md-p md-overall"><strong>Bottom line:</strong> ${gloss(d.overall)}</p>` : ''}
       ${(d.limits || []).length ? `<div class="md-limits">
         ${/* Folded, with the count in the label. Open, the list was five
              to seven bullets under every desk, and on a quiet day it was

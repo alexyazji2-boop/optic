@@ -137,8 +137,11 @@ def test_an_expiry_does_not_come_in_hot_or_soft():
     an event that does not have one."""
     rows = md._scenarios({"available": False}, _catalyst("Quadruple witching", "positioning"))
     labels = " ".join(r["label"] for r in rows).lower()
-    assert "hot" not in labels and "soft" not in labels
-    assert "unwind" in labels or "moves the tape" in labels
+    # "Hot" and "soft" were the desk's words; "higher" and "lower than last
+    # time" are the plain ones that replaced them, and neither applies.
+    for word in ("hot", "soft", "higher", "lower"):
+        assert word not in labels, word
+    assert "passes quietly" in labels and "moves prices" in labels
     body = " ".join(r["text"] for r in rows)
     assert "do not print a number" in body
 
@@ -146,7 +149,8 @@ def test_an_expiry_does_not_come_in_hot_or_soft():
 def test_a_data_release_does_get_a_hot_and_soft_branch():
     rows = md._scenarios({"available": False}, _catalyst("Consumer Price Index", "inflation"))
     labels = " ".join(r["label"] for r in rows).lower()
-    assert "hot" in labels and "soft" in labels and "in line" in labels
+    assert "higher than last time" in labels and "lower than last time" in labels
+    assert "about the same" in labels
 
 
 def test_the_branches_are_conditional_and_carry_no_instruction():
@@ -178,18 +182,22 @@ def test_a_flat_dollar_is_not_a_direction():
     said that it was."""
     tape = {"ten_year": {"chg_1d": -0.9}, "dollar": {"chg_1d": 0.02}}
     out = md._overall(tape, {"available": False}, [])
-    assert "saying nothing together" in out
-    assert "usually means a rate story" not in out
+    assert "do not tell a clear story" in out
+    assert "where they think interest rates are headed" not in out
 
 
 def test_yields_and_the_dollar_moving_together_is_named():
     tape = {"ten_year": {"chg_1d": 0.9}, "dollar": {"chg_1d": 0.5}}
-    assert "rate story" in md._overall(tape, {"available": False}, [])
+    assert "where they think interest rates are headed" in md._overall(
+        tape, {"available": False}, [])
 
 
 def test_a_quiet_day_says_levels_rather_than_narrative():
     out = md._overall({}, {"available": False}, [])
-    assert "flow" in out and "levels" in out
+    # Levels over narrative, in words: it was "the moves here are flow. That
+    # makes levels worth more than narrative today."
+    assert "no big news" in out
+    assert "where prices actually end up matters more than any explanation" in out
 
 
 def test_a_day_with_releases_warns_off_the_first_reaction():
@@ -386,3 +394,130 @@ def test_the_reader_is_told_which_voice_wrote_it():
     assert "Written for today by" in fn
     assert "not configured on this deployment" in fn
     assert ".md-voice" in CSS
+
+
+# --------------------------------------------------------- a voice for anyone
+
+
+# The desk's own language, which a reader with no market background cannot
+# follow. Asked for as "simplify the voice of the optic desk ... make it so
+# that anyone, regardless of financial and economic knowledge can understand
+# whats going on for the day".
+DESK_JARGON = (r"\btape\b", r"\bflow\b", r"\bpositioning\b", r"basis point", r"\bpriced\b",
+               r"front end", r"open interest", r"\bstrip\b", r"\bthe curve\b",
+               r"\bimplied\b", r"effective rate", r"\breprice", r"\bhot\b", r"\bsoft\b")
+
+
+def _every_desk():
+    """The template desk on each branch it has: a decision with odds, a
+    month's average priced, an expiry, a data release, and a quiet day."""
+    probability = md.rate_path(QUOTE, EFFECTIVE, "2026-10-01", date(2026, 10, 14),
+                               today=date(2026, 10, 2))
+    priced = {"available": True, "kind": "priced", "basis_points": 12.0,
+              "implied_average": 4.0, "effective": 3.88,
+              "contract_month_label": "November", "limit": "A limit."}
+    macro = {"groups": {"futures": [
+        {"symbol": "ES=F", "label": "S&P 500 futures", "chg_1d": 0.48},
+        {"symbol": "NQ=F", "label": "Nasdaq 100 futures", "chg_1d": 0.58},
+        {"symbol": "RTY=F", "label": "Russell 2000 futures", "chg_1d": -0.31}]},
+        "vix": {"last": 15.59}}
+    cpi = {"events": [{"title": "Consumer Price Index", "days_away": 0, "importance": 5,
+                       "impact": "high", "category": "inflation"}]}
+    expiry = {"events": [{"title": "Quadruple witching", "days_away": 1, "importance": 5,
+                          "impact": "high", "category": "positioning",
+                          "when_label": "Tomorrow"}]}
+    for rate, events in ((probability, None), (priced, None), ({"available": False}, expiry),
+                         ({"available": False}, cpi), ({"available": False}, {"events": []})):
+        yield md.build(macro=macro, events=events, rate=rate, today=date(2026, 10, 5))
+
+
+def _prose(desk):
+    parts = list(desk["lead"]) + [desk["note"], desk["overall"]] + list(desk["limits"])
+    for row in desk["scenarios"]:
+        parts += [row["label"], row["text"]]
+    return " ".join(p for p in parts if p)
+
+
+def test_the_assembled_desk_speaks_without_the_desks_jargon():
+    for desk in _every_desk():
+        text = _prose(desk).lower()
+        for pattern in DESK_JARGON:
+            assert not re.search(pattern, text), (pattern, text[:200])
+
+
+def test_the_assembled_lead_carries_a_few_numbers_not_a_table():
+    """The written desk of 2026-10-05 had sixteen figures in five paragraphs.
+    The assembled lead quotes the S&P's move and, when a decision is priced,
+    its odds: words for the rest."""
+    for desk in _every_desk():
+        lead = " ".join(desk["lead"])
+        # Names are not figures: "S&P 500", "Nasdaq 100", and a meeting's date.
+        named = re.sub(r"\b(S&P|Nasdaq|Russell|Dow)( Jones)? \d+", "", lead)
+        named = re.sub(r"\b\d{1,2} [A-Z][a-z]+\b", "", named)
+        figures = re.findall(r"\d+(?:\.\d+)?", named)
+        # Two: the S&P's move, and the odds when a decision is priced. Three
+        # let every index's percentage back in with one of them still missing.
+        assert len(figures) <= 2, (figures, lead)
+
+
+def test_the_prompt_writes_for_someone_who_has_never_bought_a_stock():
+    from app.ai import DESK_PROMPT
+    low = DESK_PROMPT.lower()
+    assert "never bought a stock" in low and "knows nothing about finance or economics" in low
+    # A number budget, and rounding.
+    assert "at most four in the whole lead" in low
+    assert "never more than one" in low and "round them" in low
+    # The words it may not use, and the rule for the ones it must.
+    for word in ("tape", "flow", "positioning", "priced in", "basis points", "open interest"):
+        assert word in low, word
+    assert "say what it is in plain words" in low and "the first time" in low
+    # And the probability rule survives the simpler voice.
+    assert "do not call it" in low and "odds or a chance" in low
+
+
+def test_the_page_names_the_branches_and_the_bottom_line():
+    from pathlib import Path
+    app_js = (Path(__file__).resolve().parent.parent / "static/app.js").read_text()
+    fn = app_js[app_js.index("function morningDesk(data) {"):]
+    fn = fn[:fn.index("\nfunction ")]
+    assert '<h3 class="md-h3">What could happen next</h3>' in fn
+    assert "<strong>Bottom line:</strong>" in fn
+    assert '<h3 class="md-h3">Today\'s reports</h3>' in fn
+
+
+def test_the_note_explains_only_what_the_desk_has_said():
+    """Two mismatches found reading the plain version aloud: the note explained
+    "that expected change" when the lead had left a small one out, and "each
+    report below" on a day with no reports."""
+    small = {"available": True, "kind": "priced", "basis_points": 6.5,
+             "implied_average": 3.945, "effective": 3.88, "contract_month_label": "November"}
+    cot = _catalyst("CFTC Commitments of Traders", "positioning", days=4)
+    out = md.build(rate=small, events={"events": [cot]}, today=date(2026, 10, 5))
+    assert "expected change" not in out["note"]
+    assert "report below" not in out["note"]
+    assert not any("interest rate" in p for p in out["lead"]), "the lead left it out"
+    big = dict(small, basis_points=12.0)
+    assert "expected change" in md.build(rate=big, today=date(2026, 10, 5))["note"]
+    cpi = {"title": "CPI", "days_away": 0, "importance": 5, "impact": "high"}
+    assert "report below" in md.build(events={"events": [cpi]}, today=date(2026, 10, 5))["note"]
+
+
+def test_a_positions_report_is_not_given_an_expirys_branches():
+    """The weekly report of what big traders hold expires nothing, and was told
+    "the bets expire" and "the day after" anyway."""
+    assert md._scenarios({"available": False},
+                         _catalyst("CFTC Commitments of Traders", "positioning")) == []
+    assert md._scenarios({"available": False},
+                         _catalyst("Quadruple witching", "positioning"))
+
+
+def test_the_lead_reads_as_sentences():
+    macro = {"groups": {"futures": [
+        {"symbol": "ES=F", "label": "S&P 500 futures", "chg_1d": 0.48},
+        {"symbol": "NQ=F", "label": "Nasdaq 100 futures", "chg_1d": 0.58}]}}
+    cot = dict(_catalyst("CFTC Commitments of Traders", "positioning", days=4),
+               when_label="Fri Oct 9")
+    lead = " ".join(md.build(macro=macro, events={"events": [cot]},
+                             today=date(2026, 10, 5))["lead"])
+    assert "Nasdaq 100 futures are up slightly" in lead, lead
+    assert "on Fri Oct 9" in lead and "fri oct 9" not in lead

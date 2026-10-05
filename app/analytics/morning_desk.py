@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import calendar as _cal
 import logging
+import re
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
@@ -294,62 +295,74 @@ def _lead(tape: Dict[str, Any], rate: Dict[str, Any],
     front = (fut or cash)
     spx = next((r for r in front if "S&P" in (r.get("label") or "")), None)
 
+    # In words anyone can follow: see the note on DESK_PROMPT in app/ai.py for
+    # what this voice replaced. A figure stays where it is the point, rounded,
+    # and a market word is said in plain terms the first time it appears.
     bp = rate.get("basis_points") if rate.get("available") else None
     if rate.get("kind") == "probability" and rate.get("probability") is not None:
+        move = {"cut": "cut", "hike": "raise"}.get(rate.get("direction") or "", "change")
         out.append(
-            "The fed funds strip has {}% of a {:.0f} basis point {} priced for the "
-            "{} meeting, against an effective rate of {}% today. {}"
-            .format(rate["probability"], rate.get("step_bp", STEP_BP),
-                    rate.get("direction") or "move",
-                    datetime.fromisoformat(rate["meeting"]).strftime("%-d %B"),
-                    rate.get("effective"),
-                    "That is the market saying the decision itself is settled, "
-                    "which moves the question to the language around it."
+            "Traders betting on interest rates put the chance that the Federal "
+            "Reserve will {} rates by a quarter of a point at its {} meeting at "
+            "about {:.0f}%. {}"
+            .format(move, datetime.fromisoformat(rate["meeting"]).strftime("%-d %B"),
+                    rate["probability"],
+                    "So most of them think the decision is already settled, and what "
+                    "matters is what the Fed says about what comes next."
                     if (rate["probability"] or 0) >= 80 else
-                    "That is a market that has not made its mind up, which is "
-                    "the condition that keeps a room tense into the print."))
+                    "So the market has not made up its mind, which tends to keep "
+                    "investors on edge until the decision."))
     elif bp is not None and abs(bp) >= RATE_LEAD_BP:
         out.append(
-            "The front fed funds contract is pricing an average effective rate of "
-            "{}% for {}, against {}% today. So about {:.0f} basis points of {} sits "
-            "in the curve before anyone has said anything."
-            .format(rate.get("implied_average"),
-                    rate.get("contract_month_label") or "the delivery month",
-                    rate.get("effective"), abs(bp),
-                    "tightening" if bp > 0 else "easing"))
+            "Traders expect the Federal Reserve's interest rate to {} a little over "
+            "{}, before the Fed has said anything about it."
+            .format("rise" if bp > 0 else "fall",
+                    rate.get("contract_month_label") or "the coming month"))
 
     if spx and spx.get("chg_1d") is not None:
         vix = tape.get("vix") or {}
-        line = "{} are {} at {}".format(
+        # One figure, the S&P's, which is the one the strip above leads with;
+        # the rest in words. "S&P 500 futures +0.48%, Nasdaq 100 futures
+        # +0.58%" read as a table, not a sentence.
+        line = "{} are {} ({})".format(
             spx.get("label"), _move_word(spx.get("chg_1d")), _pct(spx.get("chg_1d")))
         others = [r for r in front if r is not spx and r.get("chg_1d") is not None]
         if others:
-            line += ", with {}".format(" and ".join(
-                "{} {}".format(r["label"], _pct(r["chg_1d"])) for r in others[:2]))
-        if vix.get("last") is not None:
-            line += ". Volatility is at {}{}".format(
-                vix["last"],
-                ", which is not a market bracing for much" if vix["last"] < 18
-                else ", which is a market paying up for protection" if vix["last"] > 24
-                else "")
+            names = [r["label"] for r in others[:2]]
+            # "Nasdaq 100 futures is up" read wrong: futures are plural.
+            plural = len(names) > 1 or names[0].endswith("futures")
+            line += ", and {} {} {}".format(" and ".join(names), "are" if plural else "is",
+                                            _move_word(others[0]["chg_1d"]))
         out.append(line + ".")
+        if vix.get("last") is not None:
+            out.append(
+                "Investors look calm: the VIX, a measure of how nervous they are, is low."
+                if vix["last"] < 18 else
+                "Investors look nervous: the VIX, a measure of how worried they are, "
+                "is high, which means people are paying up to protect themselves."
+                if vix["last"] > 24 else
+                "The VIX, a measure of how nervous investors are, is in its normal range.")
 
     if releases:
         titles = [r.get("title") or "" for r in releases[:3]]
-        out.append("On the calendar this morning: {}. The numbers are below, each "
-                   "against its own prior print.".format(", ".join(t for t in titles if t)))
+        out.append("Today's reports: {}. Each is explained below, next to its last "
+                   "reading.".format(", ".join(t for t in titles if t)))
     elif catalyst and catalyst.get("days_away") is not None:
-        when = (catalyst.get("when_label") or "").lower() or "ahead"
+        label = catalyst.get("when_label") or ""
+        # "tomorrow" reads as a word; a date needs its "on", where lowering it
+        # gave "the next one is CFTC Commitments of Traders fri oct 9".
+        when = (label.lower() if label in ("Today", "Tomorrow", "This week", "Next week")
+                else "on " + label if label else "ahead")
         flow = (catalyst.get("category") or "") in FLOW_CATEGORIES
-        out.append("Nothing is scheduled to print today. The next dated item is {} "
-                   "{}, which {}."
+        out.append("There are no big economic reports today. The next one is {} {}, "
+                   "which {}."
                    .format(catalyst.get("title"), when,
-                           "changes what is holding price rather than what is "
-                           "known about the economy" if flow else
-                           "is what the week builds toward"))
+                           "shows what big traders were already betting on rather "
+                           "than anything new about the economy" if flow else
+                           "is what this week is building up to"))
     else:
-        out.append("Nothing is scheduled to print today and nothing dated is inside "
-                   "the calendar horizon, so this is a tape trading on its own.")
+        out.append("There are no big economic reports today or in the days ahead, so "
+                   "prices are moving on their own.")
     return out
 
 
@@ -363,89 +376,90 @@ def _scenarios(rate: Dict[str, Any],
     """
     rows: List[Dict[str, str]] = []
     if rate.get("kind") == "probability" and rate.get("probability") is not None:
-        step = "{:.0f}bp".format(rate.get("step_bp", STEP_BP))
-        move = rate.get("direction") or "move"
+        move = {"cut": "cuts", "hike": "raises"}.get(rate.get("direction") or "", "moves")
         rows.append({
-            "label": "{} {}, and a soft statement".format(step, move),
-            "text": "If the decision lands as priced and the language leans "
-                    "toward it being a response to one thing rather than the "
-                    "start of a series, the event risk comes out of the market "
-                    "and the tape is free to move on whatever it was going to "
-                    "trade anyway."})
+            "label": "The Fed {} rates and sounds relaxed".format(move),
+            "text": "If the decision goes as traders expect and the Fed signals it "
+                    "is a one-off, the uncertainty is over and markets can move on."})
         rows.append({
-            "label": "{} {}, and a firm statement".format(step, move),
-            "text": "If the language points at more of the same, the front end "
-                    "reprices first and equities take their cue from it. The "
-                    "thing to watch is the two-year, not the index."})
+            "label": "The Fed {} rates and hints at more".format(move),
+            "text": "If the Fed suggests further moves are coming, interest rates on "
+                    "bonds react first, and stocks usually follow their lead."})
         rows.append({
             "label": "No change",
-            "text": "With {}% priced for a {}, holding would be the genuine "
-                    "surprise, and a surprise reprices bonds, the dollar and "
-                    "equities together rather than one at a time."
-                    .format(rate["probability"], move)})
+            "text": "With about {:.0f}% of traders expecting a move, holding rates "
+                    "steady would be a real surprise, and surprises tend to move "
+                    "bonds, the dollar and stocks all at once."
+                    .format(rate["probability"])})
     elif catalyst and (catalyst.get("category") or "") in FLOW_CATEGORIES:
+        # Not "comes in higher": an options expiry or a positioning report
+        # publishes no number to be higher or lower about. And these branches
+        # are about bets expiring, so they are an expiry's alone. The weekly
+        # positions report expires nothing and moves nothing on its own, and
+        # was being given "the bets expire" anyway; it gets no branches.
         title = catalyst.get("title") or "the next event"
+        if not re.search(r"expir|witching", title, re.I):
+            return rows
         rows.append({
-            "label": "{}, and the unwind is orderly".format(title),
-            "text": "Expiries and positioning reports do not print a number, so "
-                    "there is nothing to beat or miss. What they do is move open "
-                    "interest: contracts that have been pinning price stop "
-                    "pinning it. An orderly one passes without a mark on the "
-                    "chart."})
+            "label": "{} passes quietly".format(title),
+            "text": "Option expiries and reports on what big traders hold do not "
+                    "print a number, so there is nothing to beat or miss. Most of "
+                    "the time they pass without anyone noticing."})
         rows.append({
-            "label": "{}, and it moves the tape".format(title),
-            "text": "Where a large amount of open interest sits at one strike, "
-                    "price can be held near it into the event and released "
-                    "after. A move on the day that reverses the next morning is "
-                    "the signature of flow rather than news."})
+            "label": "{} moves prices".format(title),
+            "text": "When many bets are tied to one price, a stock or an index can "
+                    "stick near it until the bets expire and move more freely after. "
+                    "A jump that reverses the next morning is usually this, not news."})
         rows.append({
-            "label": "The session after",
-            "text": "Usually the more informative one. With the expiring "
-                    "contracts gone, whatever the tape does next is position "
-                    "being rebuilt rather than defended."})
+            "label": "The day after",
+            "text": "Usually more telling. Once the expiring bets are gone, the next "
+                    "move reflects what investors actually think."})
     elif catalyst:
-        title = catalyst.get("title") or "the next release"
+        title = catalyst.get("title") or "the next report"
         rows.append({
-            "label": "{} comes in hot".format(title),
-            "text": "A print above its prior reading pushes the argument toward "
-                    "policy staying tighter for longer, which shows up in the "
-                    "front end before it shows up in the index."})
+            "label": "{} comes in higher than last time".format(title),
+            "text": "For most reports, a higher reading makes it more likely that "
+                    "interest rates stay high for longer. Bond markets usually react "
+                    "before stocks do."})
         rows.append({
-            "label": "{} comes in soft".format(title),
-            "text": "A print below its prior reading does the reverse, and the "
-                    "first place to look is whether the move in yields is "
-                    "matched by one in the dollar. If it is not, the market did "
-                    "not believe it."})
+            "label": "{} comes in lower than last time".format(title),
+            "text": "That points the other way. Watch whether interest rates and the "
+                    "dollar both fall: if only one does, investors may not believe "
+                    "the number."})
         rows.append({
-            "label": "It lands in line",
-            "text": "The most common outcome and the least discussed one. An "
-                    "in-line print leaves the tape trading position rather than "
-                    "news, and the first hour usually reverses."})
+            "label": "It comes in about the same",
+            "text": "The most common result. Markets then tend to carry on with "
+                    "whatever they were already doing, and early moves often reverse."})
     return rows
 
 
-def _note(rate: Dict[str, Any], catalyst: Optional[Dict[str, Any]]) -> str:
+def _note(rate: Dict[str, Any], catalyst: Optional[Dict[str, Any]],
+          releases: Optional[List[Dict[str, Any]]] = None) -> str:
     """One factual correction of whatever the branches invite people to get wrong."""
     if rate.get("kind") == "probability":
-        return ("Worth being precise about what that percentage is. It is not a "
-                "forecast and nobody surveyed anyone for it: it is backed out of "
-                "the price of a futures contract that settles on the average "
-                "effective rate for its delivery month, so it is what the market "
-                "is charging rather than what it believes. The decision itself is "
-                "a vote of the committee, and the chair is one member of it.")
-    if rate.get("available") and rate.get("basis_points") is not None:
-        return ("That basis point figure is a monthly average, not odds on a "
-                "meeting. {} Turning one into the other needs the contract for "
-                "the month the decision sits in, and this says which it has."
-                .format(rate.get("limit") or ""))
-    if catalyst:
-        return ("The comparison below is against the previous print, not against "
-                "an expectation. This terminal does not carry surveyed consensus, "
-                "so a release that beats its own prior month is described as "
-                "exactly that and not as a beat.")
-    return ("A quiet calendar is not the same as a quiet market. It means the "
-            "moves on the tape are position and flow rather than news, which is "
-            "the condition in which the first hour is least worth trusting.")
+        return ("That percentage is not a forecast or a survey. It is worked out "
+                "from what traders are paying in the futures market, so it shows "
+                "where their money is, not what will happen. The decision is a "
+                "vote by the Fed's committee.")
+    bp = rate.get("basis_points") if rate.get("available") else None
+    if bp is not None and abs(bp) >= RATE_LEAD_BP:
+        # Only when the lead said it. Below RATE_LEAD_BP the lead leaves the
+        # rate out, and this explained "that expected change" to a reader who
+        # had not been told of one.
+        # Not odds: a contract priced on the month's average rate says how far
+        # the average is expected to move, not how likely a decision is. The
+        # contract-month caveat itself is in the limits list, in full.
+        return ("That expected change is an average over the whole month, not the "
+                "chance of a decision at a particular meeting.")
+    # Only with reports below to compare: on a day whose next item is days
+    # away this told the reader about "each report below" with none there.
+    if releases:
+        return ("Each report below is compared with its own last reading, not with "
+                "what economists predicted. This site does not carry those "
+                "predictions, so \"higher than last time\" means exactly that.")
+    return ("A quiet calendar does not mean a quiet market. Without news, prices "
+            "move on traders' own buying and selling, so the first hour of trading "
+            "is the least worth trusting.")
 
 
 def _calendar(releases: List[Dict[str, Any]]) -> List[Dict[str, str]]:
@@ -481,24 +495,27 @@ def _overall(tape: Dict[str, Any], rate: Dict[str, Any],
     if ten.get("chg_1d") is not None and dollar.get("chg_1d") is not None:
         flat = abs(ten["chg_1d"]) < FLAT_PCT or abs(dollar["chg_1d"]) < FLAT_PCT
         same = (ten["chg_1d"] > 0) == (dollar["chg_1d"] > 0)
-        bits.append("Yields are {} and the dollar is {}, which {}"
+        bits.append("Interest rates on government bonds are {} and the dollar is {}, {}"
                     .format(_move_word(ten["chg_1d"]), _move_word(dollar["chg_1d"]),
-                            "leaves them saying nothing together: one of the two "
-                            "has not moved" if flat else
-                            "is the combination that usually means a rate story"
+                            "but one of the two has barely moved, so together they do "
+                            "not tell a clear story" if flat else
+                            # Not "it is usually about interest rates", which
+                            # read back as rates being about rates.
+                            "and when the two move together like this, investors "
+                            "are usually reacting to where they think interest "
+                            "rates are headed"
                             if same else
-                            "pull against each other, so whatever is moving one is "
-                            "not the thing moving the other"))
+                            "so they are pulling in different directions, and "
+                            "something different is driving each one"))
     if crude.get("chg_1d") is not None and abs(crude["chg_1d"]) >= 1.5:
-        bits.append("crude is {} at {}, which feeds the inflation argument from "
-                    "the cost side".format(_move_word(crude["chg_1d"]),
-                                           _pct(crude["chg_1d"])))
-    tail = ("Whatever the first reaction is, it is the least reliable part of the "
-            "day. The market has to digest the path rather than the headline, and "
-            "that shows up over the days after, not in the first hour."
+        bits.append("oil is {}, which matters because energy costs feed into the "
+                    "prices of almost everything".format(_move_word(crude["chg_1d"])))
+    tail = ("The first reaction to news is the least reliable part of the day. The "
+            "real verdict usually shows up over the next few days."
             if (releases or rate.get("kind") == "probability") else
-            "With nothing dated to react to, the moves here are flow. That makes "
-            "levels worth more than narrative today.")
+            "With no big news today, moves are mostly traders shuffling their bets, "
+            "so where prices actually end up matters more than any explanation for "
+            "them.")
     if not bits:
         return tail
     return "{}. {}".format(". ".join(b[0].upper() + b[1:] for b in bits), tail)
@@ -521,11 +538,12 @@ def build(macro: Optional[Dict[str, Any]] = None,
     rate = rate or {"available": False, "reason": "Not requested."}
 
     limits = [
-        "No consensus estimates. Releases are compared against their own prior "
-        "print, because surveyed expectations are licensed and this terminal "
-        "does not carry them.",
-        "Adjacency is not causation. Where a headline and a move happen the same "
-        "morning, both are reported and no mechanism is asserted between them.",
+        "No consensus estimates, meaning no economists' predictions. Each report is "
+        "compared with its own last reading, because those predictions are sold "
+        "under licence and this site does not carry them.",
+        "Happening together is not the same as causing. When a headline and a "
+        "price move land on the same morning, both are reported, and neither is "
+        "said to have caused the other.",
     ]
     if not releases:
         limits.append("Nothing is scheduled for today, so there is no data section.")
@@ -538,7 +556,7 @@ def build(macro: Optional[Dict[str, Any]] = None,
         "title": "Optic Desk",
         "lead": _lead(tape, rate, catalyst, releases),
         "scenarios": _scenarios(rate, catalyst),
-        "note": _note(rate, catalyst),
+        "note": _note(rate, catalyst, releases),
         "calendar": _calendar(releases),
         "overall": _overall(tape, rate, releases),
         "tape": tape,
