@@ -1953,7 +1953,7 @@ ul.reasons li { margin-bottom: var(--space-1); }
   color: var(--ink-muted);
   line-height: 1.55;
 }
-.caveat.is-clamped {
+.clamp-prose.is-clamped {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -1962,13 +1962,30 @@ ul.reasons li { margin-bottom: var(--space-1); }
   border-radius: var(--r-xs);
   transition: color var(--dur-ui, 120ms) ease;
 }
-.caveat.is-clamped:hover { color: var(--ink-2); }
-.caveat.is-clamped:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.caveat.is-open { cursor: pointer; }
-/* The affordance, on its own line so it cannot be mistaken for the sentence
-   it follows. */
-.caveat.is-clamped::after { content: ' more'; color: var(--s1); }
-.caveat.is-open::after { content: ' less'; color: var(--s1); }
+.clamp-prose.is-clamped:hover { color: var(--ink-2); }
+.clamp-prose.is-clamped:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.clamp-prose.is-open { cursor: pointer; }
+/* The affordance. Clamped text clips its own ::after, so "more" cannot be
+   appended to the last visible word; it is drawn over the end of the last
+   line instead, on the surface colour so the words under it fade out behind
+   it rather than colliding with it. */
+.clamp-prose.is-clamped { position: relative; padding-right: 0; }
+.clamp-prose.is-clamped::after {
+  content: 'more';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  padding-left: var(--space-6);
+  color: var(--s1);
+  background: linear-gradient(to right, transparent, var(--surface) var(--space-5));
+}
+.clamp-prose.is-open::after { content: ' less'; color: var(--s1); }
+/* Outside a panel the page plane is what sits behind the text. */
+.view > .clamp-prose.is-clamped::after,
+.pl-block .clamp-prose.is-clamped::after,
+.pl-hero .clamp-prose.is-clamped::after {
+  background: linear-gradient(to right, transparent, var(--plane) var(--space-5));
+}
 
 .gloss-term {
   font-style: normal;
@@ -2424,7 +2441,7 @@ body.chat-resizing svg { pointer-events: none; }
    the header rather than as another panel competing for attention. */
 
 .sessionbar {
-  padding: var(--space-2) var(--space-5) var(--space-3);
+  padding: var(--space-2) var(--space-5);
   border-bottom: 1px solid var(--border);
   background: var(--surface);
 }
@@ -2518,7 +2535,7 @@ body.chat-resizing svg { pointer-events: none; }
   box-shadow: 0 0 0 1px var(--plane);
 }
 
-.ses-detail { margin-top: var(--space-4); }
+.ses-detail { margin-top: var(--space-3); }
 
 /* The detail fold, and the shape of it is the point.
  *
@@ -2556,23 +2573,27 @@ body.chat-resizing svg { pointer-events: none; }
  * legend, the timezone note, the company profile, the description -- is most
  * of it. The live part, which session and the clock and the 24-hour strip,
  * stays unconditional. */
+/* On the session row itself, after the strip, rather than on a row of its
+   own under it: the fold is closed by default now, so a row holding only this
+   button was 38px of every page spent on a control. Quiet until hovered, like
+   the other text controls in the header bands. */
 .ses-detail-btn {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  margin-top: var(--space-3);
-  padding: var(--space-1) var(--space-3);
-  background: var(--surface-2);
-  border: 1px solid var(--border-strong);
+  flex: none;
+  padding: var(--space-1) var(--space-2);
+  background: none;
+  border: 1px solid transparent;
   border-radius: var(--r-md);
-  color: var(--ink-2);
+  color: var(--ink-muted);
   font: inherit;
   font-size: var(--t-small);
   cursor: pointer;
   transition: color var(--dur-ui) var(--ease-ui),
               border-color var(--dur-ui) var(--ease-ui);
 }
-.ses-detail-btn:hover { color: var(--ink); border-color: var(--ink-muted); }
+.ses-detail-btn:hover { color: var(--ink); border-color: var(--border-strong); }
 .ses-detail-btn::after {
   content: "";
   width: 0;
@@ -2777,19 +2798,18 @@ body.chat-open footer.legal { padding-right: var(--chat-w); }
  * narrow. A container query could, but every ancestor would need a containment
  * context declared for one notice. A bold lead-in on a paragraph is the ordinary
  * way to set this and it cannot break at any width. */
+/* The per-view notice: one quiet line under the page's own heading, not a
+   boxed callout. See legalBanner for why; the clamp and its "more" come from
+   .caveat, so this only sets the line count and the spacing. */
 .legal-area {
   display: block;
-  margin-bottom: var(--space-4);
-  padding: var(--space-2) var(--space-3);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-left: 2px solid var(--warn);
-  border-radius: var(--r-md);
+  margin: 0 0 var(--space-4);
   font-size: var(--t-caption);
-  line-height: 1.65;
-  color: var(--ink-2);
+  line-height: 1.55;
+  color: var(--ink-muted);
 }
-.legal-area strong { color: var(--ink); margin-right: var(--space-0); }
+.legal-area.caveat.is-clamped { -webkit-line-clamp: 1; }
+.legal-area strong { color: var(--ink-2); font-weight: 600; margin-right: var(--space-0); }
 
 /* ---------------------------------------------------------------- settings */
 .settings-row {
@@ -6418,8 +6438,36 @@ details.ind-explain[open] > summary .cal-caret { transform: rotate(90deg); }
   background: var(--accent, var(--s1));
 }
 
-/* The second row is gone; nothing should reserve height for it. */
-nav.tabs-sub, #subnav { display: none !important; }
+/* A section's pages, in the top bar beside the search box.
+ *
+ * This was `display: none !important` on a desktop once the rail arrived, on
+ * the grounds that the rail's menus list the same pages. They do, behind a
+ * hover: on Read, Macro and Indices nothing on the page said which of three
+ * pages it was or that the other two existed, while the phone drew them as
+ * chips and the dossier drew its own tab strip. One rule for every section
+ * now: its pages are always visible, as the dossier's are.
+ *
+ * In the top bar rather than as a second row, because that bar was 800px of
+ * empty glass between Load and Sign in at 1440, so this costs no height. */
+nav.tabs-sub#subnav {
+  margin-left: var(--space-4);
+  padding: 0;
+  border-bottom: 0;
+  gap: var(--space-1);
+  flex: 0 1 auto;
+}
+nav.tabs-sub#subnav button {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--t-small);
+  border-radius: var(--r-pill);
+  color: var(--ink-muted);
+}
+nav.tabs-sub#subnav button[aria-selected="true"] {
+  color: var(--ink);
+  border-color: var(--btn-primary);
+  background: color-mix(in srgb, var(--btn-primary) 14%, transparent);
+}
+nav.tabs-sub#subnav button[aria-selected="true"]::after { content: none; }
 
 /* ==================================================== flat layout (v2) =====
  *
@@ -9660,6 +9708,10 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
   cursor: pointer;
 }
 .sec-bulk-btn:hover { color: var(--ink); border-color: var(--border-strong); }
+/* One of the pair at a time; see syncBulkState. Before the state is known
+   (no attribute yet) both show, which is the old behaviour rather than none. */
+[data-all-open="true"] > [data-bulk="open"],
+[data-all-open="false"] > [data-bulk="close"] { display: none; }
 .sec-bulk-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 
 /* ========================================================= the Optic loop ===
@@ -13805,6 +13857,39 @@ body.chat-full .rp { display: none; }
   background: var(--bg-hover);
 }
 .rp-icon { width: 17px; height: 17px; flex: none; }
+
+/* An icon until it is pointed at. The labelled pill sat over the bottom-right
+   corner of every page, permanently, on top of table columns and the last
+   line of whatever panel ended there; at 1440x900 it covered the Watchlist's
+   Analyze links and a column of the analyst table. The name is still in the
+   button, so it is still the accessible name, and it fades in beside the icon
+   on hover and on keyboard focus: an opacity change, because a hover that
+   resizes the button would reflow the page under the pointer. */
+.rp-btn {
+  position: relative;
+  width: 44px;
+  padding: 0;
+  justify-content: center;
+}
+.rp-btn-label {
+  position: absolute;
+  right: calc(100% + var(--space-2));
+  top: 50%;
+  transform: translateY(-50%);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--t-small);
+  white-space: nowrap;
+  box-shadow: var(--elev-1);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-ui) var(--ease-ui);
+}
+.rp-btn:hover .rp-btn-label,
+.rp-btn:focus-visible .rp-btn-label { opacity: 1; }
 
 .rp-panel {
   width: 310px;

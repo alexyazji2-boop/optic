@@ -219,17 +219,13 @@ def test_the_fold_is_remembered_and_the_same_everywhere():
     assert "rememberSessionDetail(open)" in APP_JS
 
 
-def test_the_fold_defaults_to_open_where_there_is_room_for_it():
-    """This asserted `!== '0'` -- open everywhere an unset key was found --
-    which was right while the fold was new and wrong once it was measured.
-    At 375x812 the detail is 274px ahead of the content, and "it takes too
-    much space" was the phone report that asked for the fold at all.
-
-    So the untouched default now splits on width (see the test below) and what
-    survives from the original intent is the part that was never about the
-    phone: a desktop reader who has touched nothing still sees what they saw
-    before, and a storage failure opens rather than closes, because a fold
-    that cannot remember is better stuck open than stuck shut."""
+def test_a_storage_failure_does_not_shut_a_fold_the_reader_opened():
+    """The fold is closed by default at every width now (see the test below),
+    so the old guard here, that a private-mode failure falls through to an
+    open default, has nothing to fall through to. What survives is the reason
+    it existed: a reader who opened the fold must not find it shut on the
+    next view switch just because storage throws. The catch returns the
+    in-memory answer rather than a literal."""
     fn = _fn("sessionDetailOpen")
     assert "return true" in fn
     # The catch BLOCK, not everything after it. Sliced to end-of-function this
@@ -241,6 +237,8 @@ def test_the_fold_defaults_to_open_where_there_is_room_for_it():
     catch = catch[:catch.index("}") + 1]
     assert "return false" not in catch, \
         "a private-mode failure must not shut the fold outright"
+    assert "sessionDetailMemo" in catch, "the reader's choice is lost in private mode"
+    assert "sessionDetailMemo = open;" in _fn("rememberSessionDetail")
 
 
 def _inside_max_width(css, needle):
@@ -597,37 +595,21 @@ def test_the_mark_carries_the_brand_alone():
     assert 'viewBox="0 0 32 32"' in open("static/index.html").read()
 
 
-def test_the_fold_starts_closed_on_a_phone_and_open_on_a_desktop():
-    """"It takes too much space" was the phone complaint, and a fold that
-    ships open does not answer it until the reader finds the button.
+def test_the_fold_starts_closed_at_every_width():
+    """It used to split on width: closed on a phone, open on a desktop on the
+    reading that a wide screen has room. Measured at 1440x900 on 2026-10-04,
+    the open fold was the same 170px of legend, company paragraph and session
+    prose above every page, and the reader's report was that every page felt
+    like too much competing for attention. Closed by default now; the phase
+    and the countdown stay on the row above it.
 
-    Measured on the live site at 375x812: `#ses-detail` is 274px, a third of
-    the viewport, sitting ahead of whatever the reader opened the app for. A
-    desktop has that room and the always-on read is worth having there, so the
-    untouched default splits on width rather than picking one for both.
-
-    An explicit choice has to outrank the width, or a phone reader who opens
-    the fold finds it shut again on the next view -- which is the bug the
-    localStorage key was added to prevent in the first place."""
+    An explicit choice still outranks the default, both ways round, or a
+    reader who opens it finds it shut again on the next view."""
     fn = _fn("sessionDetailOpen")
-    # A saved answer wins, both ways round -- and unconditionally, or a phone
-    # reader's explicit "open" is read and then overruled by the width anyway.
     assert re.search(r"if \(saved === '1'\) return true;", fn)
     assert re.search(r"if \(saved === '0'\) return false;", fn)
-    # And only then the width.
-    assert "PHONE_QUERY" in fn, "the fold must reuse the one phone breakpoint"
-    # By name only: a literal here is a second breakpoint to keep in step with
-    # the first, and they drift.
-    assert not re.search(r"matchMedia\(\s*['\"]", fn), \
-        "no inline media string -- use PHONE_QUERY"
-    assert "matchMedia" in fn
-    # Negated: matching the phone query means closed, not open.
-    assert re.search(r"return\s*!\(?\s*window\.matchMedia", fn), \
-        "a phone must default closed -- an unnegated return opens it there"
-    # The width test has to come after the saved-value tests, or a stored
-    # preference never gets read on the device that most needs it honoured.
-    assert fn.index("saved === '0'") < fn.index("PHONE_QUERY")
-
+    assert "matchMedia" not in fn, "the width no longer decides"
+    assert fn.rstrip().rstrip("}").rstrip().endswith("return false;"), "the untouched default is closed"
 
 def test_the_phone_fold_still_leaves_the_session_legible():
     """A fold that hides which session it is would trade one problem for a

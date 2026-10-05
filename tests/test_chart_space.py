@@ -60,11 +60,14 @@ def test_the_fold_republishes_the_chrome_height():
 
 
 def test_the_fold_starts_closed_on_the_charting_view():
+    """Closed by default everywhere since the 2026-10-04 clutter pass, which
+    covers Charting; what still matters here is that an explicit choice is
+    read first and nothing after it opens the fold for an untouched reader."""
     fn = _fn("sessionDetailOpen")
-    assert "STATE.view === 'chart'" in fn
-    # After the stored answer, or a reader who opened it there loses it.
-    assert fn.index("saved === '0'") < fn.index("STATE.view === 'chart'"), \
-        "an explicit choice has to outrank the view"
+    assert fn.index("saved === '0'") < fn.rindex("return false;"), \
+        "an explicit choice has to outrank the default"
+    assert "return true" not in fn[fn.index("catch (e)"):].split("}", 1)[1], \
+        "nothing after the stored answer may open the fold by default"
 
 
 def test_the_session_bar_is_hidden_only_on_charting():

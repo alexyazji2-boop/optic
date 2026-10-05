@@ -79,7 +79,7 @@ def test_the_toggle_is_delegated():
 
 
 def test_the_expanded_state_is_announced_and_reversible():
-    fn = APP.split("const cav = evt.target.closest && evt.target.closest('p.caveat[role=\"button\"]');", 1)[1]
+    fn = APP.split("const cav = evt.target.closest && evt.target.closest('p.clamp-prose[role=\"button\"]');", 1)[1]
     fn = fn[:fn.index("});")]
     assert "classList.toggle('is-open')" in fn
     assert "classList.toggle('is-clamped', !open)" in fn
@@ -87,5 +87,27 @@ def test_the_expanded_state_is_announced_and_reversible():
 
 
 def test_the_affordance_says_which_way_it_goes():
-    assert ".caveat.is-clamped::after { content: ' more'" in CSS
-    assert ".caveat.is-open::after { content: ' less'" in CSS
+    # Drawn over the end of the clamped line rather than appended to it: a
+    # line-clamped box clips its own ::after, so " more" after the last word
+    # was never on screen (found in the 2026-10-04 clutter pass).
+    block = CSS_CODE.split(".clamp-prose.is-clamped::after {", 1)[1]
+    block = block[:block.index("}")]
+    assert "content: 'more'" in block and "position: absolute" in block
+    assert ".clamp-prose.is-open::after { content: ' less'" in CSS
+
+
+def test_panel_ledes_and_method_notes_clamp_like_caveats():
+    """After the caveats, long panel ledes were the largest body of prose
+    between a heading and its figures: 22 over 140 characters on three pages.
+    They clamp by the same measurement, so a short one is left alone."""
+    sel = APP.split("const CLAMP_PROSE = '", 1)[1].split("'", 1)[0]
+    for part in ("p.caveat", ".panel > p.sub", "p.pl-method"):
+        assert part in sel, part
+    assert "host.querySelectorAll(CLAMP_PROSE)" in APP
+
+
+def test_prose_rendered_while_hidden_is_judged_when_its_view_shows():
+    """A facet prefetched in the background had every caveat unjudged,
+    because a hidden view has no height to measure."""
+    fn = APP.split("function switchView(view, force) {", 1)[1].split("\n}\n", 1)[0]
+    assert "markClampedCaveats(views[view])" in fn

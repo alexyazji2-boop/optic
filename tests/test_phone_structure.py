@@ -74,7 +74,10 @@ def test_a_sections_pages_are_chips_and_the_dossier_has_its_own():
     assert "sub.hidden = pages.length < 2;" in nav
     phone = _phone()
     assert "header.topbar #subnav:not([hidden]) {\n    display: flex !important;" in phone
-    assert "nav.tabs-sub, #subnav { display: none !important; }" in CSS, "and none on a desktop"
+    # And on a desktop too, in the top bar: a section's pages were reachable
+    # there only through a hover menu on the rail.
+    assert "nav.tabs-sub, #subnav { display: none !important; }" not in CSS
+    assert "nav.tabs-sub#subnav {" in CSS
 
 
 def test_the_phone_draws_one_navigation_one_search_and_one_line_of_hours():

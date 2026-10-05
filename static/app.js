@@ -1939,11 +1939,20 @@ const LEGAL = {
   },
 };
 
-/** The per-view notice, as markup to prepend to a view. */
+/** The per-view notice, as markup to prepend to a view.
+ *
+ * One line, with the rest a click away. It was a bordered amber callout of
+ * two to four lines at the top of every page that has one, sitting under the
+ * page footer's own disclaimer and above panels that each state their limits
+ * as well: the third statement of "this is not advice" before the first
+ * figure. The lead in bold ("Not a recommendation.", "Hypothetical
+ * performance.") is what a reader needs on arrival and it is always visible;
+ * the specifics clamp with the same control as every other caveat (see
+ * markClampedCaveats), so nothing in the notice is removed. */
 function legalBanner(view) {
   const text = LEGAL.areas[view];
   if (!text) return '';
-  return `<div class="legal-area" role="note">${text}</div>`;
+  return `<p class="legal-area caveat">${text}</p>`;
 }
 
 /* The assistant's own notice. Pulse now commits to a directional read, which is
@@ -10686,8 +10695,17 @@ function securityHeader(view, opts = {}) {
     ? STATE.swing.quote : null;
   const quick = STATE.quickQuote && STATE.quickQuote.ticker === sym ? STATE.quickQuote.quote : null;
   const q = (sym === STATE.ticker ? (swingQ || quick) : null) || {};
-  const has = q.price !== null && q.price !== undefined;
-  const pct = q.change_pct;
+  /* The session strip's prices, for whatever the facet's quote lacks. The
+   * strip used to print its own "At the close" figure on Options, Investing
+   * and Earnings, and on two of those it was the only place the day's change
+   * appeared, because their quote arrives without one. It now prints only the
+   * extended-hours price, so this header is the one place the close and the
+   * change live, and it has to be complete on every facet. */
+  const sp = STATE.session && STATE.session.ticker === sym
+    ? (STATE.session.prices || {}) : {};
+  const price = q.price !== null && q.price !== undefined ? q.price : sp.regular_close;
+  const has = price !== null && price !== undefined;
+  const pct = Number.isFinite(q.change_pct) ? q.change_pct : sp.regular_change_pct;
   const dir = !Number.isFinite(pct) || Math.abs(pct) < 0.005
     ? 'flat' : (pct > 0 ? 'up' : 'down');
 
@@ -10730,7 +10748,7 @@ function securityHeader(view, opts = {}) {
     ${opts.compact ? '' : `<div class="sec-id">
       <span class="sec-sym">${esc(sym)}</span>
       ${q.name ? `<span class="sec-name">${esc(q.name)}</span>` : ''}
-      ${has ? `<span class="sec-px">${fmt(q.price, 2)}</span>
+      ${has ? `<span class="sec-px">${fmt(price, 2)}</span>
         <span class="sec-chg ${dir}">${Number.isFinite(pct)
     ? `${pct >= 0 ? '+' : ''}${fmt(pct, 2)}%` : ''}</span>` : ''}
       ${showStage ? '<span class="stage-chip" id="stage-sec-overview" hidden></span>' : ''}
@@ -10748,6 +10766,23 @@ function securityHeader(view, opts = {}) {
  * loadSwing owns the fetch; this waits on it and then paints whichever facet
  * asked. Without the shared payload each tab would refetch a two-second call
  * and the workspace would feel slower than the single page it replaced. */
+/* Redraws the dossier header once the session's prices land, when the facet
+ * painted it without a change or a price. Only then: the header is otherwise
+ * left alone, so a facet whose quote already carried both is not touched. */
+function completeSecurityHeader() {
+  if (!SECURITY_VIEWS.includes(STATE.view)) return;
+  const host = views[STATE.view];
+  const head = host && host.querySelector('.sec-head:not(.compact)');
+  if (!head) return;
+  const chg = head.querySelector('.sec-chg');
+  if (head.querySelector('.sec-px') && chg && chg.textContent.trim()) return;
+  const holder = document.createElement('div');
+  holder.innerHTML = securityHeader(STATE.view);
+  if (!holder.firstElementChild) return;
+  head.replaceWith(holder.firstElementChild);
+  syncSecurityHeader();   // the sticky offset tracks the element, not the class
+}
+
 async function loadSecurityFacet(view, force, opts = {}) {
   const host = views[view];
   if (!host) return;
@@ -31067,55 +31102,48 @@ const SESSION_CAVEAT_PHASES = new Set(['overnight', 'holiday', 'closed']);
  * phases that never fold. */
 const SES_DESC_KEY = 'optic.session.desc';
 
-/* The detail panel's fold, on a phone only.
+/* The detail panel's fold: closed until the reader opens it, at every width.
  *
  * `#ses-detail` carries the phase legend, the timezone note, the company
- * block and the description. Measured at 375x812 it is 165px of every page,
- * above every view, and the comment on the markup below records the last
- * attempt at paying that down and exactly how it failed: the rules were
- * written for a width query and ended up outside one, so the desktop -- which
- * has the room -- hid the company details behind a click for no reason.
+ * block and the description. It used to start open on a desktop, on the
+ * reading that a wide screen has room for it. Measured at 1440x900 in the
+ * clutter pass of 2026-10-04: with it open, the first dossier panel started at
+ * y=640 on Investing and Earnings, under the status line, the session row,
+ * the company paragraph, the legend, two lines of session prose, the price
+ * header, the tab strip, the panel strip and the notice. The reader's report
+ * was that every page felt like too much competing for attention, and this
+ * block was the same 170px on every one of them.
  *
- * So the shape here is deliberate and is the opposite of that attempt. The
- * DEFAULT, unmediated, is the desktop's: everything shown, no control. The
- * phone block is the only thing that adds a fold. A rule that escapes the
- * query now fails towards "visible on a phone too", which is the state this
- * has been in for months, rather than towards a desktop with its details
- * hidden and no button to get them back.
+ * Nothing in it is lost. The phase and the countdown stay on the row above
+ * the fold, the price is in the dossier header, and the button sits on that
+ * row naming what it opens. A phase whose meaning a reader needs (overnight,
+ * holiday, closed) still says so in the status line's chip.
  *
- * The default is open on a desktop and folded on a phone, and that split is
- * the whole point. Measured on the live site at 375x812: the detail is 274px,
- * a third of the viewport, ahead of anything the reader came for. A desktop
- * has the room and the always-on read is worth having; a phone does not, so
- * the fold starts closed there and the summary line above it -- the phase and
- * the countdown -- still says what session it is.
- *
- * An explicit choice outranks both. Once the reader has touched the button,
- * `localStorage` holds a '1' or a '0' and the viewport stops deciding, so a
- * phone reader who opens it keeps it open. Only the untouched case reads the
- * width. */
+ * An explicit choice outranks the default. Once the reader has touched the
+ * button, `localStorage` holds a '1' or a '0'; where storage throws, the
+ * answer is kept in memory so the fold does not snap shut on every view
+ * switch, which re-renders the bar. */
 const SES_DETAIL_KEY = 'optic.session.detail.v1';
+let sessionDetailMemo = null;
 
 function sessionDetailOpen() {
   try {
     const saved = localStorage.getItem(SES_DETAIL_KEY);
     if (saved === '1') return true;
     if (saved === '0') return false;
-  } catch (e) { /* private mode: fall through to the width */ }
-  /* Charting is sized against the viewport rather than scrolled, so every
-   * pixel above it comes straight off the chart. 57px of session timetable is
-   * a third of what the plot gains from collapsing it, on the one view whose
-   * whole purpose is chart height. The phase and the countdown stay in the
-   * summary line above the fold either way. */
-  if (STATE.view === 'chart') return false;
-  // Untouched, so the width decides. `PHONE_QUERY` is the same 719px the rest
-  // of the phone layout uses, rather than a second number to keep in step.
-  return !(window.matchMedia && window.matchMedia(PHONE_QUERY).matches);
+  } catch (e) {
+    if (sessionDetailMemo !== null) return sessionDetailMemo;
+  }
+  /* Untouched: closed. On Charting this is also what keeps the plot tall,
+   * since the workspace is sized against the viewport and every pixel above
+   * it comes straight off the chart. */
+  return false;
 }
 
 function rememberSessionDetail(open) {
+  sessionDetailMemo = open;
   try { localStorage.setItem(SES_DETAIL_KEY, open ? '1' : '0'); }
-  catch (e) { /* private mode: it just forgets between renders */ }
+  catch (e) { /* private mode: sessionDetailMemo carries it for this visit */ }
 }
 
 function sessionDescOpen() {
@@ -31254,14 +31282,14 @@ function renderSessionBar() {
 
   const tickerRelevant = TICKER_VIEWS.includes(STATE.view);
 
-  const closeBlock = !tickerRelevant ? '' : `<div class="ses-price">
-    <span class="ses-plabel">${sess.is_regular ? 'Today' : 'At the close'}</span>
-    <span class="ses-pval">${fmt(p.regular_close, 2)}</span>
-    <span class="ses-pnote ${signClass(p.regular_change_pct)}">${
-    fmtPct(p.regular_change_pct, 2)} on the day</span>
-  </div>`;
-
-  const showExtended = tickerRelevant && !sess.is_regular
+  /* No "At the close" block. Every view that drew it (TICKER_VIEWS) is a
+   * dossier page, and the dossier header directly below already shows the
+   * same close and the same change in larger type; the two were the second
+   * and third copies of one number above the fold. The extended-hours print
+   * stays, because nothing else on those pages carries it. */
+  // Not on Options: its quote header prints the same extended-hours price a
+  // few pixels below, labelled, with its change against the close.
+  const showExtended = tickerRelevant && STATE.view !== 'swing' && !sess.is_regular
     && p.change_from_close_pct !== null && p.change_from_close_pct !== undefined;
 
   const nowBlock = showExtended ? `<div class="ses-price">
@@ -31322,36 +31350,22 @@ function renderSessionBar() {
         <span class="ses-phase">${esc(sess.label || '')}</span>
         <span class="ses-sub" id="ses-clock">${esc(sessionClockLine(sess, now))}</span>
       </div>
-      ${closeBlock}
       ${nowBlock}
       <div class="ses-strip">${segments}${marker}</div>
+      <button type="button" class="ses-detail-btn" id="ses-detail-btn"
+        aria-controls="ses-detail" aria-expanded="${sessionDetailOpen()}">
+        ${companyBlock ? 'Hours &amp; company' : 'Market hours'}</button>
     </div>
-    ${/* The legend, the company and the description — shown, not disclosed.
-        *
-        * These sat behind an "Hours & company" button for a phone-height
-        * reason that was real: on a 375px screen the four phase keys, the
-        * timezone note and the description took about 240px between them and
-        * pushed the day's cross-asset moves off the first screen.
-        *
-        * The button went because the fix was aimed at a phone and landed on
-        * everything. Its two rules were written for the 640px block and ended
-        * up at the top of the file outside it, so `display: none` applied at
-        * every width and the desktop — which has the room, and whose comment
-        * claimed it "renders exactly what it did before" — hid the company
-        * details behind a click for no reason at all.
-        *
-        * The phone cost is back and is the accepted price of the details being
-        * visible without being asked for. If it needs paying down again, pay
-        * it inside a width query and verify the rule is actually in one. */''}
-    ${/* Rendered at every width; `display: none` above 559 keeps it off a
-         desktop. Labelled for what it reveals rather than "Details", so it
-         says something before it is pressed -- and so for what it reveals
-         now: with no company to show it opens the hours alone, and "Hours &
-         company" promised one that was not there (reported from Home with
-         no symbol loaded). */''}
-    <button type="button" class="ses-detail-btn" id="ses-detail-btn"
-      aria-controls="ses-detail" aria-expanded="${sessionDetailOpen()}">
-      ${companyBlock ? 'Hours &amp; company' : 'Market hours'}</button>
+    ${/* The stale-print warning sits outside the fold: it qualifies the
+         extended-hours price on the row above, and a caveat on a figure
+         belongs where the figure is, not behind a button. */''}
+    ${tickerRelevant && p.stale_note ? `<div class="ses-warn">${gloss(p.stale_note)}</div>` : ''}
+    ${/* The legend, the company and the description, folded by default
+         at every width; see sessionDetailOpen for the measurement. The
+         button on the row above is labelled for what it reveals: with no
+         company to show it opens the hours alone, and "Hours & company"
+         promised one that was not there (reported from Home with no symbol
+         loaded). */''}
     <div class="ses-detail${sessionDetailOpen() ? '' : ' is-closed'}" id="ses-detail">
       ${companyBlock}
       <div class="ses-legend">${legend}
@@ -31360,7 +31374,6 @@ function renderSessionBar() {
     : `Times in ${esc(zoneTag)}; market runs on ET`}<button type="button"
           data-goto-settings>Change</button></span>
       </div>
-      ${tickerRelevant && p.stale_note ? `<div class="ses-warn">${gloss(p.stale_note)}</div>` : ''}
       ${sessionDescHTML(phase, sess.description)}
     </div>`;
 
@@ -31430,6 +31443,7 @@ async function loadSession(force) {
     const firstLoad = !STATE.session;
     STATE.session = data;
     renderSessionBar();
+    completeSecurityHeader();
     // The Quote panel keys its extended-hours block off the session phase, and
     // the swing view usually paints before this request lands.
     if (firstLoad && STATE.view === 'swing' && STATE.swing) renderSwing(STATE.swing);
@@ -31507,17 +31521,27 @@ function updateStatus() {
     // sync with reality.
     const host = views[STATE.view];
     const busy = !!(host && host.querySelector('.loading'));
+    // A bare symbol on a dossier page repeats the header under it.
+    const named = SECURITY_VIEWS.includes(STATE.view) && !busy;
     setStatus([
-      STATE.ticker
-        ? `${esc(STATE.ticker)}${busy ? '. Loading…' : ''}`
-        : (busy ? 'Loading…' : 'Ready.'),
+      named ? null
+        : STATE.ticker
+          ? `${esc(STATE.ticker)}${busy ? '. Loading…' : ''}`
+          : (busy ? 'Loading…' : 'Ready.'),
       liveIndicatorHTML(),
-    ]);
+    ].filter(Boolean));
     return;
   }
 
   const parts = [];
-  const quote = d.quote || {};
+  /* On a dossier page the header directly below names the symbol and prints
+   * the price and the change, and the session strip carries the extended-hours
+   * print. Repeating all three here made the price the most-printed thing on
+   * the screen (four copies above the fold on Options, measured 2026-10-04),
+   * so on those pages this line keeps only what nothing else says: the
+   * view's own reading, the source and its time, and the feed's state. */
+  const headed = SECURITY_VIEWS.includes(STATE.view);
+  const quote = headed ? {} : (d.quote || {});
   // Investing nests everything under `holding` and carries a bare `price`.
   const holding = d.holding || {};
   // Market-wide views aren't about the loaded symbol — Optic Portfolio is one
@@ -31528,7 +31552,7 @@ function updateStatus() {
     || (tickerViews.includes(STATE.view) ? STATE.ticker : null);
   const price = quote.price !== undefined && quote.price !== null
     ? quote.price : (holding.price !== undefined ? holding.price : d.spot);
-  if (label) {
+  if (label && !headed) {
     parts.push(`<strong class="dim">${esc(label)}</strong>${
       price ? ' ' + fmt(price, 2) : ''}`);
   }
@@ -31603,7 +31627,10 @@ function updateStatus() {
     parts.push(`Source: ${esc(d.data_source || 'yfinance')} · ${
       new Date(d.generated_at).toLocaleTimeString()}`);
   }
-  if (quote.market_state) parts.push(`Market: ${esc(friendlyMarketState(quote.market_state))}`);
+  // The session strip names the phase in words wherever it is drawn.
+  if (quote.market_state && !STATE.session) {
+    parts.push(`Market: ${esc(friendlyMarketState(quote.market_state))}`);
+  }
   parts.push(liveIndicatorHTML());
   setStatus(parts);
 }
@@ -33770,6 +33797,11 @@ function groupForView(view) {
   // The instrument chart has no fixed home: it belongs to the group that opened
   // it, so the subnav keeps the reader where they were.
   if (view === 'instrument' && STATE.instrumentFrom) return STATE.instrumentFrom;
+  /* Settings is the rail's footer button, not a member of any group. Falling
+   * through to 'home' lit Home in the rail while Settings was open, so two
+   * rail entries claimed to be the current page. Its own id matches no group:
+   * the gear's aria-pressed is the only mark, and on a phone it is under More. */
+  if (view === 'settings') return 'settings';
   const g = NAV_GROUPS.find((x) => x.views.includes(view));
   return g ? g.id : 'home';
 }
@@ -34011,6 +34043,12 @@ function switchView(view, force) {
   // and two marks blinking out of phase reads as a fault.
   document.body.dataset.view = view;
   Object.entries(views).forEach(([k, node]) => node.classList.toggle('active', k === view));
+  /* Prose rendered while its view was hidden had no height to measure, so
+   * markClampedCaveats left all of it unjudged: a facet prefetched in the
+   * background (Options, after a ticker load from Overview) arrived with
+   * every caveat at full length. Judged again now that it has layout; the
+   * pass skips anything already decided, so this costs one query. */
+  markClampedCaveats(views[view]);
   if (view !== 'settings') NAV_LAST[groupForView(view)] = view;
   paintNav(view);
   paintMobileTabs(view);
@@ -36289,8 +36327,22 @@ function setAllPanels(view, open) {
     if (panel.dataset.panelId) rememberCollapse(panel.dataset.panelId, open);
   });
   if (open) markClampedCaveats(host);
-  const bar = host.querySelector('.panel-bulk');
-  if (bar) bar.dataset.allOpen = String(open);
+  syncBulkState(view);
+}
+
+/* Expand all and Collapse all show one at a time. Both are rendered, and the
+ * strip's `data-all-open` decides which: "Expand all" while anything is shut,
+ * "Collapse all" once nothing is. Two buttons side by side, one of which
+ * always does nothing, were a third of the strip's width on a phone and the
+ * reason the section chips were squeezed to one visible name there. */
+function syncBulkState(view) {
+  const host = views[view];
+  if (!host) return;
+  const panels = [...host.querySelectorAll(REACHABLE_PANELS)];
+  const allOpen = panels.length > 0 && panels.every((p) => !p.classList.contains('is-closed'));
+  host.querySelectorAll('.panel-bulk, .sec-bulk').forEach((bar) => {
+    bar.dataset.allOpen = String(allOpen);
+  });
 }
 
 /* Panels the reader can actually reach.
@@ -36307,7 +36359,7 @@ const REACHABLE_PANELS = '.panel[data-collapsible="1"]:not([hidden])';
 
 function addBulkControl(view) {
   const host = views[view];
-  if (!host || host.querySelector('.panel-bulk')) return;
+  if (!host || host.querySelector('.panel-bulk, .sec-index')) return;
   if (host.querySelectorAll(REACHABLE_PANELS).length < 4) return;
   /* Skipped when the section index is going to render them itself.
    *
@@ -36326,6 +36378,7 @@ function addBulkControl(view) {
     if (b) setAllPanels(view, b.dataset.bulk === 'open');
   });
   host.insertBefore(bar, host.firstChild);
+  syncBulkState(view);
 }
 
 /* ------------------------------------------------------- section index
@@ -36376,6 +36429,11 @@ function buildSectionIndex(view) {
 
   const panels = [...host.querySelectorAll(REACHABLE_PANELS)];
   if (panels.length < SECTION_INDEX_MIN) return;
+  /* The index carries its own bulk buttons. A view whose sections arrive late
+   * (Read) got the standalone bar while it had fewer than six and kept it once
+   * the index arrived, so the same three buttons were drawn twice, one row
+   * apart. */
+  host.querySelectorAll('.panel-bulk').forEach((bar) => bar.remove());
 
   const nav = document.createElement('nav');
   nav.className = 'sec-index span-all';
@@ -36421,6 +36479,7 @@ function buildSectionIndex(view) {
   nav.appendChild(bulk);
 
   host.insertBefore(nav, afterOpticLoop(host));
+  syncBulkState(view);
   armSectionIndex(view, nav, panels);
 }
 
@@ -36951,6 +37010,8 @@ document.addEventListener('click', (evt) => {
   if (panel.dataset.panelId) rememberCollapse(panel.dataset.panelId, open);
   // Now that its contents have layout, the caveats inside can be measured.
   if (open) markClampedCaveats(panel);
+  const viewEl = panel.closest('.view');
+  if (viewEl) syncBulkState(viewEl.id.replace(/^view-/, ''));
 });
 
 /* Everything a view needs once its DOM exists: the notice, the glossary pass,
@@ -36972,11 +37033,22 @@ document.addEventListener('click', (evt) => {
  * Made operable rather than just clickable: 150 of these render across the
  * product, and a paragraph that reveals text on click has to be reachable by
  * keyboard and announce that it expands. */
+/* What clamps. Caveats first, and then the other prose that sits between a
+ * panel's heading and its figures: the panel's own lede (`.panel > p.sub`)
+ * and the method notes under the Optic loop's blocks, the cross-asset board
+ * and the scorecards. Measured at 1440 across Options, Investing and Macro in
+ * the 2026-10-04 clutter pass: after the caveats, panel ledes over 140
+ * characters were the next largest body of prose, 22 of them and 5,000
+ * characters, each one between a heading and the numbers it introduces. The
+ * same rule as the caveats: only what overflows is clamped, by measurement,
+ * and the rest is one click or one Enter away. */
+const CLAMP_PROSE = 'p.caveat, .panel > p.sub, p.pl-method, p.cc-method, p.sc-note';
+
 function markClampedCaveats(host) {
   if (!host) return;
-  host.querySelectorAll('p.caveat').forEach((el) => {
+  host.querySelectorAll(CLAMP_PROSE).forEach((el) => {
     if (el.dataset.caveatChecked === '1') return;
-    el.classList.add('is-clamped');
+    el.classList.add('clamp-prose', 'is-clamped');
     /* Inside `display: none` both heights are 0 and the test reads `0 <= 1`,
      * so every caveat in a collapsed panel is judged to fit. Measured on the
      * Options facet: 21 caveats, 0 clamped, because the panels had not been
@@ -37000,15 +37072,17 @@ function markClampedCaveats(host) {
 /* Delegated, because these are rendered into every panel on every repaint --
  * the same reason the glossary terms and the nav menus are. */
 document.addEventListener('click', (evt) => {
-  const cav = evt.target.closest && evt.target.closest('p.caveat[role="button"]');
+  const cav = evt.target.closest && evt.target.closest('p.clamp-prose[role="button"]');
   if (!cav) return;
+  // A link or a glossary term inside the prose keeps its own click.
+  if (evt.target.closest('a, button, .gloss-term')) return;
   const open = cav.classList.toggle('is-open');
   cav.classList.toggle('is-clamped', !open);
   cav.setAttribute('aria-expanded', String(open));
 });
 document.addEventListener('keydown', (evt) => {
   if (evt.key !== 'Enter' && evt.key !== ' ') return;
-  const cav = evt.target.closest && evt.target.closest('p.caveat[role="button"]');
+  const cav = evt.target.closest && evt.target.closest('p.clamp-prose[role="button"]');
   if (!cav) return;
   evt.preventDefault();
   cav.click();
@@ -37017,7 +37091,6 @@ document.addEventListener('keydown', (evt) => {
 function chromeView(view) {
   const host = views[view];
   if (!host) return;
-  markClampedCaveats(host);
   // Notice first, before the panels — and here rather than in each renderer so
   // a view physically cannot be added without it.
   const banner = legalBanner(view);
@@ -37028,6 +37101,8 @@ function chromeView(view) {
     holder.innerHTML = banner;
     while (holder.firstChild) host.insertBefore(holder.firstChild, anchor);
   }
+  // After the notice is in, since it clamps with the caveats.
+  markClampedCaveats(host);
   glossHeaders(host);
   dedupeGlossTerms(host);
   // Last, so it wraps the finished DOM including anything the steps above added.
