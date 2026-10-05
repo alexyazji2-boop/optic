@@ -1831,29 +1831,25 @@ function lineChart(opts) {
         // session is live. One series only: every line pulsing is noise, and the
         // reader is being told "the newest point is still forming", which is a
         // fact about the bar rather than about any particular average.
-        /* Asked to "make the chart blink more visible, pop out more", with a
-         * screenshot where it could barely be found: a 4px dot breathing by
-         * 14%, and one 1.5px outline of a halo starting at 55% opacity, on a
-         * line of the same colour against a near-black plot. Two filled
-         * ripples now, half a beat apart so one is always spreading, reaching
-         * four times the dot; and the dot is larger, glows in the line's
-         * colour and swells with the beat. See .live-halo in styles.css. */
+        /* One ripple, lightly filled, on a dot a little larger than the
+         * line's own end. Softened on request ("the blinking dot is too
+         * heavy") from two filled ripples and a 5px glowing dot; it began as a
+         * bare 1.5px outline that was too faint to find. The weights and the
+         * beat are in .live-halo in styles.css. */
         if (liveNextChart && si === 0) {
-          ['live-halo', 'live-halo live-halo-late'].forEach((cls) => {
-            const halo = s('circle', {
-              cx: X(lastIdx), cy: Y(se.values[lastIdx]), r: 5,
-              fill: endColor, 'fill-opacity': 0.28, stroke: endColor, 'stroke-width': 2,
-              class: cls,
-              'data-fade': animating ? DRAW_MS * 0.8 : null,
-            });
-            root.appendChild(halo);
-            liveMarks.push(halo);
+          const halo = s('circle', {
+            cx: X(lastIdx), cy: Y(se.values[lastIdx]), r: 4,
+            fill: endColor, 'fill-opacity': 0.16, stroke: endColor, 'stroke-width': 1,
+            class: 'live-halo',
+            'data-fade': animating ? DRAW_MS * 0.8 : null,
           });
+          root.appendChild(halo);
+          liveMarks.push(halo);
         }
         // 2px surface ring keeps the end dot legible where lines cross.
         const live = liveNextChart && si === 0;
         const endDot = s('circle', {
-          cx: X(lastIdx), cy: Y(se.values[lastIdx]), r: live ? 5 : 4,
+          cx: X(lastIdx), cy: Y(se.values[lastIdx]), r: live ? 4.5 : 4,
           fill: endColor, stroke: C.surface, 'stroke-width': 2,
           // `color` so the glow can be currentColor: the line's own colour,
           // tinted bar and all, without a second copy of it in the CSS.

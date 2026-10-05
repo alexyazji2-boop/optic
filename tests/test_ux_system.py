@@ -338,3 +338,18 @@ def test_alert_focuses_the_builder_after_each_render_until_the_reader_acts():
     assert "setTimeout(stop, WATCH_FOCUS_MS)" in fn
     handler = RAW[RAW.index("closest('[data-sec-alert]')"):][:400]
     assert "focusWatchBuilderSoon();" in handler
+
+
+def test_every_ask_pulse_chip_is_outlined_at_rest():
+    """"Have this button show like this at all times, and those similar across
+    the terminal", with "What is this?" pictured in its hover state. Every Ask
+    Pulse chip is the one `.ask-pulse` class: the blue edge, the tint and full
+    ink at rest, and hover a step deeper so pointing still answers."""
+    code = re.sub(r"/\*.*?\*/", "", CSS, flags=re.S)
+    rest = re.search(r"(?m)^\.ask-pulse \{([^}]*)\}", code).group(1)
+    assert "border: 1px solid var(--s1);" in rest
+    assert "border: 1px solid transparent" not in rest and "background: transparent" not in rest
+    assert "color: var(--ink);" in rest
+    assert "background: color-mix(in srgb, var(--s1) 12%, transparent);" in rest
+    hover = re.search(r"(?m)^\.ask-pulse:hover \{([^}]*)\}", code).group(1)
+    assert "var(--s1) 22%" in hover, "hover still answers"

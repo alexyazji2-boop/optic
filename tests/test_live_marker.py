@@ -1,13 +1,15 @@
-"""The live marker on a chart's newest point is easy to find.
+"""The live marker on a chart's newest point: findable, and no heavier.
 
-Asked for as "make the chart blink more visible, pop out more", with a
-screenshot of QQQ's hourly line where it could barely be found: a 4px dot
-breathing by 14%, and one 1.5px outline of a halo reaching 2.6 times the dot
-from 55% opacity, in the line's own colour over a near-black plot. Now two
-filled ripples half a beat apart reach 4.2 times it from 90%, and the dot is
-larger, swells by a third and glows in its own colour. Rendered through the
-recording DOM rather than read as text, so the count of ripples is the count
-drawn.
+Its third weight. Asked first to "make the chart blink more visible, pop out
+more", with a screenshot of QQQ's hourly line where it could barely be found:
+a 4px dot breathing by 14%, and one 1.5px outline of a halo reaching 2.6 times
+the dot from 55% opacity. That made two filled ripples half a beat apart
+reaching 4.2 times it from 90%, and a 5px dot swelling by a third with a glow.
+Then, on 2026-10-05: "the blinking dot is too heavy. make it softer", with a
+picture of it as a green blob over the price tag. One lightly filled ripple
+now, to 2.8 times from 55% on a slower beat, and a dot that grows 12% with a
+faint glow. Rendered through the recording DOM rather than read as text, so
+the count of ripples is the count drawn.
 """
 
 from __future__ import annotations
@@ -56,13 +58,14 @@ def _drawn(live):
     return json.loads(blob.split("RESULT:", 1)[1].split("\n")[0])
 
 
-def test_a_live_chart_draws_two_filled_ripples_and_a_larger_dot():
+def test_a_live_chart_draws_one_lightly_filled_ripple_and_a_slightly_larger_dot():
     out = _drawn(True)
-    assert [h["cls"] for h in out["halos"]] == ["live-halo", "live-halo live-halo-late"]
-    for halo in out["halos"]:
-        assert halo["fill"] == "#0ca30c" and halo["stroke"] == "#0ca30c"
-        assert float(halo["opacity"]) > 0, "filled, not an outline"
-    assert out["dots"] == [{"r": "5", "color": "#0ca30c", "fill": "#0ca30c"}]
+    assert [h["cls"] for h in out["halos"]] == ["live-halo"], "one ripple, not two"
+    halo = out["halos"][0]
+    assert halo["fill"] == "#0ca30c" and halo["stroke"] == "#0ca30c"
+    # Filled, so it is a mark and not a thicker line end, but lightly.
+    assert 0 < float(halo["opacity"]) <= 0.2
+    assert out["dots"] == [{"r": "4.5", "color": "#0ca30c", "fill": "#0ca30c"}]
 
 
 def test_a_closed_market_draws_no_blink():
@@ -72,24 +75,25 @@ def test_a_closed_market_draws_no_blink():
     assert out == {"halos": [], "dots": []}
 
 
-def test_the_ripples_spread_wide_and_the_dot_glows():
+def test_the_ripple_and_the_glow_are_soft():
     halo = NO_COMMENTS[NO_COMMENTS.index("@keyframes live-halo {"):]
     halo = halo[:halo.index("\n}")]
-    # Frame by frame: a bare `scale(4.2) in halo` matched the 100% frame alone
-    # and passed with the spread itself put back to 2.6.
-    assert "0%   { transform: scale(1);   opacity: 0.9; }" in halo
-    assert "80%  { transform: scale(4.2); opacity: 0; }" in halo
-    assert "\n.live-halo-late { animation-delay: -0.8s; }" in NO_COMMENTS
-    assert "animation: live-halo 1.6s" in NO_COMMENTS
+    # Frame by frame: a bare `scale(2.8) in halo` would match the 100% frame
+    # alone and pass with the spread put back to 4.2.
+    assert "0%   { transform: scale(1);   opacity: 0.55; }" in halo
+    assert "75%  { transform: scale(2.8); opacity: 0; }" in halo
+    assert "live-halo-late" not in NO_COMMENTS and "live-halo-late" not in CHARTS
+    assert "animation: live-halo 2.4s" in NO_COMMENTS
     dot = NO_COMMENTS[NO_COMMENTS.index("\n.live-dot {"):]
-    assert "filter: drop-shadow(0 0 4px currentColor);" in dot[:dot.index("}")]
+    assert "filter: drop-shadow(0 0 2px currentColor);" in dot[:dot.index("}")]
     beat = NO_COMMENTS[NO_COMMENTS.index("@keyframes live-dot {"):]
-    assert "scale(1.32)" in beat[:beat.index("\n}")]
+    beat = beat[:beat.index("\n}")]
+    assert "scale(1.12)" in beat and "drop-shadow(0 0 3px currentColor)" in beat
 
 
 def test_less_motion_still_finds_it():
     """No animation for a reader who asked for less, and still a ring to see."""
     still = NO_COMMENTS[NO_COMMENTS.index("@media (prefers-reduced-motion: reduce) {\n  .live-halo"):]
     still = still[:still.index("\n}")]
-    assert ".live-halo { animation: none; opacity: 0.45; transform: scale(2); }" in still
+    assert ".live-halo { animation: none; opacity: 0.3; transform: scale(1.8); }" in still
     assert ".live-dot { animation: none; }" in still

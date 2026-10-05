@@ -3803,43 +3803,42 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
 
 /* Live marker on the leading point of a chart's primary series.
  *
- * Two ripples spread from it and fade, half a beat apart, and the dot swells
- * and glows with the beat. Set only while the session is open — see
- * setChartLive(). A blinking dot on a closed market would be claiming movement
- * that isn't happening.
+ * One ripple spreads from it and fades, and the dot breathes. Set only while
+ * the session is open -- see setChartLive(). A blinking dot on a closed market
+ * would be claiming movement that isn't happening.
  *
- * Stronger than it was, on request ("make the chart blink more visible, pop
- * out more"): the halo was one 1.5px outline reaching 2.6 times the dot from
- * 55% opacity, and the dot grew 14%, which on a line of the same colour over a
- * near-black plot read as a slightly thicker line end. Filled ripples from 90%
- * to 4.2 times, a dot that grows by a third, and a glow in its own colour
- * (`color` on the circle, so currentColor follows a tinted line). */
+ * Its third weight. It began as one 1.5px outline reaching 2.6 times the dot
+ * from 55% opacity, with the dot growing 14%, and was asked to "pop out more"
+ * because it read as a slightly thicker line end. That made two filled ripples
+ * from 90% out to 4.2 times, a dot growing by a third and a 3-7px glow, and
+ * on 2026-10-05 it was "too heavy, make it softer", with a picture of it as a
+ * green blob over the price tag. Between the two now: one ripple, lightly
+ * filled so it still reads as a mark rather than a line end, from 55% to 2.8
+ * times over a slower beat, a dot that grows 12%, and a glow of 1.5-3px. */
 .live-halo {
   transform-box: fill-box;
   transform-origin: center;
-  animation: live-halo 1.6s cubic-bezier(0.2, 0.6, 0.35, 1) infinite;
+  animation: live-halo 2.4s cubic-bezier(0.25, 0.6, 0.4, 1) infinite;
 }
-.live-halo-late { animation-delay: -0.8s; }
 @keyframes live-halo {
-  0%   { transform: scale(1);   opacity: 0.9; }
-  80%  { transform: scale(4.2); opacity: 0; }
-  100% { transform: scale(4.2); opacity: 0; }
+  0%   { transform: scale(1);   opacity: 0.55; }
+  75%  { transform: scale(2.8); opacity: 0; }
+  100% { transform: scale(2.8); opacity: 0; }
 }
 .live-dot {
   transform-box: fill-box;
   transform-origin: center;
-  animation: live-dot 1.6s ease-in-out infinite;
-  filter: drop-shadow(0 0 4px currentColor);
+  animation: live-dot 2.4s ease-in-out infinite;
+  filter: drop-shadow(0 0 2px currentColor);
 }
 @keyframes live-dot {
-  0%, 100% { transform: scale(1);    filter: drop-shadow(0 0 3px currentColor); }
-  50%      { transform: scale(1.32); filter: drop-shadow(0 0 7px currentColor); }
+  0%, 100% { transform: scale(1);    filter: drop-shadow(0 0 1.5px currentColor); }
+  50%      { transform: scale(1.12); filter: drop-shadow(0 0 3px currentColor); }
 }
-/* Still for a reader who asked for less motion, and still easy to find: one
-   ring held at its widest useful size, and the glow without the beat. */
+/* Still for a reader who asked for less motion, and still findable: the ring
+   held part-way out, faint, and the dot without the beat. */
 @media (prefers-reduced-motion: reduce) {
-  .live-halo { animation: none; opacity: 0.45; transform: scale(2); }
-  .live-halo-late { display: none; }
+  .live-halo { animation: none; opacity: 0.3; transform: scale(1.8); }
   .live-dot { animation: none; }
 }
 
@@ -4198,12 +4197,14 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
 
 /* --------------------------------------------------------- Ask Pulse ------ */
 
-/* Sits beside a heading, so it must not compete with it: normal weight, muted
- * until hovered. It is an offer, not a call to action. */
-/* Outlined only on hover. Every panel heading on a dossier page carries one
-   of these, and as bordered pills they were a second row of chips competing
-   with the headings they sit beside; at rest they are muted text now, which is
-   all a question needs to be until it is pointed at. */
+/* Outlined at all times: the blue edge, the tint and the full ink that it used
+ * to show only under the pointer. On the reader's call, with a picture of
+ * "What is this?" beside US 10Y in that state: "have this button show like
+ * this at all times, and those similar across the terminal". That reverses
+ * the clutter pass of 2026-10-04, which had reduced these to muted text until
+ * hovered so they would not compete with the headings beside them; at rest
+ * they read as nothing to press. Every Ask Pulse chip is this one class.
+ * Hover deepens the tint a step, so pointing at one still answers. */
 .ask-pulse {
   font: inherit;
   font-size: var(--t-micro);
@@ -4212,9 +4213,9 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
   margin-left: var(--space-3);
   padding: var(--space-1) var(--space-2);
   border-radius: var(--r-pill);
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--ink-muted);
+  border: 1px solid var(--s1);
+  background: color-mix(in srgb, var(--s1) 12%, transparent);
+  color: var(--ink);
   cursor: pointer;
   vertical-align: middle;
   white-space: nowrap;
@@ -4223,7 +4224,7 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
 .ask-pulse:hover {
   border-color: var(--s1);
   color: var(--ink);
-  background: color-mix(in srgb, var(--s1) 12%, transparent);
+  background: color-mix(in srgb, var(--s1) 22%, transparent);
 }
 .ask-pulse:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
