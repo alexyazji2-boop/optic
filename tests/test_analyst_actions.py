@@ -11,6 +11,7 @@ ones. Nothing here touches the network.
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import os
 import shutil
@@ -166,7 +167,12 @@ def test_the_provider_reads_yahoos_frame(monkeypatch):
 
 
 def test_the_endpoints(store, monkeypatch):
-    analysts.refresh(store, ["AAPL", "INTC"], budget=10, now=time.time())
+    # Pinned like every other test here. The route calls feed() with no `now`,
+    # so it read the real clock, and the fixture's actions are dated from NOW:
+    # INTC's upgrade, two days before 2026-09-30, fell out of the seven-day
+    # window on 2026-10-05 and this failed on a tree nobody had touched.
+    monkeypatch.setattr(main.analysts_mod, "feed", functools.partial(analysts.feed, now=NOW + 60))
+    analysts.refresh(store, ["AAPL", "INTC"], budget=10, now=NOW)
     client = TestClient(main.app)
     feed = client.get("/api/analysts/latest", params={"days": 7, "show": "upgrades"}).json()
     assert [r["ticker"] for r in feed["rows"]] == ["INTC"] and feed["show"] == "upgrades"
