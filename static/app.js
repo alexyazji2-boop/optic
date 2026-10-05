@@ -15912,30 +15912,43 @@ function wsLegend(ps) {
  * that six that feel right beat twenty that do not — the core annotation set
  * plus the three measurement tools, which is what a terminal actually needs.
  * Each is a real interaction with drag handles and persistence, not an icon. */
+/* `group` puts a divider between kinds of tool on the rail: select, then lines,
+ * then shapes and the Fibonacci tools, then notes, then the three that measure.
+ * Contiguous here on purpose, so the rail can draw one where the group changes. */
 const WS_TOOLS = [
-  { id: 'cursor', label: 'Select', glyph: '&#10530;', hint: 'Select and move a drawing' },
-  { id: 'trend', label: 'Trend line', glyph: '&#9585;', hint: 'A line between two points' },
-  { id: 'ray', label: 'Ray', glyph: '&#8599;', hint: 'A line that extends past the second point' },
-  { id: 'hline', label: 'Level', glyph: '&#9473;', hint: 'A horizontal price level' },
-  { id: 'vline', label: 'Date line', glyph: '&#9474;', hint: 'A vertical line marking one bar' },
-  { id: 'channel', label: 'Channel', glyph: '&#8801;', hint: 'Two parallel trend lines' },
-  { id: 'rect', label: 'Rectangle', glyph: '&#9633;', hint: 'A box around a region' },
-  { id: 'fibdraw', label: 'Fib retracement', glyph: '&#9776;', hint: 'Fib levels between two points' },
-  { id: 'fibext', label: 'Fib extension', glyph: '&#9783;', hint: 'Projected levels beyond the move' },
-  { id: 'pitchfork', label: 'Pitchfork', glyph: '&#9868;', hint: 'Andrews pitchfork from three pivots' },
-  { id: 'arrow', label: 'Arrow', glyph: '&#8594;', hint: 'A pointer at something' },
-  { id: 'text', label: 'Text', glyph: 'T', hint: 'A note on the chart' },
-  { id: 'ruler', label: 'Measure', glyph: '&#8596;', hint: 'Price and date distance between two points' },
-  { id: 'rr', label: 'Risk / reward', glyph: '&#9707;', hint: 'Entry, stop and target as a box' },
-  { id: 'position', label: 'Position size', glyph: '&#8721;', hint: 'Shares to buy for a given risk' },
+  { id: 'cursor', group: 'select', label: 'Select', glyph: '&#10530;', hint: 'Select and move a drawing' },
+  { id: 'trend', group: 'lines', label: 'Trend line', glyph: '&#9585;', hint: 'A line between two points' },
+  { id: 'ray', group: 'lines', label: 'Ray', glyph: '&#8599;', hint: 'A line that extends past the second point' },
+  { id: 'hline', group: 'lines', label: 'Level', glyph: '&#9473;', hint: 'A horizontal price level' },
+  { id: 'vline', group: 'lines', label: 'Date line', glyph: '&#9474;', hint: 'A vertical line marking one bar' },
+  { id: 'channel', group: 'lines', label: 'Channel', glyph: '&#8801;', hint: 'Two parallel trend lines' },
+  { id: 'rect', group: 'shapes', label: 'Rectangle', glyph: '&#9633;', hint: 'A box around a region' },
+  { id: 'fibdraw', group: 'shapes', label: 'Fib retracement', glyph: '&#9776;', hint: 'Fib levels between two points' },
+  { id: 'fibext', group: 'shapes', label: 'Fib extension', glyph: '&#9783;', hint: 'Projected levels beyond the move' },
+  { id: 'pitchfork', group: 'shapes', label: 'Pitchfork', glyph: '&#9868;', hint: 'Andrews pitchfork from three pivots' },
+  { id: 'arrow', group: 'notes', label: 'Arrow', glyph: '&#8594;', hint: 'A pointer at something' },
+  { id: 'text', group: 'notes', label: 'Text', glyph: 'T', hint: 'A note on the chart' },
+  { id: 'ruler', group: 'measure', label: 'Measure', glyph: '&#8596;', hint: 'Price and date distance between two points' },
+  { id: 'rr', group: 'measure', label: 'Risk / reward', glyph: '&#9707;', hint: 'Entry, stop and target as a box' },
+  { id: 'position', group: 'measure', label: 'Position size', glyph: '&#8721;', hint: 'Shares to buy for a given risk' },
 ];
 
+/* The drawing rail, tools in their groups and then the actions.
+ *
+ * Asked to "fill this space out", with the rail circled in full screen: the
+ * tools sat at the top at their own spacing and the rail's whole remaining
+ * height opened up in one gap above Snap, Undo, Redo and Delete, because
+ * `.ws-rail-gap` was a flexible spacer that took all of it. The spare height
+ * goes to the dividers between groups now (`.ws-rail-sep`), so the buttons stay
+ * the squares they are, a group stays together, and the column reaches the
+ * foot of the rail with no hole in it. */
 function wsToolRail() {
   return `<div class="ws-rail" role="toolbar" aria-label="Drawing tools">
-    ${WS_TOOLS.map((t) => `<button type="button" class="ws-tool${
+    ${WS_TOOLS.map((t, k) => `${k && WS_TOOLS[k - 1].group !== t.group
+    ? '<span class="ws-rail-sep" aria-hidden="true"></span>' : ''}<button type="button" class="ws-tool${
   wsTool === t.id ? ' on' : ''}" data-ws-tool="${t.id}" title="${esc(t.hint)}"
       aria-pressed="${wsTool === t.id}">${t.glyph}</button>`).join('')}
-    <div class="ws-rail-gap"></div>
+    <div class="ws-rail-gap ws-rail-sep" aria-hidden="true"></div>
     <button type="button" class="ws-tool ws-snap${wsSnapOn ? ' on' : ''}" data-ws-snap
       aria-pressed="${wsSnapOn}" title="${wsSnapOn
     ? 'Snapping on: points land on a candle and its open, high, low or close. Click to place freely.'
@@ -16121,14 +16134,14 @@ function wsStudiesMenu() {
   </div>`;
 }
 
-/* Whether the More drawer is open.
+/* Whether the Layers drawer is open.
  *
  * A module variable rather than a class on the element, because the toolbar is
  * rebuilt wholesale (`tb.outerHTML = wsToolbar()`) every time a dropdown opens
  * or closes. A DOM-only flag would be thrown away by the next menu click. */
 let wsToolsOpen = false;
 
-/* The toolbar: what you reach for constantly on the bar, the rest behind More.
+/* The toolbar: what you reach for constantly on the bar, the rest in Layers.
  *
  * On a phone first. Measured at 375x812: nineteen buttons wrapping to six
  * rows, 227px of controls above a chart that got 443, which was the "mobile
@@ -16140,8 +16153,13 @@ let wsToolsOpen = false;
  * On the bar: Indicators, Chart read, Reset, the interval, the session, the
  * range pills, Reset zoom when there is a zoom to reset, and Line/Candles --
  * what changes the chart often, and what tells you what you are looking at.
- * Behind More: Levels, Stages, Volume, Events, the studies, Panes and Colours,
+ * In Layers: Levels, Stages, Volume, Events, the studies, Panes and Colours,
  * the set you open, use once and close. Its button counts what in there is on.
+ *
+ * Named Layers, not More. It shipped as More, and was asked to be renamed
+ * "to something more fitting on a charting tab": More says only that there
+ * is more, where everything in it is something drawn on the chart or under
+ * it, and the colours those are drawn in.
  *
  * One drawer at every width, drawn two ways by CSS. On a phone it opens into
  * the toolbar's own rows, as it always has. Above that it floats under the
@@ -16302,12 +16320,12 @@ function wsMenuHTML(m) {
   </div>`;
 }
 
-/* The menus folded into More. Everything but Indicators: see wsToolbar. */
+/* The menus folded into Layers. Everything but Indicators: see wsToolbar. */
 function wsTuckedMenus() {
   return WS_MENUS.filter((m) => m.id !== 'indicators');
 }
 
-/* How many things inside More are drawing, for the count on its button. A
+/* How many things inside Layers are drawing, for the count on its button. A
  * closed drawer that hid what was switched on would make a lit overlay
  * impossible to trace back to its control. Colours are left out: a colour is
  * a look, not something drawn on the chart. */
@@ -16326,7 +16344,7 @@ function wsToolbar() {
     ${WS_MENUS.filter((m) => m.id === 'indicators').map(wsMenuHTML).join('')}
     <button type="button" class="ws-menu-btn ws-tools-btn${inside ? ' on' : ''}" data-ws-tools
       aria-expanded="${wsToolsOpen}"
-      title="Levels, stages, volume, events, studies, panes and colours">More${
+      title="Levels, stages, volume, events, studies, panes and colours">Layers${
   inside ? ` <span class="ws-count">${inside}</span>` : ''}<span class="ws-caret"
       aria-hidden="true">&#9662;</span></button>
     ${/* Outside the drawer too: the read is wanted most on a phone, where
@@ -16337,7 +16355,7 @@ function wsToolbar() {
         title="The trend, the nearest levels, RSI and MACD, from daily sessions">Chart read</button>
       ${wsMenuOpen === 'read' ? `<div class="ws-menu-pop ws-read-pop">${chartReadHTML()}</div>` : ''}
     </div>
-    ${/* Beside More rather than inside `.ws-tools`, the drawer: a declutter
+    ${/* Beside Layers rather than inside `.ws-tools`, the drawer: a declutter
          is most wanted when the drawer is shut. */''}
     <button type="button" class="ws-menu-btn ws-reset" data-ws-reset
       ${wsChartIsClean() ? 'disabled' : ''}
@@ -20548,7 +20566,7 @@ function wsDrawKeys(evt) {
     return;
   }
   if (evt.key === 'Escape' && (wsMenuOpen || wsToolsOpen)) {
-    // An open menu or More is the innermost thing on screen, so it shuts
+    // An open menu or Layers is the innermost thing on screen, so it shuts
     // before anything on the chart is cancelled.
     wsMenuOpen = null; wsToolsOpen = false;
     const tbk = views.chart.querySelector('.ws-toolbar');
@@ -35899,7 +35917,7 @@ document.addEventListener('click', (evt) => {
     // and swallowing it would mean every first click after opening a menu did
     // nothing but close it.
   }
-  // More, the same way, now that it floats over the chart. A click inside it
+  // Layers, the same way, now that it floats over the chart. A click inside it
   // is left alone: its own menus and toggles are in there.
   if (wsToolsOpen && STATE.view === 'chart'
       && !evt.target.closest('.ws-tools, [data-ws-tools]')) {

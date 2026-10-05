@@ -662,9 +662,9 @@ def test_the_chart_toolbar_has_one_drawer_drawn_two_ways():
 
     Then the desktop got it too, asked for as a chart-first workspace with
     "secondary settings in a compact menu": at 1440x900 the bar was two rows
-    and eleven controls. On the bar now: Indicators, More, Chart read, Reset,
+    and eleven controls. On the bar now: Indicators, Layers, Chart read, Reset,
     the interval, the session, the ranges, Fit, Reset zoom and the chart style.
-    Behind More: Levels, Stages, Volume, Events, the studies, Panes and
+    In Layers: Levels, Stages, Volume, Events, the studies, Panes and
     Colours. Re-measured: one 53px row at 1100, 1152, 1280 and 1440 wide; on
     the phone 139px over three rows shut and 261px open, against the 141 and
     227 this test recorded before.

@@ -101,26 +101,28 @@ def _labels(html):
 
 
 def _bar_and_drawer(html):
-    """What is on the bar, and what is behind More. The drawer is everything
+    """What is on the bar, and what is in Layers. The drawer is everything
     from its wrapper up to the spacer, which follows it directly."""
     at = html.index('<div class="ws-tools">')
     gap = html.index('<div class="ws-toolbar-gap">')
     return _labels(html[:at] + html[gap:]), _labels(html[at:gap])
 
 
-def test_the_bar_carries_fifteen_controls_and_more_holds_seven(toolbar):
+def test_the_bar_carries_fifteen_controls_and_layers_holds_seven(toolbar):
     """Asked for as a chart-first workspace with "secondary settings in a
     compact menu". At 1440x900 the bar was two rows of twenty controls over
     the chart. On it now: what changes the chart often and what says what the
-    chart is. Behind More: the layers you set up once. Every option is still
-    there, and More's count says how many of those layers are on.
+    chart is. In Layers: the layers you set up once. Every option is still
+    there, and the count on Layers says how many of them are on. It shipped
+    as More and was renamed, asked for as "something more fitting on a
+    charting tab".
 
     The eighteenth control of the old count, the trading-hours menu, stays on
     the bar beside the bar size, as asked for ("regular trading hours" and
     "extended hours"); Chart read stays beside Reset and outside the drawer
     (see tests/test_chart_read.py); Fit is new, fit-to-data beside Reset zoom."""
     bar, drawer = _bar_and_drawer(toolbar["shut"])
-    assert bar == ["Indicators", "More 1", "Chart read", "Reset", "1D", "Regular hours",
+    assert bar == ["Indicators", "Layers 1", "Chart read", "Reset", "1D", "Regular hours",
                    "1M", "3M", "6M", "1Y", "All", "Fit", "Candles", "Line", "Area"], bar
     assert drawer == ["Levels", "Stages", "Volume 1", "Events", "Studies", "Panes",
                       "Colours"], drawer

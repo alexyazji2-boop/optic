@@ -183,7 +183,7 @@ def test_the_dock_starts_shut_and_a_stored_arrangement_is_kept():
     assert "if (Array.isArray(saved)) wsDockOpen = saved" in after
 
 
-def test_more_counts_what_it_holds_that_is_on():
+def test_layers_counts_what_it_holds_that_is_on():
     out = _run(APP_PRELUDE, """
       R.rest = wsTuckedOn();
       wsPanesOpen = ['rsi'];
@@ -191,12 +191,12 @@ def test_more_counts_what_it_holds_that_is_on():
       R.bar = wsToolbar();
       print('RESULT:' + JSON.stringify(R));
     """)
-    assert out["rest"] == 1, "volume is on by default, and it is behind More"
+    assert out["rest"] == 1, "volume is on by default, and it is in Layers"
     assert out["withPane"] == 2
-    assert re.search(r'data-ws-tools[^>]*>More <span class="ws-count">2</span>', out["bar"])
+    assert re.search(r'data-ws-tools[^>]*>Layers <span class="ws-count">2</span>', out["bar"])
 
 
-def test_more_closes_when_you_click_away_or_press_escape():
+def test_layers_closes_when_you_click_away_or_press_escape():
     """It floats over the chart now, so a drawer left open would sit over the
     candles. A click inside it is left alone: its own menus are in there."""
     click = APP[APP.index("if (wsToolsOpen && STATE.view === 'chart'"):]
@@ -288,7 +288,59 @@ def test_every_drawing_tool_fits_at_desktop_heights():
     assert ".ws-rail .ws-tool { width: 28px; height: 28px; }" in _media("(max-height: 950px)")
     two = _media("(max-height: 820px)")
     assert "grid-template-columns: repeat(2, 28px);" in two
-    assert ".ws-rail-gap { grid-column: 1 / -1;" in two
+    assert ".ws-rail-gap, .ws-rail-sep { grid-column: 1 / -1;" in two
+    assert "align-content: space-between;" in two, "the rows spread down the rail"
+
+
+def test_the_drawing_rail_has_no_hole_under_its_tools():
+    """Asked to "fill this space out", with the rail circled in full screen.
+    `.ws-rail-gap` was a flexible spacer that took all the spare height, so the
+    tools sat at the top and the rest of the rail was one gap above Snap. The
+    spare height is shared by the dividers between groups now, capped, and the
+    rail spreads what is left. Measured after: from the top of the rail to its
+    foot with no hole at 1100x760, 1440x900 and 1920x1080, normal and full
+    screen; dividers 17px at 1440x900, 42px in full screen there."""
+    assert "\n.ws-rail-gap { flex: 1 1 auto;" not in NO_COMMENTS, "the hole is back"
+    assert "\n.ws-rail { justify-content: space-between; }" in NO_COMMENTS
+    sep = NO_COMMENTS[NO_COMMENTS.index("\n.ws-rail-sep {"):]
+    sep = sep[:sep.index("}")]
+    for decl in ("flex: 1 1 var(--space-2);", "max-height: 44px;", "align-self: stretch;"):
+        assert decl in sep, decl
+
+
+def test_the_tools_are_grouped_with_a_divider_between_kinds():
+    out = _run(APP_PRELUDE, """
+      navigator.platform = navigator.platform || 'MacIntel';   // the undo shortcut's label
+      var html = wsToolRail();
+      // The order of tools and dividers as the rail draws them.
+      R.seq = (html.match(/data-ws-tool="[a-z]+"|ws-rail-sep|data-ws-snap/g) || [])
+        .map(function (m) { return m.replace(/data-ws-tool="|"/g, ''); });
+      // Every group in one run, so a divider falls only where the kind changes.
+      var seen = {}, runs = 0, prev = null;
+      WS_TOOLS.forEach(function (t) { if (t.group !== prev) { runs += 1; seen[t.group] = (seen[t.group] || 0) + 1; prev = t.group; } });
+      R.runs = runs; R.groups = Object.keys(seen).length;
+      print('RESULT:' + JSON.stringify(R));
+    """)
+    assert out["runs"] == out["groups"] == 5
+    assert out["seq"] == [
+        "cursor", "ws-rail-sep",
+        "trend", "ray", "hline", "vline", "channel", "ws-rail-sep",
+        "rect", "fibdraw", "fibext", "pitchfork", "ws-rail-sep",
+        "arrow", "text", "ws-rail-sep",
+        "ruler", "rr", "position", "ws-rail-sep",
+        "data-ws-snap",
+    ], out["seq"]
+
+
+def test_the_widget_buttons_share_the_rails_height_where_it_is_a_column():
+    """Circled in the same request: fourteen buttons, then nothing down to
+    Pulse. Above 900px only, where the rail is a column; below it the rail is a
+    scrolling row and growing would mean wider."""
+    col = _media("(min-width: 901px)")
+    assert ".ws-wrail-btn { flex: 1 1 auto; max-height: 64px; justify-content: center; }" in col
+    # Pulse keeps its place at the foot, which the cap leaves room for.
+    pulse = NO_COMMENTS[NO_COMMENTS.index("\n.ws-wrail-pulse {"):]
+    assert "margin-top: auto;" in pulse[:pulse.index("}")]
 
 
 def test_the_widget_rail_keeps_the_report_pills_corner_free():

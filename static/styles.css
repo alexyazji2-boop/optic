@@ -7192,7 +7192,7 @@ body[data-view="chart"] main { padding-top: var(--space-2); }
 }
 .ws-toolbar-gap { flex: 1 1 auto; }
 
-/* The More drawer. Shut at rest at every width; see wsToolbar.
+/* The Layers drawer. Shut at rest at every width; see wsToolbar.
  *
  * Open, it floats under the bar rather than joining its rows. Joining them is
  * what it does on a phone, and on a desktop that made the bar a row taller,
@@ -7625,7 +7625,24 @@ body[data-view="chart"] main { padding-top: var(--space-2); }
   scrollbar-width: none;
 }
 .ws-rail::-webkit-scrollbar { display: none; }
-.ws-rail-gap { flex: 1 1 auto; min-height: var(--s4); }
+/* The dividers between groups of tools, and between the tools and the actions,
+   and where the rail's spare height goes. See wsToolRail.
+
+   `.ws-rail-gap` was a flexible spacer that took all of it, so the tools sat
+   at the top and the rest of the rail was one hole above Snap: asked to "fill
+   this space out", with the rail circled in full screen. Shared five ways it
+   is a little room around each line, the buttons keep their size, and the
+   column runs from the top of the rail to the foot of it. Capped, so a very
+   tall screen does not push the groups apart: past the cap the rail's
+   space-between spreads what is left evenly. */
+.ws-rail { justify-content: space-between; }
+.ws-rail-sep {
+  flex: 1 1 var(--space-2);
+  align-self: stretch;
+  min-height: var(--space-2);
+  max-height: 44px;
+  background: linear-gradient(var(--border), var(--border)) center / 60% 1px no-repeat;
+}
 
 
 /* A widget button that cannot act says so.
@@ -7672,10 +7689,12 @@ body[data-view="chart"] main { padding-top: var(--space-2); }
   .ws-rail {
     display: grid;
     grid-template-columns: repeat(2, 28px);
-    align-content: start;
+    /* The rows spread down the rail, for the reason the column's dividers
+       grow: no hole under the last tool. */
+    align-content: space-between;
     justify-content: center;
   }
-  .ws-rail-gap { grid-column: 1 / -1; min-height: var(--space-2); }
+  .ws-rail-gap, .ws-rail-sep { grid-column: 1 / -1; min-height: var(--space-2); }
 }
 
 .ws-canvas {
@@ -8143,6 +8162,16 @@ body[data-view="chart"] main { padding-top: var(--space-2); }
 }
 .ws-wrail-ico { font-size: var(--t-body); }
 .ws-wrail-lab { font-size: 9px; text-align: center; }
+
+/* The widget buttons share the rail's height, where the rail is a column.
+   Circled with the drawing rail in the same request: fourteen buttons at their
+   own height and then nothing down to Pulse, which `margin-top: auto` holds at
+   the foot. They grow to fill it now, up to a cap past which that margin takes
+   what is left, as it did. Above 900px only: below it the rail is a scrolling
+   row (see the max-width: 900px rules), where growing would mean wider. */
+@media (min-width: 901px) {
+  .ws-wrail-btn { flex: 1 1 auto; max-height: 64px; justify-content: center; }
+}
 
 /* Clear of the Report a problem pill.
  *
