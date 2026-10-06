@@ -136,13 +136,32 @@ def test_a_close_through_the_50_day_is_a_change_of_state():
     assert "X closed above its 50-day average" in heads
 
 
-def test_rsi_easing_by_a_point_is_not_news():
-    closes = [100.0 + 0.8 * i for i in range(60)]
-    b, _ = bars(closes + [closes[-1] - 0.3])
+def _overbought_run():
+    """Up three days in four: a 14-day RSI in the eighties."""
+    closes = [100.0]
+    for i in range(80):
+        closes.append(closes[-1] + (0.9 if i % 4 != 3 else -0.5))
+    return closes
+
+
+def test_rsi_easing_just_under_70_is_not_news():
+    """From 82 to 69.9 crosses the line by a tenth of a point: the same
+    stretched reading, not a change of state."""
+    closes = _overbought_run()
+    b, _ = bars(closes + [closes[-1] - 1.825])
     r = S.rsi(b.c, 14)
-    assert r[-2] >= 70 and r[-1] > 65
+    assert r[-2] >= 70 and 69 < r[-1] < 70
     out = B.price_checks("X", b, b.stamps[-1], b.stamps[-2])
     assert not [i for i in out["items"] if "RSI left" in i["headline"]]
+
+
+def test_rsi_falling_well_out_of_the_zone_is():
+    closes = _overbought_run()
+    b, _ = bars(closes + [closes[-1] - 4.0])
+    r = S.rsi(b.c, 14)
+    assert r[-2] >= 70 and r[-1] <= 65
+    out = B.price_checks("X", b, b.stamps[-1], b.stamps[-2])
+    assert "X RSI left overbought territory" in [i["headline"] for i in out["items"]]
 
 
 def test_a_new_52_week_closing_high_is_an_item():
