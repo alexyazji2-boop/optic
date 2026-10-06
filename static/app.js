@@ -14043,7 +14043,7 @@ function renderCatalystMode(c) {
     <div class="grid c3" style="margin-top:var(--space-4)">
       <div class="catmode-box">
         <div class="idx-lbl">Released</div>
-        <div class="catmode-ago">${esc((r.age || {}).label || '')}</div>
+        <div class="catmode-ago">${esc(catalystAgeLabel(r.age))}</div>
         ${r.summary ? `<p class="catmode-sum">${esc(r.summary.slice(0, 260))}</p>` : ''}
       </div>
       <div class="catmode-box">
@@ -14104,13 +14104,39 @@ function mountPanel(hostId, html) {
   revealPanels(host);
 }
 
+/* How long ago, worked out now from the release's own time. The server's
+ * label is right when it is built, and this card used to be fetched once per
+ * page, so an afternoon later it still said "Released 12 minutes ago". */
+function catalystAgeLabel(age) {
+  if (!age) return '';
+  const then = age.published_utc ? new Date(age.published_utc) : null;
+  if (!then || Number.isNaN(then.getTime())) return age.label || '';
+  const mins = Math.max(0, Math.round((Date.now() - then.getTime()) / 60000));
+  if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'} ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 48) return `${hrs} hour${hrs === 1 ? '' : 's'} ago`;
+  return `${Math.round(hrs / 24)} days ago`;
+}
+
+// The reaction it shows moves with the market, so the card is read again when
+// the tab is revisited after this long, not once per page.
+const CATALYST_MODE_TTL_MS = 10 * 60 * 1000;
+let catalystModeAt = 0;
+
 async function loadCatalystMode() {
-  if (STATE.catalystMode) return;
+  if (STATE.catalystMode && Date.now() - catalystModeAt < CATALYST_MODE_TTL_MS) return;
   try {
     STATE.catalystMode = await getJSON('/api/catalyst-mode');
+    catalystModeAt = Date.now();
     mountPanel('catmode-host', renderCatalystMode(STATE.catalystMode));
   } catch (err) {
-    console.warn('Catalyst mode unavailable:', err.message);
+    /* Said where the card would be, rather than only in the console: an empty
+     * space reads as "no catalyst today", which is a claim. */
+    if (!STATE.catalystMode) {
+      mountPanel('catmode-host', `<div class="panel span-all"><p class="sub">Market catalyst mode
+        could not be loaded just now (${esc(err.message)}), so whether a release is driving the
+        market is unknown here. It is tried again the next time this tab opens.</p></div>`);
+    }
   }
 }
 

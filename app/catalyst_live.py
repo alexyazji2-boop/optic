@@ -109,7 +109,9 @@ def _age(published: Optional[str]) -> Optional[Dict[str, Any]]:
         label = "{:.0f} hours ago".format(hours)
     else:
         label = "{:.0f} days ago".format(hours / 24)
-    return {"hours": round(hours, 1), "label": label,
+    # The instant as well as the label: the label is true when it is built,
+    # and a page left open all afternoon kept saying "12 minutes ago".
+    return {"hours": round(hours, 1), "label": label, "published_utc": when.isoformat(),
             "at_et": when.astimezone(ET).strftime("%b %-d at %-I:%M %p ET")}
 
 
