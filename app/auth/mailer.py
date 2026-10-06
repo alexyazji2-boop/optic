@@ -136,6 +136,21 @@ def reset_email(name: str, link: str) -> Dict[str, str]:
     }
 
 
+def no_password_email(name: str, methods: str) -> Dict[str, str]:
+    """For a reset asked of an account with no password. Said in the inbox
+    rather than on the page: the page answers every address the same way, so it
+    cannot be used to learn which ones have accounts."""
+    greeting = "Hi {},".format(name) if name else "Hi,"
+    return {
+        "subject": "Signing in to Optic Terminal",
+        "body": "{}\n\nSomeone asked to reset the password on your Optic Terminal account. "
+                "It has no password: it signs in with {}, which is managed there rather "
+                "than here, so there is nothing to reset. Sign in that way instead.\n\nIf "
+                "you did not ask, you can ignore this message.\n\nOptic Terminal\n".format(
+                    greeting, methods),
+    }
+
+
 def password_changed_email(name: str, when: str) -> Dict[str, str]:
     """Sent after a password changes. Not a courtesy: it is the one notification
     that tells someone their account was taken over while they still have the

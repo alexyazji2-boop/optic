@@ -881,9 +881,12 @@
         });
         var note = form.querySelector('[data-note]');
         var message = asked.message;
+        // Said the same way for every address, like the reply it comes from:
+        // with no mail relay nothing is emailed to anyone, and a link exists
+        // only if an account does.
         if (asked.mail && !asked.mail.available) {
-          message += ' Email is not configured on this deployment, so the link is in '
-            + 'the server log rather than an inbox.';
+          message = 'Email is not configured on this deployment, so nothing is emailed. '
+            + 'If an account uses that address, its reset link is in the server log.';
         }
         if (note) { note.textContent = message; note.hidden = false; }
         busy(form, false);

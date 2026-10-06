@@ -217,13 +217,30 @@ def test_forgot_password_does_not_reveal_whether_the_address_exists(outbox):
     assert len([m for m in outbox if "reset" in m["subject"].lower()]) == 1
 
 
-def test_forgot_password_on_a_provider_only_account_explains_rather_than_looping():
+def test_forgot_password_on_a_provider_only_account_explains_in_the_inbox(outbox):
+    """It explained on the page, which told anyone with the address that it
+    has an account and which provider it uses. The page now answers it like
+    any other address, and the explanation goes to the mailbox."""
     user = store.create_user("g@example.com", "G", "Oogle", email_verified=True)
     store.add_identity(user["id"], "google", "sub-1", "g@example.com")
     reply = client.post("/api/auth/forgot-password", json={"email": "g@example.com"})
-    assert reply.status_code == 200
-    assert "Google" in reply.json()["message"]
+    ghost = client.post("/api/auth/forgot-password", json={"email": "ghost@example.com"})
+    assert reply.status_code == 200 and reply.json() == ghost.json()
+    assert "Google" not in reply.text
+    letter = [m for m in outbox if m["to"] == "g@example.com"][0]
+    assert "Google" in letter["body"] and "nothing to reset" in letter["body"]
     assert main.accounts_db.rows("SELECT 1 FROM password_resets") == []
+
+
+def test_forgot_password_answers_every_address_identically(outbox):
+    """Not only the message: the whole reply. A `sent` flag on a real account's
+    reply alone was an existence check (found in review, 2026-10-06)."""
+    signup()
+    client.cookies.clear()
+    known = client.post("/api/auth/forgot-password", json={"email": "reader@example.com"})
+    unknown = client.post("/api/auth/forgot-password", json={"email": "ghost@example.com"})
+    assert known.json() == unknown.json()
+    assert "sent" not in known.json()
 
 
 def test_a_changed_password_is_notified_by_email(outbox):

@@ -29,7 +29,7 @@ import logging
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urlencode
 
-from fastapi import APIRouter, Body, HTTPException, Query, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, Query, Request, Response
 from fastapi.responses import RedirectResponse
 from starlette.concurrency import run_in_threadpool
 
@@ -276,14 +276,28 @@ async def logout_all(request: Request, response: Response) -> Dict[str, Any]:
 # ------------------------------------------------------------- password reset
 
 
+def _send_later(to: str, subject: str, body: str, link: Optional[str] = None) -> None:
+    """A background task's mail: whether a relay took it goes to the log, never
+    into a response that only some addresses would get."""
+    try:
+        if not mailer.send(to, subject, body, link):
+            log.info("auth mail not handed to a relay: %s", subject)
+    except Exception as exc:                                   # noqa: BLE001
+        log.warning("auth mail failed (%s): %s", subject, exc)
+
+
 @router.post("/forgot-password")
-async def forgot_password(request: Request,
+async def forgot_password(request: Request, background: BackgroundTasks,
                           payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
     email = store.normalise_email(_clean(payload.get("email"), 320))
     ratelimit.guard(request, "forgot", email or None)
 
     # One response for every case: address exists, does not exist, or exists with
-    # no password. Anything else turns this into a free account-existence check.
+    # no password. Anything else turns this into a free account-existence check,
+    # and two things here used to be one: a `sent` flag that only a real account's
+    # reply carried, and a message naming the provider of a provider-only one.
+    # The mail goes out as a background task, after the reply, so a slow relay
+    # cannot make a real address take longer to answer than a made-up one.
     answer = {"ok": True,
               "message": "If an account uses that address, a reset link is on its way.",
               "mail": mailer.available()}
@@ -294,22 +308,19 @@ async def forgot_password(request: Request,
 
     methods = store.auth_methods(user["id"])
     if not methods["password"] and (methods["providers"] or methods["passkeys"]):
-        # A provider-only account has no password to reset. Saying so is safe:
-        # the caller already had to guess the address, and sending them round a
-        # reset loop for a password that does not exist is worse.
+        # No password to reset. Said to the mailbox, which is the account
+        # holder, and not on the page, which is anyone with the address.
         names = [linking.label(p) for p in methods["providers"]]
         if methods["passkeys"]:
             names.append("a passkey")
-        answer["message"] = ("That account signs in with {}, which is managed there "
-                             "rather than here. There is no Optic Terminal password to "
-                             "reset.".format(" or ".join(names)))
+        letter = mailer.no_password_email(user.get("first_name") or "", " or ".join(names))
+        background.add_task(_send_later, user["email"], letter["subject"], letter["body"])
         return answer
 
     token = store.create_reset(user["id"], config.RESET_TTL)
     link = "{}/?reset={}".format(base_url(), token)
     letter = mailer.reset_email(user.get("first_name") or "", link)
-    sent = await _send(user["email"], letter["subject"], letter["body"], link)
-    answer["sent"] = sent
+    background.add_task(_send_later, user["email"], letter["subject"], letter["body"], link)
     return answer
 
 
