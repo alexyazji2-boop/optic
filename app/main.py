@@ -14,7 +14,7 @@ import sqlite3
 import math
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -1089,15 +1089,44 @@ async def symbol_search(
     return await _run(lambda: {"query": q, "results": universe_mod.search(q, limit)})
 
 
+# A daily candle's close keeps moving for a few minutes after the bell, while
+# the closing auction prints and the feed's daily row settles. A follow-up is
+# written once and never corrected, so it does not read a candle until its
+# session closed at least this long ago.
+SIGNAL_SETTLE_MINUTES = 30
+
+
+def settled_session(now_et: datetime) -> Optional[str]:
+    """The latest session whose close is SIGNAL_SETTLE_MINUTES old, as a date."""
+    day = now_et.date()
+    for _ in range(10):
+        close_at = session_mod.regular_close(day)
+        if close_at and close_at + timedelta(minutes=SIGNAL_SETTLE_MINUTES) <= now_et:
+            return day.isoformat()
+        day -= timedelta(days=1)
+    return None
+
+
+def signal_followup_due(now_et: datetime, last_session: Optional[str]) -> Optional[str]:
+    """The session to follow signals up to, or None when that was already done.
+
+    Once per settled session, which is once an evening and not again at the
+    weekend, and once after a start (a deploy empties app.state): each event is
+    written once, so a repeat costs one download and writes nothing."""
+    day = settled_session(now_et)
+    return None if day is None or day == last_session else day
+
+
 def _signal_bars(symbols: List[str]) -> Dict[str, Any]:
-    """Completed daily candles for every symbol with a signal to follow up,
-    in one download."""
+    """Settled daily candles for every symbol with a signal to follow up, in
+    one download."""
     if not symbols:
         return {}
     frames = YF_PROVIDER.batch_history(sorted(set(symbols)), period="6mo", interval="1d")
+    settled = datetime.now(timezone.utc) - timedelta(minutes=SIGNAL_SETTLE_MINUTES)
     out = {}
     for sym, df in (frames or {}).items():
-        bars = setups_mod.daily_bars(df)
+        bars = setups_mod.daily_bars(df, settled)
         if bars is not None:
             out[sym] = bars
     return out
@@ -1504,7 +1533,14 @@ async def watch_check(request: Request, body: Dict[str, Any] = Body(default={}))
     """
     ticker = str(body.get("ticker") or "").upper().strip()
     rows = body.get("watches") or []
-    user = auth_deps.current_user(request)
+    # Only to know whose signal history a firing alert belongs in. The check
+    # itself needs no account, so an accounts database that cannot answer
+    # makes this a guest's check, not a failed one.
+    try:
+        user = auth_deps.current_user(request)
+    except Exception as exc:  # noqa: BLE001 - see above
+        logging.getLogger("uvicorn.error").warning("watch check: account lookup failed: %s", exc)
+        user = None
     if not ticker:
         raise HTTPException(status_code=400, detail="A ticker is required.")
     if not isinstance(rows, list) or len(rows) > 25:
@@ -2407,6 +2443,23 @@ async def _tracker_loop() -> None:
                 except Exception as exc:  # noqa: BLE001 - never break the loop
                     log.warning("brief refresh failed: %s", exc)
 
+            # Signal history follow-ups, once each settled session. Above the
+            # market-hours gate: the candle they read settles after the close,
+            # when the gate below is shut, and a deploy at the weekend should
+            # not wait for Monday's close to catch up.
+            try:
+                due = signal_followup_due(
+                    datetime.now(timezone.utc).astimezone(session_mod.ET),
+                    getattr(app.state, "signals_followed_up", None))
+                if due:
+                    app.state.signals_followed_up = due
+                    out = await _run(signal_history.followup_all, _signal_bars)
+                    if out["events_added"]:
+                        log.info("signals: %s followed up to %s, %s events added",
+                                 out["signals"], due, out["events_added"])
+            except Exception as exc:  # noqa: BLE001 - never break the loop
+                log.warning("signal follow-up failed: %s", exc)
+
             # Nothing to do overnight or at the weekend. Prices don't move, so
             # marking would re-read the same close and a scan would take entries
             # at a price nobody could have traded. The one exception is the first
@@ -2472,19 +2525,6 @@ async def _tracker_loop() -> None:
                     except Exception as exc:  # noqa: BLE001 - never break the loop
                         log.warning("watch run failed: %s", exc)
 
-            # Signal history follow-ups: once as the session closes, when the
-            # day's candle is complete, and once on the first pass after a
-            # start so a restart does not leave a day unobserved. Each status
-            # and horizon is written once, so a repeat writes nothing.
-            if just_closed or getattr(app.state, "signals_followed_up", None) is None:
-                app.state.signals_followed_up = now
-                try:
-                    out = await _run(signal_history.followup_all, _signal_bars)
-                    if out["events_added"]:
-                        log.info("signals: %s followed up, %s events added",
-                                 out["signals"], out["events_added"])
-                except Exception as exc:  # noqa: BLE001 - never break the loop
-                    log.warning("signal follow-up failed: %s", exc)
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # a failed pass must not kill the loop

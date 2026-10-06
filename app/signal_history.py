@@ -48,6 +48,16 @@ HORIZONS = (1, 5, 10, 20)
 
 TERMINAL = ("invalidated", "expired")
 
+# How far the feed's close for the trigger candle may sit from the recorded
+# trigger price before the feed counts as re-based. Yahoo restates a close by
+# a cent or two; a split moves it by half or more.
+REBASE_TOLERANCE = 0.005
+
+# Signals older than this are no longer followed up: the last horizon is 20
+# candles, about four weeks, and the follow-up reads six months of candles, so
+# a trigger this old has either been observed or fallen out of the feed.
+FOLLOW_UP_DAYS = 150
+
 SOURCE = ("Yahoo Finance daily candles (split-adjusted, not dividend-adjusted), "
           "read by Optic's Swing setups engine")
 
@@ -177,17 +187,31 @@ def followup_events(sig: Dict[str, Any], bars: Optional[setups_mod.Bars],
     bull = sig["direction"] == "bull"
     stop = _num(sig.get("invalidation"))
     base = _num(sig.get("trigger_price"))
+    # The feed's history is split-adjusted: after a 4-for-1 split every earlier
+    # close is a quarter of what it was, and of what the record says. Read
+    # against the record's levels unscaled, that is an invalidation and a 75%
+    # fall that never happened. The trigger candle is in both, so its close
+    # measures the re-basing, and the feed's closes are put back into the
+    # record's terms before anything is compared.
+    scale, note = 1.0, ""
+    now_base = float(bars.c[t0])
+    if base and now_base > 0 and abs(now_base / base - 1.0) > REBASE_TOLERANCE:
+        scale = base / now_base
+        note = (" The feed has re-based this stock's prices since the trigger (a split "
+                "or a correction); its closes are scaled by {:.4g} to the record's terms."
+                ).format(scale)
     status = None
     for k in range(t0 + 1, len(bars)):
-        c = float(bars.c[k])
+        c = float(bars.c[k]) * scale
         if stop is not None and ((bull and c < stop) or (not bull and c > stop)):
             status = {"kind": "status", "label": "invalidated", "data_as_of": bars.stamps[k],
                       "price": c, "detail": "Completed close {} the invalidation at {:.2f}.".format(
-                          "below" if bull else "above", stop)}
+                          "below" if bull else "above", stop) + note}
             break
         if k - t0 >= signal_ttl:
             status = {"kind": "status", "label": "expired", "data_as_of": bars.stamps[k],
-                      "price": c, "detail": "Listed for {} candles without invalidation.".format(signal_ttl)}
+                      "price": c, "detail": "Listed for {} candles without invalidation.".format(
+                          signal_ttl) + note}
             break
     if status:
         out.append(status)
@@ -195,11 +219,11 @@ def followup_events(sig: Dict[str, Any], bars: Optional[setups_mod.Bars],
         k = t0 + h
         if k >= len(bars) or base is None or base == 0:
             continue
-        c = float(bars.c[k])
+        c = float(bars.c[k]) * scale
         out.append({"kind": "observation", "label": "after {} candle{}".format(h, "" if h == 1 else "s"),
                     "data_as_of": bars.stamps[k], "price": c,
                     "change_pct": (c / base - 1.0) * 100.0,
-                    "detail": "Close-to-close change in the stock from the trigger candle."})
+                    "detail": "Close-to-close change in the stock from the trigger candle." + note})
     return out
 
 
@@ -214,29 +238,36 @@ def _signal_ttl(sig: Dict[str, Any]) -> int:
         return 10
 
 
-def pending() -> List[Dict[str, Any]]:
-    """Every signal, across accounts, still missing a status or a horizon."""
+def pending(today: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Every recent signal, across accounts, still missing a status or a horizon."""
+    from datetime import date as _date, timedelta
+    day = _date.fromisoformat(today) if today else _now().date()
+    cutoff = (day - timedelta(days=FOLLOW_UP_DAYS)).isoformat()
     rows = db.rows(
         "SELECT s.*, (SELECT COUNT(*) FROM signal_events e WHERE e.signal_id = s.id) AS events, "
         "(SELECT COUNT(*) FROM signal_events e WHERE e.signal_id = s.id AND e.kind = 'status') AS statuses "
-        "FROM signals s ORDER BY s.symbol")
+        "FROM signals s WHERE s.trigger_at >= ? ORDER BY s.symbol", (cutoff,))
     want = 1 + len(HORIZONS)
     return [r for r in rows if r["events"] < want]
 
 
 def followup_all(load_bars: Callable[[List[str]], Dict[str, setups_mod.Bars]],
-                 when: Optional[datetime] = None) -> Dict[str, Any]:
+                 when: Optional[datetime] = None, today: Optional[str] = None) -> Dict[str, Any]:
     """Append what is newly knowable for every unfinished signal.
 
     `load_bars` takes symbols and returns their completed daily candles; it is
     injected so a test can drive this with no network, and so the scheduler can
     hand it one batched download for every symbol at once."""
-    todo = pending()
+    todo = pending(today)
     symbols = sorted({r["symbol"] for r in todo})
     bars = load_bars(symbols) if symbols else {}
     added = 0
     for sig in todo:
         for ev in followup_events(sig, bars.get(sig["symbol"]), _signal_ttl(sig)):
+            # One verdict per signal. A feed that later restates a close could
+            # otherwise add a second, different one beside it.
+            if ev["kind"] == "status" and sig["statuses"]:
+                continue
             if add_event(sig, ev["kind"], ev["label"], ev["data_as_of"], ev.get("price"),
                          ev.get("change_pct"), ev.get("detail") or "", when):
                 added += 1
@@ -313,6 +344,16 @@ def history(user_id: str, symbol: Optional[str] = None, status: Optional[str] = 
     if direction in ("bull", "bear"):
         sql += " AND direction = ?"
         args.append(direction)
+    # In the query rather than after it, so the limit counts matching signals:
+    # filtered afterwards, "invalidated" over a long history came back empty
+    # whenever the newest 200 were all still open.
+    verdict = ("SELECT 1 FROM signal_events e WHERE e.signal_id = signals.id "
+               "AND e.user_id = signals.user_id AND e.kind = 'status'")
+    if status in TERMINAL:
+        sql += " AND EXISTS (" + verdict + " AND e.label = ?)"
+        args.append(status)
+    elif status == "unresolved":
+        sql += " AND NOT EXISTS (" + verdict + ")"
     sql += " ORDER BY trigger_at DESC, recorded_at DESC LIMIT ?"
     args.append(max(1, min(500, int(limit))))
     sigs = [_decode(r) for r in db.rows(sql, tuple(args))]
@@ -332,7 +373,5 @@ def history(user_id: str, symbol: Optional[str] = None, status: Optional[str] = 
         s["events"] = evs
         s["status"] = terminal["label"] if terminal else "unresolved"
         s["horizons"] = horizon_states(s, evs)
-        if status and s["status"] != status:
-            continue
         out.append(s)
     return out

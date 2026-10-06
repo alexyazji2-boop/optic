@@ -20,6 +20,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import db, main, signal_history, watch_runner
+from app import session as session_mod
 from app.analytics import setups as S
 from app.analytics import watches as watches_mod
 
@@ -160,8 +161,8 @@ def test_follow_up_writes_each_event_once_across_passes(two):
     closes = [sig["trigger_price"] * (1 + 0.01 * i) for i in range(25)]
     later = _bars(closes, start=sig["trigger_at"])
     load = lambda syms: {"X": later}
-    first = signal_history.followup_all(load)
-    second = signal_history.followup_all(load)
+    first = signal_history.followup_all(load, today=later.stamps[-1])
+    second = signal_history.followup_all(load, today=later.stamps[-1])
     assert first["events_added"] == 1 + len(signal_history.HORIZONS)
     assert second["events_added"] == 0 and second["signals"] == 0
     row = signal_history.history(two[0])[0]
@@ -196,3 +197,111 @@ def test_the_guest_follow_up_stores_nothing_and_reads_the_same_rule(monkeypatch)
     events = res.json()["events"]["k1"]
     assert [e["label"] for e in events if e["kind"] == "status"] == ["invalidated"]
     assert "not an options return" in res.json()["basis"]
+
+
+# ===================================================== listing and scheduling
+
+def _rec(key, day, price=100.0, stop=90.0):
+    return {"signal_key": key, "symbol": "X", "strategy": "trend_pullback",
+            "strategy_label": "Trend pullback", "direction": "bull", "timeframe": "daily",
+            "trigger_at": day, "data_as_of": day, "trigger_price": price, "invalidation": stop}
+
+
+def test_the_status_filter_counts_toward_the_limit(two):
+    """Filtered after the LIMIT, asking for invalidated signals came back empty
+    whenever the newest rows were all still open."""
+    days = ["2026-09-01", "2026-09-02", "2026-09-03"]
+    for i, d in enumerate(days):
+        signal_history.record(two[0], _rec("k%d" % i, d), "test")
+    oldest = [s for s in signal_history.history(two[0]) if s["trigger_at"] == days[0]][0]
+    signal_history.add_event(oldest, "status", "invalidated", "2026-09-04", 89.0)
+    got = signal_history.history(two[0], status="invalidated", limit=2)
+    assert [s["trigger_at"] for s in got] == [days[0]]
+    still = signal_history.history(two[0], status="unresolved", limit=5)
+    assert [s["trigger_at"] for s in still] == [days[2], days[1]]
+    assert signal_history.history(two[1], status="invalidated") == []
+
+
+def test_a_restated_feed_cannot_add_a_second_verdict(two):
+    signal_history.record(two[0], _rec("k", "2026-09-01"), "test")
+    calm = _bars([100.0 + 0.1 * i for i in range(14)], start="2026-09-01")
+    signal_history.followup_all(lambda syms: {"X": calm}, today="2026-09-30")
+    assert signal_history.history(two[0])[0]["status"] == "expired"
+    # The same candles restated so that one closes beyond the invalidation.
+    restated = _bars([100.0, 100.5, 85.0] + [100.0] * 25, start="2026-09-01")
+    signal_history.followup_all(lambda syms: {"X": restated}, today="2026-10-20")
+    row = signal_history.history(two[0])[0]
+    assert [e["label"] for e in row["events"] if e["kind"] == "status"] == ["expired"]
+
+
+def test_a_split_since_the_trigger_is_not_read_as_a_collapse():
+    """Recorded at 400 with the stop at 360; the feed has since split 4-for-1,
+    so it shows the trigger candle at 100."""
+    b = _bars([100.0, 101.0, 102.0, 103.0, 104.0, 105.0])
+    events = signal_history.followup_events(_sig(b.stamps[0], 400.0, 360.0), b, 10)
+    assert not [e for e in events if e["kind"] == "status"]
+    first = [e for e in events if e["label"] == "after 1 candle"][0]
+    assert first["change_pct"] == pytest.approx(1.0)
+    assert first["price"] == pytest.approx(404.0), "in the record's terms"
+    assert "re-based" in first["detail"]
+    restated = signal_history.followup_events(_sig(b.stamps[0], 100.2, 90.0), b, 10)
+    assert "re-based" not in restated[0]["detail"], "a cent or two is a restatement, not a split"
+
+
+def test_a_signal_past_the_follow_up_window_is_left_alone(two):
+    signal_history.record(two[0], _rec("old", "2026-01-02"), "test")
+    signal_history.record(two[0], _rec("new", "2026-09-01"), "test")
+    assert [r["signal_key"] for r in signal_history.pending(today="2026-10-06")] == ["new"]
+
+
+def test_follow_ups_wait_for_the_close_to_settle_and_run_once_a_session():
+    ET = session_mod.ET
+    due = main.signal_followup_due
+    assert due(datetime(2026, 10, 9, 16, 10, tzinfo=ET), None) == "2026-10-08", \
+        "a start reads up to the last settled session"
+    assert due(datetime(2026, 10, 9, 16, 10, tzinfo=ET), "2026-10-08") is None, \
+        "Friday's close is still settling"
+    assert due(datetime(2026, 10, 9, 16, 31, tzinfo=ET), "2026-10-08") == "2026-10-09"
+    assert due(datetime(2026, 10, 10, 12, 0, tzinfo=ET), "2026-10-09") is None
+    assert due(datetime(2026, 10, 12, 10, 0, tzinfo=ET), "2026-10-09") is None
+    assert due(datetime(2026, 11, 27, 13, 31, tzinfo=ET), "2026-11-25") == "2026-11-27", \
+        "a half day settles from 1:30pm"
+
+
+def test_the_follow_up_runs_above_the_market_hours_gate():
+    """Below it, the evening pass that reads the settled candle never ran."""
+    src = open("app/main.py", encoding="utf-8").read()
+    loop = src[src.index("async def _tracker_loop"):]
+    assert loop.index("signal_followup_due(") < loop.index("if not is_open and not just_closed:")
+
+
+def _check_with(monkeypatch, res, lookup):
+    monkeypatch.setattr(main, "_swing_snapshot", lambda *a, **k: {"quote": {"price": 1.0}})
+    monkeypatch.setattr(main.YF_PROVIDER, "earnings_date", lambda t: None)
+    monkeypatch.setattr(main, "_attach_setups", lambda payload, t: payload.update(setups=res))
+    monkeypatch.setattr(main.auth_deps, "current_user", lookup)
+    return TestClient(main.app).post("/api/watches/check", json={
+        "ticker": "X", "watches": [{"id": "w1", "kind": "swing_setup", "params": {"preset": "any"}}]})
+
+
+def test_a_page_check_records_for_the_signed_in_reader(two, monkeypatch):
+    _df, res, _hit = fired()
+    reply = _check_with(monkeypatch, res, lambda request: {"id": two[0]})
+    assert reply.status_code == 200, reply.text
+    assert reply.json()["met"][0]["signal_record"]["symbol"] == "X"
+    rows = signal_history.history(two[0])
+    assert len(rows) == 1 and rows[0]["origin"] == "alert check on the page"
+
+
+def test_a_page_check_survives_an_accounts_outage(two, monkeypatch):
+    _df, res, _hit = fired()
+
+    def broken(request):
+        raise sqlite3.OperationalError("database is locked")
+
+    reply = _check_with(monkeypatch, res, broken)
+    assert reply.status_code == 200, reply.text
+    met = reply.json()["met"]
+    assert met and met[0]["signal_record"]["strategy"] == "trend_pullback", \
+        "the guest copy is still handed back"
+    assert signal_history.history(two[0]) == []
