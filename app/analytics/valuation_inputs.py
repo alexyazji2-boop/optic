@@ -228,11 +228,20 @@ def build(provider, ticker: str) -> Dict[str, Any]:
     inputs["margin"] = stm.get("margin") or _missing(
         "No net income and revenue for the same periods, so no trailing margin.")
     shares = _num(short.get("shares_outstanding"))
-    inputs["shares"] = ({"value": shares, "unit": "shares", "source": YF_QUOTE + ", shares outstanding",
-                         "as_of": None, "kind": "reported",
-                         "note": "The feed does not date this count."} if shares else
-                        _missing("The feed has no share count, so per-share figures need yours."))
     mcap = _num(quote.get("market_cap"))
+    if shares:
+        inputs["shares"] = {"value": shares, "unit": "shares", "source": YF_QUOTE + ", shares outstanding",
+                            "as_of": None, "kind": "reported", "note": "The feed does not date this count."}
+    elif mcap and price:
+        # The count the market value implies, when the feed leaves the count
+        # itself out. Said to be derived, and how.
+        inputs["shares"] = {"value": round(mcap / price), "unit": "shares", "kind": "derived",
+                            "source": YF_QUOTE + ", market value divided by price",
+                            "as_of": quote.get("as_of"),
+                            "note": ("Counts every share class at this one's price, so a company "
+                                     "with several classes is approximate.")}
+    else:
+        inputs["shares"] = _missing("The feed has no share count, so per-share figures need yours.")
     inputs["market_cap"] = ({"value": mcap, "unit": "currency", "currency": price_ccy,
                              "source": YF_QUOTE, "as_of": quote.get("as_of"), "kind": "reported"}
                             if mcap else _missing("No market value in the quote."))

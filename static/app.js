@@ -8938,12 +8938,15 @@ function dailyChangesHTML() {
 async function openDailyChange(sym, view, panelName) {
   loadTicker(sym, view);
   if (!panelName) return;
-  const id = `sec-${panelId(view, panelName).replace(/[^a-z0-9]+/g, '-')}`;
+  // By the panel's chrome id, which every collapsible panel carries; its
+  // element id can be its own (the setups panel is `swing-setups`).
+  const key = panelId(view, panelName);
   for (let i = 0; i < 40; i++) {
     await new Promise((r) => setTimeout(r, 250));
     if (STATE.ticker !== sym || STATE.view !== view) return;
-    const panel = document.getElementById(id);
-    if (panel) { openPanelById(id); return; }
+    const panel = [...document.querySelectorAll('.panel[data-panel-id]')]
+      .find((el) => el.dataset.panelId === key);
+    if (panel) { openPanel(panel); return; }
   }
 }
 
@@ -12045,7 +12048,10 @@ document.addEventListener('click', (evt) => {
  * it" does from the Setup, and what a briefing item does on the tab it opens. */
 function openPanelById(id) {
   const panel = document.getElementById(id);
-  if (!panel) return;
+  if (panel) openPanel(panel);
+}
+
+function openPanel(panel) {
   if (panel.hidden && panel.dataset.panelId) {
     panel.hidden = false;
     panel.classList.remove('is-advanced');

@@ -1313,8 +1313,8 @@ class YFinanceProvider(MarketDataProvider):
         def build() -> Dict[str, Any]:
             try:
                 info = self._info(ticker)
-            except Exception:
-                return {}
+            except Exception as exc:
+                return _failed({}, exc)
             settle = info.get("dateShortInterest")
             settle_date = None
             if settle:
@@ -1412,9 +1412,7 @@ class YFinanceProvider(MarketDataProvider):
             try:
                 info = self._info(ticker)
             except Exception as exc:
-                if _is_rate_limit(exc):
-                    note_throttle(exc)
-                return {}
+                return _failed({}, exc)
 
             kind = (info.get("quoteType") or "").upper()
             summary = (info.get("longBusinessSummary") or "").strip()
@@ -1456,8 +1454,8 @@ class YFinanceProvider(MarketDataProvider):
         def build() -> Dict[str, Any]:
             try:
                 info = yf.Ticker(ticker).info or {}
-            except Exception:
-                return {}
+            except Exception as exc:
+                return _failed({}, exc)
             # yfinance reports both of these as fractions (0.03 = 0.03%, 0.0105 = 1.05%)
             # but the expense field is already in percent units while yield is not.
             expense = info.get("netExpenseRatio")
@@ -1480,8 +1478,8 @@ class YFinanceProvider(MarketDataProvider):
         def build() -> Dict[str, Any]:
             try:
                 cal = yf.Ticker(ticker).calendar or {}
-            except Exception:
-                return {}
+            except Exception as exc:
+                return _failed({}, exc)
             dates = cal.get("Earnings Date") or []
             if not isinstance(dates, list):
                 dates = [dates]

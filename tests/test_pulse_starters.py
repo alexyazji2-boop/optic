@@ -75,11 +75,12 @@ def test_the_greeting_does_not_count_as_a_conversation():
 
 
 def test_both_greetings_are_marked():
-    """There are two — one for a configured assistant and one for an
-    unconfigured one — and marking only the happy path would leave the bug live
-    for exactly the readers who have not set an API key yet."""
+    """There are three — one for a configured assistant, one for an
+    unconfigured or refused one, and one for a status check that got no answer
+    — and marking only the happy path would leave the bug live for exactly the
+    readers who have not set an API key yet."""
     marks = APP_JS.count("classList.add('msg-greeting')")
-    assert marks == 2, f"expected both boot greetings marked, found {marks}"
+    assert marks == 3, f"expected every boot greeting marked, found {marks}"
 
 
 def test_a_real_message_still_clears_the_empty_state():

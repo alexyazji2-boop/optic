@@ -99,9 +99,18 @@ def test_without_filings_the_statements_are_used_and_say_which(monkeypatch):
     assert out["history"]["margin"]["value"] == pytest.approx((10 + 10 + 9 + 8) / 4, abs=0.01)
 
 
+def test_without_a_reported_count_the_market_value_gives_one_said_to_be_derived(monkeypatch):
+    no_filings(monkeypatch)
+    out = vi.build(Provider(short={}), "X")
+    shares = out["inputs"]["shares"]
+    assert shares["value"] == 1e9 and shares["kind"] == "derived"
+    assert "market value divided by price" in shares["source"] and "approximate" in shares["note"]
+
+
 def test_a_figure_the_feeds_lack_is_missing_not_guessed(monkeypatch):
     no_filings(monkeypatch)
-    out = vi.build(Provider(fin={}, short={}), "X")
+    q = dict(Provider().q, market_cap=None)
+    out = vi.build(Provider(quote=q, fin={}, short={}), "X")
     assert out["inputs"]["revenue"]["value"] is None and out["inputs"]["revenue"]["reason"]
     assert out["inputs"]["shares"]["value"] is None and "need yours" in out["inputs"]["shares"]["reason"]
     assert out["inputs"]["margin"]["value"] is None

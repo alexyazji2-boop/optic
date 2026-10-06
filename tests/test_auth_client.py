@@ -631,7 +631,11 @@ def test_a_drawing_never_lands_on_another_bar_sizes_dates():
     migrate it while its own bar size is on screen, the one place its indices
     still mean what they meant."""
     assert "return wsDrawStore[STATE.chartSymbol || ''] || [];" in APP_JS
-    assert "wsDrawStore[STATE.chartSymbol || ''] = list;" in APP_JS
+    # One set per symbol, written for the symbol on screen only (and re-read
+    # first, so another tab's symbols survive: tests/test_drawings_two_tabs.py).
+    save = APP_JS[APP_JS.index("function wsSaveDrawings(list)"):]
+    save = save[:save.index("\n}")]
+    assert "const sym = STATE.chartSymbol || '';" in save and "stored[sym] = list;" in save
     key = APP_JS[APP_JS.index("function wsDrawKey()"):]
     key = key[:key.index("\n}")]
     assert "if (isIntradayRange(chartRange)) return `${sym}@${intradayBarsKey()}`;" in key
