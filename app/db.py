@@ -580,6 +580,102 @@ MIGRATION_9 = [
 ]
 
 
+# Signal history. A record of each swing-setup trigger that fired on a
+# reader's own alert, kept exactly as it was when it fired: the rule's
+# version, its parameters, the indicator readings and the conditions it
+# checked, the prices it named and the data it read. Asked for as
+# "transparent, persistent signal history", with the original record
+# immutable and what happened afterwards recorded separately.
+#
+# Immutable by trigger, not by convention: an UPDATE on either table is
+# refused by the database itself, so no later code path can rewrite what a
+# signal said when it fired, or an observation once made. Deleting stays
+# possible, which is what an account deletion's cascade needs.
+#
+# One row per reader per trigger. The key is the setup's own (symbol, preset,
+# side, timeframe, trigger candle), so the same trigger seen by the scheduled
+# runner, the page's check and a retry is one record.
+MIGRATION_10 = [
+    """
+    CREATE TABLE IF NOT EXISTS signals (
+        id                   TEXT PRIMARY KEY,
+        user_id              TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        signal_key           TEXT NOT NULL,
+        symbol               TEXT NOT NULL,
+        strategy             TEXT NOT NULL,
+        strategy_label       TEXT NOT NULL,
+        family               TEXT NOT NULL DEFAULT '',
+        kind                 TEXT NOT NULL DEFAULT '',
+        direction            TEXT NOT NULL,
+        timeframe            TEXT NOT NULL,
+        trigger_at           TEXT NOT NULL,
+        trigger_completed_at TEXT,
+        data_as_of           TEXT NOT NULL,
+        recorded_at          TEXT NOT NULL,
+        trigger_price        REAL,
+        trigger_level        REAL,
+        invalidation         REAL,
+        target               REAL,
+        conditions           TEXT NOT NULL DEFAULT '{}',
+        indicators           TEXT NOT NULL DEFAULT '{}',
+        explanation          TEXT NOT NULL DEFAULT '',
+        source               TEXT NOT NULL DEFAULT '',
+        rule_version         TEXT NOT NULL DEFAULT '',
+        params               TEXT NOT NULL DEFAULT '{}',
+        assumptions          TEXT NOT NULL DEFAULT '[]',
+        origin               TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_key ON signals(user_id, signal_key)",
+    "CREATE INDEX IF NOT EXISTS idx_signals_user ON signals(user_id, trigger_at DESC)",
+    """
+    CREATE TRIGGER IF NOT EXISTS signals_immutable BEFORE UPDATE ON signals
+    BEGIN SELECT RAISE(ABORT, 'signal records are immutable'); END
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS signal_events (
+        id          TEXT PRIMARY KEY,
+        signal_id   TEXT NOT NULL REFERENCES signals(id) ON DELETE CASCADE,
+        user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        kind        TEXT NOT NULL,
+        label       TEXT NOT NULL,
+        observed_at TEXT NOT NULL,
+        data_as_of  TEXT NOT NULL,
+        price       REAL,
+        change_pct  REAL,
+        detail      TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    # A status is recorded once, and an observation at a horizon once.
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_events_once "
+    "ON signal_events(signal_id, kind, label)",
+    "CREATE INDEX IF NOT EXISTS idx_signal_events_user ON signal_events(user_id, observed_at DESC)",
+    """
+    CREATE TRIGGER IF NOT EXISTS signal_events_immutable BEFORE UPDATE ON signal_events
+    BEGIN SELECT RAISE(ABORT, 'signal events are immutable'); END
+    """,
+]
+
+
+# Valuation scenarios: a reader's bull, base and bear assumptions for one
+# symbol, the same shape as a thesis (one row per reader per symbol, edited in
+# place) and for the same reason a table of its own. The assumptions are JSON
+# because the client owns the field list; the server stores and returns them.
+MIGRATION_11 = [
+    """
+    CREATE TABLE IF NOT EXISTS valuations (
+        id          TEXT PRIMARY KEY,
+        user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        symbol      TEXT NOT NULL,
+        scenarios   TEXT NOT NULL DEFAULT '{}',
+        created_at  TEXT NOT NULL,
+        updated_at  TEXT NOT NULL
+    )
+    """,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_valuations_symbol ON valuations(user_id, symbol)",
+]
+
+
 MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (1, "accounts", MIGRATION_1),
     (2, "oauth_pkce", MIGRATION_2),
@@ -590,6 +686,8 @@ MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (7, "feedback_resolved", MIGRATION_7),
     (8, "feedback_reporter", MIGRATION_8),
     (9, "remember_me", MIGRATION_9),
+    (10, "signals", MIGRATION_10),
+    (11, "valuations", MIGRATION_11),
 ]
 
 

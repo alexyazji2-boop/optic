@@ -73,6 +73,11 @@ KINDS = ("continuation", "reversal")
 # walks everything it is given.
 SCAN_BARS = 260
 
+# The version of these rules a recorded signal names (app/signal_history.py).
+# Bumped whenever a rule's logic or a default changes, so a signal can always
+# be read against the rules that produced it.
+RULES_VERSION = "setups-2026-10-06.1"
+
 # How long after it resolves an invalidated or expired setup still shows as
 # such, rather than going back to Watching. Long enough to be seen on a review
 # the next morning.
@@ -2294,8 +2299,12 @@ def evaluate(bars: Bars, ind: Indicators, preset_id: str, p: Dict[str, Any], bul
     invalidation = None
     trigger_level = None
     if state == "triggered":
+        end = bars.ends[inst["trigger_t"]] if inst["trigger_t"] < len(bars.ends) else None
         trigger = {"stamp": bars.stamps[inst["trigger_t"]], "close": _real(w, inst["close"]),
-                   "level": _real(w, inst["level"])}
+                   "level": _real(w, inst["level"]),
+                   # When the trigger candle closed, which is when the signal
+                   # could first have been known.
+                   "completed_at": end.isoformat() if isinstance(end, datetime) else None}
         invalidation = _real(w, inst["stop"])
         trigger_level = trigger["level"]
     else:

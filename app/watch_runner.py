@@ -38,7 +38,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
-from . import db
+from . import db, signal_history
 from .analytics import watches as watches_mod
 
 log = logging.getLogger("optic.watch_runner")
@@ -129,6 +129,28 @@ def record_hit(row: Dict[str, Any], result: Dict[str, Any],
     return True
 
 
+def record_signal(user_id: str, result: Dict[str, Any], origin: str,
+                  when: Optional[datetime] = None) -> Optional[str]:
+    """A swing-setup alert that fired, into the reader's signal history.
+
+    From the row the evaluator saw, never from a later look at the chart: the
+    history records what was known when the trigger was seen. The signal's own
+    key dedupes it, so the same trigger reached by the schedule and by the
+    page's check is one record."""
+    row = result.get("setup_row")
+    if not row or not row.get("key"):
+        return None
+    try:
+        rec = signal_history.record_from_row(
+            row, data_as_of=result.get("setup_as_of") or row.get("as_of") or "",
+            params=result.get("setup_params") or {},
+            trigger_completed_at=(row.get("trigger") or {}).get("completed_at"))
+        return signal_history.record(user_id, rec, origin, when)
+    except Exception as exc:                              # noqa: BLE001
+        log.warning("signal not recorded for %s: %s", row.get("key"), exc)
+        return None
+
+
 def run_once(snapshot: Callable[[str], Dict[str, Any]],
              limit: int = MAX_SYMBOLS_PER_RUN) -> Dict[str, Any]:
     """Evaluate every stored watch and record what fired.
@@ -162,6 +184,8 @@ def run_once(snapshot: Callable[[str], Dict[str, Any]],
             result = by_id.get(row["id"])
             if result and result.get("met") and record_hit(row, result, when):
                 fired += 1
+            if result and result.get("met") and row["kind"] == "swing_setup":
+                record_signal(row["user_id"], result, "scheduled alert check", when)
 
     return {
         "ran_at": when.isoformat(),

@@ -425,8 +425,14 @@ def _swing_setup(d, p):
         return None
     hit = max(hits, key=lambda r: r["trigger"]["stamp"])
     side = "Bullish" if hit["direction"] == "bull" else "Bearish"
+    # The row as the engine reported it, and what it read, for the signal
+    # history to record exactly (app/signal_history.py). The watch evaluates
+    # every preset at its defaults, so those are the parameters it ran with.
     return {"state": hit["key"], "dedupe": hit["key"],
-            "evidence": "{} {}. {}".format(side, hit["label"].lower(), hit["explanation"])}
+            "evidence": "{} {}. {}".format(side, hit["label"].lower(), hit["explanation"]),
+            "setup_row": hit,
+            "setup_as_of": (d.get("setups") or {}).get("as_of"),
+            "setup_params": setups_mod.resolve_params(hit["preset"], {})}
 
 
 EVALUATORS = {

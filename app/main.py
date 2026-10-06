@@ -80,6 +80,7 @@ from .analytics import watchlist as watchlist_mod
 from .analytics import setups as setups_mod
 from . import knowledge as knowledge_mod
 from . import watch_runner
+from . import signal_history
 from .analytics import watches as watches_mod
 from . import events as events_mod
 from .analytics import extras as extras_mod
@@ -1088,6 +1089,75 @@ async def symbol_search(
     return await _run(lambda: {"query": q, "results": universe_mod.search(q, limit)})
 
 
+def _signal_bars(symbols: List[str]) -> Dict[str, Any]:
+    """Completed daily candles for every symbol with a signal to follow up,
+    in one download."""
+    if not symbols:
+        return {}
+    frames = YF_PROVIDER.batch_history(sorted(set(symbols)), period="6mo", interval="1d")
+    out = {}
+    for sym, df in (frames or {}).items():
+        bars = setups_mod.daily_bars(df)
+        if bars is not None:
+            out[sym] = bars
+    return out
+
+
+SIGNAL_BASIS = (
+    "Each observation is the change in the stock's closing price from the trigger "
+    "candle's close to the close a set number of completed candles later. It is "
+    "not an options return and not the result of a trade: nothing was bought or "
+    "sold, and no option prices are known for those dates. A horizon whose candle "
+    "has not printed, or is missing from the feed, is unknown.")
+
+
+@app.get("/api/signals")
+async def signals_list(
+    request: Request,
+    symbol: Optional[str] = Query(None),
+    status: Optional[str] = Query(None, description="unresolved, invalidated or expired"),
+    strategy: Optional[str] = Query(None),
+    direction: Optional[str] = Query(None),
+) -> Dict[str, Any]:
+    """The signed-in reader's own signal history, newest trigger first."""
+    user = auth_deps.require_user(request)
+    sym = (_setup_symbols(symbol or "", 1) or [None])[0] if symbol else None
+    rows = await _run(signal_history.history, user["id"], sym, status, strategy, direction)
+    return {"signals": rows, "horizons": list(signal_history.HORIZONS),
+            "basis": SIGNAL_BASIS, "source": signal_history.SOURCE}
+
+
+@app.post("/api/signals/followup")
+async def signals_followup(body: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """What followed a list of signals, for a guest whose history is kept in the
+    browser. Stores nothing; reads the same candles the account follow-up does."""
+    items = body.get("signals") or []
+    if not isinstance(items, list) or len(items) > 60:
+        raise HTTPException(status_code=400, detail="Send a list of at most 60 signals.")
+    clean = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        sym = (_setup_symbols(str(it.get("symbol") or ""), 1) or [None])[0]
+        if not sym or it.get("direction") not in ("bull", "bear") or not it.get("trigger_at"):
+            continue
+        clean.append({"key": str(it.get("signal_key") or "")[:120], "symbol": sym,
+                      "direction": it["direction"], "trigger_at": str(it["trigger_at"])[:20],
+                      "trigger_price": it.get("trigger_price"), "invalidation": it.get("invalidation"),
+                      "params": json.dumps({"signal_ttl": (it.get("params") or {}).get("signal_ttl", 10)})})
+
+    def build() -> Dict[str, Any]:
+        bars = _signal_bars([c["symbol"] for c in clean])
+        out = {}
+        for c in clean:
+            out[c["key"]] = signal_history.followup_events(
+                c, bars.get(c["symbol"]), signal_history._signal_ttl(c))
+        return {"events": out, "observed_at": datetime.now(timezone.utc).isoformat(),
+                "basis": SIGNAL_BASIS}
+
+    return await _run(build)
+
+
 # ---------------------------------------------------------------- swing setups
 #
 # The scanner behind the Swing setups section: explainable entry rules on
@@ -1414,7 +1484,7 @@ async def watch_catalogue() -> Dict[str, Any]:
 
 
 @app.post("/api/watches/check")
-async def watch_check(body: Dict[str, Any]) -> Dict[str, Any]:
+async def watch_check(request: Request, body: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
     """Evaluate a set of watches and report which have tripped.
 
     A POST because the client sends its watch definitions in the body — there
@@ -1431,6 +1501,7 @@ async def watch_check(body: Dict[str, Any]) -> Dict[str, Any]:
     """
     ticker = str(body.get("ticker") or "").upper().strip()
     rows = body.get("watches") or []
+    user = auth_deps.current_user(request)
     if not ticker:
         raise HTTPException(status_code=400, detail="A ticker is required.")
     if not isinstance(rows, list) or len(rows) > 25:
@@ -1446,6 +1517,13 @@ async def watch_check(body: Dict[str, Any]) -> Dict[str, Any]:
         if any(isinstance(r, dict) and r.get("kind") == "swing_setup" for r in rows):
             _attach_setups(payload, ticker)
         results = watches_mod.check(payload, rows)
+        # A signed-in reader's swing-setup alert that this check found firing
+        # goes into their signal history now, as the scheduled runner would
+        # have it. A guest's is kept by the page, in this browser.
+        if user:
+            for res in results:
+                if res.get("met") and res.get("kind") == "swing_setup":
+                    watch_runner.record_signal(user["id"], res, "alert check on the page")
         return {
             "ticker": ticker,
             "checked_at": datetime.now(timezone.utc).isoformat(),
@@ -2386,6 +2464,20 @@ async def _tracker_loop() -> None:
                             )
                     except Exception as exc:  # noqa: BLE001 - never break the loop
                         log.warning("watch run failed: %s", exc)
+
+            # Signal history follow-ups: once as the session closes, when the
+            # day's candle is complete, and once on the first pass after a
+            # start so a restart does not leave a day unobserved. Each status
+            # and horizon is written once, so a repeat writes nothing.
+            if just_closed or getattr(app.state, "signals_followed_up", None) is None:
+                app.state.signals_followed_up = now
+                try:
+                    out = await _run(signal_history.followup_all, _signal_bars)
+                    if out["events_added"]:
+                        log.info("signals: %s followed up, %s events added",
+                                 out["signals"], out["events_added"])
+                except Exception as exc:  # noqa: BLE001 - never break the loop
+                    log.warning("signal follow-up failed: %s", exc)
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # a failed pass must not kill the loop
