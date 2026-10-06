@@ -651,6 +651,180 @@ async def adopt_theses(request: Request,
             "no_room": sorted(full)}
 
 
+# ---------------------------------------------------------------- valuations
+#
+# A reader's own bear, base and bull scenarios for one name. The arithmetic is
+# the page's (static/app.js, `valuationScenario`); this stores the inputs,
+# typed and bounded, and never a result. The price a scenario implies is
+# recomputed from its inputs every time it is shown, so a stored figure cannot
+# drift away from the inputs that produced it.
+#
+# Guests keep theirs in localStorage under optic.valuation.v1, and signing in
+# adopts them the way theses are adopted: merged, the account's copy winning.
+
+MAX_VALUATIONS = 200
+VALUATION_CASES = ("bear", "base", "bull")
+# (lowest, highest) per input, in the units the form uses: percent a year,
+# percent, percent a year, and a multiple. Wide enough for any real company,
+# narrow enough that a typo is refused rather than valued.
+CASE_LIMITS = {
+    "growth": (-95.0, 500.0),
+    "margin": (-500.0, 100.0),
+    "share_change": (-50.0, 100.0),
+    "pe": (0.1, 1000.0),
+}
+SHARED_LIMITS = {
+    "years": (1.0, 15.0),
+    "required_return": (0.0, 50.0),
+    # The reader's own figure in place of a reported one, or None for the
+    # reported one.
+    "revenue": (1.0, 1e14),
+    "shares": (1.0, 1e13),
+}
+MAX_CASE_NOTE = 1000
+
+
+def _bounded(where: str, raw: Any, low: float, high: float) -> Optional[float]:
+    if raw is None or raw == "":
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="{} is not a number.".format(where))
+    if value != value or value in (float("inf"), float("-inf")) or not (low <= value <= high):
+        raise HTTPException(status_code=400, detail="{} must be between {:g} and {:g}.".format(
+            where, low, high))
+    return value
+
+
+def _valuation_body(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """The stored shape, rebuilt field by field from what was sent: anything
+    the form does not have is dropped, and a value out of range is refused
+    with the field named."""
+    shared_in = payload.get("shared") if isinstance(payload.get("shared"), dict) else {}
+    shared = {k: _bounded("shared." + k, shared_in.get(k), lo, hi)
+              for k, (lo, hi) in SHARED_LIMITS.items()}
+    if shared["years"] is not None:
+        shared["years"] = float(int(round(shared["years"])))
+    out: Dict[str, Any] = {"v": 1, "shared": shared}
+    any_input = any(v is not None for v in shared.values())
+    for case in VALUATION_CASES:
+        raw = payload.get(case) if isinstance(payload.get(case), dict) else {}
+        fields = {k: _bounded(case + "." + k, raw.get(k), lo, hi) for k, (lo, hi) in CASE_LIMITS.items()}
+        fields["note"] = str(raw.get("note") or "").strip()[:MAX_CASE_NOTE]
+        any_input = any_input or any(v not in (None, "") for v in fields.values())
+        out[case] = fields
+    marks = payload.get("from_history") if isinstance(payload.get("from_history"), list) else []
+    allowed = {"{}.{}".format(c, k) for c in VALUATION_CASES for k in CASE_LIMITS}
+    out["from_history"] = sorted({str(m) for m in marks if str(m) in allowed})
+    if not any_input:
+        raise HTTPException(status_code=400, detail="There is nothing to save.")
+    return out
+
+
+def _valuation_payload(found: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        body = json.loads(found.get("scenarios") or "{}")
+    except (ValueError, TypeError):
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    body["symbol"] = found["symbol"]
+    body["saved_at"] = found["updated_at"]
+    body["created_at"] = found["created_at"]
+    return body
+
+
+@router.get("/valuations")
+async def list_valuations(request: Request) -> Dict[str, Any]:
+    user = deps.require_user(request)
+    found = db.rows("SELECT * FROM valuations WHERE user_id = ? ORDER BY updated_at DESC",
+                    (user["id"],))
+    return {"valuations": {r["symbol"]: _valuation_payload(r) for r in found},
+            "count": len(found), "limit": MAX_VALUATIONS}
+
+
+@router.put("/valuations/{symbol}")
+async def put_valuation(symbol: str, request: Request,
+                        payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Write or rewrite one name's scenarios. One row per symbol, so an upsert."""
+    user = deps.require_user(request)
+    deps.csrf_guard(request)
+    sym = _symbol(symbol)
+    body = json.dumps(_valuation_body(payload), sort_keys=True, separators=(",", ":"))
+    now = db.utcnow()
+    existing = db.row("SELECT id FROM valuations WHERE user_id = ? AND symbol = ?", (user["id"], sym))
+    if existing is None:
+        count = db.row("SELECT COUNT(*) AS n FROM valuations WHERE user_id = ?", (user["id"],))
+        if int((count or {}).get("n") or 0) >= MAX_VALUATIONS:
+            raise HTTPException(status_code=403, detail=(
+                "That is {} names with scenarios, which is the limit. Clear one to start "
+                "another.").format(MAX_VALUATIONS))
+        db.execute("INSERT INTO valuations (id,user_id,symbol,scenarios,created_at,updated_at) "
+                   "VALUES (?,?,?,?,?,?)", (db.new_id(), user["id"], sym, body, now, now))
+    else:
+        db.execute("UPDATE valuations SET scenarios=?, updated_at=? WHERE user_id=? AND symbol=?",
+                   (body, now, user["id"], sym))
+    saved = db.row("SELECT * FROM valuations WHERE user_id = ? AND symbol = ?", (user["id"], sym))
+    assert saved is not None
+    return {"ok": True, "valuation": _valuation_payload(saved)}
+
+
+@router.delete("/valuations/{symbol}")
+async def drop_valuation(symbol: str, request: Request) -> Dict[str, Any]:
+    user = deps.require_user(request)
+    deps.csrf_guard(request)
+    removed = db.execute("DELETE FROM valuations WHERE user_id = ? AND symbol = ?",
+                         (user["id"], _symbol(symbol)))
+    if not removed:
+        raise HTTPException(status_code=404, detail="There are no scenarios for that symbol.")
+    return {"ok": True}
+
+
+@router.post("/valuations/adopt")
+async def adopt_valuations(request: Request,
+                           payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Take over browser-held scenarios on sign-in. Merges and never overwrites:
+    the account's copy of a symbol wins, as for theses."""
+    user = deps.require_user(request)
+    deps.csrf_guard(request)
+    incoming = payload.get("valuations")
+    if not isinstance(incoming, dict) or not incoming:
+        raise HTTPException(status_code=400, detail="Nothing to import.")
+    mine = {r["symbol"] for r in db.rows("SELECT symbol FROM valuations WHERE user_id = ?",
+                                         (user["id"],))}
+    room = MAX_VALUATIONS - len(mine)
+    adopted: List[str] = []
+    skipped: List[str] = []
+    refused: List[str] = []
+    now = db.utcnow()
+    for raw_symbol, body in incoming.items():
+        if not isinstance(body, dict):
+            continue
+        try:
+            sym = _symbol(raw_symbol)
+            clean = _valuation_body(body)
+        except HTTPException:
+            # One unusable entry must not fail the rest.
+            refused.append(str(raw_symbol)[:20])
+            continue
+        if sym in mine:
+            skipped.append(sym)
+            continue
+        if len(adopted) >= room:
+            refused.append(sym)
+            continue
+        db.execute("INSERT INTO valuations (id,user_id,symbol,scenarios,created_at,updated_at) "
+                   "VALUES (?,?,?,?,?,?)",
+                   (db.new_id(), user["id"], sym,
+                    json.dumps(clean, sort_keys=True, separators=(",", ":")),
+                    str(body.get("saved_at") or now)[:40] or now, now))
+        adopted.append(sym)
+        mine.add(sym)
+    return {"ok": True, "adopted": sorted(adopted), "skipped": sorted(skipped),
+            "refused": sorted(refused)}
+
+
 # ------------------------------------------------------------------- watches
 #
 # `app/analytics/watches.py` evaluates a watch and stays stateless; this stores

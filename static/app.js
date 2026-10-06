@@ -132,6 +132,7 @@ const PERSONAL_KEYS = [
   'optic.watches.v1',            // watches, signed out
   'optic.signals.v1',            // swing-setup signals that fired, signed out
   'optic.thesis.v1',             // theses, and their backing copy signed in
+  'optic.valuation.v1',          // valuation scenarios, signed out or unsaved
   'optic.chart.drawings.v1',     // drawings as bar indices, until migrated
   'optic.chart.drawings.v2',     // drawings as times; see WS_DRAW_KEY_V2
   'optic.chart.notes.v1',
@@ -28202,6 +28203,9 @@ function renderLong(d) {
     <div id="fv-host" class="span-all">${STATE.fairValueFor === STATE.ticker
     ? renderFairValue(STATE.fairValue) : ''}</div>
 
+    <div id="vs-host" class="span-all">${VALUATION.inputsFor === STATE.ticker
+    ? renderValuationScenarios() : ''}</div>
+
     ${vh.available ? `<div class="panel">
       <h2>${hg('Valuation vs its own history')}</h2>
       <p class="sub">A multiple only means something against a yardstick. The one that needs
@@ -28448,6 +28452,616 @@ async function loadFairValue(force) {
   const card = views.overview && views.overview.querySelector('.ov-card[data-sec-view="long"]');
   if (card && STATE.view === 'overview') card.outerHTML = ovInvestingCard();
 }
+
+/* ======================================================= valuation scenarios
+ *
+ * The reader's own bear, base and bull cases for one name, and the price each
+ * implies. Asked for as editable valuation scenarios on the Investing tab.
+ * The server supplies only what was reported, each figure with its source and
+ * date (/api/valuation-inputs, app/analytics/valuation_inputs.py). Every
+ * assumption is the reader's. A figure filled from the company's own history
+ * is marked as such and never called a forecast. The arithmetic is here and
+ * nowhere else, so what is shown is always computed from the inputs on screen:
+ *
+ *   revenue in year N  = revenue now x (1 + growth)^N
+ *   net income         = that revenue x the net margin
+ *   shares in year N   = shares now x (1 + share change)^N
+ *   EPS                = net income / shares
+ *   price in year N    = EPS x the exit P/E
+ *   value today        = that price / (1 + required return)^N
+ *
+ * The implied yearly rate is (price in year N / price now)^(1/N) - 1, which is
+ * price appreciation alone: dividends are not in it, so it is not a total
+ * return. A case that ends in a loss has no earnings multiple to apply and
+ * says so instead of printing a negative price. */
+const VALUATION_KEY = 'optic.valuation.v1';
+const VALUATION_CASES = [
+  { id: 'bear', label: 'Bear' },
+  { id: 'base', label: 'Base' },
+  { id: 'bull', label: 'Bull' },
+];
+// The bounds app/account.py holds them to (CASE_LIMITS, SHARED_LIMITS).
+const VALUATION_FIELDS = [
+  { key: 'growth', label: 'Revenue growth', named: 'revenue growth', unit: '% a year', min: -95, max: 500 },
+  { key: 'margin', label: 'Net margin', named: 'net margin', unit: '%', min: -500, max: 100 },
+  { key: 'share_change', label: 'Share count change', named: 'share count change', unit: '% a year', min: -50, max: 100 },
+  { key: 'pe', label: 'Exit P/E', named: 'exit P/E', unit: 'times earnings', min: 0.1, max: 1000 },
+];
+const VALUATION_SHARED = [
+  { key: 'years', label: 'Years ahead', named: 'years ahead', unit: 'years', min: 1, max: 15, integer: true },
+  { key: 'required_return', label: 'Required return', named: 'required return', unit: '% a year', min: 0, max: 50 },
+];
+const VALUATION_OVERRIDES = [
+  { key: 'revenue', label: 'Your own figure (optional)', named: 'revenue', min: 1, max: 1e14 },
+  { key: 'shares', label: 'Your own figure (optional)', named: 'share count', min: 1, max: 1e13 },
+];
+
+const VALUATION = {
+  inputsFor: null,     // the symbol `inputs` describes
+  inputs: null,
+  drafts: {},          // per symbol: what is in the boxes, as typed
+  status: {},          // per symbol: the last save's outcome
+  account: undefined,  // signed in: { SYM: stored } once loaded, null if it failed
+  accountError: null,
+  saveTimer: null,
+};
+
+/* A number as typed: "12", "12.5%", "-3", "1,200". Blank is null, not zero. */
+function valuationNumber(raw) {
+  const text = String(raw === null || raw === undefined ? '' : raw).trim()
+    .replace(/,/g, '').replace(/[%x×]$/i, '').trim();
+  if (!text) return null;
+  const n = Number(text);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+/* An amount with an optional K, M, B or T: "130.5B" is 130,500,000,000. */
+function valuationAmount(raw) {
+  const text = String(raw === null || raw === undefined ? '' : raw).trim().replace(/[,$\s]/g, '');
+  if (!text) return null;
+  const m = /^(-?\d+(?:\.\d+)?)([kmbt]?)$/i.exec(text);
+  if (!m) return NaN;
+  const scale = { '': 1, k: 1e3, m: 1e6, b: 1e9, t: 1e12 }[m[2].toLowerCase()];
+  return Number(m[1]) * scale;
+}
+
+/* '' when the box is fine, blank included; the reason otherwise. */
+function valuationFieldError(spec, raw, amount) {
+  const n = amount ? valuationAmount(raw) : valuationNumber(raw);
+  if (n === null) return '';
+  if (Number.isNaN(n)) return amount ? 'A number, like 130.5B' : 'Not a number';
+  if (spec.integer && Math.round(n) !== n) return 'A whole number';
+  if (n < spec.min || n > spec.max) {
+    return `Between ${spec.min.toLocaleString('en-US')} and ${spec.max.toLocaleString('en-US')}`;
+  }
+  return '';
+}
+
+/* One case, worked out. `start` is what the scenario starts from (revenue,
+ * shares, price, market value), `c` the case's inputs and `shared` the
+ * horizon and required return, all as numbers. */
+function valuationScenario(start, c, shared) {
+  const missing = VALUATION_FIELDS.filter((f) => c[f.key] === null || c[f.key] === undefined
+    || !Number.isFinite(c[f.key])).map((f) => f.named);
+  if (!shared.years) missing.push('years ahead');
+  if (!(start.revenue > 0)) missing.push('a revenue figure');
+  if (missing.length) return { ok: false, missing };
+  const n = shared.years;
+  const revenue = start.revenue * Math.pow(1 + c.growth / 100, n);
+  const netIncome = revenue * (c.margin / 100);
+  const out = { ok: true, years: n, revenue, netIncome };
+  if (!(netIncome > 0)) { out.loss = true; return out; }
+  const discount = shared.required_return === null || shared.required_return === undefined
+    ? null : Math.pow(1 + shared.required_return / 100, n);
+  out.companyValue = netIncome * c.pe;
+  if (discount) out.companyValueToday = out.companyValue / discount;
+  if (start.marketCap > 0 && discount) out.vsMarketCap = out.companyValueToday / start.marketCap - 1;
+  if (start.shares > 0) {
+    out.shares = start.shares * Math.pow(1 + c.share_change / 100, n);
+    out.eps = netIncome / out.shares;
+    out.price = out.eps * c.pe;
+    if (discount) out.priceToday = out.price / discount;
+    if (start.price > 0) {
+      if (discount) out.vsPrice = out.priceToday / start.price - 1;
+      out.cagr = Math.pow(out.price / start.price, 1 / n) - 1;
+    }
+  }
+  return out;
+}
+
+function valuationLocalStore() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(VALUATION_KEY) || '{}');
+    return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  } catch (e) { return {}; }
+}
+
+function valuationWriteLocal(store) {
+  try {
+    localStorage.setItem(VALUATION_KEY, JSON.stringify(store));
+    return true;
+  } catch (e) { return false; }
+}
+
+function valuationEmptyDraft() {
+  const d = { shared: {}, from_history: [] };
+  VALUATION_SHARED.concat(VALUATION_OVERRIDES).forEach((f) => { d.shared[f.key] = ''; });
+  VALUATION_CASES.forEach((c) => {
+    d[c.id] = { note: '' };
+    VALUATION_FIELDS.forEach((f) => { d[c.id][f.key] = ''; });
+  });
+  return d;
+}
+
+/* Stored numbers back into boxes. */
+function valuationDraftFrom(stored) {
+  const d = valuationEmptyDraft();
+  if (!stored || typeof stored !== 'object') return d;
+  const text = (v) => (v === null || v === undefined ? '' : String(v));
+  Object.keys(d.shared).forEach((k) => { d.shared[k] = text((stored.shared || {})[k]); });
+  VALUATION_CASES.forEach((c) => {
+    const from = stored[c.id] || {};
+    VALUATION_FIELDS.forEach((f) => { d[c.id][f.key] = text(from[f.key]); });
+    d[c.id].note = String(from.note || '');
+  });
+  d.from_history = Array.isArray(stored.from_history) ? stored.from_history.slice() : [];
+  return d;
+}
+
+function valuationDraft(sym) {
+  if (!VALUATION.drafts[sym]) {
+    const mine = signedIn() && VALUATION.account ? VALUATION.account[sym] : null;
+    VALUATION.drafts[sym] = valuationDraftFrom(mine || valuationLocalStore()[sym]);
+  }
+  return VALUATION.drafts[sym];
+}
+
+/* Every box's complaint, keyed "case.field". Empty when all are fine. */
+function valuationErrors(d) {
+  const errs = {};
+  VALUATION_SHARED.forEach((f) => {
+    const e = valuationFieldError(f, d.shared[f.key]);
+    if (e) errs[`shared.${f.key}`] = e;
+  });
+  VALUATION_OVERRIDES.forEach((f) => {
+    const e = valuationFieldError(f, d.shared[f.key], true);
+    if (e) errs[`shared.${f.key}`] = e;
+  });
+  VALUATION_CASES.forEach((c) => VALUATION_FIELDS.forEach((f) => {
+    const e = valuationFieldError(f, d[c.id][f.key]);
+    if (e) errs[`${c.id}.${f.key}`] = e;
+  }));
+  return errs;
+}
+
+/* The draft as the server stores it: numbers, or null for a blank box. */
+function valuationBodyOf(d) {
+  const num = (raw) => { const n = valuationNumber(raw); return Number.isFinite(n) ? n : null; };
+  const amt = (raw) => { const n = valuationAmount(raw); return Number.isFinite(n) ? n : null; };
+  const body = { v: 1, shared: {}, from_history: d.from_history.slice() };
+  VALUATION_SHARED.forEach((f) => { body.shared[f.key] = num(d.shared[f.key]); });
+  VALUATION_OVERRIDES.forEach((f) => { body.shared[f.key] = amt(d.shared[f.key]); });
+  VALUATION_CASES.forEach((c) => {
+    body[c.id] = { note: d[c.id].note || '' };
+    VALUATION_FIELDS.forEach((f) => { body[c.id][f.key] = num(d[c.id][f.key]); });
+  });
+  return body;
+}
+
+function valuationIsEmpty(body) {
+  const shared = Object.values(body.shared).some((v) => v !== null);
+  return !shared && VALUATION_CASES.every((c) => !body[c.id].note
+    && VALUATION_FIELDS.every((f) => body[c.id][f.key] === null));
+}
+
+/* What the cases start from: the reader's figure where they gave one, else
+ * the reported one. */
+function valuationStart(d, inputs) {
+  const reported = (k) => (((inputs || {}).inputs || {})[k] || {}).value;
+  const own = (k) => { const n = valuationAmount(d.shared[k]); return Number.isFinite(n) ? n : null; };
+  return {
+    revenue: own('revenue') || reported('revenue') || null,
+    shares: own('shares') || reported('shares') || null,
+    price: reported('price') || null,
+    marketCap: reported('market_cap') || null,
+    ownRevenue: !!own('revenue'),
+    ownShares: !!own('shares'),
+  };
+}
+
+function valuationShared(d) {
+  const num = (raw) => { const n = valuationNumber(raw); return Number.isFinite(n) ? n : null; };
+  const years = num(d.shared.years);
+  return {
+    years: years && years >= 1 && years <= 15 && Math.round(years) === years ? years : null,
+    required_return: (() => {
+      const r = num(d.shared.required_return);
+      return r !== null && r >= 0 && r <= 50 ? r : null;
+    })(),
+  };
+}
+
+function valuationCaseNumbers(d, id) {
+  const out = {};
+  VALUATION_FIELDS.forEach((f) => {
+    const n = valuationNumber(d[id][f.key]);
+    out[f.key] = Number.isFinite(n) && n >= f.min && n <= f.max ? n : null;
+  });
+  return out;
+}
+
+function valuationMoney(v, ccy) {
+  if (v === null || v === undefined || !Number.isFinite(v)) return 'not available';
+  const sign = v < 0 ? '-' : '';
+  const body = fmtCompact(Math.abs(v), Math.abs(v) >= 1e3 ? 1 : 2);
+  if (ccy === 'USD') return `${sign}$${body}`;
+  return `${sign}${body}${ccy ? ' ' + ccy : ''}`;
+}
+
+function valuationPrice(v, ccy) {
+  if (v === null || v === undefined || !Number.isFinite(v)) return 'not available';
+  return ccy === 'USD' ? usd(v) : `${fmt(v, 2)}${ccy ? ' ' + ccy : ''}`;
+}
+
+function valuationOutputs(sym, id) {
+  const d = valuationDraft(sym);
+  const inputs = VALUATION.inputs || {};
+  const ccy = inputs.price_currency || null;
+  const start = valuationStart(d, inputs);
+  const shared = valuationShared(d);
+  const r = valuationScenario(start, valuationCaseNumbers(d, id), shared);
+  if (!r.ok) {
+    return `<p class="vs-wait">Needs ${esc(r.missing.join(', '))} to value this case.</p>`;
+  }
+  const yr = `year ${r.years}`;
+  if (r.loss) {
+    return `<p class="vs-loss">Ends ${esc(yr)} with a net loss of ${esc(valuationMoney(-r.netIncome, ccy))}
+      on revenue of ${esc(valuationMoney(r.revenue, ccy))}, so an earnings multiple does not value it.</p>`;
+  }
+  // Every value below is markup already escaped.
+  const rows = [
+    [`Revenue in ${yr}`, esc(valuationMoney(r.revenue, ccy))],
+    ['Net income', esc(valuationMoney(r.netIncome, ccy))],
+  ];
+  if (r.eps !== undefined) {
+    rows.push(['Earnings per share', esc(valuationPrice(r.eps, ccy))]);
+    rows.push([`Price in ${yr}`, `<strong>${esc(valuationPrice(r.price, ccy))}</strong>`]);
+    rows.push([`Value today`, r.priceToday !== undefined
+      ? `${esc(valuationPrice(r.priceToday, ccy))} <span class="muted">at ${fmt(shared.required_return, 1)}% a year</span>`
+      : '<span class="muted">add a required return</span>']);
+    if (r.vsPrice !== undefined) {
+      rows.push(['Against the price now', `<span class="${signClass(r.vsPrice)}">${fmtPct(r.vsPrice * 100, 1)}</span>`]);
+    }
+    if (r.cagr !== undefined) {
+      rows.push(['Price change a year', `<span class="${signClass(r.cagr)}">${fmtPct(r.cagr * 100, 1)}</span>
+        <span class="muted">price only</span>`]);
+    }
+  } else {
+    rows.push([`Company value in ${yr}`, `<strong>${esc(valuationMoney(r.companyValue, ccy))}</strong>`]);
+    if (r.vsMarketCap !== undefined) {
+      rows.push(['Against its market value now', `<span class="${signClass(r.vsMarketCap)}">${
+        fmtPct(r.vsMarketCap * 100, 1)}</span>`]);
+    }
+    rows.push(['Per share', '<span class="muted">needs a share count</span>']);
+  }
+  return `<dl class="vs-out">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl>`;
+}
+
+function valuationSource(fig) {
+  if (!fig) return '';
+  const when = fig.period_end ? `period ended ${shortDateYear(fig.period_end)}`
+    : fig.as_of ? `as of ${signalWhen(fig.as_of)}` : '';
+  const pub = fig.available_from ? `, public from ${shortDateYear(fig.available_from)}` : '';
+  return [fig.source, when ? when + pub : ''].filter(Boolean).join(', ');
+}
+
+function shortDateYear(iso) {
+  return signalWhen(String(iso || '').slice(0, 10));
+}
+
+function valuationStartRow(label, fig, value, extra) {
+  if (!fig || fig.value === null || fig.value === undefined) {
+    return `<li class="vs-fact"><span class="vs-fact-k">${esc(label)}</span>
+      <span class="vs-fact-v muted">not available</span>
+      <span class="vs-fact-src">${esc((fig || {}).reason || 'The feed has none.')}</span>${extra || ''}</li>`;
+  }
+  return `<li class="vs-fact"><span class="vs-fact-k">${esc(label)}</span>
+    <span class="vs-fact-v">${value}</span>
+    <span class="vs-fact-src">${esc(cap(fig.kind || 'reported'))}: ${esc(valuationSource(fig))}${
+  fig.note ? '. ' + esc(fig.note) : ''}${fig.currency_note ? ' ' + esc(fig.currency_note) : ''}</span>${extra || ''}</li>`;
+}
+
+/* The company's own five-year median P/E, from the Investing tab's valuation
+ * history: the same number that panel shows. */
+function valuationPeMedian() {
+  const vh = ((STATE.long || {}).holding || {}).valuation_history || {};
+  return vh.available && vh.median_pe > 0 ? { value: vh.median_pe, years: vh.usable_years } : null;
+}
+
+function valuationBox(sym, scope, spec, d, errs, amount) {
+  const key = `${scope}.${spec.key}`;
+  const raw = scope === 'shared' ? d.shared[spec.key] : d[scope][spec.key];
+  const err = errs[key] || '';
+  const id = `vs-${sym}-${scope}-${spec.key}`.replace(/[^A-Za-z0-9_-]/g, '_');
+  const fromHistory = d.from_history.indexOf(key) >= 0;
+  const attr = scope === 'shared' ? `data-vs-shared="${esc(spec.key)}"`
+    : `data-vs-case="${esc(scope)}" data-vs-field="${esc(spec.key)}"`;
+  const named = scope === 'shared' ? spec.named : `${scope} ${spec.named}`;
+  return `<label class="vs-field${err ? ' has-err' : ''}" for="${id}">
+    <span class="vs-label">${esc(spec.label)}${fromHistory
+    ? ' <span class="vs-hist" title="Filled from the company\'s own history. Not a forecast.">history</span>' : ''}</span>
+    <span class="vs-input"><input id="${id}" type="text" inputmode="decimal" autocomplete="off"
+      ${attr} value="${esc(raw)}" aria-label="${esc(cap(named))}${amount ? ', your own figure' : ''}"
+      aria-invalid="${err ? 'true' : 'false'}"
+      aria-describedby="${id}-err" placeholder="${amount ? 'reported' : ''}">
+      <span class="vs-unit">${esc(spec.unit || '')}</span></span>
+    <span class="vs-err" id="${id}-err" role="status">${esc(err)}</span>
+  </label>`;
+}
+
+function renderValuationScenarios() {
+  const sym = STATE.ticker;
+  const inputs = VALUATION.inputs;
+  const head = `<h2>Valuation scenarios</h2>
+    <p class="sub">Your own bear, base and bull cases for ${esc(sym)}, and the price each implies.
+      The starting figures are what the company reported, each with its source. Every assumption
+      below is yours: nothing here is a forecast, a price target or advice.</p>`;
+  if (!inputs || VALUATION.inputsFor !== sym) {
+    return `<div class="panel vs-panel">${head}${loadingHTML('reported figures')}</div>`;
+  }
+  if (!inputs.available) {
+    return `<div class="panel vs-panel">${head}<p class="caveat">${esc(inputs.reason || 'Not available for this symbol.')}</p></div>`;
+  }
+  const d = valuationDraft(sym);
+  const errs = valuationErrors(d);
+  const inp = inputs.inputs || {};
+  const hist = inputs.history || {};
+  const ccy = inputs.price_currency || null;
+  const pe5 = valuationPeMedian();
+  const status = VALUATION.status[sym] || '';
+  const where = signedIn()
+    ? (VALUATION.account === null
+      ? `Your saved scenarios could not be loaded${VALUATION.accountError ? ` (${esc(VALUATION.accountError)})` : ''}, so changes are kept in this browser.`
+      : 'Saved to your account as you edit.')
+    : 'Saved in this browser as you edit, because you are signed out.';
+  const histLine = [
+    hist.revenue_growth && hist.revenue_growth.value !== null && hist.revenue_growth.value !== undefined
+      ? `revenue ${fmtPct(hist.revenue_growth.value, 1)} a year over ${hist.revenue_growth.years} year${hist.revenue_growth.years === 1 ? '' : 's'} (${esc(hist.revenue_growth.source)})` : '',
+    hist.margin && hist.margin.value !== null && hist.margin.value !== undefined
+      ? `net margin ${fmt(hist.margin.value, 1)}% on average over ${(hist.margin.years || []).length} fiscal year${(hist.margin.years || []).length === 1 ? '' : 's'}` : '',
+    hist.share_change && hist.share_change.value !== null && hist.share_change.value !== undefined
+      ? `diluted shares ${fmtPct(hist.share_change.value, 1)} a year over ${hist.share_change.years} year${hist.share_change.years === 1 ? '' : 's'}` : '',
+    pe5 ? `trailing P/E median ${fmt(pe5.value, 1)} over ${pe5.years} profitable years` : '',
+  ].filter(Boolean);
+
+  return `<div class="panel vs-panel">
+    ${head}
+    ${(inputs.warnings || []).map((w) => `<p class="callout bad">${esc(w)}</p>`).join('')}
+    <h3 class="vs-h">Starting point</h3>
+    <ul class="vs-facts">
+      ${valuationStartRow('Price', inp.price, esc(valuationPrice((inp.price || {}).value, ccy)))}
+      ${valuationStartRow('Revenue', inp.revenue, esc(valuationMoney((inp.revenue || {}).value, (inp.revenue || {}).currency)),
+    valuationBox(sym, 'shared', VALUATION_OVERRIDES[0], d, errs, true))}
+      ${valuationStartRow('Net margin', inp.margin, esc((inp.margin || {}).value === undefined ? '' : fmt(inp.margin.value, 1) + '%'))}
+      ${valuationStartRow('Shares outstanding', inp.shares, esc(fmtCompact((inp.shares || {}).value, 2)),
+    valuationBox(sym, 'shared', VALUATION_OVERRIDES[1], d, errs, true))}
+      ${valuationStartRow('Market value', inp.market_cap, esc(valuationMoney((inp.market_cap || {}).value, ccy)))}
+    </ul>
+    <p class="vs-history"><strong>Its own history, not a forecast:</strong> ${histLine.length
+    ? histLine.join('; ') + '.' : 'not enough history in the feeds to describe.'}
+      ${histLine.length ? `<button type="button" class="auth-link" data-vs-fill="base">Fill the base case from history</button>
+      <span class="muted">It copies these figures as they stand. A past growth rate carried forward is a
+      strong assumption in its own right, so change whatever you disagree with.</span>` : ''}</p>
+
+    <div class="vs-shared">
+      ${VALUATION_SHARED.map((f) => valuationBox(sym, 'shared', f, d, errs)).join('')}
+    </div>
+
+    <div class="vs-cases">
+      ${VALUATION_CASES.map((c) => `<section class="vs-case vs-${c.id}" aria-label="${esc(c.label)} case">
+        <div class="vs-case-head"><h3 class="vs-h">${esc(c.label)}</h3>
+          <button type="button" class="auth-link" data-vs-clear-case="${c.id}">Clear</button></div>
+        ${VALUATION_FIELDS.map((f) => valuationBox(sym, c.id, f, d, errs)).join('')}
+        <div class="vs-results" id="vs-out-${c.id}">${valuationOutputs(sym, c.id)}</div>
+      </section>`).join('')}
+    </div>
+
+    <p class="caveat">How each case is worked out: revenue grows at your rate for the years ahead, your
+      net margin turns it into earnings, your share count change spreads those over the shares,
+      and your exit P/E prices them. Value today discounts that price at your required return.
+      The yearly change is in the share price alone: dividends${
+  (inp.dividend_yield || {}).value ? ` (a current yield of ${fmt(inp.dividend_yield.value * 100, 2)}%)` : ''}
+      are not included, so it is not a total return.</p>
+    <p class="vs-save">${esc(where)} <span class="vs-status" role="status">${esc(status)}</span>
+      <button type="button" class="auth-link" data-vs-reset>Clear all scenarios for ${esc(sym)}</button></p>
+  </div>`;
+}
+
+function paintValuation() {
+  const host = document.getElementById('vs-host');
+  if (host && STATE.view === 'long') host.innerHTML = renderValuationScenarios();
+}
+
+async function loadValuationInputs(force) {
+  const sym = STATE.ticker;
+  if (!sym) return;
+  if (VALUATION.inputsFor === sym && VALUATION.inputs && !force) { paintValuation(); return; }
+  VALUATION.inputsFor = sym;
+  VALUATION.inputs = null;
+  paintValuation();
+  let data;
+  try {
+    data = await getJSON(`/api/valuation-inputs/${encodeURIComponent(sym)}`);
+  } catch (err) {
+    data = { available: false, reason: `The reported figures could not be loaded (${err.message}).` };
+  }
+  if (STATE.ticker !== sym) return;
+  VALUATION.inputs = data;
+  await valuationAccountLoad();
+  paintValuation();
+}
+
+/* The account's scenarios, once per sign-in, with this browser's adopted:
+ * merged, the account's copy of a symbol winning, as theses are. */
+async function valuationAccountLoad() {
+  if (!signedIn() || VALUATION.account !== undefined) return;
+  try {
+    const reply = await authApi('/api/valuations');
+    VALUATION.account = reply.valuations || {};
+    VALUATION.accountError = null;
+  } catch (err) {
+    VALUATION.account = null;
+    VALUATION.accountError = err.message;
+    return;
+  }
+  const local = valuationLocalStore();
+  const fresh = {};
+  Object.keys(local).forEach((sym) => { if (!VALUATION.account[sym]) fresh[sym] = local[sym]; });
+  if (!Object.keys(fresh).length) return;
+  try {
+    const out = await authApi('/api/valuations/adopt', { method: 'POST', body: { valuations: fresh } });
+    (out.adopted || []).forEach((sym) => { VALUATION.account[sym] = local[sym]; });
+    if ((out.adopted || []).length && window.OpticAuth) {
+      const n = out.adopted.length;
+      window.OpticAuth.toast(`Brought scenarios for ${n} name${n === 1 ? '' : 's'} into your account.`);
+    }
+  } catch (e) { /* the local copies are untouched; the next sign-in tries again */ }
+  // Drafts built before the account answered are rebuilt from it.
+  VALUATION.drafts = {};
+}
+
+async function valuationSave(sym) {
+  const d = valuationDraft(sym);
+  const errs = valuationErrors(d);
+  if (Object.keys(errs).length) {
+    VALUATION.status[sym] = 'Not saved: fix the boxes marked in red first.';
+    return false;
+  }
+  const body = valuationBodyOf(d);
+  const empty = valuationIsEmpty(body);
+  const stamp = new Date().toISOString();
+  const keepLocal = () => {
+    const store = valuationLocalStore();
+    if (empty) delete store[sym];
+    else store[sym] = { ...body, saved_at: stamp };
+    return valuationWriteLocal(store);
+  };
+  if (signedIn() && VALUATION.account) {
+    try {
+      if (empty) {
+        if (VALUATION.account[sym]) await authApi(`/api/valuations/${encodeURIComponent(sym)}`, { method: 'DELETE' });
+        delete VALUATION.account[sym];
+      } else {
+        const out = await authApi(`/api/valuations/${encodeURIComponent(sym)}`, { method: 'PUT', body });
+        VALUATION.account[sym] = out.valuation;
+      }
+      VALUATION.status[sym] = empty ? 'Cleared.' : `Saved ${signalWhen(stamp)}.`;
+      return true;
+    } catch (err) {
+      const kept = keepLocal();
+      VALUATION.status[sym] = `Not saved to your account (${err.message}).${kept ? ' Kept in this browser.' : ''}`;
+      return false;
+    }
+  }
+  VALUATION.status[sym] = keepLocal()
+    ? (empty ? 'Cleared.' : `Saved ${signalWhen(stamp)}.`)
+    : 'Not saved: this browser refused the write (storage full or blocked).';
+  return true;
+}
+
+/* After a save only the status line changes: repainting the panel would take
+ * the caret out of the box the reader has just tabbed into. */
+function paintValuationStatus(sym) {
+  const line = document.querySelector('#vs-host .vs-status');
+  if (line && STATE.ticker === sym) line.textContent = VALUATION.status[sym] || '';
+}
+
+function valuationSaveSoon(sym) {
+  clearTimeout(VALUATION.saveTimer);
+  VALUATION.saveTimer = setTimeout(async () => {
+    await valuationSave(sym);
+    paintValuationStatus(sym);
+  }, 500);
+}
+
+/* The base case from the company's own figures: the growth, the average
+ * margin, the share count change and the median P/E it has actually had. Each
+ * box filled this way is tagged "history". */
+function valuationFillFromHistory(sym, id) {
+  const d = valuationDraft(sym);
+  const hist = (VALUATION.inputs || {}).history || {};
+  const pe5 = valuationPeMedian();
+  const put = (field, value) => {
+    if (value === null || value === undefined || !Number.isFinite(value)) return;
+    d[id][field] = String(Math.round(value * 10) / 10);
+    const key = `${id}.${field}`;
+    if (d.from_history.indexOf(key) < 0) d.from_history.push(key);
+  };
+  put('growth', (hist.revenue_growth || {}).value);
+  put('margin', (hist.margin || {}).value);
+  put('share_change', (hist.share_change || {}).value);
+  put('pe', pe5 ? pe5.value : null);
+}
+
+/* Typing recomputes the case it changes and leaves the boxes alone, so the
+ * caret stays where it was. Leaving a box saves. */
+document.addEventListener('input', (evt) => {
+  const t = evt.target;
+  if (!t || !t.matches || !t.matches('[data-vs-field], [data-vs-shared]')) return;
+  const sym = STATE.ticker;
+  const d = valuationDraft(sym);
+  let key;
+  if (t.matches('[data-vs-shared]')) {
+    key = `shared.${t.getAttribute('data-vs-shared')}`;
+    d.shared[t.getAttribute('data-vs-shared')] = t.value;
+  } else {
+    const id = t.getAttribute('data-vs-case');
+    const field = t.getAttribute('data-vs-field');
+    key = `${id}.${field}`;
+    d[id][field] = t.value;
+    // A box the reader has typed in is theirs, not history's.
+    d.from_history = d.from_history.filter((k) => k !== key);
+  }
+  const errs = valuationErrors(d);
+  const label = t.closest('.vs-field');
+  const msg = label && label.querySelector('.vs-err');
+  if (msg) msg.textContent = errs[key] || '';
+  if (label) label.classList.toggle('has-err', !!errs[key]);
+  t.setAttribute('aria-invalid', errs[key] ? 'true' : 'false');
+  VALUATION_CASES.forEach((c) => {
+    const out = document.getElementById(`vs-out-${c.id}`);
+    if (out) out.innerHTML = valuationOutputs(sym, c.id);
+  });
+});
+
+document.addEventListener('change', (evt) => {
+  const t = evt.target;
+  if (!t || !t.matches || !t.matches('[data-vs-field], [data-vs-shared]')) return;
+  valuationSaveSoon(STATE.ticker);
+});
+
+document.addEventListener('click', (evt) => {
+  if (!evt.target || !evt.target.closest) return;
+  const fill = evt.target.closest('[data-vs-fill]');
+  const clear = evt.target.closest('[data-vs-clear-case]');
+  const reset = evt.target.closest('[data-vs-reset]');
+  if (!fill && !clear && !reset) return;
+  const sym = STATE.ticker;
+  const d = valuationDraft(sym);
+  if (fill) valuationFillFromHistory(sym, fill.getAttribute('data-vs-fill'));
+  if (clear) {
+    const id = clear.getAttribute('data-vs-clear-case');
+    VALUATION_FIELDS.forEach((f) => { d[id][f.key] = ''; });
+    d[id].note = '';
+    d.from_history = d.from_history.filter((k) => k.indexOf(`${id}.`) !== 0);
+  }
+  if (reset) {
+    if (!window.confirm(`Clear every scenario saved for ${sym}? This cannot be undone.`)) return;
+    VALUATION.drafts[sym] = valuationEmptyDraft();
+  }
+  paintValuation();
+  valuationSave(sym).then(paintValuation);
+});
 
 async function loadPatternRates() {
   if (STATE.patternRates) return;
@@ -33177,7 +33791,9 @@ async function loadMarket(force, opts = {}) {
 
 async function loadLong(force, opts = {}) {
   const silent = !!opts.silent;
-  if (STATE.long && STATE.long.ticker === STATE.ticker && !force) { renderLong(STATE.long); revealPanels(views.long); return; }
+  if (STATE.long && STATE.long.ticker === STATE.ticker && !force) {
+    renderLong(STATE.long); revealPanels(views.long); loadValuationInputs(); return;
+  }
   if (!silent) beginLoad(views.long, `10-year history for ${STATE.ticker} and the major indices`);
   try {
     const data = await getJSON(`/api/longterm/${encodeURIComponent(STATE.ticker)}?indices=false`);
@@ -33190,6 +33806,7 @@ async function loadLong(force, opts = {}) {
     if (!silent) revealPanels(views.long);
     loadPeHistory();
     loadFairValue();
+    loadValuationInputs();
     updateStatus();
     updateChatContext();
   } catch (err) {

@@ -65,6 +65,7 @@ from .analytics import indicators as indicators_mod
 from .analytics import patterns as patterns_mod
 from .analytics import fair_value as fair_value_mod
 from .analytics import pe_history as pe_history_mod
+from .analytics import valuation_inputs as valuation_inputs_mod
 from .analytics import pattern_stats as pattern_stats_mod
 from .analytics import portfolio_risk as portfolio_risk_mod
 from .analytics import evaluate as evaluate_mod
@@ -3703,6 +3704,22 @@ async def pe_history_panel(ticker: str, years: int = Query(10, ge=2, le=20)) -> 
     """Weekly trailing P/E and quarterly revenue growth, from SEC filings."""
     def build() -> Dict[str, Any]:
         out = pe_history_mod.build(YF_PROVIDER, ticker, years=years)
+        out["generated_at"] = datetime.now(timezone.utc).isoformat()
+        return out
+    return await _run(build)
+
+
+@app.get("/api/valuation-inputs/{ticker}")
+async def valuation_inputs(ticker: str) -> Dict[str, Any]:
+    """What a reader's valuation scenarios start from: reported figures with
+    their sources and dates, and the company's own history. Never a forecast;
+    see app/analytics/valuation_inputs.py."""
+    sym = (_setup_symbols(ticker, 1) or [None])[0]
+    if not sym:
+        raise HTTPException(status_code=400, detail="That does not look like a symbol.")
+
+    def build() -> Dict[str, Any]:
+        out = valuation_inputs_mod.build(YF_PROVIDER, sym)
         out["generated_at"] = datetime.now(timezone.utc).isoformat()
         return out
     return await _run(build)

@@ -809,6 +809,9 @@ class YFinanceProvider(MarketDataProvider):
                 "industry": info.get("industry"),
                 "quote_type": info.get("quoteType"),
                 "currency": info.get("currency", "USD"),
+                # The currency the company reports in, which for a foreign
+                # listing is not the one it is quoted in (TSM: TWD and USD).
+                "financial_currency": info.get("financialCurrency"),
                 "market_state": info.get("marketState"),
                 "exchange": info.get("fullExchangeName") or info.get("exchange"),
                 "analyst_target": _f(info.get("targetMeanPrice")),
