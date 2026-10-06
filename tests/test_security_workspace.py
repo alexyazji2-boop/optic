@@ -218,10 +218,12 @@ def test_the_price_is_only_shown_when_it_belongs_to_that_symbol():
     same rule, and so is a payload still held for the previous name while the
     next one loads. tests/test_quick_quote.py drives all three cases."""
     body = APP_JS.split("function securityHeader(", 1)[1].split("\nfunction ", 1)[0]
-    # Merged field by field, and only for the loaded symbol.
-    assert "if (sym === STATE.ticker) {" in body
-    assert "STATE.swing.ticker === sym" in body
-    assert "STATE.quickQuote.ticker === sym" in body
+    # Merged field by field, and only for the loaded symbol: the merge is
+    # facetQuote's, shared with the key statistics so the two cannot disagree.
+    assert "const q = sym === STATE.ticker ? facetQuote(sym) : {};" in body
+    merge = APP_JS.split("function facetQuote(sym) {", 1)[1].split("\n}\n", 1)[0]
+    assert "STATE.swing.ticker === sym" in merge
+    assert "STATE.quickQuote.ticker === sym" in merge
 
 
 def test_compare_is_not_a_facet():

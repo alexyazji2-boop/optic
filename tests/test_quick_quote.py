@@ -152,7 +152,7 @@ function secActionsHTML() { return ''; }
 
 
 def test_the_header_takes_the_quick_price_while_the_full_one_is_on_its_way():
-    _js(HEADER, ["securityHeader"], """
+    _js(HEADER, ["facetQuote", "securityHeader"], """
       assert(priceIn(securityHeader('news')) === null, 'nothing yet, nothing shown');
       STATE.quickQuote = { ticker: 'HOOD', quote: { name: 'Robinhood', price: 41.2, change_pct: 2.5 } };
       var html = securityHeader('news');
@@ -169,7 +169,7 @@ def test_a_full_payload_without_a_price_does_not_erase_the_quick_one():
     dropped the quick quote's price (and its name and change) for nothing,
     until the session payload's close arrived to stand in. The merge is field
     by field, so a blank field defers and a filled one wins."""
-    _js(HEADER, ["securityHeader"], """
+    _js(HEADER, ["facetQuote", "securityHeader"], """
       STATE.quickQuote = { ticker: 'HOOD', quote: { name: 'Robinhood', price: 41.2, change_pct: 2.5 } };
       STATE.swing = { ticker: 'HOOD', quote: { price: null, change_pct: null, exchange: 'NMS' } };
       var html = securityHeader('news');
@@ -181,7 +181,7 @@ def test_a_full_payload_without_a_price_does_not_erase_the_quick_one():
 
 
 def test_the_header_never_lends_one_symbols_price_to_another():
-    _js(HEADER, ["securityHeader"], """
+    _js(HEADER, ["facetQuote", "securityHeader"], """
       // The previous name's payload is still held while this one loads.
       STATE.swing = { ticker: 'NKE', quote: { price: 71.1, change_pct: -1 } };
       assert(priceIn(securityHeader('news')) === null, "NKE's price under HOOD");
