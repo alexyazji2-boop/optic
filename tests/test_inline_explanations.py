@@ -108,7 +108,9 @@ def test_the_definition_opens_and_closes():
     handler = CODE[CODE.index("closest('[data-gloss-open]')"):]
     handler = handler[:handler.index("\n});")]
     assert "aria-expanded" in handler
-    assert "next.remove()" in handler, "a second click has to close it"
+    # `shown`, not `next`: in a Key stats row the definition is the row's last
+    # <dd>, not the term's next sibling (tests/test_key_stats.py replays both).
+    assert "shown.remove()" in handler, "a second click has to close it"
     assert "insertAdjacentElement('afterend'" in handler
 
 
