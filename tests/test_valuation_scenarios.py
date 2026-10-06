@@ -160,7 +160,7 @@ def test_a_case_is_worked_out_the_way_the_page_says():
     shares = 1e9 * 0.99 ** 5
     price = ni / shares * 18
     assert out["revenue"] == pytest.approx(rev) and out["netIncome"] == pytest.approx(ni)
-    assert out["eps"] == pytest.approx(ni / shares)
+    assert out["eps"] == pytest.approx(ni / shares) and out["shares"] == pytest.approx(shares)
     assert out["price"] == pytest.approx(price)
     assert out["priceToday"] == pytest.approx(price / 1.09 ** 5)
     assert out["vsPrice"] == pytest.approx(price / 1.09 ** 5 / 50 - 1)
@@ -340,3 +340,18 @@ def test_adopting_a_browser_copy_never_overwrites(fresh):
 def test_a_write_needs_the_csrf_pair(fresh):
     register("a@example.com")
     assert client.put("/api/valuations/NVDA", json=BODY).status_code == 403
+
+
+def test_the_results_show_the_share_count_and_a_loss_maker_is_flagged():
+    out = _run("""
+      STATE.ticker = 'X'; VALUATION.inputsFor = 'X';
+      VALUATION.inputs = {available: true, price_currency: 'USD',
+        inputs: {price: {value: 10}, revenue: {value: 1e9}, shares: {value: 1e8}, margin: {value: -4.2}},
+        history: {}};
+      var d = valuationDraft('X');
+      d.shared.years = '5'; d.base.growth = '10'; d.base.margin = '8'; d.base.share_change = '2'; d.base.pe = '15';
+      R.out = valuationOutputs('X', 'base');
+      R.panel = renderValuationScenarios();
+    """)
+    assert "Diluted shares in year 5" in out["out"] and "110.41M" in out["out"]
+    assert "is losing money on its latest figures" in out["panel"]

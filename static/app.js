@@ -28887,6 +28887,7 @@ function valuationOutputs(sym, id) {
     ['Net income', esc(valuationMoney(r.netIncome, ccy))],
   ];
   if (r.eps !== undefined) {
+    rows.push([`Diluted shares in ${yr}`, esc(fmtCompact(r.shares, 2))]);
     rows.push(['Earnings per share', esc(valuationPrice(r.eps, ccy))]);
     rows.push([`Price in ${yr}`, `<strong>${esc(valuationPrice(r.price, ccy))}</strong>`]);
     rows.push([`Value today`, r.priceToday !== undefined
@@ -29000,6 +29001,8 @@ function renderValuationScenarios() {
   return `<div class="panel vs-panel">
     ${head}
     ${(inputs.warnings || []).map((w) => `<p class="callout bad">${esc(w)}</p>`).join('')}
+    ${(inp.margin || {}).value < 0 ? `<p class="callout bad">${esc(sym)} is losing money on its latest figures, so
+      a P/E has nothing to divide today. Any value below rests entirely on the margin you assume it reaches.</p>` : ''}
     <h3 class="vs-h">Starting point</h3>
     <ul class="vs-facts">
       ${valuationStartRow('Price', inp.price, esc(valuationPrice((inp.price || {}).value, ccy)))}
