@@ -16884,3 +16884,61 @@ table.data.ss-table tr.ss-row > td:nth-child(6) { white-space: normal; min-width
   table.data.ss-table tr.ss-why-row > td,
   table.data.ss-table tr.ss-detail-row > td { display: block; padding-left: 0; padding-right: 0; }
 }
+
+/* ------------------------------------------------------------ signal history
+ *
+ * One line per signal that opens into its record. The four horizon readings
+ * sit on the line because they are what the list is scanned for; the record
+ * behind them is one click away and is never edited. */
+.sig-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-0); }
+.sig-row { border-radius: var(--r-sm); background: var(--raised); }
+.sig-sum {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-3);
+  cursor: pointer;
+  list-style: none;
+  border-radius: var(--r-sm);
+  transition: background-color var(--dur-ui) var(--ease-ui);
+}
+.sig-sum::-webkit-details-marker { display: none; }
+.sig-sum:hover { background: var(--surface-2); }
+.sig-sum:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.sig-when { color: var(--ink-muted); font-size: var(--t-small); min-width: 7.5rem; }
+.sig-title { font-weight: 600; color: var(--ink); }
+.sig-strat { font-weight: 400; color: var(--ink-2); }
+.sig-state {
+  display: inline-block;
+  font-size: var(--t-caption);
+  font-weight: 600;
+  padding: 0 var(--space-2);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-strong);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.sig-state.is-invalidated { color: var(--neg); border-color: color-mix(in srgb, var(--neg) 55%, transparent); }
+.sig-state.is-expired { color: var(--ink-muted); }
+.sig-hz {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  font-size: var(--t-small);
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+.sig-hk { color: var(--ink-muted); font-weight: 600; }
+.sig-hc.is-missing, .sig-hc.is-unknown { font-style: italic; }
+.sig-body { padding: 0 var(--space-3) var(--space-3); display: grid; gap: var(--space-3); }
+.sig-body, .sig-body p, .sig-body td, .sig-body li { white-space: normal; }
+.sig-cols { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
+.sig-tl { margin: 0; padding-left: var(--space-4); display: grid; gap: var(--space-1); font-size: var(--t-small); color: var(--ink-2); }
+.sig-tl-when { color: var(--ink-muted); }
+.sig-filter { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--t-caption); color: var(--ink-muted); }
+@media (max-width: 640px) {
+  .sig-hz { margin-left: 0; width: 100%; }
+  .sig-when { min-width: 0; }
+}

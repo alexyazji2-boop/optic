@@ -130,6 +130,7 @@ const PERSONAL_KEYS = [
   'optic.chart.watch.v1',        // the watchlist, signed out
   'optic.watchlists.v1',         // named watchlists, signed out
   'optic.watches.v1',            // watches, signed out
+  'optic.signals.v1',            // swing-setup signals that fired, signed out
   'optic.thesis.v1',             // theses, and their backing copy signed in
   'optic.chart.drawings.v1',     // drawings as bar indices, until migrated
   'optic.chart.drawings.v2',     // drawings as times; see WS_DRAW_KEY_V2
@@ -5827,12 +5828,12 @@ function renderAlerts() {
   // reason to hide the watches you set: they are checked by a different
   // endpoint and the two have no dependency on each other.
   if (!data) {
-    host.innerHTML = `${renderWatchHits()}${renderWatchesBlock()}
+    host.innerHTML = `${renderWatchHits()}${renderWatchesBlock()}${renderSignalHistory()}
       <section class="panel">${loadingHTML('scan alerts')}</section>`;
     return;
   }
   if (data.error) {
-    host.innerHTML = `${renderWatchHits()}${renderWatchesBlock()}
+    host.innerHTML = `${renderWatchHits()}${renderWatchesBlock()}${renderSignalHistory()}
       <section class="panel">${errorHTML(data.error)}</section>`;
     return;
   }
@@ -5857,6 +5858,7 @@ function renderAlerts() {
   host.innerHTML = `
   ${renderWatchHits()}
   ${renderWatchesBlock()}
+  ${renderSignalHistory()}
 
   <section class="panel">
     <div class="wv-head">
@@ -6083,6 +6085,13 @@ async function checkWatchSymbol(symbol) {
       price: reply.price,
       results: results,
     };
+    // A swing-setup alert that fired is a signal. The check has already put it
+    // in a signed-in reader's account; a guest's is kept here, as it came.
+    const fired = results.filter((r) => r.met && r.signal_record);
+    if (fired.length) {
+      if (!signedIn()) fired.forEach((r) => keepLocalSignal(r.signal_record));
+      loadSignals(true).then(() => { if (STATE.view === 'alerts') renderAlerts(); });
+    }
     if (signedIn()) {
       try {
         await authApi('/api/watches/seen', { method: 'POST', body: { results: results } });
@@ -6517,6 +6526,9 @@ async function loadAlertsFeed(force) {
      their own watches did. */
   await loadWatchHits(force);
   paintWatchHitBadge();
+  // A third source with no dependency on the other two: started here, painted
+  // when it lands, and never in the way of the scan feed.
+  loadSignals(force).then(() => { if (STATE.view === 'alerts') renderAlerts(); });
   if (STATE.alertsFeed && !force) { renderAlerts(); return; }
   try {
     const data = await getJSON('/api/alerts');
@@ -6535,6 +6547,453 @@ async function loadAlertsFeed(force) {
   }
   renderAlerts();
 }
+
+/* ---------------------------------------------------------- signal history
+ *
+ * Each swing-setup alert of the reader's that fired, as it was recorded at the
+ * time, and what the stock did after. Signed in, the server keeps it
+ * (app/signal_history.py): recorded by the scheduled runner or by this page's
+ * own check, whichever saw the trigger first, and followed up after each
+ * settled close. A guest's lives in this browser: the record is the one the
+ * server built for the check (`signal_record`), stored as it came, and what
+ * followed is asked of /api/signals/followup, which stores nothing. Either
+ * way an observation is the stock's close, never an option's price or a
+ * trade's result, and a horizon with nothing observed says so rather than
+ * showing a number. */
+const SIGNALS_KEY = 'optic.signals.v1';
+// A browser's storage is small and shared with everything else on the page.
+// Two hundred records is years of an active reader's alerts.
+const SIGNALS_LOCAL_MAX = 200;
+// The follow-up endpoint's own cap.
+const SIGNALS_FOLLOWUP_MAX = 60;
+const SIGNAL_HORIZONS = [1, 5, 10, 20];
+const SIGNAL_STATUS_LABELS = { unresolved: 'Open', invalidated: 'Invalidated', expired: 'Expired' };
+
+const SIGNALS = {
+  data: null,          // { signals, basis, where: 'account' | 'browser' }
+  error: null,
+  loading: false,
+  options: null,       // symbols and strategies, from an unfiltered read
+  status: 'all',
+  direction: 'all',
+  symbol: '',
+  strategy: '',
+  open: {},            // which records are expanded, by signal key
+  followed: null,      // a guest's horizon states from the last follow-up
+  followedAt: null,
+  followError: null,
+  basis: '',
+};
+
+function readLocalSignals() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SIGNALS_KEY) || 'null');
+    if (raw && Array.isArray(raw.signals) && raw.events && typeof raw.events === 'object') return raw;
+  } catch (e) { /* unreadable: an empty history rather than a broken view */ }
+  return { signals: [], events: {} };
+}
+
+function writeLocalSignals(store) {
+  try {
+    localStorage.setItem(SIGNALS_KEY, JSON.stringify(store));
+    return true;
+  } catch (e) { return false; }
+}
+
+/* A guest's record, kept exactly as the server built it and never edited. The
+ * same trigger seen again is the same record, so it is not stored twice. */
+function keepLocalSignal(rec) {
+  if (!rec || !rec.signal_key) return false;
+  const store = readLocalSignals();
+  if (store.signals.some((s) => s.signal_key === rec.signal_key)) return false;
+  store.signals.push({ ...rec, recorded_at: new Date().toISOString(),
+                       origin: 'alert check on the page' });
+  if (store.signals.length > SIGNALS_LOCAL_MAX) {
+    store.signals.sort((a, b) => String(b.trigger_at).localeCompare(String(a.trigger_at)));
+    store.signals.slice(SIGNALS_LOCAL_MAX).forEach((s) => { delete store.events[s.signal_key]; });
+    store.signals = store.signals.slice(0, SIGNALS_LOCAL_MAX);
+  }
+  return writeLocalSignals(store);
+}
+
+/* What followed, appended once each as the server does it: one status per
+ * signal and one observation per horizon, stamped with when this browser first
+ * saw it. A later reply that differs does not replace what was recorded. */
+function addLocalSignalEvents(store, key, events) {
+  const have = store.events[key] || [];
+  (events || []).forEach((e) => {
+    if (e.kind === 'status' && have.some((h) => h.kind === 'status')) return;
+    if (have.some((h) => h.kind === e.kind && h.label === e.label)) return;
+    have.push({ ...e, observed_at: new Date().toISOString() });
+  });
+  store.events[key] = have;
+}
+
+function signalStatusOf(events) {
+  const verdict = (events || []).find((e) => e.kind === 'status'
+    && (e.label === 'invalidated' || e.label === 'expired'));
+  return verdict ? verdict.label : 'unresolved';
+}
+
+function signalHorizonLabel(h) {
+  return `after ${h} candle${h === 1 ? '' : 's'}`;
+}
+
+/* A guest's horizons: what this browser recorded, and otherwise what the last
+ * follow-up said about the candle (not printed yet, or printed and missing).
+ * Before any follow-up has answered, unknown. */
+function localSignalHorizons(key, events) {
+  const told = (SIGNALS.followed || {})[key] || [];
+  return SIGNAL_HORIZONS.map((h) => {
+    const e = (events || []).find((x) => x.kind === 'observation' && x.label === signalHorizonLabel(h));
+    if (e) {
+      return { horizon: h, state: 'observed', data_as_of: e.data_as_of, price: e.price,
+               change_pct: e.change_pct, observed_at: e.observed_at };
+    }
+    const t = told.find((x) => x.horizon === h);
+    return { horizon: h, state: t && t.state !== 'observed' ? t.state : 'unknown' };
+  });
+}
+
+function localSignalRows() {
+  const store = readLocalSignals();
+  return store.signals.map((s) => {
+    const events = (store.events[s.signal_key] || []).slice()
+      .sort((a, b) => String(a.data_as_of).localeCompare(String(b.data_as_of)));
+    return { ...s, events, status: signalStatusOf(events),
+             horizons: localSignalHorizons(s.signal_key, events) };
+  }).sort((a, b) => String(b.trigger_at).localeCompare(String(a.trigger_at)));
+}
+
+async function followUpLocalSignals() {
+  const store = readLocalSignals();
+  const todo = store.signals
+    .filter((s) => (store.events[s.signal_key] || []).length < 1 + SIGNAL_HORIZONS.length)
+    .sort((a, b) => String(b.trigger_at).localeCompare(String(a.trigger_at)))
+    .slice(0, SIGNALS_FOLLOWUP_MAX);
+  if (!todo.length) return;
+  const reply = await postJSON('/api/signals/followup', {
+    signals: todo.map((s) => ({
+      signal_key: s.signal_key, symbol: s.symbol, direction: s.direction,
+      trigger_at: s.trigger_at, trigger_price: s.trigger_price, invalidation: s.invalidation,
+      params: { signal_ttl: (s.params || {}).signal_ttl },
+    })),
+  });
+  // Read again rather than reuse: a check may have kept a new record meanwhile.
+  const fresh = readLocalSignals();
+  Object.keys(reply.events || {}).forEach((key) => {
+    if (fresh.signals.some((s) => s.signal_key === key)) {
+      addLocalSignalEvents(fresh, key, reply.events[key]);
+    }
+  });
+  writeLocalSignals(fresh);
+  SIGNALS.followed = reply.horizons || {};
+  SIGNALS.basis = reply.basis || '';
+}
+
+function signalFiltersAreDefault() {
+  return SIGNALS.status === 'all' && SIGNALS.direction === 'all'
+    && !SIGNALS.symbol && !SIGNALS.strategy;
+}
+
+function signalOptions(rows) {
+  const strategies = {};
+  rows.forEach((s) => { strategies[s.strategy] = s.strategy_label || s.strategy; });
+  return {
+    symbols: [...new Set(rows.map((s) => s.symbol))].sort(),
+    strategies: Object.keys(strategies).sort().map((id) => ({ id, label: strategies[id] })),
+  };
+}
+
+/* Filtered by the server when it is the account's history, so a filter over a
+ * long history still finds the old rows the newest few hundred would hide. */
+function signalQuery() {
+  const q = [];
+  if (SIGNALS.status !== 'all') q.push(`status=${encodeURIComponent(SIGNALS.status)}`);
+  if (SIGNALS.direction !== 'all') q.push(`direction=${encodeURIComponent(SIGNALS.direction)}`);
+  if (SIGNALS.symbol) q.push(`symbol=${encodeURIComponent(SIGNALS.symbol)}`);
+  if (SIGNALS.strategy) q.push(`strategy=${encodeURIComponent(SIGNALS.strategy)}`);
+  return '/api/signals' + (q.length ? `?${q.join('&')}` : '');
+}
+
+async function loadSignals(force) {
+  if (SIGNALS.loading || (SIGNALS.data && !force)) return;
+  SIGNALS.loading = true;
+  try {
+    if (signedIn()) {
+      const reply = await authApi(signalQuery());
+      SIGNALS.data = { signals: reply.signals || [], basis: reply.basis || '', where: 'account' };
+      if (signalFiltersAreDefault() || !SIGNALS.options) {
+        SIGNALS.options = signalOptions(SIGNALS.data.signals);
+      }
+    } else {
+      // Once a page load: the candles it reads move once a day.
+      if (!SIGNALS.followedAt) {
+        SIGNALS.followedAt = new Date().toISOString();
+        try {
+          await followUpLocalSignals();
+          SIGNALS.followError = null;
+        } catch (err) {
+          SIGNALS.followError = err.message;
+        }
+      }
+      const rows = localSignalRows();
+      SIGNALS.data = { signals: rows, basis: SIGNALS.basis, where: 'browser' };
+      SIGNALS.options = signalOptions(rows);
+    }
+    SIGNALS.error = null;
+  } catch (err) {
+    SIGNALS.error = err.message;
+  }
+  SIGNALS.loading = false;
+}
+
+function signalRowsShown() {
+  const data = SIGNALS.data || {};
+  const rows = data.signals || [];
+  if (data.where === 'account') return rows;
+  return rows.filter((s) => (SIGNALS.status === 'all' || s.status === SIGNALS.status)
+    && (SIGNALS.direction === 'all' || s.direction === SIGNALS.direction)
+    && (!SIGNALS.symbol || s.symbol === SIGNALS.symbol)
+    && (!SIGNALS.strategy || s.strategy === SIGNALS.strategy));
+}
+
+/* A date as a date, a moment in Eastern time: a record is read against the
+ * exchange's clock, not the reader's. */
+function signalWhen(iso) {
+  if (!iso) return 'not recorded';
+  const s = String(iso);
+  const day = s.length === 10;
+  const d = new Date(day ? `${s}T12:00:00Z` : s);
+  if (Number.isNaN(d.getTime())) return s;
+  return day
+    ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+    : d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric',
+                                  minute: '2-digit', timeZone: 'America/New_York', timeZoneName: 'short' });
+}
+
+/* When the trigger candle closed: the time alone when that was the candle's
+ * own day, which for a daily candle it always is. */
+function signalClosedAt(s) {
+  if (!s.trigger_completed_at) return '';
+  const d = new Date(s.trigger_completed_at);
+  if (Number.isNaN(d.getTime())) return '';
+  const sameDay = d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+    === String(s.trigger_at).slice(0, 10);
+  return sameDay
+    ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit',
+                                      timeZone: 'America/New_York', timeZoneName: 'short' })
+    : signalWhen(s.trigger_completed_at);
+}
+
+function signalPrice(v) {
+  return v === null || v === undefined || Number.isNaN(Number(v)) ? 'not recorded' : fmt(v, 2);
+}
+
+function signalHorizonCell(h) {
+  const tag = `<span class="sig-hk">+${h.horizon}</span>`;
+  if (h.state === 'observed' && h.change_pct !== null && h.change_pct !== undefined) {
+    return `<span class="sig-hc" title="Close ${esc(fmt(h.price, 2))} on ${esc(signalWhen(h.data_as_of))}, ${
+      h.horizon} completed candle${h.horizon === 1 ? '' : 's'} after the trigger">${tag} <span class="${
+      signClass(h.change_pct)}">${fmtPct(h.change_pct, 1)}</span></span>`;
+  }
+  const why = h.state === 'pending' ? 'That candle has not closed yet.'
+    : h.state === 'missing' ? 'Its candle has passed and no close was observed: the feed had none, or the follow-up has not run since.'
+      : 'Not checked yet.';
+  return `<span class="sig-hc is-${esc(h.state)}" title="${esc(why)}">${tag} ${
+    h.state === 'pending' ? 'not yet' : 'unknown'}</span>`;
+}
+
+function signalEventItem(e) {
+  const when = `<span class="sig-tl-when">${esc(signalWhen(e.data_as_of))}</span>`;
+  const seen = `<span class="muted">Observed ${esc(signalWhen(e.observed_at))}.</span>`;
+  if (e.kind === 'status') {
+    return `<li>${when} <strong>${esc(SIGNAL_STATUS_LABELS[e.label] || e.label)}.</strong> ${
+      esc(e.detail || '')} ${seen}</li>`;
+  }
+  const rebased = e.detail && e.detail.indexOf('re-based') >= 0
+    ? ` <span class="muted">${esc(e.detail)}</span>` : '';
+  return `<li>${when} ${esc(cap(e.label))}: close ${signalPrice(e.price)}, <span class="${
+    signClass(e.change_pct)}">${fmtPct(e.change_pct, 2)}</span> from the trigger close.${rebased} ${seen}</li>`;
+}
+
+/* kv() capitalises each value, which would print a rule version as
+ * "Setups-2026..." and a data source with a capital it does not have. A record
+ * is shown exactly as it was stored. */
+function signalKV(pairs) {
+  return `<dl class="kv">${pairs.map(([k, v]) => `<dt>${gloss(cap(k))}</dt><dd>${v}</dd>`).join('')}</dl>`;
+}
+
+function signalHistoryDetail(s) {
+  const cond = s.conditions || {};
+  const checks = cond.checks || [];
+  const readings = Object.entries(s.indicators || {}).filter(([, v]) => v !== null && v !== undefined);
+  const params = Object.entries(s.params || {}).filter(([, v]) => v !== null && v !== undefined);
+  const events = s.events || [];
+  return `<div class="sig-body">
+    ${s.explanation ? `<p class="ss-rule">${esc(s.explanation)}</p>` : ''}
+    <div class="sig-cols">
+      <div>
+        <h4 class="ss-h">The record, as it fired</h4>
+        ${signalKV([
+    ['Trigger candle', esc(cap(signalWhen(s.trigger_at))) + (signalClosedAt(s)
+      ? `, closed ${esc(signalClosedAt(s))}` : '')],
+    ['Data read through', esc(cap(signalWhen(s.data_as_of)))],
+    ['Timeframe', esc(cap(s.timeframe || 'daily'))],
+    ['Trigger price', cap(signalPrice(s.trigger_price))],
+    ['Trigger level', s.trigger_level === null || s.trigger_level === undefined
+      ? 'None for this rule' : cap(signalPrice(s.trigger_level))],
+    ['Invalidation', cap(signalPrice(s.invalidation))],
+    ['Target', s.target === null || s.target === undefined
+      ? 'None: this rule sets no target' : cap(signalPrice(s.target))],
+    ['Recorded', esc(cap(signalWhen(s.recorded_at))) + (s.origin ? `, by the ${esc(s.origin)}` : '')],
+    ['Rule version', s.rule_version ? `<code>${esc(s.rule_version)}</code>` : 'Not recorded'],
+    ['Source', s.source ? esc(s.source) : 'Not recorded'],
+  ])}
+      </div>
+      <div>
+        <h4 class="ss-h">What followed</h4>
+        ${events.length ? `<ol class="sig-tl">${events.map(signalEventItem).join('')}</ol>`
+    : '<p class="sub">Nothing observed yet. The first observation is the close one completed candle after the trigger.</p>'}
+      </div>
+    </div>
+    ${checks.length ? `<div>
+      <h4 class="ss-h">${esc(String(cond.met))} of ${esc(String(cond.of))} conditions met when it fired</h4>
+      <div class="ss-scroll"><table class="data narrow ss-checks"><tbody>${checks.map((c) => `<tr${
+    c.required ? '' : ' class="ss-info"'}>
+        <td class="name">${esc(c.group || '')}</td>
+        <td class="name">${esc(c.rule || '')}${c.required ? '' : ' <span class="muted">(filter off, not counted)</span>'}</td>
+        <td class="name">${setupCheckMark(c.passed)}</td>
+        <td>${c.value === null || c.value === undefined ? '' : esc(String(c.value))}</td>
+      </tr>`).join('')}</tbody></table></div>
+      ${cond.note ? `<p class="caveat">${esc(cond.note)}</p>` : ''}
+    </div>` : ''}
+    <div class="sig-cols">
+      ${readings.length ? `<div><h4 class="ss-h">Readings when it fired</h4>${
+    signalKV(readings.map(([k, v]) => [k, esc(String(v))]))}</div>` : ''}
+      ${params.length ? `<div><h4 class="ss-h">Parameters</h4>${
+    signalKV(params.map(([k, v]) => [k.replace(/_/g, ' '), esc(String(v))]))}</div>` : ''}
+    </div>
+    ${(s.assumptions || []).length ? `<div><h4 class="ss-h">Assumptions</h4>
+      <ul class="ss-notes">${s.assumptions.map((a) => `<li>${esc(a)}</li>`).join('')}</ul></div>` : ''}
+  </div>`;
+}
+
+function signalHistoryRow(s) {
+  const status = SIGNAL_STATUS_LABELS[s.status] ? s.status : 'unresolved';
+  const bull = s.direction === 'bull';
+  const key = s.signal_key || s.id;
+  return `<li class="sig-row">
+    <details data-sig-key="${esc(key)}"${SIGNALS.open[key] ? ' open' : ''}>
+      <summary class="sig-sum">
+        <span class="sig-when">${esc(signalWhen(s.trigger_at))}</span>
+        <span class="sig-title">${esc(s.symbol)} <span class="sig-strat">${
+  esc(s.strategy_label || s.strategy)}</span></span>
+        <span class="ss-dir ${bull ? 'is-bull' : 'is-bear'}">${bull ? 'Bullish' : 'Bearish'}</span>
+        <span class="sig-state is-${status}">${SIGNAL_STATUS_LABELS[status]}</span>
+        <span class="sig-hz" aria-label="The stock's close after 1, 5, 10 and 20 completed candles">${
+  (s.horizons || []).map(signalHorizonCell).join('')}</span>
+      </summary>
+      ${signalHistoryDetail(s)}
+    </details>
+  </li>`;
+}
+
+function renderSignalHistory() {
+  const where = signedIn()
+    ? 'Kept in your account, recorded whether or not this page was open.'
+    : 'Kept in this browser while you are signed out, so it holds only the triggers this page saw.';
+  const head = `<div class="wv-head"><div>
+      <h2>Signal history</h2>
+      <p class="wv-sub">Every swing-setup alert of yours that fired, recorded when it
+        fired and never edited. What the stock did next is added beside it as each
+        completed candle prints. ${esc(where)}</p>
+    </div></div>`;
+  if (SIGNALS.error) {
+    return `<section class="panel" aria-label="Signal history">${head}${errorHTML(SIGNALS.error)}</section>`;
+  }
+  if (!SIGNALS.data) {
+    return `<section class="panel" aria-label="Signal history">${head}${loadingHTML('signal history')}</section>`;
+  }
+  const rows = signalRowsShown();
+  const opts = SIGNALS.options || { symbols: [], strategies: [] };
+  const any = opts.symbols.length > 0 || rows.length > 0;
+  const pill = (attr, id, label, on) => `<button type="button" class="pill${on ? ' on' : ''}"
+    ${attr}="${esc(id)}" aria-pressed="${on}">${esc(label)}</button>`;
+  const filters = any ? `<div class="wv-filters" role="group" aria-label="Filter signal history">
+      <span class="wv-filter-label">Status</span>
+      ${['all', 'unresolved', 'invalidated', 'expired'].map((id) => pill('data-sig-status', id,
+    id === 'all' ? 'All' : SIGNAL_STATUS_LABELS[id], SIGNALS.status === id)).join('')}
+      <span class="wv-filter-label">Side</span>
+      ${[['all', 'Both'], ['bull', 'Bullish'], ['bear', 'Bearish']].map(([id, label]) => pill(
+    'data-sig-dir', id, label, SIGNALS.direction === id)).join('')}
+      ${opts.symbols.length > 1 ? `<label class="sig-filter"><span>Symbol</span>
+        <select data-sig-symbol><option value="">All</option>${opts.symbols.map((sym) => `<option value="${
+    esc(sym)}"${SIGNALS.symbol === sym ? ' selected' : ''}>${esc(sym)}</option>`).join('')}</select></label>` : ''}
+      ${opts.strategies.length > 1 ? `<label class="sig-filter"><span>Strategy</span>
+        <select data-sig-strategy><option value="">All</option>${opts.strategies.map((st) => `<option value="${
+    esc(st.id)}"${SIGNALS.strategy === st.id ? ' selected' : ''}>${esc(st.label)}</option>`).join('')}</select></label>` : ''}
+    </div>` : '';
+  const body = rows.length
+    ? `<ul class="sig-list">${rows.map(signalHistoryRow).join('')}</ul>`
+    : any ? `<p class="wv-none">None of your signals matches this filter.
+        <button type="button" class="auth-link" data-sig-reset>Show all</button></p>`
+      : `<p class="wv-none">No signals yet. One is recorded when a swing-setup alert of
+        yours fires on a completed candle. Set one from a ticker's Options tab, under
+        Swing setups.</p>`;
+  return `<section class="panel" aria-label="Signal history">
+    ${head}
+    ${filters}
+    ${SIGNALS.loading ? '<p class="sub">Updating…</p>' : ''}
+    ${SIGNALS.followError && SIGNALS.data.where === 'browser' ? `<p class="caveat">What followed could not
+      be checked just now (${esc(SIGNALS.followError)}), so horizons not already recorded show as
+      unknown.</p>` : ''}
+    ${body}
+    ${rows.length >= 200 && SIGNALS.data.where === 'account' ? '<p class="wd-foot">Showing the newest 200 that match.</p>' : ''}
+    ${rows.length && SIGNALS.data.basis ? `<p class="wd-foot">${esc(SIGNALS.data.basis)}</p>` : ''}
+  </section>`;
+}
+
+function refreshSignals() {
+  if (SIGNALS.data && SIGNALS.data.where === 'account') {
+    loadSignals(true).then(() => { if (STATE.view === 'alerts') renderAlerts(); });
+  }
+  if (STATE.view === 'alerts') renderAlerts();
+}
+
+document.addEventListener('click', (evt) => {
+  if (!evt.target || !evt.target.closest) return;
+  const status = evt.target.closest('[data-sig-status]');
+  const dir = evt.target.closest('[data-sig-dir]');
+  const reset = evt.target.closest('[data-sig-reset]');
+  if (!status && !dir && !reset) return;
+  if (status) SIGNALS.status = status.getAttribute('data-sig-status');
+  if (dir) SIGNALS.direction = dir.getAttribute('data-sig-dir');
+  if (reset) {
+    SIGNALS.status = 'all';
+    SIGNALS.direction = 'all';
+    SIGNALS.symbol = '';
+    SIGNALS.strategy = '';
+  }
+  refreshSignals();
+});
+
+document.addEventListener('change', (evt) => {
+  const t = evt.target;
+  if (!t || !t.matches) return;
+  if (t.matches('[data-sig-symbol]')) SIGNALS.symbol = t.value;
+  else if (t.matches('[data-sig-strategy]')) SIGNALS.strategy = t.value;
+  else return;
+  refreshSignals();
+});
+
+// An open record stays open across the view's repaints. `toggle` does not
+// bubble, so this listens in the capture phase.
+document.addEventListener('toggle', (evt) => {
+  const d = evt.target;
+  if (!d || !d.matches || !d.matches('details[data-sig-key]')) return;
+  SIGNALS.open[d.getAttribute('data-sig-key')] = d.open;
+}, true);
 
 /* Watchlist view interactions. */
 document.addEventListener('click', (evt) => {

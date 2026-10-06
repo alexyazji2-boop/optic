@@ -154,7 +154,7 @@ def record_signal(user_id: str, result: Dict[str, Any], origin: str,
     try:
         return signal_history.record(user_id, rec, origin, when)
     except Exception as exc:                              # noqa: BLE001
-        log.warning("signal not recorded for %s: %s", row.get("key"), exc)
+        log.warning("signal not recorded for %s: %s", rec.get("signal_key"), exc)
         return None
 
 
