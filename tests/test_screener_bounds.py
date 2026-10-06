@@ -137,3 +137,23 @@ def test_a_background_rerun_leaves_the_boxes_alone():
 
 def test_ignored_filters_are_shown_with_the_matches():
     assert "Not applied: " in APP_JS.split("function screenerResultHTML() {", 1)[1][:4000]
+
+
+# ------------------------------------------------------------ the words box
+
+def test_an_amount_with_a_size_is_not_a_share_price():
+    """"market cap over $10B" became "priced over $10"."""
+    from app.analytics import scan_request as sr
+    out = sr.read("market cap over $10B")
+    assert out["filters"] == [] and out["understood"] == []
+    assert "$10b" in out["leftover"] and "cap" in out["leftover"]
+    assert sr.read("cap above $500 million")["filters"] == []
+    assert sr.read("price above $50")["filters"] == [{"field": "price", "min": 50.0, "max": None}]
+    assert sr.read("under $20")["filters"] == [{"field": "price", "min": None, "max": 20.0}]
+
+
+def test_a_ratio_it_cannot_read_is_listed_as_unread():
+    """"P/E" split into "p" and "e", both too short to list, so the reply never
+    said the ratio had been ignored."""
+    from app.analytics import scan_request as sr
+    assert "p/e" in sr.read("P/E below 15 above the 200-day")["leftover"]

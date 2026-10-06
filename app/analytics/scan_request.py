@@ -117,11 +117,14 @@ def _rules() -> List[Tuple[re.Pattern, Any]]:
                    "In a downtrend: under the 200-day and lower than three months ago",
                    ("roc60", "asc")))
     # Price, which needs a dollar sign or the word, so "under 200 day" is not a price.
-    add(r"\b(?:under|below|less\s+than|cheaper\s+than)\s+\$\s*(\d+(?:\.\d+)?)"
+    # And not an amount with a size after it: "market cap over $10B" read as a
+    # share price over $10. There is no market-cap field, so that request is
+    # left unread and the reply says so.
+    add(r"\b(?:under|below|less\s+than|cheaper\s+than)\s+\$\s*(\d+(?:\.\d+)?)" + _NOT_AN_AMOUNT +
         r"|\b(?:under|below|less\s+than)\s+(\d+(?:\.\d+)?)\s*(?:dollars|bucks)\b",
         lambda m: ([{"field": "price", "min": None, "max": float(m.group(1) or m.group(2))}], [],
                    "Priced under ${:g}".format(float(m.group(1) or m.group(2))), None))
-    add(r"\b(?:over|above|more\s+than)\s+\$\s*(\d+(?:\.\d+)?)"
+    add(r"\b(?:over|above|more\s+than)\s+\$\s*(\d+(?:\.\d+)?)" + _NOT_AN_AMOUNT +
         r"|\b(?:over|above|more\s+than)\s+(\d+(?:\.\d+)?)\s*(?:dollars|bucks)\b",
         lambda m: ([{"field": "price", "min": float(m.group(1) or m.group(2)), "max": None}], [],
                    "Priced over ${:g}".format(float(m.group(1) or m.group(2))), None))
@@ -131,6 +134,11 @@ def _rules() -> List[Tuple[re.Pattern, Any]]:
         r"in\s+a)\s+)?(month|3\s+months|three\s+months|quarter)\b",
         lambda m: _returns(m.group(1).lower(), float(m.group(2)), m.group(3).lower()))
     return out
+
+
+# After a dollar figure: a size word or letter makes it an amount ($10B, $500
+# million), not a share price.
+_NOT_AN_AMOUNT = r"(?!\d|\.\d|\s*(?:[kmbt]\b|bn\b|mm\b|thousand|million|billion|trillion))"
 
 
 def _side(word: str, n: str):
@@ -221,7 +229,9 @@ def read(text: str) -> Dict[str, Any]:
             if got_sort and not sorted_by_rule:
                 sort, sorted_by_rule = got_sort, True
             remaining = remaining[:m.start()] + " " + remaining[m.end():]
-    words = re.findall(r"[a-z0-9$%][a-z0-9$%'.-]*", remaining.lower())
+    # "/" kept inside a word, so "P/E" is one word the reply can say it did
+    # not read, rather than "p" and "e", each too short to be listed.
+    words = re.findall(r"[a-z0-9$%][a-z0-9$%'./-]*", remaining.lower())
     leftover = [w for w in words if w.strip(".-'") not in STOPWORDS and len(w.strip(".-'")) > 1]
     return {"filters": filters, "states": states, "sort": sort[0], "direction": sort[1],
             "understood": understood, "leftover": leftover}
