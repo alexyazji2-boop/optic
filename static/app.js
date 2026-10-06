@@ -2639,7 +2639,12 @@ function aggregateWeekly(ps) {
     const k = weekKey(dates[i]);
     if (k !== key) {
       key = k;
-      out.dates.push(dates[i]);
+      /* Labelled by its Monday, as the ten-year weekly bars that replace this
+       * stand-in are (Yahoo dates a week by its calendar Monday, holiday or
+       * not). It was labelled by the week's last session, so a drawing made
+       * before those bars arrived was stored at a Friday and, read against
+       * Monday-dated bars, sat most of the way into the following week. */
+      out.dates.push(k);
       out.open.push(ps.open ? ps.open[i] : null);
       out.high.push(ps.high ? ps.high[i] : null);
       out.low.push(ps.low ? ps.low[i] : null);
@@ -2647,7 +2652,6 @@ function aggregateWeekly(ps) {
       out.volume.push(ps.volume ? ps.volume[i] : 0);
     } else {
       const j = out.dates.length - 1;
-      out.dates[j] = dates[i];                     // label the bar by its last session
       if (ps.high) out.high[j] = Math.max(out.high[j], ps.high[i]);
       if (ps.low) out.low[j] = Math.min(out.low[j], ps.low[i]);
       if (ps.close) out.close[j] = ps.close[i];
@@ -2676,6 +2680,9 @@ function aggregateWeekly(ps) {
   out.ema21 = emaSeries(out.close, 21);
   out.ema50 = emaSeries(out.close, 50);
   out.weekly = true;
+  // The same flag the ten-year bars carry: trendSegments finds a daily
+  // anchor's week by its Monday.
+  out.mondays = true;
   return out;
 }
 
