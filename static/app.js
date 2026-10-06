@@ -33043,6 +33043,7 @@ function screenerFilterRow(spec, i) {
       <input type="number" step="any" data-sc-max="${i}" value="${
   spec.max === null || spec.max === undefined ? '' : spec.max}"
         aria-label="Maximum"></label>
+    <span class="sc-bad" role="status">${screenerRowBad(spec) ? 'Not a number, so this bound is not applied.' : ''}</span>
     <span class="sc-unit">${esc((field || {}).unit || '')}</span>
     <button type="button" class="sc-drop" data-sc-del="${i}"
       aria-label="Remove this filter" title="Remove">\u00d7</button>
@@ -33163,6 +33164,8 @@ function screenerResultHTML() {
       is why the ranked count is ${fmt(res.considered, 0)} and not
       ${fmt(res.universe, 0)}.</p>` : ''}
     ${funnel ? `<ul class="sc-funnel">${funnel}</ul>` : ''}
+    ${(res.ignored || []).length ? `<div class="callout warn">Not applied: ${(res.ignored).map((g) =>
+    `${esc(g.label || g.field || 'a filter')} (${esc(g.reason)})`).join('; ')}.</div>` : ''}
     ${screenerTableHTML(res)}
   </div>`;
 }
@@ -33201,18 +33204,31 @@ function paintScreenerResult() {
 
 async function runScreener(quiet) {
   if (screenerBusy) return;
+  // The request leaves out what the reader cannot see: the marker on each row.
+  const bad = screenerSpec().filters.some(screenerRowBad);
+  if (bad && !quiet) {
+    STATE.screenerResult = { available: false,
+      reason: 'One of the bounds is not a number, so the screen did not run. Fix the box marked in red.' };
+    paintScreenerResult();
+    return;
+  }
   screenerBusy = true;
   if (!quiet) {
     STATE.screenerResult = 'loading';
     paintScreenerResult();
   }
   try {
-    STATE.screenerResult = await postJSON('/api/screener', screenerSpec());
+    const spec = screenerSpec();
+    STATE.screenerResult = await postJSON('/api/screener', { ...spec,
+      filters: spec.filters.map(({ field, min, max }) => ({ field, min, max })) });
   } catch (err) {
     STATE.screenerResult = { available: false, reason: err.message };
   }
   screenerBusy = false;
-  paintScreener();
+  // A background re-run repaints the result only. The builder holds the boxes
+  // the reader may be typing in.
+  if (quiet) paintScreenerResult();
+  else paintScreener();
   // The ranking it filters is being built: ask again until it lands.
   if (STATE.screenerResult && STATE.screenerResult.building) {
     scanWhenBuilt(() => STATE.view === 'scan' && STATE.scanMode === 'build',
@@ -33639,9 +33655,42 @@ document.addEventListener('click', (evt) => {
   if (!spec) return;
 });
 
-/* Bounds and selects. `change` rather than `input` on the number boxes: firing a
- * repaint per keystroke rebuilt the row under the cursor and lost the caret
- * halfway through typing "12.5". */
+/* A bound is kept as it is typed, without a repaint.
+ *
+ * It used to be kept only on `change`, which fires when the box loses focus.
+ * Anything that repainted the builder first, such as the poll that re-runs the
+ * screen every five seconds while the ranking builds, rebuilt the boxes from
+ * the stored spec and wiped what had been typed, and Run then sent no bound at
+ * all. And text a number box cannot read (letters, a lone "-") reached the
+ * spec as an empty bound, which the server drops: a screen for "price at least
+ * 100" came back with the whole market. Now an unreadable box is marked and
+ * Run refuses until it is fixed. */
+function screenerBoundInput(t) {
+  const spec = screenerSpec();
+  const which = t.dataset.scMin !== undefined ? 'min' : 'max';
+  const idx = Number(t.dataset.scMin !== undefined ? t.dataset.scMin : t.dataset.scMax);
+  const row = spec.filters[idx];
+  if (!row) return;
+  const bad = !!(t.validity && t.validity.badInput);
+  row[which] = t.value === '' || bad ? null : Number(t.value);
+  row.bad = Object.assign({}, row.bad || {}, { [which]: bad });
+  t.setAttribute('aria-invalid', bad ? 'true' : 'false');
+  const note = t.closest('.sc-filter') && t.closest('.sc-filter').querySelector('.sc-bad');
+  if (note) note.textContent = screenerRowBad(row) ? 'Not a number, so this bound is not applied.' : '';
+}
+
+function screenerRowBad(row) {
+  return !!(row && row.bad && (row.bad.min || row.bad.max));
+}
+
+document.addEventListener('input', (evt) => {
+  const t = evt.target;
+  if (!t || !t.dataset) return;
+  if (t.dataset.scMin !== undefined || t.dataset.scMax !== undefined) screenerBoundInput(t);
+});
+
+/* Selects, and the bounds once more on `change` for browsers that send no
+ * `input` for a spinner press. */
 document.addEventListener('change', (evt) => {
   const t = evt.target;
   if (!t || !t.dataset) return;
@@ -33675,14 +33724,13 @@ document.addEventListener('change', (evt) => {
 
   if (t.dataset.scField !== undefined) {
     const row = spec.filters[Number(t.dataset.scField)];
-    if (row) { row.field = t.value; paintScreener(); }
+    // A new field starts with no bounds: "price at least 100" carried over
+    // onto a 20-day change was a screen for a 100% move, empty with no hint.
+    if (row) { row.field = t.value; row.min = null; row.max = null; row.bad = null; paintScreener(); }
     return;
   }
   if (t.dataset.scMin !== undefined || t.dataset.scMax !== undefined) {
-    const which = t.dataset.scMin !== undefined ? 'min' : 'max';
-    const idx = Number(t.dataset.scMin !== undefined ? t.dataset.scMin : t.dataset.scMax);
-    const row = spec.filters[idx];
-    if (row) row[which] = t.value === '' ? null : Number(t.value);
+    screenerBoundInput(t);
     return;                                  // no repaint: the caret is in here
   }
   if (t.dataset.scState !== undefined) {

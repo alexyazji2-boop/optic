@@ -144,25 +144,33 @@ def _num(value: Any) -> Optional[float]:
     return out if out == out and out not in (float("inf"), float("-inf")) else None
 
 
-def parse_filters(raw: Any) -> List[Dict[str, Any]]:
+def parse_filters(raw: Any, ignored: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
     """Reader-supplied bounds, validated against FIELDS.
 
     Unknown ids are dropped rather than raising: a filter the server does not
     recognise is a stale tab, and losing the request entirely would be a worse
-    answer than running the rest. The response reports what it used.
+    answer than running the rest. The response reports what it used, and
+    `ignored` collects what it did not and why: a dropped "P/E below 15" that
+    nobody is told about returns the whole market as if it had been applied.
     """
     out: List[Dict[str, Any]] = []
+    skip = ignored if ignored is not None else []
     if not isinstance(raw, list):
         return out
     for item in raw[:MAX_FILTERS]:
         if not isinstance(item, dict):
             continue
-        field = FIELD_BY_ID.get(str(item.get("field") or ""))
+        name = str(item.get("field") or "")
+        field = FIELD_BY_ID.get(name)
         if not field:
+            skip.append({"field": name[:40], "reason": "not a field this screen has"})
             continue
         low, high = _num(item.get("min")), _num(item.get("max"))
         if low is None and high is None:
-            continue                       # an empty bound is not a filter
+            # An empty bound is not a filter, and is said not to be one.
+            skip.append({"field": field["id"], "label": field["label"],
+                         "reason": "no minimum or maximum, so nothing to apply"})
+            continue
         if low is not None and high is not None and low > high:
             low, high = high, low          # a reversed pair is a typo, not an error
         out.append({"field": field["id"], "min": low, "max": high})
@@ -194,7 +202,8 @@ def run(ranking: Optional[Dict[str, Any]], filters: Any = None, states: Any = No
         sort: str = "score", direction: str = "desc",
         limit: int = DEFAULT_LIMIT) -> Dict[str, Any]:
     """Apply reader-supplied bounds to the cached ranking."""
-    used = parse_filters(filters)
+    ignored: List[Dict[str, Any]] = []
+    used = parse_filters(filters, ignored)
     used_states = parse_states(states)
     rows = ((ranking or {}).get("ranked") or [])
     if not rows:
@@ -204,7 +213,7 @@ def run(ranking: Optional[Dict[str, Any]], filters: Any = None, states: Any = No
                        "roughly three thousand symbols, so it runs in the "
                        "background rather than on page load. Run a scan once and "
                        "this fills in."),
-            "filters": used, "states": used_states, "blind_spot": BLIND,
+            "filters": used, "ignored": ignored, "states": used_states, "blind_spot": BLIND,
         }
 
     ranked_at = _num((ranking or {}).get("ranked_at"))
@@ -282,6 +291,7 @@ def run(ranking: Optional[Dict[str, Any]], filters: Any = None, states: Any = No
         "prefiltered": (ranking or {}).get("passed"),
         "gates": (ranking or {}).get("gates") or {},
         "filters": used,
+        "ignored": ignored,
         "states": used_states,
         "funnel": funnel,
         "sort": sort_field["id"],

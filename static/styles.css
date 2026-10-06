@@ -17040,3 +17040,8 @@ table.data.ss-table tr.ss-row > td:nth-child(6) { white-space: normal; min-width
 .dc-why { margin: 2px 0 0; font-size: var(--t-caption); color: var(--ink-muted); }
 .dc-quiet, .dc-stale { margin: var(--space-2) 0 0; font-size: var(--t-small); color: var(--ink-2); }
 .dc-foot { margin: var(--space-2) 0 0; font-size: var(--t-caption); color: var(--ink-muted); }
+
+/* A bound the box could not read, said beside the row it belongs to. */
+.sc-bad { flex-basis: 100%; font-size: var(--t-caption); color: var(--neg); }
+.sc-bad:empty { display: none; }
+.sc-filter input[aria-invalid="true"] { border-color: var(--neg); }

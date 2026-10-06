@@ -4806,6 +4806,13 @@ async def screener_run(payload: Dict[str, Any] = Body(default={})) -> Dict[str, 
     writes none: this is a filter over rows already on disk, so it is deliberately
     outside _write_guard.
     """
+    # A limit that is not a whole number is the caller's mistake, answered as
+    # one: int("abc") inside the build was a 500.
+    try:
+        limit = int(payload.get("limit") or screener_mod.DEFAULT_LIMIT)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="The limit is a whole number of rows.")
+
     def build() -> Dict[str, Any]:
         ranking = _cached_ranking()
         job = _ensure_ranking(ranking)
@@ -4815,7 +4822,7 @@ async def screener_run(payload: Dict[str, Any] = Body(default={})) -> Dict[str, 
             states=payload.get("states"),
             sort=str(payload.get("sort") or "score"),
             direction=str(payload.get("direction") or "desc"),
-            limit=int(payload.get("limit") or screener_mod.DEFAULT_LIMIT),
+            limit=limit,
         )
         if job is not None:
             out["building"] = job

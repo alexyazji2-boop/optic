@@ -311,8 +311,11 @@ def test_it_is_inside_the_market_hours_gate():
     loop = main[main.index("async def _tracker_loop()"):]
     loop = loop[:loop.index("\n@app.on_event")]
     gate = loop.index("if not is_open and not just_closed:")
-    assert loop.index("WATCH_AUTO") > gate
+    # The watch runner's own condition, not the first WATCH_AUTO: the briefing's
+    # post-close readings share the flag and sit above the gate on purpose,
+    # because the candle they follow settles after the close.
     assert "if WATCH_AUTO and (is_open or just_closed):" in loop
+    assert loop.index("if WATCH_AUTO and (is_open or just_closed):") > gate
     block = loop[loop.index("if WATCH_AUTO and (is_open or just_closed):"):]
     assert "if just_closed or last_watch is None" in block[:400], \
         "the closing pass must not wait for the interval"
