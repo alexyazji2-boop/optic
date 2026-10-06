@@ -59,6 +59,7 @@ import numpy as np
 import pandas as pd
 
 from .. import session as session_mod
+from . import quotes
 
 ET = session_mod.ET
 
@@ -2558,9 +2559,14 @@ def contracts_for(chain: Optional[pd.DataFrame], spot: Optional[float], bull: bo
     if chain is None or chain.empty or spot is None:
         return {**base, "available": False, "reason": "No option chain could be read for this symbol.",
                 "considered": 0, "passed": 0, "dropped": {}, "contracts": []}
-    pool = chain[chain["is_call"] == bull].copy()
-    considered = int(len(pool))
-    dropped: Dict[str, int] = {}
+    side_rows = chain[chain["is_call"] == bull]
+    considered = int(len(side_rows))
+    # Usable quotes first, by the screen every contract choice shares: a bid and
+    # an ask above zero, not crossed, a known contract size, and a dated quote
+    # not stale where the feed dates them. Mid and spread are recomputed from
+    # that bid and ask. Then the reader's own filters.
+    pool, screened = quotes.usable(side_rows, None, now)
+    dropped: Dict[str, int] = dict(screened.get("dropped") or {})
 
     def keep(mask, why):
         nonlocal pool
@@ -2572,8 +2578,8 @@ def contracts_for(chain: Optional[pd.DataFrame], spot: Optional[float], bull: bo
          "{} to {} days to expiry".format(f["dte_min"], f["dte_max"]))
     keep(pool["open_interest"] >= f["min_oi"], "open interest at least {}".format(f["min_oi"]))
     keep(pool["volume"] >= f["min_volume"], "volume today at least {}".format(f["min_volume"]))
-    keep((pool["spread_pct"] <= f["max_spread_pct"]) & (pool["bid"] > 0),
-         "a bid, and a spread at most {:g}% of the mid".format(f["max_spread_pct"]))
+    keep(pool["spread_pct"] <= f["max_spread_pct"],
+         "a spread at most {:g}% of the mid".format(f["max_spread_pct"]))
     if "delta" in pool.columns:
         d = pool["delta"].abs()
         keep((d >= f["delta_min"]) & (d <= f["delta_max"]),
@@ -2618,13 +2624,14 @@ def contracts_for(chain: Optional[pd.DataFrame], spot: Optional[float], bull: bo
             "theta": None if filled else num(r.get("theta"), 3),
             "vega": None if filled else num(r.get("vega"), 3),
             "last_trade": last_trade,
-            "cost_for_one": num(float(r["mid"]) * 100.0, 0),
+            "cost_for_one": num(float(r["mid"]) * float(r.get("multiplier") or 100.0), 0),
             "breakeven": num(float(r["strike"]) + float(r["mid"]) if bull
                              else float(r["strike"]) - float(r["mid"]), 2),
             "through_earnings": bool(earn and date.fromisoformat(expiry[:10]) >= earn and earn >= today),
         })
     return {**base, "available": True, "considered": considered, "passed": int(len(pool)),
             "shown": len(rows), "dropped": dropped, "contracts": rows, "fetched_at": fetched,
+            "quote_times": screened.get("quote_times"),
             "order": "by expiry, then strike. Not ranked: no contract here is called the best."}
 
 

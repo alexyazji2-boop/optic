@@ -15,6 +15,7 @@ import pandas as pd
 
 from ..news import (age_phrase, count_words, material_catalyst,
                     pending_catalyst)
+from . import quotes
 from .entry import BUDGET_MIN_DELTA, iv_context
 from .series_stats import relative_strength
 
@@ -146,17 +147,17 @@ def _macro_score(macro: Optional[Dict[str, Any]]) -> Optional[float]:
 
 
 def _pick(chain: pd.DataFrame, is_call: bool, expiry: str, target_delta: float):
-    """Closest liquid contract to a target delta on a given expiry."""
-    side = chain[(chain["is_call"] == is_call) & (chain["expiry"] == expiry)].copy()
-    if side.empty:
+    """Closest liquid contract to a target delta on a given expiry, or None.
+
+    Liquid by the shared screen (app/analytics/quotes.py): a usable two-sided
+    quote, open interest or volume of at least 20, and a spread of at most 15%
+    of the midpoint. It used to fall back to any contract with a delta when
+    none passed, so an idea could be built from a leg nobody was trading; with
+    nothing liquid at a delta now, there is no idea at that delta."""
+    pool = _tradable(chain, is_call, expiry)
+    if pool.empty:
         return None
-    side = side[side["delta"].notna()]
-    if side.empty:
-        return None
-    side["delta_gap"] = (side["delta"].abs() - abs(target_delta)).abs()
-    # Prefer contracts that can actually be filled.
-    liquid = side[(side["open_interest"] >= 20) | (side["volume"] >= 20)]
-    pool = liquid if not liquid.empty else side
+    pool["delta_gap"] = (pool["delta"].abs() - abs(target_delta)).abs()
     return pool.nsmallest(1, "delta_gap").iloc[0]
 
 
@@ -302,12 +303,12 @@ def _for_one(idea: Dict[str, Any], budget: Optional[float]) -> Dict[str, Any]:
 
 
 def _tradable(chain: pd.DataFrame, is_call: bool, expiry: str) -> pd.DataFrame:
-    """One side of one expiry the way `_pick` chooses from it: priced, with a
-    delta, and only the liquid contracts whenever there are any."""
+    """One side of one expiry, the contracts an idea may be built from: a delta,
+    and liquid by the shared screen. Empty when none are; never relaxed."""
     side = chain[(chain["is_call"] == is_call) & (chain["expiry"] == expiry)]
-    side = side[side["delta"].notna() & (side["mid"] > 0)]
-    liquid = side[(side["open_interest"] >= 20) | (side["volume"] >= 20)]
-    return (liquid if not liquid.empty else side).copy()
+    side = side[side["delta"].notna()]
+    pool, _report = quotes.screen(side, None, quotes.IDEA_MIN_ACTIVITY, quotes.MAX_SPREAD_PCT)
+    return pool[pool["mid"] > 0].copy() if not pool.empty else pool.copy()
 
 
 def _fit_single(idea: Optional[Dict[str, Any]], chain: pd.DataFrame, spot: float,

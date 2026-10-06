@@ -4557,7 +4557,7 @@ function renderSetup(d) {
       ${cell('Entry', zoneText, zoneText ? 'in the stock, not the option' : '')}
       ${cell('Contract', rec.strike
     ? `${fmt(rec.strike, 0)} ${String(rec.expiry || '').slice(0, 10)}`
-    : null, rec.entry_mid ? `about ${fmt(rec.entry_mid, 2)} per share` : '')}
+    : null, rec.entry_mid ? `mid about ${fmt(rec.entry_mid, 2)} a share, an estimate` : '')}
       ${cell('Cost for one', rec.strike && forOne ? usd(forOne, 0) : null,
     order.limit_price ? 'at the limit price, 100 shares' : '100 shares')}
       ${/* ep.target is an object, not a number: {target_price, target_source,
@@ -10955,11 +10955,16 @@ function renderSwing(d) {
     <h2>${hg('Buy calls / puts')}</h2>
     <p class="sub">Naked directional options. Quick-glance card in the same format as the strategies below.
       For a fully ranked set of strikes scored against a projected target, see the Strike &amp; Entry
-      Recommendation panel above. Strikes and premiums are live from the chain, filtered for liquidity.
-      Not recommendations. The sizing decision is yours.</p>
+      Recommendation panel above. Strikes and premiums are from the chain, each leg a contract with a
+      usable two-sided quote, open interest or volume of at least 20 and a spread of at most 15%; a delta
+      with nothing that liquid has no idea. Prices are midpoints between the bid and the ask: estimates,
+      not fills. Not recommendations. The sizing decision is yours.</p>
     ${budgetLine(d)}
-    ${renderIdeaList(d.naked_ideas, d,
-    '<div class="callout">No naked directional idea. The composite read is neutral, so buying a call or put outright has no edge. See the strategies below for range-bound or volatility-driven setups instead.</div>')}
+    ${renderIdeaList(d.naked_ideas, d, /bullish|bearish/.test(String((d.verdict || {}).stance || ''))
+    // A directional read with no idea is a chain with nothing liquid near 50
+    // delta, now that the legs are never taken from contracts the screen excluded.
+    ? '<div class="callout">No contract near 50 delta passes the liquidity screen on the nearest swing expiry, so there is no call or put to show.</div>'
+    : '<div class="callout">No naked directional idea. The composite read is neutral, so buying a call or put outright has no edge. See the strategies below for range-bound or volatility-driven setups instead.</div>')}
   </div>
 
   <div class="panel gap" id="swing-ideas-multi">
@@ -11461,6 +11466,29 @@ function overBudgetLine(ideas, d) {
     <button type="button" class="auth-link" data-goto-budget>Change the limit</button></p>`;
 }
 
+/* What the liquidity screen did, in one line under the plan.
+ *
+ * The screen used to relax itself when fewer than four contracts passed, so a
+ * thin chain was ranked from the contracts it had just excluded. It never does
+ * now, and this line is how a short or empty list explains itself: how many
+ * were considered, what the test was, what it removed, and whether the feed
+ * dates its quotes at all. */
+function renderLiquidityLine(p) {
+  const liq = (p && p.liquidity) || null;
+  if (!liq || !liq.criteria) return '';
+  const removed = Object.entries(liq.dropped || {}).sort((a, b) => b[1] - a[1])
+    .slice(0, 4).map(([why, n]) => `${esc(why)} (${n})`).join('; ');
+  const notes = (p.liquidity_notes || []).map((n) => esc(n)).join(' ');
+  return `<p class="eb-line liq-line">${liq.reason === 'illiquid'
+    ? `<strong>No contracts meet the liquidity criteria.</strong> None of the ${
+      fmt(liq.considered, 0)} considered has ${esc(liq.criteria)}.`
+    : `${fmt(liq.passed, 0)} of ${fmt(liq.considered, 0)} contracts with ${
+      fmt(liq.min_dte, 0)} days or more pass the liquidity screen: ${esc(liq.criteria)}.`}
+    ${removed ? `Removed: ${removed}.` : ''}
+    ${liq.quote_times ? `Quote times: ${esc(liq.quote_times)}.` : ''}
+    <span class="muted">${notes}</span></p>`;
+}
+
 function renderEntryPlan(p, d) {
   if (!p) return '';
 
@@ -11495,6 +11523,7 @@ function renderEntryPlan(p, d) {
     ${/* The note, not the control: the control is at the top of the tab, in
         * the Setup, and one copy of it is one place to look. */''}
     ${budgetLine(d, (p.affordability || {}).note)}
+    ${renderLiquidityLine(p)}
 
     <div class="callout info" style="font-size:var(--t-base);border-left-color:var(--good)">
       <strong>${esc(p.headline)}</strong>
@@ -11560,7 +11589,7 @@ function renderEntryPlan(p, d) {
       common outcome, and the reason deep-OTM contracts score badly here.</p>
     <table class="data">
       <thead><tr>
-        <th>#</th><th>Strike ($)</th><th>Expiry</th><th>Days left</th><th>Mid ($)</th><th>Cost for one ($)</th><th>Spread</th><th>Delta</th><th>Theta ($/day)</th>
+        <th>#</th><th>Strike ($)</th><th>Expiry</th><th>Days left</th><th>Mid, est. ($)</th><th>Cost for one ($)</th><th>Spread</th><th>Delta</th><th>Theta ($/day)</th>
         <th>Breakeven</th><th>At target</th><th>IV −20%</th><th>If flat</th><th>Half against</th><th>OI</th>
       </tr></thead>
       <tbody>${(p.candidates || []).map((c) => `<tr${c.rank === 1 ? ' style="background:var(--surface-2)"' : ''}>

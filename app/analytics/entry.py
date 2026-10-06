@@ -13,12 +13,13 @@ ATR and chart structure, and every assumption is returned alongside the numbers.
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 
 from ..news import material_catalyst, pending_catalyst
+from . import quotes
 from .greeks import bs_price
 
 TRADING_DAYS = 252
@@ -353,40 +354,65 @@ def project_target(
 # ------------------------------------------------------------ strike ranking
 
 
-def _contract_pool(
+def contract_pool(
     frame: pd.DataFrame, direction: str, target: Dict[str, Any],
-) -> Optional[pd.DataFrame]:
-    """The contracts the ranker may choose from, before the delta band.
+) -> Tuple[Optional[pd.DataFrame], Dict[str, Any]]:
+    """The contracts the ranker may choose from, before the delta band, and why
+    there are no more of them.
 
-    The right side, enough time left, and liquid enough to get in and out of.
-    Its own function because the cost limit asks two questions of the same
-    pool: which contracts fit, and, when none do, what the cheapest one costs.
+    The right side, enough time left, a usable quote, and liquid enough to get
+    in and out of (see app/analytics/quotes.py). Its own function because the
+    cost limit asks two questions of the same pool: which contracts fit, and,
+    when none do, what the cheapest one costs.
+
+    **It never relaxes.** It used to rank the whole side of the chain when
+    fewer than four contracts passed the liquidity test, so a thin chain was
+    answered with the contracts the test had just excluded, and the plan's
+    headline recommended one. Fewer passing means fewer candidates now, and
+    none means the plan says no contract meets the criteria.
     """
-    if frame is None or frame.empty or not target.get("available"):
-        return None
+    side_word = "call" if direction == "up" else "put"
+    if frame is None or frame.empty:
+        return None, {"reason": "no_chain", "text": "No options chain to choose from."}
+    if not target.get("available"):
+        return None, {"reason": "no_target",
+                      "text": "No price target to measure a contract against."}
 
     is_call = direction == "up"
     hold_days = int(target.get("estimated_calendar_days") or 21)
 
     side = frame[frame["is_call"] == is_call].copy()
     if side.empty:
-        return None
+        return None, {"reason": "no_side", "text": "No {}s on this chain.".format(side_word)}
 
     # Buy more time than the thesis needs: an option that expires the week the
     # move is due leaves no room for the move to arrive late, which it usually does.
     min_dte = max(21, hold_days + 10)
-    side = side[(side["mid"] > 0.05) & (side["dte"] >= min_dte)]
+    side = side[side["dte"] >= min_dte]
     if side.empty:
-        return None
+        return None, {"reason": "no_time", "min_dte": min_dte,
+                      "text": "No {} on this chain has the {} days left this setup "
+                              "needs.".format(side_word, min_dte)}
 
-    # Only contracts that can be entered and exited: a wide spread eats the edge
-    # before the thesis has a chance.
-    liquid = side[
-        ((side["open_interest"] >= 50) | (side["volume"] >= 50))
-        & (side["spread_pct"].fillna(99) <= 15)
-    ]
-    pool = liquid if len(liquid) >= 4 else side
-    return None if pool.empty else pool
+    # Only contracts that can be entered and exited: a usable two-sided quote,
+    # some trading interest, and a spread that does not eat the edge before the
+    # thesis has a chance.
+    pool, report = quotes.screen(side, None, quotes.PLAN_MIN_ACTIVITY, quotes.MAX_SPREAD_PCT)
+    pool = pool[pool["mid"] > 0.05] if not pool.empty else pool
+    report["min_dte"] = min_dte
+    if pool.empty:
+        report["reason"] = "illiquid"
+        report["text"] = quotes.describe_empty(report, side_word)
+        return None, report
+    report["text"] = ("{} of {} {}s with {} days or more pass: {}.".format(
+        len(pool), report["considered"], side_word, min_dte, report["criteria"]))
+    return pool, report
+
+
+def _contract_pool(
+    frame: pd.DataFrame, direction: str, target: Dict[str, Any],
+) -> Optional[pd.DataFrame]:
+    return contract_pool(frame, direction, target)[0]
 
 
 def cheapest_in_reach(
@@ -510,7 +536,7 @@ def rank_strikes(
                 # number in the table is a hundredth of what leaves the account.
                 # Carried on the row rather than left for the reader to multiply,
                 # because the multiplication is exactly what gets skipped.
-                "cost_per_contract": _f(entry * 100.0, 0),
+                "cost_per_contract": _f(entry * float(row.get("multiplier") or 100.0), 0),
                 "value_at_target": _f(base, 2),
                 "return_at_target_pct": _f(ret, 1),
                 "value_if_iv_drops_20pct": _f(crushed, 2),
@@ -518,7 +544,7 @@ def rank_strikes(
                 "value_if_flat": _f(flat, 2),
                 "return_if_flat_pct": _f((flat / entry - 1.0) * 100.0, 1),
                 "return_if_half_against_pct": _f((against / entry - 1.0) * 100.0, 1),
-                "capital_per_contract": _f(entry * 100.0, 2),
+                "capital_per_contract": _f(entry * float(row.get("multiplier") or 100.0), 2),
                 # Only a cost limit puts a contract here, by stretching the band
                 # down to BUDGET_MIN_DELTA. Carried so the panel can say why the
                 # row is further from the price than the rest of the plan wants.
@@ -775,6 +801,10 @@ def build_plan(
         }
 
     target = project_target(spot, direction, technicals, gex)
+    # What the chain offers before anything is ranked: how many contracts were
+    # considered, what each liquidity test removed, and why nothing is left
+    # when nothing is. Carried on the plan so an empty list explains itself.
+    _pool, liquidity = contract_pool(frame, direction, target)
     candidates = rank_strikes(frame, spot, direction, target, rate, div)
     # What the account can actually place, before anything is recommended.
     #
@@ -915,9 +945,9 @@ def build_plan(
         order = {
             "limit_price": limit,
             "never_pay_more_than": ceiling,
-            "note": "Place a limit order at {}, {} the mid price of {}. The midpoint "
-            "between the best bid and the best ask. The bid/ask spread is {}% of that mid, "
-            "which is {}".format(
+            "note": "Place a limit order at {}, {} the mid price of {}: the midpoint "
+            "between the best bid and the best ask, an estimate rather than a price anybody "
+            "has offered. The bid/ask spread is {}% of that mid, which is {}".format(
                 _usd(limit), "just above" if limit > mid else "at", _usd(mid),
                 _f(best["spread_pct"], 1),
                 "wide enough that paying the ask outright can cost more than a whole day's "
@@ -1037,9 +1067,13 @@ def build_plan(
         # The trigger clause qualifies a contract, and with none it printed on
         # its own: "but only on a pullback in the stock to $719.56 – $725.05."
         # was the whole headline whenever a cost limit or a thin chain left the
-        # list empty.
-        headline = (affordability.get("note") if affordability.get("filtered") else "") or (
-            "No {} on this chain suits the setup.".format("call" if bullish else "put"))
+        # list empty. A chain with nothing liquid says that, with its numbers,
+        # rather than the vaguer "suits".
+        if liquidity.get("reason") in ("illiquid", "no_time", "no_side"):
+            headline = liquidity.get("text")
+        else:
+            headline = (affordability.get("note") if affordability.get("filtered") else "") or (
+                "No {} on this chain suits the setup.".format("call" if bullish else "put"))
 
     return {
         "actionable": True,
@@ -1049,6 +1083,8 @@ def build_plan(
         "headline": headline,
         "recommended": best,
         "candidates": candidates,
+        "liquidity": {k: v for k, v in liquidity.items() if k != "notes"},
+        "liquidity_notes": liquidity.get("notes") or [quotes.NOT_A_FILL, quotes.OI_CAVEAT],
         "target": target,
         "entry_options": entries,
         "affordability": affordability,
@@ -1090,6 +1126,8 @@ def build_plan(
                 target.get("estimated_calendar_days")
             ),
             "Greeks come from Black-Scholes at a {:.2%} risk-free rate on delayed quotes.".format(rate),
-            "Mid prices assume you can fill near the midpoint, which is optimistic on wide spreads.",
+            "Mid prices are estimates halfway between the bid and the ask, not prices anybody has "
+            "offered; a fill can be worse, and on a wide spread usually is.",
+            "Open interest and volume show trading interest, not that an order will fill.",
         ],
     }

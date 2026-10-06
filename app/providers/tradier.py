@@ -280,6 +280,16 @@ class TradierProvider(MarketDataProvider):
                             "open_interest": _f(c.get("open_interest")),
                             "iv": iv,
                             "is_call": (c.get("option_type") or "").lower() == "call",
+                            # When each side of the quote was set, in epoch
+                            # milliseconds, and how many shares one contract
+                            # delivers: the two facts the quote screen in
+                            # app/analytics/quotes.py can only use when a
+                            # provider states them.
+                            "bid_time": pd.to_datetime(c.get("bid_date"), unit="ms", utc=True, errors="coerce")
+                            if c.get("bid_date") else pd.NaT,
+                            "ask_time": pd.to_datetime(c.get("ask_date"), unit="ms", utc=True, errors="coerce")
+                            if c.get("ask_date") else pd.NaT,
+                            "multiplier": _f(c.get("contract_size")),
                         }
                     )
 
