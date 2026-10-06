@@ -129,6 +129,17 @@ def record_hit(row: Dict[str, Any], result: Dict[str, Any],
     return True
 
 
+def signal_record(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The immutable record a fired swing_setup result describes, or None."""
+    row = result.get("setup_row")
+    if not row or not row.get("key") or not (row.get("trigger") or {}).get("stamp"):
+        return None
+    return signal_history.record_from_row(
+        row, data_as_of=result.get("setup_as_of") or row.get("as_of") or "",
+        params=result.get("setup_params") or {},
+        trigger_completed_at=(row.get("trigger") or {}).get("completed_at"))
+
+
 def record_signal(user_id: str, result: Dict[str, Any], origin: str,
                   when: Optional[datetime] = None) -> Optional[str]:
     """A swing-setup alert that fired, into the reader's signal history.
@@ -137,14 +148,10 @@ def record_signal(user_id: str, result: Dict[str, Any], origin: str,
     history records what was known when the trigger was seen. The signal's own
     key dedupes it, so the same trigger reached by the schedule and by the
     page's check is one record."""
-    row = result.get("setup_row")
-    if not row or not row.get("key"):
+    rec = signal_record(result)
+    if not rec:
         return None
     try:
-        rec = signal_history.record_from_row(
-            row, data_as_of=result.get("setup_as_of") or row.get("as_of") or "",
-            params=result.get("setup_params") or {},
-            trigger_completed_at=(row.get("trigger") or {}).get("completed_at"))
         return signal_history.record(user_id, rec, origin, when)
     except Exception as exc:                              # noqa: BLE001
         log.warning("signal not recorded for %s: %s", row.get("key"), exc)

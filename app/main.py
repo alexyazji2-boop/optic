@@ -521,7 +521,7 @@ def _swing_snapshot(
     exposure: Optional[pd.DataFrame] = None
 
     if chain is not None and not chain.empty:
-        gex_read = gex_mod.analyse(chain, spot, rate=RISK_FREE, div=div)
+        gex_read = gex_mod.analyse(chain, spot, rate=RISK_FREE, div=div, ticker=ticker)
         exposure = gex_read.pop("_exposure_frame", None)
         if exposure is not None:
             greeks_read = greeks_panel.analyse(exposure, spot)
@@ -1149,11 +1149,14 @@ async def signals_followup(body: Dict[str, Any] = Body(default={})) -> Dict[str,
     def build() -> Dict[str, Any]:
         bars = _signal_bars([c["symbol"] for c in clean])
         out = {}
+        horizons = {}
         for c in clean:
-            out[c["key"]] = signal_history.followup_events(
+            evs = signal_history.followup_events(
                 c, bars.get(c["symbol"]), signal_history._signal_ttl(c))
-        return {"events": out, "observed_at": datetime.now(timezone.utc).isoformat(),
-                "basis": SIGNAL_BASIS}
+            out[c["key"]] = evs
+            horizons[c["key"]] = signal_history.horizon_states(c, evs)
+        return {"events": out, "horizons": horizons,
+                "observed_at": datetime.now(timezone.utc).isoformat(), "basis": SIGNAL_BASIS}
 
     return await _run(build)
 
@@ -1520,10 +1523,14 @@ async def watch_check(request: Request, body: Dict[str, Any] = Body(default={}))
         # A signed-in reader's swing-setup alert that this check found firing
         # goes into their signal history now, as the scheduled runner would
         # have it. A guest's is kept by the page, in this browser.
-        if user:
-            for res in results:
-                if res.get("met") and res.get("kind") == "swing_setup":
+        for res in results:
+            if res.get("met") and res.get("kind") == "swing_setup":
+                if user:
                     watch_runner.record_signal(user["id"], res, "alert check on the page")
+                # The same record, for a guest's browser to keep: built here, by
+                # the one function the account path uses, so the two cannot
+                # describe one trigger differently.
+                res["signal_record"] = watch_runner.signal_record(res)
         return {
             "ticker": ticker,
             "checked_at": datetime.now(timezone.utc).isoformat(),

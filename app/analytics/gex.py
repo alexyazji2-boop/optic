@@ -1,19 +1,50 @@
-"""Dealer gamma / delta exposure (GEX / DEX) from an options chain.
+"""Dealer gamma, delta, vanna and charm exposure (GEX, DEX, VEX, CEX) from a chain.
 
-SIGN CONVENTION (this matters, and every vendor picks their own):
-we assume the dealer is *short* customer calls and *long* customer puts, the
-standard retail-flow assumption. That gives
+**The model's assumption, stated once and used everywhere.** Dealers (the market
+makers on the other side of customer orders) are assumed to be LONG every call
+customers have sold to them and SHORT every put customers have bought from them.
+That is the common retail convention (customers write calls against stock and
+buy puts for protection), and it is an assumption: open interest says how many
+contracts are open at a strike, not who holds which side of them, so nothing
+here is observed dealer inventory. Under it, each contract's exposure is the
+dealer's own:
 
-    call GEX = +gamma * OI * contract_multiplier * S^2 * 0.01
-    put  GEX = -gamma * OI * contract_multiplier * S^2 * 0.01
+    call  GEX = +gamma x OI x multiplier x S^2 x 0.01     (long a call: long gamma)
+    put   GEX = -gamma x OI x multiplier x S^2 x 0.01     (short a put: short gamma)
 
-so positive net GEX = dealers hedge *against* the move (vol suppression,
-mean reversion, ranges hold) and negative net GEX = dealers hedge *with* the
-move (vol expansion, trends extend, breakouts run). Every number returned is
-"dollars of dealer delta that must be hedged per 1% move in spot".
+**What a sign means.** Positive net GEX is dealers net LONG gamma. To stay
+delta-neutral a long-gamma book sells as the price rises and buys as it falls,
+which leans against moves: ranges tend to hold. Negative net GEX is dealers
+net SHORT gamma, whose hedge buys rises and sells falls, adding to moves:
+trends tend to extend. The flip point is the spot price at which the sign of
+net GEX changes, re-priced at each level, and it is reported with the direction
+it crosses in, because "above the flip, dealers dampen" is only true of a
+crossing from negative below to positive above.
 
-The assumption is stated explicitly in the payload so it can be flipped rather
-than silently believed.
+**Units.** Every exposure is in dollars of the dealer's delta (shares of delta
+valued at today's spot), with gamma per $1 and per share, open interest in
+contracts and the multiplier in shares per contract:
+
+* GEX: change in dealer delta, in dollars, for a 1% move in spot: the stock the
+  hedge has to trade to stay neutral after that move.
+* DEX: the dealer's option delta, in dollars (delta x OI x multiplier x S).
+  Under this convention it is never negative (a long call and a short put both
+  carry positive delta), and the dealer's stock hedge is the opposite sign.
+* VEX: change in dealer delta, in dollars, for a 1 point rise in implied vol.
+* CEX: change in dealer delta, in dollars, for one calendar day passing.
+
+**Contract size.** The provider's stated size where it gives one (Tradier's
+contract_size), 100 shares for a contract whose symbol's root is the ticker's,
+and otherwise unknown: an adjusted contract (TSLA1 rather than TSLA) after a
+split or merger can deliver something other than 100 shares, so it is left out
+of every exposure and counted rather than multiplied by a number that is
+probably wrong. See app/analytics/quotes.py.
+
+**What open interest cannot establish**, and so what no number here claims: who
+is long and who is short; positions opened or closed today (open interest is
+the last session's); whether dealers hedge, how much, or with what; positions
+held away from dealers, and trades between two customers; and the deliverable
+of an adjusted contract.
 """
 
 from __future__ import annotations
@@ -23,9 +54,41 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 
+from . import quotes
 from .greeks import greeks
 
-CONTRACT_MULTIPLIER = 100.0
+# Kept for callers that import it. A contract's own size is used wherever it is
+# known; see the module docstring.
+CONTRACT_MULTIPLIER = quotes.STANDARD_MULTIPLIER
+
+ASSUMPTION = ("Model assumption, not observed positions: dealers are long the calls "
+              "customers sold and short the puts customers bought, so calls count as "
+              "positive gamma exposure and puts as negative. Open interest shows how "
+              "many contracts are open, not who holds which side.")
+
+CONVENTION = {
+    "positions": "Dealers long customer-sold calls, short customer-bought puts.",
+    "represents": "The dealer's own exposure under that assumption, not the customer's.",
+    "positive": ("Dealers net long gamma: hedging sells rises and buys falls, which "
+                 "leans against moves."),
+    "negative": ("Dealers net short gamma: hedging buys rises and sells falls, which "
+                 "adds to moves."),
+    "units": {
+        "gex": "dollars of dealer delta per 1% move in spot",
+        "dex": "dollars of dealer option delta; the stock hedge is the opposite sign",
+        "vex": "dollars of dealer delta per 1 point rise in implied volatility",
+        "cex": "dollars of dealer delta per calendar day",
+    },
+    "multiplier": ("Shares per contract: the provider's stated size, 100 for a standard "
+                   "contract, and an adjusted contract of unstated size left out."),
+    "cannot_establish": [
+        "who holds which side of a contract",
+        "positions opened or closed today",
+        "whether, how much and with what dealers hedge",
+        "positions held away from dealers, or trades between customers",
+        "an adjusted contract's deliverable",
+    ],
+}
 
 
 def _f(value: Any) -> Optional[float]:
@@ -38,12 +101,19 @@ def _f(value: Any) -> Optional[float]:
     return None if not np.isfinite(out) else out
 
 
-def compute_exposure(chain: pd.DataFrame, spot: float, rate: float = 0.0, div: float = 0.0) -> pd.DataFrame:
-    """Attach greeks and signed dollar exposures to a normalized chain frame.
+def compute_exposure(chain: pd.DataFrame, spot: float, rate: float = 0.0, div: float = 0.0,
+                     ticker: Optional[str] = None) -> pd.DataFrame:
+    """Attach greeks and the dealer's signed dollar exposures to a chain frame.
 
     ``chain`` needs columns: strike, tau, iv, open_interest, volume, is_call.
-    """
+    Rows whose contract size cannot be known (an adjusted contract with no
+    stated size) are dropped, and the frame's ``attrs["unknown_size"]`` says
+    how many."""
     df = chain.copy()
+    size = quotes.multipliers(df, ticker)
+    unknown = int(size.isna().sum())
+    df = df[size.notna()].copy()
+    df["multiplier"] = size[size.notna()].to_numpy()
     g = greeks(
         spot,
         df["strike"].to_numpy(),
@@ -56,23 +126,27 @@ def compute_exposure(chain: pd.DataFrame, spot: float, rate: float = 0.0, div: f
     for name in ("delta", "gamma", "vega", "theta", "vanna", "charm"):
         df[name] = g[name]
 
+    # +1 for a call (dealer long it), -1 for a put (dealer short it).
     sign = np.where(df["is_call"].to_numpy(), 1.0, -1.0)
     oi = df["open_interest"].fillna(0.0).to_numpy()
     vol = df["volume"].fillna(0.0).to_numpy()
+    mult = df["multiplier"].to_numpy(dtype=float)
 
-    # Gamma exposure in $ of dealer delta per 1% spot move.
-    df["gex"] = sign * df["gamma"].to_numpy() * oi * CONTRACT_MULTIPLIER * spot * spot * 0.01
-    df["gex_volume"] = sign * df["gamma"].to_numpy() * vol * CONTRACT_MULTIPLIER * spot * spot * 0.01
+    # Dealer delta change, in dollars, for a 1% move in spot.
+    df["gex"] = sign * df["gamma"].to_numpy() * oi * mult * spot * spot * 0.01
+    df["gex_volume"] = sign * df["gamma"].to_numpy() * vol * mult * spot * spot * 0.01
 
-    # Delta exposure in $ notional of dealer hedge.
-    df["dex"] = sign * df["delta"].to_numpy() * oi * CONTRACT_MULTIPLIER * spot
+    # The dealer's own option delta in dollars. Never negative under this
+    # convention; the hedge in stock is the opposite sign.
+    df["dex"] = sign * df["delta"].to_numpy() * oi * mult * spot
 
-    # Vanna / charm exposure, the two flows that drive drift into opex.
-    df["vex"] = sign * df["vanna"].to_numpy() * oi * CONTRACT_MULTIPLIER * spot
-    df["cex"] = sign * df["charm"].to_numpy() * oi * CONTRACT_MULTIPLIER * spot
+    # Dealer delta change in dollars per vol point (vanna) and per day (charm).
+    df["vex"] = sign * df["vanna"].to_numpy() * oi * mult * spot
+    df["cex"] = sign * df["charm"].to_numpy() * oi * mult * spot
 
-    df["notional_oi"] = oi * CONTRACT_MULTIPLIER * df["strike"].to_numpy()
-    df["premium_traded"] = vol * CONTRACT_MULTIPLIER * df["mid"].fillna(df["last"]).fillna(0.0).to_numpy()
+    df["notional_oi"] = oi * mult * df["strike"].to_numpy()
+    df["premium_traded"] = vol * mult * df["mid"].fillna(df["last"]).fillna(0.0).to_numpy()
+    df.attrs["unknown_size"] = unknown
     return df
 
 
@@ -94,7 +168,9 @@ def _gamma_at_spot(df: pd.DataFrame, test_spot: float, rate: float, div: float) 
     )
     sign = np.where(df["is_call"].to_numpy(), 1.0, -1.0)
     oi = df["open_interest"].fillna(0.0).to_numpy()
-    exposure = sign * g["gamma"] * oi * CONTRACT_MULTIPLIER * test_spot * test_spot * 0.01
+    mult = (df["multiplier"].to_numpy(dtype=float) if "multiplier" in df.columns
+            else np.full(len(df), quotes.STANDARD_MULTIPLIER))
+    exposure = sign * g["gamma"] * oi * mult * test_spot * test_spot * 0.01
     return float(np.nansum(exposure))
 
 
@@ -106,12 +182,17 @@ def gamma_profile(
     span_pct: float = 0.12,
     steps: int = 61,
 ) -> Dict[str, Any]:
-    """Net GEX as a function of spot, plus the zero-crossing (gamma flip)."""
+    """Net GEX as a function of spot, plus the zero-crossing (gamma flip).
+
+    The crossing nearest spot, with its direction: "upward" when net GEX is
+    negative below the flip and positive above it, "downward" the reverse.
+    Only an upward crossing supports "above the flip dealers dampen moves"."""
     lo, hi = spot * (1 - span_pct), spot * (1 + span_pct)
     grid = np.linspace(lo, hi, steps)
     values = [_gamma_at_spot(df, float(s), rate, div) for s in grid]
 
     flip: Optional[float] = None
+    direction: Optional[str] = None
     for i in range(1, len(values)):
         a, b = values[i - 1], values[i]
         if np.isfinite(a) and np.isfinite(b) and a * b < 0:
@@ -121,13 +202,22 @@ def gamma_profile(
             # Keep whichever crossing sits closest to spot.
             if flip is None or abs(candidate - spot) < abs(flip - spot):
                 flip = candidate
+                direction = "upward" if b > a else "downward"
 
     return {
         "spots": [round(float(s), 4) for s in grid],
         "net_gex": [_f(v) for v in values],
         "flip_point": None if flip is None else round(flip, 4),
         "flip_distance_pct": None if flip is None else round((flip / spot - 1.0) * 100.0, 3),
+        "flip_direction": direction,
     }
+
+
+def _level(row: Optional[pd.Series], spot: float, key: str = "gex") -> Optional[Dict[str, Any]]:
+    if row is None:
+        return None
+    return {"strike": float(row["strike"]), key: float(row["net_gex"] if key == "gex" else row["abs_gex"]),
+            "distance_pct": round((float(row["strike"]) / spot - 1.0) * 100.0, 3)}
 
 
 def analyse(
@@ -136,12 +226,16 @@ def analyse(
     rate: float = 0.0,
     div: float = 0.0,
     top_n: int = 14,
+    ticker: Optional[str] = None,
 ) -> Dict[str, Any]:
     """GEX/DEX analysis for the (already expiry-filtered) chain."""
     if chain is None or chain.empty:
         return {"error": "empty options chain"}
 
-    df = compute_exposure(chain, spot, rate, div)
+    df = compute_exposure(chain, spot, rate, div, ticker)
+    unknown = int(df.attrs.get("unknown_size") or 0)
+    if df.empty:
+        return {"error": "no contract on this chain has a known size"}
 
     by_strike = (
         df.groupby("strike")
@@ -166,44 +260,62 @@ def analyse(
 
     profile = gamma_profile(df, spot, rate, div)
 
-    # Walls: heaviest positive (call) and heaviest negative (put) gamma strikes.
-    pos = by_strike[by_strike["net_gex"] > 0]
-    neg = by_strike[by_strike["net_gex"] < 0]
-    call_wall = pos.loc[pos["net_gex"].idxmax()] if not pos.empty else None
-    put_wall = neg.loc[neg["net_gex"].idxmin()] if not neg.empty else None
+    # Walls, on the side of spot each is named for. The call wall is the
+    # heaviest positive net GEX at or above spot: long dealer gamma there leans
+    # against a rally into it. The put wall is the heaviest negative net GEX at
+    # or below spot: short dealer gamma there adds to a fall through it, which
+    # is why it is not called support here. Both used to be taken from either
+    # side of spot, so a "ceiling" could sit under the price.
+    above = by_strike[(by_strike["strike"] >= spot) & (by_strike["net_gex"] > 0)]
+    below = by_strike[(by_strike["strike"] <= spot) & (by_strike["net_gex"] < 0)]
+    call_wall = above.loc[above["net_gex"].idxmax()] if not above.empty else None
+    put_wall = below.loc[below["net_gex"].idxmin()] if not below.empty else None
     max_oi_strike = by_strike.loc[(by_strike["call_oi"] + by_strike["put_oi"]).idxmax()]
 
-    # Absolute-gamma peak = the strike price is most magnetically pinned to.
-    pin = by_strike.loc[by_strike["abs_gex"].idxmax()]
+    # The pin is where long dealer gamma is heaviest, because only long gamma
+    # pins: hedging it sells above and buys below. It used to be the largest
+    # exposure of either sign, which on a put-heavy chain named a strike where
+    # hedging pushes price away rather than pulling it in.
+    positive = by_strike[by_strike["net_gex"] > 0]
+    pin = positive.loc[positive["net_gex"].idxmax()] if not positive.empty else None
 
-    regime = "positive" if total_gex > 0 else "negative"
+    regime = "positive" if total_gex > 0 else "negative" if total_gex < 0 else "flat"
     flip = profile["flip_point"]
 
     if regime == "positive":
         regime_note = (
-            "Positive net GEX: dealers are long gamma and hedge against direction . "
-            "Expect mean reversion, suppressed realized vol, and ranges that hold. "
-            "Favours selling premium / spreads over naked directional longs."
+            "Positive net GEX: under the model's assumption dealers are net long gamma, so "
+            "their hedging sells rises and buys falls. Expect mean reversion, suppressed "
+            "realized vol and ranges that hold. Favours selling premium and spreads over "
+            "naked directional longs."
         )
         swing_note = (
-            "For swings, buy dips toward the put wall and fade rips into the call wall. "
-            "Breakouts need a catalyst to overcome hedging drag."
+            "For swings, rallies into the call wall tend to stall and breakouts need a "
+            "catalyst to overcome hedging drag. The put wall below is where negative gamma "
+            "is heaviest: a fall that reaches it is where hedging stops resisting and "
+            "starts adding to the move."
+        )
+    elif regime == "negative":
+        regime_note = (
+            "Negative net GEX: under the model's assumption dealers are net short gamma, so "
+            "their hedging buys rises and sells falls. Expect vol expansion, trend "
+            "continuation and larger daily ranges. Favours long premium and directional swings."
+        )
+        swing_note = (
+            "For swings, momentum breakouts tend to extend rather than revert. Long calls "
+            "and puts get help from hedging flows instead of fighting them, and a stop gets "
+            "hit faster when the move turns."
         )
     else:
-        regime_note = (
-            "Negative net GEX: dealers are short gamma and hedge with direction . "
-            "Expect vol expansion, trend continuation, and larger daily ranges. "
-            "Favours long premium and directional swings."
-        )
-        swing_note = (
-            "For swings, momentum breakouts extend rather than revert. "
-            "Long calls/puts get help from dealer hedging instead of fighting it."
-        )
+        regime_note = "Net GEX is zero: the model's call and put exposure cancel at this price."
+        swing_note = "No hedging lean either way at this price under the model."
 
     top = by_strike.nlargest(top_n, "abs_gex").sort_values("strike")
 
     return {
-        "assumption": "dealers short customer calls, long customer puts (calls +GEX, puts -GEX)",
+        "assumption": ASSUMPTION,
+        "convention": CONVENTION,
+        "excluded_contracts": unknown,
         "spot": round(float(spot), 4),
         "totals": {
             "net_gex": total_gex,
@@ -221,25 +333,17 @@ def analyse(
             "swing_implication": swing_note,
             "flip_point": flip,
             "flip_distance_pct": profile["flip_distance_pct"],
+            "flip_direction": profile.get("flip_direction"),
             "above_flip": None if flip is None else bool(spot > flip),
         },
         "levels": {
-            "call_wall": None
-            if call_wall is None
-            else {
-                "strike": float(call_wall["strike"]),
-                "gex": float(call_wall["net_gex"]),
-                "distance_pct": round((float(call_wall["strike"]) / spot - 1.0) * 100.0, 3),
-            },
-            "put_wall": None
-            if put_wall is None
-            else {
-                "strike": float(put_wall["strike"]),
-                "gex": float(put_wall["net_gex"]),
-                "distance_pct": round((float(put_wall["strike"]) / spot - 1.0) * 100.0, 3),
-            },
-            "gamma_pin": {
+            "call_wall": _level(call_wall, spot),
+            "put_wall": _level(put_wall, spot),
+            "gamma_pin": None if pin is None else {
                 "strike": float(pin["strike"]),
+                "gex": float(pin["net_gex"]),
+                # Kept under its old name too: the pin is positive now, so its
+                # size and its absolute size are the same number.
                 "abs_gex": float(pin["abs_gex"]),
                 "distance_pct": round((float(pin["strike"]) / spot - 1.0) * 100.0, 3),
             },

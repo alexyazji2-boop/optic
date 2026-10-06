@@ -183,7 +183,11 @@ def test_the_tone_pass_did_not_drop_the_data_limits():
     prompt before the rewrite and they have to be in it after."""
     assert "delayed roughly 15 minutes" in SYSTEM
     assert "proxy" in SYSTEM
-    assert "short customer calls and long customer puts" in SYSTEM
+    # The dealer assumption, stated the way gex.py computes it: long the calls
+    # customers sold, short the puts they bought. It used to say the reverse
+    # of the arithmetic, and this line pinned the reverse.
+    assert "long the calls customers sold and short the puts customers bought" in SYSTEM
+    assert "short customer calls and long customer puts" not in SYSTEM
 
 
 def test_the_tone_pass_did_not_drop_the_line_between_analysis_and_instruction():

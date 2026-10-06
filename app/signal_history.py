@@ -243,6 +243,46 @@ def followup_all(load_bars: Callable[[List[str]], Dict[str, setups_mod.Bars]],
     return {"signals": len(todo), "symbols": len(symbols), "events_added": added}
 
 
+def horizon_states(sig: Dict[str, Any], events: Sequence[Dict[str, Any]],
+                   today: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Each horizon as observed, still to come, or missing.
+
+    Counted in exchange sessions from the trigger candle, on the server's
+    calendar (app/session.py), so a page never has to do calendar arithmetic.
+    "Missing" is a horizon whose session has passed with no observation: the
+    feed had no candle for it or the follow-up has not run since. Either way it
+    is shown as unknown, never as a number."""
+    from datetime import date as _date
+    from . import session as session_mod
+    seen = {e["label"]: e for e in events if e.get("kind") == "observation"}
+    try:
+        day = _date.fromisoformat(str(sig.get("trigger_at"))[:10])
+    except ValueError:
+        return [{"horizon": h, "state": "unknown"} for h in HORIZONS]
+    last = _date.fromisoformat(today) if today else datetime.now(session_mod.ET).date()
+    passed = 0
+    probe = day
+    while passed < max(HORIZONS) + 1:
+        probe = session_mod.next_trading_day(probe)
+        close_at = session_mod.regular_close(probe)
+        if probe > last or (close_at and close_at > datetime.now(session_mod.ET) and probe == last):
+            break
+        passed += 1
+    out = []
+    for h in HORIZONS:
+        label = "after {} candle{}".format(h, "" if h == 1 else "s")
+        if label in seen:
+            e = seen[label]
+            out.append({"horizon": h, "state": "observed", "data_as_of": e["data_as_of"],
+                        "price": e.get("price"), "change_pct": e.get("change_pct"),
+                        "observed_at": e.get("observed_at")})
+        elif passed >= h:
+            out.append({"horizon": h, "state": "missing"})
+        else:
+            out.append({"horizon": h, "state": "pending"})
+    return out
+
+
 # ------------------------------------------------------------------ reading
 
 def _decode(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -291,6 +331,7 @@ def history(user_id: str, symbol: Optional[str] = None, status: Optional[str] = 
         terminal = next((e for e in evs if e["kind"] == "status" and e["label"] in TERMINAL), None)
         s["events"] = evs
         s["status"] = terminal["label"] if terminal else "unresolved"
+        s["horizons"] = horizon_states(s, evs)
         if status and s["status"] != status:
             continue
         out.append(s)

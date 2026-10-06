@@ -1,9 +1,16 @@
 """Dedicated delta and gamma panels.
 
-GEX answers "what must dealers hedge?". This answers "what is the chain itself
+GEX answers "what must dealers hedge?" under its stated assumption about who
+holds which side (app/analytics/gex.py). This answers "what is the chain itself
 made of?" — where delta and gamma sit by strike and expiry, what the at-the-money
 contracts actually cost in theta, and where the gamma is concentrated enough to
 matter for a swing entry.
+
+**Nothing here is signed by position.** Every contract has a buyer and a seller,
+so the delta and gamma of open interest belong to both sides at once. The
+figures below count each open contract as if held long, which describes how
+much delta and gamma the chain carries and where, and says nothing about who is
+long it. Readings that need a side are the GEX panel's, and say so.
 """
 
 from __future__ import annotations
@@ -138,19 +145,23 @@ def analyse(frame: pd.DataFrame, spot: float, top_n: int = 16) -> Dict[str, Any]
     )
 
     net_share_delta = call_share_delta + put_share_delta
-    if net_share_delta > 0:
-        delta_read = (
-            "Open interest carries net long delta of {:,.0f} share-equivalents. Positioning leans long."
-        ).format(net_share_delta)
-    else:
-        delta_read = (
-            "Open interest carries net short delta of {:,.0f} share-equivalents. Positioning leans short."
-        ).format(abs(net_share_delta))
+    # Calling the chain's lean a positioning lean was a claim open interest cannot support: every
+    # contract open has a long side and a short side. Said as what it is, the
+    # delta of the chain counted as if every contract were held long.
+    delta_read = (
+        "Counting every open contract as held long, calls carry {:,.0f} share-equivalents of "
+        "delta and puts {:,.0f}, net {:,.0f}. Open interest does not say who is long or short, "
+        "so this is the chain's size and lean, not anybody's position."
+    ).format(call_share_delta, put_share_delta, net_share_delta)
 
     if near_share is not None and near_share > 35:
+        # Whether concentrated gamma pins or sharpens moves depends on which
+        # side holds it, which open interest does not show. The GEX panel reads
+        # it under its stated assumption; this says only where it sits.
         gamma_read = (
-            "{:.0f}% of chain gamma sits within 2% of spot. Strong pinning pressure into expiry; "
-            "expect chop and mean reversion unless a catalyst forces the issue.".format(near_share)
+            "{:.0f}% of chain gamma sits within 2% of spot, so hedging flows near here are large. "
+            "Whether they dampen moves or add to them depends on the sign of dealer gamma, which "
+            "the GEX panel reads under its assumption.".format(near_share)
         )
     elif near_share is not None and near_share < 15:
         gamma_read = (
@@ -210,7 +221,8 @@ def analyse(frame: pd.DataFrame, spot: float, top_n: int = 16) -> Dict[str, Any]
         "second_order": {
             "net_vanna": _f(float((frame["vanna"] * oi * 100.0).sum()), 2),
             "net_charm": _f(float((frame["charm"] * oi * 100.0).sum()), 2),
-            "note": "Vanna links spot to IV moves; charm is delta decay into expiry. Both drive "
-            "drift around monthly opex.",
+            "note": "Counted as if every contract were held long, in shares: vanna is how delta "
+            "moves with implied volatility, charm how it decays with time. The dealer-signed "
+            "versions, in dollars, are on the GEX and vanna panels.",
         },
     }

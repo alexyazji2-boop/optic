@@ -218,14 +218,18 @@ def why(payload: Dict[str, Any]) -> Dict[str, Any]:
             totals = gex.get("totals") or {}
             regime = (gex.get("regime") or {}).get("state")
             net = _num(totals.get("net_gex_per_1pct_millions"))
-            headline = "Dealer hedging is {} moves".format(
-                "dampening" if regime == "positive" else "amplifying")
+            # "Amplifying" used to cover a missing regime as well as a negative
+            # one. Each sign is said, under the model's assumption, and no sign
+            # says nothing about direction.
+            headline = ("Dealer hedging is dampening moves" if regime == "positive" else
+                        "Dealer hedging is amplifying moves" if regime == "negative" else
+                        "Dealer hedging has no lean")
             if net is not None:
                 evidence.append("net GEX {}${:,.1f}M per 1% move".format(
                     "+" if net >= 0 else "-", abs(net)))
             pin = ((gex.get("levels") or {}).get("gamma_pin") or {}).get("strike")
             if _num(pin):
-                evidence.append("gamma pinned near {:,.2f}".format(_num(pin)))
+                evidence.append("heaviest long dealer gamma near {:,.2f}".format(_num(pin)))
 
         elif key == "flow":
             # put_call_ratio is nested under `volume`, not on `flow` itself. Read
@@ -363,21 +367,23 @@ def whats_next(
                     "watch": side,
                 })
 
-    # The dealer-gamma levels that behave like a ceiling and a floor. There is no
-    # `flip` field on this payload — the regime state carries the sign and
-    # `levels` carries the strikes, which is what a reader can actually watch.
+    # The dealer-gamma walls. Each is described by its own sign, not the
+    # chain's: the call wall is the heaviest positive gamma above the price and
+    # the put wall the heaviest negative below it (app/analytics/gex.py), so
+    # under the model's assumption hedging leans against a move at the first
+    # and adds to one at the second, whatever the total is. Read from the
+    # global regime, the put wall was "dampens" on every positive chain.
     levels_gex = gex.get("levels") or {}
-    regime = (gex.get("regime") or {}).get("state")
-    for name, key in (("Call wall", "call_wall"), ("Put wall", "put_wall")):
+    for name, key, effect in (("Call wall", "call_wall", "leans against a rally into it"),
+                              ("Put wall", "put_wall", "adds to a fall through it")):
         strike = _num((levels_gex.get(key) or {}).get("strike"))
         if not strike or not spot:
             continue
         today_items.append({
             "kind": "gamma",
             "label": "{} {:,.2f}".format(name, strike),
-            "detail": "{:+.1f}% away. Dealer hedging {} moves here.".format(
-                (strike / spot - 1) * 100,
-                "dampens" if regime == "positive" else "amplifies"),
+            "detail": "{:+.1f}% away. Under the model's dealer assumption, hedging here {}.".format(
+                (strike / spot - 1) * 100, effect),
             "watch": "gamma",
         })
 
@@ -546,7 +552,7 @@ def options_brief(payload: Dict[str, Any]) -> Dict[str, Any]:
             "value": " / ".join(x for x in (
                 "{:,.0f}".format(wall) if wall else None,
                 "{:,.0f}".format(put_wall) if put_wall else None) if x),
-            "note": "where dealer hedging is heaviest above and below",
+            "note": "the heaviest positive dealer gamma above the price and negative below it, under the model's assumption",
             "tone": "flat",
         })
 
@@ -763,8 +769,10 @@ def _candidate_follow_ups(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "rank": 90,
             })
 
-    # 4. A gamma wall price is sitting near.
-    flip = _num(gex.get("flip_point"))
+    # 4. The gamma flip price is sitting near. It lives on `regime` (and
+    # `profile`); read off the top level it never existed, so this question
+    # was never asked.
+    flip = _num((gex.get("regime") or {}).get("flip_point"))
     spot = _num(tech.get("spot")) or _num(((payload or {}).get("quote") or {}).get("price"))
     if flip and spot:
         away = abs(spot / flip - 1.0) * 100.0

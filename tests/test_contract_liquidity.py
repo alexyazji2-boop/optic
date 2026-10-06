@@ -87,14 +87,18 @@ def test_a_locked_market_is_usable_and_a_crossed_one_is_not():
     assert list(pool["strike"]) == [100.0]
 
 
-def test_an_adjusted_contract_is_left_out_unless_its_size_is_stated():
+def test_only_a_contract_known_to_be_100_shares_is_a_candidate():
     df = chain([{"strike": 100.0}, {"strike": 101.0, "contract": "ABC1261120C00101000"}])
     pool, report = quotes.usable(df)
     assert list(pool["strike"]) == [100.0]
     assert report["dropped"]["an adjusted contract whose size is not stated"] == 1
-    sized = df.assign(multiplier=[100.0, 150.0])
-    pool2, _ = quotes.usable(sized)
-    assert list(pool2["multiplier"]) == [100.0, 150.0]
+    stated = df.assign(multiplier=[100.0, 100.0])
+    pool2, _ = quotes.usable(stated)
+    assert list(pool2["strike"]) == [100.0, 101.0], "a stated 100 is a standard contract"
+    odd = df.assign(multiplier=[100.0, 150.0])
+    pool3, report3 = quotes.usable(odd)
+    assert list(pool3["strike"]) == [100.0]
+    assert report3["dropped"]["a non-standard contract size"] == 1
 
 
 def test_quote_age_is_checked_only_where_the_feed_dates_quotes():

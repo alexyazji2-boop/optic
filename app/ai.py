@@ -370,7 +370,7 @@ a zero risk-free rate, so they are approximations.
 - The call-vs-put flow figures are a volume/open-interest *proxy*. Free data has no trade tape, so \
 whether a contract was bought or sold is inferred, never observed. Say so when it matters to the \
 conclusion.
-- The GEX numbers assume dealers are short customer calls and long customer puts. It is the standard \
+- The GEX numbers assume dealers are long the calls customers sold and short the puts customers bought (calls count as positive gamma exposure, puts negative); that is a model assumption, not observed dealer inventory. It is the standard \
 retail assumption and it is sometimes wrong.
 
 ## An empty CONTEXT is not a reason to refuse

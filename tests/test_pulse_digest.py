@@ -28,7 +28,10 @@ def _payload():
         "generated_at": "2026-09-15T16:55:36+00:00",
         "quote": {"name": "Apple Inc.", "price": 330.11, "change_pct": -0.89},
         "technicals": {"spot": 330.11},
-        "gex": {"flip_point": 331.0},
+        # On `regime`, where gex.py puts it. The fixture had it at the top
+        # level, the same wrong place the code read it from, so the question
+        # this pins was never asked on a real payload.
+        "gex": {"regime": {"flip_point": 331.0}},
         "pulse": {
             "stance": "bullish",
             "conviction": "high",
@@ -252,7 +255,7 @@ def test_a_distant_gamma_flip_earns_no_question():
     assert any("gamma flip" in q for q in got), got
 
     far = _payload()
-    far["gex"]["flip_point"] = 420.0
+    far["gex"]["regime"]["flip_point"] = 420.0
     got = [c["question"] for c in P._candidate_follow_ups(far)]
     assert not any("gamma flip" in q for q in got), got
 

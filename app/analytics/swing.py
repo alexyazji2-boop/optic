@@ -74,12 +74,16 @@ def _gamma_score(gex: Dict[str, Any], spot: float) -> Optional[float]:
     levels = gex.get("levels", {})
     score = 0.0
 
+    # Which side of the flip spot is on matters only through the sign of dealer
+    # gamma at spot: "above the flip, dealers dampen" is true of a crossing from
+    # negative below to positive above, and the reverse of one that crosses the
+    # other way. The sign at spot is the regime, so that is what is read.
     flip = regime.get("flip_point")
     if flip:
-        if spot > flip:
-            score += 20  # above flip: dealers dampen downside
-        else:
-            score -= 25  # below flip: air pocket, moves accelerate
+        if regime.get("state") == "positive":
+            score += 20  # long dealer gamma at spot: hedging dampens downside
+        elif regime.get("state") == "negative":
+            score -= 25  # short dealer gamma at spot: air pocket, moves accelerate
 
     call_wall = (levels.get("call_wall") or {}).get("distance_pct")
     put_wall = (levels.get("put_wall") or {}).get("distance_pct")
@@ -92,14 +96,14 @@ def _gamma_score(gex: Dict[str, Any], spot: float) -> Optional[float]:
             score -= 12
     if put_wall is not None:
         if put_wall > -1.5:
-            score -= 10  # price sitting on the put wall is fragile
+            score -= 10  # on the heaviest negative gamma: a fall from here can speed up
         elif put_wall < -5:
             score += 8  # cushion well below
 
-    net_dex = (gex.get("totals") or {}).get("net_dex")
-    if net_dex is not None:
-        score += float(np.clip(net_dex / 5e9, -15, 15))
-
+    # Dealer delta (DEX) is not read. Under the model's convention a long call
+    # and a short put both carry positive delta, so net DEX is never negative
+    # and grows with the size of the chain: as a score input it added up to +15
+    # to any name with a large open interest, whatever the price was doing.
     return float(np.clip(score, -100, 100))
 
 
@@ -492,7 +496,9 @@ def build_naked_ideas(
         idea = _single_idea(
             chain, spot, expiry, False, 0.50,
             "Long put (at-the-money)",
-            "Direct downside exposure with defined risk. Negative-gamma tape amplifies moves in your favor.",
+            # The second sentence used to say "Negative-gamma tape amplifies
+            # moves in your favor" on every chain, whatever its regime.
+            "Direct downside exposure with defined risk: the most it can lose is the premium.",
         )
         idea = _fit_single(idea, chain, spot, expiry, False, budget)
         if idea:
@@ -563,8 +569,14 @@ def build_strategy_ideas(
                     {
                         "name": "Cash-secured put",
                         "structure": "short put (income)",
-                        "rationale": "Positive gamma regime plus a dealer put wall near {:.0f} means dips get bought. "
-                        "Selling a ~20-delta put collects premium and only obliges you at a price you already like.".format(put_wall),
+                        # This used to call the put wall a floor where buyers
+                        # step in, the opposite of the model: it is the heaviest
+                        # negative gamma, where hedging adds to a fall.
+                        "rationale": "Positive gamma regime: under the model's assumption dealer hedging "
+                        "leans against moves near the money, the condition premium selling wants. Selling a "
+                        "~20-delta put collects premium and only obliges you to buy at a price you already "
+                        "like. The put wall near {:.0f} is the heaviest negative gamma below the price, where "
+                        "a fall can speed up rather than stall.".format(put_wall),
                         "expiry": expiry,
                         "dte": int(put_leg["dte"]),
                         "legs": [_leg(put_leg, "SELL")],
@@ -583,8 +595,9 @@ def build_strategy_ideas(
     if bearish:
         idea = _spread_idea(
             chain, expiry, False, 0.55, 0.25, "Bear put spread",
-            "Lower cost than an outright put, with the short leg placed near the dealer put wall"
-            "{}.".format(" at {:.0f}".format(put_wall) if put_wall else ""),
+            "Lower cost than an outright put, with a capped payoff.{}".format(
+                " The put wall at {:.0f} is the heaviest negative gamma below the price, where a "
+                "fall can speed up under the model's assumption.".format(put_wall) if put_wall else ""),
         )
         idea = _fit_spread(idea, chain, expiry, False, budget)
         if idea:

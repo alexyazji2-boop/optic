@@ -22,13 +22,13 @@ contracts still open after the last session; volume counts today's trades so
 far; the spread is the quote at the moment the chain was read. The midpoint is
 an estimate of a fair price between them, not a price anybody has offered.
 
-**Adjusted contracts are left out.** After a split, merger or special dividend
-a contract can deliver something other than 100 shares, and its symbol's root
-then differs from the ticker's (TSLA1, not TSLA). Every cost and every exposure
-in this app multiplies by the contract's size, so one whose size is unknown
-cannot be priced honestly; where the provider states a size (Tradier's
-contract_size) it is used, and where it does not, an adjusted contract is
-excluded and counted.
+**Adjusted contracts are left out of selection.** After a split, merger or
+special dividend a contract can deliver something other than 100 shares, and
+its symbol's root then differs from the ticker's (TSLA1, not TSLA). The costs,
+budgets and paper trades that follow from a chosen contract are written for
+100 shares, so a contract is only chosen when its size is known to be 100:
+stated so by the provider, or a standard symbol. The exposure figures in
+gex.py use a stated size where there is one and leave an unknown size out.
 
 **Quote age** is checked only where the provider dates its quotes. Tradier's
 bid_date and ask_date do; Yahoo's chain dates only each contract's last trade,
@@ -151,7 +151,14 @@ def usable(frame: Optional[pd.DataFrame], ticker: Optional[str] = None,
     pool = drop(pool, np.isfinite(bid) & np.isfinite(ask) & (bid > 0) & (ask > 0),
                 "no usable bid or ask")
     pool = drop(pool, _num(pool["ask"]) >= _num(pool["bid"]), "a crossed market (bid above ask)")
-    pool = drop(pool, multipliers(pool, ticker).notna(), "an adjusted contract whose size is not stated")
+    size = multipliers(pool, ticker)
+    pool = drop(pool, size.notna(), "an adjusted contract whose size is not stated")
+    # A stated size other than 100 is an adjusted contract, whose deliverable is
+    # often part cash or another company's shares. Breakevens, payoffs and the
+    # order ticket all assume 100 shares of this stock, so it is not a candidate.
+    # Exposure (gex.py) still counts it, at its stated size.
+    pool = drop(pool, multipliers(pool, ticker) == STANDARD_MULTIPLIER,
+                "a non-standard contract size")
     bid, ask = _num(pool["bid"]), _num(pool["ask"])
     mid = (bid + ask) / 2.0
     pool = pool.assign(mid=mid, spread_pct=(ask - bid) / mid * 100.0,

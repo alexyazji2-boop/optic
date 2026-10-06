@@ -839,9 +839,10 @@ def build_plan(
         support = (fib.get("nearest_support") or {}).get("price")
         if support:
             zone.append({"price": _f(support, 2), "label": "nearest Fibonacci support"})
-        put_wall = (levels.get("put_wall") or {}).get("strike")
-        if put_wall and put_wall < spot:
-            zone.append({"price": _f(put_wall, 2), "label": "dealer put wall"})
+        # The put wall is not a pullback level. It is the heaviest negative
+        # dealer gamma below the price (app/analytics/gex.py), where hedging
+        # under the model's assumption adds to a fall rather than absorbing it:
+        # the opposite of a reason for a pullback to hold.
     else:
         for key, label in (("ema21", "21-day EMA"), ("sma20", "20-day SMA"), ("ema9", "9-day EMA")):
             value = (mas.get(key) or {}).get("value")

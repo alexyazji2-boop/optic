@@ -385,9 +385,9 @@ const GLOSSARY = {
   '0dte': "Zero Days to Expiry. An option expiring the same day it's traded. Its price can swing very fast since there's no time left for the bet to play out.",
   'gamma squeeze': "A rapid, self-reinforcing price move that happens when dealers who sold options must keep buying (or selling) the stock to stay hedged as the price moves, which pushes the price further in the same direction.",
   'short squeeze': "A rapid price rise that forces traders who bet against a stock (short sellers) to buy it back to limit their losses, and that buying pushes the price up even more.",
-  'call wall': "The strike with the largest call open interest / gamma exposure above the price. Dealers hedging those calls tend to sell as the stock rallies into it, so it often acts like a ceiling.",
-  'put wall': "The strike with the largest put open interest / gamma exposure below the price. Dealers hedging those puts tend to buy as the stock falls into it, so it often acts like a floor.",
-  'gamma pin': "The single strike with the largest gamma exposure in either direction. The level dealer hedging tends to pull price toward, especially as expiry gets close.",
+  'call wall': "The strike above the price with the largest positive dealer gamma exposure, under the model's assumption that dealers are long the calls customers sold. Long gamma hedging sells into a rally, so a rally into it tends to stall.",
+  'put wall': "The strike below the price with the largest negative dealer gamma exposure, under the model's assumption that dealers are short the puts customers bought. Short gamma hedging sells into a fall, so a fall through it can speed up rather than stop. Some traders still treat it as support, because put buyers often take profits there; that is about behaviour, not something open interest shows.",
+  'gamma pin': "The strike with the largest positive dealer gamma exposure, under the model's assumption. Long gamma hedging sells above it and buys below it, which is what can pull price toward it, especially as expiry gets close.",
   'r1': "First resistance. A level derived from yesterday's high/low/close where an intraday rally often stalls first, before testing R2.",
   'r2': "Second resistance. A level derived from yesterday's high/low/close, further above price than R1 and a tougher ceiling to break through.",
   's1': "First support. A level derived from yesterday's high/low/close where an intraday decline often stalls first, before testing S2.",
@@ -635,10 +635,10 @@ const HEADER_DEFS = {
   'candidate strikes, ranked': 'Option contracts scored against each other on cost, liquidity and probability of working out.',
   'notable contracts': 'Individual option contracts with unusual volume or open interest relative to their own normal. Often where new positioning is showing up.',
   'at-the-money greeks by expiry': 'How sensitive the closest-to-price options are, broken out by expiry date.',
-  'gamma concentration by expiry': 'Which expiry dates hold the most dealer hedging pressure. Near-dated concentration makes price moves sharper.',
+  'gamma concentration by expiry': 'Which expiry dates hold the most gamma. Near-dated gamma reacts most to price, so whether hedging there dampens moves or adds to them matters most; the GEX panel reads which, under its stated assumption.',
   'net gex by strike': 'Dealer hedging pressure at each individual strike price.',
   'gamma profile across spot': 'How dealer hedging pressure would change if the stock moved up or down from here. Where the tape flips from calm to fast.',
-  'key levels': 'The strikes acting most like a ceiling or a floor because of how options are positioned there.',
+  'key levels': 'The strikes where dealer gamma is heaviest under the model\'s assumption: where hedging tends to lean against a move, and where it tends to add to one.',
   'fibonacci levels': 'Pullback prices derived from a mathematical ratio, used as rough guesses for where a move might pause. Widely watched, which is part of why they sometimes work.',
   'support & resistance': "Price levels the stock has genuinely reversed at, scored on four things: how many times price turned there, how firmly it was rejected (long wicks beat bars that closed at their extreme), how much volume traded across the level, and how recently it was last defended. Unlike Fibonacci, these come from actual candle history rather than a ratio.",
   'moving averages': 'Average prices over various periods, used to define the trend and act as moving support or resistance.',
@@ -10832,7 +10832,10 @@ function renderSwing(d) {
     ['OI-weighted call delta', fmt((gk.delta || {}).oi_weighted_call_delta, 3)],
     ['OI-weighted put delta', fmt((gk.delta || {}).oi_weighted_put_delta, 3)],
     ['Total open interest', fmtCompact((gk.delta || {}).total_open_interest)],
-    ['Dealer delta exposure (DEX)', '$' + fmtCompact((gex.totals || {}).net_dex)],
+    // The dealer's own option delta under the GEX assumption. Never negative
+    // there (a long call and a short put both carry positive delta), and the
+    // stock hedge is the opposite sign.
+    ['Dealer option delta, model (DEX)', '$' + fmtCompact((gex.totals || {}).net_dex) + ' (hedged by about as much stock, sold)'],
   ])}
       <h3>${hg('At-the-money greeks by expiry')}</h3>
       <div class="scroll-y">
@@ -10858,8 +10861,10 @@ function renderSwing(d) {
     ['Peak gamma strike', `${fmt((gk.gamma || {}).peak_gamma_strike, 1)} (${fmtPct((gk.gamma || {}).peak_gamma_distance_pct, 1)})`],
     ['Gamma within ±2% of spot', `${fmt((gk.gamma || {}).gamma_within_2pct_share, 1)}%`],
     ['Total chain gamma (OI-weighted)', fmtCompact((gk.gamma || {}).total_gamma_oi)],
-    ['Net vanna exposure', fmtCompact((gk.second_order || {}).net_vanna)],
-    ['Net charm exposure', fmtCompact((gk.second_order || {}).net_charm)],
+    // Unsigned: counted as if every contract were held long, in shares. The
+    // dealer-signed dollar versions are on the vanna panel.
+    ['Vanna across open interest (unsigned, shares)', fmtCompact((gk.second_order || {}).net_vanna)],
+    ['Charm across open interest (unsigned, shares)', fmtCompact((gk.second_order || {}).net_charm)],
   ])}
       <p class="caveat">${esc((gk.second_order || {}).note || '')}</p>
       <h3>${hg('Gamma concentration by expiry')}</h3>
@@ -10890,21 +10895,24 @@ function renderSwing(d) {
         </div>
         <div>
           <h3>${hg('Gamma profile across spot')}${askPulse('gamma-profile')}</h3>
-          <p class="sub">Where the curve crosses zero is the flip point. Above it dealers dampen moves, below it they amplify them.</p>
+          <p class="sub">Where the curve crosses zero is the flip point. ${gexFlipSentence(gex)}</p>
           <div id="chart-gamma-profile"></div>
           <h3>${hg('Key levels')}${askPulse('levels')}</h3>
           <table class="data">
             <thead><tr><th>Level</th><th>Strike ($)</th><th>Distance</th><th>Exposure</th></tr></thead>
             <tbody>
-              ${(gex.levels || {}).call_wall ? `<tr><td class="name">${gloss('Call wall')} (resistance)</td><td>${fmt(gex.levels.call_wall.strike, 1)}</td><td class="${signClass(gex.levels.call_wall.distance_pct)}">${fmtPct(gex.levels.call_wall.distance_pct, 1)}</td><td>$${fmtCompact(gex.levels.call_wall.gex)}</td></tr>` : ''}
-              ${(gex.levels || {}).put_wall ? `<tr><td class="name">${gloss('Put wall')} (support)</td><td>${fmt(gex.levels.put_wall.strike, 1)}</td><td class="${signClass(gex.levels.put_wall.distance_pct)}">${fmtPct(gex.levels.put_wall.distance_pct, 1)}</td><td>$${fmtCompact(gex.levels.put_wall.gex)}</td></tr>` : ''}
-              ${(gex.levels || {}).gamma_pin ? `<tr><td class="name">${gloss('Gamma pin')} (max |GEX|)</td><td>${fmt(gex.levels.gamma_pin.strike, 1)}</td><td class="${signClass(gex.levels.gamma_pin.distance_pct)}">${fmtPct(gex.levels.gamma_pin.distance_pct, 1)}</td><td>$${fmtCompact(gex.levels.gamma_pin.abs_gex)}</td></tr>` : ''}
+              ${(gex.levels || {}).call_wall ? `<tr><td class="name">${gloss('Call wall')} (heaviest positive gamma above)</td><td>${fmt(gex.levels.call_wall.strike, 1)}</td><td class="${signClass(gex.levels.call_wall.distance_pct)}">${fmtPct(gex.levels.call_wall.distance_pct, 1)}</td><td>$${fmtCompact(gex.levels.call_wall.gex)}</td></tr>` : ''}
+              ${(gex.levels || {}).put_wall ? `<tr><td class="name">${gloss('Put wall')} (heaviest negative gamma below)</td><td>${fmt(gex.levels.put_wall.strike, 1)}</td><td class="${signClass(gex.levels.put_wall.distance_pct)}">${fmtPct(gex.levels.put_wall.distance_pct, 1)}</td><td>$${fmtCompact(gex.levels.put_wall.gex)}</td></tr>` : ''}
+              ${(gex.levels || {}).gamma_pin ? `<tr><td class="name">${gloss('Gamma pin')} (heaviest positive gamma)</td><td>${fmt(gex.levels.gamma_pin.strike, 1)}</td><td class="${signClass(gex.levels.gamma_pin.distance_pct)}">${fmtPct(gex.levels.gamma_pin.distance_pct, 1)}</td><td>$${fmtCompact(gex.levels.gamma_pin.abs_gex)}</td></tr>` : ''}
               ${(gex.levels || {}).max_oi_strike ? `<tr><td class="name">Max open interest</td><td>${fmt(gex.levels.max_oi_strike.strike, 1)}</td><td>—</td><td>${fmtCompact(gex.levels.max_oi_strike.total_oi)} contracts</td></tr>` : ''}
             </tbody>
           </table>
         </div>
       </div>
-      <p class="caveat">Sign convention: ${esc(gex.assumption || '')}. This is the standard retail assumption and it is sometimes wrong.</p>
+      <p class="caveat">Sign convention: ${esc(gex.assumption || '')} Every figure is the dealer's
+        exposure under it, in dollars of dealer delta (GEX per 1% move). ${(gex.excluded_contracts || 0)
+    ? `${fmt(gex.excluded_contracts, 0)} adjusted contract${gex.excluded_contracts === 1 ? '' : 's'} of unstated size left out. ` : ''}It is the
+        common retail convention and it is sometimes wrong.</p>
     </div>
   </div>
 
@@ -11487,6 +11495,24 @@ function renderLiquidityLine(p) {
     ${removed ? `Removed: ${removed}.` : ''}
     ${liq.quote_times ? `Quote times: ${esc(liq.quote_times)}.` : ''}
     <span class="muted">${notes}</span></p>`;
+}
+
+/* What the side of the flip means, read from the direction of its crossing.
+ *
+ * "Above it dealers dampen moves, below it they amplify them" was printed on
+ * every chain. It is true of a crossing from negative gamma below to positive
+ * above, which is the usual shape, and backwards for one that crosses the
+ * other way, which gex.py now reports. */
+function gexFlipSentence(gex) {
+  const dir = ((gex || {}).regime || {}).flip_direction
+    || ((gex || {}).profile || {}).flip_direction;
+  if (dir === 'upward') {
+    return 'Here it crosses from negative below to positive above: above it hedging under the model\'s assumption dampens moves, below it adds to them.';
+  }
+  if (dir === 'downward') {
+    return 'Here it crosses from positive below to negative above: below it hedging under the model\'s assumption dampens moves, above it adds to them.';
+  }
+  return 'No crossing within 12% of the price: dealer gamma has the same sign across that range.';
 }
 
 function renderEntryPlan(p, d) {
@@ -28531,8 +28557,9 @@ const PULSE_TOPICS = {
   regime: 'Explain the index regime score in plain language. What kind of market is this '
     + 'right now, how is the number built, and what should it change about how I read '
     + 'individual setups?',
-  levels: 'Explain the call wall, put wall and gamma pin for {t} simply. Why would dealer '
-    + 'hedging make these act like a ceiling or a floor, and how reliable is that?',
+  levels: 'Explain the call wall, put wall and gamma pin for {t} simply. Under the model\'s '
+    + 'dealer assumption, where does hedging lean against a move and where does it add to one, '
+    + 'and how reliable is that assumption?',
 
   /* The five panels the product brief added, each of which shipped without an
    * Ask Pulse. These are the "contextual AI actions" it asked for: a question
