@@ -386,6 +386,30 @@ def _session_hours(meta: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+class _Failed:
+    """A producer's answer when its request failed: handed to the caller and
+    never kept.
+
+    A refused or broken request is not the same fact as one that came back
+    empty, and caching the empty answer made it one. A single 429 on a price
+    history was five minutes of "No price data found" for that name, the
+    ranking's own retry pass was answered by the cached failure it was
+    retrying, and a statement that failed to load was missing for six hours.
+    Not counted as a success either, so the request pacer does not speed up on
+    the strength of a failure."""
+    __slots__ = ("value",)
+
+    def __init__(self, value):
+        self.value = value
+
+
+def _failed(value, exc: Optional[BaseException] = None):
+    """The marker, noting a rate limit on the way so the pacer still slows."""
+    if exc is not None and _is_rate_limit(exc):
+        note_throttle(exc)
+    return _Failed(value)
+
+
 def _cached(key: str, ttl: float, producer, gate: bool = True):
     """Tiny TTL memo. Chains move fast, price history doesn't — callers pick.
 
@@ -451,6 +475,8 @@ def _fill(key: str, ttl: float, producer, gate: bool, fresh_for: float):
         # wrapper over a gated one, or one of `.info`'s documents under the
         # token its caller took, and counting those too would make the rate
         # recover several times faster than _on_success says it does.
+        if isinstance(value, _Failed):
+            return value.value
         if gate:
             with _PACE_LOCK:
                 _on_success()
@@ -1021,8 +1047,8 @@ class YFinanceProvider(MarketDataProvider):
         def build() -> Optional[str]:
             try:
                 cal = yf.Ticker(ticker).calendar
-            except Exception:
-                return None
+            except Exception as exc:
+                return _failed(None, exc)
             if not cal:
                 return None
             dates = cal.get("Earnings Date") if isinstance(cal, dict) else None
@@ -1046,8 +1072,8 @@ class YFinanceProvider(MarketDataProvider):
                 df = yf.Ticker(ticker).history(
                     period=period, interval=interval, auto_adjust=False
                 )
-            except Exception:
-                return pd.DataFrame()
+            except Exception as exc:
+                return _failed(pd.DataFrame(), exc)
             if df is None or df.empty:
                 return pd.DataFrame()
             df = df.dropna(subset=["Close"])
@@ -1076,9 +1102,7 @@ class YFinanceProvider(MarketDataProvider):
                         threads=True,
                     )
             except Exception as exc:
-                if _is_rate_limit(exc):
-                    note_throttle(exc)
-                raw = None
+                return _failed({}, exc)
 
             out: Dict[str, pd.DataFrame] = {}
             if raw is None or len(raw) == 0:
@@ -1110,8 +1134,8 @@ class YFinanceProvider(MarketDataProvider):
                 df = handle.history(
                     period=period, interval=interval, auto_adjust=False, prepost=prepost
                 )
-            except Exception:
-                return pd.DataFrame()
+            except Exception as exc:
+                return _failed(pd.DataFrame(), exc)
             if df is None or df.empty:
                 return pd.DataFrame()
             df = df.dropna(subset=["Close"])
@@ -1348,8 +1372,8 @@ class YFinanceProvider(MarketDataProvider):
         def build() -> List[Dict[str, Any]]:
             try:
                 frame = self._earnings_dates(ticker)
-            except Exception:
-                return []
+            except Exception as exc:
+                return _failed([], exc)
             if frame is None or frame.empty:
                 return []
             out: List[Dict[str, Any]] = []
@@ -1595,14 +1619,18 @@ class YFinanceProvider(MarketDataProvider):
             # object's statement caches are not written with threads in mind.
             try:
                 return getattr(yf.Ticker(ticker), attr)
-            except Exception:
-                return None
+            except Exception as exc:
+                return _failed(None, exc)
 
         def build() -> Dict[str, Any]:
             # Side by side: one request each, and in a row they were 3.5s of a
             # first load on the live site (FTNT, 2026-09-28).
             with ThreadPoolExecutor(max_workers=len(statements)) as pool:
                 frames = list(pool.map(read, [attr for _, attr in statements]))
+            # Any statement that failed makes the whole answer a failure: kept,
+            # a missing balance sheet would read as "none filed" for hours.
+            broke = any(isinstance(f, _Failed) for f in frames)
+            frames = [f.value if isinstance(f, _Failed) else f for f in frames]
             out: Dict[str, Any] = {}
             for (name, _), frame in zip(statements, frames):
                 if frame is None or getattr(frame, "empty", True):
@@ -1615,7 +1643,7 @@ class YFinanceProvider(MarketDataProvider):
                         for idx in frame.index
                     },
                 }
-            return out
+            return _Failed(out) if broke else out
 
         return _cached("fin:" + ticker, self.TTL_FILED, build)
 
@@ -1633,8 +1661,8 @@ class YFinanceProvider(MarketDataProvider):
             t = yf.Ticker(ticker)
             try:
                 series = t.splits
-            except Exception:                                  # noqa: BLE001
-                return []
+            except Exception as exc:                           # noqa: BLE001
+                return _failed([], exc)
             if series is None or len(series) == 0:
                 return []
             out = []
