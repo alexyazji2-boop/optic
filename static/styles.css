@@ -16933,8 +16933,13 @@ table.data.ss-table tr.ss-row > td:nth-child(6) { white-space: normal; min-width
 .sig-hk { color: var(--ink-muted); font-weight: 600; }
 .sig-hc.is-missing, .sig-hc.is-unknown { font-style: italic; }
 .sig-body { padding: 0 var(--space-3) var(--space-3); display: grid; gap: var(--space-3); }
-.sig-body, .sig-body p, .sig-body td, .sig-body li { white-space: normal; }
-.sig-cols { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
+.sig-body, .sig-body p, .sig-body td, .sig-body li, .sig-body dd { white-space: normal; }
+/* Grid items default to their content's width, so the 480px conditions table
+   widened the whole record past a phone's screen. Zero lets the table's own
+   scroller take the overflow. */
+.sig-body > *, .sig-cols > * { min-width: 0; }
+.sig-body .kv dd { overflow-wrap: anywhere; }
+.sig-cols { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr)); }
 .sig-tl { margin: 0; padding-left: var(--space-4); display: grid; gap: var(--space-1); font-size: var(--t-small); color: var(--ink-2); }
 .sig-tl-when { color: var(--ink-muted); }
 .sig-filter { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--t-caption); color: var(--ink-muted); }
@@ -16963,7 +16968,8 @@ table.data.ss-table tr.ss-row > td:nth-child(6) { white-space: normal; min-width
 .vs-fact-src { font-size: var(--t-caption); color: var(--ink-muted); }
 .vs-history { margin: var(--space-3) 0; font-size: var(--t-small); color: var(--ink-2); max-width: 90ch; }
 .vs-shared { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: var(--space-2) 0 var(--space-3); }
-.vs-cases { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+.vs-cases { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr)); }
+.vs-cases > *, .vs-facts > * { min-width: 0; }
 .vs-case { padding: var(--space-3); border-radius: var(--r-sm); background: var(--raised); display: grid; gap: var(--space-2); align-content: start; }
 .vs-case-head { display: flex; align-items: baseline; justify-content: space-between; }
 .vs-case-head .vs-h { margin: 0; }
