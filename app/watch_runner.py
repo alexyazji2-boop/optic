@@ -68,7 +68,7 @@ def _dedupe_key(watch_id: str, when: datetime, event: Optional[str] = None) -> s
 def due_watches() -> List[Dict[str, Any]]:
     """Every active watch across every account, with its owner."""
     return db.rows(
-        "SELECT w.id, w.user_id, w.symbol, w.kind, w.params, w.note "
+        "SELECT w.id, w.user_id, w.symbol, w.kind, w.params, w.note, w.last_evidence "
         "FROM watches w WHERE w.active = 1 ORDER BY w.symbol, w.created_at")
 
 
@@ -123,10 +123,44 @@ def record_hit(row: Dict[str, Any], result: Dict[str, Any],
             return False
         return False
     # The watch remembers too, which is what the browser-side check reads so it
-    # does not re-announce something already sitting in the inbox.
+    # does not re-announce something already sitting in the inbox. In the
+    # shape the page's own check stores (account.py, watches/seen): this wrote
+    # the bare sentence, which the account route could not parse, so a state
+    # the schedule had seen was lost and the page called it new.
     db.execute("UPDATE watches SET last_met_at = ?, last_evidence = ? WHERE id = ?",
-               (when.isoformat(), str(result.get("evidence") or ""), row["id"]))
+               (when.isoformat(), evidence_json(result), row["id"]))
     return True
+
+
+EVIDENCE_KEYS = ("evidence", "state", "level", "value", "detail")
+
+
+def evidence_json(result: Dict[str, Any]) -> str:
+    return json.dumps({k: result[k] for k in EVIDENCE_KEYS if k in result}, sort_keys=True)[:2000]
+
+
+def previous_state(row: Dict[str, Any]) -> Optional[str]:
+    """The state a state-reporting watch last recorded, or None."""
+    try:
+        stored = json.loads(row.get("last_evidence") or "null")
+    except (TypeError, ValueError):
+        return None                     # a sentence from before the shape was fixed
+    return stored.get("state") if isinstance(stored, dict) else None
+
+
+def is_news(row: Dict[str, Any], result: Dict[str, Any]) -> bool:
+    """Whether a met result is worth a hit.
+
+    A level or event condition (price above, a breakout) is, once a day: the
+    inbox says "still true" daily by design. A condition that reports a state
+    (`signal_flip`, `analyst_revisions`) describes something that stays true
+    for weeks, so it is news only when the state differs from the last one
+    recorded, which is the rule the page's own check applies. Without it a
+    stance watch posted "stance reads bullish" every day nothing changed."""
+    state = result.get("state")
+    if state is None:
+        return True
+    return previous_state(row) != state
 
 
 def signal_record(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -168,7 +202,14 @@ def run_once(snapshot: Callable[[str], Dict[str, Any]],
     """
     when = _now()
     grouped = group_by_symbol(due_watches())
-    symbols = sorted(grouped)[:limit]
+    ordered = sorted(grouped)
+    if len(ordered) > limit:
+        # A window that moves on each pass. Cut alphabetically, the names past
+        # the cap were the same names every time and were never checked.
+        passes = int(when.timestamp() // 1800)
+        start = (passes * limit) % len(ordered)
+        ordered = ordered[start:] + ordered[:start]
+    symbols = ordered[:limit]
     checked = fired = 0
     failed: List[str] = []
 
@@ -189,7 +230,7 @@ def run_once(snapshot: Callable[[str], Dict[str, Any]],
         for row in rows:
             checked += 1
             result = by_id.get(row["id"])
-            if result and result.get("met") and record_hit(row, result, when):
+            if result and result.get("met") and is_news(row, result) and record_hit(row, result, when):
                 fired += 1
             if result and result.get("met") and row["kind"] == "swing_setup":
                 record_signal(row["user_id"], result, "scheduled alert check", when)

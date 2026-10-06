@@ -2652,11 +2652,13 @@ async def _tracker_loop() -> None:
                     app.state.last_watch_run = now
                     try:
                         out = await _run(watch_runner.run_once, _watch_snapshot)
-                        if out["hits"] or out["failed_symbols"]:
+                        if out["hits"] or out["failed_symbols"] or out["skipped_symbols"]:
                             log.info(
-                                "watches: %s symbols, %s checked, %s fired, failed %s",
+                                "watches: %s symbols, %s checked, %s fired, failed %s, "
+                                "%s left for the next pass",
                                 out["symbols"], out["watches_checked"],
                                 out["hits"], out["failed_symbols"] or "none",
+                                out["skipped_symbols"],
                             )
                     except Exception as exc:  # noqa: BLE001 - never break the loop
                         log.warning("watch run failed: %s", exc)

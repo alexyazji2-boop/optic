@@ -358,3 +358,47 @@ def test_the_schedule_can_be_turned_off():
     deployment has to be able to say no."""
     main = open("app/main.py", encoding="utf-8").read()
     assert 'os.environ.get("WATCH_AUTO"' in main
+
+
+# ------------------------------------------------------- found in review, 2026-10-06
+
+def _stance(stance):
+    return lambda symbol: {"verdict": {"stance": stance, "conviction": "moderate"}}
+
+
+def test_a_state_watch_reports_a_change_not_the_same_state_daily(account, monkeypatch):
+    """`signal_flip` describes a state. Recorded once a day while it held, it
+    posted "stance reads bullish" every day nothing changed."""
+    add_watch(account, "AAA", "signal_flip", {"to": "any"})
+    days = iter([datetime(2026, 10, d, 15, 0, tzinfo=timezone.utc) for d in (5, 6, 7, 8)])
+    monkeypatch.setattr(watch_runner, "_now", lambda: next(days))
+    assert watch_runner.run_once(_stance("bullish"))["hits"] == 1, "first sighting is news"
+    assert watch_runner.run_once(_stance("bullish"))["hits"] == 0, "the same state is not"
+    assert watch_runner.run_once(_stance("bearish"))["hits"] == 1, "a change is"
+    assert watch_runner.run_once(_stance("bearish"))["hits"] == 0
+
+
+def test_what_the_schedule_saw_is_stored_the_way_the_page_reads_it(account):
+    """It stored the bare sentence; the account route parses JSON, so the
+    state was lost and the page called every stance new."""
+    from app import account as account_mod
+    wid = add_watch(account, "AAA", "signal_flip", {"to": "any"})
+    watch_runner.run_once(_stance("bullish"))
+    row = db.row("SELECT * FROM watches WHERE id = ?", (wid,))
+    payload = account_mod._watch_payload(row)
+    assert payload["last_evidence"]["state"] == "bullish"
+    assert payload["last_evidence"]["evidence"].startswith("stance reads bullish")
+
+
+def test_names_past_the_cap_are_reached_on_later_passes(account, monkeypatch):
+    """Cut alphabetically, the same tail was skipped on every pass."""
+    for i in range(5):
+        add_watch(account, "S%d" % i, "rsi_above", {"level": 50})
+    seen = set()
+    for n in range(3):
+        moment = datetime(2026, 10, 6, 14, 0, tzinfo=timezone.utc) + timedelta(minutes=30 * n)
+        monkeypatch.setattr(watch_runner, "_now", lambda moment=moment: moment)
+        snap = lambda symbol: (seen.add(symbol) or {"technicals": {"rsi": {"value": 40, "length": 14}}})
+        out = watch_runner.run_once(snap, limit=2)
+        assert out["symbols"] == 2 and out["skipped_symbols"] == 3
+    assert seen == {"S0", "S1", "S2", "S3", "S4"}
