@@ -142,6 +142,29 @@ def test_a_restart_is_waited_out_and_the_page_carries_on_without_a_reload():
       assert(originGate === null && !banner(), 'the line is gone with the wait');
       assert(reloads === 0, 'and nothing reloaded');
       assert(healthChecks > 1 && healthChecks < 20, 'one poll for the page: ' + healthChecks);
+      assert(tries('/api/quote/VST') === 2, 'the late one tried before the wait and after it, '
+             + 'and not in between: ' + tries('/api/quote/VST'));
+    """)
+
+
+def test_a_request_that_still_fails_after_the_wait_stops():
+    """/healthz answering does not mean every endpoint does: a proxy can still
+    give one of them a 502. Each request waits once, or that request and the
+    poll would chase each other for as long as the tab stayed open."""
+    run_js("""
+      fetch = function (url) {
+        if (url === '/healthz') { healthChecks++; return Promise.resolve({ ok: true, status: 200 }); }
+        calls.push({ url: url, at: now });
+        return Promise.resolve({ ok: false, status: 502, statusText: '',
+          json: function () { return Promise.reject(new Error('an HTML error page')); } });
+      };
+      var caught = null;
+      getJSON('/api/ticker/VST').catch(function (e) { caught = e; });
+      await runUntil(function () { return caught !== null; });
+      assert(caught && caught.originUnreachable === true, 'gave up, marked: ' + caught);
+      assert(caught.message === 'the server is unreachable (HTTP 502) after 6 attempts', caught.message);
+      // Five quick tries, the wait, one more: then it says so.
+      assert(healthChecks === 1, 'one wait: ' + healthChecks);
     """)
 
 
