@@ -257,6 +257,8 @@ def test_nothing_worth_asking_about_is_not_asked():
       page.keep(GUEST);
       localStorage.setItem('optic.chart.watch.v1', '[]');
       localStorage.setItem('optic.paper.v1', '{"open":[],"closed":[]}');
+      localStorage.setItem('optic.thesis.v1', '{"NVDA":{"bull":"","bear":""}}');
+      localStorage.setItem('optic.screener.v1', '{"filters":[],"states":[],"sort":"score","direction":"desc"}');
       localStorage.setItem('optic.theme', 'dark');
       assert(page.keep(user(A)) === false && page.asked() === null, 'no question');
       assert(localStorage.getItem('optic.session.holder.v1') === A, 'A\\'s');

@@ -468,11 +468,12 @@ def test_a_pass_says_how_many_are_left_and_the_next_one_reads_them(monkeypatch):
 
 
 def test_kept_names_come_first_then_the_most_recently_asked():
-    B.note_requested(["OLD"], datetime(2026, 10, 1, tzinfo=timezone.utc))
-    B.note_requested(["NEW"], datetime(2026, 10, 5, tzinfo=timezone.utc))
+    # Named so that alphabetical order is the opposite of recency.
+    B.note_requested(["AAA"], datetime(2026, 10, 1, tzinfo=timezone.utc))
+    B.note_requested(["ZZZ"], datetime(2026, 10, 5, tzinfo=timezone.utc))
     asked = B.recently_requested(datetime(2026, 10, 6, tzinfo=timezone.utc))
-    assert asked == ["NEW", "OLD"]
-    assert B.reading_order(["SPY", "NEW"], asked) == ["SPY", "NEW", "OLD"]
+    assert asked == ["ZZZ", "AAA"]
+    assert B.reading_order(["SPY", "ZZZ"], asked) == ["SPY", "ZZZ", "AAA"]
 
 
 def test_the_loop_keeps_going_until_nobody_is_left():

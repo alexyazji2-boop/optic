@@ -220,13 +220,26 @@ function storedHasContent(raw) {
   return full(value);
 }
 
+/* A store whose shape always carries words: a reset screen still has its
+ * default sort, which is not a screen anybody built. */
+const GUEST_THING_CONTENT = {
+  'optic.screener.v1': (v) => !!(v && ((v.filters || []).length || (v.states || []).length)),
+};
+
 function guestThingsHere() {
   const found = [];
   Object.keys(GUEST_THING_LABELS).forEach((key) => {
     let raw = null;
     try { raw = localStorage.getItem(key); } catch (e) { raw = null; }
+    if (raw === null) return;
     const label = GUEST_THING_LABELS[key];
-    if (raw !== null && storedHasContent(raw) && found.indexOf(label) < 0) found.push(label);
+    let has;
+    if (GUEST_THING_CONTENT[key]) {
+      try { has = GUEST_THING_CONTENT[key](JSON.parse(raw)); } catch (e) { has = false; }
+    } else {
+      has = storedHasContent(raw);
+    }
+    if (has && found.indexOf(label) < 0) found.push(label);
   });
   return found;
 }
