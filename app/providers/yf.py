@@ -1800,7 +1800,9 @@ class YFinanceProvider(MarketDataProvider):
             _CACHE.pop(key, None)
         good = _NEWS_GOOD.get(key)
         if good is not None and now - good[0] < self.NEWS_STALE_FOR:
-            return good[1]
+            # Marked with when it was fetched: shown as fresh, a six-hour-old
+            # list read as this minute's news (app/news.py says so instead).
+            return HeldNews(good[1], good[0])
         return []
 
     def _gather_news(self, ticker: str, limit: int) -> List[Dict[str, Any]]:
@@ -1911,6 +1913,16 @@ class YFinanceProvider(MarketDataProvider):
 
 # The last news list with stories in it, per symbol, as (when, items).
 _NEWS_GOOD: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
+
+
+class HeldNews(list):
+    """The last list with stories in it, served while the feed comes back
+    empty. A list, so every caller reads it as before; `fetched_at` is when it
+    was actually fetched, for the page to say."""
+
+    def __init__(self, items, fetched_at: float):
+        super().__init__(items)
+        self.fetched_at = fetched_at
 
 # What a company's name loses before it is searched for: "Coinbase Global,
 # Inc." is searched as "Coinbase Global", "The Walt Disney Company" as "Walt

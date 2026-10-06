@@ -744,6 +744,9 @@ OVERFETCH = 3
 
 def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
     items = provider.news(ticker, limit=limit * OVERFETCH)
+    # Set when the feed came back empty and these are the last stories it did
+    # return (providers/yf.py, HeldNews), so the page can say how old they are.
+    held_at = getattr(items, "fetched_at", None)
     earnings = provider.earnings_date(ticker)
 
     # For the relevance split. The quote is cached and /api/ticker has already
@@ -941,6 +944,10 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
             key=lambda r: -r["mentions"],
         ),
         "articles": scored,
+        "held": ({"fetched_at": datetime.fromtimestamp(held_at, timezone.utc).isoformat(),
+                  "note": ("The headline feed came back empty just now, so these are the "
+                           "stories it returned earlier.")}
+                 if held_at else None),
     }
 
 

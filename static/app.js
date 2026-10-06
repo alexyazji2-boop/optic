@@ -12987,6 +12987,17 @@ function newsTierLegend(news, matched) {
   </div>`;
 }
 
+/* The feed came back empty and these are its last stories: when they were
+ * fetched, said once above them rather than passed off as this minute's. */
+function newsHeldNote(news) {
+  const held = news && news.held;
+  if (!held || !held.fetched_at) return '';
+  const when = new Date(held.fetched_at);
+  const at = Number.isNaN(when.getTime()) ? '' : ` They were fetched ${when.toLocaleString([], {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} (${shortWhen(held.fetched_at)}).`;
+  return `<div class="callout warn">${esc(held.note || '')}${esc(at)}</div>`;
+}
+
 function renderNewsView() {
   const d = STATE.swing || {};
   const news = d.news || {};
@@ -13001,6 +13012,7 @@ function renderNewsView() {
     news.days_to_earnings !== null && news.days_to_earnings !== undefined
       ? ` (${news.days_to_earnings}d)` : ''}` : ''}</p>
     ${news.earnings_warning ? `<div class="callout">${esc(news.earnings_warning)}</div>` : ''}
+    ${newsHeldNote(news)}
     ${(news.catalyst_summary || []).length ? `<h3>${hg('Catalyst types detected')}</h3>
       <div class="legend">${news.catalyst_summary.map((c) =>
     catalystChip(`${cap(c.type)} \u00d7${c.mentions}`, c.lean, { type: c.type })).join('')}</div>
@@ -20517,7 +20529,8 @@ function wsWidgetBody(id) {
     const arts = (n.articles || []).slice(0, 7);
     if (!arts.length) return none(d ? 'No recent coverage.' : 'Load a symbol.');
     return `<p class="ws-leg-args">${esc(cap(n.overall_tone || ''))}${
-  n.article_count ? ` · ${fmt(n.article_count, 0)} stories` : ''}</p>
+  n.article_count ? ` · ${fmt(n.article_count, 0)} stories` : ''}${
+  n.held && n.held.fetched_at ? ` · fetched ${esc(shortWhen(n.held.fetched_at))}, the feed is empty now` : ''}</p>
     <ul class="ws-list">${arts.map((a) => `<li>
       <a href="${esc(a.link || a.url || '#')}" target="_blank" rel="noopener"
         class="ws-news-link">${esc((a.title || '').slice(0, 92))}</a>
