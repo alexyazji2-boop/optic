@@ -282,3 +282,6 @@ def test_the_line_is_styled_from_tokens():
     block = block[:block.index(".origin-banner strong")]
     assert "#" not in block, "a colour that is not a token"
     assert "var(--warn)" in block and "var(--surface)" in block
+    # A fixed box at left: 50% has half the viewport to shrink into; without
+    # its own width the line wrapped onto five rows.
+    assert "width: max-content;" in block
