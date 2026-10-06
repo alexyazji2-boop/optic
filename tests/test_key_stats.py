@@ -37,8 +37,8 @@ def test_the_panel_lists_only_what_the_quote_has():
                   "Average volume", "Short interest", "Days to cover"):
         assert f"['{label}'" in rows, label
     ks = _fn("function keyStatsHTML(q, opts = {}) {")
-    assert ".map((id) => all[id]).filter((r) => r && r[1] !== null);" in ks
-    assert "if (!rows.length) return '';" in ks
+    assert ".filter((id) => all[id] && all[id][1] !== null);" in ks
+    assert "if (!ids.length) return '';" in ks
 
 
 def test_it_sits_below_optics_read():
@@ -71,7 +71,7 @@ SHORT = {"available": True, "percent_of_float": 0.034, "days_to_cover": 1.8,
          "settlement_date": "2026-09-15"}
 
 
-def _jsc(script):
+def _jsc(script, before=""):
     exe = JSC if os.path.exists(JSC) else shutil.which("jsc")
     if not exe:
         pytest.skip("no JavaScriptCore on this machine")
@@ -80,6 +80,7 @@ def _jsc(script):
       document.documentElement.style = document.documentElement.style || {};
       document.documentElement.style.setProperty = function () {};
       document.documentElement.style.removeProperty = function () {};
+    """ + before + """
       try { load('static/charts.js'); load('static/app.js'); } catch (e) {}
       var Q = %s, SH = %s, R = {};
     """ % (json.dumps(QUOTE), json.dumps(SHORT)) + script + "\nprint('RESULT:' + JSON.stringify(R));"
@@ -154,3 +155,144 @@ def test_every_tab_renders_them():
 def test_the_quote_carries_the_open():
     src = Path(yf.__file__).read_text()
     assert '"open": _f(info.get("regularMarketOpen") or info.get("open")),' in src
+
+
+# ------------------------------------------------------------ what each one means
+#
+# Asked for over the Investing tab's panel: "include definitions for each of
+# these terms". Each label explains itself by the reader's knowledge mode, the
+# way the glossary's terms do.
+
+import re
+
+ALL_IDS = ["market_cap", "pe_trailing", "pe_forward", "eps_trailing", "eps_forward",
+           "dividend_yield", "open", "day_high", "day_low", "volume", "avg_volume",
+           "high_52", "low_52", "beta", "short_float", "days_to_cover", "profit_margin",
+           "revenue_growth"]
+
+
+def _defs():
+    return _jsc("R = KEY_STAT_DEFS;")
+
+
+def test_every_figure_has_a_definition():
+    defs = _defs()
+    rows = _fn("function keyStatRows(q, short) {")
+    ids = re.findall(r"^    (\w+): \[", rows, re.M)
+    assert sorted(ids) == sorted(ALL_IDS), ids
+    for view, listed in _jsc("R = KEY_STATS_FOR;").items():
+        for fid in listed:
+            assert defs.get(fid), (view, fid)
+
+
+def test_each_definition_says_what_it_is_and_why_it_matters():
+    """The glossary's own rules (tests/test_glossary_fundamentals.py): two
+    sentences at least, no em dash, and no telling the reader what to do."""
+    banned = ("you should", "you want", "look for a", "buy when", "sell when",
+              "a good sign that you")
+    for fid, body in _defs().items():
+        assert body.count(".") >= 2 and len(body) >= 110, (fid, body)
+        assert "\u2014" not in body, fid
+        for phrase in banned:
+            assert phrase not in body.lower(), (fid, phrase)
+
+
+def test_the_definitions_say_what_the_feed_measures():
+    """Checked against Yahoo's own data on 2026-10-06 (AAPL, VST, PLTR, KO)."""
+    d = _defs()
+    assert "intraday highs rather than closing prices" in d["high_52"]
+    assert "intraday lows rather than closing prices" in d["low_52"]
+    assert "five years of monthly returns against the S&P 500" in d["beta"]
+    assert "last three months" in d["avg_volume"]
+    assert "same quarter a year earlier" in d["revenue_growth"]
+    assert "last twelve months" in d["profit_margin"]
+    assert "current rate" in d["dividend_yield"]
+    assert "regular session" in d["day_high"] and "regular session" in d["day_low"]
+
+
+def test_the_glossary_wording_is_reused_where_it_exists():
+    d = _defs()
+    gl = _jsc("R = {cap: GLOSSARY['market cap'], si: GLOSSARY['short interest'], dtc: GLOSSARY['days to cover']};")
+    assert d["market_cap"] == gl["cap"] and d["days_to_cover"] == gl["dtc"]
+    assert d["short_float"].startswith(gl["si"])
+
+
+def test_each_label_explains_itself_by_the_readers_mode():
+    out = _jsc("""
+      marketSessionET = function () { return 'regular'; };
+      var policy = 'on_demand';
+      explainPolicy = function () { return policy; };
+      R.demand = keyStatsHTML(Q, {view: 'long', short: SH});
+      policy = 'inline';
+      R.inline = keyStatsHTML(Q, {view: 'long', short: SH});
+      policy = 'off';
+      R.off = keyStatsHTML(Q, {view: 'long', short: SH});
+      R.beta = KEY_STAT_DEFS.beta;
+    """)
+    demand, inline, off = out["demand"], out["inline"], out["off"]
+    # The Investing tab's seven, each marked.
+    assert demand.count('<dfn class="gloss-term" tabindex="0"') == 7, demand
+    assert 'data-def="How far the stock has tended to move' in demand
+    assert '>Beta</dfn>' in demand and '>Market cap</dfn>' in demand
+    # Simple: a control that opens the definition in place.
+    assert inline.count("data-gloss-open") == 7 and 'aria-expanded="false"' in inline
+    # Professional: the figures, unmarked.
+    assert "gloss-term" not in off and "<dt>Beta</dt>" in off
+    # The definition text survives the attribute round trip (S&P's ampersand).
+    assert "S&amp;P 500" in demand and "&amp;amp;" not in demand
+
+
+def test_an_opened_definition_goes_under_the_whole_row():
+    """Seen in the browser on Simple: opened after the label, the definition
+    was squeezed into the label's half beside the figure, a column about a
+    hundred pixels wide. It is now one more <dd> of the row, full width."""
+    out = _jsc("""
+      function el(tag, cls) {
+        return { tagName: tag.toUpperCase(), className: cls || '', textContent: '', kids: [], attrs: {},
+          classList: { contains: function (c) { return (this.owner.className || '').split(' ').indexOf(c) >= 0; } },
+          getAttribute: function (k) { return Object.prototype.hasOwnProperty.call(this.attrs, k) ? this.attrs[k] : null; },
+          setAttribute: function (k, v) { this.attrs[k] = String(v); },
+          appendChild: function (c) { this.kids.push(c); c.parent = this; },
+          insertAdjacentElement: function () { R.wrongPlace = true; },
+          remove: function () { var i = this.parent.kids.indexOf(this); this.parent.kids.splice(i, 1); } };
+      }
+      var row = el('div', 'ks-row'), term = el('button', 'gloss-term is-inline');
+      term.attrs['data-def'] = 'What beta is.'; term.attrs['aria-expanded'] = 'false';
+      row.querySelector = function () {
+        return this.kids.filter(function (k) { return k.className === 'gloss-inline'; })[0] || null;
+      };
+      term.closest = function (sel) { return sel === '[data-gloss-open]' ? term : sel === '[data-gloss-row]' ? row : null; };
+      document.createElement = function (tag) { var e = el(tag); e.classList.owner = e; return e; };
+      // The glossary's own click listener, as app.js registered it.
+      var gloss = CLICKS.filter(function (fn) { return String(fn).indexOf('data-gloss-open') >= 0; });
+      R.listeners = gloss.length;
+      gloss[0]({ target: term });
+      R.opened = row.kids.map(function (k) { return k.tagName + '.' + k.className + ':' + k.textContent; });
+      R.expanded = term.attrs['aria-expanded'];
+      gloss[0]({ target: term });
+      R.closed = row.kids.length; R.after = term.attrs['aria-expanded'];
+    """, before="""
+      var CLICKS = [];
+      document.addEventListener = function (type, fn) { if (type === 'click') CLICKS.push(fn); };
+    """)
+    assert out["listeners"] == 1, out
+    assert out["opened"] == ["DD.gloss-inline:What beta is."], out
+    assert out["expanded"] == "true" and not out.get("wrongPlace")
+    assert out["closed"] == 0 and out["after"] == "false"
+
+
+def test_the_row_wraps_only_while_a_definition_is_open():
+    assert "data-gloss-row" in _fn("function keyStatsHTML(q, opts = {}) {")
+    assert ".ks-row:has(> .gloss-inline) { flex-wrap: wrap; }" in CSS
+    assert ".ks-row > .gloss-inline { flex-basis: 100%;" in CSS
+    opened = CSS[CSS.index(".ks-row > .gloss-inline {"):]
+    opened = opened[:opened.index("}")]
+    assert "text-align: left;" in opened and "font-weight: 400;" in opened, "styled as a figure"
+    phone = CSS[CSS.index(".ks-grid { grid-template-columns: 1fr 1fr;"):]
+    phone = phone[:phone.index("\n}\n")]
+    assert ".ks-row:has(> .gloss-inline) { grid-column: 1 / -1; flex-wrap: nowrap; }" in phone
+    # Measured at 375px: wrapping the stacked row put the definition in a
+    # second column, 34px past the row's edge.
+    assert ".ks-row > .gloss-inline { flex-basis: auto; }" in phone
+    base = CSS[CSS.index(".ks-row { display: flex;"):]
+    assert "flex-wrap" not in base[:base.index("}")], "a long figure would drop below its label"

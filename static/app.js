@@ -863,19 +863,24 @@ document.addEventListener('click', (evt) => {
   const term = evt.target.closest('[data-gloss-open]');
   if (!term) return;
   const open = term.getAttribute('aria-expanded') === 'true';
-  const next = term.nextElementSibling;
+  /* In a label-and-figure row (Key stats) the definition goes under the whole
+   * row, as one more <dd> of it. Put after the label, it was squeezed into the
+   * label's half beside the figure: a column a hundred pixels wide. */
+  const row = term.closest('[data-gloss-row]');
+  const shown = row ? row.querySelector(':scope > .gloss-inline') : term.nextElementSibling;
   if (open) {
-    if (next && next.classList.contains('gloss-inline')) next.remove();
+    if (shown && shown.classList.contains('gloss-inline')) shown.remove();
     term.setAttribute('aria-expanded', 'false');
     return;
   }
-  const box = document.createElement('span');
+  const box = document.createElement(row ? 'dd' : 'span');
   box.className = 'gloss-inline';
   // textContent, not innerHTML: the definition is plain prose from a table in
   // this file, and the day one of them contains an ampersand is not the day to
   // find out it was being parsed as markup.
   box.textContent = term.getAttribute('data-def') || '';
-  term.insertAdjacentElement('afterend', box);
+  if (row) row.appendChild(box);
+  else term.insertAdjacentElement('afterend', box);
   term.setAttribute('aria-expanded', 'true');
 });
 
@@ -13898,6 +13903,43 @@ const KEY_STATS_FOR = {
   news: ['open', 'day_high', 'day_low', 'volume', 'avg_volume'],
 };
 
+/* What each figure is, for the label that names it.
+ *
+ * Asked for over the Investing tab's panel: "include definitions for each of
+ * these terms". Each label explains itself the way a glossary term does, by
+ * the reader's knowledge mode (glossTerm): on hover or focus by default, opened
+ * in place on Simple, and left plain on Professional. Kept out of GLOSSARY,
+ * which marks words wherever they appear in prose: "volume" or "open" marked
+ * in every sentence would be texture. Here the label is the whole subject.
+ *
+ * Written against what the feed reports, checked on 2026-10-06 against Yahoo's
+ * own data for AAPL, VST, PLTR and KO: the 52-week range is intraday highs and
+ * lows rather than closes, beta is five years of monthly returns against the
+ * S&P 500, average volume is three months, revenue growth is the latest quarter
+ * against the same one a year earlier, the margin is the last twelve months,
+ * and the yield is the current annual dividend rate over the price. Where the
+ * glossary already says it, its sentence is the one used. */
+const KEY_STAT_DEFS = {
+  market_cap: GLOSSARY['market cap'],
+  pe_trailing: "Price to earnings: the share price divided by the last twelve months of reported earnings per share. It says how many dollars you pay for each dollar the company earned. A high number means the market expects growth, not that the stock is bad.",
+  pe_forward: "Price to earnings against what analysts expect the company to earn per share over the coming year, instead of what it earned in the last one. Lower than the trailing figure when earnings are expected to grow, and only as good as the estimates.",
+  eps_trailing: "Earnings per share: the company's profit over the last twelve months divided by its shares. It is the figure the trailing P/E is calculated from, and a buyback can lift it even when profit does not grow.",
+  eps_forward: "The earnings per share analysts expect over the coming year, the average of their estimates. A forecast rather than a result, and the figure the forward P/E is calculated from.",
+  dividend_yield: "A year of dividends at the current rate, as a percentage of the share price. 2% means about $2 a year for every $100 of stock, before tax. A yield also rises when the price falls, so a high one can be a warning rather than a gift.",
+  open: "The price the regular session opened at, 9:30am Eastern. The gap from the previous close is what moved overnight, on news or in other markets.",
+  day_high: "The highest price traded in the regular session, 9:30am to 4pm Eastern. Trades before the open or after the close are not counted, so a reaction to news after hours shows in the next session's range.",
+  day_low: "The lowest price traded in the regular session, 9:30am to 4pm Eastern. With the high, it is how far the stock swung in one day. Trades before the open or after the close are not counted.",
+  volume: "How many shares changed hands in the regular session, so far if it is still open. Read against average volume: a move on heavy volume had many traders behind it, and one on light volume had few.",
+  avg_volume: "The average number of shares traded per day over the last three months. It is the yardstick for today's volume, and a guide to how easily the stock can be bought or sold without moving its price.",
+  high_52: "The highest price the stock traded at in the past 52 weeks, counting intraday highs rather than closing prices. Read with the 52-week low, it shows whether today's price is near the top of its year or the bottom.",
+  low_52: "The lowest price the stock traded at in the past 52 weeks, counting intraday lows rather than closing prices. Read with the 52-week high, it shows how wide the year's swings were and where today's price sits within them.",
+  beta: "How far the stock has tended to move when the market moves, from five years of monthly returns against the S&P 500. 1 means in step with the market, 2 about twice as far either way, and below 1 less. It describes the past, and says nothing about direction.",
+  short_float: GLOSSARY['short interest'] + ' Exchanges report it twice a month, so it is as of the date shown.',
+  days_to_cover: GLOSSARY['days to cover'],
+  profit_margin: "Net income as a percentage of revenue over the last twelve months. Of every dollar that came in, how many cents the company kept after every cost, including interest and tax. A one-off gain, such as selling part of the business, can lift it for a year.",
+  revenue_growth: "How much revenue grew in the most recent quarter, against the same quarter a year earlier. Comparing like quarters takes out seasonal swings, and an acquisition can add growth the existing business did not earn.",
+};
+
 function keyStatRows(q, short) {
   const has = (v) => v !== null && v !== undefined && Number.isFinite(Number(v));
   const money = (v) => (Math.abs(v) >= 1e6 ? '$' + fmtCompact(v, 2) : usd(v));
@@ -13937,11 +13979,12 @@ function keyStatRows(q, short) {
 function keyStatsHTML(q, opts = {}) {
   if (!q || q.price === null || q.price === undefined) return '';
   const all = keyStatRows(q, opts.short);
-  const rows = (KEY_STATS_FOR[opts.view || 'overview'] || KEY_STATS_FOR.overview)
-    .map((id) => all[id]).filter((r) => r && r[1] !== null);
-  if (!rows.length) return '';
-  const list = `<dl class="ks-grid">${rows.map(([k, v]) => `<div class="ks-row"><dt>${
-    esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>`;
+  const ids = (KEY_STATS_FOR[opts.view || 'overview'] || KEY_STATS_FOR.overview)
+    .filter((id) => all[id] && all[id][1] !== null);
+  if (!ids.length) return '';
+  const policy = explainPolicy();
+  const list = `<dl class="ks-grid">${ids.map((id) => `<div class="ks-row" data-gloss-row><dt>${
+    glossTerm(esc(all[id][0]), KEY_STAT_DEFS[id], policy)}</dt><dd>${esc(all[id][1])}</dd></div>`).join('')}</dl>`;
   if (opts.bare) return list;
   return `<section class="panel ks-panel" data-fixed="1" aria-label="Key stats">
     <h2>${hg('Key stats')}</h2>

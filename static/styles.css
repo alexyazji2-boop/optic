@@ -16382,12 +16382,25 @@ body.ws-max[data-view="chart"] main { padding: 0; }
 .ks-row { display: flex; justify-content: space-between; gap: var(--space-3);
   padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
 .ks-row dt { color: var(--ink-muted); font-size: var(--t-small); }
+/* A definition opened in place (Simple) is one more <dd> of the row, on a line
+   of its own under the label and the figure. Wrapping only then: a long figure
+   ("3.40% of float, as of Sep 15") would otherwise drop below its label. */
+.ks-row:has(> .gloss-inline) { flex-wrap: wrap; }
+/* Prose, not a figure: none of the figure's right alignment or weight. */
+.ks-row > .gloss-inline { flex-basis: 100%; margin-bottom: 0; text-align: left;
+  font-weight: 400; font-variant-numeric: normal; }
 .ks-row dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 600;
   font-size: var(--t-small); text-align: right; }
 @media (max-width: 559px) {
   .ks-grid { grid-template-columns: 1fr 1fr; gap: 0 var(--space-3); }
   .ks-row { flex-direction: column; gap: 2px; }
   .ks-row dd { text-align: left; }
+  /* Half a phone is too narrow to read a paragraph in: an opened row takes both.
+     The row is a column here, so the definition simply stacks under the figure;
+     wrapping a column, as the wide layout wraps its row, pushed it into a
+     second column past the row's edge. */
+  .ks-row:has(> .gloss-inline) { grid-column: 1 / -1; flex-wrap: nowrap; }
+  .ks-row > .gloss-inline { flex-basis: auto; }
 }
 
 /* ================================================================ accounts ===
