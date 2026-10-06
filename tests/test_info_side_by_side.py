@@ -237,8 +237,10 @@ def test_the_earnings_frame_is_yfinances_own(monkeypatch):
     ours = Y.YFinanceProvider()._earnings_dates("ZZZ")
     assert ours.equals(theirs)
     rows = Y.YFinanceProvider().earnings_history("ZZZ")
-    assert rows[1] == {"date": "2026-07-30", "eps_estimate": 1.0, "eps_reported": 1.2,
-                       "surprise_pct": 20.0}
+    # `timing` from the page's own time: which session reacted to the report
+    # (tests/test_earnings_definitions.py).
+    assert rows[1] == {"date": "2026-07-30", "timing": "after_close", "eps_estimate": 1.0,
+                       "eps_reported": 1.2, "surprise_pct": 20.0}
 
 
 def test_a_page_without_a_table_has_no_dates(monkeypatch):
