@@ -252,3 +252,17 @@ def test_the_provider_keeps_when_each_report_came_out(monkeypatch):
     rows = p.earnings_history("ZZTIME")
     assert [(r["date"], r["timing"]) for r in rows] == [("2026-07-14", "before_open"),
                                                          ("2026-07-30", "after_close")]
+
+
+def test_each_tile_carries_its_own_definition_not_a_glossary_word():
+    """"Beat rate" is also a glossary word, so a tile that lost its own
+    definition would still be marked, with the general one."""
+    out = _render()
+    unescape = lambda s: s.replace("&#39;", "'").replace("&quot;", '"').replace("&amp;", "&")
+    by_label = {}
+    for label, d in _terms(out["html"]):
+        by_label.setdefault(label, unescape(d))
+    for label, key in (("Beat rate", "beat_rate"), ("Implied move", "implied_move"),
+                       ("Ratio", "pricing_ratio"), ("Move after", "move_after"),
+                       ("EPS consensus", "eps_consensus"), ("Buy share", "buy_share")):
+        assert by_label[label] == out["defs"][key], label
