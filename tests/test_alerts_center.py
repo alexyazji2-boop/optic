@@ -307,8 +307,23 @@ def test_the_delivery_box_is_the_owners():
     assert "These stay in this inbox." in owner and "No mail server." in owner
     assert "texted" not in owner, "nothing here texts anyone"
     on = _note(True, {"enabled": True, "blockers": []})
-    assert "Emailed to you." in on and "one email" in on
+    assert "Set up to email you." in on and "one email" in on
     assert _note(False, {"enabled": True, "blockers": []}) == ""
+
+
+def test_the_delivery_box_says_what_was_sent_not_only_what_is_set_up():
+    """"Emailed to you" came from configuration, so a relay refusing every
+    message still read as working (found in review, 2026-10-06)."""
+    never = _note(True, {"enabled": True, "blockers": [], "last_attempt": None})
+    assert "No email has been attempted since this server started." in never
+    refused = _note(True, {"enabled": True, "blockers": [], "undelivered_recent": 3,
+                           "last_attempt": {"at": "2026-10-06T20:31:00Z", "sent": 0,
+                                            "reason": "The mail server did not accept the message."}})
+    assert "sent nothing: The mail server did not accept the message." in refused
+    assert "3 alerts from the" in refused and "not been emailed yet" in refused
+    sent = _note(True, {"enabled": True, "blockers": [],
+                        "last_attempt": {"at": "2026-10-06T20:31:00Z", "sent": 2}})
+    assert "The last email went out" in sent and "carrying 2 alerts" in sent
 
 
 def test_the_second_delivery_line_is_the_owners_too():

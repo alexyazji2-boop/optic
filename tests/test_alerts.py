@@ -250,6 +250,20 @@ def test_a_send_that_fails_leaves_them_pending_for_the_next_scan(mail):
     assert alerts.deliver_pending() == {"sent": 1}
 
 
+def test_the_last_attempt_and_the_backlog_are_recorded_as_they_happened(mail):
+    """What the inbox says about delivery comes from what delivery did."""
+    alerts.raise_alert("closed", "NVDA closed at its target", dedupe_key="c2")
+    mail["accept"] = False
+    alerts.deliver_pending()
+    assert alerts.LAST_ATTEMPT["sent"] == 0 and alerts.LAST_ATTEMPT["pending"] == 1
+    assert "did not accept" in alerts.LAST_ATTEMPT["reason"]
+    assert alerts.undelivered_recent() == 1
+    mail["accept"] = True
+    alerts.deliver_pending()
+    assert alerts.LAST_ATTEMPT["sent"] == 1 and alerts.LAST_ATTEMPT["reason"] is None
+    assert alerts.undelivered_recent() == 0
+
+
 def test_nothing_is_sent_while_delivery_is_off(monkeypatch):
     _local(monkeypatch)
     monkeypatch.setattr(alerts.mailer, "available", lambda: {"available": False})

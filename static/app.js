@@ -5810,11 +5810,24 @@ function alertRow(a, kinds) {
  * were never theirs to set. Signed in as the owner it says what is missing,
  * named rather than left as "not configured", or that the scan's alerts
  * arrive by email. */
+/* What delivery is set up to do, then what it actually did. "Emailed to you"
+ * was printed from configuration alone, so a relay that refused every message
+ * still read as delivery working; the server now reports the last attempt and
+ * how many recent alerts no email has carried. */
 function alertDeliveryNote(delivery) {
   if (!delivery || !isOwner()) return '';
   if (delivery.enabled) {
-    return `<div class="callout info"><strong>Emailed to you.</strong> Each scan's
-      new alerts arrive as one email, and stay here as well.</div>`;
+    const last = delivery.last_attempt;
+    const when = last && last.at ? new Date(last.at).toLocaleString([], {
+      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+    const record = !last ? 'No email has been attempted since this server started.'
+      : last.sent ? `The last email went out ${when}, carrying ${last.sent} alert${last.sent === 1 ? '' : 's'}.`
+        : last.reason ? `The last attempt, ${when}, sent nothing: ${last.reason}` : '';
+    const waiting = delivery.undelivered_recent
+      ? ` ${delivery.undelivered_recent} alert${delivery.undelivered_recent === 1 ? '' : 's'} from the
+        last day ${delivery.undelivered_recent === 1 ? 'has' : 'have'} not been emailed yet.` : '';
+    return `<div class="callout info"><strong>Set up to email you.</strong> Each scan's
+      new alerts go out as one email, and stay here as well. ${esc(record)}${esc(waiting)}</div>`;
   }
   const blockers = delivery.blockers || [];
   if (!blockers.length) return '';
@@ -20210,8 +20223,10 @@ function alertsBody() {
   // The owner's, as on the alerts page: see alertDeliveryNote.
   return `${list}
   ${isOwner() ? `<div class="alert-delivery">
-    <strong>${d.enabled ? 'Delivery is on.' : 'Nothing is being sent to you.'}</strong>
-    ${d.enabled ? '' : `
+    <strong>${d.enabled ? 'Delivery is set up.' : 'Nothing is being sent to you.'}</strong>
+    ${d.enabled ? esc(d.last_attempt && d.last_attempt.sent ? 'The last email went out.'
+      : d.last_attempt && d.last_attempt.reason ? `The last attempt sent nothing: ${d.last_attempt.reason}`
+        : 'No email has gone out from this server yet.') : `
       <ul class="alert-blockers">${(d.blockers || []).map((b) =>
     `<li>${esc(b)}</li>`).join('')}</ul>`}
   </div>` : ''}`;

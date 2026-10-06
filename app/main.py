@@ -4059,7 +4059,11 @@ async def list_alerts(limit: int = Query(50, ge=1, le=200),
         "alerts": alerts_mod.recent(limit=limit, unseen_only=unseen),
         "unseen": alerts_mod.unseen_count(),
         "kinds": alerts_mod.KINDS,
-        "delivery": alerts_mod.delivery_status(),
+        # What delivery needs, and what it has actually done: the newest
+        # attempt in this process and how many recent alerts no email carried.
+        "delivery": {**alerts_mod.delivery_status(),
+                     "last_attempt": dict(alerts_mod.LAST_ATTEMPT) or None,
+                     "undelivered_recent": alerts_mod.undelivered_recent()},
     }
 
 

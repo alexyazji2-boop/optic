@@ -306,6 +306,27 @@ def _always_on() -> bool:
     return is_hosted() or os.environ.get("ALERT_ALWAYS_ON", "").strip().lower() == "true"
 
 
+# The last delivery attempt in this process: when, what went out, and why not.
+# "Delivery is on" is a statement about configuration; this is what happened.
+LAST_ATTEMPT: Dict[str, Any] = {}
+
+
+def _note_attempt(sent: int, pending: int = 0, reason: Optional[str] = None) -> None:
+    LAST_ATTEMPT.clear()
+    LAST_ATTEMPT.update({"at": datetime.now(timezone.utc).isoformat(), "sent": sent,
+                         "pending": pending, "reason": reason})
+
+
+def undelivered_recent() -> int:
+    """Alerts from the delivery window that no email has carried yet."""
+    init()
+    since = (datetime.now(timezone.utc) - timedelta(hours=DELIVER_WITHIN_HOURS)).isoformat()
+    with _conn() as conn:
+        row = conn.execute("SELECT COUNT(*) FROM alerts WHERE delivered = 0 AND created_at >= ?",
+                           (since,)).fetchone()
+    return int(row[0] if row else 0)
+
+
 def delivery_status() -> Dict[str, Any]:
     """What delivery needs, checked rather than assumed.
 
@@ -368,6 +389,7 @@ def deliver_pending(limit: int = DELIVER_LIMIT) -> Dict[str, Any]:
     """
     status = delivery_status()
     if not status["enabled"]:
+        _note_attempt(0, reason=" ".join(status["blockers"]))
         return {"sent": 0, "reason": " ".join(status["blockers"])}
     init()
     since = (datetime.now(timezone.utc) - timedelta(hours=DELIVER_WITHIN_HOURS)).isoformat()
@@ -380,9 +402,11 @@ def deliver_pending(limit: int = DELIVER_LIMIT) -> Dict[str, Any]:
         return {"sent": 0}
     mail = _digest(rows)
     if not mailer.send(_recipient(), mail["subject"], mail["body"]):
+        _note_attempt(0, len(rows), "The mail server did not accept the message.")
         return {"sent": 0, "pending": len(rows),
                 "reason": "The mail server did not accept the message."}
     with _conn() as conn:
         conn.executemany("UPDATE alerts SET delivered = 1 WHERE id = ?",
                          [(row["id"],) for row in rows])
+    _note_attempt(len(rows))
     return {"sent": len(rows)}
