@@ -24,9 +24,7 @@ client = TestClient(main.app)
 # catalyst scan are open to everyone, spaced out for anyone but the owner, and
 # tests/test_public_scans.py holds them to that. What is left changes the
 # record in ways a reader has no business doing.
-# Marking the inbox read joined them: one inbox for the deployment, and an
-# empty body marked every alert read for everyone (found in review, 2026-10-06).
-WRITES = ("/api/alerts/clear", "/api/alerts/seen", "/api/feedback/resolve-all")
+WRITES = ("/api/alerts/clear", "/api/feedback/resolve-all")
 PLATFORM_VARS = ("RAILWAY_ENVIRONMENT", "RAILWAY_GIT_COMMIT_SHA",
                  "RENDER", "FLY_APP_NAME")
 
@@ -90,3 +88,21 @@ def test_marking_alerts_seen_stays_open():
     for a token merely for having looked at the inbox."""
     main.WRITE_TOKEN = "correct-horse"
     assert client.post("/api/alerts/seen", json={}).status_code == 200
+
+
+def test_only_the_owner_changes_the_shared_read_state():
+    """One inbox for the deployment: a visitor's empty-bodied call marked every
+    alert read for everyone (found in review, 2026-10-06)."""
+    from app import alerts as alerts_mod
+    main.WRITE_TOKEN = "correct-horse"
+    seen = []
+    orig = alerts_mod.mark_seen
+    alerts_mod.mark_seen = lambda ids=None: seen.append(ids) or 3
+    try:
+        visitor = client.post("/api/alerts/seen", json={}).json()
+        owner = client.post("/api/alerts/seen", json={}, headers={"X-Optic-Token": "correct-horse"}).json()
+    finally:
+        alerts_mod.mark_seen = orig
+    assert visitor == {"marked": 0, "shared": False,
+                       "detail": "The inbox's read state is the owner's, so nothing was marked."}
+    assert owner["marked"] == 3 and owner["shared"] is True and seen == [None]
