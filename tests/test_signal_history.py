@@ -305,3 +305,18 @@ def test_a_page_check_survives_an_accounts_outage(two, monkeypatch):
     assert met and met[0]["signal_record"]["strategy"] == "trend_pullback", \
         "the guest copy is still handed back"
     assert signal_history.history(two[0]) == []
+
+
+def test_deleting_an_account_removes_its_signals_and_what_followed(two):
+    """Immutable against edits, not against the account holder leaving: the
+    triggers refuse UPDATE only, and the rows go with the account."""
+    from app.auth import store
+    _df, _res, hit = fired()
+    watch_runner.record_signal(two[0], hit, "scheduled alert check")
+    sig = signal_history.history(two[0])[0]
+    signal_history.add_event(sig, "status", "expired", "2026-01-01")
+    watch_runner.record_signal(two[1], hit, "scheduled alert check")
+    store.delete_user(two[0])
+    assert db.rows("SELECT id FROM signals WHERE user_id = ?", (two[0],)) == []
+    assert db.rows("SELECT id FROM signal_events WHERE user_id = ?", (two[0],)) == []
+    assert len(signal_history.history(two[1])) == 1, "the other reader's record stays"
