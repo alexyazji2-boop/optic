@@ -264,8 +264,15 @@ def test_the_csrf_cookie_is_readable_but_the_session_cookie_is_not():
     assert "httponly" not in csrf.lower()
 
 
-def test_logout_needs_no_csrf_header_because_it_only_removes_access():
+def test_logout_checks_the_csrf_pair_like_every_signed_in_write():
+    """It was exempt, on the grounds that it only removes access; another site
+    ending a reader's session is still a forged request. Asked for 2026-10-06."""
     register(client, "out@example.com")
+    assert client.post("/api/auth/logout").status_code == 403
+    csrf = client.cookies.get(config.CSRF_COOKIE)
+    assert client.post("/api/auth/logout", headers={"X-Optic-CSRF": csrf}).status_code == 200
+    client.cookies.clear()
+    # Nothing to forge without a session: a signed-out logout still answers.
     assert client.post("/api/auth/logout").status_code == 200
 
 

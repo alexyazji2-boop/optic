@@ -212,7 +212,8 @@ def test_a_forged_cookie_authenticates_nobody():
 def test_logout_deletes_the_session_row():
     signup()
     assert len(main.accounts_db.rows("SELECT 1 FROM sessions")) == 1
-    assert client.post("/api/auth/logout").status_code == 200
+    csrf = client.cookies.get(config.CSRF_COOKIE)
+    assert client.post("/api/auth/logout", headers={"X-Optic-CSRF": csrf}).status_code == 200
     assert main.accounts_db.rows("SELECT 1 FROM sessions") == []
     client.cookies.clear()
     assert client.get("/api/auth/me").json()["authenticated"] is False

@@ -255,6 +255,13 @@ async def login(request: Request, response: Response,
 
 @router.post("/logout")
 async def logout(request: Request, response: Response) -> Dict[str, Any]:
+    # The same double-submit check as every other signed-in write, logout-all
+    # included. It used to be skipped on the grounds that signing out only
+    # removes access, which is true and still lets another site end a reader's
+    # session, unsaved work and all. The guard passes a request with no
+    # session cookie, and /api/auth/me issues the CSRF cookie again on any load
+    # where it is missing, so a reader can always sign out after a reload.
+    deps.csrf_guard(request)
     session, _user = deps.session_and_user(request)
     if session:
         store.delete_session(session["id"])
