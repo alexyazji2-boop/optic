@@ -110,6 +110,9 @@ function setWriteToken() {}
 var window = { OpticAuth: { csrf: function () { return 'c'; }, state: function () { return { admin: true }; } },
                prompt: function () { return null; } };
 var attempts = 0, failFirst = 0;
+// The page's wait for the server (tests/test_restart_wait.py has it for real).
+var originGate = null, waits = 0, serverBack = false;
+function waitForOrigin() { waits++; return Promise.resolve(serverBack); }
 function fetch(url, opts) {
   attempts++;
   if (attempts <= failFirst) return Promise.reject(new TypeError('Failed to fetch'));
@@ -119,7 +122,7 @@ function fetch(url, opts) {
 
 
 def test_a_dropped_connection_is_retried_before_anything_is_said():
-    _js(REPORTS, ["fetchReports"], """
+    _js(REPORTS, ["retryAfter", "fetchReports"], """
       failFirst = 2;
       var data = await fetchReports(50);
       assert(Array.isArray(data.reports), 'answered');
@@ -128,13 +131,31 @@ def test_a_dropped_connection_is_retried_before_anything_is_said():
 
 
 def test_a_connection_that_never_comes_back_is_a_marked_error_not_the_browsers_words():
-    _js(REPORTS, ["fetchReports"], """
+    _js(REPORTS, ["retryAfter", "fetchReports"], """
       failFirst = 99;
       var caught = null;
       try { await fetchReports(50); } catch (e) { caught = e; }
       assert(caught && caught.originUnreachable === true, 'marked');
       assert(caught.message === 'the connection dropped after 5 attempts', caught && caught.message);
       assert(attempts === 5, 'the same five tries getJSON makes');
+      assert(waits === 1, 'and the same wait for the server, once');
+    """)
+
+
+def test_a_server_back_from_a_restart_is_asked_once_more():
+    _js(REPORTS, ["retryAfter", "fetchReports"], """
+      failFirst = 5; serverBack = true;
+      var data = await fetchReports(50);
+      assert(Array.isArray(data.reports), 'answered after the wait');
+      assert(attempts === 6 && waits === 1, attempts + ' tries, ' + waits + ' waits');
+    """)
+
+
+def test_a_read_made_during_the_wait_joins_it():
+    _js(REPORTS, ["retryAfter", "fetchReports"], """
+      originGate = {}; failFirst = 1; serverBack = true;
+      var data = await fetchReports(50);
+      assert(attempts === 2 && waits === 1, 'no quick retries of its own: ' + attempts);
     """)
 
 

@@ -96,7 +96,7 @@ def run_js(scenario):
     setup = "\n".join(declaration(name) for name in [
         "ORIGIN_DOWN_RE",
         "swingRequestId", "swingLoading", "swingInFlight", "chartRequestId",
-        "SESSION_LABEL", "AUTO_REFRESH_VIEWS", "autoRefreshPending", "REFRESH_HEALTH",
+        "SESSION_LABEL", "AUTO_REFRESH_VIEWS", "autoRefreshPending", "REFRESH_HEALTH", "originGate",
         # liveIndicatorHTML asks whether the loaded name has an overnight print.
         "TICKER_VIEWS"])
     loaders = "\n".join(function(name) for name in [
@@ -208,6 +208,22 @@ def test_a_failed_refresh_is_said_on_the_chip_and_a_good_one_clears_it():
       pending[1].resolve({ticker: 'AAPL', revision: 2}); await tick;
       chip = liveIndicatorHTML();
       assert(chip.includes('refreshing every 20s'), 'a good refresh did not clear it: ' + chip);
+    """)
+
+
+def test_while_the_server_is_away_the_chip_says_so_and_nothing_more_is_asked():
+    """Reported beside "The server is not reachable": the chip said "Market
+    open · refreshing every 20s" through a restart (tests/test_restart_wait.py)."""
+    run_js("""
+      STATE.view = 'overview'; STATE.swing = {ticker: 'AAPL'};
+      originGate = {promise: new Promise(function () {})};
+      var chip = liveIndicatorHTML();
+      assert(chip.includes('Reconnecting to the server') && !chip.includes('refreshing'), chip);
+      assert(!chip.includes('pulse-beat'), 'nothing is arriving, so nothing pulses');
+      await tickAutoRefresh();
+      assert(pending.length === 0, 'a tick added to the queue');
+      originGate = null;
+      assert(liveIndicatorHTML().includes('refreshing every 20s'), 'back to the session when it answers');
     """)
 
 

@@ -1619,6 +1619,10 @@ function setWriteToken(value) {
 }
 
 async function postJSON(url, body) {
+  // Never retried (see RETRY_DELAYS_MS), but one asked for while the page is
+  // already waiting for the server has not gone anywhere yet, so it goes once,
+  // when the server is back, instead of failing into the outage.
+  if (originGate) await originGate.promise;
   const headers = { 'Content-Type': 'application/json' };
   const token = writeToken();
   if (token) headers['X-Optic-Token'] = token;
@@ -1717,44 +1721,148 @@ function worthRetrying(status) {
     || (status >= 520 && status <= 530);
 }
 
+/* One wait for the whole page while the server is away.
+ *
+ * A deploy here stops the old server before the new one is up (one replica on
+ * a volume, so two can never run at once), and for the better part of a minute
+ * every request fails at the connection. Each request used to retry on its own
+ * for fifteen seconds and then paint "The server is not reachable" into its
+ * panel, usually seconds before the server came back: reported from VST's
+ * Overview during the 2026-10-06 deploy. Now the first request that keeps
+ * failing opens this gate: one poll of /healthz for the page, a line at the top
+ * saying what is happening, and every request waiting on it rather than
+ * failing. When the server answers they carry on where they were, with no
+ * reload. Only an outage past the end of ORIGIN_WAIT_MS is reported as one.
+ *
+ * Paced by a schedule, not the clock, so the wait is the same however the
+ * timers run: about two minutes, checked often at first. */
+const ORIGIN_WAIT_MS = [1000, 1000, 2000, 2000, 3000, 3000, 4000, 4000,
+  ...Array(20).fill(5000)];                        // 120 seconds in all
+let originGate = null;
+// When the server was first missed, kept across waits until it answers: past
+// the first wait the page is still waiting, and the line should say for how long.
+let originAwaySince = null;
+
+function waitForOrigin() {
+  if (!originGate) {
+    let resolve;
+    const promise = new Promise((r) => { resolve = r; });
+    originGate = { promise, resolve };
+    if (originAwaySince === null) originAwaySince = Date.now();
+    paintOriginBanner('waiting');
+    pollOrigin();
+  }
+  return originGate.promise;
+}
+
+async function pollOrigin() {
+  const gate = originGate;
+  for (const delay of ORIGIN_WAIT_MS) {
+    await new Promise((r) => setTimeout(r, delay));
+    try {
+      const res = await fetch('/healthz', { cache: 'no-store' });
+      if (res && res.ok) {
+        originGate = null;
+        originAwaySince = null;
+        paintOriginBanner('back');
+        gate.resolve(true);
+        return;
+      }
+    } catch (e) { /* still away */ }
+    paintOriginBanner('waiting');
+  }
+  originGate = null;
+  paintOriginBanner('gone');
+  gate.resolve(false);
+}
+
+/* The line at the top while the gate is open: one for the page, instead of an
+ * error in every panel, and gone again when the server answers. */
+function paintOriginBanner(state) {
+  if (typeof document === 'undefined' || !document.body || !document.createElement) return;
+  let bar = document.getElementById('origin-banner');
+  if (state === 'back' || state === 'gone') {
+    if (bar) bar.remove();
+    if (typeof updateStatus === 'function') updateStatus();
+    return;
+  }
+  const created = !bar;
+  if (created) {
+    bar = document.createElement('div');
+    bar.id = 'origin-banner';
+    bar.className = 'origin-banner';
+    bar.setAttribute('role', 'status');
+    document.body.appendChild(bar);
+  }
+  const minutes = Math.floor((Date.now() - (originAwaySince || Date.now())) / 60000);
+  // "Most likely": from the page, a restart and an outage look the same until
+  // one of them ends. The guess is the common case and is worded as one.
+  const why = minutes >= 2
+    ? `It has not answered for ${minutes} minutes.`
+    : `It is not answering, most likely because it is restarting for an update,
+       which usually takes under a minute.`;
+  // Asked on every check, but only rewritten when the words change, so a
+  // screen reader is not handed the same sentence every few seconds.
+  if (bar.dataset.why !== why) {
+    bar.dataset.why = why;
+    bar.innerHTML = `<span class="origin-banner-dot" aria-hidden="true"></span>
+      <span><strong>Reconnecting to the server.</strong> ${why} This page carries on by
+      itself when it is back.</span>`;
+  }
+  // The status chip says so too, from the moment the line appears.
+  if (created && typeof updateStatus === 'function') updateStatus();
+}
+
+/* After a try that got no usable answer, whether to make another: the quick
+ * retries for a blink first, then once, with everything else, the page's wait
+ * for the server. A request made while that wait is on skips its own retries,
+ * which would only add to the queue. `wait` is the caller's, so each request
+ * waits once. */
+async function retryAfter(i, wait) {
+  if (i < RETRY_DELAYS_MS.length && !originGate) {
+    await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[i]));
+    return true;
+  }
+  if (wait.taken) return false;
+  wait.taken = true;
+  return waitForOrigin();
+}
+
 async function getJSON(url) {
   let lastDetail = '';
   let attempts = 0;
+  const wait = {};
 
-  for (let i = 0; i <= RETRY_DELAYS_MS.length; i += 1) {
-    attempts = i + 1;
-    let res;
+  for (let i = 0; ; i += 1) {
+    attempts += 1;
+    let res = null;
     try {
       res = await fetch(url);
     } catch (err) {
       // A dropped connection throws rather than returning a status. Same class
       // of failure, same treatment.
       lastDetail = 'the connection dropped';
-      if (i < RETRY_DELAYS_MS.length) {
-        await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[i]));
-        continue;
+    }
+
+    if (res) {
+      if (res.ok) return res.json();
+
+      // HTTP/2 carries no status text, so res.statusText is '' over the tunnel and
+      // over any modern host — which surfaced as a bare "Could not load." with no
+      // reason at all. The status code is always available, so it's the fallback,
+      // and 5xx from a proxy gets named because that failure is about the
+      // connection rather than anything the app did.
+      let detail = '';
+      try { detail = ((await res.json()).detail || '').toString(); } catch (e) { /* not JSON */ }
+      if (detail) throw new Error(detail);           // the app answered; that is the answer
+
+      if (!worthRetrying(res.status)) {
+        throw new Error(`${res.statusText || 'request failed'} (HTTP ${res.status})`);
       }
-      break;
+      lastDetail = `the server is unreachable (HTTP ${res.status})`;
     }
 
-    if (res.ok) return res.json();
-
-    // HTTP/2 carries no status text, so res.statusText is '' over the tunnel and
-    // over any modern host — which surfaced as a bare "Could not load." with no
-    // reason at all. The status code is always available, so it's the fallback,
-    // and 5xx from a proxy gets named because that failure is about the
-    // connection rather than anything the app did.
-    let detail = '';
-    try { detail = ((await res.json()).detail || '').toString(); } catch (e) { /* not JSON */ }
-    if (detail) throw new Error(detail);           // the app answered; that is the answer
-
-    if (!worthRetrying(res.status)) {
-      throw new Error(`${res.statusText || 'request failed'} (HTTP ${res.status})`);
-    }
-    lastDetail = `the server is unreachable (HTTP ${res.status})`;
-    if (i < RETRY_DELAYS_MS.length) {
-      await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[i]));
-    }
+    if (!(await retryAfter(i, wait))) break;
   }
 
   /* Marked, so the error box can offer recovery instead of just a status code.
@@ -31721,22 +31829,22 @@ async function fetchReports(limit, status) {
    * 159ms. The same delays, and the same marked error when they run out, so
    * the page can offer recovery instead of the browser's words. */
   let res = null;
-  for (let i = 0; i <= RETRY_DELAYS_MS.length; i += 1) {
+  let attempts = 0;
+  const wait = {};
+  for (let i = 0; !res; i += 1) {
+    attempts += 1;
     try {
       res = await fetch('/api/feedback?limit=' + encodeURIComponent(limit || 50)
         + (status ? '&status=' + encodeURIComponent(status) : ''), {
         headers,
         credentials: 'same-origin',
       });
-      break;
     } catch (e) {
-      if (i < RETRY_DELAYS_MS.length) {
-        await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[i]));
-      }
+      if (!(await retryAfter(i, wait))) break;
     }
   }
   if (!res) {
-    const err = new Error(`the connection dropped after ${RETRY_DELAYS_MS.length + 1} attempts`);
+    const err = new Error(`the connection dropped after ${attempts} attempts`);
     err.originUnreachable = true;
     throw err;
   }
@@ -35637,6 +35745,10 @@ function trimPhase(label, phaseShown) {
 }
 
 function liveIndicatorHTML(opts = {}) {
+  // The server is away: nothing is refreshing, whatever the session.
+  if (originGate) {
+    return '<span class="chip warn"><span class="dot"></span>Reconnecting to the server</span>';
+  }
   const session = marketSessionET();
   if (session === 'closed') {
     // Name the holiday when there is one. "Market closed" on a Monday reads as
@@ -35684,7 +35796,9 @@ function liveIndicatorHTML(opts = {}) {
 
 async function tickAutoRefresh() {
   updateStatus(); // keep the live/closed chip accurate even off the swing tab
-  if (document.hidden || !isTapeLiveET()) return;
+  // While the server is away the requests already waiting will carry on; a
+  // tick would only add more to the queue.
+  if (document.hidden || !isTapeLiveET() || originGate) return;
   if (autoRefreshPending || swingLoading) return;
   autoRefreshPending = true;
   const view = STATE.view;
