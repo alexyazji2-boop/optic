@@ -157,3 +157,51 @@ def test_a_ratio_it_cannot_read_is_listed_as_unread():
     said the ratio had been ignored."""
     from app.analytics import scan_request as sr
     assert "p/e" in sr.read("P/E below 15 above the 200-day")["leftover"]
+
+
+# ------------------------------------------------------------ kept across a reload
+
+def test_the_screen_being_built_survives_a_reload():
+    """A reload, or a tab closed by accident, emptied the builder."""
+    exe = JSC if os.path.exists(JSC) else shutil.which("jsc")
+    if not exe:
+        pytest.skip("no JavaScriptCore on this machine")
+    page = """
+      load('tests/support/browser_stubs.js');
+      localStorage.getItem = function (k) { return Object.prototype.hasOwnProperty.call(MEM, k) ? MEM[k] : null; };
+      localStorage.setItem = function (k, v) { MEM[k] = String(v); };
+      document.documentElement.style = document.documentElement.style || {};
+      document.documentElement.style.setProperty = function () {};
+      document.documentElement.style.removeProperty = function () {};
+      try { load('static/charts.js'); load('static/app.js'); } catch (e) {}
+    """
+    first = """
+      var MEM = {};
+    """ + page + """
+      var spec = screenerSpec();
+      spec.filters.push({field: 'price', min: null, max: null});
+      screenerBoundInput({dataset: {scMin: '0'}, value: '100', validity: {badInput: false},
+                          setAttribute: function () {}, closest: function () { return null; }});
+      spec.sort = 'roc20'; screenerSave();
+      print('MEM:' + JSON.stringify(MEM));
+    """
+    out = subprocess.run([exe, "-e", first], capture_output=True, text=True, timeout=60, cwd=str(ROOT))
+    mem = out.stdout.split("MEM:", 1)[1].split("\n")[0]
+    second = "var MEM = " + mem + ";" + page + """
+      print('RESULT:' + JSON.stringify(screenerSpec()));
+    """
+    out2 = subprocess.run([exe, "-e", second], capture_output=True, text=True, timeout=60, cwd=str(ROOT))
+    spec = json.loads(out2.stdout.split("RESULT:", 1)[1].split("\n")[0])
+    assert spec["filters"] == [{"field": "price", "min": 100, "max": None}]
+    assert spec["sort"] == "roc20" and spec["direction"] == "desc"
+    garbage = "var MEM = {'optic.screener.v1': '{not json'};" + page + """
+      print('RESULT:' + JSON.stringify(screenerSpec()));
+    """
+    out3 = subprocess.run([exe, "-e", garbage], capture_output=True, text=True, timeout=60, cwd=str(ROOT))
+    blank = json.loads(out3.stdout.split("RESULT:", 1)[1].split("\n")[0])
+    assert blank["filters"] == [] and blank["sort"] == "score"
+
+
+def test_the_saved_screen_is_a_personal_key():
+    keys = APP_JS[APP_JS.index("const PERSONAL_KEYS = ["):APP_JS.index("];", APP_JS.index("const PERSONAL_KEYS = ["))]
+    assert "'optic.screener.v1'" in keys

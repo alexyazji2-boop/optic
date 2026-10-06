@@ -130,6 +130,7 @@ const PERSONAL_KEYS = [
   'optic.chart.watch.v1',        // the watchlist, signed out
   'optic.watchlists.v1',         // named watchlists, signed out
   'optic.watches.v1',            // watches, signed out
+  'optic.screener.v1',           // the screen being built
   'optic.signals.v1',            // swing-setup signals that fired, signed out
   'optic.thesis.v1',             // theses, and their backing copy signed in
   'optic.valuation.v1',          // valuation scenarios, signed out or unsaved
@@ -33260,10 +33261,45 @@ function scanCell(kind, value) {
 let screenerFields = null;          // the catalogue, fetched once
 let screenerBusy = false;
 
+/* The screen being built, kept in this browser as it is built. A reload, or
+ * a tab closed by accident, used to empty the builder and lose every bound. */
+const SCREENER_KEY = 'optic.screener.v1';
+
+function screenerBlank() {
+  return { filters: [], states: [], sort: 'score', direction: 'desc', limit: 50 };
+}
+
+function screenerStored() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SCREENER_KEY) || 'null');
+    if (!raw || !Array.isArray(raw.filters) || !Array.isArray(raw.states)) return null;
+    const num = (v) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Number(v));
+    return {
+      filters: raw.filters.filter((f) => f && typeof f.field === 'string')
+        .map((f) => ({ field: f.field, min: num(f.min), max: num(f.max) })),
+      states: raw.states.filter((x) => typeof x === 'string'),
+      sort: typeof raw.sort === 'string' ? raw.sort : 'score',
+      direction: raw.direction === 'asc' ? 'asc' : 'desc',
+      limit: 50,
+    };
+  } catch (e) { return null; }
+}
+
+/* The bounds as they are, without the page's markers for boxes it could not
+ * read: an unreadable box is saved as empty, which is what it is. */
+function screenerSave() {
+  const spec = STATE.screener;
+  if (!spec) return;
+  try {
+    localStorage.setItem(SCREENER_KEY, JSON.stringify({
+      filters: spec.filters.map(({ field, min, max }) => ({ field, min, max })),
+      states: spec.states, sort: spec.sort, direction: spec.direction,
+    }));
+  } catch (e) { /* private mode: the screen lasts as long as the tab */ }
+}
+
 function screenerSpec() {
-  if (!STATE.screener) {
-    STATE.screener = { filters: [], states: [], sort: 'score', direction: 'desc', limit: 50 };
-  }
+  if (!STATE.screener) STATE.screener = screenerStored() || screenerBlank();
   return STATE.screener;
 }
 
@@ -33864,6 +33900,7 @@ document.addEventListener('click', (evt) => {
     STATE.screener = { ...r.spec, filters: (r.spec.filters || []).map((f) => ({ ...f })),
       states: [...(r.spec.states || [])], limit: 50 };
     STATE.screenerResult = r.result || null;
+    screenerSave();
   }
   const mode = askEdit ? { dataset: { scanMode: 'build' } }
     : evt.target.closest('[data-scan-mode]');
@@ -33891,18 +33928,21 @@ document.addEventListener('click', (evt) => {
     const taken = new Set(screenerSpec().filters.map((f) => f.field));
     const next = (cat.fields || []).find((f) => !taken.has(f.id)) || (cat.fields || [])[0];
     if (next) screenerSpec().filters.push({ field: next.id, min: null, max: null });
+    screenerSave();
     paintScreener();
     return;
   }
   const del = evt.target.closest('[data-sc-del]');
   if (del) {
     screenerSpec().filters.splice(Number(del.dataset.scDel), 1);
+    screenerSave();
     paintScreener();
     return;
   }
   if (evt.target.closest('[data-sc-reset]')) {
-    STATE.screener = { filters: [], states: [], sort: 'score', direction: 'desc', limit: 50 };
+    STATE.screener = screenerBlank();
     STATE.screenerResult = null;
+    screenerSave();
     paintScreener();
     return;
   }
@@ -33929,6 +33969,7 @@ function screenerBoundInput(t) {
   const bad = !!(t.validity && t.validity.badInput);
   row[which] = t.value === '' || bad ? null : Number(t.value);
   row.bad = Object.assign({}, row.bad || {}, { [which]: bad });
+  screenerSave();
   t.setAttribute('aria-invalid', bad ? 'true' : 'false');
   const note = t.closest('.sc-filter') && t.closest('.sc-filter').querySelector('.sc-bad');
   if (note) note.textContent = screenerRowBad(row) ? 'Not a number, so this bound is not applied.' : '';
@@ -33981,7 +34022,7 @@ document.addEventListener('change', (evt) => {
     const row = spec.filters[Number(t.dataset.scField)];
     // A new field starts with no bounds: "price at least 100" carried over
     // onto a 20-day change was a screen for a 100% move, empty with no hint.
-    if (row) { row.field = t.value; row.min = null; row.max = null; row.bad = null; paintScreener(); }
+    if (row) { row.field = t.value; row.min = null; row.max = null; row.bad = null; screenerSave(); paintScreener(); }
     return;
   }
   if (t.dataset.scMin !== undefined || t.dataset.scMax !== undefined) {
@@ -33993,10 +34034,11 @@ document.addEventListener('change', (evt) => {
     spec.states = t.checked
       ? [...new Set([...spec.states, id])]
       : spec.states.filter((x) => x !== id);
+    screenerSave();
     return;
   }
-  if (t.hasAttribute && t.hasAttribute('data-sc-sort')) { spec.sort = t.value; return; }
-  if (t.hasAttribute && t.hasAttribute('data-sc-dir')) { spec.direction = t.value; }
+  if (t.hasAttribute && t.hasAttribute('data-sc-sort')) { spec.sort = t.value; screenerSave(); return; }
+  if (t.hasAttribute && t.hasAttribute('data-sc-dir')) { spec.direction = t.value; screenerSave(); }
 });
 
 function bindScanPills() {
