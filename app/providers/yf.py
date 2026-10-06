@@ -596,6 +596,26 @@ def merge_info(symbol: str, summary: Optional[Dict[str, Any]], quote: Optional[D
     return info
 
 
+def _report_timing(stamp: Any) -> Optional[str]:
+    """Before the open or after the close, from the time the feed gives a report.
+
+    The date alone cannot say which session reacted: a report at 06:00 moves
+    that day's session, one at 16:00 the next. Anything before the close moves
+    that day's, so the rare midday report counts with the early ones. Midnight,
+    or no time at all, is the feed not knowing, and is left unknown.
+    """
+    try:
+        ts = pd.Timestamp(stamp)
+    except (TypeError, ValueError):
+        return None
+    if ts.tzinfo is not None:
+        ts = ts.tz_convert("America/New_York")
+    minutes = ts.hour * 60 + ts.minute
+    if minutes == 0:
+        return None
+    return "after_close" if minutes >= 16 * 60 else "before_open"
+
+
 def _iso_from_epoch(value: Any) -> Optional[str]:
     """Yahoo's extended-hours timestamps are unix seconds. Kept so the UI can say
     *when* an after-hours price was last struck — a quote from 4:05pm and one from
@@ -1388,6 +1408,7 @@ class YFinanceProvider(MarketDataProvider):
                 out.append(
                     {
                         "date": str(pd.Timestamp(stamp).date()),
+                        "timing": _report_timing(stamp),
                         "eps_estimate": _f(row.get("EPS Estimate")),
                         "eps_reported": _f(row.get("Reported EPS")),
                         "surprise_pct": _f(row.get("Surprise(%)")),

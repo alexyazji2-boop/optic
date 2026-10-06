@@ -14026,6 +14026,55 @@ const FIN_DEFS = {
   sv_days: "How many trading days of FINRA's daily files the average covers, up to the last twenty. FINRA publishes one file for each trading day, usually that evening.",
 };
 
+/* The Earnings tab's figures, explained the same way.
+ *
+ * Asked for after Financials: "add definitions to the Earnings tab stats too".
+ * Worked out from app/analytics/earnings.py, which builds every one of them.
+ * Where it was wrong the figure was fixed rather than described as it was:
+ * the move after a report measured the day after the reaction for every
+ * company reporting before the open (JPM, July 2026: +1.17% shown for a
+ * +2.50% session), estimate revisions ran backwards for a company expected to
+ * lose money, and year-over-year growth from a loss had the wrong sign. */
+const EARN_DEFS = {
+  // ---- the next report, or the latest result
+  eps_consensus: "The average of analysts' estimates of earnings per share for the coming report, with the lowest and highest beside it. A wide range means they disagree, and a bigger surprise either way is more likely.",
+  revenue_consensus: "The average of analysts' revenue estimates for the coming report, with the lowest and highest beside it. Revenue is harder to flatter than earnings, so a miss here can matter more than an earnings beat.",
+  implied_move: "The move the options market is pricing through the report: an at-the-money call plus put at the first expiry after it, as a share of the price. It is the breakeven move, so it slightly understates the move the market expects.",
+  beat_rate: GLOSSARY['beat rate'] + ' Counted over the quarters shown here, and a quarter exactly in line counts against it.',
+  move_after: "How far the stock moved in the session that reacted to the report: the report day itself when it came out before the open, the next day when it came out after the close. A session still trading is not counted until it ends.",
+  reaction: "The stock's move in after-hours or pre-market trading since the report, against the last regular close. Far fewer shares trade then, so it is the market's first read and can retrace once the regular session opens.",
+  // ---- event pricing
+  actual_move: "What the stock has really done over a comparable stretch. When the expiry is within a week of the report, the average move in the sessions that reacted to past reports; otherwise the average move over windows as long as the option's life, across the past two years.",
+  pricing_ratio: "The implied move divided by the actual one. At 1.25 or above the options cost more than the stock's own record would justify, at 0.85 or below less, and in between they are fairly priced by this measure.",
+  atm_iv: GLOSSARY['implied volatility'] + ' This one is for the at-the-money option at the expiry above, as a yearly rate.',
+  // ---- estimate revisions
+  rev_eps: "Analysts' current average estimate of earnings per share for that period: this quarter, next quarter, this fiscal year or next. The columns beside it show how the estimate has moved.",
+  rev_30d: "How much that estimate has changed in the last 30 days, as a share of what it was then. Estimates usually move after the company's own guidance, so this is the closest free read of what management said.",
+  rev_90d: "The same change over 90 days. Three months of revisions is a steadier read than one, and the full-year rows decide whether estimates are called rising or falling.",
+  rev_analysts: "How many analysts raised their estimate for that period in the last 30 days, and how many cut it. Several moving the same way says more than the size of any one change.",
+  // ---- surprise history
+  avg_surprise: "The average gap between reported EPS and consensus across the quarters below, as a percentage of the estimate. One quarter with a one-off gain or charge can dominate it.",
+  avg_move_after: "The average size of the stock's move in the sessions that reacted to the reports below, up or down. It is the yardstick for a straddle that expires within a week of the next report.",
+  avg_move_beat: "The stock's average move in the reacting session after the quarters it beat consensus. Negative means beats have been sold, so the bar the market cares about sits above the consensus.",
+  avg_move_miss: "The stock's average move in the reacting session after the quarters it missed or only matched consensus. A small figure means a miss was expected, or did not matter to the price.",
+  // ---- financial growth
+  q_rev_yoy: "This quarter's revenue against the same quarter a year earlier, which takes out seasonal swings. The free feed carries five quarters of statements, so only the latest quarter has one.",
+  q_ni_yoy: "This quarter's net income against the same quarter a year earlier. It is left out when that earlier quarter was a loss, because growth from a loss has no meaningful percentage.",
+  a_rev_yoy: "The fiscal year's revenue against the year before, from the annual statements. Annual figures move slowly, so a turn shows in the quarters first.",
+  a_ni_yoy: "The fiscal year's net income against the year before. It is left out when that earlier year was a loss, because growth from a loss has no meaningful percentage.",
+  fwd_eps: "Analysts' average estimate of earnings per share for that period: this quarter, next quarter, this fiscal year or next. A forecast rather than a result.",
+  fwd_eps_growth: "How far that estimate is above or below earnings for the same period a year earlier, as the data source reports it. From a loss a year earlier, the percentage says little.",
+  fwd_rev: "Analysts' average revenue estimate for that period. Revenue is harder to flatter than earnings, so its estimate is the steadier of the two.",
+  fwd_rev_growth: "How far the revenue estimate is above or below revenue for the same period a year earlier, as the data source reports it. Comparing like periods takes out seasonal swings.",
+  fwd_analysts: "How many analysts' estimates go into the earnings average for that period. The fewer there are, the less a consensus it is, and the more one estimate can move it.",
+  // ---- analyst view
+  target_mean: "The average of the price targets analysts have published, usually for twelve months out, with the lowest and highest beside it. A sentiment gauge more than a forecast: targets sit above the price in almost every market.",
+  implied_upside: "How far the mean target is above or below today's price. A wide gap means either the targets are stale or the market disagrees with them.",
+  buy_share: "The share of analysts rating the stock a buy or strong buy this month. When nearly all of them already do, an upgrade has little room left to move the price.",
+  rating_split: "How many analysts rate the stock a buy, a hold or a sell this month, with strong ratings counted in with the plain ones. Sell ratings are rare, so holds carry more of the doubt than the name suggests.",
+  rating_period: "Now is this month's count of ratings; -1m, -2m and -3m are the counts one, two and three months ago. Read down the rows to see which way opinion is moving.",
+};
+
 /* The versus-the-index tiles, one per window, against the benchmark named. */
 function excessReturnDef(days, benchmark) {
   return `Excess return: the stock's return over the last ${days} trading days minus ${
@@ -26023,26 +26072,30 @@ function renderEarnings(d) {
     <div class="grid c4" style="margin-bottom:var(--space-3)">
       ${reported
     ? tile('Surprise', fmtPct(lr.surprise_pct, 1),
-      lr.beat ? 'came in above consensus' : 'came in below consensus', signClass(lr.surprise_pct))
+      lr.beat ? 'came in above consensus' : 'came in below consensus', signClass(lr.surprise_pct),
+      FIN_DEFS.surprise)
     : tile('EPS consensus', fmt(nr.eps_consensus, 2), nr.eps_low && nr.eps_high
-      ? `range ${fmt(nr.eps_low, 2)} – ${fmt(nr.eps_high, 2)}` : null)}
+      ? `range ${fmt(nr.eps_low, 2)} – ${fmt(nr.eps_high, 2)}` : null, '', EARN_DEFS.eps_consensus)}
       ${reported && !nr.date
     ? tile('Next report', 'not scheduled yet',
       'the feed has no confirmed date for the coming quarter')
     : tile('Revenue consensus', nr.revenue_consensus_label ? esc(nr.revenue_consensus_label) : '—',
-      nr.revenue_low && nr.revenue_high ? `range $${fmtCompact(nr.revenue_low)} – $${fmtCompact(nr.revenue_high)}` : null)}
+      nr.revenue_low && nr.revenue_high ? `range $${fmtCompact(nr.revenue_low)} – $${fmtCompact(nr.revenue_high)}` : null,
+      '', EARN_DEFS.revenue_consensus)}
       ${reported
     ? (lr.next_day_move_pct !== null && lr.next_day_move_pct !== undefined
-      ? tile('Move after', fmtPct(lr.next_day_move_pct, 1), 'the session after the print',
-        signClass(lr.next_day_move_pct))
+      ? tile('Move after', fmtPct(lr.next_day_move_pct, 1), 'the session that reacted',
+        signClass(lr.next_day_move_pct), EARN_DEFS.move_after)
       : ext.available
         ? tile('Reaction', fmtPct(ext.move_pct, 1),
-          `${esc(cap(ext.kind))} · ${usd(ext.price)}`, signClass(ext.move_pct))
-        : tile('Reaction', 'no quote yet', 'nothing traded outside the session'))
+          `${esc(cap(ext.kind))} · ${usd(ext.price)}`, signClass(ext.move_pct), EARN_DEFS.reaction)
+        : tile('Reaction', 'no quote yet', 'nothing traded outside the session', '', EARN_DEFS.reaction))
     : tile('Implied move', imp.available ? fmt(imp.implied_move_pct, 1) + '%' : '—',
-      imp.available ? `${imp.dte}-day straddle · ${fmt(imp.strike, 2)} strike` : (imp.reason || null))}
+      imp.available ? `${imp.dte}-day straddle · ${fmt(imp.strike, 2)} strike` : (imp.reason || null),
+      '', EARN_DEFS.implied_move)}
       ${tile('Beat rate', sp.beat_rate_pct !== null && sp.beat_rate_pct !== undefined
-    ? fmt(sp.beat_rate_pct, 0) + '%' : '—', sp.quarters ? `last ${sp.quarters} quarters` : null)}
+    ? fmt(sp.beat_rate_pct, 0) + '%' : '—', sp.quarters ? `last ${sp.quarters} quarters` : null,
+    '', EARN_DEFS.beat_rate)}
     </div>
     ${nr.dispersion_note && !reported ? `<div class="callout info">${gloss(nr.dispersion_note)}</div>` : ''}
     ${reported && ext.available && lr.reaction_fights_result ? `<div class="callout bad">
@@ -26069,12 +26122,15 @@ function renderEarnings(d) {
       ${pr.available ? `
         <p class="sub">${gloss(pr.note || '')}</p>
         <div class="grid c2" style="margin-bottom:var(--space-3)">
-          ${tile('Options imply', fmt(pr.implied_move_pct, 1) + '%', `${imp.dte}-day straddle`)}
+          ${tile('Options imply', fmt(pr.implied_move_pct, 1) + '%', `${imp.dte}-day straddle`, '',
+    EARN_DEFS.implied_move)}
           ${tile('Stock actually moves', fmt(pr.baseline_move_pct, 1) + '%',
-    pr.baseline_kind === 'event-day' ? 'avg after past reports' : `avg over ${pr.baseline_sessions} sessions`)}
+    pr.baseline_kind === 'event-day' ? 'avg after past reports' : `avg over ${pr.baseline_sessions} sessions`,
+    '', EARN_DEFS.actual_move)}
           ${tile('Ratio', fmt(pr.ratio, 2) + 'x', 'implied ÷ actual',
-    pr.stance === 'expensive' ? 'down' : pr.stance === 'cheap' ? 'up' : '')}
-          ${tile('ATM implied vol', imp.atm_iv_pct ? fmt(imp.atm_iv_pct, 1) + '%' : '—', imp.expiry ? `expiry ${esc(imp.expiry)}` : null)}
+    pr.stance === 'expensive' ? 'down' : pr.stance === 'cheap' ? 'up' : '', EARN_DEFS.pricing_ratio)}
+          ${tile('ATM implied vol', imp.atm_iv_pct ? fmt(imp.atm_iv_pct, 1) + '%' : '—',
+    imp.expiry ? `expiry ${esc(imp.expiry)}` : null, '', EARN_DEFS.atm_iv)}
         </div>
         ${pr.event_day_note ? `<div class="callout info">${gloss(pr.event_day_note)}</div>` : ''}
         <p class="caveat">${gloss(pr.caveat || '')}</p>
@@ -26086,7 +26142,9 @@ function renderEarnings(d) {
       <p class="sub">${gloss(rev.note || '')}</p>
       ${rev.available ? `
       <table class="data">
-        <thead><tr><th>Period</th><th>EPS est.</th><th>30d</th><th>90d</th><th>Analysts</th></tr></thead>
+        <thead><tr><th>Period</th><th>${statLabel('EPS est.', EARN_DEFS.rev_eps)}</th>
+          <th>${statLabel('30d', EARN_DEFS.rev_30d)}</th><th>${statLabel('90d', EARN_DEFS.rev_90d)}</th>
+          <th>${statLabel('Analysts', EARN_DEFS.rev_analysts)}</th></tr></thead>
         <tbody>${revRows}</tbody>
       </table>` : ''}
       <p class="caveat">${gloss(rev.caveat || '')}</p>
@@ -26096,20 +26154,26 @@ function renderEarnings(d) {
   <div class="panel span2 gap">
     <h2>${hg('Surprise history')}</h2>
     ${sp.available ? `
-    <p class="sub">Reported EPS against consensus, and what the stock actually did the session after.</p>
+    <p class="sub">Reported EPS against consensus, and how the stock moved in the session that reacted.</p>
     <div class="grid c4" style="margin-bottom:var(--space-3)">
-      ${tile('Average surprise', fmtPct(sp.avg_surprise_pct, 1), 'reported vs consensus', signClass(sp.avg_surprise_pct))}
-      ${tile('Avg move after report', fmt(sp.avg_abs_move_pct, 1) + '%', 'absolute, either direction')}
+      ${tile('Average surprise', fmtPct(sp.avg_surprise_pct, 1), 'reported vs consensus',
+    signClass(sp.avg_surprise_pct), EARN_DEFS.avg_surprise)}
+      ${tile('Avg move after report', fmt(sp.avg_abs_move_pct, 1) + '%', 'absolute, either direction', '',
+    EARN_DEFS.avg_move_after)}
       ${tile('Avg move on a beat', fmtPct(sp.avg_move_on_beat_pct, 1),
     sp.avg_move_on_beat_pct === null || sp.avg_move_on_beat_pct === undefined
-      ? 'no beats in sample' : 'next session', signClass(sp.avg_move_on_beat_pct))}
+      ? 'no beats in sample' : 'reacting session', signClass(sp.avg_move_on_beat_pct), EARN_DEFS.avg_move_beat)}
       ${tile('Avg move on a miss', fmtPct(sp.avg_move_on_miss_pct, 1),
     sp.avg_move_on_miss_pct === null || sp.avg_move_on_miss_pct === undefined
-      ? 'no misses in sample' : 'next session', signClass(sp.avg_move_on_miss_pct))}
+      ? 'no misses in sample' : 'reacting session', signClass(sp.avg_move_on_miss_pct), EARN_DEFS.avg_move_miss)}
     </div>
     ${(sp.notes || []).map((n) => `<div class="callout info">${gloss(n)}</div>`).join('')}
     <table class="data">
-      <thead><tr><th>Report date</th><th>EPS est.</th><th>EPS reported</th><th>Surprise</th><th>Next session</th></tr></thead>
+      <thead><tr><th>Report date</th><th>${statLabel('EPS est.', FIN_DEFS.eps_estimate)}</th>
+        <th>${statLabel('EPS reported', FIN_DEFS.eps_actual)}</th><th>${statLabel('Surprise', FIN_DEFS.surprise)}</th>
+        ${/* "Move after", not "Next session": for a report before the open the
+            session that reacts is the report day's own. */''}
+        <th>${statLabel('Move after', EARN_DEFS.move_after)}</th></tr></thead>
       <tbody>${surpriseRows}</tbody>
     </table>` : '<div class="callout">No reported earnings history available for this ticker.</div>'}
   </div>
@@ -26118,7 +26182,10 @@ function renderEarnings(d) {
     <h2>${hg('Financial growth')} <span class="th-plain">· quarterly, year over year</span></h2>
     ${(gr.notes || []).map((n) => `<div class="callout info">${gloss(n)}</div>`).join('')}
     ${qRows ? `<table class="data">
-      <thead><tr><th>Quarter</th><th>Revenue</th><th>YoY</th><th>Net income</th><th>YoY</th><th>Gross margin</th><th>Op margin</th></tr></thead>
+      <thead><tr><th>Quarter</th><th>${statLabel('Revenue', FIN_DEFS.revenue)}</th>
+        <th>${statLabel('YoY', EARN_DEFS.q_rev_yoy)}</th><th>${statLabel('Net income', FIN_DEFS.net_income)}</th>
+        <th>${statLabel('YoY', EARN_DEFS.q_ni_yoy)}</th><th>${statLabel('Gross margin', FIN_DEFS.gross_margin)}</th>
+        <th>${statLabel('Op margin', FIN_DEFS.operating_margin)}</th></tr></thead>
       <tbody>${qRows}</tbody>
     </table>
     <p class="caveat">The free feed carries only five quarters of statements, so year-over-year
@@ -26126,12 +26193,17 @@ function renderEarnings(d) {
       margin trend; the annual table below covers multi-year growth.</p>` : '<div class="callout">No quarterly statements available.</div>'}
     ${aRows ? `<h3>${hg('Annual growth')}</h3>
     <table class="data">
-      <thead><tr><th>Fiscal year</th><th>Revenue</th><th>YoY</th><th>Net income</th><th>YoY</th><th>Gross margin</th><th>Op margin</th></tr></thead>
+      <thead><tr><th>Fiscal year</th><th>${statLabel('Revenue', FIN_DEFS.revenue)}</th>
+        <th>${statLabel('YoY', EARN_DEFS.a_rev_yoy)}</th><th>${statLabel('Net income', FIN_DEFS.net_income)}</th>
+        <th>${statLabel('YoY', EARN_DEFS.a_ni_yoy)}</th><th>${statLabel('Gross margin', FIN_DEFS.gross_margin)}</th>
+        <th>${statLabel('Op margin', FIN_DEFS.operating_margin)}</th></tr></thead>
       <tbody>${aRows}</tbody>
     </table>` : ''}
     ${fwdRows ? `<h3>${hg('Forward estimates')}</h3>
     <table class="data">
-      <thead><tr><th>Period</th><th>EPS est.</th><th>EPS growth</th><th>Revenue est.</th><th>Rev growth</th><th>Analysts</th></tr></thead>
+      <thead><tr><th>Period</th><th>${statLabel('EPS est.', EARN_DEFS.fwd_eps)}</th>
+        <th>${statLabel('EPS growth', EARN_DEFS.fwd_eps_growth)}</th><th>${statLabel('Revenue est.', EARN_DEFS.fwd_rev)}</th>
+        <th>${statLabel('Rev growth', EARN_DEFS.fwd_rev_growth)}</th><th>${statLabel('Analysts', EARN_DEFS.fwd_analysts)}</th></tr></thead>
       <tbody>${fwdRows}</tbody>
     </table>` : ''}
   </div>
@@ -26141,14 +26213,18 @@ function renderEarnings(d) {
     ${(an.notes || []).map((n) => `<div class="callout info">${gloss(n)}</div>`).join('')}
     <div class="grid c4" style="margin-bottom:var(--space-3)">
       ${tile('Mean analyst target', usd(an.target_mean), an.target_low && an.target_high
-    ? `Individual targets range ${usd(an.target_low)} – ${usd(an.target_high)}` : null)}
-      ${tile('Implied upside', fmtPct(an.upside_pct, 0), 'to mean target', signClass(an.upside_pct))}
+    ? `Individual targets range ${usd(an.target_low)} – ${usd(an.target_high)}` : null, '', EARN_DEFS.target_mean)}
+      ${tile('Implied upside', fmtPct(an.upside_pct, 0), 'to mean target', signClass(an.upside_pct),
+    EARN_DEFS.implied_upside)}
       ${tile('Buy share', an.buy_share_pct !== null && an.buy_share_pct !== undefined
-    ? fmt(an.buy_share_pct, 0) + '%' : '—', an.analyst_count ? `${an.analyst_count} analysts` : null)}
-      ${tile('Split', `${an.buys ?? '—'} / ${an.holds ?? '—'} / ${an.sells ?? '—'}`, 'buy / hold / sell')}
+    ? fmt(an.buy_share_pct, 0) + '%' : '—', an.analyst_count ? `${an.analyst_count} analysts` : null, '',
+    EARN_DEFS.buy_share)}
+      ${tile('Split', `${an.buys ?? '—'} / ${an.holds ?? '—'} / ${an.sells ?? '—'}`, 'buy / hold / sell', '',
+    EARN_DEFS.rating_split)}
     </div>
     ${ratingRows ? `<table class="data">
-      <thead><tr><th>Period</th><th>Strong buy</th><th>Buy</th><th>Hold</th><th>Sell</th><th>Strong sell</th></tr></thead>
+      <thead><tr><th>${statLabel('Period', EARN_DEFS.rating_period)}</th><th>Strong buy</th><th>Buy</th><th>Hold</th>
+        <th>Sell</th><th>Strong sell</th></tr></thead>
       <tbody>${ratingRows}</tbody>
     </table>` : ''}
     <p class="caveat">Price targets are sentiment, not forecasts. They cluster above spot in almost every market.</p>

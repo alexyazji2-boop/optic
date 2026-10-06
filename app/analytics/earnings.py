@@ -109,12 +109,21 @@ def _next_report(history: List[Dict[str, Any]], calendar: Dict[str, Any],
 # ------------------------------------------------------ surprise + reaction
 
 
-def _reaction_map(hist: pd.DataFrame, dates: List[str]) -> Dict[str, Optional[float]]:
-    """Percent price change on the first session after each report date.
+def _reaction_map(hist: pd.DataFrame, dates: List[str],
+                  before_open: Optional[Set[str]] = None,
+                  now: Optional[pd.Timestamp] = None) -> Dict[str, Optional[float]]:
+    """Percent price change in the session that reacted to each report.
 
-    Reports land either before the open or after the close, and the free feed
-    doesn't say which. Taking the first session that *ends* after the report
-    timestamp captures the reaction candle in both cases.
+    A report after the close moves the next session; one before the open moves
+    that same day's. Daily bars are stamped at midnight, so "the first session
+    after the date" was the next day for both, and for every company that
+    reports before the open it measured the day after the reaction. Checked on
+    2026-10-06: JPM reported at 06:00 on 14 July and moved +2.50% that day,
+    and the panel showed the next day's +1.17%; January's -4.19% showed as
+    -0.97%. `before_open` is the dates the feed timed before the open.
+
+    A session still trading is not a reaction yet: its "close" is the latest
+    print. Left out until it ends, so a fresh report stays a fresh report.
     """
     if hist is None or hist.empty:
         return {}
@@ -123,15 +132,18 @@ def _reaction_map(hist: pd.DataFrame, dates: List[str]) -> Dict[str, Optional[fl
         return {}
     idx = closes.index.tz_localize(None) if closes.index.tz is not None else closes.index
     values = closes.to_numpy()
+    early = before_open or set()
+    now_et = now if now is not None else pd.Timestamp.now(tz="America/New_York")
+    session_open = now_et.hour * 60 + now_et.minute < 16 * 60
     out: Dict[str, Optional[float]] = {}
     for date in dates:
         stamp = pd.Timestamp(date)
-        after = np.nonzero(idx > stamp)[0]
-        if len(after) == 0:
+        hits = np.nonzero((idx >= stamp) if date in early else (idx > stamp))[0]
+        if len(hits) == 0:
             out[date] = None
             continue
-        i = int(after[0])
-        if i == 0:
+        i = int(hits[0])
+        if i == 0 or (session_open and pd.Timestamp(idx[i]).date() == now_et.date()):
             out[date] = None
             continue
         out[date] = _f((values[i] / values[i - 1] - 1.0) * 100.0, 2)
@@ -148,7 +160,8 @@ def _surprise_history(history: List[Dict[str, Any]], hist: pd.DataFrame, limit: 
     if not reported:
         return {"available": False, "rows": []}
 
-    reactions = _reaction_map(hist, [r["date"] for r in reported])
+    reactions = _reaction_map(hist, [r["date"] for r in reported],
+                              before_open={r["date"] for r in reported if r.get("timing") == "before_open"})
 
     rows: List[Dict[str, Any]] = []
     for r in reported:
@@ -202,7 +215,7 @@ def _surprise_history(history: List[Dict[str, Any]], hist: pd.DataFrame, limit: 
             "so the bar sits above consensus."
         )
     elif on_beat is not None and on_beat > 0:
-        notes.append(f"A beat has typically been rewarded, averaging {on_beat:+.1f}% the next session.")
+        notes.append(f"A beat has typically been rewarded, averaging {on_beat:+.1f}% in the session that reacted.")
     if out["avg_abs_move_pct"] is not None:
         notes.append(
             f"Average move the session after a report is {out['avg_abs_move_pct']:.1f}% in either direction."
@@ -348,10 +361,14 @@ def _revisions(est: Dict[str, Any]) -> Dict[str, Any]:
             continue
 
         def drift(days_key: str) -> Optional[float]:
+            # Against the size of the old estimate, not its sign. For a company
+            # expected to lose money, current / past - 1 read an estimate
+            # improving from -0.50 to -0.40 as a 20% cut, and turned the
+            # rising-or-falling verdict upside down with it.
             past = block.get(days_key)
             if past is None or not past or current is None:
                 return None
-            return _f((current / past - 1.0) * 100.0, 2)
+            return _f((current - past) / abs(past) * 100.0, 2)
 
         rev = revisions.get(key) or {}
         up30 = rev.get("upLast30days")
@@ -458,16 +475,19 @@ def _growth(financials: Dict[str, Any], est: Dict[str, Any]) -> Dict[str, Any]:
     # Quarterly YoY: compare each quarter with the same quarter a year earlier,
     # which is 4 columns further back. Sequential comparisons would be dominated
     # by seasonality for most businesses.
+    # Not from a base at or below zero: growth from a loss has no meaningful
+    # percentage, and the arithmetic gives the wrong sign (a loss of 100 that
+    # became a profit of 50 read as -150%). fundamentals._growth says the same.
     for i, row in enumerate(q_rows):
         older = q_rows[i + 4] if i + 4 < len(q_rows) else None
         for key in ("revenue", "net_income"):
-            if older and row.get(key) and older.get(key):
+            if older and row.get(key) is not None and (older.get(key) or 0) > 0:
                 row[key + "_yoy_pct"] = _f((row[key] / older[key] - 1.0) * 100.0, 1)
 
     for i, row in enumerate(a_rows):
         older = a_rows[i + 1] if i + 1 < len(a_rows) else None
         for key in ("revenue", "net_income"):
-            if older and row.get(key) and older.get(key):
+            if older and row.get(key) is not None and (older.get(key) or 0) > 0:
                 row[key + "_yoy_pct"] = _f((row[key] / older[key] - 1.0) * 100.0, 1)
 
     # Forward expectations, straight from the analyst estimate blocks.
