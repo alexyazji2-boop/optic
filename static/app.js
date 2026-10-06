@@ -41103,7 +41103,8 @@ function restoreReloadPlace() {
     const health = await getJSON('/api/health');
     renderHomeStatus(health);
     if (!health.assistant.enabled) {
-      addMsg('assistant', `Hi, I'm ${ASSISTANT_NAME}. I'm not configured yet — ` + health.assistant.hint
+      addMsg('assistant', `Hi, I'm ${ASSISTANT_NAME}. ${health.assistant.key_refused
+        ? "I can't answer right now:" : "I'm not configured yet:"} ` + health.assistant.hint
         + '\n\nEverything else in the terminal works without me.')
         .classList.add('msg-greeting');
       $('#chat-send').disabled = true;
@@ -41117,7 +41118,13 @@ function restoreReloadPlace() {
       addMsg('assistant', `Ask me anything. About the loaded ticker's gamma regime, flow or recommended strike, about the market as a whole, or attach a chart or PDF. **Deep research** runs live web sources.`)
         .classList.add('msg-greeting');
     }
-  } catch (e) { /* backend health is non-fatal for the UI */ }
+  } catch (e) {
+    /* Non-fatal for the page, but not silent: with no answer about the
+     * assistant, a question would meet the origin-down copy unannounced. */
+    addMsg('assistant', `Hi, I'm ${ASSISTANT_NAME}. The server did not answer a status check just now, `
+      + 'so questions may fail until it does. The rest of the terminal keeps what it has loaded.')
+      .classList.add('msg-greeting');
+  }
   startAutoRefresh();
   // Deliberately no initial ticker fetch: the home page waits for the user to
   // choose one instead of assuming SPY.

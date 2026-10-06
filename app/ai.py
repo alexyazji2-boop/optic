@@ -851,6 +851,30 @@ def key_usable() -> bool:
     return usable
 
 
+_KEY_REFRESHING = threading.Event()
+
+
+def key_refused() -> bool:
+    """Whether Anthropic refused the key at the last check, from memory alone.
+
+    Never a network call, so the status read on every page load stays instant.
+    When the remembered answer is stale, one check is started off the request
+    and the next read has it. Without this the page announced "Ask me
+    anything" over a revoked key and the first question failed."""
+    fresh = time.time() - _KEY_CHECK["at"] < KEY_CHECK_TTL
+    if not fresh and not _KEY_REFRESHING.is_set() and available().get("enabled") is True:
+        _KEY_REFRESHING.set()
+
+        def check() -> None:
+            try:
+                key_usable()
+            finally:
+                _KEY_REFRESHING.clear()
+
+        threading.Thread(target=check, name="key-check", daemon=True).start()
+    return _KEY_CHECK["usable"] is False
+
+
 def available() -> Dict[str, Any]:
     """Report whether the assistant can actually make a call.
 

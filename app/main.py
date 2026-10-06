@@ -730,6 +730,18 @@ def deployed_commit() -> str:
 _BOOTED_AT = datetime.now(timezone.utc)
 
 
+def _assistant_status() -> Dict[str, Any]:
+    """`ai.available()`, which knows a credential is present, corrected by
+    what Anthropic said about it at the last check."""
+    status = ai.available()
+    if status.get("enabled") is True and ai.key_refused():
+        status = {**status, "enabled": False, "key_refused": True,
+                  "hint": ("Anthropic refused the configured key at the last check, so it "
+                           "may be revoked, expired or without access. Replace "
+                           "ANTHROPIC_API_KEY on the server.")}
+    return status
+
+
 @app.get("/api/health")
 async def health() -> Dict[str, Any]:
     now = datetime.now(timezone.utc)
@@ -740,7 +752,7 @@ async def health() -> Dict[str, Any]:
         # sandbox token is not a real-time feed and the page must not say so.
         "realtime_chain": PROVIDER.name == "tradier"
         and "sandbox." not in str(getattr(PROVIDER, "base", "")),
-        "assistant": ai.available(),
+        "assistant": _assistant_status(),
         "server_time": now.isoformat(),
         "commit": deployed_commit(),
         # Uptime is the other half of the question. A process that restarted
