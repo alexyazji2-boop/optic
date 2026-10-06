@@ -182,7 +182,6 @@ def test_the_screen_being_built_survives_a_reload():
       spec.filters.push({field: 'price', min: null, max: null});
       screenerBoundInput({dataset: {scMin: '0'}, value: '100', validity: {badInput: false},
                           setAttribute: function () {}, closest: function () { return null; }});
-      spec.sort = 'roc20'; screenerSave();
       print('MEM:' + JSON.stringify(MEM));
     """
     out = subprocess.run([exe, "-e", first], capture_output=True, text=True, timeout=60, cwd=str(ROOT))
@@ -192,8 +191,8 @@ def test_the_screen_being_built_survives_a_reload():
     """
     out2 = subprocess.run([exe, "-e", second], capture_output=True, text=True, timeout=60, cwd=str(ROOT))
     spec = json.loads(out2.stdout.split("RESULT:", 1)[1].split("\n")[0])
-    assert spec["filters"] == [{"field": "price", "min": 100, "max": None}]
-    assert spec["sort"] == "roc20" and spec["direction"] == "desc"
+    assert spec["filters"] == [{"field": "price", "min": 100, "max": None}], "typing alone saved it"
+    assert spec["sort"] == "score" and spec["direction"] == "desc"
     garbage = "var MEM = {'optic.screener.v1': '{not json'};" + page + """
       print('RESULT:' + JSON.stringify(screenerSpec()));
     """
