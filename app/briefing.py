@@ -233,10 +233,18 @@ def note_requested(symbols: Iterable[str], when: Optional[datetime] = None) -> N
 
 
 def recently_requested(when: Optional[datetime] = None) -> List[str]:
+    """Names asked about in the last REQUESTED_DAYS, the most recent first."""
     since = ((when or datetime.now(timezone.utc)) - timedelta(days=REQUESTED_DAYS)).isoformat()
     with _LOCK, closing(_connect()) as conn:
         return [r["symbol"] for r in conn.execute(
-            "SELECT symbol FROM requested WHERE last_requested >= ? ORDER BY symbol", (since,))]
+            "SELECT symbol FROM requested WHERE last_requested >= ? "
+            "ORDER BY last_requested DESC, symbol", (since,))]
+
+
+def reading_order(kept: Sequence[str], asked: Sequence[str]) -> List[str]:
+    """Who is read first after a close: names on readers' lists, the most
+    widely kept first, then names asked about, the most recent first."""
+    return list(dict.fromkeys(list(kept) + list(asked)))
 
 
 def observe(provider, symbol: str) -> Dict[str, Any]:
@@ -281,8 +289,15 @@ def observe(provider, symbol: str) -> Dict[str, Any]:
 
 def capture(provider, symbols: Sequence[str], session: str,
             when: Optional[datetime] = None, limit: int = CAPTURE_PER_PASS) -> Dict[str, Any]:
-    """Read and save every name that has no reading for `session` yet."""
-    todo = [s for s in symbols if not has_reading(s, session)][:limit]
+    """Read and save up to `limit` of the names with no reading for `session`,
+    in the order given, and say how many are still waiting.
+
+    One pass used to stop at the limit and the session was then marked done,
+    so with more names than that the ones past it, alphabetically, were never
+    read at all. `remaining` is what the caller keeps going on: another batch
+    on its next turn until nothing is left (main.py, the tracker loop)."""
+    waiting = [s for s in symbols if not has_reading(s, session)]
+    todo = waiting[:limit]
     saved = 0
     for sym in todo:
         try:
@@ -290,7 +305,8 @@ def capture(provider, symbols: Sequence[str], session: str,
                 saved += 1
         except Exception as exc:                               # noqa: BLE001
             log.warning("briefing: reading %s failed: %s", sym, exc)
-    return {"session": session, "wanted": len(todo), "saved": saved}
+    return {"session": session, "wanted": len(todo), "saved": saved,
+            "remaining": max(0, len(waiting) - saved)}
 
 
 # ---------------------------------------------------------------- the checks

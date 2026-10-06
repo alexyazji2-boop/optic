@@ -275,7 +275,7 @@ def test_capture_reads_only_names_without_a_reading():
         out = B.capture(P(), ["A", "B"], "2026-10-05")
     finally:
         sec_facts.history = orig
-    assert out == {"session": "2026-10-05", "wanted": 1, "saved": 1}
+    assert out == {"session": "2026-10-05", "wanted": 1, "saved": 1, "remaining": 0}
     assert P.calls == ["B"]
     saved = B.readings("B", "2026-10-05")[0]["data"]
     assert saved["next_earnings"] == "2026-10-22" and saved["revenue_ttm"] is None
@@ -438,3 +438,46 @@ def test_the_removed_panel_stays_removed():
     app = (ROOT / "static/app.js").read_text(encoding="utf-8")
     for name in ("renderWhatChanged", "priorSnapshot", "writeSnapshot", "changesBetween", "whatchanged"):
         assert name not in app
+
+
+# ------------------------------------------------- every name read, not the first 120
+
+class _Reader:
+    def earnings_date(self, s):
+        return None
+
+    def earnings_history(self, s, limit=8):
+        return []
+
+    def short_interest(self, s):
+        return {}
+
+
+def test_a_pass_says_how_many_are_left_and_the_next_one_reads_them(monkeypatch):
+    """One pass used to stop at its limit and the session was marked done, so
+    the names past it were never read."""
+    from app.analytics import sec_facts
+    monkeypatch.setattr(sec_facts, "history", lambda s, force=False: {"available": False, "reason": "x"})
+    names = ["N%d" % i for i in range(5)]
+    first = B.capture(_Reader(), names, "2026-10-05", limit=2)
+    assert first == {"session": "2026-10-05", "wanted": 2, "saved": 2, "remaining": 3}
+    second = B.capture(_Reader(), names, "2026-10-05", limit=2)
+    third = B.capture(_Reader(), names, "2026-10-05", limit=2)
+    assert second["remaining"] == 1 and third["remaining"] == 0
+    assert all(B.has_reading(n, "2026-10-05") for n in names)
+
+
+def test_kept_names_come_first_then_the_most_recently_asked():
+    B.note_requested(["OLD"], datetime(2026, 10, 1, tzinfo=timezone.utc))
+    B.note_requested(["NEW"], datetime(2026, 10, 5, tzinfo=timezone.utc))
+    asked = B.recently_requested(datetime(2026, 10, 6, tzinfo=timezone.utc))
+    assert asked == ["NEW", "OLD"]
+    assert B.reading_order(["SPY", "NEW"], asked) == ["SPY", "NEW", "OLD"]
+
+
+def test_the_loop_keeps_going_until_nobody_is_left():
+    src = (ROOT / "app/main.py").read_text()
+    block = src[src.index("due_read = signal_followup_due("):][:1600]
+    assert 'if not out["remaining"] or passes[due_read] >= BRIEFING_MAX_PASSES:' in block
+    assert "briefing_mod.reading_order(_all_watch_symbols()," in block
+    assert "ORDER BY n DESC, symbol" in src

@@ -1176,12 +1176,20 @@ def _account_watch_symbols(user_id: str) -> List[str]:
 
 
 def _all_watch_symbols() -> List[str]:
-    """For the post-close reading only: which names anyone keeps, with nothing
-    about who."""
+    """For the post-close reading only: which names anyone keeps, the most
+    widely kept first, with nothing about who."""
     try:
-        return [r["symbol"] for r in accounts_db.rows("SELECT DISTINCT symbol FROM watchlist_items")]
+        return [r["symbol"] for r in accounts_db.rows(
+            "SELECT symbol, COUNT(*) AS n FROM watchlist_items GROUP BY symbol "
+            "ORDER BY n DESC, symbol")]
     except Exception:                                            # noqa: BLE001
         return []
+
+
+# A session's readings are taken in batches, one per turn of the tracker loop,
+# until every name has one. A name whose reading keeps failing must not keep
+# the job busy all night, so a session gets this many batches at most.
+BRIEFING_MAX_PASSES = 8
 
 
 def _briefing_read_soon(symbols: List[str], session: str) -> None:
@@ -2608,11 +2616,19 @@ async def _tracker_loop() -> None:
                         datetime.now(timezone.utc).astimezone(session_mod.ET),
                         getattr(app.state, "briefing_read", None))
                     if due_read:
-                        app.state.briefing_read = due_read
-                        names = sorted(set(_all_watch_symbols()) | set(briefing_mod.recently_requested()))
+                        passes = getattr(app.state, "briefing_passes", {})
+                        passes = {due_read: passes.get(due_read, 0) + 1}
+                        app.state.briefing_passes = passes
+                        names = briefing_mod.reading_order(_all_watch_symbols(),
+                                                           briefing_mod.recently_requested())
                         out = await _run(briefing_mod.capture, YF_PROVIDER, names, due_read)
-                        if out["saved"]:
-                            log.info("briefing: saved %s readings for %s", out["saved"], due_read)
+                        # Done for the session only when nobody is left, or
+                        # after the last batch it is allowed.
+                        if not out["remaining"] or passes[due_read] >= BRIEFING_MAX_PASSES:
+                            app.state.briefing_read = due_read
+                        if out["saved"] or out["remaining"]:
+                            log.info("briefing: saved %s readings for %s, %s still to read",
+                                     out["saved"], due_read, out["remaining"])
                 except Exception as exc:  # noqa: BLE001 - never break the loop
                     log.warning("briefing readings failed: %s", exc)
 
