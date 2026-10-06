@@ -84,7 +84,7 @@ STUBS += "var rendered = 0;\nfunction renderSwing() { rendered++; }\n"
 
 for name in ["beginLoad", "endLoad", "revealPanels", "writeSnapshot", "setChartLive",
              "setChartAnimation", "loadPatternRates", "loadIndicators",
-             "loadSeasonality", "loadExtras", "loadRelPerf", "mountRelativeChart",
+             "loadSeasonality", "loadSetups", "loadExtras", "loadRelPerf", "mountRelativeChart",
              "updateStatus", "updateChatContext", "wsMountChart", "wsEnsureIntraday"]:
     STUBS += "function " + name + "() {}\n"
 

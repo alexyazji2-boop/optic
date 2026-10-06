@@ -302,13 +302,20 @@ def test_it_runs_on_its_own_interval_not_the_mark_cadence():
 def test_it_is_inside_the_market_hours_gate():
     """Every condition but earnings_near reads a price or a technical, and both
     are the same number all weekend, so a pass then spends provider calls
-    re-reading Friday's close."""
+    re-reading Friday's close.
+
+    Plus one pass as the session closes: a swing setup triggers on the
+    completed daily candle, which exists from 4:00pm, and the next session's
+    first pass would have delivered it the following morning."""
     main = open("app/main.py", encoding="utf-8").read()
     loop = main[main.index("async def _tracker_loop()"):]
     loop = loop[:loop.index("\n@app.on_event")]
     gate = loop.index("if not is_open and not just_closed:")
     assert loop.index("WATCH_AUTO") > gate
-    assert "if is_open and WATCH_AUTO:" in loop
+    assert "if WATCH_AUTO and (is_open or just_closed):" in loop
+    block = loop[loop.index("if WATCH_AUTO and (is_open or just_closed):"):]
+    assert "if just_closed or last_watch is None" in block[:400], \
+        "the closing pass must not wait for the interval"
 
 
 def test_a_failed_pass_does_not_kill_the_loop():
@@ -316,7 +323,7 @@ def test_a_failed_pass_does_not_kill_the_loop():
     bad provider response must not take the other three down for the lifetime
     of the process."""
     main = open("app/main.py", encoding="utf-8").read()
-    block = main[main.index("if is_open and WATCH_AUTO:"):]
+    block = main[main.index("if WATCH_AUTO and (is_open or just_closed):"):]
     block = block[:block.index("except asyncio.CancelledError")]
     assert "except Exception" in block
     assert "log.warning" in block
@@ -327,7 +334,7 @@ def test_the_interval_is_recorded_before_the_pass_not_after():
     measures from the end, so a twenty-minute pass on a thirty-minute timer
     would run every fifty."""
     main = open("app/main.py", encoding="utf-8").read()
-    block = main[main.index("if is_open and WATCH_AUTO:"):]
+    block = main[main.index("if WATCH_AUTO and (is_open or just_closed):"):]
     block = block[:block.index("except Exception")]
     assert block.index("app.state.last_watch_run = now") < block.index("run_once")
 

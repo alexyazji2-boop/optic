@@ -528,6 +528,7 @@ const HEADER_DEFS = {
   'swing verdict': "The terminal's combined read on this stock: chart signals, dealer gamma, options flow, news tone and the macro backdrop blended into one score from -100 (bearish) to +100 (bullish).",
   'quote': "The current price and where it sits inside today's range and the past year's range. The baseline every other panel is measured against.",
   'options analytics': 'The options-market side of the analysis: greeks, dealer gamma exposure and call-versus-put flow.',
+  'swing setups': 'Entry rules for swing trades, bullish and bearish, read on completed candles. Each arms on a setup, triggers on one exact candle event and is cancelled by a stated level. For review: nothing is traded.',
   'strike & entry recommendation': "Which option contract the terminal would pick given the current read, and the price level where entering makes sense instead of chasing.",
   'price, moving averages & fibonacci': "The price history with trend lines and common pullback levels drawn on. Used to judge whether the trend is intact and where a move is likely to pause.",
   'rsi (14)': 'A momentum gauge from 0-100 showing whether the stock has been bought or sold too hard recently. Above 70 is stretched, below 30 is washed out.',
@@ -4589,6 +4590,695 @@ function renderSetup(d) {
       recommendation. Options can expire worthless and lose the entire premium.
       The invalidation level is part of the setup, not a footnote to it.</p>
   </section>`;
+}
+
+/* ============================================================ swing setups ===
+ *
+ * Asked for as a "swing-trade setup scanner and entry-alert system" inside the
+ * Options tab: explainable bullish and bearish entry setups, for review, with
+ * nothing traded. The rules, their lifecycle and what each may read are in
+ * app/analytics/setups.py; this is the table that shows them.
+ *
+ * Compact on purpose. Seven columns and one sentence per row; everything else,
+ * the rule checks, the chart with the setup marked, the volume, the option
+ * contracts and how the rule did on this stock before, is one click into a row
+ * and fetched only then.
+ *
+ * The panel's own heading and shell are drawn by renderSwing, and only
+ * `#setups-body` is replaced when a scan lands. Replacing the whole panel would
+ * throw away the collapse toggle the panel machinery added to it.
+ */
+const SETUPS_VIEW_KEY = 'optic.setups.view.v1';
+const SETUPS_PARAMS_KEY = 'optic.setups.params.v1';
+// A scan is reused for five minutes. Completed candles change once a day; the
+// provisional read of the forming one is what the refresh is for.
+const SETUPS_FRESH_MS = 5 * 60 * 1000;
+
+const SETUPS = {
+  data: null, url: null, at: 0, loading: null, error: null,
+  open: {}, details: {}, options: {}, rulesOpen: false, catalogue: null,
+};
+
+const SETUP_STATUS_LABELS = {
+  watching: 'Watching', armed: 'Armed', triggered: 'Triggered',
+  invalidated: 'Invalidated', expired: 'Expired', inactive: 'Context not met',
+};
+
+const SETUP_STATUS_FILTERS = [
+  ['recent', 'Live and just ended'], ['active', 'Armed or triggered'],
+  ['triggered', 'Triggered'], ['armed', 'Armed'], ['watching', 'Watching'],
+  ['ended', 'Invalidated or expired'], ['all', 'Everything'],
+];
+
+function setupsView() {
+  const base = { scope: 'symbol', direction: 'both', timeframe: 'daily', family: '', status: 'recent' };
+  try {
+    const raw = JSON.parse(localStorage.getItem(SETUPS_VIEW_KEY) || '{}');
+    return { ...base, ...(raw && typeof raw === 'object' ? raw : {}) };
+  } catch (e) { return base; }
+}
+
+function saveSetupsView(view) {
+  try { localStorage.setItem(SETUPS_VIEW_KEY, JSON.stringify(view)); } catch (e) { /* private mode */ }
+}
+
+/* The reader's own rule settings: which presets run, and any parameter they
+ * changed. Only changes are kept, so a preset's default moving on the server
+ * reaches everybody who never touched it. */
+function setupsParams() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SETUPS_PARAMS_KEY) || '{}');
+    return { enabled: Array.isArray(raw.enabled) ? raw.enabled : null,
+             params: raw.params && typeof raw.params === 'object' ? raw.params : {} };
+  } catch (e) { return { enabled: null, params: {} }; }
+}
+
+function saveSetupsParams(value) {
+  try {
+    if (!value || (!value.enabled && !Object.keys(value.params || {}).length)) {
+      localStorage.removeItem(SETUPS_PARAMS_KEY);
+    } else {
+      localStorage.setItem(SETUPS_PARAMS_KEY, JSON.stringify(value));
+    }
+  } catch (e) { /* private mode */ }
+}
+
+/* Which symbols a scan covers. "This symbol" by default: the tab is about one
+ * name, and a watchlist is one choice away rather than forty requests nobody
+ * asked for. */
+function setupsSymbols(view) {
+  if (view.scope && view.scope.startsWith('list:')) {
+    const id = view.scope.slice(5);
+    const list = (watchAllLists() || []).find((l) => String(l.id) === id);
+    const syms = list ? list.symbols : [];
+    return [...new Set(syms.map((s) => String(s).toUpperCase()))].slice(0, 40);
+  }
+  return STATE.ticker ? [STATE.ticker] : [];
+}
+
+function setupsPresetIds(view) {
+  const cat = SETUPS.catalogue;
+  const prm = setupsParams();
+  if (!cat) return null;
+  let ids = cat.presets.map((p) => p.id);
+  if (prm.enabled) ids = ids.filter((id) => prm.enabled.includes(id));
+  if (view.family) {
+    ids = ids.filter((id) => {
+      const p = cat.presets.find((x) => x.id === id);
+      return view.family === id || (p && p.family === view.family);
+    });
+  }
+  return ids;
+}
+
+function setupsUrl(view) {
+  const syms = setupsSymbols(view);
+  if (!syms.length) return null;
+  const tf = view.timeframe === '4h' && syms.length === 1 ? '4h' : 'daily';
+  const ids = setupsPresetIds(view);
+  const prm = setupsParams().params;
+  const q = [
+    'symbols=' + encodeURIComponent(syms.join(',')),
+    'timeframe=' + tf,
+    'direction=' + encodeURIComponent(view.direction || 'both'),
+    'status=' + encodeURIComponent(view.status || 'recent'),
+  ];
+  if (ids && ids.length) q.push('presets=' + encodeURIComponent(ids.join(',')));
+  if (Object.keys(prm).length) q.push('params=' + encodeURIComponent(JSON.stringify(prm)));
+  // The forming candle is read only while there is one, and marked provisional.
+  if (isTapeLiveET()) q.push('provisional=1');
+  return '/api/setups?' + q.join('&');
+}
+
+async function loadSetupsCatalogue() {
+  if (SETUPS.catalogue) return SETUPS.catalogue;
+  try {
+    SETUPS.catalogue = await getJSON('/api/setups/catalogue');
+  } catch (err) {
+    SETUPS.catalogue = null;
+  }
+  return SETUPS.catalogue;
+}
+
+async function loadSetups(force) {
+  if (!STATE.ticker) return;
+  await loadSetupsCatalogue();
+  const view = setupsView();
+  const url = setupsUrl(view);
+  if (!url) { SETUPS.data = null; SETUPS.url = null; mountSetups(); return; }
+  if (!force && SETUPS.url === url && SETUPS.data && Date.now() - SETUPS.at < SETUPS_FRESH_MS) {
+    mountSetups();
+    return;
+  }
+  if (SETUPS.loading === url) return;
+  SETUPS.loading = url;
+  SETUPS.error = null;
+  mountSetups();
+  try {
+    const data = await getJSON(url);
+    if (SETUPS.loading !== url) return;          // a newer filter owns the panel
+    SETUPS.data = data;
+    SETUPS.url = url;
+    SETUPS.at = Date.now();
+  } catch (err) {
+    if (SETUPS.loading !== url) return;
+    SETUPS.error = err.message;
+  }
+  SETUPS.loading = null;
+  mountSetups();
+}
+
+function setupRowKey(r) {
+  return [r.symbol, r.preset, r.direction, r.timeframe].join('|');
+}
+
+function setupWhen(stamp) {
+  if (!stamp) return '';
+  if (stamp.includes('T')) {
+    const [d, t] = stamp.split('T');
+    return `${shortDate(d)} ${t.slice(0, 5)} ET`;
+  }
+  return shortDate(stamp) + ' close';
+}
+
+function shortDate(iso) {
+  const d = new Date(iso + 'T12:00:00Z');
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
+function setupFamilies() {
+  const cat = SETUPS.catalogue;
+  if (!cat) return [];
+  const names = {
+    trend: 'Trend pullback', crossover: 'Moving-average crosses', momentum: 'RSI and MACD',
+    fibonacci: 'Fibonacci', stochastic: 'Triple stochastic', donchian: 'Donchian',
+    avwap: 'Anchored VWAP', levels: 'Support and resistance', volatility: 'Squeeze',
+  };
+  return cat.families.map((f) => [f, names[f] || cap(f)]);
+}
+
+/* The filters. Each one is a select, so it works the same way with a mouse, a
+ * keyboard and a screen reader, and costs one row on a phone. */
+function renderSetupsFilters(view) {
+  const lists = watchAllLists() || [];
+  const one = setupsSymbols(view).length <= 1;
+  const sel = (name, label, options, value) => `<label class="ss-filter">
+    <span>${esc(label)}</span>
+    <select data-ss-filter="${name}">${options.map(([v, l, off]) => `<option value="${esc(v)}"${
+  String(v) === String(value) ? ' selected' : ''}${off ? ' disabled' : ''}>${esc(l)}</option>`).join('')}</select>
+  </label>`;
+  return `<div class="ss-filters" role="group" aria-label="Filter the swing setups">
+    ${sel('scope', 'Symbols', [
+    ['symbol', `This symbol${STATE.ticker ? ` (${STATE.ticker})` : ''}`],
+    ...lists.map((l) => [`list:${l.id}`, `${l.name} (${(l.symbols || []).length})`]),
+  ], view.scope)}
+    ${sel('direction', 'Direction', [['both', 'Both'], ['bull', 'Bullish'], ['bear', 'Bearish']],
+    view.direction)}
+    ${sel('timeframe', 'Timeframe', [
+    ['daily', 'Daily, weekly trend'],
+    ['4h', one ? '4-hour, daily trend' : '4-hour (one symbol only)', !one],
+  ], one ? view.timeframe : 'daily')}
+    ${sel('family', 'Strategy', [['', 'All'], ...setupFamilies()], view.family)}
+    ${sel('status', 'Status', SETUP_STATUS_FILTERS, view.status)}
+    <button type="button" class="pill${SETUPS.rulesOpen ? ' on' : ''}" data-ss-rules
+      aria-expanded="${SETUPS.rulesOpen}">Rules</button>
+  </div>`;
+}
+
+function setupStatusChip(r) {
+  const label = SETUP_STATUS_LABELS[r.status] || cap(r.status);
+  return `<span class="ss-state is-${esc(r.status)}">${esc(label)}</span>${
+    r.provisional ? `<span class="ss-prov" title="${esc(r.provisional.text)}">provisional: ${
+      esc(r.provisional.event)}</span>` : ''}`;
+}
+
+function renderSetupsTable(rows) {
+  /* Seven columns and the sentence under them. As an eighth column the
+   * explanation was the widest thing on the row and the first to scroll out
+   * of sight, on the one table where it is the point. */
+  const own = setupsParams().params;
+  return `<div class="ss-scroll"><table class="data ss-table">
+    <thead><tr>
+      <th>Symbol</th><th>Setup</th><th>Status</th><th>Trigger ($)</th>
+      <th>Invalidation ($)</th><th>When</th><th><span class="sr-only">Details</span></th>
+    </tr></thead>
+    <tbody>${rows.map((r) => {
+    const key = setupRowKey(r);
+    const open = !!SETUPS.open[key];
+    // A preset's name carries its defaults ("20-bar"), so a row running on the
+    // reader's own parameters says so rather than contradicting its sentence.
+    const mine = !!(own[r.preset] && Object.keys(own[r.preset]).length) || !!(own['*'] && Object.keys(own['*']).length);
+    const when = r.status === 'triggered' || (r.trigger && r.status !== 'armed')
+      ? setupWhen((r.trigger || {}).stamp || r.status_at)
+      : r.status === 'armed' ? 'armed ' + setupWhen(r.armed_at || r.status_at) : setupWhen(r.status_at);
+    return `<tr class="ss-row${open ? ' is-open' : ''}">
+      <td class="name">${esc(r.symbol)}</td>
+      <td class="name ss-setup">
+        <span class="ss-dir is-${esc(r.direction)}">${r.direction === 'bull' ? 'Bullish' : 'Bearish'}</span>
+        ${esc(r.label)}
+        <span class="ss-kind">${esc(r.kind)}${r.experimental ? ', experimental' : ''}${
+  mine ? ', your settings' : ''}</span>
+      </td>
+      <td class="name">${setupStatusChip(r)}</td>
+      <td data-label="Trigger">${r.trigger_level === null || r.trigger_level === undefined ? '—' : fmt(r.trigger_level, 2)}</td>
+      <td data-label="Invalidation">${r.invalidation === null || r.invalidation === undefined ? '—' : fmt(r.invalidation, 2)}</td>
+      <td class="name" data-label="When">${esc(when)}</td>
+      <td><button type="button" class="ss-open" data-ss-open="${esc(key)}"
+        aria-expanded="${open}" aria-label="${open ? 'Hide' : 'Show'} details for ${esc(r.symbol)} ${
+  esc(r.label)}">${open ? 'Hide' : 'Details'}</button></td>
+    </tr>
+    <tr class="ss-why-row${open ? ' is-open' : ''}"><td colspan="7">${esc(r.explanation)}</td></tr>
+    ${open ? `<tr class="ss-detail-row"><td colspan="7">${renderSetupDetail(r)}</td></tr>` : ''}`;
+  }).join('')}</tbody>
+  </table></div>`;
+}
+
+function setupCheckMark(passed) {
+  if (passed === true) return '<span class="ss-pass">met</span>';
+  if (passed === false) return '<span class="ss-fail">not met</span>';
+  return '<span class="ss-na">no data</span>';
+}
+
+function renderSetupHistory(h) {
+  if (!h) return '';
+  if (!h.available) return `<p class="caveat">${esc(h.reason || 'No historical evaluation.')}</p>`;
+  const cols = [['All', h.all], ['Earlier 70%', h.earlier], ['Held out, last 30%', h.held_out]];
+  const cell = (s, k, f) => (s && s.n ? f(s[k]) : '—');
+  return `<h4 class="ss-h">How this rule did on ${esc((SETUPS.data || {}).timeframe === '4h' ? '' : 'daily')} candles, ${
+    esc(h.from)} to ${esc(h.to)}</h4>
+    ${h.small_sample ? `<p class="ss-warn">${esc(h.small_sample)}</p>` : ''}
+    <table class="data narrow ss-hist"><thead><tr><th></th>${cols.map(([l]) => `<th>${esc(l)}</th>`).join('')}</tr></thead>
+    <tbody>
+      <tr><td class="name">Trades</td>${cols.map(([, s]) => `<td>${s && s.n ? s.n : 0}</td>`).join('')}</tr>
+      <tr><td class="name">Won</td>${cols.map(([, s]) => `<td>${cell(s, 'win_rate_pct', (v) => fmt(v, 0) + '%')}</td>`).join('')}</tr>
+      <tr><td class="name">Average, in R</td>${cols.map(([, s]) => `<td>${cell(s, 'avg_r', (v) => fmt(v, 2))}</td>`).join('')}</tr>
+      <tr><td class="name">Median, in R</td>${cols.map(([, s]) => `<td>${cell(s, 'median_r', (v) => fmt(v, 2))}</td>`).join('')}</tr>
+      <tr><td class="name">Deepest drawdown, in R</td>${cols.map(([, s]) => `<td>${cell(s, 'max_drawdown_r', (v) => fmt(v, 2))}</td>`).join('')}</tr>
+    </tbody></table>
+    <p class="caveat">R is the distance from entry to the invalidation level, so 1R is what
+      the stop would have cost. Entry at ${esc(h.assumptions.entry)}; exit at ${
+  esc(h.assumptions.exits)}; ${fmt(h.assumptions.slippage_bps_each_way, 0)} basis points of
+      slippage each way, ${esc(h.assumptions.fees)}; ${esc(h.assumptions.same_bar)}.
+      ${esc(h.caveat)}</p>`;
+}
+
+function renderSetupOptions(r) {
+  const key = setupRowKey(r);
+  const o = SETUPS.options[key];
+  const f = (o && o.filters) || setupOptionDefaults();
+  const form = `<form class="ss-opt-form" data-ss-options-form="${esc(key)}">
+    <label>Days to expiry <input name="dte_min" type="number" min="0" max="730" value="${esc(f.dte_min)}"> to
+      <input name="dte_max" type="number" min="1" max="730" value="${esc(f.dte_max)}"></label>
+    <label>Open interest at least <input name="min_oi" type="number" min="0" value="${esc(f.min_oi)}"></label>
+    <label>Volume today at least <input name="min_volume" type="number" min="0" value="${esc(f.min_volume)}"></label>
+    <label>Spread at most (%) <input name="max_spread_pct" type="number" min="0.5" max="100" step="0.5" value="${
+  esc(f.max_spread_pct)}"></label>
+    <button type="submit" class="pill">${o && o.data ? 'Apply' : 'Show contracts'}</button>
+  </form>`;
+  if (!o) {
+    return `<h4 class="ss-h">Option contracts</h4>
+      <p class="sub">The signal comes from the stock. Contracts are a separate question,
+        asked of the chain with filters you set.</p>${form}`;
+  }
+  if (o.loading) return `<h4 class="ss-h">Option contracts</h4>${form}<p class="sub">Reading the chain…</p>`;
+  if (o.error) return `<h4 class="ss-h">Option contracts</h4>${form}<p class="caveat">${esc(o.error)}</p>`;
+  const d = o.data;
+  const dropped = Object.entries(d.dropped || {}).map(([why, n]) => `${esc(why)} (${n} out)`).join('; ');
+  return `<h4 class="ss-h">Option contracts: ${esc(d.side)}s</h4>${form}
+    ${d.available ? `<p class="sub">${d.passed} of ${d.considered} ${esc(d.side)}s pass: ${dropped || 'no filter removed any'}.
+      ${d.passed > d.shown ? `The first ${d.shown} are listed.` : ''} Listed ${esc(d.order)}${
+  d.fetched_at ? ` Chain read ${esc(new Date(d.fetched_at).toLocaleTimeString())}.` : ''}</p>` : `<p class="caveat">${esc(d.reason || '')}</p>`}
+    ${d.earnings_in_hold ? `<p class="ss-warn">Earnings on ${esc(d.earnings)} fall inside the ${
+    d.hold_days}-day holding period. A report can move the stock and the options' implied
+      volatility at once.</p>` : ''}
+    ${(d.contracts || []).length ? `<div class="ss-scroll"><table class="data ss-opt">
+      <thead><tr><th>Expiry</th><th>Days</th><th>Strike</th><th>Bid / ask</th><th>Spread</th>
+        <th>Volume</th><th>Open int.</th><th>IV</th><th>Delta</th><th>Theta</th><th>Cost for one</th>
+        <th>Last trade</th></tr></thead>
+      <tbody>${d.contracts.map((c) => `<tr>
+        <td class="name">${esc(c.expiry)}${c.through_earnings ? ' <span class="ss-flag">earnings</span>' : ''}</td>
+        <td>${c.dte}</td><td>${fmt(c.strike, 2)}</td>
+        <td>${fmt(c.bid, 2)} / ${fmt(c.ask, 2)}</td><td>${fmt(c.spread_pct, 1)}%</td>
+        <td>${fmtCompact(c.volume)}</td><td>${fmtCompact(c.open_interest)}</td>
+        <td>${c.iv_pct === null || c.iv_pct === undefined ? `<span class="muted" title="${
+  esc(c.iv_note || '')}">not quoted</span>` : fmt(c.iv_pct, 1) + '%'}</td>
+        <td>${c.delta === null || c.delta === undefined ? '—' : fmt(c.delta, 2)}</td>
+        <td>${c.theta === null || c.theta === undefined ? '—' : fmt(c.theta, 3)}</td>
+        <td>${usd(c.cost_for_one, 0)}</td>
+        <td class="name">${c.last_trade ? esc(new Date(c.last_trade).toLocaleString('en-US', {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })) : 'not given'}</td>
+      </tr>`).join('')}</tbody></table></div>` : (d.available ? '<p class="sub">No contract passes these filters. The stock setup above stands on its own.</p>' : '')}
+    <ul class="ss-notes">${(d.notes || []).map((n) => `<li>${esc(n)}</li>`).join('')}</ul>`;
+}
+
+function setupOptionDefaults() {
+  return { dte_min: 21, dte_max: 60, min_oi: 100, min_volume: 10, max_spread_pct: 10 };
+}
+
+function renderSetupDetail(r) {
+  const key = setupRowKey(r);
+  const det = SETUPS.details[key];
+  if (!det || det.loading) return '<p class="sub">Reading the setup…</p>';
+  if (det.error) return `<p class="caveat">${esc(det.error)}</p>`;
+  const d = det.data;
+  const row = d.row || r;
+  const cond = row.conditions || {};
+  const idx = Object.keys(SETUPS.details).indexOf(key);
+  const vol = row.volume || {};
+  return `<div class="ss-detail">
+    <div class="ss-detail-head">
+      <p class="ss-rule"><strong>The rule.</strong> ${esc(d.rules || '')}</p>
+      <button type="button" class="btn" data-ss-alert="${esc(key)}">Alert me when this triggers</button>
+    </div>
+    ${row.provisional ? `<p class="ss-prov-line">${esc(row.provisional.text)}</p>` : ''}
+    <div id="ss-chart-${idx}" class="ss-chart" role="img" aria-label="${esc(row.symbol)} with the ${
+  esc(row.label)} setup marked"></div>
+    <p class="caveat">Marked on the chart: where it armed and triggered, the trigger level, the
+      invalidation level${(d.chart && d.chart.anchors || []).length ? ', and the anchors the rule measured from, each usable only from the date it was confirmed' : ''}.</p>
+    <div>
+      <div>
+        <h4 class="ss-h">${cond.met} of ${cond.of} conditions met</h4>
+        <table class="data narrow ss-checks"><tbody>${(row.checks || []).map((c) => `<tr${
+  c.required ? '' : ' class="ss-info"'}>
+          <td class="name">${esc(c.group)}</td>
+          <td class="name">${esc(c.rule)}${c.required ? '' : ' <span class="muted">(filter off, not counted)</span>'}</td>
+          <td class="name">${setupCheckMark(c.passed)}</td>
+          <td>${c.value === null || c.value === undefined ? '' : esc(String(c.value))}</td>
+        </tr>`).join('')}</tbody></table>
+        <p class="caveat">${esc(cond.note || '')}</p>
+      </div>
+      <div class="ss-readings">
+        <h4 class="ss-h">Readings</h4>
+        ${kv(Object.entries(row.values || {}).filter(([, v]) => v !== null && v !== undefined)
+    .map(([k, v]) => [k, esc(String(v))]))}
+        <h4 class="ss-h">Volume</h4>
+        <p class="sub">${vol.ratio ? `${fmt(vol.ratio, 2)}x the 20-bar average on the ${
+    row.status === 'triggered' ? 'trigger candle' : 'latest candle'}.` : 'Not enough volume history.'}</p>
+        ${row.note ? `<p class="caveat">${esc(row.note)}</p>` : ''}
+      </div>
+    </div>
+    ${renderSetupHistory(d.history)}
+    ${renderSetupOptions(row)}
+  </div>`;
+}
+
+/* The chart for one open row: the last 120 candles, the rule's own lines, the
+ * levels it trades against and the bars where its state changed. */
+function setupChartNode(d, w) {
+  const ch = d.chart || {};
+  const row = d.row || {};
+  const n = (ch.close || []).length;
+  // The rule's own lines, the first in the brand gold like every chart's
+  // primary line here; blue is kept for one category of several.
+  const palette = [C.brand, C.s7, C.s3, C.s5, C.s4, C.s6];
+  const series = [{ name: 'Close', values: ch.close || [], color: C.ink, hidden: true }];
+  Object.entries(ch.lines || {}).forEach(([name, values], i) => {
+    series.push({ name, values, color: palette[i % palette.length], width: 1.5, marker: false });
+  });
+  const refLines = [];
+  if (ch.trigger_level !== null && ch.trigger_level !== undefined) {
+    refLines.push({ value: ch.trigger_level, label: `Trigger ${fmt(ch.trigger_level, 2)}`, color: C.pos });
+  }
+  if (ch.invalidation !== null && ch.invalidation !== undefined) {
+    refLines.push({ value: ch.invalidation, label: `Invalidation ${fmt(ch.invalidation, 2)}`,
+      color: C.neg, dash: true });
+  }
+  (ch.levels || []).forEach((l) => {
+    if (l.price === null || l.price === undefined) return;
+    refLines.push({ value: l.price, label: l.ratio ? `${l.label}` : cap(l.label || ''),
+      color: l.zone ? C.warn : C.muted, dim: !l.zone });
+  });
+  const bands = row.zone && row.zone.top !== null && row.zone.bottom !== null
+    ? [{ top: Math.max(row.zone.top, row.zone.bottom), bottom: Math.min(row.zone.top, row.zone.bottom),
+         color: C.warn, opacity: 0.12, label: 'Golden zone' }] : [];
+  /* Every state change the rule went through would be sixteen dashed lines on
+   * NVDA's breakout chart, most of them setups that armed and lapsed. What a
+   * reader is looking for is when it fired, so: every trigger in the window,
+   * the latest one labelled; the bar the live setup armed on; and the close
+   * that invalidated the latest signal. */
+  const marks = ch.marks || [];
+  const fired = marks.filter((m) => m.type === 'triggered');
+  const latest = fired[fired.length - 1];
+  const lastArm = row.status === 'armed' ? [...marks].reverse().find((m) => m.type === 'armed') : null;
+  const killed = latest ? marks.find((m) => m.type === 'invalidated' && m.index > latest.index) : null;
+  const shown = [...fired, ...(lastArm ? [lastArm] : []), ...(killed ? [killed] : [])];
+  const tone = { triggered: C.pos, invalidated: C.neg, armed: C.warn };
+  const vMarkers = shown.map((m) => ({
+    index: m.index, color: tone[m.type] || C.ink2,
+    label: m === latest ? 'Trigger' : m === lastArm ? 'Armed' : m === killed ? 'Invalidated' : '',
+    detail: `${cap(m.type)} on the ${m.stamp} candle${m.level !== null && m.level !== undefined
+      ? ` at ${fmt(m.level, 2)}` : ''}`, value: m.price === null ? undefined : m.price,
+  }));
+  const anchors = (ch.anchors || []).filter((a) => a.index !== null && a.index !== undefined);
+  anchors.forEach((a) => vMarkers.push({
+    index: a.index, color: C.s2, label: cap(a.label || 'anchor'), value: a.price,
+    detail: `${cap(a.label || 'anchor')} ${a.stamp}${a.manual ? ', set by hand'
+      : a.confirmed_at ? `, confirmed ${a.confirmed_at}` : ''}`,
+  }));
+  const segments = anchors.length >= 2 ? [{
+    x1: anchors[0].index, y1: anchors[0].price, x2: anchors[1].index, y2: anchors[1].price,
+    color: C.s2, width: 1.5, dash: true, label: 'Measured move',
+  }] : [];
+  return lineChart({
+    width: w, height: 300, labels: ch.stamps || [],
+    candles: { open: ch.open, high: ch.high, low: ch.low, close: ch.close },
+    candleUp: chartColor('up'), candleDown: chartColor('down'),
+    series, refLines, bands, vMarkers, segments,
+    volume: n ? ch.volume : null, refLineFit: 'clip',
+  });
+}
+
+function mountSetupCharts() {
+  Object.entries(SETUPS.details).forEach(([key, det], idx) => {
+    if (!SETUPS.open[key] || !det || !det.data) return;
+    const id = `ss-chart-${idx}`;
+    const host = document.getElementById(id);
+    if (!host || host.dataset.drawn === det.at) return;
+    host.dataset.drawn = det.at;
+    mount(id, (w) => setupChartNode(det.data, w));
+  });
+}
+
+function renderSetupsRules() {
+  const cat = SETUPS.catalogue;
+  if (!cat) return '<p class="sub">The rule catalogue did not load.</p>';
+  const prm = setupsParams();
+  const enabled = prm.enabled || cat.presets.map((p) => p.id);
+  const field = (scope, spec) => {
+    const mine = (prm.params[scope] || {})[spec.key];
+    const value = mine === undefined ? spec.default : mine;
+    const name = `${scope}::${spec.key}`;
+    const help = spec.help ? ` title="${esc(spec.help)}"` : '';
+    if (spec.type === 'bool') {
+      return `<label class="ss-param ss-bool"${help}><input type="checkbox" name="${esc(name)}"${
+        value ? ' checked' : ''}> ${esc(spec.label)}</label>`;
+    }
+    if (spec.type === 'choice') {
+      return `<label class="ss-param"${help}><span>${esc(spec.label)}</span><select name="${esc(name)}">${
+        spec.choices.map((c) => `<option value="${esc(c)}"${c === value ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select></label>`;
+    }
+    if (spec.type === 'date' || spec.type === 'symbol') {
+      return `<label class="ss-param"${help}><span>${esc(spec.label)}</span><input type="${
+        spec.type === 'date' ? 'date' : 'text'}" name="${esc(name)}" value="${esc(value || '')}"></label>`;
+    }
+    return `<label class="ss-param"${help}><span>${esc(spec.label)}</span><input type="number" name="${
+      esc(name)}" value="${esc(value)}" min="${esc(spec.min)}" max="${esc(spec.max)}" step="${
+      esc(spec.step || (spec.type === 'int' ? 1 : 0.05))}"></label>`;
+  };
+  const shared = cat.presets[0].context;
+  return `<form class="ss-rules" data-ss-rules-form>
+    <p class="sub">Every preset is a hypothesis to test, not a strategy known to work. Changes
+      are kept in this browser and apply to the scan above; alerts use each preset's defaults.</p>
+    <fieldset><legend>Context and lifecycle, for every preset</legend>
+      <div class="ss-params">${shared.map((s) => field('*', s)).join('')}</div>
+    </fieldset>
+    ${cat.presets.map((p) => `<details class="ss-preset">
+      <summary><label><input type="checkbox" name="enabled::${esc(p.id)}"${
+  enabled.includes(p.id) ? ' checked' : ''}> ${esc(p.label)}</label>
+        <span class="ss-kind">${esc(p.kind)}${p.experimental ? ', experimental' : ''}</span></summary>
+      <p class="ss-rule"><strong>Bullish.</strong> ${esc(p.rules.bull)}</p>
+      <p class="ss-rule"><strong>Bearish.</strong> ${esc(p.rules.bear)}</p>
+      <div class="ss-params">${p.params.map((s) => field(p.id, s)).join('')}</div>
+    </details>`).join('')}
+    <div class="ss-rules-actions">
+      <button type="submit" class="btn">Apply</button>
+      <button type="button" class="auth-link" data-ss-rules-reset>Back to the defaults</button>
+    </div>
+  </form>`;
+}
+
+function renderSetupsBody() {
+  const view = setupsView();
+  const data = SETUPS.data;
+  const syms = setupsSymbols(view);
+  const head = renderSetupsFilters(view) + (SETUPS.rulesOpen ? renderSetupsRules() : '');
+  if (!syms.length) {
+    return `${head}<p class="sub">That watchlist is empty. Add symbols to it, or scan this symbol.</p>`;
+  }
+  if (SETUPS.error && !data) return `${head}<p class="caveat">${esc(SETUPS.error)}</p>`;
+  if (!data) return `${head}<p class="sub">Reading ${syms.length === 1 ? esc(syms[0]) : `${syms.length} symbols`}…</p>`;
+  const rows = data.rows || [];
+  const counts = Object.values(data.counts || {}).reduce((acc, c) => {
+    Object.entries(c).forEach(([k, v]) => { acc[k] = (acc[k] || 0) + v; });
+    return acc;
+  }, {});
+  const stateLine = ['triggered', 'armed', 'watching', 'invalidated', 'expired', 'inactive']
+    .filter((k) => counts[k]).map((k) => `${counts[k]} ${SETUP_STATUS_LABELS[k].toLowerCase()}`).join(', ');
+  const asOf = [...new Set(Object.values(data.as_of || {}))].sort().pop();
+  const through = !asOf ? '' : asOf.includes('T')
+    ? ` to the candle that closed ${esc(setupWhen(asOf))}` : ` to the ${esc(shortDate(asOf))} close`;
+  return `${head}
+    <p class="ss-line">${SETUPS.loading ? 'Updating… ' : ''}${
+  data.timeframe === '4h' ? '4-hour candles, daily trend.' : 'Daily candles, weekly trend.'}
+      Completed candles${through}${
+  data.forming ? '; ' + esc(data.forming.note) : ''}. ${stateLine ? 'Across every rule: ' + esc(stateLine) + '.' : ''}
+      ${(data.failed || []).length ? `No candles for ${esc(data.failed.join(', '))}.` : ''}</p>
+    ${rows.length ? renderSetupsTable(rows) : `<p class="sub">No setups match these filters. Status
+      "Everything" lists every rule, including those waiting on context.</p>`}
+    <p class="caveat">${esc(data.method || '')}</p>`;
+}
+
+function mountSetups() {
+  const host = document.getElementById('setups-body');
+  if (!host) return;
+  host.innerHTML = renderSetupsBody();
+  mountSetupCharts();
+}
+
+async function openSetupDetail(key) {
+  const row = ((SETUPS.data || {}).rows || []).find((r) => setupRowKey(r) === key);
+  if (!row) return;
+  const prm = setupsParams().params;
+  const q = [`preset=${encodeURIComponent(row.preset)}`, `direction=${row.direction}`,
+    `timeframe=${row.timeframe}`];
+  if (Object.keys(prm).length) q.push('params=' + encodeURIComponent(JSON.stringify(prm)));
+  SETUPS.details[key] = { loading: true };
+  mountSetups();
+  try {
+    const data = await getJSON(`/api/setups/${encodeURIComponent(row.symbol)}/detail?${q.join('&')}`);
+    SETUPS.details[key] = { data, at: String(Date.now()) };
+  } catch (err) {
+    SETUPS.details[key] = { error: err.message };
+  }
+  mountSetups();
+}
+
+async function loadSetupOptions(key, filters) {
+  const row = ((SETUPS.data || {}).rows || []).find((r) => setupRowKey(r) === key);
+  if (!row) return;
+  const f = { ...setupOptionDefaults(), ...(filters || {}) };
+  SETUPS.options[key] = { loading: true, filters: f };
+  mountSetups();
+  const q = Object.entries(f).map(([k, v]) => `${k}=${encodeURIComponent(v)}`);
+  q.push(`direction=${row.direction}`);
+  // The per-contract cost limit set at the top of the tab, so the contracts here
+  // agree with the plan's.
+  const cap = entryBudget();
+  if (cap) q.push('budget=' + encodeURIComponent(cap));
+  try {
+    const data = await getJSON(`/api/setups/${encodeURIComponent(row.symbol)}/options?${q.join('&')}`);
+    SETUPS.options[key] = { data, filters: f };
+  } catch (err) {
+    SETUPS.options[key] = { error: err.message, filters: f };
+  }
+  mountSetups();
+}
+
+document.addEventListener('change', (evt) => {
+  const sel = evt.target && evt.target.closest ? evt.target.closest('[data-ss-filter]') : null;
+  if (!sel) return;
+  const view = setupsView();
+  view[sel.dataset.ssFilter] = sel.value;
+  if (view.scope !== 'symbol' && view.timeframe === '4h') view.timeframe = 'daily';
+  saveSetupsView(view);
+  SETUPS.open = {};
+  loadSetups(true);
+});
+
+document.addEventListener('click', (evt) => {
+  if (!evt.target || !evt.target.closest) return;
+  const open = evt.target.closest('[data-ss-open]');
+  if (open) {
+    const key = open.dataset.ssOpen;
+    SETUPS.open[key] = !SETUPS.open[key];
+    if (SETUPS.open[key] && !(SETUPS.details[key] && SETUPS.details[key].data)) openSetupDetail(key);
+    else mountSetups();
+    return;
+  }
+  if (evt.target.closest('[data-ss-rules]')) {
+    SETUPS.rulesOpen = !SETUPS.rulesOpen;
+    mountSetups();
+    return;
+  }
+  if (evt.target.closest('[data-ss-rules-reset]')) {
+    saveSetupsParams(null);
+    SETUPS.details = {};
+    loadSetups(true);
+    return;
+  }
+  const alertBtn = evt.target.closest('[data-ss-alert]');
+  if (alertBtn) {
+    const row = ((SETUPS.data || {}).rows || []).find((r) => setupRowKey(r) === alertBtn.dataset.ssAlert);
+    if (!row) return;
+    loadWatchCatalogue().then(() => addWatchDef(row.symbol, 'swing_setup', { preset: row.preset }))
+      .then(() => window.OpticAuth.toast(`Watching ${row.symbol} for the ${row.label.toLowerCase()}. `
+        + 'A trigger on a completed daily candle lands in Alerts.'))
+      .catch((err) => window.OpticAuth.toast(err.message, 'bad'));
+  }
+});
+
+document.addEventListener('submit', (evt) => {
+  const form = evt.target && evt.target.closest ? evt.target.closest('[data-ss-options-form], [data-ss-rules-form]') : null;
+  if (!form) return;
+  evt.preventDefault();
+  if (form.dataset.ssOptionsForm !== undefined) {
+    const f = {};
+    ['dte_min', 'dte_max', 'min_oi', 'min_volume', 'max_spread_pct'].forEach((k) => {
+      const el = form.querySelector(`[name="${k}"]`);
+      const v = el ? Number(el.value) : NaN;
+      if (Number.isFinite(v)) f[k] = v;
+    });
+    loadSetupOptions(form.dataset.ssOptionsForm, f);
+    return;
+  }
+  // The rules form: keep only what differs from each default.
+  const cat = SETUPS.catalogue;
+  if (!cat) return;
+  const params = {};
+  const enabled = [];
+  const read = (scope, spec) => {
+    const el = form.querySelector(`[name="${CSS.escape(scope + '::' + spec.key)}"]`);
+    if (!el) return;
+    let v;
+    if (spec.type === 'bool') v = el.checked;
+    else if (spec.type === 'int' || spec.type === 'float') v = Number(el.value);
+    else v = el.value;
+    if (spec.type !== 'bool' && spec.type !== 'choice' && spec.type !== 'date' && spec.type !== 'symbol'
+        && !Number.isFinite(v)) return;
+    if (v === spec.default || (spec.type === 'date' && !v)) return;
+    (params[scope] = params[scope] || {})[spec.key] = v;
+  };
+  cat.presets[0].context.forEach((s) => read('*', s));
+  cat.presets.forEach((p) => {
+    const on = form.querySelector(`[name="${CSS.escape('enabled::' + p.id)}"]`);
+    if (!on || on.checked) enabled.push(p.id);
+    p.params.forEach((s) => read(p.id, s));
+  });
+  saveSetupsParams({ enabled: enabled.length === cat.presets.length ? null : enabled, params });
+  SETUPS.details = {};
+  SETUPS.rulesOpen = false;
+  loadSetups(true);
+});
+
+function renderSetupsShell() {
+  return `<div class="panel gap span-all" id="swing-setups">
+    <h2>${hg('Swing setups')}</h2>
+    <p class="sub">Bullish and bearish entry rules on completed candles, each with its
+      context, setup, trigger and invalidation. For review: nothing here places a trade,
+      and every rule is a hypothesis to test, not a strategy known to work.</p>
+    <div id="setups-body">${renderSetupsBody()}</div>
+  </div>`;
 }
 
 /* ================================================================ thesis ====
@@ -9729,6 +10419,7 @@ function renderSwing(d) {
   ${renderOptionsBrief(d)}
   ${renderFollowUps(d)}
   ${renderThesis(d)}
+  ${renderSetupsShell()}
 
   <div class="grid c2 gap">
     <div class="panel">
@@ -27355,6 +28046,7 @@ async function loadSwing(force, opts = {}) {
      * for another symbol or bar size, so the tab asks for its own. */
     if (showTrends) loadTrendlines(STATE.ticker);
     loadSeasonality();
+    loadSetups();
     loadExtras();
     loadRelPerf();
     /* Also mounted here, not only from loadExtras.
@@ -37758,7 +38450,10 @@ const PANELS_OPEN_BY_DEFAULT = {
    * verdict stays open because it is the answer. Everything else is evidence
    * for an answer already on screen, which is what a closed panel is for.
    * Collapsed, never removed: one click, and the state is remembered. */
-  swing: ['swing verdict', 'price, moving averages'],
+  /* 'swing setups' opens: it is a table of what is live now, short by
+     default (this symbol, live and just-ended setups), and the one panel here
+     somebody came to the tab to use rather than to read. */
+  swing: ['swing verdict', 'price, moving averages', 'swing setups'],
   /* 'earnings verdict' named no panel on this tab or any other -- the same
      dead-key trap as the tracker's 'the record' and the brief's 'morning
      desk'. What it was reaching for is the written read, which now sits under

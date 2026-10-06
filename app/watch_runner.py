@@ -52,12 +52,16 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _dedupe_key(watch_id: str, when: datetime) -> str:
-    """One hit per watch per day.
+def _dedupe_key(watch_id: str, when: datetime, event: Optional[str] = None) -> str:
+    """One hit per watch per day, or per event when the evaluator names one.
 
     The date is part of the key rather than a lookup, so the uniqueness is a
-    property of the row and survives two runners overlapping.
+    property of the row and survives two runners overlapping. A swing setup
+    names its trigger instead: it stays fresh for three candles, and keyed by
+    day the same trigger would have been stored three times.
     """
+    if event:
+        return "%s:%s" % (watch_id, event)
     return "%s:%s" % (watch_id, when.date().isoformat())
 
 
@@ -112,7 +116,7 @@ def record_hit(row: Dict[str, Any], result: Dict[str, Any],
             "body, created_at, dedupe_key) VALUES (?,?,?,?,?,?,?,?,?)",
             (uuid.uuid4().hex, row["user_id"], row["id"], symbol, row["kind"],
              _title(symbol, result), _body(result, row.get("note")),
-             when.isoformat(), _dedupe_key(row["id"], when)))
+             when.isoformat(), _dedupe_key(row["id"], when, result.get("dedupe"))))
     except Exception as exc:                      # the unique index, normally
         if "UNIQUE" not in str(exc).upper():
             log.warning("watch hit not stored: %s", exc)

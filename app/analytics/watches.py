@@ -29,6 +29,8 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
+from . import setups as setups_mod
+
 # The catalogue. `needs` documents which panel each one reads, so a condition
 # cannot be added without saying where its evidence comes from.
 CONDITIONS: Dict[str, Dict[str, Any]] = {
@@ -162,6 +164,21 @@ CONDITIONS: Dict[str, Dict[str, Any]] = {
         "needs": "company.ownership",
         "why": "Form 4 filings. The filer's own classification, not an "
                "interpretation of it.",
+    },
+    # Swing setups, as an alert. The choices are the presets themselves, so a
+    # watch can only name a rule that exists; the evaluator reads the rows the
+    # snapshot attaches (see main._attach_setups), built with each preset's
+    # default settings.
+    "swing_setup": {
+        "label": "A swing setup triggers",
+        "param": {"key": "preset", "kind": "setup", "label": "Setup", "default": "any",
+                  "choices": [{"value": "any", "label": "Any setup"}] + [
+                      {"value": p["id"], "label": p["label"]} for p in setups_mod.PRESETS]},
+        "needs": "setups",
+        "why": "A Swing setups rule fired on a completed daily candle, with its "
+               "default settings. Completed candles only, so it arrives after the "
+               "close that triggered it; a candle still forming never raises one. "
+               "For review: nothing is traded.",
     },
     "short_interest": {
         "label": "Short interest changes by",
@@ -396,6 +413,22 @@ def _short_interest(d, p):
                             change, _num(si.get("percent_of_float")) or 0)}
 
 
+def _swing_setup(d, p):
+    """One hit per trigger, not per day.
+
+    `state` and `dedupe` are the trigger's own key (symbol, preset, side,
+    candle), so the browser-side check announces it once and the scheduled
+    runner stores it once, however many days it stays fresh."""
+    want = str(p.get("preset") or "any").lower()
+    hits = setups_mod.fresh_triggers(d.get("setups") or {}, want)
+    if not hits:
+        return None
+    hit = max(hits, key=lambda r: r["trigger"]["stamp"])
+    side = "Bullish" if hit["direction"] == "bull" else "Bearish"
+    return {"state": hit["key"], "dedupe": hit["key"],
+            "evidence": "{} {}. {}".format(side, hit["label"].lower(), hit["explanation"])}
+
+
 EVALUATORS = {
     "price_above": _price_above,
     "price_below": _price_below,
@@ -410,6 +443,7 @@ EVALUATORS = {
     "analyst_revisions": _analyst_revisions,
     "insider_activity": _insider_activity,
     "short_interest": _short_interest,
+    "swing_setup": _swing_setup,
 }
 
 

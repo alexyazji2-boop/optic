@@ -454,6 +454,9 @@ SETTINGS = {
     # Whether drawing points snap to a candle's O/H/L/C. A preference about the
     # tool, like the chart style beside it, not anything the reader made.
     "optic.chart.snap.v1",
+    # Swing setups: the panel's filters, and the rule parameters a reader
+    # changed. Preferences about the tool, like the chart's beside them.
+    "optic.setups.view.v1", "optic.setups.params.v1",
     # A fact about this browser's authenticator, needed before anyone signs in.
     "optic.auth.passkeyMade",
     # The session machinery itself.

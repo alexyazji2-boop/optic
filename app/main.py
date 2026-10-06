@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 from concurrent.futures import ThreadPoolExecutor
+import json
 import logging
 import os
 import re
@@ -76,6 +77,7 @@ from . import alerts as alerts_mod
 from .analytics import econ as econ_mod
 from .analytics import pulse as pulse_mod
 from .analytics import watchlist as watchlist_mod
+from .analytics import setups as setups_mod
 from . import knowledge as knowledge_mod
 from . import watch_runner
 from .analytics import watches as watches_mod
@@ -1086,6 +1088,325 @@ async def symbol_search(
     return await _run(lambda: {"query": q, "results": universe_mod.search(q, limit)})
 
 
+# ---------------------------------------------------------------- swing setups
+#
+# The scanner behind the Swing setups section: explainable entry rules on
+# completed candles, for review. See app/analytics/setups.py for the rules and
+# what each one may and may not read. Open to guests like every research
+# endpoint; it stores nothing.
+
+_SETUP_CACHE: Dict[str, Any] = {}
+_SETUP_LOCK = threading.Lock()
+SETUP_CACHE_SECONDS = 60
+_SETUP_SYMBOL = re.compile(r"^[A-Z0-9.\-^=]{1,12}$")
+
+
+def _setup_symbols(raw: str, cap: int = 40) -> List[str]:
+    out: List[str] = []
+    for part in (raw or "").split(","):
+        sym = part.strip().upper()
+        if sym and _SETUP_SYMBOL.match(sym) and sym not in out:
+            out.append(sym)
+    return out[:cap]
+
+
+def _setup_overrides(raw: Optional[str]) -> Dict[str, Any]:
+    """The reader's parameters: JSON keyed by preset id, or "*" for every one.
+
+    Unknown presets are dropped here and every value is clamped by the engine,
+    so all this has to refuse is what is not a JSON object."""
+    if not raw:
+        return {}
+    if len(raw) > 8000:
+        raise HTTPException(status_code=400, detail="The parameters are too long.")
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="The parameters have to be JSON.")
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="The parameters have to be a JSON object.")
+    out: Dict[str, Any] = {}
+    for key, value in data.items():
+        if (key == "*" or key in setups_mod.PRESET_BY_ID) and isinstance(value, dict):
+            out[key] = {str(k)[:40]: v for k, v in list(value.items())[:80]}
+    return out
+
+
+def _setup_directions(direction: str):
+    d = (direction or "both").strip().lower()
+    if d == "both":
+        return setups_mod.DIRECTIONS
+    if d in setups_mod.DIRECTIONS:
+        return (d,)
+    raise HTTPException(status_code=400, detail="Direction is both, bull or bear.")
+
+
+def _setup_timeframe(timeframe: str, symbols: List[str]) -> str:
+    tf = (timeframe or "daily").strip().lower()
+    if tf not in setups_mod.TIMEFRAMES:
+        raise HTTPException(status_code=400, detail="Timeframe is daily or 4h.")
+    if tf == "4h" and len(symbols) > 1:
+        raise HTTPException(
+            status_code=400,
+            detail="4-hour timing reads one symbol at a time, because each needs its "
+                   "own intraday request. Pick one symbol.")
+    return tf
+
+
+def _setup_frames(symbols: List[str], bench: str, period: str = "2y"):
+    """One download for every symbol and the benchmark. A scan of forty names
+    is one request rather than forty, which is what keeps it inside the feed's
+    rate limit."""
+    return YF_PROVIDER.batch_history(sorted(set(symbols) | {bench}), period=period, interval="1d")
+
+
+# What a scan row carries. The rule checks and indicator values are the detail
+# view's; carried on every row they made six symbols 359 KB, and forty would
+# have been over two megabytes for a table that shows seven columns.
+_SETUP_ROW_KEYS = ("symbol", "preset", "label", "family", "kind", "experimental", "direction",
+                   "timeframe", "status", "status_at", "armed_at", "trigger", "trigger_level",
+                   "invalidation", "explanation", "provisional", "key", "as_of")
+
+# Which states each status filter keeps. "recent" is the default: what is live,
+# and what has just ended, since an invalidation is news to somebody who saw it arm.
+SETUP_STATUS_FILTERS = {
+    "active": ("armed", "triggered"),
+    "recent": ("armed", "triggered", "invalidated", "expired"),
+    "triggered": ("triggered",),
+    "armed": ("armed",),
+    "watching": ("watching",),
+    "ended": ("invalidated", "expired"),
+    "all": setups_mod.STATES,
+}
+
+
+def _setup_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    out = {k: row.get(k) for k in _SETUP_ROW_KEYS}
+    cond = row.get("conditions") or {}
+    out["conditions"] = {"met": cond.get("met"), "of": cond.get("of")}
+    out["volume_ratio"] = (row.get("volume") or {}).get("ratio")
+    return out
+
+
+def _setup_scan(symbols: List[str], timeframe: str, preset_ids, directions,
+                overrides: Dict[str, Any], provisional: bool,
+                status: str = "recent") -> Dict[str, Any]:
+    keep = SETUP_STATUS_FILTERS.get(status, SETUP_STATUS_FILTERS["recent"])
+    bench = setups_mod.benchmark_of(overrides)
+    frames = _setup_frames(symbols, bench)
+    rows: List[Dict[str, Any]] = []
+    failed: List[str] = []
+    as_of: Dict[str, str] = {}
+    missing: Dict[str, int] = {}
+    totals: Dict[str, Dict[str, int]] = {}
+    forming = None
+    for sym in symbols:
+        df = frames.get(sym)
+        if df is None or df.empty:
+            failed.append(sym)
+            continue
+        intraday = (YF_PROVIDER.intraday_history(sym, period="1y", interval="4h")
+                    if timeframe == "4h" else None)
+        try:
+            res = setups_mod.analyse(sym, df, frames.get(bench), preset_ids, directions,
+                                     overrides, timeframe, intraday, provisional=provisional)
+        except Exception as exc:                           # noqa: BLE001
+            # One symbol that will not compute must not cost the other thirty-nine.
+            logging.getLogger("optic").warning("setups failed for %s: %s", sym, exc)
+            failed.append(sym)
+            continue
+        if not res.get("available"):
+            failed.append(sym)
+            continue
+        counted = {}
+        for r in res["rows"]:
+            counted[r["status"]] = counted.get(r["status"], 0) + 1
+            if r["status"] in keep:
+                rows.append(_setup_row(r))
+        totals[sym] = counted
+        as_of[sym] = res["as_of"]
+        forming = forming or res.get("forming")
+        if res.get("missing_sessions"):
+            missing[sym] = res["missing_sessions"]
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "timeframe": timeframe,
+        "symbols": symbols,
+        "failed": failed,
+        "benchmark": bench,
+        "benchmark_missing": frames.get(bench) is None,
+        "as_of": as_of,
+        "forming": forming,
+        "missing_sessions": missing,
+        "status": status if status in SETUP_STATUS_FILTERS else "recent",
+        # Every state counted, filtered or not, so a short table says what it
+        # left out rather than looking like a quiet market.
+        "counts": totals,
+        "rows": rows,
+        "method": setups_mod.METHOD,
+    }
+
+
+@app.get("/api/setups/catalogue")
+async def setups_catalogue() -> Dict[str, Any]:
+    """Every preset, its rules for both directions, and its parameters."""
+    return setups_mod.catalogue()
+
+
+@app.get("/api/setups")
+async def setups_scan(
+    symbols: str = Query("", description="Comma-separated symbols, at most 40"),
+    timeframe: str = Query("daily", description="daily, or 4h for one symbol"),
+    presets: str = Query("", description="Comma-separated preset ids; blank is all"),
+    direction: str = Query("both", description="both, bull or bear"),
+    params: Optional[str] = Query(None, description="JSON keyed by preset id, or * for all"),
+    provisional: bool = Query(False, description="Also read the forming candle, marked provisional"),
+    status: str = Query("recent", description="active, recent, triggered, armed, watching, ended or all"),
+) -> Dict[str, Any]:
+    """Swing setups across a list of symbols, on completed candles.
+
+    Cached for a minute per request: the Options tab redraws every twenty
+    seconds during the session, and a completed candle does not change between
+    redraws."""
+    wanted = _setup_symbols(symbols)
+    if not wanted:
+        raise HTTPException(status_code=400, detail="Name at least one symbol.")
+    tf = _setup_timeframe(timeframe, wanted)
+    preset_ids = [p for p in (presets or "").split(",") if p in setups_mod.PRESET_BY_ID] or None
+    dirs = _setup_directions(direction)
+    overrides = _setup_overrides(params)
+    status = (status or "recent").strip().lower()
+    if status not in SETUP_STATUS_FILTERS:
+        raise HTTPException(status_code=400, detail="Unknown status filter.")
+    key = json.dumps([wanted, tf, preset_ids, list(dirs), overrides, bool(provisional), status,
+                      int(time.time() // SETUP_CACHE_SECONDS)], sort_keys=True, default=str)
+    with _SETUP_LOCK:
+        hit = _SETUP_CACHE.get(key)
+    if hit is not None:
+        return hit
+    out = await _run(_setup_scan, wanted, tf, preset_ids, dirs, overrides, bool(provisional), status)
+    with _SETUP_LOCK:
+        if len(_SETUP_CACHE) > 64:
+            _SETUP_CACHE.clear()
+        _SETUP_CACHE[key] = out
+    return out
+
+
+@app.get("/api/setups/{ticker}/detail")
+async def setups_detail(
+    ticker: str,
+    preset: str = Query(...),
+    direction: str = Query("bull"),
+    timeframe: str = Query("daily"),
+    params: Optional[str] = Query(None),
+    slippage_bps: float = Query(5.0, ge=0, le=200),
+    target_r: float = Query(2.0, ge=0.5, le=10),
+    max_hold: int = Query(20, ge=1, le=120),
+) -> Dict[str, Any]:
+    """One setup in full: its row, the chart with its anchors and trigger, and
+    how its triggers played out on this stock's past daily candles.
+
+    The row and chart come from the same two years of candles the scan reads,
+    so the two cannot disagree. The historical evaluation reads five years, to
+    give it more trades to count, and says how many it found."""
+    sym = (_setup_symbols(ticker, 1) or [None])[0]
+    if not sym:
+        raise HTTPException(status_code=400, detail="That is not a symbol.")
+    if preset not in setups_mod.PRESET_BY_ID:
+        raise HTTPException(status_code=400, detail="Unknown setup.")
+    dirs = _setup_directions(direction)
+    if len(dirs) != 1:
+        raise HTTPException(status_code=400, detail="Direction is bull or bear.")
+    tf = _setup_timeframe(timeframe, [sym])
+    overrides = _setup_overrides(params)
+    opts = {"slippage_bps": slippage_bps, "target_r": target_r, "max_hold": max_hold}
+
+    def build() -> Dict[str, Any]:
+        bench = setups_mod.benchmark_of(overrides)
+        frames = _setup_frames([sym], bench)
+        if frames.get(sym) is None:
+            raise HTTPException(status_code=404, detail="No price history for {}.".format(sym))
+        intraday = (YF_PROVIDER.intraday_history(sym, period="1y", interval="4h")
+                    if tf == "4h" else None)
+        res = setups_mod.analyse(sym, frames.get(sym), frames.get(bench), [preset], dirs,
+                                 overrides, tf, intraday, provisional=True,
+                                 detail=(preset, dirs[0]))
+        if not res.get("available"):
+            raise HTTPException(status_code=404, detail=res.get("reason") or "No candles.")
+        out = {"row": res["rows"][0], **res.get("detail", {}), "forming": res.get("forming"),
+               "benchmark": res.get("benchmark"), "method": setups_mod.METHOD}
+        if tf == "daily":
+            long_frames = _setup_frames([sym], bench, period="5y")
+            past = setups_mod.analyse(sym, long_frames.get(sym), long_frames.get(bench),
+                                      [preset], dirs, overrides, "daily",
+                                      detail=(preset, dirs[0]), history_opts=opts)
+            out["history"] = (past.get("detail") or {}).get("history") or {
+                "available": False, "reason": "No longer history could be read."}
+        else:
+            out["history"] = {"available": False,
+                              "reason": "Historical evaluation is on daily candles only."}
+        return out
+
+    return await _run(build)
+
+
+@app.get("/api/setups/{ticker}/options")
+async def setups_options(
+    ticker: str,
+    direction: str = Query("bull"),
+    dte_min: int = Query(21, ge=0, le=730),
+    dte_max: int = Query(60, ge=1, le=730),
+    min_oi: int = Query(100, ge=0),
+    min_volume: int = Query(10, ge=0),
+    max_spread_pct: float = Query(10.0, ge=0.5, le=100),
+    delta_min: float = Query(0.2, ge=0, le=1),
+    delta_max: float = Query(0.8, ge=0, le=1),
+    hold_days: int = Query(30, ge=1, le=365),
+    budget: Optional[float] = Query(None, ge=0, le=1_000_000),
+) -> Dict[str, Any]:
+    """Contracts for a setup's direction, assessed apart from the setup.
+
+    The signal comes from the stock. This lists the contracts on that side that
+    pass the reader's filters, with the counts each filter removed, and does not
+    rank them."""
+    sym = (_setup_symbols(ticker, 1) or [None])[0]
+    if not sym:
+        raise HTTPException(status_code=400, detail="That is not a symbol.")
+    dirs = _setup_directions(direction)
+    if len(dirs) != 1:
+        raise HTTPException(status_code=400, detail="Direction is bull or bear.")
+    filters = {"dte_min": dte_min, "dte_max": max(dte_min, dte_max), "min_oi": min_oi,
+               "min_volume": min_volume, "max_spread_pct": max_spread_pct,
+               "delta_min": min(delta_min, delta_max), "delta_max": max(delta_min, delta_max),
+               "hold_days": hold_days, "budget": budget if budget and budget > 0 else None}
+
+    def build() -> Dict[str, Any]:
+        quote = PROVIDER.quote(sym) or {}
+        spot = quote.get("price")
+        chain = PROVIDER.options_chain(sym, max_expiries=6)
+        frame = None
+        if chain is not None and not chain.empty and spot:
+            frame = gex_mod.compute_exposure(chain, spot, rate=RISK_FREE,
+                                             div=quote.get("dividend_yield") or 0.0)
+        try:
+            earnings = YF_PROVIDER.earnings_date(sym)
+        except Exception:                                  # noqa: BLE001
+            earnings = None
+        out = setups_mod.contracts_for(frame, spot, dirs[0] == "bull", filters, earnings)
+        out["symbol"] = sym
+        out["spot"] = spot
+        # The same test /api/health uses: Tradier's chain is live when it is
+        # configured, and the free feed's is delayed.
+        out["realtime"] = (PROVIDER.name == "tradier"
+                           and "sandbox." not in str(getattr(PROVIDER, "base", "")))
+        if not out["realtime"]:
+            out["notes"] = out["notes"] + [
+                "Quotes from this feed are delayed, typically by about 15 minutes."]
+        return out
+
+    return await _run(build)
+
+
 @app.get("/api/watches/catalogue")
 async def watch_catalogue() -> Dict[str, Any]:
     """The conditions a watch can be built from, and what each one reads."""
@@ -1122,6 +1443,8 @@ async def watch_check(body: Dict[str, Any]) -> Dict[str, Any]:
             payload["next_earnings_date"] = YF_PROVIDER.earnings_date(ticker)
         except Exception:
             payload["next_earnings_date"] = None
+        if any(isinstance(r, dict) and r.get("kind") == "swing_setup" for r in rows):
+            _attach_setups(payload, ticker)
         results = watches_mod.check(payload, rows)
         return {
             "ticker": ticker,
@@ -1149,7 +1472,25 @@ def _watch_snapshot(symbol: str) -> Dict[str, Any]:
         # An earnings date that will not load costs the earnings_near condition
         # and nothing else. Every other watch on this symbol still evaluates.
         payload["next_earnings_date"] = None
+    _attach_setups(payload, symbol)
     return payload
+
+
+def _attach_setups(payload: Dict[str, Any], symbol: str) -> None:
+    """The Swing setups rows a `swing_setup` watch reads.
+
+    Every preset with its default settings, on completed daily candles. From the
+    provider's cached history: the snapshot above has just read this symbol's,
+    and the benchmark's is shared by every symbol in a pass. A failure costs the
+    setup watches and nothing else."""
+    try:
+        bench = "SPY"
+        payload["setups"] = setups_mod.analyse(
+            symbol, YF_PROVIDER.history(symbol, period="2y", interval="1d"),
+            YF_PROVIDER.history(bench, period="2y", interval="1d"))
+    except Exception as exc:                               # noqa: BLE001
+        logging.getLogger("optic").info("setups for %s skipped: %s", symbol, exc)
+        payload["setups"] = {"available": False, "rows": [], "reason": str(exc)}
 
 
 @app.post("/api/watches/run")
@@ -2028,9 +2369,12 @@ async def _tracker_loop() -> None:
             # would start the next pass while the last one was still running.
             # Thirty leaves headroom, and the once-per-day dedupe means more
             # frequent passes would mostly write nothing anyway.
-            if is_open and WATCH_AUTO:
+            # And one pass as the session closes. A swing setup triggers on the
+            # completed daily candle, which exists from 4:00pm; waiting for the
+            # next session's first pass would deliver it the following morning.
+            if WATCH_AUTO and (is_open or just_closed):
                 last_watch = getattr(app.state, "last_watch_run", None)
-                if last_watch is None or now - last_watch >= WATCH_RUN_MINUTES * 60:
+                if just_closed or last_watch is None or now - last_watch >= WATCH_RUN_MINUTES * 60:
                     app.state.last_watch_run = now
                     try:
                         out = await _run(watch_runner.run_once, _watch_snapshot)

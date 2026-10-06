@@ -45,6 +45,11 @@ def clean_iv(chain: pd.DataFrame) -> pd.DataFrame:
         return chain
     chain = chain.copy()
     chain.loc[(chain["iv"] <= 0.01) | (chain["iv"] > 4.0), "iv"] = np.nan
+    # Which ones are about to be filled in, kept beside the number. The greeks
+    # need a value for every contract and get one; a panel that shows a
+    # contract's own IV must not show a median from its neighbours as if the
+    # feed had quoted it.
+    chain["iv_filled"] = chain["iv"].isna()
     if "expiry" in chain.columns:
         chain["iv"] = chain.groupby("expiry")["iv"].transform(lambda s: s.fillna(s.median()))
     chain["iv"] = chain["iv"].fillna(chain["iv"].median()).fillna(0.35)

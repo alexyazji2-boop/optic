@@ -276,6 +276,31 @@ def _regular_end(when: datetime) -> int:
     return EARLY_REGULAR_END if early_close_name(when) else REGULAR_END
 
 
+def regular_close(day: date) -> Optional[datetime]:
+    """When `day`'s regular session closes, in ET, or None if it does not trade.
+
+    For a completed daily candle: a bar dated today is still forming until this
+    instant, which is 1:00pm on a half day and never on a holiday or weekend.
+    Public because app/analytics/setups.py needs the answer and not the clock
+    arithmetic behind it."""
+    if day.weekday() >= 5 or day in market_holidays(day.year):
+        return None
+    noon = datetime(day.year, day.month, day.day, 12, 0, tzinfo=ET)
+    return _at(noon, _regular_end(noon))
+
+
+def next_trading_day(day: date) -> date:
+    """The first session after `day`. A week's candle is complete once this
+    falls in a later week, which is how a Thursday before Good Friday closes
+    the week."""
+    probe = day + timedelta(days=1)
+    for _ in range(10):
+        if regular_close(probe) is not None:
+            return probe
+        probe += timedelta(days=1)
+    return probe
+
+
 def _after_end(when: datetime) -> int:
     return EARLY_AFTER_END if early_close_name(when) else AFTER_END
 

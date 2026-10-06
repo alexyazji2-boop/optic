@@ -16693,3 +16693,194 @@ table.data.accounts-table td.ac-who { white-space: normal; min-width: 120px; wid
   .view.active { animation: none; }
   .data-state.is-live > .dot { animation: none; }
 }
+
+/* ================================================================ swing setups
+ *
+ * A filter row, a seven-column table, and a row that opens into the detail.
+ * Status reads by colour and by word, never colour alone: armed is the amber
+ * of a warning, triggered the positive green, invalidated the negative red,
+ * expired and watching the muted ink.
+ */
+.ss-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2) var(--space-3);
+  margin: 0 0 var(--space-3);
+}
+.ss-filter { display: grid; gap: 2px; font-size: var(--t-caption); color: var(--ink-muted); }
+.ss-filter select { min-width: 9rem; }
+.ss-line { margin: 0 0 var(--space-3); font-size: var(--t-small); color: var(--ink-2); max-width: 90ch; }
+.ss-scroll { overflow-x: auto; }
+.ss-table td, .ss-table th { vertical-align: top; }
+/* `td.name` does not left-align in this file and `table.data td` is nowrap at
+   (0,1,2); these outscore it, and the prose rows wrap. */
+table.data.ss-table td.name, table.data.ss-table th:nth-child(2) { text-align: left; }
+table.data.ss-table td.ss-setup { white-space: normal; }
+table.data.ss-table tr.ss-why-row > td,
+table.data.ss-table tr.ss-detail-row > td {
+  white-space: normal;
+  text-align: left;
+}
+table.data.ss-table tr.ss-why-row > td {
+  padding-top: 0;
+  font-size: var(--t-small);
+  color: var(--ink-2);
+}
+/* The row and its sentence read as one: the rule sits under the sentence. */
+table.data.ss-table tr.ss-row > td { border-bottom: none; }
+table.data.ss-table tr.ss-why-row.is-open > td { border-bottom: none; }
+.ss-detail, .ss-detail p, .ss-detail td, .ss-detail li { white-space: normal; }
+.ss-detail table.data td:not(.name) { white-space: nowrap; }
+.ss-setup { min-width: 10rem; }
+/* "When" wraps to two short lines rather than pushing Details off the edge. */
+table.data.ss-table tr.ss-row > td:nth-child(6) { white-space: normal; min-width: 4.5rem; }
+.ss-dir {
+  display: inline-block;
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0 var(--space-1);
+  border-radius: var(--r-pill);
+  border: 1px solid currentColor;
+  margin-right: var(--space-1);
+}
+.ss-dir.is-bull { color: var(--pos); }
+.ss-dir.is-bear { color: var(--neg); }
+.ss-kind { display: block; font-size: var(--t-caption); color: var(--ink-muted); }
+.ss-state {
+  display: inline-block;
+  font-size: var(--t-caption);
+  font-weight: 600;
+  padding: 0 var(--space-2);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-strong);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.ss-state.is-triggered { color: var(--pos); border-color: color-mix(in srgb, var(--pos) 55%, transparent); }
+.ss-state.is-armed { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 55%, transparent); }
+.ss-state.is-invalidated { color: var(--neg); border-color: color-mix(in srgb, var(--neg) 55%, transparent); }
+.ss-state.is-expired, .ss-state.is-inactive { color: var(--ink-muted); }
+/* Provisional is dashed: a reading of a candle that has not finished. */
+.ss-prov {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--t-micro);
+  color: var(--ink-muted);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-pill);
+  padding: 0 var(--space-1);
+  width: max-content;
+}
+.ss-prov-line {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-md);
+  font-size: var(--t-small);
+  color: var(--ink-2);
+}
+.ss-open {
+  appearance: none;
+  border: 1px solid var(--border-strong);
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--t-caption);
+  border-radius: var(--r-pill);
+  padding: var(--space-0) var(--space-2);
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.ss-open:hover { color: var(--ink); border-color: var(--ink-muted); }
+@media (prefers-reduced-motion: reduce) {
+  .ss-open { transition: none; }
+}
+.ss-open:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ss-row.is-open td { border-bottom-color: transparent; }
+.ss-detail-row > td { background: var(--surface-2); padding: var(--space-3); }
+.ss-detail { display: grid; gap: var(--space-3); }
+.ss-detail-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.ss-rule { margin: 0; font-size: var(--t-small); color: var(--ink-2); max-width: 80ch; }
+.ss-chart { min-height: 300px; }
+.ss-h { margin: var(--space-2) 0 var(--space-1); font-size: var(--t-small); font-weight: 600; color: var(--ink); }
+.ss-checks { width: 100%; }
+.ss-checks td { font-size: var(--t-small); }
+.ss-readings { max-width: 40rem; }
+.ss-info td { color: var(--ink-muted); }
+.ss-pass { color: var(--pos); font-weight: 600; }
+.ss-fail { color: var(--neg); font-weight: 600; }
+.ss-na { color: var(--ink-muted); }
+.ss-warn { margin: 0 0 var(--space-2); font-size: var(--t-small); color: var(--warn); max-width: 80ch; }
+.ss-flag {
+  font-size: var(--t-micro);
+  color: var(--warn);
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  border-radius: var(--r-pill);
+  padding: 0 var(--space-1);
+}
+.ss-notes { margin: var(--space-2) 0 0; padding-left: var(--space-4); display: grid; gap: var(--space-1); }
+.ss-notes li { font-size: var(--t-caption); color: var(--ink-muted); max-width: 80ch; }
+.ss-opt-form, .ss-params {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2) var(--space-3);
+  margin: 0 0 var(--space-2);
+  font-size: var(--t-caption);
+  color: var(--ink-muted);
+}
+.ss-opt-form input { width: 5.5rem; }
+.ss-rules { display: grid; gap: var(--space-2); margin: 0 0 var(--space-3); }
+.ss-rules fieldset { border: 1px solid var(--border); border-radius: var(--r-md); padding: var(--space-2) var(--space-3); margin: 0; }
+.ss-rules legend { font-size: var(--t-small); color: var(--ink); padding: 0 var(--space-1); }
+.ss-preset { border: 1px solid var(--border); border-radius: var(--r-md); padding: var(--space-2) var(--space-3); }
+.ss-preset summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
+.ss-preset summary label { font-size: var(--t-small); color: var(--ink); }
+.ss-preset .ss-rule { margin: var(--space-2) 0; }
+.ss-param { display: grid; gap: 2px; }
+.ss-param.ss-bool { display: flex; align-items: center; gap: var(--space-1); }
+.ss-param input[type="number"] { width: 6rem; }
+.ss-param input[type="text"], .ss-param input[type="date"] { width: 9rem; }
+.ss-rules-actions { display: flex; gap: var(--space-3); align-items: center; }
+
+@media (max-width: 559px) {
+  .ss-filter select { min-width: 0; width: 100%; }
+  .ss-filter { flex: 1 1 45%; }
+  /* A phone stacks each setup instead of scrolling the table sideways, which
+     hid the status and both levels behind the setup's name and cut every
+     sentence off at the edge of the screen. */
+  .ss-scroll:has(> table.ss-table) { overflow-x: visible; }
+  table.data.ss-table thead { display: none; }
+  /* `table.data` has a 480px floor for scrolling tables; a stacked one fits. */
+  table.data.ss-table { min-width: 0; }
+  table.data.ss-table, table.data.ss-table > tbody { display: block; width: 100%; }
+  table.data.ss-table td { white-space: normal; min-width: 0; }
+  table.data.ss-table tr.ss-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-1) var(--space-3);
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--grid);
+  }
+  table.data.ss-table tr.ss-row > td { display: block; padding: 0; border: 0; text-align: left; }
+  table.data.ss-table tr.ss-row > td.ss-setup { flex: 1 1 12rem; min-width: 0; }
+  table.data.ss-table tr.ss-row > td:nth-child(6) { min-width: 0; }
+  table.data.ss-table tr.ss-row > td[data-label]::before {
+    content: attr(data-label) " ";
+    color: var(--ink-muted);
+    font-size: var(--t-caption);
+  }
+  table.data.ss-table tr.ss-why-row,
+  table.data.ss-table tr.ss-detail-row { display: block; }
+  table.data.ss-table tr.ss-why-row > td,
+  table.data.ss-table tr.ss-detail-row > td { display: block; padding-left: 0; padding-right: 0; }
+}

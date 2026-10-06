@@ -102,9 +102,15 @@ def test_volume_keeps_its_own_pair_unless_a_colour_was_chosen():
 
 def test_both_charts_get_the_same_colours():
     """The Charting tab and the Swing chart draw the same instrument. WS_FLAGS
-    already shares the overlay toggles for this reason."""
-    assert APP_JS.count("candleUp: chartColor('up')") == 2
-    assert APP_JS.count("candleDown: chartColor('down')") == 2
+    already shares the overlay toggles for this reason.
+
+    Three, not two, since the Swing setups row chart: it draws the same
+    instrument's candles a few inches below the Swing chart, in the colours
+    the reader chose for both."""
+    assert APP_JS.count("candleUp: chartColor('up')") == 3
+    assert APP_JS.count("candleDown: chartColor('down')") == 3
+    assert "candleUp: chartColor('up'), candleDown: chartColor('down')," in \
+        APP_JS[APP_JS.index("function setupChartNode("):]
     # Both `Close` series, by name. A global count of chartColor('line') was the
     # wrong shape: it is legitimately read by chartBaseColors and by the Swing
     # tab's line-mode legend key as well, so the number moved for good reasons.

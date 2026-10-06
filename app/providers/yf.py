@@ -1239,6 +1239,10 @@ class YFinanceProvider(MarketDataProvider):
                                 side_df.get("impliedVolatility"), errors="coerce"
                             ),
                             "in_the_money": side_df.get("inTheMoney"),
+                            # When the contract last traded, as the feed has it.
+                            # Not a quote time: the bid and ask can be newer.
+                            "last_trade": pd.to_datetime(
+                                side_df.get("lastTradeDate"), errors="coerce", utc=True),
                         }
                     )
                     part["is_call"] = is_call
@@ -1264,6 +1268,9 @@ class YFinanceProvider(MarketDataProvider):
             chain = clean_iv(chain)
             chain["volume"] = chain["volume"].fillna(0.0)
             chain["open_interest"] = chain["open_interest"].fillna(0.0)
+            # When this chain was read. Cached for TTL_CHAIN, so a reader can be
+            # shown how old the quotes in front of them are.
+            chain["fetched_at"] = pd.Timestamp.now(tz="UTC").isoformat()
             return chain
 
         return _cached(key, self.TTL_CHAIN, build)
