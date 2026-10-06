@@ -105,10 +105,13 @@ const views = {
  * - Put away, not deleted. Drawings, notes, paper trades and Pulse
  *   conversations exist nowhere else, so each account's go on a shelf of their
  *   own and come back the next time it signs in here.
- * - A guest's work goes with the first account signed in over it. That is
- *   somebody signing up after looking around, and accountLoad brings their
- *   watchlist and theses across. An account this browser has held before gets
- *   its own things back instead, and the guest's wait for the next guest.
+ * - A guest's work goes with the first account signed in over it only when
+ *   that person says it is theirs. Usually it is somebody signing up after
+ *   looking around, and accountLoad brings their watchlist and theses across;
+ *   on a shared computer it is the next person, and their account would take a
+ *   stranger's things. So it is asked, once, before anything is adopted, and
+ *   kept out it waits on the guest's shelf for the next guest. An account this
+ *   browser has held before gets its own things back without asking.
  * - Settings stay with the browser. Theme, scale, time zone and how the charts
  *   are drawn describe the screen, not the person.
  * - The swap runs at the top of the next load, before any store is read.
@@ -146,6 +149,25 @@ const PERSONAL_KEYS = [
   'optic.auth.passkeyOffered',   // so the next account is offered one as well
 ];
 
+/* What a guest leaves that is worth asking about before an account takes it,
+ * named the way the question names it. */
+const GUEST_THING_LABELS = {
+  'optic.recent.v1': 'recent searches',
+  'optic.chart.watch.v1': 'a watchlist',
+  'optic.watchlists.v1': 'a watchlist',
+  'optic.watches.v1': 'watches',
+  'optic.thesis.v1': 'theses',
+  'optic.research.v1': 'saved research',
+  'optic.valuation.v1': 'valuation scenarios',
+  'optic.signals.v1': 'signal history',
+  'optic.screener.v1': 'a screen',
+  'optic.paper.v1': 'paper trades',
+  'optic.chart.drawings.v2': 'chart drawings',
+  'optic.chart.notes.v1': 'chart notes',
+  'optic.pulse.history.v1': 'Pulse conversations',
+};
+
+let sessionAskPending = null;   // the question, while it waits for an answer
 let sessionHolderSeen = null;   // whose things this page was loaded with
 let sessionSeen = null;         // who this page last settled on
 let sessionEnding = false;      // a reload into a new session is under way
@@ -188,8 +210,61 @@ function swapDeviceSession(from, to) {
   if (whole) localStorage.removeItem(sessionShelfKey(to));
 }
 
+/* Anything in it: an empty list or a book with nothing open is nothing. */
+function storedHasContent(raw) {
+  let value;
+  try { value = JSON.parse(raw); } catch (e) { return !!raw; }
+  const full = (x) => (Array.isArray(x) ? x.some(full)
+    : (x && typeof x === 'object') ? Object.values(x).some(full)
+      : (x !== null && x !== undefined && x !== '' && x !== false));
+  return full(value);
+}
+
+function guestThingsHere() {
+  const found = [];
+  Object.keys(GUEST_THING_LABELS).forEach((key) => {
+    let raw = null;
+    try { raw = localStorage.getItem(key); } catch (e) { raw = null; }
+    const label = GUEST_THING_LABELS[key];
+    if (raw !== null && storedHasContent(raw) && found.indexOf(label) < 0) found.push(label);
+  });
+  return found;
+}
+
+/* The guest's things are the reader's: they stay where they are and become
+ * the account's, which accountLoad then brings across. */
+function bringGuestThings() {
+  const ask = sessionAskPending;
+  if (!ask) return false;
+  sessionAskPending = null;
+  try {
+    localStorage.setItem(SESSION_HOLDER_KEY, ask.who);
+    sessionHolderSeen = ask.who;
+  } catch (e) { /* storage refused: nothing is kept, so nothing can carry */ }
+  return true;
+}
+
+/* Somebody else's: they go on the guest's shelf, where the next visitor who
+ * is signed out finds them, and the account starts on a page of its own. */
+function keepGuestThingsOut() {
+  const ask = sessionAskPending;
+  if (!ask) return false;
+  sessionAskPending = null;
+  try { localStorage.setItem(SESSION_HOLDER_KEY, SESSION_GUEST); } catch (e) { return false; }
+  sessionHolderSeen = SESSION_GUEST;
+  try {
+    sessionStorage.setItem(SESSION_NEXT_KEY, JSON.stringify({ to: ask.who, said: 'in' }));
+  } catch (e) {
+    try { swapDeviceSession(SESSION_GUEST, ask.who); } catch (err) { return false; }
+  }
+  sessionEnding = true;
+  location.reload();
+  return true;
+}
+
 /* Called with every settled auth state. True when the page is about to reload
- * into a new session, so the caller stops there. */
+ * into a new session, or is asking whose a guest's things are, so the caller
+ * stops there. */
 function keepDeviceSession(state) {
   const who = state && state.status === 'user' && state.user && state.user.id
     ? String(state.user.id) : SESSION_GUEST;
@@ -201,7 +276,16 @@ function keepDeviceSession(state) {
   if (holder === who) { sessionHolderSeen = holder; return false; }
   if (holder === null || (holder === SESSION_GUEST && !readSessionShelf(who))) {
     // Nobody noted yet, or a guest signing in to an account this browser has
-    // never held: what is here is theirs.
+    // never held. What is here is theirs if they say so, and with nothing
+    // here there is nothing to ask.
+    const things = who === SESSION_GUEST ? [] : guestThingsHere();
+    if (things.length) {
+      if (!sessionAskPending) {
+        sessionAskPending = { who, holder, things };
+        if (window && typeof window.onGuestThings === 'function') window.onGuestThings(sessionAskPending);
+      }
+      return true;
+    }
     try {
       localStorage.setItem(SESSION_HOLDER_KEY, who);
       sessionHolderSeen = who;
@@ -27125,13 +27209,9 @@ if (window.OpticAuth) {
     loadAllowance();
   };
 
-  window.OpticAuth.on((state) => {
-    // `unknown` is a sign-in check that failed, not an answer: nothing is
-    // swapped or loaded until a read succeeds (static/auth.js, load).
-    if (state.status === 'loading' || state.status === 'unknown') return;
-    // Before accountLoad, which would otherwise adopt the last person's local
-    // watchlist and theses into this account.
-    if (keepDeviceSession(state)) return;
+  // What follows a settled session: the line saying what happened, then the
+  // account's own things. Shared by the listener and by "Bring them in".
+  const afterSessionKept = (state) => {
     if (sessionSaid) {
       const said = sessionSaid;
       sessionSaid = '';
@@ -27143,6 +27223,54 @@ if (window.OpticAuth) {
       if (STATE.view === 'watchlist') { STATE.watchlist = null; loadWatchlist(true); }
       loadAllowance();
     });
+  };
+
+  /* The question keepDeviceSession asks when a guest's things are here and
+   * the account has never been signed in on this browser. Nothing loads for
+   * the account until it is answered. */
+  window.onGuestThings = (ask) => {
+    if (document.getElementById('ds-ask')) return;
+    const box = document.createElement('div');
+    box.id = 'ds-ask';
+    box.className = 'ds-ask-back';
+    const list = ask.things.length > 1
+      ? `${ask.things.slice(0, -1).join(', ')} and ${ask.things[ask.things.length - 1]}`
+      : ask.things[0];
+    box.innerHTML = `<div class="ds-ask" role="dialog" aria-modal="true" aria-labelledby="ds-ask-h">
+      <h2 id="ds-ask-h">Bring what is saved here into your account?</h2>
+      <p>This browser has ${esc(list)} saved while signed out.</p>
+      <p>If they are yours, bring them in. If somebody else used this browser, keep them
+        out: they stay here for whoever next uses it signed out, and your account starts
+        with its own.</p>
+      <div class="ds-ask-btns">
+        <button type="button" class="btn primary" data-ds-bring>Bring them in</button>
+        <button type="button" class="btn" data-ds-keep>Keep them out</button>
+      </div>
+    </div>`;
+    document.body.appendChild(box);
+    const first = box.querySelector('[data-ds-bring]');
+    if (first) first.focus();
+  };
+
+  document.addEventListener('click', (evt) => {
+    if (!evt.target || !evt.target.closest) return;
+    const bring = evt.target.closest('[data-ds-bring]');
+    const keep = evt.target.closest('[data-ds-keep]');
+    if (!bring && !keep) return;
+    const box = document.getElementById('ds-ask');
+    if (box) box.remove();
+    if (bring && bringGuestThings()) afterSessionKept(window.OpticAuth.state());
+    if (keep) keepGuestThingsOut();
+  });
+
+  window.OpticAuth.on((state) => {
+    // `unknown` is a sign-in check that failed, not an answer: nothing is
+    // swapped or loaded until a read succeeds (static/auth.js, load).
+    if (state.status === 'loading' || state.status === 'unknown') return;
+    // Before accountLoad, which would otherwise adopt the last person's local
+    // watchlist and theses into this account.
+    if (keepDeviceSession(state)) return;
+    afterSessionKept(state);
   });
 }
 

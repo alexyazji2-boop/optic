@@ -93,6 +93,8 @@ def _run(scenario, boot=True):
         var run = new Function('localStorage', 'sessionStorage', 'location', 'window', 'document',
           SECTION + '\\nreturn { keep: keepDeviceSession, toGuest: handDeviceSessionToGuest,' +
           ' swap: swapDeviceSession, keys: PERSONAL_KEYS,' +
+          ' bring: bringGuestThings, keepOut: keepGuestThingsOut,' +
+          ' asked: function () { return sessionAskPending; },' +
           ' said: function () { return sessionSaid; }, ending: function () { return sessionEnding; },' +
           ' stuck: function () { return sessionStuck; } };');
         page = run(localStorage, sessionStorage, location, window, document);
@@ -210,17 +212,54 @@ def test_a_switch_found_on_load_says_nothing():
 # --------------------------------------------------------- guest and account
 
 
-def test_a_guest_signing_up_keeps_their_work():
+def test_a_guest_signing_up_is_asked_and_brought_in_keeps_their_work():
     """The watchlist and theses a guest built are what accountLoad adopts into
-    a new account, so they must still be in the browser when it runs."""
+    a new account, so brought in they must still be in the browser when it
+    runs. Asked first: on a shared computer the next person's account would
+    otherwise take a stranger's things (asked for 2026-10-06)."""
     _run("""
       page.keep(GUEST);
       localStorage.setItem('optic.chart.watch.v1', '["NVDA","AMD"]');
-      localStorage.setItem('optic.thesis.v1', '{"NVDA":{}}');
-      assert(page.keep(user(A)) === false && reloads === 0, 'no reload');
+      localStorage.setItem('optic.thesis.v1', '{"NVDA":{"bull":"data centres"}}');
+      assert(page.keep(user(A)) === true && reloads === 0, 'asked, and nothing loads meanwhile');
+      assert(page.asked().things.join() === 'a watchlist,theses', 'named: ' + page.asked().things);
+      assert(localStorage.getItem('optic.session.holder.v1') === 'guest', 'not A\\'s until answered');
+      assert(page.keep(user(A)) === true, 'still waiting, asked once');
+      assert(page.bring() === true, 'brought in');
       assert(localStorage.getItem('optic.chart.watch.v1') === '["NVDA","AMD"]', 'watchlist kept');
-      assert(localStorage.getItem('optic.thesis.v1') === '{"NVDA":{}}', 'theses kept');
+      assert(localStorage.getItem('optic.thesis.v1') === '{"NVDA":{"bull":"data centres"}}', 'theses kept');
       assert(localStorage.getItem('optic.session.holder.v1') === A, 'and now A\\'s');
+      assert(page.keep(user(A)) === false, 'and the next settle goes on');
+    """)
+
+
+def test_kept_out_the_guests_things_wait_for_the_next_guest():
+    _run("""
+      page.keep(GUEST);
+      localStorage.setItem('optic.chart.watch.v1', '["GME"]');
+      localStorage.setItem('optic.recent.v1', '["GME"]');
+      page.keep(user(A));
+      assert(page.keepOut() === true && reloads === 1, 'a fresh page for A');
+      newPage();
+      assert(localStorage.getItem('optic.chart.watch.v1') === null, 'A starts with none of it');
+      assert(localStorage.getItem('optic.recent.v1') === null, 'not even the searches');
+      assert(localStorage.getItem('optic.session.holder.v1') === A, 'and is A\\'s');
+      assert(page.keep(user(A)) === false, 'nothing more to ask');
+      page.keep(GUEST); newPage(); page.keep(GUEST);
+      assert(localStorage.getItem('optic.chart.watch.v1') === '["GME"]', 'the guest\\'s are back');
+    """)
+
+
+def test_nothing_worth_asking_about_is_not_asked():
+    """An empty list, a book with nothing open and the settings are not a
+    guest's things."""
+    _run("""
+      page.keep(GUEST);
+      localStorage.setItem('optic.chart.watch.v1', '[]');
+      localStorage.setItem('optic.paper.v1', '{"open":[],"closed":[]}');
+      localStorage.setItem('optic.theme', 'dark');
+      assert(page.keep(user(A)) === false && page.asked() === null, 'no question');
+      assert(localStorage.getItem('optic.session.holder.v1') === A, 'A\\'s');
     """)
 
 
@@ -251,11 +290,13 @@ def test_an_account_with_nothing_here_is_still_known():
     """)
 
 
-def test_a_browser_from_before_this_belongs_to_whoever_is_signed_in():
+def test_a_browser_from_before_this_asks_too():
+    """Its things could be anybody's: the same question, the same answers."""
     _run("""
       localStorage.setItem('optic.recent.v1', '["NVDA"]');
       newPage();
-      assert(page.keep(user(A)) === false && reloads === 0, 'nothing to switch from');
+      assert(page.keep(user(A)) === true && reloads === 0, 'asked');
+      page.bring();
       assert(localStorage.getItem('optic.session.holder.v1') === A, 'noted');
       assert(localStorage.getItem('optic.recent.v1') === '["NVDA"]', 'and kept');
     """)
@@ -409,11 +450,22 @@ def test_it_runs_before_any_store_is_read():
 def test_the_auth_listener_switches_before_it_loads_the_account():
     """accountLoad adopts the browser's watchlist and theses into an account
     that has none. Run first, it would adopt the last person's."""
+    after = RAW[RAW.index("const afterSessionKept = (state) => {"):]
+    after = after[:after.index("\n  };")]
+    assert "accountLoad()" in after and "if (sessionSaid) {" in after
+    assert "'Signed out. The terminal stays open.'" in after
     wiring = RAW[RAW.index("window.OpticAuth.on((state) => {"):]
     wiring = wiring[:wiring.index("\n  });\n}")]
-    assert wiring.index("if (keepDeviceSession(state)) return;") < wiring.index("accountLoad()")
-    assert "if (sessionSaid) {" in wiring
-    assert "'Signed out. The terminal stays open.'" in wiring
+    assert wiring.index("if (keepDeviceSession(state)) return;") < wiring.index("afterSessionKept(state);")
+    assert "accountLoad()" not in wiring, "only after the session is settled"
+
+
+def test_the_question_has_both_answers_wired():
+    ask = RAW[RAW.index("window.onGuestThings = (ask) => {"):]
+    ask = ask[:ask.index("window.OpticAuth.on((state) => {")]
+    assert "data-ds-bring" in ask and "data-ds-keep" in ask
+    assert "if (bring && bringGuestThings()) afterSessionKept(window.OpticAuth.state());" in ask
+    assert "if (keep) keepGuestThingsOut();" in ask
 
 
 def test_sign_out_does_not_repaint_a_page_that_is_reloading():

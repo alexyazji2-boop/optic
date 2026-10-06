@@ -17045,3 +17045,26 @@ table.data.ss-table tr.ss-row > td:nth-child(6) { white-space: normal; min-width
 .sc-bad { flex-basis: 100%; font-size: var(--t-caption); color: var(--neg); }
 .sc-bad:empty { display: none; }
 .sc-filter input[aria-invalid="true"] { border-color: var(--neg); }
+
+/* Whose things these are: asked once, over the page, before an account takes
+ * what a guest left in this browser. */
+.ds-ask-back {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: var(--scrim);
+}
+.ds-ask {
+  max-width: 30rem;
+  padding: var(--space-5);
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  box-shadow: var(--elev-2);
+}
+.ds-ask h2 { margin: 0 0 var(--space-3); font-size: var(--t-body); }
+.ds-ask p { margin: 0 0 var(--space-3); font-size: var(--t-small); color: var(--ink-2); }
+.ds-ask-btns { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
