@@ -847,6 +847,11 @@ class YFinanceProvider(MarketDataProvider):
                 # them for mutual funds only; a stock or an ETF has neither.
                 "morningstar_rating": _f(info.get("morningStarOverallRating")),
                 "morningstar_risk": _f(info.get("morningStarRiskRating")),
+                # When the price was set, as the feed words it ("10:07AM EDT").
+                # `as_of` below is when it was fetched, which on a delayed feed
+                # is fifteen minutes or a whole weekend later.
+                "market_time": (info.get("regularMarketTime")
+                                if isinstance(info.get("regularMarketTime"), str) else None),
                 "as_of": datetime.now(timezone.utc).isoformat(),
             }
 

@@ -34965,9 +34965,14 @@ function updateStatus() {
     parts.push(`<span class="${signClass(s.total_pnl)}">${fmtPct(s.return_pct, 2)}</span>`);
   }
 
+  /* The time here is when the page's data was put together, so it says
+   * "fetched". The price's own time, when the feed gives it, follows: on a
+   * delayed feed, and all weekend, the two are far apart, and a bare clock
+   * beside the source read as the time of the price. */
   if (d.generated_at) {
-    parts.push(`Source: ${esc(d.data_source || 'yfinance')} · ${
-      new Date(d.generated_at).toLocaleTimeString()}`);
+    parts.push(`Source: ${esc(d.data_source || 'yfinance')} · fetched ${
+      new Date(d.generated_at).toLocaleTimeString()}${
+      quote.market_time ? ` · price as of ${esc(quote.market_time)}` : ''}`);
   }
   // The session strip names the phase in words wherever it is drawn.
   if (quote.market_state && !STATE.session) {
@@ -35169,6 +35174,22 @@ const SESSION_LABEL = {
 const AUTO_REFRESH_VIEWS = ['home', 'overview', 'swing', 'market'];
 let autoRefreshPending = false;
 
+/* What each view's last background refresh did.
+ *
+ * The chip said "refreshing every 20s" from the session phase and the view
+ * alone. The loaders keep the last good reading when a refresh fails, which
+ * is right for the page and wrong for the chip: an hour of failed refreshes
+ * looked exactly like an hour of updates while the numbers sat still. A view
+ * whose data object was not replaced by a refresh did not refresh. */
+const REFRESH_HEALTH = {};
+
+function refreshTarget(view) {
+  if (view === 'home') return STATE.home;
+  if (view === 'overview' || view === 'swing') return STATE.swing;
+  if (view === 'market') return STATE.market;
+  return null;
+}
+
 /* The feed chip for the status line. Once the session strip is drawn under
  * it, that strip names the phase in capitals a few pixels below, so the chip
  * drops its own first word ("Overnight · ", "Pre-market · ") and keeps the
@@ -35201,6 +35222,14 @@ function liveIndicatorHTML(opts = {}) {
   // Extended hours get the same pulse but their own label, so "live" never
   // implies regular-session liquidity.
   const refreshing = AUTO_REFRESH_VIEWS.includes(STATE.view);
+  const health = REFRESH_HEALTH[STATE.view];
+  if (refreshing && health && health.failures > 0) {
+    const phaseName = (SESSION_LABEL[session] || cap(session)).split(' · ')[0];
+    const last = health.okAt ? ` · last update ${new Date(health.okAt).toLocaleTimeString([], {
+      hour: 'numeric', minute: '2-digit' })}` : ' · showing the last data loaded';
+    return `<span class="chip warn"><span class="dot"></span>${
+      esc(trimPhase(`${phaseName} · refresh failed${last}`, opts.phaseShown))}</span>`;
+  }
   const tone = session === 'regular' && refreshing ? 'bull' : 'neutral';
   // Overnight, a single stock is live when a venue has printed it tonight and
   // not otherwise. Asked of the loaded name, on the views that are about it.
@@ -35228,14 +35257,26 @@ async function tickAutoRefresh() {
   if (document.hidden || !isTapeLiveET()) return;
   if (autoRefreshPending || swingLoading) return;
   autoRefreshPending = true;
+  const view = STATE.view;
+  const before = refreshTarget(view);
+  let attempted = true;
   try {
-    if (STATE.view === 'home') await loadHomeMarket({ silent: true });
-    else if (STATE.view === 'overview' && STATE.swing) {
+    if (view === 'home') await loadHomeMarket({ silent: true });
+    else if (view === 'overview' && STATE.swing) {
       await loadSecurityFacet('overview', true, { silent: true });
-    } else if (STATE.view === 'swing' && STATE.swing) await loadSwing(true, { silent: true });
-    else if (STATE.view === 'market' && STATE.market) await loadMarket(true, { silent: true });
+    } else if (view === 'swing' && STATE.swing) await loadSwing(true, { silent: true });
+    else if (view === 'market' && STATE.market) await loadMarket(true, { silent: true });
+    else attempted = false;
+  } catch (err) {
+    // Counted below as the failure it is; the loop itself carries on.
   } finally {
     autoRefreshPending = false;
+  }
+  if (attempted && STATE.view === view) {
+    const h = REFRESH_HEALTH[view] || (REFRESH_HEALTH[view] = { failures: 0, okAt: 0 });
+    if (refreshTarget(view) !== before) { h.failures = 0; h.okAt = Date.now(); }
+    else h.failures += 1;
+    updateStatus();
   }
   // The other views are snapshots and say so in the status strip.
 }

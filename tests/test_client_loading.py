@@ -96,12 +96,12 @@ def run_js(scenario):
     setup = "\n".join(declaration(name) for name in [
         "ORIGIN_DOWN_RE",
         "swingRequestId", "swingLoading", "swingInFlight", "chartRequestId",
-        "SESSION_LABEL", "AUTO_REFRESH_VIEWS", "autoRefreshPending",
+        "SESSION_LABEL", "AUTO_REFRESH_VIEWS", "autoRefreshPending", "REFRESH_HEALTH",
         # liveIndicatorHTML asks whether the loaded name has an overnight print.
         "TICKER_VIEWS"])
     loaders = "\n".join(function(name) for name in [
         "errorHTML",
-        "loadSwing", "loadSecurityFacet", "loadChartWorkspace", "tickAutoRefresh",
+        "loadSwing", "loadSecurityFacet", "loadChartWorkspace", "tickAutoRefresh", "refreshTarget",
         "overnightPrint", "liveIndicatorHTML", "trimPhase"])
     script = STUBS + setup + loaders + "\n(async function() {\n" + scenario + """
     })().then(function() { print('TEST_OK'); }, function(err) { print(err.stack); });
@@ -190,6 +190,24 @@ def test_refreshes_home_and_overview_without_overlapping_requests():
       document.hidden = true; await tickAutoRefresh();
       document.hidden = false; phase = 'closed'; await tickAutoRefresh();
       assert(pending.length === 1, 'hidden or closed market fetched again');
+    """)
+
+
+def test_a_failed_refresh_is_said_on_the_chip_and_a_good_one_clears_it():
+    """Reproduced before the fix: the loaders keep the last reading when a
+    refresh fails, and the chip went on pulsing "refreshing every 20s" over
+    numbers that had stopped moving."""
+    run_js("""
+      STATE.view = 'overview'; STATE.swing = {ticker: 'AAPL', revision: 1};
+      var tick = tickAutoRefresh();
+      pending[0].reject(new Error('offline')); await tick;
+      var chip = liveIndicatorHTML();
+      assert(chip.includes('refresh failed') && !chip.includes('pulse-beat'), 'failure not shown: ' + chip);
+      assert(chip.includes('showing the last data loaded'), 'no word on what is shown: ' + chip);
+      tick = tickAutoRefresh();
+      pending[1].resolve({ticker: 'AAPL', revision: 2}); await tick;
+      chip = liveIndicatorHTML();
+      assert(chip.includes('refreshing every 20s'), 'a good refresh did not clear it: ' + chip);
     """)
 
 
