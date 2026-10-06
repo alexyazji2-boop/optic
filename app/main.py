@@ -1887,9 +1887,34 @@ async def home_summary() -> Dict[str, Any]:
         # small quote and one FRED series rather than another pass over the
         # market. Placed last because it reads `out["macro"]`.
         leg("morning_desk", lambda: _morning_desk(out.get("macro")))
+        _note_thin_legs(out)
         return out
 
     return await _run(build)
+
+
+def _note_thin_legs(out: Dict[str, Any]) -> None:
+    """An answer that came back empty, or short of prices, is as missing as
+    one that raised. Only a raise was counted, so a throttled feed that
+    returned a board with no rows made the page look healthy and quietly drop
+    cells (/api/home's `degraded`, read by the Home page's footnote)."""
+    board = out.get("indices")
+    if board is not None:
+        rows = board.get("rows") or []
+        bare = [str(r.get("symbol")) for r in rows if r.get("price") is None]
+        if not rows or board.get("available") is False:
+            out["degraded"].append("indices")
+        elif bare:
+            out["degraded"].append("indices ({} without a price)".format(", ".join(bare)))
+    macro = out.get("macro")
+    if macro is not None:
+        found = macro.get("instruments") or {}
+        bare = [k for k, v in found.items() if (v or {}).get("last") is None]
+        if not found:
+            out["degraded"].append("macro")
+        elif bare:
+            out["degraded"].append("macro ({} of {} instruments without a price)".format(
+                len(bare), len(found)))
 
 
 # Today's desk prose, written once and shared. Keyed on the desk's date, which
