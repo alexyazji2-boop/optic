@@ -280,23 +280,33 @@ def test_the_grid_rule_outweighs_the_menu_rule_it_would_have_lost_to():
     assert "\n.ws-interval-pop {" not in CSS
 
 
-def _place(pop, host, width):
+def _place(pop, host, width, bar=None):
+    """`bar` is the toolbar's box and whether it clips (the compact one-row bar
+    scrolls sideways, so it does); without it, a bar that clips nothing."""
     exe = JSC if os.path.exists(JSC) else shutil.which("jsc")
     if not exe:
         pytest.skip("no JavaScriptCore on this machine")
     src = re.search(r"^function wsPlaceMenu\(\) \{.*?^\}", APP, re.M | re.S).group()
     script = """
-      var rect = function (l, w) { return { left: l, right: l + w }; };
-      var HOST = %s, POP = %s;
+      var rect = function (l, w, t, h) { return { left: l, right: l + w, top: t || 0, bottom: (t || 0) + (h || 0) }; };
+      var HOST = %s, POP = %s, BAR = %s;
+      var button = { getBoundingClientRect: function () { return rect(HOST.l, HOST.w, 40, 30); } };
       var pop = { style: {}, offsetWidth: POP.w,
                   offsetParent: { getBoundingClientRect: function () { return rect(HOST.l, HOST.w); } },
-                  getBoundingClientRect: function () { return rect(HOST.l + POP.at, POP.w); } };
-      var views = { chart: { querySelector: function () { return pop; } } };
+                  getBoundingClientRect: function () { return rect(HOST.l + POP.at, POP.w); },
+                  parentElement: { querySelector: function () { return button; } } };
+      var tb = { dataset: {}, classList: { contains: function () { return false; } },
+                 querySelector: function (sel) { return sel === '.ws-menu-pop' ? pop : null; },
+                 addEventListener: function () {},
+                 getBoundingClientRect: function () { return rect(BAR ? BAR.l : 0, BAR ? BAR.w : %d, 30, 44); } };
+      var views = { chart: { querySelector: function (sel) { return sel === '.ws-toolbar' ? tb : null; } } };
       var document = { documentElement: { clientWidth: %d } };
+      var window = { innerHeight: 800 };
+      var getComputedStyle = function () { return { overflowY: BAR && BAR.clips ? 'hidden' : 'visible', display: 'flex' }; };
       %s
       wsPlaceMenu();
       print('RESULT:' + JSON.stringify(pop.style));
-    """ % (json.dumps(host), json.dumps(pop), width, src)
+    """ % (json.dumps(host), json.dumps(pop), json.dumps(bar), width, width, src)
     out = subprocess.run([exe, "-e", script], capture_output=True, text=True, timeout=30)
     assert "RESULT:" in out.stdout, out.stdout + out.stderr
     return json.loads(out.stdout.split("RESULT:", 1)[1].split("\n")[0])
@@ -321,6 +331,19 @@ def test_a_menu_is_never_pushed_off_the_left_edge_either():
     assert style == {"left": "-92px", "right": "auto"}
 
 
+def test_a_bar_that_clips_pins_the_menu_under_its_button_in_the_chart_column():
+    """With Pulse open the bar is one row scrolled sideways, and a scroller
+    clips what hangs out of it: every menu opened invisibly under the bar.
+    Reproduced at 1024px with Pulse open before the fix. Pinned to the window
+    instead, under the button, inside the chart's column."""
+    style = _place({"at": 0, "w": 210}, {"l": 600, "w": 60}, 1024,
+                   bar={"l": 235, "w": 400, "clips": True})
+    assert style["position"] == "fixed" and style["top"] == "74px"
+    # Its right edge held at the column's (235 + 400 = 635): 635 - 210 = 425.
+    assert style["left"] == "425px" and style["right"] == "auto"
+    assert style["maxHeight"] == "718px" and style["overflowY"] == "auto"
+
+
 def test_every_redraw_that_can_leave_a_menu_open_places_it():
     toggle = CODE[CODE.index("const wsMenu = evt.target.closest('[data-ws-menu]');"):]
     toggle = toggle[:toggle.index("return;")]
@@ -330,3 +353,15 @@ def test_every_redraw_that_can_leave_a_menu_open_places_it():
     assert "if (tb && !same) tb.outerHTML = wsToolbar();\n    if (!same) wsPlaceMenu();" in CODE
     render = fn("renderChartWorkspace")
     assert render.index("${wsManagePanel()}`;") < render.index("wsPlaceMenu();")
+
+
+def test_the_narrow_bar_rules_can_match():
+    """The bar is the body's sibling, so `.ws-body.narrow .ws-toolbar` matched
+    nothing and a narrow chart without Pulse wrapped its bar onto several rows.
+    Measured after the fix at 640px: one 44px row."""
+    assert ".ws-body.narrow .ws-toolbar" not in CSS
+    assert ".ws-toolbar.narrow {" in CSS or ".ws-toolbar.narrow," in CSS
+    bar = fn("wsToolbar")
+    assert "querySelector('.ws-body.narrow')" in bar and "' narrow' : ''" in bar
+    sync = fn("wsSyncNarrow")
+    assert "bar.classList.toggle('narrow', w < WS_NARROW_PX)" in sync

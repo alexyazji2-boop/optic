@@ -9082,7 +9082,7 @@ body.chat-open .ws-body .ws-leg-args { display: none; }
 /* One row, scrolled sideways. Wrapping is what turned five buttons into four
    rows; a horizontal scroll keeps every control reachable at a fixed height. */
 body.chat-open .ws-toolbar,
-.ws-body.narrow .ws-toolbar {
+.ws-toolbar.narrow {
   flex-wrap: nowrap;
   overflow-x: auto;
   overflow-y: hidden;
@@ -9091,13 +9091,13 @@ body.chat-open .ws-toolbar,
   scrollbar-width: none;
 }
 body.chat-open .ws-toolbar::-webkit-scrollbar,
-.ws-body.narrow .ws-toolbar::-webkit-scrollbar { display: none; }
+.ws-toolbar.narrow::-webkit-scrollbar { display: none; }
 body.chat-open .ws-toolbar > *,
-.ws-body.narrow .ws-toolbar > * { flex: 0 0 auto; }
+.ws-toolbar.narrow > * { flex: 0 0 auto; }
 /* The range and interval pills are the widest group and the least often
    changed once set, so they are the ones that scroll off. */
 body.chat-open .ws-toolbar .pills,
-.ws-body.narrow .ws-toolbar .pills { flex-wrap: nowrap; }
+.ws-toolbar.narrow .pills { flex-wrap: nowrap; }
 
 /* The price header on one line. The OHLC set is four labelled numbers and the
    first thing worth dropping — the candle under the cursor gives them back on
@@ -9181,7 +9181,7 @@ body.chat-open .ws-leg-static,
    A row that silently cuts off looks broken; a fade says "there is more". Local
    attachment so it moves with the content and disappears at the end. */
 body.chat-open .ws-toolbar,
-.ws-body.narrow .ws-toolbar,
+.ws-toolbar.narrow,
 body.chat-open .ws-legend,
 .ws-body.narrow .ws-legend {
   background-image: linear-gradient(to left, var(--surface) 30%, transparent);

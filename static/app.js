@@ -18219,7 +18219,10 @@ function wsTuckedOn() {
 
 function wsToolbar() {
   const inside = wsTuckedOn();
-  return `<div class="ws-toolbar${wsToolsOpen ? ' tools-open' : ''}">
+  // `narrow` on the bar as well as the body: the bar is the body's sibling,
+  // so `.ws-body.narrow .ws-toolbar` never matched anything.
+  const narrowBody = views.chart && views.chart.querySelector('.ws-body.narrow');
+  return `<div class="ws-toolbar${wsToolsOpen ? ' tools-open' : ''}${narrowBody ? ' narrow' : ''}">
     ${/* Indicators stays on the bar at every width: it is the menu a chart is
          set up from, and the one a reader opens most. */''}
     ${WS_MENUS.filter((m) => m.id === 'indicators').map(wsMenuHTML).join('')}
@@ -18373,10 +18376,47 @@ function wsSessionMenu() {
  * the toolbar wrapped. On a phone the CSS anchors menus to the toolbar and
  * they are inside the window already, so nothing here moves them. */
 function wsPlaceMenu() {
-  const pop = views.chart && views.chart.querySelector('.ws-toolbar .ws-menu-pop');
-  if (!pop || !pop.offsetParent) return;
+  const tb = views.chart && views.chart.querySelector('.ws-toolbar');
+  const pop = tb && tb.querySelector('.ws-menu-pop');
+  const tools = tb && tb.classList.contains('tools-open') ? tb.querySelector('.ws-tools') : null;
   const edge = 8;
   const width = document.documentElement.clientWidth;
+  /* With Pulse open, or the chart narrow, the bar is one row scrolled sideways,
+   * and a scroller clips whatever hangs out of it: every menu and the Layers
+   * drawer opened, invisibly, under the bar (measured: the Indicators menu at
+   * 1024px with Pulse open, its every point under the bar's own buttons).
+   * There each is pinned to the window, under what opened it, and moved with
+   * the bar when the bar is scrolled. */
+  const clipped = tb && getComputedStyle(tb).overflowY !== 'visible';
+  if (clipped) {
+    // Kept inside the chart's own column where it fits: pinned to the window,
+    // the drawer otherwise ran on under the Pulse panel and took the menus in
+    // it along.
+    const column = tb.getBoundingClientRect();
+    const lo = Math.max(edge, column.left);
+    const hi = Math.min(width - edge, column.right);
+    const pin = (el, anchor, fit) => {
+      const a = anchor.getBoundingClientRect();
+      el.style.position = 'fixed';
+      el.style.top = `${Math.round(a.bottom + 4)}px`;
+      el.style.right = 'auto';
+      if (!fit) el.style.maxWidth = `${Math.round(hi - lo)}px`;
+      const w = el.offsetWidth;
+      el.style.left = `${Math.round(Math.max(lo, Math.min(a.left, hi - w)))}px`;
+      if (fit) {
+        el.style.maxHeight = `${Math.max(160, Math.round(window.innerHeight - a.bottom - 12))}px`;
+        el.style.overflowY = 'auto';
+      }
+    };
+    if (tools && getComputedStyle(tools).display !== 'contents') pin(tools, tb, false);
+    if (pop) pin(pop, pop.parentElement.querySelector('[data-ws-menu]') || pop.parentElement, true);
+    if ((pop || tools) && !tb.dataset.pinned) {
+      tb.dataset.pinned = '1';
+      tb.addEventListener('scroll', wsPlaceMenu, { passive: true });
+    }
+    return;
+  }
+  if (!pop || !pop.offsetParent) return;
   if (pop.getBoundingClientRect().right <= width - edge) return;
   const host = pop.offsetParent.getBoundingClientRect();
   const w = pop.offsetWidth;
@@ -22940,6 +22980,8 @@ function wsSyncNarrow() {
   const w = body.getBoundingClientRect().width;
   if (!w) return;
   body.classList.toggle('narrow', w < WS_NARROW_PX);
+  const bar = views.chart.querySelector('.ws-toolbar');
+  if (bar) bar.classList.toggle('narrow', w < WS_NARROW_PX);
   // In narrow mode the dock is an overlay and shows only for the one selected
   // widget; wide, it is a column and shows whatever is open.
   body.classList.toggle('dock-open',
