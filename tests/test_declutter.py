@@ -63,3 +63,36 @@ def test_the_footer_line_is_short_and_the_full_text_is_one_press_away():
 def test_settings_lights_no_rail_group():
     fn = APP.split("function groupForView(view) {", 1)[1].split("\n}", 1)[0]
     assert "if (view === 'settings') return 'settings';" in fn
+
+
+def _code(css):
+    return re.sub(r"/\*.*?\*/", " ", css, flags=re.S)
+
+
+def test_the_section_tabs_sit_beside_the_search_not_after_pulse():
+    """Below 1410px the old `nav.tabs { order: 3 }` still reached this strip,
+    which is also a `nav.tabs`, and on the live site signed in the tabs
+    rendered to the right of Pulse. Above the phone breakpoint the strip
+    takes its DOM place again, between the search and the account control."""
+    code = _code(CSS)
+    m = re.search(r"@media \(min-width: 720px\) \{\s*nav\.tabs-sub#subnav \{([^}]*)\}", code)
+    assert m, "the desktop placement rule is gone"
+    assert "order: 0" in m.group(1)
+    assert "flex: 1 1 0" in m.group(1), "a content basis lets the strip wrap Pulse"
+    # In the DOM, the strip comes before the account slot and Pulse.
+    assert INDEX.index('id="subnav"') < INDEX.index('id="account-slot"') \
+        < INDEX.index('id="chat-toggle"')
+
+
+def test_a_narrow_bar_gives_the_tabs_a_row_rather_than_clipping_them():
+    """At 1024 the Discover tabs needed 326px and got 246, and "Analysts"
+    rendered as "Analys". Measured on the bar, so docking Pulse counts."""
+    code = _code(CSS)
+    bar = re.search(r"\nheader\.topbar \{([^}]*container-type[^}]*)\}", code)
+    assert bar and "container-name: topbar" in bar.group(1)
+    assert "flex-wrap: wrap" in bar.group(1), "the row has nowhere to go"
+    m = re.search(r"@container topbar \(max-width: [\d.]+rem\) \{\s*nav\.tabs-sub#subnav \{([^}]*)\}", code)
+    assert m, "the narrow-bar rule is gone or no longer in rem"
+    assert "order: 3" in m.group(1) and "flex: 1 0 100%" in m.group(1)
+    # Later than the desktop rule, which it has to beat on source order.
+    assert code.index("@container topbar") > code.index("@media (min-width: 720px) {\n  nav.tabs-sub#subnav")

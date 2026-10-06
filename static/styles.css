@@ -2430,7 +2430,8 @@ body.chat-resizing svg { pointer-events: none; }
    on, so this number is the only thing standing between a slightly wider label
    and the tabs running underneath Pulse. The inline row measures 1400px. */
 @media (max-width: 1410px) {
-  header.topbar { flex-wrap: wrap; row-gap: var(--space-2); }
+  /* The bar's wrap and row gap moved to the unmediated header.topbar rule
+     beside the section tabs, which can need a second row at any width. */
   nav.tabs { order: 3; flex: 1 0 100%; margin-left: 0; overflow-x: auto; }
   /* Re-asserted at higher specificity, and it is not the duplicate it looks
      like. `nav.tabs-group { flex: none; min-width: auto }` fires unconditionally
@@ -6546,6 +6547,52 @@ nav.tabs-sub#subnav button[aria-selected="true"] {
   background: color-mix(in srgb, var(--btn-primary) 14%, transparent);
 }
 nav.tabs-sub#subnav button[aria-selected="true"]::after { content: none; }
+
+/* Beside the search box, at every desktop width, whatever else fits.
+ *
+ * Below 1410px, `nav.tabs { order: 3 }` still fires: it was written to send
+ * the old eight-group strip to a row of its own, and this strip is also a
+ * `nav.tabs`. It moved these tabs to the end of the bar. Signed out, the
+ * wider "Sign in" button usually made the bar wrap, which hid it; signed in,
+ * the avatar left room for one row, and the tabs rendered to the right of
+ * Pulse on the live site. Measured locally at 1300 signed out: Pulse at
+ * x=924, the tabs at x=1058.
+ *
+ * A zero basis as well as the order, so the strip takes what the row has
+ * left and scrolls inside it rather than wrapping Pulse onto a second line.
+ * Above the phone breakpoint only: the phone layout gives this strip a row of
+ * its own after the search and Pulse, and that placement depends on the
+ * order this undoes. */
+@media (min-width: 720px) {
+  nav.tabs-sub#subnav { order: 0; flex: 1 1 0; min-width: 0; }
+}
+
+/* And a row of its own under the search when the bar is too narrow to hold
+ * it, rather than clipped. Beside the search, the strip shrinks and scrolls,
+ * and at 1024 wide the Discover tabs needed 326px and got 246: "Analysts" was
+ * cut to "Analys" with nothing saying there was more.
+ *
+ * Measured against the bar rather than the window, because docking Pulse
+ * narrows the bar at any window width. The threshold is the widest section's
+ * tabs beside everything else, signed out (the wider of the two account
+ * controls), measured at 1024 against the bar's content box, which is what
+ * a container query reads: search 272 + strip margin 18.4 + Reports' three
+ * tabs 369 + three gaps 41.4 + Sign in 86 + Pulse 102 = 888.8px at a 17.25px
+ * root, which is 51.6rem; rem so it holds at every text size.
+ * Signed in it gives the strip its own row about 48px early, which is
+ * cheaper than a second threshold that could disagree with this one.
+ *
+ * The bar wraps at every width so this has somewhere to go. Nothing else in
+ * it can force a wrap: the strip's basis is zero, and the rest is fixed. */
+header.topbar {
+  container-type: inline-size;
+  container-name: topbar;
+  flex-wrap: wrap;
+  row-gap: var(--space-2);
+}
+@container topbar (max-width: 51.6rem) {
+  nav.tabs-sub#subnav { order: 3; flex: 1 0 100%; margin-left: 0; }
+}
 
 /* ==================================================== flat layout (v2) =====
  *
