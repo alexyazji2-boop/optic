@@ -540,10 +540,12 @@ def _swing_snapshot(
 
     entry_plan: Dict[str, Any] = {"actionable": False, "headline": "No options chain available."}
     if exposure is not None:
-        naked_ideas = swing.build_naked_ideas(exposure, spot, call["stance"], tech)
+        naked_ideas = swing.build_naked_ideas(exposure, spot, call["stance"], tech,
+                                              budget=budget)
         strategy_ideas = swing.build_strategy_ideas(
             exposure, spot, call["stance"], gex_read, tech,
             news=news_read, quote=quote, history=hist, provider=YF_PROVIDER,
+            budget=budget,
         )
         entry_plan = entry_mod.build_plan(
             exposure, spot, call, tech, gex_read, news_read, rate=RISK_FREE, div=div,
@@ -610,6 +612,10 @@ def _swing_snapshot(
         "earnings_momentum": earnings_momentum,
         "naked_ideas": naked_ideas,
         "strategy_ideas": strategy_ideas,
+        # The cost limit these were built against, echoed so the page describes
+        # the limit the server applied and not whatever this browser holds now:
+        # the reader can change it while the request is in the air.
+        "budget": budget if budget is not None and budget > 0 else None,
         "macro": macro_read,
         "disclaimer": legal.SHORT,
         "disclaimer_area": legal.AREAS["swing"],

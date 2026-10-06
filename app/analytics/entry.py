@@ -50,6 +50,12 @@ SOFT_BUDGET_PER_CONTRACT = 2500.0
 # a near-share-equivalent.
 MIN_DELTA, MAX_DELTA = 0.35, 0.65
 
+# How far below the band a reader's own cost limit may reach. A cheaper contract
+# is a further one: it costs less because the stock has to move more before it
+# pays. Down to 0.25 that is a trade-off worth offering to somebody who cannot
+# place the in-band contract. Under it is the lottery ticket the band keeps out.
+BUDGET_MIN_DELTA = 0.25
+
 
 def _join(items: Any) -> str:
     """Comma-separated with a final "and". Joining three labels with " and " gave
@@ -347,33 +353,31 @@ def project_target(
 # ------------------------------------------------------------ strike ranking
 
 
-def rank_strikes(
-    frame: pd.DataFrame,
-    spot: float,
-    direction: str,
-    target: Dict[str, Any],
-    rate: float = 0.0,
-    div: float = 0.0,
-    top_n: int = 6,
-) -> List[Dict[str, Any]]:
-    """Reprice every liquid candidate at the projected target and rank the payoff."""
+def _contract_pool(
+    frame: pd.DataFrame, direction: str, target: Dict[str, Any],
+) -> Optional[pd.DataFrame]:
+    """The contracts the ranker may choose from, before the delta band.
+
+    The right side, enough time left, and liquid enough to get in and out of.
+    Its own function because the cost limit asks two questions of the same
+    pool: which contracts fit, and, when none do, what the cheapest one costs.
+    """
     if frame is None or frame.empty or not target.get("available"):
-        return []
+        return None
 
     is_call = direction == "up"
-    target_price = float(target["target_price"])
     hold_days = int(target.get("estimated_calendar_days") or 21)
 
     side = frame[frame["is_call"] == is_call].copy()
     if side.empty:
-        return []
+        return None
 
     # Buy more time than the thesis needs: an option that expires the week the
     # move is due leaves no room for the move to arrive late, which it usually does.
     min_dte = max(21, hold_days + 10)
     side = side[(side["mid"] > 0.05) & (side["dte"] >= min_dte)]
     if side.empty:
-        return []
+        return None
 
     # Only contracts that can be entered and exited: a wide spread eats the edge
     # before the thesis has a chance.
@@ -382,15 +386,72 @@ def rank_strikes(
         & (side["spread_pct"].fillna(99) <= 15)
     ]
     pool = liquid if len(liquid) >= 4 else side
-    if pool.empty:
+    return None if pool.empty else pool
+
+
+def cheapest_in_reach(
+    frame: pd.DataFrame, direction: str, target: Dict[str, Any],
+) -> Optional[float]:
+    """What the cheapest contract a cost limit could ever be offered costs.
+
+    The pool the ranker draws from, across the widest delta range a limit may
+    stretch to. When nothing fits, this is the number that tells the reader how
+    far off their limit is, measured over the whole chain rather than over the
+    six contracts that happened to rank highest without one.
+    """
+    pool = _contract_pool(frame, direction, target)
+    if pool is None:
+        return None
+    delta_abs = pool["delta"].abs()
+    reach = pool[(delta_abs >= BUDGET_MIN_DELTA) & (delta_abs <= MAX_DELTA)]
+    if reach.empty:
+        return None
+    return _f(float(reach["mid"].min()) * 100.0, 0)
+
+
+def rank_strikes(
+    frame: pd.DataFrame,
+    spot: float,
+    direction: str,
+    target: Dict[str, Any],
+    rate: float = 0.0,
+    div: float = 0.0,
+    top_n: int = 6,
+    budget: Optional[float] = None,
+) -> List[Dict[str, Any]]:
+    """Reprice every liquid candidate at the projected target and rank the payoff.
+
+    `budget` is the most one contract may cost, in dollars. It filters the pool
+    before anything is ranked, so the list is the best contracts that fit rather
+    than whichever of the unfiltered top six happen to.
+    """
+    pool = _contract_pool(frame, direction, target)
+    if pool is None:
         return []
+
+    is_call = direction == "up"
+    target_price = float(target["target_price"])
+    hold_days = int(target.get("estimated_calendar_days") or 21)
 
     # Delta band, not just a strike range. Below ~0.30 delta the contract needs an
     # outsized move merely to break even, and ranking on percentage return will
     # always favor those lottery tickets if they are left in the pool.
     delta_abs = pool["delta"].abs()
     banded = pool[(delta_abs >= MIN_DELTA) & (delta_abs <= MAX_DELTA)]
-    pool = banded if not banded.empty else pool
+    if budget is not None and budget > 0:
+        # Within the band first. A cheaper contract is a further one, so when
+        # nothing in the band fits, the band stretches down to BUDGET_MIN_DELTA
+        # and each row says it is outside it, and no further: below that is the
+        # lottery ticket the band exists to keep out, and "nothing fits" is the
+        # honest answer rather than a contract that needs a 20% move to break
+        # even.
+        fits = pool["mid"] * 100.0 <= budget
+        in_band = pool[(delta_abs >= MIN_DELTA) & (delta_abs <= MAX_DELTA) & fits]
+        if in_band.empty:
+            in_band = pool[(delta_abs >= BUDGET_MIN_DELTA) & (delta_abs <= MAX_DELTA) & fits]
+        pool = in_band
+    else:
+        pool = banded if not banded.empty else pool
     if pool.empty:
         return []
 
@@ -458,8 +519,19 @@ def rank_strikes(
                 "return_if_flat_pct": _f((flat / entry - 1.0) * 100.0, 1),
                 "return_if_half_against_pct": _f((against / entry - 1.0) * 100.0, 1),
                 "capital_per_contract": _f(entry * 100.0, 2),
+                # Only a cost limit puts a contract here, by stretching the band
+                # down to BUDGET_MIN_DELTA. Carried so the panel can say why the
+                # row is further from the price than the rest of the plan wants.
+                "outside_band": not (MIN_DELTA <= abs(float(row["delta"])) <= MAX_DELTA),
             }
         )
+
+    if budget is not None and budget > 0:
+        # A contract that loses money even when the stock reaches the target is
+        # not an entry at any price. Without a limit the band keeps those out;
+        # with one, the stretch below the band is where they live, so the
+        # limit is not allowed to buy one just because it is cheap.
+        rows = [r for r in rows if (r["return_at_target_pct"] or 0.0) > 0.0]
 
     if not rows:
         return []
@@ -551,6 +623,51 @@ def _apply_budget(candidates: List[Dict[str, Any]],
             hidden, hidden + len(kept), _usd(budget, 0)) if hidden else
             "Every contract that matches the setup fits {}.".format(_usd(budget, 0))),
     }
+
+
+def _refit_to_budget(report: Dict[str, Any], fitted: List[Dict[str, Any]],
+                     budget: float, cheapest: Optional[float]) -> Dict[str, Any]:
+    """The best contracts the limit can place, once it has hidden some.
+
+    The ranker keeps its top six and `_apply_budget` can only take contracts
+    away from them. Measured on META at a $500 limit: all six cost $2,430 to
+    $3,272, so the panel said nothing fits and the headline lost its first
+    half, on a chain with calls under $500 on it. `fitted` is the ranker asked
+    again with the limit as one of its own filters, so the plan gets the best of
+    what fits ranked against each other, not the survivors of a list chosen
+    without the limit.
+
+    `cheapest` comes from `cheapest_in_reach`, the whole reachable chain, so an
+    empty answer still says how far off the limit is.
+    """
+    total = report["hidden"] + len(report["candidates"])
+    limit = _usd(budget, 0)
+    if not fitted:
+        floor = cheapest if cheapest is not None else report.get("cheapest")
+        if floor is not None and floor <= budget:
+            # There are contracts under the limit, and every one of them would
+            # lose money even if the stock got to the target. "The cheapest is
+            # $405" under a $500 limit would read as the filter failing.
+            note = ("The contracts that cost {} or less would lose money even if the "
+                    "stock reached the target, so none is offered.".format(limit))
+        elif floor:
+            note = ("Nothing that suits this setup costs {} or less for one contract. "
+                    "The cheapest is {}.".format(limit, _usd(floor, 0)))
+        else:
+            note = ("Nothing that suits this setup costs {} or less for one "
+                    "contract.".format(limit))
+        return {**report, "candidates": [], "cheapest": floor, "note": note}
+    if report["hidden"] >= total:
+        note = ("The top picks for this setup cost more than {} for one contract, so "
+                "the plan uses the best that cost {} or less.".format(limit, limit))
+    else:
+        note = ("{} of the {} top picks cost more than {} for one contract, so the "
+                "plan is re-ranked to what fits.".format(report["hidden"], total, limit))
+    if any(c.get("outside_band") for c in fitted):
+        note += (" None at the usual distance from the price fits, so these are "
+                 "further out. They cost less because the stock has to move further "
+                 "before they pay off.")
+    return {**report, "candidates": fitted, "note": note, "refit": True}
 
 
 def _cluster_zone(levels: List[Dict[str, Any]], spot: float, atr: float):
@@ -673,6 +790,12 @@ def build_plan(
     # while noting it underneath would have three parts of the panel describing
     # a trade the fourth says you cannot make.
     affordability = _apply_budget(candidates, budget)
+    if affordability["filtered"] and affordability["hidden"]:
+        # Hiding is not the same as finding. See _refit_to_budget.
+        affordability = _refit_to_budget(
+            affordability,
+            rank_strikes(frame, spot, direction, target, rate, div, budget=budget),
+            budget, cheapest_in_reach(frame, direction, target))
     candidates = affordability["candidates"]
     best = candidates[0] if candidates else None
 
@@ -780,13 +903,23 @@ def build_plan(
         mid = best["entry_mid"] or 0.0
         bid, ask = best["bid"] or 0.0, best["ask"] or 0.0
         limit = round(mid + (ask - mid) * 0.25, 2) if ask > mid else mid
+        ceiling = round(mid + (ask - mid) * 0.5, 2) if ask > mid else mid
+        if budget is not None and budget > 0:
+            # The ticket must not walk the reader past their own limit. The
+            # contract was chosen because its mid fits, and working the order up
+            # toward the ask could still cost more than they said they can
+            # spend, so the ceiling stops at the limit. Never below the mid,
+            # which is the price the contract was chosen at.
+            ceiling = max(mid, min(ceiling, round(budget / 100.0, 2)))
+            limit = min(limit, ceiling)
         order = {
             "limit_price": limit,
-            "never_pay_more_than": round(mid + (ask - mid) * 0.5, 2) if ask > mid else mid,
-            "note": "Place a limit order at {}, just above the mid price of {}. The midpoint "
+            "never_pay_more_than": ceiling,
+            "note": "Place a limit order at {}, {} the mid price of {}. The midpoint "
             "between the best bid and the best ask. The bid/ask spread is {}% of that mid, "
             "which is {}".format(
-                _usd(limit), _usd(mid), _f(best["spread_pct"], 1),
+                _usd(limit), "just above" if limit > mid else "at", _usd(mid),
+                _f(best["spread_pct"], 1),
                 "wide enough that paying the ask outright can cost more than a whole day's "
                 "time decay." if (best["spread_pct"] or 0) > 5
                 else "tight enough to fill close to the mid without losing much to the spread.",
@@ -893,19 +1026,27 @@ def build_plan(
                     _usd(per_contract, 0)) if per_contract else "",
             )
         )
-    if zone_lo and zone_hi:
-        headline_parts.append(
-            "but only on a pullback in the stock to {} – {}".format(_usd(zone_lo), _usd(zone_hi)))
-    elif breakout_level:
-        headline_parts.append("but only on a daily close {} {}".format(
-            "above" if bullish else "below", _usd(breakout_level)))
+        if zone_lo and zone_hi:
+            headline_parts.append(
+                "but only on a pullback in the stock to {} – {}".format(_usd(zone_lo), _usd(zone_hi)))
+        elif breakout_level:
+            headline_parts.append("but only on a daily close {} {}".format(
+                "above" if bullish else "below", _usd(breakout_level)))
+    headline = (", ".join(headline_parts) + ".") if headline_parts else "Directional setup identified."
+    if not best:
+        # The trigger clause qualifies a contract, and with none it printed on
+        # its own: "but only on a pullback in the stock to $719.56 – $725.05."
+        # was the whole headline whenever a cost limit or a thin chain left the
+        # list empty.
+        headline = (affordability.get("note") if affordability.get("filtered") else "") or (
+            "No {} on this chain suits the setup.".format("call" if bullish else "put"))
 
     return {
         "actionable": True,
         "stance": stance,
         "conviction": conviction,
         "direction": "long" if bullish else "short",
-        "headline": (", ".join(headline_parts) + ".") if headline_parts else "Directional setup identified.",
+        "headline": headline,
         "recommended": best,
         "candidates": candidates,
         "target": target,

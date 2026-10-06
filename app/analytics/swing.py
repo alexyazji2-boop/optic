@@ -15,7 +15,7 @@ import pandas as pd
 
 from ..news import (age_phrase, count_words, material_catalyst,
                     pending_catalyst)
-from .entry import iv_context
+from .entry import BUDGET_MIN_DELTA, iv_context
 from .series_stats import relative_strength
 
 # GICS sector labels (as yfinance reports them) mapped to their SPDR sector
@@ -203,6 +203,11 @@ def _single_idea(
     leg = _pick(chain, is_call, expiry, target_delta)
     if leg is None or not leg["mid"] or leg["mid"] <= 0:
         return None
+    return _single_from_leg(leg, spot, expiry, is_call, name, rationale)
+
+
+def _single_from_leg(leg, spot: float, expiry: str, is_call: bool, name: str,
+                     rationale: str) -> Dict[str, Any]:
     cost = float(leg["mid"])
     breakeven = float(leg["strike"]) + cost if is_call else float(leg["strike"]) - cost
     return {
@@ -230,6 +235,11 @@ def _spread_idea(
     short_leg = _pick(chain, is_call, expiry, short_delta)
     if long_leg is None or short_leg is None:
         return None
+    return _spread_from_legs(long_leg, short_leg, expiry, is_call, name, rationale)
+
+
+def _spread_from_legs(long_leg, short_leg, expiry: str, is_call: bool, name: str,
+                      rationale: str) -> Optional[Dict[str, Any]]:
     if float(long_leg["strike"]) == float(short_leg["strike"]):
         return None
     debit = (long_leg["mid"] or 0) - (short_leg["mid"] or 0)
@@ -253,6 +263,166 @@ def _spread_idea(
         "net_delta": _f(float(long_leg["delta"]) - float(short_leg["delta"]), 3),
         "net_theta_per_day": _f(float(long_leg["theta"]) - float(short_leg["theta"]), 4),
     }
+
+
+# ------------------------------------------------- what one of these costs
+#
+# Every price on an idea is per share, because that is how a chain is quoted,
+# and an option is bought in hundreds. The cards printed those figures as they
+# came: "Max loss $659.20" on a META cash-secured put whose most it can lose is
+# $65,920 for one contract, and "Net debit $35.83" on a call that takes $3,583
+# out of the account. A reader with $500 to put into one trade could not tell
+# which ideas they could place without doing the multiplication on every card.
+#
+# The limit is the reader's own: the most they will put at risk on one contract,
+# or one set of legs. It is held against the most an idea can lose, which for a
+# bought option or a debit spread is what it costs, and for a credit structure
+# is what the broker holds back against it. Where a narrower version of the same
+# structure fits, that is offered instead; where none can, the idea is marked as
+# over the limit rather than dropped, so the panel can say what it left out.
+
+
+def _for_one(idea: Dict[str, Any], budget: Optional[float]) -> Dict[str, Any]:
+    """Dollar figures for one contract, and whether the idea fits the limit."""
+    def dollars(value: Any) -> Optional[float]:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        return _f(float(value) * 100.0, 0)
+
+    idea["cost_for_one"] = dollars(idea.get("net_debit"))
+    idea["credit_for_one"] = dollars(idea.get("net_credit"))
+    idea["risk_for_one"] = dollars(idea.get("max_loss"))
+    profit = idea.get("max_profit")
+    idea["profit_for_one"] = profit if isinstance(profit, str) else dollars(profit)
+    if budget is not None and budget > 0 and idea["risk_for_one"] is not None:
+        idea["fits_budget"] = idea["risk_for_one"] <= budget
+    else:
+        idea["fits_budget"] = None
+    return idea
+
+
+def _tradable(chain: pd.DataFrame, is_call: bool, expiry: str) -> pd.DataFrame:
+    """One side of one expiry the way `_pick` chooses from it: priced, with a
+    delta, and only the liquid contracts whenever there are any."""
+    side = chain[(chain["is_call"] == is_call) & (chain["expiry"] == expiry)]
+    side = side[side["delta"].notna() & (side["mid"] > 0)]
+    liquid = side[(side["open_interest"] >= 20) | (side["volume"] >= 20)]
+    return (liquid if not liquid.empty else side).copy()
+
+
+def _fit_single(idea: Optional[Dict[str, Any]], chain: pd.DataFrame, spot: float,
+                expiry: str, is_call: bool, budget: Optional[float]) -> Optional[Dict[str, Any]]:
+    """The contract nearest the money that the limit can buy, on the same expiry.
+
+    Nearest the money because each step further out is cheaper for the same
+    reason it is worse: the stock has to travel further before the option is
+    worth what it cost. Not past BUDGET_MIN_DELTA, the same floor the ranked
+    plan stops at.
+    """
+    if idea is None or budget is None or budget <= 0:
+        return idea
+    cost = float(idea.get("net_debit") or 0) * 100.0
+    if cost <= budget:
+        return idea
+    pool = _tradable(chain, is_call, expiry)
+    near = pool["delta"].abs()
+    ceiling = abs(float(idea.get("net_delta") or 0.5))
+    pool = pool[(near >= BUDGET_MIN_DELTA) & (near <= ceiling + 1e-9)
+                & (pool["mid"] * 100.0 <= budget)].copy()
+    if pool.empty:
+        return idea
+    pool["near"] = pool["delta"].abs()
+    leg = pool.nlargest(1, "near").iloc[0]
+    side = "call" if is_call else "put"
+    cheaper = _single_from_leg(leg, spot, expiry, is_call,
+                               "Long {} (further out, within your limit)".format(side), "")
+    move = cheaper.get("breakeven_move_pct")
+    cheaper["rationale"] = (
+        "The at-the-money {side} costs ${atm:,.0f} for one contract, more than your "
+        "${limit:,.0f} limit. This one sits further from the price, so it costs "
+        "${cost:,.0f}. Held to expiry, it makes money only if the stock finishes "
+        "{way} ${be:,.2f}{move}.".format(
+            side=side, atm=cost, limit=budget, cost=float(leg["mid"]) * 100.0,
+            way="above" if is_call else "below", be=float(cheaper["breakeven"]),
+            move=", {:.1f}% {} today's price".format(
+                abs(move), "above" if is_call else "below") if move is not None else ""))
+    cheaper["sized_to_budget"] = True
+    return cheaper
+
+
+def _fit_spread(idea: Optional[Dict[str, Any]], chain: pd.DataFrame, expiry: str,
+                is_call: bool, budget: Optional[float]) -> Optional[Dict[str, Any]]:
+    """A narrower version of the same debit spread whose cost fits the limit.
+
+    Narrower first: the spread's cost is capped by its width, so bringing the
+    short strike in toward the long one is the cheapest way to keep the same
+    view. The long leg moves out only when even the narrowest spread from it
+    costs too much. Of what fits, the one nearest the original wins, long leg
+    nearest the money and then the widest width, because that is the most of
+    the original trade the limit can buy.
+    """
+    if idea is None or budget is None or budget <= 0:
+        return idea
+    if float(idea.get("net_debit") or 0) * 100.0 <= budget:
+        return idea
+    first, second = idea["legs"]
+    width = abs(float(second["strike"]) - float(first["strike"]))
+    pool = _tradable(chain, is_call, expiry)
+    near = pool["delta"].abs()
+    longs = pool[(near >= BUDGET_MIN_DELTA)
+                 & (near <= abs(float(first["delta"] or 0)) + 1e-9)].copy()
+    longs["near"] = longs["delta"].abs()
+    for _, long_leg in longs.sort_values("near", ascending=False).iterrows():
+        k = float(long_leg["strike"])
+        shorts = pool.assign(gap=((pool["strike"] - k) if is_call else (k - pool["strike"])).values)
+        shorts = shorts[(shorts["gap"] > 0) & (shorts["gap"] <= width + 1e-9)]
+        for _, short_leg in shorts.sort_values("gap", ascending=False).iterrows():
+            debit = float(long_leg["mid"]) - float(short_leg["mid"])
+            if debit <= 0 or debit * 100.0 > budget:
+                continue
+            fitted = _spread_from_legs(long_leg, short_leg, expiry, is_call,
+                                       idea["name"], idea["rationale"])
+            if fitted is None:
+                continue
+            fitted["rationale"] = (
+                "Narrowed to fit your ${:,.0f} limit: buy the {:g} {kind} and sell the "
+                "{:g}. It costs ${:,.0f} for one and can make at most ${:,.0f}. {}".format(
+                    budget, float(long_leg["strike"]), float(short_leg["strike"]),
+                    debit * 100.0, (float(fitted["max_profit"] or 0)) * 100.0,
+                    idea["rationale"], kind="call" if is_call else "put"))
+            fitted["sized_to_budget"] = True
+            return fitted
+    return idea
+
+
+def _fit_wings(chain: pd.DataFrame, expiry: str, short_call, short_put,
+               long_call, long_put, budget: Optional[float]):
+    """Bring a short strangle's wings in until the most it can lose fits.
+
+    The most an iron condor or butterfly can lose is its wider wing less the
+    credit, so narrower wings risk less. Of the wings that fit, the one with the
+    largest credit wins, which is the widest pair the limit allows: the closest
+    to the structure as first chosen. Returns (long_call, long_put, credit), or
+    None when no pair fits.
+    """
+    if budget is None or budget <= 0:
+        return None
+    calls = _tradable(chain, True, expiry)
+    puts = _tradable(chain, False, expiry)
+    sc, sp = float(short_call["strike"]), float(short_put["strike"])
+    wing_calls = calls[(calls["strike"] > sc) & (calls["strike"] <= float(long_call["strike"]))]
+    wing_puts = puts[(puts["strike"] < sp) & (puts["strike"] >= float(long_put["strike"]))]
+    taken = float(short_call["mid"] or 0) + float(short_put["mid"] or 0)
+    best = None
+    for _, c in wing_calls.iterrows():
+        for _, p in wing_puts.iterrows():
+            credit = taken - float(c["mid"] or 0) - float(p["mid"] or 0)
+            if credit <= 0:
+                continue
+            loss = max(float(c["strike"]) - sc, sp - float(p["strike"])) - credit
+            if loss * 100.0 <= budget and (best is None or credit > best[2]):
+                best = (c, p, credit)
+    return best
 
 
 def _attach_risk_plan(
@@ -281,6 +451,7 @@ def build_naked_ideas(
     spot: float,
     stance: str,
     technicals: Dict[str, Any],
+    budget: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     """Naked long call or put — direct directional exposure, no second leg.
 
@@ -313,6 +484,7 @@ def build_naked_ideas(
             "participation per contract-share with risk capped at the premium. Theta is the cost . "
             "See the daily burn rate on the leg below.",
         )
+        idea = _fit_single(idea, chain, spot, expiry, True, budget)
         if idea:
             ideas.append(idea)
     elif bearish:
@@ -321,11 +493,12 @@ def build_naked_ideas(
             "Long put (at-the-money)",
             "Direct downside exposure with defined risk. Negative-gamma tape amplifies moves in your favor.",
         )
+        idea = _fit_single(idea, chain, spot, expiry, False, budget)
         if idea:
             ideas.append(idea)
 
     _attach_risk_plan(ideas, spot, bearish, atr_pct, support, resistance)
-    return ideas
+    return [_for_one(i, budget) for i in ideas]
 
 
 def build_strategy_ideas(
@@ -338,6 +511,7 @@ def build_strategy_ideas(
     quote: Optional[Dict[str, Any]] = None,
     history: Optional[pd.DataFrame] = None,
     provider: Any = None,
+    budget: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     """Multi-leg and cross-underlying structures: spreads, condors, iron
     butterflies, straddles/strangles, and sector pair trades.
@@ -345,6 +519,9 @@ def build_strategy_ideas(
     Distinct from build_naked_ideas() — everything here either trades two legs
     against each other or trades a view on volatility/relative-strength rather
     than pure direction.
+
+    `budget` is the most the reader will risk on one: spreads narrow and wings
+    come in to fit it where they can, and every idea says whether it does.
     """
     if chain is None or chain.empty or "delta" not in chain.columns:
         return []
@@ -374,6 +551,7 @@ def build_strategy_ideas(
                 " like the call wall at {:.0f}".format(call_wall) if call_wall else ""
             ),
         )
+        idea = _fit_spread(idea, chain, expiry, True, budget)
         if idea:
             ideas.append(idea)
 
@@ -395,6 +573,9 @@ def build_strategy_ideas(
                         "breakeven": _f(float(put_leg["strike"]) - float(put_leg["mid"]), 2),
                         "net_delta": _f(-float(put_leg["delta"]), 3),
                         "assignment_note": "Requires cash or margin for 100 shares per contract.",
+                        # What "cash-secured" means in dollars: the strike for a
+                        # hundred shares, held for as long as the put is open.
+                        "cash_for_one": _f(float(put_leg["strike"]) * 100.0, 0),
                     }
                 )
 
@@ -404,6 +585,7 @@ def build_strategy_ideas(
             "Lower cost than an outright put, with the short leg placed near the dealer put wall"
             "{}.".format(" at {:.0f}".format(put_wall) if put_wall else ""),
         )
+        idea = _fit_spread(idea, chain, expiry, False, budget)
         if idea:
             ideas.append(idea)
 
@@ -436,12 +618,26 @@ def build_strategy_ideas(
                 )
                 call_width = abs(float(long_call["strike"]) - float(short_call["strike"]))
                 put_width = abs(float(short_put["strike"]) - float(long_put["strike"]))
+                note, condor_sized = condor_note, False
+                if (credit > 0 and budget is not None and budget > 0
+                        and (max(call_width, put_width) - credit) * 100.0 > budget):
+                    narrower = _fit_wings(chain, expiry, short_call, short_put,
+                                          long_call, long_put, budget)
+                    if narrower is not None:
+                        long_call, long_put, credit = narrower
+                        call_width = abs(float(long_call["strike"]) - float(short_call["strike"]))
+                        put_width = abs(float(short_put["strike"]) - float(long_put["strike"]))
+                        condor_sized = True
+                        note = ("Wings brought in to fit your ${:,.0f} limit, so the most it can "
+                                "lose is ${:,.0f} for one. {}".format(
+                                    budget, (max(call_width, put_width) - credit) * 100.0,
+                                    condor_note))
                 if credit > 0:
                     ideas.append(
                         {
                             "name": "Iron condor",
                             "structure": "short strangle with wings",
-                            "rationale": condor_note,
+                            "rationale": note,
                             "expiry": expiry,
                             "dte": int(short_call["dte"]),
                             "legs": [
@@ -456,6 +652,7 @@ def build_strategy_ideas(
                                 -float(short_call["delta"]) + float(long_call["delta"])
                                 - float(short_put["delta"]) + float(long_put["delta"]), 3,
                             ),
+                            "sized_to_budget": condor_sized,
                         }
                     )
 
@@ -472,14 +669,30 @@ def build_strategy_ideas(
                 )
                 call_width = abs(float(wing_call["strike"]) - float(atm_call["strike"]))
                 put_width = abs(float(atm_put["strike"]) - float(wing_put["strike"]))
+                fly_note = ("Same premium-selling case as the condor, but selling the ATM straddle "
+                            "collects more credit for a tighter profit zone. Pays off if price truly pins "
+                            "near {:.0f} through expiry.".format(spot))
+                fly_sized = False
+                if (credit > 0 and budget is not None and budget > 0
+                        and (max(call_width, put_width) - credit) * 100.0 > budget):
+                    narrower = _fit_wings(chain, expiry, atm_call, atm_put,
+                                          wing_call, wing_put, budget)
+                    if narrower is not None:
+                        wing_call, wing_put, credit = narrower
+                        call_width = abs(float(wing_call["strike"]) - float(atm_call["strike"]))
+                        put_width = abs(float(atm_put["strike"]) - float(wing_put["strike"]))
+                        fly_sized = True
+                        fly_note = ("Wings brought in to fit your ${:,.0f} limit, so the most it can "
+                                    "lose is ${:,.0f} for one. {}".format(
+                                        budget, (max(call_width, put_width) - credit) * 100.0,
+                                        fly_note))
                 if credit > 0 and float(atm_call["strike"]) != float(wing_call["strike"]):
                     ideas.append(
                         {
                             "name": "Iron butterfly",
                             "structure": "short straddle with wings",
-                            "rationale": "Same premium-selling case as the condor, but selling the ATM straddle "
-                            "collects more credit for a tighter profit zone. Pays off if price truly pins "
-                            "near {:.0f} through expiry.".format(spot),
+                            "rationale": fly_note,
+                            "sized_to_budget": fly_sized,
                             "expiry": expiry,
                             "dte": int(atm_call["dte"]),
                             "legs": [
@@ -573,7 +786,7 @@ def build_strategy_ideas(
         ideas.append(pair_idea)
 
     _attach_risk_plan([i for i in ideas if not i.get("conceptual")], spot, bearish, atr_pct, support, resistance)
-    return ideas
+    return [i if i.get("conceptual") else _for_one(i, budget) for i in ideas]
 
 
 def _sector_pair_idea(

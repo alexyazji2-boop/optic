@@ -4493,11 +4493,25 @@ function renderOptionsBrief(d) {
  * bare "BUY NVDA" and the app's own legal banner says the same; a setup with no
  * stated invalidation is the version of that mistake that looks responsible.
  */
+/* The first idea on the tab that fits the limit, for when the plan's own
+ * contract cannot. A single option first, because that is what the plan was
+ * about to recommend; then the strategies, which the server has already
+ * narrowed to the limit where it could. */
+function firstIdeaThatFits(d) {
+  const all = [...((d && d.naked_ideas) || []), ...((d && d.strategy_ideas) || [])];
+  return all.find((i) => i && !i.conceptual && i.fits_budget === true) || null;
+}
+
 function renderSetup(d) {
   const ep = d.entry_plan || {};
+  /* The limit sits with the setup whichever way the read leans. A neutral read
+   * still offers condors and straddles, and the limit sizes those too; only a
+   * page with no chain at all has nothing for it to act on. */
+  const budget = d.gex && !d.gex.error ? renderBudgetControl(d) : '';
   if (!ep.actionable) {
     return ep.headline ? `<section class="su-block span-all" aria-label="Setup">
       <h2 class="hm-h">Setup${askPulse('setup')}</h2>
+      ${budget}
       <p class="su-none">${gloss(ep.headline)}</p>
     </section>` : '';
   }
@@ -4505,6 +4519,7 @@ function renderSetup(d) {
   const zone = ep.entry_zone || {};
   const risk = ep.risk || {};
   const target = ep.target || {};
+  const order = ep.order_guidance || {};
   const cell = (label, value, note) => value ? `<div class="su-cell">
     <span class="su-label">${esc(label)}</span>
     <span class="su-value">${esc(value)}</span>
@@ -4512,11 +4527,29 @@ function renderSetup(d) {
   </div>` : '';
   const zoneText = (zone.low && zone.high)
     ? `${fmt(zone.low, 2)} – ${fmt(zone.high, 2)}` : null;
+  /* What one contract takes out of the account, at the price the headline
+   * below quotes. "About 30.00 per share" was the only cost here, and it is a
+   * hundredth of what leaves the account: the $3,000 that started this. */
+  const forOne = order.limit_price ? order.limit_price * 100 : rec.capital_per_contract;
+  /* Nothing in the plan fits the limit. Say what on the tab does, rather than
+   * leaving a setup with no contract in it and nowhere to go. */
+  const fallback = (() => {
+    if (rec.strike || appliedBudget(d) === null) return '';
+    const other = firstIdeaThatFits(d);
+    return other
+      ? `<p class="su-fit">What does fit: <strong>${esc(other.name)}</strong>, ${
+        usd(other.risk_for_one, 0)} at risk for one.
+        <button type="button" class="auth-link" data-goto-panel="${
+  (d.naked_ideas || []).includes(other) ? 'swing-ideas-single' : 'swing-ideas-multi'}">Show it</button></p>`
+      : `<p class="su-fit">Nothing on this tab fits that limit. Options on a stock
+        with a lower share price usually cost less.</p>`;
+  })();
   return `<section class="su-block span-all" aria-label="Setup">
     <div class="hm-block-head">
       <h2 class="hm-h">Setup</h2>
       <span class="su-tag">computed scenario, not advice</span>
     </div>
+    ${budget}
     <div class="su-row">
       ${cell('Bias', `${esc(ep.stance || '')} ${esc(ep.direction || '')}`.trim(),
     ep.conviction ? convictionWords(ep.conviction) : '')}
@@ -4524,6 +4557,8 @@ function renderSetup(d) {
       ${cell('Contract', rec.strike
     ? `${fmt(rec.strike, 0)} ${String(rec.expiry || '').slice(0, 10)}`
     : null, rec.entry_mid ? `about ${fmt(rec.entry_mid, 2)} per share` : '')}
+      ${cell('Cost for one', rec.strike && forOne ? usd(forOne, 0) : null,
+    order.limit_price ? 'at the limit price, 100 shares' : '100 shares')}
       ${/* ep.target is an object, not a number: {target_price, target_source,
           * move_required_pct, estimated_trading_days, ...}. Formatting it
           * directly rendered "NaN". The source is worth showing too — "nearest
@@ -4539,6 +4574,12 @@ function renderSetup(d) {
     risk.stop_basis ? 'stop basis: ' + String(risk.stop_basis).slice(0, 64) : '')}
     </div>
     ${ep.headline ? `<p class="su-headline">${gloss(ep.headline)}</p>` : ''}
+    ${/* Why the contract is the one it is, when the limit chose it: the
+        * cheaper strike is a trade-off and the reader should see the cost
+        * of it here, not only in the panel further down. */''}
+    ${rec.strike && (ep.affordability || {}).refit
+    ? `<p class="su-fit">${esc(ep.affordability.note)}</p>` : ''}
+    ${fallback}
     ${risk.invalidation ? `<p class="su-invalid"><strong>What breaks it.</strong>
       ${gloss(String(risk.invalidation))}</p>` : ''}
     ${(ep.warnings || []).length ? `<ul class="su-warn">
@@ -9836,7 +9877,7 @@ function renderSwing(d) {
        host. */''}
 
 
-  ${renderEntryPlan(d.entry_plan)}
+  ${renderEntryPlan(d.entry_plan, d)}
 
   ${/* Both ids are in the markup on purpose, not generated at runtime.
       *
@@ -10219,24 +10260,24 @@ function renderSwing(d) {
     </div>
   </div>
 
-  <div class="panel gap">
+  <div class="panel gap" id="swing-ideas-single">
     <h2>${hg('Buy calls / puts')}</h2>
     <p class="sub">Naked directional options. Quick-glance card in the same format as the strategies below.
       For a fully ranked set of strikes scored against a projected target, see the Strike &amp; Entry
       Recommendation panel above. Strikes and premiums are live from the chain, filtered for liquidity.
       Not recommendations. The sizing decision is yours.</p>
-    ${(d.naked_ideas || []).length
-    ? (d.naked_ideas || []).map(renderIdea).join('')
-    : '<div class="callout">No naked directional idea. The composite read is neutral, so buying a call or put outright has no edge. See the strategies below for range-bound or volatility-driven setups instead.</div>'}
+    ${budgetLine(d)}
+    ${renderIdeaList(d.naked_ideas, d,
+    '<div class="callout">No naked directional idea. The composite read is neutral, so buying a call or put outright has no edge. See the strategies below for range-bound or volatility-driven setups instead.</div>')}
   </div>
 
-  <div class="panel gap">
+  <div class="panel gap" id="swing-ideas-multi">
     <h2>${hg('Options strategies')}</h2>
     <p class="sub">Multi-leg and cross-underlying structures. Spreads, condors, straddles/strangles, and sector
       pair trades. Matched to the stance, the gamma regime, and (where relevant) implied-vol pricing.</p>
-    ${(d.strategy_ideas || []).length
-    ? (d.strategy_ideas || []).map(renderIdea).join('')
-    : '<div class="callout">No strategy generated. The chain lacked liquid contracts at the target deltas.</div>'}
+    ${budgetLine(d)}
+    ${renderIdeaList(d.strategy_ideas, d,
+    '<div class="callout">No strategy generated. The chain lacked liquid contracts at the target deltas.</div>')}
   </div>
   `}
 
@@ -10515,17 +10556,33 @@ function fibDirectionSentence(t) {
  * Kept in this browser. It is a preference rather than a holding, and asking
  * somebody to sign in before the app will stop showing them trades they cannot
  * place would be the wrong gate on the wrong thing.
+ *
+ * AT THE TOP OF THE TAB, not inside the twelfth panel. It used to sit under
+ * "Strike & entry recommendation", which opens collapsed below eleven others,
+ * while the Setup at the top named a contract "about 30.00 per share" and the
+ * idea cards printed per-share prices as dollar figures. Asked for again, as
+ * "allow the user to filter their capital ... not everyone has $3,000/contract
+ * of capital to work with", by somebody the first version had not reached.
+ * The limit now steers the whole tab: the Setup, the ranked strikes, the
+ * single call or put, and every strategy, each of which says what it did with
+ * it. One control, because a second copy further down is a second place for
+ * the two to disagree.
  */
 const BUDGET_KEY = 'optic.entry.budget.v1';
 
-const BUDGET_STEPS = [null, 250, 500, 1000, 2500, 5000];
+/* Lower steps than before. $5,000 is not where the people this exists for
+ * are, and $100 is: the "Your own" field takes anything else. */
+const BUDGET_STEPS = [null, 100, 250, 500, 1000, 2500];
+
+/* The API refuses more than this (app/main.py, `le=1_000_000`). */
+const BUDGET_MAX = 1000000;
 
 function entryBudget() {
   try {
     const raw = localStorage.getItem(BUDGET_KEY);
     if (raw === null || raw === '') return null;
     const n = Number(raw);
-    return Number.isFinite(n) && n > 0 ? n : null;
+    return Number.isFinite(n) && n > 0 && n <= BUDGET_MAX ? n : null;
   } catch (e) { return null; }
 }
 
@@ -10536,12 +10593,36 @@ function setEntryBudget(value) {
   } catch (e) { /* private mode */ }
 }
 
-function renderBudgetControl(aff) {
-  const current = entryBudget();
-  const a = aff || {};
-  return `<div class="eb-bar">
-    <span class="eb-label">Most one contract may cost</span>
-    <div class="eb-pills" role="group" aria-label="Cost limit for one contract">
+/* What a typed amount means, or null for "not a limit".
+ *
+ * Whole dollars, because the limit is compared with what one contract costs
+ * and nobody sets a budget in cents. "$300", "300" and "1,000" all read; an
+ * empty field is how "no limit" is spelled; anything else is refused rather
+ * than guessed at, and the field says so. */
+function parseBudgetInput(text) {
+  const cleaned = String(text === undefined || text === null ? '' : text)
+    .replace(/[$,\s]/g, '');
+  if (cleaned === '') return { value: null, ok: true };
+  if (!/^\d+(\.\d+)?$/.test(cleaned)) return { value: null, ok: false };
+  const n = Math.round(Number(cleaned));
+  if (!Number.isFinite(n) || n < 1 || n > BUDGET_MAX) return { value: null, ok: false };
+  return { value: n, ok: true };
+}
+
+/* The limit the page is describing: the one the server applied when there is
+ * a payload, since that is what every number on the tab was built against. A
+ * change made while a request is in the air shows once it lands. */
+function appliedBudget(d) {
+  if (d && Object.prototype.hasOwnProperty.call(d, 'budget')) return d.budget || null;
+  return entryBudget();
+}
+
+function renderBudgetControl(d) {
+  const current = appliedBudget(d);
+  const preset = BUDGET_STEPS.includes(current);
+  return `<div class="eb-bar" id="entry-budget" role="group" aria-labelledby="eb-label">
+    <span class="eb-label" id="eb-label">Most you'll risk on one contract</span>
+    <div class="eb-pills">
       ${BUDGET_STEPS.map((v) => {
     const on = (v === null && current === null) || v === current;
     return `<button type="button" class="pill${on ? ' on' : ''}"
@@ -10549,25 +10630,147 @@ function renderBudgetControl(aff) {
         aria-pressed="${on}">${v === null ? 'No limit' : usd(v, 0)}</button>`;
   }).join('')}
     </div>
-    ${a.note ? `<p class="eb-note${a.candidates && !a.candidates.length ? ' is-empty' : ''}">${
-  esc(a.note)}</p>` : ''}
+    <form class="eb-own${current !== null && !preset ? ' on' : ''}" data-entry-budget-form novalidate>
+      <label for="eb-own-input">Your own</label>
+      <span class="eb-own-field"><span aria-hidden="true">$</span><input id="eb-own-input"
+        name="budget" type="text" inputmode="numeric" autocomplete="off"
+        placeholder="300" aria-describedby="eb-help"
+        value="${current !== null && !preset ? esc(String(current)) : ''}"></span>
+      <button type="submit" class="pill">Set</button>
+    </form>
+    <p class="eb-help" id="eb-help">Options are priced per share and sold in lots of
+      100, so $2.50 on the chain is $250 for one contract. With a limit set, the
+      setup, the ranked strikes and the ideas below use only what fits it.</p>
   </div>`;
+}
+
+function applyEntryBudget(value) {
+  setEntryBudget(value);
+  /* A refetch, not a client-side filter. The limit changes which contract is
+     recommended, and `recommended` feeds the headline, the order ticket and the
+     risk block as well as the table. Filtering the rows here would leave three
+     parts of the panel describing a trade the fourth says you cannot make.
+
+     Focus goes back to the control the reader used once the tab has redrawn:
+     the redraw replaces every element in it, and without this a keyboard user
+     who pressed $500 is left on the page body. */
+  if (!STATE.ticker) return;
+  const key = value === null ? '' : String(value);
+  const own = value !== null && !BUDGET_STEPS.includes(value);
+  Promise.resolve(loadSwing(true)).then(() => {
+    const back = own ? document.getElementById('eb-own-input')
+      : document.querySelector(`[data-entry-budget="${key}"]`);
+    if (back && typeof back.focus === 'function') back.focus({ preventScroll: true });
+  });
 }
 
 document.addEventListener('click', (evt) => {
   if (!evt.target || !evt.target.closest) return;
   const btn = evt.target.closest('[data-entry-budget]');
-  if (!btn) return;
-  const raw = btn.dataset.entryBudget;
-  setEntryBudget(raw === '' ? null : Number(raw));
-  /* A refetch, not a client-side filter. The limit changes which contract is
-     recommended, and `recommended` feeds the headline, the order ticket and the
-     risk block as well as the table. Filtering the rows here would leave three
-     parts of the panel describing a trade the fourth says you cannot make. */
-  if (STATE.ticker) loadSwing(true);
+  if (btn) {
+    const raw = btn.dataset.entryBudget;
+    applyEntryBudget(raw === '' ? null : Number(raw));
+    return;
+  }
+  /* "Change it" from further down the tab: back to the one control. */
+  const go = evt.target.closest('[data-goto-budget]');
+  if (go) {
+    const bar = document.getElementById('entry-budget');
+    if (!bar) return;
+    bar.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    const first = bar.querySelector('.pill.on') || bar.querySelector('.pill');
+    if (first) first.focus({ preventScroll: true });
+    return;
+  }
+  /* "Show it" from the Setup: open the panel holding the idea that fits, the
+   * way revealBook opens the ledger. Both idea panels start collapsed, so a
+   * scroll alone would land on a heading. A panel the reader hid in the
+   * chooser is shown again, because this is them asking to see it. */
+  const jump = evt.target.closest('[data-goto-panel]');
+  if (jump) {
+    const panel = document.getElementById(jump.dataset.gotoPanel);
+    if (!panel) return;
+    if (panel.hidden && panel.dataset.panelId) {
+      panel.hidden = false;
+      panel.classList.remove('is-advanced');
+      setPanelHidden(panel.dataset.panelId, false);
+    }
+    if (panel.classList.contains('is-closed')) {
+      panel.classList.add('is-open');
+      panel.classList.remove('is-closed');
+      const toggle = panel.querySelector(':scope > h2 .panel-toggle');
+      if (toggle) {
+        toggle.setAttribute('aria-expanded', 'true');
+        toggle.setAttribute('aria-label', 'Collapse ' + headingName(panel.querySelector(':scope > h2')));
+      }
+      if (panel.dataset.panelId) rememberCollapse(panel.dataset.panelId, true);
+      markClampedCaveats(panel);
+    }
+    panel.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
 });
 
-function renderEntryPlan(p) {
+document.addEventListener('submit', (evt) => {
+  const form = evt.target && evt.target.closest
+    ? evt.target.closest('[data-entry-budget-form]') : null;
+  if (!form) return;
+  evt.preventDefault();
+  const input = form.querySelector('input');
+  const parsed = parseBudgetInput(input ? input.value : '');
+  if (!parsed.ok) {
+    if (input) {
+      input.setAttribute('aria-invalid', 'true');
+      input.setCustomValidity('Whole dollars, from $1 to $1,000,000.');
+      input.reportValidity();
+      input.addEventListener('input', () => {
+        input.removeAttribute('aria-invalid');
+        input.setCustomValidity('');
+      }, { once: true });
+    }
+    return;
+  }
+  applyEntryBudget(parsed.value);
+});
+
+/* One line, under a panel the limit has changed, saying so.
+ *
+ * Every panel the limit steers says which limit it is working to, so a short
+ * list reads as a filter and not as a thin chain, and offers the way back to
+ * the control rather than a second copy of it. */
+function budgetLine(d, said) {
+  const limit = appliedBudget(d);
+  if (limit === null) return '';
+  return `<p class="eb-line">Working to your ${usd(limit, 0)} limit for one contract.${
+    said ? ` ${esc(said)}` : ''}
+    <button type="button" class="auth-link" data-goto-budget>Change it</button></p>`;
+}
+
+/* The ideas that fit, then the ones that do not, named.
+ *
+ * Out of the cards rather than dimmed among them: a card is a trade laid out
+ * to be placed, and one the reader has said they cannot afford is noise in the
+ * place they are choosing from. Named underneath with what each puts at risk,
+ * so the shorter list reads as their filter and the way back is one click. */
+function renderIdeaList(ideas, d, none) {
+  const all = ideas || [];
+  if (!all.length) return none;
+  const shown = all.filter((i) => i && i.fits_budget !== false);
+  return (shown.length ? shown.map(renderIdea).join('')
+    : `<div class="callout">Nothing here fits your ${usd(appliedBudget(d), 0)} limit for one contract.</div>`)
+    + overBudgetLine(all, d);
+}
+
+/* The ideas the limit leaves out, by name and by what each could lose. */
+function overBudgetLine(ideas, d) {
+  const out = (ideas || []).filter((i) => i && i.fits_budget === false);
+  if (!out.length) return '';
+  const limit = appliedBudget(d);
+  return `<p class="eb-line is-over">Over your ${usd(limit, 0)} limit, so not shown: ${
+    out.map((i) => `${esc(i.name)} (${usd(i.risk_for_one, 0)} at risk for one)`).join(', ')}.
+    <button type="button" class="auth-link" data-goto-budget>Change the limit</button></p>`;
+}
+
+function renderEntryPlan(p, d) {
   if (!p) return '';
 
   if (!p.actionable) {
@@ -10598,13 +10801,19 @@ function renderEntryPlan(p) {
     <p class="sub">Derived from the ${esc(p.stance)} read at ${esc(p.conviction)} conviction. Candidates are repriced with
       Black-Scholes at the projected target, so the ranking reflects payoff, not just a convenient delta.</p>
 
-    ${renderBudgetControl(p.affordability)}
+    ${/* The note, not the control: the control is at the top of the tab, in
+        * the Setup, and one copy of it is one place to look. */''}
+    ${budgetLine(d, (p.affordability || {}).note)}
 
     <div class="callout info" style="font-size:var(--t-base);border-left-color:var(--good)">
       <strong>${esc(p.headline)}</strong>
     </div>
 
-    <div class="grid c4" style="margin:var(--space-4) 0">
+    ${r.strike ? '' : `<p class="sub">No contract to rank against the target. The stock
+      plan below still stands, and the ideas further down may fit where a single
+      contract does not.</p>`}
+
+    ${r.strike ? `<div class="grid c4" style="margin:var(--space-4) 0">
       ${tile('Contract', `${strikeLabel(r.strike)} ${p.direction === 'long' ? 'call' : 'put'}`,
     `Expires ${esc(r.expiry || '')} · ${r.dte || 0} days left · ${
       r.moneyness === 'ITM' ? 'already in the money' : 'not yet in the money'}`)}
@@ -10615,7 +10824,7 @@ function renderEntryPlan(p) {
       ${tile('If the target is hit', fmtPct(r.return_at_target_pct, 0),
     `Return on the premium if the stock reaches ${usd(t.target_price)}, roughly ${
       t.estimated_calendar_days || '?'} days out`, signClass(r.return_at_target_pct))}
-    </div>
+    </div>` : ''}
 
     <div class="grid c2">
       <div>
@@ -10654,21 +10863,25 @@ function renderEntryPlan(p) {
       </div>
     </div>
 
-    <h3>${hg('Candidate strikes, ranked')}</h3>
+    ${(p.candidates || []).length ? `<h3>${hg('Candidate strikes, ranked')}</h3>
     <p class="sub">Every column after the greeks is a repriced scenario at ${usd(t.target_price)} in about
       ${t.estimated_calendar_days || '?'} days. “Flat” is what you lose if the move simply doesn't happen. The most
       common outcome, and the reason deep-OTM contracts score badly here.</p>
     <table class="data">
       <thead><tr>
-        <th>#</th><th>Strike ($)</th><th>Expiry</th><th>Days left</th><th>Mid ($)</th><th>Spread</th><th>Delta</th><th>Theta ($/day)</th>
+        <th>#</th><th>Strike ($)</th><th>Expiry</th><th>Days left</th><th>Mid ($)</th><th>Cost for one ($)</th><th>Spread</th><th>Delta</th><th>Theta ($/day)</th>
         <th>Breakeven</th><th>At target</th><th>IV −20%</th><th>If flat</th><th>Half against</th><th>OI</th>
       </tr></thead>
       <tbody>${(p.candidates || []).map((c) => `<tr${c.rank === 1 ? ' style="background:var(--surface-2)"' : ''}>
         <td>${c.rank}${c.rank === 1 ? ' ★' : ''}</td>
-        <td class="name num">${fmt(c.strike, 1)} <span class="muted">${esc(c.moneyness)}</span></td>
+        <td class="name num">${fmt(c.strike, 1)} <span class="muted">${esc(c.moneyness)}${
+  /* Only a cost limit puts a contract outside the setup's delta band, and it
+   * is cheaper for the reason it is further out. */
+  c.outside_band ? ' · further out' : ''}</span></td>
         <td class="name">${esc(c.expiry)}</td>
         <td>${c.dte}</td>
         <td>${fmt(c.entry_mid, 2)}</td>
+        <td>${fmt(c.cost_per_contract, 0)}</td>
         <td class="${(c.spread_pct || 0) > 5 ? 'down' : ''}">${fmt(c.spread_pct, 1)}%</td>
         <td>${fmt(c.delta, 3)}</td>
         <td class="down">${fmt(c.theta_per_day, 3)}</td>
@@ -10679,7 +10892,7 @@ function renderEntryPlan(p) {
         <td class="${signClass(c.return_if_half_against_pct)}">${fmtPct(c.return_if_half_against_pct, 0)}</td>
         <td>${fmtCompact(c.open_interest)}</td>
       </tr>`).join('')}</tbody>
-    </table>
+    </table>` : ''}
 
     ${(p.warnings || []).map((w) => `<div class="callout">${gloss(w)}</div>`).join('')}
     ${o.note ? `<div class="caveat">Order handling: ${esc(o.note)}</div>` : ''}
@@ -12308,10 +12521,23 @@ function renderIdea(idea) {
     ? idea.breakeven.map((v) => fmt(v, 2)).join(' / ')
     : idea.breakeven ? fmt(idea.breakeven, 2) + (idea.breakeven_move_pct ? ` (${fmtPct(idea.breakeven_move_pct, 1)})` : '') : null;
 
+  /* Dollars for one contract, with the per-share price beside them.
+   *
+   * These rows printed the chain's per-share figures with a dollar sign, so
+   * "Max loss $659.20" stood on a META cash-secured put whose most it can lose
+   * is $65,920, and "Net debit $35.83" on a call that takes $3,583. The legs
+   * keep the per-share quote, which is how a chain and a broker show it. */
+  const perShare = (v) => (v === null || v === undefined ? '' : ` (${usd(v, 2)} a share)`);
+  const one = (dollars, share) => (dollars === null || dollars === undefined ? null
+    : usd(dollars, 0) + perShare(share));
+  const profit = typeof idea.profit_for_one === 'string' ? esc(cap(idea.profit_for_one))
+    : one(idea.profit_for_one, idea.max_profit);
+
   return `<div class="idea">
     <div class="idea-head">
       <span class="idea-name">${esc(idea.name)}</span>
       <span class="chip neutral"><span class="dot"></span>${esc(cap(idea.structure))}</span>
+      ${idea.sized_to_budget ? '<span class="chip warn"><span class="dot"></span>Sized to your limit</span>' : ''}
       <span class="subnote sm">${esc(idea.expiry)} · ${idea.dte}d</span>
     </div>
     <div class="idea-why">${gloss(idea.rationale)}</div>
@@ -12325,10 +12551,14 @@ function renderIdea(idea) {
       <span class="muted">IV ${fmt((l.iv || 0) * 100, 1)}%</span>
     </div>`).join('')}
     <div style="margin-top:var(--space-2)">${kv([
-    idea.net_debit !== undefined && idea.net_debit !== null ? ['Net debit', '$' + fmt(idea.net_debit, 2)] : null,
-    idea.net_credit !== undefined && idea.net_credit !== null ? ['Net credit', '$' + fmt(idea.net_credit, 2)] : null,
-    ['Max profit', typeof idea.max_profit === 'string' ? esc(idea.max_profit) : '$' + fmt(idea.max_profit, 2)],
-    ['Max loss', '$' + fmt(idea.max_loss, 2)],
+    idea.cost_for_one !== undefined && idea.cost_for_one !== null
+      ? ['Cost for one', one(idea.cost_for_one, idea.net_debit)] : null,
+    idea.credit_for_one !== undefined && idea.credit_for_one !== null
+      ? ['You collect, for one', one(idea.credit_for_one, idea.net_credit)] : null,
+    idea.cash_for_one ? ['Cash to set aside', `${usd(idea.cash_for_one, 0)}, the strike for 100 shares`] : null,
+    profit ? ['Most it can make, for one', profit] : null,
+    idea.risk_for_one !== undefined && idea.risk_for_one !== null
+      ? ['Most it can lose, for one', one(idea.risk_for_one, idea.max_loss)] : null,
     idea.risk_reward ? ['Risk / reward', `1 : ${fmt(idea.risk_reward, 2)}`] : null,
     breakevenText ? ['Breakeven', breakevenText] : null,
     idea.profit_zone ? ['Profit zone', `${fmt(idea.profit_zone[0], 1)} – ${fmt(idea.profit_zone[1], 1)}`] : null,

@@ -11797,31 +11797,87 @@ body.cp-open { overflow: hidden; }
 
 /* ------------------------------------------------- the contract cost limit
  *
- * Sits under the panel's own subtitle rather than in a settings page: it is
- * read at the moment somebody is looking at a $4,000 contract, which is the
- * moment it means anything. */
+ * In the Setup at the top of the Options tab rather than in a settings page:
+ * it is read at the moment somebody is looking at a $3,000 contract, which is
+ * the moment it means anything. It used to sit inside "Strike & entry
+ * recommendation", twelve panels down and collapsed, where the person it was
+ * for never found it.
+ *
+ * A band of its own inside the Setup, set off by a surface rather than rules,
+ * because the Setup's own rows are separated by rules and a third one would
+ * read as another row of readings. */
 .eb-bar {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2) var(--space-3);
   flex-wrap: wrap;
-  margin: var(--space-3) 0 var(--space-4);
-  padding: var(--space-2) 0;
-  border-top: 1px solid var(--grid);
-  border-bottom: 1px solid var(--grid);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
 }
-.eb-label { color: var(--ink-2); font-size: var(--t-small); }
+.eb-label { color: var(--ink); font-size: var(--t-small); font-weight: 600; }
 .eb-pills { display: flex; gap: var(--space-1); flex-wrap: wrap; }
-.eb-note {
+
+/* "Your own": the amount the steps above do not have. One row with its own
+   Set, so Enter and a click do the same thing. */
+.eb-own {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+.eb-own label { color: var(--ink-2); font-size: var(--t-caption); }
+.eb-own-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  color: var(--ink-muted);
+  font-size: var(--t-caption);
+}
+.eb-own.on .eb-own-field { border-color: var(--btn-primary); color: var(--ink); }
+.eb-own-field input {
+  width: 7ch;
+  padding: var(--space-1) 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.eb-own-field input:focus { outline: none; }
+.eb-own-field:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+.eb-own-field input[aria-invalid="true"] { color: var(--neg); }
+
+.eb-help {
   flex: 1 1 100%;
   margin: 0;
   color: var(--ink-muted);
-  font-size: var(--t-small);
+  font-size: var(--t-caption);
+  max-width: 76ch;
 }
-/* The empty case is the one worth colouring. Every other note is a count; this
-   one means the panel below it has nothing in it, and a reader who misses that
-   reads an empty table as a broken chain. */
-.eb-note.is-empty { color: var(--ink-2); }
+
+/* The one line under each panel the limit steers. */
+.eb-line {
+  margin: 0 0 var(--space-3);
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  max-width: 76ch;
+}
+.eb-line.is-over { margin: var(--space-3) 0 0; color: var(--ink-muted); }
+
+/* What the limit did to the Setup, in the Setup. */
+.su-fit { margin: 0 0 var(--space-3); font-size: var(--t-small); color: var(--ink-2); max-width: 76ch; }
+
+@media (max-width: 559px) {
+  .eb-bar { padding: var(--space-3) var(--space-2); }
+  .eb-own { flex: 1 1 100%; }
+}
 
 /* ------------------------------------------- watches that fired, per account
  *
