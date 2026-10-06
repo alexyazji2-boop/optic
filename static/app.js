@@ -18511,11 +18511,43 @@ function wsDrawings() {
   return wsDrawStore[STATE.chartSymbol || ''] || [];
 }
 
-function wsSaveDrawings(list) {
-  wsDrawStore[STATE.chartSymbol || ''] = list;
-  try { localStorage.setItem(WS_DRAW_KEY_V2, JSON.stringify(wsDrawStore)); }
-  catch (e) { /* private mode: the drawings live for the session only */ }
+/* The store as it is saved now, which another tab may have written since
+ * this one loaded. */
+function wsStoredDrawings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(WS_DRAW_KEY_V2) || '{}');
+    return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {};
+  } catch (e) { return {}; }
 }
+
+/* Read, change this one symbol, write.
+ *
+ * Each tab read the store once at load and wrote its whole copy back on every
+ * save, so a drawing another tab had saved since was put back as it stood at
+ * this tab's load: draw on AAPL in one tab and MSFT in another, reload, and
+ * the first one was gone. Only the symbol being saved is this tab's to write. */
+function wsSaveDrawings(list) {
+  const sym = STATE.chartSymbol || '';
+  wsDrawStore[sym] = list;
+  try {
+    const stored = wsStoredDrawings();
+    stored[sym] = list;
+    localStorage.setItem(WS_DRAW_KEY_V2, JSON.stringify(stored));
+    wsDrawStore = stored;
+  } catch (e) { /* private mode: the drawings live for the session only */ }
+}
+
+/* Another tab's drawings, as it saves them, so this tab's next save starts
+ * from them and the chart on screen shows them. */
+window.addEventListener('storage', (evt) => {
+  if (evt.key !== WS_DRAW_KEY_V2) return;
+  const sym = STATE.chartSymbol || '';
+  const before = JSON.stringify(wsDrawStore[sym] || []);
+  wsDrawStore = wsStoredDrawings();
+  if (JSON.stringify(wsDrawStore[sym] || []) === before) return;
+  wsSelected = null;
+  if (STATE.view === 'chart') wsRenderDrawings();
+});
 
 /* Move the legacy set for the chart on screen into the time-based store.
  *
@@ -18534,10 +18566,10 @@ function wsMigrateLegacy(axis) {
     points: (dr.points || []).map((pt) => (Number.isFinite(pt.t) ? pt
       : { t: axis.timeOf(Number(pt.i) || 0), p: pt.p })),
   }));
-  wsDrawStore[STATE.chartSymbol || ''] = [...wsDrawings(), ...moved];
   delete wsLegacyDrawStore[key];
+  // Through the same read-modify-write as every other save (wsSaveDrawings).
+  wsSaveDrawings([...wsDrawings(), ...moved]);
   try {
-    localStorage.setItem(WS_DRAW_KEY_V2, JSON.stringify(wsDrawStore));
     localStorage.setItem(WS_DRAW_KEY, JSON.stringify(wsLegacyDrawStore));
   } catch (e) { /* private mode */ }
 }
