@@ -82,6 +82,7 @@ from .analytics import setups as setups_mod
 from . import knowledge as knowledge_mod
 from . import watch_runner
 from . import signal_history
+from . import briefing as briefing_mod
 from .analytics import watches as watches_mod
 from . import events as events_mod
 from .analytics import extras as extras_mod
@@ -1139,6 +1140,122 @@ SIGNAL_BASIS = (
     "not an options return and not the result of a trade: nothing was bought or "
     "sold, and no option prices are known for those dates. A horizon whose candle "
     "has not printed, or is missing from the feed, is unknown.")
+
+
+# ------------------------------------------------------------ daily briefing
+#
+# What changed since yesterday for the reader's names: see app/briefing.py for
+# what is compared with what, and why the earnings and filing half needs a
+# saved reading from an earlier session.
+
+_BRIEFING_CACHE: Dict[Any, Any] = {}
+_BRIEFING_TTL = 600
+_BRIEFING_READING: set = set()
+_BRIEFING_READING_LOCK = threading.Lock()
+
+
+def _account_watch_symbols(user_id: str) -> List[str]:
+    """Every symbol on this reader's own lists, in list order. Their id in the
+    WHERE clause, as every account read is."""
+    rows = accounts_db.rows(
+        "SELECT i.symbol FROM watchlist_items i JOIN watchlists w ON w.id = i.watchlist_id "
+        "WHERE w.user_id = ? ORDER BY w.position, i.position", (user_id,))
+    return list(dict.fromkeys(r["symbol"] for r in rows))
+
+
+def _all_watch_symbols() -> List[str]:
+    """For the post-close reading only: which names anyone keeps, with nothing
+    about who."""
+    try:
+        return [r["symbol"] for r in accounts_db.rows("SELECT DISTINCT symbol FROM watchlist_items")]
+    except Exception:                                            # noqa: BLE001
+        return []
+
+
+def _briefing_read_soon(symbols: List[str], session: str) -> None:
+    """Read the names that have no saved reading yet, off the request. Their
+    first comparison is the next session's; this only starts the record."""
+    with _BRIEFING_READING_LOCK:
+        todo = [s for s in symbols if s not in _BRIEFING_READING]
+        _BRIEFING_READING.update(todo)
+    if not todo:
+        return
+
+    def work() -> None:
+        try:
+            briefing_mod.capture(YF_PROVIDER, todo, session)
+        except Exception as exc:                                  # noqa: BLE001
+            logging.getLogger("uvicorn.error").warning("briefing reading failed: %s", exc)
+        finally:
+            with _BRIEFING_READING_LOCK:
+                _BRIEFING_READING.difference_update(todo)
+
+    threading.Thread(target=work, name="briefing-read", daemon=True).start()
+
+
+@app.post("/api/briefing")
+async def daily_briefing(request: Request, body: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """What changed since yesterday on the reader's watchlist and holdings.
+
+    A POST because a guest's watchlist and holdings live in the browser and
+    arrive in the body. A signed-in reader's own lists are added here, read by
+    their user id. Stores nothing personal: the names asked about are kept,
+    with a time and no owner, so the post-close pass knows what to read."""
+    def clean(raw: Any, cap: int) -> List[str]:
+        if not isinstance(raw, list):
+            return []
+        return _setup_symbols(",".join(str(x) for x in raw[:200]), cap)
+
+    held = clean(body.get("holdings"), 40)
+    asked = clean(body.get("symbols"), briefing_mod.MAX_SYMBOLS)
+    try:
+        user = auth_deps.current_user(request)
+    except Exception:                                            # noqa: BLE001
+        user = None
+    own = _account_watch_symbols(user["id"]) if user else []
+    symbols = list(dict.fromkeys(held + asked + own))[:briefing_mod.MAX_SYMBOLS]
+    if not symbols:
+        return {"available": False,
+                "reason": "Nothing to compare yet. Add names to your watchlist and this "
+                          "compares them session to session."}
+
+    def build() -> Dict[str, Any]:
+        now = datetime.now(timezone.utc)
+        per = briefing_mod.period(now)
+        key = (tuple(symbols), tuple(held), per["latest"])
+        hit = _BRIEFING_CACHE.get(key)
+        if hit and time.time() - hit[0] < _BRIEFING_TTL:
+            return hit[1]
+        # The setups scanner's own download: one request for every name, and
+        # the same cache entry when the two are asked about the same list.
+        frames = _setup_frames(symbols, "SPY") or {}
+        bench = frames.get("SPY")
+
+        def bars_for(sym: str):
+            return setups_mod.daily_bars(frames.get(sym), now)
+
+        def setups_for(sym: str):
+            df = frames.get(sym)
+            if df is None or df.empty:
+                return None
+            try:
+                return setups_mod.analyse(sym, df, bench, now=now)
+            except Exception as exc:                              # noqa: BLE001
+                return {"available": False, "reason": str(exc)[:120]}
+
+        out = briefing_mod.build(symbols, held, bars_for, setups_for, per)
+        briefing_mod.note_requested(symbols, now)
+        out["generated_at"] = now.isoformat()
+        out["signed_in"] = bool(user)
+        if out["unread"]:
+            _briefing_read_soon(out["unread"], per["latest"])
+        else:
+            if len(_BRIEFING_CACHE) > 200:
+                _BRIEFING_CACHE.clear()
+            _BRIEFING_CACHE[key] = (time.time(), out)
+        return out
+
+    return await _run(build)
 
 
 @app.get("/api/signals")
@@ -2443,6 +2560,24 @@ async def _tracker_loop() -> None:
                                  stamp, now_et.strftime("%H:%M"))
                 except Exception as exc:  # noqa: BLE001 - never break the loop
                     log.warning("brief refresh failed: %s", exc)
+
+            # The briefing's saved readings: earnings dates, filings and share
+            # counts for every name somebody keeps or has asked about, once each
+            # settled session. Behind WATCH_AUTO with the other jobs that spend
+            # provider calls on a schedule; up to four calls a name.
+            if WATCH_AUTO:
+                try:
+                    due_read = signal_followup_due(
+                        datetime.now(timezone.utc).astimezone(session_mod.ET),
+                        getattr(app.state, "briefing_read", None))
+                    if due_read:
+                        app.state.briefing_read = due_read
+                        names = sorted(set(_all_watch_symbols()) | set(briefing_mod.recently_requested()))
+                        out = await _run(briefing_mod.capture, YF_PROVIDER, names, due_read)
+                        if out["saved"]:
+                            log.info("briefing: saved %s readings for %s", out["saved"], due_read)
+                except Exception as exc:  # noqa: BLE001 - never break the loop
+                    log.warning("briefing readings failed: %s", exc)
 
             # Signal history follow-ups, once each settled session. Above the
             # market-hours gate: the candle they read settles after the close,

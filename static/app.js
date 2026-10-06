@@ -4167,6 +4167,7 @@ async function loadHomeMarket(opts = {}) {
       <div class="hm-main">
         ${morningDesk(data)}
         ${whatMattersNow(data)}
+        <section class="hm-block" id="hm-changes" aria-label="What changed since yesterday">${dailyChangesHTML()}</section>
         ${/* Two thirds rather than full width. Four columns of symbol, price,
              change and volume do not fit a third of the board, and squeezing
              them is how a table starts wrapping its own headers; at two thirds
@@ -4211,6 +4212,7 @@ async function loadHomeMarket(opts = {}) {
   // Its own request, not awaited: the universe scan is the slowest thing on
   // this page and the rest of it is already useful without it.
   homeMovers();
+  loadDailyChanges();
 }
 
 /* Watchlist and home navigation clicks. */
@@ -8780,18 +8782,175 @@ function homeRead(data) {
   </section>`;
 }
 
+/* ============================================ what changed since yesterday
+ *
+ * The briefing for the reader's own names (app/briefing.py): the latest
+ * completed session against the one before it, item by item, each with why it
+ * may matter and the panel that shows it. Its own request, made after the rest
+ * of Home has drawn, so the page never waits for it. The sentences are the
+ * server's, from fixed rules; nothing here is written by a model. */
+const DAILY_CHANGES = { data: null, key: '', at: 0, loading: false, error: null, retried: false, open: false };
+const DAILY_CHANGES_TTL_MS = 10 * 60 * 1000;
+// Home is a summary: four, and the rest one press away.
+const DAILY_ITEMS_SHOWN = 4;
+const DAILY_LINK_LABEL = {
+  chart: 'Chart', swing: 'Swing setups', earnings: 'Earnings', financials: 'Financials', long: 'Investing',
+};
+
+/* Holdings where the page already keeps them: open paper positions and the
+ * Roth holdings box. Symbols only; quantities stay in this browser. */
+function dailyChangeHoldings() {
+  const out = [];
+  try {
+    (paperBook.open || []).forEach((p) => { if (p && p.ticker) out.push(String(p.ticker).toUpperCase()); });
+  } catch (e) { /* no paper book on this page yet */ }
+  String((STATE.rothInputs || {}).holdings || '').split(/[\n,]/).forEach((line) => {
+    const m = /^\s*([A-Za-z][A-Za-z0-9.\-]{0,9})\b/.exec(line);
+    if (m) out.push(m[1].toUpperCase());
+  });
+  return [...new Set(out)].slice(0, 40);
+}
+
+async function loadDailyChanges(force) {
+  const symbols = watchList();
+  const holdings = dailyChangeHoldings();
+  const key = `${symbols.join(',')}|${holdings.join(',')}`;
+  const fresh = DAILY_CHANGES.data && DAILY_CHANGES.key === key
+    && Date.now() - DAILY_CHANGES.at < DAILY_CHANGES_TTL_MS;
+  if ((fresh && !force) || DAILY_CHANGES.loading) { paintDailyChanges(); return; }
+  DAILY_CHANGES.loading = true;
+  try {
+    DAILY_CHANGES.data = await postJSON('/api/briefing', { symbols, holdings });
+    DAILY_CHANGES.key = key;
+    DAILY_CHANGES.at = Date.now();
+    DAILY_CHANGES.error = null;
+  } catch (err) {
+    DAILY_CHANGES.error = err.message;
+  }
+  DAILY_CHANGES.loading = false;
+  paintDailyChanges();
+  /* Names with no saved reading are being read now, off the request. One more
+   * ask shortly afterwards shows their earnings dates without a reload. */
+  const d = DAILY_CHANGES.data;
+  if (d && (d.unread || []).length && !DAILY_CHANGES.retried) {
+    DAILY_CHANGES.retried = true;
+    setTimeout(() => { if (STATE.view === 'home') loadDailyChanges(true); }, 25000);
+  }
+}
+
+function paintDailyChanges() {
+  const host = document.getElementById('hm-changes');
+  if (host && STATE.view === 'home') host.innerHTML = dailyChangesHTML();
+}
+
+function dailyChangeRow(it) {
+  const link = it.link || {};
+  const sym = String(it.symbol || '');
+  const head = String(it.headline || '').indexOf(`${sym} `) === 0
+    ? it.headline.slice(sym.length + 1) : String(it.headline || '');
+  return `<li class="dc-item${it.holding ? ' is-held' : ''}">
+    <div class="dc-line">
+      <span class="dc-sym">${esc(sym)}</span>${it.holding ? '<span class="dc-held">held</span>' : ''}
+      <span class="dc-head">${esc(cap(head))}</span>
+      <button type="button" class="dc-open" data-dc-open="${esc(sym)}" data-dc-view="${esc(link.view || 'chart')}"${
+  link.panel ? ` data-dc-panel="${esc(link.panel)}"` : ''}>${esc(DAILY_LINK_LABEL[link.view] || 'Open')} &rarr;</button>
+    </div>
+    ${it.detail ? `<p class="dc-detail">${esc(it.detail)}</p>` : ''}
+    ${it.why ? `<p class="dc-why">${esc(it.why)}</p>` : ''}
+  </li>`;
+}
+
+/* "Unchanged" covers only the checks that ran, so the ones that could not are
+ * named beside it: a name with one saved reading has no filings to compare. */
+function dailyNotChecked(names) {
+  const by = {};
+  names.forEach((n) => (n.not_checked || []).forEach((what) => {
+    (by[what] = by[what] || []).push(n.symbol);
+  }));
+  const parts = Object.keys(by).map((what) => `${esc(what)} for ${esc(by[what].join(', '))}`);
+  return parts.length ? `<p class="dc-note">Not checked: ${parts.join('; ')}.</p>` : '';
+}
+
+function dailyChangesHTML() {
+  const st = DAILY_CHANGES;
+  const d = st.data;
+  const per = (d && d.period) || {};
+  const head = `<div class="hm-block-head"><h2 class="hm-h">What changed since yesterday</h2></div>
+    ${per.label ? `<p class="dc-period">${esc(per.label)}.</p>` : ''}`;
+  if (!d) {
+    return st.error
+      ? `${head}<p class="hm-none">The comparison is unavailable right now (${esc(st.error)}).</p>`
+      : `${head}<div class="hm-skel" aria-hidden="true"></div>`;
+  }
+  if (!d.available) return `${head}<p class="hm-none">${esc(d.reason || 'Nothing to compare.')}</p>`;
+  const items = d.items || [];
+  const shown = st.open ? items : items.slice(0, DAILY_ITEMS_SHOWN);
+  const names = d.names || [];
+  const quiet = names.filter((n) => n.state === 'unchanged');
+  const lost = names.filter((n) => n.state === 'stale' || n.state === 'missing');
+  const unread = d.unread || [];
+  return `${head}
+    ${(per.notes || []).length ? `<p class="dc-note">${esc(per.notes.join(' '))}</p>` : ''}
+    <p class="dc-summary">${esc(d.summary || '')}</p>
+    ${shown.length ? `<ul class="dc-list">${shown.map(dailyChangeRow).join('')}</ul>` : ''}
+    ${items.length > DAILY_ITEMS_SHOWN ? `<button type="button" class="hm-more" data-dc-more>${
+  st.open ? 'Show fewer' : `All ${items.length} changes`}</button>` : ''}
+    ${quiet.length ? `<p class="dc-quiet"><strong>No meaningful change:</strong> ${quiet.map((n) => `${esc(n.symbol)} <span class="${
+  signClass(n.change_pct)}">${fmtPct(n.change_pct, 1)}</span>`).join(', ')}.</p>${dailyNotChecked(quiet)}` : ''}
+    ${lost.map((n) => `<p class="dc-stale"><strong>${esc(n.symbol)}</strong>: ${esc(n.summary)}</p>`).join('')}
+    ${unread.length ? `<p class="dc-note">Earnings dates and filings are being read for the first time for ${
+  unread.length === names.length ? 'these names' : esc(unread.join(', '))}. They compare from the next session; until
+      then those checks are not counted.</p>` : ''}
+    <p class="dc-foot">${esc(d.method || '')}</p>`;
+}
+
+/* Open the name on the tab the item points at, and the panel when it names
+ * one: the setups panel starts collapsed, so landing on its tab alone would
+ * leave the reader looking for it. */
+async function openDailyChange(sym, view, panelName) {
+  loadTicker(sym, view);
+  if (!panelName) return;
+  const id = `sec-${panelId(view, panelName).replace(/[^a-z0-9]+/g, '-')}`;
+  for (let i = 0; i < 40; i++) {
+    await new Promise((r) => setTimeout(r, 250));
+    if (STATE.ticker !== sym || STATE.view !== view) return;
+    const panel = document.getElementById(id);
+    if (panel) { openPanelById(id); return; }
+  }
+}
+
+document.addEventListener('click', (evt) => {
+  if (!evt.target || !evt.target.closest) return;
+  const open = evt.target.closest('[data-dc-open]');
+  if (open) {
+    openDailyChange(open.getAttribute('data-dc-open'), open.getAttribute('data-dc-view') || 'chart',
+      open.getAttribute('data-dc-panel'));
+    return;
+  }
+  if (evt.target.closest('[data-dc-more]')) {
+    DAILY_CHANGES.open = !DAILY_CHANGES.open;
+    paintDailyChanges();
+  }
+});
+
+/* The newest scan alerts. They are Optic's own scan of its positions and the
+ * ranked universe, not the reader's watches, so the heading says so; and the
+ * row is the alert's title, which is what alerts.py stores. It rendered
+ * `message || text || reason`, none of which an alert row has, so every row
+ * on Home was a symbol beside an empty line. /api/home sends at most four, so
+ * the link names the place rather than a count it cannot know. */
 function homeAlerts(data) {
   const rows = data.alerts || [];
   if (!rows.length) return '';
   return `<section class="hm-block">
     <div class="hm-block-head">
-      <h2 class="hm-h">Your alerts</h2>
-      <button type="button" class="hm-more" data-go-view="alerts">All ${rows.length} &rarr;</button>
+      <h2 class="hm-h">Latest scan alerts</h2>
+      <button type="button" class="hm-more" data-go-view="alerts">All alerts &rarr;</button>
     </div>
     <ul class="hm-alerts">
       ${rows.slice(0, 4).map((a) => `<li>
-        <span class="hm-alert-sym">${esc(a.ticker || a.symbol || '—')}</span>
-        <span class="hm-alert-text">${esc(a.message || a.text || a.reason || '')}</span>
+        ${a.ticker || a.symbol ? `<span class="hm-alert-sym">${esc(a.ticker || a.symbol)}</span>` : ''}
+        <span class="hm-alert-text">${esc(a.title || a.message || a.body || '')}</span>
       </li>`).join('')}
     </ul>
   </section>`;
@@ -11851,28 +12010,32 @@ document.addEventListener('click', (evt) => {
    * scroll alone would land on a heading. A panel the reader hid in the
    * chooser is shown again, because this is them asking to see it. */
   const jump = evt.target.closest('[data-goto-panel]');
-  if (jump) {
-    const panel = document.getElementById(jump.dataset.gotoPanel);
-    if (!panel) return;
-    if (panel.hidden && panel.dataset.panelId) {
-      panel.hidden = false;
-      panel.classList.remove('is-advanced');
-      setPanelHidden(panel.dataset.panelId, false);
-    }
-    if (panel.classList.contains('is-closed')) {
-      panel.classList.add('is-open');
-      panel.classList.remove('is-closed');
-      const toggle = panel.querySelector(':scope > h2 .panel-toggle');
-      if (toggle) {
-        toggle.setAttribute('aria-expanded', 'true');
-        toggle.setAttribute('aria-label', 'Collapse ' + headingName(panel.querySelector(':scope > h2')));
-      }
-      if (panel.dataset.panelId) rememberCollapse(panel.dataset.panelId, true);
-      markClampedCaveats(panel);
-    }
-    panel.scrollIntoView({ block: 'start', behavior: 'smooth' });
-  }
+  if (jump) openPanelById(jump.dataset.gotoPanel);
 });
+
+/* Open a collapsed or chooser-hidden panel and put it on screen: what "Show
+ * it" does from the Setup, and what a briefing item does on the tab it opens. */
+function openPanelById(id) {
+  const panel = document.getElementById(id);
+  if (!panel) return;
+  if (panel.hidden && panel.dataset.panelId) {
+    panel.hidden = false;
+    panel.classList.remove('is-advanced');
+    setPanelHidden(panel.dataset.panelId, false);
+  }
+  if (panel.classList.contains('is-closed')) {
+    panel.classList.add('is-open');
+    panel.classList.remove('is-closed');
+    const toggle = panel.querySelector(':scope > h2 .panel-toggle');
+    if (toggle) {
+      toggle.setAttribute('aria-expanded', 'true');
+      toggle.setAttribute('aria-label', 'Collapse ' + headingName(panel.querySelector(':scope > h2')));
+    }
+    if (panel.dataset.panelId) rememberCollapse(panel.dataset.panelId, true);
+    markClampedCaveats(panel);
+  }
+  panel.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
 
 document.addEventListener('submit', (evt) => {
   const form = evt.target && evt.target.closest
