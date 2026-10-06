@@ -209,6 +209,9 @@ def test_a_wait_that_runs_on_says_for_how_long():
       await runUntil(function () { return originGate !== null; });
       assert(banner().innerHTML.indexOf('It has not answered for 2 minutes.') >= 0, banner().innerHTML);
       assert(banner().innerHTML.indexOf('restarting') < 0, 'no longer guessed at');
+      // And it keeps count while it waits: first missed at 15s, so 3 minutes at 195s.
+      await runUntil(function () { return now >= 195000; });
+      assert(banner().innerHTML.indexOf('It has not answered for 3 minutes.') >= 0, banner().innerHTML);
     """)
 
 
