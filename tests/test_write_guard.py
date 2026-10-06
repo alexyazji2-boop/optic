@@ -24,7 +24,9 @@ client = TestClient(main.app)
 # catalyst scan are open to everyone, spaced out for anyone but the owner, and
 # tests/test_public_scans.py holds them to that. What is left changes the
 # record in ways a reader has no business doing.
-WRITES = ("/api/alerts/clear", "/api/feedback/resolve-all")
+# Marking the inbox read joined them: one inbox for the deployment, and an
+# empty body marked every alert read for everyone (found in review, 2026-10-06).
+WRITES = ("/api/alerts/clear", "/api/alerts/seen", "/api/feedback/resolve-all")
 PLATFORM_VARS = ("RAILWAY_ENVIRONMENT", "RAILWAY_GIT_COMMIT_SHA",
                  "RENDER", "FLY_APP_NAME")
 

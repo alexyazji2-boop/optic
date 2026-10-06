@@ -5792,7 +5792,7 @@ function alertRow(a, kinds) {
         ${a.kind ? `<span class="al-kind">${esc(a.kind_label || a.kind)}</span>` : ''}
         ${canExplain ? `<button type="button" class="al-why" data-alert-why="${a.id}"
           aria-expanded="${open}">${open ? 'Hide why' : 'Why this fired'}</button>` : ''}
-        ${a.seen ? '' : `<button type="button" class="al-why" data-alert-seen="${a.id}"
+        ${a.seen || !alertsWritable() ? '' : `<button type="button" class="al-why" data-alert-seen="${a.id}"
           >Mark read</button>`}
       </span>
       ${open ? `<div class="al-explain">
@@ -5822,6 +5822,14 @@ function alertDeliveryNote(delivery) {
     Nothing here is emailed yet.
     <ul class="al-blockers">${blockers.map((b) =>
     `<li>${esc(b)}</li>`).join('')}</ul></div>`;
+}
+
+/* The scan inbox is the deployment's, one for everyone, so marking it read or
+ * clearing it is the owner's to do (both routes are behind _write_guard).
+ * Offered to a visitor, either control was a prompt for a token they cannot
+ * have. */
+function alertsWritable() {
+  return isOwner() || !!writeToken();
 }
 
 function renderAlerts() {
@@ -5872,7 +5880,7 @@ function renderAlerts() {
           tripped it and the readings it tripped on.
           ${unread ? `<strong>${unread} unread.</strong>` : ''}</p>
       </div>
-      ${all.length ? `<button type="button" class="btn" data-alerts-clear>
+      ${all.length && alertsWritable() ? `<button type="button" class="btn" data-alerts-clear>
         Clear all</button>` : ''}
     </div>
 
@@ -5887,7 +5895,7 @@ function renderAlerts() {
         aria-pressed="${alertKindFilter === k}">${esc((kinds[k] || {}).label || k)}</button>`).join('')}
       <button type="button" class="pill${alertUnreadOnly ? ' on' : ''}"
         data-alert-unread aria-pressed="${alertUnreadOnly}">Unread only</button>
-      ${unread ? '<button type="button" class="pill" data-alerts-seen>Mark all read</button>' : ''}
+      ${unread && alertsWritable() ? '<button type="button" class="pill" data-alerts-seen>Mark all read</button>' : ''}
     </div>` : ''}
 
     ${groups.length ? groups.map((g) => `<div class="al-group">

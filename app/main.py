@@ -4062,7 +4062,11 @@ async def list_alerts(limit: int = Query(50, ge=1, le=200),
 
 
 @app.post("/api/alerts/seen")
-async def alerts_seen(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+async def alerts_seen(request: Request, payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Mark the scan alerts read. Owner only, like clearing them: there is one
+    inbox for the deployment, so a visitor marking it read emptied the owner's
+    unread count, and an empty body marks every alert at once."""
+    _write_guard(request)
     ids = payload.get("ids")
     return {"marked": alerts_mod.mark_seen(ids if isinstance(ids, list) else None)}
 
