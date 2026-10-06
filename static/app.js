@@ -419,7 +419,9 @@ const SECURITY_OWN_SYMBOL = new Set(['chart']);
    Beginner-facing jargon gets a dotted underline; hovering (or tabbing to it
    with a keyboard) shows a plain-English definition using the same tooltip
    the charts use. Applied to narrative text (summaries, rationale, notes) —
-   not to table headers or labels, where it would just add visual noise. */
+   not to table headers or labels, where it would just add visual noise. A
+   figure's label is explained as a whole instead, where it has a definition
+   of its own (statLabel, KEY_STAT_DEFS, FIN_DEFS). */
 
 const GLOSSARY = {
   'auto trend lines': "Lines Optic fits to the swing highs and lows it has already found, rather than lines someone drew. A support line connects lows that held; a resistance line connects highs that capped. Each one is kept only if price actually touched it more than twice and it is still within reach of the current price, and the panel says how many candidates were rejected. They describe where price has turned before. They are not a forecast that it will turn there again.",
@@ -867,20 +869,25 @@ document.addEventListener('click', (evt) => {
    * row, as one more <dd> of it. Put after the label, it was squeezed into the
    * label's half beside the figure: a column a hundred pixels wide. */
   const row = term.closest('[data-gloss-row]');
-  const shown = row ? row.querySelector(':scope > .gloss-inline') : term.nextElementSibling;
+  /* Beside a <dt> of a two-column list (kv), after the figure and across both
+   * columns. Inside the label, the label's column grew to the paragraph's
+   * width and squeezed every figure in the list down to nothing. */
+  const pair = row ? null : term.closest('dt[data-gloss-pair]');
+  const after = pair ? pair.nextElementSibling : term;
+  const shown = row ? row.querySelector(':scope > .gloss-inline') : after && after.nextElementSibling;
   if (open) {
     if (shown && shown.classList.contains('gloss-inline')) shown.remove();
     term.setAttribute('aria-expanded', 'false');
     return;
   }
-  const box = document.createElement(row ? 'dd' : 'span');
+  const box = document.createElement(row || pair ? 'dd' : 'span');
   box.className = 'gloss-inline';
   // textContent, not innerHTML: the definition is plain prose from a table in
   // this file, and the day one of them contains an ampersand is not the day to
   // find out it was being parsed as markup.
   box.textContent = term.getAttribute('data-def') || '';
   if (row) row.appendChild(box);
-  else term.insertAdjacentElement('afterend', box);
+  else after.insertAdjacentElement('afterend', box);
   term.setAttribute('aria-expanded', 'true');
 });
 
@@ -1453,15 +1460,25 @@ function toneChipConviction(conviction) {
   return `<span class="chip ${cls}"><span class="dot"></span>${esc(cap(conviction) || 'n/a')}</span>`;
 }
 
+/* A figure's label. Explained as a whole when it has a definition of its own
+ * (Key stats, the Financials tab), so "% of float short" says what that figure
+ * is, rather than defining "float" inside it; otherwise glossed word by word. */
+function statLabel(label, def) {
+  return def ? glossTerm(esc(cap(label)), def, explainPolicy()) : gloss(cap(label));
+}
+
+/* Rows of [label, figure, class, definition]. A defined label marks its <dt>
+ * so an opened definition goes under the figure, across both columns. */
 function kv(pairs) {
   return `<dl class="kv">${pairs
     .filter(Boolean)
-    .map(([k, v, cls]) => `<dt>${gloss(cap(k))}</dt><dd class="${cls || ''}">${cap(v)}</dd>`)
+    .map(([k, v, cls, def]) => `<dt${def ? ' data-gloss-pair' : ''}>${statLabel(k, def)}</dt><dd class="${
+      cls || ''}">${cap(v)}</dd>`)
     .join('')}</dl>`;
 }
 
-function tile(label, value, note, cls) {
-  return `<div class="tile"><span class="label">${gloss(cap(label))}</span>
+function tile(label, value, note, cls, def) {
+  return `<div class="tile"><span class="label">${statLabel(label, def)}</span>
     <span class="value ${cls || ''}">${cap(value)}</span>
     ${note ? `<span class="note">${cap(note)}</span>` : ''}</div>`;
 }
@@ -13799,7 +13816,7 @@ function renderFinancialsView(force) {
     : '<div class="panel"><h2>Financials</h2><div class="callout">No company data '
       + 'for this ticker. Funds, indices and most ADRs do not file statements.'
       + '</div></div>'}
-    <div id="fin-extras-host">${renderExtras(STATE.extras)}</div>
+    <div id="fin-extras-host">${renderExtras(extrasForTicker())}</div>
     <div id="congress-host">${renderCongress(STATE.congress)}</div>
     <div id="seg-host">${renderSegments()}</div>`;
   revealPanels(views.financials);
@@ -13820,7 +13837,7 @@ function renderFinancialsView(force) {
   loadExtras(force).then(() => {
     const host = document.getElementById('fin-extras-host');
     if (host && STATE.view === 'financials') {
-      host.innerHTML = renderExtras(STATE.extras);
+      host.innerHTML = renderExtras(extrasForTicker());
       revealPanels(host);
       requestAnimationFrame(() => requestAnimationFrame(mountRelativeChart));
     }
@@ -13939,6 +13956,82 @@ const KEY_STAT_DEFS = {
   profit_margin: "Net income as a percentage of revenue over the last twelve months. Of every dollar that came in, how many cents the company kept after every cost, including interest and tax. A one-off gain, such as selling part of the business, can lift it for a year.",
   revenue_growth: "How much revenue grew in the most recent quarter, against the same quarter a year earlier. Comparing like quarters takes out seasonal swings, and an acquisition can add growth the existing business did not earn.",
 };
+
+/* The Financials tab's figures, explained the same way.
+ *
+ * Asked for after the key stats: "add definitions to the Financials tab stats
+ * too". Each says what the figure on this tab is, worked out from how it is
+ * built (app/analytics/fundamentals.py and extras.py) and, where it comes from
+ * Yahoo, checked against Yahoo's data on 2026-10-06. Two of those checks are
+ * in the wording because they surprise people: "total debt" counts leases
+ * (PLTR has no loans and shows $229M of them), and the reported EPS is not
+ * always on the estimate's basis (UBER's 3.11 against a 0.69 estimate was a
+ * one-off gain, not a 353% beat). The glossary's own sentence is used where it
+ * already says what the figure is. */
+const FIN_DEFS = {
+  // ---- short interest
+  short_pct_float: KEY_STAT_DEFS.short_float,
+  days_to_cover: KEY_STAT_DEFS.days_to_cover,
+  short_change: "How much the number of shares sold short changed since the previous report, about two weeks earlier. Rising means more is being bet against the stock; falling means short sellers have been buying back.",
+  shares_short: "The number of shares sold short and not yet bought back, at the settlement date of the latest report. It is the count the percentage of float is worked out from.",
+  shares_short_prior: "Shares sold short at the previous report, about two weeks before the latest one. The baseline the change beside it is measured against.",
+  float: GLOSSARY.float,
+  // ---- earnings record
+  eps_estimate: "The consensus: the earnings per share analysts expected for the quarter, averaged across their estimates before the report. It is the bar the result is judged against.",
+  eps_actual: "The earnings per share the company reported for the quarter, as the data source records it. It is not always on the same basis as the estimate, so a one-off gain or charge can turn an ordinary quarter into a huge beat or miss.",
+  surprise: GLOSSARY.surprise,
+  // ---- the statements
+  revenue_growth: "Revenue in the latest fiscal year against the year before, from the annual statements below. Annual figures move slowly, so a turn shows here after it has shown in the quarters.",
+  net_income_growth: "Net income in the latest fiscal year against the year before. It is left out when the earlier year was a loss, because growth from a loss has no meaningful percentage, and one-off gains or charges move it far more than they move revenue.",
+  net_margin: GLOSSARY['net margin'] + ' This one is for the latest fiscal year.',
+  revenue: GLOSSARY.revenue,
+  gross_profit: GLOSSARY['gross profit'],
+  operating_income: GLOSSARY['operating income'],
+  net_income: GLOSSARY['net income'],
+  free_cash_flow: GLOSSARY['free cash flow'],
+  diluted_eps: "Net income per share, counting the extra shares that options, convertible debt and other awards could create, as filed in the annual statement. The strictest per-share figure, and usually a little below basic EPS, which leaves those shares out.",
+  cash: "Cash and cash equivalents on the latest annual balance sheet: money in the bank and holdings that turn into cash almost at once. What the company could spend without selling anything or borrowing.",
+  total_debt: "Everything the company has borrowed, short and long term, on the latest annual balance sheet, including lease obligations where they are reported as debt. A company with no loans can still show some, from its leases.",
+  net_cash: "Cash minus total debt. Positive means the cash on hand would cover everything owed; negative means the company owes more than it holds, which is net debt.",
+  debt_to_equity: GLOSSARY['debt to equity'] + " It turns negative when years of buybacks or losses have pushed shareholders' equity below zero, and then no longer reads as a measure of leverage.",
+  gross_margin: GLOSSARY['gross margin'],
+  operating_margin: GLOSSARY['operating margin'],
+  // ---- ownership
+  insider_net: "Shares the company's directors and officers bought, minus shares they sold, over the last six months, from their Form 4 filings. Positive means they were net buyers, the rarer and more telling direction.",
+  institutional: GLOSSARY['institutional ownership'] + ' From their quarterly 13F filings, which arrive up to 45 days after the quarter they cover.',
+  top_holders: "Of the largest reported holders, how many raised their stake by more than 2% at their last quarterly filing, and how many cut it by more than 2%. The filings arrive up to 45 days after the quarter they describe.",
+  insider_purchases: "Shares the company's directors and officers bought over the last six months, and in how many trades. Buying with their own money is the more telling direction, because there is only one reason to do it.",
+  insider_sales: "Shares the company's directors and officers sold over the last six months, and in how many trades. Much of it is scheduled in advance or covers tax on vested shares, so it says less than buying does.",
+  insider_held: "The share of the company's stock owned by its directors, officers and largest owners. A high figure means management's own money rides on the price, and fewer shares are free to trade.",
+  holder_shares: "The number of shares the holder reported owning at its last quarterly filing. Index funds own most large companies in proportion to their size, so the biggest names on this list are often passive.",
+  holder_pct: "The holder's stake as a share of all the company's shares, as of its last filing. Funds file quarterly, so the figure can be months old.",
+  // The insider table's own, ahead of the column-header table: TH_HINTS
+  // explains a bare "Value" as a moving average's, which is not this one.
+  tx_shares: "How many shares the transaction covered, as the insider reported it on Form 4. Awards, gifts and option exercises are listed too, as Other, not only purchases and sales.",
+  tx_value: "The dollar value the filing gives for the transaction. A dash means none was stated, which is usual for awards, gifts and option exercises.",
+  holder_change: "How much the holder's position grew or shrank at its latest filing, against the one before. Index funds change with their index, so their moves say less than an active manager's.",
+  // ---- corporate actions and flow
+  div_latest: "The most recent dividend per share, dated by its ex-dividend date: a buyer on or after that day does not receive it. The payment itself usually arrives a few weeks later.",
+  // Yahoo's record has KO's September 2001 dividend twice, so 2002 reads as
+  // a cut and the streak as 23 years: the record, not the company.
+  div_streak: "How many complete calendar years in a row the yearly dividend total has risen, and the last year it fell. A long streak is a habit of raising, not a promise to keep doing it. It is counted from the data source's record by ex-dividend date, so a payment doubled or missing there can read as a cut.",
+  div_annual: "Dividends per share across the last complete calendar year, counted by ex-dividend date. A special one-off payment lifts it for that year only.",
+  div_count: "How many dividend payments the data source holds for the company, back to the earliest it has. The table below shows the most recent of them.",
+  div_year_total: "Dividends per share for that calendar year, counted by ex-dividend date. A year with a special payment stands out against its neighbours.",
+  div_year_change: "The year's total against the year before, as a percentage. A cut shows here first, and the growth streak is the run of positive years at the top.",
+  split_ratio: "How many shares each one became: 4-for-1 means every share turned into four, each worth a quarter as much. Below 1 is a reverse split, which merges shares; either way the company's value is unchanged.",
+  sv_latest: "The share of the stock's off-exchange trading on the latest day that FINRA's daily file reports as short sales. Market makers selling short to fill buy orders are counted, so a high reading is often routine liquidity rather than bets against the stock.",
+  sv_average: "The same share averaged over the days on record: this stock's own normal. A day is unusual against this, not against 50%, because market making keeps the level high for most stocks.",
+  sv_vs: "The latest day's share minus the average, in percentage points. A day well away from the stock's own normal says more than the level itself does.",
+  sv_days: "How many trading days of FINRA's daily files the average covers, up to the last twenty. FINRA publishes one file for each trading day, usually that evening.",
+};
+
+/* The versus-the-index tiles, one per window, against the benchmark named. */
+function excessReturnDef(days, benchmark) {
+  return `Excess return: the stock's return over the last ${days} trading days minus ${
+    benchmark || 'the benchmark'}'s over the same days, in percentage points. Positive means it beat the index, whether or not either one went up.${
+    days >= 252 ? ' 252 trading days is about a year.' : ''}`;
+}
 
 function keyStatRows(q, short) {
   const has = (v) => v !== null && v !== undefined && Number.isFinite(Number(v));
@@ -14114,8 +14207,8 @@ function renderCompany(co) {
   const ap = fn.annual_periods || [];
   const an = fn.annual || {};
 
-  const finRow = (label, values, money) => `<tr>
-    <td class="name">${esc(label)}</td>
+  const finRow = (label, values, money, def) => `<tr>
+    <td class="name">${statLabel(label, def)}</td>
     ${(ap || []).map((_, i) => `<td>${values && values[i] !== null && values[i] !== undefined
     ? (money ? '$' + fmtCompact(values[i]) : fmt(values[i], 2)) : '—'}</td>`).join('')}
   </tr>`;
@@ -14127,14 +14220,16 @@ function renderCompany(co) {
       ${si.available ? `
         <p class="sub">Squeeze potential: <strong>${esc(si.squeeze_potential)}</strong>${si.settlement_date ? ` · settled ${esc(si.settlement_date)}` : ''}</p>
         <div class="grid c3" style="margin-bottom:var(--space-3)">
-          ${tile('% of float short', si.percent_of_float !== null ? fmt(si.percent_of_float * 100, 2) + '%' : '—')}
-          ${tile('Days to cover', fmt(si.days_to_cover, 2))}
-          ${tile('vs prior period', fmtPct(si.change_vs_prior_pct, 1), null, signClass(si.change_vs_prior_pct))}
+          ${tile('% of float short', si.percent_of_float !== null ? fmt(si.percent_of_float * 100, 2) + '%' : '—',
+    null, '', FIN_DEFS.short_pct_float)}
+          ${tile('Days to cover', fmt(si.days_to_cover, 2), null, '', FIN_DEFS.days_to_cover)}
+          ${tile('vs prior period', fmtPct(si.change_vs_prior_pct, 1), null, signClass(si.change_vs_prior_pct),
+    FIN_DEFS.short_change)}
         </div>
         ${kv([
-    ['Shares short', fmtCompact(si.shares_short)],
-    ['Prior settlement', fmtCompact(si.shares_short_prior)],
-    ['Float', fmtCompact(si.float_shares)],
+    ['Shares short', fmtCompact(si.shares_short), '', FIN_DEFS.shares_short],
+    ['Prior settlement', fmtCompact(si.shares_short_prior), '', FIN_DEFS.shares_short_prior],
+    ['Float', fmtCompact(si.float_shares), '', FIN_DEFS.float],
   ])}
         <ul class="reasons">${(si.notes || []).map((n) => `<li>${gloss(n)}</li>`).join('')}</ul>
         <p class="caveat">${esc(si.caveat || '')}</p>`
@@ -14147,7 +14242,9 @@ function renderCompany(co) {
         <p class="sub">Beat consensus in ${eh.beat_count} of the last ${eh.sample_size} quarters
           (${fmt(eh.beat_rate_pct, 0)}%), average surprise ${fmtPct(eh.avg_surprise_pct, 1)}.</p>
         <table class="data">
-          <thead><tr><th>Quarter</th><th>EPS est.</th><th>EPS actual</th><th>Surprise</th></tr></thead>
+          <thead><tr><th>Quarter</th><th>${statLabel('EPS est.', FIN_DEFS.eps_estimate)}</th>
+            <th>${statLabel('EPS actual', FIN_DEFS.eps_actual)}</th>
+            <th>${statLabel('Surprise', FIN_DEFS.surprise)}</th></tr></thead>
           <tbody>${(eh.quarters || []).map((q) => `<tr>
             <td class="name">${esc(q.date)}</td>
             <td>${fmt(q.eps_estimate, 2)}</td>
@@ -14167,28 +14264,30 @@ function renderCompany(co) {
       ${fn.available ? `
         <p class="sub">Annual statements, most recent first.</p>
         <div class="grid c3" style="margin-bottom:var(--space-3)">
-          ${tile('Revenue growth (y/y)', fmtPct((fn.growth || {}).revenue_yoy_pct, 1), null, signClass((fn.growth || {}).revenue_yoy_pct))}
-          ${tile('Net income growth', fmtPct((fn.growth || {}).net_income_yoy_pct, 1), null, signClass((fn.growth || {}).net_income_yoy_pct))}
-          ${tile('Net margin', fmt((fn.margins || {}).net_pct, 1) + '%')}
+          ${tile('Revenue growth (y/y)', fmtPct((fn.growth || {}).revenue_yoy_pct, 1), null,
+    signClass((fn.growth || {}).revenue_yoy_pct), FIN_DEFS.revenue_growth)}
+          ${tile('Net income growth', fmtPct((fn.growth || {}).net_income_yoy_pct, 1), null,
+    signClass((fn.growth || {}).net_income_yoy_pct), FIN_DEFS.net_income_growth)}
+          ${tile('Net margin', fmt((fn.margins || {}).net_pct, 1) + '%', null, '', FIN_DEFS.net_margin)}
         </div>
         <table class="data">
           <thead><tr><th>Line</th>${(ap || []).map((p2) => `<th>${esc(p2)}</th>`).join('')}</tr></thead>
           <tbody>
-            ${finRow('Revenue', an.revenue, true)}
-            ${finRow('Gross profit', an.gross_profit, true)}
-            ${finRow('Operating income', an.operating_income, true)}
-            ${finRow('Net income', an.net_income, true)}
-            ${finRow('Free cash flow', an.free_cash_flow, true)}
-            ${finRow('Diluted EPS', an.diluted_eps, false)}
+            ${finRow('Revenue', an.revenue, true, FIN_DEFS.revenue)}
+            ${finRow('Gross profit', an.gross_profit, true, FIN_DEFS.gross_profit)}
+            ${finRow('Operating income', an.operating_income, true, FIN_DEFS.operating_income)}
+            ${finRow('Net income', an.net_income, true, FIN_DEFS.net_income)}
+            ${finRow('Free cash flow', an.free_cash_flow, true, FIN_DEFS.free_cash_flow)}
+            ${finRow('Diluted EPS', an.diluted_eps, false, FIN_DEFS.diluted_eps)}
           </tbody>
         </table>
         ${kv([
-    ['Cash', '$' + fmtCompact((fn.balance_sheet || {}).cash)],
-    ['Total debt', '$' + fmtCompact((fn.balance_sheet || {}).total_debt)],
-    ['Net cash position', '$' + fmtCompact((fn.balance_sheet || {}).net_cash)],
-    ['Debt / equity', fmt((fn.balance_sheet || {}).debt_to_equity, 2)],
-    ['Gross margin', fmt((fn.margins || {}).gross_pct, 1) + '%'],
-    ['Operating margin', fmt((fn.margins || {}).operating_pct, 1) + '%'],
+    ['Cash', '$' + fmtCompact((fn.balance_sheet || {}).cash), '', FIN_DEFS.cash],
+    ['Total debt', '$' + fmtCompact((fn.balance_sheet || {}).total_debt), '', FIN_DEFS.total_debt],
+    ['Net cash position', '$' + fmtCompact((fn.balance_sheet || {}).net_cash), '', FIN_DEFS.net_cash],
+    ['Debt / equity', fmt((fn.balance_sheet || {}).debt_to_equity, 2), '', FIN_DEFS.debt_to_equity],
+    ['Gross margin', fmt((fn.margins || {}).gross_pct, 1) + '%', '', FIN_DEFS.gross_margin],
+    ['Operating margin', fmt((fn.margins || {}).operating_pct, 1) + '%', '', FIN_DEFS.operating_margin],
   ])}
         <ul class="reasons">${(fn.notes || []).map((n) => `<li>${gloss(n)}</li>`).join('')}</ul>`
     : `<div class="callout">${esc(fn.note || 'No financial statements for this security.')}</div>`}
@@ -14220,19 +14319,28 @@ function renderCompany(co) {
       ${ow.available ? `
         <p class="sub">Insiders are net <strong>${esc(ow.insider_signal)}</strong> over the last six months.</p>
         <div class="grid c3" style="margin-bottom:var(--space-3)">
-          ${tile('Insider net (6m)', fmtCompact((ow.insider_6m || {}).net_shares) + ' sh', null, signClass((ow.insider_6m || {}).net_shares))}
-          ${tile('Institutional held', ow.institutional_pct_held !== null && ow.institutional_pct_held !== undefined ? fmt(ow.institutional_pct_held * 100, 1) + '%' : '—')}
-          ${tile('Top holders', `${ow.holders_adding} adding / ${ow.holders_trimming} trimming`)}
+          ${tile('Insider net (6m)', fmtCompact((ow.insider_6m || {}).net_shares) + ' sh', null,
+    signClass((ow.insider_6m || {}).net_shares), FIN_DEFS.insider_net)}
+          ${tile('Institutional held', ow.institutional_pct_held !== null && ow.institutional_pct_held !== undefined
+    ? fmt(ow.institutional_pct_held * 100, 1) + '%' : '—', null, '', FIN_DEFS.institutional)}
+          ${tile('Top holders', `${ow.holders_adding} adding / ${ow.holders_trimming} trimming`, null, '',
+    FIN_DEFS.top_holders)}
         </div>
         ${kv([
-    ['Insider purchases (6m)', `${fmtCompact((ow.insider_6m || {}).purchase_shares)} sh in ${fmt((ow.insider_6m || {}).purchase_count, 0)} trades`],
-    ['Insider sales (6m)', `${fmtCompact((ow.insider_6m || {}).sale_shares)} sh in ${fmt((ow.insider_6m || {}).sale_count, 0)} trades`],
-    ['Insider-held float', ow.insider_pct_held !== null && ow.insider_pct_held !== undefined ? fmt(ow.insider_pct_held * 100, 2) + '%' : '—'],
+    ['Insider purchases (6m)', `${fmtCompact((ow.insider_6m || {}).purchase_shares)} sh in ${
+      fmt((ow.insider_6m || {}).purchase_count, 0)} trades`, '', FIN_DEFS.insider_purchases],
+    ['Insider sales (6m)', `${fmtCompact((ow.insider_6m || {}).sale_shares)} sh in ${
+      fmt((ow.insider_6m || {}).sale_count, 0)} trades`, '', FIN_DEFS.insider_sales],
+    // "Held by insiders", not "Insider-held float": insiders' shares are the
+    // ones the float leaves out, and the figure is a share of all the stock.
+    ['Held by insiders', ow.insider_pct_held !== null && ow.insider_pct_held !== undefined
+      ? fmt(ow.insider_pct_held * 100, 2) + '%' : '—', '', FIN_DEFS.insider_held],
   ])}
         <h3>${hg('Recent insider transactions')}</h3>
         <div class="scroll-y" style="max-height:200px">
         <table class="data">
-          <thead><tr><th>Insider</th><th>Position</th><th>Date</th><th>Action</th><th>Shares</th><th>Value</th></tr></thead>
+          <thead><tr><th>Insider</th><th>Position</th><th>Date</th><th>Action</th>
+            <th>${statLabel('Shares', FIN_DEFS.tx_shares)}</th><th>${statLabel('Value', FIN_DEFS.tx_value)}</th></tr></thead>
           <tbody>${(ow.recent_transactions || []).map((tx) => `<tr>
             <td class="name">${esc(tx.insider)}</td>
             <td class="name muted">${esc(tx.position)}</td>
@@ -14244,8 +14352,10 @@ function renderCompany(co) {
         </table></div>
         <h3>${hg('Largest reported holders')}</h3>
         <table class="data">
-          <thead><tr><th>Holder</th><th>As of</th><th>Shares</th><th>% held</th><th>Change</th></tr></thead>
-          <tbody>${(ow.top_holders || []).slice(0, 6).map((hd) => `<tr>
+          <thead><tr><th>Holder</th><th>As of</th><th>${statLabel('Shares', FIN_DEFS.holder_shares)}</th>
+            <th>${statLabel('% held', FIN_DEFS.holder_pct)}</th>
+            <th>${statLabel('Change', FIN_DEFS.holder_change)}</th></tr></thead>
+          <tbody>${(Array.isArray(ow.top_holders) ? ow.top_holders : []).slice(0, 6).map((hd) => `<tr>
             <td class="name">${esc(hd.holder)}</td>
             <td class="name">${esc(hd.date_reported)}</td>
             <td>${fmtCompact(hd.shares)}</td>
@@ -24057,15 +24167,19 @@ function renderExtras(x) {
     <h3>${hg('Dividends')}</h3>
     <div class="grid c4" style="margin-bottom:var(--space-2)">
       ${tile('Latest payment', money((a.dividends.slice(-1)[0] || {}).amount, 2),
-    esc((a.dividends.slice(-1)[0] || {}).date || ''))}
+    esc((a.dividends.slice(-1)[0] || {}).date || ''), '', FIN_DEFS.div_latest)}
       ${tile('Growth streak', `${fmt(a.growth_streak_years, 0)}y`,
-    a.last_cut_year ? `last cut ${a.last_cut_year}` : 'no cut on record')}
+    a.last_cut_year ? `last cut ${a.last_cut_year}` : 'no cut on record', '', FIN_DEFS.div_streak)}
       ${tile('Annual total', money((a.annual.slice(-1)[0] || {}).total, 2),
-    `${(a.annual.slice(-1)[0] || {}).year || ''}. Last complete year`)}
-      ${tile('Payments on record', fmt(a.dividends.length, 0), 'most recent 24 shown')}
+    `${(a.annual.slice(-1)[0] || {}).year || ''}. Last complete year`, '', FIN_DEFS.div_annual)}
+      ${/* Every payment the source holds. It was the length of the list shown,
+          which stops at 24, so a company paying since the 1960s had "24". */''}
+      ${tile('Payments on record', fmt(Number.isFinite(a.payment_count) ? a.payment_count
+    : a.dividends.length, 0), `most recent ${fmt(a.dividends.length, 0)} shown`, '', FIN_DEFS.div_count)}
     </div>
     <table class="data">
-      <thead><tr><th>Year</th><th>Total paid</th><th>Change</th></tr></thead>
+      <thead><tr><th>Year</th><th>${statLabel('Total paid', FIN_DEFS.div_year_total)}</th>
+        <th>${statLabel('Change', FIN_DEFS.div_year_change)}</th></tr></thead>
       <tbody>${(a.annual || []).slice().reverse().map((row, i, arr) => {
     const prev = arr[i + 1];
     const chg = prev && prev.total ? ((row.total - prev.total) / prev.total) * 100 : null;
@@ -24080,7 +24194,7 @@ function renderExtras(x) {
   const splitBlock = (a.splits || []).length ? `
     <h3 style="margin-top:var(--space-4)">${hg('Splits')}</h3>
     <table class="data">
-      <thead><tr><th>Date</th><th>Ratio</th></tr></thead>
+      <thead><tr><th>Date</th><th>${statLabel('Ratio', FIN_DEFS.split_ratio)}</th></tr></thead>
       <tbody>${a.splits.slice().reverse().map((s) =>
     `<tr><td class="name">${esc(s.date)}</td><td>${fmt(s.ratio, 2)}-for-1</td></tr>`).join('')}</tbody>
     </table>` : '';
@@ -24088,13 +24202,14 @@ function renderExtras(x) {
   const svBlock = (sv.rows || []).length ? `
     <h3 style="margin-top:var(--space-4)">${hg('Off-exchange short volume')}</h3>
     <div class="grid c4" style="margin-bottom:var(--space-2)">
-      ${tile('Latest', fmt(sv.latest_pct, 1) + '%', esc((sv.rows[0] || {}).date || ''))}
+      ${tile('Latest', fmt(sv.latest_pct, 1) + '%', esc((sv.rows[0] || {}).date || ''), '',
+    FIN_DEFS.sv_latest)}
       ${tile(`${fmt(sv.days, 0)}-day average`, fmt(sv.average_pct, 1) + '%',
-    'this symbol’s own baseline')}
+    'this symbol’s own baseline', '', FIN_DEFS.sv_average)}
       ${tile('vs its average',
     fmtPct((sv.latest_pct || 0) - (sv.average_pct || 0), 1),
-    'percentage points', signClass((sv.average_pct || 0) - (sv.latest_pct || 0)))}
-      ${tile('Days on record', fmt(sv.days, 0), 'FINRA publishes daily')}
+    'percentage points', signClass((sv.average_pct || 0) - (sv.latest_pct || 0)), FIN_DEFS.sv_vs)}
+      ${tile('Days on record', fmt(sv.days, 0), 'FINRA publishes daily', '', FIN_DEFS.sv_days)}
     </div>
     <p class="caveat"><strong>Read this against its own average, not against 50%.</strong>
       ${esc(sv.caveat || '')}</p>` : `
@@ -24122,7 +24237,8 @@ function renderExtras(x) {
       ${['5d', '20d', '60d', '120d', '252d'].map((k) => tile(k.replace('d', ' days'),
     (rel.excess || {})[k] === null || (rel.excess || {})[k] === undefined
       ? '—' : fmtPct(rel.excess[k], 1),
-    'excess return', signClass((rel.excess || {})[k]))).join('')}
+    'excess return', signClass((rel.excess || {})[k]),
+    excessReturnDef(parseInt(k, 10), rel.benchmark))).join('')}
     </div>
     <div id="chart-relative" class="chart-host"></div>
     <p class="caveat">${esc(rel.note || '')}</p>`;
@@ -24256,15 +24372,36 @@ async function loadRelPerf(force) {
   revealPanels(h);
 }
 
+/* The request on its way, so a second caller waits for it.
+ *
+ * loadSwing starts this as soon as a stock lands. Opening Financials while it
+ * was still in flight met the cache guard below and returned at once: the tab
+ * painted before the data existed and was never repainted, so "Corporate
+ * actions & flow" was missing, or showed the previous stock's dividends under
+ * this one's name, since STATE.extras still held them. Seen checking the
+ * Financials definitions in a browser on 2026-10-06. */
+let extrasInFlight = null;
+
 async function loadExtras(force) {
   const sym = STATE.ticker;
   if (!sym) return;
+  if (!force && extrasInFlight && extrasInFlight.sym === sym) return extrasInFlight.promise;
   if (STATE.extrasFor === sym && !force) return;
   STATE.extrasFor = sym;
+  const promise = (async () => {
+    try {
+      const data = await getJSON(`/api/extras/${encodeURIComponent(sym)}`);
+      // A reply for a stock the reader has left is not this stock's.
+      if (STATE.extrasFor === sym) STATE.extras = data;
+    } catch (err) {
+      if (STATE.extrasFor === sym) STATE.extras = { error: err.message, ticker: sym };
+    }
+  })();
+  extrasInFlight = { sym, promise };
   try {
-    STATE.extras = await getJSON(`/api/extras/${encodeURIComponent(sym)}`);
-  } catch (err) {
-    STATE.extras = { error: err.message };
+    await promise;
+  } finally {
+    if (extrasInFlight && extrasInFlight.promise === promise) extrasInFlight = null;
   }
   /* No swing branch any more: `#extras-host` was removed from that tab, and a
      refresh that re-rendered into a host which no longer exists is how a
@@ -24272,8 +24409,14 @@ async function loadExtras(force) {
      branch in loadSecurityFacet. */
 }
 
+/* The extras for the stock on screen, or none: never the last stock's. */
+function extrasForTicker() {
+  const x = STATE.extras;
+  return x && (!x.ticker || x.ticker === STATE.ticker) ? x : null;
+}
+
 function mountRelativeChart() {
-  const rel = (STATE.extras || {}).relative;
+  const rel = (extrasForTicker() || {}).relative;
   if (!rel || rel.error || !(rel.ratio || []).length) return;
   mount('chart-relative', (w) => lineChart({
     width: w,

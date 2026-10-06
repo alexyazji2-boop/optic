@@ -117,6 +117,8 @@ def corporate_actions(provider, ticker: str) -> Dict[str, Any]:
             "annual": [{"year": y, "total": _f(v, 4)} for y, v in complete[-12:]],
             "growth_streak_years": streak,
             "last_cut_year": cut or None,
+            # Every payment the source holds; `dividends` is the latest 24.
+            "payment_count": int(len(divs)) if divs is not None else 0,
             "pays_dividend": bool(div_rows),
             "note": ("Growth streak counts consecutive years the annual total rose, "
                      "using complete calendar years only. A partial current year "

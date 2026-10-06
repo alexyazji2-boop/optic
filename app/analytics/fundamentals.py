@@ -52,11 +52,17 @@ def _pick_row(block: Optional[Dict[str, Any]], key: str) -> Optional[List[Option
 
 
 def _growth(values: Optional[List[Optional[float]]]) -> Optional[float]:
-    """Period-over-period growth. yfinance returns newest-first columns."""
+    """Period-over-period growth. yfinance returns newest-first columns.
+
+    None from a base at or below zero. Growth from a loss has no meaningful
+    percentage, and the arithmetic gives the wrong sign: a loss of 100 turning
+    into a profit of 50 came out as -150%, "net income fell 150%", and a loss
+    narrowing from 100 to 50 as a 50% fall.
+    """
     if not values or len(values) < 2:
         return None
     current, prior = values[0], values[1]
-    if current is None or prior is None or prior == 0:
+    if current is None or prior is None or prior <= 0:
         return None
     return _f((current / prior - 1.0) * 100.0, 2)
 
@@ -290,7 +296,10 @@ def analyse_ownership(insiders: Dict[str, Any], institutions: Dict[str, Any]) ->
     summary = (insiders or {}).get("summary_6m") or {}
     trades = (insiders or {}).get("transactions") or []
     breakdown = (institutions or {}).get("breakdown") or {}
-    holders = (institutions or {}).get("top_holders") or {}
+    # A list, empty or not. `or {}` turned an empty list into a dict, the page
+    # called .slice on it, and the whole Financials tab rendered blank for any
+    # stock whose holders call came back empty (KO, locally, 2026-10-06).
+    holders = (institutions or {}).get("top_holders") or []
 
     def find(*needles) -> Optional[Dict[str, Any]]:
         for key, value in summary.items():

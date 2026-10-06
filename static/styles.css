@@ -11630,7 +11630,21 @@ body.cp-open { overflow: hidden; }
   color: var(--ink-2);
   font-size: var(--t-small);
   line-height: 1.5;
+  /* Prose wherever it opens: a table header is right-aligned and nowrap, a
+     tile is centred, a figure is bold and tabular, and none of that suits a
+     paragraph. */
+  text-align: left;
+  white-space: normal;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+  font-variant-numeric: normal;
 }
+/* After the figure in a two-column list, across both columns. `.kv dd` would
+   otherwise right-align it as a figure. */
+.kv > .gloss-inline { grid-column: 1 / -1; text-align: left; font-variant-numeric: normal; }
+/* In a table cell, wide enough to read and not so wide it takes the table. */
+table.data .gloss-inline { min-width: 12rem; max-width: 20rem; }
 
 /* ---------------------------------------------------- the knowledge selector
  *
