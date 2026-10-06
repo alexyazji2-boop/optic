@@ -17080,6 +17080,9 @@ table.data.ss-table tr.ss-row > td:nth-child(6) { white-space: normal; min-width
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  /* Its own width: left at 50% leaves a fixed box only half the viewport to
+   * shrink into, which wrapped the line onto five rows. */
+  width: max-content;
   max-width: min(40rem, calc(100vw - 2 * var(--space-3)));
   padding: var(--space-2) var(--space-3);
   border-radius: var(--r-md);

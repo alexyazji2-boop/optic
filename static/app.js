@@ -1799,8 +1799,7 @@ function paintOriginBanner(state) {
   // one of them ends. The guess is the common case and is worded as one.
   const why = minutes >= 2
     ? `It has not answered for ${minutes} minutes.`
-    : `It is not answering, most likely because it is restarting for an update,
-       which usually takes under a minute.`;
+    : `It is most likely restarting for an update, which usually takes under a minute.`;
   // Asked on every check, but only rewritten when the words change, so a
   // screen reader is not handed the same sentence every few seconds.
   if (bar.dataset.why !== why) {
@@ -4150,13 +4149,16 @@ function renderHome() {
  * asking twice costs twice, and any future caller would have made it four. */
 let homeDataInFlight = null;
 let homeDataAt = 0;
+// How long a payload is handed back rather than fetched again. Named because
+// the refresh tick asks it too: see tickAutoRefresh.
+const HOME_REUSE_MS = 5000;
 
 /** The /api/home payload, fetched at most once per burst. */
 function homeData() {
   // Fresh enough to reuse. Three callers fire inside one second at boot and the
   // payload cannot have changed between them; the 20-second refresh tick is
   // well outside this and still gets its own fetch.
-  if (STATE.home && Date.now() - homeDataAt < 5000) return Promise.resolve(STATE.home);
+  if (STATE.home && Date.now() - homeDataAt < HOME_REUSE_MS) return Promise.resolve(STATE.home);
   if (homeDataInFlight) return homeDataInFlight;
   homeDataInFlight = getJSON('/api/home')
     .then((d) => { STATE.home = d; homeDataAt = Date.now(); return d; })
@@ -35805,8 +35807,15 @@ async function tickAutoRefresh() {
   const before = refreshTarget(view);
   let attempted = true;
   try {
-    if (view === 'home') await loadHomeMarket({ silent: true });
-    else if (view === 'overview' && STATE.swing) {
+    if (view === 'home') {
+      // Fetched moments ago by another caller, which the catch-up tick on coming
+      // back to the tab can land just after. homeData would hand that payload
+      // back, the check below would read the unchanged payload as a refresh
+      // that failed, and the chip said "Refresh failed" over data seconds old.
+      // There is nothing newer to fetch, so this is not a refresh at all.
+      if (STATE.home && Date.now() - homeDataAt < HOME_REUSE_MS) attempted = false;
+      else await loadHomeMarket({ silent: true });
+    } else if (view === 'overview' && STATE.swing) {
       await loadSecurityFacet('overview', true, { silent: true });
     } else if (view === 'swing' && STATE.swing) await loadSwing(true, { silent: true });
     else if (view === 'market' && STATE.market) await loadMarket(true, { silent: true });

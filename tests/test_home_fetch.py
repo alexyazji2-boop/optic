@@ -96,9 +96,12 @@ def test_home_data_reuse_window_is_shorter_than_the_refresh_tick():
     clear of the 20-second auto-refresh, or the refresh would hand back the
     payload it was firing to replace."""
     fn = body_of("homeData")
-    window = re.search(r"Date\.now\(\)\s*-\s*homeDataAt\s*<\s*(\d+)", fn)
+    window = re.search(r"Date\.now\(\)\s*-\s*homeDataAt\s*<\s*(\d+|HOME_REUSE_MS)", fn)
     assert window, "no freshness comparison found"
-    ms = int(window.group(1))
+    value = window.group(1)
+    if not value.isdigit():      # named, because the refresh tick asks it too
+        value = re.search(r"const HOME_REUSE_MS = (\d+);", CODE).group(1)
+    ms = int(value)
     assert 1000 <= ms < 20000, ms
 
 

@@ -97,6 +97,7 @@ def run_js(scenario):
         "ORIGIN_DOWN_RE",
         "swingRequestId", "swingLoading", "swingInFlight", "chartRequestId",
         "SESSION_LABEL", "AUTO_REFRESH_VIEWS", "autoRefreshPending", "REFRESH_HEALTH", "originGate",
+        "homeDataAt", "HOME_REUSE_MS",
         # liveIndicatorHTML asks whether the loaded name has an overnight print.
         "TICKER_VIEWS"])
     loaders = "\n".join(function(name) for name in [
@@ -208,6 +209,24 @@ def test_a_failed_refresh_is_said_on_the_chip_and_a_good_one_clears_it():
       pending[1].resolve({ticker: 'AAPL', revision: 2}); await tick;
       chip = liveIndicatorHTML();
       assert(chip.includes('refreshing every 20s'), 'a good refresh did not clear it: ' + chip);
+    """)
+
+
+def test_a_home_payload_seconds_old_is_not_a_failed_refresh():
+    """Reproduced in the browser: a tick within five seconds of another Home
+    fetch (the catch-up tick on coming back to the tab) got the reused payload,
+    the unchanged object read as a refresh that failed, and the chip said
+    "Refresh failed · showing the last data loaded" over data seconds old."""
+    run_js("""
+      STATE.view = 'home'; STATE.home = {fetched: 'a moment ago'};
+      homeDataAt = Date.now() - 2000;
+      await tickAutoRefresh();
+      assert(refreshed.length === 0, 'fetched again for nothing');
+      assert(!REFRESH_HEALTH.home, 'counted: ' + JSON.stringify(REFRESH_HEALTH.home));
+      assert(!liveIndicatorHTML().includes('refresh failed'), liveIndicatorHTML());
+      homeDataAt = Date.now() - 25000;
+      await tickAutoRefresh();
+      assert(refreshed.join() === 'home', 'an old payload is refreshed');
     """)
 
 
