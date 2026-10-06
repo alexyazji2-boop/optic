@@ -803,6 +803,8 @@ class YFinanceProvider(MarketDataProvider):
                 "change_pct": change_pct,
                 "day_high": _f(info.get("regularMarketDayHigh")),
                 "day_low": _f(info.get("regularMarketDayLow")),
+                # The session's opening print, for the key statistics.
+                "open": _f(info.get("regularMarketOpen") or info.get("open")),
                 # Extended-hours trade. This is where an earnings reaction first
                 # shows up — a company can report after the close and be down 6%
                 # before the next session opens — so it can't be left out just

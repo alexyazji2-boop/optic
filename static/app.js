@@ -11650,7 +11650,8 @@ function renderSwing(d) {
    * which is the part that is not duplicated. Every other facet (news,
    * financials, overview, earnings, long) has no px-head and keeps the full
    * header, so nothing else changes. */
-  views.swing.innerHTML = securityHeader('swing', { compact: true }) + html;
+  views.swing.innerHTML = securityHeader('swing', { compact: true })
+    + keyStatsHTML(d.quote, { view: 'swing', short: (d.company || {}).short_interest }) + html;
   orderAssetPageForPhone();
 
   // ---- charts
@@ -12576,22 +12577,14 @@ function securityHeader(view, opts = {}) {
   // The full payload's quote once it has landed, and the quick one before it
   // (see loadSecurityFacet). Never another symbol's: a payload still held for
   // the previous name must not lend its price to this one.
-  const swingQ = STATE.swing && (!STATE.swing.ticker || STATE.swing.ticker === sym)
-    ? STATE.swing.quote : null;
-  const quick = STATE.quickQuote && STATE.quickQuote.ticker === sym ? STATE.quickQuote.quote : null;
   /* Field by field, not object by object. The full payload can land with a
    * null price -- measured on NVDA after hours, when one Yahoo leg came back
    * empty -- and preferring it whole dropped the quick quote's name, change
    * and price for the session close, or for nothing before the session
    * payload had landed. A blank field defers to the quick quote; a filled
-   * one wins. Never another symbol's: both sources are checked against sym. */
-  const q = {};
-  if (sym === STATE.ticker) {
-    Object.assign(q, quick || {});
-    Object.entries(swingQ || {}).forEach(([k, v]) => {
-      if (v !== null && v !== undefined && v !== '') q[k] = v;
-    });
-  }
+   * one wins. Never another symbol's: both sources are checked against sym
+   * (facetQuote, which the key statistics read too). */
+  const q = sym === STATE.ticker ? facetQuote(sym) : {};
   /* The session strip's prices, for whatever the facet's quote lacks. The
    * strip used to print its own "At the close" figure on Options, Investing
    * and Earnings, and on two of those it was the only place the day's change
@@ -12999,6 +12992,7 @@ function renderNewsView() {
   const news = d.news || {};
   const arts = news.articles || [];
   views.news.innerHTML = `${securityHeader('news')}
+  ${keyStatsHTML(facetQuote(STATE.ticker || ''), { view: 'news', short: facetShort(STATE.ticker || '') })}
   <div class="panel">
     <h2>${hg('News & catalysts')}</h2>
     <p class="sub">${toneChip(news.overall_tone)} net sentiment ${
@@ -13575,6 +13569,7 @@ function renderFinancialsView(force) {
   const d = STATE.swing || {};
   const co = d.company;
   views.financials.innerHTML = `${securityHeader('financials')}
+    ${keyStatsHTML(facetQuote(STATE.ticker || ''), { view: 'financials', short: facetShort(STATE.ticker || '') })}
     ${co ? renderFinancialsLead(co) + renderCompany(co)
     : '<div class="panel"><h2>Financials</h2><div class="callout">No company data '
       + 'for this ticker. Funds, indices and most ADRs do not file statements.'
@@ -13658,35 +13653,125 @@ function ovInvestingCard() {
  * the price header, the Investing tab and the Financials tab. They are here as
  * a plain list of label and figure, first thing under the stock's name. A
  * figure the feed does not carry is left out rather than shown as a dash: an
- * ETF has no P/E, and eight dashes would read as a broken panel. */
-function keyStatsHTML(q) {
-  if (!q || q.price === null || q.price === undefined) return '';
+ * ETF has no P/E, and eight dashes would read as a broken panel.
+ *
+ * And on the other tabs, each with the figures that serve it: asked for with a
+ * broker's "Key statistics" panel, "add the applicable info to the tabs as
+ * well". Not Overview's whole list on every tab, which is what took the trend
+ * stage back off them (see securityHeader). Short inventory and borrow rate
+ * are a broker's own figures and no feed here carries either, so the short
+ * side is the exchange-reported short interest, dated by its settlement. */
+const KEY_STATS_FOR = {
+  overview: ['market_cap', 'pe_trailing', 'pe_forward', 'eps_trailing', 'eps_forward',
+    'dividend_yield', 'open', 'day_high', 'day_low', 'volume', 'avg_volume', 'high_52',
+    'low_52', 'beta', 'short_float', 'days_to_cover', 'profit_margin', 'revenue_growth'],
+  // Price action: the session's prints and the year's extremes.
+  chart: ['open', 'day_high', 'day_low', 'volume', 'avg_volume', 'high_52', 'low_52'],
+  // What an options trade leans on besides the chain: how much trades, how
+  // much it moves with the market, and how crowded the short side is.
+  swing: ['volume', 'avg_volume', 'day_high', 'day_low', 'beta', 'short_float', 'days_to_cover'],
+  long: ['market_cap', 'pe_trailing', 'pe_forward', 'dividend_yield', 'high_52', 'low_52', 'beta'],
+  earnings: ['pe_trailing', 'pe_forward', 'eps_trailing', 'eps_forward', 'market_cap'],
+  financials: ['market_cap', 'pe_trailing', 'eps_trailing', 'dividend_yield', 'profit_margin',
+    'revenue_growth'],
+  // A story moves the tape first: the session and its volume against usual.
+  news: ['open', 'day_high', 'day_low', 'volume', 'avg_volume'],
+};
+
+function keyStatRows(q, short) {
   const has = (v) => v !== null && v !== undefined && Number.isFinite(Number(v));
   const money = (v) => (Math.abs(v) >= 1e6 ? '$' + fmtCompact(v, 2) : usd(v));
-  const rows = [
-    ['Market cap', has(q.market_cap) ? money(q.market_cap) : null],
-    ['P/E (trailing)', has(q.trailing_pe) && q.trailing_pe > 0 ? fmt(q.trailing_pe, 1) : null],
-    ['P/E (forward)', has(q.forward_pe) && q.forward_pe > 0 ? fmt(q.forward_pe, 1) : null],
-    ['EPS (trailing)', has(q.trailing_eps) ? usd(q.trailing_eps) : null],
-    ['EPS (forward)', has(q.forward_eps) ? usd(q.forward_eps) : null],
-    ['Dividend yield', has(q.dividend_yield) && q.dividend_yield > 0
+  // "Today" only while it is: before the open and overnight the day's figures
+  // are the last session's.
+  const day = ['regular', 'after'].includes(marketSessionET()) ? 'today' : 'last session';
+  const si = short && short.available !== false ? short : {};
+  const settled = si.settlement_date ? `, as of ${shortDate(si.settlement_date)}` : '';
+  return {
+    market_cap: ['Market cap', has(q.market_cap) ? money(q.market_cap) : null],
+    pe_trailing: ['P/E (trailing)', has(q.trailing_pe) && q.trailing_pe > 0 ? fmt(q.trailing_pe, 1) : null],
+    pe_forward: ['P/E (forward)', has(q.forward_pe) && q.forward_pe > 0 ? fmt(q.forward_pe, 1) : null],
+    eps_trailing: ['EPS (trailing)', has(q.trailing_eps) ? usd(q.trailing_eps) : null],
+    eps_forward: ['EPS (forward)', has(q.forward_eps) ? usd(q.forward_eps) : null],
+    dividend_yield: ['Dividend yield', has(q.dividend_yield) && q.dividend_yield > 0
       ? fmt(q.dividend_yield * 100, 2) + '%' : null],
-    ['52-week range', has(q.fifty_two_low) && has(q.fifty_two_high)
-      ? `${usd(q.fifty_two_low)} to ${usd(q.fifty_two_high)}` : null],
-    ['Day range', has(q.day_low) && has(q.day_high)
-      ? `${usd(q.day_low)} to ${usd(q.day_high)}` : null],
-    ['Beta', has(q.beta) ? fmt(q.beta, 2) : null],
-    ['Volume', has(q.volume) ? fmtCompact(q.volume, 1) : null],
-    ['Average volume', has(q.avg_volume) ? fmtCompact(q.avg_volume, 1) : null],
-    ['Profit margin', has(q.profit_margin) ? fmt(q.profit_margin * 100, 1) + '%' : null],
-    ['Revenue growth', has(q.revenue_growth) ? fmtPct(q.revenue_growth * 100, 1) : null],
-  ].filter((r) => r[1] !== null);
+    open: ['Open price', has(q.open) ? usd(q.open) : null],
+    day_high: [`High ${day}`, has(q.day_high) ? usd(q.day_high) : null],
+    day_low: [`Low ${day}`, has(q.day_low) ? usd(q.day_low) : null],
+    volume: ['Volume', has(q.volume) ? fmtCompact(q.volume, 2) : null],
+    avg_volume: ['Average volume', has(q.avg_volume) ? fmtCompact(q.avg_volume, 2) : null],
+    high_52: ['52-week high', has(q.fifty_two_high) ? usd(q.fifty_two_high) : null],
+    low_52: ['52-week low', has(q.fifty_two_low) ? usd(q.fifty_two_low) : null],
+    beta: ['Beta', has(q.beta) ? fmt(q.beta, 2) : null],
+    // A fraction of the float, as the Financials tile reads it.
+    short_float: ['Short interest', has(si.percent_of_float)
+      ? `${fmt(si.percent_of_float * 100, 2)}% of float${settled}` : null],
+    days_to_cover: ['Days to cover', has(si.days_to_cover) ? fmt(si.days_to_cover, 1) : null],
+    profit_margin: ['Profit margin', has(q.profit_margin) ? fmt(q.profit_margin * 100, 1) + '%' : null],
+    revenue_growth: ['Revenue growth', has(q.revenue_growth) ? fmtPct(q.revenue_growth * 100, 1) : null],
+  };
+}
+
+/* `opts.view` picks the tab's figures (KEY_STATS_FOR), `opts.short` is the
+ * payload's short-interest block, and `opts.bare` drops the panel around the
+ * list for a host that has its own title (the Charting dock). */
+function keyStatsHTML(q, opts = {}) {
+  if (!q || q.price === null || q.price === undefined) return '';
+  const all = keyStatRows(q, opts.short);
+  const rows = (KEY_STATS_FOR[opts.view || 'overview'] || KEY_STATS_FOR.overview)
+    .map((id) => all[id]).filter((r) => r && r[1] !== null);
   if (!rows.length) return '';
+  const list = `<dl class="ks-grid">${rows.map(([k, v]) => `<div class="ks-row"><dt>${
+    esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>`;
+  if (opts.bare) return list;
   return `<section class="panel ks-panel" data-fixed="1" aria-label="Key stats">
     <h2>${hg('Key stats')}</h2>
-    <dl class="ks-grid">${rows.map(([k, v]) => `<div class="ks-row"><dt>${
-    esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
+    ${list}
   </section>`;
+}
+
+/* The quote a tab shows for `sym`: the quick quote, overlaid field by field
+ * with the full payload's where that has a value. The same merge the header
+ * makes (securityHeader), so the two never disagree. */
+function facetQuote(sym) {
+  const swingQ = STATE.swing && (!STATE.swing.ticker || STATE.swing.ticker === sym)
+    ? STATE.swing.quote : null;
+  const quick = STATE.quickQuote && STATE.quickQuote.ticker === sym ? STATE.quickQuote.quote : null;
+  const q = {};
+  Object.assign(q, quick || {});
+  Object.entries(swingQ || {}).forEach(([k, v]) => {
+    if (v !== null && v !== undefined && v !== '') q[k] = v;
+  });
+  return q;
+}
+
+function facetShort(sym) {
+  return STATE.swing && STATE.swing.ticker === sym
+    ? ((STATE.swing.company || {}).short_interest || null) : null;
+}
+
+const KEY_STATS_ASKED = new Set();
+
+/* For a tab that loads without the ticker payload (Investing, Earnings): its
+ * figures from whatever quote is here, and when none is, one ask for the
+ * quick quote (the same cached call the header uses) to fill them in. */
+function keyStatsHost(view) {
+  const sym = STATE.ticker || '';
+  const html = keyStatsHTML(facetQuote(sym), { view, short: facetShort(sym) });
+  if (!html && sym && !KEY_STATS_ASKED.has(sym) && typeof fetch === 'function') {
+    KEY_STATS_ASKED.add(sym);
+    fetch(`/api/quote/${encodeURIComponent(sym)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((r) => {
+        if (!r || r.available !== true || STATE.ticker !== sym) return;
+        if (!(STATE.swing && STATE.swing.ticker === sym)) STATE.quickQuote = { ticker: sym, quote: r.quote };
+        const host = document.getElementById(`ks-host-${view}`);
+        if (host && STATE.view === view) {
+          host.innerHTML = keyStatsHTML(facetQuote(sym), { view, short: facetShort(sym) });
+        }
+      })
+      .catch(() => { /* left out; the tab's own load reports its failures */ });
+  }
+  return `<div id="ks-host-${view}" class="span-all">${html}</div>`;
 }
 
 function renderOverviewView() {
@@ -13712,7 +13797,7 @@ function renderOverviewView() {
 
   views.overview.innerHTML = `${securityHeader('overview')}
     ${renderOpticPulse(d)}
-    ${keyStatsHTML(q)}
+    ${keyStatsHTML(q, { view: 'overview', short: (d.company || {}).short_interest })}
     <div class="panel">
       <h2>${hg('The rest of this ticker')}</h2>
       <p class="sub">One reading from each facet, so the row says what is there
@@ -20085,6 +20170,7 @@ const WS_WIDGETS = [
   { id: 'checklist', label: 'Checklist', icon: '&#10003;' }, // check
   { id: 'options', label: 'Options', icon: '&#9671;' },      // lozenge
   { id: 'levels', label: 'Key levels', icon: '&#9776;' },    // trigram
+  { id: 'stats', label: 'Stats', icon: '&#8801;' },          // identical-to, three bars
   { id: 'patterns', label: 'Patterns', icon: '&#9651;' },    // hollow triangle
   { id: 'trading', label: 'Trading', icon: '&#9644;' },      // black rectangle
   { id: 'learn', label: 'Learn', icon: '&#9678;' },          // bullseye
@@ -20418,6 +20504,13 @@ function wsWidgetBody(id) {
   }
 
   if (id === 'alerts') return alertsBody();
+
+  // The session's prints and the year's extremes, for the symbol charted.
+  if (id === 'stats') {
+    return keyStatsHTML((d || {}).quote, { view: 'chart', bare: true,
+      short: ((d || {}).company || {}).short_interest })
+      || none(d ? 'The feed has no statistics for this symbol.' : 'Load a symbol.');
+  }
 
   if (id === 'news') {
     const n = (d || {}).news || {};
@@ -25499,7 +25592,7 @@ function renderEarnings(d) {
    *
    * Reading it the other way round -- numbers, then the reading of them -- is
    * also the right order when the brief does exist. */
-  views.earnings.innerHTML = securityHeader('earnings') + `
+  views.earnings.innerHTML = securityHeader('earnings') + keyStatsHost('earnings') + `
   <div class="panel span2 gap">
     <h2>${hg(reported ? 'Latest result' : 'Next report')} · ${esc(d.ticker || '')}</h2>
     <p class="sub">${gloss(v.headline || '')}</p>
@@ -28411,7 +28504,7 @@ function renderLong(d) {
 
   if (h.error) { views.long.innerHTML = errorHTML(h.error); return; }
 
-  views.long.innerHTML = securityHeader('long') + `
+  views.long.innerHTML = securityHeader('long') + keyStatsHost('long') + `
   <div class="grid c2 gap">
     <div class="panel">
       <h2>${hg('Long-term view')} · ${esc(h.ticker)}</h2>
