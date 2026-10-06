@@ -125,14 +125,28 @@
     return STATE;
   }
 
+  var unknownRetries = 0;
+
   async function load(force) {
     if (loaded && !force) return loaded;
-    loaded = api('/api/auth/me').then(absorb).catch(function (err) {
-      // A failed state read must not leave the app in `loading` forever. Guest
-      // is the safe answer: it shows the open terminal, which is what a visitor
-      // gets anyway.
-      STATE.status = 'guest';
+    loaded = api('/api/auth/me').then(function (payload) {
+      unknownRetries = 0;
+      STATE.error = null;
+      return absorb(payload);
+    }).catch(function (err) {
+      /* A failed state read must not leave the app in `loading` forever, and
+       * it is not an answer either. It used to set `guest`, and the page took
+       * that for a sign-out: the device session put the account's things away
+       * and reloaded into the guest's, and the next good read reloaded back.
+       * `unknown` shows the open terminal without moving anybody's data, and
+       * the read is tried again a few times on its own. */
+      STATE.status = 'unknown';
+      STATE.error = err && err.message ? err.message : 'The connection dropped.';
       notify();
+      if (unknownRetries < 3) {
+        unknownRetries += 1;
+        setTimeout(function () { refresh(); }, 15000 * unknownRetries);
+      }
       return STATE;
     });
     return loaded;
@@ -1028,6 +1042,13 @@
       return;
     }
 
+    if (STATE.status === 'unknown') {
+      host.innerHTML = '<button type="button" class="btn acct-signin" data-auth-recheck title="'
+        + esc('Could not check your sign-in: ' + (STATE.error || 'no answer')) + '">'
+        + 'Sign-in check failed, retry</button>';
+      return;
+    }
+
     var user = STATE.user || {};
     var avatar = user.avatar_url
       ? '<img class="acct-face" src="' + esc(user.avatar_url) + '" alt="">'
@@ -1085,6 +1106,11 @@
       return;
     }
 
+    if (target.closest('[data-auth-recheck]')) {
+      refresh();
+      return;
+    }
+
     if (target.closest('#account-btn')) {
       menuOpen = !menuOpen;
       renderAccountButton();
@@ -1124,7 +1150,16 @@
   });
 
   async function signOut() {
-    try { await api('/api/auth/logout', { method: 'POST' }); } catch (err) { /* going anyway */ }
+    /* The session is an httpOnly cookie, so only the server can end it. A
+     * logout that did not reach it leaves the session valid, and saying
+     * "Signed out" then was untrue: the next load was signed in again. */
+    try {
+      await api('/api/auth/logout', { method: 'POST' });
+    } catch (err) {
+      toast('Could not sign out (' + err.message + '). You are still signed in on this device; '
+        + 'try again in a moment.', 'bad');
+      return;
+    }
     absorb({ authenticated: false, providers: STATE.providers, mail: STATE.mail,
       password_policy: STATE.policy });
     toast('Signed out. The terminal stays open.');

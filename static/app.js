@@ -26227,7 +26227,12 @@ async function accountLoad() {
       // No list on the account yet. Bring this browser's list across rather
       // than starting them at empty: that list is real work, and it is their
       // own data moving into their own account, not two accounts merging.
-      const local = localWatchList();
+      // Only a list this browser actually saved: with nothing stored,
+      // localWatchList() is the starter set, and adopting it put SPY, QQQ, NVDA
+      // and AMD into every new account as the reader's own choice.
+      let stored = false;
+      try { stored = localStorage.getItem(WATCH_KEY) !== null; } catch (e) { stored = false; }
+      const local = stored ? localWatchList() : [];
       if (local.length) {
         const adopted = await authApi('/api/watchlists/adopt', {
           method: 'POST', body: { symbols: local },
@@ -26427,6 +26432,12 @@ function accountPanels() {
   if (state.status === 'loading') {
     return `<div class="panel span2"><h2>${hg('Account')}</h2>
       <p class="sub">Checking...</p></div>`;
+  }
+  if (state.status === 'unknown') {
+    return `<div class="panel span2"><h2>${hg('Account')}</h2>
+      <p class="sub">Your sign-in could not be checked just now (${esc(state.error || 'no answer')}).
+        Nothing on this device has changed, and it is tried again on its own.</p>
+      <button type="button" class="btn" data-auth-recheck>Try now</button></div>`;
   }
   if (state.status !== 'user') return accountGuestPanel();
 
@@ -26880,7 +26891,9 @@ if (window.OpticAuth) {
   };
 
   window.OpticAuth.on((state) => {
-    if (state.status === 'loading') return;
+    // `unknown` is a sign-in check that failed, not an answer: nothing is
+    // swapped or loaded until a read succeeds (static/auth.js, load).
+    if (state.status === 'loading' || state.status === 'unknown') return;
     // Before accountLoad, which would otherwise adopt the last person's local
     // watchlist and theses into this account.
     if (keepDeviceSession(state)) return;
