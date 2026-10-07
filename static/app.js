@@ -6794,14 +6794,19 @@ function renderWatchHits() {
        result and then wonders why nothing accumulates; this is the one sentence
        that explains it, and it is the honest reason to make an account rather
        than a wall in front of the terminal. */
+    /* The way to act on it sits beside it. This panel said what an account
+       changes and offered no account, and the panel under it said the same
+       thing again, so a guest read the reason twice and the way in nowhere. */
     return `<section class="panel" aria-label="Watches that fired">
       <div class="wv-head"><div>
         <h2>What fired while you were away</h2>
-        <p class="wv-sub">Optic checks watches on its own schedule for people
-          with an account, and keeps what fired here until you read it. A guest's
-          watches live in this browser, so they can only be checked while it is
-          open.</p>
-      </div></div>
+        <p class="wv-sub">Nothing is kept here for a guest: a guest's watches
+          live in this browser, so there is no account to keep a hit against.
+          With a free account, Optic checks them on its own schedule, whether or
+          not a page is open, and keeps what fired here until you read it.</p>
+      </div>
+      <button type="button" class="btn" data-auth-open="signup">Create an account</button>
+      </div>
     </section>`;
   }
 
@@ -6912,8 +6917,8 @@ function renderWatchesBlock() {
           press Check, and anything that fires waits for you above. Kept on your
           account. Not sent to you: nothing here can reach a phone or a mailbox.`
     : `<strong>Checked while Optic is open</strong>, because a watch kept in this
-          browser is only reachable from this browser. Make an account and Optic
-          checks them on its own schedule instead.`}</p>
+          browser is only reachable from this browser. Not sent to you: nothing
+          here can reach a phone or a mailbox.`}</p>
       </div>
       ${symbols.length ? `<button type="button" class="btn" data-watch-check-all
         ${watchChecking ? 'disabled' : ''}>${watchChecking
