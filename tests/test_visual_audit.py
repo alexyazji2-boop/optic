@@ -561,9 +561,11 @@ def test_a_wide_table_scrolls_on_its_own_not_the_panel_around_it():
     import re
     for fn in ("function renderRotation(r) {", "function renderStockMap(sm) {"):
         body = _src(fn)
-        tables = re.findall(r'(.{0,80})<table class="data"', body)
-        assert tables and all('<div class="table-scroll"' in pre for pre in tables), fn
-        assert body.count("<table class=\"data\"") == body.count("</table></div>"), fn
+        tables = re.findall(r'(.{0,80})<table class="(data[^"]*)"', body)
+        assert tables and all('<div class="table-scroll"' in pre for pre, _ in tables), fn
+        # The name stays in view while the figures scroll under it.
+        assert all("sticky-first" in cls for _, cls in tables), fn
+        assert len(tables) == body.count("</table></div>"), fn
 
 
 def test_the_base_rates_line_is_for_a_reader_not_the_operator():

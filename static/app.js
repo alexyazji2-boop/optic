@@ -19561,7 +19561,7 @@ function renderRotation(r) {
     ${/* In a scroller of its own. At 375px the seven columns ran 774px wide and
          the whole panel scrolled sideways with them, prose and chart included,
          and the chart was drawn to the table's width rather than the screen's. */''}
-    <div class="table-scroll" style="margin-top:var(--space-3)"><table class="data" data-defs="rotation">
+    <div class="table-scroll" style="margin-top:var(--space-3)"><table class="data sticky-first" data-defs="rotation">
       <thead><tr><th>Sector</th><th>Quadrant</th><th>Strength</th><th>Momentum</th>
         <th>Δ strength</th><th>Δ momentum</th><th>Moved from</th></tr></thead>
       <tbody>${rows}</tbody>
@@ -25849,7 +25849,7 @@ function renderStockMap(sm) {
       with no earnings.</div>` : ''}
     ${/* Its own scroller, as the rotation table's: a 480px table in a 299px panel
          scrolled the panel, the map and its prose with it. */''}
-    <div class="table-scroll" style="margin-top:var(--space-3)"><table class="data">
+    <div class="table-scroll" style="margin-top:var(--space-3)"><table class="data sticky-first">
       <thead><tr><th>Name</th>
         ${Object.keys(M).map((k) => `<th>${esc(M[k].label)}</th>`).join('')}
       </tr></thead>
