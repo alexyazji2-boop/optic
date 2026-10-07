@@ -15464,11 +15464,11 @@ function renderCatalystMode(c) {
     // The explainer and the archive link belong here too. A quiet week is exactly
     // when a reader wonders what this section is for, and the stored catalysts are
     // still worth reaching.
-    return `<div class="panel span-all">
+    return `<div class="panel span-all" data-sec-label="Catalyst mode">
+      <h2>${hg('Market catalyst')}</h2>
       ${explainer('catalyst-mode', 'Market catalyst mode',
     'When a major release such as CPI or an FOMC decision is driving the market, this '
     + 'section shows what it was and how the tape moved alongside it.', '#catmode-idle')}
-      <h2>${hg('Market catalyst')}</h2>
       <p class="sub" id="catmode-idle">${esc(c.reason || 'No catalyst release right now.')}</p>
       <p class="caveat"><button type="button" class="cat-archive-link"
         data-goto-catalysts>Catalyst archive. Every stored event, searchable</button></p>
@@ -15483,9 +15483,6 @@ function renderCatalystMode(c) {
   </span>`).join('');
 
   return `<div class="panel span-all catmode" data-sec-label="Catalyst mode">
-    ${explainer('catalyst-mode', 'Market catalyst mode',
-    'When a major release such as CPI or an FOMC decision is driving the market, this '
-    + 'section shows what it was and how the tape moved alongside it.', '#catmode-method')}
     <div class="catmode-head">
       <div>
         <span class="catmode-kicker">Market Catalyst Mode</span>
@@ -15494,6 +15491,12 @@ function renderCatalystMode(c) {
       ${r.impact ? `<span class="cal-impact ${r.impact}">${esc(r.impact)} impact</span>` : ''}
     </div>
     <h2 class="catmode-title">${esc(r.title || '')}</h2>
+    ${/* Under the title, so it collapses with what it explains. Above it, the
+         first-visit note sat over a closed panel and described a body that
+         was not on screen. */''}
+    ${explainer('catalyst-mode', 'Market catalyst mode',
+    'When a major release such as CPI or an FOMC decision is driving the market, this '
+    + 'section shows what it was and how the tape moved alongside it.', '#catmode-method')}
     <p class="catmode-when">${esc((r.age || {}).at_et || '')}${
   r.source ? ` · ${esc(r.source)}` : ''}</p>
 
