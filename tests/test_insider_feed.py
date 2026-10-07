@@ -362,7 +362,9 @@ def test_the_wide_table_scrolls_sideways():
     """Eight columns including two dates overflowed the panel and the price
     column was cut off mid-figure."""
     body = APP_JS.split("function renderInsiderFeed(", 1)[1].split("\nasync function ", 1)[0]
-    assert 'class="scroll-y table-scroll"' in body
+    # Still a scrolling table where there is room for one; under 720px of box
+    # it becomes cards (cq-cards, tests/test_insiders_page.py).
+    assert 'class="scroll-y table-scroll cq-cards"' in body
 
 
 @pytest.mark.parametrize("cls", [".ins-t", ".ins-clock", ".ins-role", ".ins-code"])

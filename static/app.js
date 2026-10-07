@@ -22172,7 +22172,7 @@ function wsWidgetBody(id) {
     const acts = STATE.analystActionsFor === sym ? STATE.analystActions : null;
     const latest = acts && acts.available && (acts.rows || []).length
       ? `<h4 class="ws-sub-h">Latest actions</h4>
-        <div class="table-scroll"><table class="data narrow an-table"><tbody>${
+        <div class="table-scroll cq-cards"><table class="data narrow an-table"><tbody>${
   acts.rows.map((r) => analystRowHTML(r, { symbol: false })).join('')}</tbody></table></div>`
       : '';
     return `<table class="data narrow"><tbody>${rows.map(([k, val]) =>
@@ -34408,7 +34408,7 @@ function analystsHTML(d) {
   return `<div class="panel span-all">${head}
     <p class="sub">What each firm did to its rating and its price target. ${esc(lead)}</p>
     ${filters}
-    ${rows.length ? `<div class="table-scroll"><table class="data an-table">
+    ${rows.length ? `<div class="table-scroll cq-cards"><table class="data an-table">
       <thead><tr><th>Date</th><th>Symbol</th><th>Analyst</th><th>Prior target</th>
         <th>Target</th><th>Action</th><th>Rating</th></tr></thead>
       <tbody>${rows.map((r) => analystRowHTML(r)).join('')}</tbody>
@@ -35073,7 +35073,7 @@ function renderContracts() {
     <h2>${hg('Federal contracts')}${company && c.matched ? `<span class="th-plain">
       · ${esc(c.ticker)}</span>` : ''}</h2>
     <p class="sub">${head}</p>
-    ${rows.length ? `<div class="table-scroll"><table class="data ct-table">
+    ${rows.length ? `<div class="table-scroll cq-cards"><table class="data ct-table">
       <thead><tr><th>${company ? 'Award' : 'Recipient'}</th><th>Agency</th>
         <th class="num">Amount</th><th>Started</th><th></th></tr></thead>
       <tbody>${rows.map(contractRow).join('')}</tbody>
@@ -35200,7 +35200,7 @@ function congressResults() {
     <div class="panel">
       <h2>${hg('The filings')}${n > (c.trades || []).length ? `<span class="th-plain">
         · newest ${fmt((c.trades || []).length, 0)} of ${fmt(n, 0)}</span>` : ''}</h2>
-      <div class="scroll-y table-scroll"><table class="data ins-table">
+      <div class="scroll-y table-scroll cq-cards"><table class="data ins-table">
         <thead><tr><th>Member</th><th title="Whose account: the member's own, a spouse's, a joint one or a dependent child's">Owner</th>
           <th>Symbol</th><th>Transaction</th><th>Description</th>
           <th class="num">Amount</th><th>Traded</th><th>Disclosed</th>
@@ -35377,7 +35377,7 @@ function renderInsiderFeed() {
         * caveats off the page, and table-scroll is the repo's own horizontal
         * one — eight columns including two dates overflowed the panel and the
         * price column was cut off mid-figure. */''}
-    ${rows.length ? `<div class="scroll-y table-scroll"><table class="data if-table" data-defs="insider-feed">
+    ${rows.length ? `<div class="scroll-y table-scroll cq-cards"><table class="data if-table" data-defs="insider-feed">
       <thead><tr><th>Filed</th><th>Symbol</th><th>Insider</th><th>Transaction</th>
         <th class="num">Shares</th><th class="num">Price</th><th class="num">Value</th>
         <th>Trade date</th></tr></thead>

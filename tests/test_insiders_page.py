@@ -303,3 +303,18 @@ def test_each_insiders_table_is_a_card_per_row_on_a_phone():
         for cell in cells:
             assert "table.%s td.%s {" % (table, cell) in css, (table, cell)
             assert cell in app, cell
+
+
+def test_the_cards_follow_the_tables_box_not_the_window():
+    """On a 768px tablet the rail leaves these tables 453px and, as tables,
+    they scrolled sideways exactly as on a phone. The layouts are container
+    queries on each table's own wrapper; a full desktop keeps the table."""
+    css = (ROOT / "static/styles.css").read_text()
+    app = (ROOT / "static/app.js").read_text()
+    assert ".cq-cards { container-type: inline-size; }" in css
+    for table in ("an-table", "ins-table", "if-table", "ct-table"):
+        wrapped = re.findall(r'table-scroll cq-cards"><table class="data[^"]*\b%s\b' % table, app)
+        assert wrapped, table
+        block = css[css.index("table.%s thead { display: none; }" % table) - 600:
+                    css.index("table.%s thead { display: none; }" % table)]
+        assert "@container (max-width: 719px) {" in block, table

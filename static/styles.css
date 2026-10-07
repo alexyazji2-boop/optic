@@ -15762,11 +15762,16 @@ body.ws-max[data-view="chart"] main { padding: 0; }
 }
 .an-ticker:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .an-table td { white-space: nowrap; }
+/* Reliability pass: the card layouts below follow the table's own box, not
+   the window. On a 768px tablet the rail leaves these tables 453px, and as
+   tables they scrolled sideways there exactly as on a phone; a full desktop
+   keeps the table. Same reasoning as `#hm-watch, .wv-panel` for the rows. */
+.cq-cards { container-type: inline-size; }
 /* Reliability pass: an action per card on a phone. As a table at 375px the
    page showed the date, the symbol and half the firm's name, and the target,
    the action and the rating, which are what the row is for, sat off to the
    right behind a sideways scroll. */
-@media (max-width: 559px) {
+@container (max-width: 719px) {
   table.an-table thead { display: none; }
   /* The shared table rule's min-width held the cards at 480px in a 299px box. */
   table.an-table { min-width: 0; width: 100%; }
@@ -15805,7 +15810,7 @@ body.ws-max[data-view="chart"] main { padding: 0; }
 /* Reliability pass: a filing per card on a phone. The ten-column table was
    1,088px wide in a 299px box, so a reader saw a member's name and scrolled
    sideways for the symbol, the direction and the amount. */
-@media (max-width: 559px) {
+@container (max-width: 719px) {
   table.ins-table thead { display: none; }
   table.ins-table { min-width: 0; width: 100%; }
   table.ins-table, table.ins-table tbody { display: block; }
@@ -15838,7 +15843,7 @@ body.ws-max[data-view="chart"] main { padding: 0; }
 
 /* The same for a federal award: who and how much on the first line, the
    agency under it, the start date and the link last. 1,116px wide at 375. */
-@media (max-width: 559px) {
+@container (max-width: 719px) {
   table.ct-table thead { display: none; }
   table.ct-table { min-width: 0; width: 100%; }
   table.ct-table, table.ct-table tbody { display: block; }
@@ -15863,7 +15868,7 @@ body.ws-max[data-view="chart"] main { padding: 0; }
 /* And a Form 4: symbol, direction and value first, then who, then the size
    and price, then the trade date, and when it was filed on a line of its own,
    since EDGAR's acceptance time is long. 909px wide at 375. */
-@media (max-width: 559px) {
+@container (max-width: 719px) {
   table.if-table thead { display: none; }
   table.if-table { min-width: 0; width: 100%; }
   table.if-table, table.if-table tbody { display: block; }
