@@ -15943,8 +15943,16 @@ table.sticky-first td:first-child {
   table.ins-table td.ic-lag::before { content: 'Filed after '; color: var(--ink-muted); }
 }
 
+/* Federal awards as a table: the agency wraps, so the table fits its panel
+   at 1440px rather than pushing the date column past the edge, and a start
+   weeks after the award goes under the date. */
+table.ct-table th.ct-text, table.ct-table td.ct-who, table.ct-table td.ct-agency { text-align: left; }
+table.ct-table td.ct-agency { white-space: normal; min-width: 18ch; }
+table.ct-table td.ct-awarded { text-align: left; }
+table.ct-table .ct-later { display: block; color: var(--ink-muted); font-size: var(--t-caption); }
+
 /* The same for a federal award: who and how much on the first line, the
-   agency under it, the start date and the link last. 1,116px wide at 375. */
+   agency under it, the date it was awarded and the link last. 1,116px wide at 375. */
 @container (max-width: 719px) {
   table.ct-table thead { display: none; }
   table.ct-table { min-width: 0; width: 100%; }
@@ -15952,7 +15960,7 @@ table.sticky-first td:first-child {
   table.ct-table tr {
     display: grid;
     grid-template-columns: minmax(0, 1fr) max-content;
-    grid-template-areas: 'who amt' 'agency agency' 'start more';
+    grid-template-areas: 'who amt' 'agency agency' 'awarded more';
     column-gap: var(--space-2);
     row-gap: var(--space-0);
     padding: var(--space-2) 0;
@@ -15962,8 +15970,8 @@ table.sticky-first td:first-child {
   table.ct-table td.ct-who { grid-area: who; }
   table.ct-table td.ct-amt { grid-area: amt; text-align: right; }
   table.ct-table td.ct-agency { grid-area: agency; color: var(--ink-2); }
-  table.ct-table td.ct-start { grid-area: start; color: var(--ink-muted); }
-  table.ct-table td.ct-start::before { content: 'Started '; }
+  table.ct-table td.ct-awarded { grid-area: awarded; color: var(--ink-muted); }
+  table.ct-table td.ct-awarded::before { content: 'Awarded '; }
   table.ct-table td.ins-more { grid-area: more; text-align: right; }
 }
 

@@ -35756,14 +35756,40 @@ function insCongressRow(t) {
  * says plainly when it will not guess; see app/contracts.py.
  */
 
+/* 'Sep 22', or 'Oct 15, 1993' outside this year: a company's largest awards
+ * run back decades, and dayLabel's month and day alone read as this year. */
+function contractDate(iso) {
+  const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return '';
+  const day = `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(m[2]) - 1]} ${Number(m[3])}`;
+  return Number(m[1]) === new Date().getFullYear() ? day : `${day}, ${m[1]}`;
+}
+
+/* Dated by the day the award was signed, which is the order the rows are in.
+ * The work's start is said only when it is two weeks or more after that: the
+ * column read "Started" and held a December 1 start among September's awards,
+ * and a start six days on is not worth a second date in the row. */
+function contractWhen(a) {
+  const signed = contractDate(a.awarded);
+  const day = (iso) => Date.parse(String(iso || '').slice(0, 10) + 'T00:00:00Z');
+  const gap = (day(a.start) - day(a.awarded)) / 86400000;
+  const starts = gap >= 14 ? contractDate(a.start) : '';
+  if (!signed) return a.start ? `<span class="ct-later">work from ${esc(contractDate(a.start))}</span>` : '';
+  return `${esc(signed)}${starts ? `<span class="ct-later">work from ${esc(starts)}</span>` : ''}`;
+}
+
+/* The date leads, because the rows are in its order. It was the fourth
+ * column, after an agency cell that does not wrap ("Department of Homeland
+ * Security · U.S. Customs and Border Protection"), and at 1440px it sat past
+ * the panel's edge with only its header's first letter in view. */
 function contractRow(a) {
   return `<tr>
+    <td class="ct-awarded">${contractWhen(a)}</td>
     <td class="name ct-who">${esc(a.recipient || '')}${a.state
     ? ` <span class="muted">${esc(a.state)}</span>` : ''}</td>
     <td class="ct-agency">${esc(a.agency || '')}${a.sub_agency && a.sub_agency !== a.agency
     ? `<span class="ct-sub"> · ${esc(a.sub_agency)}</span>` : ''}</td>
     <td class="num ct-amt">$${fmtCompact(a.amount, 1)}</td>
-    <td class="ct-start">${esc(dayLabel(a.start) || '')}</td>
     <td class="ins-more">${a.url
     ? `<a href="${esc(a.url)}" target="_blank" rel="noopener"
         title="${esc(a.description || 'The award on USAspending')}">Award</a>` : ''}</td>
@@ -35788,19 +35814,19 @@ function renderContracts() {
    * happened is that this refused to guess which recipient it is. */
   const head = !company
     ? `The largest new awards across the government in the last ${
-  fmt(c.days || 30, 0)} days.`
+  fmt(c.days || 30, 0)} days, newest first.`
     : c.matched
-      ? `Awarded to <strong>${esc(c.recipient || '')}</strong>${c.lifetime_amount
-        ? `, which has been awarded $${fmtCompact(c.lifetime_amount, 1)} in all`
-        : ''}. Largest first.`
+      ? `Awarded to <strong>${esc(c.recipient || '')}</strong>${c.amount_12m
+        ? `, which was awarded $${fmtCompact(c.amount_12m, 1)} in contracts over the last 12 months`
+        : ''}. Its largest awards on record, newest first.`
       : esc(c.reason || 'No federal contractor matches this company.');
   return `<div class="panel">
     <h2>${hg('Federal contracts')}${company && c.matched ? `<span class="th-plain">
       · ${esc(c.ticker)}</span>` : ''}</h2>
     <p class="sub">${head}</p>
     ${rows.length ? `<div class="table-scroll cq-cards"><table class="data ct-table">
-      <thead><tr><th>${company ? 'Award' : 'Recipient'}</th><th>Agency</th>
-        <th class="num">Amount</th><th>Started</th><th></th></tr></thead>
+      <thead><tr><th>Awarded</th><th class="ct-text">${company ? 'Award' : 'Recipient'}</th>
+        <th class="ct-text">Agency</th><th class="num">Amount</th><th></th></tr></thead>
       <tbody>${rows.map(contractRow).join('')}</tbody>
     </table></div>` : ''}
     <p class="caveat">${esc(c.caveat || '')}

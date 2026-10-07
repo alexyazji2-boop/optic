@@ -297,7 +297,7 @@ def test_each_insiders_table_is_a_card_per_row_on_a_phone():
                                         "ic-filed", "ic-lag")),
                          ("if-table", ("if-sym", "if-tx", "if-value", "if-who", "if-shares",
                                        "if-price", "if-date", "if-filed")),
-                         ("ct-table", ("ct-who", "ct-amt", "ct-agency", "ct-start"))):
+                         ("ct-table", ("ct-who", "ct-amt", "ct-agency", "ct-awarded"))):
         assert "table.%s { min-width: 0; width: 100%%; }" % table in css, table
         assert 'class="data %s' % table in app, table
         for cell in cells:

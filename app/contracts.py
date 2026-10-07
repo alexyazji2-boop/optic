@@ -55,10 +55,16 @@ RECIPIENT_SEARCH = BASE + "/recipient/"
 CONTRACT_TYPES = ["A", "B", "C", "D"]
 
 # The cheap fields. See the module docstring before adding to this.
+# `Base Obligation Date` is the day the award was signed, which is what a list
+# of new awards is ordered by: `Start Date` is when the work begins and can be
+# months away, so a list dated by it put a December start at the top of
+# September's awards. Timed 2026-10-07: 0.57s market-wide and 0.64s by UEI,
+# against 0.74s without it.
 FIELDS = [
     "Award ID", "Recipient Name", "Awarding Agency", "Awarding Sub Agency",
     "Award Amount", "Start Date", "End Date", "Description",
     "Contract Award Type", "Place of Performance State Code",
+    "Base Obligation Date",
 ]
 
 TIMEOUT = 25.0
@@ -133,6 +139,7 @@ def _award_row(raw: Dict[str, Any]) -> Dict[str, Any]:
         "agency": raw.get("Awarding Agency"),
         "sub_agency": raw.get("Awarding Sub Agency"),
         "amount": raw.get("Award Amount"),
+        "awarded": raw.get("Base Obligation Date"),
         "start": raw.get("Start Date"),
         "end": raw.get("End Date"),
         "description": (raw.get("Description") or "").strip() or None,
@@ -142,6 +149,19 @@ def _award_row(raw: Dict[str, Any]) -> Dict[str, Any]:
         "url": ("https://www.usaspending.gov/award/"
                 + str(raw.get("generated_internal_id") or "")) if raw.get("generated_internal_id") else None,
     }
+
+
+def _newest_first(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The largest awards, listed by the day each was signed, newest first.
+
+    The API is asked for the largest, because a list of the most recent would
+    be a page of $30k purchase orders. Shown in date order, because a reader
+    scans awards as a timeline, and largest-first dated them 23, 26, 11, 25
+    and 22 September down the page. ISO dates sort as strings; an award with
+    no date goes last.
+    """
+    return sorted(rows, key=lambda r: str(r.get("awarded") or r.get("start") or ""),
+                  reverse=True)
 
 
 CAVEAT = ("Obligated amounts on prime contract awards, as reported to FPDS. An "
@@ -179,7 +199,7 @@ def recent(limit: int = 12, days: int = 30) -> Dict[str, Any]:
             return {"available": False,
                     "reason": "USAspending did not answer just now.",
                     "source": "https://www.usaspending.gov/"}
-        rows = [_award_row(r) for r in (got.get("results") or [])]
+        rows = _newest_first([_award_row(r) for r in (got.get("results") or [])])
         return {"available": True, "awards": rows, "days": days,
                 "scope": "market", "caveat": CAVEAT,
                 "source": "https://www.usaspending.gov/"}
@@ -248,10 +268,14 @@ def for_company(legal_name: str, ticker: str = "", limit: int = 12) -> Dict[str,
             "recipient": who.get("name"),
             "uei": who.get("uei"),
             "level": who.get("recipient_level"),
-            # What the whole entity has been awarded, which is the number the
-            # recipient search ranks on. Not a sum of the rows below it.
-            "lifetime_amount": who.get("amount"),
-            "awards": [_award_row(r) for r in (got.get("results") or [])],
+            # The number the recipient search ranks on, which is the last
+            # twelve months of contract obligations: with award_type
+            # "contracts" the endpoint reads its `last_12_contracts` column
+            # (usaspending-api recipient/v2/lookups.py). It was called the
+            # lifetime total and printed "in all", which put Lockheed Martin's
+            # $46.7B "in all" above a single $48.1B award of its own from 1993.
+            "amount_12m": who.get("amount"),
+            "awards": _newest_first([_award_row(r) for r in (got.get("results") or [])]),
             "caveat": CAVEAT,
             "source": "https://www.usaspending.gov/",
         }

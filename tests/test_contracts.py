@@ -5,7 +5,8 @@ the same terms as the House Clerk's filings. The hard part is not fetching it,
 it is deciding which recipient a listed company IS.
 
 Measured against the live API while this was built: LMT resolves to LOCKHEED
-MARTIN CORP ($60.5B lifetime, and its awards include Sikorsky, which is the
+MARTIN CORP ($60.5B, which is its last twelve months of contracts rather than
+the lifetime figure it was taken for; its awards include Sikorsky, which is the
 parent roll-up working); LDOS to LEIDOS HOLDINGS; AAPL and SBUX to nothing at
 all, which is the correct answer. Asked for "Apple" the recipient search ranks
 MAYER BROS. APPLE PRODUCTS INC. first, and for "Appledore" it returns a marine
@@ -219,3 +220,110 @@ def test_the_panel_distinguishes_no_match_from_no_awards():
     fn = re.search(r"function renderContracts\(\) \{.*?\n\}", APP, re.S).group()
     assert "c.matched" in fn
     assert "c.reason" in fn
+
+
+# ------------------------------------------------- in the order they were awarded
+
+
+AWARDS = [
+    {"Award ID": "A", "Recipient Name": "TRIWEST", "Award Amount": 1.2e9,
+     "Base Obligation Date": "2026-09-23", "Start Date": "2026-08-01"},
+    {"Award ID": "B", "Recipient Name": "CLARK", "Award Amount": 3.3e8,
+     "Base Obligation Date": "2026-09-26", "Start Date": "2026-09-26"},
+    {"Award ID": "C", "Recipient Name": "TUTOR PERINI", "Award Amount": 3.1e8,
+     "Base Obligation Date": "2026-09-11", "Start Date": "2026-09-11"},
+    {"Award ID": "D", "Recipient Name": "MORTENSON", "Award Amount": 2.4e8,
+     "Base Obligation Date": "2026-09-22", "Start Date": "2026-12-01"},
+]
+
+
+def test_the_largest_awards_are_listed_newest_first(monkeypatch):
+    """Asked for as "make sure that these are in chronological order". The API
+    is still asked for the largest; the rows are listed by the day each was
+    signed. They were in amount order and dated by the work's start, so the
+    list read 23, 26, 11, 25, 22 September with a December 1 among them."""
+    api = _use(monkeypatch, FakeAPI(awards=AWARDS))
+    out = contracts.recent()
+    assert api.calls[0][1]["sort"] == "Award Amount"
+    assert [a["award_id"] for a in out["awards"]] == ["B", "A", "D", "C"]
+    assert out["awards"][2]["awarded"] == "2026-09-22" and out["awards"][2]["start"] == "2026-12-01"
+
+
+def test_a_company_lists_its_largest_awards_newest_first(monkeypatch):
+    _use(monkeypatch, FakeAPI(
+        recipients=[{"name": "LOCKHEED MARTIN CORP", "uei": "U", "recipient_level": "P", "amount": 4.67e10}],
+        awards=AWARDS))
+    out = contracts.for_company("Lockheed Martin Corporation", "LMT")
+    assert [a["award_id"] for a in out["awards"]] == ["B", "A", "D", "C"]
+    assert out["amount_12m"] == 4.67e10 and "lifetime_amount" not in out
+
+
+def test_the_award_date_is_asked_for_and_was_timed():
+    """Timed 2026-10-07 against the live API: 0.57s market-wide and 0.64s by
+    UEI with it, 0.74s without."""
+    assert "Base Obligation Date" in contracts.FIELDS
+    assert "Base Obligation Date" in SRC.split("def _award_row(", 1)[1].split("\ndef ", 1)[0]
+
+
+def test_the_twelve_month_total_is_called_that():
+    """With award_type "contracts" the recipient list ranks on its
+    last_12_contracts column. Printed "in all", it put Lockheed's $46.7B total
+    beside a single $48.1B award from 1993."""
+    fn = APP[APP.index("function renderContracts() {"):]
+    fn = fn[:fn.index("\n}\n")]
+    assert "in contracts over the last 12 months" in fn and "in all" not in fn
+    assert "c.amount_12m" in fn
+
+
+def _jsc(script):
+    import json
+    import os
+    import shutil
+    import subprocess
+    import pytest
+    jsc = "/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc"
+    exe = jsc if os.path.exists(jsc) else shutil.which("jsc")
+    if not exe:
+        pytest.skip("no JavaScriptCore on this machine")
+
+    def fn(head):
+        at = APP.index(head)
+        return APP[at:APP.index("\n}\n", at) + 3]
+    src = ("function esc(s) { return String(s); }\n"
+           + fn("function contractDate(iso) {") + fn("function contractWhen(a) {") + script)
+    out = subprocess.run([exe, "-e", src], capture_output=True, text=True, timeout=60, cwd=str(ROOT))
+    assert "RESULT:" in out.stdout, (out.stdout + out.stderr)[-2000:]
+    return json.loads(out.stdout.split("RESULT:", 1)[1].split("\n")[0])
+
+
+def test_the_row_is_dated_by_the_award_with_a_later_start_under_it():
+    """Checked in a browser at 1440x900: the market list read Sep 30 down to
+    Sep 9 with "work from Dec 1" under Mortenson's Sep 22, the table 1,125px in
+    a 1,125px box; LMT's twelve ran Jun 28, 2024 back to Apr 30, 1984, which
+    had read "Apr 30" with no year."""
+    out = _jsc("""
+      var y = new Date().getFullYear();
+      print('RESULT:' + JSON.stringify([
+        contractWhen({ awarded: y + '-09-22', start: y + '-12-01' }),
+        contractWhen({ awarded: y + '-09-15', start: y + '-09-21' }),
+        contractWhen({ awarded: y + '-09-23', start: y + '-08-01' }),
+        contractWhen({ awarded: '1993-10-15', start: '1993-10-15' }),
+        contractWhen({ start: y + '-10-01' }),
+      ]));
+    """)
+    later, soon, before, old, undated = out
+    assert later == 'Sep 22<span class="ct-later">work from Dec 1</span>'
+    assert soon == "Sep 15", "a start six days on is not worth a second date"
+    assert before == "Sep 23", "work begun before the signature is not a later start"
+    assert old == "Oct 15, 1993"
+    assert undated == '<span class="ct-later">work from Oct 1</span>'
+
+
+def test_the_date_leads_the_row_and_the_header():
+    row = APP[APP.index("function contractRow(a) {"):]
+    row = row[:row.index("\n}\n")]
+    assert row.index('class="ct-awarded"') < row.index('class="name ct-who"')
+    assert "<thead><tr><th>Awarded</th>" in APP
+    css = (ROOT / "static/styles.css").read_text()
+    assert "table.ct-table td.ct-agency { white-space: normal; min-width: 18ch; }" in css
+    assert "table.ct-table td.ct-awarded::before { content: 'Awarded '; }" in css
