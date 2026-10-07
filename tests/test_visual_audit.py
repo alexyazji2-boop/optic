@@ -553,3 +553,27 @@ def test_the_three_month_rank_is_drawn_on_its_own_dates():
     assert "Where NVDA has ranked against 142 peers each session, Aug '26 to Aug '26" in head
     assert "1-month rank, 21 sessions" in head and "3-month rank, 63 sessions" in head
     assert "Source: Yahoo Finance daily closes." in head
+
+
+def test_a_wide_table_scrolls_on_its_own_not_the_panel_around_it():
+    """At 375px the rotation table ran 774px and the stock map's 480px in a
+    299px panel, and each panel scrolled sideways, prose and chart included."""
+    import re
+    for fn in ("function renderRotation(r) {", "function renderStockMap(sm) {"):
+        body = _src(fn)
+        tables = re.findall(r'(.{0,80})<table class="data"', body)
+        assert tables and all('<div class="table-scroll"' in pre for pre in tables), fn
+        assert body.count("<table class=\"data\"") == body.count("</table></div>"), fn
+
+
+def test_the_base_rates_line_is_for_a_reader_not_the_operator():
+    out = _app("""
+      R.wait = baseRatesMissing(null);
+      R.failed = baseRatesMissing({ available: false, reason: 'HTTP 504', failed: true });
+      R.server = baseRatesMissing({ available: false, reason: 'Base rates have not been computed yet.' });
+    """)
+    assert "on their way" in out["wait"] and "fills in when they land" in out["wait"]
+    assert out["failed"].startswith("Base rates could not be loaded") and "504" not in out["failed"]
+    assert out["server"] == "Base rates have not been computed yet. The measured column stays empty until they are."
+    assert "on this machine" not in _src("function renderPatterns(d) {")
+    assert "failed: true" in _src("async function loadPatternRates() {")

@@ -18154,6 +18154,25 @@ function renderSeasonality(s) {
   </div>`;
 }
 
+/* Why the measured column is empty, said for a reader.
+ *
+ * It said base rates "have not been computed on this machine yet" and "take
+ * about ninety seconds to build": a note for whoever runs the server. On the
+ * hosted site the page asks for them itself (loadPatternRates), the server
+ * builds them when it has none cached, and the panel fills in when they land. */
+function baseRatesMissing(rates) {
+  if (!rates) {
+    return 'Base rates are on their way, so the measured column is empty for now. With none '
+      + 'cached, the server builds them from ten years of daily bars first, which takes about '
+      + 'ninety seconds, and the column fills in when they land.';
+  }
+  if (rates.failed) {
+    return 'Base rates could not be loaded, so the measured column is empty. They are asked '
+      + 'for again when the page is reloaded.';
+  }
+  return `${rates.reason || 'Base rates are not available.'} The measured column stays empty until they are.`;
+}
+
 function renderPatterns(d) {
   const p = d && d.patterns;
   if (!p) return '';
@@ -18269,8 +18288,7 @@ function renderPatterns(d) {
     <p class="caveat">${gloss(p.method || '')}</p>
     ${rates && rates.available ? `<p class="caveat">Base rates: ${
   gloss(rates.method || '')} Cached, ${fmt(rates.cache_age_days || 0, 0)} days old.</p>`
-    : `<p class="caveat">Base rates have not been computed on this machine yet, so the
-      measured column is empty. They take about ninety seconds to build.</p>`}
+    : `<p class="caveat">${esc(baseRatesMissing(rates))}</p>`}
   </div>`;
 }
 
@@ -19045,11 +19063,14 @@ function renderRotation(r) {
       A sector sitting near a line can cross back next week without anything having changed.
     </div>` : ''}
 
-    <table class="data" data-defs="rotation" style="margin-top:var(--space-3)">
+    ${/* In a scroller of its own. At 375px the seven columns ran 774px wide and
+         the whole panel scrolled sideways with them, prose and chart included,
+         and the chart was drawn to the table's width rather than the screen's. */''}
+    <div class="table-scroll" style="margin-top:var(--space-3)"><table class="data" data-defs="rotation">
       <thead><tr><th>Sector</th><th>Quadrant</th><th>Strength</th><th>Momentum</th>
         <th>Δ strength</th><th>Δ momentum</th><th>Moved from</th></tr></thead>
       <tbody>${rows}</tbody>
-    </table>
+    </table></div>
 
     <p class="caveat">Tails are smoothed over ${fmt(p.smooth, 0)} weeks and drawn as curves.
       Unsmoothed, each sector jumped about a quarter of the chart per week and the tails
@@ -25281,7 +25302,9 @@ function renderStockMap(sm) {
       Dropped rather than drawn at zero. A P/E of nothing plotted at the origin
       reads as "very cheap", which is the opposite of the truth for a company
       with no earnings.</div>` : ''}
-    <table class="data" style="margin-top:var(--space-3)">
+    ${/* Its own scroller, as the rotation table's: a 480px table in a 299px panel
+         scrolled the panel, the map and its prose with it. */''}
+    <div class="table-scroll" style="margin-top:var(--space-3)"><table class="data">
       <thead><tr><th>Name</th>
         ${Object.keys(M).map((k) => `<th>${esc(M[k].label)}</th>`).join('')}
       </tr></thead>
@@ -25292,7 +25315,7 @@ function renderStockMap(sm) {
           <div style="color:var(--ink-muted);font-size:var(--t-caption)">${esc(r.name)}</div></td>
         ${Object.keys(M).map((k) => `<td>${mapValue(r.values[k], M[k])}</td>`).join('')}
       </tr>`).join('')}</tbody>
-    </table>
+    </table></div>
     <p class="caveat">${gloss('A treemap is unusually good at making a comparison '
     + 'look authoritative, so every measure is named and every raw value is in the '
     + 'table beneath. A tile is only as good as the measure under it: price-to-book '
@@ -31583,7 +31606,7 @@ async function loadPatternRates() {
   try {
     STATE.patternRates = await getJSON('/api/patterns/base-rates');
   } catch (err) {
-    STATE.patternRates = { available: false, reason: err.message };
+    STATE.patternRates = { available: false, reason: err.message, failed: true };
   }
   // One panel, not the whole tab. This used to re-render the entire Swing view,
   // which threw away the staggered reveal that had just been applied to all 27
