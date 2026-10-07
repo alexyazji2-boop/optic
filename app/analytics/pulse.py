@@ -484,6 +484,11 @@ def options_brief(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     flow = (payload or {}).get("flow") or {}
     gex = (payload or {}).get("gex") or {}
+    # No chain, no brief. With the flow read refused it still drew one line,
+    # "Unusual: none, no contract is trading far above its own open
+    # interest", which is a reading of a chain nobody had.
+    if flow.get("error"):
+        return {"available": False, "reason": flow.get("error")}
     volume = flow.get("volume") or {}
     premium = flow.get("premium") or {}
     skew = flow.get("iv_skew") or {}
@@ -516,11 +521,16 @@ def options_brief(payload: Dict[str, Any]) -> Dict[str, Any]:
     if unusual:
         top = max(unusual, key=lambda r: _num(r.get("vol_oi_ratio")) or 0)
         strike = _num(top.get("strike"))
+        ratio = _num(top.get("vol_oi_ratio"))
+        # A contract with no open interest has no ratio: its volume is all new
+        # positions. "0.0x open interest" said the opposite of that.
+        traded = ("{:.1f}x open interest".format(ratio) if ratio
+                  else "{:,.0f} traded on no open interest".format(_num(top.get("volume")) or 0))
         items.append({
             "label": "Unusual",
             "value": "{:,.0f} {}".format(strike or 0, str(top.get("type", "")).lower()),
-            "note": "{:.1f}x open interest, {} expiry \u00b7 {} contract{} flagged".format(
-                _num(top.get("vol_oi_ratio")) or 0, top.get("expiry", "?"),
+            "note": "{}, {} expiry \u00b7 {} contract{} flagged".format(
+                traded, top.get("expiry", "?"),
                 len(unusual), "" if len(unusual) == 1 else "s"),
             "tone": "up" if str(top.get("type", "")).upper() == "CALL" else "down",
         })

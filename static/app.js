@@ -5162,6 +5162,7 @@ function renderSetup(d) {
       <h2 class="hm-h">Setup${askPulse('setup')}</h2>
       ${budget}
       <p class="su-none">${gloss(ep.headline)}</p>
+      ${ep.reason ? `<p class="caveat">${esc(ep.reason)}</p>` : ''}
     </section>` : '';
   }
   const rec = ep.recommended || {};
