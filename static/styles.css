@@ -12829,6 +12829,24 @@ body.auth-open { overflow: hidden; }
 #chat-send:disabled,
 #chat-research:disabled { opacity: 0.45; cursor: not-allowed; }
 
+/* Reliability pass: the rest of the panel's ways into a question, shut with
+   the composer (see markPulseControls). Dimmed rather than hidden for the same
+   reason as the box: the starters say what Pulse would do, which is part of
+   understanding the sentence about why it will not. A press focuses that
+   sentence, and the nudge says the press was heard. */
+#chat-attach:disabled,
+#chat.is-blocked .chat-actions label,
+#chat.is-blocked [aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
+.chat-off:focus { outline: none; }
+.chat-off.is-nudged { animation: chat-off-nudge 600ms var(--ease-ui); }
+@keyframes chat-off-nudge {
+  0%, 100% { border-left-color: var(--border-strong); }
+  30% { border-left-color: var(--brand); color: var(--ink); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-off.is-nudged { animation: none; border-left-color: var(--brand); }
+}
+
 .chat-allow.spent { color: var(--ink-2); }
 
 .chat-allow button {

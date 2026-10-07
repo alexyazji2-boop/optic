@@ -43,6 +43,9 @@ var chatState = { busy: false };
 function sendChat(text) { sent.push(text); }
 function wsOnChatToggle() { toggles++; }
 function loadAllowance() { allowances++; }
+// Pulse open. The shut case, where a press goes to the reason instead, is
+// tests/test_pulse_unavailable.py's.
+function pulseBlockedReason() { return null; }
 var classes = new Set();
 var document = { body: { classList: { add: function (c) { classes.add(c); } } } };
 function Event(type) { this.type = type; }

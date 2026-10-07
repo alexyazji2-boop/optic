@@ -160,3 +160,106 @@ def test_the_controls_the_client_disables_actually_exist():
     handler."""
     for el_id in ("chat-input", "chat-send", "chat-research"):
         assert 'id="{}"'.format(el_id) in HTML, el_id
+
+
+# ------------------------------------------------- everything else in the panel
+
+
+def _js_fn(name):
+    import re
+    return re.search(r"^function " + name + r"\([^\n]*\) \{.*?^\}", APP, re.M | re.S).group()
+
+
+def _run_blocked(scenario):
+    import os
+    import shutil
+    import subprocess
+
+    import pytest
+
+    jsc = "/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc"
+    exe = jsc if os.path.exists(jsc) else shutil.which("jsc")
+    if not exe:
+        pytest.skip("no JavaScriptCore on this machine")
+    dom = r"""
+    function El(id) {
+      this.id = id; this.attrs = {}; this.classes = new Set(); this.disabled = false;
+      this.value = ''; this.focused = 0; this.offsetWidth = 1;
+      var self = this;
+      this.classList = {
+        toggle: function (c, on) { if (on) self.classes.add(c); else self.classes.delete(c); },
+        add: function (c) { self.classes.add(c); }, remove: function (c) { self.classes.delete(c); },
+        contains: function (c) { return self.classes.has(c); },
+      };
+    }
+    El.prototype.setAttribute = function (k, v) { this.attrs[k] = String(v); };
+    El.prototype.removeAttribute = function (k) { delete this.attrs[k]; };
+    El.prototype.focus = function () { this.focused += 1; };
+    El.prototype.setSelectionRange = function () {};
+    El.prototype.dispatchEvent = function () {};
+    var els = {};
+    ['chat', 'chat-input', 'chat-attach', 'chat-web', 'chat-off'].forEach(function (id) { els['#' + id] = new El(id); });
+    var starters = [new El('mode'), new El('card')];
+    function $(sel) { return els[sel] || null; }
+    var bodyClasses = new Set();
+    var document = {
+      body: { classList: { add: function (c) { bodyClasses.add(c); } } },
+      querySelectorAll: function (sel) { return sel.indexOf('[data-q]') >= 0 ? starters : []; },
+    };
+    function Event() {}
+    var ACCOUNT = { ai: null, allowance: null };
+    """
+    src = "\n".join([
+        "function assert(v, m) { if (!v) throw new Error(m); }", dom,
+        _js_fn("pulseBlockedReason"), _js_fn("markPulseControls"),
+        _js_fn("nudgePulseBlocked"), _js_fn("openPulseWithText"),
+        "try {", scenario, "print('TEST_OK'); } catch (e) { print('FAIL ' + e); }",
+    ])
+    out = subprocess.run([exe, "-e", src], capture_output=True, text=True, timeout=30)
+    assert "TEST_OK" in out.stdout, out.stdout + out.stderr
+
+
+def test_a_starter_pressed_while_shut_goes_to_the_reason_not_the_box():
+    """Only the composer was disabled. A starter card or a mode chip pressed
+    while Pulse was shut wrote its question into the disabled box, greyed out
+    like a message about to send, and nothing else happened."""
+    _run_blocked("""
+      ACCOUNT.ai = { enabled: false, hint: 'Pulse is not configured here.' };
+      markPulseControls(true);
+      openPulseWithText('What do the names on this screen have in common?');
+      assert(els['#chat-input'].value === '', 'the question went into a box that cannot send it');
+      assert(els['#chat-off'].focused === 1, 'the press did nothing visible');
+      assert(els['#chat-off'].classList.contains('is-nudged'), 'and was not acknowledged');
+      assert(bodyClasses.has('chat-open'), 'the panel still opens, so the reason can be read');
+    """)
+
+
+def test_attach_web_search_and_the_starters_shut_and_reopen_with_the_box():
+    _run_blocked("""
+      markPulseControls(true);
+      assert(els['#chat'].classList.contains('is-blocked'), 'panel class');
+      assert(els['#chat-attach'].disabled && els['#chat-web'].disabled, 'Attach and Web search');
+      assert(starters.every(function (b) { return b.attrs['aria-disabled'] === 'true'; }), 'starters');
+      markPulseControls(false);
+      assert(!els['#chat'].classList.contains('is-blocked'), 'class comes off');
+      assert(!els['#chat-attach'].disabled && !els['#chat-web'].disabled, 'controls come back');
+      assert(starters.every(function (b) { return !('aria-disabled' in b.attrs); }), 'starters come back');
+    """)
+
+
+def test_an_open_pulse_still_drafts_into_the_box():
+    _run_blocked("""
+      ACCOUNT.ai = { enabled: true };
+      openPulseWithText('Market read');
+      assert(els['#chat-input'].value === 'Market read', 'the ordinary path broke');
+      assert(els['#chat-off'].focused === 0, 'no nudge when nothing is shut');
+    """)
+
+
+def test_the_starters_rendered_later_are_marked_too():
+    """The cards and chips are rebuilt as the view changes, after
+    renderPulseUnavailable has run, so each render marks its own."""
+    empty = APP.split("function renderPulseEmpty() {", 1)[1].split("\nfunction ", 1)[0]
+    assert "if (pulseBlockedReason()) markPulseControls(true);" in empty
+    modes = APP.split("modes.innerHTML = pulseModesHTML();", 1)[1][:80]
+    assert "markPulseControls(true)" in modes

@@ -28566,10 +28566,12 @@ function renderPulseUnavailable() {
   if (!off) {
     if (host) host.remove();
     [input, send, research].forEach((el) => { if (el) el.disabled = false; });
+    markPulseControls(false);
     if (input) input.removeAttribute('aria-describedby');
     return;
   }
   [input, send, research].forEach((el) => { if (el) el.disabled = true; });
+  markPulseControls(true);
   if (input) {
     input.placeholder = reason.placeholder;
     input.setAttribute('aria-describedby', 'chat-off');
@@ -28591,6 +28593,39 @@ function renderPulseUnavailable() {
    * only value is a number, coerced with Number() above. */
   if (reason.html) host.innerHTML = reason.html;
   else host.textContent = reason.text;
+}
+
+/* Everything else in the panel that leads to a question, shut with the box.
+ *
+ * Only the composer was disabled. The starter cards, the mode chips above the
+ * box, Attach and Web search all still took a press while Pulse was shut,
+ * and a press on a card or chip wrote its question into the disabled box and
+ * did nothing else visible: a dead control on every one of them. They are
+ * re-rendered as the view changes, so they are marked rather than disabled
+ * one by one, and the panel's class carries the look. Saved conversations
+ * stay open: reading an old answer spends nothing. */
+function markPulseControls(off) {
+  const panel = $('#chat');
+  if (panel) panel.classList.toggle('is-blocked', off);
+  ['#chat-attach', '#chat-web'].forEach((sel) => {
+    const el = $(sel);
+    if (el) el.disabled = off;
+  });
+  document.querySelectorAll('#chat [data-q], #chat .pulse-card').forEach((el) => {
+    if (off) el.setAttribute('aria-disabled', 'true');
+    else el.removeAttribute('aria-disabled');
+  });
+}
+
+/* A press on something Pulse cannot act on goes to the sentence saying why. */
+function nudgePulseBlocked() {
+  const note = $('#chat-off');
+  if (!note) return;
+  note.setAttribute('tabindex', '-1');
+  note.focus({ preventScroll: false });
+  note.classList.remove('is-nudged');
+  void note.offsetWidth;                  // restart the animation on a repeat press
+  note.classList.add('is-nudged');
 }
 
 /* What is left of today's assistant allowance, stated before the click.
@@ -32565,6 +32600,10 @@ function openPulseWithText(text) {
   document.body.classList.add('chat-open');
   const box = $('#chat-input');
   if (!box) return;
+  /* Shut, the question has nowhere to go. It was written into the disabled
+   * box anyway, where it sat greyed out like a message about to send, and
+   * the press looked like it had done nothing. The reason is what to show. */
+  if (pulseBlockedReason()) { nudgePulseBlocked(); return; }
   box.value = text;
   box.focus();
   box.setSelectionRange(text.length, text.length);
@@ -38246,6 +38285,7 @@ function updateChatContext() {
   ] : [];
   const modes = $('#pulse-modes');
   if (modes) modes.innerHTML = pulseModesHTML();
+  if (pulseBlockedReason()) markPulseControls(true);
   $('#chat-suggest').innerHTML = suggestions
     .map((q) => `<button type="button" data-q="${esc(q)}">${esc(q.length > 46 ? q.slice(0, 44) + '…' : q)}</button>`)
     .join('');
@@ -38708,6 +38748,7 @@ function renderPulseEmpty() {
   const existing = log.querySelector('.pulse-empty');
   if (hasMsgs) { if (existing) existing.remove(); return; }
   log.innerHTML = pulseStarters(pulseStartersExpanded);
+  if (pulseBlockedReason()) markPulseControls(true);
 }
 
 function mdLite(text) {
