@@ -1621,6 +1621,8 @@ function armViewReveals() {
 function setStatus(parts) {
   const host = $('#statusline');
   if (!host) return;
+  // Nothing to say is no row, rather than an empty 29px band of glass.
+  host.hidden = !parts.length;
   host.innerHTML = `<div class="sl-parts">${
     parts.map((p) => `<span>${p}</span>`).join('')}</div>`;
 }
@@ -4851,13 +4853,19 @@ function renderHomeStatus(health) {
  *
  * `group` lands on the page last used inside that section, as the desktop
  * rail does, and the section's other pages are chips under the top bar. */
+/* `nav` names the rail's own icon for the place (NAV_ICONS), so a section
+ * wears one mark on both devices. The bar drew Unicode glyphs, a house, a
+ * half-filled circle, an arrow and a lens, against the rail's drawn set: the
+ * Dossier was a document on a laptop and a half moon on a phone, and the
+ * glyphs took whatever weight and baseline the phone's fallback font gave
+ * them. More is three dots drawn to the same recipe. */
 const MOBILE_TABS = [
-  { view: 'home', label: 'Home', icon: '&#8962;' },
+  { view: 'home', label: 'Home', nav: 'home' },
   // The desktop's word for it, so a reader learns the product once.
-  { view: 'overview', label: 'Dossier', icon: '&#9683;' },
-  { group: 'market', label: 'Markets', icon: '&#8599;' },
-  { group: 'discover', label: 'Discover', icon: '&#8981;' },
-  { more: true, label: 'More', icon: '&#8943;' },
+  { view: 'overview', label: 'Dossier', nav: 'security' },
+  { group: 'market', label: 'Markets', nav: 'market' },
+  { group: 'discover', label: 'Discover', nav: 'discover' },
+  { more: true, label: 'More', nav: 'more' },
 ];
 
 /** What a bottom-bar button stands for, as its data-mtab. */
@@ -4873,7 +4881,7 @@ function mountMobileTabs() {
   nav.setAttribute('aria-label', 'Primary');
   nav.innerHTML = MOBILE_TABS.map((t) => `<button type="button" class="mtab"
     data-mtab="${esc(mtabKey(t))}" aria-label="${esc(t.label)}">
-    <span class="mtab-ico" aria-hidden="true">${t.mark === 'pulse' ? pulseMarkHTML('pulse-glyph-sm') : t.icon}</span>
+    <span class="mtab-ico" aria-hidden="true">${navIcon(t.nav)}</span>
     <span class="mtab-lab">${esc(t.label)}</span>
   </button>`).join('');
   document.body.appendChild(nav);
@@ -24572,6 +24580,8 @@ async function loadChartWorkspace(symbol, force) {
   STATE.chartSymbol = sym;
   STATE.chartData = 'loading';
   syncTabTitle();
+  // The chart's own symbol box changes the symbol without a page switch.
+  if (STATE.view === 'chart') routeRecord();
   renderChartWorkspace('loading');
   // The stage reading beside the payload rather than after it, so it is
   // usually in hand for the first draw and nothing redraws behind the sweep.
@@ -37265,8 +37275,13 @@ async function loadSession(force) {
     return;
   }
   try {
-    const data = await getJSON(`/api/session/${encodeURIComponent(STATE.ticker)}`);
-    const firstLoad = !STATE.session;
+    const asked = STATE.ticker;
+    const data = await getJSON(`/api/session/${encodeURIComponent(asked)}`);
+    // A symbol searched while this was in flight owns the slot now.
+    if (asked !== STATE.ticker) return;
+    // The market-wide phase alone (kept across a symbol change) is not this
+    // symbol's first session payload.
+    const firstLoad = !STATE.session || !STATE.session.ticker;
     STATE.session = data;
     renderSessionBar();
     completeSecurityHeader();
@@ -37295,13 +37310,18 @@ function updateStatus() {
   // Home is the landing page. Whatever symbol is still in memory isn't what this
   // page is about, and printing it next to an empty search box reads as a bug —
   // which is exactly how it was reported.
+  /* On Home the row is kept for a warning and nothing else.
+   *
+   * It said "Search a ticker or company name to begin." over a page whose
+   * first control is that search, beside a chip reading "Index futures are
+   * live" over a session strip reading OVERNIGHT: 48px of chrome repeating
+   * the two things directly below it. With a symbol loaded it said "Pick a
+   * tab above", and on a desktop there is no tab above. Home's own search
+   * offers the loaded symbol back. A reconnect or a failed refresh still
+   * takes the row, because nothing else on the page says so. */
   if (STATE.view === 'home') {
-    setStatus([
-      STATE.ticker
-        ? `${esc(STATE.ticker)} is loaded. Pick a tab above, or search another symbol.`
-        : 'Search a ticker or company name to begin.',
-      statusFeedChip(),
-    ]);
+    const chip = statusFeedChip();
+    setStatus(/class="chip warn"/.test(chip) ? [chip] : []);
     return;
   }
   // 'settings' belongs here too: it has no symbol of its own, so it shouldn't be
@@ -39797,6 +39817,153 @@ function groupForView(view) {
   return g ? g.id : 'home';
 }
 
+/* ================================================================ ROUTES ===
+ *
+ * The page and the symbol, in the address bar.
+ *
+ * Optic had no URL at all: every page lived at `/`. Back left the app for
+ * whatever site came before it, a reload always landed on Home with the symbol
+ * gone, and a page could not be linked to anyone. Measured 2026-10-06: the
+ * history stack held one entry however many pages had been visited.
+ *
+ * `#/NVDA/options` for a Dossier page, `#/NVDA` for its Overview, `#/read`
+ * for a page about no one symbol, nothing for Home. A hash rather than a path
+ * because the server serves index.html at `/` alone and every other path is
+ * an API or a static file; a hash never reaches it.
+ *
+ * Symbols are upper case and pages lower case, which is what tells `#/scan`
+ * (the page) from `#/SCAN` (a ticker). A lower-case segment that names no
+ * page is read as a symbol, so a hand-typed `#/nvda` still opens NVDA.
+ *
+ * The transient instrument chart has no route: it is a chart of a row in some
+ * other page's table and is reached from that page. */
+const ROUTE_SLUGS = {
+  overview: 'overview', chart: 'chart', swing: 'options', long: 'investing',
+  earnings: 'earnings', financials: 'financials', news: 'news',
+  compare: 'compare', brief: 'read', market: 'macro', indices: 'indices',
+  explore: 'explore', scan: 'scan', insiders: 'insiders', analysts: 'analysts',
+  tracker: 'portfolio', paper: 'paper', roth: 'retirement',
+  watchlist: 'watchlist', alerts: 'alerts', settings: 'settings',
+  reports: 'reports', usage: 'usage', accounts: 'accounts',
+};
+const ROUTE_VIEWS = Object.fromEntries(
+  Object.entries(ROUTE_SLUGS).map(([view, slug]) => [slug, view]));
+// What a symbol may look like: BRK-B, ^GSPC, ES=F, 7203.T.
+const ROUTE_SYMBOL_RE = /^[A-Z0-9][A-Z0-9.\-=^]{0,14}$|^\^[A-Z0-9.]{1,10}$/;
+
+// True while a route is being applied, so switchView does not record the
+// step it is being driven through as a new one.
+let routeApplying = false;
+
+/** The hash for a view, from the symbol it is showing. '' is Home; null is a
+ *  page with no route of its own. */
+function routeFor(view) {
+  if (view === 'home') return '';
+  if (view === 'instrument') {
+    return STATE.instrument ? `#/instrument/${encodeURIComponent(STATE.instrument.symbol)}` : null;
+  }
+  const slug = ROUTE_SLUGS[view];
+  if (!slug) return null;
+  if (SECURITY_VIEWS.includes(view)) {
+    const sym = view === 'chart' ? (STATE.chartSymbol || STATE.ticker) : STATE.ticker;
+    if (sym) {
+      const enc = encodeURIComponent(sym).replace(/%5E/gi, '^');
+      return view === 'overview' ? `#/${enc}` : `#/${enc}/${slug}`;
+    }
+  }
+  return `#/${slug}`;
+}
+
+/** `{view, symbol}` from a hash, or null for one that names nothing. */
+function parseRoute(hash) {
+  const text = String(hash || '');
+  if (!text || text === '#' || text === '#/') return { view: 'home', symbol: null };
+  // An in-page anchor (`#read-desk-markets`) is not a route.
+  if (!text.startsWith('#/')) return null;
+  const raw = text.slice(2).replace(/\/+$/, '');
+  if (!raw) return { view: 'home', symbol: null };
+  const parts = raw.split('/').map((p) => {
+    try { return decodeURIComponent(p); } catch (e) { return p; }
+  });
+  const head = parts[0];
+  if (ROUTE_VIEWS[head] && parts.length === 1) return { view: ROUTE_VIEWS[head], symbol: null };
+  if (head === 'instrument' && parts[1]) return { view: 'instrument', symbol: parts[1] };
+  const symbol = head.toUpperCase();
+  if (!ROUTE_SYMBOL_RE.test(symbol)) return null;
+  const view = parts[1] ? ROUTE_VIEWS[parts[1].toLowerCase()] : 'overview';
+  if (!view || !SECURITY_VIEWS.includes(view)) return null;
+  return { view, symbol };
+}
+
+/** Write the page on screen into the address bar: a new entry when it is a
+ *  new place, nothing when it is the same one. */
+function routeRecord() {
+  if (routeApplying || typeof history === 'undefined' || !history.pushState) return;
+  const want = routeFor(STATE.view);
+  if (want === null) return;
+  if (want === (location.hash || '')) return;
+  try {
+    history.pushState(null, '', want || location.pathname + location.search);
+  } catch (e) { /* a sandboxed frame can refuse; the page still works */ }
+}
+
+/** Open whatever a hash names. Returns whether it named anything. */
+function applyRoute(hash) {
+  const route = parseRoute(hash);
+  if (!route) return false;
+  routeApplying = true;
+  try {
+    const { view, symbol } = route;
+    if (view === 'instrument') {
+      // After a reload the label it was opened with is gone, so it is named
+      // by its symbol until the page that lists it is opened again.
+      if (STATE.instrument && STATE.instrument.symbol === symbol) switchView('instrument');
+      else openInstrument(symbol, symbol, STATE.instrumentFrom || 'market');
+    } else if (!symbol) {
+      if (view !== STATE.view) switchView(view);
+    } else if (view === 'chart' && STATE.ticker) {
+      // The chart keeps its own symbol (see STATE.chartSymbol), so stepping
+      // back to an earlier chart does not reload the Dossier under it.
+      if (STATE.chartSymbol !== symbol) STATE.chartSymbol = symbol;
+      switchView('chart', STATE.view === 'chart');
+    } else if (symbol !== STATE.ticker) {
+      loadTicker(symbol, view);
+    } else if (view !== STATE.view) {
+      switchView(view);
+    }
+  } finally {
+    routeApplying = false;
+  }
+  // A hand-typed `#/nvda` is recorded as `#/NVDA`, in place.
+  const canonical = routeFor(STATE.view);
+  if (canonical !== null && canonical !== (location.hash || '') && history.replaceState) {
+    try {
+      history.replaceState(null, '', canonical || location.pathname + location.search);
+    } catch (e) { /* as above */ }
+  }
+  return true;
+}
+
+if (typeof window !== 'undefined' && window.addEventListener) {
+  window.addEventListener('popstate', () => applyRoute(location.hash));
+}
+
+/* In-page anchors scroll; they do not take the address bar.
+ *
+ * The Read's desk index is `<a href="#read-desk-markets">`. Followed, it put
+ * that fragment where the route was, so a reload after using it landed on
+ * Home and Back stepped through every desk visited. */
+document.addEventListener('click', (evt) => {
+  const a = evt.target && evt.target.closest && evt.target.closest('a[href^="#"]');
+  if (!a) return;
+  const href = a.getAttribute('href') || '';
+  if (href.startsWith('#/') || href.length < 2) return;
+  const el = document.getElementById(href.slice(1));
+  if (!el) return;
+  evt.preventDefault();
+  el.scrollIntoView({ block: 'start', behavior: reducedMotion() ? 'auto' : 'smooth' });
+});
+
 /** Repaint both rows for the active view. */
 /* One row of sections, each opening a menu of its pages on hover.
  *
@@ -39850,6 +40017,8 @@ const NAV_ICONS = {
   portfolio: '<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 10h17M9 10v9.5"/>',
   // An eye: the list you are keeping watch over.
   follow: '<path d="M2.6 12C6 6.8 8.9 4.6 12 4.6s6 2.2 9.4 7.4c-3.4 5.2-6.3 7.4-9.4 7.4S6 17.2 2.6 12Z"/><circle cx="12" cy="12" r="2.6"/>',
+  // Three dots, for the bottom bar's More: everything the four tabs are not.
+  more: '<path d="M5.5 12h.01M12 12h.01M18.5 12h.01" stroke-width="2.6"/>',
   /* The same warning triangle the Report a Problem button carries, and the
      same path data rather than a second drawing of one: this section is the
      other end of that button, and a reader who has used it should meet the
@@ -40283,6 +40452,7 @@ function switchView(view, force) {
   renderSessionBar();
   // Pulse's research modes are about the page on screen, so they follow it.
   if (document.getElementById('chat-suggest')) updateChatContext();
+  routeRecord();
 }
 
 /* A tap is not a hover, and the caret has been promising otherwise.
@@ -40820,7 +40990,17 @@ function loadTicker(raw, destination) {
   STATE.earningsBrief = null;
   STATE.long = null;
   $('#ticker-input').value = next;
-  STATE.session = null;
+  /* The previous symbol's price pair goes; the market's phase stays.
+   *
+   * This was `STATE.session = null`, which sent marketSessionET to the client
+   * clock until the new symbol's session landed. The clock knows weekends and
+   * clock hours only, so overnight it says "closed": Home read OVERNIGHT, a
+   * search flipped the strip to "Market closed · auto-refresh paused" and hid
+   * the session bar, and both came back when the request did. With Yahoo
+   * slow that was thirty seconds of the wrong market state, measured
+   * 2026-10-06. The phase is market-wide and was already right. */
+  STATE.session = STATE.session && STATE.session.session
+    ? { session: STATE.session.session } : null;
   loadSession(true);
   // Coming from home there's nothing to show on home, so land on the analysis.
   // `destination` is for callers that must leave their own tab.
@@ -41927,12 +42107,22 @@ function onPulseSuggestion(evt) {
 $('#chat-suggest').addEventListener('click', onPulseSuggestion);
 if ($('#pulse-modes')) $('#pulse-modes').addEventListener('click', onPulseSuggestion);
 
-document.addEventListener('keydown', (evt) => {
-  if ((evt.metaKey || evt.ctrlKey) && evt.key === 'k') {
-    evt.preventDefault();
-    document.body.classList.add('chat-open');
-    $('#chat-input').focus();
-  }
+/* Cmd+K is the palette's alone. A second handler here opened Pulse on the
+ * same keystroke, so "Search or ask  ⌘K" opened the palette over a Pulse panel
+ * that then stayed open, 400px wide, once the palette closed. The palette's
+ * "ask Optic" row is the keyboard way into Pulse.
+ *
+ * Escape closes the panel from inside it, as it closes every other layer here,
+ * and hands focus back to the button that opened it. Its own two pickers close
+ * first: their handlers are on document, after this one, so they are still
+ * open when this runs. */
+$('#chat').addEventListener('keydown', (evt) => {
+  if (evt.key !== 'Escape' || paletteOpen || kmOpen || ppOpen) return;
+  if (!document.body.classList.contains('chat-open')) return;
+  evt.preventDefault();
+  document.body.classList.remove('chat-open');
+  wsOnChatToggle();
+  $('#chat-toggle').focus();
 });
 
 /* ------------------------------------------------------- collapsible panels
@@ -43554,7 +43744,13 @@ function restoreReloadPlace() {
   } catch (e) {
     place = null;
   }
-  if (!place || !place.view || place.view === 'home') return;
+  /* The address bar, when the notice did not leave a place: a reload, a
+   * link someone sent, or Back into the app from another site. */
+  if (!place || !place.view) {
+    applyRoute(location.hash);
+    return;
+  }
+  if (place.view === 'home') return;
   if (place.ticker) loadTicker(place.ticker, place.view);
   else switchView(place.view);
 }

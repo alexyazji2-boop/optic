@@ -208,7 +208,11 @@
              autocomplete="off" aria-haspopup="dialog"
              aria-label="Search or ask. Opens the command palette">
     </div>
-    <button class="btn primary" type="submit">Load</button>
+    <!-- Secondary, not gold. Focusing the box opens the palette, so what this
+         button does is load the symbol already in it again: a refresh. Gold
+         beside the gold Pulse button made two primary actions in one bar,
+         and three on a Dossier page with its own Ask Pulse. -->
+    <button class="btn" type="submit" title="Load this symbol again">Load</button>
   </form>
 
   <!-- Kept: syncSecurityHeader and the instrument chart both write into it. -->

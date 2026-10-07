@@ -98,12 +98,14 @@ def run_js(scenario):
         "swingRequestId", "swingLoading", "swingInFlight", "chartRequestId",
         "SESSION_LABEL", "AUTO_REFRESH_VIEWS", "autoRefreshPending", "REFRESH_HEALTH", "originGate",
         "homeDataAt", "HOME_REUSE_MS",
+        # loadChartWorkspace records the chart's symbol in the address bar.
+        "routeApplying",
         # liveIndicatorHTML asks whether the loaded name has an overnight print.
         "TICKER_VIEWS"])
     loaders = "\n".join(function(name) for name in [
         "errorHTML",
         "loadSwing", "loadSecurityFacet", "loadChartWorkspace", "tickAutoRefresh", "refreshTarget",
-        "overnightPrint", "liveIndicatorHTML", "trimPhase"])
+        "overnightPrint", "liveIndicatorHTML", "trimPhase", "routeRecord"])
     script = STUBS + setup + loaders + "\n(async function() {\n" + scenario + """
     })().then(function() { print('TEST_OK'); }, function(err) { print(err.stack); });
     """

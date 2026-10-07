@@ -989,6 +989,7 @@ nav.tabs button[aria-selected="true"]::after {
   align-items: flex-start;
   gap: var(--space-3);
 }
+.statusline[hidden] { display: none; }
 .sl-parts {
   display: flex;
   gap: var(--space-4);
@@ -17167,3 +17168,25 @@ details.exact > .table-scroll, details.exact > table { margin-top: var(--space-2
  * only cue. */
 table.heat td { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
 table.heat td.name { text-align: left; font-weight: 500; }
+
+/* ===================================================== SHELL: one line each ==
+ *
+ * The session strip on one line from 1080px. Its head stacked the phase over
+ * the clock and the extended-hours print stacked its label over its price, so
+ * the strip was 63px on every page for a reading that changes four times a
+ * day: with the top bar and the status line, 177px of chrome above Home's
+ * first figure at 1440x900. Side by side the same words fit in one row; under
+ * 1080px the strip already wraps its timeline to a row of its own and the
+ * stacked head is the narrower shape. */
+@media (min-width: 1080px) {
+  .sessionbar .ses-head { flex-direction: row; align-items: baseline; gap: var(--space-3); }
+  .sessionbar .ses-price { flex-direction: row; align-items: baseline; gap: var(--space-2); }
+  .sessionbar .ses-pval { font-size: var(--t-body); }
+}
+
+/* A phone's top bar packs to the right. On Home the search is not drawn and
+ * a guest's Sign in lives under More, which left Pulse alone at the left edge
+ * of an empty bar, where a page's back control would be. */
+@media (max-width: 559px) {
+  header.topbar { justify-content: flex-end; }
+}

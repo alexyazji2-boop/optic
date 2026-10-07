@@ -42,7 +42,7 @@ def test_there_is_one_mark_and_the_mascot_is_gone():
 
 
 def test_the_small_places_get_the_reduced_mark():
-    """The button, the panel header and the phone tab are all under 24px."""
+    """The button and the panel header are both under 24px."""
     mount = _fn("mountPulseMarks")
     assert "'pulse-mark-btn', 'pulse-mark-head'" in mount
     assert "pulseMarkHTML('pulse-glyph-sm')" in mount
@@ -50,10 +50,13 @@ def test_the_small_places_get_the_reduced_mark():
     assert 'id="pulse-mark-btn"' in HTML and 'id="pulse-mark-head"' in HTML
     # And it is actually called at boot.
     assert "\n  mountPulseMarks();" in APP
-    # The phone tab too, which used a four-pointed star standing in for a mark
-    # that did not exist.
-    assert "t.mark === 'pulse' ? pulseMarkHTML('pulse-glyph-sm') : t.icon" in APP
+    # The phone's bottom bar had a Pulse tab, which used a four-pointed star
+    # standing in for a mark that did not exist. Pulse left the bar for the top
+    # bar's button, and the tabs now wear the rail's icons (test_shell_routes),
+    # so the branch that drew the mark there went with it.
     assert "'&#10022;'" not in APP, "the stand-in star is gone"
+    tabs = APP.split("const MOBILE_TABS = [", 1)[1].split("\n];", 1)[0]
+    assert "Pulse" not in tabs
 
 
 def test_the_heartbeat_stays_sharp():
