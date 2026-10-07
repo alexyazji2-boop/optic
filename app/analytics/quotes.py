@@ -95,7 +95,12 @@ def multipliers(frame: pd.DataFrame, ticker: Optional[str]) -> pd.Series:
         roots = frame["contract"].map(option_root)
         # Without a ticker, the chain's own most common root is the standard
         # one: adjusted contracts are a handful beside the regular series.
-        want = str(ticker).upper() if ticker else (
+        # The OCC root carries no punctuation: BRK-B's contracts are BRKB...,
+        # BF-B's BFB..., so the ticker is compared without its dash or dot.
+        # Compared as written, every Berkshire B contract read as an adjusted
+        # one of unknown size, the whole chain was dropped, and the ticker
+        # build failed with a 500 (measured 2026-10-07).
+        want = re.sub(r"[^A-Z0-9]", "", str(ticker).upper()) if ticker else (
             roots.dropna().mode().iloc[0] if roots.notna().any() else None)
         standard = roots.isna() | (roots == want) if want else pd.Series(True, index=frame.index)
     else:

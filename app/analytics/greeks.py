@@ -20,7 +20,9 @@ def _norm_pdf(x: np.ndarray) -> np.ndarray:
 
 def _norm_cdf(x: np.ndarray) -> np.ndarray:
     # erf is vectorised via numpy's ufunc on the scipy-free path
-    return 0.5 * (1.0 + np.vectorize(math.erf)(x / math.sqrt(2.0)))
+    # otypes, so an empty chain is an empty answer: without it numpy has to
+    # call erf once to learn the output type, and on zero contracts raises.
+    return 0.5 * (1.0 + np.vectorize(math.erf, otypes=[float])(x / math.sqrt(2.0)))
 
 
 def _sanitise(
