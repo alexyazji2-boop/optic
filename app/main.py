@@ -2169,7 +2169,8 @@ def _morning_desk(macro: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         meeting = None
         for row in ((events_out or {}).get("events") or []):
             title = (row.get("title") or "").lower()
-            if "fomc" in title or "federal open market" in title:
+            # The decision, not its minutes three weeks later: both say FOMC.
+            if ("fomc" in title or "federal open market" in title) and "minutes" not in title:
                 meeting = row.get("at")
                 break
         rate = morning_desk_mod.rate_path(

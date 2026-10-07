@@ -158,6 +158,16 @@ WHY_IT_MATTERS = {
         "The state-level breakdown of a national number already published. "
         "Included for completeness; it does not move an index."
     ),
+    # Before "fomc", which would otherwise answer for the minutes too: _why
+    # takes the first needle found in the title.
+    "fomc minutes": (
+        "The record of the last meeting's discussion, published three weeks "
+        "after it. The decision is already known, so what can move prices is "
+        "the detail: how many officials leaned toward the next change and what "
+        "they said about inflation and the balance sheet. Usually smaller than "
+        "the decision itself; it matters when the discussion reads more hawkish "
+        "or dovish than the statement and press conference did."
+    ),
     "fomc": (
         "The rate decision itself, plus the statement and, at four of the eight "
         "meetings. The projections and a press conference. The decision is "
@@ -261,17 +271,93 @@ _MONTHS = ("January February March April May June July August September "
 
 
 def _fomc_events(force: bool = False) -> Dict[str, Any]:
-    """Parse FOMC meeting dates out of the Fed's calendar page.
+    """FOMC decisions from the Fed's calendar page, one row per meeting.
 
     The page lists each meeting as a month and a day range. Two-day meetings are
     what matter — the statement lands on the second day at 14:00 ET — so a range
     is collapsed to its final day. Anything that doesn't parse is dropped.
     """
     result = feeds.load_html("fomc-calendar", FOMC_URL, force=force)
+    meetings = _fomc_meetings(result.get("text") or "")
+    if not result.get("text"):
+        return {"events": [], "error": result.get("error") or "empty page",
+                "stale": bool(result.get("stale"))}
+    rows = [{
+        "title": "FOMC statement and rate decision",
+        "short": "FOMC",
+        "at": m["when"].isoformat(),
+        "all_day": False,
+        "agency": "Federal Reserve",
+        "agency_short": "Fed",
+        "source_url": FOMC_URL,
+        "confidence": "published",
+        "importance": 10,
+        "note": "Two-day meetings are shown on the day the statement lands.",
+    } for m in meetings]
+    return {"events": rows, "error": None if rows else "no dates parsed",
+            "stale": bool(result.get("stale"))}
+
+
+# The Fed's stated practice: "The minutes of regularly scheduled meetings are
+# released three weeks after the date of the policy decision." Checked against
+# the page's own release notes for 2021-2026: 21 days every time but around
+# holidays (Nov 26, 2024 and Dec 30, 2025 came a day or two early).
+MINUTES_AFTER = timedelta(days=21)
+
+
+def _fomc_minutes_events(force: bool = False) -> Dict[str, Any]:
+    """FOMC minutes, from the same page as the decisions.
+
+    Asked for as "there FOMC minutes today? focus on accuracy here": on
+    2026-10-07 the September minutes came out at 2pm and the calendar listed
+    meetings only. A meeting whose minutes are out carries "(Released October
+    07, 2026)" on the page, and that date is used. One still to come is dated by
+    the three-week rule and marked `estimated`, so the calendar can say so.
+    """
+    result = feeds.load_html("fomc-calendar", FOMC_URL, force=force)
     text = result.get("text") or ""
     if not text:
         return {"events": [], "error": result.get("error") or "empty page",
                 "stale": bool(result.get("stale"))}
+    rows: List[Dict[str, Any]] = []
+    for m in _fomc_meetings(text):
+        if m["released"]:
+            when, confidence = m["released"], "published"
+            note = "The release date the Fed's calendar gives for these minutes."
+        elif m["two_day"]:
+            # Not "recurring": that is the COT rows' weekly rule, and the
+            # calendar explains it as the CFTC's. Not "rule" either, which the
+            # expiry rows use for a date that cannot move.
+            when, confidence = m["when"] + MINUTES_AFTER, "estimated"
+            note = ("Dated by the Fed's rule of three weeks after the decision. "
+                    "Around a holiday the release has come a day or two early.")
+        else:
+            # A one-day or unscheduled meeting's minutes are not always
+            # released on the rule, and guessing a date would be inventing one.
+            continue
+        rows.append({
+            "title": "FOMC minutes from the {} meeting".format(_MONTHS[m["month"] - 1]),
+            "short": "FOMC minutes",
+            "at": when.isoformat(),
+            "all_day": False,
+            "agency": "Federal Reserve",
+            "agency_short": "Fed",
+            "source_url": FOMC_URL,
+            "confidence": confidence,
+            # High: the minutes have repriced the front of the curve on their
+            # own (January 2022's balance-sheet discussion is the plain case).
+            "importance": 8,
+            "note": note,
+        })
+    return {"events": rows, "error": None if rows else "no dates parsed",
+            "stale": bool(result.get("stale"))}
+
+
+def _fomc_meetings(text: str) -> List[Dict[str, Any]]:
+    """Each meeting on the Fed's calendar page: decision time, month, whether
+    it ran two days, and its minutes' release date once the page gives one."""
+    if not text:
+        return []
 
     # Anchor on the page's own structure rather than on prose dates.
     #
@@ -285,25 +371,39 @@ def _fomc_events(force: bool = False) -> Dict[str, Any]:
     #   <div class="fomc-meeting__date">27-28</div>
     # under an "<h4>… 2026 FOMC Meetings" heading. So: track the year from the
     # headings, then read month/day pairs in document order.
-    rows: List[Dict[str, Any]] = []
+    meetings: List[Dict[str, Any]] = []
     seen = set()
 
+    # The minutes note sits inside its meeting's block, after the date and
+    # before the next month, so it belongs to the meeting read last.
     tokens = re.finditer(
         r"(?P<year>20\d\d)\s+FOMC\s+Meetings"
         r"|fomc-meeting__month[^>]*>\s*(?:<strong>)?\s*(?P<month>[A-Z][a-z]+)"
-        r"|fomc-meeting__date[^>]*>\s*(?P<days>[\d\-–/\s*]+)",
+        r"|fomc-meeting__date[^>]*>\s*(?P<days>[\d\-–/\s*]+)"
+        r"|\(Released\s+(?P<rel>[A-Z][a-z]+\s+\d{1,2},\s+20\d\d)\)",
         text)
 
     year: Optional[int] = None
     month: Optional[int] = None
+    last: Optional[Dict[str, Any]] = None
     for token in tokens:
         if token.group("year"):
             year = int(token.group("year"))
             month = None
+            last = None
             continue
         if token.group("month"):
             name = token.group("month")
             month = _MONTHS.index(name) + 1 if name in _MONTHS else None
+            last = None
+            continue
+        if token.group("rel"):
+            if last is not None and last["released"] is None:
+                try:
+                    day = datetime.strptime(re.sub(r"\s+", " ", token.group("rel")), "%B %d, %Y")
+                    last["released"] = day.replace(hour=14, tzinfo=ET)
+                except ValueError:
+                    pass
             continue
 
         days_raw = token.group("days") or ""
@@ -328,22 +428,12 @@ def _fomc_events(force: bool = False) -> Dict[str, Any]:
             continue
         key = when.date().isoformat()
         if key in seen:
+            last = None
             continue
         seen.add(key)
-        rows.append({
-            "title": "FOMC statement and rate decision",
-            "short": "FOMC",
-            "at": when.isoformat(),
-            "all_day": False,
-            "agency": "Federal Reserve",
-            "agency_short": "Fed",
-            "source_url": FOMC_URL,
-            "confidence": "published",
-            "importance": 10,
-            "note": "Two-day meetings are shown on the day the statement lands.",
-        })
-    return {"events": rows, "error": None if rows else "no dates parsed",
-            "stale": bool(result.get("stale"))}
+        last = {"when": when, "month": month, "two_day": len(nums) > 1, "released": None}
+        meetings.append(last)
+    return meetings
 
 
 def _cot_events(now: datetime) -> Dict[str, Any]:
@@ -543,14 +633,23 @@ def _readings(title: str, days_away: Optional[int]) -> Dict[str, Any]:
     }
 
 
-def upcoming(force: bool = False, now: Optional[datetime] = None) -> Dict[str, Any]:
-    """The calendar section: what's scheduled between now and the horizon."""
+def upcoming(force: bool = False, now: Optional[datetime] = None,
+             earlier_today: bool = False) -> Dict[str, Any]:
+    """The calendar section: what's scheduled between now and the horizon.
+
+    `earlier_today` keeps what already came out today, marked `released`. Home's
+    Today band asks for it: at 3pm on a minutes day the minutes are still what
+    the day is about, and dropping them at 2:01 left a reader asking whether
+    there were any. Every other caller wants what is still to come.
+    """
     now = now or datetime.now(ET)
     horizon = now + timedelta(days=HORIZON_DAYS)
+    since = now.replace(hour=0, minute=0, second=0, microsecond=0) if earlier_today else now
 
     legs = {
         "bls": _bls_events(force=force),
         "fomc": _fomc_events(force=force),
+        "fomc_minutes": _fomc_minutes_events(force=force),
         "cot": _cot_events(now),
         "expiry": _expiry_events(now),
     }
@@ -562,7 +661,7 @@ def upcoming(force: bool = False, now: Optional[datetime] = None) -> Dict[str, A
                 when = datetime.fromisoformat(row["at"])
             except (ValueError, TypeError):
                 continue
-            if now <= when <= horizon:
+            if since <= when <= horizon:
                 events.append(row)
 
     # Chronological, with the bigger release first on a shared slot — CPI and
@@ -574,6 +673,7 @@ def upcoming(force: bool = False, now: Optional[datetime] = None) -> Dict[str, A
         when = datetime.fromisoformat(row["at"])
         days = (when.date() - today).days
         row["days_away"] = days
+        row["released"] = when < now
         row["when_label"] = ("Today" if days == 0 else
                              "Tomorrow" if days == 1 else
                              when.strftime("%a %b %-d"))

@@ -60,7 +60,7 @@ def _et_date(stamp: Any) -> Optional[str]:
 def _events(now: Optional[datetime] = None) -> List[Dict[str, Any]]:
     """Scheduled releases and expiries inside the horizon."""
     try:
-        cal = events_mod.upcoming(now=now)
+        cal = events_mod.upcoming(now=now, earlier_today=True)
     except Exception as exc:
         log.warning("priority: calendar unavailable: %s", exc)
         return []
@@ -75,7 +75,11 @@ def _events(now: Optional[datetime] = None) -> List[Dict[str, Any]]:
             "title": e.get("title"),
             "short": e.get("short"),
             "when": e.get("when_label"),
-            "time": e.get("time_label"),
+            # Out already, and said so, rather than a time that has passed
+            # reading as one still to come.
+            "time": ("Out at " + e["time_label"]) if e.get("released") and e.get("time_label")
+            else e.get("time_label"),
+            "released": bool(e.get("released")),
             "days_away": days,
             "date": _et_date(e.get("at")),
             "why": e.get("why"),

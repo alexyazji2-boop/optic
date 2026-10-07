@@ -193,7 +193,7 @@ def test_the_feed_dates_its_earnings_days_and_events():
 def test_priority_rows_carry_the_date(monkeypatch):
     from app import priority
 
-    monkeypatch.setattr(priority.events_mod, "upcoming", lambda now=None: {"events": [
+    monkeypatch.setattr(priority.events_mod, "upcoming", lambda now=None, **kw: {"events": [
         {"title": "CPI", "days_away": 2, "at": "2026-10-08T08:30:00-04:00", "impact": "high"}]})
     monkeypatch.setattr(priority.weekly_mod, "earnings_this_week", lambda provider, now=None: {"days": [
         {"day": "Thursday", "date": "2026-10-08", "symbols": ["PEP"]}]})

@@ -4659,8 +4659,10 @@ function catalystPlacement(p, nowIso) {
       : (Number.isFinite(row.days_away) ? row.days_away : null);
     const day = days.find((x) => x.k === k);
     if (day) {
+      // A release already out says "Out" on the strip, where "Out at 2:00 PM
+      // ET" cut off the cell; the list below keeps the time.
       day.items.push({ kind, col: kind === 'event' ? 'events' : 'earnings', title: row.short || row.title,
-        time: row.time, impact: row.impact, row });
+        time: row.released ? 'Out' : row.time, impact: row.impact, row });
     }
   };
   ((cols.events || {}).rows || []).forEach((r) => place(r, 'event'));
@@ -9485,7 +9487,7 @@ function storyQuestion(data) {
  * is today or tomorrow and matters (medium impact or above). */
 const RELEASE_NAMES = {
   Jobs: 'The jobs report', CPI: 'CPI', PPI: 'PPI', FOMC: 'The Fed decision',
-  JOLTS: 'JOLTS', ECI: 'The employment cost index',
+  JOLTS: 'JOLTS', ECI: 'The employment cost index', 'FOMC minutes': 'The Fed minutes',
 };
 
 function catalystQuestion(data) {
@@ -9494,6 +9496,17 @@ function catalystQuestion(data) {
   const name = RELEASE_NAMES[c.short] || c.title;
   const fed = c.short === 'FOMC';
   const at = c.time_label ? ` at ${c.time_label}` : '';
+  // Minutes have no number to come in hot or cool; what they can change is
+  // the read on the next decision.
+  if (c.short === 'FOMC minutes') {
+    if (c.days_away === 1) return `${name} are out tomorrow${at}. What could they change about the next decision?`;
+    if (c.days_away !== 0) return null;
+    const due = Date.parse(c.at || '');
+    const now = Date.parse((((data || {}).session) || {}).now_et || '');
+    return isFinite(due) && isFinite(now) && now >= due
+      ? `${name} came out today. What did they change about the next decision?`
+      : `${name} are out today${at}. What could they change about the next decision?`;
+  }
   if (c.days_away === 1) {
     return fed ? `${name} is tomorrow${at}. What is priced in?`
       : `${name} is out tomorrow${at}. What would a hot or a cool number do?`;
@@ -32800,6 +32813,8 @@ const READ_CONF_HINT = {
   published: 'Date and time as published by the agency.',
   recurring: 'Derived from the release’s weekly schedule, not a confirmed posting; '
     + 'a federal holiday can move it.',
+  estimated: 'Dated by the Fed’s rule of three weeks after the decision. The Fed '
+    + 'gives the date once they are out; around a holiday they have come a day or two early.',
 };
 
 /* Impact bands. Three, not a 1-10 number: the reader's decision is binary —
@@ -32875,7 +32890,8 @@ function calRow(e) {
     <span class="cal-impact ${impact}" title="${esc(e.impact_note || '')}">${
   esc(CAL_IMPACT_LABEL[impact] || impact)}</span>
     <span class="read-cal-who" title="${esc(READ_CONF_HINT[e.confidence] || '')}">${
-  esc(e.agency_short)}${e.confidence === 'recurring' ? ' · scheduled' : ''}</span>`;
+  esc(e.agency_short)}${e.confidence === 'recurring' ? ' · scheduled'
+    : e.confidence === 'estimated' ? ' · estimated' : ''}</span>`;
 
   const cls = `read-cal-row${e.importance >= 9 ? ' major' : ''}`;
   if (!e.why && !readings.available) return `<div class="${cls}">${head}</div>`;
@@ -33581,6 +33597,7 @@ function briefCalendar(cal) {
       <div class="read-cal-rows">${rows.map((e) => calRow(e)).join('')}</div>
     </div>`).join('');
   const derived = events.some((e) => e.confidence === 'recurring');
+  const estimated = events.some((e) => e.confidence === 'estimated');
   const priced = events.filter((e) => (e.readings || {}).available).length;
 
   return `<div class="panel" id="cal-panel">
@@ -33602,6 +33619,8 @@ function briefCalendar(cal) {
       ${derived ? 'Rows marked <em>scheduled</em> come from a recurring weekly rule rather '
         + 'than a published date: the CFTC publishes no machine-readable calendar, so a '
         + 'federal holiday can shift the real posting.' : ''}
+      ${estimated ? 'Rows marked <em>estimated</em> are FOMC minutes not yet out, dated by the '
+        + 'Fed’s rule of three weeks after the decision.' : ''}
       ${(cal.degraded || []).length ? `The ${cal.degraded.join(' and ')} calendar could not be
         read on this refresh, so releases from it are missing.` : ''}</p>
   </div>`;
