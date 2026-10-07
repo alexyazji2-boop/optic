@@ -34523,9 +34523,15 @@ function usageHTML(data) {
   const features = data.features || [];
   const totals = data.totals || {};
   const since = data.since ? stampIn(data.since, activeZone()) : '';
+  /* An empty ledger on a deployment with no key is not "yet": nothing can
+   * be recorded until it has one, and the owner reading this is the person
+   * who would set it. */
+  const keyless = ((STATE.health || {}).assistant || {}).enabled === false;
   const lead = features.length
     ? `What the model has cost this deployment, by feature. Recorded since ${esc(since)}.`
-    : 'No calls recorded yet. Every call to Claude is recorded here from this deploy on.';
+    : keyless
+      ? 'No calls recorded. The assistant has no key on this deployment, so nothing calls Claude and nothing is recorded until it has one.'
+      : 'No calls recorded yet. Every call to Claude is recorded here from this deploy on.';
   const table = features.length ? `<div class="table-scroll"><table class="data usage-table">
       <thead><tr><th>Feature</th><th>Today</th><th>7 days</th><th>30 days</th>
         <th title="Calls in the last 30 days">Calls</th>
