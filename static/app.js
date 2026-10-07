@@ -2109,10 +2109,20 @@ async function getJSON(url) {
       // connection rather than anything the app did.
       let detail = '';
       try { detail = ((await res.json()).detail || '').toString(); } catch (e) { /* not JSON */ }
-      if (detail) throw new Error(detail);           // the app answered; that is the answer
+      /* The status rides on the error. A 404 from /api/ticker is the feed
+       * saying the symbol does not exist, which is a different page from a
+       * failed load (see symbolMissingHTML), and the message alone cannot be
+       * told apart from any other refusal. */
+      if (detail) {
+        const answered = new Error(detail);   // the app answered; that is the answer
+        answered.status = res.status;
+        throw answered;
+      }
 
       if (!worthRetrying(res.status)) {
-        throw new Error(`${res.statusText || 'request failed'} (HTTP ${res.status})`);
+        const refused = new Error(`${res.statusText || 'request failed'} (HTTP ${res.status})`);
+        refused.status = res.status;
+        throw refused;
       }
       lastDetail = `the server is unreachable (HTTP ${res.status})`;
     }
@@ -9790,6 +9800,16 @@ function recentSymbols() {
   } catch (e) { return []; }
 }
 
+/** Take a symbol back out of the recent list: the feed said it does not exist,
+ *  and Home's Recent row would otherwise offer it back on every visit. */
+function forgetSymbol(symbol) {
+  const sym = String(symbol || '').trim().toUpperCase();
+  const was = recentSymbols();
+  if (!was.includes(sym)) return;
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(was.filter((s) => s !== sym))); }
+  catch (e) { /* private mode */ }
+}
+
 function rememberSymbol(symbol) {
   const sym = String(symbol || '').trim().toUpperCase();
   if (!sym) return;
@@ -13292,6 +13312,21 @@ function securityViewsFor(sym) {
  * any extended-hours print, through freshExtended); on Tradier it is the last
  * trade, which can be an extended-hours one. "Delayed ~15 min" beside a
  * Friday close read on a Sunday would describe the feed, not the number. */
+/* Which close. "At the close" on a Monday morning is Friday's, and on a
+ * holiday the day before it; the server's calendar names the day
+ * (session.last_close) because the client must not learn holidays. Today's,
+ * a weekday within the week, or a date past that. */
+function closeLabel() {
+  const sess = (STATE.session || {}).session || {};
+  const lc = sess.last_close;
+  if (!lc || !lc.date) return 'At the close';
+  const today = String(sess.now_et || '').slice(0, 10);
+  if (lc.date === today) return "At today's close";
+  const days = (Date.parse(today) - Date.parse(lc.date)) / 86400000;
+  if (Number.isFinite(days) && days > 0 && days < 7 && lc.weekday) return `At ${lc.weekday}'s close`;
+  return lc.label ? `At the ${lc.label} close` : 'At the close';
+}
+
 function secDataStateHTML(q) {
   const session = marketSessionET();
   /* Real-time only when the feed is and this quote came from it. Tradier
@@ -13304,7 +13339,7 @@ function secDataStateHTML(q) {
   let tone;
   let why;
   if (session !== 'regular') {
-    label = realtime ? 'Last trade' : 'At the close';
+    label = realtime ? 'Last trade' : closeLabel();
     tone = 'is-closed';
     why = realtime
       ? 'The most recent trade the feed holds, which outside the regular session can be an extended-hours one'
@@ -13423,6 +13458,16 @@ function securityHeader(view, opts = {}) {
    * means when they click Financials. */
   const sym = (opts.symbol !== undefined ? opts.symbol : STATE.ticker) || '';
   if (!sym) return '';
+  /* A symbol the feed has never heard of has no sections to visit and nothing
+   * to watch. With the tabs and Watch, Alert and Ask Pulse still drawn, the
+   * header kept saying "Loading price" over the error, and Watch would have
+   * put ZZZZQ on the watchlist. */
+  if (symbolMissing(sym)) {
+    return `<header class="sec-head is-missing"><div class="sec-id">
+      <span class="sec-sym">${esc(sym)}</span>
+      <span class="sec-px-none">Not found</span>
+    </div></header>`;
+  }
   // The full payload's quote once it has landed, and the quick one before it
   // (see loadSecurityFacet). Never another symbol's: a payload still held for
   // the previous name must not lend its price to this one.
@@ -13452,6 +13497,7 @@ function securityHeader(view, opts = {}) {
     const on = v === view;
     return `<button type="button" role="tab" class="sec-tab${on ? ' on' : ''}"
       data-sec-view="${esc(v)}" data-sec-sym="${esc(sym)}" aria-selected="${on}"
+      tabindex="${on ? 0 : -1}"
       title="${esc(SUB_TITLES[v] || '')}">${esc(SUB_LABELS[v] || v)}</button>`;
   }).join('');
 
@@ -13486,11 +13532,15 @@ function securityHeader(view, opts = {}) {
   return `<header class="sec-head${opts.compact ? ' compact' : ''}${view === 'chart' ? '' : ' has-acts'}">
     ${opts.compact ? '' : `<div class="sec-id">
       <span class="sec-sym">${esc(sym)}</span>
-      ${q.name ? `<span class="sec-name">${esc(q.name)}</span>` : ''}
+      ${/* The feed names a fund or a thin listing by its symbol when it has
+           no name, which printed "MSFT MSFT 529.30". */''}
+      ${q.name && String(q.name).trim().toUpperCase() !== sym.toUpperCase()
+    ? `<span class="sec-name">${esc(q.name)}</span>` : ''}
       ${has ? `<span class="sec-px">${fmt(price, 2)}</span>
         <span class="sec-chg ${dir}">${Number.isFinite(pct)
     ? `${pct >= 0 ? '+' : ''}${fmt(pct, 2)}%` : ''}</span>` : `<span class="sec-px-none"
-        >${STATE.swing && STATE.swing.ticker === sym ? 'No price in the feed' : 'Loading price'}</span>`}
+        >${STATE.swing && STATE.swing.ticker === sym ? 'No price in the feed'
+    : STATE.loadFailed === sym ? 'Price unavailable' : 'Loading price'}</span>`}
       ${showStage ? '<span class="stage-chip" id="stage-sec-overview" hidden></span>' : ''}
       ${q.exchange ? `<span class="sec-meta">${esc(q.exchange)}${
     q.sector ? ` \u00b7 ${esc(q.sector)}` : ''}</span>` : ''}
@@ -13568,9 +13618,24 @@ async function loadSecurityFacet(view, force, opts = {}) {
       const clock = host.querySelector ? host.querySelector('[data-load-elapsed]') : null;
       if (clock && typeof setInterval === 'function') {
         const started = Date.now();
+        /* "Several seconds" stops being true at about fifteen, and a count
+         * passing 30 under a sentence promising quick reads as a hang.
+         * Measured 2026-10-06 with Yahoo rate-limiting this machine: 31s
+         * before the first figure, under the same sentence throughout. Past
+         * fifteen the sentence says what is slow and that it is still going. */
+        const note = clock.closest ? clock.closest('.panel') : null;
+        let slowSaid = false;
         ticking = setInterval(() => {
           if (!clock.isConnected) { clearInterval(ticking); return; }
-          clock.textContent = `${Math.round((Date.now() - started) / 1000)}s`;
+          const secs = Math.round((Date.now() - started) / 1000);
+          clock.textContent = `${secs}s`;
+          const cav = note && note.querySelector('.caveat');
+          if (!slowSaid && secs >= 15 && cav) {
+            slowSaid = true;
+            cav.textContent = 'Taking longer than usual: the market data provider is slow '
+              + 'to answer right now. Optic is still waiting on it, and this page fills in '
+              + 'when it answers.';
+          }
         }, 1000);
       }
       /* The price first. The strip's name, price and change are one cached
@@ -13610,8 +13675,8 @@ async function loadSecurityFacet(view, force, opts = {}) {
        * The one inside the card does the same work: for these three views
        * `switchView(view, true)` dispatches straight back to
        * `loadSecurityFacet(view, true)`, which is what this button called. */
-      host.innerHTML = `${securityHeader(view)}${errorHTML(err.message,
-        { originUnreachable: err.originUnreachable })}`;
+      host.innerHTML = `${securityHeader(view)}${tickerErrorHTML(err, ticker)}`;
+      fillSymbolSuggestions(host);
       return;
     } finally {
       if (ticking) clearInterval(ticking);
@@ -31738,6 +31803,68 @@ let swingLoading = false;
  */
 let swingInFlight = null;
 
+/* ======================================================= A MISSING SYMBOL ===
+ *
+ * Symbols the feed answered 404 for this session. A 404 from /api/ticker is
+ * the provider saying it has no price for the name at all, and it was shown
+ * as a failed load: "Could not load. No price data found for 'ZZZZQ'." with
+ * Try again, under a header still reading "Loading price" over seven
+ * sections and a Watch button. Retrying a name that does not exist cannot
+ * work; the way forward is a search.
+ *
+ * Cleared when the symbol is searched again (loadTicker), so a feed that was
+ * wrong for a moment is asked again rather than remembered as final. */
+const SYMBOL_MISSING = new Set();
+
+function symbolMissing(sym) {
+  return SYMBOL_MISSING.has(String(sym || '').toUpperCase());
+}
+
+/** What a failed /api/ticker load means for the header and the recent list. */
+function noteTickerFailure(err, ticker) {
+  // A refresh that fails over a dossier already on screen is a blip, not news.
+  if (STATE.swing && STATE.swing.ticker === ticker) return;
+  STATE.loadFailed = ticker;
+  if (err && err.status === 404) {
+    SYMBOL_MISSING.add(ticker);
+    forgetSymbol(ticker);
+  }
+}
+
+/** The body for a symbol that did not load: not found, or the failure. */
+function tickerErrorHTML(err, ticker) {
+  if (!symbolMissing(ticker)) {
+    return errorHTML(err.message, { originUnreachable: err.originUnreachable });
+  }
+  return `<div class="panel empty-state sym-missing" data-fixed="1">
+    <h2>No symbol called ${esc(ticker)}</h2>
+    <p class="sub">The data feed has no price for it. Check the spelling, or search
+      by the company's name.</p>
+    <div class="sym-suggest" data-sym-suggest="${esc(ticker)}" hidden></div>
+    <div class="empty-acts"><button type="button" class="btn primary" data-open-palette
+      >Search again</button></div>
+  </div>`;
+}
+
+/* The closest names the search index has to what was typed: APPL finds
+ * AAPL. Filled after the panel paints, and only while it is still the one on
+ * screen; nothing is drawn when the index has nothing. */
+async function fillSymbolSuggestions(host) {
+  const box = host && host.querySelector && host.querySelector('[data-sym-suggest]');
+  if (!box || typeof fetch !== 'function') return;
+  const typed = box.dataset.symSuggest;
+  let rows = [];
+  try {
+    const res = await fetch(`/api/search?q=${encodeURIComponent(typed)}&limit=5`);
+    if (res.ok) rows = ((await res.json()).results || []).filter((r) => r.symbol !== typed);
+  } catch (e) { return; }
+  if (!rows.length || !box.isConnected) return;
+  box.innerHTML = `<span class="sym-suggest-label">Did you mean</span>${rows.map((r) => `
+    <button type="button" class="sym-pick" data-pick="${esc(r.symbol)}" title="${esc(r.name || '')}"
+      ><strong>${esc(r.symbol)}</strong>${r.name ? `<span>${esc(r.name)}</span>` : ''}</button>`).join('')}`;
+  box.hidden = false;
+}
+
 async function loadSwing(force, opts = {}) {
   const silent = !!opts.silent;
   if (STATE.swing && STATE.swing.ticker === STATE.ticker && !force) {
@@ -31765,8 +31892,8 @@ async function loadSwing(force, opts = {}) {
       if (opts.propagateError) throw outcome.error;
       if (!silent) {
         endLoad(views.swing);
-        views.swing.innerHTML = errorHTML(outcome.error.message,
-          { originUnreachable: outcome.error.originUnreachable });
+        views.swing.innerHTML = tickerErrorHTML(outcome.error, ticker);
+        fillSymbolSuggestions(views.swing);
       }
       return null;
     }
@@ -31793,6 +31920,7 @@ async function loadSwing(force, opts = {}) {
     if (requestId !== swingRequestId || STATE.ticker !== ticker) return null;
     outcome = { data };
     STATE.swing = data;
+    if (STATE.loadFailed === ticker) STATE.loadFailed = null;
     if (data.macro && !data.macro.error) {
       STATE.market = STATE.market || {};
       STATE.market.macro = data.macro;
@@ -31827,13 +31955,14 @@ async function loadSwing(force, opts = {}) {
   } catch (err) {
     outcome = { error: err };
     if (requestId !== swingRequestId || STATE.ticker !== ticker) return null;
+    noteTickerFailure(err, ticker);
     if (opts.propagateError) throw err;
     // A background refresh tick shouldn't wipe out a perfectly good dashboard
     // over one transient network blip — only a manual/foreground load does.
     if (!silent) {
       endLoad(views.swing);
-      views.swing.innerHTML = errorHTML(err.message,
-        { originUnreachable: err.originUnreachable });
+      views.swing.innerHTML = tickerErrorHTML(err, ticker);
+      fillSymbolSuggestions(views.swing);
     }
     else console.warn('Silent swing refresh failed:', err.message);
     return null;
@@ -34048,6 +34177,27 @@ function showReportsTab(tab) {
     }
   });
 }
+
+/* The Dossier's sections are a tab list, and a tab list is one Tab stop.
+ *
+ * Each section was its own stop, so a keyboard reader went through seven
+ * buttons to reach Watch, and the arrow keys the role promises did nothing.
+ * Now Tab lands on the open section, the arrows and Home/End move along the
+ * strip, and Enter or Space opens one. Focus moves without opening: each
+ * section is a page load, and opening on every arrow press would fetch four
+ * pages on the way from Overview to Earnings. */
+document.addEventListener('keydown', (evt) => {
+  const tab = evt.target && evt.target.closest ? evt.target.closest('.sec-tabs .sec-tab') : null;
+  if (!tab) return;
+  const tabs = [...tab.parentElement.querySelectorAll('.sec-tab')];
+  const at = tabs.indexOf(tab);
+  const to = { ArrowRight: at + 1, ArrowLeft: at - 1, Home: 0, End: tabs.length - 1 }[evt.key];
+  if (to === undefined) return;
+  evt.preventDefault();
+  const next = tabs[(to + tabs.length) % tabs.length];
+  tabs.forEach((t) => t.setAttribute('tabindex', t === next ? '0' : '-1'));
+  next.focus();
+});
 
 // The arrow keys move between the two tabs, as a tab list is expected to, and
 // Home and End go to the ends. The selection follows the focus.
@@ -41094,6 +41244,9 @@ function loadTicker(raw, destination) {
   // Recording it at each call site instead would miss whichever one is added
   // next.
   rememberSymbol(next);
+  // Asked again, so the feed is asked again: see SYMBOL_MISSING.
+  SYMBOL_MISSING.delete(next);
+  if (STATE.loadFailed === next) STATE.loadFailed = null;
   ++swingRequestId;
   swingLoading = false;
   STATE.ticker = next;

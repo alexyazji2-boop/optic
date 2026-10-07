@@ -54,6 +54,9 @@ function esc(s) { return String(s); }
 function securityHeader() { return '<header>'; }
 function emptyHTML() { return 'empty'; }
 function errorHTML(m) { return 'error ' + m; }
+// A failed load renders through tickerErrorHTML (tests/test_symbol_loading.py).
+function tickerErrorHTML(err) { return errorHTML(err.message); }
+function fillSymbolSuggestions() {}
 function preserveUI(h, f) { f(); }
 var rendered = 0;
 function renderOverviewView() { rendered++; host.innerHTML = 'overview'; }
