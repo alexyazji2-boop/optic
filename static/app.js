@@ -8611,7 +8611,11 @@ function renderExplore(data) {
       <table class="data narrow">
         <thead><tr><th>Sector</th><th>Week</th><th>Month</th><th>Read</th></tr></thead>
         <tbody>${sectors.map((r) => `<tr class="ex-row" data-explore-sector="${esc(r.symbol)}">
-          <td class="name">${esc(r.name)}</td>
+          ${/* A button in the row, for the keyboard. The row took the click
+               and nothing else: no tab stop and no name, so the eleven
+               sectors could not be opened without a mouse. */''}
+          <td class="name"><button type="button" class="ex-sector-btn"
+            data-explore-sector="${esc(r.symbol)}">${esc(r.name)}</button></td>
           <td class="${signClass(r.rel_week_pct)}">${fmtPct(r.rel_week_pct, 1)}</td>
           <td class="${signClass(r.rel_month_pct)}">${fmtPct(r.rel_month_pct, 1)}</td>
           ${/* rotation is {state, label, note}, so String() on it rendered

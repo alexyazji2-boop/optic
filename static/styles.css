@@ -10614,6 +10614,10 @@ body.cp-open { overflow: hidden; }
   color: var(--ink-muted);
 }
 
+/* Reliability pass: the sector name is the row's button; it reads as the
+   name it was, with the focus ring the rest of the app uses. */
+.ex-sector-btn { padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.ex-sector-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-sm); }
 .ex-row { cursor: pointer; transition: background var(--dur-ui) var(--ease-ui); }
 .ex-row:hover { background: var(--raised); }
 
