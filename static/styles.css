@@ -12793,6 +12793,18 @@ body.auth-open { overflow: hidden; }
 
 .set-profile .set-row-act { flex-wrap: wrap; }
 .set-profile input { max-width: 132px; }
+/* Reliability pass: on a phone the two 132px boxes and Save wrapped into
+   "Demo" alone on one line and "Reader  Save" on the next. The names share a
+   row, each half of it, and Save sits under them. */
+@media (max-width: 559px) {
+  .set-profile .set-row-act {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    width: 100%;
+  }
+  .set-profile input { max-width: none; width: 100%; }
+  .set-profile .set-row-act .btn { justify-self: start; }
+}
 
 .set-pw {
   display: flex;
