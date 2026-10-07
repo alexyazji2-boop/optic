@@ -3765,7 +3765,7 @@ function macdCrossSentence(cross, wk, dates, unit, zoom, what = 'MACD') {
   const widening = Math.abs(gap) > Math.abs(prevGap);
 
   if (!cross) {
-    return `<p class="caveat" style="margin:var(--space-2) 0 0">No crossover in the last ${zoom} ${unit}s —
+    return `<p class="caveat" style="margin:var(--space-2) 0 0">No crossover in the last ${zoom} ${unit}s:
       ${what} has stayed ${gap >= 0 ? 'above' : 'below'} its signal line throughout, so momentum has
       not changed direction in this window. The gap is currently
       ${widening ? 'widening' : 'narrowing'}${widening ? '' : ', which is what precedes a cross'}.</p>`;
@@ -6969,7 +6969,7 @@ function renderWatchesBlock() {
         </ul>
       </div>`;
   }).join('') : `<p class="wv-none">No watches yet. A watch is the answer to
-      "what would make me look at this again" — a level, a breakout, an earnings
+      "what would make me look at this again": a level, a breakout, an earnings
       date coming up, or Optic's own stance changing on you.</p>`}
 
     ${anyChecked ? `<p class="wd-foot">${esc((watchCatalogue || {}).method || '')}</p>` : ''}
@@ -18142,7 +18142,7 @@ function renderSeasonality(s) {
     </table>
     <p class="caveat">Gap between the two windows:
       <strong>${fmt(tom.gap, 3)}%</strong> per day net of ${esc(s.benchmark)}, p =
-      ${tom.p === null || tom.p === undefined ? '—' : fmt(tom.p, 3)} —
+      ${tom.p === null || tom.p === undefined ? '—' : fmt(tom.p, 3)}:
       ${seasVerdict(tom.verdict)}.</p>
 
     <p class="caveat" style="margin-top:var(--space-3)">${gloss('Two limits worth holding on to. The '
@@ -28268,10 +28268,9 @@ function renderSettings() {
 
   <div class="panel span2 gap">
     <h2>${hg('How much to show')}</h2>
-    <p class="sub">The Analysis tab renders twenty-two panels and nine of them are
-      derivatives positioning. Simple starts those collapsed; every panel is on
-      the page either way, and every panel that says what it cannot tell you
-      keeps saying it.</p>
+    <p class="sub">Simple starts the densest panels collapsed, one press from
+      open. Every panel is on the page either way, and every panel that says
+      what it cannot tell you keeps saying it.</p>
     <div class="settings-row">
       <div class="settings-label">Detail
         <span class="settings-hint">Pro is what the terminal has always shown.
@@ -28320,9 +28319,15 @@ function renderSettings() {
         : ASSISTANT_NAME + ' is switched off in this build';
     })()],
     ['Optic Portfolio', 'One shared simulated ledger, no real money'],
-    ['Stored on this device', 'Theme, time zone, chart preferences and any Roth holdings you enter'],
+    /* Two lists on this page named what this browser holds and they
+       disagreed: the Account panel said the watchlist was here and this row
+       left it out. Both follow PERSONAL_KEYS now, and signed in, the
+       account's half moves to the row below. */
+    ['Stored on this device', signedIn()
+      ? 'Theme, time zone, chart preferences, recent symbols, Pulse chats, drawings, notes, Paper Desk trades and Retirement holdings'
+      : DEVICE_STORED_GUEST],
     ['Stored on the server', signedIn()
-      ? 'Your account: name, email, watchlists, saved research, preferences and sessions'
+      ? 'Your account: name, email, watchlists, watches, saved research, theses, valuation scenarios, signal history, preferences and sessions'
       : 'Nothing about you'],
   ])}
     <p class="caveat">${signedIn()
@@ -28614,6 +28619,13 @@ function accountFace(user, cls) {
     : `<span class="${cls}">${esc(label)}</span>`;
 }
 
+/* What a guest's browser holds, in the words the Account panel and About this
+ * build both print. It follows PERSONAL_KEYS: the page is named for its nav
+ * label, Retirement, rather than the Roth store it reads. */
+const DEVICE_STORED_GUEST = 'Theme, time zone, chart preferences, your watchlists '
+  + 'and watches, saved research, theses, Pulse chats, drawings, notes, Paper Desk '
+  + 'trades and any Retirement holdings you entered';
+
 function accountGuestPanel() {
   return `<div class="panel span2 gap">
     <h2>${hg('Account')}</h2>
@@ -28621,9 +28633,8 @@ function accountGuestPanel() {
       saved research on the server instead of in this browser, so they follow you to
       another device and survive clearing site data.</p>
     <div class="set-guest">
-      <p><strong>Right now everything is stored in this browser.</strong> Theme, time
-        zone, chart preferences, your watchlist, your saved questions and any Roth
-        holdings you entered. Nothing about you is on the server.</p>
+      <p><strong>Right now everything is stored in this browser.</strong>
+        ${DEVICE_STORED_GUEST}. Nothing about you is on the server.</p>
       <div class="set-row-act">
         <button type="button" class="btn primary" data-auth-open="signup">Create an account</button>
         <button type="button" class="btn" data-auth-open="signin">Sign in</button>
@@ -28719,9 +28730,16 @@ function accountPanels() {
 
   <div class="panel span2 gap set-danger">
     <h2>${hg('Delete account')}</h2>
-    <p class="sub">Removes the account and everything on it: watchlists, saved research,
-      preferences, connected sign-in methods and every session. It cannot be undone, and
-      the shared paper-trading ledger is not affected because it was never yours.</p>
+    ${/* "Everything on it" was not true of one thing. A problem report is
+         filed with the sender's address so the maintainer can write back, and
+         it has no tie to the account row, so it outlives the account. Said
+         here, where the reader is deciding, rather than discovered later. */''}
+    <p class="sub">Removes the account and everything kept on it: watchlists, watches,
+      saved research, theses, valuation scenarios, signal history, preferences,
+      connected sign-in methods and every session. It cannot be undone. Problem
+      reports you sent are kept with the address they came from, so a reply can
+      still reach you, and the shared paper-trading ledger is not affected because
+      it was never yours.</p>
     <div class="set-row-act">
       <button type="button" class="btn" data-acct-delete>Delete this account</button>
     </div>
@@ -31963,7 +31981,7 @@ function briefStrip(indices) {
 
 const READ_CONF_HINT = {
   published: 'Date and time as published by the agency.',
-  recurring: 'Derived from the release’s weekly schedule, not a confirmed posting — '
+  recurring: 'Derived from the release’s weekly schedule, not a confirmed posting; '
     + 'a federal holiday can move it.',
 };
 
@@ -32655,7 +32673,7 @@ function renderVanna(gex) {
     : 'When gamma dominates, the hedging that matters is driven by the stock itself, and '
       + 'the GEX flip point above is the level to watch.'}</div>` : ''}
 
-      <p class="caveat">${gloss('Same sign convention and the same estimate as GEX above — '
+      <p class="caveat">${gloss('Same sign convention and the same estimate as GEX above: '
     + 'these are computed from the same chain and the same dealer assumption, so they '
     + 'inherit the same uncertainty. Open interest is a stale, once-a-day figure and '
     + 'the dealer side is assumed rather than observed.')}</p>
@@ -33233,7 +33251,7 @@ function paperTicketHTML() {
       ${/* The mid is what the book will mark this at, so the spread is the
            first thing that makes a paper fill a fiction. Said here, at the
            moment of entry, rather than in a footnote nobody reads. */''}
-      ${picked.spread_pct > 10 ? '<span class="neg"> — wide; a real fill would be worse.</span>' : ''}</p>`
+      ${picked.spread_pct > 10 ? '<span class="neg">, which is wide, so a real fill would be worse.</span>' : ''}</p>`
     : ''}` : ''}
     <div class="pt-grid">
       <div class="ins-field"><label for="pt-qty">${isOpt ? 'Contracts' : 'Shares'}</label>
@@ -33598,7 +33616,7 @@ function renderPaperView() {
   views.paper.innerHTML = `<div class="panel pt-head" data-fixed="1">
       <h1>${hg('Paper Desk')}</h1>
       <p class="sub">Your own book, entered by hand and priced by the terminal.
-        It lives in this browser and nowhere else — no account, no server
+        It lives in this browser and nowhere else: no account, no server
         copy, and no connection to Optic Portfolio, which is the terminal's own
         record and stays untouched.</p>
     </div>
