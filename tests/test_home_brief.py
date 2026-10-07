@@ -109,3 +109,87 @@ def test_the_pe_bands_quote_cheap_with_quote_marks():
     method note read `so \\u201ccheap\\u201d means cheap against itself`."""
     src = (ROOT / "app/analytics/pe_history.py").read_text()
     assert "\\\\u201c" not in src and "\\\\u201d" not in src
+
+
+# ------------------------------------------------- the market strip and the band
+
+
+def test_a_yield_moves_in_basis_points():
+    """The 10-year read "-0.79%", a percent of the rate, for a move of about
+    four hundredths of a point."""
+    exe = JSC if os.path.exists(JSC) else shutil.which("jsc")
+    if not exe:
+        pytest.skip("no JavaScriptCore on this machine")
+    src = """
+      function fmtPct(v, d) { return (v >= 0 ? '+' : '') + Number(v).toFixed(d) + '%'; }
+    """ + _fn("function moveLabel(inst) {") + """
+      print('RESULT:' + JSON.stringify([
+        moveLabel({ group: 'rates', last: 5.27, chg_1d: -0.79 }),
+        moveLabel({ group: 'rates', last: 4.10, chg_1d: 1.24 }),
+        moveLabel({ group: 'rates', last: 4.10, chg_1d: 0 }),
+        moveLabel({ group: 'equity', last: 7878, chg_1d: 0.66 }),
+        moveLabel({ group: 'rates', last: 4.1, chg_1d: null })]));
+    """
+    out = subprocess.run([exe, "-e", src], capture_output=True, text=True, timeout=30)
+    got = json.loads(out.stdout.split("RESULT:", 1)[1].split("\n")[0])
+    assert got == ["−4 bp", "+5 bp", "0 bp", "+0.66%", None]
+
+
+def test_the_strip_says_when_it_was_read():
+    fn = _fn("function marketStripHTML(data) {")
+    assert 'class="ms-asof">As of' in fn and "data.generated_at" in fn
+    assert "esc(moveLabel(inst))" in fn
+    assert "esc(moveLabel(inst))" in _fn("function whatMattersNow(data) {")
+
+
+def test_a_holiday_is_named_on_the_week_strip():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from app import priority
+    days = priority._closed_days(datetime(2026, 11, 23, 10, tzinfo=ZoneInfo("America/New_York")))
+    assert days == {"2026-11-26": "Thanksgiving Day"}
+    fn = _fn("function catalystPlacement(p, nowIso) {")
+    assert "closed_days" in fn
+    assert "Market closed: ${esc(x.closed)}" in _fn("function catalystStripHTML(p, nowIso) {")
+
+
+def test_a_report_is_high_impact_only_when_it_moves_the_index():
+    src = (ROOT / "app/priority.py").read_text()
+    assert '"impact": "high" if symbol in MAJORS else "medium",' in src
+    assert "Watchlist names reporting" not in src
+
+
+def test_the_strip_explains_its_two_cues():
+    fn = _fn("function catalystStripHTML(p, nowIso) {")
+    assert 'class="cs-key"' in fn and "High impact" in fn and "Company report" in fn
+
+
+def test_the_today_band_goes_stale_and_says_when_it_is_from():
+    fn = _fn("async function loadHomeToday() {")
+    assert "HOME_TODAY_TTL_MS" in fn and "STATE.priorityDay !== etDay()" in fn
+    assert "loadHomeToday();" in _fn("async function tickAutoRefresh() {") \
+        if "async function tickAutoRefresh() {" in APP else "loadHomeToday();" in APP
+    assert "as of ${esc(timeIn(p.generated_at, activeZone()))}" in _fn("function homeTodayHTML(p) {")
+
+
+def test_the_pulse_inputs_fill_out_from_a_middle_line():
+    """(score + 100) / 2 drew a score of 0 as a half-full bar, and -7 for
+    Macro as "about half good"."""
+    exe = JSC if os.path.exists(JSC) else shutil.which("jsc")
+    if not exe:
+        pytest.skip("no JavaScriptCore on this machine")
+    src = _fn("function pulseBar(score, direction) {") + """
+      function cells(html) {
+        var parts = html.split('<i class="pl-mid"></i>');
+        var on = function (s) { return (s.match(/pl-cell on/g) || []).length; };
+        return [on(parts[0]), on(parts[1])];
+      }
+      print('RESULT:' + JSON.stringify([cells(pulseBar(0, 'flat')), cells(pulseBar(50, 'up')),
+        cells(pulseBar(-75, 'down')), cells(pulseBar(100, 'up')), pulseBar(null).indexOf('is-none') >= 0]));
+    """
+    out = subprocess.run([exe, "-e", src], capture_output=True, text=True, timeout=30)
+    got = json.loads(out.stdout.split("RESULT:", 1)[1].split("\n")[0])
+    assert got == [[0, 0], [0, 3], [4, 0], [0, 5], True]
+    hero = _fn("function renderOpticPulse(d) {")
+    assert "pulseBar(f.unavailable ? null : f.score, f.direction)" in hero
+    assert "from -100 to +100" in hero

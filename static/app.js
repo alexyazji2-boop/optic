@@ -4529,7 +4529,8 @@ function homeTodayHTML(p) {
   const horizon = Number(p.horizon_days) || 0;
   return `<div class="ht-head">
       <h2 class="ht-title">What matters today</h2>
-      ${horizon ? `<span class="ht-sub">Next ${fmt(horizon, 0)} days</span>` : ''}
+      ${horizon ? `<span class="ht-sub">Next ${fmt(horizon, 0)} days${
+  p.generated_at ? ` \u00b7 as of ${esc(timeIn(p.generated_at, activeZone()))}` : ''}</span>` : ''}
       <button type="button" class="ht-more" data-goto-view="brief"
         >The full read \u2192</button>
     </div>
@@ -4600,7 +4601,10 @@ function catalystPlacement(p, nowIso) {
   for (let k = 0; k <= horizon; k += 1) {
     const d = new Date(base.getTime() + k * 86400000);
     if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue;    // no session
-    days.push({ k, d, items: [] });
+    // A holiday by the server's calendar (closed_days); the client knows
+    // weekends only. Drawn as a closed day rather than one with nothing on it.
+    const iso = d.toISOString().slice(0, 10);
+    days.push({ k, d, items: [], closed: ((p || {}).closed_days || {})[iso] || null });
   }
   const place = (row, kind) => {
     const on = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(row.date || ''));
@@ -4659,6 +4663,12 @@ function catalystStripHTML(p, nowIso) {
     const all = x.items;
     const rest = all.slice(CATALYST_SHOWN);
     const where = [...new Set(rest.map((it) => it.col))].join(' ');
+    if (x.closed && !all.length) {
+      return `<div class="cs-day is-closed${x.k === 0 ? ' is-today' : ''}" role="listitem">
+      <span class="cs-date">${esc(name)}</span>
+      <span class="cs-none">Market closed: ${esc(x.closed)}</span>
+    </div>`;
+    }
     return `<div class="cs-day${x.k === 0 ? ' is-today' : ''}${all.length ? '' : ' is-empty'}" role="listitem">
       <span class="cs-date">${esc(name)}</span>
       ${all.length ? `<ul class="cs-items">${all.slice(0, CATALYST_SHOWN).map(item).join('')}${rest.length
@@ -4667,9 +4677,18 @@ function catalystStripHTML(p, nowIso) {
     : '<span class="cs-none">Nothing tracked</span>'}
     </div>`;
   }).join('');
+  /* The strip's two cues, said once beside it: an amber edge is a high-impact
+   * item and a dashed one a company's report. They were drawn and explained
+   * nowhere, so the colour carried a meaning the reader had to guess. */
+  const anyHigh = days.some((x) => x.items.slice(0, CATALYST_SHOWN).some((it) => it.impact === 'high'));
+  const anyEarn = days.some((x) => x.items.slice(0, CATALYST_SHOWN).some((it) => it.kind === 'earnings'));
+  const key = anyHigh || anyEarn ? `<p class="cs-key">${
+    anyHigh ? '<span class="cs-key-item impact-high">High impact</span>' : ''}${
+    anyEarn ? '<span class="cs-key-item is-earnings">Company report</span>' : ''}</p>` : '';
   return `<div class="cs-strip" role="list" aria-label="${placed} scheduled catalyst${placed === 1 ? '' : 's'} by day">
     ${cells}
   </div>
+  ${key}
   ${catalystNoteHTML(openItem)}`;
 }
 
@@ -4689,12 +4708,29 @@ function catalystNoteHTML(it) {
 /* Not through mountPanel: that falls back to re-rendering Optic's Read when its
  * host is missing, which is right for the Read tab's hosts and wrong for a home
  * page one -- leaving Home would repaint a tab the reader is not on. */
+/* How long the Today band's board is kept before Home asks again. It was
+ * fetched once per page load and never again, so a tab left open overnight
+ * kept yesterday's "Today", and nothing on the band said when it was from.
+ * The server caches the board, so asking again costs it little. */
+const HOME_TODAY_TTL_MS = 30 * 60 * 1000;
+
 async function loadHomeToday() {
   const host = document.getElementById('hm-today');
   if (!host) return;
+  const etDay = () => {
+    try {
+      return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+    } catch (e) { return ''; }
+  };
+  if (STATE.priority && (Date.now() - (STATE.priorityAt || 0) > HOME_TODAY_TTL_MS
+      || STATE.priorityDay !== etDay())) {
+    STATE.priority = null;
+  }
   if (!STATE.priority) {
     try {
       STATE.priority = await getJSON('/api/priority');
+      STATE.priorityAt = Date.now();
+      STATE.priorityDay = etDay();
     } catch (err) {
       return;              // the rest of Home is unaffected; say nothing
     }
@@ -8802,6 +8838,33 @@ function stripRows(data) {
   return MARKET_STRIP.map((row) => (overnight && row.overnight ? row.overnight : row));
 }
 
+/* A day's move as the market quotes it. A yield moves in basis points: the
+ * strip printed the 10-year's "-0.79%", a percent of the rate, for a move of
+ * about four hundredths of a point, which reads as a large fall in a bond
+ * yield and is not one. The change is worked back from the same percentage,
+ * so the two can never disagree. */
+function moveLabel(inst) {
+  const chg = inst ? inst.chg_1d : null;
+  if (chg === null || chg === undefined || !Number.isFinite(Number(chg))) return null;
+  const last = Number(inst.last);
+  if (inst.group === 'rates' && Number.isFinite(last) && chg > -100) {
+    const bp = (last - last / (1 + chg / 100)) * 100;
+    if (Number.isFinite(bp)) {
+      const n = Math.round(bp);
+      return `${n > 0 ? '+' : n < 0 ? '\u2212' : ''}${Math.abs(n)} bp`;
+    }
+  }
+  return fmtPct(chg, 2);
+}
+
+/* The typical day an instrument's ATR describes, in the units of a day's
+ * close-to-close move. ATR measures the high-to-low range, which is wider
+ * than the close-to-close move it was being compared with, so "0.7x normal"
+ * understated every move by the same factor. The Macro tab's expected-move
+ * panel makes this conversion (RANGE_PER_SIGMA in app/analytics/macro.py),
+ * and the two now agree. */
+const RANGE_PER_SIGMA = 1.6;
+
 function marketStripHTML(data) {
   const cells = stripRows(data).map(({ group, label }) => {
     const inst = stripInstrument(data, group, label);
@@ -8815,7 +8878,7 @@ function marketStripHTML(data) {
       <span class="ms-label">${esc(label)}</span>
       <span class="ms-last">${fmt(inst.last, inst.last < 20 ? 2 : (inst.last > 1000 ? 0 : 2))}</span>
       ${chg === null || chg === undefined ? ''
-    : `<span class="ms-chg ${signClass(chg)}">${fmtPct(chg, 2)}</span>`}
+    : `<span class="ms-chg ${signClass(chg)}">${esc(moveLabel(inst))}</span>`}
       ${word && word !== 'flat' ? `<span class="ms-word">${esc(word)}</span>` : ''}
       ${sparkSlot(inst.series, 'ms-spark')}
     </button>`;
@@ -8826,8 +8889,12 @@ function marketStripHTML(data) {
    * band at every width and the order means the indices are the ones on screen
    * before you scroll. The cells scroll on a track inside the box, so the box
    * keeps its border while they move (see stripFade). */
+  // When these were read. Nothing on Home said, and overnight half of them
+  // are the last close and half are live futures and crypto.
+  const at = data.generated_at ? timeIn(data.generated_at, activeZone()) : '';
   return `<div class="ms-strip" role="group" aria-label="Market snapshot"><div
-    class="ms-track">${cells}</div></div>`;
+    class="ms-track">${cells}</div></div>${at ? `<p class="ms-asof">As of ${esc(at)}${
+  marketSessionET() === 'regular' ? '' : '. Futures and crypto trade now; the rest are at the last close'}</p>` : ''}`;
 }
 
 /* The fade at the strip's right edge, only while there is more to scroll to.
@@ -8892,11 +8959,21 @@ function rankedMoves(data) {
        * extra request. Guarded anyway, and an instrument without one sorts
        * last rather than dividing by zero. */
       const atr = Number(inst.atr_pct) || 0;
-      rows.push({ ...inst, group, rel: atr ? Math.abs(inst.chg_1d) / atr : 0 });
+      rows.push({ ...inst, group, rel: atr ? Math.abs(inst.chg_1d) / (atr / RANGE_PER_SIGMA) : 0 });
     });
   });
   rows.sort((a, b) => b.rel - a.rel);
-  return rows;
+  /* One row per market. The S&P 500 and its futures, the Russell and its
+   * futures, are one market quoted twice, and both ranked: the Russell and
+   * the Russell futures took two of the five rows. The larger mover of each
+   * pair keeps the place. */
+  const seen = new Set();
+  return rows.filter((r) => {
+    const family = String(r.label || r.symbol || '').replace(/\s+futures$/i, '').toLowerCase();
+    if (seen.has(family)) return false;
+    seen.add(family);
+    return true;
+  });
 }
 
 /* The market's top stories, three of them, above the instrument list.
@@ -9063,7 +9140,7 @@ function whatMattersNow(data) {
       <button type="button" class="cc-move" data-instrument="${esc(inst.symbol)}"
         data-instrument-label="${esc(inst.label)}">
         <span class="cc-move-name">${esc(inst.label)}</span>
-        <span class="cc-move-chg ${signClass(inst.chg_1d)}">${fmtPct(inst.chg_1d, 2)}</span>
+        <span class="cc-move-chg ${signClass(inst.chg_1d)}">${esc(moveLabel(inst))}</span>
         ${sparkSlot(inst.series, 'cc-spark')}
         ${/* The multiple is why the row is on the list at all, so it is shown
             * rather than left implicit. Without it "VVIX +6.4%" above
@@ -9354,8 +9431,12 @@ function marketQuestions(data) {
   add(story, story && FED_WORDS.test(story) ? 'fed' : 'story');
   const release = catalystQuestion(data);
   add(release, release && FED_WORDS.test(release) ? 'fed' : 'release');
+  /* A move worth its own question is one past the instrument's whole
+   * average range, which is RANGE_PER_SIGMA typical days now that `rel`
+   * counts typical days (see rankedMoves); a one-day move clears that on
+   * about one day in ten. */
   moves.slice(1)
-    .filter((m) => m.rel >= 1 && !asked.has(m.group))
+    .filter((m) => m.rel >= RANGE_PER_SIGMA && !asked.has(m.group))
     .slice(0, 2)
     .forEach((m) => add(moveQuestion(m), m.group));
 
@@ -10511,18 +10592,29 @@ document.addEventListener('input', (evt) => {
  * a conclusion.
  */
 
-/** A 0-100 bar. Ten cells, so the bar reads as a quantity and not a gradient. */
-function pulseBar(value, direction) {
-  if (value === null || value === undefined) {
+/** A score from -100 to +100, filled out from a middle line. Five cells each
+ *  side, so the bar reads as a quantity and not a gradient.
+ *
+ *  It was ten cells filled left to right from (score + 100) / 2, so a score
+ *  of 0 drew as a half-full bar and -3 for Macro read as "about half good".
+ *  Nothing on the bar marked the middle or said the scale ran negative. Now
+ *  0 is an empty bar on its midline, +50 fills half of the right side and -50
+ *  half of the left, which is what the signed figure beside it says. */
+function pulseBar(score, direction) {
+  if (score === null || score === undefined || !Number.isFinite(Number(score))) {
     return '<span class="pl-bar is-none" aria-hidden="true"></span>';
   }
-  const filled = Math.max(0, Math.min(10, Math.round(value / 10)));
+  const n = Math.max(0, Math.min(5, Math.round(Math.abs(Number(score)) / 20)));
+  const side = Number(score) < 0 ? 'neg' : 'pos';
   const tone = direction === 'up' ? 'up' : direction === 'down' ? 'down' : 'flat';
-  let cells = '';
-  for (let i = 0; i < 10; i += 1) {
-    cells += `<i class="pl-cell${i < filled ? ' on' : ''}"></i>`;
+  let left = '';
+  let right = '';
+  for (let i = 0; i < 5; i += 1) {
+    // Counted out from the middle on either side.
+    left += `<i class="pl-cell${side === 'neg' && 4 - i < n ? ' on' : ''}"></i>`;
+    right += `<i class="pl-cell${side === 'pos' && i < n ? ' on' : ''}"></i>`;
   }
-  return `<span class="pl-bar tone-${tone}" aria-hidden="true">${cells}</span>`;
+  return `<span class="pl-bar is-diverging tone-${tone}" aria-hidden="true">${left}<i class="pl-mid"></i>${right}</span>`;
 }
 
 /* What changed since the last visit to a symbol used to sit here. It was taken
@@ -10873,11 +10965,13 @@ function renderOpticPulse(d) {
       <div class="pl-factors">
         ${(p.factors || []).map((f) => `<div class="pl-factor${f.unavailable ? ' is-none' : ''}">
           <span class="pl-flabel" title="${esc(f.measures || '')}">${esc(f.label)}</span>
-          ${pulseBar(f.bar, f.direction)}
+          ${pulseBar(f.unavailable ? null : f.score, f.direction)}
           <span class="pl-fval">${f.unavailable ? 'no data'
     : (f.score > 0 ? '+' : '') + fmt(f.score, 0)}</span>
         </div>`).join('')}
       </div>
+      <p class="pl-scale">Each input scores from -100 to +100: a bar fills right of the line
+        when the input leans bullish and left when it leans bearish.</p>
       <p class="pl-skill">${esc(skill.text || '')}</p>
       ${p.factors_priced < p.factors_total
     ? `<p class="pl-caveat">${p.factors_priced} of ${p.factors_total} inputs had data.
@@ -38193,6 +38287,9 @@ async function tickAutoRefresh() {
       // There is nothing newer to fetch, so this is not a refresh at all.
       if (STATE.home && Date.now() - homeDataAt < HOME_REUSE_MS) attempted = false;
       else await loadHomeMarket({ silent: true });
+      // The Today band asks again once its board is stale (HOME_TODAY_TTL_MS);
+      // inside that it repaints from what it holds, which costs nothing.
+      loadHomeToday();
     } else if (view === 'overview' && STATE.swing) {
       await loadSecurityFacet('overview', true, { silent: true });
     } else if (view === 'swing' && STATE.swing) await loadSwing(true, { silent: true });

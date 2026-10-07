@@ -17447,3 +17447,31 @@ table.heat td.name { text-align: left; font-weight: 500; }
   .sec-head.compact.show-mini .sec-mini { grid-column: 1; grid-row: 2; }
   .sec-head.compact.show-mini .sec-actions { grid-column: 2; grid-row: 2; justify-content: flex-end; }
 }
+
+/* The week strip's key, and a holiday's cell. The key's items wear the same
+   left edge the strip's items do, so the legend is the cue itself. */
+.cs-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin: calc(-1 * var(--space-1)) 0 var(--space-3);
+  font-size: var(--t-caption);
+  color: var(--ink-muted);
+}
+.cs-key-item { padding-left: var(--space-2); border-left: 2px solid var(--ink-muted); }
+.cs-key-item.impact-high { border-left-color: var(--warn); }
+.cs-key-item.is-earnings { border-left-style: dashed; }
+.cs-day.is-closed { background: transparent; border-style: dashed; }
+.ms-asof { margin: var(--space-1) 0 0; font-size: var(--t-caption); color: var(--ink-muted); text-align: right; }
+
+/* ============================================================ OVERVIEW ===
+ * The Pulse inputs as signed bars: a middle line, five cells either side. */
+.pl-bar.is-diverging { align-items: center; }
+.pl-mid {
+  flex: 0 0 2px;
+  align-self: stretch;
+  margin: -2px 1px;
+  border-radius: 1px;
+  background: var(--ink-muted);
+}
+.pl-scale { margin: var(--space-3) 0 0; font-size: var(--t-caption); color: var(--ink-muted); }
