@@ -286,7 +286,22 @@ def test_that_standing_hint_is_conditional_not_a_claim():
     """A passkey synced from an iPhone shows up on a Mac that never created
     one, so "you do not have a passkey" would be wrong for exactly the people
     it would annoy most. And it must not show once one has been made here."""
-    block = AUTH_JS.split("var hint = (passkeysSupported()", 1)[1][:400]
+    block = AUTH_JS.split("var hint = (offerPasskey", 1)[1][:400]
     assert "!passkeyMadeHere()" in block
     assert "First time on this device?" in block
     assert "you do not have" not in block.lower()
+
+
+def test_create_account_does_not_lead_with_a_passkey_sign_in():
+    """A passkey signs in to an account that exists. On Create account the
+    button read "Sign in with Face ID or Touch ID" above a note telling a
+    first-timer to sign in with email: both wrong for the one reader who has
+    no account yet. The button and the hint share one condition, which
+    excludes the sign-up form."""
+    row = AUTH_JS.split("function providerRow() {", 1)[1].split("\n  function ", 1)[0]
+    offer = row.split("var offerPasskey =", 1)[1].split(";", 1)[0]
+    assert "mode !== 'signup'" in offer
+    assert "if (offerPasskey) {" in row and "data-passkey-signin" in row
+    assert "var hint = (offerPasskey" in row
+    # Apple and Google create the account on the way through, so they stay.
+    assert "providerAvailable('apple')" in row and "providerAvailable('google')" in row

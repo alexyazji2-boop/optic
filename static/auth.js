@@ -457,8 +457,15 @@
     return !!(providers[name] && providers[name].available);
   }
 
-  function providerRow(reason) {
+  function providerRow() {
     var buttons = [];
+    /* A passkey signs in to an account that already exists; it cannot make
+     * one. On Create account it led the form as "Sign in with Face ID or
+     * Touch ID", above a note telling a first-timer to sign in with email,
+     * on the one form whose reader has no account to sign in to. Apple and
+     * Google make the account on the way through, so they stay. */
+    var offerPasskey = mode !== 'signup' && passkeysSupported()
+      && providerAvailable('passkey');
     if (providerAvailable('apple')) {
       buttons.push('<button type="button" class="auth-provider apple" data-provider="apple">'
         + '<svg viewBox="0 0 16 16" aria-hidden="true" class="auth-glyph">'
@@ -474,7 +481,7 @@
         + '<path fill="#EA4335" d="M9 3.6c1.3 0 2.5.5 3.4 1.3l2.6-2.6A9 9 0 0 0 .9 5l3 2.3C4.6 5.2 6.6 3.6 9 3.6z"/>'
         + '</svg>Continue with Google</button>');
     }
-    if (passkeysSupported() && providerAvailable('passkey')) {
+    if (offerPasskey) {
       buttons.push('<button type="button" class="auth-provider passkey" data-passkey-signin'
         + ' title="Uses the passkey saved on this device. A security key or your'
         + ' phone works too.">'
@@ -502,8 +509,7 @@
      * condition rather than a claim: a passkey synced from an iPhone will show
      * up here without ever having been created on this machine, so "you do not
      * have one" would be wrong for exactly the people it would annoy most. */
-    var hint = (passkeysSupported() && providerAvailable('passkey')
-                && !passkeyMadeHere())
+    var hint = (offerPasskey && !passkeyMadeHere())
       ? '<p class="auth-note auth-passkey-hint">First time on this device? Sign in '
         + 'with your email, then add ' + esc(biometricName()) + ' from Settings.</p>'
       : '';
