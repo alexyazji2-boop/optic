@@ -492,7 +492,7 @@ def test_settings_says_what_signing_out_does():
 # The browser's, not the person's: how the screen looks and where things are.
 SETTINGS = {
     "optic.theme", "optic.timezone", "optic.ui.scale.v1", "optic.mode.v1",
-    "optic.rail.tight", "optic.panels.open", "optic.panels.hidden.v1",
+    "optic.rail.tight", "optic.rail.tight.v2", "optic.panels.open", "optic.panels.hidden.v1",
     "optic.notices.dismissed", "optic.session.desc", "optic.session.detail.v1",
     "optic.chat.width.v1", "optic.chat.width.v2",
     "optic.knowledge.v1", "optic.knowledge.asked.v1", "optic.pulse.persona.v1",

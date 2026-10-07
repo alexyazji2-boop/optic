@@ -94,7 +94,7 @@ def test_the_phone_draws_one_navigation_one_search_and_one_line_of_hours():
 
 
 def test_the_search_box_says_what_it_is_for_on_a_phone():
-    assert "const PHONE_SEARCH_HINT = 'Search a stock or company';" in APP
+    assert "const PHONE_SEARCH_HINT = 'Ticker or company';" in APP
     sync = _fn("function syncSearchHint() {")
     assert "box.placeholder = phone ? PHONE_SEARCH_HINT : box.dataset.wideHint;" in sync
 

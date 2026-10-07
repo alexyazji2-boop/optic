@@ -4157,6 +4157,30 @@ function trackRailHeight() {
  * A rail that forgets is a rail you re-collapse on every visit, and the whole
  * point of collapsing it is that the reader wanted the width back. */
 const RAIL_KEY = 'optic.rail.tight';
+/* The reader's own choice, kept apart from the state.
+ *
+ * applyRail wrote RAIL_KEY on every load whether anyone had pressed Collapse
+ * or not, so "0" in it means nothing: every browser that ever opened Optic
+ * has it. A choice is written here, from the button only, and without one the
+ * width decides: collapsed from 560 to 1023px, where the expanded rail's 212px
+ * left a 768px tablet 556px of page and every wide table scrolled sideways,
+ * measured 2026-10-07. A "1" in the old key could only have come from the
+ * button, so it still counts as a choice. */
+const RAIL_CHOICE_KEY = 'optic.rail.tight.v2';
+const RAIL_AUTO_QUERY = '(min-width: 560px) and (max-width: 1023px)';
+
+function railChoice() {
+  try {
+    const v = localStorage.getItem(RAIL_CHOICE_KEY);
+    if (v === '1' || v === '0') return v === '1';
+    if (localStorage.getItem(RAIL_KEY) === '1') return true;
+  } catch (e) { /* private mode */ }
+  return null;
+}
+
+function railDefault() {
+  return typeof matchMedia === 'function' && matchMedia(RAIL_AUTO_QUERY).matches;
+}
 
 /* Every blinking Optic mark on one clock.
  *
@@ -4196,14 +4220,30 @@ function applyRail(tight) {
 }
 
 function initRail() {
-  let tight = false;
-  try { tight = localStorage.getItem(RAIL_KEY) === '1'; } catch (e) { tight = false; }
-  applyRail(tight);
+  const chosen = railChoice();
+  // Set, not animated: the rail's width transition is for the button, and on
+  // a load it would draw the rail at 212px and slide it shut.
+  const railEl = document.getElementById('rail');
+  if (railEl) railEl.style.transition = 'none';
+  applyRail(chosen === null ? railDefault() : chosen);
+  if (railEl) {
+    void railEl.offsetWidth;
+    setTimeout(() => { railEl.style.transition = ''; }, 0);
+  }
   const btn = document.getElementById('rail-toggle');
   if (btn) {
     btn.addEventListener('click', () => {
-      applyRail(!document.body.classList.contains('rail-tight'));
+      const tight = !document.body.classList.contains('rail-tight');
+      try { localStorage.setItem(RAIL_CHOICE_KEY, tight ? '1' : '0'); }
+      catch (e) { /* private mode: it just forgets between loads */ }
+      applyRail(tight);
     });
+  }
+  // A window crossing the line follows it, until the reader has chosen.
+  if (typeof matchMedia === 'function') {
+    const mq = matchMedia(RAIL_AUTO_QUERY);
+    const follow = () => { if (railChoice() === null) applyRail(railDefault()); };
+    if (mq.addEventListener) mq.addEventListener('change', follow);
   }
   trackRailHeight();
 }
@@ -10378,7 +10418,9 @@ function paintPaletteList() {
 
 /* On a phone the search box says what it is for. "Search or ask ⌘K" names a
    key a phone does not have. */
-const PHONE_SEARCH_HINT = 'Search a stock or company';
+// "Ticker or company", as Home's own box says on a phone: the longer "Search
+// a stock or company" was cut to "SEARCH A STOCK OR COM" at 375px.
+const PHONE_SEARCH_HINT = 'Ticker or company';
 
 function syncSearchHint() {
   const box = document.getElementById('ticker-input');

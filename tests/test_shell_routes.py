@@ -200,3 +200,19 @@ def test_the_phone_bar_wears_the_rails_icons():
         assert re.search(rf"^\s+{key}: '", icons, flags=re.M), key
     assert "&#9683;" not in tabs, "the half-moon glyph"
     assert "${navIcon(t.nav)}" in _fn("function mountMobileTabs() {")
+
+
+def test_a_tablet_opens_on_the_collapsed_rail_until_the_reader_chooses():
+    """At 768px the expanded rail left 556px of page, measured 2026-10-07. The
+    old key was written on every load, so it says nothing about a choice."""
+    assert "const RAIL_AUTO_QUERY = '(min-width: 560px) and (max-width: 1023px)';" in APP
+    init = _fn("function initRail() {")
+    assert "applyRail(chosen === null ? railDefault() : chosen);" in init
+    assert "localStorage.setItem(RAIL_CHOICE_KEY" in init, "the button records the choice"
+    assert "mq.addEventListener('change', follow)" in init
+    choice = _fn("function railChoice() {")
+    assert "localStorage.getItem(RAIL_KEY) === '1'" in choice, "an old collapse was a choice"
+
+
+def test_the_phone_search_hint_fits():
+    assert "const PHONE_SEARCH_HINT = 'Ticker or company';" in APP
