@@ -34326,19 +34326,22 @@ function analystRowHTML(r, opts = {}) {
   const cls = r.rating_class === 'buy' ? 'up' : r.rating_class === 'sell' ? 'down' : '';
   const moved = r.target_action === 'Raises' ? 'up' : r.target_action === 'Lowers' ? 'down' : '';
   const changed = r.prior_rating && r.prior_rating !== r.rating;
+  /* A class per cell, so the phone layout (styles.css, .an-table) places each
+   * by what it is rather than by position: the Dossier's copy of this table
+   * has no Symbol column. */
   return `<tr>
-    <td>${esc(dayLabel(String(r.at || '').slice(0, 10)))}</td>
-    ${opts.symbol === false ? '' : `<td><button type="button" class="tkr"
+    <td class="an-date">${esc(dayLabel(String(r.at || '').slice(0, 10)))}</td>
+    ${opts.symbol === false ? '' : `<td class="an-sym"><button type="button" class="tkr"
       data-analyse="${esc(r.ticker)}">${esc(r.ticker)}</button></td>`}
-    <td class="name">${esc(r.firm)}</td>
-    <td class="num">${analystTarget(r.prior_target, r.action === 'init' ? 'new' : '')}</td>
+    <td class="name an-firm">${esc(r.firm)}</td>
+    <td class="num an-prior">${analystTarget(r.prior_target, r.action === 'init' ? 'new' : '')}</td>
     ${/* The move in a glyph as well as a colour, so a raise and a cut read
          apart without the colour; the Action column is the rating's. */''}
-    <td class="num ${moved}">${analystTarget(r.target)}${moved
+    <td class="num an-target ${moved}">${analystTarget(r.target)}${moved
     ? `<span class="an-move" aria-label="${moved === 'up' ? 'raised' : 'lowered'}"> ${
       moved === 'up' ? '\u2191' : '\u2193'}</span>` : ''}</td>
-    <td><span class="an-action ${tone}">${esc(r.action_label)}</span></td>
-    <td><span class="an-rating ${cls}"${changed ? ` title="${esc(`From ${r.prior_rating}`)}"` : ''}>${
+    <td class="an-act"><span class="an-action ${tone}">${esc(r.action_label)}</span></td>
+    <td class="an-rate"><span class="an-rating ${cls}"${changed ? ` title="${esc(`From ${r.prior_rating}`)}"` : ''}>${
   esc(r.rating || '')}</span></td>
   </tr>`;
 }

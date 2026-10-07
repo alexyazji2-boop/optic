@@ -254,8 +254,8 @@ def test_the_page_shows_each_action_like_the_reference():
     assert order == sorted(order)
     assert 'class="tkr"\n      data-analyse="INTC">INTC</button>' in html
     # The raise in a glyph as well as the colour, so it does not rest on colour.
-    assert '<td class="num up">45.00<span class="an-move" aria-label="raised">' in html
-    assert '<td class="num">30.00</td>' in html
+    assert '<td class="num an-target up">45.00<span class="an-move" aria-label="raised">' in html
+    assert '<td class="num an-prior">30.00</td>' in html
     assert '<span class="an-action up">Upgrade</span>' in html
     assert 'title="From Sell">Neutral</span>' in html
     assert "1 action in the last 7 days, across 400 names" in html
@@ -352,3 +352,20 @@ def test_a_missing_target_says_which_kind_of_missing():
     assert ">Not given<" in absent
     assert shown == "12.50"
     assert "None" not in new + absent
+
+
+def test_a_phone_gets_a_card_per_action_with_every_field_on_it():
+    """As a table at 375px the page showed the date, the symbol and half the
+    firm, and the target, action and rating sat behind a sideways scroll; the
+    shared table rule's min-width held the rows at 480px in a 299px box.
+    Each cell is placed by its class, since the Dossier's copy has no Symbol."""
+    css = (ROOT / "static/styles.css").read_text()
+    block = css[css.index("Reliability pass: an action per card on a phone"):]
+    block = block[:block.index("\n}\n")]
+    assert "table.an-table { min-width: 0; width: 100%; }" in block
+    assert "'date sym act' 'firm firm rate' 'prior prior target'" in block
+    for cell in ("an-date", "an-sym", "an-firm", "an-prior", "an-target", "an-act", "an-rate"):
+        assert "td.%s {" % cell in block, cell
+    row = APP.split("function analystRowHTML(", 1)[1].split("\n}\n", 1)[0]
+    for cell in ("an-date", "an-firm", "an-prior", "an-target", "an-act", "an-rate"):
+        assert cell in row, cell

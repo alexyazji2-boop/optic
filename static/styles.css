@@ -15762,6 +15762,36 @@ body.ws-max[data-view="chart"] main { padding: 0; }
 }
 .an-ticker:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .an-table td { white-space: nowrap; }
+/* Reliability pass: an action per card on a phone. As a table at 375px the
+   page showed the date, the symbol and half the firm's name, and the target,
+   the action and the rating, which are what the row is for, sat off to the
+   right behind a sideways scroll. */
+@media (max-width: 559px) {
+  table.an-table thead { display: none; }
+  /* The shared table rule's min-width held the cards at 480px in a 299px box. */
+  table.an-table { min-width: 0; width: 100%; }
+  table.an-table, table.an-table tbody { display: block; }
+  /* The prior target spans two tracks so it does not widen the date's. */
+  table.an-table tr {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr) max-content;
+    grid-template-areas: 'date sym act' 'firm firm rate' 'prior prior target';
+    column-gap: var(--space-2);
+    row-gap: var(--space-0);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border);
+  }
+  table.an-table td { display: block; padding: 0; border: 0; text-align: left; white-space: normal; }
+  table.an-table td.an-date { grid-area: date; color: var(--ink-muted); }
+  table.an-table td.an-sym { grid-area: sym; }
+  table.an-table td.an-firm { grid-area: firm; color: var(--ink-2); }
+  table.an-table td.an-act { grid-area: act; text-align: right; }
+  table.an-table td.an-rate { grid-area: rate; text-align: right; }
+  table.an-table td.an-prior { grid-area: prior; }
+  table.an-table td.an-target { grid-area: target; text-align: right; }
+  table.an-table td.an-prior::before { content: 'Prior target '; color: var(--ink-muted); }
+  table.an-table td.an-target::before { content: 'Target '; color: var(--ink-muted); }
+}
 .ws-sub-h {
   margin: var(--space-3) 0 var(--space-1);
   font-size: var(--t-caption);
