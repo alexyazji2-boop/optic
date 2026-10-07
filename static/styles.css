@@ -17386,3 +17386,17 @@ table.heat td.name { text-align: left; font-weight: 500; }
     grid-column: auto;
   }
 }
+
+/* ========================================================= EARNINGS ===
+ * A name on the reader's own watchlist, inside the week's scan. */
+.ew-mine {
+  margin-left: var(--space-1);
+  padding: 0 var(--space-1);
+  border-radius: var(--r-xs);
+  border: 1px solid color-mix(in srgb, var(--brand) 55%, transparent);
+  color: var(--brand);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

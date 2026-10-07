@@ -815,7 +815,7 @@ const HEADER_DEFS = {
   'splits': 'A split changes how many shares exist without changing what the company is worth: a 2-for-1 split doubles the shares and halves the price. Past prices are adjusted for splits, so charts compare like with like.',
   'recent sec filings': "The company's latest filings with the US Securities and Exchange Commission: annual reports (10-K), quarterly reports (10-Q) and notices of material events (8-K), among others. They are the primary source most of the figures elsewhere are drawn from.",
   'insiders': "Who is trading what and who the government is paying, from three public filing regimes: company insiders' Form 4s, members of the House under the STOCK Act, and federal contract awards. Each is published after a delay, and nothing here is ranked by how profitable it looked.",
-  'earnings this week': 'Which names on the watchlist report between Monday and Friday of this week, grouped by day. It scans a fixed list of widely followed names, not the whole market, because free data gives one earnings date per symbol at a time.',
+  'earnings this week': 'Which widely followed companies report between Monday and Friday of this week, grouped by day, with the names on your own watchlist marked. It scans a fixed list of widely followed names, not the whole market, because free data gives one earnings date per symbol at a time.',
   'where the price sits': "Today's price against three yardsticks on one axis: the range the company's own price-to-earnings history implies, the analysts' price targets, and its trading range over the past year. Each shows a range rather than a single figure, because none of them is precise.",
   'the past year': "The stock's daily closing price over the last twelve months, with its earnings reports, ex-dividend dates and splits marked on it. It shows how the price moved and what it did around each event.",
   'how they have moved': "Each compared name's price over the past year, rebased so that all of them start at 100 on the same day. A line ending at 130 has risen 30 percent over the period, so the ends can be compared directly.",
@@ -14252,7 +14252,7 @@ function exploreReadings(scans, moves, sectors) {
       tone: 'neutral',
       verdict: `${fmt(scans.considered, 0)} names`,
       detail: `${fmt(scans.considered, 0)} of ${fmt(universe, 0)} symbols cleared the `
-        + `price and volume filters${share === null ? '' : ` -- ${fmt(share, 0)}%`}. `
+        + `price and volume filters${share === null ? '' : `, ${fmt(share, 0)}% of them`}. `
         + 'Every screen on this page ranks within that set, so a name absent from a '
         + 'result may have been filtered out before the screen ran rather than failed it.',
     });
@@ -14434,7 +14434,7 @@ function financialsReadings(co) {
       verdict: `${fmt(net, 1)}% net`,
       detail: `Of every dollar of revenue, ${fmt(net, 1)} cents reaches net income`
         + (num(m.gross_pct) !== null
-          ? ` -- ${fmt(m.gross_pct, 1)}% gross, ${fmt(m.operating_pct, 1)}% operating.` : '.'),
+          ? `, against ${fmt(m.gross_pct, 1)}% gross and ${fmt(m.operating_pct, 1)}% operating.` : '.'),
     });
   }
   // 3. Whether the company has been landing its own guidance.
@@ -14485,7 +14485,7 @@ function financialsReadings(co) {
       detail: `${fmtCompact(num(ins.purchase_shares) || 0, 1)} shares bought and `
         + `${fmtCompact(num(ins.sale_shares) || 0, 1)} sold over six months`
         + (!meaningful
-          ? `, a net of ${fmtCompact(Math.abs(netSh), 1)} -- under a tenth of what`
+          ? `, a net of ${fmtCompact(Math.abs(netSh), 1)}: under a tenth of what`
             + ' changed hands, so the direction is noise rather than a view.'
           : `, a net of ${fmtCompact(Math.abs(netSh), 1)}.`),
     });
@@ -15046,8 +15046,14 @@ function keyStatRows(q, short) {
     short_float: ['Short interest', has(si.percent_of_float)
       ? `${fmt(si.percent_of_float * 100, 2)}% of float${settled}` : null],
     days_to_cover: ['Days to cover', has(si.days_to_cover) ? fmt(si.days_to_cover, 1) : null],
-    profit_margin: ['Profit margin', has(q.profit_margin) ? fmt(q.profit_margin * 100, 1) + '%' : null],
-    revenue_growth: ['Revenue growth', has(q.revenue_growth) ? fmtPct(q.revenue_growth * 100, 1) : null],
+    /* Named for their periods. Financials prints "Revenue growth +16.4%" in
+     * Key stats and "Revenue growth (y/y) +6.4%" under the statements a few
+     * rows down, and both are right: one is the latest quarter against the
+     * same quarter a year before, the other the fiscal year. Same for the
+     * margin, twelve months against 26.9% for the year. Two figures under
+     * one name on one page read as a contradiction. */
+    profit_margin: ['Profit margin, 12 months', has(q.profit_margin) ? fmt(q.profit_margin * 100, 1) + '%' : null],
+    revenue_growth: ['Revenue growth, last quarter', has(q.revenue_growth) ? fmtPct(q.revenue_growth * 100, 1) : null],
   };
 }
 
@@ -15385,7 +15391,12 @@ function renderCompany(co) {
         ${kv([
     ['Cash', usdCompact((fn.balance_sheet || {}).cash), '', FIN_DEFS.cash],
     ['Total debt', usdCompact((fn.balance_sheet || {}).total_debt), '', FIN_DEFS.total_debt],
-    ['Net cash position', usdCompact((fn.balance_sheet || {}).net_cash), '', FIN_DEFS.net_cash],
+    /* Negative net cash is net debt, and the line under this table says so:
+     * the row printed "Net cash position $-62.7B" above "$62.72B net debt
+     * position". */
+    (Number((fn.balance_sheet || {}).net_cash) < 0
+      ? ['Net debt', usdCompact(-(fn.balance_sheet || {}).net_cash), '', FIN_DEFS.net_cash]
+      : ['Net cash position', usdCompact((fn.balance_sheet || {}).net_cash), '', FIN_DEFS.net_cash]),
     ['Debt / equity', fmt((fn.balance_sheet || {}).debt_to_equity, 2), '', FIN_DEFS.debt_to_equity],
     ['Gross margin', fmt((fn.margins || {}).gross_pct, 1) + '%', '', FIN_DEFS.gross_margin],
     ['Operating margin', fmt((fn.margins || {}).operating_pct, 1) + '%', '', FIN_DEFS.operating_margin],
@@ -27427,6 +27438,12 @@ function renderEarningsWeek(w) {
       <p class="sub">${esc(w.reason || 'Unavailable.')}</p></div>`;
   }
 
+  /* "The watchlist" here was the 144 names the server scans, and it read as
+   * the reader's own: "1 reporting from the watchlist" over PepsiCo, on a
+   * watchlist of SPY, QQQ, NVDA and AMD. The scan is named for what it is,
+   * and the reader's own names are marked within it. */
+  const mine = new Set(watchList().map((t) => String(t).toUpperCase()));
+  const scanned = Number(w.universe || w.checked) || 0;
   const cols = (w.days || []).map((d) => `
     <section class="ew-day${d.is_today ? ' today' : ''}${d.is_past ? ' past' : ''}">
       <header class="ew-day-head">
@@ -27440,7 +27457,8 @@ function renderEarningsWeek(w) {
           data-analyse="${esc(r.ticker)}">
           ${companyMark(r.ticker, r.domain, 34)}
           <span class="ew-tick">${esc(r.ticker)}${r.major
-    ? '<span class="ew-major">major</span>' : ''}</span>
+    ? '<span class="ew-major">major</span>' : ''}${mine.has(String(r.ticker).toUpperCase())
+    ? '<span class="ew-mine">watching</span>' : ''}</span>
           <span class="ew-name">${esc(r.name || '')}</span>
           <span class="ew-eps">${r.eps_consensus === null || r.eps_consensus === undefined
     ? '<i>no estimate</i>'
@@ -27448,16 +27466,16 @@ function renderEarningsWeek(w) {
       ? ` · rev $${fmtCompact(r.revenue_consensus)}` : ''}`}</span>
           ${r.confirmed === false ? '<span class="ew-unconf">date not confirmed</span>' : ''}
         </button>`).join('')
-    : '<p class="ew-empty">Nothing from the watchlist.</p>'}
+    : '<p class="ew-empty">Nothing scheduled.</p>'}
     </section>`).join('');
 
   return `<div class="panel span-all">
     <div class="ew-head">
       <div>
         <h2>${hg('Earnings this week')}${askPulse('earningsweek')}</h2>
-        <p class="sub">${esc(w.week_label)} · <strong>${fmt(w.total, 0)}</strong> reporting
-          from the watchlist${w.majors ? `, <strong>${fmt(w.majors, 0)}</strong> index-moving`
-    : ''}. Click any ticker to open the full analysis.</p>
+        <p class="sub">${esc(w.week_label)} · <strong>${fmt(w.total, 0)}</strong> reporting${
+  scanned ? ` of the ${fmt(scanned, 0)} widely followed names Optic checks` : ''}${
+  w.majors ? `, <strong>${fmt(w.majors, 0)}</strong> index-moving` : ''}. Open any one for its full analysis.</p>
       </div>
       <div class="ew-nav">
         <button type="button" class="bulk-btn" data-ew-offset="${(w.offset || 0) - 1}"
@@ -27658,7 +27676,7 @@ function renderEarnings(d) {
       <div>
         <span class="hero-label">${hg(reported ? 'Reported EPS' : 'Next report')}</span>
         <div class="hero ${reported ? signClass(lr.surprise_pct) : ''}" style="font-size:var(--t-d2)">${
-  reported ? fmt(lr.eps_reported, 2) : (nr.date ? esc(nr.date) : '—')}</div>
+  reported ? fmt(lr.eps_reported, 2) : (nr.date ? esc(reportDate(nr.date)) : '—')}</div>
         <span class="note subnote">${
   reported
     ? `Vs ${fmt(lr.eps_estimate, 2)} expected · reported ${esc(lr.date || '')}`
@@ -27667,8 +27685,17 @@ function renderEarnings(d) {
       <div style="display:flex;flex-direction:column;gap:var(--space-2)">
         ${daysChip}
         ${reactionChip}
-        <span class="chip ${revCls}"><span class="dot"></span>Estimates ${esc(rev.direction || 'unknown')}</span>
-        ${pr.available ? `<span class="chip ${stanceCls}"><span class="dot"></span>Event ${esc(pr.stance)}</span>` : ''}
+        ${/* Only a direction is news. "Estimates unknown" sat beside an EPS
+             consensus and a revenue range, reading as if those were unknown;
+             what is missing is the revision history, which its own panel
+             says. */''}
+        ${rev.direction && rev.direction !== 'unknown'
+    ? `<span class="chip ${revCls}"><span class="dot"></span>Estimates ${esc(rev.direction)}</span>` : ''}
+        ${/* "Event fair" named the model's stance, not what it means: the
+             straddle against the moves this name has actually made. */''}
+        ${pr.available ? `<span class="chip ${stanceCls}" title="${esc(pr.note || '')}"><span class="dot"></span>${
+  esc({ expensive: 'Move priced rich', cheap: 'Move priced cheap', fair: 'Move priced fairly' }[pr.stance]
+    || `Event ${pr.stance}`)}</span>` : ''}
       </div>
     </div>
     <div class="grid c4" style="margin-bottom:var(--space-3)">
@@ -35035,6 +35062,19 @@ function congressActivityChart(rows, days) {
 }
 
 /** "Sep 12" from an ISO day, without pulling the whole date formatter in. */
+/* A report date as a reader says it: "Mon, Nov 2", with the year only when it
+ * is not this one. The Earnings tab printed "2026-11-02" in display type, the
+ * one date in the app a retail reader is most likely to put in a calendar. */
+function reportDate(iso) {
+  const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return String(iso || '');
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12);
+  if (isNaN(d.getTime())) return String(iso);
+  const opts = { weekday: 'short', month: 'short', day: 'numeric' };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+  return d.toLocaleDateString('en-US', opts);
+}
+
 function dayLabel(iso) {
   const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return String(iso || '');
@@ -37772,7 +37812,7 @@ function updateStatus() {
           fmtPct(e.move_pct, 1)}</span>`);
       }
     }
-    else if (nr.date) parts.push(`Next report: ${esc(nr.date)}${
+    else if (nr.date) parts.push(`Next report: ${esc(reportDate(nr.date))}${
       nr.days_away === null || nr.days_away === undefined ? '' : ` (${nr.days_away}d)`}`);
     else parts.push('No scheduled report');
   } else if (STATE.view === 'long') {
