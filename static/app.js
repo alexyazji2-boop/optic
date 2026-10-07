@@ -6192,19 +6192,20 @@ function watchListsBar() {
       <button type="button" class="wl-chip is-new" data-watch-list-new
         title="Create a list">+ New list</button>
     </div>
+    ${/* With one list, three of these four were disabled: both arrows and
+         Delete, the last explained only by a title a phone never shows. They
+         are drawn once there is a second list for them to act on. */''}
     ${lists.length ? `<div class="wl-bar-tools">
-      <button type="button" class="wl-tool" data-watch-list-move="-1"
+      ${lists.length > 1 ? `<button type="button" class="wl-tool" data-watch-list-move="-1"
         ${idx <= 0 ? 'disabled' : ''} title="Move this list left"
         aria-label="Move this list left">\u2190</button>
       <button type="button" class="wl-tool" data-watch-list-move="1"
         ${idx < 0 || idx >= lists.length - 1 ? 'disabled' : ''}
-        title="Move this list right" aria-label="Move this list right">\u2192</button>
+        title="Move this list right" aria-label="Move this list right">\u2192</button>` : ''}
       <button type="button" class="wl-tool" data-watch-list-rename
         title="Rename this list">Rename</button>
-      <button type="button" class="wl-tool" data-watch-list-del
-        ${lists.length <= 1 ? 'disabled' : ''}
-        title="${lists.length <= 1 ? 'This is your only list'
-    : 'Delete this list'}">Delete</button>
+      ${lists.length > 1 ? `<button type="button" class="wl-tool" data-watch-list-del
+        title="Delete this list">Delete</button>` : ''}
     </div>` : ''}
   </div>`;
 }

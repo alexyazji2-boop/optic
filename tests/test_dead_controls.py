@@ -83,6 +83,10 @@ def test_a_new_visitor_has_one_list_and_it_is_the_active_one():
         assert(watchActiveList() && watchActiveList().name === 'Watchlist', 'no active list, so Rename returns');
         var bar = watchListsBar();
         assert(/class="wl-chip on"/.test(bar) && /aria-selected="true"/.test(bar), 'the only list is not selected');
+        // One list: nothing to reorder and nothing it may delete, so no
+        // disabled arrows or Delete standing in the bar.
+        assert(!/data-watch-list-move|data-watch-list-del/.test(bar), 'tools with nothing to act on');
+        assert(/data-watch-list-rename/.test(bar), 'Rename still applies to a single list');
         assert(!('optic.watchlists.v1' in store), 'reading the lists wrote them; nothing is saved until a change');
         """,
     ]))

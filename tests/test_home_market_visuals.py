@@ -114,7 +114,7 @@ def _fill_sparks_source():
 def test_a_narrow_row_gives_the_line_its_own_line():
     narrow = CSS[CSS.index("@container (max-width: 559px) {\n  .wv-cols { display: none; }"):]
     narrow = narrow[:narrow.index("\n}\n")]
-    assert "'sym price chg go' 'sym changed signal go' 'sym trend trend go'" in narrow
+    assert "'sym price chg go' 'sym changed changed go' 'sym trend signal go'" in narrow
     assert "'sym . price . chg . go' 'sym . changed . signal . go' 'sym . trend trend trend . go'" in CSS
 
 

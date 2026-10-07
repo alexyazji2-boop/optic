@@ -85,9 +85,10 @@ def _block(start, css=CSS):
 def test_the_row_layout_follows_the_card_not_the_window():
     assert "#hm-watch, .wv-panel { container-type: inline-size; }" in CSS
     narrow = _block("@container (max-width: 559px) {")
-    # The 30-day line on a third line, across the price and change tracks:
-    # beside the price it left the price 16px of a 308px row.
-    assert "'sym price chg go' 'sym changed signal go' 'sym trend trend go'" in narrow
+    # The 30-day line on a third line: beside the price it left the price
+    # 16px of a 308px row. "What changed" has the whole second line, because
+    # sharing it with the signal ellipsised "20-day breakout" on a 375px phone.
+    assert "'sym price chg go' 'sym changed changed go' 'sym trend signal go'" in narrow
     assert ".wl-go { grid-area: go;" in narrow
     # The window-width version survives only where container queries do not
     # exist. Beside them it came later in the file, and its grid has no `go`

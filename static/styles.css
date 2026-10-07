@@ -11025,9 +11025,14 @@ body.cp-open { overflow: hidden; }
   /* The 30-day line on a third line of its own, across the price and change
      tracks. Beside the price it took that track's room: measured in a 308px
      row, the price had 16px. */
+  /* Reliability pass: the signal moved down beside the line, and "what
+     changed" has the whole second line. Sharing it with BULLISH, a 375px phone
+     gave the reason 102px of the 116 that "20-day breakout" needs, and every
+     row read "20-day brea...": the one word on the row that says why it is
+     there. The signal is a single word and sits fine at the line's end. */
   .wl-open {
     grid-template-columns: 3.75rem minmax(0, 1fr) auto auto;
-    grid-template-areas: 'sym price chg go' 'sym changed signal go' 'sym trend trend go';
+    grid-template-areas: 'sym price chg go' 'sym changed changed go' 'sym trend signal go';
     column-gap: var(--space-2);
     row-gap: 2px;
   }
@@ -11110,7 +11115,7 @@ body.cp-open { overflow: hidden; }
   @media (max-width: 559px) {
     .wl-open {
       grid-template-columns: 3.75rem minmax(0, 1fr) auto auto;
-      grid-template-areas: 'sym price chg go' 'sym changed signal go' 'sym trend trend go';
+      grid-template-areas: 'sym price chg go' 'sym changed changed go' 'sym trend signal go';
       column-gap: var(--space-2);
       row-gap: 2px;
     }
