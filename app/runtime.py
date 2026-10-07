@@ -22,6 +22,17 @@ def is_hosted() -> bool:
     return any(os.environ.get(v) for v in _PLATFORM_VARS)
 
 
+def for_reader(reader: str, operator: str) -> str:
+    """The sentence for whoever is reading: a visitor on the hosted site, or
+    the person running the terminal on their own machine.
+
+    A feature that is dark because a variable is unset says why, and "Set
+    FEED_CONTACT in .env" is the right why for the second and a useless one for
+    the first, who has no environment to set it in. Pulse's hint made this
+    branch first (app/ai.py); this is that branch, for everything else."""
+    return reader if is_hosted() else operator
+
+
 def base_url() -> str:
     """The origin the browser reaches this app on, without a trailing slash.
 

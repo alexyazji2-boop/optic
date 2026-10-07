@@ -26,7 +26,7 @@ from datetime import date, datetime, timezone
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 from . import ai_store, knowledge, weekly_store
-from .runtime import is_hosted
+from .runtime import for_reader, is_hosted
 
 import logging
 
@@ -2161,8 +2161,12 @@ async def stream_chat(
         yield _sse(
             "error",
             {
-                "message": "Assistant is not configured. Set ANTHROPIC_API_KEY in your "
-                "environment (or run `ant auth login`) and restart the server."
+                "message": for_reader(
+                    "Pulse is not configured on this deployment, so it cannot "
+                    "answer questions. Every other panel on the terminal works "
+                    "without it.",
+                    "Assistant is not configured. Set ANTHROPIC_API_KEY in your "
+                    "environment (or run `ant auth login`) and restart the server.")
             },
         )
         return
@@ -2349,8 +2353,12 @@ async def deep_research(
         yield _sse(
             "error",
             {
-                "message": "Deep research needs Claude API access. Set ANTHROPIC_API_KEY "
-                "(or run `ant auth login`) and restart. The headline pass still works without it."
+                "message": for_reader(
+                    "Deep research is not available on this deployment. Every "
+                    "other panel on the terminal works without it.",
+                    "Deep research needs Claude API access. Set ANTHROPIC_API_KEY "
+                    "(or run `ant auth login`) and restart. The headline pass still "
+                    "works without it.")
             },
         )
         return

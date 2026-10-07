@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from .. import feeds
+from ..runtime import for_reader
 
 # EDGAR's ticker directory. Small, stable, and cached for a day — the mapping only
 # changes when a company lists, delists or changes symbol.
@@ -97,7 +98,9 @@ def recent(ticker: str, limit: int = MAX_ROWS) -> Dict[str, Any]:
     """The company's recent notable filings, newest first."""
     if not feeds.CONTACT_OK:
         return {"available": False,
-                "reason": "SEC requires a contact address. Set FEED_CONTACT in .env"}
+                "reason": for_reader(
+                    "Filings from SEC EDGAR are not available on this site right now.",
+                    "SEC requires a contact address. Set FEED_CONTACT in .env")}
 
     try:
         cik = _cik_for(ticker)

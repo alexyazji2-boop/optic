@@ -46,6 +46,7 @@ import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional, Tuple
 
 from .. import feeds
+from ..runtime import for_reader
 from .. import segment_store
 from . import sec_facts
 
@@ -166,10 +167,13 @@ def filings(ticker: str, force: bool = False) -> Dict[str, Any]:
         return {"available": False, "reason": "That does not look like a symbol."}
     if not feeds.CONTACT_OK:
         return {"available": False, "needs_contact": True,
-                "reason": ("This reads filings from SEC EDGAR, which requires a "
-                           "contact address in every request and refuses the ones "
-                           "without it. Set FEED_CONTACT to an email you are "
-                           "willing to be contacted on.")}
+                "reason": for_reader(
+                    "Segment figures from SEC EDGAR are not available on this "
+                    "site right now.",
+                    "This reads filings from SEC EDGAR, which requires a "
+                    "contact address in every request and refuses the ones "
+                    "without it. Set FEED_CONTACT to an email you are "
+                    "willing to be contacted on.")}
     try:
         cik = sec_facts.cik_for(symbol)
     except sec_facts.LookupUnavailable as exc:

@@ -39,6 +39,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import feeds
+from .runtime import for_reader
 
 log = logging.getLogger(__name__)
 
@@ -184,12 +185,16 @@ def index(count: int = INDEX_COUNT, force: bool = False,
     # configuration rather than as a broken section.
     if not feeds.CONTACT_OK:
         return {"available": False, "rows": [], "needs_contact": True,
-                "reason": ("This reads filings straight from SEC EDGAR, which "
-                           "requires a contact address in every request and "
-                           "refuses the ones without it. Set FEED_CONTACT to an "
-                           "email you are willing to be contacted on and this "
-                           "fills in. Nothing else on the terminal needs it "
-                           "except the SEC filings section of the daily read.")}
+                "reason": for_reader(
+                    "Insider filings from SEC EDGAR are not available on this "
+                    "site right now. The House disclosures and federal awards "
+                    "on this page do not depend on them.",
+                    "This reads filings straight from SEC EDGAR, which "
+                    "requires a contact address in every request and "
+                    "refuses the ones without it. Set FEED_CONTACT to an "
+                    "email you are willing to be contacted on and this "
+                    "fills in. Nothing else on the terminal needs it "
+                    "except the SEC filings section of the daily read.")}
 
     try:
         # A company's history changes when it files, not continuously, so it is

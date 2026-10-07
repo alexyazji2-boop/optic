@@ -16,7 +16,7 @@ import os
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
-from ..runtime import base_url, is_hosted
+from ..runtime import base_url, for_reader, is_hosted
 
 # --------------------------------------------------------------- sessions
 
@@ -172,8 +172,8 @@ def _unset_reason(reader: str, operator: str) -> str:
     and on the public site it told them "Google sign-in needs
     GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in the environment": an
     instruction for the operator, to somebody with no environment to set it
-    in. Same branch and same reason as the assistant's hint in app/ai.py."""
-    return reader if is_hosted() else operator
+    in. See runtime.for_reader."""
+    return for_reader(reader, operator)
 
 
 def google_status() -> Dict[str, Any]:
