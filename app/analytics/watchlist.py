@@ -214,6 +214,9 @@ def build(provider, symbols: List[str]) -> Dict[str, Any]:
             "signal": sig["state"],
             "signal_why": sig["why"],
             "bars": int(len(closes)),
+            # The last 30 closes, for a sparkline beside the figures: the same
+            # pull the changes above are read from, so nothing new is fetched.
+            "spark": [round(v, 2) for v in (_num(x) for x in closes.iloc[-30:]) if v is not None],
         })
 
     return {

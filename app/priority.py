@@ -42,6 +42,17 @@ MAX_PER_COLUMN = 20
 IMPACT_RANK = {"high": 0, "medium": 1, "low": 2}
 
 
+def _et_date(stamp: Any) -> Optional[str]:
+    """The New York calendar date of an ISO timestamp, or None."""
+    try:
+        when = datetime.fromisoformat(str(stamp))
+    except (TypeError, ValueError):
+        return None
+    if when.tzinfo is not None:
+        when = when.astimezone(weekly_mod.ET)
+    return when.date().isoformat()
+
+
 def _events(now: Optional[datetime] = None) -> List[Dict[str, Any]]:
     """Scheduled releases and expiries inside the horizon."""
     try:
@@ -62,6 +73,7 @@ def _events(now: Optional[datetime] = None) -> List[Dict[str, Any]]:
             "when": e.get("when_label"),
             "time": e.get("time_label"),
             "days_away": days,
+            "date": _et_date(e.get("at")),
             "why": e.get("why"),
             "agency": e.get("agency_short"),
         })
@@ -86,6 +98,7 @@ def _earnings(provider, now: Optional[datetime] = None) -> List[Dict[str, Any]]:
                 "ticker": symbol,
                 "title": "{} reports {}".format(symbol, day["day"]),
                 "when": day["day"],
+                "date": day.get("date"),
                 "why": ("An earnings report resets the estimate the price is built "
                         "on, which is why the option market charges more into it."),
             })

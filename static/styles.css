@@ -11009,7 +11009,7 @@ body.cp-open { overflow: hidden; }
  * 15px. The last track is fixed rather than `auto` for the same reason —
  * `auto` sized itself to "SIGNAL" in the header and "BULLISH" in the rows,
  * which are different widths. */
-:root { --wl-cols: 4.25rem 6rem 5.5rem 1fr 5.5rem 5.25rem; }
+:root { --wl-cols: 4.25rem 6rem 5.5rem 3.75rem 1fr 5.5rem 5.25rem; }
 
 .wl-open {
   flex: 1 1 auto;
@@ -11066,14 +11066,18 @@ body.cp-open { overflow: hidden; }
      changed" sits: at 4.25rem and 12px gaps a 328px card (Pulse open, 1280px
      window) left it 62px and "No change" needs 75, so it read "No cha...". A
      five-letter symbol is about 3.4rem in the row's bold face. */
+  /* The 30-day line on a third line of its own, across the price and change
+     tracks. Beside the price it took that track's room: measured in a 308px
+     row, the price had 16px. */
   .wl-open {
     grid-template-columns: 3.75rem minmax(0, 1fr) auto auto;
-    grid-template-areas: 'sym price chg go' 'sym changed signal go';
+    grid-template-areas: 'sym price chg go' 'sym changed signal go' 'sym trend trend go';
     column-gap: var(--space-2);
     row-gap: 2px;
   }
   .wl-sym { grid-area: sym; align-self: center; }
   .wl-price { grid-area: price; }
+  .wl-trend { grid-area: trend; }
   .wl-chg { grid-area: chg; text-align: right; }
   .wl-changed { grid-area: changed; }
   .wl-signal { grid-area: signal; text-align: right; }
@@ -11117,9 +11121,10 @@ body.cp-open { overflow: hidden; }
     .wl-list.is-compact .wl-open {
       grid-column: 1 / -1;
       grid-template-columns: subgrid;
-      grid-template-areas: 'sym . price . chg . go' 'sym . changed . signal . go';
+      grid-template-areas: 'sym . price . chg . go' 'sym . changed . signal . go' 'sym . trend trend trend . go';
       column-gap: normal;
     }
+    .wl-list.is-compact .wl-trend { grid-area: trend; }
     /* A symbol with no data: its reason runs from the price column to the end. */
     .wl-list.is-compact > .wl-row.is-none > .wl-sym { grid-column: 1; }
     .wl-list.is-compact > .wl-row.is-none > .wl-none { grid-column: 3 / -1; }
@@ -11149,12 +11154,13 @@ body.cp-open { overflow: hidden; }
   @media (max-width: 559px) {
     .wl-open {
       grid-template-columns: 3.75rem minmax(0, 1fr) auto auto;
-      grid-template-areas: 'sym price chg go' 'sym changed signal go';
+      grid-template-areas: 'sym price chg go' 'sym changed signal go' 'sym trend trend go';
       column-gap: var(--space-2);
       row-gap: 2px;
     }
     .wl-sym { grid-area: sym; align-self: center; }
     .wl-price { grid-area: price; }
+    .wl-trend { grid-area: trend; }
     .wl-chg { grid-area: chg; text-align: right; }
     .wl-changed { grid-area: changed; }
     .wl-signal { grid-area: signal; text-align: right; }
@@ -17159,3 +17165,39 @@ details.exact > .table-scroll, details.exact > table { margin-top: var(--space-2
 /* A payoff diagram inside an idea card: the card's own width, no extra frame. */
 .idea-payoff { margin: var(--space-2) 0; }
 .idea-payoff .viz-sub { margin-bottom: var(--space-1); }
+
+/* The watchlist's 30-session sparkline, ahead of what changed in the row. */
+.wl-trend { align-self: center; min-width: 0; }
+.wl-spark { display: block; height: 18px; }
+.wl-spark svg { display: block; }
+
+/* A month's line in each strip cell and beside each of today's moves. */
+.ms-spark { display: block; width: 64px; height: 16px; margin-top: 2px; }
+.cc-spark { display: inline-block; width: 56px; height: 18px; vertical-align: middle; }
+.ms-spark svg, .cc-spark svg { display: block; }
+
+/* The week ahead as days. A row of cells, today's marked, each listing what is
+ * scheduled on it; an empty day says so rather than leaving a hole. */
+.cs-strip {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: var(--space-2);
+  margin: var(--space-2) 0 var(--space-3);
+}
+.cs-day { padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface-2); min-width: 0; }
+.cs-day.is-today { border-color: var(--brand); }
+.cs-day.is-empty { opacity: 0.7; }
+.cs-date { display: block; font-size: var(--t-caption); font-weight: 600; color: var(--ink-2); margin-bottom: var(--space-1); }
+.cs-day.is-today .cs-date { color: var(--brand); }
+.cs-items { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); }
+.cs-item { font-size: var(--t-caption); color: var(--ink); padding-left: var(--space-2); border-left: 2px solid var(--ink-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-item.impact-high { border-left-color: var(--warn); font-weight: 600; }
+.cs-item.is-earnings { border-left-style: dashed; }
+.cs-time { margin-left: var(--space-1); color: var(--ink-muted); }
+.cs-none { font-size: var(--t-caption); color: var(--ink-muted); }
+.cs-more { margin: 0; padding-left: var(--space-2); }
+
+/* The sector heatmap: a table whose cells carry their figure and sign, tinted
+ * by how strongly within their column. The tint is behind the text, never the
+ * only cue. */
+table.heat td { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+table.heat td.name { text-align: left; font-weight: 500; }

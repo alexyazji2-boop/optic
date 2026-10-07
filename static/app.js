@@ -681,6 +681,7 @@ const HEADER_DEFS = {
   // ---- macro & sectors
   'macro regime': 'Whether the overall market is currently rewarding risk-taking or punishing it, scored from cross-asset signals like the VIX, credit, the dollar and oil. It sets how aggressive to be, not what to buy.',
   'market breadth': 'How many parts of the market are joining a move. A rally with broad participation tends to keep going; one carried by a handful of names is fragile.',
+  'treasury yield curve': "Government bond yields at different maturities, joined into one line. Longer loans usually pay more; when short ones pay more the curve is inverted, which has often come before a recession, though not on any reliable timetable.",
   'cross-asset dashboard': 'Key markets outside stocks. Volatility, the dollar, bonds, commodities, credit and crypto. Because these usually move before equities do.',
   'cross-asset ratios': 'One market divided by another, which exposes relative shifts (like small caps versus large caps) that a single price chart hides.',
   'sector relative strength': "Which sectors are beating or lagging the S&P 500. Showing where money is actually flowing, not just what's green today.",
@@ -4282,6 +4283,7 @@ function homeTodayHTML(p) {
       <button type="button" class="ht-more" data-goto-view="brief"
         >The full read \u2192</button>
     </div>
+    ${catalystStripHTML(p, ((STATE.home || {}).session || {}).now_et)}
     <div class="ht-cols">${cols.map((c) => {
     const all = c.rows || [];
     const open = homeTodayOpen.has(c.id);
@@ -4293,8 +4295,8 @@ function homeTodayHTML(p) {
      * never sent and open onto the same two. The count now says how many more
      * this panel can actually show. */
     const rest = all.length - rows.length;
-    return `<section class="ht-col">
-        <h3 class="ht-col-name" title="${esc(c.blurb || '')}">${esc(c.name || c.id)}</h3>
+    return `<section class="ht-col" data-ht-col="${esc(c.id)}">
+        <h3 class="ht-col-name" tabindex="-1" title="${esc(c.blurb || '')}">${esc(c.name || c.id)}</h3>
         <ul class="ht-list">${rows.map(homeTodayRow).join('')}</ul>
         ${/* A button, not a paragraph. It read "7 more" and was a <p>: a
              sentence telling the reader there were seven more and offering no
@@ -4304,6 +4306,77 @@ function homeTodayHTML(p) {
   open ? 'Show fewer' : `${fmt(rest, 0)} more`}</button>` : ''}
       </section>`;
   }).join('')}</div>`;
+}
+
+/* The week ahead as days, each with what is scheduled on it.
+ *
+ * Asked for as "upcoming catalysts displayed as a visual timeline or calendar
+ * strip". Only what the feed dates is placed, by the row's date or else its
+ * days away, and only on the days the feed looks at: a day past its horizon
+ * would say nothing is on it when nothing was looked for. Anything it cannot
+ * place stays in the columns below, which list every row; nothing is guessed
+ * onto a day. An earnings row once was, from its weekday, and on a Tuesday
+ * Monday's report was drawn on next Monday. */
+function catalystStripHTML(p, nowIso) {
+  const cols = {};
+  (p.columns || []).forEach((c) => { cols[c.id] = c; });
+  /* Today in New York: the session's own date when Home has loaded, and the
+   * clock's otherwise, since this section can arrive first. */
+  const etToday = () => {
+    try {
+      return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' })
+        .format(new Date());
+    } catch (e) { return ''; }
+  };
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(nowIso || etToday()));
+  const base = m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])) : null;
+  if (!base) return '';
+  // Inclusive: the feed keeps a row that is exactly its horizon away.
+  const horizon = Math.max(1, Math.min(7, Number.isFinite(p.horizon_days) ? p.horizon_days : 5));
+  const days = [];
+  for (let k = 0; k <= horizon; k += 1) {
+    const d = new Date(base.getTime() + k * 86400000);
+    if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue;    // no session
+    days.push({ k, d, items: [] });
+  }
+  const place = (row, kind) => {
+    const on = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(row.date || ''));
+    const k = on ? Math.round((Date.UTC(+on[1], +on[2] - 1, +on[3]) - base.getTime()) / 86400000)
+      : (Number.isFinite(row.days_away) ? row.days_away : null);
+    const day = days.find((x) => x.k === k);
+    if (day) {
+      day.items.push({ kind, col: kind === 'event' ? 'events' : 'earnings', title: row.short || row.title,
+        time: row.time, impact: row.impact });
+    }
+  };
+  ((cols.events || {}).rows || []).forEach((r) => place(r, 'event'));
+  ((cols.earnings || {}).rows || []).forEach((r) => place(r, 'earnings'));
+  const placed = days.reduce((n, x) => n + x.items.length, 0);
+  if (!placed) return '';
+  /* Two a day, the larger first, and the rest is a button that opens the
+   * columns listing them: a strip that grows with the feed is a table. */
+  const RANK = { high: 0, medium: 1, low: 2 };
+  const SHOWN = 2;
+  const label = (d) => `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()]} ${d.getUTCDate()}`;
+  const item = (it) => `<li class="cs-item is-${esc(it.kind)} impact-${esc(it.impact || 'low')}"
+        title="${esc(it.title)}${it.time ? ' · ' + esc(it.time) : ''}">${esc(it.title)}${
+  it.time ? `<span class="cs-time">${esc(it.time)}</span>` : ''}${
+  it.impact === 'high' ? '<span class="sr-only"> (high impact)</span>' : ''}</li>`;
+  return `<div class="cs-strip" role="list" aria-label="${placed} scheduled catalyst${placed === 1 ? '' : 's'} by day">
+    ${days.map((x) => {
+    const name = x.k === 0 ? 'Today' : label(x.d);
+    const all = x.items.slice().sort((a, b) => (RANK[a.impact] ?? 3) - (RANK[b.impact] ?? 3));
+    const rest = all.slice(SHOWN);
+    const where = [...new Set(rest.map((it) => it.col))].join(' ');
+    return `<div class="cs-day${x.k === 0 ? ' is-today' : ''}${all.length ? '' : ' is-empty'}" role="listitem">
+      <span class="cs-date">${esc(name)}</span>
+      ${all.length ? `<ul class="cs-items">${all.slice(0, SHOWN).map(item).join('')}${rest.length
+    ? `<li><button type="button" class="ht-rest cs-more" data-ht-show="${esc(where)}"
+          aria-label="${rest.length} more on ${esc(name)}, listed below">${rest.length} more</button></li>` : ''}</ul>`
+    : '<span class="cs-none">Nothing tracked</span>'}
+    </div>`;
+  }).join('')}
+  </div>`;
 }
 
 /* Not through mountPanel: that falls back to re-rendering Optic's Read when its
@@ -4376,6 +4449,7 @@ async function loadHomeMarket(opts = {}) {
     const was = strip.querySelector('.ms-track');
     const scrollLeft = was ? was.scrollLeft : 0;
     strip.innerHTML = marketStripHTML(data);
+    fillSparks(strip);
     const track = strip.querySelector('.ms-track');
     if (track) track.scrollLeft = scrollLeft;
     stripFade(strip);
@@ -4462,6 +4536,8 @@ async function loadHomeMarket(opts = {}) {
      element and the arrival would be a single frame again. */
   if (opts.silent) preserveUI(host, () => { host.innerHTML = html; });
   else host.innerHTML = html;
+  fillSparks(host);
+  mountHomeVisuals(data);
   if (!opts.silent) revealPanels(host, ':scope > .hm-greet, :scope > .hm-board > * > *');
   loadWatchlist();
   // Its own request, not awaited: the universe scan is the slowest thing on
@@ -5972,13 +6048,14 @@ function renderWatchlist() {
     </div>
 
     <div class="wv-cols" aria-hidden="true">
-      <span>Symbol</span><span>Price</span><span>Today</span>
+      <span>Symbol</span><span>Price</span><span>Today</span><span>30 days</span>
       <span>What changed</span><span>Signal</span><span></span>
     </div>
     <div id="wv-feed">${watchlistFeedHTML({})}</div>
 
     <p class="wv-method">${gloss((STATE.watchlist || {}).method || '')}</p>
   </section>`;
+  fillSparks(host);
   loadWatchlist();
 }
 
@@ -7341,7 +7418,7 @@ document.addEventListener('input', (evt) => {
   if (!evt.target || evt.target.id !== 'wv-q') return;
   watchQuery = evt.target.value || '';
   const feed = document.getElementById('wv-feed');
-  if (feed) feed.innerHTML = watchlistFeedHTML({});
+  if (feed) { feed.innerHTML = watchlistFeedHTML({}); fillSparks(feed); }
   const shown = document.getElementById('wv-shown');
   if (shown) shown.textContent = watchShownLabel();
 });
@@ -7861,6 +7938,10 @@ function watchRow(r, opts) {
       <span class="wl-sym">${esc(r.symbol)}</span>
       <span class="wl-price">${fmt(r.price, 2)}</span>
       <span class="wl-chg ${signClass(r.change_pct)}">${fmtPct(r.change_pct, 2)}</span>
+      ${/* Its own track, always present so the grid lines up with or without
+          * a line in it. Inside "what changed" it took the room that text
+          * needs: at a phone's width the reason for the row was ellipsised. */''}
+      <span class="wl-trend">${sparkSlot(r.spark)}</span>
       ${/* "No change", not "quiet": at the width the home page gives this column
           * it rendered as "q..", which a reader took for a button. */''}
       <span class="wl-changed">${changed
@@ -7875,6 +7956,36 @@ function watchRow(r, opts) {
     </button>
     ${o.removable ? watchRemoveBtn(r.symbol) : ''}
   </li>`;
+}
+
+/* A sparkline's place in a row: the last 30 closes, drawn by fillSparks once
+ * the row is on the page. Decorative to a screen reader, which the row's own
+ * label already gives the price and the change. Coloured by the direction of
+ * the 30 sessions, so it agrees with its own shape rather than with today. */
+function sparkSlot(values, cls = 'wl-spark', last = 30) {
+  const v = (values || []).filter(Number.isFinite).slice(-last);
+  if (v.length < 2) return '';
+  return `<span class="${cls}" aria-hidden="true" data-spark="${v.join(',')}" data-dir="${
+    v[v.length - 1] >= v[0] ? 'up' : 'down'}" title="Last ${v.length} sessions"></span>`;
+}
+
+function fillSparks(root) {
+  if (!root || !root.querySelectorAll) return;
+  root.querySelectorAll('[data-spark]:not([data-drawn])').forEach((slot) => {
+    const values = slot.dataset.spark.split(',').map(Number);
+    /* A row's line takes the width its track has: its own column in a wide
+     * row, the line across the price and change in a narrow one. */
+    const avail = slot.parentElement ? slot.parentElement.clientWidth : 0;
+    const box = slot.classList.contains('ms-spark') ? [64, 16]
+      : slot.classList.contains('wl-spark') && avail ? [Math.max(40, Math.min(160, avail - 2)), 18] : [56, 18];
+    slot.appendChild(sparkline(values, box[0], box[1], slot.dataset.dir === 'up' ? C.pos : C.neg));
+    slot.dataset.drawn = '1';
+  });
+}
+
+/* Home's drawn parts, once the page is in: the strip's and the board's lines. */
+function mountHomeVisuals() {
+  fillSparks(document.getElementById('cc-strip'));
 }
 
 function watchRemoveBtn(symbol) {
@@ -7979,9 +8090,9 @@ function renderWatchlistHost() {
   // Both mounts, because the feed is shown in two places and only one of them
   // exists at a time. Painting whichever is present avoids a view rebuild.
   const home = document.getElementById('hm-watch');
-  if (home) home.innerHTML = watchlistFeedHTML({ compact: true, limit: 6 });
+  if (home) { home.innerHTML = watchlistFeedHTML({ compact: true, limit: 6 }); fillSparks(home); }
   const full = document.getElementById('wv-feed');
-  if (full) full.innerHTML = watchlistFeedHTML({});
+  if (full) { full.innerHTML = watchlistFeedHTML({}); fillSparks(full); }
   const pulse = document.getElementById('wv-pulse');
   if (pulse) pulse.innerHTML = watchPulseHTML(((STATE.watchlist || {}).rows) || []);
   const count = document.getElementById('wv-count');
@@ -8386,6 +8497,7 @@ function marketStripHTML(data) {
       ${chg === null || chg === undefined ? ''
     : `<span class="ms-chg ${signClass(chg)}">${fmtPct(chg, 2)}</span>`}
       ${word && word !== 'flat' ? `<span class="ms-word">${esc(word)}</span>` : ''}
+      ${sparkSlot(inst.series, 'ms-spark')}
     </button>`;
   }).filter(Boolean).join('');
   if (!cells) return '';
@@ -8618,6 +8730,7 @@ function whatMattersNow(data) {
         data-instrument-label="${esc(inst.label)}">
         <span class="cc-move-name">${esc(inst.label)}</span>
         <span class="cc-move-chg ${signClass(inst.chg_1d)}">${fmtPct(inst.chg_1d, 2)}</span>
+        ${sparkSlot(inst.series, 'cc-spark')}
         ${/* The multiple is why the row is on the list at all, so it is shown
             * rather than left implicit. Without it "VVIX +6.4%" above
             * "Russell 2000 -1.3%" looks like the list is simply sorted by the
@@ -24885,6 +24998,84 @@ function mountEconChart() {
   }));
 }
 
+/* An rgba from a theme hex, for a cell tinted by its value. */
+function tint(hex, alpha) {
+  const m = /^#([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+  if (!m) return 'transparent';
+  const v = parseInt(m[1], 16);
+  return `rgba(${v >> 16}, ${(v >> 8) & 255}, ${v & 255}, ${alpha.toFixed(3)})`;
+}
+
+/* Sectors against the benchmark over four windows, as a heatmap that is also
+ * a table: every cell carries its figure and its sign, and the tint only says
+ * how strongly, scaled within its own column so a quiet week is not washed
+ * out by a loud half-year. */
+function sectorHeatHTML(s) {
+  const rows = (s.sectors || []).filter((r) => r.rs);
+  if (!rows.length) return '';
+  const cols = [['rs_1w', '1 week'], ['rs_1m', '1 month'], ['rs_3m', '3 months'], ['rs_6m', '6 months']];
+  const peak = {};
+  cols.forEach(([k]) => { peak[k] = Math.max(0.01, ...rows.map((r) => Math.abs((r.rs || {})[k] || 0))); });
+  const by3m = rows.filter((r) => Number.isFinite((r.rs || {}).rs_3m)).slice().sort((x, y) => y.rs.rs_3m - x.rs.rs_3m);
+  const title = by3m.length >= 2
+    ? `${by3m[0].name} leads ${s.benchmark || 'SPY'} over three months; ${by3m[by3m.length - 1].name} trails it` : '';
+  return `<div class="viz">
+    ${title ? `<p class="viz-title">${esc(title)}</p>` : ''}
+    <p class="viz-sub">Each sector's return minus ${esc(s.benchmark || 'SPY')}'s, in percentage points. Green ahead, red behind; the deeper the colour, the larger within that column.</p>
+    <div class="table-scroll"><table class="data heat">
+      <thead><tr><th>Sector</th>${cols.map(([, name]) => `<th>${esc(name)}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map((r) => `<tr><td class="name">${esc(r.name)} <span class="muted">${esc(r.symbol)}</span></td>${cols.map(([k]) => {
+    const v = (r.rs || {})[k];
+    if (!Number.isFinite(v)) return '<td>—</td>';
+    const a = 0.12 + 0.5 * Math.min(1, Math.abs(v) / peak[k]);
+    return `<td class="${signClass(v)}" style="background:${tint(v >= 0 ? C.pos : C.neg, a)}">${fmtPct(v, 1)}</td>`;
+  }).join('')}</tr>`).join('')}</tbody>
+    </table></div>
+  </div>`;
+}
+
+/* The Treasury curve now and twenty sessions ago, from the three yields the
+ * cross-asset board carries. */
+function macroYieldCurve(inst) {
+  const keys = [['^IRX', '3 month'], ['^FVX', '5 year'], ['^TNX', '10 year']];
+  const now = keys.map(([k]) => (inst[k] || {}).last);
+  if (now.filter(Number.isFinite).length < 2) return '';
+  const short = now[0], long = now[now.length - 1];
+  const title = !Number.isFinite(short) || !Number.isFinite(long) ? ''
+    : long > short ? `The curve slopes up: the 10-year yields ${fmt(long - short, 2)} points more than the 3-month`
+      : `The curve is inverted: the 3-month yields ${fmt(short - long, 2)} points more than the 10-year`;
+  return `<div class="panel gap">
+    <h2>${hg('Treasury yield curve')}</h2>
+    ${vizBlock('viz-mkt-curve', title,
+    'Yields at three maturities now and twenty sessions ago. The maturities are evenly spaced here, not to scale. Source: Yahoo Finance.',
+    legendHtml([{ name: 'Now', color: C.brand }, { name: '20 sessions ago', color: C.muted, dash: true }]))}
+  </div>`;
+}
+
+function mountMarketVisuals(m) {
+  const em = m.expected_move || {};
+  if (em.implied_pct && em.spot) {
+    const band = (pct) => [em.spot * (1 - pct / 100), em.spot * (1 + pct / 100)];
+    const [lo, hi] = band(em.implied_pct);
+    const [rlo, rhi] = em.realized_pct > 0 ? band(em.realized_pct) : [null, null];
+    vizMount('viz-mkt-move', (w) => rangeChart({
+      width: w, low: lo, high: hi, format: (v) => fmt(v, 0), trackLabel: 'One day, as the options price it',
+      ariaLabel: `Options price a ${fmt(em.implied_pct, 2)} percent day${rlo
+    ? `; the index has been moving ${fmt(em.realized_pct, 2)} percent` : ''}.`,
+      marks: [{ value: em.spot, label: 'Now', color: C.ink, primary: true },
+        ...(rlo ? [{ value: rlo, label: 'Its own day', color: C.s7 }, { value: rhi, label: '', say: 'Its own day', color: C.s7 }] : [])],
+    }));
+  }
+  const inst = m.instruments || {};
+  const keys = ['^IRX', '^FVX', '^TNX'];
+  vizMount('viz-mkt-curve', (w) => curveChart({
+    width: Math.min(w, 560), categories: ['3 month', '5 year', '10 year'],
+    ariaLabel: 'Treasury yields now and twenty sessions ago.',
+    series: [{ name: 'Now', values: keys.map((k) => (inst[k] || {}).last), color: C.brand },
+      { name: '20 sessions ago', values: keys.map((k) => (inst[k] || {}).close_20d_ago), color: C.muted, dash: true }],
+  }));
+}
+
 /* The S&P's daily move as its options price it, against what the index does.
  *
  * Asked for as "use the ATR, calculating VIX/16 for expected S&P volatility
@@ -24897,6 +25088,9 @@ function macroExpectedMove(em) {
   return `<div class="panel gap">
     <h2>${hg('Expected S&P move')} <span class="th-plain">· from the VIX</span></h2>
     <p class="sub">${esc(em.reading || '')}</p>
+    ${vizBlock('viz-mkt-move', `Options price a ±${fmt(em.implied_pct, 2)}% day${em.realized_pct > 0
+    ? `; the S&P has been moving ±${fmt(em.realized_pct, 2)}%` : ''}`,
+    'One day around the index now: the band the options price, and inside it the index\'s own recent day on the same footing.')}
     <div class="grid c4">
       ${tile('Options price', `±${fmt(em.implied_pct, 2)}% a day`,
     `VIX ${fmt(em.vix, 1)} ÷ 16 · ±${fmt(em.implied_points, 0)} points`)}
@@ -25021,6 +25215,7 @@ function renderMarket(d) {
   </div>
 
   ${macroExpectedMove(m.expected_move)}
+  ${macroYieldCurve(inst)}
 
   <div id="rotation-host" class="span-all">${renderRotation(STATE.rotation)}</div>
 
@@ -25072,7 +25267,8 @@ function renderMarket(d) {
     <div class="panel span2">
       <h2>${hg('Sector relative strength')}</h2>
       <p class="sub">Ranked on the ratio line against ${esc(s.benchmark || 'SPY')}. Leadership, not beta. Composite blends 1-week to 6-month relative strength with trend confirmation.</p>
-      <table class="data">
+      ${sectorHeatHTML(s)}
+      ${exactFigures(`<table class="data">
         <thead><tr><th>#</th><th>Sector</th><th>Composite</th><th></th><th>RS 1w</th><th>RS 1m</th><th>RS 3m</th><th>RS 6m</th><th>RSI</th><th>vs 50d</th><th>vs 200d</th><th>Strength</th></tr></thead>
         <tbody>${(s.sectors || []).map((r) => `<tr>
           <td>${r.rank}</td>
@@ -25088,7 +25284,7 @@ function renderMarket(d) {
           <td class="${signClass(r.vs_sma200)}">${fmtPct(r.vs_sma200, 1)}</td>
           <td class="name">${toneChip(r.strength)}</td>
         </tr>`).join('')}</tbody>
-      </table>
+      </table>`, 'Exact figures, with the composite and the trend')}
     </div>
   </div>
 
@@ -25188,6 +25384,7 @@ function renderMarket(d) {
     }));
   }
 
+  mountMarketVisuals(m);
   if (evc.series) {
     mount('chart-breadth', (w) => lineChart({
       width: w,
@@ -39955,6 +40152,23 @@ document.addEventListener('click', (evt) => {
     paperSave();
     paperNote = 'Book cleared. Nothing was touched in Optic Portfolio.';
     renderPaperView();
+    return;
+  }
+  /* A day's "more" in the week strip: open the columns that list the rest,
+   * and take the reader to the first of them. */
+  const htShow = evt.target.closest('[data-ht-show]');
+  if (htShow) {
+    const ids = htShow.dataset.htShow.split(' ').filter(Boolean);
+    ids.forEach((id) => homeTodayOpen.add(id));
+    const host = document.getElementById('hm-today');
+    if (host && STATE.priority) {
+      preserveUI(host, () => { host.innerHTML = homeTodayHTML(STATE.priority); });
+      const col = host.querySelector(`[data-ht-col="${ids[0]}"] .ht-col-name`);
+      if (col) {
+        col.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
+        col.focus({ preventScroll: true });
+      }
+    }
     return;
   }
   const htAll = evt.target.closest('[data-ht-all]');

@@ -57,7 +57,7 @@ var AMD = { available: true, symbol: 'AMD', price: 607.87, change_pct: -3.61, si
 
 
 def test_the_row_says_analyze_and_the_placeholder_says_no_change():
-    _js(ROW, ["watchRow"], """
+    _js(ROW, ["sparkSlot", "watchRow"], """
       var html = watchRow(AMD, {});
       assert(html.indexOf('>quiet<') < 0, 'still says quiet');
       assert(html.indexOf('class="wl-quiet">No change<') >= 0, 'no No change');
@@ -85,7 +85,9 @@ def _block(start, css=CSS):
 def test_the_row_layout_follows_the_card_not_the_window():
     assert "#hm-watch, .wv-panel { container-type: inline-size; }" in CSS
     narrow = _block("@container (max-width: 559px) {")
-    assert "'sym price chg go' 'sym changed signal go'" in narrow
+    # The 30-day line on a third line, across the price and change tracks:
+    # beside the price it left the price 16px of a 308px row.
+    assert "'sym price chg go' 'sym changed signal go' 'sym trend trend go'" in narrow
     assert ".wl-go { grid-area: go;" in narrow
     # The window-width version survives only where container queries do not
     # exist. Beside them it came later in the file, and its grid has no `go`
@@ -99,7 +101,9 @@ def test_the_row_layout_follows_the_card_not_the_window():
 def test_the_columns_and_the_header_agree():
     cols = re.search(r"--wl-cols: ([^;]+);", CSS).group(1).split()
     header = re.search(r'<div class="wv-cols" aria-hidden="true">(.*?)</div>', RAW, re.S).group(1)
-    assert len(cols) == 6 and header.count("<span") == 6, (cols, header)
+    # Seven since the 30-day sparkline took a track of its own.
+    assert len(cols) == 7 and header.count("<span") == 7, (cols, header)
+    assert "<span>30 days</span>" in header
     assert '<section class="panel wv-panel">' in RAW
 
 

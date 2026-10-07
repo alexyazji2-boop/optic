@@ -119,7 +119,10 @@ def earnings_this_week(provider, now: Optional[datetime] = None,
             by_day.setdefault(when.strftime("%A"), []).append(symbol)
 
     order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-    days = [{"day": d, "symbols": sorted(by_day[d])} for d in order if d in by_day]
+    # The date too, so a reader placing a day on a calendar does not have to
+    # work out which Monday: on a weekday this week has days that are past.
+    days = [{"day": d, "date": (start + timedelta(days=i)).date().isoformat(), "symbols": sorted(by_day[d])}
+            for i, d in enumerate(order) if d in by_day]
     return {
         "week_of": start.date().isoformat(),
         "days": days,

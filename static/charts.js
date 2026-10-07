@@ -3570,11 +3570,16 @@ function rangeChart(opts) {
     const g = s('g', {});
     g.appendChild(s('line', { x1: x, x2: x, y1: trackY - 9, y2: trackY + 9, stroke: mk.color || C.ink, 'stroke-width': mk.primary ? 3 : 2, 'stroke-linecap': 'round' }));
     const tx = anchor === 'end' ? x - 5 : anchor === 'start' ? x + 5 : x;
-    g.appendChild(s('text', {
-      x: Math.max(m.l, Math.min(W - m.r, tx)), y: trackY - 15, fill: mk.color || C.ink, 'font-size': CF.micro,
-      'font-weight': mk.primary ? CW.tag : CW.label, 'text-anchor': anchor,
-    }, `${mk.label} ${format(mk.value)}`));
-    focusMark(g, tipRows(escapeText(mk.label), [['Value', format(mk.value)]]), `${mk.label} ${format(mk.value)}`);
+    // A mark with no label of its own (the second end of a band) keeps its
+    // tick and its readout, and leaves the words to its partner.
+    if (mk.label) {
+      g.appendChild(s('text', {
+        x: Math.max(m.l, Math.min(W - m.r, tx)), y: trackY - 15, fill: mk.color || C.ink, 'font-size': CF.micro,
+        'font-weight': mk.primary ? CW.tag : CW.label, 'text-anchor': anchor,
+      }, `${mk.label} ${format(mk.value)}`));
+    }
+    const name = mk.label || mk.say || 'Mark';
+    focusMark(g, tipRows(escapeText(name), [['Value', format(mk.value)]]), `${name} ${format(mk.value)}`);
     root.appendChild(g);
   });
   return root;
@@ -3763,5 +3768,50 @@ function payoffChart(opts) {
     showCursor();
   });
   root.appendChild(hit);
+  return root;
+}
+
+/**
+ * Values across a few categories, joined as a line, one line per series: a
+ * yield curve now and some sessions ago. The categories are evenly spaced and
+ * the caller says so; a maturity axis drawn to scale would crush the short end.
+ *
+ * series: [{name, values, color, dash}]
+ */
+function curveChart(opts) {
+  const { categories = [], series = [], width = 420, height = 160, format = (v) => fmt(v, 2) + '%', ariaLabel = '' } = opts;
+  const all = [];
+  series.forEach((sr) => sr.values.forEach((v) => { if (Number.isFinite(v)) all.push(v); }));
+  if (categories.length < 2 || all.length < 2) return null;
+  const W = width, H = height;
+  const m = { t: 14, r: 18, b: 24, l: 46 };
+  let [lo, hi] = extentOf(all);
+  const pad = (hi - lo) * 0.2 || 0.25;
+  lo -= pad; hi += pad;
+  const X = (i) => m.l + (i / (categories.length - 1)) * (W - m.l - m.r);
+  const Y = (v) => m.t + (H - m.t - m.b) - ((v - lo) / (hi - lo)) * (H - m.t - m.b);
+  const root = svgRoot(W, H);
+  root.setAttribute('aria-label', ariaLabel);
+  niceTicks(lo, hi, 4).forEach((t) => {
+    root.appendChild(s('line', { x1: m.l, x2: W - m.r, y1: Y(t), y2: Y(t), stroke: C.grid, 'stroke-width': 1 }));
+    root.appendChild(s('text', { x: m.l - 8, y: Y(t) + 4, fill: C.muted, 'font-size': CF.micro, 'text-anchor': 'end', 'font-variant-numeric': 'tabular-nums' }, format(t)));
+  });
+  categories.forEach((c, i) => {
+    root.appendChild(s('text', { x: X(i), y: H - 6, fill: C.ink2, 'font-size': CF.tick, 'text-anchor': 'middle' }, c));
+  });
+  series.forEach((sr) => {
+    const pts = sr.values.map((v, i) => (Number.isFinite(v) ? [X(i), Y(v)] : null)).filter(Boolean);
+    root.appendChild(s('polyline', { points: pts.map((p) => p.join(',')).join(' '), fill: 'none', stroke: sr.color || C.brand,
+      'stroke-width': sr.dash ? 1.5 : 2.5, 'stroke-dasharray': sr.dash ? '4 3' : null, 'stroke-linejoin': 'round' }));
+    sr.values.forEach((v, i) => {
+      if (!Number.isFinite(v)) return;
+      const g = s('g', {});
+      g.appendChild(s('circle', { cx: X(i), cy: Y(v), r: sr.dash ? 3 : 4.5, fill: sr.dash ? C.surface : (sr.color || C.brand), stroke: sr.color || C.brand, 'stroke-width': 1.5 }));
+      if (!sr.dash) g.appendChild(s('text', { x: X(i), y: Y(v) - 9, fill: C.ink, 'font-size': CF.micro, 'font-weight': CW.label, 'text-anchor': 'middle', 'font-variant-numeric': 'tabular-nums' }, format(v)));
+      g.appendChild(s('circle', { cx: X(i), cy: Y(v), r: 12, fill: 'transparent' }));
+      focusMark(g, tipRows(escapeText(`${categories[i]} · ${sr.name}`), [['Yield', format(v)]]), `${categories[i]}, ${sr.name}: ${format(v)}`);
+      root.appendChild(g);
+    });
+  });
   return root;
 }
