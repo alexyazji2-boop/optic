@@ -17190,3 +17190,88 @@ table.heat td.name { text-align: left; font-weight: 500; }
 @media (max-width: 559px) {
   header.topbar { justify-content: flex-end; }
 }
+
+/* =============================================================== HOME ===
+ *
+ * A week-strip item with a reason opens it under the strip. The button wears
+ * the item's own line, so the strip looks as it did; the dotted underline on
+ * hover is the only sign it opens, the same cue the glossary terms use. */
+.cs-note-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: underline dotted transparent;
+  text-underline-offset: 3px;
+  transition: text-decoration-color var(--dur-ui) var(--ease-ui);
+}
+@media (hover: hover) {
+  .cs-note-btn:hover { text-decoration-color: currentColor; }
+}
+.cs-item.is-open { border-left-color: var(--brand); }
+.cs-note {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px solid var(--brand);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  background: var(--surface-2);
+  font-size: var(--t-small);
+  line-height: 1.5;
+  color: var(--ink-2);
+  max-width: 80ch;
+}
+.cs-note[hidden] { display: none; }
+.cs-note strong { color: var(--ink); font-weight: 600; }
+.cs-note-when { margin: 0 var(--space-2); color: var(--ink-muted); font-size: var(--t-caption); }
+
+/* The desk's takeaway leads it, a step up from the paragraphs under it. */
+.md .md-overall { font-size: var(--t-lead); line-height: 1.5; margin-bottom: var(--space-3); }
+.md-more { margin-top: var(--space-2); }
+.md-more > .md-p:first-of-type { margin-top: var(--space-3); }
+
+/* One column, in the order of the brief rather than of the two columns.
+ *
+ * Below the rail breakpoint the main column stacked whole above the rail, so
+ * on a phone the reader's own watchlist came after the desk, what matters
+ * now, what changed and the month's movers: y=5168 of a 6300px page at
+ * 375x812, measured 2026-10-06. Unboxed, the blocks take the order a daily
+ * brief reads in: the day's read, your names and what changed on them, then
+ * the market's moves, the month's movers, the written brief and the
+ * questions. Two columns keep their own order above this. */
+@container hm-market (max-width: 671px) {
+  .hm-board > .hm-main, .hm-board > .hm-rail { display: contents; }
+  .hm-board .md { order: 1; }
+  .hm-board .hm-block:has(#hm-watch) { order: 2; }
+  .hm-board #hm-changes { order: 3; }
+  .hm-board .cc-now { order: 4; }
+  .hm-board .hm-block:has(#cc-movers) { order: 5; }
+  .hm-board .hm-block:has(.hm-alerts) { order: 6; }
+  .hm-board .hm-block:has([data-go-view="brief"]) { order: 7; }
+  .hm-board .hm-block:has(.cc-qs) { order: 8; }
+}
+
+/* The first-visit question on a phone: each answer one row, not a card.
+   Five stacked cards made the question 761px tall at 375px, so a first-time
+   reader scrolled a screen of choices before anything about the market. */
+@media (max-width: 559px) {
+  .kob-opts { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+  .kob-opt {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    min-height: 44px;
+    text-align: left;
+  }
+  .kob-opt .kob-glyph { font-size: var(--t-body); }
+  .kob-opt .kob-tag { color: var(--ink-muted); }
+}

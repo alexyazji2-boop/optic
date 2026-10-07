@@ -125,7 +125,7 @@ def _sectors(provider) -> List[Dict[str, Any]]:
             "kind": "sector",
             "impact": "high" if changed else "medium",
             "ticker": r["symbol"],
-            "title": "{} — {}".format(r["symbol"], r.get("name")),
+            "title": "{} · {}".format(r["symbol"], r.get("name")),
             "trend": r.get("trend"),
             "rotation": rot,
             "why": (r.get("summary") or "") + (

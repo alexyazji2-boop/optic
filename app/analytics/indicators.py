@@ -274,7 +274,7 @@ CATALOGUE: List[Dict[str, Any]] = [
      "caveat": ("Lagging by construction (a smoothed average of smoothed values) so it confirms a trend well after the trend began and stays elevated after one ends. On its own it says nothing about direction: a hard sell-off and a strong rally read the same.")},
     {"id": "stochastic", "name": "Stochastic", "pane": "own", "group": "Momentum",
      "represents": ("Where the close sits inside the last 14 sessions' high-low range, as a percentage. At 100 it closed at the top of the range; at 0, the bottom."),
-     "why": ("It is a position-in-range reading, not a momentum reading, and that distinction is where most misuse starts. In a strong trend it pins near an extreme for weeks — 'overbought' at 90 during a sustained advance has been a bad reason to sell far more often than a good one. It is most informative in a range, which is exactly when ADX is low."),
+     "why": ("It is a position-in-range reading, not a momentum reading, and that distinction is where most misuse starts. In a strong trend it pins near an extreme for weeks: 'overbought' at 90 during a sustained advance has been a bad reason to sell far more often than a good one. It is most informative in a range, which is exactly when ADX is low."),
      "measures": "Where the close sits inside the last 14 sessions' range.",
      "caveat": ("In a sustained trend it pins near an extreme for weeks, so \u201coverbought\u201d here has been a bad reason to sell far more often than a good one. It reads position in a range, and a range is what a trending market does not have.")},
     {"id": "obv", "name": "On-balance volume", "pane": "own", "group": "Flow",
@@ -404,7 +404,7 @@ def _reading(key: str, df: pd.DataFrame, payload: Dict[str, Any]) -> Optional[st
         quality = ("the line explains very little of the movement, so read the "
                    "channel as decoration" if r2 < 0.3 else
                    "a reasonable fit" if r2 < 0.6 else "a strong fit")
-        return ("Sloping {:+.2f}% a session with an R-squared of {:.2f} — {}."
+        return ("Sloping {:+.2f}% a session with an R-squared of {:.2f}: {}."
                 .format(slope, r2, quality))
 
     if key == "adx":
@@ -471,7 +471,7 @@ def _reading(key: str, df: pd.DataFrame, payload: Dict[str, Any]) -> Optional[st
         tail = (" Volume-weighted, so this is an extreme backed by real trade "
                 "rather than a thin drift." if extreme else
                 " Nothing stretched either way.")
-        return "Money flow index {:.0f} — {}.{}".format(v, zone, tail)
+        return "Money flow index {:.0f}: {}.{}".format(v, zone, tail)
 
     if key == "rs":
         vals = [v for v in lines.get("RS vs SPY", []) if v is not None]

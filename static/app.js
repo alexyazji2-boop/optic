@@ -4223,9 +4223,19 @@ if (homeNarrowQuery && homeNarrowQuery.addEventListener) {
 
 function renderHome() {
   hideTip();
-  const quick = HOME_QUICK_PICKS
-    .map((t) => `<button type="button" data-pick="${t}">${t}</button>`)
+  /* A returning reader's own names, a new one's examples.
+   *
+   * The row was always SPY, QQQ, NVDA, AAPL, TSLA, AMD, MSFT and IWM: eight
+   * examples for someone who has never searched, and still those eight for
+   * someone who opened INTC and PLTR yesterday and came back to carry on. The
+   * names they opened are the ones they are most likely to want, newest
+   * first, and the examples stay for the visit where there are none. */
+  const recent = recentSymbols();
+  const picks = recent.length ? recent : HOME_QUICK_PICKS;
+  const quick = picks
+    .map((t) => `<button type="button" data-pick="${esc(t)}">${esc(t)}</button>`)
     .join('');
+  const quickLabel = recent.length ? 'Recent' : 'Or jump to';
 
   views.home.innerHTML = `
   <div class="home">
@@ -4278,7 +4288,7 @@ function renderHome() {
     </form>
 
     <div class="home-quick">
-      <span class="label">Or jump to</span>
+      <span class="label">${quickLabel}</span>
       ${quick}
     </div>
 
@@ -4487,10 +4497,25 @@ function homeTodayHTML(p) {
   if (!p || p.available === false) return '';
   const byId = {};
   (p.columns || []).forEach((c) => { byId[c.id] = c; });
+  const nowIso = ((STATE.home || {}).session || {}).now_et;
+  const strip = catalystStripHTML(p, nowIso);
+  /* The columns list what the strip does not show.
+   *
+   * Both listed every row, so a week with PEP reporting on Thursday said so
+   * in the Thursday cell and again under "Earnings this week", and the
+   * Commitments of Traders on Friday twice more: measured on Home on
+   * 2026-10-06, every scheduled row on the page was printed twice. The strip
+   * holds what it can date, two a day; the columns keep what it cannot place
+   * and a busy day's overflow, which is what its "N more" opens, and the
+   * sectors, which have no day. A strip item's reason opens under the strip
+   * (catalystNoteHTML), so nothing a column row said is lost. */
+  const onStrip = strip ? catalystPlacement(p, nowIso).shown : new Set();
   const cols = HOME_TODAY_COLUMNS
     .map((id) => byId[id])
-    .filter((c) => c && (c.rows || []).length);
-  if (!cols.length) return '';
+    .filter(Boolean)
+    .map((c) => ({ ...c, rows: (c.rows || []).filter((r) => !onStrip.has(r)) }))
+    .filter((c) => c.rows.length);
+  if (!cols.length && !strip) return '';
   const horizon = Number(p.horizon_days) || 0;
   return `<div class="ht-head">
       <h2 class="ht-title">What matters today</h2>
@@ -4498,8 +4523,8 @@ function homeTodayHTML(p) {
       <button type="button" class="ht-more" data-goto-view="brief"
         >The full read \u2192</button>
     </div>
-    ${catalystStripHTML(p, ((STATE.home || {}).session || {}).now_et)}
-    <div class="ht-cols">${cols.map((c) => {
+    ${strip}
+    ${cols.length ? `<div class="ht-cols">${cols.map((c) => {
     const all = c.rows || [];
     const open = homeTodayOpen.has(c.id);
     const rows = open ? all : all.slice(0, HOME_TODAY_ROWS);
@@ -4520,7 +4545,7 @@ function homeTodayHTML(p) {
           data-ht-all="${esc(c.id)}" aria-expanded="${open}">${
   open ? 'Show fewer' : `${fmt(rest, 0)} more`}</button>` : ''}
       </section>`;
-  }).join('')}</div>`;
+  }).join('')}</div>` : ''}`;
 }
 
 /* The week ahead as days, each with what is scheduled on it.
@@ -4532,9 +4557,22 @@ function homeTodayHTML(p) {
  * place stays in the columns below, which list every row; nothing is guessed
  * onto a day. An earnings row once was, from its weekday, and on a Tuesday
  * Monday's report was drawn on next Monday. */
-function catalystStripHTML(p, nowIso) {
+/* Which strip item's reason is open, by its title. Module state for the
+ * reason homeTodayOpen is: the band is rebuilt by the refresh tick, and a
+ * note kept on the markup would close under the reader every twenty seconds. */
+let catalystNoteOpen = null;
+
+/* Two a day, the larger first; the rest is a button that opens the columns
+ * listing them. A strip that grows with the feed is a table. */
+const CATALYST_SHOWN = 2;
+
+/* Where each dated row falls in the days ahead, and which rows the strip
+ * shows. Shared by the strip and the columns under it, so the columns can
+ * leave out exactly what the strip already says. */
+function catalystPlacement(p, nowIso) {
+  const shown = new Set();
   const cols = {};
-  (p.columns || []).forEach((c) => { cols[c.id] = c; });
+  ((p || {}).columns || []).forEach((c) => { cols[c.id] = c; });
   /* Today in New York: the session's own date when Home has loaded, and the
    * clock's otherwise, since this section can arrive first. */
   const etToday = () => {
@@ -4545,7 +4583,7 @@ function catalystStripHTML(p, nowIso) {
   };
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(nowIso || etToday()));
   const base = m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])) : null;
-  if (!base) return '';
+  if (!base) return { days: [], placed: 0, shown };
   // Inclusive: the feed keeps a row that is exactly its horizon away.
   const horizon = Math.max(1, Math.min(7, Number.isFinite(p.horizon_days) ? p.horizon_days : 5));
   const days = [];
@@ -4561,37 +4599,81 @@ function catalystStripHTML(p, nowIso) {
     const day = days.find((x) => x.k === k);
     if (day) {
       day.items.push({ kind, col: kind === 'event' ? 'events' : 'earnings', title: row.short || row.title,
-        time: row.time, impact: row.impact });
+        time: row.time, impact: row.impact, row });
     }
   };
   ((cols.events || {}).rows || []).forEach((r) => place(r, 'event'));
   ((cols.earnings || {}).rows || []).forEach((r) => place(r, 'earnings'));
-  const placed = days.reduce((n, x) => n + x.items.length, 0);
-  if (!placed) return '';
-  /* Two a day, the larger first, and the rest is a button that opens the
-   * columns listing them: a strip that grows with the feed is a table. */
   const RANK = { high: 0, medium: 1, low: 2 };
-  const SHOWN = 2;
+  days.forEach((x) => {
+    x.items.sort((a, b) => (RANK[a.impact] ?? 3) - (RANK[b.impact] ?? 3));
+    x.items.slice(0, CATALYST_SHOWN).forEach((it) => shown.add(it.row));
+  });
+  const placed = days.reduce((n, x) => n + x.items.length, 0);
+  return { days, placed, shown };
+}
+
+/* The week ahead as days, each with what is scheduled on it.
+ *
+ * Asked for as "upcoming catalysts displayed as a visual timeline or calendar
+ * strip". Only what the feed dates is placed, by the row's date or else its
+ * days away, and only on the days the feed looks at: a day past its horizon
+ * would say nothing is on it when nothing was looked for. Anything it cannot
+ * place stays in the columns below; nothing is guessed onto a day. An
+ * earnings row once was, from its weekday, and on a Tuesday Monday's report
+ * was drawn on next Monday.
+ *
+ * An item with a reason is a button that opens it under the strip, one at a
+ * time: the reason was the column row's, and the columns no longer repeat
+ * what the strip shows. */
+function catalystStripHTML(p, nowIso) {
+  const { days, placed } = catalystPlacement(p, nowIso);
+  if (!placed) return '';
   const label = (d) => `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()]} ${d.getUTCDate()}`;
-  const item = (it) => `<li class="cs-item is-${esc(it.kind)} impact-${esc(it.impact || 'low')}"
-        title="${esc(it.title)}${it.time ? ' · ' + esc(it.time) : ''}">${esc(it.title)}${
-  it.time ? `<span class="cs-time">${esc(it.time)}</span>` : ''}${
-  it.impact === 'high' ? '<span class="sr-only"> (high impact)</span>' : ''}</li>`;
-  return `<div class="cs-strip" role="list" aria-label="${placed} scheduled catalyst${placed === 1 ? '' : 's'} by day">
-    ${days.map((x) => {
+  let openItem = null;
+  const item = (it) => {
+    const inner = `${esc(it.title)}${
+      it.time ? `<span class="cs-time">${esc(it.time)}</span>` : ''}${
+      it.impact === 'high' ? '<span class="sr-only"> (high impact)</span>' : ''}`;
+    const cls = `cs-item is-${esc(it.kind)} impact-${esc(it.impact || 'low')}`;
+    const tip = `${esc(it.title)}${it.time ? ' · ' + esc(it.time) : ''}`;
+    if (!String(it.row.why || '').trim()) return `<li class="${cls}" title="${tip}">${inner}</li>`;
+    const open = catalystNoteOpen === it.title;
+    if (open) openItem = it;
+    return `<li class="${cls} has-note${open ? ' is-open' : ''}"><button type="button"
+        class="cs-note-btn" data-cs-note="${esc(it.title)}" aria-expanded="${open}"
+        aria-controls="cs-note" title="${tip}">${inner}</button></li>`;
+  };
+  const cells = days.map((x) => {
     const name = x.k === 0 ? 'Today' : label(x.d);
-    const all = x.items.slice().sort((a, b) => (RANK[a.impact] ?? 3) - (RANK[b.impact] ?? 3));
-    const rest = all.slice(SHOWN);
+    const all = x.items;
+    const rest = all.slice(CATALYST_SHOWN);
     const where = [...new Set(rest.map((it) => it.col))].join(' ');
     return `<div class="cs-day${x.k === 0 ? ' is-today' : ''}${all.length ? '' : ' is-empty'}" role="listitem">
       <span class="cs-date">${esc(name)}</span>
-      ${all.length ? `<ul class="cs-items">${all.slice(0, SHOWN).map(item).join('')}${rest.length
+      ${all.length ? `<ul class="cs-items">${all.slice(0, CATALYST_SHOWN).map(item).join('')}${rest.length
     ? `<li><button type="button" class="ht-rest cs-more" data-ht-show="${esc(where)}"
           aria-label="${rest.length} more on ${esc(name)}, listed below">${rest.length} more</button></li>` : ''}</ul>`
     : '<span class="cs-none">Nothing tracked</span>'}
     </div>`;
-  }).join('')}
-  </div>`;
+  }).join('');
+  return `<div class="cs-strip" role="list" aria-label="${placed} scheduled catalyst${placed === 1 ? '' : 's'} by day">
+    ${cells}
+  </div>
+  ${catalystNoteHTML(openItem)}`;
+}
+
+/* The open item's reason, in one place under the strip. */
+function catalystNoteHTML(it) {
+  if (!it) return '<p class="cs-note" id="cs-note" hidden></p>';
+  const row = it.row || {};
+  const title = String(row.title || it.title);
+  // "PEP reports Thursday" already says when; a second "Thursday" beside it
+  // read as a stutter.
+  let when = String(row.when || row.time || '').trim();
+  if (when && title.toLowerCase().includes(when.toLowerCase())) when = '';
+  return `<p class="cs-note" id="cs-note"><strong>${esc(title)}</strong>${
+    when ? `<span class="cs-note-when">${esc(when)}</span>` : ''} ${esc(String(row.why || '').trim())}</p>`;
 }
 
 /* Not through mountPanel: that falls back to re-rendering Optic's Read when its
@@ -8867,7 +8949,17 @@ function homeTierLabel(id) {
 function morningDesk(data) {
   const d = (data || {}).morning_desk;
   if (!d || d.available !== true) return '';
-  const lead = (d.lead || []).map((p) => `<p class="md-p">${gloss(p)}</p>`).join('');
+  /* The takeaway first, then the reasons, one press away.
+   *
+   * The bottom line was the last paragraph of a desk 640px tall at 1440x900
+   * and 1006px on a phone, measured 2026-10-06, so the one sentence that
+   * says what the day comes to was below the fold on every device, under
+   * five paragraphs building up to it. It leads now, with the first of
+   * those paragraphs for context; the rest of the lead, the branches, the
+   * note and today's reports open under "The whole desk". */
+  const leads = d.lead || [];
+  const lead = leads.slice(0, 1).map((p) => `<p class="md-p">${gloss(p)}</p>`).join('');
+  const leadRest = leads.slice(1).map((p) => `<p class="md-p">${gloss(p)}</p>`).join('');
   /* Two plain headings, for a reader who has never seen a desk note: what the
    * branches are, and which line is the summary. Asked for as a desk "anyone,
    * regardless of financial and economic knowledge can understand"; unlabelled,
@@ -8896,11 +8988,15 @@ function morningDesk(data) {
         <h2 class="hm-h">Optic Desk</h2>
         ${askPulse('morning_desk')}
       </div>
-      ${lead}
-      ${scenarios}
-      ${d.note ? `<p class="md-note"><strong>Note:</strong> ${gloss(d.note)}</p>` : ''}
-      ${cal}
       ${d.overall ? `<p class="md-p md-overall"><strong>Bottom line:</strong> ${gloss(d.overall)}</p>` : ''}
+      ${lead}
+      ${leadRest || scenarios || d.note || cal ? `<details class="ind-explain md-more">
+        <summary>The whole desk<i class="cal-caret" aria-hidden="true"></i></summary>
+        ${leadRest}
+        ${scenarios}
+        ${d.note ? `<p class="md-note"><strong>Note:</strong> ${gloss(d.note)}</p>` : ''}
+        ${cal}
+      </details>` : ''}
       ${(d.limits || []).length ? `<div class="md-limits">
         ${/* Folded, with the count in the label. Open, the list was five
              to seven bullets under every desk, and on a quiet day it was
@@ -9459,7 +9555,7 @@ function paintDailyChanges() {
   if (host && STATE.view === 'home') host.innerHTML = dailyChangesHTML();
 }
 
-function dailyChangeRow(it) {
+function dailyChangeRow(it, repeatWhy) {
   const link = it.link || {};
   const sym = String(it.symbol || '');
   const head = String(it.headline || '').indexOf(`${sym} `) === 0
@@ -9472,8 +9568,23 @@ function dailyChangeRow(it) {
   link.panel ? ` data-dc-panel="${esc(link.panel)}"` : ''}>${esc(DAILY_LINK_LABEL[link.view] || 'Open')} &rarr;</button>
     </div>
     ${it.detail ? `<p class="dc-detail">${esc(it.detail)}</p>` : ''}
-    ${it.why ? `<p class="dc-why">${esc(it.why)}</p>` : ''}
+    ${it.why && !repeatWhy ? `<p class="dc-why">${esc(it.why)}</p>` : ''}
   </li>`;
+}
+
+/* Each kind of change carries one sentence on what it means, and four setups
+ * triggering on the close printed "A rule's trigger on a completed candle,
+ * with its invalidation level already set, read with the default rules. It is
+ * for review, not an order." four times, one under each, measured on Home on
+ * 2026-10-06. The first row of a kind keeps it; the rest would say it again. */
+function dailyChangeRows(items) {
+  const seen = new Set();
+  return items.map((it) => {
+    const why = String(it.why || '').trim();
+    const repeat = !!why && seen.has(why);
+    if (why) seen.add(why);
+    return dailyChangeRow(it, repeat);
+  }).join('');
 }
 
 /* "Unchanged" covers only the checks that ran, so the ones that could not are
@@ -9508,7 +9619,7 @@ function dailyChangesHTML() {
   return `${head}
     ${(per.notes || []).length ? `<p class="dc-note">${esc(per.notes.join(' '))}</p>` : ''}
     <p class="dc-summary">${esc(d.summary || '')}</p>
-    ${shown.length ? `<ul class="dc-list">${shown.map(dailyChangeRow).join('')}</ul>` : ''}
+    ${shown.length ? `<ul class="dc-list">${dailyChangeRows(shown)}</ul>` : ''}
     ${items.length > DAILY_ITEMS_SHOWN ? `<button type="button" class="hm-more" data-dc-more>${
   st.open ? 'Show fewer' : `All ${items.length} changes`}</button>` : ''}
     ${quiet.length ? `<p class="dc-quiet"><strong>No meaningful change:</strong> ${quiet.map((n) => `${esc(n.symbol)} <span class="${
@@ -38338,10 +38449,11 @@ function knowledgeOnboardingHTML() {
   return `<section class="kob" aria-labelledby="kob-h">
     <div class="kob-head">
       <h2 class="kob-h" id="kob-h">How should Optic speak to you?</h2>
-      <p class="kob-sub">This sets how much financial detail Optic assumes and
-        how much it explains as it goes. It changes the wording and the density,
-        never the figures, and you can change it any time from the control in
-        Ask Pulse.</p>
+      ${/* One line. Three said the same thing at length under a question
+           that already explains itself, on the one visit a reader is
+           deciding whether the page is too much for them. */''}
+      <p class="kob-sub">Optic explains as much as you want. It changes the wording,
+        never the figures, and you can change it any time in Ask Pulse.</p>
     </div>
     <div class="kob-opts" role="group" aria-labelledby="kob-h">
       ${modes.map((m) => `<button type="button" class="kob-opt" data-kob-pick="${esc(m.id)}">
@@ -41453,6 +41565,18 @@ document.addEventListener('click', (evt) => {
     }
     return;
   }
+  const csNote = evt.target.closest('[data-cs-note]');
+  if (csNote) {
+    const key = csNote.dataset.csNote;
+    catalystNoteOpen = catalystNoteOpen === key ? null : key;
+    const host = document.getElementById('hm-today');
+    if (host && STATE.priority) {
+      preserveUI(host, () => { host.innerHTML = homeTodayHTML(STATE.priority); });
+      const again = [...host.querySelectorAll('[data-cs-note]')].find((b) => b.dataset.csNote === key);
+      if (again) again.focus({ preventScroll: true });
+    }
+    return;
+  }
   const htAll = evt.target.closest('[data-ht-all]');
   if (htAll) {
     const id = htAll.dataset.htAll;
@@ -43477,7 +43601,9 @@ document.addEventListener('click', (evt) => {
  * characters, each one between a heading and the numbers it introduces. The
  * same rule as the caveats: only what overflows is clamped, by measurement,
  * and the rest is one click or one Enter away. */
-const CLAMP_PROSE = 'p.caveat, .panel > p.sub, p.pl-method, p.cc-method, p.sc-note, p.ses-warn';
+// p.dc-foot: Home's "What changed" method, five lines under the changes on a
+// phone, in the same register as cc-method beside it.
+const CLAMP_PROSE = 'p.caveat, .panel > p.sub, p.pl-method, p.cc-method, p.sc-note, p.ses-warn, p.dc-foot';
 
 function markClampedCaveats(host) {
   if (!host) return;

@@ -34,9 +34,13 @@ APP = open("static/app.js", encoding="utf-8").read()
 CSS = open("static/styles.css", encoding="utf-8").read()
 
 
-def _row(title, impact="medium", when="Fri Sep 25", why="because", short=""):
+def _row(title, impact="medium", when="Fri Sep 25", why="because", short="", days_away=None):
+    # Undated by default: the week strip above the columns places a row by its
+    # date or its days away, and a placed row leaves the columns (see
+    # test_a_row_on_the_strip_is_not_listed_again). These cases are about the
+    # columns, so their rows are ones the strip cannot place.
     return {"kind": "event", "impact": impact, "title": title, "short": short,
-            "when": when, "time": "", "days_away": 3, "why": why, "agency": "BLS"}
+            "when": when, "time": "", "days_away": days_away, "why": why, "agency": "BLS"}
 
 
 def _col(cid, name, rows, total=None):
@@ -80,6 +84,20 @@ CASES = {
     "row_without_when": {"available": True, "horizon_days": 5, "columns": [
         _col("sectors", "Sector read-through",
              [_row("XLE - Energy", "high", when="")])]},
+
+    # Dated rows, read on Tuesday 6 October: PEP and the COT go on the strip,
+    # Thursday's third event is a busy day's overflow, and one event has no
+    # date at all.
+    "dated": {"available": True, "horizon_days": 5, "columns": [
+        _col("events", "Market-moving events",
+             [_row("CFTC Commitments of Traders", "medium", "Fri Oct 9", "What big traders hold.",
+                   short="COT", days_away=3),
+              _row("Jobless claims", "high", "Thu Oct 8", "Weekly layoffs.", days_away=2),
+              _row("Fed speaker", "low", "Thu Oct 8", "One voice.", days_away=2),
+              _row("Undated release", "low", "", "No day yet.")]),
+        _col("earnings", "Earnings this week",
+             [_row("PEP reports Thursday", "high", "Thursday", "A staples bellwether.", days_away=2)]),
+        _col("sectors", "Sector read-through", [_row("XLY - Consumer Discretionary", "high", "")])]},
 }
 
 
@@ -94,6 +112,9 @@ def rendered():
       if (typeof homeTodayHTML !== 'function') {
         print('RESULT:' + JSON.stringify({error: 'homeTodayHTML is not defined'}));
       } else {
+        // The strip dates rows from the session's own day; pinned, so a case
+        // does not change with the weekday the suite runs on.
+        STATE.home = { session: { now_et: '2026-10-06T21:00:00-04:00' } };
         var cases = %s, out = {};
         for (var key in cases) {
           var html = homeTodayHTML(cases[key]) || '';
@@ -386,3 +407,41 @@ def test_the_open_columns_survive_the_refresh_tick():
     assert "const homeTodayOpen = new Set();" in APP
     fn = APP.split("function homeTodayHTML(p) {", 1)[1].split("\n}\n", 1)[0]
     assert "homeTodayOpen.has(c.id)" in fn
+
+
+def test_a_row_on_the_strip_is_not_listed_again(rendered):
+    """Every scheduled row on Home was printed twice: once in its day on the
+    strip and once in its column. The columns keep what the strip cannot
+    place, a busy day's overflow and the sectors."""
+    html = rendered["dated"]["html"]
+    strip = html[html.index('class="cs-strip"'):html.index('id="cs-note"')]
+    cols = html[html.index('class="ht-cols"'):]
+    for shown in ("COT", "Jobless claims", "PEP reports Thursday"):
+        assert shown in strip, shown
+    assert "PEP reports Thursday" not in cols and "Jobless claims" not in cols
+    assert "CFTC Commitments of Traders" not in cols, "COT is the same row, by its short name"
+    # Thursday has three: two on the strip, and the third is what its "1 more" opens.
+    assert "Fed speaker" not in strip and "Fed speaker" in cols
+    assert 'data-ht-show="events"' in strip
+    assert "Undated release" in cols and "Undated release" not in strip
+    assert "Earnings this week" not in cols, "a column with nothing left is not drawn"
+    assert "Sector read-through" in cols
+
+
+def test_a_strip_item_opens_its_reason_under_the_strip(rendered):
+    """The reason was the column row's, and the column no longer lists it."""
+    html = rendered["dated"]["html"]
+    assert 'data-cs-note="PEP reports Thursday"' in html
+    assert 'aria-controls="cs-note"' in html and 'aria-expanded="false"' in html
+    assert '<p class="cs-note" id="cs-note" hidden></p>' in html, "closed until asked"
+    fn = APP.split("function catalystNoteHTML(it) {", 1)[1].split("\n}\n", 1)[0]
+    assert "esc(String(row.why || '').trim())" in fn
+    click = APP.split("const csNote = evt.target.closest('[data-cs-note]');", 1)[1]
+    click = click[:click.index("return;")]
+    assert "catalystNoteOpen = catalystNoteOpen === key ? null : key;" in click
+    assert "preserveUI(host" in click, "the refresh tick's rebuild keeps it open"
+
+
+def test_the_band_still_draws_when_the_strip_holds_everything():
+    fn = APP.split("function homeTodayHTML(p) {", 1)[1].split("\n}\n", 1)[0]
+    assert "if (!cols.length && !strip) return '';" in fn

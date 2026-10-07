@@ -479,7 +479,7 @@ def take(payload: Dict[str, Any]) -> Dict[str, Any]:
         "method": (
             "Leaders are read off the same three scores the table below shows. A "
             "horizon whose top two are within five points is flagged as a close "
-            "call rather than a ranking — the scores are built from a handful of "
+            "call rather than a ranking: the scores are built from a handful of "
             "inputs each and do not resolve that finely."
         ),
     }

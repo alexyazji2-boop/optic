@@ -381,7 +381,7 @@ def candle_patterns(df: pd.DataFrame, bars: int = 3) -> Dict[str, Any]:
             found.append({
                 "pattern": "marubozu", "direction": "bullish" if bullish else "bearish",
                 "date": date,
-                "detail": ("Opened at one extreme and closed at the other with almost no wick — "
+                "detail": ("Opened at one extreme and closed at the other with almost no wick: "
                            f"{'buyers' if bullish else 'sellers'} held the bar from open to close."),
             })
         elif body_share <= DOJI_BODY:
