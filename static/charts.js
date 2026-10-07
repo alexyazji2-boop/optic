@@ -3590,16 +3590,18 @@ function rangeChart(opts) {
  * calls to the right, open interest by strike. The strike labels sit in the
  * middle gutter, and a dashed line between two rows marks where the price is.
  *
- * rows: [{label, left, right, detail}], top to bottom as drawn.
+ * rows: [{label, left, right, detail}], top to bottom as drawn. `showValues`
+ * prints each figure at the end of its bar, for a short list read row by row.
  */
 function butterflyBars(opts) {
   const { rows = [], width = 720, rowHeight = 20, leftName = 'Puts', rightName = 'Calls',
     leftColor = C.neg, rightColor = C.pos, format = (v) => fmtCompact(v), markerRow = null,
-    markerLabel = '', ariaLabel = '' } = opts;
+    markerLabel = '', ariaLabel = '', showValues = false } = opts;
   const usable = rows.filter((r) => (r.left || 0) > 0 || (r.right || 0) > 0);
   if (usable.length < 2) return null;
   const W = width, gutter = 58;
-  const m = { t: 20, r: 8, b: 6, l: 8 };
+  const room = showValues ? 44 : 8;
+  const m = { t: 20, r: room, b: 6, l: room };
   const H = m.t + usable.length * rowHeight + m.b;
   const half = (W - m.l - m.r - gutter) / 2;
   const mid = m.l + half + gutter / 2;
@@ -3615,6 +3617,11 @@ function butterflyBars(opts) {
     const lw = ((r.left || 0) / maxV) * half, rw = ((r.right || 0) / maxV) * half;
     if (lw > 0) g.appendChild(s('rect', { x: mid - gutter / 2 - lw, y, width: Math.max(1, lw), height: barH, rx: 3, fill: leftColor, opacity: 0.85 }));
     if (rw > 0) g.appendChild(s('rect', { x: mid + gutter / 2, y, width: Math.max(1, rw), height: barH, rx: 3, fill: rightColor, opacity: 0.85 }));
+    if (showValues) {
+      const at = { y: y + barH / 2 + 4, fill: C.muted, 'font-size': CF.micro, 'font-variant-numeric': 'tabular-nums' };
+      g.appendChild(s('text', { ...at, x: mid - gutter / 2 - lw - 4, 'text-anchor': 'end' }, format(r.left || 0)));
+      g.appendChild(s('text', { ...at, x: mid + gutter / 2 + rw + 4 }, format(r.right || 0)));
+    }
     g.appendChild(s('text', { x: mid, y: y + barH / 2 + 4, fill: C.ink2, 'font-size': CF.tick, 'font-weight': CW.tick, 'text-anchor': 'middle', 'font-variant-numeric': 'tabular-nums' }, r.label));
     g.appendChild(s('rect', { x: m.l, y: y - 3, width: W - m.l - m.r, height: rowHeight, fill: 'transparent' }));
     focusMark(g, tipRows(escapeText(r.label), r.detail || [[leftName, format(r.left || 0)], [rightName, format(r.right || 0)]]),
@@ -3634,24 +3641,26 @@ function butterflyBars(opts) {
  * by expiry), or a ranked list (sectors, matches). The highlighted row is the
  * one the title names.
  *
- * rows: [{label, value, detail, highlight}]
+ * rows: [{label, value, detail, highlight}]. `max` is what a full-width bar
+ * stands for: a share of a whole is drawn against 100, so its largest part is
+ * not stretched to look like all of it.
  */
 function rankBars(opts) {
   const { rows = [], width = 720, rowHeight = 24, labelWidth = 90, format = (v) => fmt(v, 1),
-    color = C.brand, ariaLabel = '' } = opts;
+    color = C.brand, ariaLabel = '', max = null } = opts;
   const usable = rows.filter((r) => Number.isFinite(r.value));
   if (!usable.length) return null;
   const W = width;
   const m = { t: 4, r: 64, b: 4, l: labelWidth };
   const H = m.t + usable.length * rowHeight + m.b;
   const plotW = W - m.l - m.r;
-  const maxV = Math.max(...usable.map((r) => Math.abs(r.value)), 1e-9);
+  const maxV = Number.isFinite(max) && max > 0 ? max : Math.max(...usable.map((r) => Math.abs(r.value)), 1e-9);
   const barH = Math.min(14, rowHeight - 8);
   const root = svgRoot(W, H);
   root.setAttribute('aria-label', ariaLabel);
   usable.forEach((r, i) => {
     const y = m.t + i * rowHeight + (rowHeight - barH) / 2;
-    const w = Math.max(1.5, (Math.abs(r.value) / maxV) * plotW);
+    const w = Math.max(1.5, Math.min(1, Math.abs(r.value) / maxV) * plotW);
     const g = s('g', {});
     root.appendChild(s('text', { x: m.l - 8, y: y + barH / 2 + 4, fill: r.highlight ? C.ink : C.ink2, 'font-size': CF.tick, 'font-weight': r.highlight ? CW.label : CW.tick, 'text-anchor': 'end' }, r.label));
     g.appendChild(s('rect', { x: m.l, y, width: w, height: barH, rx: 3, fill: r.value < 0 ? C.neg : color, opacity: r.highlight ? 1 : 0.6 }));

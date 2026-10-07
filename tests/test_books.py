@@ -406,3 +406,29 @@ def test_pressing_a_book_opens_its_figures_and_its_positions():
     assert "revealBook()" in click
     assert "loadTracker(true).then(" in click, \
         "the panels do not exist until the reload has painted them"
+
+
+def _closed(book, pnl, exit_at="2026-10-02T15:00:00+00:00"):
+    with paper._LOCK, paper._connect() as conn:
+        conn.execute(
+            "INSERT INTO positions (book,ticker,instrument,direction,qty,entry_price,entry_spot,"
+            "entry_at,exit_at,status,pnl,risk_dollars) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (book, "TEST", "shares", "long", 10, 100.0, 100.0, "2026-10-01T14:00:00+00:00", exit_at,
+             "closed", pnl, 500.0))
+
+
+def test_the_monthly_record_is_the_selected_books(ledger):
+    """Each book has its own $100,000 and its own record, and the months were
+    pooled: the Consistency table under "Aggressive" counted all three books'
+    trades against one start."""
+    _closed("balanced", -250.0)
+    _closed("aggressive", 900.0)
+    _closed("conservative", 40.0)
+    month = lambda payload: next(m for m in payload["months"] if m["key"] == "2026-10")
+    agg = paper.state(book="aggressive", month="2026-10")
+    assert month(agg)["realised_pnl"] == 900.0 and month(agg)["closed_count"] == 1
+    assert [r["book"] for r in agg["month"]["closed"]] == ["aggressive"]
+    bal = paper.state(book="balanced", month="2026-10")
+    assert month(bal)["realised_pnl"] == -250.0
+    assert month(bal)["return_pct"] == round(-250.0 / paper.START_EQUITY * 100, 2)
+    assert sum(m["realised_pnl"] or 0 for m in paper.monthly_breakdown()) == 690.0, "unnamed is all of them"

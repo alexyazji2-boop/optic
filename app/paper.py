@@ -1586,10 +1586,21 @@ def _stats(closed: List[Dict[str, Any]], base_equity: float) -> Dict[str, Any]:
     }
 
 
-def monthly_breakdown() -> List[Dict[str, Any]]:
-    """Per-month results, oldest first, with running equity carried across."""
-    closed = _rows("SELECT * FROM positions WHERE status='closed' AND " + LIVE)
-    opened = _rows("SELECT entry_at FROM positions WHERE " + LIVE)
+def _book_clause(book: Optional[str]):
+    """The SQL that narrows a reader to one book, or to all of them."""
+    return (" AND book=?", (book,)) if book else ("", ())
+
+
+def monthly_breakdown(book: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Per-month results, oldest first, with running equity carried across.
+
+    One book's, when it is named, which is how the tab asks. Each book has its
+    own starting capital and its own record, and pooling the three against one
+    start put every book's trades under whichever book was selected.
+    """
+    where, args = _book_clause(book)
+    closed = _rows("SELECT * FROM positions WHERE status='closed' AND " + LIVE + where, args)
+    opened = _rows("SELECT entry_at FROM positions WHERE " + LIVE + where, args)
 
     by_close: Dict[str, List[Dict[str, Any]]] = {}
     for row in closed:
@@ -1618,12 +1629,15 @@ def monthly_breakdown() -> List[Dict[str, Any]]:
     return out
 
 
-def month_detail(key: str) -> Dict[str, Any]:
-    """Trades that closed in a month, and positions opened in it."""
+def month_detail(key: str, book: Optional[str] = None) -> Dict[str, Any]:
+    """Trades that closed in a month, and positions opened in it, for one book
+    when it is named."""
+    where, args = _book_clause(book)
     closed = [r for r in _rows("SELECT * FROM positions WHERE status='closed' AND " + LIVE
-                               + " ORDER BY exit_at DESC")
+                               + where + " ORDER BY exit_at DESC", args)
               if _month_key(r.get("exit_at")) == key]
-    opened = [r for r in _rows("SELECT * FROM positions WHERE " + LIVE + " ORDER BY entry_at DESC")
+    opened = [r for r in _rows("SELECT * FROM positions WHERE " + LIVE + where
+                               + " ORDER BY entry_at DESC", args)
               if _month_key(r.get("entry_at")) == key]
     still_open = [r for r in opened if r["status"] == "open"]
     return {
@@ -1649,7 +1663,7 @@ def state(limit: int = 60, month: Optional[str] = None,
             scan["funnel"] = json.loads(scan["funnel"] or "null")
         except (TypeError, ValueError):
             scan["funnel"] = None
-    months = monthly_breakdown()
+    months = monthly_breakdown(book or DEFAULT_BOOK)
     keys = [m["key"] for m in months]
     # Default to the current month, which is what someone opening the tab wants.
     selected = month if month in keys else (keys[-1] if keys else None)
@@ -1658,7 +1672,7 @@ def state(limit: int = 60, month: Optional[str] = None,
         "summary": summary(book),
         "months": months,
         "selected_month": selected,
-        "month": month_detail(selected) if selected else None,
+        "month": month_detail(selected, book or DEFAULT_BOOK) if selected else None,
         "progress": progress(),
         "feed": _feed_state(),
         "market_open": market_open_et(),

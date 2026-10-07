@@ -191,7 +191,9 @@ def build(provider, positions: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     high_pairs = [p for p in pairs if abs(p["correlation"]) >= HIGH_PAIR]
     concentrated = diversification is not None and diversification < LOW_DIVERSIFICATION
-    heavy = [s for s in sector_rows if s["weight_pct"] >= HEAVY_SECTOR_PCT]
+    # "Unclassified" is missing data, not a sector: a shock to it is not a thing.
+    heavy = [s for s in sector_rows
+             if s["weight_pct"] >= HEAVY_SECTOR_PCT and s["sector"] != "Unclassified"]
 
     if concentrated:
         verdict = (
@@ -228,6 +230,9 @@ def build(provider, positions: List[Dict[str, Any]]) -> Dict[str, Any]:
         "available": True,
         "positions": positions_out,
         "names": len(positions_out),
+        # Weighted as one share of the underlying per contract (value above), so
+        # the page can say an option's share is understated rather than imply it.
+        "option_positions": sum(1 for r in rows if r["instrument"] == "option"),
         "gross_exposure": round(gross, 2),
         "net_exposure": round(sum(s["signed_value"] for s in by_symbol.values()), 2),
         "sectors": sector_rows,

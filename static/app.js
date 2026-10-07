@@ -18128,6 +18128,7 @@ function renderPortfolioRisk(r) {
     ? '—' : fmt(p.risk_contribution_pct, 1) + '%'}</td>
   </tr>`).join('');
 
+  const unmeasured = (r.positions || []).filter((p) => !Number.isFinite(p.risk_contribution_pct)).length;
   const pairs = (r.top_pairs || []).slice(0, 6).map((p) => `<tr>
     <td class="name">${esc(p.a)} / ${esc(p.b)}</td>
     <td class="num ${Math.abs(p.correlation) >= 0.7 ? 'down' : ''}">${
@@ -18172,26 +18173,34 @@ function renderPortfolioRisk(r) {
     <div class="grid c2" style="margin-top:var(--space-4)">
       <div>
         <h3>${hg('Where the money and the risk sit')}</h3>
-        <table class="data">
+        ${vizBlock('viz-risk-split', moneyRiskTitle(r), `Each name's share of the book's money beside its share of the book's swings, from ${
+  fmt(r.window_sessions, 0)} sessions of daily returns.${unmeasured
+    ? ` ${fmt(unmeasured, 0)} name${unmeasured === 1 ? '' : 's'} without enough history ${unmeasured === 1 ? 'is' : 'are'} left out.` : ''}${
+  r.option_positions ? ' An option counts as one share of its stock per contract, not by premium or delta, so its share here is understated.' : ''}`)}
+        ${exactFigures(`<table class="data">
           <thead><tr><th>Name</th><th>Sector</th><th class="num">Weight</th>
             <th class="num">Risk share</th></tr></thead>
           <tbody>${positions}</tbody>
-        </table>
+        </table>`)}
       </div>
       <div>
         <h3>${hg('Most correlated pairs')}</h3>
-        <table class="data">
+        ${pairs ? vizBlock('viz-risk-pairs', pairsTitle(r), `Correlation of daily returns over ${
+  fmt(r.window_sessions, 0)} sessions, from -1 to +1. At 0.7 or more two names behave much like one.`) : ''}
+        ${exactFigures(`<table class="data">
           <thead><tr><th>Pair</th><th class="num">${fmt(r.window_sessions, 0)}-day correlation</th></tr></thead>
           <tbody>${pairs || '<tr><td colspan="2">Not enough overlapping history.</td></tr>'}</tbody>
-        </table>
+        </table>`)}
         <h3 style="margin-top:var(--space-4)">${hg('Sector exposure')}</h3>
-        <table class="data">
-          <tbody>${(r.sectors || []).map((x) => `<tr>
+        ${bookSectors(r).some(sectorKnown)
+    ? vizBlock('viz-risk-sectors', sectorsTitle(r), 'Each sector\'s share of gross exposure, drawn against the whole book.')
+    : '<p class="viz-none">The data provider gives no sector for these names.</p>'}
+        ${exactFigures(`<table class="data">
+          <tbody>${bookSectors(r).map((x) => `<tr>
             <td class="name">${esc(x.sector)}</td>
-            <td style="width:50%">${regimeBar((x.weight_pct - 50) * 2)}</td>
-            <td class="num">${fmt(x.weight_pct, 0)}%</td>
+            <td class="num">${fmt(x.weight_pct, 1)}%</td>
           </tr>`).join('')}</tbody>
-        </table>
+        </table>`)}
       </div>
     </div>
 
@@ -18199,6 +18208,75 @@ function renderPortfolioRisk(r) {
       ${usd(r.summed_stop_risk)}.</strong> ${esc(r.summed_risk_note || '')}</div>
     <p class="caveat">${gloss(r.method || '')}</p>
   </div>`;
+}
+
+/* Book-level risk, drawn: the money against the risk name by name, the pairs
+ * that move alike, and the sectors as shares of the whole book. The sectors
+ * were a bar centred on 50%, so every sector under half the book drew red
+ * and to the left, as if it were negative. */
+function bookSectors(r) {
+  return (r.sectors || []).filter((x) => Number.isFinite(x.weight_pct))
+    .slice().sort((a, b) => b.weight_pct - a.weight_pct);
+}
+
+/* A book none of whose names has a sector has nothing to draw. */
+const sectorKnown = (x) => !/^(unclassified|unknown|n\/a|)$/i.test(String(x.sector || '').trim());
+
+function moneyRiskTitle(r) {
+  const measured = (r.positions || []).filter((p) => Number.isFinite(p.risk_contribution_pct));
+  if (measured.length < 2) return '';
+  const over = (p) => p.risk_contribution_pct - Math.abs(p.weight_pct);
+  const top = measured.reduce((m, p) => (over(p) > over(m) ? p : m), measured[0]);
+  return over(top) >= 5
+    ? `${top.symbol} carries ${fmt(top.risk_contribution_pct, 0)}% of the risk on ${fmt(Math.abs(top.weight_pct), 0)}% of the money`
+    : 'Each name carries about as much of the risk as of the money';
+}
+
+function pairsTitle(r) {
+  const top = (r.top_pairs || [])[0];
+  if (!top) return '';
+  return `${top.a} and ${top.b} move most alike: ${top.correlation > 0 ? '+' : ''}${fmt(top.correlation, 2)} over ${
+    fmt(r.window_sessions, 0)} sessions`;
+}
+
+function sectorsTitle(r) {
+  const rows = bookSectors(r);
+  if (!rows.some(sectorKnown)) return '';
+  if (rows.length === 1) return `All of the book is in ${rows[0].sector}`;
+  return `${rows[0].sector} is ${fmt(rows[0].weight_pct, 0)}% of the book`;
+}
+
+function mountBookRiskVisuals(r) {
+  if (!r || !r.available) return;
+  const measured = (r.positions || []).filter((p) => Number.isFinite(p.risk_contribution_pct));
+  vizMount('viz-risk-split', (w) => butterflyBars({
+    width: w, rowHeight: 22, leftName: 'Share of money', rightName: 'Share of risk', showValues: true,
+    leftColor: C.brand, rightColor: C.s7, format: (v) => `${fmt(v, 0)}%`,
+    ariaLabel: "Each position's share of the book's money beside its share of the book's risk.",
+    rows: measured.map((p) => ({
+      label: p.symbol, left: Math.abs(p.weight_pct), right: Math.max(0, p.risk_contribution_pct),
+      detail: [['Share of money', `${fmt(p.weight_pct, 1)}%${p.weight_pct < 0 ? ', short' : ''}`],
+        ['Share of risk', `${fmt(p.risk_contribution_pct, 1)}%${p.risk_contribution_pct < 0 ? ', offsetting the rest' : ''}`],
+        ['Sector', p.sector || 'Not classified']],
+    })),
+  }), 'The risk split needs three months of prices for two names or more.');
+  const pairs = (r.top_pairs || []).slice(0, 6);
+  const pairLabels = pairs.map((p) => `${p.a} / ${p.b}`);
+  vizMount('viz-risk-pairs', (w) => rankBars({
+    width: w, max: 1, format: (v) => `${v > 0 ? '+' : ''}${fmt(v, 2)}`,
+    labelWidth: Math.min(150, Math.max(70, ...pairLabels.map((l) => textWidthGuess(l, CF.tick))) + 12),
+    ariaLabel: 'The most correlated pairs of positions.',
+    rows: pairs.map((p, i) => ({ label: pairLabels[i], value: p.correlation, highlight: Math.abs(p.correlation) >= 0.7,
+      detail: [['Correlation', `${p.correlation > 0 ? '+' : ''}${fmt(p.correlation, 2)}`],
+        ['Window', `${fmt(r.window_sessions, 0)} sessions`]] })),
+  }));
+  const sectors = bookSectors(r);
+  vizMount('viz-risk-sectors', (w) => rankBars({
+    width: w, max: 100, format: (v) => `${fmt(v, 0)}%`,
+    labelWidth: Math.min(170, Math.max(70, ...sectors.map((x) => textWidthGuess(x.sector, CF.tick))) + 12),
+    ariaLabel: "Each sector's share of the book.",
+    rows: sectors.map((x, i) => ({ label: x.sector, value: x.weight_pct, highlight: i === 0 })),
+  }), 'No sector data for these positions.');
 }
 
 async function loadPortfolioRisk() {
@@ -18210,7 +18288,11 @@ async function loadPortfolioRisk() {
     STATE.bookRisk = { available: false, reason: err.message };
   }
   const host = document.getElementById('book-risk-host');
-  if (host) { host.innerHTML = renderPortfolioRisk(STATE.bookRisk); revealPanels(host); }
+  if (host) {
+    host.innerHTML = renderPortfolioRisk(STATE.bookRisk);
+    revealPanels(host);
+    mountBookRiskVisuals(STATE.bookRisk);
+  }
 }
 
 function renderSentiment(f) {
@@ -28666,6 +28748,25 @@ function travelCell(p) {
  * Eleven rows of numbers do not add up to an impression on their own, and the
  * tiles above give totals rather than a spread. This says how the holdings are
  * split and which two rows are worth looking at first. */
+function monthsTitle(months) {
+  const done = months.slice(0, -1).filter((m) => Number.isFinite(m.realised_pnl));
+  if (!done.length) return '';
+  const up = done.filter((m) => m.realised_pnl > 0).length;
+  return `${up} of ${done.length} finished month${done.length === 1 ? '' : 's'} closed with a gain`;
+}
+
+function mountTrackerMonths(months) {
+  vizMount('viz-trk-months', (w) => columnChart({
+    width: w, height: 150, format: (v) => money(v, 0), highlightLast: false, color: C.pos,
+    ariaLabel: 'Realised profit or loss by month.',
+    items: months.map((m, i) => ({
+      label: periodTick(m.key), value: Number(m.realised_pnl) || 0,
+      detail: [['Realised', money(m.realised_pnl, 0)], ['Return', fmtPct(m.return_pct, 2)],
+        ['Closed', fmt(m.closed_count, 0)], ...(i === months.length - 1 ? [['Status', 'In progress']] : [])],
+    })),
+  }), 'One month of record so far.');
+}
+
 function openStateOfPlay(open) {
   const scored = open.filter((p) => Number.isFinite(Number(p.pnl)));
   if (!scored.length) return '';
@@ -28686,6 +28787,41 @@ function openStateOfPlay(open) {
     order is ever sent to a broker.</div>`;
 }
 
+/* What a mark is, when it is not a live quote. The server writes "Modelled
+ * (no live quote)" and this read "model", so an estimated mark was never
+ * labelled, though the caveat under the table says it is. */
+function markNote(source) {
+  const src = String(source || '');
+  if (/^modelled/i.test(src)) return ' · estimated';
+  if (/^entry price/i.test(src)) return ' · not yet marked';
+  if (/^expired/i.test(src)) return ' · at expiry';
+  return '';
+}
+
+/* Open P&L by trade, largest first, for a book holding two or more. */
+function openPnlTitle(open) {
+  const scored = open.filter((p) => Number.isFinite(Number(p.pnl)));
+  if (scored.length < 2) return '';
+  const total = scored.reduce((a, p) => a + Number(p.pnl), 0);
+  const top = scored.reduce((m, p) => (Math.abs(Number(p.pnl)) > Math.abs(Number(m.pnl)) ? p : m), scored[0]);
+  return `${total >= 0 ? 'Up' : 'Down'} ${money(Math.abs(total), 0)} across ${scored.length} open trades; ${top.ticker}${
+    top.instrument === 'option' ? ' (option)' : ''} is the largest at ${money(top.pnl, 0)}`;
+}
+
+function mountOpenPnl(open) {
+  const scored = open.filter((p) => Number.isFinite(Number(p.pnl)))
+    .slice().sort((a, b) => Number(b.pnl) - Number(a.pnl));
+  vizMount('viz-trk-open', (w) => (scored.length < 2 ? null : divergingBars({
+    width: w, rowHeight: 22, labelWidth: 76, format: (v) => money(v, 0),
+    ariaLabel: 'Unrealised profit or loss of each open trade.',
+    rows: scored.map((p) => ({
+      label: `${p.ticker}${p.instrument === 'option' ? ' opt' : ''}`, value: Number(p.pnl),
+      detail: [['Up or down', money(p.pnl, 0)], ['Return', fmtPct(p.pnl_pct, 1)],
+        ['Marked from', cap(p.mark_source || 'not marked')]],
+    })),
+  })));
+}
+
 /** The open-positions panel. Split out of renderTracker so it can be placed at
  *  the top of the tab rather than reachable only by scrolling past everything
  *  the ledger has ever done. */
@@ -28696,8 +28832,7 @@ function openPositionsPanel(open) {
     <td>${cap(sideCell(p))}</td>
     <td>${sizeCell(p)}</td>
     <td>${fmt(p.entry_price, 2)}
-      <div class="subnote">now ${fmt(p.mark_price, 2)}${
-    p.mark_source === 'model' ? ' · estimated' : ''}</div></td>
+      <div class="subnote">now ${fmt(p.mark_price, 2)}${markNote(p.mark_source)}</div></td>
     <td>${travelCell(p)}</td>
     <td class="${signClass(p.pnl)}"><strong>${money(p.pnl, 0)}</strong>
       <div class="caption">${fmtPct(p.pnl_pct, 1)}</div></td>
@@ -28716,6 +28851,8 @@ function openPositionsPanel(open) {
       stock is now, and the shaded stretch between them is the ground it has covered.</p>
 
     ${openStateOfPlay(open)}
+    ${open.length >= 2 ? vizBlock('viz-trk-open', openPnlTitle(open),
+    'Unrealised profit or loss at the latest mark, in dollars. Nothing is settled until a trade closes.') : ''}
 
     <table class="data">
       <thead><tr><th>Position</th><th>Betting on</th><th>Size</th><th>Paid</th>
@@ -29288,6 +29425,8 @@ function renderTracker(d) {
 
     ${months.length > 1 ? `
       <h3 style="margin-top:var(--space-4)">${hg('Consistency')}</h3>
+      ${vizBlock('viz-trk-months', monthsTitle(months),
+    `Realised profit or loss by the month trades closed in${bookName ? `, ${bookName} book` : ''}, in dollars. The latest month is still in progress.`)}
       <table class="data" data-defs="tracker-months">
         <thead><tr><th>Month</th><th>Opened</th><th>Closed</th><th>Realised</th><th>Return</th>
           <th>Win rate</th><th>Expectancy</th><th>Profit factor</th><th>Equity after</th></tr></thead>
@@ -29408,6 +29547,9 @@ function renderTracker(d) {
       <tbody>${scanRows}</tbody>
     </table>
   </div>` : ''}`;
+  mountOpenPnl(open);
+  if (months.length > 1) mountTrackerMonths(months);
+  if (STATE.bookRisk) mountBookRiskVisuals(STATE.bookRisk);
 }
 
 /* ================================================================== INDICES */
@@ -32539,6 +32681,23 @@ function paperClosedRow(t) {
  * anything that is down -- which is the exact habit a practice account exists
  * to expose rather than to hide.
  */
+/* The record as a run of trades, oldest first: one column each, in R. */
+const PAPER_R_SHOWN = 30;
+
+function mountPaperR() {
+  const rows = paperBook.closed.filter((t) => t.r !== null && t.r !== undefined && isFinite(t.r))
+    .slice(0, PAPER_R_SHOWN).reverse();
+  vizMount('viz-paper-r', (w) => columnChart({
+    width: w, height: 140, color: C.pos, highlightLast: true, format: (v) => paperRText(v),
+    ariaLabel: 'The result of each closed trade, in multiples of what it risked.',
+    items: rows.map((t) => ({
+      label: t.ticker, value: t.r,
+      detail: [['Result', paperRText(t.r)], ['P&L', `${t.pnl >= 0 ? '+' : '−'}$${fmtCompact(Math.abs(t.pnl), 2)}`],
+        ['Closed', t.closed_at ? new Date(t.closed_at).toLocaleDateString() : 'Not recorded']],
+    })),
+  }));
+}
+
 function paperStatsHTML() {
   const done = paperBook.closed;
   if (!done.length) {
@@ -32576,6 +32735,10 @@ function paperStatsHTML() {
         <strong class="${avgR >= 0 ? 'pos' : 'neg'}">${paperRText(avgR)}</strong>
         <span class="pt-sub">per trade, in multiples of what it risked</span></div>
     </div>
+    ${withR.length >= 2 ? vizBlock('viz-paper-r', `${fmt(withR.filter((t) => t.r > 0).length, 0)} of ${
+  fmt(withR.length, 0)} trades with a stop made more than they risked to lose${
+  withR.length > PAPER_R_SHOWN ? `; the latest ${PAPER_R_SHOWN} drawn` : ''}`,
+    'Each closed trade in multiples of what its stop said it could lose, oldest first. Kept in this browser only.') : ''}
     ${withOptic || against ? `<h3 class="pt-h3">With the terminal, and against it</h3>
       <div class="pt-stats">
         ${withOptic ? `<div class="pt-stat"><span class="pt-k">Traded with Optic's read</span>
@@ -32752,6 +32915,7 @@ function renderPaperView() {
     : '<button type="button" class="btn" data-paper-reset>Clear the book</button>'}</div>
     </div>` : ''}`;
   revealPanels(views.paper);
+  mountPaperR();
 }
 
 /* ------------------------------------------------------------- the wiring */
