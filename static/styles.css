@@ -11192,7 +11192,7 @@ body.cp-open { overflow: hidden; }
 }
 .wv-add input:focus { outline: 2px solid var(--focus); outline-offset: 1px; }
 
-.wv-sorts { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-4); }
+.wv-sorts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); margin-bottom: var(--space-4); }
 
 /* A header row for the feed, matching the row grid exactly. Without it the
    Signal column is five uppercase words with no stated meaning.

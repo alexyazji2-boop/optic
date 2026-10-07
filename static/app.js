@@ -6243,7 +6243,11 @@ function renderWatchlist() {
     </div>
 
     <div id="wv-pulse">${watchPulseHTML(((STATE.watchlist || {}).rows) || [])}</div>
+    ${/* Labelled like the filter row under it. Seven unlabelled pills above
+        * a row headed "Show" read as more filters, and pressing one reordered
+        * the list instead of narrowing it. */''}
     <div class="wv-sorts" role="group" aria-label="Sort the watchlist">
+      <span class="wv-filter-label">Sort</span>
       ${WATCH_SORTS.map((sp) => `<button type="button"
         class="pill${watchSort === sp.id ? ' on' : ''}" data-watch-sort="${esc(sp.id)}"
         aria-pressed="${watchSort === sp.id}">${esc(sp.label)}</button>`).join('')}
