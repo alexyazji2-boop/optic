@@ -19600,21 +19600,26 @@ function wsLegend(ps) {
  * then shapes and the Fibonacci tools, then notes, then the three that measure.
  * Contiguous here on purpose, so the rail can draw one where the group changes. */
 const WS_TOOLS = [
-  { id: 'cursor', group: 'select', label: 'Select', glyph: '&#10530;', hint: 'Select and move a drawing' },
-  { id: 'trend', group: 'lines', label: 'Trend line', glyph: '&#9585;', hint: 'A line between two points' },
-  { id: 'ray', group: 'lines', label: 'Ray', glyph: '&#8599;', hint: 'A line that extends past the second point' },
-  { id: 'hline', group: 'lines', label: 'Level', glyph: '&#9473;', hint: 'A horizontal price level' },
-  { id: 'vline', group: 'lines', label: 'Date line', glyph: '&#9474;', hint: 'A vertical line marking one bar' },
-  { id: 'channel', group: 'lines', label: 'Channel', glyph: '&#8801;', hint: 'Two parallel trend lines' },
-  { id: 'rect', group: 'shapes', label: 'Rectangle', glyph: '&#9633;', hint: 'A box around a region' },
-  { id: 'fibdraw', group: 'shapes', label: 'Fib retracement', glyph: '&#9776;', hint: 'Fib levels between two points' },
-  { id: 'fibext', group: 'shapes', label: 'Fib extension', glyph: '&#9783;', hint: 'Projected levels beyond the move' },
-  { id: 'pitchfork', group: 'shapes', label: 'Pitchfork', glyph: '&#9868;', hint: 'Andrews pitchfork from three pivots' },
-  { id: 'arrow', group: 'notes', label: 'Arrow', glyph: '&#8594;', hint: 'A pointer at something' },
-  { id: 'text', group: 'notes', label: 'Text', glyph: 'T', hint: 'A note on the chart' },
-  { id: 'ruler', group: 'measure', label: 'Measure', glyph: '&#8596;', hint: 'Price and date distance between two points' },
-  { id: 'rr', group: 'measure', label: 'Risk / reward', glyph: '&#9707;', hint: 'Entry, stop and target as a box' },
-  { id: 'position', group: 'measure', label: 'Position size', glyph: '&#8721;', hint: 'Shares to buy for a given risk' },
+  /* Drawn icons rather than box-drawing glyphs, to the rail's recipe
+   * (wsWidgetIcon). The glyphs took the fallback font's weight and baseline,
+   * the delete button was a colour emoji, and none of these buttons had a
+   * name, so a screen reader read "box drawings light diagonal" for the trend
+   * line. Each now carries its label as its accessible name. */
+  { id: 'cursor', group: 'select', label: 'Select', icon: '<path d="M5.5 3.5 18.5 11l-5.6 1.6-3 5.9Z"/>', hint: 'Select and move a drawing' },
+  { id: 'trend', group: 'lines', label: 'Trend line', icon: '<path d="M6.2 16.8 17.8 7.2"/><circle cx="5" cy="18" r="1.7"/><circle cx="19" cy="6" r="1.7"/>', hint: 'A line between two points' },
+  { id: 'ray', group: 'lines', label: 'Ray', icon: '<circle cx="5" cy="18" r="1.7"/><path d="M6.3 16.7 20 4.5"/><path d="M14.5 4.5H20V10"/>', hint: 'A line that extends past the second point' },
+  { id: 'hline', group: 'lines', label: 'Level', icon: '<path d="M3 12h18"/><circle cx="12" cy="12" r="1.7"/>', hint: 'A horizontal price level' },
+  { id: 'vline', group: 'lines', label: 'Date line', icon: '<path d="M12 3v18"/><circle cx="12" cy="12" r="1.7"/>', hint: 'A vertical line marking one bar' },
+  { id: 'channel', group: 'lines', label: 'Channel', icon: '<path d="M3.5 14.5 17 4.5M7 19.5 20.5 9.5"/>', hint: 'Two parallel trend lines' },
+  { id: 'rect', group: 'shapes', label: 'Rectangle', icon: '<rect x="4" y="6.5" width="16" height="11" rx="1"/>', hint: 'A box around a region' },
+  { id: 'fibdraw', group: 'shapes', label: 'Fib retracement', icon: '<path d="M4 4.5h16M4 9.5h16M4 14.5h16M4 19.5h16"/><path d="m6 19.5 12-15" stroke-dasharray="1.6 2.4"/>', hint: 'Fib levels between two points' },
+  { id: 'fibext', group: 'shapes', label: 'Fib extension', icon: '<path d="M4 19.5h9M4 14.5h9M4 9.5h16M4 4.5h16"/><path d="M17 19.5V12"/><path d="m14.5 14.5 2.5-2.5 2.5 2.5"/>', hint: 'Projected levels beyond the move' },
+  { id: 'pitchfork', group: 'shapes', label: 'Pitchfork', icon: '<path d="M3.5 20.5 9.5 14.5"/><path d="M9.5 14.5 20 7M9.5 14.5H20M9.5 14.5 20 21"/>', hint: 'Andrews pitchfork from three pivots' },
+  { id: 'arrow', group: 'notes', label: 'Arrow', icon: '<path d="M5 19 18.5 5.5"/><path d="M11 5.5h7.5V13"/>', hint: 'A pointer at something' },
+  { id: 'text', group: 'notes', label: 'Text', icon: '<path d="M5 7V4.5h14V7M12 4.5v15M9 19.5h6"/>', hint: 'A note on the chart' },
+  { id: 'ruler', group: 'measure', label: 'Measure', icon: '<path d="M4 12h16"/><path d="m7 9-3 3 3 3M17 9l3 3-3 3"/>', hint: 'Price and date distance between two points' },
+  { id: 'rr', group: 'measure', label: 'Risk / reward', icon: '<rect x="5" y="3.5" width="14" height="17" rx="1"/><path d="M5 11h14"/>', hint: 'Entry, stop and target as a box' },
+  { id: 'position', group: 'measure', label: 'Position size', icon: '<rect x="5" y="3.5" width="14" height="17" rx="1.5"/><path d="M8 7.5h8"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 16h.01M12 16h.01M15.5 16h.01" stroke-width="2.4"/>', hint: 'Shares to buy for a given risk' },
 ];
 
 /* The drawing rail, tools in their groups and then the actions.
@@ -19631,10 +19636,10 @@ function wsToolRail() {
     ${WS_TOOLS.map((t, k) => `${k && WS_TOOLS[k - 1].group !== t.group
     ? '<span class="ws-rail-sep" aria-hidden="true"></span>' : ''}<button type="button" class="ws-tool${
   wsTool === t.id ? ' on' : ''}" data-ws-tool="${t.id}" title="${esc(t.hint)}"
-      aria-pressed="${wsTool === t.id}">${t.glyph}</button>`).join('')}
+      aria-label="${esc(t.label)}" aria-pressed="${wsTool === t.id}">${wsWidgetIcon(t.icon)}</button>`).join('')}
     <div class="ws-rail-gap ws-rail-sep" aria-hidden="true"></div>
     <button type="button" class="ws-tool ws-snap${wsSnapOn ? ' on' : ''}" data-ws-snap
-      aria-pressed="${wsSnapOn}" title="${wsSnapOn
+      aria-label="Snap to candles" aria-pressed="${wsSnapOn}" title="${wsSnapOn
     ? 'Snapping on: points land on a candle and its open, high, low or close. Click to place freely.'
     : 'Snapping off: points land exactly where you click. Click to snap to candles.'}"
       ><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none"
@@ -19642,13 +19647,16 @@ function wsToolRail() {
       d="M4 2v6a4 4 0 0 0 8 0V2M4 5h2.5M9.5 5H12"/></svg></button>
     <button type="button" class="ws-tool" data-ws-undo
       ${wsUndoStack.length ? '' : 'disabled'}
-      title="Undo (${navigator.platform.startsWith('Mac') ? '\u2318Z' : 'Ctrl+Z'})">&#8630;</button>
+      aria-label="Undo" title="Undo (${navigator.platform.startsWith('Mac') ? '\u2318Z' : 'Ctrl+Z'})"
+      >${wsWidgetIcon('<path d="M9 6.5 4.5 11 9 15.5"/><path d="M4.5 11H15a4.5 4.5 0 0 1 0 9h-2"/>')}</button>
     <button type="button" class="ws-tool" data-ws-redo
       ${wsRedoStack.length ? '' : 'disabled'}
-      title="Redo (${navigator.platform.startsWith('Mac') ? '\u21e7\u2318Z' : 'Ctrl+Y'})">&#8631;</button>
+      aria-label="Redo" title="Redo (${navigator.platform.startsWith('Mac') ? '\u21e7\u2318Z' : 'Ctrl+Y'})"
+      >${wsWidgetIcon('<path d="M15 6.5 19.5 11 15 15.5"/><path d="M19.5 11H9a4.5 4.5 0 0 0 0 9h2"/>')}</button>
     <button type="button" class="ws-tool" data-ws-clear-draw
       ${wsDrawings().length ? '' : 'disabled'}
-      title="Delete every drawing on this symbol">&#128465;</button>
+      aria-label="Delete every drawing on this symbol" title="Delete every drawing on this symbol"
+      >${wsWidgetIcon('<path d="M4 7h16M9.5 7V4.5h5V7"/><path d="M6 7l1 12.5a1.5 1.5 0 0 0 1.5 1.4h7a1.5 1.5 0 0 0 1.5-1.4L18 7"/><path d="M10 11v6M14 11v6"/>')}</button>
   </div>`;
 }
 
@@ -21876,23 +21884,53 @@ function wsLastBar(ps) {
  * Every glyph below is from a block with no emoji presentation, so it inherits
  * the rail's colour and goes green when the widget is open — which is what makes
  * "which of these is on" readable at a glance. */
+/* Each widget's mark, drawn to the rail's own recipe (NAV_ICONS): a 24-unit
+ * box, no fill, a 1.8 stroke, round caps.
+ *
+ * They were Unicode glyphs, and two pairs were the same character: Watch and
+ * Key levels were both a trigram, Insiders and Pulse both a fisheye, so the
+ * rail asked a reader to tell four buttons apart by a 9px label. The glyphs
+ * also took whatever weight the platform's fallback font gave each one. Each
+ * mark here is the thing the panel shows: a bell for alerts, a calendar for
+ * the seasons, two candles for the patterns. */
 const WS_WIDGETS = [
-  { id: 'watchlist', label: 'Watch', icon: '&#9776;' },      // trigram, list
-  { id: 'alerts', label: 'Alerts', icon: '&#9873;' },        // flag
-  { id: 'news', label: 'News', icon: '&#9636;' },            // horizontal fill
-  { id: 'analysts', label: 'Analysts', icon: '&#9650;' },    // up triangle
-  { id: 'seasonality', label: 'Season', icon: '&#9639;' },   // grid
-  { id: 'notes', label: 'Notes', icon: '&#9998;' },          // pencil
-  { id: 'insiders', label: 'Insiders', icon: '&#9673;' },    // fisheye
-  { id: 'reports', label: 'Reports', icon: '&#9635;' },      // vertical fill
-  { id: 'checklist', label: 'Checklist', icon: '&#10003;' }, // check
-  { id: 'options', label: 'Options', icon: '&#9671;' },      // lozenge
-  { id: 'levels', label: 'Key levels', icon: '&#9776;' },    // trigram
-  { id: 'stats', label: 'Stats', icon: '&#8801;' },          // identical-to, three bars
-  { id: 'patterns', label: 'Patterns', icon: '&#9651;' },    // hollow triangle
-  { id: 'trading', label: 'Trading', icon: '&#9644;' },      // black rectangle
-  { id: 'learn', label: 'Learn', icon: '&#9678;' },          // bullseye
+  { id: 'watchlist', label: 'Watch',      // the rail's eye, for the list you keep watch over
+    icon: '<path d="M2.6 12C6 6.8 8.9 4.6 12 4.6s6 2.2 9.4 7.4c-3.4 5.2-6.3 7.4-9.4 7.4S6 17.2 2.6 12Z"/><circle cx="12" cy="12" r="2.6"/>' },
+  { id: 'alerts', label: 'Alerts',        // the header's Alert bell
+    icon: '<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2H4.5Z"/><path d="M10 21h4"/>' },
+  { id: 'news', label: 'News',            // a folded paper
+    icon: '<rect x="3.5" y="5" width="13" height="14" rx="1.5"/><path d="M16.5 9h3a1 1 0 0 1 1 1v7.5a1.5 1.5 0 0 1-3 0V9"/><path d="M6.5 9h7M6.5 12.5h7M6.5 16h4"/>' },
+  { id: 'analysts', label: 'Analysts',    // a price target
+    icon: '<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/>' },
+  { id: 'seasonality', label: 'Season',   // a calendar
+    icon: '<rect x="3.5" y="5" width="17" height="15" rx="1.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/>' },
+  { id: 'notes', label: 'Notes',          // a pencil
+    icon: '<path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17Z"/><path d="m14.5 7.5 3 3"/>' },
+  { id: 'insiders', label: 'Insiders',    // a person
+    icon: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>' },
+  { id: 'reports', label: 'Reports',      // a filing with its figures
+    icon: '<path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7Z"/><path d="M14 3v4h4"/><path d="M9.5 17v-3M12 17v-5M14.5 17v-2"/>' },
+  { id: 'checklist', label: 'Checklist',  // two ticked rows
+    icon: '<path d="m4 7 2 2 3.5-3.5"/><path d="M12.5 7.5H20"/><path d="m4 15 2 2 3.5-3.5"/><path d="M12.5 15.5H20"/>' },
+  { id: 'options', label: 'Options',      // a call's payoff: flat, then up
+    icon: '<path d="M3.5 15.5h7.5l9.5-9.5"/><path d="M3.5 19.5h17"/>' },
+  // `short` for the rail: "Key levels" is two lines in 54px at the micro size.
+  { id: 'levels', label: 'Key levels', short: 'Levels',   // a price between two levels
+    icon: '<path d="M3.5 6.5h17M3.5 17.5h17"/><path d="m4.5 14 4-3.5 3 2.5 4-5 4 2.5"/>' },
+  { id: 'stats', label: 'Stats',          // a list of figures
+    icon: '<path d="M9 6.5h11M9 12h11M9 17.5h11"/><path d="M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01" stroke-width="2.6"/>' },
+  { id: 'patterns', label: 'Patterns',    // two candles
+    icon: '<path d="M7 3.5v3M7 15.5v5"/><rect x="5" y="6.5" width="4" height="9" rx="0.8"/><path d="M17 5v4M17 16v3.5"/><rect x="15" y="9" width="4" height="7" rx="0.8"/>' },
+  { id: 'trading', label: 'Trading',      // a buy and a sell
+    icon: '<path d="M4 8.5h15l-3.5-3.5"/><path d="M20 15.5H5l3.5 3.5"/>' },
+  { id: 'learn', label: 'Learn',          // a mortarboard
+    icon: '<path d="M2.8 9.5 12 5l9.2 4.5L12 14Z"/><path d="M7 11.8v4.4c0 1.4 2.2 2.6 5 2.6s5-1.2 5-2.6v-4.4"/><path d="M21.2 9.5v5"/>' },
 ];
+
+function wsWidgetIcon(paths) {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"
+    stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+}
 
 /* Per-symbol free text. The one thing on this page the terminal cannot derive:
  * why *you* are looking at this chart. Saved on blur rather than per keystroke —
@@ -22051,8 +22089,8 @@ function wsWidgetRail() {
       ${reachable ? '' : 'disabled'}
       title="${reachable ? esc(w.label) : esc(w.label
         + '. Close Pulse to open this panel: there is not room for the chart and both.')}">
-      <span class="ws-wrail-ico">${w.icon}</span>
-      <span class="ws-wrail-lab">${esc(w.label)}</span>
+      <span class="ws-wrail-ico" aria-hidden="true">${wsWidgetIcon(w.icon)}</span>
+      <span class="ws-wrail-lab">${esc(w.short || w.label)}</span>
     </button>`;
   }).join('')}
     ${/* Pulse, at the foot of the rail rather than in the widget list.
@@ -22068,7 +22106,7 @@ function wsWidgetRail() {
     <button type="button" class="ws-wrail-btn ws-wrail-pulse"
       data-ask-chart="${esc(STATE.chartSymbol || '')}"
       title="Have Pulse read this chart and summarise the big picture">
-      <span class="ws-wrail-ico" aria-hidden="true">&#9673;</span>
+      <span class="ws-wrail-ico" aria-hidden="true">${pulseMarkHTML('pulse-glyph-sm')}</span>
       <span class="ws-wrail-lab">Pulse</span>
     </button>
   </div>`;
@@ -24865,9 +24903,19 @@ function wsSyncNarrow() {
   if (!body) return;
   const w = body.getBoundingClientRect().width;
   if (!w) return;
+  const was = body.classList.contains('narrow');
   body.classList.toggle('narrow', w < WS_NARROW_PX);
   const bar = views.chart.querySelector('.ws-toolbar');
   if (bar) bar.classList.toggle('narrow', w < WS_NARROW_PX);
+  /* The widget rail says which panels are open, and "open" means a different
+   * thing on each side of the line: wide, every widget left open; narrow, the
+   * one picked since. The rail is drawn before this measures, so a phone
+   * opened with Notes left open on a laptop lit Notes over a dock it hides,
+   * measured at 375px, and pressing it then closed what was not showing. */
+  if (was !== body.classList.contains('narrow')) {
+    const rail = views.chart.querySelector('.ws-wrail');
+    if (rail) rail.outerHTML = wsWidgetRail();
+  }
   // In narrow mode the dock is an overlay and shows only for the one selected
   // widget; wide, it is a column and shows whatever is open.
   body.classList.toggle('dock-open',

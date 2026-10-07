@@ -17310,3 +17310,79 @@ table.heat td.name { text-align: left; font-weight: 500; }
   .sym-pick:hover { border-color: var(--brand); color: var(--ink); }
 }
 .sec-head.is-missing .sec-px-none { color: var(--warn); }
+
+/* ============================================================== CHART ===
+ *
+ * The widget rail's marks are drawn icons now (see WS_WIDGETS), at the rail's
+ * 18px. Its labels were a fixed 9px, the one size in the workspace that the
+ * reader's Text size setting could not reach; they take the micro step of
+ * the type scale like the chart's own ticks. */
+/* 16px marks and one-line labels: sixteen buttons at 38px each were 623px
+ * against the 602 the rail has above the Report a problem pill at 1440x900,
+ * which pushed Pulse under the pill again. */
+.ws-wrail-ico { display: flex; align-items: center; justify-content: center; height: 16px; }
+.ws-wrail-ico svg { width: 16px; height: 16px; display: block; }
+.ws-wrail-ico .pulse-glyph-sm { width: 16px; height: 16px; }
+.ws-wrail-lab { font-size: var(--t-micro); white-space: nowrap; letter-spacing: -0.01em; }
+
+/* A widget's close button is its only way out of the dock besides the rail,
+ * and it was hover-only: opacity 0 until the pointer crossed the widget, which
+ * a phone and a keyboard never do, and display:none with Pulse open, where
+ * the rail's toggle is disabled too. It is always drawn, at a 24px target. */
+.ws-widget .ws-widget-head .ws-leg-btn {
+  opacity: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  font-size: var(--t-body);
+  border-radius: var(--r-xs);
+}
+/* The legend's own hide and remove buttons reveal on hover; a keyboard
+ * reaching them, and a device with no hover, get them without one. */
+.ws-leg-row:focus-within .ws-leg-btn { opacity: 1; }
+@media (hover: none) {
+  .ws-leg-btn { opacity: 1; }
+}
+
+/* The drawing tools' marks, at the size the glyphs were set at. */
+.ws-tool svg { width: 18px; height: 18px; display: block; }
+.ws-rail .ws-tool:disabled svg { opacity: 0.8; }
+
+/* The drawing tools on a phone: one row above the chart, not a column beside
+ * it. At 375px the column was two tools wide, 77px of a 338px workspace, and
+ * the chart drew in the 261 left: the tools took a quarter of the width a
+ * phone's chart has least of, to save height it has more of. As a row they
+ * cost one 36px strip, which scrolls sideways like the widget row under the
+ * chart, and the chart takes the full width. */
+@media (max-width: 559px) {
+  .ws-body,
+  .ws-body.narrow,
+  body.chat-open .ws-body { grid-template-columns: minmax(0, 1fr); }
+  .ws-rail {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 2px;
+    min-width: 0;
+    padding: var(--space-1) var(--space-2);
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .ws-rail .ws-tool { flex: 0 0 auto; width: 32px; height: 32px; }
+  .ws-rail-sep,
+  .ws-rail-gap {
+    flex: 0 0 1px;
+    align-self: stretch;
+    min-height: 0;
+    max-height: none;
+    width: 1px;
+    margin: var(--space-1) var(--space-1);
+    background: var(--border);
+    grid-column: auto;
+  }
+}
