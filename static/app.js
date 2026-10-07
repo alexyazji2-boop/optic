@@ -815,6 +815,7 @@ const HEADER_DEFS = {
   'recent sec filings': "The company's latest filings with the US Securities and Exchange Commission: annual reports (10-K), quarterly reports (10-Q) and notices of material events (8-K), among others. They are the primary source most of the figures elsewhere are drawn from.",
   'insiders': "Who is trading what and who the government is paying, from three public filing regimes: company insiders' Form 4s, members of the House under the STOCK Act, and federal contract awards. Each is published after a delay, and nothing here is ranked by how profitable it looked.",
   'earnings this week': 'Which names on the watchlist report between Monday and Friday of this week, grouped by day. It scans a fixed list of widely followed names, not the whole market, because free data gives one earnings date per symbol at a time.',
+  'the past year': "The stock's daily closing price over the last twelve months, with its earnings reports, ex-dividend dates and splits marked on it. It shows how the price moved and what it did around each event.",
   'how they have moved': "Each compared name's price over the past year, rebased so that all of them start at 100 on the same day. A line ending at 130 has risen 30 percent over the period, so the ends can be compared directly.",
   'economic data': "Official US economic series from the Federal Reserve's FRED database, such as inflation, jobs, spending and output, shown in the form each is usually read in. Their releases are among the main scheduled movers of rates and stocks.",
 };
@@ -14822,6 +14823,102 @@ function keyStatsHost(view) {
   return `<div id="ks-host-${view}" class="span-all">${html}</div>`;
 }
 
+/* The past year of the price, with its reports, ex-dividend dates and splits.
+ * Asked for as "Dossier Overview: a price chart with earnings, dividend and
+ * split markers". The Overview had no chart: it gave the price's place in its
+ * range as a percentage. Daily closes the ticker payload already carries; the
+ * dividends and splits come with the extras, and the chart is drawn again when
+ * they land. A date past the last bar is not drawn on it. */
+const OV_SESSIONS = 252;
+
+function overviewSeries(d) {
+  const ps = ((d.technicals || {}).price_series) || {};
+  const dates = (ps.dates || []).map((x) => String(x).slice(0, 10));
+  const close = ps.close || [];
+  const rows = dates.map((dt, i) => [dt, Number(close[i])]).filter(([dt, v]) => dt && Number.isFinite(v) && v > 0);
+  const last = rows.slice(-OV_SESSIONS);
+  return { dates: last.map((r) => r[0]), close: last.map((r) => r[1]) };
+}
+
+function overviewEvents(d, dates) {
+  if (dates.length < 2) return [];
+  const end = dates[dates.length - 1];
+  const out = [];
+  const at = (iso) => (iso && iso >= dates[0] && iso <= end ? barIndexForDate(dates, iso) : undefined);
+  (((d.company || {}).earnings_history || {}).quarters || []).forEach((r) => {
+    const iso = String(r.date || '').slice(0, 10);
+    const i = at(iso);
+    if (i === undefined) return;
+    const beat = Number.isFinite(r.surprise_pct) ? (r.surprise_pct >= 0 ? 'beat' : 'missed') : '';
+    out.push({ index: i, iso, kind: 'Earnings report', label: 'E', color: C.s4,
+      text: [reportTiming(r.timing) ? `Reported ${reportTiming(r.timing)}` : 'Reported',
+        Number.isFinite(r.eps_reported) ? `EPS ${fmt(r.eps_reported, 2)}` : '',
+        Number.isFinite(r.eps_estimate) ? `against ${fmt(r.eps_estimate, 2)} expected` : '',
+        beat ? `(${beat} by ${fmt(Math.abs(r.surprise_pct), 1)}%)` : ''].filter(Boolean).join(' ') });
+  });
+  const acts = (extrasForTicker() || {}).actions || {};
+  (acts.dividends || []).forEach((r) => {
+    const iso = String(r.date || '').slice(0, 10);
+    const i = at(iso);
+    if (i === undefined) return;
+    out.push({ index: i, iso, kind: 'Ex-dividend date', label: 'D', color: C.s7,
+      text: Number.isFinite(r.amount) ? `${money(r.amount, 2)} a share` : 'Amount not given' });
+  });
+  (acts.splits || []).forEach((r) => {
+    const iso = String(r.date || '').slice(0, 10);
+    const i = at(iso);
+    if (i === undefined) return;
+    out.push({ index: i, iso, kind: 'Split', label: 'S', color: C.ink2,
+      text: Number.isFinite(r.ratio) ? `${fmt(r.ratio, 2)}-for-1` : 'Ratio not given' });
+  });
+  return out.sort((a, b) => (a.iso < b.iso ? -1 : 1));
+}
+
+function overviewChartTitle(sym, close) {
+  if (close.length < 2) return '';
+  const first = close[0], last = close[close.length - 1];
+  const chg = (last / first - 1) * 100;
+  const span = close.length >= OV_SESSIONS - 12 ? 'over the past year' : `over the ${fmt(close.length, 0)} sessions shown`;
+  const move = `${sym} is ${chg >= 0 ? 'up' : 'down'} ${fmt(Math.abs(chg), 0)}% ${span}`;
+  const off = (last / Math.max(...close) - 1) * 100;
+  return off > -1 ? `${move}, at its highest close of it` : `${move}, ${fmt(Math.abs(off), 0)}% below its highest close`;
+}
+
+function overviewChartHTML(d) {
+  const { dates, close } = overviewSeries(d);
+  if (close.length < 20) return '';
+  const next = (((d.company || {}).earnings_history || {}).upcoming || [])[0];
+  const nextIso = next && String(next.date || '').slice(0, 10);
+  return `<div class="panel" id="ov-price">
+    <h2>${hg('The past year')}</h2>
+    ${vizBlock('viz-ov-price', overviewChartTitle(STATE.ticker || '', close),
+    `Daily closes, split-adjusted, through ${dates[dates.length - 1]}. Source: Yahoo Finance. Marked: E an earnings report, D an ex-dividend date, S a split.${
+      nextIso && nextIso > dates[dates.length - 1] ? ` Next report ${nextIso}${reportTiming(next.timing) ? ', ' + reportTiming(next.timing) : ''}.` : ''}`)}
+    <div id="ov-events"></div>
+  </div>`;
+}
+
+function mountOverviewChart(d) {
+  const { dates, close } = overviewSeries(d);
+  if (close.length < 20) return;
+  const events = overviewEvents(d, dates);
+  vizMount('viz-ov-price', (w) => lineChart({
+    width: w, height: 220, labels: dates, valueTags: true,
+    series: [{ name: 'Close', values: close, color: priceLineColor(close) }],
+    vMarkers: events.map((e) => ({ index: e.index, color: e.color, label: e.label, detail: `${e.kind} ${e.iso}: ${e.text}` })),
+    yFormat: (v) => fmt(v, v < 20 ? 2 : 0),
+  }));
+  // Every marked date in words too: a marker's hover is not reachable from a keyboard.
+  const host = document.getElementById('ov-events');
+  if (host) {
+    host.innerHTML = events.length ? exactFigures(`<table class="data">
+      <thead><tr><th>Date</th><th>Marked</th><th>What</th></tr></thead>
+      <tbody>${events.slice().reverse().map((e) => `<tr><td class="name">${esc(e.iso)}</td>
+        <td>${esc(e.kind)}</td><td style="text-align:left;white-space:normal">${esc(e.text)}</td></tr>`).join('')}</tbody>
+    </table>`, `The ${events.length} marked date${events.length === 1 ? '' : 's'}`) : '';
+  }
+}
+
 function renderOverviewView() {
   const d = STATE.swing || {};
   const q = d.quote || {};
@@ -14846,6 +14943,7 @@ function renderOverviewView() {
   views.overview.innerHTML = `${securityHeader('overview')}
     ${renderOpticPulse(d)}
     ${keyStatsHTML(q, { view: 'overview', short: (d.company || {}).short_interest })}
+    ${overviewChartHTML(d)}
     <div class="panel">
       <h2>${hg('The rest of this ticker')}</h2>
       <p class="sub">One reading from each facet, so the row says what is there
@@ -14877,8 +14975,9 @@ function renderOverviewView() {
         data-sec-sym="${esc(STATE.ticker || '')}">All ${
   news.article_count || heads.length} headlines</button>
     </div>` : ''}
-    ${fin.available === false && fin.notes ? `<p class="caveat">${esc(fin.notes)}</p>` : ''}`;
+    ${fin.available === false && (fin.note || fin.notes) ? `<p class="caveat">${esc(fin.note || fin.notes)}</p>` : ''}`;
   revealPanels(views.overview);
+  mountOverviewChart(d);
   loadFairValue();
 }
 
@@ -25249,6 +25348,10 @@ async function loadExtras(force) {
     await promise;
   } finally {
     if (extrasInFlight && extrasInFlight.promise === promise) extrasInFlight = null;
+  }
+  // The Overview chart marks the dividends and splits, which land after it.
+  if (STATE.view === 'overview' && STATE.extrasFor === sym && document.getElementById('viz-ov-price')) {
+    mountOverviewChart(STATE.swing || {});
   }
   /* No swing branch any more: `#extras-host` was removed from that tab, and a
      refresh that re-rendered into a host which no longer exists is how a
