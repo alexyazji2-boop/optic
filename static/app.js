@@ -764,6 +764,58 @@ const HEADER_DEFS = {
   'credit': "Corporate bonds. Credit markets usually crack before stocks do, so weakness here is one of the earliest warnings you'll get.",
   'equity': 'The major stock indices themselves, for direct comparison against everything else on this dashboard.',
   'crypto': 'Bitcoin and friends, treated here as a pure risk-appetite gauge. It tends to move first and hardest when speculative money shifts.',
+  // ---- the terminal-wide pass: headings a reader stalls on
+  'atr': "Average true range over 14 sessions: the typical distance a day covers from its low to its high, counting any gap from the previous close. It measures how much the stock moves, not which way, and the figure beside it is that range as a share of the price.",
+  'vanna': "How much the dealers' hedge would change if implied volatility moved one point with the price standing still. Vanna is the same for a call and a put at one strike, so the sign of the total comes from the assumption about which side of each trade the dealers are on.",
+  'charm': 'How much the dealers\' hedge changes as a day passes, with price and volatility unchanged. It is the hedging the clock alone forces, and it grows into an options expiry, which is where some of the drift into an expiry Friday comes from.',
+  'implied correlation': "How strongly the options market expects an index's members to move together, found by comparing the index's implied volatility with the weighted implied volatility of its members. A high reading prices the names to rise and fall as one; a low one prices them to go their own ways.",
+  'close defence': 'The one level the closing price has to stay on the right side of for the current trend read to hold overnight. Only the close counts, because the averages and pivots behind it are defined on closing prices, so an intraday dip through the level is not a break.',
+  'book-level risk': "Whether the open trades are separate bets or the same bet placed several times. It reads the positions together: how much of the book's swings each name accounts for, which pairs move alike, and how much the mix cancels out.",
+  'three books': 'The same scan run under three sets of risk rules, each book with its own $100,000 and its own record. The candidates are identical, so differences between the books come from the rules rather than from different signals.',
+  'the five drivers': 'The five forces this panel uses to explain why a currency pair moves: rate differentials, carry, terms of trade, risk appetite and policy. Each row describes the mechanism, not a forecast of the next move.',
+  'its own median': "The middle of this company's own weekly trailing P/E over the same years: it traded above this multiple half the time and below it half the time. The quarter range beside it holds the middle half of those weeks.",
+  'where each name leads': 'Each compared name on the same 0 to 100 composite score at three horizons, so the bars can be read across the whole panel. A name can lead at one horizon and trail at another, and the size of the gap says how much a lead means.',
+  'dividend score': 'A score out of 100 for how safe and steady the dividend looks in its payment record. It has four parts of up to 25 points each: whether earnings cover the payout, how many years in a row the annual total has risen, its five-year growth, and the yield.',
+  'stock maps': 'A screen drawn as a picture instead of a table. The tile map sizes each stock by one measure and colours it by another, and the bubble chart plots two measures against each other with size as a third.',
+  'turn of the month': 'Whether this stock has done better in the last and first few trading days of each month than in the rest of it. The window is fixed in advance and only one comparison is made, so the bar for significance is the ordinary p below 0.05.',
+  'day of the week': "Whether this stock's average daily return has differed by weekday over its history. Five weekdays are compared, so the bar for significance is raised to allow for five chances at a fluke.",
+  'month of the year': "Whether this stock's average return has differed by calendar month over its history. Twelve months are tested at once, so the significance bar is divided by twelve: testing twelve things gives twelve chances to get lucky once.",
+  'most correlated pairs': 'The pairs of open positions whose daily returns have moved most alike over the window shown. A correlation near +1 means the two rise and fall together, so holding both spreads the risk less than holding two unrelated names.',
+  'trailing p/e now': "The share price divided by the last twelve months of diluted earnings per share, from SEC filings. The note places today's multiple among the multiples this company has traded at over the years shown.",
+  'fair value': 'What the stock would be worth at the price-to-earnings multiples the market has usually paid for it: trailing earnings times the 25th percentile, median and 75th percentile of its own five-year P/E. It is a range to read the price against, not a target, and it cannot tell whether the business has changed.',
+  'morningstar rating': "Morningstar's star rating for this fund, from one to five, based on its past returns after costs and adjusted for risk against funds of the same kind. It looks backward, and it is Morningstar's view, not Optic's.",
+  'off-exchange short volume': "The share of each day's off-exchange trading, through dark pools and wholesalers, that was reported as short sales, from FINRA's daily files. Market makers sell short routinely to fill buy orders, so the level runs high for every stock, and a change against its own average says more than the level does.",
+  'seasonality': "Whether this stock's returns have followed the calendar: by month, by weekday and around the turn of each month, from its own history. Each effect is tested for statistical significance, because averages split by calendar always show some pattern by chance.",
+  'sector rotation': 'Where each sector stands against the index on two measures centred on 100: relative strength, and relative momentum, which says whether that strength is rising or falling. Together they place each sector as leading, weakening, lagging or improving, and sectors tend to move through those in a clockwise loop.',
+  'relative performance': "Where this stock's return ranks against a fixed universe of 143 liquid names spread across all eleven sectors, from 0 to 100 for each window. A rank of 97 means it has outrun 97 percent of them, and crossings through 80 and 20 mark a name starting to lead or to lag.",
+  'versus the index': "The stock's return minus the benchmark's over each window, in percentage points. Positive means it has beaten the index over that stretch, and negative means it has trailed it.",
+  'valuation vs its own history': "Today's trailing P/E set against the multiples this company has traded at over the past five years. It answers whether the stock is expensive for itself, which needs no assumptions about which other companies are comparable.",
+  'multiple and revenue history': 'The trailing P/E the market has paid for this company week by week, from SEC filings, beside its revenue growth. Read together, they show whether a change in the multiple came with a change in the business.',
+  'revenue and the multiple': "Each year's revenue beside the P/E the stock traded at that year. Together they show whether a rising price came from the business growing, from the market paying more for each dollar of earnings, or from both.",
+  'segments and geography': "How the company's revenue splits by business line and by region, as reported in its SEC filings. It shows which parts of the business carry the totals and how much depends on a single market.",
+  'corporate actions & flow': "The company's dividends and splits, short sales in off-exchange trading, and the stock's return against the index. Together they record what has changed about a share and who has been trading it, from the payment record, FINRA's files and prices.",
+  'cross-asset': 'Every instrument Optic tracks across stocks, rates, currencies, commodities and crypto, ranked by today\'s move against its own average daily range. A move of twice its usual range is unusual for that instrument, whatever its size in percent.',
+  'cross-check': "Optic's own trailing P/E, computed from SEC filings, set beside the data provider's figure for the same multiple. When the two differ they are built from different earnings figures, and the gap shows how much that choice moves the multiple.",
+  'insider filings': "Trades by a company's officers, directors and largest holders, from the Form 4 filings they must send the SEC within two business days. Open-market purchases are the rarer kind; sales happen for many reasons, from taxes to diversification.",
+  'congressional disclosures': 'Trades in this stock disclosed by members of the House under the STOCK Act, which requires a filing within 45 days of the trade. Amounts are reported only as ranges, and the delay means a disclosure describes a past trade, not a current position.',
+  'federal contracts': 'Contracts the US government has awarded to this company, from USAspending.gov, the official record of federal spending. The obligated amount is what the government has committed, which can differ from what is eventually paid.',
+  'expected s&p move': "The daily move the S&P 500's options are pricing, from the VIX divided by 16, set against the index's own recent days. The VIX is an annual figure, and dividing by about 16, the square root of 252 trading days, turns it into one day's typical move.",
+  'sector exposure': "How the book's money is split across sectors, as a share of its gross exposure. A book concentrated in one sector behaves much like a single bet on that sector, however many names it holds.",
+  'where the money and the risk sit': "Each position's share of the book's money beside its share of the book's risk. A volatile name can carry far more of the risk than its weight suggests, and this table shows that gap.",
+  'latest revenue growth': 'The most recent reported revenue against the same period a year earlier, from SEC filings. Comparing a quarter with the same quarter a year before removes the seasonal swings a quarter-on-quarter comparison would show.',
+  'market catalyst': 'A scheduled economic release, such as an inflation or jobs report, while it is fresh: what was expected, what came out and how prices reacted. Between releases the panel is idle, and the archive holds every stored event.',
+  'overnight, worldwide': 'Markets that trade while the US is closed, such as Asian and European stock indices, with their moves since their last close. They show the backdrop the US session opens into.',
+  'chart patterns': 'Shapes in the price history that traders watch, such as triangles, flags and double tops, with support and resistance zones and recent candle patterns. Where it has been measured, each pattern shows how often it has resolved in its expected direction, since a shape alone predicts nothing.',
+  'disclosed trades per day': 'House trade disclosures over the chosen window, counted by day, with purchases and sales shown separately. A trade can be filed up to 45 days after it happened, so each count is of what has been disclosed so far.',
+  'most disclosed': 'The symbols that appear most often in House trade disclosures over the window. It counts filings rather than money, because the amounts are reported only as wide ranges.',
+  'pre-earnings brief': "A written read ahead of the next report, covering what is expected, what the options price for the move and what happened around past reports. It is written by Claude from the terminal's own data, and it is not a recommendation.",
+  'what analysts say': "The ratings and price targets published by the firms that cover this stock, as Yahoo Finance carries them: counts of buy, hold and sell, and the mean, lowest and highest target. It is the view of the brokers' analysts, not an Optic pick.",
+  'dividends': 'Cash the company pays to shareholders, per share, from its payment record. A buyer has to own the stock before the ex-dividend date to receive the next payment, and the price usually drops by about the dividend on that date.',
+  'splits': 'A split changes how many shares exist without changing what the company is worth: a 2-for-1 split doubles the shares and halves the price. Past prices are adjusted for splits, so charts compare like with like.',
+  'recent sec filings': "The company's latest filings with the US Securities and Exchange Commission: annual reports (10-K), quarterly reports (10-Q) and notices of material events (8-K), among others. They are the primary source most of the figures elsewhere are drawn from.",
+  'insiders': "Who is trading what and who the government is paying, from three public filing regimes: company insiders' Form 4s, members of the House under the STOCK Act, and federal contract awards. Each is published after a delay, and nothing here is ranked by how profitable it looked.",
+  'earnings this week': 'Which names on the watchlist report between Monday and Friday of this week, grouped by day. It scans a fixed list of widely followed names, not the whole market, because free data gives one earnings date per symbol at a time.',
+  'economic data': "Official US economic series from the Federal Reserve's FRED database, such as inflation, jobs, spending and output, shown in the form each is usually read in. Their releases are among the main scheduled movers of rates and stocks.",
 };
 
 /** Wrap a section heading so hovering it explains what the section is and how
@@ -1207,7 +1259,128 @@ const TH_HINTS = {
  * different in every panel, which is how a moving average's "Value" ended up
  * on an insider table, so those take their definition at the call site
  * (tests/test_terminology.py keeps them out of here). */
+/* Labels that mean the same in every table that uses them. */
+const RS_DEF = (span) => `How much the sector has gained or lost against the benchmark over the past ${span}, as the change in the ratio of its price to the benchmark's, in percent. Positive means it has outpaced the index, whatever either did on its own.`;
+const CAGR_DEF = (years) => `The compound annual growth rate over ${years} years: the steady yearly return that would turn the starting value into the ending one. It smooths the path, so two series with the same figure can have had very different rides.`;
+const MA200_DEF = 'Where the price sits against its 200-day moving average, in percent. The 200-day is the most watched long-term trend line, and trading above it is how a long-term uptrend usually looks.';
+
 const LABEL_DEFS = {
+  'rs 1w': RS_DEF('week'),
+  'rs 1m': RS_DEF('month'),
+  'rs 3m': RS_DEF('three months'),
+  'rs 6m': RS_DEF('six months'),
+  'vs 50d': 'Where the price sits against its 50-day moving average, in percent. Positive means it trades above the average, which is how a medium-term uptrend usually looks.',
+  'vs 200d': MA200_DEF,
+  'vs 200-day': MA200_DEF,
+  'vs 40w': 'Where the price sits against its 40-week moving average, in percent. Forty weeks is close to the 200-day average, measured on weekly closes, which smooths out single-day noise.',
+  'vs 200w': 'Where the price sits against its 200-week moving average, about four years of weekly closes, in percent. It is the slowest trend line in common use, so a price far above it has run well ahead of its long-run trend.',
+  'wk rsi': 'The 14-period RSI computed on weekly closes, from 0 to 100. Above 70 means weeks of hard buying and below 30 weeks of hard selling, on a slower clock than the daily reading.',
+  'z (60d)': 'How far the ratio sits from its own 60-session average, measured in standard deviations. Beyond plus or minus 2 is unusually stretched for that pair, the zone a mean-reversion trade looks for.',
+  'implied vol': "The volatility the option's price implies, annualised and in percent: how much movement the market is paying for. Higher implied volatility makes options dearer for buyers and pays sellers more.",
+  'open int.': 'Open interest: how many contracts at this strike and expiry are still open, counted after the previous session. It shows where positions sit, not how much traded today.',
+  'drawdown': 'How far the price stands below its highest close so far, in percent. Zero means it is at a high, and minus 30 means it would need to rise about 43 percent to get back.',
+  'worst drawdown': 'The deepest fall from a high to a later low over the history measured, in percent. It is the loss someone who bought at the worst moment would have sat through before any recovery.',
+  '3y cagr': CAGR_DEF('three'),
+  '5y cagr': CAGR_DEF('five'),
+  '10y cagr': CAGR_DEF('ten'),
+};
+/* Column definitions for one table's own headers, chosen by the table's
+ * data-defs. "Strength", "Composite" and "p" each mean something different in
+ * every table that has one, so their definitions belong to the table: the
+ * sector rotation table's "Strength" was being explained as a support level's
+ * score. A header whose text varies ("vs SPY") names its entry with
+ * data-def-key. These win over the terminal-wide hints. */
+const TABLE_DEFS = {
+  'sector-rs': {
+    composite: 'A blend of relative strength against the benchmark from one week to six months, weighted toward one to three months, plus a few points for trend confirmation: price above its 50 and 200-day averages and the ratio line above its own. Higher means stronger leadership.',
+    strength: 'The composite read as a word: strong at 8 or more, improving from 2, neutral in between, deteriorating from minus 2 and weak at minus 8 or below. It names the reading and adds nothing to it.',
+    breakout: 'A 0 to 100 score for how close the basket is to a breakout: near its 20-day or three-month high, its Bollinger bands squeezed, momentum firm without being stretched, and volume picking up. It is high only when those line up, because any one alone is noise.',
+  },
+  pairs: {
+    ratio: "The first leg's price divided by the second's. A rising ratio means the first is outperforming the second, whatever the market as a whole did.",
+  },
+  rotation: {
+    quadrant: 'Where the sector sits on the rotation chart: leading is strong and still gaining, weakening is strong but losing ground, lagging is weak and losing, and improving is weak but gaining. Sectors tend to pass through them clockwise.',
+    strength: "The sector's performance against the benchmark compared with its own recent norm, centred on 100 and measured on weekly bars. Above 100 means it is outperforming by more than usual for it.",
+    momentum: "Whether the sector's relative strength is rising or falling, centred on 100. Above 100 means it is gaining ground on the benchmark, and below 100 means it is losing ground.",
+    'δ strength': 'How much the strength reading changed over the latest week. A positive figure is a sector moving right on the rotation chart, toward leading or weakening.',
+    'δ momentum': 'How much the momentum reading changed over the latest week. A positive figure is a sector moving up on the rotation chart, toward improving or leading.',
+    'moved from': 'The quadrant the sector was in a week earlier, shown only when it has crossed into a new one. A crossing is the earliest thing the chart says and also the least reliable, since a sector near a line can cross back.',
+  },
+  'eval-ic': {
+    composite: "The information coefficient of the screen's own score at this horizon: the rank correlation between each name's score and its later return against the rest of the universe, averaged across dates. Zero means the score is noise, and real equity signals tend to sit around 0.02 to 0.05.",
+    random: 'The same measurement for a score made of random numbers, the control for luck. A composite that does not clear it by a margin has shown nothing.',
+    '3-month return alone': "The same measurement for one raw factor, the past three months' return on its own. A blended score has to beat this to justify its extra parts.",
+    'vs single factor': "Whether the composite's coefficient beats the three-month return's at this horizon. Losing means the plain past return ranked the names at least as well as the whole score did.",
+  },
+  'eval-buckets': {
+    'score bucket': 'The band of scores the observations fell in, from strongly negative to strongly positive. Each row collects every name that scored in that band on any evaluation date.',
+    n: 'How many observations fall in the bucket, one for each name on each date it scored there. The observations overlap in time, so they are less independent than the count suggests.',
+    'mean excess': "The average return over the horizon after subtracting the whole universe's average for the same dates. Positive means names in this bucket beat the other names on the same days.",
+    'hit rate': 'The share of observations in the bucket whose excess return was above zero. Fifty percent is what a coin would manage.',
+    '95% interval': 'The range that would hold the true mean excess return 95 times in 100 if the observations were independent. They overlap, so the honest range is wider, and a range that spans zero has not shown an edge.',
+  },
+  seasonality: {
+    years: 'How many years of history sit behind the row, one observation for each year. A calendar month seen fifteen times is a small sample, which is why the bar for significance is raised.',
+    days: 'How many trading days fall in the bucket over the history. More days make a real effect easier to tell apart from chance.',
+    mean: 'The average return per period in this bucket, in percent: per month in the monthly table and per day in the others. It is the raw figure, before the benchmark is taken off.',
+    'vs-bench': "The same average with the benchmark's return over the same periods taken off. It separates this stock's own calendar effect from the market's.",
+    up: 'The share of periods in the bucket that ended higher. It shows how consistent the effect is, which an average can hide.',
+    'ex best yr': "The same mean with that month's single best year removed. A figure that collapses when one year comes out was one year, not a season.",
+    median: 'The middle daily return in the bucket, with half the days above it and half below. Far from the mean means a few large days are carrying the average.',
+    p: 'The p-value: how often a difference at least this large would turn up by chance if the calendar had no effect at all. A row counts only when it clears the corrected bar stated above the table.',
+    verdict: 'Whether the row clears the significance bar after the correction for how many rows were tested. A row that fails may still look large, but it has not shown it is more than chance.',
+    window: 'The stretch of each month the row covers: the turn of the month, meaning its last and first few trading days, or the rest of it. The window is fixed in advance, not chosen for its result.',
+  },
+  'roth-drift': {
+    'you hold': 'The dollar value of the holdings mapped to this exposure. Funds that track the same thing are added together as one exposure.',
+    current: "This exposure's share of the whole portfolio's value today, in percent. Funds that track the same index count together as one exposure.",
+    target: 'The share of the portfolio the model allocation gives this exposure, in percent. The gap between it and the current share is the drift.',
+    drift: 'How far the current share sits from the target, in percentage points. Positive means this exposure has grown past its target share, and negative means it has fallen short.',
+  },
+  'roth-buys': {
+    'share of contribution': "The part of this year's contribution that goes to this fund, in percent. New money goes to the exposures furthest below target, which moves the portfolio back toward the model without selling anything.",
+  },
+  'roth-sleeve': {
+    conviction: "Optic's long-term read on the stock, from a score built on its trend, valuation and record: high, moderate, neutral, cautious or low. With too little usable history the score is capped, so a short record cannot read as a strong one.",
+    score: 'The long-term score behind the conviction, from minus 100 to plus 100. High conviction starts at 40 and low conviction at minus 40.',
+    suggested: 'The share of the stock sleeve this name would get under the model\'s sizing rules, in percent. A name that fails an eligibility test gets none, and the reason is listed under the table.',
+    history: 'How many years of prices the figures are measured over. A short history may have missed a full market cycle, which flatters it.',
+  },
+  'roth-funds': {
+    'in model': 'The share of the model allocation this fund holds, in percent, or a dash when the model does not use it. The highlighted rows are the funds in the model.',
+    expense: "The fund's annual expense ratio: the share of the money invested that the fund deducts each year to cover its costs. It comes out of the return every year, so small differences compound over decades.",
+    'cagr (full)': "The compound annual growth rate over the fund's full available history: the steady yearly return that would turn its first price into its latest. A fund with a short history is measured over fewer years, which makes its figure less comparable.",
+    volatility: "How much the fund's daily returns swing, annualised and in percent. Higher volatility means a bumpier ride, whatever the average return.",
+    'return / vol': 'The full-history annual growth rate divided by the volatility: how much return each unit of swing has bought. It is a Sharpe ratio with the risk-free rate set to zero, so it compares funds with each other rather than with cash.',
+    history: 'How many years of prices the figures are measured over. A short history may have missed a full market cycle, which flatters it.',
+  },
+  indices: {
+    '1y': "The index's change over the past twelve months, in percent. A single year can sit far from the long-run rates beside it.",
+    phase: 'The long-term trend in words, from weekly closes against the 40-week and 200-week averages: secular uptrend, uptrend correcting, attempted bottom, secular downtrend or neutral. It moves slowly by design and says nothing about the next few weeks.',
+  },
+  'tracker-months': {
+    realised: 'Profit or loss from the trades closed in the month, in dollars. An open position counts only once it closes, in the month it closes.',
+    return: "The month's realised profit or loss as a percentage of what the account was worth when the month began. Each month is measured against its own starting equity, not the original stake.",
+    'equity after': 'What the account was worth at the end of the month, counting closed trades only. It carries forward, so each month starts from where the one before it ended.',
+  },
+  'entry-plan': {
+    'days left': 'Calendar days until the contract expires. Fewer days means faster time decay and less room for the move to happen.',
+    'mid, est. ($)': 'The midpoint between the bid and the ask, per share: an estimate of a fair fill, not a guaranteed price. A wide spread makes it less reliable.',
+    'cost for one ($)': 'What one contract costs at the estimated mid: the per-share premium times the 100 shares a contract covers. It is the figure that would leave the account.',
+    'at target': "The contract's return if the stock reaches the target by the estimated exit date, with implied volatility unchanged. It is repriced with an options model, so the time decay along the way is included.",
+    'iv −20%': 'The return at the target if implied volatility also falls by a fifth, as it often does after an event. A move can be right and the trade still lose to the fall in volatility.',
+    'if flat': 'The return if the stock is unchanged at the estimated exit date, so only time has passed. It is what the time decay alone costs, and it is the most common outcome.',
+    'half against': 'The return if the stock moves half the distance to the target in the wrong direction by the exit date. It shows how quickly the contract loses when the read is wrong.',
+  },
+  'long-factors': {
+    points: 'What this factor added to or took from the long-term score. The column adds up to the total underneath, which is capped between minus 100 and plus 100.',
+  },
+  paper: {
+    r: 'Profit or loss in multiples of what the trade was set up to lose: the distance from entry to stop, times the size. Plus 2R means it made twice what the stop would have cost, which holds whatever the account size.',
+    'marked from': 'Where the latest price came from: the last trade for shares, or the midpoint of the option chain for options. A mid is not a fill, so a real exit would pay some of the spread.',
+    'optic then': "The stance Optic held on this symbol when the trade was opened, kept as it was. Comparing it with the result shows how trades with Optic's read fared against trades against it.",
+  },
 };
 
 /** Give table headers the same hover definitions as prose.
@@ -1222,7 +1395,9 @@ function glossHeaders(host) {
     const text = th.textContent;
     if (!text || !text.trim()) return;
     const key = text.trim().toLowerCase().replace(/\s+/g, ' ');
-    const whole = TH_HINTS[key] || LABEL_DEFS[key];
+    const table = th.closest('table[data-defs]');
+    const own = table ? (TABLE_DEFS[table.dataset.defs] || {})[th.dataset.defKey || key] : null;
+    const whole = own || TH_HINTS[key] || LABEL_DEFS[key];
     if (whole) {
       // Through glossTerm, not hand-rolled. Three call sites emitted this
       // markup directly and so ignored the reader's mode: measured at 13 terms
@@ -12725,7 +12900,7 @@ function renderEntryPlan(p, d) {
     <p class="sub">Every column after the greeks is a repriced scenario at ${usd(t.target_price)} in about
       ${t.estimated_calendar_days || '?'} days. “Flat” is what you lose if the move simply doesn't happen. The most
       common outcome, and the reason deep-OTM contracts score badly here.</p>
-    <table class="data">
+    <table class="data" data-defs="entry-plan">
       <thead><tr>
         <th>#</th><th>Strike ($)</th><th>Expiry</th><th>Days left</th><th>Mid, est. ($)</th><th>Cost for one ($)</th><th>Spread</th><th>Delta</th><th>Theta ($/day)</th>
         <th>Breakeven</th><th>At target</th><th>IV −20%</th><th>If flat</th><th>Half against</th><th>OI</th>
@@ -17584,8 +17759,8 @@ function renderSeasonality(s) {
       tested, so the bar for significance is 0.05 ÷ 12 = <strong>p &lt;
       ${fmt(mo.threshold, 4)}</strong>, not 0.05. Testing twelve things gives twelve
       chances to get lucky once.</p>
-    <table class="data">
-      <thead><tr><th>Month</th><th>Years</th><th>Mean</th><th>vs ${esc(s.benchmark)}</th>
+    <table class="data" data-defs="seasonality">
+      <thead><tr><th>Month</th><th>Years</th><th>Mean</th><th data-def-key="vs-bench">vs ${esc(s.benchmark)}</th>
         <th></th><th>Up</th><th>Ex best yr</th><th>p</th><th>Verdict</th></tr></thead>
       <tbody>${seasRows('monthly', mo.rows || [], 2, 'mean_ex_best')}</tbody>
     </table>
@@ -17602,8 +17777,8 @@ function renderSeasonality(s) {
       ${fmt((wd.periods || 0) / 5, 0)} observations per weekday against about fifteen per
       calendar month, so a real effect has somewhere to show up. Five buckets, so the bar is
       <strong>p &lt; ${fmt(wd.threshold, 3)}</strong>.</p>
-    <table class="data">
-      <thead><tr><th>Day</th><th>Days</th><th>Mean</th><th>vs ${esc(s.benchmark)}</th>
+    <table class="data" data-defs="seasonality">
+      <thead><tr><th>Day</th><th>Days</th><th>Mean</th><th data-def-key="vs-bench">vs ${esc(s.benchmark)}</th>
         <th></th><th>Up</th><th>Median</th><th>p</th><th>Verdict</th></tr></thead>
       <tbody>${seasRows('weekday', wd.rows || [], 3, 'median')}</tbody>
     </table>
@@ -17618,8 +17793,8 @@ function renderSeasonality(s) {
       first ${fmt((tom.window || {}).after, 0)} trading days of each month against the rest
       of it. The window fixed in advance rather than chosen for producing the best number.
       One comparison, so no correction is owed and the bar is the plain p &lt; 0.05.</p>
-    <table class="data">
-      <thead><tr><th>Window</th><th>Days</th><th>Mean</th><th>vs ${esc(s.benchmark)}</th>
+    <table class="data" data-defs="seasonality">
+      <thead><tr><th>Window</th><th>Days</th><th>Mean</th><th data-def-key="vs-bench">vs ${esc(s.benchmark)}</th>
         <th>Up</th></tr></thead>
       <tbody>${(tom.rows || []).map((r) => `<tr>
         <td class="name">${esc(r.label)}</td>
@@ -17795,7 +17970,7 @@ function renderEvaluation(e) {
     <summary>${fmt(h.horizon_sessions, 0)}-session horizon: IC ${
   fmt(h.information_coefficient, 4)}, positive on ${fmt(h.ic_positive_share_pct, 0)}% of ${
   fmt(h.ic_dates, 0)} dates<i class="cal-caret" aria-hidden="true"></i></summary>
-    <table class="data">
+    <table class="data" data-defs="eval-buckets">
       <thead><tr><th>Score bucket</th><th class="num">n</th><th class="num">Mean excess</th>
         <th class="num">Hit rate</th><th class="num">95% interval</th></tr></thead>
       <tbody>${(h.buckets || []).filter((b) => b.n).map((b) => `<tr>
@@ -17820,7 +17995,7 @@ function renderEvaluation(e) {
     <div class="callout ${(e.comparison || []).some((c) => c.beats_single_factor) ? '' : 'warn'}">
       <strong>Result.</strong> ${esc(e.verdict || '')}</div>
 
-    <table class="data" style="margin-top:var(--space-3)">
+    <table class="data" data-defs="eval-ic" style="margin-top:var(--space-3)">
       <thead><tr><th>Horizon</th><th class="num">Composite</th><th class="num">Random</th>
         <th class="num">3-month return alone</th><th>vs single factor</th></tr></thead>
       <tbody>${rows}</tbody>
@@ -18363,7 +18538,7 @@ function renderRotation(r) {
       A sector sitting near a line can cross back next week without anything having changed.
     </div>` : ''}
 
-    <table class="data" style="margin-top:var(--space-3)">
+    <table class="data" data-defs="rotation" style="margin-top:var(--space-3)">
       <thead><tr><th>Sector</th><th>Quadrant</th><th>Strength</th><th>Momentum</th>
         <th>Δ strength</th><th>Δ momentum</th><th>Moved from</th></tr></thead>
       <tbody>${rows}</tbody>
@@ -25021,7 +25196,7 @@ function sectorHeatHTML(s) {
     ? `${by3m[0].name} leads ${s.benchmark || 'SPY'} over three months; ${by3m[by3m.length - 1].name} trails it` : '';
   return `<div class="viz">
     ${title ? `<p class="viz-title">${esc(title)}</p>` : ''}
-    <p class="viz-sub">Each sector's return minus ${esc(s.benchmark || 'SPY')}'s, in percentage points. Green ahead, red behind; the deeper the colour, the larger within that column.</p>
+    <p class="viz-sub">The change in each sector's price relative to ${esc(s.benchmark || 'SPY')}'s (the ratio of the two), in percent. Green ahead, red behind; the deeper the colour, the larger within that column.</p>
     <div class="table-scroll"><table class="data heat">
       <thead><tr><th>Sector</th>${cols.map(([, name]) => `<th>${esc(name)}</th>`).join('')}</tr></thead>
       <tbody>${rows.map((r) => `<tr><td class="name">${esc(r.name)} <span class="muted">${esc(r.symbol)}</span></td>${cols.map(([k]) => {
@@ -25268,7 +25443,7 @@ function renderMarket(d) {
       <h2>${hg('Sector relative strength')}</h2>
       <p class="sub">Ranked on the ratio line against ${esc(s.benchmark || 'SPY')}. Leadership, not beta. Composite blends 1-week to 6-month relative strength with trend confirmation.</p>
       ${sectorHeatHTML(s)}
-      ${exactFigures(`<table class="data">
+      ${exactFigures(`<table class="data" data-defs="sector-rs">
         <thead><tr><th>#</th><th>Sector</th><th>Composite</th><th></th><th>RS 1w</th><th>RS 1m</th><th>RS 3m</th><th>RS 6m</th><th>RSI</th><th>vs 50d</th><th>vs 200d</th><th>Strength</th></tr></thead>
         <tbody>${(s.sectors || []).map((r) => `<tr>
           <td>${r.rank}</td>
@@ -25292,7 +25467,7 @@ function renderMarket(d) {
     <div class="panel">
       <h2>${hg('Themes & sub-industries')}</h2>
       <p class="sub">Same ranking method applied to narrower baskets, where rotation shows up first.</p>
-      <table class="data">
+      <table class="data" data-defs="sector-rs">
         <thead><tr><th>#</th><th>Theme</th><th>Composite</th><th>RS 1m</th><th>RS 3m</th><th>RSI</th><th>Breakout</th></tr></thead>
         <tbody>${(s.themes || []).map((r) => `<tr>
           <td>${r.rank}</td>
@@ -25325,7 +25500,7 @@ function renderMarket(d) {
       <p class="sub">One level narrower than the themes above. Single sub-industries and thematic baskets
         (memory chips, uranium, cybersecurity, rare earths...) that rotation often reaches before it shows
         up in the broader sector or theme ETFs.</p>
-      <table class="data">
+      <table class="data" data-defs="sector-rs">
         <thead><tr><th>#</th><th>Niche</th><th>Composite</th><th>RS 1m</th><th>RS 3m</th><th>RSI</th><th>Breakout</th></tr></thead>
         <tbody>${(s.niche || []).map((r) => `<tr>
           <td>${r.rank}</td>
@@ -25343,7 +25518,7 @@ function renderMarket(d) {
   <div class="panel">
     <h2>${hg('Ratio pair trades')}</h2>
     <p class="sub">Each row is one ratio line. A z-score beyond ±2 is a mean-reversion setup; a trending ratio above its 50-day is a momentum setup. Sorted by how stretched they are.</p>
-    <table class="data">
+    <table class="data" data-defs="pairs">
       <thead><tr><th>Pair</th><th>Thesis</th><th>Ratio</th><th>z (60d)</th><th>5d</th><th>20d</th><th>60d</th><th>Setup</th></tr></thead>
       <tbody>${(s.pairs || []).map((p) => `<tr>
         <td class="name"><strong>${esc(p.pair)}</strong></td>
@@ -26994,7 +27169,7 @@ function renderRoth(d) {
     <h2>${hg('Drift from target')}</h2>
     <p class="sub">Portfolio value ${money(dr.total_value)}. ${gloss(dr.summary || '')}</p>
     ${dr.unmapped_note ? `<div class="callout">${gloss(dr.unmapped_note)}</div>` : ''}
-    <table class="data">
+    <table class="data" data-defs="roth-drift">
       <thead><tr><th>Exposure</th><th>You hold</th><th>Current</th><th>Target</th><th>Drift</th><th></th></tr></thead>
       <tbody>${(dr.rows || []).map((r) => `<tr>
         <td class="name">${esc(r.label)}</td>
@@ -27013,7 +27188,7 @@ function renderRoth(d) {
     <h2>${hg('Where to put this year\'s contribution')}</h2>
     ${rb.available ? `
       <p class="sub">${gloss(rb.note || '')}</p>
-      ${(rb.rows || []).length ? `<table class="data">
+      ${(rb.rows || []).length ? `<table class="data" data-defs="roth-buys">
         <thead><tr><th>Buy</th><th>Exposure</th><th>Amount</th><th>Share of contribution</th><th></th></tr></thead>
         <tbody>${rb.rows.map((r) => `<tr>
           <td class="name"><strong>${esc(r.symbol || '—')}</strong></td>
@@ -27042,7 +27217,7 @@ function renderRoth(d) {
   <div class="panel span2 gap">
     <h2>${hg('Individual stock sleeve')}</h2>
     <p class="sub">${gloss(sl.note || '')}</p>
-    ${(sl.rows || []).length ? `<table class="data">
+    ${(sl.rows || []).length ? `<table class="data" data-defs="roth-sleeve">
       <thead><tr><th>Stock</th><th>Conviction</th><th>Score</th><th>10y CAGR</th><th>Worst drawdown</th><th>History</th><th>Suggested</th></tr></thead>
       <tbody>${sl.rows.map((r) => `<tr${r.eligible ? '' : ' style="opacity:0.62"'}>
         <td class="name"><strong>${esc(r.symbol)}</strong><div class="subnote">${esc(r.name || '')}</div></td>
@@ -27072,7 +27247,7 @@ function renderRoth(d) {
   <div class="panel span2 gap">
     <h2>${hg('Fund universe')}</h2>
     <p class="sub">Every candidate measured over its full available history. Highlighted rows are in the model above.</p>
-    <table class="data">
+    <table class="data" data-defs="roth-funds">
       <thead><tr><th>Fund</th><th>In model</th><th>Expense</th><th>CAGR (full)</th><th>5y CAGR</th><th>Volatility</th><th>Return / vol</th><th>Worst drawdown</th><th>History</th></tr></thead>
       <tbody>${fundRows}</tbody>
     </table>
@@ -29113,7 +29288,7 @@ function renderTracker(d) {
 
     ${months.length > 1 ? `
       <h3 style="margin-top:var(--space-4)">${hg('Consistency')}</h3>
-      <table class="data">
+      <table class="data" data-defs="tracker-months">
         <thead><tr><th>Month</th><th>Opened</th><th>Closed</th><th>Realised</th><th>Return</th>
           <th>Win rate</th><th>Expectancy</th><th>Profit factor</th><th>Equity after</th></tr></thead>
         <tbody>${monthRows}</tbody>
@@ -29255,7 +29430,7 @@ function renderIndices(d) {
   <div class="panel span2 gap">
     <h2>${hg('Index regime')}</h2>
     <p class="sub">${gloss(idx.regime_summary || '')}</p>
-    <table class="data">
+    <table class="data" data-defs="indices">
       <thead><tr><th>Index</th><th>Last</th><th>1y</th><th>3y CAGR</th><th>5y CAGR</th><th>10y CAGR</th><th>vs 40w</th><th>vs 200w</th><th>Wk RSI</th><th>Drawdown</th><th>Phase</th></tr></thead>
       <tbody>${(idx.indices || []).map((r) => `<tr>
         <td class="name">${esc(r.name)}<div class="subnote">${esc(r.note || '')}</div></td>
@@ -29659,7 +29834,7 @@ function renderLong(d) {
       <p class="sub">Every factor the model checked and what each one contributed. Mostly price
         behaviour. The valuation and income factors can add at most 13 of the
         ${fmt((h.conviction_scale || {}).max_possible, 0)} available points.</p>
-      <table class="data">
+      <table class="data" data-defs="long-factors">
         <thead><tr><th>Factor</th><th>Type</th><th>Points</th><th>Why</th></tr></thead>
         <tbody>${(h.conviction_factors || []).map((f) => `<tr>
           <td class="name">${esc(cap(f.label))}</td>
@@ -32544,7 +32719,7 @@ function renderPaperView() {
     <div class="panel">
       <h2>${hg('Open')}${open.length ? `<span class="th-plain"> · ${
   fmt(open.length, 0)}</span>` : ''}</h2>
-      ${open.length ? `<div class="table-scroll"><table class="data">
+      ${open.length ? `<div class="table-scroll"><table class="data" data-defs="paper">
         <thead><tr><th>Position</th><th class="num">Entry</th><th class="num">Mark</th>
           <th>Marked from</th><th class="num">P&amp;L</th>
           <th class="num" title="Profit in multiples of what the stop said the trade would lose">R</th>
@@ -32560,7 +32735,7 @@ function renderPaperView() {
     ${paperStatsHTML()}
     ${paperBook.closed.length ? `<div class="panel">
       <h2>${hg('Closed')}</h2>
-      <div class="table-scroll"><table class="data">
+      <div class="table-scroll"><table class="data" data-defs="paper">
         <thead><tr><th>Position</th><th class="num">Entry</th><th class="num">Exit</th>
           <th class="num">P&amp;L</th><th class="num">R</th>
           <th>Optic then</th><th>Closed</th></tr></thead>
