@@ -34230,9 +34230,17 @@ async function loadAnalysts(force) {
   revealPanels(host);
 }
 
-/* A target, or the word for none: an initiation has no prior one. */
-function analystTarget(v) {
-  return v === null || v === undefined ? '<span class="muted">None</span>' : fmt(v, 2);
+/* A target, or the reason there is none.
+ *
+ * Both blanks printed "None", which in a column of prices reads as a null
+ * leaking from the server, and it was two different facts: an initiation
+ * has no earlier target to show, and some firms publish a rating with no
+ * target at all (21 of the 200 newest rows). */
+function analystTarget(v, why) {
+  if (v !== null && v !== undefined) return fmt(v, 2);
+  return why === 'new'
+    ? '<span class="muted" title="New coverage: there was no earlier target">New</span>'
+    : '<span class="muted" title="The firm published no price target">Not given</span>';
 }
 
 /* One action. The rating is the firm's own word, coloured by its class; the
@@ -34247,8 +34255,12 @@ function analystRowHTML(r, opts = {}) {
     ${opts.symbol === false ? '' : `<td><button type="button" class="tkr"
       data-analyse="${esc(r.ticker)}">${esc(r.ticker)}</button></td>`}
     <td class="name">${esc(r.firm)}</td>
-    <td class="num">${analystTarget(r.prior_target)}</td>
-    <td class="num ${moved}">${analystTarget(r.target)}</td>
+    <td class="num">${analystTarget(r.prior_target, r.action === 'init' ? 'new' : '')}</td>
+    ${/* The move in a glyph as well as a colour, so a raise and a cut read
+         apart without the colour; the Action column is the rating's. */''}
+    <td class="num ${moved}">${analystTarget(r.target)}${moved
+    ? `<span class="an-move" aria-label="${moved === 'up' ? 'raised' : 'lowered'}"> ${
+      moved === 'up' ? '\u2191' : '\u2193'}</span>` : ''}</td>
     <td><span class="an-action ${tone}">${esc(r.action_label)}</span></td>
     <td><span class="an-rating ${cls}"${changed ? ` title="${esc(`From ${r.prior_rating}`)}"` : ''}>${
   esc(r.rating || '')}</span></td>

@@ -253,7 +253,9 @@ def test_the_page_shows_each_action_like_the_reference():
                                               "Target", "Action", "Rating")]
     assert order == sorted(order)
     assert 'class="tkr"\n      data-analyse="INTC">INTC</button>' in html
-    assert '<td class="num up">45.00</td>' in html and '<td class="num">30.00</td>' in html
+    # The raise in a glyph as well as the colour, so it does not rest on colour.
+    assert '<td class="num up">45.00<span class="an-move" aria-label="raised">' in html
+    assert '<td class="num">30.00</td>' in html
     assert '<span class="an-action up">Upgrade</span>' in html
     assert 'title="From Sell">Neutral</span>' in html
     assert "1 action in the last 7 days, across 400 names" in html
@@ -336,3 +338,17 @@ def test_the_search_reads_one_name_directly_and_clears_back_to_the_feed():
     assert "if (!ANALYST_DAYS.includes(analystQuery.days)) analystQuery.days = 30;" in clear
     submit = APP[APP.index("const form = evt.target.closest && evt.target.closest('[data-an-search]');"):][:400]
     assert "analystQuery.ticker = String((box && box.value) || '').trim().toUpperCase()" in submit
+
+
+
+def test_a_missing_target_says_which_kind_of_missing():
+    """Both blanks printed "None", which in a column of prices reads as a null
+    leaking from the server, and it was two facts: an initiation has no prior
+    target, and some firms publish a rating with no target (21 of 200 rows)."""
+    out = _jsc("print('RESULT:' + JSON.stringify(["
+               "analystTarget(null, 'new'), analystTarget(null), analystTarget(12.5)]));")
+    new, absent, shown = out
+    assert ">New<" in new and "no earlier target" in new
+    assert ">Not given<" in absent
+    assert shown == "12.50"
+    assert "None" not in new + absent
