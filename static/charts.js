@@ -2926,6 +2926,66 @@ function eventTimeline(opts) {
   return root;
 }
 
+/**
+ * Yardsticks on one price axis: each row a range from its low to its high with
+ * its middle ticked, and the price drawn as one line through every row, so
+ * where the price sits against each reads down the column. A valuation's
+ * "football field", for a handful of rows; figures at both ends of each.
+ *
+ * rows: [{label, low, high, mid, color, detail}]
+ */
+function fieldChart(opts) {
+  const { rows = [], price, width = 640, rowHeight = 34, labelWidth = 120, format = (v) => fmt(v, 2),
+    ariaLabel = '', priceLabel = 'Price' } = opts;
+  const usable = rows.filter((r) => Number.isFinite(r.low) && Number.isFinite(r.high) && r.high > r.low);
+  if (!usable.length || !Number.isFinite(price)) return null;
+  const W = width;
+  // Row names above their bars on a phone, beside them otherwise.
+  const stacked = W < 460;
+  const head = stacked ? 14 : 0;
+  const m = { t: 22, r: 14, b: 6, l: stacked ? 10 : labelWidth };
+  const H = m.t + usable.length * (rowHeight + head) + m.b;
+  const vals = usable.flatMap((r) => [r.low, r.high]).concat(price);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  // Room at both ends for the figures printed outside each bar.
+  const pad = (hi - lo) * (stacked ? 0.16 : 0.1) || Math.abs(hi) * 0.05 || 1;
+  lo -= pad; hi += pad;
+  const X = (v) => m.l + ((v - lo) / (hi - lo)) * (W - m.l - m.r);
+  const root = svgRoot(W, H);
+  root.setAttribute('aria-label', ariaLabel);
+  const where = (r) => (price < r.low ? 'below it' : price > r.high ? 'above it' : 'inside it');
+  usable.forEach((r, i) => {
+    const top = m.t + i * (rowHeight + head);
+    const y = top + head + rowHeight / 2;
+    const color = r.color || C.brand;
+    if (stacked) {
+      root.appendChild(s('text', { x: m.l, y: top + 11, fill: C.ink2, 'font-size': CF.micro, 'font-weight': CW.label }, r.label));
+    } else {
+      root.appendChild(s('text', { x: m.l - 10, y: y + 4, fill: C.ink2, 'font-size': CF.tick, 'text-anchor': 'end' }, r.label));
+    }
+    const g = s('g', {});
+    const x1 = X(r.low), x2 = X(r.high);
+    g.appendChild(s('rect', { x: x1, y: y - 7, width: Math.max(2, x2 - x1), height: 14, rx: 4, fill: color, opacity: 0.4 }));
+    if (Number.isFinite(r.mid)) {
+      g.appendChild(s('line', { x1: X(r.mid), x2: X(r.mid), y1: y - 9, y2: y + 9, stroke: color, 'stroke-width': 2.5 }));
+    }
+    const num = { y: y + 4, fill: C.muted, 'font-size': CF.micro, 'font-variant-numeric': 'tabular-nums' };
+    g.appendChild(s('text', { ...num, x: x1 - 4, 'text-anchor': 'end' }, format(r.low)));
+    g.appendChild(s('text', { ...num, x: x2 + 4 }, format(r.high)));
+    g.appendChild(s('rect', { x: m.l, y: y - rowHeight / 2, width: W - m.l - m.r, height: rowHeight, fill: 'transparent' }));
+    const say = `${format(r.low)} to ${format(r.high)}${Number.isFinite(r.mid) ? `, middle ${format(r.mid)}` : ''}; the price is ${where(r)}`;
+    focusMark(g, tipRows(escapeText(r.label), r.detail || [['Range', say]]), `${r.label}: ${say}`);
+    root.appendChild(g);
+  });
+  const px = X(price);
+  root.appendChild(s('line', { x1: px, x2: px, y1: m.t - 5, y2: H - m.b, stroke: C.ink, 'stroke-width': 1.5 }));
+  const tag = `${priceLabel} ${format(price)}`;
+  const half = textWidthGuess(tag, CF.micro) / 2;
+  root.appendChild(s('text', { x: Math.max(m.l + half, Math.min(W - m.r - half, px)), y: m.t - 9, 'text-anchor': 'middle',
+    fill: C.ink, 'font-size': CF.micro, 'font-weight': CW.label }, tag));
+  return root;
+}
+
 /** Sparkline: one series, no legend, no axis — the number beside it carries the value. */
 function sparkline(values, width = 96, height = 26, color = C.brand) {
   const clean = (values || []).filter((v) => v !== null && isFinite(v));

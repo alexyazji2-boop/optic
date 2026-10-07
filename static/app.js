@@ -815,6 +815,7 @@ const HEADER_DEFS = {
   'recent sec filings': "The company's latest filings with the US Securities and Exchange Commission: annual reports (10-K), quarterly reports (10-Q) and notices of material events (8-K), among others. They are the primary source most of the figures elsewhere are drawn from.",
   'insiders': "Who is trading what and who the government is paying, from three public filing regimes: company insiders' Form 4s, members of the House under the STOCK Act, and federal contract awards. Each is published after a delay, and nothing here is ranked by how profitable it looked.",
   'earnings this week': 'Which names on the watchlist report between Monday and Friday of this week, grouped by day. It scans a fixed list of widely followed names, not the whole market, because free data gives one earnings date per symbol at a time.',
+  'where the price sits': "Today's price against three yardsticks on one axis: the range the company's own price-to-earnings history implies, the analysts' price targets, and its trading range over the past year. Each shows a range rather than a single figure, because none of them is precise.",
   'the past year': "The stock's daily closing price over the last twelve months, with its earnings reports, ex-dividend dates and splits marked on it. It shows how the price moved and what it did around each event.",
   'how they have moved': "Each compared name's price over the past year, rebased so that all of them start at 100 on the same day. A line ending at 130 has risen 30 percent over the period, so the ends can be compared directly.",
   'economic data': "Official US economic series from the Federal Reserve's FRED database, such as inflation, jobs, spending and output, shown in the form each is usually read in. Their releases are among the main scheduled movers of rates and stocks.",
@@ -17587,11 +17588,6 @@ async function loadGlobal() {
  * app/analytics/fair_value.py says how each is worked out; each panel says it
  * again in the reader's words, and what it cannot tell them. */
 
-/** Where a value falls along a bar, as a percentage. */
-function fvPct(v, lo, hi) {
-  return Math.max(0, Math.min(100, ((v - lo) / (hi - lo)) * 100));
-}
-
 function renderFairValueBlock(f) {
   if (!f) return '';
   if (!f.available) {
@@ -17599,10 +17595,6 @@ function renderFairValueBlock(f) {
       <h2>${hg('Fair value')}${askPulse('fairvalue')}</h2>
       <p class="sub">${esc(f.reason || 'Unavailable.')}</p></div>`;
   }
-  // The axis runs a little past whichever of the range and the price is
-  // further out, so the marker is never on the edge.
-  const axLo = Math.min(f.low, f.price) * 0.96;
-  const axHi = Math.max(f.high, f.price) * 1.04;
   const above = f.gap_to_mid_pct > 0;
   const tone = f.wide ? '' : (above ? 'down' : 'up');
   const verdict = f.wide ? 'Too wide to call'
@@ -17619,14 +17611,6 @@ function renderFairValueBlock(f) {
       ${tile('Price now', usd(f.price), `${fmt(f.multiples.now, 1)}\u00d7 today`)}
       ${tile(verdict, fmtPct(f.gap_to_mid_pct, 1), 'price against the middle', tone)}
     </div>
-    <div class="fv-bar" aria-hidden="true">
-      <span class="fv-band" style="left:${fvPct(f.low, axLo, axHi).toFixed(1)}%;width:${
-  (fvPct(f.high, axLo, axHi) - fvPct(f.low, axLo, axHi)).toFixed(1)}%"></span>
-      <span class="fv-mid" style="left:${fvPct(f.mid, axLo, axHi).toFixed(1)}%"></span>
-      <span class="fv-now ${tone}" style="left:${fvPct(f.price, axLo, axHi).toFixed(1)}%"></span>
-    </div>
-    <div class="fv-key"><span>${usd(f.low, 0)}</span><span>middle ${usd(f.mid, 0)}</span>
-      <span>${usd(f.high, 0)}</span></div>
     ${f.wide ? `<div class="callout">${esc(f.wide_note)}</div>` : ''}
     <p class="caveat">${esc(f.basis)}</p>
     <ul class="reasons">${(f.limits || []).map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
@@ -17720,12 +17704,80 @@ function renderStarBlock(r) {
   </div>`;
 }
 
+/* The yardsticks on one axis, with the price through them. Asked for as
+ * "Investing-tab valuation-range visuals". The fair value range was a bar of
+ * its own, with no figures a screen reader could reach, and the analysts'
+ * targets were two numbers in a tile beside it: the one question both answer,
+ * where the price sits against each, needed them side by side. The 52-week
+ * range is the third row because it is the price's own yardstick. */
+function yardstickRows(d) {
+  const f = (d || {}).fair_value || {};
+  const a = (d || {}).analysts || {};
+  const q = facetQuote(STATE.ticker || '');
+  const rows = [];
+  if (f.available && !f.wide) {
+    rows.push({ key: 'fv', label: 'Fair value', low: f.low, high: f.high, mid: f.mid, color: C.brand,
+      detail: [['Range', `${usd(f.low, 0)} to ${usd(f.high, 0)}`],
+        ['Middle', `${usd(f.mid, 0)}, at ${fmt((f.multiples || {}).mid, 1)}\u00d7 its own median P/E`],
+        ['From', 'its own five-year P/E quartiles times trailing earnings']] });
+  }
+  if (a.available && Number.isFinite(a.target_low) && Number.isFinite(a.target_high)) {
+    rows.push({ key: 'an', label: 'Analyst targets', low: a.target_low, high: a.target_high, mid: a.target_mean, color: C.s7,
+      detail: [['Range', `${usd(a.target_low, 0)} to ${usd(a.target_high, 0)}`], ['Mean', usd(a.target_mean, 0)],
+        ['Analysts', fmt(a.analyst_count || 0, 0)]] });
+  }
+  if (Number.isFinite(q.fifty_two_low) && Number.isFinite(q.fifty_two_high)) {
+    rows.push({ key: 'yr', label: '52-week range', low: q.fifty_two_low, high: q.fifty_two_high, color: C.ink2,
+      detail: [['Lowest trade', usd(q.fifty_two_low, 2)], ['Highest trade', usd(q.fifty_two_high, 2)]] });
+  }
+  return rows;
+}
+
+function yardstickPrice(d) {
+  const f = (d || {}).fair_value || {};
+  if (f.available && Number.isFinite(f.price)) return f.price;
+  return facetQuote(STATE.ticker || '').price;
+}
+
+function yardsticksTitle(rows, price) {
+  const pos = (r) => (price < r.low ? 'below' : price > r.high ? 'above' : 'inside');
+  const fv = rows.find((r) => r.key === 'fv');
+  const an = rows.find((r) => r.key === 'an');
+  if (fv && an && pos(fv) === pos(an)) {
+    return `At ${usd(price)}, the price is ${pos(fv)} both its fair value range and the analysts' targets`;
+  }
+  const parts = [fv ? `${pos(fv)} its fair value range` : '', an ? `${pos(an)} the analysts' targets` : ''].filter(Boolean);
+  return parts.length ? `At ${usd(price)}, the price is ${parts.join(' and ')}` : '';
+}
+
+function yardsticksHTML(d) {
+  const rows = yardstickRows(d);
+  const price = yardstickPrice(d);
+  if (rows.length < 2 || !Number.isFinite(price)) return '';
+  return `<div class="panel span-all">
+    <h2>${hg('Where the price sits')}</h2>
+    ${vizBlock('viz-inv-field', yardsticksTitle(rows, price),
+    `Each range from its low to its high, ticked at its middle, against today's price. Fair value is its own five-year P/E quartiles times trailing earnings, from SEC filings; the targets are the analysts' lowest, mean and highest, from Yahoo Finance; the 52-week range is the lowest and highest trade.${
+      ((d || {}).fair_value || {}).wide ? ' The fair value range is too wide to draw against a price, and is left out.' : ''}`)}
+  </div>`;
+}
+
+function mountYardsticks(d) {
+  const rows = yardstickRows(d);
+  const price = yardstickPrice(d);
+  if (rows.length < 2 || !Number.isFinite(price)) return;
+  vizMount('viz-inv-field', (w) => fieldChart({
+    width: w, rows, price, format: (v) => usd(v, 0),
+    ariaLabel: "Today's price against its fair value range, the analysts' targets and its 52-week range.",
+  }));
+}
+
 function renderFairValue(d) {
   if (!d) return '';
   const blocks = [renderMorningstarBlock(d.morningstar), renderFairValueBlock(d.fair_value),
     renderAnalystsBlock(d.analysts)].filter(Boolean);
   const stars = renderStarBlock(d.stars);
-  return `${stars}${blocks.length ? `<div class="grid c2 gap">${blocks.join('')}</div>` : ''}${
+  return `${stars}${yardsticksHTML(d)}${blocks.length ? `<div class="grid c2 gap">${blocks.join('')}</div>` : ''}${
     renderDividendBlock(d.dividend)}`;
 }
 
@@ -30316,7 +30368,7 @@ function renderLong(d) {
 
     ${renderRevenueMultiple((d.holding || {}).revenue_multiple)}
 
-    <div id="pe-host" class="span-all">${renderPeHistory(STATE.peHistory)}</div>
+    <div id="pe-host" class="span-all">${renderPeHistory(peHistoryForTicker())}</div>
 
     <div id="fv-host" class="span-all">${STATE.fairValueFor === STATE.ticker
     ? renderFairValue(STATE.fairValue) : ''}</div>
@@ -30391,8 +30443,9 @@ function renderLong(d) {
   ltChartCtx = { h, lt, ltLevels };
   ltPriceBlock(h, lt, ltLevels);
 
+  if (STATE.fairValueFor === STATE.ticker && STATE.fairValue) mountYardsticks(STATE.fairValue);
   if (dd.series) {
-    drawPeChart(STATE.peHistory);
+    drawPeChart(peHistoryForTicker());
     mount('chart-drawdown', (w) => lineChart({
       valueTags: true,
       width: w,
@@ -30528,16 +30581,28 @@ async function loadSeasonality(force, symbol) {
   }
 }
 
+/* The P/E history for the stock on screen, or none. It was drawn from
+ * whatever was in hand, so moving from one stock to another showed the first
+ * one's multiples under the second's name until the new request returned. */
+function peHistoryForTicker() {
+  return STATE.peHistoryFor === STATE.ticker ? STATE.peHistory : null;
+}
+
 async function loadPeHistory(force) {
   const sym = STATE.ticker;
   if (!sym) return;
   if (STATE.peHistoryFor === sym && !force) return;
   STATE.peHistoryFor = sym;
+  STATE.peHistory = null;
+  let data;
   try {
-    STATE.peHistory = await getJSON(`/api/pe-history/${encodeURIComponent(sym)}`);
+    data = await getJSON(`/api/pe-history/${encodeURIComponent(sym)}`);
   } catch (err) {
-    STATE.peHistory = { available: false, reason: err.message };
+    data = { available: false, reason: err.message };
   }
+  // A late answer for a stock no longer on screen is dropped.
+  if (STATE.peHistoryFor !== sym) return;
+  STATE.peHistory = data;
   const host = document.getElementById('pe-host');
   if (host && STATE.view === 'long') {
     host.innerHTML = renderPeHistory(STATE.peHistory);
@@ -30565,6 +30630,7 @@ async function loadFairValue(force) {
   if (host && STATE.view === 'long') {
     host.innerHTML = renderFairValue(data);
     revealPanels(host);
+    mountYardsticks(data);
   }
   // The Overview's Investing card takes the stars in place.
   const card = views.overview && views.overview.querySelector('.ov-card[data-sec-view="long"]');

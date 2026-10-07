@@ -185,9 +185,10 @@ def _run(script):
         return APP[at:APP.index("\n}\n", at) + 3]
 
     pieces = "\n".join(piece(h) for h in (
-        "function fvPct(", "function renderFairValueBlock(", "function renderAnalystsBlock(",
+        "function renderFairValueBlock(", "function renderAnalystsBlock(",
         "function renderDividendBlock(", "function renderMorningstarBlock(", "function starsText(",
-        "function renderStarBlock(", "function renderFairValue("))
+        "function renderStarBlock(", "function yardstickRows(", "function yardstickPrice(",
+        "function yardsticksTitle(", "function yardsticksHTML(", "function renderFairValue("))
     prelude = """
       function esc(v) { return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
       function cap(v) { return v.charAt(0).toUpperCase() + v.slice(1); }
@@ -198,6 +199,9 @@ def _run(script):
       function fmtPct(v, d) { return (v >= 0 ? '+' : '') + Number(v).toFixed(d) + '%'; }
       function signClass(v) { return v > 0 ? 'up' : v < 0 ? 'down' : 'flat'; }
       function tile(label, value, note, cls) { return '<tile ' + (cls || '') + '>' + label + '|' + value + '|' + (note || '') + '</tile>'; }
+      var STATE = { ticker: 'X' }, C = { brand: 'gold', s7: 'violet', ink2: 'grey' };
+      function facetQuote() { return {}; }
+      function vizBlock(id, title, sub) { return '<div id="' + id + '">' + title + '|' + sub + '</div>'; }
     """ + pieces
     out = subprocess.run([exe, "-e", prelude + script], capture_output=True, text=True, timeout=60, cwd=str(ROOT))
     assert "RESULT:" in out.stdout, (out.stdout + out.stderr)[-2000:]
@@ -215,7 +219,7 @@ def test_the_panels_show_the_range_the_verdict_and_what_it_cannot_do():
     for text in ("<tile >Fair value, middle|$272.62|31.3× its own median</tile>",
                  "Range|$243 to $304|27.9× to 34.9×", "Price now|$333.69|38.3× today",
                  "<tile down>Above its range|+22.4%|price against the middle</tile>",
-                 'class="fv-bar"', "A range to read the price against, not a target.",
+                 'id="viz-inv-field"', "A range to read the price against, not a target.",
                  "It assumes the next years look like the last ones",
                  "What analysts say", "<tile up>Mean target|$94.65|+10.5% from here</tile>",
                  "Buy / hold / sell|19 · 4 · 1|24 analysts", "Not an Optic pick",
@@ -233,7 +237,7 @@ def test_a_wide_range_has_numbers_and_a_note_but_no_verdict_and_nothing_empty_is
     shown, bare = out
     assert "<tile >Too wide to call|" in shown and "no verdict" in shown
     assert "What analysts say" not in shown and "Dividend score" not in shown
-    assert "No filing history." in bare and "fv-bar" not in bare
+    assert "No filing history." in bare and "viz-inv-field" not in bare
 
 
 def test_it_loads_under_the_multiple_history_and_drops_another_symbols_answer():

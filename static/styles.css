@@ -16119,21 +16119,8 @@ body.ws-max[data-view="chart"] main { padding: 0; }
 
 
 /* ---------------------------------------- fair value, analysts, dividend score
- * The range bar under the fair value tiles: the 25th to 75th percentile as a
- * band, the middle as a tick and today's price as a dot. Paint-level only. */
-.fv-bar { position: relative; height: 8px; margin: var(--space-4) var(--space-2) var(--space-1);
-  border-radius: var(--r-pill); background: var(--surface-2); border: 1px solid var(--border); }
-.fv-band { position: absolute; top: 0; bottom: 0; border-radius: var(--r-pill);
-  background: color-mix(in srgb, var(--s1) 38%, transparent); }
-.fv-mid { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink-muted);
-  transform: translateX(-1px); }
-.fv-now { position: absolute; top: 50%; width: 12px; height: 12px; border-radius: var(--r-pill);
-  background: var(--ink); border: 2px solid var(--surface); transform: translate(-50%, -50%); }
-.fv-now.up { background: var(--pos); }
-.fv-now.down { background: var(--neg); }
-.fv-key { display: flex; justify-content: space-between; color: var(--ink-muted);
-  font-size: var(--t-caption); margin: 0 var(--space-2) var(--space-3);
-  font-variant-numeric: tabular-nums; }
+ * The range is drawn on the shared axis of "Where the price sits" now
+ * (fieldChart), so the bar of its own and its key are gone. */
 /* Buys, holds and sells as one bar of the analysts who rate it. */
 .fv-split { display: flex; height: 8px; margin-top: var(--space-4); border-radius: var(--r-pill);
   overflow: hidden; background: var(--surface-2); }
