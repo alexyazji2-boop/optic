@@ -14225,7 +14225,7 @@ function mountFinancialsVisuals(co) {
     vizMount('viz-fin-owners', (w) => (whole ? shareBars({
       width: w, labelWidth: 8, ariaLabel: ownersTitle(ow), countLabel: (n) => fmt(n, 1) + '%', showTotal: false,
       // A translucent neutral: present as the rest of the whole, quieter than either holder.
-      segments: [{ key: 'inst', name: 'Institutions', color: C.s1 }, { key: 'ins', name: 'Insiders', color: C.brand },
+      segments: [{ key: 'inst', name: 'Institutions', color: C.s7 }, { key: 'ins', name: 'Insiders', color: C.brand },
         { key: 'rest', name: 'Everyone else', color: `${C.muted}55` }],
       rows: [{ label: '', values: { inst: inst * 100, ins: (ins || 0) * 100, rest: Math.max(0, 100 - inst * 100 - (ins || 0) * 100) } }],
     }) : null), Number.isFinite(inst) ? 'The source\'s institutional and insider figures overlap for this company, so they are not drawn as parts of one whole.'
