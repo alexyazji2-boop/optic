@@ -34195,7 +34195,11 @@ async function loadReports(force, opts = {}) {
     host.innerHTML = reportsForOwnerHTML();
     return;
   }
-  if (!force && STATE.reportsLoaded) return;
+  /* Drawn once, the list was never asked for again: a report filed after the
+   * first visit, by a reader or by the owner from the button on this very
+   * page, stayed out of it until a reload, under "No problem reports yet".
+   * A visit keeps the list it has on screen and refreshes it in place. */
+  if (!force && STATE.reportsLoaded) opts = { ...opts, inPlace: true };
   // In place, a tab change or a resolve keeps the page it already drew.
   if (!opts.inPlace || !host.querySelector('#rp-tabpanel')) {
     host.innerHTML = `<div class="panel" data-fixed="1"><h2>Problem Reports</h2>

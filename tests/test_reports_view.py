@@ -108,7 +108,7 @@ def test_the_page_is_drawn_for_the_signed_in_owner_only():
     fn = _code(APP[APP.index("async function loadReports("):])
     fn = fn[:fn.index("\n}")]
     guard = fn.index("if (!isOwner()) {")
-    assert guard < fn.index("if (!force && STATE.reportsLoaded) return;")
+    assert guard < fn.index("if (!force && STATE.reportsLoaded) opts = { ...opts, inPlace: true };")
     assert "host.innerHTML = reportsForOwnerHTML();" in fn[guard:guard + 200]
     assert guard < fn.index("fetchReports(")
     msg = _code(APP[APP.index("function reportsForOwnerHTML("):])
@@ -204,3 +204,15 @@ def test_the_list_says_when_it_is_showing_a_page_of_a_longer_record():
     fn = fn[:fn.index("\n}\n")]
     assert "data.total" in fn
     assert "Showing the newest" in fn
+
+
+
+def test_a_visit_refreshes_the_list_it_already_drew():
+    """Drawn once, the list was never fetched again: a report filed after the
+    first visit stayed out of it until a reload, under "No problem reports
+    yet". A visit keeps the list on screen and refreshes it in place."""
+    fn = _code(APP[APP.index("async function loadReports("):])
+    fn = fn[:fn.index("\n}")]
+    assert "if (!force && STATE.reportsLoaded) return;" not in fn
+    cached = fn.index("if (!force && STATE.reportsLoaded) opts = { ...opts, inPlace: true };")
+    assert cached < fn.index("fetchReports(")
