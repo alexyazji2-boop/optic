@@ -3865,10 +3865,14 @@ function columnChart(opts) {
   const pts = items.filter((it) => Number.isFinite(it.value));
   if (pts.length < 2) return null;
   const W = width;
-  const m = { t: 18, r: 6, b: 22, l: 6 };
-  const plotH = height - m.t - m.b;
   const lo = Math.min(0, ...pts.map((it) => it.value));
   const hi = Math.max(0, ...pts.map((it) => it.value));
+  /* A negative column's figure is printed under it, so when one reaches the
+   * floor the floor leaves a line for it above the period labels. They shared
+   * the 22px and were drawn over each other: COIN's Financials printed a net
+   * loss across its own year. */
+  const m = { t: 18, r: 6, b: lo < 0 ? 36 : 22, l: 6 };
+  const plotH = height - m.t - m.b;
   const Y = (v) => m.t + plotH - ((v - lo) / (hi - lo || 1)) * plotH;
   const band = (W - m.l - m.r) / pts.length;
   const barW = Math.min(34, band * 0.62);

@@ -168,3 +168,30 @@ def test_a_long_row_label_has_room():
       R.x = Number(label.attrs.x);
     """)
     assert out["x"] == 132
+
+
+# ------------------------------------------------------------ a loss under its year
+
+def test_a_negative_columns_figure_clears_the_year_under_it():
+    """COIN's four-year Financials printed "-$2.6B" over "2022": a negative
+    column's figure sits under the column, and the floor gave it the same 22px
+    the period labels use. Checked in a browser at 1440x900 on COIN: no text
+    box in any of the four charts meets another."""
+    out = _jsc("""
+      function rows(items) {
+        var root = columnChart({ width: 320, height: 140, format: function (v) { return v + 'B'; }, items: items });
+        return all(root, function (n) { return n.tag === 'text'; })
+          .map(function (n) { return [n.textContent || (n.children || []).map(function (c) { return c.textContent || ''; }).join(''), Number(n.attrs.y)]; });
+      }
+      R.loss = rows([{ label: '2022', value: -2.6 }, { label: '2023', value: 0.1 },
+                     { label: '2024', value: 2.6 }, { label: '2025', value: 1.3 }]);
+      R.gain = rows([{ label: '2022', value: 3.2 }, { label: '2023', value: 3.1 },
+                     { label: '2024', value: 6.6 }, { label: '2025', value: 7.2 }]);
+    """)
+    def y_of(rows, s):
+        return next(y for t, y in rows if s in t)
+    loss = out["loss"]
+    # Baselines 12px apart at the micro size: the figure's descender above the year's cap height.
+    assert y_of(loss, "2022") - y_of(loss, "-2.6B") >= 12, loss
+    gain = out["gain"]
+    assert y_of(gain, "2022") == 134, "a chart with no loss keeps its floor"
