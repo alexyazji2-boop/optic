@@ -153,7 +153,7 @@ def test_the_chart_is_actually_handed_them():
     """A toggle switched on and never passed to lineChart is the insider-marker
     bug: the checkbox changes and nothing else does."""
     fn = _fn("wsMountChart")
-    assert "showAccum ? accumLines(STATE.accumZones) : []" in fn
+    assert "showAccum ? accumLines(STATE.accumZonesFor === (d.ticker || STATE.chartSymbol) ? STATE.accumZones : null) : []" in fn
 
 
 def test_they_are_drawn_on_every_bar_size_and_clipped_to_the_plot():
@@ -164,7 +164,7 @@ def test_they_are_drawn_on_every_bar_size_and_clipped_to_the_plot():
     fn = _fn("wsMountChart")
     refs = fn[fn.index("refLines: ["):]
     refs = refs[:refs.index("\n      ],")]
-    assert "...(showAccum ? accumLines(STATE.accumZones) : [])," in refs
+    assert "...(showAccum ? accumLines(STATE.accumZonesFor === (d.ticker || STATE.chartSymbol) ? STATE.accumZones : null) : [])," in refs
     assert "refLineFit: 'clip'," in fn
 
 

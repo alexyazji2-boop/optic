@@ -339,3 +339,163 @@ def test_the_sector_table_lost_its_decoration_and_pairs_do_not_call_a_reversal()
     assert "<th>Composite</th><th></th>" not in body and "data-bar=\"${r.composite}\"" not in body
     assert "'z-stretched'" in body and "signClass(-p.zscore_60d)" not in body
     assert "<th>90 sessions</th>" in body
+
+
+# ------------------------------------------------------------ Options, the Chart, the Dossier
+
+def test_a_strike_is_not_read_as_a_year():
+    """The gamma profile's spot prices went to new Date(): its axis read
+    "Jan, 1973 ... 1989" for an $80 stock. A strike is a category."""
+    out = _prim(SHIMS + """
+      R.num = parseBarDate('185'); R.date = !!parseBarDate('2026-10-07'); R.stamp = !!parseBarDate('2026-10-07T14:30:00');
+      var root = lineChart({ width: 500, height: 160, labels: ['80', '85', '90', '95', '100'],
+        series: [{ name: 'Net GEX', values: [-2, -1, 0, 1, 2], color: C.brand }] });
+      R.labels = texts(root);
+    """)
+    assert out["num"] is None and out["date"] and out["stamp"]
+    assert "80" in out["labels"] and "90" in out["labels"] and "100" in out["labels"]
+    assert not any(l.startswith(("Jan", "1973")) for l in out["labels"])
+
+
+def test_the_rsi_axis_reads_the_lines_it_draws_and_price_axes_carry_their_decimals():
+    out = _prim(SHIMS + """
+      var rsi = lineChart({ width: 400, height: 200, labels: ['a', 'b', 'c'], yDomain: [10, 90], yTicks: [30, 50, 70],
+        series: [{ name: 'RSI', values: [40, 55, 62], color: C.brand }], yFormat: function (v) { return String(Math.round(v)); } });
+      R.rsi = texts(rsi);
+      var steps = [];
+      lineChart({ width: 400, height: 300, labels: ['a', 'b', 'c', 'd'], series: [{ name: 'P', values: [3.1, 3.6, 4.4, 3.9], color: C.brand }],
+        yFormat: function (v, step) { steps.push(step); return v.toFixed(2); } });
+      R.steps = steps.filter(function (x) { return x !== undefined; });
+    """)
+    assert "30" in out["rsi"] and "70" in out["rsi"] and "25" not in out["rsi"] and "75" not in out["rsi"]
+    assert out["steps"] and all(abs(x - out["steps"][0]) < 1e-9 for x in out["steps"]), "the step goes to the formatter"
+    got = _app("R.a = priceAxisLabel(3.5, 0.5); R.b = priceAxisLabel(182, 5); R.c = priceAxisLabel(3.55, 0.05);")
+    assert got == {"a": "3.5", "b": "182", "c": "3.55"}
+
+
+def test_a_candles_prices_are_read_at_the_readouts_precision():
+    src = __import__("pathlib").Path(__file__).resolve().parent.parent.joinpath("static/charts.js").read_text()
+    assert "rows.push(['Open', (valueFormat || yFormat)(o)]);" in src
+
+
+def test_the_macd_pane_is_read_from_the_keyboard_and_takes_the_theme():
+    out = _prim(SHIMS + """
+      var root = macdChart([0.1, 0.3, -0.2], [0.05, 0.2, 0.0], [0.05, 0.1, -0.2], ['2026-10-01', '2026-10-02', '2026-10-05'], 500);
+      var slider = all(root, function (n) { return n.attrs && n.attrs.role === 'slider'; })[0];
+      slider.listeners.focus[0]();
+      R.text = slider.attrs['aria-valuetext'];
+      var before = C.s3; C.s3 = '#123456';
+      var again = macdChart([0.1, 0.3], [0.05, 0.2], [0.05, 0.1], ['2026-10-01', '2026-10-02'], 500);
+      R.fills = all(again, function (n) { return n.tag === 'rect' && n.attrs.fill === '#123456'; }).length;
+      C.s3 = before;
+    """)
+    assert out["text"].endswith("MACD -0.200, signal 0.000, histogram -0.200")
+    assert out["fills"] >= 1, "the histogram reads the theme when it is drawn"
+
+
+def test_the_options_charts_say_which_strikes_and_expiries_they_are_drawn_from():
+    out = _app("""
+      R.scope = chainScope({ expiries: { used: ['2026-10-16', '2026-10-23', '2026-11-20'] } });
+      R.one = chainScope({ expiries: { used: ['2026-10-16'] } });
+      R.none = chainScope({});
+      R.k = [strikeLabel(185), strikeLabel(182.5), strikeLabel(7.25)];
+    """)
+    assert out["scope"] == "3 expiries, Oct 16 to Nov 20" and out["one"] == "the Oct 16 expiry" and out["none"] == ""
+    assert out["k"] == ["$185", "$182.50", "$7.25"], "two half-dollar strikes no longer share a label"
+    swing = _src("function renderSwing(d) {")
+    assert "strikes with the most dealer" in swing and "strikes with the most premium traded" in swing
+    assert "No strike carries gamma in the expiries used." in swing
+    vis = _src("function mountOptionsVisuals(d) {")
+    assert "max: 100, format: (v) => fmt(v, 1) + '%', ariaLabel: expiryGammaTitle(gk)" in vis
+    assert "highlightLast: false" in vis and "unit: 'contracts'" in vis
+    assert "label: fmt(r.strike, 0)" not in swing + vis
+
+
+def test_the_price_charts_key_and_captions_say_what_is_drawn():
+    block = _src("function swingPriceBlock(d, ps, ctx) {")
+    assert "{ name: 'Fibonacci level', color: C.refFib }" in block
+    assert "{ name: 'Support band', color: C.pos, boxed: true }" in block
+    assert "name: 'Support / resistance'" not in block
+    swing = _src("function renderSwing(d) {")
+    assert "are left off rather than redrawn" not in swing and "is computed from these same bars" in swing
+
+
+def test_panels_draw_only_the_stock_on_screen():
+    swing = _src("function renderSwing(d) {")
+    assert "STATE.seasonalityFor === STATE.ticker ? STATE.seasonality : null" in swing
+    assert "STATE.relperfKey === STATE.ticker ? STATE.relperf : null" in swing
+    assert "mountRelPerfChart();" in swing, "the chart is drawn again on each render, which rebuilds its host"
+    for loader, guard in (("async function loadSeasonality(", "if (STATE.seasonalityFor !== sym) return;"),
+                          ("async function loadRelPerf(", "if (STATE.relperfKey !== sym) return;"),
+                          ("async function loadAccumZones(", "if (STATE.accumZonesFor !== sym) return;")):
+        assert guard in _src(loader), loader
+
+
+def test_seasonality_colours_only_what_clears_the_bar():
+    out = _app("R.sig = seasBar(0.4, 1, 'significant'); R.noise = seasBar(0.4, 1, 'noise');")
+    assert 'class="up"' in out["sig"] and 'class="faint"' in out["noise"]
+
+
+def test_the_revenue_and_multiple_panel_has_no_second_axis():
+    out = _app("""
+      R.html = renderRevenueMultiple({ available: true, revenue_cagr_pct: 9, method: 'm',
+        years: [{ label: '2024', revenue: 100e9, pe: 30 }, { label: '2025', revenue: 120e9, pe: 25 }] });
+    """)
+    html = out["html"]
+    assert "rm-chart" not in html and 'id="viz-rm-rev"' in html and 'id="viz-rm-pe"' in html
+    assert "multiple compressed from 30.0 to 25.0" in html and "Exact figures" in html
+    assert "renderRevenueMultiple(" in _src("function renderLong(d) {"), "the Investing tab still draws it"
+
+
+def test_redundant_charts_are_gone_and_the_rest_say_their_source():
+    assert "fv-split" not in _src("function renderAnalystsBlock(a) {")
+    company = _src("function renderCompany(co) {")
+    assert "vizBlock('viz-fin-insiders'" not in company
+    app = __import__("pathlib").Path(__file__).resolve().parent.parent.joinpath("static/app.js").read_text()
+    assert "vizMount('viz-fin-insiders'" not in app
+    out = _app("""
+      R.yahoo = priceSourceName({ data_source: 'yfinance' }); R.tradier = priceSourceName({ data_source: 'tradier' });
+    """)
+    assert out["yahoo"] == "Yahoo Finance" and out["tradier"].startswith("Tradier")
+    assert 'role="group" aria-label="${esc(row.symbol)} with the ${' in app
+
+
+def test_a_negative_dollar_figure_carries_its_sign_ahead_of_the_symbol():
+    """'$' + fmtCompact printed a net gamma of minus 25 million as "$-25.0M"."""
+    out = _prim("R.v = [usdCompact(-25e6), usdCompact(25e6), usdCompact(0), usdCompact(null), usdCompact(1.234e9, 2)];")
+    assert out["v"] == ["-$25.0M", "$25.0M", "$0", "\u2014", "$1.23B"]
+    # Where a figure can be negative. A trade's value cannot, and is left as it was.
+    for fn in ("function renderSwing(d) {", "function renderCompany(co) {", "function mountEarningsVisuals(d) {"):
+        assert "'$' + fmtCompact(" not in _src(fn), fn
+    earnings = _src("function renderEarnings(d) {")
+    assert "<td>${usdCompact(r.net_income)}</td>" in earnings and "$${fmtCompact(r.net_income)}" not in earnings
+    assert "usdCompact((gex.totals || {}).net_gex)" in _src("function renderSwing(d) {")
+
+
+def test_the_price_marker_on_a_bar_chart_has_a_row_of_its_own():
+    """"spot 16" printed across the "$16" strike label above it, and rounded a
+    $15.76 price to the strike it was drawn beside."""
+    out = _prim(SHIMS + """
+      var rows = [{ label: '$1,240', value: 4 }, { label: '$1,237.50', value: -2 }, { label: '$1,235', value: 1 }];
+      var root = divergingBars({ width: 600, rows: rows, markerRow: 1, markerLabel: 'price $1,238.12' });
+      var t = all(root, function (n) { return n.tag === 'text'; });
+      var y = function (label) { return Number(t.filter(function (n) { return n.textContent === label; })[0].attrs.y); };
+      var mark = t.filter(function (n) { return n.textContent === 'price $1,238.12'; })[0];
+      var line = all(root, function (n) { return n.tag === 'line' && n.attrs['stroke-dasharray'] === '4 3'; })[0];
+      R.gapAbove = Number(mark.attrs.y) - y('$1,240'); R.gapBelow = y('$1,237.50') - Number(mark.attrs.y);
+      R.anchor = mark.attrs['text-anchor']; R.markX = Number(mark.attrs.x);
+      R.lineEnd = Number(line.attrs.x2); R.labelLeft = 600 - 2 - textWidthGuess('price $1,238.12', CF.tick);
+      R.labelX = t.filter(function (n) { return n.textContent === '$1,237.50'; })[0].attrs.x;
+      R.labelRoom = textWidthGuess('$1,237.50', CF.tick);
+    """)
+    assert out["gapAbove"] >= 14 and out["gapBelow"] >= 14, "the marker's label clears the rows on both sides"
+    assert out["anchor"] == "end" and out["markX"] == 598 and out["lineEnd"] < out["labelLeft"]
+    assert float(out["labelX"]) - out["labelRoom"] >= 0, "the widest strike is not cut off at the left edge"
+    swing = _src("function renderSwing(d) {")
+    assert "markerLabel: `price ${usd(d.quote.price)}`" in swing and "spot ${fmt(d.quote.price, 0)}" not in swing
+
+
+def test_the_workspace_rsi_axis_reads_whole_numbers():
+    panes = _src("function wsMountPanes(ps) {")
+    rsi = panes[panes.index("mount('ws-pane-rsi'"):panes.index("if (wsPaneOpen('macd')")]
+    assert "yTicks: [30, 50, 70]" in rsi and "yFormat: (x) => fmt(x, 0)" in rsi and "valueFormat: (x) => fmt(x, 1)" in rsi

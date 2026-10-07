@@ -174,6 +174,15 @@ function fmtCompact(v, digits = 1) {
   return fmt(v, abs < 10 ? 2 : 0);
 }
 
+/* A compact dollar figure with the sign ahead of the symbol. '$' + fmtCompact
+ * printed a net gamma of minus 25 million as "$-25.0M", and an axis through zero
+ * read "$0.00" between "$25.0M" and "$-25.0M". */
+function usdCompact(v, digits = 1) {
+  if (v === null || v === undefined || Number.isNaN(v)) return '\u2014';
+  if (v === 0) return '$0';
+  return (v < 0 ? '-$' : '$') + fmtCompact(Math.abs(v), digits);
+}
+
 function fmtPct(v, digits = 2) {
   if (v === null || v === undefined || Number.isNaN(v)) return '—';
   // Same rule, plus the sign prefix has to follow the rounded value: -0.004 at two
@@ -374,6 +383,15 @@ function chartAnimationOn() { return animateNextChart; }
  * means "this point is still moving", which is only the case in a live session.
  */
 let liveNextChart = false;
+/* Today in New York, for the live pulse: a page in market hours set the flag
+ * for every chart it drew, so a lagged daily FINRA series and the gamma
+ * profile pulsed "live" beside the one price that was. */
+function etTodayISO() {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' })
+      .format(new Date());
+  } catch (e) { return ''; }
+}
 
 function setChartLive(on) { liveNextChart = on; }
 
@@ -659,6 +677,11 @@ function barLabelText(label) {
 function parseBarDate(label) {
   if (!label) return null;
   const raw = String(label);
+  /* Only a date is read as one. Anything else went to new Date(), which reads
+   * a bare number as a year: the gamma profile's spot prices labelled its axis
+   * "Jan, 1973 ... 1989" for an $80 stock. A strike is a category, and the
+   * axis falls back to labelling it as one. */
+  if (!/^\d{4}-\d{2}-\d{2}/.test(raw)) return null;
   // Daily labels are bare dates. Parsing "2026-03-09" as ISO makes it UTC
   // midnight, which in a negative offset is the evening of the 8th — so the
   // month boundary lands one bar early and December reads as November. The
@@ -1011,6 +1034,9 @@ function lineChart(opts) {
     // empty space — so the one thing the chart is for, how close to a band price
     // is, could not be judged.
     yDomain = null,
+    // The axis's tick values, when they are the point (an RSI's 30, 50, 70);
+    // otherwise they are chosen to fit the range.
+    yTicks = null,
     // Vertical event markers: {index, color, label, detail, value}. A dashed
     // line down the plot, an optional short label at the top, an optional dot
     // on the price, and `detail` as the hover text. Used for the point where
@@ -1232,9 +1258,13 @@ function lineChart(opts) {
   // Captured once per chart so a flag flipped mid-render can't half-animate it.
   const animating = animateNextChart && !reducedMotion();
   const seriesDelay = makeStagger();
+  // Live only where the last bar is today's (see etTodayISO).
+  const liveHere = liveNextChart && String(labels[labels.length - 1] || '').slice(0, 10) === etTodayISO();
   // Scale gridline count with available height — a fixed 4 ticks leaves a tall
   // chart with a sparse, hard-to-read axis. ~65px per tick keeps labels legible.
-  const ticks = niceTicks(lo, hi, Math.max(3, Math.min(8, Math.round(priceH / 65))));
+  const ticks = Array.isArray(yTicks) && yTicks.length
+    ? yTicks.filter((t) => t >= lo && t <= hi)
+    : niceTicks(lo, hi, Math.max(3, Math.min(8, Math.round(priceH / 65))));
 
   /* Each run of a stage, for its name along the foot (below).
    *
@@ -1306,8 +1336,10 @@ function lineChart(opts) {
       'stroke-width': 1, opacity: 0.55,
     }));
     // A fine step plus a coarse yFormat can round neighbouring ticks to the same
-    // string; draw the gridline but skip the repeated label.
-    const text = yFormat(t);
+    // string; draw the gridline but skip the repeated label. The step goes to
+    // the formatter, so an axis can carry the decimals its gridlines need: a
+    // whole-dollar format on a $3 to $4 range put "4" on the 3.50 line.
+    const text = yFormat(t, ticks.length > 1 ? ticks[1] - ticks[0] : undefined);
     if (text === lastTickLabel) return;
     lastTickLabel = text;
     gridLayer.appendChild(s('text', {
@@ -1865,7 +1897,7 @@ function lineChart(opts) {
          * heavy") from two filled ripples and a 5px glowing dot; it began as a
          * bare 1.5px outline that was too faint to find. The weights and the
          * beat are in .live-halo in styles.css. */
-        if (liveNextChart && si === 0) {
+        if (liveHere && si === 0) {
           const halo = s('circle', {
             cx: X(lastIdx), cy: Y(se.values[lastIdx]), r: 4,
             fill: endColor, 'fill-opacity': 0.16, stroke: endColor, 'stroke-width': 1,
@@ -1876,7 +1908,7 @@ function lineChart(opts) {
           liveMarks.push(halo);
         }
         // 2px surface ring keeps the end dot legible where lines cross.
-        const live = liveNextChart && si === 0;
+        const live = liveHere && si === 0;
         const endDot = s('circle', {
           cx: X(lastIdx), cy: Y(se.values[lastIdx]), r: live ? 4.5 : 4,
           fill: endColor, stroke: C.surface, 'stroke-width': 2,
@@ -1889,7 +1921,7 @@ function lineChart(opts) {
           'data-fade': animating ? DRAW_MS * 0.8 : null,
         });
         root.appendChild(endDot);
-        if (liveNextChart && si === 0) liveMarks.push(endDot);
+        if (liveHere && si === 0) liveMarks.push(endDot);
       }
     }
   });
@@ -2536,9 +2568,11 @@ function lineChart(opts) {
     if (candles && candles.open) {
       const o = candles.open[i], h = candles.high[i], l = candles.low[i];
       if ([o, h, l].every((v) => v !== null && v !== undefined && isFinite(v))) {
-        rows.push(['Open', yFormat(o)]);
-        rows.push(['High', yFormat(h)]);
-        rows.push(['Low', yFormat(l)]);
+        // The readout's precision, not the axis's: a whole-dollar axis rounded
+        // a candle's open, high and low to the dollar.
+        rows.push(['Open', (valueFormat || yFormat)(o)]);
+        rows.push(['High', (valueFormat || yFormat)(h)]);
+        rows.push(['Low', (valueFormat || yFormat)(l)]);
       }
     }
     series.forEach((se, k) => {
@@ -2773,21 +2807,30 @@ function divergingBars(opts) {
 
   const W = width;
   const barH = Math.min(16, rowHeight - 6);
-  const H = height || rows.length * rowHeight + 30;
-  const m = { t: 8, r: 74, b: 20, l: labelWidth };
+  /* The marker takes a gap of its own between the two rows it falls between.
+   * Its label sat in the label column 3px over its line, on the strike above:
+   * "spot 16" printed across "$16" on every chart that had one. */
+  const marked = markerRow !== null && markerRow !== undefined && rows.length > 1;
+  const markerAt = marked ? Math.max(0, Math.min(rows.length, markerRow)) : -1;
+  const gap = marked ? 14 : 0;
+  const H = height || rows.length * rowHeight + 30 + gap;
+  // A label wider than its column widens the column instead of running off
+  // the left edge: "$1,237.50" is wider than the 58px a strike was given.
+  const longest = Math.max(0, ...rows.map((r) => textWidthGuess(r.label || '', CF.tick)));
+  const m = { t: 8, r: 74, b: 20, l: Math.min(Math.max(labelWidth, Math.ceil(longest) + 12), Math.round(W * 0.35)) };
   const plotW = W - m.l - m.r;
-  const plotH = H - m.t - m.b;
+  const plotH = H - m.t - m.b - gap;
 
   const maxAbs = Number.isFinite(fixedMax) && fixedMax > 0 ? fixedMax : Math.max(...rows.map((r) => Math.abs(r.value || 0)), 1);
   const mid = m.l + plotW / 2;
   const X = (v) => mid + (v / maxAbs) * (plotW / 2);
-  const Y = (i) => m.t + (i + 0.5) * (plotH / rows.length);
+  const Y = (i) => m.t + (i + 0.5) * (plotH / rows.length) + (marked && i >= markerAt ? gap : 0);
 
   const root = svgRoot(W, H);
   if (ariaLabel) root.setAttribute('aria-label', ariaLabel);
 
   root.appendChild(s('line', {
-    x1: mid, y1: m.t, x2: mid, y2: m.t + plotH, stroke: C.baseline, 'stroke-width': 1,
+    x1: mid, y1: m.t, x2: mid, y2: m.t + plotH + gap, stroke: C.baseline, 'stroke-width': 1,
   }));
 
   rows.forEach((r, i) => {
@@ -2818,15 +2861,22 @@ function divergingBars(opts) {
     }, format(v)));
   });
 
-  if (markerRow !== null && markerRow !== undefined && rows.length > 1) {
-    const y = m.t + Math.max(0, Math.min(rows.length, markerRow)) * (plotH / rows.length);
+  if (marked) {
+    const y = m.t + markerAt * (plotH / rows.length) + gap / 2;
+    // The label ends at the chart's right edge, in a row the gap keeps clear,
+    // and the line stops short of it: "price $1,234.56" is wider than the
+    // value column.
+    const labelW = markerLabel ? textWidthGuess(markerLabel, CF.tick) : 0;
     root.appendChild(s('line', {
-      x1: m.l - 4, y1: y, x2: m.l + plotW, y2: y,
+      x1: m.l - 4, y1: y, x2: Math.max(m.l, Math.min(m.l + plotW, W - 2 - labelW - 6)), y2: y,
       stroke: C.warn, 'stroke-width': 1, 'stroke-dasharray': '4 3',
     }));
-    root.appendChild(s('text', {
-      x: m.l - 8, y: y - 3, fill: C.warn, 'font-size': CF.tick, 'text-anchor': 'end',
-    }, markerLabel));
+    if (markerLabel) {
+      root.appendChild(s('text', {
+        x: W - 2, y: y + 4, fill: C.warn, 'font-size': CF.tick, 'text-anchor': 'end',
+        'font-variant-numeric': 'tabular-nums',
+      }, markerLabel));
+    }
   }
 
   if (axisLabel) {
@@ -3114,8 +3164,11 @@ const EVENT_GAP = EVENT_W + 2;
 // 2.7: a full-height drag on a 400px plot is about 12 times.
 const Y_ZOOM_PX = 160;
 
-const MACD_HIST_POS = C.s3;
-const MACD_HIST_NEG = C.neg;
+/* Read at draw time, not when the script loads: syncChartTheme rewrites C when
+ * the theme flips, and constants taken at load kept the dark theme's colours
+ * in the light one. */
+const macdHistPos = () => C.s3;
+const macdHistNeg = () => C.neg;
 
 function macdChart(macd, signal, hist, labels, width = 720, opts = {}) {
   // Taller than the old 150px. The panel's job is to show which side of the
@@ -3172,7 +3225,7 @@ function macdChart(macd, signal, hist, labels, width = 720, opts = {}) {
       // Green above zero rather than the MACD line's blue. The bars and the line
       // are different quantities and must not share a hue; green/red also matches
       // the sign convention the histogram is already encoding.
-      fill: v >= 0 ? MACD_HIST_POS : MACD_HIST_NEG, opacity: 0.5,
+      fill: v >= 0 ? macdHistPos() : macdHistNeg(), opacity: 0.5,
       rx: Math.min(2, w / 2),
     }));
   };
@@ -3276,18 +3329,49 @@ function macdChart(macd, signal, hist, labels, width = 720, opts = {}) {
   const cross = s('line', { y1: m.t, y2: m.t + plotH, stroke: C.ink2, 'stroke-width': 1, opacity: 0 });
   root.appendChild(cross);
   const overlay = s('rect', { x: m.l, y: m.t, width: plotW, height: plotH, fill: 'transparent', style: 'cursor:crosshair' });
-  bindScrub(overlay, (evt) => {
-    const box = root.getBoundingClientRect();
-    const scale = W / box.width;
-    let i = Math.round((((evt.clientX - box.left) * scale) - m.l) / plotW * (n - 1));
-    i = Math.max(0, Math.min(n - 1, i));
+  const readBar = (i, evt) => {
     cross.setAttribute('x1', X(i)); cross.setAttribute('x2', X(i)); cross.setAttribute('opacity', 0.45);
     showTip(tipRows(barLabelText(labels[i]), [
       [`<span style="color:${C.brand}">■</span> MACD`, fmt(macd[i], 3)],
       [`<span style="color:${C.s7}">■</span> Signal`, fmt(signal[i], 3)],
       ['Histogram', fmt(hist[i], 3)],
     ]), evt);
-  }, () => { hideTip(); cross.setAttribute('opacity', 0); });
+    return `${barLabelText(labels[i]) || `Point ${i + 1}`}: MACD ${fmt(macd[i], 3)}, signal ${fmt(signal[i], 3)}, histogram ${fmt(hist[i], 3)}`;
+  };
+  const clearBar = () => { hideTip(); cross.setAttribute('opacity', 0); };
+  bindScrub(overlay, (evt) => {
+    const box = root.getBoundingClientRect();
+    const scale = W / box.width;
+    let i = Math.round((((evt.clientX - box.left) * scale) - m.l) / plotW * (n - 1));
+    i = Math.max(0, Math.min(n - 1, i));
+    readBar(i, evt);
+  }, clearBar);
+  /* The same keyboard readout as lineChart's: this pane could only be read
+   * by pointing at it. */
+  let keyAt = n - 1;
+  const keyRead = (i) => {
+    keyAt = Math.max(0, Math.min(n - 1, i));
+    const box = root.getBoundingClientRect();
+    const scale = W / (box.width || W);
+    const text = readBar(keyAt, { clientX: box.left + X(keyAt) / scale, clientY: box.top + m.t / scale });
+    overlay.setAttribute('aria-valuenow', String(keyAt + 1));
+    overlay.setAttribute('aria-valuetext', text);
+  };
+  overlay.setAttribute('tabindex', '0');
+  overlay.setAttribute('role', 'slider');
+  overlay.setAttribute('aria-valuemin', '1');
+  overlay.setAttribute('aria-valuemax', String(n));
+  overlay.setAttribute('aria-label', 'MACD, signal and histogram, point by point');
+  overlay.addEventListener('focus', () => keyRead(keyAt));
+  overlay.addEventListener('blur', clearBar);
+  overlay.addEventListener('keydown', (evt) => {
+    const step = evt.shiftKey ? 10 : 1;
+    const to = evt.key === 'ArrowLeft' ? keyAt - step : evt.key === 'ArrowRight' ? keyAt + step
+      : evt.key === 'Home' ? 0 : evt.key === 'End' ? n - 1 : null;
+    if (to === null) return;
+    evt.preventDefault();
+    keyRead(to);
+  });
   root.appendChild(overlay);
   return root;
 }
@@ -3749,9 +3833,12 @@ function shareBars(opts) {
           'font-weight': CW.label,
         }, text));
       }
+      // A row can carry its own unit and count format: a calls-against-puts
+      // split mixes contracts in one row with dollars in the next.
+      const rc = r.countLabel || countLabel, ru = r.unit !== undefined ? r.unit : unit;
       focusMark(g, tipRows(escapeText(`${r.label} · ${sg.name}`), [
-        ['Count', countLabel(n) + (unit ? ` ${unit}` : '')], ['Share', `${fmt(share, 1)}%`],
-        ['Of', countLabel(total) + (unit ? ` ${unit}` : '')]]), `${r.label}: ${sg.name} ${fmt(share, 0)} percent`);
+        ['Count', rc(n) + (ru ? ` ${ru}` : '')], ['Share', `${fmt(share, 1)}%`],
+        ['Of', rc(total) + (ru ? ` ${ru}` : '')]]), `${r.label}: ${sg.name} ${fmt(share, 0)} percent`);
       root.appendChild(g);
       x += w;
     });
@@ -3759,7 +3846,7 @@ function shareBars(opts) {
       root.appendChild(s('text', {
         x: W - m.r + 8, y: y + barH / 2 + 4, fill: C.muted, 'font-size': CF.tick,
         'font-variant-numeric': 'tabular-nums',
-      }, countLabel(total)));
+      }, (r.countLabel || countLabel)(total)));
     }
   });
   return root;

@@ -5499,7 +5499,9 @@ function renderSetupDetail(r) {
       <button type="button" class="btn" data-ss-alert="${esc(key)}">Alert me when this triggers</button>
     </div>
     ${row.provisional ? `<p class="ss-prov-line">${esc(row.provisional.text)}</p>` : ''}
-    <div id="ss-chart-${idx}" class="ss-chart" role="img" aria-label="${esc(row.symbol)} with the ${
+    ${/* A group: as an image, the chart's own readout and marks inside it were
+         reached by the keyboard and not read. */''}
+    <div id="ss-chart-${idx}" class="ss-chart" role="group" aria-label="${esc(row.symbol)} with the ${
   esc(row.label)} setup marked"></div>
     <p class="caveat">Marked on the chart: where it armed and triggered, the trigger level, the
       invalidation level${(d.chart && d.chart.anchors || []).length ? ', and the anchors the rule measured from, each usable only from the date it was confirmed' : ''}.</p>
@@ -11204,6 +11206,13 @@ function swingRedrawChart() {
  * Body is unchanged from when it lived inline. `ctx` carries the four locals it
  * borrowed from renderSwing (t, q, srComputed) plus the payload.
  */
+/* A price axis label to the precision its gridlines are apart (the step
+ * comes from lineChart): whole dollars a dollar or more apart, cents when
+ * closer. */
+function priceAxisLabel(v, step) {
+  return fmt(v, step === undefined || step >= 1 ? 0 : step >= 0.1 ? 1 : 2);
+}
+
 function swingPriceBlock(d, ps, ctx) {
   const { t, q, srComputed } = ctx;
 
@@ -11359,8 +11368,13 @@ function swingPriceBlock(d, ps, ctx) {
         .map(([id, color]) => ({
           name: maLabel(id, ps) + (maShortOf(id, ps) ? ` (${maShortOf(id, ps)})` : ''), color,
         }))),
-      showFib ? { name: 'Fibonacci level', color: C.refFib, dash: true } : null,
-      showSR ? { name: 'Support / resistance', color: C.refSR, dash: true } : null,
+      /* As they are drawn: Fibonacci levels are solid lines with the golden
+       * ratios heavier, support and resistance are bands. The key showed both
+       * as dashed lines, the levels' colours swapped. See fibLines, srBands. */
+      showFib ? { name: 'Fibonacci level', color: C.refFib } : null,
+      showFib ? { name: 'Golden ratio level', color: C.refSR } : null,
+      showSR ? { name: 'Support band', color: C.pos, boxed: true } : null,
+      showSR ? { name: 'Resistance band', color: C.neg, boxed: true } : null,
       showVbp ? { name: 'Volume by price', color: C.ink2, boxed: true } : null,
       showInsiders ? { name: 'Insider buy', color: C.s3, boxed: true } : null,
       showInsiders ? { name: 'Insider sell', color: C.neg, boxed: true } : null,
@@ -11483,7 +11497,7 @@ function swingPriceBlock(d, ps, ctx) {
       // claiming one. See earningsMarkers().
       vMarkers: earningsMarkersFor(ps, STATE.ticker),
       refLineFit: 'clip',
-      yFormat: (x) => fmt(x, 0),
+      yFormat: priceAxisLabel,
       valueFormat: (x) => fmt(x, 2),
     }));
 
@@ -11783,9 +11797,14 @@ function renderSwing(d) {
 
   <div id="patterns-host" class="span-all">${renderPatterns(d)}</div>
 
-  <div id="seasonality-host" class="span-all">${renderSeasonality(STATE.seasonality)}</div>
+  ${/* For the stock on screen only: the Chart workspace loads seasonality for its
+       own symbol, and either payload could still be the last stock's while the
+       new one loads. */''}
+  <div id="seasonality-host" class="span-all">${renderSeasonality(
+    STATE.seasonalityFor === STATE.ticker ? STATE.seasonality : null)}</div>
 
-  <div id="relperf-host" class="span-all">${renderRelPerf(STATE.relperf)}</div>
+  <div id="relperf-host" class="span-all">${renderRelPerf(
+    STATE.relperfKey === STATE.ticker ? STATE.relperf : null)}</div>
   ${/* Corporate actions & flow is on Financials only.
        It rendered here as well, identically, and it was 2,092px of this tab:
        a fifth of its height, on a panel whose own copy calls it "four datasets
@@ -11809,15 +11828,15 @@ function renderSwing(d) {
     <div class="panel span2" id="swing-chart-panel">
       <h2>${hg('Price, moving averages & Fibonacci')}${chartPulse(STATE.ticker)} <span class="th-plain">· ${
   esc(swingBarCountText(ps))}</span></h2>
+      ${/* This said the averages, Fibonacci and the oscillators were left off
+           intraday, while each was drawn from the intraday bars. */''}
       ${ps.intraday
-    ? `<p class="sub">Intraday price only. The moving averages, Fibonacci levels, RSI and
-        MACD on this tab are all computed from <strong>daily</strong> closes. Drawing a
-        200-day line across six hours of trade would put a flat line on the chart and imply
-        it meant something here, so they are left off rather than redrawn from the wrong
-        series. The panels below still show the daily read.</p>`
+    ? `<p class="sub">Intraday bars. What is drawn on them, the averages, the Fibonacci grid and
+        support and resistance, and the RSI and MACD panes, is computed from these same bars, not
+        from daily closes.</p>`
     : `<p class="sub">Bias <strong>${esc(t.bias || 'n/a')}</strong>· ${fibDirectionSentence(t)}
-        ${showFib || showSR
-    ? 'Levels you have switched on are drawn as shaded bands rather than lines. A Fibonacci interval and a support shelf are both ranges, and a hairline claims a precision neither has. The band price currently sits in is labelled.'
+        ${showFib || showSR ? `${showSR ? 'Support and resistance are shaded bands, green below the price and red above: a shelf is a range, and a hairline claims a precision it does not have. The band price currently sits in is labelled. ' : ''}${
+    showFib ? 'Fibonacci retracements are lines, the golden ratios drawn heavier.' : ''}`
     : 'Fibonacci and support levels are off. Switch them on under <em>Technical Levels</em>. They are still listed in the tables below.'}</p>`}
       ${isIntradayRange(chartRange) && intra && intra.loading
     ? '<p class="sub">Loading intraday bars…</p>' : ''}
@@ -11966,7 +11985,7 @@ function renderSwing(d) {
               <td class="name num">${usd(l.price)}
                 <div class="subnote">${esc(cap(l.role))}</div></td>
               <td class="${signClass(l.distance_pct)}">${fmtPct(l.distance_pct, 1)}</td>
-              <td><strong>${fmt(l.strength, 0)}</strong><span data-bar="${l.strength}" data-bar-max="100"></span></td>
+              <td><strong>${fmt(l.strength, 0)}</strong><span data-bar="${l.strength}" data-bar-max="100" data-bar-kind="score"></span></td>
               <td>${fmt(l.touches, 0)}
                 <div class="subnote">${l.last_touch_bars_ago === 0
     ? 'testing now' : 'last ' + l.last_touch_bars_ago + srUnit + ' ago'}</div></td>
@@ -12053,7 +12072,7 @@ function renderSwing(d) {
       <p class="sub">${esc((gk.delta || {}).read || '')}</p>
       ${kv([
     ['Net delta (share equiv.)', fmtCompact((gk.delta || {}).net_delta_shares)],
-    ['Net delta notional', '$' + fmtCompact((gk.delta || {}).net_delta_notional)],
+    ['Net delta notional', usdCompact((gk.delta || {}).net_delta_notional)],
     ['Call delta exposure', fmtCompact((gk.delta || {}).call_delta_shares)],
     ['Put delta exposure', fmtCompact((gk.delta || {}).put_delta_shares)],
     ['OI-weighted call delta', fmt((gk.delta || {}).oi_weighted_call_delta, 3)],
@@ -12062,7 +12081,7 @@ function renderSwing(d) {
     // The dealer's own option delta under the GEX assumption. Never negative
     // there (a long call and a short put both carry positive delta), and the
     // stock hedge is the opposite sign.
-    ['Dealer option delta, model (DEX)', '$' + fmtCompact((gex.totals || {}).net_dex) + ' (hedged by about as much stock, sold)'],
+    ['Dealer option delta, model (DEX)', usdCompact((gex.totals || {}).net_dex) + ' (hedged by about as much stock, sold)'],
   ])}
       <h3>${hg('At-the-money greeks by expiry')}</h3>
       ${vizBlock('viz-opt-term', termStructureTitle(gk), 'At-the-money implied volatility at each expiry used, the average of the call and the put. Source: the options chain.')}
@@ -12095,9 +12114,10 @@ function renderSwing(d) {
     ['Charm across open interest (unsigned, shares)', fmtCompact((gk.second_order || {}).net_charm)],
   ])}
       <p class="caveat">${esc((gk.second_order || {}).note || '')}</p>
-      ${vizBlock('viz-opt-oi', oiByStrikeTitle(gex), 'Open interest at each strike near the price, puts to the left and calls to the right. Hover for volume. Source: the options chain.')}
+      ${vizBlock('viz-opt-oi', oiByStrikeTitle(gex), `Open interest at the ${fmt((gex.by_strike || []).length, 0)} strikes with the most dealer gamma, not every strike, puts to the left and calls to the right${
+    chainScope(d) ? `, from ${chainScope(d)}` : ''}. Hover for volume. Source: the options chain.`)}
       <h3>${hg('Gamma concentration by expiry')}</h3>
-      ${vizBlock('viz-opt-expiry', expiryGammaTitle(gk), '')}
+      ${vizBlock('viz-opt-expiry', expiryGammaTitle(gk), "Each expiry's share of the chain's gamma, weighted by open interest, in percent.")}
       ${exactFigures(`<table class="data">
         <thead><tr><th>Expiry</th><th>DTE</th><th>Gamma (OI)</th><th>Share</th><th>Open interest</th></tr></thead>
         <tbody>${((gk.gamma || {}).by_expiry || []).map((r) => `<tr>
@@ -12112,7 +12132,7 @@ function renderSwing(d) {
   <div class="grid c2 gap">
     <div class="panel span2">
       <h2>${hg('GEX. Dealer gamma exposure')}${askPulse('gex')}</h2>
-      <p class="sub">Net ${(gex.totals || {}).net_gex >= 0 ? '+' : ''}$${fmtCompact((gex.totals || {}).net_gex)} of dealer delta per 1% move.
+      <p class="sub">Net ${(gex.totals || {}).net_gex >= 0 ? '+' : ''}${usdCompact((gex.totals || {}).net_gex)} of dealer delta per 1% move.
         Regime: <strong>${esc((gex.regime || {}).state || '')}</strong>.
         ${(gex.regime || {}).flip_point ? `Gamma flip at <strong>${fmt(gex.regime.flip_point, 2)}</strong> (${fmtPct((gex.regime || {}).flip_distance_pct, 2)} away).` : ''}</p>
       <div class="callout info">${gloss((gex.regime || {}).note || '')}<br><br><strong>For swings:</strong> ${gloss((gex.regime || {}).swing_implication || '')}</div>
@@ -12120,12 +12140,16 @@ function renderSwing(d) {
       <div class="grid c2" style="margin-top:var(--space-3)">
         <div>
           <h3>${hg('Net GEX by strike')}</h3>
+          ${(gex.by_strike || []).length ? `<p class="sub">The ${fmt(gex.by_strike.length, 0)} strikes with the most dealer
+            gamma${chainScope(d) ? `, from ${chainScope(d)}` : ''}: not every strike, so the rows are in strike order
+            but not evenly spaced in price.</p>` : '<p class="viz-none">No strike carries gamma in the expiries used.</p>'}
           <div id="legend-gex"></div>
           <div id="chart-gex"></div>
         </div>
         <div>
           <h3>${hg('Gamma profile across spot')}${askPulse('gamma-profile')}</h3>
           <p class="sub">Where the curve crosses zero is the flip point. ${gexFlipSentence(gex)}</p>
+          ${((gex.profile || {}).spots || []).length ? '' : '<p class="viz-none">No profile: the chain had too little open interest to reprice.</p>'}
           <div id="chart-gamma-profile"></div>
           <h3>${hg('Key levels')}${askPulse('levels')}</h3>
           <table class="data" data-defs="gamma-levels">
@@ -12159,11 +12183,11 @@ function renderSwing(d) {
     ['Put volume', fmtCompact((flow.volume || {}).puts)],
     ['Put/call volume ratio', fmt((flow.volume || {}).put_call_ratio, 2)],
     ['Put/call OI ratio', fmt((flow.open_interest || {}).put_call_ratio, 2)],
-    ['Call premium', '$' + fmtCompact((flow.premium || {}).calls)],
-    ['Put premium', '$' + fmtCompact((flow.premium || {}).puts)],
+    ['Call premium', usdCompact((flow.premium || {}).calls)],
+    ['Put premium', usdCompact((flow.premium || {}).puts)],
     ['Call share of premium', `${fmt((flow.premium || {}).call_share_pct, 1)}%`],
-    ['New-position premium (calls)', '$' + fmtCompact((flow.new_positions || {}).call_premium)],
-    ['New-position premium (puts)', '$' + fmtCompact((flow.new_positions || {}).put_premium)],
+    ['New-position premium (calls)', usdCompact((flow.new_positions || {}).call_premium)],
+    ['New-position premium (puts)', usdCompact((flow.new_positions || {}).put_premium)],
     ['OTM put IV − call IV', `${fmt((flow.iv_skew || {}).put_minus_call_vol_pts, 1)} vol pts`],
   ]))}
       <ul class="reasons">${(flow.notes || []).map((n) => `<li>${gloss(n)}</li>`).join('')}</ul>
@@ -12172,7 +12196,9 @@ function renderSwing(d) {
 
     <div class="panel">
       <h2>${hg('Net premium by strike')}</h2>
-      <p class="sub">Calls positive, puts negative. Where today's money actually went.</p>
+      <p class="sub">Calls positive, puts negative. Where today's money actually went${(flow.by_strike || []).length
+    ? `: the ${fmt(flow.by_strike.length, 0)} strikes with the most premium traded${chainScope(d) ? `, from ${chainScope(d)}` : ''}` : ''}.</p>
+      ${(flow.by_strike || []).length ? '' : '<p class="viz-none">No premium traded at any strike today.</p>'}
       <div id="legend-flow"></div>
       <div id="chart-flow"></div>
       <h3>${hg('Notable contracts')}</h3>
@@ -12237,9 +12263,18 @@ function renderSwing(d) {
   orderAssetPageForPhone();
 
   // ---- charts
+  /* A 0-100 score (a level's strength) runs up from zero against 100, as its
+   * data-bar-max said; it was drawn as a gain-or-loss bar centred on zero,
+   * against the verdict's scale. The verdict's signed scores keep theirs. */
   views.swing.querySelectorAll('[data-bar]').forEach((host) => {
-    host.appendChild(inlineBar(Number(host.dataset.bar), maxComp, 70, 9));
+    const score = host.dataset.barKind === 'score';
+    host.appendChild(inlineBar(Number(host.dataset.bar), score ? (Number(host.dataset.barMax) || 100) : maxComp,
+      70, 9, score ? { oneSided: true } : {}));
   });
+  /* Relative performance, from what is in hand: only its loader drew it, and
+   * this render rebuilds its host, so after a refresh or a time-frame press
+   * the chart box was empty. */
+  if (STATE.relperfKey === STATE.ticker && STATE.relperf && STATE.relperf.available) mountRelPerfChart();
 
   // See swingPriceBlock. swingRedrawChart calls it again with a new window.
   swingChartCtx = { t, q, srComputed };
@@ -12299,7 +12334,11 @@ function renderSwing(d) {
       // which made "how close to a band" impossible to judge. 10-90 keeps both
       // bands comfortably inside with room for their labels.
       yDomain: [10, 90],
-      // Unlabelled on purpose: the y-axis already reads 30/50/70 and the sub-line
+      // The axis reads 30/50/70, so the bands are labelled where they are drawn.
+      // It said so here and read 25/50/75: chosen to fit 10 to 90, the ticks
+      // left the two lines that matter unlabelled.
+      yTicks: [30, 50, 70],
+      // Unlabelled on purpose: the y-axis reads 30/50/70 and the sub-line
       // above says what they mean, so the text was duplication that collided with
       // the very line it was annotating.
       refLines: [
@@ -12386,30 +12425,37 @@ function renderSwing(d) {
     mount('chart-gex', (w) => divergingBars({
       width: w,
       rows: rows.map((r) => ({
-        label: fmt(r.strike, 0),
+        label: strikeLabel(r.strike),
         value: r.net_gex,
         detail: [
-          ['Net GEX', '$' + fmtCompact(r.net_gex)],
-          ['Call GEX', '$' + fmtCompact(r.call_gex)],
-          ['Put GEX', '$' + fmtCompact(r.put_gex)],
+          ['Net GEX', usdCompact(r.net_gex)],
+          ['Call GEX', usdCompact(r.call_gex)],
+          ['Put GEX', usdCompact(r.put_gex)],
           ['Call OI', fmtCompact(r.call_oi)],
           ['Put OI', fmtCompact(r.put_oi)],
           ['Call / put volume', `${fmtCompact(r.call_vol)} / ${fmtCompact(r.put_vol)}`],
         ],
       })),
       markerRow: spotIdx >= 0 ? spotIdx : null,
-      markerLabel: `spot ${fmt(d.quote.price, 0)}`,
-      format: (x) => '$' + fmtCompact(x),
+      markerLabel: `price ${usd(d.quote.price)}`,
+      format: (x) => usdCompact(x),
       axisLabel: 'dealer $ delta per 1% move',
     }));
   }
 
   const prof = (gex.profile || {});
   if (prof.spots && prof.net_gex) {
+    // The price now, marked on the axis of prices it is drawn across.
+    const spotNow = (d.quote || {}).price;
+    const spotAt = Number.isFinite(spotNow) ? prof.spots.reduce((best, x, i) =>
+      (Math.abs(x - spotNow) < Math.abs(prof.spots[best] - spotNow) ? i : best), 0) : -1;
     mount('chart-gamma-profile', (w) => lineChart({
       width: w,
       height: 200,
-      labels: prof.spots.map((x) => fmt(x, 0)),
+      vMarkers: spotAt >= 0 ? [{ index: spotAt, label: 'now', color: C.ink2,
+        detail: `The stock at ${fmt(spotNow, 2)}` }] : [],
+      ariaLabel: 'Net dealer gamma if the stock were at each price',
+      labels: prof.spots.map((x) => fmt(x, x < 20 ? 2 : 0)),
       series: [{ name: 'Net GEX', values: prof.net_gex, color: C.brand, fill: true }],
       // The flip line was --warn, which is the gold line's own colour in the
       // light theme (2.7 apart). A neutral reads as the reference it is.
@@ -12417,7 +12463,7 @@ function renderSwing(d) {
         prof.flip_point ? { value: 0, label: `flip ≈ ${fmt(prof.flip_point, 2)}`, color: C.ink2 } : { value: 0, label: '', color: C.baseline },
       ],
       zeroLine: true,
-      yFormat: (x) => '$' + fmtCompact(x),
+      yFormat: (x) => usdCompact(x),
     }));
   }
 
@@ -12430,16 +12476,16 @@ function renderSwing(d) {
     mount('chart-flow', (w) => divergingBars({
       width: w,
       rows: rows.map((r) => ({
-        label: fmt(r.strike, 0),
+        label: strikeLabel(r.strike),
         value: r.net_premium,
         detail: [
-          ['Net premium', '$' + fmtCompact(r.net_premium)],
-          ['Call premium', '$' + fmtCompact(r.call_premium)],
-          ['Put premium', '$' + fmtCompact(r.put_premium)],
+          ['Net premium', usdCompact(r.net_premium)],
+          ['Call premium', usdCompact(r.call_premium)],
+          ['Put premium', usdCompact(r.put_premium)],
           ['Call / put volume', `${fmtCompact(r.call_volume)} / ${fmtCompact(r.put_volume)}`],
         ],
       })),
-      format: (x) => '$' + fmtCompact(x),
+      format: (x) => usdCompact(x),
       axisLabel: 'net premium traded today',
     }));
   }
@@ -12488,11 +12534,21 @@ function periodDay(value) {
   return `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(m[2]) - 1]} ${Number(m[3])}`;
 }
 
+/* Which expiries a chain chart is drawn from, in words: none of them said,
+ * and the Options payload carries the list it used. */
+function chainScope(d) {
+  const used = ((d || {}).expiries || {}).used || [];
+  if (!used.length) return '';
+  return used.length === 1 ? `the ${periodDay(used[0])} expiry`
+    : `${used.length} expiries, ${periodDay(used[0])} to ${periodDay(used[used.length - 1])}`;
+}
+
 function mountOptionsVisuals(d) {
   const gk = d.greeks || {}, gex = d.gex || {}, flow = d.flow || {}, spot = (d.quote || {}).price;
   const atm = (gk.atm_greeks || []).filter((r) => r.call && r.put && Number.isFinite(r.call.iv) && Number.isFinite(r.put.iv));
   vizMount('viz-opt-term', (w) => columnChart({
-    width: w, height: 140, color: C.s7, format: (v) => fmt(v, 1) + '%', ariaLabel: termStructureTitle(gk),
+    // No expiry is singled out: the longest drew in full colour for no reason.
+    width: w, height: 140, color: C.s7, highlightLast: false, format: (v) => fmt(v, 1) + '%', ariaLabel: termStructureTitle(gk),
     items: atm.map((r) => ({ label: `${r.dte}d`, value: ((r.call.iv + r.put.iv) / 2) * 100,
       detail: [['Expiry', esc(r.expiry)], ['Call IV', fmt(r.call.iv * 100, 1) + '%'], ['Put IV', fmt(r.put.iv * 100, 1) + '%'],
         ['Strike', fmt(r.call.strike, 1)]] })),
@@ -12501,15 +12557,16 @@ function mountOptionsVisuals(d) {
   const spotRow = Number.isFinite(spot) ? strikes.findIndex((r) => r.strike < spot) : -1;
   vizMount('viz-opt-oi', (w) => butterflyBars({
     width: w, ariaLabel: oiByStrikeTitle(gex), format: (v) => fmtCompact(v),
-    markerRow: spotRow > 0 ? spotRow : null, markerLabel: Number.isFinite(spot) ? `price ${fmt(spot, 2)}` : '',
-    rows: strikes.map((r) => ({ label: fmt(r.strike, 0), left: r.put_oi || 0, right: r.call_oi || 0,
+    markerRow: spotRow > 0 ? spotRow : null, markerLabel: Number.isFinite(spot) ? `price ${usd(spot)}` : '',
+    rows: strikes.map((r) => ({ label: strikeLabel(r.strike), left: r.put_oi || 0, right: r.call_oi || 0,
       detail: [['Put open interest', fmtCompact(r.put_oi)], ['Call open interest', fmtCompact(r.call_oi)],
         ['Put / call volume today', `${fmtCompact(r.put_vol)} / ${fmtCompact(r.call_vol)}`]] })),
   }), 'No open interest by strike in this chain.');
   const exp = ((gk.gamma || {}).by_expiry || []);
   const topShare = Math.max(...exp.map((r) => r.share_pct || 0), 0);
   vizMount('viz-opt-expiry', (w) => rankBars({
-    width: w, labelWidth: 96, format: (v) => fmt(v, 1) + '%', ariaLabel: expiryGammaTitle(gk),
+    // Shares of the whole, drawn against 100: the largest was drawn full width.
+    width: w, labelWidth: 96, max: 100, format: (v) => fmt(v, 1) + '%', ariaLabel: expiryGammaTitle(gk),
     rows: exp.map((r) => ({ label: `${periodDay(r.expiry)} · ${r.dte}d`, value: r.share_pct, highlight: r.share_pct === topShare,
       detail: [['Share of gamma', fmt(r.share_pct, 1) + '%'], ['Gamma (OI-weighted)', fmtCompact(r.gamma_oi)],
         ['Open interest', fmtCompact(r.open_interest)]] })),
@@ -12520,9 +12577,11 @@ function mountOptionsVisuals(d) {
     width: w, labelWidth: 108, ariaLabel: callPutTitle(flow),
     segments: [{ key: 'calls', name: 'Calls', color: C.pos }, { key: 'puts', name: 'Puts', color: C.neg }],
     countLabel: (n) => fmtCompact(n),
-    rows: [{ label: 'Volume', values: pair(flow.volume) }, { label: 'Open interest', values: pair(flow.open_interest) },
-      { label: 'Premium', values: pair(flow.premium) },
-      { label: 'New positions', values: { calls: np.call_premium || 0, puts: np.put_premium || 0 } }],
+    rows: [{ label: 'Volume', values: pair(flow.volume), unit: 'contracts' },
+      { label: 'Open interest', values: pair(flow.open_interest), unit: 'contracts' },
+      { label: 'Premium', values: pair(flow.premium), countLabel: (n) => `$${fmtCompact(n)}`, unit: '' },
+      { label: 'New positions', values: { calls: np.call_premium || 0, puts: np.put_premium || 0 },
+        countLabel: (n) => `$${fmtCompact(n)}`, unit: '' }],
   }), 'No volume or open interest today.');
   [...(d.naked_ideas || []), ...(d.strategy_ideas || [])].forEach((idea) => {
     if (!idea || !idea.__payoff || !(idea.legs || []).length) return;
@@ -14719,13 +14778,6 @@ function mountFinancialsVisuals(co) {
       rows: [{ label: '', values: { inst: inst * 100, ins: (ins || 0) * 100, rest: Math.max(0, 100 - inst * 100 - (ins || 0) * 100) } }],
     }) : null), Number.isFinite(inst) ? 'The source\'s institutional and insider figures overlap for this company, so they are not drawn as parts of one whole.'
       : 'No ownership breakdown for this company.');
-    const i6 = ow.insider_6m || {};
-    vizMount('viz-fin-insiders', (w) => ((i6.purchase_shares || i6.sale_shares) ? divergingBars({
-      width: w, labelWidth: 64, ariaLabel: insiderFlowTitle(ow),
-      format: (v) => fmtCompact(Math.abs(v)) + ' sh',
-      rows: [{ label: 'Bought', value: i6.purchase_shares || 0, detail: [['Shares', fmtCompact(i6.purchase_shares)], ['Trades', fmt(i6.purchase_count, 0)]] },
-        { label: 'Sold', value: -(i6.sale_shares || 0), detail: [['Shares', fmtCompact(i6.sale_shares)], ['Trades', fmt(i6.sale_count, 0)]] }],
-    }) : null), 'No insider purchases or sales in the last six months.');
   }
 }
 
@@ -14767,7 +14819,7 @@ function excessReturnDef(days, benchmark) {
 
 function keyStatRows(q, short) {
   const has = (v) => v !== null && v !== undefined && Number.isFinite(Number(v));
-  const money = (v) => (Math.abs(v) >= 1e6 ? '$' + fmtCompact(v, 2) : usd(v));
+  const money = (v) => (Math.abs(v) >= 1e6 ? usdCompact(v, 2) : usd(v));
   // "Today" only while it is: before the open and overnight the day's figures
   // are the last session's.
   const day = ['regular', 'after'].includes(marketSessionET()) ? 'today' : 'last session';
@@ -14923,6 +14975,12 @@ function overviewChartTitle(sym, close) {
   return off > -1 ? `${move}, at its highest close of it` : `${move}, ${fmt(Math.abs(off), 0)}% below its highest close`;
 }
 
+/* The price feed the payload names. It said Yahoo Finance whatever served the
+ * bars, and with a Tradier token set the server reads Tradier first. */
+function priceSourceName(d) {
+  return (d || {}).data_source === 'tradier' ? 'Tradier, with Yahoo Finance where it has no data' : 'Yahoo Finance';
+}
+
 function overviewChartHTML(d) {
   const { dates, close } = overviewSeries(d);
   if (close.length < 20) return '';
@@ -14931,7 +14989,7 @@ function overviewChartHTML(d) {
   return `<div class="panel" id="ov-price">
     <h2>${hg('The past year')}</h2>
     ${vizBlock('viz-ov-price', overviewChartTitle(STATE.ticker || '', close),
-    `Daily closes, split-adjusted, through ${dates[dates.length - 1]}. Source: Yahoo Finance. Marked: E an earnings report, D an ex-dividend date, S a split.${
+    `Daily closes, split-adjusted, through ${dates[dates.length - 1]}. Source: ${priceSourceName(d)}. Marked: E an earnings report, D an ex-dividend date, S a split.${
       nextIso && nextIso > dates[dates.length - 1] ? ` Next report ${nextIso}${reportTiming(next.timing) ? ', ' + reportTiming(next.timing) : ''}.` : ''}`)}
     <div id="ov-events"></div>
   </div>`;
@@ -15040,7 +15098,7 @@ function renderCompany(co) {
   const finRow = (label, values, money, def) => `<tr>
     <td class="name">${statLabel(label, def)}</td>
     ${(ap || []).map((_, i) => `<td>${values && values[i] !== null && values[i] !== undefined
-    ? (money ? '$' + fmtCompact(values[i]) : fmt(values[i], 2)) : '—'}</td>`).join('')}
+    ? (money ? usdCompact(values[i]) : fmt(values[i], 2)) : '—'}</td>`).join('')}
   </tr>`;
 
   return `
@@ -15124,9 +15182,9 @@ function renderCompany(co) {
           </tbody>
         </table>`, 'Exact figures, by year')}
         ${kv([
-    ['Cash', '$' + fmtCompact((fn.balance_sheet || {}).cash), '', FIN_DEFS.cash],
-    ['Total debt', '$' + fmtCompact((fn.balance_sheet || {}).total_debt), '', FIN_DEFS.total_debt],
-    ['Net cash position', '$' + fmtCompact((fn.balance_sheet || {}).net_cash), '', FIN_DEFS.net_cash],
+    ['Cash', usdCompact((fn.balance_sheet || {}).cash), '', FIN_DEFS.cash],
+    ['Total debt', usdCompact((fn.balance_sheet || {}).total_debt), '', FIN_DEFS.total_debt],
+    ['Net cash position', usdCompact((fn.balance_sheet || {}).net_cash), '', FIN_DEFS.net_cash],
     ['Debt / equity', fmt((fn.balance_sheet || {}).debt_to_equity, 2), '', FIN_DEFS.debt_to_equity],
     ['Gross margin', fmt((fn.margins || {}).gross_pct, 1) + '%', '', FIN_DEFS.gross_margin],
     ['Operating margin', fmt((fn.margins || {}).operating_pct, 1) + '%', '', FIN_DEFS.operating_margin],
@@ -15169,7 +15227,9 @@ function renderCompany(co) {
     FIN_DEFS.top_holders)}
         </div>
         ${vizBlock('viz-fin-owners', ownersTitle(ow), 'Shares held by institutions from their 13F filings and by insiders, against all the shares. Source: Yahoo Finance.')}
-        ${vizBlock('viz-fin-insiders', insiderFlowTitle(ow), 'Shares bought and sold by directors and officers over the last six months, from their Form 4 filings.')}
+        ${/* No two-bar chart of bought against sold: it repeated the two rows
+             directly under it. The finding is the line under the heading. */''}
+        ${insiderFlowTitle(ow) ? `<p class="viz-title">${esc(insiderFlowTitle(ow))}</p>` : ''}
         ${kv([
     ['Insider purchases (6m)', `${fmtCompact((ow.insider_6m || {}).purchase_shares)} sh in ${
       fmt((ow.insider_6m || {}).purchase_count, 0)} trades`, '', FIN_DEFS.insider_purchases],
@@ -15191,7 +15251,7 @@ function renderCompany(co) {
             <td class="name">${esc(tx.date)}</td>
             <td class="name ${tx.action === 'purchase' ? 'up' : tx.action === 'sale' ? 'down' : ''}">${esc(cap(tx.action))}</td>
             <td>${fmtCompact(tx.shares)}</td>
-            <td>${tx.value ? '$' + fmtCompact(tx.value) : '—'}</td>
+            <td>${tx.value ? usdCompact(tx.value) : '—'}</td>
           </tr>`).join('') || '<tr><td colspan="6" class="muted">No recent filings.</td></tr>'}</tbody>
         </table></div>
         <h3>${hg('Largest reported holders')}</h3>
@@ -16198,28 +16258,6 @@ function renderRevenueMultiple(rm) {
       <p class="sub">${esc(rm.reason || 'Unavailable.')}</p></div>`;
   }
   const years = rm.years || [];
-  const maxRev = Math.max(...years.map((y) => y.revenue), 1);
-  const pes = years.map((y) => y.pe).filter((v) => v !== null && v !== undefined);
-  const peLo = pes.length ? Math.min(...pes) : 0;
-  const peHi = pes.length ? Math.max(...pes) : 1;
-  const peSpan = (peHi - peLo) || 1;
-
-  const rows = years.map((y) => {
-    const h = (y.revenue / maxRev) * 100;
-    // The P/E dot's vertical position within the bar's own column, on its own
-    // scale — padded off the edges so the extremes are still visible.
-    const peTop = y.pe === null || y.pe === undefined
-      ? null : 8 + (1 - (y.pe - peLo) / peSpan) * 76;
-    return `<div class="rm-col">
-      <div class="rm-plot">
-        <div class="rm-bar" style="height:${h.toFixed(1)}%"></div>
-        ${peTop !== null ? `<span class="rm-pe" style="top:${peTop.toFixed(1)}%"
-          title="Trailing P/E for fiscal ${esc(y.label)}">${fmt(y.pe, 1)}</span>` : ''}
-      </div>
-      <div class="rm-rev">$${fmtCompact(y.revenue)}</div>
-      <div class="rm-label">${esc(y.label)}</div>
-    </div>`;
-  }).join('');
 
   // Did revenue and the multiple move the same way? That is the read.
   const first = years[0] || {};
@@ -16245,18 +16283,40 @@ function renderRevenueMultiple(rm) {
              marked it down with it.`;
   }
 
+  /* Two charts side by side, each from zero, in place of a P/E floated inside
+   * each revenue bar on its own min-to-max scale: a second axis with no ticks,
+   * where a dot's height against its bar meant nothing. */
   return `<div class="panel span2">
     <h2>${hg('Revenue and the multiple')}${askPulse('revmultiple')}</h2>
-    <p class="sub">What the business earned, against what the market paid for it. Bars are
-      annual revenue; the number floating in each column is that fiscal year's trailing P/E.</p>
-    <div class="rm-chart">${rows}</div>
-    <div class="rm-legend">
-      <span><i class="rm-key bar"></i>Annual revenue</span>
-      <span><i class="rm-key pe"></i>Trailing P/E that year</span>
-    </div>
+    <p class="sub">What the business earned, against what the market paid for it, by fiscal year: annual
+      revenue, and that year's trailing P/E, each drawn from zero.</p>
     ${divergence ? `<p class="sc-note">${divergence}</p>` : ''}
+    <div class="viz-multiples">
+      <div><h4>Annual revenue</h4><div id="viz-rm-rev" class="viz-host"></div></div>
+      <div><h4>Trailing P/E that year</h4><div id="viz-rm-pe" class="viz-host"></div></div>
+    </div>
+    ${exactFigures(`<table class="data">
+      <thead><tr><th>Fiscal year</th><th class="num">Revenue</th><th class="num">Trailing P/E</th></tr></thead>
+      <tbody>${years.map((y) => `<tr><td class="name">${esc(y.label)}</td><td class="num">$${fmtCompact(y.revenue)}</td>
+        <td class="num">${y.pe === null || y.pe === undefined ? '\u2014' : fmt(y.pe, 1)}</td></tr>`).join('')}</tbody>
+    </table>`)}
     <p class="caveat">${gloss(rm.method || '')}</p>
   </div>`;
+}
+
+function mountRevenueMultiple(rm) {
+  if (!rm || !rm.available) return;
+  const years = rm.years || [];
+  vizMount('viz-rm-rev', (w) => columnChart({
+    width: w, height: 140, format: (v) => usdCompact(v), ariaLabel: 'Annual revenue by fiscal year.',
+    items: years.filter((y) => Number.isFinite(y.revenue)).map((y) => ({ label: y.label, value: y.revenue,
+      detail: [['Fiscal year', esc(y.label)], ['Revenue', usdCompact(y.revenue)]] })),
+  }), 'Fewer than two years of revenue.');
+  vizMount('viz-rm-pe', (w) => columnChart({
+    width: w, height: 140, color: C.s7, format: (v) => fmt(v, 1) + '\u00d7', ariaLabel: 'Trailing P/E by fiscal year.',
+    items: years.filter((y) => Number.isFinite(y.pe)).map((y) => ({ label: y.label, value: y.pe,
+      detail: [['Fiscal year', esc(y.label)], ['Trailing P/E', fmt(y.pe, 1)]] })),
+  }), 'Fewer than two years with a P/E.');
 }
 
 /* Today's priority board.
@@ -17658,7 +17718,6 @@ function renderFairValueBlock(f) {
 function renderAnalystsBlock(a) {
   if (!a || !a.available) return '';
   const total = a.analyst_count || 0;
-  const share = (n) => (total ? ((n / total) * 100).toFixed(1) : 0);
   return `<div class="panel">
     <h2>${hg('What analysts say')}${askPulse('analystsview')}</h2>
     <p class="sub">The firms that cover it, as they published. Not an Optic pick.</p>
@@ -17672,10 +17731,9 @@ function renderAnalystsBlock(a) {
       ${tile('Say buy', a.buy_share_pct === null || a.buy_share_pct === undefined
     ? '\u2014' : fmt(a.buy_share_pct, 0) + '%', 'of those rating it')}
     </div>
-    ${total ? `<div class="fv-split" aria-hidden="true">
-      <span class="up" style="width:${share(a.buys)}%"></span>
-      <span class="flat" style="width:${share(a.holds)}%"></span>
-      <span class="down" style="width:${share(a.sells)}%"></span></div>` : ''}
+    ${/* The buy, hold and sell split bar is gone: it drew the counts in the
+         tile directly above it and said nothing they do not. The ratings are
+         drawn on the Earnings tab, month by month. */''}
     <p class="caveat">${esc(a.note || '')}</p>
   </div>`;
 }
@@ -17795,7 +17853,7 @@ function yardsticksHTML(d) {
   return `<div class="panel span-all">
     <h2>${hg('Where the price sits')}</h2>
     ${vizBlock('viz-inv-field', yardsticksTitle(rows, price),
-    `Each range from its low to its high, ticked at its middle, against today's price. Fair value is its own five-year P/E quartiles times trailing earnings, from SEC filings; the targets are the analysts' lowest, mean and highest, from Yahoo Finance; the 52-week range is the lowest and highest trade.${
+    `Each range from its low to its high, ticked at its middle, against today's price. Fair value is its own five-year P/E quartiles times trailing earnings, from SEC filings; the targets are the analysts' lowest, mean and highest, from Yahoo Finance, and look about twelve months ahead where the other two rows are today's; the 52-week range is the lowest and highest trade.${
       ((d || {}).fair_value || {}).wide ? ' The fair value range is too wide to draw against a price, and is left out.' : ''}`)}
   </div>`;
 }
@@ -17952,12 +18010,16 @@ function seasVerdict(v) {
 
 /** A bar that reads from a shared centre, so rows compare against each other
  *  rather than each against its own maximum. */
-function seasBar(value, scale) {
+function seasBar(value, scale, verdict) {
   const v = Number(value);
   if (!Number.isFinite(v) || !scale) return '<div class="seas-bar"></div>';
   const pct = Math.min(Math.abs(v) / scale, 1) * 50;
   const side = v >= 0 ? 'left:50%' : `right:50%`;
-  return `<div class="seas-bar"><i class="${v >= 0 ? 'up' : 'down'}"
+  /* Only an effect that clears the corrected bar takes the up or down colour.
+   * Scaled to the table's largest, the top bar looked as strong when the
+   * panel said nothing was significant as when something was. */
+  const shade = verdict === 'significant' ? (v >= 0 ? 'up' : 'down') : 'faint';
+  return `<div class="seas-bar"><i class="${shade}"
     style="${side};width:${pct.toFixed(1)}%"></i></div>`;
 }
 
@@ -17973,7 +18035,7 @@ function seasRows(section, rows, digits, robustKey) {
       <td>${n}</td>
       <td class="${signClass(raw.mean)}">${fmt(raw.mean, digits)}%</td>
       <td class="${signClass(e.mean)}"><strong>${fmt(e.mean, digits)}%</strong></td>
-      <td>${seasBar(e.mean, scale)}</td>
+      <td>${seasBar(e.mean, scale, e.verdict)}</td>
       <td>${raw.hit_rate === null || raw.hit_rate === undefined
     ? '—' : fmt(raw.hit_rate, 0) + '%'}</td>
       <td class="${signClass(raw[robustKey])}">${fmt(raw[robustKey], digits)}%</td>
@@ -21042,6 +21104,11 @@ function wsMountPanes(ps) {
       // on the top edge and left the oversold band in dead space, which makes
       // "how close to a band" impossible to read.
       yDomain: [10, 90],
+      yTicks: [30, 50, 70],              // see the Options RSI pane
+      // Whole numbers on the axis, as the Options pane has them ("30.00" read
+      // as a price), and the tags to the one decimal the legend gives.
+      yFormat: (x) => fmt(x, 0),
+      valueFormat: (x) => fmt(x, 1),
       refLines: [
         { value: 70, label: '', color: C.refSR, emphasis: true },
         { value: 50, label: '', color: C.muted },
@@ -22328,12 +22395,15 @@ async function loadAccumZones(symbol, force) {
   if (!sym) return;
   if (STATE.accumZonesFor === sym && !force) return;
   STATE.accumZonesFor = sym;
+  let zones;
   try {
     const data = await getJSON(`/api/longterm/${encodeURIComponent(sym)}?indices=false`);
-    STATE.accumZones = (data && data.holding) || { available: false, reason: 'no holding block' };
+    zones = (data && data.holding) || { available: false, reason: 'no holding block' };
   } catch (err) {
-    STATE.accumZones = { available: false, reason: err.message };
+    zones = { available: false, reason: err.message };
   }
+  if (STATE.accumZonesFor !== sym) return;        // a later symbol's request won
+  STATE.accumZones = zones;
   if (STATE.view === 'chart') wsRedrawSettled();
   else if (STATE.view === 'swing' && STATE.swing) swingRenderSettled();
 }
@@ -24304,7 +24374,10 @@ function wsMountChart() {
         // multi-year level and a multi-week one can be read against each other.
         // A price is a price on any bar size, and refLineFit 'clip' drops the
         // ones that sit off this chart.
-        ...(showAccum ? accumLines(STATE.accumZones) : []),
+        // The zones for this chart's symbol only: loaded once a stock, they were
+        // drawn whoever they belonged to, so the last stock's levels showed on
+        // the new chart while its own loaded.
+        ...(showAccum ? accumLines(STATE.accumZonesFor === (d.ticker || STATE.chartSymbol) ? STATE.accumZones : null) : []),
       ],
       bands: [
         ...(showSR ? (intraday ? srBands(ps.sr || [], ps.atr, ps.spot)
@@ -25300,7 +25373,10 @@ function renderExtras(x) {
     'this symbol’s own baseline', '', FIN_DEFS.sv_average)}
       ${tile('vs its average',
     fmtPct((sv.latest_pct || 0) - (sv.average_pct || 0), 1),
-    'percentage points', signClass((sv.average_pct || 0) - (sv.latest_pct || 0)), FIN_DEFS.sv_vs)}
+    // Uncoloured: shorting off-exchange is mostly market makers filling
+    // orders, so more of it is not a bearish reading, and the colour ran
+    // opposite to the figure's own sign.
+    'percentage points', '', FIN_DEFS.sv_vs)}
       ${tile('Days on record', fmt(sv.days, 0), 'FINRA publishes daily', '', FIN_DEFS.sv_days)}
     </div>`)}
     <p class="caveat"><strong>Read this against its own average, not against 50%.</strong>
@@ -25453,11 +25529,14 @@ async function loadRelPerf(force) {
   STATE.relperf = 'loading';
   const host = document.getElementById('relperf-host');
   if (host) host.innerHTML = renderRelPerf('loading');
+  let data;
   try {
-    STATE.relperf = await getJSON(`/api/relperf/${encodeURIComponent(sym)}`);
+    data = await getJSON(`/api/relperf/${encodeURIComponent(sym)}`);
   } catch (err) {
-    STATE.relperf = { available: false, reason: err.message };
+    data = { available: false, reason: err.message };
   }
+  if (STATE.relperfKey !== sym) return;          // the reader has moved to another stock
+  STATE.relperf = data;
   const h = document.getElementById('relperf-host');
   if (!h) return;
   h.innerHTML = renderRelPerf(STATE.relperf);
@@ -27224,7 +27303,7 @@ function renderEarnings(d) {
     <td class="name">${esc(r.period)}</td>
     <td>$${fmtCompact(r.revenue)}</td>
     <td class="${signClass(r.revenue_yoy_pct)}">${fmtPct(r.revenue_yoy_pct, 1)}</td>
-    <td>$${fmtCompact(r.net_income)}</td>
+    <td>${usdCompact(r.net_income)}</td>
     <td class="${signClass(r.net_income_yoy_pct)}">${fmtPct(r.net_income_yoy_pct, 1)}</td>
     <td>${fmt(r.gross_margin_pct, 1)}%</td>
     <td>${fmt(r.operating_margin_pct, 1)}%</td>
@@ -27234,7 +27313,7 @@ function renderEarnings(d) {
     <td class="name">${esc(r.period)}</td>
     <td>$${fmtCompact(r.revenue)}</td>
     <td class="${signClass(r.revenue_yoy_pct)}">${fmtPct(r.revenue_yoy_pct, 1)}</td>
-    <td>$${fmtCompact(r.net_income)}</td>
+    <td>${usdCompact(r.net_income)}</td>
     <td class="${signClass(r.net_income_yoy_pct)}">${fmtPct(r.net_income_yoy_pct, 1)}</td>
     <td>${fmt(r.gross_margin_pct, 1)}%</td>
     <td>${fmt(r.operating_margin_pct, 1)}%</td>
@@ -27349,7 +27428,7 @@ function renderEarnings(d) {
       <h2>${hg('Estimate revisions')}</h2>
       ${rev.available ? vizBlock('viz-earn-revisions', rev.direction && rev.direction !== 'unknown'
     ? `Full-year estimates ${rev.direction} over 90 days` : '',
-  'How each period\'s EPS estimate has changed over 90 days, as a share of what it was. Hover for 30 days and the analysts behind it.') : ''}
+  'How each period\'s EPS estimate has changed over 90 days, as a share of what it was. Hover for 30 days and the analysts behind it. Source: Yahoo Finance.') : ''}
       <p class="sub">${gloss(rev.note || '')}</p>
       ${rev.available ? exactFigures(`
       <table class="data">
@@ -27509,10 +27588,10 @@ function mountEarningsVisuals(d) {
     label: periodTick(r.period), value: r[key],
     detail: [['Quarter', esc(r.period)], ['Value', fmtv(r[key])]],
   }));
-  vizMount('viz-earn-q-rev', (w) => columnChart({ items: col('revenue', (v) => '$' + fmtCompact(v)), width: w,
-    format: (v) => '$' + fmtCompact(v, 0), ariaLabel: 'Quarterly revenue' }));
-  vizMount('viz-earn-q-ni', (w) => columnChart({ items: col('net_income', (v) => '$' + fmtCompact(v)), width: w,
-    format: (v) => '$' + fmtCompact(v, 0), ariaLabel: 'Quarterly net income' }));
+  vizMount('viz-earn-q-rev', (w) => columnChart({ items: col('revenue', (v) => usdCompact(v)), width: w,
+    format: (v) => usdCompact(v, 0), ariaLabel: 'Quarterly revenue' }));
+  vizMount('viz-earn-q-ni', (w) => columnChart({ items: col('net_income', (v) => usdCompact(v)), width: w,
+    format: (v) => usdCompact(v, 0), ariaLabel: 'Quarterly net income' }));
   // Banks and insurers report no operating income, so this one says so.
   vizMount('viz-earn-q-om', (w) => columnChart({ items: col('operating_margin_pct', (v) => fmt(v, 1) + '%'), width: w,
     format: (v) => fmt(v, 0) + '%', color: C.s7, ariaLabel: 'Quarterly operating margin' }),
@@ -27529,8 +27608,12 @@ function mountEarningsVisuals(d) {
     }), 'No ratings on record.');
   }
   if (an.target_low && an.target_high) {
-    const spot = an.target_mean && an.upside_pct !== null && an.upside_pct !== undefined
-      ? an.target_mean / (1 + an.upside_pct / 100) : null;
+    // The quote when there is one; worked back from the upside otherwise,
+    // which is the price the data provider measured the upside from.
+    const quoted = facetQuote(STATE.ticker || '').price;
+    const spot = Number.isFinite(quoted) ? quoted
+      : an.target_mean && an.upside_pct !== null && an.upside_pct !== undefined
+        ? an.target_mean / (1 + an.upside_pct / 100) : null;
     vizMount('viz-earn-targets', (w) => rangeChart({
       width: w, low: an.target_low, high: an.target_high, format: (v) => usd(v), trackLabel: 'Published targets',
       ariaLabel: `Analyst price targets from ${usd(an.target_low)} to ${usd(an.target_high)}, mean ${usd(an.target_mean)}.`,
@@ -27824,7 +27907,7 @@ function renderRoth(d) {
       // The chart pads its range 8% below the lowest value, which on an
       // all-positive money series puts a tick just under zero and renders it
       // as "$-0.00". Snap sub-dollar magnitudes to a clean zero.
-      yFormat: (x) => '$' + fmtCompact(Math.abs(x) < 1 ? 0 : x),
+      yFormat: (x) => usdCompact(Math.abs(x) < 1 ? 0 : x),
       valueFormat: (x) => '$' + Number(x).toLocaleString('en-US', { maximumFractionDigits: 0 }),
     }));
   }
@@ -30409,7 +30492,7 @@ function ltPriceBlock(h, lt, ltLevels) {
       // they were annotating — which is what made this chart hard to read.
       refLabelSide: 'left',
       refLineFit: 'clip',
-      yFormat: (x) => fmt(x, 0),
+      yFormat: priceAxisLabel,
       valueFormat: (x) => fmt(x, 2),
     }));
   }
@@ -30605,6 +30688,7 @@ function renderLong(d) {
   ltPriceBlock(h, lt, ltLevels);
 
   if (STATE.fairValueFor === STATE.ticker && STATE.fairValue) mountYardsticks(STATE.fairValue);
+  mountRevenueMultiple((h || {}).revenue_multiple);
   if (dd.series) {
     drawPeChart(peHistoryForTicker());
     mount('chart-drawdown', (w) => lineChart({
@@ -30725,13 +30809,16 @@ async function loadSeasonality(force, symbol) {
   if (!sym) return;
   if (STATE.seasonalityFor === sym && !force) return;
   STATE.seasonalityFor = sym;
+  let data;
   try {
-    STATE.seasonality = await getJSON(`/api/seasonality/${encodeURIComponent(sym)}`);
+    data = await getJSON(`/api/seasonality/${encodeURIComponent(sym)}`);
   } catch (err) {
-    STATE.seasonality = { error: err.message, ticker: sym };
+    data = { error: err.message, ticker: sym };
   }
+  if (STATE.seasonalityFor !== sym) return;      // a later request for another symbol won
+  STATE.seasonality = data;
   const host = document.getElementById('seasonality-host');
-  if (host && STATE.view === 'swing') {
+  if (host && STATE.view === 'swing' && sym === STATE.ticker) {
     host.innerHTML = renderSeasonality(STATE.seasonality);
     revealPanels(host);
   }
@@ -35240,7 +35327,7 @@ function scanCell(kind, value) {
   if (kind === 'score') return `<span class="${signClass(value)}">${fmt(value, 0)}</span>`;
   // Dollar volume runs to hundreds of millions; the plain formatter would print
   // nine digits into a table column.
-  if (kind === 'usd') return `$${fmtCompact(value)}`;
+  if (kind === 'usd') return usdCompact(value);
   return fmt(value, 2);
 }
 
@@ -35405,7 +35492,7 @@ function screenerBuilder() {
 
 function screenerCell(col, value) {
   if (value === null || value === undefined) return '\u2014';
-  if (col.unit === '$' && Math.abs(value) >= 1e6) return `$${fmtCompact(value)}`;
+  if (col.unit === '$' && Math.abs(value) >= 1e6) return usdCompact(value);
   const n = fmt(value, col.decimals);
   if (col.unit === '%') return `${n}%`;
   if (col.unit === 'x') return `${n}\u00d7`;

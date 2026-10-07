@@ -30,15 +30,19 @@ NO_COMMENTS = re.sub(r"/\*.*?\*/", "", CSS, flags=re.S)
 JSC = "/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc"
 
 
-def _drawn(live):
+def _drawn(live, ends_today=True):
+    """A series of 40 daily bars ending today in New York, or yesterday. The
+    pulse is drawn only on a series that runs to today: a page in market hours
+    set the flag for every chart it drew, lagged daily data included."""
     exe = JSC if os.path.exists(JSC) else shutil.which("jsc")
     if not exe:
         pytest.skip("no JavaScriptCore on this machine")
     src = ((ROOT / "tests/support/recording_dom.js").read_text() + CHARTS + """
       var labels = [], close = [];
-      for (var i = 0; i < 40; i += 1) {
-        labels.push(new Date(Date.UTC(2026, 8, 1) + i * 86400000).toISOString().slice(0, 10));
-        close.push(700 + i);
+      var end = Date.parse(etTodayISO() + 'T12:00:00Z') - (%s ? 0 : 86400000);
+      for (var i = 39; i >= 0; i -= 1) {
+        labels.push(new Date(end - i * 86400000).toISOString().slice(0, 10));
+        close.push(739 - i);
       }
       setChartLive(%s);
       NODES.length = 0;
@@ -51,7 +55,7 @@ def _drawn(live):
         halos: halos.map(function (n) { return { cls: cls(n), r: n.attrs.r, fill: n.attrs.fill,
           opacity: n.attrs['fill-opacity'], stroke: n.attrs.stroke }; }),
         dots: dots.map(function (n) { return { r: n.attrs.r, color: n.attrs.color, fill: n.attrs.fill }; }) }));
-    """ % ("true" if live else "false"))
+    """ % ("true" if ends_today else "false", "true" if live else "false"))
     out = subprocess.run([exe, "-e", src], capture_output=True, text=True, timeout=120)
     blob = out.stdout + out.stderr
     assert "RESULT:" in blob, blob[-2000:]
@@ -97,3 +101,9 @@ def test_less_motion_still_finds_it():
     still = still[:still.index("\n}")]
     assert ".live-halo { animation: none; opacity: 0.3; transform: scale(1.8); }" in still
     assert ".live-dot { animation: none; }" in still
+
+
+def test_a_series_that_ends_before_today_does_not_pulse_on_a_live_page():
+    """FINRA's daily short volume and the gamma profile pulsed "live" in
+    market hours beside the one price that was."""
+    assert _drawn(True, ends_today=False) == {"halos": [], "dots": []}

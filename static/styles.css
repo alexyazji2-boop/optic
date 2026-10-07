@@ -5075,67 +5075,9 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
 
 /* ------------------------------------------- revenue and the multiple ---- */
 
-/* stretch, not flex-end: with flex-end the columns shrink to their own content
- * height, so the bars' percentage heights resolved against a collapsed parent
- * and rendered as hairlines. The columns must fill the chart for a percentage
- * height to mean anything. */
-.rm-chart {
-  display: flex;
-  align-items: stretch;
-  gap: var(--space-3);
-  height: 230px;
-  margin-top: var(--space-4);
-}
-.rm-col { flex: 1 1 0; display: flex; flex-direction: column; min-width: 0; }
-.rm-plot { position: relative; flex: 1 1 auto; min-height: 0; display: flex; align-items: flex-end; }
-.rm-bar {
-  width: 100%;
-  background: linear-gradient(180deg,
-    color-mix(in srgb, var(--s3) 70%, transparent),
-    color-mix(in srgb, var(--s3) 30%, transparent));
-  border-radius: 3px 3px 0 0;
-  min-height: 2px;
-}
-/* The multiple floats on its own scale inside the column, so it can sit low on a
- * tall bar — which is the whole point when growth and rerating disagree. */
-.rm-pe {
-  position: absolute;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: var(--t-micro);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink);
-  background: var(--surface);
-  border: 1px solid var(--s4);
-  border-radius: var(--r-pill);
-  padding: var(--space-0) var(--space-2);
-  white-space: nowrap;
-}
-.rm-rev {
-  margin-top: var(--space-2);
-  font-size: var(--t-micro);
-  color: var(--ink-2);
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-.rm-label {
-  font-size: var(--t-micro);
-  color: var(--ink-muted);
-  text-align: center;
-  margin-top: var(--space-0);
-}
-.rm-legend {
-  display: flex;
-  gap: var(--space-4);
-  margin-top: var(--space-3);
-  font-size: var(--t-micro);
-  color: var(--ink-muted);
-}
-.rm-legend span { display: inline-flex; align-items: center; gap: var(--space-2); }
-.rm-key { width: 12px; height: 8px; border-radius: 2px; flex: none; }
-.rm-key.bar { background: color-mix(in srgb, var(--s3) 60%, transparent); }
-.rm-key.pe { background: var(--surface); border: 1px solid var(--s4); border-radius: var(--r-pill); height: 10px; }
+/* The panel draws two charts from zero now (columnChart): revenue, and that
+ * year's P/E. The P/E floated inside each revenue bar on its own scale was a
+ * second axis with no ticks. */
 
 /* --------------------------------------------------- panel hover accent -- */
 
@@ -7167,6 +7109,7 @@ b, strong { font-weight: 600; }
 }
 .seas-bar i.up { background: var(--pos); }
 .seas-bar i.down { background: var(--neg); }
+.seas-bar i.faint { background: var(--ink-muted); opacity: 0.45; }
 
 .seas-rpt {
   font-size: var(--t-micro);

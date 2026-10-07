@@ -193,7 +193,8 @@ def test_the_options_charts_are_handed_their_data():
     """, PAYLOAD)
     assert out["id1"] == out["id2"], "the same card keeps the same host across refreshes"
     assert out["term"] == [["6d", 21.5], ["73d", 25.0]]
-    assert [r["label"] for r in out["oi"]["rows"]] == ["340", "330"] and out["oi"]["markerRow"] == 1
+    assert [r["label"] for r in out["oi"]["rows"]] == ["$340", "$330"] and out["oi"]["markerRow"] == 1
+    assert out["oi"]["markerLabel"] == "price $333.60"
     assert out["exp"] == [["Oct 12 · 6d", False], ["Dec 18 · 73d", True]]
     assert out["split"] == ["Volume", "Open interest", "Premium", "New positions"]
     assert out["payoff"]["spot"] == 333.6 and out["payoff"]["legs"][0]["strike"] == 335

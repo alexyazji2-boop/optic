@@ -124,22 +124,26 @@ def test_the_track_record_statements_and_owners_are_drawn():
       CO.earnings_history.upcoming = [{ date: '2026-10-21', eps_estimate: 1.2, timing: 'before_open' }];
       R.html = renderCompany(CO);
       mountFinancialsVisuals(CO);
-      build('viz-fin-track'); build('viz-fin-rev'); build('viz-fin-owners'); build('viz-fin-insiders');
+      build('viz-fin-track'); build('viz-fin-rev'); build('viz-fin-owners');
       R.track = CAPT.dumbbellChart[0].items;
       R.rev = CAPT.columnChart[0].items;
       R.owners = CAPT.shareBars[0].rows[0].values;
-      R.ins = CAPT.divergingBars[0].rows;
+      R.insiders = 'viz-fin-insiders' in BUILT;
+      R.flat = renderCompany(Object.assign({}, CO, { ownership: Object.assign({}, CO.ownership, { insider_6m: {} }) }));
     """)
     html = out["html"]
-    for host in ("viz-fin-track", "viz-fin-rev", "viz-fin-ni", "viz-fin-fcf", "viz-fin-eps", "viz-fin-owners",
-                 "viz-fin-insiders"):
+    for host in ("viz-fin-track", "viz-fin-rev", "viz-fin-ni", "viz-fin-fcf", "viz-fin-eps", "viz-fin-owners"):
         assert f'id="{host}"' in html, host
     assert "Exact figures, by year" in html
     assert out["track"][-1]["label"] == "Next" and "before the open" in dict(out["track"][-1]["detail"])["Reports"]
     assert [i["label"] for i in out["rev"]] == ["2024", "2025"], "oldest first"
     assert out["rev"][-1]["value"] == 1e9
     assert out["owners"] == {"inst": 70.0, "ins": 5.0, "rest": 25.0}
-    assert [r["label"] for r in out["ins"]] == ["Bought", "Sold"] and out["ins"][1]["value"] == -1500
+    # Two bars of bought against sold repeated the two rows under them; the
+    # finding is the line under the heading, and no line when there is none.
+    assert 'id="viz-fin-insiders"' not in html and not out["insiders"]
+    assert "Insiders sold more than they bought over six months" in html
+    assert '<p class="viz-title"></p>' not in out["flat"]
 
 
 def test_holder_figures_that_overlap_are_not_drawn_as_one_whole():
