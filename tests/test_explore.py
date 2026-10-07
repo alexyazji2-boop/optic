@@ -308,3 +308,13 @@ def test_a_quiet_tape_is_not_headlined_as_a_move():
     assert "0.9x" in quiet["detail"] and "HYG" in quiet["detail"]
     loud = run(2.4)
     assert loud["label"] == "Biggest move" and loud["verdict"] == "HYG +0.4%"
+
+
+def test_the_sector_read_is_on_screen_in_a_narrow_box():
+    """The rotation read is the table's fourth column and sat off the right edge
+    behind a scrollbar at 375px. Narrow, each sector is a card with its read."""
+    body = _fn("renderExplore")
+    assert 'table-scroll cq-cards"><table class="data narrow ex-sector-table">' in body
+    for cell in ("exs-name", "exs-week", "exs-month", "exs-read"):
+        assert cell in body, cell
+        assert "table.ex-sector-table td.%s {" % cell in CSS, cell

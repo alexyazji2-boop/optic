@@ -8635,25 +8635,25 @@ function renderExplore(data) {
       <h2>${hg('Sectors')}</h2>
       <p class="sub">Every sector against ${esc((data.sectors || {}).benchmark || 'the benchmark')},
         by its own week. Rotation is where money moved, not where it is.</p>
-      <table class="data narrow">
+      <div class="table-scroll cq-cards"><table class="data narrow ex-sector-table">
         <thead><tr><th>Sector</th><th>Week</th><th>Month</th><th>Read</th></tr></thead>
         <tbody>${sectors.map((r) => `<tr class="ex-row" data-explore-sector="${esc(r.symbol)}">
           ${/* A button in the row, for the keyboard. The row took the click
                and nothing else: no tab stop and no name, so the eleven
                sectors could not be opened without a mouse. */''}
-          <td class="name"><button type="button" class="ex-sector-btn"
+          <td class="name exs-name"><button type="button" class="ex-sector-btn"
             data-explore-sector="${esc(r.symbol)}">${esc(r.name)}</button></td>
-          <td class="${signClass(r.rel_week_pct)}">${fmtPct(r.rel_week_pct, 1)}</td>
-          <td class="${signClass(r.rel_month_pct)}">${fmtPct(r.rel_month_pct, 1)}</td>
+          <td class="exs-week ${signClass(r.rel_week_pct)}">${fmtPct(r.rel_week_pct, 1)}</td>
+          <td class="exs-month ${signClass(r.rel_month_pct)}">${fmtPct(r.rel_month_pct, 1)}</td>
           ${/* rotation is {state, label, note}, so String() on it rendered
                "[object Object]" down the whole column. The sector board two
                panels away already reads .label; this one was interpolating the
                container. The note is the title because it is a sentence and
                this is a narrow cell. */''}
-          <td class="name muted" title="${esc((r.rotation || {}).note || '')}">${
+          <td class="name muted exs-read" title="${esc((r.rotation || {}).note || '')}">${
   esc((r.rotation || {}).label || '')}</td>
         </tr>`).join('')}</tbody>
-      </table>
+      </table></div>
     </section>` : ''}
 
     ${moves.length ? `<section class="panel">

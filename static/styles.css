@@ -15810,6 +15810,30 @@ body.ws-max[data-view="chart"] main { padding: 0; }
   table.gm-table td.gm-rho::before { content: 'With the S&P '; color: var(--ink-muted); }
 }
 
+/* Explore's sectors: the rotation read is the fourth column, and at 375px it
+   sat off the right edge behind a scrollbar. Name and read, then the week and
+   the month against SPY. */
+@container (max-width: 479px) {
+  table.ex-sector-table thead { display: none; }
+  table.ex-sector-table { min-width: 0; width: 100%; }
+  table.ex-sector-table, table.ex-sector-table tbody { display: block; }
+  table.ex-sector-table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    grid-template-areas: 'name read' 'week month';
+    column-gap: var(--space-2);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border);
+  }
+  table.ex-sector-table td { display: block; padding: 0; border: 0; text-align: left; white-space: normal; }
+  table.ex-sector-table td.exs-name { grid-area: name; }
+  table.ex-sector-table td.exs-read { grid-area: read; text-align: right; }
+  table.ex-sector-table td.exs-week { grid-area: week; }
+  table.ex-sector-table td.exs-month { grid-area: month; text-align: right; }
+  table.ex-sector-table td.exs-week::before { content: 'Week vs SPY '; color: var(--ink-muted); }
+  table.ex-sector-table td.exs-month::before { content: 'Month '; color: var(--ink-muted); }
+}
+
 /* Reliability pass: an action per card on a phone. As a table at 375px the
    page showed the date, the symbol and half the firm's name, and the target,
    the action and the rating, which are what the row is for, sat off to the
