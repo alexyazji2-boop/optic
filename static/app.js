@@ -13484,7 +13484,10 @@ const syncSecurityHeader = trackSecurityHeader();
  * the instrument's type, and a fund's strip leaves the tab out; anything that
  * still opens it for a fund lands on Overview. Until the quote is in the type
  * is not known, and the tab shows. */
-const FUND_TYPES = ['ETF', 'MUTUALFUND'];
+/* And an index: ^GSPC opened a Financials tab of empty panels, for the same
+ * reason SPY did, since an index files no statements either. The quote calls
+ * it INDEX. */
+const FUND_TYPES = ['ETF', 'MUTUALFUND', 'INDEX'];
 
 function symbolIsFund(sym) {
   if (!sym) return false;

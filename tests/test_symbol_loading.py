@@ -204,3 +204,7 @@ def test_a_page_that_loads_once_says_when():
     fn = _fn("function snapshotWords() {")
     assert "snapshot from ${at}, not refreshing" in fn
     assert "${snapshotWords()}" in _fn("function liveIndicatorHTML(opts = {}) {")
+
+
+def test_an_index_has_no_financials_tab_either():
+    assert "const FUND_TYPES = ['ETF', 'MUTUALFUND', 'INDEX'];" in APP
