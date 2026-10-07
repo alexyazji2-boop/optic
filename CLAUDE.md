@@ -61,7 +61,8 @@ The exception is Pulse — `/api/chat` and `/api/research`, which share
 `_spend_guard`. They are the only endpoints that spend the operator's money per
 call, and metered by address they were also the easiest thing here to get more
 of, because a new address is a new allowance. A guest gets 401 and a sentence
-naming the way in; an account gets its plan's allowance, Free being five a day.
+naming the way in; an account gets its plan's allowance, Free being three a day
+(`PLANS` in `app/auth/store.py`).
 `GUEST_AI_CALLS_PER_DAY` above zero restores the old per-address metering, so the
 gate is a default rather than a literal.
 
