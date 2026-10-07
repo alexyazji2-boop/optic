@@ -105,14 +105,31 @@ def test_the_moves_are_ranked_against_each_instrument_s_own_range():
     fourth, but VVIX moves 4.9% on an average day and the Russell 1.1%."""
     fn = _fn("rankedMoves")
     assert "inst.atr_pct" in fn
-    assert "Math.abs(inst.chg_1d) / atr" in fn
+    # Against the typical close-to-close day the ATR describes, converted as
+    # the Macro tab's expected-move panel converts it.
+    assert "Math.abs(inst.chg_1d) / (atr / RANGE_PER_SIGMA)" in fn
     assert "rows.sort((a, b) => b.rel - a.rel)" in fn
+
+
+def test_the_range_conversion_is_the_macro_tabs_own():
+    import re
+    from pathlib import Path
+    macro = (Path(__file__).resolve().parent.parent / "app/analytics/macro.py").read_text()
+    server = float(re.search(r"^RANGE_PER_SIGMA = ([0-9.]+)", macro, re.M).group(1))
+    client = float(re.search(r"^const RANGE_PER_SIGMA = ([0-9.]+);", APP_JS, re.M).group(1))
+    assert server == client
+
+
+def test_a_market_quoted_twice_is_ranked_once():
+    """The Russell and the Russell futures took two of the five rows."""
+    fn = _fn("rankedMoves")
+    assert ".replace(/\\s+futures$/i, '')" in fn and "seen.has(family)" in fn
 
 
 def test_an_instrument_without_a_range_sorts_last_rather_than_dividing_by_zero():
     fn = _fn("rankedMoves")
     assert "const atr = Number(inst.atr_pct) || 0;" in fn
-    assert "atr ? Math.abs(inst.chg_1d) / atr : 0" in fn
+    assert "atr ? Math.abs(inst.chg_1d) / (atr / RANGE_PER_SIGMA) : 0" in fn
 
 
 def test_the_multiple_is_shown_because_it_justifies_the_order():

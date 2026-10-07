@@ -301,6 +301,23 @@ def next_trading_day(day: date) -> date:
     return probe
 
 
+def last_regular_close(when: datetime) -> Optional[datetime]:
+    """The most recent regular-session close at or before `when`, in ET.
+
+    What a price read outside the session is the close *of*. The header said
+    "At the close" on a Monday morning, which is Friday's, and after a holiday
+    is the day before it; the client knows weekends only and must not learn the
+    calendar (see marketSessionET), so the day is named here."""
+    when = when.astimezone(ET)
+    day = when.date()
+    for _ in range(10):
+        close = regular_close(day)
+        if close is not None and close <= when:
+            return close
+        day -= timedelta(days=1)
+    return None
+
+
 def _after_end(when: datetime) -> int:
     return EARLY_AFTER_END if early_close_name(when) else AFTER_END
 
@@ -440,6 +457,7 @@ def state(now: Optional[datetime] = None) -> Dict[str, Any]:
 
     holiday = holiday_name(when)
     early = early_close_name(when)
+    closed_at = last_regular_close(when)
     return {
         "phase": phase,
         # The holiday's own name, so the strip reads "Labor Day" rather than
@@ -469,6 +487,14 @@ def state(now: Optional[datetime] = None) -> Dict[str, Any]:
             "selected zone; the ET equivalent is shown alongside."
         ),
         "day_pct": round(_minutes(when) / (24 * 60) * 100, 2),
+        # The close a price outside the session belongs to: today's after 4pm,
+        # Friday's all weekend, and the day before a holiday on the holiday.
+        "last_close": {
+            "at": closed_at.isoformat(),
+            "date": closed_at.date().isoformat(),
+            "weekday": closed_at.strftime("%A"),
+            "label": closed_at.strftime("%b %-d"),
+        } if closed_at else None,
         "segments": segments,
         "next": _next_change(when),
         # The one thing a reader has to know before trusting an off-hours price.

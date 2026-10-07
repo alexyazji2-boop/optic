@@ -303,9 +303,9 @@ def build(provider, ticker: str, years: int = 10) -> Dict[str, Any]:
             "restated once. Weeks where the trailing year was loss-making are "
             "omitted rather than plotted, because a P/E on negative earnings is "
             "not a small number, it is not a number{loss}. Percentile bands are "
-            "over this name's own history in the window, so \\u201ccheap\\u201d "
+            "over this name's own history in the window, so \u201ccheap\u201d "
             "means cheap against itself and says nothing about its sector."
-        ).format(loss=(" — {} such weeks here".format(negative) if negative else "")),
+        ).format(loss=(" ({} such weeks here)".format(negative) if negative else "")),
     }
 
 

@@ -148,6 +148,8 @@ function priceIn(html) { var m = /sec-px">([^<]*)</.exec(html); return m ? m[1] 
 // this harness measures which price the header picks and nothing else.
 function secDataStateHTML() { return ''; }
 function secActionsHTML() { return ''; }
+// A symbol the feed 404'd has a header of its own (tests/test_symbol_loading.py).
+function symbolMissing() { return false; }
 """
 
 
@@ -209,6 +211,10 @@ function securityHeader(view) {
 }
 function emptyHTML() { return 'empty'; }
 function errorHTML(m) { return 'error ' + m; }
+// A failed load renders through tickerErrorHTML, which tells a symbol the feed
+// has never heard of from a failure (tests/test_symbol_loading.py).
+function tickerErrorHTML(err) { return errorHTML(err.message); }
+function fillSymbolSuggestions() {}
 function preserveUI(h, f) { f(); }
 function renderOverviewView() { host.innerHTML = 'overview'; }
 function renderNewsView() {} function renderFinancialsView() {}

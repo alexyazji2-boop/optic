@@ -9,7 +9,7 @@ Four columns, each a different kind of "why does this matter today":
 
   events      Scheduled releases and expiries inside a short window, ranked by
               the calendar's own impact band. Facts about a calendar.
-  earnings    Watchlist names reporting imminently. Also a calendar fact.
+  earnings    Widely followed names reporting imminently. Also a calendar fact.
   sectors     Which sectors changed state overnight, and where money rotated.
               Computed from prices.
   movers      The names the scanners surfaced most strongly today.
@@ -25,9 +25,13 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from datetime import timedelta
+
 from . import events as events_mod
+from . import session as session_mod
 from . import weekly as weekly_mod
 from .analytics import sector_board
+from .earnings_week import MAJORS
 
 log = logging.getLogger(__name__)
 
@@ -83,7 +87,7 @@ def _events(now: Optional[datetime] = None) -> List[Dict[str, Any]]:
 
 
 def _earnings(provider, now: Optional[datetime] = None) -> List[Dict[str, Any]]:
-    """Watchlist names reporting this week, soonest first."""
+    """Widely followed names (weekly.WATCHLIST) reporting this week, soonest first."""
     try:
         block = weekly_mod.earnings_this_week(provider, now)
     except Exception as exc:
@@ -94,7 +98,11 @@ def _earnings(provider, now: Optional[datetime] = None) -> List[Dict[str, Any]]:
         for symbol in day.get("symbols", []):
             rows.append({
                 "kind": "earnings",
-                "impact": "high",
+                # High for a report that moves the index, medium for the rest.
+                # Every report was "high", so on a day with two slots on Home's
+                # week strip any name in the scan outranked a medium-impact
+                # release, and a mid-cap's report took CPI's place.
+                "impact": "high" if symbol in MAJORS else "medium",
                 "ticker": symbol,
                 "title": "{} reports {}".format(symbol, day["day"]),
                 "when": day["day"],
@@ -125,7 +133,7 @@ def _sectors(provider) -> List[Dict[str, Any]]:
             "kind": "sector",
             "impact": "high" if changed else "medium",
             "ticker": r["symbol"],
-            "title": "{} — {}".format(r["symbol"], r.get("name")),
+            "title": "{} · {}".format(r["symbol"], r.get("name")),
             "trend": r.get("trend"),
             "rotation": rot,
             "why": (r.get("summary") or "") + (
@@ -173,6 +181,25 @@ def _movers(scanners_mod, ranking: Dict[str, Any]) -> List[Dict[str, Any]]:
     return rows[:MAX_PER_COLUMN]
 
 
+def _closed_days(now: Optional[datetime] = None) -> Dict[str, str]:
+    """Weekdays inside the horizon the market does not trade, with the reason.
+
+    Home's week strip leaves weekends out on its own and drew a holiday as an
+    ordinary day reading "Nothing tracked"; the client knows weekends only and
+    must not learn the exchange calendar (see marketSessionET), so the board
+    names the days here."""
+    when = (now or datetime.now(timezone.utc)).astimezone(session_mod.ET)
+    out: Dict[str, str] = {}
+    for k in range(HORIZON_DAYS + 1):
+        day = (when + timedelta(days=k)).date()
+        if day.weekday() >= 5:
+            continue
+        name = session_mod.market_holidays(day.year).get(day)
+        if name:
+            out[day.isoformat()] = name
+    return out
+
+
 def build(provider, scanners_mod, ranking: Dict[str, Any],
           now: Optional[datetime] = None) -> Dict[str, Any]:
     """The four columns, each with a preview and its full list."""
@@ -181,7 +208,7 @@ def build(provider, scanners_mod, ranking: Dict[str, Any],
          "blurb": "Scheduled releases and expiries in the next {} days.".format(HORIZON_DAYS),
          "rows": _events(now)},
         {"id": "earnings", "name": "Earnings this week",
-         "blurb": "Watchlist names reporting, soonest first.",
+         "blurb": "Widely followed names reporting, soonest first.",
          "rows": _earnings(provider, now)},
         {"id": "sectors", "name": "Sector read-through",
          "blurb": "Sectors that changed state overnight, or where money is rotating.",
@@ -198,6 +225,7 @@ def build(provider, scanners_mod, ranking: Dict[str, Any],
         "available": any(c["total"] for c in columns),
         "columns": columns,
         "horizon_days": HORIZON_DAYS,
+        "closed_days": _closed_days(now),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "method": (
             "Nothing on this board is new data. It is the calendar, the earnings "

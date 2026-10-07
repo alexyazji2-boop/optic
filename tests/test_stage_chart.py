@@ -248,7 +248,10 @@ def test_the_overview_chip_is_guarded_on_the_dossiers_own_symbol():
     deliberately independent. Proven in a browser -- with TSLA on screen,
     NVDA's late answer painted unguarded read Stage 2 under TSLA's name."""
     fn = _sec_header()
-    block = fn[fn.index("if (showStage) {"):fn.index("return `<header")]
+    # The header proper, after the early return for a symbol the feed does not
+    # know (tests/test_symbol_loading.py), which has no stage chip.
+    at = fn.index("if (showStage) {")
+    block = fn[at:fn.index("return `<header", at)]
     assert "() => (STATE.ticker || '') === sym" in block
     assert "chartSymbol" not in block
 

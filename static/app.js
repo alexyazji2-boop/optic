@@ -816,7 +816,7 @@ const HEADER_DEFS = {
   'splits': 'A split changes how many shares exist without changing what the company is worth: a 2-for-1 split doubles the shares and halves the price. Past prices are adjusted for splits, so charts compare like with like.',
   'recent sec filings': "The company's latest filings with the US Securities and Exchange Commission: annual reports (10-K), quarterly reports (10-Q) and notices of material events (8-K), among others. They are the primary source most of the figures elsewhere are drawn from.",
   'insiders': "Who is trading what and who the government is paying, from three public filing regimes: company insiders' Form 4s, members of the House under the STOCK Act, and federal contract awards. Each is published after a delay, and nothing here is ranked by how profitable it looked.",
-  'earnings this week': 'Which names on the watchlist report between Monday and Friday of this week, grouped by day. It scans a fixed list of widely followed names, not the whole market, because free data gives one earnings date per symbol at a time.',
+  'earnings this week': 'Which widely followed companies report between Monday and Friday of this week, grouped by day, with the names on your own watchlist marked. It scans a fixed list of widely followed names, not the whole market, because free data gives one earnings date per symbol at a time.',
   'where the price sits': "Today's price against three yardsticks on one axis: the range the company's own price-to-earnings history implies, the analysts' price targets, and its trading range over the past year. Each shows a range rather than a single figure, because none of them is precise.",
   'the past year': "The stock's daily closing price over the last twelve months, with its earnings reports, ex-dividend dates and splits marked on it. It shows how the price moved and what it did around each event.",
   'how they have moved': "Each compared name's price over the past year, rebased so that all of them start at 100 on the same day. A line ending at 130 has risen 30 percent over the period, so the ends can be compared directly.",
@@ -1622,6 +1622,8 @@ function armViewReveals() {
 function setStatus(parts) {
   const host = $('#statusline');
   if (!host) return;
+  // Nothing to say is no row, rather than an empty 29px band of glass.
+  host.hidden = !parts.length;
   host.innerHTML = `<div class="sl-parts">${
     parts.map((p) => `<span>${p}</span>`).join('')}</div>`;
 }
@@ -2108,10 +2110,20 @@ async function getJSON(url) {
       // connection rather than anything the app did.
       let detail = '';
       try { detail = ((await res.json()).detail || '').toString(); } catch (e) { /* not JSON */ }
-      if (detail) throw new Error(detail);           // the app answered; that is the answer
+      /* The status rides on the error. A 404 from /api/ticker is the feed
+       * saying the symbol does not exist, which is a different page from a
+       * failed load (see symbolMissingHTML), and the message alone cannot be
+       * told apart from any other refusal. */
+      if (detail) {
+        const answered = new Error(detail);   // the app answered; that is the answer
+        answered.status = res.status;
+        throw answered;
+      }
 
       if (!worthRetrying(res.status)) {
-        throw new Error(`${res.statusText || 'request failed'} (HTTP ${res.status})`);
+        const refused = new Error(`${res.statusText || 'request failed'} (HTTP ${res.status})`);
+        refused.status = res.status;
+        throw refused;
       }
       lastDetail = `the server is unreachable (HTTP ${res.status})`;
     }
@@ -4146,6 +4158,30 @@ function trackRailHeight() {
  * A rail that forgets is a rail you re-collapse on every visit, and the whole
  * point of collapsing it is that the reader wanted the width back. */
 const RAIL_KEY = 'optic.rail.tight';
+/* The reader's own choice, kept apart from the state.
+ *
+ * applyRail wrote RAIL_KEY on every load whether anyone had pressed Collapse
+ * or not, so "0" in it means nothing: every browser that ever opened Optic
+ * has it. A choice is written here, from the button only, and without one the
+ * width decides: collapsed from 560 to 1023px, where the expanded rail's 212px
+ * left a 768px tablet 556px of page and every wide table scrolled sideways,
+ * measured 2026-10-07. A "1" in the old key could only have come from the
+ * button, so it still counts as a choice. */
+const RAIL_CHOICE_KEY = 'optic.rail.tight.v2';
+const RAIL_AUTO_QUERY = '(min-width: 560px) and (max-width: 1023px)';
+
+function railChoice() {
+  try {
+    const v = localStorage.getItem(RAIL_CHOICE_KEY);
+    if (v === '1' || v === '0') return v === '1';
+    if (localStorage.getItem(RAIL_KEY) === '1') return true;
+  } catch (e) { /* private mode */ }
+  return null;
+}
+
+function railDefault() {
+  return typeof matchMedia === 'function' && matchMedia(RAIL_AUTO_QUERY).matches;
+}
 
 /* Every blinking Optic mark on one clock.
  *
@@ -4180,19 +4216,37 @@ function applyRail(tight) {
     const text = btn.querySelector('.rail-label');
     if (text) text.textContent = tight ? 'Expand' : 'Collapse';
   }
-  try { localStorage.setItem(RAIL_KEY, tight ? '1' : '0'); }
-  catch (e) { /* private mode: it just forgets between loads */ }
+  /* Nothing is stored here. Writing the state on every application is what
+   * made RAIL_KEY meaningless, and with a width-led default it would save the
+   * width's answer as the reader's: a tablet's automatic collapse came back
+   * as a choice on the desktop. The button stores the choice (initRail). */
 }
 
 function initRail() {
-  let tight = false;
-  try { tight = localStorage.getItem(RAIL_KEY) === '1'; } catch (e) { tight = false; }
-  applyRail(tight);
+  const chosen = railChoice();
+  // Set, not animated: the rail's width transition is for the button, and on
+  // a load it would draw the rail at 212px and slide it shut.
+  const railEl = document.getElementById('rail');
+  if (railEl) railEl.style.transition = 'none';
+  applyRail(chosen === null ? railDefault() : chosen);
+  if (railEl) {
+    void railEl.offsetWidth;
+    setTimeout(() => { railEl.style.transition = ''; }, 0);
+  }
   const btn = document.getElementById('rail-toggle');
   if (btn) {
     btn.addEventListener('click', () => {
-      applyRail(!document.body.classList.contains('rail-tight'));
+      const tight = !document.body.classList.contains('rail-tight');
+      try { localStorage.setItem(RAIL_CHOICE_KEY, tight ? '1' : '0'); }
+      catch (e) { /* private mode: it just forgets between loads */ }
+      applyRail(tight);
     });
+  }
+  // A window crossing the line follows it, until the reader has chosen.
+  if (typeof matchMedia === 'function') {
+    const mq = matchMedia(RAIL_AUTO_QUERY);
+    const follow = () => { if (railChoice() === null) applyRail(railDefault()); };
+    if (mq.addEventListener) mq.addEventListener('change', follow);
   }
   trackRailHeight();
 }
@@ -4222,9 +4276,19 @@ if (homeNarrowQuery && homeNarrowQuery.addEventListener) {
 
 function renderHome() {
   hideTip();
-  const quick = HOME_QUICK_PICKS
-    .map((t) => `<button type="button" data-pick="${t}">${t}</button>`)
+  /* A returning reader's own names, a new one's examples.
+   *
+   * The row was always SPY, QQQ, NVDA, AAPL, TSLA, AMD, MSFT and IWM: eight
+   * examples for someone who has never searched, and still those eight for
+   * someone who opened INTC and PLTR yesterday and came back to carry on. The
+   * names they opened are the ones they are most likely to want, newest
+   * first, and the examples stay for the visit where there are none. */
+  const recent = recentSymbols();
+  const picks = recent.length ? recent : HOME_QUICK_PICKS;
+  const quick = picks
+    .map((t) => `<button type="button" data-pick="${esc(t)}">${esc(t)}</button>`)
     .join('');
+  const quickLabel = recent.length ? 'Recent' : 'Or jump to';
 
   views.home.innerHTML = `
   <div class="home">
@@ -4277,7 +4341,7 @@ function renderHome() {
     </form>
 
     <div class="home-quick">
-      <span class="label">Or jump to</span>
+      <span class="label">${quickLabel}</span>
       ${quick}
     </div>
 
@@ -4486,19 +4550,35 @@ function homeTodayHTML(p) {
   if (!p || p.available === false) return '';
   const byId = {};
   (p.columns || []).forEach((c) => { byId[c.id] = c; });
+  const nowIso = ((STATE.home || {}).session || {}).now_et;
+  const strip = catalystStripHTML(p, nowIso);
+  /* The columns list what the strip does not show.
+   *
+   * Both listed every row, so a week with PEP reporting on Thursday said so
+   * in the Thursday cell and again under "Earnings this week", and the
+   * Commitments of Traders on Friday twice more: measured on Home on
+   * 2026-10-06, every scheduled row on the page was printed twice. The strip
+   * holds what it can date, two a day; the columns keep what it cannot place
+   * and a busy day's overflow, which is what its "N more" opens, and the
+   * sectors, which have no day. A strip item's reason opens under the strip
+   * (catalystNoteHTML), so nothing a column row said is lost. */
+  const onStrip = strip ? catalystPlacement(p, nowIso).shown : new Set();
   const cols = HOME_TODAY_COLUMNS
     .map((id) => byId[id])
-    .filter((c) => c && (c.rows || []).length);
-  if (!cols.length) return '';
+    .filter(Boolean)
+    .map((c) => ({ ...c, rows: (c.rows || []).filter((r) => !onStrip.has(r)) }))
+    .filter((c) => c.rows.length);
+  if (!cols.length && !strip) return '';
   const horizon = Number(p.horizon_days) || 0;
   return `<div class="ht-head">
       <h2 class="ht-title">What matters today</h2>
-      ${horizon ? `<span class="ht-sub">Next ${fmt(horizon, 0)} days</span>` : ''}
+      ${horizon ? `<span class="ht-sub">Next ${fmt(horizon, 0)} days${
+  p.generated_at ? ` \u00b7 as of ${esc(timeIn(p.generated_at, activeZone()))}` : ''}</span>` : ''}
       <button type="button" class="ht-more" data-goto-view="brief"
         >The full read \u2192</button>
     </div>
-    ${catalystStripHTML(p, ((STATE.home || {}).session || {}).now_et)}
-    <div class="ht-cols">${cols.map((c) => {
+    ${strip}
+    ${cols.length ? `<div class="ht-cols">${cols.map((c) => {
     const all = c.rows || [];
     const open = homeTodayOpen.has(c.id);
     const rows = open ? all : all.slice(0, HOME_TODAY_ROWS);
@@ -4519,7 +4599,7 @@ function homeTodayHTML(p) {
           data-ht-all="${esc(c.id)}" aria-expanded="${open}">${
   open ? 'Show fewer' : `${fmt(rest, 0)} more`}</button>` : ''}
       </section>`;
-  }).join('')}</div>`;
+  }).join('')}</div>` : ''}`;
 }
 
 /* The week ahead as days, each with what is scheduled on it.
@@ -4531,9 +4611,22 @@ function homeTodayHTML(p) {
  * place stays in the columns below, which list every row; nothing is guessed
  * onto a day. An earnings row once was, from its weekday, and on a Tuesday
  * Monday's report was drawn on next Monday. */
-function catalystStripHTML(p, nowIso) {
+/* Which strip item's reason is open, by its title. Module state for the
+ * reason homeTodayOpen is: the band is rebuilt by the refresh tick, and a
+ * note kept on the markup would close under the reader every twenty seconds. */
+let catalystNoteOpen = null;
+
+/* Two a day, the larger first; the rest is a button that opens the columns
+ * listing them. A strip that grows with the feed is a table. */
+const CATALYST_SHOWN = 2;
+
+/* Where each dated row falls in the days ahead, and which rows the strip
+ * shows. Shared by the strip and the columns under it, so the columns can
+ * leave out exactly what the strip already says. */
+function catalystPlacement(p, nowIso) {
+  const shown = new Set();
   const cols = {};
-  (p.columns || []).forEach((c) => { cols[c.id] = c; });
+  ((p || {}).columns || []).forEach((c) => { cols[c.id] = c; });
   /* Today in New York: the session's own date when Home has loaded, and the
    * clock's otherwise, since this section can arrive first. */
   const etToday = () => {
@@ -4544,14 +4637,17 @@ function catalystStripHTML(p, nowIso) {
   };
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(nowIso || etToday()));
   const base = m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])) : null;
-  if (!base) return '';
+  if (!base) return { days: [], placed: 0, shown };
   // Inclusive: the feed keeps a row that is exactly its horizon away.
   const horizon = Math.max(1, Math.min(7, Number.isFinite(p.horizon_days) ? p.horizon_days : 5));
   const days = [];
   for (let k = 0; k <= horizon; k += 1) {
     const d = new Date(base.getTime() + k * 86400000);
     if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue;    // no session
-    days.push({ k, d, items: [] });
+    // A holiday by the server's calendar (closed_days); the client knows
+    // weekends only. Drawn as a closed day rather than one with nothing on it.
+    const iso = d.toISOString().slice(0, 10);
+    days.push({ k, d, items: [], closed: ((p || {}).closed_days || {})[iso] || null });
   }
   const place = (row, kind) => {
     const on = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(row.date || ''));
@@ -4560,48 +4656,124 @@ function catalystStripHTML(p, nowIso) {
     const day = days.find((x) => x.k === k);
     if (day) {
       day.items.push({ kind, col: kind === 'event' ? 'events' : 'earnings', title: row.short || row.title,
-        time: row.time, impact: row.impact });
+        time: row.time, impact: row.impact, row });
     }
   };
   ((cols.events || {}).rows || []).forEach((r) => place(r, 'event'));
   ((cols.earnings || {}).rows || []).forEach((r) => place(r, 'earnings'));
-  const placed = days.reduce((n, x) => n + x.items.length, 0);
-  if (!placed) return '';
-  /* Two a day, the larger first, and the rest is a button that opens the
-   * columns listing them: a strip that grows with the feed is a table. */
   const RANK = { high: 0, medium: 1, low: 2 };
-  const SHOWN = 2;
+  days.forEach((x) => {
+    x.items.sort((a, b) => (RANK[a.impact] ?? 3) - (RANK[b.impact] ?? 3));
+    x.items.slice(0, CATALYST_SHOWN).forEach((it) => shown.add(it.row));
+  });
+  const placed = days.reduce((n, x) => n + x.items.length, 0);
+  return { days, placed, shown };
+}
+
+/* The week ahead as days, each with what is scheduled on it.
+ *
+ * Asked for as "upcoming catalysts displayed as a visual timeline or calendar
+ * strip". Only what the feed dates is placed, by the row's date or else its
+ * days away, and only on the days the feed looks at: a day past its horizon
+ * would say nothing is on it when nothing was looked for. Anything it cannot
+ * place stays in the columns below; nothing is guessed onto a day. An
+ * earnings row once was, from its weekday, and on a Tuesday Monday's report
+ * was drawn on next Monday.
+ *
+ * An item with a reason is a button that opens it under the strip, one at a
+ * time: the reason was the column row's, and the columns no longer repeat
+ * what the strip shows. */
+function catalystStripHTML(p, nowIso) {
+  const { days, placed } = catalystPlacement(p, nowIso);
+  if (!placed) return '';
   const label = (d) => `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()]} ${d.getUTCDate()}`;
-  const item = (it) => `<li class="cs-item is-${esc(it.kind)} impact-${esc(it.impact || 'low')}"
-        title="${esc(it.title)}${it.time ? ' · ' + esc(it.time) : ''}">${esc(it.title)}${
-  it.time ? `<span class="cs-time">${esc(it.time)}</span>` : ''}${
-  it.impact === 'high' ? '<span class="sr-only"> (high impact)</span>' : ''}</li>`;
-  return `<div class="cs-strip" role="list" aria-label="${placed} scheduled catalyst${placed === 1 ? '' : 's'} by day">
-    ${days.map((x) => {
+  let openItem = null;
+  const item = (it) => {
+    const inner = `${esc(it.title)}${
+      it.time ? `<span class="cs-time">${esc(it.time)}</span>` : ''}${
+      it.impact === 'high' ? '<span class="sr-only"> (high impact)</span>' : ''}`;
+    const cls = `cs-item is-${esc(it.kind)} impact-${esc(it.impact || 'low')}`;
+    const tip = `${esc(it.title)}${it.time ? ' · ' + esc(it.time) : ''}`;
+    if (!String(it.row.why || '').trim()) return `<li class="${cls}" title="${tip}">${inner}</li>`;
+    const open = catalystNoteOpen === it.title;
+    if (open) openItem = it;
+    return `<li class="${cls} has-note${open ? ' is-open' : ''}"><button type="button"
+        class="cs-note-btn" data-cs-note="${esc(it.title)}" aria-expanded="${open}"
+        aria-controls="cs-note" title="${tip}">${inner}</button></li>`;
+  };
+  const cells = days.map((x) => {
     const name = x.k === 0 ? 'Today' : label(x.d);
-    const all = x.items.slice().sort((a, b) => (RANK[a.impact] ?? 3) - (RANK[b.impact] ?? 3));
-    const rest = all.slice(SHOWN);
+    const all = x.items;
+    const rest = all.slice(CATALYST_SHOWN);
     const where = [...new Set(rest.map((it) => it.col))].join(' ');
+    if (x.closed && !all.length) {
+      return `<div class="cs-day is-closed${x.k === 0 ? ' is-today' : ''}" role="listitem">
+      <span class="cs-date">${esc(name)}</span>
+      <span class="cs-none">Market closed: ${esc(x.closed)}</span>
+    </div>`;
+    }
     return `<div class="cs-day${x.k === 0 ? ' is-today' : ''}${all.length ? '' : ' is-empty'}" role="listitem">
       <span class="cs-date">${esc(name)}</span>
-      ${all.length ? `<ul class="cs-items">${all.slice(0, SHOWN).map(item).join('')}${rest.length
+      ${all.length ? `<ul class="cs-items">${all.slice(0, CATALYST_SHOWN).map(item).join('')}${rest.length
     ? `<li><button type="button" class="ht-rest cs-more" data-ht-show="${esc(where)}"
           aria-label="${rest.length} more on ${esc(name)}, listed below">${rest.length} more</button></li>` : ''}</ul>`
     : '<span class="cs-none">Nothing tracked</span>'}
     </div>`;
-  }).join('')}
-  </div>`;
+  }).join('');
+  /* The strip's two cues, said once beside it: an amber edge is a high-impact
+   * item and a dashed one a company's report. They were drawn and explained
+   * nowhere, so the colour carried a meaning the reader had to guess. */
+  const anyHigh = days.some((x) => x.items.slice(0, CATALYST_SHOWN).some((it) => it.impact === 'high'));
+  const anyEarn = days.some((x) => x.items.slice(0, CATALYST_SHOWN).some((it) => it.kind === 'earnings'));
+  const key = anyHigh || anyEarn ? `<p class="cs-key">${
+    anyHigh ? '<span class="cs-key-item impact-high">High impact</span>' : ''}${
+    anyEarn ? '<span class="cs-key-item is-earnings">Company report</span>' : ''}</p>` : '';
+  return `<div class="cs-strip" role="list" aria-label="${placed} scheduled catalyst${placed === 1 ? '' : 's'} by day">
+    ${cells}
+  </div>
+  ${key}
+  ${catalystNoteHTML(openItem)}`;
+}
+
+/* The open item's reason, in one place under the strip. */
+function catalystNoteHTML(it) {
+  if (!it) return '<p class="cs-note" id="cs-note" hidden></p>';
+  const row = it.row || {};
+  const title = String(row.title || it.title);
+  // "PEP reports Thursday" already says when; a second "Thursday" beside it
+  // read as a stutter.
+  let when = String(row.when || row.time || '').trim();
+  if (when && title.toLowerCase().includes(when.toLowerCase())) when = '';
+  return `<p class="cs-note" id="cs-note"><strong>${esc(title)}</strong>${
+    when ? `<span class="cs-note-when">${esc(when)}</span>` : ''} ${esc(String(row.why || '').trim())}</p>`;
 }
 
 /* Not through mountPanel: that falls back to re-rendering Optic's Read when its
  * host is missing, which is right for the Read tab's hosts and wrong for a home
  * page one -- leaving Home would repaint a tab the reader is not on. */
+/* How long the Today band's board is kept before Home asks again. It was
+ * fetched once per page load and never again, so a tab left open overnight
+ * kept yesterday's "Today", and nothing on the band said when it was from.
+ * The server caches the board, so asking again costs it little. */
+const HOME_TODAY_TTL_MS = 30 * 60 * 1000;
+
 async function loadHomeToday() {
   const host = document.getElementById('hm-today');
   if (!host) return;
+  const etDay = () => {
+    try {
+      return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+    } catch (e) { return ''; }
+  };
+  if (STATE.priority && (Date.now() - (STATE.priorityAt || 0) > HOME_TODAY_TTL_MS
+      || STATE.priorityDay !== etDay())) {
+    STATE.priority = null;
+  }
   if (!STATE.priority) {
     try {
       STATE.priority = await getJSON('/api/priority');
+      STATE.priorityAt = Date.now();
+      STATE.priorityDay = etDay();
     } catch (err) {
       return;              // the rest of Home is unaffected; say nothing
     }
@@ -4688,9 +4860,12 @@ async function loadHomeMarket(opts = {}) {
   const html = `
     <div class="hm-greet">
       <h2 class="hm-hello">${esc(homeHello())}</h2>
-      <span class="hm-session is-${session.is_open ? 'open' : 'shut'}">
-        ${esc(holiday ? holiday + ' \u00b7 market closed' : (session.label || ''))}
-      </span>
+      ${/* The day, not the session: the session strip directly above already
+           says "OVERNIGHT" and when the next session opens, and this chip said
+           "Overnight" again. A daily brief is dated. A holiday stays named,
+           because it is why the market is shut. */''}
+      <span class="hm-date">${esc(homeDateLine(session))}${
+  holiday ? ` \u00b7 ${esc(holiday)}, market closed` : ''}</span>
     </div>
     ${/* A main column and a rail, not one grid of equal cells.
          Three equal columns could not fill: a grid row is as tall as its
@@ -4852,13 +5027,19 @@ function renderHomeStatus(health) {
  *
  * `group` lands on the page last used inside that section, as the desktop
  * rail does, and the section's other pages are chips under the top bar. */
+/* `nav` names the rail's own icon for the place (NAV_ICONS), so a section
+ * wears one mark on both devices. The bar drew Unicode glyphs, a house, a
+ * half-filled circle, an arrow and a lens, against the rail's drawn set: the
+ * Dossier was a document on a laptop and a half moon on a phone, and the
+ * glyphs took whatever weight and baseline the phone's fallback font gave
+ * them. More is three dots drawn to the same recipe. */
 const MOBILE_TABS = [
-  { view: 'home', label: 'Home', icon: '&#8962;' },
+  { view: 'home', label: 'Home', nav: 'home' },
   // The desktop's word for it, so a reader learns the product once.
-  { view: 'overview', label: 'Dossier', icon: '&#9683;' },
-  { group: 'market', label: 'Markets', icon: '&#8599;' },
-  { group: 'discover', label: 'Discover', icon: '&#8981;' },
-  { more: true, label: 'More', icon: '&#8943;' },
+  { view: 'overview', label: 'Dossier', nav: 'security' },
+  { group: 'market', label: 'Markets', nav: 'market' },
+  { group: 'discover', label: 'Discover', nav: 'discover' },
+  { more: true, label: 'More', nav: 'more' },
 ];
 
 /** What a bottom-bar button stands for, as its data-mtab. */
@@ -4874,7 +5055,7 @@ function mountMobileTabs() {
   nav.setAttribute('aria-label', 'Primary');
   nav.innerHTML = MOBILE_TABS.map((t) => `<button type="button" class="mtab"
     data-mtab="${esc(mtabKey(t))}" aria-label="${esc(t.label)}">
-    <span class="mtab-ico" aria-hidden="true">${t.mark === 'pulse' ? pulseMarkHTML('pulse-glyph-sm') : t.icon}</span>
+    <span class="mtab-ico" aria-hidden="true">${navIcon(t.nav)}</span>
     <span class="mtab-lab">${esc(t.label)}</span>
   </button>`).join('');
   document.body.appendChild(nav);
@@ -5063,6 +5244,7 @@ function renderSetup(d) {
       <h2 class="hm-h">Setup${askPulse('setup')}</h2>
       ${budget}
       <p class="su-none">${gloss(ep.headline)}</p>
+      ${ep.reason ? `<p class="caveat">${esc(ep.reason)}</p>` : ''}
     </section>` : '';
   }
   const rec = ep.recommended || {};
@@ -8767,6 +8949,33 @@ function stripRows(data) {
   return MARKET_STRIP.map((row) => (overnight && row.overnight ? row.overnight : row));
 }
 
+/* A day's move as the market quotes it. A yield moves in basis points: the
+ * strip printed the 10-year's "-0.79%", a percent of the rate, for a move of
+ * about four hundredths of a point, which reads as a large fall in a bond
+ * yield and is not one. The change is worked back from the same percentage,
+ * so the two can never disagree. */
+function moveLabel(inst) {
+  const chg = inst ? inst.chg_1d : null;
+  if (chg === null || chg === undefined || !Number.isFinite(Number(chg))) return null;
+  const last = Number(inst.last);
+  if (inst.group === 'rates' && Number.isFinite(last) && chg > -100) {
+    const bp = (last - last / (1 + chg / 100)) * 100;
+    if (Number.isFinite(bp)) {
+      const n = Math.round(bp);
+      return `${n > 0 ? '+' : n < 0 ? '\u2212' : ''}${Math.abs(n)} bp`;
+    }
+  }
+  return fmtPct(chg, 2);
+}
+
+/* The typical day an instrument's ATR describes, in the units of a day's
+ * close-to-close move. ATR measures the high-to-low range, which is wider
+ * than the close-to-close move it was being compared with, so "0.7x normal"
+ * understated every move by the same factor. The Macro tab's expected-move
+ * panel makes this conversion (RANGE_PER_SIGMA in app/analytics/macro.py),
+ * and the two now agree. */
+const RANGE_PER_SIGMA = 1.6;
+
 function marketStripHTML(data) {
   const cells = stripRows(data).map(({ group, label }) => {
     const inst = stripInstrument(data, group, label);
@@ -8780,7 +8989,7 @@ function marketStripHTML(data) {
       <span class="ms-label">${esc(label)}</span>
       <span class="ms-last">${fmt(inst.last, inst.last < 20 ? 2 : (inst.last > 1000 ? 0 : 2))}</span>
       ${chg === null || chg === undefined ? ''
-    : `<span class="ms-chg ${signClass(chg)}">${fmtPct(chg, 2)}</span>`}
+    : `<span class="ms-chg ${signClass(chg)}">${esc(moveLabel(inst))}</span>`}
       ${word && word !== 'flat' ? `<span class="ms-word">${esc(word)}</span>` : ''}
       ${sparkSlot(inst.series, 'ms-spark')}
     </button>`;
@@ -8791,8 +9000,12 @@ function marketStripHTML(data) {
    * band at every width and the order means the indices are the ones on screen
    * before you scroll. The cells scroll on a track inside the box, so the box
    * keeps its border while they move (see stripFade). */
+  // When these were read. Nothing on Home said, and overnight half of them
+  // are the last close and half are live futures and crypto.
+  const at = data.generated_at ? timeIn(data.generated_at, activeZone()) : '';
   return `<div class="ms-strip" role="group" aria-label="Market snapshot"><div
-    class="ms-track">${cells}</div></div>`;
+    class="ms-track">${cells}</div></div>${at ? `<p class="ms-asof">As of ${esc(at)}${
+  marketSessionET() === 'regular' ? '' : '. Futures and crypto trade now; the rest are at the last close'}</p>` : ''}`;
 }
 
 /* The fade at the strip's right edge, only while there is more to scroll to.
@@ -8857,11 +9070,21 @@ function rankedMoves(data) {
        * extra request. Guarded anyway, and an instrument without one sorts
        * last rather than dividing by zero. */
       const atr = Number(inst.atr_pct) || 0;
-      rows.push({ ...inst, group, rel: atr ? Math.abs(inst.chg_1d) / atr : 0 });
+      rows.push({ ...inst, group, rel: atr ? Math.abs(inst.chg_1d) / (atr / RANGE_PER_SIGMA) : 0 });
     });
   });
   rows.sort((a, b) => b.rel - a.rel);
-  return rows;
+  /* One row per market. The S&P 500 and its futures, the Russell and its
+   * futures, are one market quoted twice, and both ranked: the Russell and
+   * the Russell futures took two of the five rows. The larger mover of each
+   * pair keeps the place. */
+  const seen = new Set();
+  return rows.filter((r) => {
+    const family = String(r.label || r.symbol || '').replace(/\s+futures$/i, '').toLowerCase();
+    if (seen.has(family)) return false;
+    seen.add(family);
+    return true;
+  });
 }
 
 /* The market's top stories, three of them, above the instrument list.
@@ -8925,7 +9148,17 @@ function homeTierLabel(id) {
 function morningDesk(data) {
   const d = (data || {}).morning_desk;
   if (!d || d.available !== true) return '';
-  const lead = (d.lead || []).map((p) => `<p class="md-p">${gloss(p)}</p>`).join('');
+  /* The takeaway first, then the reasons, one press away.
+   *
+   * The bottom line was the last paragraph of a desk 640px tall at 1440x900
+   * and 1006px on a phone, measured 2026-10-06, so the one sentence that
+   * says what the day comes to was below the fold on every device, under
+   * five paragraphs building up to it. It leads now, with the first of
+   * those paragraphs for context; the rest of the lead, the branches, the
+   * note and today's reports open under "The whole desk". */
+  const leads = d.lead || [];
+  const lead = leads.slice(0, 1).map((p) => `<p class="md-p">${gloss(p)}</p>`).join('');
+  const leadRest = leads.slice(1).map((p) => `<p class="md-p">${gloss(p)}</p>`).join('');
   /* Two plain headings, for a reader who has never seen a desk note: what the
    * branches are, and which line is the summary. Asked for as a desk "anyone,
    * regardless of financial and economic knowledge can understand"; unlabelled,
@@ -8954,11 +9187,15 @@ function morningDesk(data) {
         <h2 class="hm-h">Optic Desk</h2>
         ${askPulse('morning_desk')}
       </div>
-      ${lead}
-      ${scenarios}
-      ${d.note ? `<p class="md-note"><strong>Note:</strong> ${gloss(d.note)}</p>` : ''}
-      ${cal}
       ${d.overall ? `<p class="md-p md-overall"><strong>Bottom line:</strong> ${gloss(d.overall)}</p>` : ''}
+      ${lead}
+      ${leadRest || scenarios || d.note || cal ? `<details class="ind-explain md-more">
+        <summary>The whole desk<i class="cal-caret" aria-hidden="true"></i></summary>
+        ${leadRest}
+        ${scenarios}
+        ${d.note ? `<p class="md-note"><strong>Note:</strong> ${gloss(d.note)}</p>` : ''}
+        ${cal}
+      </details>` : ''}
       ${(d.limits || []).length ? `<div class="md-limits">
         ${/* Folded, with the count in the label. Open, the list was five
              to seven bullets under every desk, and on a quiet day it was
@@ -9014,7 +9251,7 @@ function whatMattersNow(data) {
       <button type="button" class="cc-move" data-instrument="${esc(inst.symbol)}"
         data-instrument-label="${esc(inst.label)}">
         <span class="cc-move-name">${esc(inst.label)}</span>
-        <span class="cc-move-chg ${signClass(inst.chg_1d)}">${fmtPct(inst.chg_1d, 2)}</span>
+        <span class="cc-move-chg ${signClass(inst.chg_1d)}">${esc(moveLabel(inst))}</span>
         ${sparkSlot(inst.series, 'cc-spark')}
         ${/* The multiple is why the row is on the list at all, so it is shown
             * rather than left implicit. Without it "VVIX +6.4%" above
@@ -9305,8 +9542,12 @@ function marketQuestions(data) {
   add(story, story && FED_WORDS.test(story) ? 'fed' : 'story');
   const release = catalystQuestion(data);
   add(release, release && FED_WORDS.test(release) ? 'fed' : 'release');
+  /* A move worth its own question is one past the instrument's whole
+   * average range, which is RANGE_PER_SIGMA typical days now that `rel`
+   * counts typical days (see rankedMoves); a one-day move clears that on
+   * about one day in ten. */
   moves.slice(1)
-    .filter((m) => m.rel >= 1 && !asked.has(m.group))
+    .filter((m) => m.rel >= RANGE_PER_SIGMA && !asked.has(m.group))
     .slice(0, 2)
     .forEach((m) => add(moveQuestion(m), m.group));
 
@@ -9517,7 +9758,7 @@ function paintDailyChanges() {
   if (host && STATE.view === 'home') host.innerHTML = dailyChangesHTML();
 }
 
-function dailyChangeRow(it) {
+function dailyChangeRow(it, repeatWhy) {
   const link = it.link || {};
   const sym = String(it.symbol || '');
   const head = String(it.headline || '').indexOf(`${sym} `) === 0
@@ -9530,8 +9771,23 @@ function dailyChangeRow(it) {
   link.panel ? ` data-dc-panel="${esc(link.panel)}"` : ''}>${esc(DAILY_LINK_LABEL[link.view] || 'Open')} &rarr;</button>
     </div>
     ${it.detail ? `<p class="dc-detail">${esc(it.detail)}</p>` : ''}
-    ${it.why ? `<p class="dc-why">${esc(it.why)}</p>` : ''}
+    ${it.why && !repeatWhy ? `<p class="dc-why">${esc(it.why)}</p>` : ''}
   </li>`;
+}
+
+/* Each kind of change carries one sentence on what it means, and four setups
+ * triggering on the close printed "A rule's trigger on a completed candle,
+ * with its invalidation level already set, read with the default rules. It is
+ * for review, not an order." four times, one under each, measured on Home on
+ * 2026-10-06. The first row of a kind keeps it; the rest would say it again. */
+function dailyChangeRows(items) {
+  const seen = new Set();
+  return items.map((it) => {
+    const why = String(it.why || '').trim();
+    const repeat = !!why && seen.has(why);
+    if (why) seen.add(why);
+    return dailyChangeRow(it, repeat);
+  }).join('');
 }
 
 /* "Unchanged" covers only the checks that ran, so the ones that could not are
@@ -9566,7 +9822,7 @@ function dailyChangesHTML() {
   return `${head}
     ${(per.notes || []).length ? `<p class="dc-note">${esc(per.notes.join(' '))}</p>` : ''}
     <p class="dc-summary">${esc(d.summary || '')}</p>
-    ${shown.length ? `<ul class="dc-list">${shown.map(dailyChangeRow).join('')}</ul>` : ''}
+    ${shown.length ? `<ul class="dc-list">${dailyChangeRows(shown)}</ul>` : ''}
     ${items.length > DAILY_ITEMS_SHOWN ? `<button type="button" class="hm-more" data-dc-more>${
   st.open ? 'Show fewer' : `All ${items.length} changes`}</button>` : ''}
     ${quiet.length ? `<p class="dc-quiet"><strong>No meaningful change:</strong> ${quiet.map((n) => `${esc(n.symbol)} <span class="${
@@ -9616,6 +9872,16 @@ document.addEventListener('click', (evt) => {
  * `message || text || reason`, none of which an alert row has, so every row
  * on Home was a symbol beside an empty line. /api/home sends at most four, so
  * the link names the place rather than a count it cannot know. */
+/** "Wednesday, October 7": the market's date, from the session payload, so a
+ *  reader west of New York after 9pm is not dated a day behind the desk. */
+function homeDateLine(session) {
+  const iso = (session || {}).now_et;
+  const at = iso ? new Date(iso) : new Date();
+  if (isNaN(at.getTime())) return '';
+  return at.toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', timeZone: 'America/New_York' });
+}
+
 function homeAlerts(data) {
   const rows = data.alerts || [];
   if (!rows.length) return '';
@@ -9735,6 +10001,16 @@ function recentSymbols() {
       ? raw.filter((s) => typeof s === 'string' && /^[A-Z.^=-]{1,12}$/.test(s))
       : [];
   } catch (e) { return []; }
+}
+
+/** Take a symbol back out of the recent list: the feed said it does not exist,
+ *  and Home's Recent row would otherwise offer it back on every visit. */
+function forgetSymbol(symbol) {
+  const sym = String(symbol || '').trim().toUpperCase();
+  const was = recentSymbols();
+  if (!was.includes(sym)) return;
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(was.filter((s) => s !== sym))); }
+  catch (e) { /* private mode */ }
 }
 
 function rememberSymbol(symbol) {
@@ -10223,7 +10499,9 @@ function paintPaletteList() {
 
 /* On a phone the search box says what it is for. "Search or ask ⌘K" names a
    key a phone does not have. */
-const PHONE_SEARCH_HINT = 'Search a stock or company';
+// "Ticker or company", as Home's own box says on a phone: the longer "Search
+// a stock or company" was cut to "SEARCH A STOCK OR COM" at 375px.
+const PHONE_SEARCH_HINT = 'Ticker or company';
 
 function syncSearchHint() {
   const box = document.getElementById('ticker-input');
@@ -10437,18 +10715,29 @@ document.addEventListener('input', (evt) => {
  * a conclusion.
  */
 
-/** A 0-100 bar. Ten cells, so the bar reads as a quantity and not a gradient. */
-function pulseBar(value, direction) {
-  if (value === null || value === undefined) {
+/** A score from -100 to +100, filled out from a middle line. Five cells each
+ *  side, so the bar reads as a quantity and not a gradient.
+ *
+ *  It was ten cells filled left to right from (score + 100) / 2, so a score
+ *  of 0 drew as a half-full bar and -3 for Macro read as "about half good".
+ *  Nothing on the bar marked the middle or said the scale ran negative. Now
+ *  0 is an empty bar on its midline, +50 fills half of the right side and -50
+ *  half of the left, which is what the signed figure beside it says. */
+function pulseBar(score, direction) {
+  if (score === null || score === undefined || !Number.isFinite(Number(score))) {
     return '<span class="pl-bar is-none" aria-hidden="true"></span>';
   }
-  const filled = Math.max(0, Math.min(10, Math.round(value / 10)));
+  const n = Math.max(0, Math.min(5, Math.round(Math.abs(Number(score)) / 20)));
+  const side = Number(score) < 0 ? 'neg' : 'pos';
   const tone = direction === 'up' ? 'up' : direction === 'down' ? 'down' : 'flat';
-  let cells = '';
-  for (let i = 0; i < 10; i += 1) {
-    cells += `<i class="pl-cell${i < filled ? ' on' : ''}"></i>`;
+  let left = '';
+  let right = '';
+  for (let i = 0; i < 5; i += 1) {
+    // Counted out from the middle on either side.
+    left += `<i class="pl-cell${side === 'neg' && 4 - i < n ? ' on' : ''}"></i>`;
+    right += `<i class="pl-cell${side === 'pos' && i < n ? ' on' : ''}"></i>`;
   }
-  return `<span class="pl-bar tone-${tone}" aria-hidden="true">${cells}</span>`;
+  return `<span class="pl-bar is-diverging tone-${tone}" aria-hidden="true">${left}<i class="pl-mid"></i>${right}</span>`;
 }
 
 /* What changed since the last visit to a symbol used to sit here. It was taken
@@ -10693,6 +10982,40 @@ function pulseReadMore(d) {
 }
 
 
+/* Optic's read in one line, for the Options tab: the stance sentence, any
+ * catalyst that changes how it is read, and the way to the full panel on
+ * Overview. See renderSwing for why the panel itself is not repeated here. */
+/* Show the compact strip's symbol and price while the price card is above
+ * the top of the screen. One observer, replaced on every render, because the
+ * render replaces the card it watched. */
+let priceCardObserver = null;
+function watchPriceCardForStrip() {
+  if (priceCardObserver) { priceCardObserver.disconnect(); priceCardObserver = null; }
+  if (typeof IntersectionObserver !== 'function' || !views.swing) return;
+  const card = views.swing.querySelector('.px-head');
+  const head = views.swing.querySelector('.sec-head.compact');
+  if (!card || !head) return;
+  priceCardObserver = new IntersectionObserver(([entry]) => {
+    const gone = !entry.isIntersecting && entry.boundingClientRect.top < 0;
+    head.classList.toggle('show-mini', gone);
+  });
+  priceCardObserver.observe(card);
+}
+
+function renderPulseLine(d) {
+  const p = d.pulse;
+  if (!p) return '';
+  const stance = String(p.stance || 'neutral');
+  const g = d.digest || {};
+  const lede = g.lede || p.stance_label || cap(stance);
+  return `<section class="pl-line span-all" aria-label="Optic's read">
+    <p class="pl-line-lede is-${esc(stance)}"><span class="pl-eyebrow">Optic's read</span>${esc(lede)}</p>
+    ${pulseCatalystLine(p.catalyst)}
+    <button type="button" class="hm-more pl-line-go" data-sec-view="overview"
+      data-sec-sym="${esc(d.ticker || STATE.ticker || '')}">The full read, with its inputs, on Overview &rarr;</button>
+  </section>`;
+}
+
 function renderOpticPulse(d) {
   const p = d.pulse;
   if (!p) return '';
@@ -10765,11 +11088,13 @@ function renderOpticPulse(d) {
       <div class="pl-factors">
         ${(p.factors || []).map((f) => `<div class="pl-factor${f.unavailable ? ' is-none' : ''}">
           <span class="pl-flabel" title="${esc(f.measures || '')}">${esc(f.label)}</span>
-          ${pulseBar(f.bar, f.direction)}
+          ${pulseBar(f.unavailable ? null : f.score, f.direction)}
           <span class="pl-fval">${f.unavailable ? 'no data'
     : (f.score > 0 ? '+' : '') + fmt(f.score, 0)}</span>
         </div>`).join('')}
       </div>
+      <p class="pl-scale">Each input scores from -100 to +100: a bar fills right of the line
+        when the input leans bullish and left when it leans bearish.</p>
       <p class="pl-skill">${esc(skill.text || '')}</p>
       ${p.factors_priced < p.factors_total
     ? `<p class="pl-caveat">${p.factors_priced} of ${p.factors_total} inputs had data.
@@ -11718,13 +12043,22 @@ function renderSwing(d) {
     </div>
   </li>`).join('');
 
+  /* The tab's own work first, after the price.
+   *
+   * It opened on the price, then the whole Optic Pulse panel, then three
+   * summary blocks, and reached the Setup and the options read at y=2244 of
+   * a 8,700px page at 1440x900 (measured 2026-10-07). The Pulse panel is the
+   * one Overview leads with, the same 645px, so going Overview to Options
+   * read the same judgement twice. Here it is one line with the way back to
+   * it, and the tab leads with what it is for: the setup, what the options
+   * are saying, then the levels and the inputs. */
   const html = `
   ${renderPriceHead(d, extQ)}
-  ${renderOpticPulse(d)}
-  ${renderWhyMoving(d)}
-  ${renderWhatsNext(d)}
+  ${renderPulseLine(d)}
   ${renderSetup(d)}
   ${renderOptionsBrief(d)}
+  ${renderWhatsNext(d)}
+  ${renderWhyMoving(d)}
   ${renderFollowUps(d)}
   ${renderThesis(d)}
   ${renderSetupsShell()}
@@ -12328,6 +12662,7 @@ function renderSwing(d) {
   views.swing.innerHTML = securityHeader('swing', { compact: true })
     + keyStatsHTML(d.quote, { view: 'swing', short: (d.company || {}).short_interest }) + html;
   orderAssetPageForPhone();
+  watchPriceCardForStrip();
 
   // ---- charts
   /* A 0-100 score (a level's strength) runs up from zero against 100, as its
@@ -13215,7 +13550,10 @@ const syncSecurityHeader = trackSecurityHeader();
  * the instrument's type, and a fund's strip leaves the tab out; anything that
  * still opens it for a fund lands on Overview. Until the quote is in the type
  * is not known, and the tab shows. */
-const FUND_TYPES = ['ETF', 'MUTUALFUND'];
+/* And an index: ^GSPC opened a Financials tab of empty panels, for the same
+ * reason SPY did, since an index files no statements either. The quote calls
+ * it INDEX. */
+const FUND_TYPES = ['ETF', 'MUTUALFUND', 'INDEX'];
 
 function symbolIsFund(sym) {
   if (!sym) return false;
@@ -13239,6 +13577,21 @@ function securityViewsFor(sym) {
  * any extended-hours print, through freshExtended); on Tradier it is the last
  * trade, which can be an extended-hours one. "Delayed ~15 min" beside a
  * Friday close read on a Sunday would describe the feed, not the number. */
+/* Which close. "At the close" on a Monday morning is Friday's, and on a
+ * holiday the day before it; the server's calendar names the day
+ * (session.last_close) because the client must not learn holidays. Today's,
+ * a weekday within the week, or a date past that. */
+function closeLabel() {
+  const sess = (STATE.session || {}).session || {};
+  const lc = sess.last_close;
+  if (!lc || !lc.date) return 'At the close';
+  const today = String(sess.now_et || '').slice(0, 10);
+  if (lc.date === today) return "At today's close";
+  const days = (Date.parse(today) - Date.parse(lc.date)) / 86400000;
+  if (Number.isFinite(days) && days > 0 && days < 7 && lc.weekday) return `At ${lc.weekday}'s close`;
+  return lc.label ? `At the ${lc.label} close` : 'At the close';
+}
+
 function secDataStateHTML(q) {
   const session = marketSessionET();
   /* Real-time only when the feed is and this quote came from it. Tradier
@@ -13251,7 +13604,7 @@ function secDataStateHTML(q) {
   let tone;
   let why;
   if (session !== 'regular') {
-    label = realtime ? 'Last trade' : 'At the close';
+    label = realtime ? 'Last trade' : closeLabel();
     tone = 'is-closed';
     why = realtime
       ? 'The most recent trade the feed holds, which outside the regular session can be an extended-hours one'
@@ -13370,6 +13723,16 @@ function securityHeader(view, opts = {}) {
    * means when they click Financials. */
   const sym = (opts.symbol !== undefined ? opts.symbol : STATE.ticker) || '';
   if (!sym) return '';
+  /* A symbol the feed has never heard of has no sections to visit and nothing
+   * to watch. With the tabs and Watch, Alert and Ask Pulse still drawn, the
+   * header kept saying "Loading price" over the error, and Watch would have
+   * put ZZZZQ on the watchlist. */
+  if (symbolMissing(sym)) {
+    return `<header class="sec-head is-missing"><div class="sec-id">
+      <span class="sec-sym">${esc(sym)}</span>
+      <span class="sec-px-none">Not found</span>
+    </div></header>`;
+  }
   // The full payload's quote once it has landed, and the quick one before it
   // (see loadSecurityFacet). Never another symbol's: a payload still held for
   // the previous name must not lend its price to this one.
@@ -13399,6 +13762,7 @@ function securityHeader(view, opts = {}) {
     const on = v === view;
     return `<button type="button" role="tab" class="sec-tab${on ? ' on' : ''}"
       data-sec-view="${esc(v)}" data-sec-sym="${esc(sym)}" aria-selected="${on}"
+      tabindex="${on ? 0 : -1}"
       title="${esc(SUB_TITLES[v] || '')}">${esc(SUB_LABELS[v] || v)}</button>`;
   }).join('');
 
@@ -13433,16 +13797,29 @@ function securityHeader(view, opts = {}) {
   return `<header class="sec-head${opts.compact ? ' compact' : ''}${view === 'chart' ? '' : ' has-acts'}">
     ${opts.compact ? '' : `<div class="sec-id">
       <span class="sec-sym">${esc(sym)}</span>
-      ${q.name ? `<span class="sec-name">${esc(q.name)}</span>` : ''}
+      ${/* The feed names a fund or a thin listing by its symbol when it has
+           no name, which printed "MSFT MSFT 529.30". */''}
+      ${q.name && String(q.name).trim().toUpperCase() !== sym.toUpperCase()
+    ? `<span class="sec-name">${esc(q.name)}</span>` : ''}
       ${has ? `<span class="sec-px">${fmt(price, 2)}</span>
         <span class="sec-chg ${dir}">${Number.isFinite(pct)
     ? `${pct >= 0 ? '+' : ''}${fmt(pct, 2)}%` : ''}</span>` : `<span class="sec-px-none"
-        >${STATE.swing && STATE.swing.ticker === sym ? 'No price in the feed' : 'Loading price'}</span>`}
+        >${STATE.swing && STATE.swing.ticker === sym ? 'No price in the feed'
+    : STATE.loadFailed === sym ? 'Price unavailable' : 'Loading price'}</span>`}
       ${showStage ? '<span class="stage-chip" id="stage-sec-overview" hidden></span>' : ''}
       ${q.exchange ? `<span class="sec-meta">${esc(q.exchange)}${
     q.sector ? ` \u00b7 ${esc(q.sector)}` : ''}</span>` : ''}
       ${has ? secDataStateHTML(q) : ''}
     </div>`}
+    ${/* The symbol and price, in the compact strip, once the price card that
+         stands in for them has scrolled away (watchPriceCardForStrip). The
+         compact strip left a reader halfway down Options with seven tabs and
+         no name: which company, at what price. Hidden from a screen reader,
+         which has the card's own heading. */''}
+    ${opts.compact && view === 'swing' ? `<span class="sec-mini" aria-hidden="true">
+      <strong>${esc(sym)}</strong>${has ? ` <span class="sec-mini-px">${fmt(price, 2)}</span>
+      <span class="sec-chg ${dir}">${Number.isFinite(pct) ? `${pct >= 0 ? '+' : ''}${fmt(pct, 2)}%` : ''}</span>` : ''}
+    </span>` : ''}
     <nav class="sec-tabs" role="tablist" aria-label="Dossier sections">${tabs}</nav>
     ${/* On every facet but Charting, compact included: Options drops the
          identity row because its price card says it, but the actions are not
@@ -13515,9 +13892,24 @@ async function loadSecurityFacet(view, force, opts = {}) {
       const clock = host.querySelector ? host.querySelector('[data-load-elapsed]') : null;
       if (clock && typeof setInterval === 'function') {
         const started = Date.now();
+        /* "Several seconds" stops being true at about fifteen, and a count
+         * passing 30 under a sentence promising quick reads as a hang.
+         * Measured 2026-10-06 with Yahoo rate-limiting this machine: 31s
+         * before the first figure, under the same sentence throughout. Past
+         * fifteen the sentence says what is slow and that it is still going. */
+        const note = clock.closest ? clock.closest('.panel') : null;
+        let slowSaid = false;
         ticking = setInterval(() => {
           if (!clock.isConnected) { clearInterval(ticking); return; }
-          clock.textContent = `${Math.round((Date.now() - started) / 1000)}s`;
+          const secs = Math.round((Date.now() - started) / 1000);
+          clock.textContent = `${secs}s`;
+          const cav = note && note.querySelector('.caveat');
+          if (!slowSaid && secs >= 15 && cav) {
+            slowSaid = true;
+            cav.textContent = 'Taking longer than usual: the market data provider is slow '
+              + 'to answer right now. Optic is still waiting on it, and this page fills in '
+              + 'when it answers.';
+          }
         }, 1000);
       }
       /* The price first. The strip's name, price and change are one cached
@@ -13557,8 +13949,8 @@ async function loadSecurityFacet(view, force, opts = {}) {
        * The one inside the card does the same work: for these three views
        * `switchView(view, true)` dispatches straight back to
        * `loadSecurityFacet(view, true)`, which is what this button called. */
-      host.innerHTML = `${securityHeader(view)}${errorHTML(err.message,
-        { originUnreachable: err.originUnreachable })}`;
+      host.innerHTML = `${securityHeader(view)}${tickerErrorHTML(err, ticker)}`;
+      fillSymbolSuggestions(host);
       return;
     } finally {
       if (ticking) clearInterval(ticking);
@@ -14335,7 +14727,7 @@ function financialsReadings(co) {
       verdict: `${fmt(net, 1)}% net`,
       detail: `Of every dollar of revenue, ${fmt(net, 1)} cents reaches net income`
         + (num(m.gross_pct) !== null
-          ? ` -- ${fmt(m.gross_pct, 1)}% gross, ${fmt(m.operating_pct, 1)}% operating.` : '.'),
+          ? `, against ${fmt(m.gross_pct, 1)}% gross and ${fmt(m.operating_pct, 1)}% operating.` : '.'),
     });
   }
   // 3. Whether the company has been landing its own guidance.
@@ -14386,7 +14778,7 @@ function financialsReadings(co) {
       detail: `${fmtCompact(num(ins.purchase_shares) || 0, 1)} shares bought and `
         + `${fmtCompact(num(ins.sale_shares) || 0, 1)} sold over six months`
         + (!meaningful
-          ? `, a net of ${fmtCompact(Math.abs(netSh), 1)} -- under a tenth of what`
+          ? `, a net of ${fmtCompact(Math.abs(netSh), 1)}: under a tenth of what`
             + ' changed hands, so the direction is noise rather than a view.'
           : `, a net of ${fmtCompact(Math.abs(netSh), 1)}.`),
     });
@@ -14947,8 +15339,14 @@ function keyStatRows(q, short) {
     short_float: ['Short interest', has(si.percent_of_float)
       ? `${fmt(si.percent_of_float * 100, 2)}% of float${settled}` : null],
     days_to_cover: ['Days to cover', has(si.days_to_cover) ? fmt(si.days_to_cover, 1) : null],
-    profit_margin: ['Profit margin', has(q.profit_margin) ? fmt(q.profit_margin * 100, 1) + '%' : null],
-    revenue_growth: ['Revenue growth', has(q.revenue_growth) ? fmtPct(q.revenue_growth * 100, 1) : null],
+    /* Named for their periods. Financials prints "Revenue growth +16.4%" in
+     * Key stats and "Revenue growth (y/y) +6.4%" under the statements a few
+     * rows down, and both are right: one is the latest quarter against the
+     * same quarter a year before, the other the fiscal year. Same for the
+     * margin, twelve months against 26.9% for the year. Two figures under
+     * one name on one page read as a contradiction. */
+    profit_margin: ['Profit margin, 12 months', has(q.profit_margin) ? fmt(q.profit_margin * 100, 1) + '%' : null],
+    revenue_growth: ['Revenue growth, last quarter', has(q.revenue_growth) ? fmtPct(q.revenue_growth * 100, 1) : null],
   };
 }
 
@@ -15286,7 +15684,12 @@ function renderCompany(co) {
         ${kv([
     ['Cash', usdCompact((fn.balance_sheet || {}).cash), '', FIN_DEFS.cash],
     ['Total debt', usdCompact((fn.balance_sheet || {}).total_debt), '', FIN_DEFS.total_debt],
-    ['Net cash position', usdCompact((fn.balance_sheet || {}).net_cash), '', FIN_DEFS.net_cash],
+    /* Negative net cash is net debt, and the line under this table says so:
+     * the row printed "Net cash position $-62.7B" above "$62.72B net debt
+     * position". */
+    (Number((fn.balance_sheet || {}).net_cash) < 0
+      ? ['Net debt', usdCompact(-(fn.balance_sheet || {}).net_cash), '', FIN_DEFS.net_cash]
+      : ['Net cash position', usdCompact((fn.balance_sheet || {}).net_cash), '', FIN_DEFS.net_cash]),
     ['Debt / equity', fmt((fn.balance_sheet || {}).debt_to_equity, 2), '', FIN_DEFS.debt_to_equity],
     ['Gross margin', fmt((fn.margins || {}).gross_pct, 1) + '%', '', FIN_DEFS.gross_margin],
     ['Operating margin', fmt((fn.margins || {}).operating_pct, 1) + '%', '', FIN_DEFS.operating_margin],
@@ -19529,21 +19932,26 @@ function wsLegend(ps) {
  * then shapes and the Fibonacci tools, then notes, then the three that measure.
  * Contiguous here on purpose, so the rail can draw one where the group changes. */
 const WS_TOOLS = [
-  { id: 'cursor', group: 'select', label: 'Select', glyph: '&#10530;', hint: 'Select and move a drawing' },
-  { id: 'trend', group: 'lines', label: 'Trend line', glyph: '&#9585;', hint: 'A line between two points' },
-  { id: 'ray', group: 'lines', label: 'Ray', glyph: '&#8599;', hint: 'A line that extends past the second point' },
-  { id: 'hline', group: 'lines', label: 'Level', glyph: '&#9473;', hint: 'A horizontal price level' },
-  { id: 'vline', group: 'lines', label: 'Date line', glyph: '&#9474;', hint: 'A vertical line marking one bar' },
-  { id: 'channel', group: 'lines', label: 'Channel', glyph: '&#8801;', hint: 'Two parallel trend lines' },
-  { id: 'rect', group: 'shapes', label: 'Rectangle', glyph: '&#9633;', hint: 'A box around a region' },
-  { id: 'fibdraw', group: 'shapes', label: 'Fib retracement', glyph: '&#9776;', hint: 'Fib levels between two points' },
-  { id: 'fibext', group: 'shapes', label: 'Fib extension', glyph: '&#9783;', hint: 'Projected levels beyond the move' },
-  { id: 'pitchfork', group: 'shapes', label: 'Pitchfork', glyph: '&#9868;', hint: 'Andrews pitchfork from three pivots' },
-  { id: 'arrow', group: 'notes', label: 'Arrow', glyph: '&#8594;', hint: 'A pointer at something' },
-  { id: 'text', group: 'notes', label: 'Text', glyph: 'T', hint: 'A note on the chart' },
-  { id: 'ruler', group: 'measure', label: 'Measure', glyph: '&#8596;', hint: 'Price and date distance between two points' },
-  { id: 'rr', group: 'measure', label: 'Risk / reward', glyph: '&#9707;', hint: 'Entry, stop and target as a box' },
-  { id: 'position', group: 'measure', label: 'Position size', glyph: '&#8721;', hint: 'Shares to buy for a given risk' },
+  /* Drawn icons rather than box-drawing glyphs, to the rail's recipe
+   * (wsWidgetIcon). The glyphs took the fallback font's weight and baseline,
+   * the delete button was a colour emoji, and none of these buttons had a
+   * name, so a screen reader read "box drawings light diagonal" for the trend
+   * line. Each now carries its label as its accessible name. */
+  { id: 'cursor', group: 'select', label: 'Select', icon: '<path d="M5.5 3.5 18.5 11l-5.6 1.6-3 5.9Z"/>', hint: 'Select and move a drawing' },
+  { id: 'trend', group: 'lines', label: 'Trend line', icon: '<path d="M6.2 16.8 17.8 7.2"/><circle cx="5" cy="18" r="1.7"/><circle cx="19" cy="6" r="1.7"/>', hint: 'A line between two points' },
+  { id: 'ray', group: 'lines', label: 'Ray', icon: '<circle cx="5" cy="18" r="1.7"/><path d="M6.3 16.7 20 4.5"/><path d="M14.5 4.5H20V10"/>', hint: 'A line that extends past the second point' },
+  { id: 'hline', group: 'lines', label: 'Level', icon: '<path d="M3 12h18"/><circle cx="12" cy="12" r="1.7"/>', hint: 'A horizontal price level' },
+  { id: 'vline', group: 'lines', label: 'Date line', icon: '<path d="M12 3v18"/><circle cx="12" cy="12" r="1.7"/>', hint: 'A vertical line marking one bar' },
+  { id: 'channel', group: 'lines', label: 'Channel', icon: '<path d="M3.5 14.5 17 4.5M7 19.5 20.5 9.5"/>', hint: 'Two parallel trend lines' },
+  { id: 'rect', group: 'shapes', label: 'Rectangle', icon: '<rect x="4" y="6.5" width="16" height="11" rx="1"/>', hint: 'A box around a region' },
+  { id: 'fibdraw', group: 'shapes', label: 'Fib retracement', icon: '<path d="M4 4.5h16M4 9.5h16M4 14.5h16M4 19.5h16"/><path d="m6 19.5 12-15" stroke-dasharray="1.6 2.4"/>', hint: 'Fib levels between two points' },
+  { id: 'fibext', group: 'shapes', label: 'Fib extension', icon: '<path d="M4 19.5h9M4 14.5h9M4 9.5h16M4 4.5h16"/><path d="M17 19.5V12"/><path d="m14.5 14.5 2.5-2.5 2.5 2.5"/>', hint: 'Projected levels beyond the move' },
+  { id: 'pitchfork', group: 'shapes', label: 'Pitchfork', icon: '<path d="M3.5 20.5 9.5 14.5"/><path d="M9.5 14.5 20 7M9.5 14.5H20M9.5 14.5 20 21"/>', hint: 'Andrews pitchfork from three pivots' },
+  { id: 'arrow', group: 'notes', label: 'Arrow', icon: '<path d="M5 19 18.5 5.5"/><path d="M11 5.5h7.5V13"/>', hint: 'A pointer at something' },
+  { id: 'text', group: 'notes', label: 'Text', icon: '<path d="M5 7V4.5h14V7M12 4.5v15M9 19.5h6"/>', hint: 'A note on the chart' },
+  { id: 'ruler', group: 'measure', label: 'Measure', icon: '<path d="M4 12h16"/><path d="m7 9-3 3 3 3M17 9l3 3-3 3"/>', hint: 'Price and date distance between two points' },
+  { id: 'rr', group: 'measure', label: 'Risk / reward', icon: '<rect x="5" y="3.5" width="14" height="17" rx="1"/><path d="M5 11h14"/>', hint: 'Entry, stop and target as a box' },
+  { id: 'position', group: 'measure', label: 'Position size', icon: '<rect x="5" y="3.5" width="14" height="17" rx="1.5"/><path d="M8 7.5h8"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 16h.01M12 16h.01M15.5 16h.01" stroke-width="2.4"/>', hint: 'Shares to buy for a given risk' },
 ];
 
 /* The drawing rail, tools in their groups and then the actions.
@@ -19560,10 +19968,10 @@ function wsToolRail() {
     ${WS_TOOLS.map((t, k) => `${k && WS_TOOLS[k - 1].group !== t.group
     ? '<span class="ws-rail-sep" aria-hidden="true"></span>' : ''}<button type="button" class="ws-tool${
   wsTool === t.id ? ' on' : ''}" data-ws-tool="${t.id}" title="${esc(t.hint)}"
-      aria-pressed="${wsTool === t.id}">${t.glyph}</button>`).join('')}
+      aria-label="${esc(t.label)}" aria-pressed="${wsTool === t.id}">${wsWidgetIcon(t.icon)}</button>`).join('')}
     <div class="ws-rail-gap ws-rail-sep" aria-hidden="true"></div>
     <button type="button" class="ws-tool ws-snap${wsSnapOn ? ' on' : ''}" data-ws-snap
-      aria-pressed="${wsSnapOn}" title="${wsSnapOn
+      aria-label="Snap to candles" aria-pressed="${wsSnapOn}" title="${wsSnapOn
     ? 'Snapping on: points land on a candle and its open, high, low or close. Click to place freely.'
     : 'Snapping off: points land exactly where you click. Click to snap to candles.'}"
       ><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none"
@@ -19571,13 +19979,16 @@ function wsToolRail() {
       d="M4 2v6a4 4 0 0 0 8 0V2M4 5h2.5M9.5 5H12"/></svg></button>
     <button type="button" class="ws-tool" data-ws-undo
       ${wsUndoStack.length ? '' : 'disabled'}
-      title="Undo (${navigator.platform.startsWith('Mac') ? '\u2318Z' : 'Ctrl+Z'})">&#8630;</button>
+      aria-label="Undo" title="Undo (${navigator.platform.startsWith('Mac') ? '\u2318Z' : 'Ctrl+Z'})"
+      >${wsWidgetIcon('<path d="M9 6.5 4.5 11 9 15.5"/><path d="M4.5 11H15a4.5 4.5 0 0 1 0 9h-2"/>')}</button>
     <button type="button" class="ws-tool" data-ws-redo
       ${wsRedoStack.length ? '' : 'disabled'}
-      title="Redo (${navigator.platform.startsWith('Mac') ? '\u21e7\u2318Z' : 'Ctrl+Y'})">&#8631;</button>
+      aria-label="Redo" title="Redo (${navigator.platform.startsWith('Mac') ? '\u21e7\u2318Z' : 'Ctrl+Y'})"
+      >${wsWidgetIcon('<path d="M15 6.5 19.5 11 15 15.5"/><path d="M19.5 11H9a4.5 4.5 0 0 0 0 9h2"/>')}</button>
     <button type="button" class="ws-tool" data-ws-clear-draw
       ${wsDrawings().length ? '' : 'disabled'}
-      title="Delete every drawing on this symbol">&#128465;</button>
+      aria-label="Delete every drawing on this symbol" title="Delete every drawing on this symbol"
+      >${wsWidgetIcon('<path d="M4 7h16M9.5 7V4.5h5V7"/><path d="M6 7l1 12.5a1.5 1.5 0 0 0 1.5 1.4h7a1.5 1.5 0 0 0 1.5-1.4L18 7"/><path d="M10 11v6M14 11v6"/>')}</button>
   </div>`;
 }
 
@@ -20648,7 +21059,7 @@ function wsManagePanel() {
       <p class="ws-modal-foot">Colours come from the palette the charts already
         draw from, which is the set checked for separation under colour-vision
         simulation. A free hex can land invisibly on top of a line that is
-        already there. Changes apply to the Charting tab and the Swing chart
+        already there. Changes apply to the Charting tab and the Options tab's chart
         together, and are remembered on this device.</p>
     </div>
   </div>`;
@@ -20724,8 +21135,8 @@ function renderChartWorkspace(d) {
     host.innerHTML = `<div class="ws-empty">
       <h2>Charting</h2>
       <p class="sub">A full-height chart with its own toolbar, overlays and drawings.
-        Overlay settings are shared with the Swing tab, so a moving average you recolour
-        here is that colour there too.</p>
+        Overlay settings are shared with the Options tab's chart, so a moving average you
+        recolour here is that colour there too.</p>
       <form class="ws-load" id="ws-form">
         <input id="ws-symbol" type="text" placeholder="Ticker" autocomplete="off"
           spellcheck="false" aria-label="Ticker to chart">
@@ -21805,23 +22216,53 @@ function wsLastBar(ps) {
  * Every glyph below is from a block with no emoji presentation, so it inherits
  * the rail's colour and goes green when the widget is open — which is what makes
  * "which of these is on" readable at a glance. */
+/* Each widget's mark, drawn to the rail's own recipe (NAV_ICONS): a 24-unit
+ * box, no fill, a 1.8 stroke, round caps.
+ *
+ * They were Unicode glyphs, and two pairs were the same character: Watch and
+ * Key levels were both a trigram, Insiders and Pulse both a fisheye, so the
+ * rail asked a reader to tell four buttons apart by a 9px label. The glyphs
+ * also took whatever weight the platform's fallback font gave each one. Each
+ * mark here is the thing the panel shows: a bell for alerts, a calendar for
+ * the seasons, two candles for the patterns. */
 const WS_WIDGETS = [
-  { id: 'watchlist', label: 'Watch', icon: '&#9776;' },      // trigram, list
-  { id: 'alerts', label: 'Alerts', icon: '&#9873;' },        // flag
-  { id: 'news', label: 'News', icon: '&#9636;' },            // horizontal fill
-  { id: 'analysts', label: 'Analysts', icon: '&#9650;' },    // up triangle
-  { id: 'seasonality', label: 'Season', icon: '&#9639;' },   // grid
-  { id: 'notes', label: 'Notes', icon: '&#9998;' },          // pencil
-  { id: 'insiders', label: 'Insiders', icon: '&#9673;' },    // fisheye
-  { id: 'reports', label: 'Reports', icon: '&#9635;' },      // vertical fill
-  { id: 'checklist', label: 'Checklist', icon: '&#10003;' }, // check
-  { id: 'options', label: 'Options', icon: '&#9671;' },      // lozenge
-  { id: 'levels', label: 'Key levels', icon: '&#9776;' },    // trigram
-  { id: 'stats', label: 'Stats', icon: '&#8801;' },          // identical-to, three bars
-  { id: 'patterns', label: 'Patterns', icon: '&#9651;' },    // hollow triangle
-  { id: 'trading', label: 'Trading', icon: '&#9644;' },      // black rectangle
-  { id: 'learn', label: 'Learn', icon: '&#9678;' },          // bullseye
+  { id: 'watchlist', label: 'Watch',      // the rail's eye, for the list you keep watch over
+    icon: '<path d="M2.6 12C6 6.8 8.9 4.6 12 4.6s6 2.2 9.4 7.4c-3.4 5.2-6.3 7.4-9.4 7.4S6 17.2 2.6 12Z"/><circle cx="12" cy="12" r="2.6"/>' },
+  { id: 'alerts', label: 'Alerts',        // the header's Alert bell
+    icon: '<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2H4.5Z"/><path d="M10 21h4"/>' },
+  { id: 'news', label: 'News',            // a folded paper
+    icon: '<rect x="3.5" y="5" width="13" height="14" rx="1.5"/><path d="M16.5 9h3a1 1 0 0 1 1 1v7.5a1.5 1.5 0 0 1-3 0V9"/><path d="M6.5 9h7M6.5 12.5h7M6.5 16h4"/>' },
+  { id: 'analysts', label: 'Analysts',    // a price target
+    icon: '<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/>' },
+  { id: 'seasonality', label: 'Season',   // a calendar
+    icon: '<rect x="3.5" y="5" width="17" height="15" rx="1.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/>' },
+  { id: 'notes', label: 'Notes',          // a pencil
+    icon: '<path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17Z"/><path d="m14.5 7.5 3 3"/>' },
+  { id: 'insiders', label: 'Insiders',    // a person
+    icon: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>' },
+  { id: 'reports', label: 'Reports',      // a filing with its figures
+    icon: '<path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7Z"/><path d="M14 3v4h4"/><path d="M9.5 17v-3M12 17v-5M14.5 17v-2"/>' },
+  { id: 'checklist', label: 'Checklist',  // two ticked rows
+    icon: '<path d="m4 7 2 2 3.5-3.5"/><path d="M12.5 7.5H20"/><path d="m4 15 2 2 3.5-3.5"/><path d="M12.5 15.5H20"/>' },
+  { id: 'options', label: 'Options',      // a call's payoff: flat, then up
+    icon: '<path d="M3.5 15.5h7.5l9.5-9.5"/><path d="M3.5 19.5h17"/>' },
+  // `short` for the rail: "Key levels" is two lines in 54px at the micro size.
+  { id: 'levels', label: 'Key levels', short: 'Levels',   // a price between two levels
+    icon: '<path d="M3.5 6.5h17M3.5 17.5h17"/><path d="m4.5 14 4-3.5 3 2.5 4-5 4 2.5"/>' },
+  { id: 'stats', label: 'Stats',          // a list of figures
+    icon: '<path d="M9 6.5h11M9 12h11M9 17.5h11"/><path d="M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01" stroke-width="2.6"/>' },
+  { id: 'patterns', label: 'Patterns',    // two candles
+    icon: '<path d="M7 3.5v3M7 15.5v5"/><rect x="5" y="6.5" width="4" height="9" rx="0.8"/><path d="M17 5v4M17 16v3.5"/><rect x="15" y="9" width="4" height="7" rx="0.8"/>' },
+  { id: 'trading', label: 'Trading',      // a buy and a sell
+    icon: '<path d="M4 8.5h15l-3.5-3.5"/><path d="M20 15.5H5l3.5 3.5"/>' },
+  { id: 'learn', label: 'Learn',          // a mortarboard
+    icon: '<path d="M2.8 9.5 12 5l9.2 4.5L12 14Z"/><path d="M7 11.8v4.4c0 1.4 2.2 2.6 5 2.6s5-1.2 5-2.6v-4.4"/><path d="M21.2 9.5v5"/>' },
 ];
+
+function wsWidgetIcon(paths) {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"
+    stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+}
 
 /* Per-symbol free text. The one thing on this page the terminal cannot derive:
  * why *you* are looking at this chart. Saved on blur rather than per keystroke —
@@ -21980,8 +22421,8 @@ function wsWidgetRail() {
       ${reachable ? '' : 'disabled'}
       title="${reachable ? esc(w.label) : esc(w.label
         + '. Close Pulse to open this panel: there is not room for the chart and both.')}">
-      <span class="ws-wrail-ico">${w.icon}</span>
-      <span class="ws-wrail-lab">${esc(w.label)}</span>
+      <span class="ws-wrail-ico" aria-hidden="true">${wsWidgetIcon(w.icon)}</span>
+      <span class="ws-wrail-lab">${esc(w.short || w.label)}</span>
     </button>`;
   }).join('')}
     ${/* Pulse, at the foot of the rail rather than in the widget list.
@@ -21997,7 +22438,7 @@ function wsWidgetRail() {
     <button type="button" class="ws-wrail-btn ws-wrail-pulse"
       data-ask-chart="${esc(STATE.chartSymbol || '')}"
       title="Have Pulse read this chart and summarise the big picture">
-      <span class="ws-wrail-ico" aria-hidden="true">&#9673;</span>
+      <span class="ws-wrail-ico" aria-hidden="true">${pulseMarkHTML('pulse-glyph-sm')}</span>
       <span class="ws-wrail-lab">Pulse</span>
     </button>
   </div>`;
@@ -24685,6 +25126,8 @@ async function loadChartWorkspace(symbol, force) {
   STATE.chartSymbol = sym;
   STATE.chartData = 'loading';
   syncTabTitle();
+  // The chart's own symbol box changes the symbol without a page switch.
+  if (STATE.view === 'chart') routeRecord();
   renderChartWorkspace('loading');
   // The stage reading beside the payload rather than after it, so it is
   // usually in hand for the first draw and nothing redraws behind the sweep.
@@ -24792,9 +25235,19 @@ function wsSyncNarrow() {
   if (!body) return;
   const w = body.getBoundingClientRect().width;
   if (!w) return;
+  const was = body.classList.contains('narrow');
   body.classList.toggle('narrow', w < WS_NARROW_PX);
   const bar = views.chart.querySelector('.ws-toolbar');
   if (bar) bar.classList.toggle('narrow', w < WS_NARROW_PX);
+  /* The widget rail says which panels are open, and "open" means a different
+   * thing on each side of the line: wide, every widget left open; narrow, the
+   * one picked since. The rail is drawn before this measures, so a phone
+   * opened with Notes left open on a laptop lit Notes over a dock it hides,
+   * measured at 375px, and pressing it then closed what was not showing. */
+  if (was !== body.classList.contains('narrow')) {
+    const rail = views.chart.querySelector('.ws-wrail');
+    if (rail) rail.outerHTML = wsWidgetRail();
+  }
   // In narrow mode the dock is an overlay and shows only for the one selected
   // widget; wide, it is a column and shows whatever is open.
   body.classList.toggle('dock-open',
@@ -27307,6 +27760,12 @@ function renderEarningsWeek(w) {
       <p class="sub">${esc(w.reason || 'Unavailable.')}</p></div>`;
   }
 
+  /* "The watchlist" here was the 144 names the server scans, and it read as
+   * the reader's own: "1 reporting from the watchlist" over PepsiCo, on a
+   * watchlist of SPY, QQQ, NVDA and AMD. The scan is named for what it is,
+   * and the reader's own names are marked within it. */
+  const mine = new Set(watchList().map((t) => String(t).toUpperCase()));
+  const scanned = Number(w.universe || w.checked) || 0;
   const cols = (w.days || []).map((d) => `
     <section class="ew-day${d.is_today ? ' today' : ''}${d.is_past ? ' past' : ''}">
       <header class="ew-day-head">
@@ -27320,7 +27779,8 @@ function renderEarningsWeek(w) {
           data-analyse="${esc(r.ticker)}">
           ${companyMark(r.ticker, r.domain, 34)}
           <span class="ew-tick">${esc(r.ticker)}${r.major
-    ? '<span class="ew-major">major</span>' : ''}</span>
+    ? '<span class="ew-major">major</span>' : ''}${mine.has(String(r.ticker).toUpperCase())
+    ? '<span class="ew-mine">watching</span>' : ''}</span>
           <span class="ew-name">${esc(r.name || '')}</span>
           <span class="ew-eps">${r.eps_consensus === null || r.eps_consensus === undefined
     ? '<i>no estimate</i>'
@@ -27328,16 +27788,16 @@ function renderEarningsWeek(w) {
       ? ` · rev $${fmtCompact(r.revenue_consensus)}` : ''}`}</span>
           ${r.confirmed === false ? '<span class="ew-unconf">date not confirmed</span>' : ''}
         </button>`).join('')
-    : '<p class="ew-empty">Nothing from the watchlist.</p>'}
+    : '<p class="ew-empty">Nothing scheduled.</p>'}
     </section>`).join('');
 
   return `<div class="panel span-all">
     <div class="ew-head">
       <div>
         <h2>${hg('Earnings this week')}${askPulse('earningsweek')}</h2>
-        <p class="sub">${esc(w.week_label)} · <strong>${fmt(w.total, 0)}</strong> reporting
-          from the watchlist${w.majors ? `, <strong>${fmt(w.majors, 0)}</strong> index-moving`
-    : ''}. Click any ticker to open the full analysis.</p>
+        <p class="sub">${esc(w.week_label)} · <strong>${fmt(w.total, 0)}</strong> reporting${
+  scanned ? ` of the ${fmt(scanned, 0)} widely followed names Optic checks` : ''}${
+  w.majors ? `, <strong>${fmt(w.majors, 0)}</strong> index-moving` : ''}. Open any one for its full analysis.</p>
       </div>
       <div class="ew-nav">
         <button type="button" class="bulk-btn" data-ew-offset="${(w.offset || 0) - 1}"
@@ -27431,8 +27891,8 @@ function renderEarnings(d) {
   if (d.not_applicable) {
     views.earnings.innerHTML = securityHeader('earnings') + `<div class="panel"><h2>No earnings for ${esc(d.ticker || '')}</h2>
       <div class="callout info">${esc(d.reason)}</div>
-      <p class="sub" style="margin-top:var(--space-3)">The Swing / Options and Macro tabs all work
-        normally for this ticker.</p></div>`;
+      <p class="sub" style="margin-top:var(--space-3)">Its Overview, Chart, Options and Investing
+        tabs work as they do for any symbol.</p></div>`;
     return;
   }
 
@@ -27538,7 +27998,7 @@ function renderEarnings(d) {
       <div>
         <span class="hero-label">${hg(reported ? 'Reported EPS' : 'Next report')}</span>
         <div class="hero ${reported ? signClass(lr.surprise_pct) : ''}" style="font-size:var(--t-d2)">${
-  reported ? fmt(lr.eps_reported, 2) : (nr.date ? esc(nr.date) : '—')}</div>
+  reported ? fmt(lr.eps_reported, 2) : (nr.date ? esc(reportDate(nr.date)) : '—')}</div>
         <span class="note subnote">${
   reported
     ? `Vs ${fmt(lr.eps_estimate, 2)} expected · reported ${esc(lr.date || '')}`
@@ -27547,8 +28007,17 @@ function renderEarnings(d) {
       <div style="display:flex;flex-direction:column;gap:var(--space-2)">
         ${daysChip}
         ${reactionChip}
-        <span class="chip ${revCls}"><span class="dot"></span>Estimates ${esc(rev.direction || 'unknown')}</span>
-        ${pr.available ? `<span class="chip ${stanceCls}"><span class="dot"></span>Event ${esc(pr.stance)}</span>` : ''}
+        ${/* Only a direction is news. "Estimates unknown" sat beside an EPS
+             consensus and a revenue range, reading as if those were unknown;
+             what is missing is the revision history, which its own panel
+             says. */''}
+        ${rev.direction && rev.direction !== 'unknown'
+    ? `<span class="chip ${revCls}"><span class="dot"></span>Estimates ${esc(rev.direction)}</span>` : ''}
+        ${/* "Event fair" named the model's stance, not what it means: the
+             straddle against the moves this name has actually made. */''}
+        ${pr.available ? `<span class="chip ${stanceCls}" title="${esc(pr.note || '')}"><span class="dot"></span>${
+  esc({ expensive: 'Move priced rich', cheap: 'Move priced cheap', fair: 'Move priced fairly' }[pr.stance]
+    || `Event ${pr.stance}`)}</span>` : ''}
       </div>
     </div>
     <div class="grid c4" style="margin-bottom:var(--space-3)">
@@ -31807,6 +32276,68 @@ let swingLoading = false;
  */
 let swingInFlight = null;
 
+/* ======================================================= A MISSING SYMBOL ===
+ *
+ * Symbols the feed answered 404 for this session. A 404 from /api/ticker is
+ * the provider saying it has no price for the name at all, and it was shown
+ * as a failed load: "Could not load. No price data found for 'ZZZZQ'." with
+ * Try again, under a header still reading "Loading price" over seven
+ * sections and a Watch button. Retrying a name that does not exist cannot
+ * work; the way forward is a search.
+ *
+ * Cleared when the symbol is searched again (loadTicker), so a feed that was
+ * wrong for a moment is asked again rather than remembered as final. */
+const SYMBOL_MISSING = new Set();
+
+function symbolMissing(sym) {
+  return SYMBOL_MISSING.has(String(sym || '').toUpperCase());
+}
+
+/** What a failed /api/ticker load means for the header and the recent list. */
+function noteTickerFailure(err, ticker) {
+  // A refresh that fails over a dossier already on screen is a blip, not news.
+  if (STATE.swing && STATE.swing.ticker === ticker) return;
+  STATE.loadFailed = ticker;
+  if (err && err.status === 404) {
+    SYMBOL_MISSING.add(ticker);
+    forgetSymbol(ticker);
+  }
+}
+
+/** The body for a symbol that did not load: not found, or the failure. */
+function tickerErrorHTML(err, ticker) {
+  if (!symbolMissing(ticker)) {
+    return errorHTML(err.message, { originUnreachable: err.originUnreachable });
+  }
+  return `<div class="panel empty-state sym-missing" data-fixed="1">
+    <h2>No symbol called ${esc(ticker)}</h2>
+    <p class="sub">The data feed has no price for it. Check the spelling, or search
+      by the company's name.</p>
+    <div class="sym-suggest" data-sym-suggest="${esc(ticker)}" hidden></div>
+    <div class="empty-acts"><button type="button" class="btn primary"
+      data-open-palette="${esc(ticker)}">Search again</button></div>
+  </div>`;
+}
+
+/* The closest names the search index has to what was typed: APPL finds
+ * AAPL. Filled after the panel paints, and only while it is still the one on
+ * screen; nothing is drawn when the index has nothing. */
+async function fillSymbolSuggestions(host) {
+  const box = host && host.querySelector && host.querySelector('[data-sym-suggest]');
+  if (!box || typeof fetch !== 'function') return;
+  const typed = box.dataset.symSuggest;
+  let rows = [];
+  try {
+    const res = await fetch(`/api/search?q=${encodeURIComponent(typed)}&limit=5`);
+    if (res.ok) rows = ((await res.json()).results || []).filter((r) => r.symbol !== typed);
+  } catch (e) { return; }
+  if (!rows.length || !box.isConnected) return;
+  box.innerHTML = `<span class="sym-suggest-label">Did you mean</span>${rows.map((r) => `
+    <button type="button" class="sym-pick" data-pick="${esc(r.symbol)}" title="${esc(r.name || '')}"
+      ><strong>${esc(r.symbol)}</strong>${r.name ? `<span>${esc(r.name)}</span>` : ''}</button>`).join('')}`;
+  box.hidden = false;
+}
+
 async function loadSwing(force, opts = {}) {
   const silent = !!opts.silent;
   if (STATE.swing && STATE.swing.ticker === STATE.ticker && !force) {
@@ -31834,8 +32365,8 @@ async function loadSwing(force, opts = {}) {
       if (opts.propagateError) throw outcome.error;
       if (!silent) {
         endLoad(views.swing);
-        views.swing.innerHTML = errorHTML(outcome.error.message,
-          { originUnreachable: outcome.error.originUnreachable });
+        views.swing.innerHTML = tickerErrorHTML(outcome.error, ticker);
+        fillSymbolSuggestions(views.swing);
       }
       return null;
     }
@@ -31862,6 +32393,7 @@ async function loadSwing(force, opts = {}) {
     if (requestId !== swingRequestId || STATE.ticker !== ticker) return null;
     outcome = { data };
     STATE.swing = data;
+    if (STATE.loadFailed === ticker) STATE.loadFailed = null;
     if (data.macro && !data.macro.error) {
       STATE.market = STATE.market || {};
       STATE.market.macro = data.macro;
@@ -31896,13 +32428,14 @@ async function loadSwing(force, opts = {}) {
   } catch (err) {
     outcome = { error: err };
     if (requestId !== swingRequestId || STATE.ticker !== ticker) return null;
+    noteTickerFailure(err, ticker);
     if (opts.propagateError) throw err;
     // A background refresh tick shouldn't wipe out a perfectly good dashboard
     // over one transient network blip — only a manual/foreground load does.
     if (!silent) {
       endLoad(views.swing);
-      views.swing.innerHTML = errorHTML(err.message,
-        { originUnreachable: err.originUnreachable });
+      views.swing.innerHTML = tickerErrorHTML(err, ticker);
+      fillSymbolSuggestions(views.swing);
     }
     else console.warn('Silent swing refresh failed:', err.message);
     return null;
@@ -34168,6 +34701,27 @@ function showReportsTab(tab) {
   });
 }
 
+/* The Dossier's sections are a tab list, and a tab list is one Tab stop.
+ *
+ * Each section was its own stop, so a keyboard reader went through seven
+ * buttons to reach Watch, and the arrow keys the role promises did nothing.
+ * Now Tab lands on the open section, the arrows and Home/End move along the
+ * strip, and Enter or Space opens one. Focus moves without opening: each
+ * section is a page load, and opening on every arrow press would fetch four
+ * pages on the way from Overview to Earnings. */
+document.addEventListener('keydown', (evt) => {
+  const tab = evt.target && evt.target.closest ? evt.target.closest('.sec-tabs .sec-tab') : null;
+  if (!tab) return;
+  const tabs = [...tab.parentElement.querySelectorAll('.sec-tab')];
+  const at = tabs.indexOf(tab);
+  const to = { ArrowRight: at + 1, ArrowLeft: at - 1, Home: 0, End: tabs.length - 1 }[evt.key];
+  if (to === undefined) return;
+  evt.preventDefault();
+  const next = tabs[(to + tabs.length) % tabs.length];
+  tabs.forEach((t) => t.setAttribute('tabindex', t === next ? '0' : '-1'));
+  next.focus();
+});
+
 // The arrow keys move between the two tabs, as a tab list is expected to, and
 // Home and End go to the ends. The selection follows the focus.
 document.addEventListener('keydown', (evt) => {
@@ -34989,6 +35543,19 @@ function congressActivityChart(rows, days) {
 }
 
 /** "Sep 12" from an ISO day, without pulling the whole date formatter in. */
+/* A report date as a reader says it: "Mon, Nov 2", with the year only when it
+ * is not this one. The Earnings tab printed "2026-11-02" in display type, the
+ * one date in the app a retail reader is most likely to put in a calendar. */
+function reportDate(iso) {
+  const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return String(iso || '');
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12);
+  if (isNaN(d.getTime())) return String(iso);
+  const opts = { weekday: 'short', month: 'short', day: 'numeric' };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+  return d.toLocaleDateString('en-US', opts);
+}
+
 function dayLabel(iso) {
   const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return String(iso || '');
@@ -37159,7 +37726,16 @@ function friendlyMarketState(raw) {
 // Macro, Roth, Optic Portfolio, Settings, Home — the tab is about the market or
 // the app, so a company profile and one stock's closing price are just noise
 // carried over from whatever was loaded last.
-const TICKER_VIEWS = ['swing', 'earnings', 'long'];
+/* The Dossier facets that are about one stock's price, which is every facet
+ * but Chart (it has its own live price and label).
+ *
+ * It was Options, Earnings and Investing, from before the Dossier had an
+ * Overview, Financials and News. So overnight on AAPL the session strip
+ * carried the Blue Ocean print and "updates every minute" on Earnings, and
+ * on Financials the same stock read "Index futures are live", a sentence
+ * about a different market, with no extended-hours price anywhere on the
+ * page. Measured 2026-10-07. */
+const TICKER_VIEWS = ['swing', 'earnings', 'long', 'overview', 'financials', 'news'];
 
 const SESSION_PHASES = [
   { phase: 'overnight', label: 'Overnight', hours: '8pm – 4am' },
@@ -37576,8 +38152,13 @@ async function loadSession(force) {
     return;
   }
   try {
-    const data = await getJSON(`/api/session/${encodeURIComponent(STATE.ticker)}`);
-    const firstLoad = !STATE.session;
+    const asked = STATE.ticker;
+    const data = await getJSON(`/api/session/${encodeURIComponent(asked)}`);
+    // A symbol searched while this was in flight owns the slot now.
+    if (asked !== STATE.ticker) return;
+    // The market-wide phase alone (kept across a symbol change) is not this
+    // symbol's first session payload.
+    const firstLoad = !STATE.session || !STATE.session.ticker;
     STATE.session = data;
     renderSessionBar();
     completeSecurityHeader();
@@ -37606,13 +38187,18 @@ function updateStatus() {
   // Home is the landing page. Whatever symbol is still in memory isn't what this
   // page is about, and printing it next to an empty search box reads as a bug —
   // which is exactly how it was reported.
+  /* On Home the row is kept for a warning and nothing else.
+   *
+   * It said "Search a ticker or company name to begin." over a page whose
+   * first control is that search, beside a chip reading "Index futures are
+   * live" over a session strip reading OVERNIGHT: 48px of chrome repeating
+   * the two things directly below it. With a symbol loaded it said "Pick a
+   * tab above", and on a desktop there is no tab above. Home's own search
+   * offers the loaded symbol back. A reconnect or a failed refresh still
+   * takes the row, because nothing else on the page says so. */
   if (STATE.view === 'home') {
-    setStatus([
-      STATE.ticker
-        ? `${esc(STATE.ticker)} is loaded. Pick a tab above, or search another symbol.`
-        : 'Search a ticker or company name to begin.',
-      statusFeedChip(),
-    ]);
+    const chip = statusFeedChip();
+    setStatus(/class="chip warn"/.test(chip) ? [chip] : []);
     return;
   }
   // 'settings' belongs here too: it has no symbol of its own, so it shouldn't be
@@ -37753,7 +38339,7 @@ function updateStatus() {
           fmtPct(e.move_pct, 1)}</span>`);
       }
     }
-    else if (nr.date) parts.push(`Next report: ${esc(nr.date)}${
+    else if (nr.date) parts.push(`Next report: ${esc(reportDate(nr.date))}${
       nr.days_away === null || nr.days_away === undefined ? '' : ` (${nr.days_away}d)`}`);
     else parts.push('No scheduled report');
   } else if (STATE.view === 'long') {
@@ -38055,11 +38641,19 @@ function liveIndicatorHTML(opts = {}) {
       ? 'Overnight · no venue has printed this name tonight'
       : session === 'overnight' || refreshing
         ? (SESSION_LABEL[session] || cap(session))
-        : `${(SESSION_LABEL[session] || cap(session)).split(' · ')[0]} · snapshot`;
+        : `${(SESSION_LABEL[session] || cap(session)).split(' · ')[0]} · ${snapshotWords()}`;
   // Falls back to the phase's own name rather than to undefined: a phase added
   // server-side should degrade to "Overnight", never to a rendered "undefined".
   return `<span class="chip ${tone}"><span class="dot"${beat}></span>${
     esc(trimPhase(label, opts.phaseShown))}</span>`;
+}
+
+/* What "not refreshing" means on a page that loads once: when it was read.
+ * The chip said "Snapshot", a word for the mechanism rather than the fact. */
+function snapshotWords() {
+  const at = TICKER_VIEWS.includes(STATE.view) && STATE.swing && STATE.swing.generated_at
+    ? timeIn(STATE.swing.generated_at, activeZone()) : '';
+  return at ? `snapshot from ${at}, not refreshing` : 'snapshot, not refreshing';
 }
 
 async function tickAutoRefresh() {
@@ -38081,6 +38675,9 @@ async function tickAutoRefresh() {
       // There is nothing newer to fetch, so this is not a refresh at all.
       if (STATE.home && Date.now() - homeDataAt < HOME_REUSE_MS) attempted = false;
       else await loadHomeMarket({ silent: true });
+      // The Today band asks again once its board is stale (HOME_TODAY_TTL_MS);
+      // inside that it repaints from what it holds, which costs nothing.
+      loadHomeToday();
     } else if (view === 'overview' && STATE.swing) {
       await loadSecurityFacet('overview', true, { silent: true });
     } else if (view === 'swing' && STATE.swing) await loadSwing(true, { silent: true });
@@ -38634,10 +39231,11 @@ function knowledgeOnboardingHTML() {
   return `<section class="kob" aria-labelledby="kob-h">
     <div class="kob-head">
       <h2 class="kob-h" id="kob-h">How should Optic speak to you?</h2>
-      <p class="kob-sub">This sets how much financial detail Optic assumes and
-        how much it explains as it goes. It changes the wording and the density,
-        never the figures, and you can change it any time from the control in
-        Ask Pulse.</p>
+      ${/* One line. Three said the same thing at length under a question
+           that already explains itself, on the one visit a reader is
+           deciding whether the page is too much for them. */''}
+      <p class="kob-sub">Optic explains as much as you want. It changes the wording,
+        never the figures, and you can change it any time in Ask Pulse.</p>
     </div>
     <div class="kob-opts" role="group" aria-labelledby="kob-h">
       ${modes.map((m) => `<button type="button" class="kob-opt" data-kob-pick="${esc(m.id)}">
@@ -40114,6 +40712,168 @@ function groupForView(view) {
   return g ? g.id : 'home';
 }
 
+/* ================================================================ ROUTES ===
+ *
+ * The page and the symbol, in the address bar.
+ *
+ * Optic had no URL at all: every page lived at `/`. Back left the app for
+ * whatever site came before it, a reload always landed on Home with the symbol
+ * gone, and a page could not be linked to anyone. Measured 2026-10-06: the
+ * history stack held one entry however many pages had been visited.
+ *
+ * `#/NVDA/options` for a Dossier page, `#/NVDA` for its Overview, `#/read`
+ * for a page about no one symbol, nothing for Home. A hash rather than a path
+ * because the server serves index.html at `/` alone and every other path is
+ * an API or a static file; a hash never reaches it.
+ *
+ * Symbols are upper case and pages lower case, which is what tells `#/scan`
+ * (the page) from `#/SCAN` (a ticker). A lower-case segment that names no
+ * page is read as a symbol, so a hand-typed `#/nvda` still opens NVDA.
+ *
+ * The transient instrument chart has no route: it is a chart of a row in some
+ * other page's table and is reached from that page. */
+const ROUTE_SLUGS = {
+  overview: 'overview', chart: 'chart', swing: 'options', long: 'investing',
+  earnings: 'earnings', financials: 'financials', news: 'news',
+  compare: 'compare', brief: 'read', market: 'macro', indices: 'indices',
+  explore: 'explore', scan: 'scan', insiders: 'insiders', analysts: 'analysts',
+  tracker: 'portfolio', paper: 'paper', roth: 'retirement',
+  watchlist: 'watchlist', alerts: 'alerts', settings: 'settings',
+  reports: 'reports', usage: 'usage', accounts: 'accounts',
+};
+const ROUTE_VIEWS = Object.fromEntries(
+  Object.entries(ROUTE_SLUGS).map(([view, slug]) => [slug, view]));
+// What a symbol may look like: BRK-B, ^GSPC, ES=F, 7203.T.
+const ROUTE_SYMBOL_RE = /^[A-Z0-9][A-Z0-9.\-=^]{0,14}$|^\^[A-Z0-9.]{1,10}$/;
+
+// True while a route is being applied, so switchView does not record the
+// step it is being driven through as a new one.
+let routeApplying = false;
+
+/** The hash for a view, from the symbol it is showing. '' is Home; null is a
+ *  page with no route of its own. */
+function routeFor(view) {
+  if (view === 'home') return '';
+  if (view === 'instrument') {
+    return STATE.instrument ? `#/instrument/${encodeURIComponent(STATE.instrument.symbol)}` : null;
+  }
+  const slug = ROUTE_SLUGS[view];
+  if (!slug) return null;
+  if (SECURITY_VIEWS.includes(view)) {
+    const sym = view === 'chart' ? (STATE.chartSymbol || STATE.ticker) : STATE.ticker;
+    if (sym) {
+      const enc = encodeURIComponent(sym).replace(/%5E/gi, '^');
+      return view === 'overview' ? `#/${enc}` : `#/${enc}/${slug}`;
+    }
+  }
+  return `#/${slug}`;
+}
+
+/** `{view, symbol}` from a hash, or null for one that names nothing. */
+function parseRoute(hash) {
+  const text = String(hash || '');
+  if (!text || text === '#' || text === '#/') return { view: 'home', symbol: null };
+  // An in-page anchor (`#read-desk-markets`) is not a route.
+  if (!text.startsWith('#/')) return null;
+  const raw = text.slice(2).replace(/\/+$/, '');
+  if (!raw) return { view: 'home', symbol: null };
+  const parts = raw.split('/').map((p) => {
+    try { return decodeURIComponent(p); } catch (e) { return p; }
+  });
+  const head = parts[0];
+  if (ROUTE_VIEWS[head] && parts.length === 1) return { view: ROUTE_VIEWS[head], symbol: null };
+  if (head === 'instrument' && parts[1]) return { view: 'instrument', symbol: parts[1] };
+  const symbol = head.toUpperCase();
+  if (!ROUTE_SYMBOL_RE.test(symbol)) return null;
+  const view = parts[1] ? ROUTE_VIEWS[parts[1].toLowerCase()] : 'overview';
+  if (!view || !SECURITY_VIEWS.includes(view)) return null;
+  return { view, symbol };
+}
+
+/** Write the page on screen into the address bar: a new entry when it is a
+ *  new place, nothing when it is the same one. */
+function routeRecord() {
+  if (routeApplying || typeof history === 'undefined' || !history.pushState) return;
+  const want = routeFor(STATE.view);
+  if (want === null) return;
+  if (want === (location.hash || '')) return;
+  try {
+    history.pushState(null, '', want || location.pathname + location.search);
+  } catch (e) { /* a sandboxed frame can refuse; the page still works */ }
+}
+
+/** Open whatever a hash names. Returns whether it named anything. */
+function applyRoute(hash) {
+  const route = parseRoute(hash);
+  if (!route) return false;
+  routeApplying = true;
+  try {
+    const { view, symbol } = route;
+    if (view === 'instrument') {
+      // After a reload the label it was opened with is gone, so it is named
+      // by its symbol until the page that lists it is opened again.
+      if (STATE.instrument && STATE.instrument.symbol === symbol) switchView('instrument');
+      else openInstrument(symbol, symbol, STATE.instrumentFrom || 'market');
+    } else if (!symbol) {
+      if (view !== STATE.view) switchView(view);
+    } else if (view === 'chart' && STATE.ticker) {
+      // The chart keeps its own symbol (see STATE.chartSymbol), so stepping
+      // back to an earlier chart does not reload the Dossier under it.
+      if (STATE.chartSymbol !== symbol) STATE.chartSymbol = symbol;
+      switchView('chart', STATE.view === 'chart');
+    } else if (symbol !== STATE.ticker) {
+      loadTicker(symbol, view);
+    } else if (view !== STATE.view) {
+      switchView(view);
+    }
+  } finally {
+    routeApplying = false;
+  }
+  // A hand-typed `#/nvda` is recorded as `#/NVDA`, in place.
+  const canonical = routeFor(STATE.view);
+  if (canonical !== null && canonical !== (location.hash || '') && history.replaceState) {
+    try {
+      history.replaceState(null, '', canonical || location.pathname + location.search);
+    } catch (e) { /* as above */ }
+  }
+  return true;
+}
+
+if (typeof window !== 'undefined' && window.addEventListener) {
+  window.addEventListener('popstate', () => applyRoute(location.hash));
+}
+
+/* The skip link moves focus into the page itself, past the chrome, without
+ * putting #main in the address bar where the route is. */
+document.addEventListener('click', (evt) => {
+  const skip = evt.target && evt.target.closest && evt.target.closest('[data-skip-main]');
+  if (!skip) return;
+  evt.preventDefault();
+  // The page's own region, so the next Tab is the first control on the page
+  // and a screen reader announces which page it is (each view is labelled).
+  const target = views[STATE.view] || document.getElementById('main');
+  if (!target) return;
+  if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
+  target.focus({ preventScroll: true });
+  target.scrollIntoView({ block: 'start' });
+});
+
+/* In-page anchors scroll; they do not take the address bar.
+ *
+ * The Read's desk index is `<a href="#read-desk-markets">`. Followed, it put
+ * that fragment where the route was, so a reload after using it landed on
+ * Home and Back stepped through every desk visited. */
+document.addEventListener('click', (evt) => {
+  const a = evt.target && evt.target.closest && evt.target.closest('a[href^="#"]');
+  if (!a) return;
+  const href = a.getAttribute('href') || '';
+  if (href.startsWith('#/') || href.length < 2) return;
+  const el = document.getElementById(href.slice(1));
+  if (!el) return;
+  evt.preventDefault();
+  el.scrollIntoView({ block: 'start', behavior: reducedMotion() ? 'auto' : 'smooth' });
+});
+
 /** Repaint both rows for the active view. */
 /* One row of sections, each opening a menu of its pages on hover.
  *
@@ -40167,6 +40927,8 @@ const NAV_ICONS = {
   portfolio: '<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 10h17M9 10v9.5"/>',
   // An eye: the list you are keeping watch over.
   follow: '<path d="M2.6 12C6 6.8 8.9 4.6 12 4.6s6 2.2 9.4 7.4c-3.4 5.2-6.3 7.4-9.4 7.4S6 17.2 2.6 12Z"/><circle cx="12" cy="12" r="2.6"/>',
+  // Three dots, for the bottom bar's More: everything the four tabs are not.
+  more: '<path d="M5.5 12h.01M12 12h.01M18.5 12h.01" stroke-width="2.6"/>',
   /* The same warning triangle the Report a Problem button carries, and the
      same path data rather than a second drawing of one: this section is the
      other end of that button, and a reader who has used it should meet the
@@ -40600,6 +41362,7 @@ function switchView(view, force) {
   renderSessionBar();
   // Pulse's research modes are about the page on screen, so they follow it.
   if (document.getElementById('chat-suggest')) updateChatContext();
+  routeRecord();
 }
 
 /* A tap is not a hover, and the caret has been promising otherwise.
@@ -40847,7 +41610,9 @@ if (window.OpticAuth && window.OpticAuth.on) {
 // Human names for the views, for the gear's tooltip.
 const VIEW_NAMES = {
   chart: 'Charting',
-  home: 'Home', swing: 'Swing', earnings: 'Earnings',
+  // 'Options', as the tab strip names it. "Back to Swing" named a tab the
+  // reader had never seen.
+  home: 'Home', swing: 'Options', earnings: 'Earnings',
   market: 'Macro', indices: 'Indices', long: 'Investing', roth: 'Retirement',
   tracker: "Optic Portfolio", settings: 'Settings', brief: "Optic's Read",
 };
@@ -41129,6 +41894,9 @@ function loadTicker(raw, destination) {
   // Recording it at each call site instead would miss whichever one is added
   // next.
   rememberSymbol(next);
+  // Asked again, so the feed is asked again: see SYMBOL_MISSING.
+  SYMBOL_MISSING.delete(next);
+  if (STATE.loadFailed === next) STATE.loadFailed = null;
   ++swingRequestId;
   swingLoading = false;
   STATE.ticker = next;
@@ -41137,7 +41905,17 @@ function loadTicker(raw, destination) {
   STATE.earningsBrief = null;
   STATE.long = null;
   $('#ticker-input').value = next;
-  STATE.session = null;
+  /* The previous symbol's price pair goes; the market's phase stays.
+   *
+   * This was `STATE.session = null`, which sent marketSessionET to the client
+   * clock until the new symbol's session landed. The clock knows weekends and
+   * clock hours only, so overnight it says "closed": Home read OVERNIGHT, a
+   * search flipped the strip to "Market closed · auto-refresh paused" and hid
+   * the session bar, and both came back when the request did. With Yahoo
+   * slow that was thirty seconds of the wrong market state, measured
+   * 2026-10-06. The phase is market-wide and was already right. */
+  STATE.session = STATE.session && STATE.session.session
+    ? { session: STATE.session.session } : null;
   loadSession(true);
   // Coming from home there's nothing to show on home, so land on the analysis.
   // `destination` is for callers that must leave their own tab.
@@ -41587,6 +42365,18 @@ document.addEventListener('click', (evt) => {
         col.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
         col.focus({ preventScroll: true });
       }
+    }
+    return;
+  }
+  const csNote = evt.target.closest('[data-cs-note]');
+  if (csNote) {
+    const key = csNote.dataset.csNote;
+    catalystNoteOpen = catalystNoteOpen === key ? null : key;
+    const host = document.getElementById('hm-today');
+    if (host && STATE.priority) {
+      preserveUI(host, () => { host.innerHTML = homeTodayHTML(STATE.priority); });
+      const again = [...host.querySelectorAll('[data-cs-note]')].find((b) => b.dataset.csNote === key);
+      if (again) again.focus({ preventScroll: true });
     }
     return;
   }
@@ -42244,12 +43034,22 @@ function onPulseSuggestion(evt) {
 $('#chat-suggest').addEventListener('click', onPulseSuggestion);
 if ($('#pulse-modes')) $('#pulse-modes').addEventListener('click', onPulseSuggestion);
 
-document.addEventListener('keydown', (evt) => {
-  if ((evt.metaKey || evt.ctrlKey) && evt.key === 'k') {
-    evt.preventDefault();
-    document.body.classList.add('chat-open');
-    $('#chat-input').focus();
-  }
+/* Cmd+K is the palette's alone. A second handler here opened Pulse on the
+ * same keystroke, so "Search or ask  ⌘K" opened the palette over a Pulse panel
+ * that then stayed open, 400px wide, once the palette closed. The palette's
+ * "ask Optic" row is the keyboard way into Pulse.
+ *
+ * Escape closes the panel from inside it, as it closes every other layer here,
+ * and hands focus back to the button that opened it. Its own two pickers close
+ * first: their handlers are on document, after this one, so they are still
+ * open when this runs. */
+$('#chat').addEventListener('keydown', (evt) => {
+  if (evt.key !== 'Escape' || paletteOpen || kmOpen || ppOpen) return;
+  if (!document.body.classList.contains('chat-open')) return;
+  evt.preventDefault();
+  document.body.classList.remove('chat-open');
+  wsOnChatToggle();
+  $('#chat-toggle').focus();
 });
 
 /* ------------------------------------------------------- collapsible panels
@@ -43610,7 +44410,9 @@ document.addEventListener('click', (evt) => {
  * characters, each one between a heading and the numbers it introduces. The
  * same rule as the caveats: only what overflows is clamped, by measurement,
  * and the rest is one click or one Enter away. */
-const CLAMP_PROSE = 'p.caveat, .panel > p.sub, p.pl-method, p.cc-method, p.sc-note, p.ses-warn';
+// p.dc-foot: Home's "What changed" method, five lines under the changes on a
+// phone, in the same register as cc-method beside it.
+const CLAMP_PROSE = 'p.caveat, .panel > p.sub, p.pl-method, p.cc-method, p.sc-note, p.ses-warn, p.dc-foot';
 
 function markClampedCaveats(host) {
   if (!host) return;
@@ -43877,7 +44679,13 @@ function restoreReloadPlace() {
   } catch (e) {
     place = null;
   }
-  if (!place || !place.view || place.view === 'home') return;
+  /* The address bar, when the notice did not leave a place: a reload, a
+   * link someone sent, or Back into the app from another site. */
+  if (!place || !place.view) {
+    applyRoute(location.hash);
+    return;
+  }
+  if (place.view === 'home') return;
   if (place.ticker) loadTicker(place.ticker, place.view);
   else switchView(place.view);
 }

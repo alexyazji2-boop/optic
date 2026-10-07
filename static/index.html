@@ -112,6 +112,12 @@
      its own search box for horizontal room and left every page starting
      below ~350px of chrome. A terminal's navigation belongs down the side,
      where it costs no vertical space and can hold labels. -->
+<!-- The first Tab stop. Without it a keyboard reader went through the brand,
+     seven sections, Settings, Collapse, the search, Load, Sign in and Pulse,
+     about fifteen stops, before reaching anything on the page, on every page.
+     Hidden until it has focus. -->
+<a class="skip-link" href="#main" data-skip-main>Skip to the page</a>
+
 <div class="app">
 
 <nav class="rail" id="rail" aria-label="Sections">
@@ -208,7 +214,11 @@
              autocomplete="off" aria-haspopup="dialog"
              aria-label="Search or ask. Opens the command palette">
     </div>
-    <button class="btn primary" type="submit">Load</button>
+    <!-- Secondary, not gold. Focusing the box opens the palette, so what this
+         button does is load the symbol already in it again: a refresh. Gold
+         beside the gold Pulse button made two primary actions in one bar,
+         and three on a Dossier page with its own Ask Pulse. -->
+    <button class="btn" type="submit" title="Load this symbol again">Load</button>
   </form>
 
   <!-- Kept: syncSecurityHeader and the instrument chart both write into it. -->
@@ -241,7 +251,7 @@
      is running, the regular-hours close, and where the stock is trading now. -->
 <div class="sessionbar" id="sessionbar" hidden></div>
 
-<main>
+<main id="main" tabindex="-1">
   <section class="view active" id="view-home" role="tabpanel" aria-label="Home"></section>
   <section class="view" id="view-brief" role="tabpanel" aria-label="Optic&apos;s Read. Daily summary"></section>
   <!-- The Dossier. One traded thing, seven sections, one persistent header.

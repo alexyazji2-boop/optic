@@ -90,7 +90,7 @@ def _describe(form: str, items: str) -> str:
     codes = [c.strip() for c in (items or "").split(",") if c.strip()]
     named = [ITEM_LABELS[c] for c in codes if c in ITEM_LABELS]
     if named:
-        return "{} — {}".format(label, "; ".join(named[:2]))
+        return "{}: {}".format(label, "; ".join(named[:2]))
     return label
 
 

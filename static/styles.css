@@ -989,6 +989,7 @@ nav.tabs button[aria-selected="true"]::after {
   align-items: flex-start;
   gap: var(--space-3);
 }
+.statusline[hidden] { display: none; }
 .sl-parts {
   display: flex;
   gap: var(--space-4);
@@ -17423,3 +17424,329 @@ details.exact > .table-scroll, details.exact > table { margin-top: var(--space-2
  * only cue. */
 table.heat td { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
 table.heat td.name { text-align: left; font-weight: 500; }
+
+/* ===================================================== SHELL: one line each ==
+ *
+ * The session strip on one line from 1080px. Its head stacked the phase over
+ * the clock and the extended-hours print stacked its label over its price, so
+ * the strip was 63px on every page for a reading that changes four times a
+ * day: with the top bar and the status line, 177px of chrome above Home's
+ * first figure at 1440x900. Side by side the same words fit in one row; under
+ * 1080px the strip already wraps its timeline to a row of its own and the
+ * stacked head is the narrower shape. */
+@media (min-width: 1080px) {
+  .sessionbar .ses-head { flex-direction: row; align-items: baseline; gap: var(--space-3); }
+  .sessionbar .ses-price { flex-direction: row; align-items: baseline; gap: var(--space-2); }
+  .sessionbar .ses-pval { font-size: var(--t-body); }
+}
+
+/* A phone's top bar packs to the right. On Home the search is not drawn and
+ * a guest's Sign in lives under More, which left Pulse alone at the left edge
+ * of an empty bar, where a page's back control would be. */
+@media (max-width: 559px) {
+  header.topbar { justify-content: flex-end; }
+}
+
+/* =============================================================== HOME ===
+ *
+ * A week-strip item with a reason opens it under the strip. The button wears
+ * the item's own line, so the strip looks as it did; the dotted underline on
+ * hover is the only sign it opens, the same cue the glossary terms use. */
+.cs-note-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: underline dotted transparent;
+  text-underline-offset: 3px;
+  transition: text-decoration-color var(--dur-ui) var(--ease-ui);
+}
+@media (hover: hover) {
+  .cs-note-btn:hover { text-decoration-color: currentColor; }
+}
+.cs-item.is-open { border-left-color: var(--brand); }
+.cs-note {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px solid var(--brand);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  background: var(--surface-2);
+  font-size: var(--t-small);
+  line-height: 1.5;
+  color: var(--ink-2);
+  max-width: 80ch;
+}
+.cs-note[hidden] { display: none; }
+.cs-note strong { color: var(--ink); font-weight: 600; }
+.cs-note-when { margin: 0 var(--space-2); color: var(--ink-muted); font-size: var(--t-caption); }
+
+/* The desk's takeaway leads it, a step up from the paragraphs under it. */
+.md .md-overall { font-size: var(--t-lead); line-height: 1.5; margin-bottom: var(--space-3); }
+.md-more { margin-top: var(--space-2); }
+.md-more > .md-p:first-of-type { margin-top: var(--space-3); }
+
+/* One column, in the order of the brief rather than of the two columns.
+ *
+ * Below the rail breakpoint the main column stacked whole above the rail, so
+ * on a phone the reader's own watchlist came after the desk, what matters
+ * now, what changed and the month's movers: y=5168 of a 6300px page at
+ * 375x812, measured 2026-10-06. Unboxed, the blocks take the order a daily
+ * brief reads in: the day's read, your names and what changed on them, then
+ * the market's moves, the month's movers, the written brief and the
+ * questions. Two columns keep their own order above this. */
+@container hm-market (max-width: 671px) {
+  .hm-board > .hm-main, .hm-board > .hm-rail { display: contents; }
+  .hm-board .md { order: 1; }
+  .hm-board .hm-block:has(#hm-watch) { order: 2; }
+  .hm-board #hm-changes { order: 3; }
+  .hm-board .cc-now { order: 4; }
+  .hm-board .hm-block:has(#cc-movers) { order: 5; }
+  .hm-board .hm-block:has(.hm-alerts) { order: 6; }
+  .hm-board .hm-block:has([data-go-view="brief"]) { order: 7; }
+  .hm-board .hm-block:has(.cc-qs) { order: 8; }
+}
+
+/* The first-visit question on a phone: each answer one row, not a card.
+   Five stacked cards made the question 761px tall at 375px, so a first-time
+   reader scrolled a screen of choices before anything about the market. */
+@media (max-width: 559px) {
+  .kob-opts { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+  .kob-opt {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    min-height: 44px;
+    text-align: left;
+  }
+  .kob-opt .kob-glyph { font-size: var(--t-body); }
+  .kob-opt .kob-tag { color: var(--ink-muted); }
+}
+
+/* ============================================================ DOSSIER ===
+ *
+ * A symbol the feed has never heard of: the closest names, as chips the
+ * reader can press instead of retyping. */
+.sym-suggest {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.sym-suggest[hidden] { display: none; }
+.sym-suggest-label { font-size: var(--t-small); color: var(--ink-muted); margin-right: var(--space-1); }
+.sym-pick {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--t-small);
+  cursor: pointer;
+  max-width: 100%;
+  transition: border-color var(--dur-ui) var(--ease-ui), color var(--dur-ui) var(--ease-ui);
+}
+.sym-pick strong { color: var(--ink); font-weight: 600; }
+.sym-pick span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 22ch; }
+@media (hover: hover) {
+  .sym-pick:hover { border-color: var(--brand); color: var(--ink); }
+}
+.sec-head.is-missing .sec-px-none { color: var(--warn); }
+
+/* ============================================================== CHART ===
+ *
+ * The widget rail's marks are drawn icons now (see WS_WIDGETS), at the rail's
+ * 18px. Its labels were a fixed 9px, the one size in the workspace that the
+ * reader's Text size setting could not reach; they take the micro step of
+ * the type scale like the chart's own ticks. */
+/* 16px marks and one-line labels: sixteen buttons at 38px each were 623px
+ * against the 602 the rail has above the Report a problem pill at 1440x900,
+ * which pushed Pulse under the pill again. */
+.ws-wrail-ico { display: flex; align-items: center; justify-content: center; height: 16px; }
+.ws-wrail-ico svg { width: 16px; height: 16px; display: block; }
+.ws-wrail-ico .pulse-glyph-sm { width: 16px; height: 16px; }
+.ws-wrail-lab { font-size: var(--t-micro); white-space: nowrap; letter-spacing: -0.01em; }
+
+/* A widget's close button is its only way out of the dock besides the rail,
+ * and it was hover-only: opacity 0 until the pointer crossed the widget, which
+ * a phone and a keyboard never do, and display:none with Pulse open, where
+ * the rail's toggle is disabled too. It is always drawn, at a 24px target. */
+.ws-widget .ws-widget-head .ws-leg-btn {
+  opacity: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  font-size: var(--t-body);
+  border-radius: var(--r-xs);
+}
+/* The legend's own hide and remove buttons reveal on hover; a keyboard
+ * reaching them, and a device with no hover, get them without one. */
+.ws-leg-row:focus-within .ws-leg-btn { opacity: 1; }
+@media (hover: none) {
+  .ws-leg-btn { opacity: 1; }
+}
+
+/* The drawing tools' marks, at the size the glyphs were set at. */
+.ws-tool svg { width: 18px; height: 18px; display: block; }
+.ws-rail .ws-tool:disabled svg { opacity: 0.8; }
+
+/* The drawing tools on a phone: one row above the chart, not a column beside
+ * it. At 375px the column was two tools wide, 77px of a 338px workspace, and
+ * the chart drew in the 261 left: the tools took a quarter of the width a
+ * phone's chart has least of, to save height it has more of. As a row they
+ * cost one 36px strip, which scrolls sideways like the widget row under the
+ * chart, and the chart takes the full width. */
+@media (max-width: 559px) {
+  .ws-body,
+  .ws-body.narrow,
+  body.chat-open .ws-body { grid-template-columns: minmax(0, 1fr); }
+  .ws-rail {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 2px;
+    min-width: 0;
+    padding: var(--space-1) var(--space-2);
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .ws-rail .ws-tool { flex: 0 0 auto; width: 32px; height: 32px; }
+  .ws-rail-sep,
+  .ws-rail-gap {
+    flex: 0 0 1px;
+    align-self: stretch;
+    min-height: 0;
+    max-height: none;
+    width: 1px;
+    margin: var(--space-1) var(--space-1);
+    background: var(--border);
+    grid-column: auto;
+  }
+}
+
+/* ========================================================= EARNINGS ===
+ * A name on the reader's own watchlist, inside the week's scan. */
+.ew-mine {
+  margin-left: var(--space-1);
+  padding: 0 var(--space-1);
+  border-radius: var(--r-xs);
+  border: 1px solid color-mix(in srgb, var(--brand) 55%, transparent);
+  color: var(--brand);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ============================================================= OPTIONS ===
+ * Optic's read as a line on the Options tab: the full panel is Overview's. */
+.pl-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--r-chrome);
+  background: var(--surface);
+}
+.pl-line .pl-eyebrow { display: block; margin-bottom: var(--space-1); }
+.pl-line-lede {
+  flex: 1 1 32rem;
+  margin: 0;
+  font-size: var(--t-lead);
+  line-height: 1.45;
+  color: var(--ink);
+}
+.pl-line > :not(.pl-line-lede):not(.pl-line-go) { flex-basis: 100%; }
+.pl-line-go { white-space: nowrap; }
+/* The compact strip's symbol and price, shown once the price card is gone. */
+.sec-head.compact .sec-mini { display: none; }
+.sec-head.compact.show-mini .sec-mini {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-right: var(--space-4);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.sec-mini strong { font-weight: 700; color: var(--ink); }
+.sec-mini-px { font-weight: 600; color: var(--ink); }
+/* Three columns while the symbol shows: it, the tabs, the actions, on one
+   row. The header is a two-column grid, so a third item pushed the tabs to
+   the right and the actions onto a row of their own. Narrow, the tabs take
+   the first row as they already do, and the symbol shares the actions' row. */
+.sec-head.compact.show-mini { grid-template-columns: auto minmax(0, 1fr) auto; }
+.sec-head.compact.show-mini .sec-mini { align-self: center; padding-bottom: var(--space-1); }
+@container sechead (max-width: 820px) {
+  .sec-head.compact.show-mini { grid-template-columns: auto minmax(0, 1fr); }
+  .sec-head.compact.show-mini .sec-tabs { grid-column: 1 / -1; grid-row: 1; }
+  .sec-head.compact.show-mini .sec-mini { grid-column: 1; grid-row: 2; }
+  .sec-head.compact.show-mini .sec-actions { grid-column: 2; grid-row: 2; justify-content: flex-end; }
+}
+
+/* The week strip's key, and a holiday's cell. The key's items wear the same
+   left edge the strip's items do, so the legend is the cue itself. */
+.cs-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin: calc(-1 * var(--space-1)) 0 var(--space-3);
+  font-size: var(--t-caption);
+  color: var(--ink-muted);
+}
+.cs-key-item { padding-left: var(--space-2); border-left: 2px solid var(--ink-muted); }
+.cs-key-item.impact-high { border-left-color: var(--warn); }
+.cs-key-item.is-earnings { border-left-style: dashed; }
+.cs-day.is-closed { background: transparent; border-style: dashed; }
+.ms-asof { margin: var(--space-1) 0 0; font-size: var(--t-caption); color: var(--ink-muted); text-align: right; }
+
+/* ============================================================ OVERVIEW ===
+ * The Pulse inputs as signed bars: a middle line, five cells either side. */
+.pl-bar.is-diverging { align-items: center; }
+.pl-mid {
+  flex: 0 0 2px;
+  align-self: stretch;
+  margin: -2px 1px;
+  border-radius: 1px;
+  background: var(--ink-muted);
+}
+.pl-scale { margin: var(--space-3) 0 0; font-size: var(--t-caption); color: var(--ink-muted); }
+.hm-date { font-size: var(--t-small); color: var(--ink-muted); }
+
+/* The skip link: off screen until it is focused, then the first thing drawn. */
+.skip-link {
+  position: fixed;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: 200;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--r-sm);
+  background: var(--btn-primary);
+  color: var(--btn-primary-ink);
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+.skip-link:focus, .skip-link:focus-visible { transform: none; outline: 2px solid var(--focus); outline-offset: 2px; }
+main:focus { outline: none; }
+main > .view:focus { outline: none; }

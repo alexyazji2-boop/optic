@@ -105,7 +105,7 @@ def test_the_data_state_says_what_the_number_is():
     ~15 min". Real-time only when the deployment's feed is and this quote came
     from it: Tradier falls back to yfinance per quote and says so in
     `quote_source`."""
-    _js(DATA_STATE, ["secDataStateHTML"], """
+    _js(DATA_STATE, ["closeLabel", "secDataStateHTML"], """
       var h = label();
       assert(h.indexOf('Delayed ~15 min') >= 0 && h.indexOf('is-delayed') >= 0, 'free feed: ' + h);
       assert(h.indexOf('2:05 pm') >= 0, 'with the time it was fetched');

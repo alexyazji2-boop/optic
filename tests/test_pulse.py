@@ -202,7 +202,10 @@ def test_the_expiry_list_is_dates_not_rows():
         today=date(2026, 9, 7))
     week = [i for i in out["this_week"] if i["kind"] == "expiry"]
     assert len(week) == 1
-    assert "2026-09-09" in week[0]["label"], "must skip the expiry already past"
+    assert week[0]["date"] == "2026-09-09", "must skip the expiry already past"
+    # Written as a reader says it, with how far off in words.
+    assert week[0]["label"] == "Options expiry Wed, Sep 9"
+    assert week[0]["detail"].startswith("In 2 days.")
 
 
 def test_earnings_inside_the_window_lands_this_week_and_far_ones_do_not():

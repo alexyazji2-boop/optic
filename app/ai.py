@@ -2204,7 +2204,7 @@ async def stream_chat(
     if attach_problems:
         # Told, not swallowed: a silently dropped file makes the answer look wrong
         # for no visible reason.
-        yield _sse("status", {"state": "some files were not sent — "
+        yield _sse("status", {"state": "some files were not sent: "
                               + "; ".join(attach_problems[:3])})
 
     # An unknown persona falls back to neutral rather than erroring: the value

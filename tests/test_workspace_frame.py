@@ -145,7 +145,9 @@ def test_the_rail_collapses_and_remembers():
     assert "const RAIL_KEY = 'optic.rail.tight';" in APP
     fn = APP.split("function applyRail(tight) {", 1)[1].split("\n}", 1)[0]
     assert "classList.toggle('rail-tight', tight)" in fn
-    assert "localStorage.setItem(RAIL_KEY" in fn
+    assert "localStorage.setItem(RAIL_KEY" not in fn, "the state is not the choice"
+    init = APP.split("function initRail() {", 1)[1].split("\n}", 1)[0]
+    assert "localStorage.setItem(RAIL_CHOICE_KEY" in init, "the button remembers"
     assert "aria-pressed" in fn, "a toggle has to say which way it is set"
 
 

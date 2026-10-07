@@ -120,8 +120,8 @@ Y_MIN, Y_MAX = 340, 380
 
 BLIND = ("Only what the filer tagged. A company that reports one segment has one "
          "row here, and a breakdown disclosed in prose rather than in XBRL is "
-         "not reachable. Operating metrics — daily users, impressions, "
-         "subscribers — are not in the filings at all: they are published in the "
+         "not reachable. Operating metrics (daily users, impressions, "
+         "subscribers) are not in the filings at all: they are published in the "
          "quarterly press release, laid out differently by every issuer.")
 
 METHOD = ("Read from the XBRL instance document of each 10-Q and 10-K, which "

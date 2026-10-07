@@ -905,7 +905,7 @@ def analyse(provider, ticker: str, limit: int = 12) -> Dict[str, Any]:
                 else "in {} days".format(days_to_earnings)
             )
             earnings_warning = (
-                "Earnings on {} — {}. IV will stay bid into the print and collapse after it; "
+                "Earnings on {}, {}. IV will stay bid into the print and collapse after it; "
                 "long premium held through earnings usually loses even when the direction is right.".format(
                     earnings, when
                 )

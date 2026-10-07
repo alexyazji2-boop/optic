@@ -346,6 +346,16 @@ def whats_next(
     company = (payload or {}).get("company") or {}
     expiries = (payload or {}).get("expiries") or {}
 
+    # Dates as a reader says them, and how far off in words. The panel read
+    # "Options expiry 2026-10-07" over "Today away.", measured 2026-10-07: an
+    # ISO date in a sentence, and a count of days that came out as a word. The
+    # ISO date stays on the row as `date`, for anything that sorts or links.
+    def day_label(d: date) -> str:
+        return "{}, {} {}".format(d.strftime("%a"), d.strftime("%b"), d.day)
+
+    def when(days: int) -> str:
+        return "Today" if days == 0 else "Tomorrow" if days == 1 else "In {} days".format(days)
+
     spot = _num(technicals.get("spot")) or _num(((payload or {}).get("quote") or {}).get("price"))
 
     today_items: List[Dict[str, Any]] = []
@@ -395,9 +405,9 @@ def whats_next(
         days = (nxt - now).days
         item = {
             "kind": "expiry",
-            "label": "Options expiry {}".format(nxt.isoformat()),
-            "detail": "{} away. Dealer gamma from this expiry unwinds on the day.".format(
-                "today" if days == 0 else "{} day{}".format(days, "" if days == 1 else "s")),
+            "label": "Options expiry {}".format(day_label(nxt)),
+            "date": nxt.isoformat(),
+            "detail": "{}. Dealer gamma from this expiry unwinds on the day.".format(when(days)),
             "watch": "expiry",
         }
         if days == 0:
@@ -416,10 +426,10 @@ def whats_next(
         days = (earn - now).days
         item = {
             "kind": "earnings",
-            "label": "Earnings {}".format(earn.isoformat()),
-            "detail": "{} away. Options price a move around it; a position held "
-                      "through it is a bet on the print.".format(
-                          "today" if days == 0 else "{} day{}".format(days, "" if days == 1 else "s")),
+            "label": "Earnings {}".format(day_label(earn)),
+            "date": earn.isoformat(),
+            "detail": "{}. Options price a move around it; a position held "
+                      "through it is a bet on the print.".format(when(days)),
             "watch": "earnings",
         }
         if days == 0:
@@ -444,7 +454,8 @@ def whats_next(
         item = {
             "kind": "macro",
             "label": "{}{}".format(title, " ({})".format(short) if short and short != title else ""),
-            "detail": " · ".join(bit for bit in (d.isoformat(), agency) if bit),
+            "date": d.isoformat(),
+            "detail": " · ".join(bit for bit in (day_label(d), agency) if bit),
             "watch": "macro",
         }
         (today_items if d == now else week_items).append(item)
@@ -484,6 +495,11 @@ def options_brief(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     flow = (payload or {}).get("flow") or {}
     gex = (payload or {}).get("gex") or {}
+    # No chain, no brief. With the flow read refused it still drew one line,
+    # "Unusual: none, no contract is trading far above its own open
+    # interest", which is a reading of a chain nobody had.
+    if flow.get("error"):
+        return {"available": False, "reason": flow.get("error")}
     volume = flow.get("volume") or {}
     premium = flow.get("premium") or {}
     skew = flow.get("iv_skew") or {}
@@ -516,11 +532,16 @@ def options_brief(payload: Dict[str, Any]) -> Dict[str, Any]:
     if unusual:
         top = max(unusual, key=lambda r: _num(r.get("vol_oi_ratio")) or 0)
         strike = _num(top.get("strike"))
+        ratio = _num(top.get("vol_oi_ratio"))
+        # A contract with no open interest has no ratio: its volume is all new
+        # positions. "0.0x open interest" said the opposite of that.
+        traded = ("{:.1f}x open interest".format(ratio) if ratio
+                  else "{:,.0f} traded on no open interest".format(_num(top.get("volume")) or 0))
         items.append({
             "label": "Unusual",
             "value": "{:,.0f} {}".format(strike or 0, str(top.get("type", "")).lower()),
-            "note": "{:.1f}x open interest, {} expiry \u00b7 {} contract{} flagged".format(
-                _num(top.get("vol_oi_ratio")) or 0, top.get("expiry", "?"),
+            "note": "{}, {} expiry \u00b7 {} contract{} flagged".format(
+                traded, top.get("expiry", "?"),
                 len(unusual), "" if len(unusual) == 1 else "s"),
             "tone": "up" if str(top.get("type", "")).upper() == "CALL" else "down",
         })

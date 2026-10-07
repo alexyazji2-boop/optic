@@ -418,6 +418,55 @@ def _sector_confirm(ticker: str) -> Dict[str, Any]:
     prof = YF_PROVIDER.profile(ticker) or {}
     return sector_confirm_mod.build(YF_PROVIDER, ticker, prof.get("sector"))
 
+# How near the price a chain has to reach before it is read at all.
+CHAIN_NEAR_BAND = 0.15
+
+
+def _chain_unusable(chain: Optional[pd.DataFrame], spot: Optional[float]) -> Optional[str]:
+    """Why a chain the feed returned cannot be analysed, or None if it can.
+
+    Outside market hours Yahoo serves the chain frozen rather than not at all.
+    Measured on AAPL at 3am ET on 2026-10-07: 379 contracts, 167 of them struck
+    within 15% of the $333.63 price, and not one of those 167 with a bid, an
+    ask or any open interest; their implied volatilities were placeholders
+    (0.125, 0.094, 0.25) and only the previous session's volume was real. The
+    open interest that was left sat on deep in-the-money strikes from $5 to
+    $110, so the chain read as a put wall at $20 "94% away", a gamma pin at
+    $110, a $110 call recommended at $21,185 a contract and a skew from
+    placeholder volatilities, all stated as positioning.
+
+    So a chain is read only when something near the price is quoted or held:
+    a bid, an ask, or open interest. Otherwise it is treated as no chain, with
+    the reason, which is what the live site says at the same hour when the feed
+    serves nothing at all. Near is 15% of the price, or a dollar for a stock
+    under about seven, whose strikes can be a dollar apart."""
+    if chain is None or chain.empty or not spot or spot <= 0 or "strike" not in chain:
+        return None
+    strikes = pd.to_numeric(chain["strike"], errors="coerce")
+    band = max(spot * CHAIN_NEAR_BAND, 1.0)
+    near = chain[(strikes - spot).abs() <= band]
+
+    def positive(col: str) -> bool:
+        if col not in near:
+            return False
+        return bool((pd.to_numeric(near[col], errors="coerce").fillna(0) > 0).any())
+
+    if len(near) and (positive("bid") or positive("ask") or positive("open_interest")):
+        return None
+    if not len(near):
+        return (
+            "The option chain the feed returned has no strikes near the price: {:,} contracts "
+            "struck from ${:,.2f} to ${:,.2f}, against ${:,.2f}. The options readings wait "
+            "until the feed serves the whole chain."
+        ).format(int(len(chain)), float(strikes.min()), float(strikes.max()), float(spot))
+    return (
+        "The option chain the feed returned has no quotes and no open interest near the "
+        "price: none of the {:,} contracts within {:.0f}% of ${:,.2f} has a bid, an ask or "
+        "an open position. The free feed serves the chain like this outside market hours, "
+        "so the options readings wait until it is quoted again."
+    ).format(int(len(near)), CHAIN_NEAR_BAND * 100, float(spot))
+
+
 
 def _swing_snapshot(
     ticker: str,
@@ -522,14 +571,28 @@ def _swing_snapshot(
     strategy_ideas: List[Dict[str, Any]] = []
     exposure: Optional[pd.DataFrame] = None
 
-    if chain is not None and not chain.empty:
+    partial = _chain_unusable(chain, spot)
+    # No chain at all, said as one of two different things: the symbol lists
+    # no options, or the feed listed expiries and then returned no chain for
+    # them, which is how the free feed often answers outside market hours.
+    if (chain is None or chain.empty) and not partial:
+        listed = (available_expiries or {}).get("available") if isinstance(
+            available_expiries, dict) else available_expiries
+        if listed:
+            partial = (
+                "The feed lists {} expiries for {} but returned no chain for them just now. "
+                "It often does this outside market hours; the options readings come back "
+                "when it answers."
+            ).format(len(listed), ticker)
+    if chain is not None and not chain.empty and not partial:
         gex_read = gex_mod.analyse(chain, spot, rate=RISK_FREE, div=div, ticker=ticker)
         exposure = gex_read.pop("_exposure_frame", None)
         if exposure is not None:
             greeks_read = greeks_panel.analyse(exposure, spot)
         flow_read = flow_mod.analyse(chain, spot)
     else:
-        note = "No options chain available for {}. Equity/technical analysis only.".format(ticker)
+        note = partial or (
+            "No options chain available for {}. Equity/technical analysis only.".format(ticker))
         gex_read = {"error": note}
         flow_read = {"error": note}
         greeks_read = {"error": note}
@@ -543,7 +606,12 @@ def _swing_snapshot(
 
     call = swing.verdict(tech, gex_read, flow_read, news_read, macro_read, spot)
 
-    entry_plan: Dict[str, Any] = {"actionable": False, "headline": "No options chain available."}
+    # The reason rides with the headline, so the Setup block can say why there
+    # is no setup (a frozen overnight chain) rather than only that there is none.
+    entry_plan: Dict[str, Any] = {
+        "actionable": False,
+        "headline": "No options readings right now." if partial else "No options chain available.",
+        "reason": partial}
     if exposure is not None:
         naked_ideas = swing.build_naked_ideas(exposure, spot, call["stance"], tech,
                                               budget=budget)
