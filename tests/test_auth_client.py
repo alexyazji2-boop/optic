@@ -582,7 +582,7 @@ def test_the_price_head_is_the_first_thing_on_the_asset_page():
     block = APP_JS[APP_JS.index("function renderSwing(d) {"):]
     block = block[block.index("  const html = `"):]
     block = block[:block.index("</div>`")]
-    assert block.index("renderPriceHead") < block.index("renderOpticPulse")
+    assert block.index("renderPriceHead") < block.index("renderPulseLine")
 
 
 def test_the_price_itself_is_not_coloured_by_direction():

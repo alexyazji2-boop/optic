@@ -10767,6 +10767,40 @@ function pulseReadMore(d) {
 }
 
 
+/* Optic's read in one line, for the Options tab: the stance sentence, any
+ * catalyst that changes how it is read, and the way to the full panel on
+ * Overview. See renderSwing for why the panel itself is not repeated here. */
+/* Show the compact strip's symbol and price while the price card is above
+ * the top of the screen. One observer, replaced on every render, because the
+ * render replaces the card it watched. */
+let priceCardObserver = null;
+function watchPriceCardForStrip() {
+  if (priceCardObserver) { priceCardObserver.disconnect(); priceCardObserver = null; }
+  if (typeof IntersectionObserver !== 'function' || !views.swing) return;
+  const card = views.swing.querySelector('.px-head');
+  const head = views.swing.querySelector('.sec-head.compact');
+  if (!card || !head) return;
+  priceCardObserver = new IntersectionObserver(([entry]) => {
+    const gone = !entry.isIntersecting && entry.boundingClientRect.top < 0;
+    head.classList.toggle('show-mini', gone);
+  });
+  priceCardObserver.observe(card);
+}
+
+function renderPulseLine(d) {
+  const p = d.pulse;
+  if (!p) return '';
+  const stance = String(p.stance || 'neutral');
+  const g = d.digest || {};
+  const lede = g.lede || p.stance_label || cap(stance);
+  return `<section class="pl-line span-all" aria-label="Optic's read">
+    <p class="pl-line-lede is-${esc(stance)}"><span class="pl-eyebrow">Optic's read</span>${esc(lede)}</p>
+    ${pulseCatalystLine(p.catalyst)}
+    <button type="button" class="hm-more pl-line-go" data-sec-view="overview"
+      data-sec-sym="${esc(d.ticker || STATE.ticker || '')}">The full read, with its inputs, on Overview &rarr;</button>
+  </section>`;
+}
+
 function renderOpticPulse(d) {
   const p = d.pulse;
   if (!p) return '';
@@ -11792,13 +11826,22 @@ function renderSwing(d) {
     </div>
   </li>`).join('');
 
+  /* The tab's own work first, after the price.
+   *
+   * It opened on the price, then the whole Optic Pulse panel, then three
+   * summary blocks, and reached the Setup and the options read at y=2244 of
+   * a 8,700px page at 1440x900 (measured 2026-10-07). The Pulse panel is the
+   * one Overview leads with, the same 645px, so going Overview to Options
+   * read the same judgement twice. Here it is one line with the way back to
+   * it, and the tab leads with what it is for: the setup, what the options
+   * are saying, then the levels and the inputs. */
   const html = `
   ${renderPriceHead(d, extQ)}
-  ${renderOpticPulse(d)}
-  ${renderWhyMoving(d)}
-  ${renderWhatsNext(d)}
+  ${renderPulseLine(d)}
   ${renderSetup(d)}
   ${renderOptionsBrief(d)}
+  ${renderWhatsNext(d)}
+  ${renderWhyMoving(d)}
   ${renderFollowUps(d)}
   ${renderThesis(d)}
   ${renderSetupsShell()}
@@ -12402,6 +12445,7 @@ function renderSwing(d) {
   views.swing.innerHTML = securityHeader('swing', { compact: true })
     + keyStatsHTML(d.quote, { view: 'swing', short: (d.company || {}).short_interest }) + html;
   orderAssetPageForPhone();
+  watchPriceCardForStrip();
 
   // ---- charts
   /* A 0-100 score (a level's strength) runs up from zero against 100, as its
@@ -13547,6 +13591,15 @@ function securityHeader(view, opts = {}) {
     q.sector ? ` \u00b7 ${esc(q.sector)}` : ''}</span>` : ''}
       ${has ? secDataStateHTML(q) : ''}
     </div>`}
+    ${/* The symbol and price, in the compact strip, once the price card that
+         stands in for them has scrolled away (watchPriceCardForStrip). The
+         compact strip left a reader halfway down Options with seven tabs and
+         no name: which company, at what price. Hidden from a screen reader,
+         which has the card's own heading. */''}
+    ${opts.compact && view === 'swing' ? `<span class="sec-mini" aria-hidden="true">
+      <strong>${esc(sym)}</strong>${has ? ` <span class="sec-mini-px">${fmt(price, 2)}</span>
+      <span class="sec-chg ${dir}">${Number.isFinite(pct) ? `${pct >= 0 ? '+' : ''}${fmt(pct, 2)}%` : ''}</span>` : ''}
+    </span>` : ''}
     <nav class="sec-tabs" role="tablist" aria-label="Dossier sections">${tabs}</nav>
     ${/* On every facet but Charting, compact included: Options drops the
          identity row because its price card says it, but the actions are not

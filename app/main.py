@@ -572,6 +572,18 @@ def _swing_snapshot(
     exposure: Optional[pd.DataFrame] = None
 
     partial = _chain_unusable(chain, spot)
+    # No chain at all, said as one of two different things: the symbol lists
+    # no options, or the feed listed expiries and then returned no chain for
+    # them, which is how the free feed often answers outside market hours.
+    if (chain is None or chain.empty) and not partial:
+        listed = (available_expiries or {}).get("available") if isinstance(
+            available_expiries, dict) else available_expiries
+        if listed:
+            partial = (
+                "The feed lists {} expiries for {} but returned no chain for them just now. "
+                "It often does this outside market hours; the options readings come back "
+                "when it answers."
+            ).format(len(listed), ticker)
     if chain is not None and not chain.empty and not partial:
         gex_read = gex_mod.analyse(chain, spot, rate=RISK_FREE, div=div, ticker=ticker)
         exposure = gex_read.pop("_exposure_frame", None)

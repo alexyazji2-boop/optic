@@ -17400,3 +17400,50 @@ table.heat td.name { text-align: left; font-weight: 500; }
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+
+/* ============================================================= OPTIONS ===
+ * Optic's read as a line on the Options tab: the full panel is Overview's. */
+.pl-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--r-chrome);
+  background: var(--surface);
+}
+.pl-line .pl-eyebrow { display: block; margin-bottom: var(--space-1); }
+.pl-line-lede {
+  flex: 1 1 32rem;
+  margin: 0;
+  font-size: var(--t-lead);
+  line-height: 1.45;
+  color: var(--ink);
+}
+.pl-line > :not(.pl-line-lede):not(.pl-line-go) { flex-basis: 100%; }
+.pl-line-go { white-space: nowrap; }
+/* The compact strip's symbol and price, shown once the price card is gone. */
+.sec-head.compact .sec-mini { display: none; }
+.sec-head.compact.show-mini .sec-mini {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-right: var(--space-4);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.sec-mini strong { font-weight: 700; color: var(--ink); }
+.sec-mini-px { font-weight: 600; color: var(--ink); }
+/* Three columns while the symbol shows: it, the tabs, the actions, on one
+   row. The header is a two-column grid, so a third item pushed the tabs to
+   the right and the actions onto a row of their own. Narrow, the tabs take
+   the first row as they already do, and the symbol shares the actions' row. */
+.sec-head.compact.show-mini { grid-template-columns: auto minmax(0, 1fr) auto; }
+.sec-head.compact.show-mini .sec-mini { align-self: center; padding-bottom: var(--space-1); }
+@container sechead (max-width: 820px) {
+  .sec-head.compact.show-mini { grid-template-columns: auto minmax(0, 1fr); }
+  .sec-head.compact.show-mini .sec-tabs { grid-column: 1 / -1; grid-row: 1; }
+  .sec-head.compact.show-mini .sec-mini { grid-column: 1; grid-row: 2; }
+  .sec-head.compact.show-mini .sec-actions { grid-column: 2; grid-row: 2; justify-content: flex-end; }
+}

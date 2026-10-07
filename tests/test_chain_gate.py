@@ -64,3 +64,30 @@ def test_an_unusual_contract_on_no_open_interest_is_said_so():
     note = [i for i in out["items"] if i["label"] == "Unusual"][0]["note"]
     assert note.startswith("150 traded on no open interest"), note
     assert "0.0x" not in note
+
+
+def test_no_chain_with_listed_expiries_says_which_kind_of_missing():
+    """The feed listed 23 expiries for AAPL at 3am and returned no chain for
+    them; "No options chain available" read as if AAPL had no options."""
+    from pathlib import Path
+    main = (Path(__file__).resolve().parent.parent / "app/main.py").read_text()
+    block = main.split("    partial = _chain_unusable(chain, spot)", 1)[1].split("    if chain is not None", 1)[0]
+    assert "if (chain is None or chain.empty) and not partial:" in block
+    assert "returned no chain for them just now" in block
+    plan = main.split('"headline": "No options readings right now." if partial', 1)
+    assert len(plan) == 2, "the setup says there is nothing to read, not that there are no options"
+
+
+def test_the_options_tab_leads_with_its_own_work():
+    from pathlib import Path
+    app = (Path(__file__).resolve().parent.parent / "static/app.js").read_text()
+    swing = app[app.index("function renderSwing(d) {"):]
+    block = swing[swing.index("  const html = `"):swing.index("${renderSetupsShell()}")]
+    order = ["renderPriceHead", "renderPulseLine", "renderSetup", "renderOptionsBrief",
+             "renderWhatsNext", "renderWhyMoving", "renderFollowUps"]
+    at = [block.index("${" + n + "(") for n in order]
+    assert at == sorted(at), order
+    assert "renderOpticPulse(d)" not in block, "the full panel is Overview's"
+    line = app[app.index("function renderPulseLine(d) {"):]
+    line = line[:line.index("\n}\n")]
+    assert 'data-sec-view="overview"' in line and "pulseCatalystLine(p.catalyst)" in line
