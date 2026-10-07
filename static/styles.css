@@ -15858,6 +15858,16 @@ body.ws-max[data-view="chart"] main { padding: 0; }
   table.cat-co-table td.cc-why { grid-area: why; }
 }
 
+/* A wide table that scrolls sideways keeps its first column in view, on the
+   panel's own surface so the scrolled cells pass under it. */
+table.sticky-first th:first-child,
+table.sticky-first td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface);
+}
+
 /* Reliability pass: an action per card on a phone. As a table at 375px the
    page showed the date, the symbol and half the firm's name, and the target,
    the action and the rating, which are what the row is for, sat off to the

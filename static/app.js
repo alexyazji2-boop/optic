@@ -28321,8 +28321,11 @@ function renderSettings() {
     seg.active ? ' <span class="subnote">· now</span>' : ''}</td>
       <td>${esc(timeIn(seg.start_at, 'America/New_York'))} – ${
     esc(timeIn(seg.end_at, 'America/New_York'))} ET</td>
-      <td>${esc(timeIn(seg.start_at, zone))} – ${esc(timeIn(seg.end_at, zone))} ${
-    esc(zoneAbbrev(zone))}</td>
+      ${/* On market time the second column repeated the first word for word,
+           under a line saying nothing is converted, and pushed the table
+           wider than a phone. */''}
+      ${onMarketTime ? '' : `<td>${esc(timeIn(seg.start_at, zone))} – ${esc(timeIn(seg.end_at, zone))} ${
+    esc(zoneAbbrev(zone))}</td>`}
     </tr>`).join('');
 
   views.settings.innerHTML = `
@@ -28390,7 +28393,7 @@ function renderSettings() {
     ${hoursRows ? `
       <h3 style="margin-top:var(--space-4)">${hg('Market hours')}</h3>
       <div class="table-scroll"><table class="data narrow">
-        <thead><tr><th>Session</th><th>Eastern (market)</th><th>Your zone</th></tr></thead>
+        <thead><tr><th>Session</th><th>Eastern (market)</th>${onMarketTime ? '' : '<th>Your zone</th>'}</tr></thead>
         <tbody>${hoursRows}</tbody>
       </table></div>
       <p class="caveat">Overnight straddles midnight, so its two halves share one row. Daylight
@@ -30398,7 +30401,9 @@ function renderIndices(d) {
   <div class="panel span2 gap">
     <h2>${hg('Index regime')}</h2>
     <p class="sub">${gloss(idx.regime_summary || '')}</p>
-    <table class="data" data-defs="indices">
+    ${/* Eleven columns scroll sideways on anything narrower than a desktop,
+         and the names went with them. The name column stays put. */''}
+    <div class="table-scroll"><table class="data sticky-first" data-defs="indices">
       <thead><tr><th>Index</th><th>Last</th><th>1y</th><th>3y CAGR</th><th>5y CAGR</th><th>10y CAGR</th><th>vs 40w</th><th>vs 200w</th><th>Wk RSI</th><th>Drawdown</th><th>Phase</th></tr></thead>
       <tbody>${(idx.indices || []).map((r) => `<tr>
         <td class="name">${esc(r.name)}<div class="subnote">${esc(r.note || '')}</div></td>
@@ -30413,7 +30418,7 @@ function renderIndices(d) {
         <td class="${signClass(r.current_drawdown_pct)}">${fmtPct(r.current_drawdown_pct, 1)}</td>
         <td class="name">${esc(cap(r.phase) || '')}</td>
       </tr>`).join('')}</tbody>
-    </table>
+    </table></div>
     <p class="caveat">CAGR is the annualized rate of return over the period, so a 10-year
       figure smooths through crashes rather than hiding them. Check the drawdown column alongside it.</p>
   </div>
