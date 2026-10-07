@@ -38279,9 +38279,13 @@ function renderPulseHistory(open) {
           title="Delete this conversation" aria-label="Delete">&times;</button>
       </div>`).join('')}</div>`
     : '<p class="sub" style="padding:var(--space-2) var(--space-0)">Nothing saved yet.</p>'}
-    <p class="caveat">Stored in this browser only, never uploaded, and not visible
-      to anyone else using this link. Attachments are not saved: the file itself was
-      never kept, only the note that one was sent. The last
+    ${/* "Not visible to anyone else using this link" was from when the
+         terminal was shared through a tunnel link. What is true now is the
+         browser, and the shelf each account's things go on (PERSONAL_KEYS). */''}
+    <p class="caveat">Stored in this browser only and never uploaded, so they do not
+      follow you to another device. Each account's are kept apart here, and signing
+      out puts yours away until you sign in again. Attachments are not saved: the
+      file itself was never kept, only the note that one was sent. The last
       ${fmt(PULSE_MAX_CONVERSATIONS, 0)} conversations are retained.</p>`;
 }
 
