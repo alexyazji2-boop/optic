@@ -234,3 +234,18 @@ def test_home_is_dated_and_does_not_say_the_session_twice():
     home = home[:home.index("\n}\n")]
     assert "hm-session" not in home
     assert 'class="hm-date">${esc(homeDateLine(session))}' in home
+
+
+def test_the_passkey_offer_waits_for_the_data_question():
+    """Signed in on a browser holding a guest's searches, the reader got "Bring
+    what is saved here into your account?" and "Make sign-in faster" in the
+    same second, measured 2026-10-07."""
+    auth = (ROOT / "static/auth.js").read_text()
+    fn = auth[auth.index("  function maybeOfferPasskey() {"):]
+    fn = fn[:fn.index("\n  }\n")]
+    assert "document.getElementById('ds-ask') || document.querySelector('.auth-modal')" in fn
+    assert "setTimeout(maybeOfferPasskey, 1500)" in fn
+    # Recorded as offered only once it is shown, after the wait.
+    assert fn.index("setTimeout(maybeOfferPasskey") < fn.index("localStorage.setItem(PROMPTED_KEY")
+    assert "if (document.querySelector('.auth-promo')) return;" in fn
+    assert "ds-ask" in APP, "the question it waits for is the app's own"

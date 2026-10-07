@@ -976,9 +976,27 @@
 
   var PROMPTED_KEY = 'optic.auth.passkeyOffered';
 
+  /* One question at a time, the reader's data first.
+   *
+   * Signing in on a browser with a guest's searches in it opens "Bring what is
+   * saved here into your account?", a decision about whose things these are,
+   * and this card arrived beside it in the same second: two asks on the first
+   * signed-in screen, one of them a promotion. It waits now until that
+   * question, and the sign-in dialog, are gone, and it is only recorded as
+   * offered once it has actually been shown. */
+  var promoWaits = 0;
+
   function maybeOfferPasskey() {
     if (STATE.status !== 'user' || !STATE.methods) return;
     if (STATE.methods.passkeys > 0 || !passkeysSupported()) return;
+    if (document.querySelector('.auth-promo')) return;
+    var busy = document.getElementById('ds-ask') || document.querySelector('.auth-modal');
+    if (busy || promoWaits === 0) {
+      // The first pass waits a beat as well: the data question is opened by
+      // the app on the same sign-in, a moment after this runs.
+      if (promoWaits < 240) { promoWaits += 1; setTimeout(maybeOfferPasskey, 1500); }
+      return;
+    }
     try {
       if (localStorage.getItem(PROMPTED_KEY)) return;
       localStorage.setItem(PROMPTED_KEY, new Date().toISOString());

@@ -4215,8 +4215,10 @@ function applyRail(tight) {
     const text = btn.querySelector('.rail-label');
     if (text) text.textContent = tight ? 'Expand' : 'Collapse';
   }
-  try { localStorage.setItem(RAIL_KEY, tight ? '1' : '0'); }
-  catch (e) { /* private mode: it just forgets between loads */ }
+  /* Nothing is stored here. Writing the state on every application is what
+   * made RAIL_KEY meaningless, and with a width-led default it would save the
+   * width's answer as the reader's: a tablet's automatic collapse came back
+   * as a choice on the desktop. The button stores the choice (initRail). */
 }
 
 function initRail() {
