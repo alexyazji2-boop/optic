@@ -372,3 +372,21 @@ def test_id_token_verification_names_the_algorithms_rather_than_trusting_the_hea
     assert 'algorithms=["RS256", "ES256"]' in source
     assert "algorithms=[claims" not in source
     assert 'options={"require": ["exp", "iat", "sub", "aud", "iss"]' in source
+
+
+
+def test_a_reader_on_the_public_site_is_not_handed_the_operators_instructions(monkeypatch):
+    """Settings prints these under Connected accounts to every signed-in reader.
+    On the hosted site they read "needs GOOGLE_CLIENT_ID and
+    GOOGLE_CLIENT_SECRET in the environment"."""
+    from app.auth import config
+    monkeypatch.setenv("RAILWAY_ENVIRONMENT", "production")
+    body = config.providers()
+    for name in ("google", "apple"):
+        assert body[name]["available"] is False
+        reason = body[name]["reason"]
+        assert "not offered on this site" in reason, reason
+        assert "environment" not in reason and "_ID" not in reason, reason
+    monkeypatch.delenv("RAILWAY_ENVIRONMENT")
+    assert "GOOGLE_CLIENT_ID" in config.providers()["google"]["reason"], \
+        "the operator running it locally still gets the instruction"

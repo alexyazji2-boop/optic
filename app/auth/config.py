@@ -165,14 +165,26 @@ def redirect_uri(provider: str) -> str:
     return "{}/api/auth/{}/callback".format(base_url(), provider)
 
 
+def _unset_reason(reader: str, operator: str) -> str:
+    """Why a sign-in method is dark, in the words of whoever is reading.
+
+    Settings prints this under Connected accounts to every signed-in reader,
+    and on the public site it told them "Google sign-in needs
+    GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in the environment": an
+    instruction for the operator, to somebody with no environment to set it
+    in. Same branch and same reason as the assistant's hint in app/ai.py."""
+    return reader if is_hosted() else operator
+
+
 def google_status() -> Dict[str, Any]:
     missing = [name for name, value in (("GOOGLE_CLIENT_ID", GOOGLE_CLIENT_ID),
                                         ("GOOGLE_CLIENT_SECRET", GOOGLE_CLIENT_SECRET))
                if not value]
     if missing:
         return {"available": False,
-                "reason": "Google sign-in needs {} in the environment.".format(
-                    " and ".join(missing))}
+                "reason": _unset_reason(
+                    "Google sign-in is not offered on this site.",
+                    "Google sign-in needs {} in the environment.".format(" and ".join(missing)))}
     return {"available": True, "redirect_uri": redirect_uri("google")}
 
 
@@ -184,9 +196,11 @@ def apple_status() -> Dict[str, Any]:
                if not value]
     if missing:
         return {"available": False,
-                "reason": "Sign in with Apple needs {} in the environment. It also "
-                          "needs a paid Apple Developer membership, which is where "
-                          "the Service ID and key come from.".format(", ".join(missing))}
+                "reason": _unset_reason(
+                    "Sign in with Apple is not offered on this site.",
+                    "Sign in with Apple needs {} in the environment. It also "
+                    "needs a paid Apple Developer membership, which is where "
+                    "the Service ID and key come from.".format(", ".join(missing)))}
     return {"available": True, "redirect_uri": redirect_uri("apple")}
 
 
@@ -198,8 +212,10 @@ def passkeys_status() -> Dict[str, Any]:
         import webauthn  # noqa: F401
     except ImportError:
         return {"available": False,
-                "reason": "Passkeys need the `webauthn` package. Run pip install -r "
-                          "requirements.txt."}
+                "reason": _unset_reason(
+                    "Passkeys are not available on this site right now.",
+                    "Passkeys need the `webauthn` package. Run pip install -r "
+                    "requirements.txt.")}
     return {"available": True, "rp_id": rp_id()}
 
 
