@@ -6189,8 +6189,12 @@ function watchListsBar() {
         class="wl-chip${l.id === activeId ? ' on' : ''}"
         data-watch-list="${esc(l.id)}" aria-selected="${l.id === activeId}"
         >${esc(l.name)}<span class="wl-chip-n">${(l.symbols || []).length}</span></button>`).join('')}
-      <button type="button" class="wl-chip is-new" data-watch-list-new
-        title="Create a list">+ New list</button>
+      ${(() => {
+    const full = watchListFull();
+    return `<button type="button" class="wl-chip is-new" data-watch-list-new
+        ${full ? `aria-disabled="true" title="${esc(full)}"` : 'title="Create a list"'}
+        >+ New list</button>`;
+  })()}
     </div>
     ${/* With one list, three of these four were disabled: both arrows and
          Delete, the last explained only by a title a phone never shows. They
@@ -7593,6 +7597,9 @@ document.addEventListener('click', (evt) => {
   if (pick) { watchListSwitch(pick.dataset.watchList); return; }
 
   if (evt.target.closest('[data-watch-list-new]')) {
+    // At the cap, said before the name is asked for rather than after it.
+    const full = watchListFull();
+    if (full) { window.OpticAuth.toast(full, 'bad'); return; }
     const name = window.prompt('Name the list');
     if (name) watchListCreate(name);
     return;
@@ -7766,6 +7773,28 @@ function watchSave(list) {
 const WATCHLISTS_KEY = 'optic.watchlists.v1';
 const WATCHLIST_LIMIT = 12;
 
+/* How many lists this reader may keep, and the sentence when they are at it.
+ *
+ * Signed in, the plan's number: Free keeps 3, which the server enforces. The
+ * page checked only this browser's twelve, so a Free account was asked to
+ * name a fourth list and then refused it ("The Free plan keeps 3
+ * watchlists"), the name it had typed thrown away. Read from the account's
+ * own subscription, so a plan with more needs no change here. */
+function watchListCap() {
+  const plan = signedIn() && window.OpticAuth ? (window.OpticAuth.state().subscription || {}) : null;
+  const limit = plan && plan.limits ? Number(plan.limits.watchlists) : NaN;
+  return Number.isFinite(limit) && limit > 0
+    ? { n: limit, plan: plan.label || 'Free' } : { n: WATCHLIST_LIMIT, plan: null };
+}
+
+function watchListFull() {
+  const cap = watchListCap();
+  if (watchAllLists().length < cap.n) return '';
+  return cap.plan
+    ? `The ${cap.plan} plan keeps ${cap.n} watchlists. Rename or delete one to make room.`
+    : 'Twelve lists is the limit. Rename or delete one.';
+}
+
 function newListId() {
   return 'wl' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
@@ -7878,10 +7907,8 @@ async function watchListCreate(name) {
   if (!clean) return;
   const taken = watchAllLists().some((l) => l.name.toLowerCase() === clean.toLowerCase());
   if (taken) { window.OpticAuth.toast('You already have a list with that name.', 'bad'); return; }
-  if (watchAllLists().length >= WATCHLIST_LIMIT) {
-    window.OpticAuth.toast('Twelve lists is the limit. Rename or delete one.', 'bad');
-    return;
-  }
+  const full = watchListFull();
+  if (full) { window.OpticAuth.toast(full, 'bad'); return; }
   if (signedIn()) {
     try {
       const made = await authApi('/api/watchlists', { method: 'POST', body: { name: clean } });

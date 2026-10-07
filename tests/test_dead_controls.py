@@ -75,7 +75,9 @@ def test_a_new_visitor_has_one_list_and_it_is_the_active_one():
         _line(r"^const WATCHLISTS_KEY = .*$"),
         _line(r"^let firstListId = .*$"),
         _fn("esc"), _fn("newListId"), _fn("localWatchList"), _fn("localLists"),
-        _fn("watchAllLists"), _fn("watchActiveId"), _fn("watchActiveList"), _fn("watchListsBar"),
+        _line(r"^const WATCHLIST_LIMIT = .*$"),
+        _fn("watchAllLists"), _fn("watchActiveId"), _fn("watchActiveList"),
+        _fn("watchListCap"), _fn("watchListFull"), _fn("watchListsBar"),
         """
         var a = localLists(), b = localLists();
         assert(a.lists[0].id === b.lists[0].id, 'a fresh id on every read');
@@ -156,3 +158,32 @@ def test_full_screen_charting_takes_the_report_pill_down_with_the_chrome():
     start = css.index("body.ws-max[data-view=\"chart\"] .rail,")
     block = css[start:css.index("/* ---------------------------------------------------------- Insiders page")]
     assert 'body.ws-max[data-view="chart"] .rp { display: none; }' in block
+
+
+
+def test_a_free_account_at_its_cap_is_told_before_it_names_a_list():
+    """Free keeps 3 lists and the server refuses a fourth, but the page checked
+    only this browser's twelve: a Free account was asked to name the list and
+    then refused it, the typed name thrown away."""
+    _jsc("\n".join([
+        "function assert(v, m) { if (!v) throw new Error(m); }",
+        "function esc(v) { return String(v); }",
+        "function signedIn() { return true; }",
+        "var window = { OpticAuth: { state: function () { return { subscription:"
+        " { label: 'Free', limits: { watchlists: 3 } } }; } } };",
+        "var lists = [{ id: 'a', name: 'One', symbols: [] }, { id: 'b', name: 'Two', symbols: [] }];",
+        "function watchAllLists() { return lists; }",
+        "function watchActiveId() { return 'a'; }",
+        _line(r"^const WATCHLIST_LIMIT = .*$"),
+        _fn("watchListCap"), _fn("watchListFull"), _fn("watchListsBar"),
+        """
+        assert(watchListFull() === '', 'two of three is not full');
+        assert(!/aria-disabled/.test(watchListsBar()), 'the chip is shut below the cap');
+        lists.push({ id: 'c', name: 'Three', symbols: [] });
+        assert(/The Free plan keeps 3 watchlists/.test(watchListFull()), watchListFull());
+        assert(/data-watch-list-new\s+aria-disabled="true"/.test(watchListsBar()), 'no sign on the chip');
+        """,
+    ]))
+    handler = JS.split("closest('[data-watch-list-new]')", 1)[1][:400]
+    assert handler.index("watchListFull()") < handler.index("window.prompt("), \
+        "the cap is checked after the name is asked for"
