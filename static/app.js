@@ -8556,13 +8556,15 @@ function renderExplore(data) {
     title: 'What is worth a look',
     sub: 'A reading of the three sections below, not a fourth thing to read.',
     cls: 'span-all',
-    rows: exploreReadings(scans, moves, sectors),
+    rows: exploreReadings(scans, moves, sectors, (data.sectors || {}).benchmark || 'SPY'),
   })}
     <section class="panel">
       <h2>${hg('Screens')}</h2>
       <p class="sub">${esc(scans.ready
-    ? `${scans.considered || 0} liquid names through the filters, out of a ${
-      scans.universe_size || 0}-symbol universe.`
+    ? /* The count is the first reading above; said twice, 200px apart, it
+         crowded out what this panel is for. */
+      `Each screen asks one question of those ${fmt(scans.considered || 0, 0)} names
+      and opens its ranked results on Scan.`
     : (scans.scans || []).length
       ? 'The universe ranking is still building in the background. The screens open, and fill once it lands.'
       : 'The scanner catalogue is unavailable right now.')}</p>
@@ -14055,7 +14057,7 @@ function indicesReadings(idx) {
  * Ranked by `rel` rather than raw percent for the reason recorded on
  * rankedMoves: raw percent ranks by which instrument is inherently jumpiest.
  */
-function exploreReadings(scans, moves, sectors) {
+function exploreReadings(scans, moves, sectors, benchmark = 'SPY') {
   const out = [];
   const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
@@ -14067,7 +14069,7 @@ function exploreReadings(scans, moves, sectors) {
       tone: 'neutral',
       verdict: `${fmt(scans.considered, 0)} names`,
       detail: `${fmt(scans.considered, 0)} of ${fmt(universe, 0)} symbols cleared the `
-        + `price and volume filters${share === null ? '' : ` -- ${fmt(share, 0)}%`}. `
+        + `price and volume filters${share === null ? '' : ` (${fmt(share, 0)}%)`}. `
         + 'Every screen on this page ranks within that set, so a name absent from a '
         + 'result may have been filtered out before the screen ran rather than failed it.',
     });
@@ -14075,30 +14077,50 @@ function exploreReadings(scans, moves, sectors) {
 
   const top = (moves || [])[0];
   if (top && num(top.chg_1d) !== null) {
+    /* Quiet is an answer. Measured overnight: the "biggest move" was HYG at
+     * 0.9x its normal day, printed under a heading that says something moved.
+     * Below one normal day nothing did, and the reading says that instead. */
+    const quiet = num(top.rel) !== null && top.rel > 0 && top.rel < 1;
+    const name = top.label || top.symbol || '';
     out.push({
-      label: 'Biggest move',
-      tone: top.chg_1d > 0 ? 'bull' : top.chg_1d < 0 ? 'bear' : 'neutral',
+      label: quiet ? 'A quiet tape' : 'Biggest move',
+      tone: quiet ? 'neutral' : top.chg_1d > 0 ? 'bull' : top.chg_1d < 0 ? 'bear' : 'neutral',
       // Computed first rather than nested in the template: a ternary holding a
       // second template literal inside an interpolation is how the last
       // version of this line ended up with an unterminated string.
-      verdict: `${top.label || top.symbol || ''} ${fmtPct(top.chg_1d, 1)}`,
-      detail: 'Ranked against each instrument\'s own typical daily range rather '
-        + 'than by raw percent'
-        + (num(top.rel) ? `, so this is ${fmt(top.rel, 1)}x a normal day for it` : '')
-        + '. The biggest percentage on a screen is usually just the jumpiest '
-        + 'instrument on it.',
+      verdict: quiet ? 'Nothing beyond a normal day'
+        : `${name} ${fmtPct(top.chg_1d, 1)}`,
+      detail: quiet
+        ? `Of everything Optic tracks, the largest move against its own typical `
+          + `daily range was ${name} at ${fmtPct(top.chg_1d, 1)}, ${fmt(top.rel, 1)}x a `
+          + 'normal day. Nothing cleared one.'
+        : 'Ranked against each instrument\'s own typical daily range rather '
+          + 'than by raw percent'
+          + (num(top.rel) ? `, so this is ${fmt(top.rel, 1)}x a normal day for it` : '')
+          + '. The biggest percentage on a screen is usually just the jumpiest '
+          + 'instrument on it.',
     });
   }
 
-  const rows = (sectors || []).filter((r) => num(r.chg_1d) !== null);
+  /* Read off the Sectors table below, which is the week against the
+   * benchmark. This filtered on `chg_1d`, which a sector-board row has never
+   * carried, so the reading was never drawn: the panel promised a reading of
+   * three sections and gave two. Neutral in tone whichever way it falls,
+   * because a sector beating SPY in a falling week is still falling. */
+  const rows = (sectors || []).filter((r) => num(r.rel_week_pct) !== null);
   if (rows.length) {
-    const up = rows.filter((r) => r.chg_1d > 0).length;
+    const ahead = rows.filter((r) => r.rel_week_pct > 0).length;
+    const share = ahead / rows.length;
     out.push({
       label: 'Sector breadth',
-      tone: up > rows.length * 0.6 ? 'bull' : up < rows.length * 0.4 ? 'bear' : 'neutral',
-      verdict: `${up} of ${rows.length} up`,
-      detail: `${up} of the ${rows.length} sectors are higher on the day. Breadth says `
-        + 'how much of the market is taking part, which a single index level cannot.',
+      tone: 'neutral',
+      verdict: `${ahead} of ${rows.length} ahead of ${benchmark}`,
+      detail: `${ahead} of the ${rows.length} sectors beat ${benchmark} over the last `
+        + 'five sessions. '
+        + (share >= 0.6 ? 'Most of the market is keeping up with the index, so the move is broad. '
+          : share <= 0.4 ? 'Most are trailing the index, so its heaviest sectors are carrying it. '
+            : 'About half are ahead, so leadership is split. ')
+        + 'A single index level cannot say how much of the market is taking part.',
     });
   }
   return out;

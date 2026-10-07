@@ -220,3 +220,91 @@ def test_every_published_group_actually_has_the_field_the_page_reads():
     assert len(groups) >= 5
     for g in groups:
         assert g.get("name"), g.get("id")
+
+
+def test_every_reading_draws_from_the_rows_the_server_actually_builds():
+    """"A reading of the three sections below" gave two. Sector breadth filtered
+    on `chg_1d`, which a sector-board row has never carried, so it was skipped
+    on every load and nothing looked wrong: two readings is also a plausible
+    page. Rows come from the real sector_board.build here, so a reading that
+    names a field the server does not write fails rather than vanishing."""
+    import json
+    import os
+    import shutil
+    import subprocess
+
+    import pandas as pd
+    import pytest
+
+    from app.analytics import sector_board
+
+    jsc = "/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc"
+    exe = jsc if os.path.exists(jsc) else shutil.which("jsc")
+    if not exe:
+        pytest.skip("no JavaScriptCore on this machine")
+
+    class Provider:
+        def batch_history(self, symbols, period, interval):
+            out = {}
+            for i, sym in enumerate(symbols):
+                # SPY rises 1 a day; half the sectors faster, half slower.
+                step = 1.0 if sym == "SPY" else (1.5 if i % 2 else 0.5)
+                closes = [100 + step * d for d in range(30)]
+                out[sym] = pd.DataFrame({"Close": closes,
+                                         "High": [c + 1 for c in closes],
+                                         "Low": [c - 1 for c in closes]})
+            return out
+
+    board = sector_board.build(Provider())
+    rows = [r for r in board["rows"] if r.get("available")]
+    assert len(rows) == 11
+    ahead = sum(1 for r in rows if r["rel_week_pct"] > 0)
+
+    src = "\n".join([
+        "function fmt(v, d) { return Number(v).toFixed(d); }",
+        "function fmtPct(v, d) { return (v >= 0 ? '+' : '') + Number(v).toFixed(d) + '%'; }",
+        _fn("exploreReadings"),
+        "var rows = exploreReadings({ready: true, considered: 792, universe_size: 2975}, "
+        "[], %s, %s);" % (json.dumps(rows), json.dumps(board["benchmark"])),
+        "print(JSON.stringify(rows));",
+    ])
+    out = subprocess.run([exe, "-e", src], capture_output=True, text=True, timeout=30)
+    readings = {r["label"]: r for r in json.loads(out.stdout.strip().splitlines()[-1])}
+    assert "Sector breadth" in readings, out.stdout + out.stderr
+    assert readings["Sector breadth"]["verdict"] == "%d of 11 ahead of SPY" % ahead
+    # The share prints as a number in brackets, not after a typed double hyphen.
+    assert "(27%)" in readings["What is screenable"]["detail"]
+    assert "--" not in readings["What is screenable"]["detail"]
+
+
+def test_a_quiet_tape_is_not_headlined_as_a_move():
+    """Overnight the top of the ranking was HYG at 0.9x its normal day, under
+    "Biggest move". Below one normal day the reading says nothing moved."""
+    import json
+    import os
+    import shutil
+    import subprocess
+
+    import pytest
+
+    jsc = "/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc"
+    exe = jsc if os.path.exists(jsc) else shutil.which("jsc")
+    if not exe:
+        pytest.skip("no JavaScriptCore on this machine")
+
+    def run(rel):
+        moves = [{"label": "HYG", "chg_1d": 0.4, "rel": rel}]
+        src = "\n".join([
+            "function fmt(v, d) { return Number(v).toFixed(d); }",
+            "function fmtPct(v, d) { return (v >= 0 ? '+' : '') + Number(v).toFixed(d) + '%'; }",
+            _fn("exploreReadings"),
+            "print(JSON.stringify(exploreReadings(null, %s, [])));" % json.dumps(moves),
+        ])
+        out = subprocess.run([exe, "-e", src], capture_output=True, text=True, timeout=30)
+        return json.loads(out.stdout.strip().splitlines()[-1])[0]
+
+    quiet = run(0.9)
+    assert quiet["label"] == "A quiet tape" and quiet["tone"] == "neutral"
+    assert "0.9x" in quiet["detail"] and "HYG" in quiet["detail"]
+    loud = run(2.4)
+    assert loud["label"] == "Biggest move" and loud["verdict"] == "HYG +0.4%"
