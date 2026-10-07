@@ -241,3 +241,16 @@ def test_the_read_is_not_also_left_behind_in_a_second_panel():
     assert APP.count("briefProse(summary.paragraphs)") == 1
     assert "hg('Morning desk')" not in APP, \
         "the emptied panel should be gone, not rendering a bare heading"
+
+
+def test_a_section_headed_by_the_days_content_is_indexed_by_what_it_is():
+    """The catalyst and weekly panels are headed by the day's speech and the
+    week's headline, so the Read's index read "Bowman, Modernizing the R..."
+    and "U.S. Market Update: Chips...": a different chip every morning,
+    naming the content rather than the place on the page. Each carries its
+    kind, the index prefers it, and the heading is still the chip's title."""
+    body = APP.split("function buildSectionIndex(view) {", 1)[1].split("\nfunction ", 1)[0]
+    assert "const full = panel.dataset.secLabel || named;" in body
+    assert 'title="${esc(named || full)}"' in body
+    assert '<div class="panel span-all catmode" data-sec-label="Catalyst mode">' in APP
+    assert '<div class="panel span-all weekly" data-sec-label="Weekly analysis">' in APP

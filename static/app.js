@@ -15447,7 +15447,7 @@ function renderCatalystMode(c) {
     <span class="${signClass(a.change_pct)}">${a.change_pct > 0 ? '+' : ''}${fmt(a.change_pct, 2)}%</span>
   </span>`).join('');
 
-  return `<div class="panel span-all catmode">
+  return `<div class="panel span-all catmode" data-sec-label="Catalyst mode">
     ${explainer('catalyst-mode', 'Market catalyst mode',
     'When a major release such as CPI or an FOMC decision is driving the market, this '
     + 'section shows what it was and how the tape moved alongside it.', '#catmode-method')}
@@ -15881,7 +15881,7 @@ function renderWeekly(w) {
   d.symbols.map((sym) => `<button type="button" class="tkr" data-analyse="${esc(sym)}"
     >${esc(sym)}</button>`).join(' ')}</li>`).join('');
 
-  return `<div class="panel span-all weekly">
+  return `<div class="panel span-all weekly" data-sec-label="Weekly analysis">
     <div class="weekly-kicker">Weekly Market Analysis</div>
     <h2 class="weekly-title">${esc(w.headline || 'Weekly market update')}</h2>
     ${w.subhead ? `<p class="weekly-sub">${esc(w.subhead)}</p>` : ''}
@@ -42834,7 +42834,13 @@ function buildSectionIndex(view) {
   nav.setAttribute('aria-label', 'Jump to a section');
   nav.innerHTML = panels.map((panel) => {
     const head = panel.querySelector(':scope > h2');
-    const full = headingName(head);
+    /* What the section is, where its heading is what it says. The catalyst
+     * and weekly panels are headed by the day's content, so the Read's index
+     * read "Bowman, Modernizing the R..." and "U.S. Market Update: Chips...":
+     * a different chip every morning, naming a speech rather than a place
+     * on the page. Their kind is the chip; the heading stays as its title. */
+    const named = headingName(head);
+    const full = panel.dataset.secLabel || named;
     /* Named for the section, not for where it currently sits in the list.
      *
      * This was `sec-${view}-${i}`, which is unique only if every panel is
@@ -42859,7 +42865,7 @@ function buildSectionIndex(view) {
     let label = full.replace(/\s*[·—-]\s*$/, '');
     if (label.length > 26) label = label.slice(0, 25).trimEnd() + '…';
     return `<button type="button" class="sec-chip" data-sec-jump="${esc(panel.id)}"
-      title="${esc(full)}">${esc(label)}</button>`;
+      title="${esc(named || full)}">${esc(label)}</button>`;
   }).join('');
 
   /* The bulk controls ride along, after the fade so they sit above it.
