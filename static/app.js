@@ -37412,7 +37412,16 @@ function friendlyMarketState(raw) {
 // Macro, Roth, Optic Portfolio, Settings, Home — the tab is about the market or
 // the app, so a company profile and one stock's closing price are just noise
 // carried over from whatever was loaded last.
-const TICKER_VIEWS = ['swing', 'earnings', 'long'];
+/* The Dossier facets that are about one stock's price, which is every facet
+ * but Chart (it has its own live price and label).
+ *
+ * It was Options, Earnings and Investing, from before the Dossier had an
+ * Overview, Financials and News. So overnight on AAPL the session strip
+ * carried the Blue Ocean print and "updates every minute" on Earnings, and
+ * on Financials the same stock read "Index futures are live", a sentence
+ * about a different market, with no extended-hours price anywhere on the
+ * page. Measured 2026-10-07. */
+const TICKER_VIEWS = ['swing', 'earnings', 'long', 'overview', 'financials', 'news'];
 
 const SESSION_PHASES = [
   { phase: 'overnight', label: 'Overnight', hours: '8pm – 4am' },
@@ -38318,11 +38327,19 @@ function liveIndicatorHTML(opts = {}) {
       ? 'Overnight · no venue has printed this name tonight'
       : session === 'overnight' || refreshing
         ? (SESSION_LABEL[session] || cap(session))
-        : `${(SESSION_LABEL[session] || cap(session)).split(' · ')[0]} · snapshot`;
+        : `${(SESSION_LABEL[session] || cap(session)).split(' · ')[0]} · ${snapshotWords()}`;
   // Falls back to the phase's own name rather than to undefined: a phase added
   // server-side should degrade to "Overnight", never to a rendered "undefined".
   return `<span class="chip ${tone}"><span class="dot"${beat}></span>${
     esc(trimPhase(label, opts.phaseShown))}</span>`;
+}
+
+/* What "not refreshing" means on a page that loads once: when it was read.
+ * The chip said "Snapshot", a word for the mechanism rather than the fact. */
+function snapshotWords() {
+  const at = TICKER_VIEWS.includes(STATE.view) && STATE.swing && STATE.swing.generated_at
+    ? timeIn(STATE.swing.generated_at, activeZone()) : '';
+  return at ? `snapshot from ${at}, not refreshing` : 'snapshot, not refreshing';
 }
 
 async function tickAutoRefresh() {

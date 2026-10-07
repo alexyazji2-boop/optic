@@ -107,7 +107,7 @@ def run_js(scenario):
     loaders = "\n".join(function(name) for name in [
         "errorHTML",
         "loadSwing", "loadSecurityFacet", "loadChartWorkspace", "tickAutoRefresh", "refreshTarget",
-        "overnightPrint", "liveIndicatorHTML", "trimPhase", "routeRecord",
+        "overnightPrint", "liveIndicatorHTML", "snapshotWords", "trimPhase", "routeRecord",
         "symbolMissing", "noteTickerFailure", "tickerErrorHTML", "fillSymbolSuggestions",
         "forgetSymbol", "recentSymbols"])
     script = STUBS + setup + loaders + "\n(async function() {\n" + scenario + """

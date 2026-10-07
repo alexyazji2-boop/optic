@@ -188,3 +188,19 @@ def test_the_sections_are_one_tab_stop_and_the_arrows_move_along_them():
     assert "ArrowRight: at + 1, ArrowLeft: at - 1, Home: 0, End: tabs.length - 1" in block
     assert "next.focus();" in block
     assert "switchView" not in block and ".click()" not in block, "focus moves, it does not open"
+
+
+def test_every_dossier_facet_but_chart_carries_the_stocks_own_session():
+    """Overnight on AAPL, Earnings carried the Blue Ocean print and Financials
+    read "Index futures are live", with no extended-hours price on the page."""
+    import re
+    views = re.search(r"const TICKER_VIEWS = \[([^\]]*)\];", APP).group(1)
+    got = set(re.findall(r"'(\w+)'", views))
+    assert got == {"swing", "earnings", "long", "overview", "financials", "news"}
+    assert "chart" not in got, "the chart has its own live price and label"
+
+
+def test_a_page_that_loads_once_says_when():
+    fn = _fn("function snapshotWords() {")
+    assert "snapshot from ${at}, not refreshing" in fn
+    assert "${snapshotWords()}" in _fn("function liveIndicatorHTML(opts = {}) {")
