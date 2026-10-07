@@ -31929,19 +31929,62 @@ function roughGap(ms) {
 }
 
 /** The last-updated line for the Read hero, plus when the next one lands. */
-function readUpdatedHTML(iso) {
+function readUpdatedHTML(iso, refreshing) {
   const zone = activeZone();
   const stamp = stampIn(iso, zone);
   const ago = briefAgo(iso);
-  const next = nextBriefAnchor();
-  const nextIso = next ? next.toISOString() : null;
+  /* An aged Read is served at once and rebuilt behind it (brief.state), so
+   * the line says a newer one is coming, and offers it when it has landed
+   * rather than repainting the page under somebody reading it. */
   return `<p class="read-updated">
     <span class="read-updated-dot"></span>
     <strong>Last updated</strong> ${stamp ? esc(stamp) : 'time not recorded'}${
-  ago ? ` <span class="read-updated-ago">· ${esc(ago)}</span>` : ''}
+  ago ? ` <span class="read-updated-ago">· ${esc(ago)}</span>` : ''}${refreshing
+    ? ' <span class="read-newer" id="read-newer">· A newer Read is being built</span>' : ''}
   </p>
   `;
 }
+
+/* Ask again while the newer Read is built, and offer it once it is in.
+ *
+ * Cheap to ask: while the build runs the server answers with the copy it
+ * already has and starts nothing new. Four tries, fifteen seconds apart,
+ * covers the builds on record bar the outliers; past that the line says so
+ * and a reload will pick it up. */
+let briefNewerTimer = null;
+function watchForNewerBrief(shown) {
+  clearTimeout(briefNewerTimer);
+  let tries = 0;
+  const check = async () => {
+    if (STATE.view !== 'brief' || STATE.brief !== shown || STATE.briefDay) return;
+    tries += 1;
+    let next = null;
+    try { next = await getJSON('/api/brief'); } catch (e) { /* try again below */ }
+    if (STATE.view !== 'brief' || STATE.brief !== shown) return;
+    const slot = document.getElementById('read-newer');
+    if (next && !next.stale && next.built_at && next.built_at !== shown.built_at) {
+      STATE.briefNext = next;
+      if (slot) {
+        slot.innerHTML = `· <button type="button" class="auth-link" data-brief-newer
+          >A newer Read is ready. Show it</button>`;
+      }
+      return;
+    }
+    if (tries < 4) briefNewerTimer = setTimeout(check, 15000);
+    else if (slot) slot.textContent = '\u00b7 The newer Read is taking a while. Reload to check again.';
+  };
+  briefNewerTimer = setTimeout(check, 15000);
+}
+
+document.addEventListener('click', (evt) => {
+  if (!evt.target.closest || !evt.target.closest('[data-brief-newer]')) return;
+  const next = STATE.briefNext;
+  STATE.briefNext = null;
+  if (!next) { loadBrief(true); return; }
+  STATE.brief = next;
+  STATE.briefDay = null;
+  loadBrief(false);       // paints STATE.brief and its late sections, no refetch
+});
 
 /* The rebuild schedule, which is three lines of explanation and was sitting
  * between the title and the read.
@@ -35389,7 +35432,7 @@ function renderBrief(d) {
     <div class="read-hero-top">
       <div>
         <h2>Optic's Read: ${esc(d.day)}${askPulse('morning')}</h2>
-        ${readUpdatedHTML(d.built_at)}
+        ${readUpdatedHTML(d.built_at, d.refreshing === true && !d.historical)}
       </div>
       <div class="read-search">
         <input id="read-q" type="search" placeholder="Search the headlines"
@@ -35521,6 +35564,7 @@ async function loadBrief(force, opts = {}) {
     setChartLive(isTapeLiveET());
     setChartAnimation(!silent || hasPendingDraws());
     renderBrief(data);
+    if (data.refreshing === true && !day) watchForNewerBrief(data);
     // Not awaited: one extra request each, and the tab is already usable.
     loadSentiment();
     loadWeekly();

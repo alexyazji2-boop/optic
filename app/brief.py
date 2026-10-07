@@ -922,15 +922,63 @@ def state(yf_provider, day: Optional[str] = None, force: bool = False) -> Dict[s
             cached = _MEM.get(current)
         if cached and time.time() - cached["at"] < REBUILD_AFTER_SECONDS:
             return {**cached["payload"], "archive": archive(), "cached": True}
-        stored = _load(current)
+        stored = None if cached else _load(current)
         if stored:
             age = time.time() - _parse_iso(stored.get("built_at"))
+            with _LOCK:
+                _MEM[current] = {"at": time.time() - age, "payload": stored}
             if age < REBUILD_AFTER_SECONDS:
-                with _LOCK:
-                    _MEM[current] = {"at": time.time() - age, "payload": stored}
                 return {**stored, "archive": archive(), "cached": True}
+        # Today's Read exists and has aged: serve it and rebuild behind it.
+        #
+        # This rebuilt on the reader's request. The background loop and the
+        # cache both run on twenty minutes, so for much of every cycle the
+        # first reader to open Markets paid for the build: 2 to 30 seconds in
+        # the recorded builds, 14 and 39 measured from a browser here, behind
+        # one line of "Loading today's Read". The aged copy is a real Read with
+        # its own "Last updated" on it, which is what the page prints, so it
+        # is served as what it is, and `refreshing` says a newer one is on its
+        # way. A day with no Read yet still builds on the request: there is
+        # nothing to show instead.
+        prior = (cached or {}).get("payload") or stored
+        if prior:
+            return {**prior, "archive": archive(), "cached": True, "stale": True,
+                    "refreshing": _rebuild_behind(yf_provider, current)}
 
     return {**build(yf_provider, current), "archive": archive()}
+
+
+# Held while a background rebuild of today's Read is running, so a burst of
+# readers on an aged copy starts one build rather than one each.
+_REBUILDING = threading.Lock()
+
+
+def _rebuild_behind(yf_provider, key: str) -> bool:
+    """Start one background rebuild of `key`. True when one is running.
+
+    In the provider's jobs lane, like the scheduled refresh: the reader who
+    set it off already has a Read, so its fetches should not queue ahead of
+    the next reader's."""
+    if not _REBUILDING.acquire(blocking=False):
+        return True
+
+    def run() -> None:
+        try:
+            from .providers import yf as yf_lane
+            with yf_lane.background():
+                build(yf_provider, key)
+        except Exception as exc:                            # noqa: BLE001
+            log.warning("brief: background rebuild failed: %s", exc)
+        finally:
+            _REBUILDING.release()
+
+    try:
+        threading.Thread(target=run, name="brief-rebuild", daemon=True).start()
+    except RuntimeError as exc:
+        _REBUILDING.release()
+        log.warning("brief: could not start a background rebuild: %s", exc)
+        return False
+    return True
 
 
 def _parse_iso(raw: Optional[str]) -> float:
