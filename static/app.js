@@ -13628,6 +13628,71 @@ function newsHeldNote(news) {
   return `<div class="callout warn">${esc(held.note || '')}${esc(at)}</div>`;
 }
 
+/* The headlines in time: about the company above, the market's below, each
+ * one when it was published. Asked for as "News: a timeline with tags". The
+ * feed carried every item's publish time and the page never drew it, so a
+ * burst of stories this morning read the same as a week of them. */
+const NEWS_WEIGHT = { breaking: 3, major: 3, notable: 2, background: 1 };
+const DAY_MS = 86400000;
+
+function newsTimed(arts) {
+  return (arts || []).map((a) => ({ a, t: Date.parse(a.published || '') })).filter((x) => Number.isFinite(x.t));
+}
+
+function newsEnd(news) {
+  const held = news && news.held && Date.parse(news.held.fetched_at || '');
+  return Number.isFinite(held) ? held : Date.now();
+}
+
+function newsTimelineTitle(arts, end) {
+  const name = STATE.ticker || 'the company';
+  const about = newsTimed((arts || []).filter((a) => a.about_company));
+  if (!about.length) return 'Nothing in the feed names the company; these are market headlines';
+  const day = about.filter((x) => end - x.t <= DAY_MS).length;
+  if (day * 2 >= about.length) return `${day} of ${about.length} headlines about ${name} arrived in the last 24 hours`;
+  const days = Math.max(1, Math.round((end - Math.min(...about.map((x) => x.t))) / DAY_MS));
+  return `${about.length} headline${about.length === 1 ? '' : 's'} about ${name} over the past ${days} day${days === 1 ? '' : 's'}`;
+}
+
+function newsTimelineHTML(news, arts) {
+  const timed = newsTimed(arts);
+  if (timed.length < 2) return '';
+  const missing = (arts || []).length - timed.length;
+  const key = (cls, glyph, name) => `<span class="key"><span class="tl-key ${cls}" aria-hidden="true">${glyph}</span>${name}</span>`;
+  return vizBlock('viz-news-time', newsTimelineTitle(arts, newsEnd(news)),
+    `When each headline was published, New York time${news.held ? ', up to when they were fetched' : ''}. Shape and colour are its tone, read from its wording by a word list, and size is its tier.${
+      missing ? ` ${missing} without a publish time ${missing === 1 ? 'is' : 'are'} listed below but not drawn.` : ''}`,
+    `<div class="legend">${key('up', '\u25b2', 'Bullish wording')}${key('down', '\u25bc', 'Bearish wording')}${
+      key('flat', '\u25cf', 'Neither')}</div>`);
+}
+
+function mountNewsTimeline(news, arts) {
+  const timed = newsTimed(arts);
+  if (timed.length < 2) return;
+  const end = newsEnd(news);
+  const first = Math.min(...timed.map((x) => x.t));
+  // At least eight hours: a day's window put this evening's dozen stories in
+  // the last quarter of the axis, on top of each other.
+  const start = Math.min(first - (end - first) * 0.06, end - DAY_MS / 3);
+  const tiers = Object.fromEntries(((news.tiers || [])).map((t) => [t.id, t.label]));
+  const item = ({ a, t }) => ({
+    t, label: a.title || 'Headline',
+    lean: /bull/.test(a.tone || '') ? 'up' : /bear/.test(a.tone || '') ? 'down' : 'flat',
+    weight: NEWS_WEIGHT[a.tier] || 1,
+    detail: [['Published', esc(new Date(t).toLocaleString([], { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' ET')],
+      ['Source', esc(a.publisher || 'Not given')], ['Tier', esc(tiers[a.tier] || cap(a.tier || 'Not rated'))],
+      ['Tone', esc(cap(a.tone || 'neutral'))],
+      ...((a.catalysts || []).length ? [['Tags', esc(a.catalysts.map((c) => cap(c.type)).join(', '))]] : [])],
+  });
+  const name = STATE.ticker || 'the company';
+  vizMount('viz-news-time', (w) => eventTimeline({
+    width: w, start, end, now: end, nowLabel: news.held ? 'fetched' : 'now',
+    ariaLabel: `Headlines by publish time, about ${name} and about the market.`,
+    lanes: [{ name: `About ${name}`, items: timed.filter((x) => x.a.about_company).map(item) },
+      { name: 'Market context', items: timed.filter((x) => !x.a.about_company).map(item) }],
+  }));
+}
+
 function renderNewsView() {
   const d = STATE.swing || {};
   const news = d.news || {};
@@ -13643,6 +13708,7 @@ function renderNewsView() {
       ? ` (${news.days_to_earnings}d)` : ''}` : ''}</p>
     ${news.earnings_warning ? `<div class="callout">${esc(news.earnings_warning)}</div>` : ''}
     ${newsHeldNote(news)}
+    ${newsTimelineHTML(news, arts)}
     ${(news.catalyst_summary || []).length ? `<h3>${hg('Catalyst types detected')}</h3>
       <div class="legend">${news.catalyst_summary.map((c) =>
     catalystChip(`${cap(c.type)} \u00d7${c.mentions}`, c.lean, { type: c.type })).join('')}</div>
@@ -13652,6 +13718,7 @@ function renderNewsView() {
       assistant for a live, sourced brief.</p>
   </div>`;
   revealPanels(views.news);
+  mountNewsTimeline(news, arts);
 }
 
 /* ---- Segments and geography ------------------------------------------------

@@ -2837,6 +2837,95 @@ function intervalChart(opts) {
   return root;
 }
 
+/**
+ * Events in time, one lane per kind: headlines about the company above the
+ * market's, past reports beside coming ones. Each mark is one event, shaped by
+ * its lean as well as coloured (a triangle up, a triangle down, a dot for
+ * neither) and sized by its weight, 1 to 3. Marks that would sit on each other
+ * step up and down within their lane. Hover or focus reads one; `now` is drawn
+ * where it falls inside the range. Dates are New York's.
+ *
+ * lanes: [{name, items: [{t (ms), label, lean: 'up'|'down'|'flat', weight, color, detail}]}]
+ */
+function eventTimeline(opts) {
+  const { lanes = [], start, end, now = null, width = 640, laneHeight = 38, ariaLabel = '',
+    labelWidth = 128, nowLabel = 'now' } = opts;
+  const used = lanes.filter((l) => (l.items || []).some((it) => Number.isFinite(it.t)));
+  if (!used.length || !Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+  const W = width;
+  // Lane names go above their lane on a phone, beside it otherwise.
+  const stacked = W < 460;
+  const head = stacked ? 14 : 0;
+  const m = { t: 10, r: 16, b: 24, l: stacked ? 10 : labelWidth };
+  const H = m.t + used.length * (laneHeight + head) + m.b;
+  const X = (t) => m.l + ((t - start) / (end - start)) * (W - m.l - m.r);
+  const root = svgRoot(W, H);
+  root.setAttribute('aria-label', ariaLabel);
+
+  // Ticks: hours inside a day and a half, days beyond it, as many as fit.
+  const span = end - start, HOUR = 3600000, DAY = 24 * HOUR;
+  const fmtNY = (t, o) => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', ...o }).format(new Date(t));
+  const steps = span <= 36 * HOUR ? [3, 6, 12].map((h) => h * HOUR) : [1, 2, 7, 14, 30].map((d) => d * DAY);
+  const room = Math.max(1, Math.floor((W - m.l - m.r) / 74));
+  const step = steps.find((st) => span / st <= room) || steps[steps.length - 1];
+  /* On New York's clock: aligned to UTC, a day's tick sat at 8 pm the evening
+   * before, and a story from that afternoon drew left of its own day. One
+   * offset for the window; a clock change inside it moves a tick an hour. */
+  const wall = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hourCycle: 'h23', year: 'numeric',
+    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    .formatToParts(new Date(start)).reduce((o, x) => ({ ...o, [x.type]: x.value }), {});
+  const off = Date.UTC(+wall.year, +wall.month - 1, +wall.day, +wall.hour % 24, +wall.minute, +wall.second) - Math.floor(start / 1000) * 1000;
+  for (let w = Math.ceil((start + off) / step) * step; w - off <= end; w += step) {
+    const t = w - off;
+    const x = X(t);
+    root.appendChild(s('line', { x1: x, x2: x, y1: m.t, y2: H - m.b, stroke: C.grid, 'stroke-width': 1 }));
+    // Midnight says which day it is; the hours between say only the hour.
+    const midnight = fmtNY(t, { hour: 'numeric', hourCycle: 'h23' }).replace(/\D/g, '') === '00';
+    root.appendChild(s('text', { x, y: H - 7, fill: C.muted, 'font-size': CF.micro, 'text-anchor': 'middle' },
+      step < DAY && !midnight ? fmtNY(t, { hour: 'numeric' }) : fmtNY(t, { month: 'short', day: 'numeric' })));
+  }
+  if (Number.isFinite(now) && now >= start && now <= end) {
+    const x = X(now);
+    root.appendChild(s('line', { x1: x, x2: x, y1: m.t - 4, y2: H - m.b, stroke: C.ink2, 'stroke-width': 1, 'stroke-dasharray': '3 3' }));
+    root.appendChild(s('text', { x: Math.min(x, W - m.r), y: m.t - 1, fill: C.ink2, 'font-size': CF.micro, 'text-anchor': 'end' }, nowLabel));
+  }
+
+  used.forEach((lane, li) => {
+    const top = m.t + li * (laneHeight + head);
+    const mid = top + head + laneHeight / 2;
+    if (stacked) {
+      root.appendChild(s('text', { x: m.l, y: top + 10, fill: C.ink2, 'font-size': CF.micro, 'font-weight': CW.label }, lane.name));
+    } else {
+      root.appendChild(s('text', { x: m.l - 10, y: mid + 4, fill: C.ink2, 'font-size': CF.tick, 'text-anchor': 'end' }, lane.name));
+    }
+    root.appendChild(s('line', { x1: m.l, x2: W - m.r, y1: mid, y2: mid, stroke: C.baseline, 'stroke-width': 1 }));
+    const placed = [];
+    const offsets = [0, -10, 10, -5, 5];
+    (lane.items || []).filter((it) => Number.isFinite(it.t)).slice().sort((a, b) => a.t - b.t).forEach((it) => {
+      const x = Math.max(m.l, Math.min(W - m.r, X(it.t)));
+      const slot = offsets.find((o) => !placed.some((p) => p.o === o && Math.abs(p.x - x) < 11)) ?? 0;
+      placed.push({ x, o: slot });
+      const y = mid + slot;
+      const r = 3 + Math.max(1, Math.min(3, it.weight || 1)) * 1.3;
+      const color = it.color || (it.lean === 'up' ? C.pos : it.lean === 'down' ? C.neg : C.muted);
+      const g = s('g', {});
+      if (it.lean === 'up' || it.lean === 'down') {
+        const d = it.lean === 'up'
+          ? `M${x},${y - r} L${x + r},${y + r * 0.8} L${x - r},${y + r * 0.8} Z`
+          : `M${x},${y + r} L${x + r},${y - r * 0.8} L${x - r},${y - r * 0.8} Z`;
+        g.appendChild(s('path', { d, fill: color, stroke: C.surface, 'stroke-width': 1 }));
+      } else {
+        g.appendChild(s('circle', { cx: x, cy: y, r: r * 0.85, fill: color, stroke: C.surface, 'stroke-width': 1 }));
+      }
+      g.appendChild(s('rect', { x: x - 8, y: y - 8, width: 16, height: 16, fill: 'transparent' }));
+      focusMark(g, tipRows(escapeText(it.label), it.detail || [['When', fmtNY(it.t, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })]]),
+        `${lane.name}: ${it.label}`);
+      root.appendChild(g);
+    });
+  });
+  return root;
+}
+
 /** Sparkline: one series, no legend, no axis — the number beside it carries the value. */
 function sparkline(values, width = 96, height = 26, color = C.brand) {
   const clean = (values || []).filter((v) => v !== null && isFinite(v));

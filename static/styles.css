@@ -17196,6 +17196,12 @@ details.exact > .table-scroll, details.exact > table { margin-top: var(--space-2
 .cs-none { font-size: var(--t-caption); color: var(--ink-muted); }
 .cs-more { margin: 0; padding-left: var(--space-2); }
 
+/* The timeline legend's shapes, in the colours the marks are drawn in. */
+.tl-key { display: inline-block; width: 1em; margin-right: var(--space-1); font-size: var(--t-caption); text-align: center; }
+.tl-key.up { color: var(--pos); }
+.tl-key.down { color: var(--neg); }
+.tl-key.flat { color: var(--ink-muted); }
+
 /* A scan's ranked column: a bar in each cell, scaled to the list, and a mark on
  * the header saying the order comes from it. */
 .scan-bar { display: inline-block; vertical-align: middle; margin-right: var(--space-2); line-height: 0; }
