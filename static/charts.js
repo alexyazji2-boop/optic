@@ -1046,6 +1046,10 @@ function lineChart(opts) {
     // Off by default so the panels that are deliberately spare — sparklines,
     // the breadth strip — do not grow a gutter they have no use for.
     valueTags = false,
+    /* With valueTags, the first series is the price the chart is about and is
+     * tagged in the direction's colour. Off for lines that are peers, such as
+     * Compare's rebased names, where each tag takes its line's own colour. */
+    directionTag = true,
     /* The caller pans this chart on a plain drag, and the measurement takes a
      * press held still for a moment first, or shift.
      *
@@ -1908,9 +1912,9 @@ function lineChart(opts) {
    */
   if (valueTags) {
     let priceTag = null;
-    const priceSeries = series.find((se) => (se.values || []).some(
+    const priceSeries = directionTag ? series.find((se) => (se.values || []).some(
       (v) => v !== null && isFinite(v),
-    ));
+    )) : null;
     if (priceSeries) {
       const li = priceSeries.values.reduce(
         (acc, v, i) => (v !== null && isFinite(v) ? i : acc), -1,

@@ -22,11 +22,16 @@ screen wearing a longer label.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 log = logging.getLogger(__name__)
 
 MIN_TICKERS, MAX_TICKERS = 2, 4
+
+# The performance lines: a year of sessions, sent as one point a week and the
+# last session, so four names cost about two hundred numbers.
+PERF_SESSIONS = 252
+PERF_STEP = 5
 
 # What each horizon is scored from, stated so the panel can show it.
 HORIZONS = [
@@ -210,6 +215,43 @@ def _score_longterm(m: Dict[str, Any]) -> Optional[float]:
 SCORERS = {"swing": _score_swing, "position": _score_position, "longterm": _score_longterm}
 
 
+def _closes(payload: Dict[str, Any]) -> List[Tuple[str, float]]:
+    """The daily closes the snapshot already carries, as (date, close)."""
+    ps = ((payload or {}).get("technicals") or {}).get("price_series") or {}
+    out = []
+    for d, c in zip(ps.get("dates") or [], ps.get("close") or []):
+        v = _num(c)
+        if d and v and v > 0:
+            out.append((str(d)[:10], v))
+    return out
+
+
+def _performance(closes: Dict[str, List[Tuple[str, float]]]) -> Optional[Dict[str, Any]]:
+    """Each name's price over the past year, rebased to 100 on the first day all
+    of them traded, so the lines start together and where each ends says how it
+    did against the others. Price only: the closes are split-adjusted and leave
+    dividends out. None when two names do not share a month of sessions."""
+    usable = {t: c for t, c in closes.items() if c}
+    if len(usable) < MIN_TICKERS:
+        return None
+    common = set.intersection(*(set(d for d, _ in c) for c in usable.values()))
+    dates = sorted(common)[-(PERF_SESSIONS + 1):]
+    if len(dates) < 21:
+        return None
+    keep = dates[::PERF_STEP]
+    if keep[-1] != dates[-1]:
+        keep.append(dates[-1])
+    series = []
+    for ticker, rows in usable.items():
+        by_date = dict(rows)
+        base = by_date[dates[0]]
+        series.append({"ticker": ticker,
+                       "values": [round(by_date[d] / base * 100.0, 2) for d in keep],
+                       "change_pct": round((by_date[dates[-1]] / base - 1.0) * 100.0, 1)})
+    return {"dates": keep, "start": dates[0], "end": dates[-1],
+            "sessions": len(dates) - 1, "series": series}
+
+
 def build(snapshot_fn, longterm_fn, tickers: List[str]) -> Dict[str, Any]:
     """Compare tickers across the three horizons.
 
@@ -229,6 +271,7 @@ def build(snapshot_fn, longterm_fn, tickers: List[str]) -> Dict[str, Any]:
 
     rows: List[Dict[str, Any]] = []
     failed: List[Dict[str, str]] = []
+    closes: Dict[str, List[Tuple[str, float]]] = {}
     for sym in clean:
         try:
             payload = snapshot_fn(sym)
@@ -248,6 +291,7 @@ def build(snapshot_fn, longterm_fn, tickers: List[str]) -> Dict[str, Any]:
         m["ticker"] = sym
         m["scores"] = {k: fn(m) for k, fn in SCORERS.items()}
         rows.append(m)
+        closes[sym] = _closes(payload)
 
     if len(rows) < MIN_TICKERS:
         return {"available": False,
@@ -275,6 +319,7 @@ def build(snapshot_fn, longterm_fn, tickers: List[str]) -> Dict[str, Any]:
         "rows": rows,
         "ranks": ranks,
         "horizons": HORIZONS,
+        "performance": _performance(closes),
         "failed": failed,
         "method": (
             "Every figure is computed the same way at the same moment for each "

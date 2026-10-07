@@ -815,6 +815,7 @@ const HEADER_DEFS = {
   'recent sec filings': "The company's latest filings with the US Securities and Exchange Commission: annual reports (10-K), quarterly reports (10-Q) and notices of material events (8-K), among others. They are the primary source most of the figures elsewhere are drawn from.",
   'insiders': "Who is trading what and who the government is paying, from three public filing regimes: company insiders' Form 4s, members of the House under the STOCK Act, and federal contract awards. Each is published after a delay, and nothing here is ranked by how profitable it looked.",
   'earnings this week': 'Which names on the watchlist report between Monday and Friday of this week, grouped by day. It scans a fixed list of widely followed names, not the whole market, because free data gives one earnings date per symbol at a time.',
+  'how they have moved': "Each compared name's price over the past year, rebased so that all of them start at 100 on the same day. A line ending at 130 has risen 30 percent over the period, so the ends can be compared directly.",
   'economic data': "Official US economic series from the Federal Reserve's FRED database, such as inflation, jobs, spending and output, shown in the form each is usually read in. Their releases are among the main scheduled movers of rates and stocks.",
 };
 
@@ -26251,8 +26252,10 @@ function renderCompareBars(c) {
     const top = scored[0].score;
     const gap = top - scored[1].score;
     // The same threshold `compare.take` uses for `decisive`, so the wording
-    // here cannot disagree with the headline above it.
-    const decisive = gap >= 8;
+    // here cannot disagree with the headline above it. It said so and used 8
+    // against the take's 5, so a six-point lead was decisive in the headline
+    // and not highlighted on its bar.
+    const decisive = gap >= CMP_TIE_POINTS;
 
     return `<div class="cb-group">
       <div class="cb-head">
@@ -26418,7 +26421,7 @@ function renderCompare(c) {
 
   const anyLead = CMP_ROWS.some((m) => m.lead && cmpLeader(m, cols));
 
-  return head + take + renderCompareBars(c) + `<div class="panel span-all">
+  return head + take + comparePerfHTML(c) + renderCompareBars(c) + `<div class="panel span-all">
     <div class="table-scroll">
     <table class="data cmp-table">
       <thead><tr><th>Metric</th>${cols.map((r) => `<th class="num">
@@ -26465,10 +26468,49 @@ async function loadCompare(force) {
   revealPanels(views.compare);
 }
 
+/* How the compared names have moved, one line each, rebased to 100 on the
+ * first session all of them traded, so the lines start together. The payload
+ * held single figures only; the series rides on it now (compare.py), from the
+ * closes each snapshot already loads. */
+const CMP_LINE_COLORS = () => [C.brand, C.s7, C.s2, C.s5];
+
+function comparePerfTitle(perf) {
+  const ranked = (perf.series || []).filter((x) => Number.isFinite(x.change_pct))
+    .slice().sort((a, b) => b.change_pct - a.change_pct);
+  if (ranked.length < 2) return '';
+  const word = (x) => `${x.ticker} ${x.change_pct >= 0 ? 'rose' : 'fell'} ${fmt(Math.abs(x.change_pct), 0)}%`;
+  return `${word(ranked[0])} over the period; ${word(ranked[ranked.length - 1])}`;
+}
+
+function comparePerfHTML(c) {
+  const perf = c && c.available && c.performance;
+  if (!perf || (perf.series || []).length < 2) return '';
+  const colors = CMP_LINE_COLORS();
+  return `<div class="panel span-all">
+    <h2>${hg('How they have moved')}</h2>
+    ${vizBlock('viz-cmp-perf', comparePerfTitle(perf),
+    `Each close divided by its close on ${perf.start}, times 100, to ${perf.end}: ${fmt(perf.sessions, 0)} sessions, one point a week. Price only: dividends are not included.`,
+    legendHtml(perf.series.map((x, i) => ({ name: `${x.ticker} ${fmtPct(x.change_pct, 1)}`, color: colors[i % colors.length] }))))}
+  </div>`;
+}
+
+function mountCompareVisuals(c) {
+  const perf = c && c.available && c.performance;
+  if (!perf || (perf.series || []).length < 2) return;
+  const colors = CMP_LINE_COLORS();
+  vizMount('viz-cmp-perf', (w) => lineChart({
+    width: w, height: 230, labels: perf.dates,
+    series: perf.series.map((x, i) => ({ name: x.ticker, values: x.values, color: colors[i % colors.length] })),
+    refLines: [{ value: 100, color: C.muted, label: 'start', emphasis: true }],
+    yFormat: (v) => fmt(v, 0), valueTags: true, directionTag: false,
+  }), 'Not enough shared history to draw.');
+}
+
 /* The Compare view, drawn and wired: its boxes are new elements on every
  * render, so each render attaches their suggestions again. */
 function mountCompare(c) {
   views.compare.innerHTML = renderCompare(c);
+  mountCompareVisuals(c);
   (STATE.compareInputs || ['', '']).forEach((_v, i) => {
     attachTypeahead(`cmp-input-${i}`, `cmp-results-${i}`, (pick) => {
       const next = [...(STATE.compareInputs || [])];

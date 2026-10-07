@@ -739,11 +739,14 @@ def test_vmarkers_render_the_detail_they_are_given():
 def test_the_compare_bars_use_the_same_threshold_as_the_take():
     """The bars exist to show the gap, and the wording about whether the gap is
     decisive must not disagree with the headline above it."""
+    import re
     block = APP_JS[APP_JS.index("function renderCompareBars(c)"):]
     block = block[:block.index("function renderCompare(c)")]
-    assert "gap >= 8" in block
+    assert "const decisive = gap >= CMP_TIE_POINTS;" in block
+    tie = float(re.search(r"const CMP_TIE_POINTS = ([0-9.]+);", APP_JS).group(1))
     take = open("app/analytics/compare.py").read()
-    assert "0.08" in take or "8" in take
+    assert tie == float(re.search(r'"decisive": gap >= ([0-9.]+),', take).group(1)), \
+        "the bars said they used the take's threshold and used 8 against its 5"
 
 
 def test_a_composite_score_bar_is_not_painted_with_the_directional_pair():
