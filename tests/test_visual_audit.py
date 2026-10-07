@@ -499,3 +499,57 @@ def test_the_workspace_rsi_axis_reads_whole_numbers():
     panes = _src("function wsMountPanes(ps) {")
     rsi = panes[panes.index("mount('ws-pane-rsi'"):panes.index("if (wsPaneOpen('macd')")]
     assert "yTicks: [30, 50, 70]" in rsi and "yFormat: (x) => fmt(x, 0)" in rsi and "valueFormat: (x) => fmt(x, 1)" in rsi
+
+
+def test_the_dock_seasonality_draws_a_loss_below_the_line_and_colours_only_a_finding():
+    out = _app("""
+      var sn = { years: 15, monthly: { rows: [
+        { label: 'January', short: 'Jan', raw: { n: 15, mean: 3.95, hit_rate: 53.3, verdict: 'noise' } },
+        { label: 'February', short: 'Feb', raw: { n: 15, mean: -2.1, hit_rate: 40, verdict: 'significant' } },
+        { label: 'March', short: 'Mar', raw: { n: 15, mean: 1.2, hit_rate: 60, verdict: 'unproven' } } ] } };
+      R.html = wsSeasonalityMini(sn);
+    """)
+    html = out["html"]
+    cols = html.split('class="ws-seas-col"')[1:]
+    assert '<span class="ws-seas-half up"><span class="ws-seas-bar faint"' in cols[0]
+    assert '<span class="ws-seas-half up"></span>' in cols[1] and '<span class="ws-seas-half down"><span class="ws-seas-bar down"' in cols[1]
+    assert "ws-seas-bar up" not in html, "a month that is noise or unproven is not drawn as a finding"
+    assert 'role="img"' in html and "February: mean -2.10% over 15 years, up in 40% of them, significant" in html
+    assert "Exact figures" in html and "<td>unproven</td>" in html
+    assert "Swing tab" not in html and "the Options tab" in html
+
+
+def test_an_open_indicator_pane_with_too_few_bars_says_so():
+    out = _app("""
+      var M = {}; wsPanesOpen = ['rsi', 'macd'];
+      vizMount = function (id, build, none) { M[id] = build(600) || none; };
+      wsPaneLegend = function () {};
+      wsMountPanes({ dates: ['2026-10-06', '2026-10-07'], close: [1, 2] });
+      R.m = M;
+    """)
+    assert out["m"] == {"ws-pane-rsi": "RSI is drawn from 30 bars up, and this range has fewer.",
+                        "ws-pane-macd": "MACD is drawn from 30 bars up, and this range has fewer."}
+
+
+def test_the_three_month_rank_is_drawn_on_its_own_dates():
+    """The 3-month rank starts later than the 1-month one and both end today.
+    Drawn by index against the 1-month dates, it ended two months early while
+    its tag read today's rank."""
+    out = _app("""
+      var CAP = [];
+      mount = function (id, build) { build(600); };
+      lineChart = function (o) { CAP.push(o); return null; };
+      STATE.ticker = 'NVDA';
+      STATE.relperf = { available: true, ticker: 'NVDA', universe_size: 142, windows: {
+        '1m': { available: true, window_days: 21, dates: ['2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06'], series: [50, 60, 70, 83] },
+        '3m': { available: true, window_days: 63, dates: ['2026-08-05', '2026-08-06'], series: [80, 87] } } };
+      mountRelPerfChart();
+      R.labels = CAP[0].labels; R.series = CAP[0].series.map(function (s) { return [s.name, s.values]; });
+      R.head = relPerfChartHead(STATE.relperf);
+    """)
+    assert out["labels"] == ["2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06"]
+    assert out["series"] == [["1-month rank", [50, 60, 70, 83]], ["3-month rank", [None, None, 80, 87]]]
+    head = out["head"]
+    assert "Where NVDA has ranked against 142 peers each session, Aug '26 to Aug '26" in head
+    assert "1-month rank, 21 sessions" in head and "3-month rank, 63 sessions" in head
+    assert "Source: Yahoo Finance daily closes." in head

@@ -557,6 +557,7 @@ const GLOSSARY = {
   'insider buying': "A director or officer buying their own company's shares with their own money. Worth more as a signal than insider selling, which happens for tax, a house or a divorce as often as for a view.",
   'guidance': "The company's own forecast for its coming quarter or year. Often moves the share price more than the results themselves, because the results are about a period already priced in.",
   'balance sheet': "The snapshot of what a company owns, what it owes and what is left for shareholders, at one moment. The other two statements cover a period; this one covers an instant.",
+  'net sentiment': "The average tone of the headlines listed, each scored by a fixed word list in which bullish terms add and bearish terms subtract, weighted so a fresh story counts more than a week-old one. It has no fixed range: past 0.5 either way the page calls it mildly bullish or bearish, and past 2 bullish or bearish.",
 };
 
 // Sort longest-first so multi-word terms (e.g. "put/call ratio") match
@@ -13762,7 +13763,21 @@ function newsTimelineHTML(news, arts) {
     `When each headline was published, New York time${news.held ? ', up to when they were fetched' : ''}. Shape and colour are its tone, read from its wording by a word list, and size is its tier.${
       missing ? ` ${missing} without a publish time ${missing === 1 ? 'is' : 'are'} listed below but not drawn.` : ''}`,
     `<div class="legend">${key('up', '\u25b2', 'Bullish wording')}${key('down', '\u25bc', 'Bearish wording')}${
-      key('flat', '\u25cf', 'Neither')}</div>`);
+      key('flat', '\u25cf', 'Neither')}${newsSizeKey(news)}</div>`);
+}
+
+/* What a mark's size says. The caption said "size is its tier" and nothing
+ * said which size was which. Drawn at the timeline's own radii, 3 + 1.3 per
+ * step of NEWS_WEIGHT, and named from the feed's tiers. */
+function newsSizeKey(news) {
+  const tiers = (news && news.tiers) || [];
+  return [3, 2, 1].map((w) => {
+    const names = tiers.filter((t) => (NEWS_WEIGHT[t.id] || 1) === w).map((t) => t.label || cap(t.id));
+    if (!names.length) return '';
+    const d = (2 * (3 + w * 1.3)).toFixed(1);
+    return `<span class="key"><span class="tl-size" style="width:${d}px;height:${d}px" aria-hidden="true"></span>${
+      esc(names.map((n, i) => (i ? n.toLowerCase() : n)).join(' or '))}</span>`;
+  }).join('');
 }
 
 function mountNewsTimeline(news, arts) {
@@ -13800,8 +13815,9 @@ function renderNewsView() {
   ${keyStatsHTML(facetQuote(STATE.ticker || ''), { view: 'news', short: facetShort(STATE.ticker || '') })}
   <div class="panel">
     <h2>${hg('News & catalysts')}</h2>
-    <p class="sub">${toneChip(news.overall_tone)} net sentiment ${
-  fmt(news.net_sentiment, 2)} across ${news.article_count || 0} headlines${
+    <p class="sub">${toneChip(news.overall_tone)} ${gloss('net sentiment')} ${news.net_sentiment > 0 ? '+' : ''}${
+  fmt(news.net_sentiment, 2)} across ${news.article_count || 0} headlines
+      <span class="caption">(it leans past \u00b10.5 and reads bullish or bearish past \u00b12)</span>${
   news.earnings_date ? ` \u00b7 earnings ${esc(news.earnings_date)}${
     news.days_to_earnings !== null && news.days_to_earnings !== undefined
       ? ` (${news.days_to_earnings}d)` : ''}` : ''}</p>
@@ -21119,6 +21135,11 @@ function wsMountPanes(ps) {
       sessions: showSessions ? dates : null,
     }));
     setChartAnimation(was);
+  } else if (wsPaneOpen('rsi')) {
+    // An open pane with no series was a blank box under the chart. The
+    // oscillators are left off below 30 bars; see wsWithOscillators.
+    wsPaneLegend('rsi', '<strong>RSI</strong> 14');
+    vizMount('ws-pane-rsi', () => null, 'RSI is drawn from 30 bars up, and this range has fewer.');
   }
 
   if (wsPaneOpen('macd') && (ps.macd || []).length) {
@@ -21138,6 +21159,9 @@ function wsMountPanes(ps) {
       { cross, unit, height: 132, sessions: showSessions, marginRight: 74 },
     ));
     setChartAnimation(was);
+  } else if (wsPaneOpen('macd')) {
+    wsPaneLegend('macd', '<strong>MACD</strong> 12, 26, 9');
+    vizMount('ws-pane-macd', () => null, 'MACD is drawn from 30 bars up, and this range has fewer.');
   }
 }
 
@@ -22246,32 +22270,53 @@ function wsWidgetBody(id) {
 }
 
 /** A compact month grid for the dock. The full panel with the significance
- *  columns lives on the Swing tab; this is the at-a-glance version. */
+ *  columns lives on the Options tab; this is the at-a-glance version.
+ *
+ *  A month that averaged a loss is drawn below the line. Every bar grew up from
+ *  one baseline, so a losing month differed from a winning one only by colour.
+ *  And only a month that clears the significance test takes the up or down
+ *  colour, as on the full panel: at n=15 most do not, and drawn in full colour
+ *  they read as twelve findings. */
 function wsSeasonalityMini(sn) {
   if (sn && sn.error) return `<p class="sub">${esc(sn.error)}</p>`;
   const rows = ((sn || {}).monthly || {}).rows || [];
   if (!rows.length) return '<p class="sub">Not enough history.</p>';
   const val = (r) => (r.raw || {}).mean;
   const max = Math.max(...rows.map((r) => Math.abs(val(r) || 0)), 0.01);
-  const meta = (sn.monthly || {});
-  return `<div class="ws-seas">${rows.map((r) => {
+  // The server's own word: significant, unproven, noise or too few.
+  const said = (raw) => raw.verdict || 'no verdict';
+  const read = (r) => {
+    const raw = r.raw || {};
+    return `${r.label || ''}: mean ${fmtPct(val(r), 2)} over ${fmt(raw.n, 0)} years, up in ${
+      fmt(raw.hit_rate, 0)}% of them, ${said(raw)}`;
+  };
+  return `<div class="ws-seas" role="img" aria-label="${esc(`Mean move by calendar month over ${fmt(sn.years, 0)} years. ${
+    rows.map(read).join('. ')}.`)}">${rows.map((r) => {
     const v = val(r) || 0;
     const raw = r.raw || {};
-    const h = Math.max(Math.round((Math.abs(v) / max) * 34), 2);
+    const h = Math.max(Math.round((Math.abs(v) / max) * 22), 2);
+    const shade = raw.verdict === 'significant' ? (v >= 0 ? 'up' : 'down') : 'faint';
     // Bar height is the mean, the number above it is the hit rate. Two different
     // measures deliberately: a month can be up 9 years in 15 and still average
     // negative if the losses are bigger, and that disagreement is the useful part.
-    return `<div class="ws-seas-col" title="${esc(r.label || '')}: mean ${fmt(v, 2)}% over ${
-  fmt(raw.n, 0)} years, up ${fmt(raw.hit_rate, 0)}% of them: ${esc(raw.verdict || '')}">
+    return `<div class="ws-seas-col" title="${esc(read(r))}">
       <span class="ws-seas-pct">${fmt(raw.hit_rate, 0)}</span>
-      <span class="ws-seas-bar ${v >= 0 ? 'up' : 'down'}" style="height:${h}px"></span>
+      <span class="ws-seas-half up">${v >= 0 ? `<span class="ws-seas-bar ${shade}" style="height:${h}px"></span>` : ''}</span>
+      <span class="ws-seas-half down">${v < 0 ? `<span class="ws-seas-bar ${shade}" style="height:${h}px"></span>` : ''}</span>
       <span class="ws-seas-lab">${esc((r.short || '').slice(0, 1))}</span>
     </div>`;
   }).join('')}</div>
-  <p class="ws-leg-args">Bar is the mean move, the figure above is how often it
-    was up. ${fmt(sn.years, 0)} years. Hover for the verdict, at n=${
-  fmt(((rows[0] || {}).raw || {}).n, 0)} per month, most come back noise, and
-    the full panel on the Swing tab shows why.</p>`;
+  <p class="ws-leg-args">Each bar is the month's mean move, above the line for a gain and below
+    for a loss; the figure over it is how often the month was up. ${fmt(sn.years, 0)} years.
+    Only a month that clears the significance test is coloured: at n=${
+  fmt(((rows[0] || {}).raw || {}).n, 0)} per month most come back noise, and the full panel on
+    the Options tab shows why.</p>
+  ${exactFigures(`<table class="data narrow">
+    <thead><tr><th>Month</th><th class="num">Mean</th><th class="num">Up</th><th>Reads as</th></tr></thead>
+    <tbody>${rows.map((r) => `<tr><td class="name">${esc(r.short || r.label || '')}</td>
+      <td class="num">${fmtPct(val(r), 2)}</td><td class="num">${fmt((r.raw || {}).hit_rate, 0)}%</td>
+      <td>${esc(said(r.raw || {}))}</td></tr>`).join('')}</tbody>
+  </table>`)}`;
 }
 
 
@@ -25480,6 +25525,7 @@ function renderRelPerf(rp) {
     <h2>${hg('Relative performance')} ${askPulse('relperf')}</h2>
     <p class="sub">${esc(rp.headline || '')}</p>
     <div class="grid c2" style="margin-bottom:var(--space-3)">${tiles}</div>
+    ${relPerfChartHead(rp)}
     <div id="chart-relperf" class="chart-host"></div>
     ${crosses.length ? `<table class="data narrow" data-defs="relperf-crosses" style="margin-top:var(--space-3)">
       <thead><tr><th>Crossed</th><th>Window</th><th>Level</th><th>Rank</th></tr></thead>
@@ -25492,20 +25538,54 @@ function renderRelPerf(rp) {
   </div>`;
 }
 
+/* The windows drawn, and the dates they are drawn across: the longest
+ * window's, since each one ends on the same session. */
+function relPerfWindows(rp) {
+  const keys = Object.keys((rp || {}).windows || {}).filter((k) => (rp.windows[k] || {}).available);
+  const longest = keys.reduce((a, k) => ((rp.windows[k].dates || []).length
+    > (rp.windows[a].dates || []).length ? k : a), keys[0]);
+  return { keys, labels: keys.length ? (rp.windows[longest].dates || []) : [] };
+}
+
+function relPerfName(k) {
+  const m = /^(\d+)m$/.exec(k);
+  return m ? `${m[1]}-month rank` : `${k} rank`;
+}
+
+function relPerfChartHead(rp) {
+  const { keys, labels } = relPerfWindows(rp);
+  if (!keys.length || labels.length < 2) return '';
+  const peers = Number.isFinite(rp.universe_size) ? `${fmt(rp.universe_size, 0)} peers` : 'its peers';
+  return `<p class="viz-title">${esc(`Where ${rp.ticker || STATE.ticker} has ranked against ${peers} each session, ${
+    periodTick(labels[0])} to ${periodTick(labels[labels.length - 1])}`)}</p>
+    <p class="viz-sub">Percentile rank of the window's return, 0 to 100. Source: Yahoo Finance daily closes.</p>
+    ${legendHtml(keys.map((k, i) => ({ name: `${relPerfName(k)}, ${fmt(rp.windows[k].window_days, 0)} sessions`,
+    color: i === 0 ? C.brand : C.s7 })))}`;
+}
+
 function mountRelPerfChart() {
   const rp = STATE.relperf;
   if (!rp || rp.available !== true) return;
-  const keys = Object.keys(rp.windows || {}).filter((k) => (rp.windows[k] || {}).available);
+  const { keys, labels } = relPerfWindows(rp);
   if (!keys.length) return;
-  const base = rp.windows[keys[0]];
+  /* Each window's ranks on its own dates. The 3-month rank starts later, as it
+   * needs three months of returns first, and was drawn from the first of the
+   * 1-month window's dates: it ended in August while its tag read today's. */
+  const onDates = (win) => {
+    const at = new Map((win.dates || []).map((d, i) => [d, (win.series || [])[i]]));
+    return labels.map((d) => (at.has(d) ? at.get(d) : null));
+  };
   mount('chart-relperf', (w) => lineChart({
     width: w,
     height: 240,
-    labels: base.dates || [],
+    labels,
     valueTags: true,
+    // A rank's tag in its line's colour: up-green and down-red are for a price.
+    directionTag: false,
+    ariaLabel: `${keys.map(relPerfName).join(' and ')} against peers, by session.`,
     series: keys.map((k, i) => ({
-      name: `${k} rank`,
-      values: rp.windows[k].series || [],
+      name: relPerfName(k),
+      values: onDates(rp.windows[k]),
       color: i === 0 ? C.brand : C.s7,
       width: i === 0 ? 1.8 : 1.3,
       marker: false,

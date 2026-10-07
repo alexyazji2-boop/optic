@@ -8133,7 +8133,6 @@ body[data-view="chart"] main { padding-top: var(--space-2); }
   display: flex;
   align-items: flex-end;
   gap: 2px;
-  height: 62px;
   margin-bottom: var(--space-1);
 }
 .ws-seas-col {
@@ -8146,9 +8145,16 @@ body[data-view="chart"] main { padding-top: var(--space-2); }
   min-width: 0;
 }
 .ws-seas-pct { font-size: 8px; color: var(--ink-muted); }
-.ws-seas-bar { width: 100%; border-radius: 2px 2px 0 0; }
+/* Two halves either side of a zero line: a gain grows up from it, a loss down. */
+.ws-seas-half { display: flex; width: 100%; height: 22px; }
+.ws-seas-half.up { align-items: flex-end; border-bottom: 1px solid var(--border-strong); }
+.ws-seas-half.down { align-items: flex-start; }
+.ws-seas-bar { width: 100%; }
+.ws-seas-half.up .ws-seas-bar { border-radius: 2px 2px 0 0; }
+.ws-seas-half.down .ws-seas-bar { border-radius: 0 0 2px 2px; }
 .ws-seas-bar.up { background: var(--pos); }
 .ws-seas-bar.down { background: var(--neg); }
+.ws-seas-bar.faint { background: var(--ink-muted); opacity: 0.45; }
 .ws-seas-lab { font-size: 8px; color: var(--ink-muted); }
 
 .ws-empty {
@@ -17143,6 +17149,7 @@ details.exact > .table-scroll, details.exact > table { margin-top: var(--space-2
 .tl-key.up { color: var(--pos); }
 .tl-key.down { color: var(--neg); }
 .tl-key.flat { color: var(--ink-muted); }
+.tl-size { display: inline-block; margin-right: var(--space-1); border-radius: 50%; background: var(--ink-muted); vertical-align: middle; }
 
 /* A ratio stretched beyond two standard deviations: weight, not a colour
  * that would read as a call on which way it goes next. */

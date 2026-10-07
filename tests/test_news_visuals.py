@@ -126,3 +126,24 @@ def test_day_ticks_fall_on_new_york_midnight():
     """)
     assert out["first"] == pytest.approx(out["want"], abs=0.01), "midnight in New York is 04:00 UTC in October"
     assert "Oct 4" in out["labels"]
+
+
+def test_a_marks_size_is_keyed_and_net_sentiment_carries_its_scale():
+    """The caption said "size is its tier" and nothing said which size was
+    which; the net sentiment figure gave no scale to read it against."""
+    out = _app("""
+      R.key = newsSizeKey({ tiers: [{ id: 'breaking', label: 'Breaking' }, { id: 'major', label: 'Major' },
+        { id: 'notable', label: 'Notable' }, { id: 'background', label: 'Background' }] });
+      R.none = newsSizeKey({});
+      R.html = newsTimelineHTML(NEWS, NEWS.articles);
+      R.def = GLOSSARY['net sentiment'];
+    """)
+    key = out["key"]
+    assert key.index("Breaking or major") < key.index("Notable") < key.index("Background")
+    assert 'width:13.8px;height:13.8px' in key and 'width:8.6px;height:8.6px' in key, "the timeline's own radii"
+    assert out["none"] == ""
+    assert "Notable" in out["html"], "the key rides in the timeline's legend"
+    assert "past 0.5 either way" in out["def"] and "past 2" in out["def"]
+    src = (ROOT / "static/app.js").read_text()
+    body = src[src.index("function renderNewsView() {"):]
+    assert "${gloss('net sentiment')}" in body and "(it leans past \\u00b10.5 and reads bullish or bearish past \\u00b12)" in body
