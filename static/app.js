@@ -13837,6 +13837,8 @@ function renderFinancialsView(force) {
     <div id="fin-extras-host">${renderExtras(extrasForTicker())}</div>
     <div id="congress-host">${renderCongress(STATE.congress)}</div>
     <div id="seg-host">${renderSegments()}</div>`;
+  mountFinancialsVisuals(co);
+  mountExtrasVisuals(extrasForTicker());
   revealPanels(views.financials);
   // Its own request, started after the paint so the statements above are
   // readable while EDGAR is being read.
@@ -13856,6 +13858,7 @@ function renderFinancialsView(force) {
     const host = document.getElementById('fin-extras-host');
     if (host && STATE.view === 'financials') {
       host.innerHTML = renderExtras(extrasForTicker());
+      mountExtrasVisuals(extrasForTicker());
       revealPanels(host);
       requestAnimationFrame(() => requestAnimationFrame(mountRelativeChart));
     }
@@ -14093,6 +14096,179 @@ const EARN_DEFS = {
   rating_period: "Now is this month's count of ratings; -1m, -2m and -3m are the counts one, two and three months ago. Read down the rows to see which way opinion is moving.",
 };
 
+/* ------------------------------------------------- visual-first panel parts
+ *
+ * Asked for as "lead with the visual and keep precise numerical detail
+ * available": a chart whose title is its finding, a line saying what it is
+ * drawn from, and the table it summarises kept beneath it under "Exact
+ * figures". The primitives are in charts.js (dumbbellChart, shareBars,
+ * columnChart, rangeChart). */
+function vizBlock(id, title, sub, legendHtml = '') {
+  return `<div class="viz">
+    ${title ? `<p class="viz-title">${esc(title)}</p>` : ''}
+    ${sub ? `<p class="viz-sub">${esc(sub)}</p>` : ''}
+    ${legendHtml}
+    <div id="${esc(id)}" class="viz-host"></div>
+  </div>`;
+}
+
+/* A chart builder, or a sentence when there is too little to draw. */
+function vizMount(id, build, none = 'Not enough history to draw this yet.') {
+  mount(id, (w) => {
+    const node = build(w);
+    if (node) return node;
+    const p = document.createElement('p');
+    p.className = 'viz-none';
+    p.textContent = none;
+    return p;
+  });
+}
+
+function exactFigures(tableHtml, label = 'Exact figures') {
+  return tableHtml ? `<details class="exact"><summary>${esc(label)}</summary>${tableHtml}</details>` : '';
+}
+
+function legendHtml(items) {
+  return `<div class="legend">${items.map((it) => `<span class="key"><span class="swatch${
+    it.shape ? ' ' + it.shape : ''}" style="${it.shape === 'ring'
+    ? `background:transparent;border-color:${it.color}${it.dash ? ';border-style:dashed' : ''}`
+    : `background:${it.color}`}"></span>${esc(it.name)}</span>`).join('')}</div>`;
+}
+
+/* "2026-07-14" as "Jul '26"; a bare year stays a year. */
+function periodTick(value) {
+  const str = String(value || '');
+  const m = /^(\d{4})-(\d{2})/.exec(str);
+  if (!m) return str;
+  const mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(m[2]) - 1];
+  return `${mon} '${m[1].slice(2)}`;
+}
+
+function reportTiming(t) {
+  return t === 'before_open' ? 'before the open' : t === 'after_close' ? 'after the close' : '';
+}
+
+/* The Financials tab's chart titles: each one's finding, in words. */
+function ownersTitle(ow) {
+  const inst = ow.institutional_pct_held, ins = ow.insider_pct_held;
+  if (!Number.isFinite(inst)) return '';
+  return `Institutions hold ${fmt(inst * 100, 0)}% of the shares${Number.isFinite(ins) ? `, insiders ${fmt(ins * 100, 1)}%` : ''}`;
+}
+
+function insiderFlowTitle(ow) {
+  const net = (ow.insider_6m || {}).net_shares;
+  if (!Number.isFinite(net)) return '';
+  return net > 0 ? 'Insiders bought more than they sold over six months'
+    : net < 0 ? 'Insiders sold more than they bought over six months'
+      : 'Insider buying and selling offset over six months';
+}
+
+function dividendTitle(a) {
+  const last = (a.annual || []).slice(-1)[0];
+  if (!last) return '';
+  const streak = a.growth_streak_years;
+  return `${money(last.total, 2)} a share in ${last.year}${streak > 1 ? `, raised ${streak} years in a row` : ''}`;
+}
+
+function shortVolumeTitle(sv) {
+  if (!Number.isFinite(sv.latest_pct) || !Number.isFinite(sv.average_pct)) return '';
+  return `${fmt(sv.latest_pct, 0)}% of off-exchange volume on the latest day was short, against a ${fmt(sv.days, 0)}-day average of ${fmt(sv.average_pct, 0)}%`;
+}
+
+function excessTitle(rel) {
+  const vals = ['5d', '20d', '60d', '120d', '252d'].map((k) => (rel.excess || {})[k]).filter(Number.isFinite);
+  if (!vals.length) return '';
+  const ahead = vals.filter((v) => v > 0).length;
+  return `Ahead of ${rel.benchmark || 'the index'} over ${ahead} of ${vals.length} windows`;
+}
+
+function mountFinancialsVisuals(co) {
+  if (!co || co.error) return;
+  const eh = co.earnings_history || {}, fn = co.financials || {}, ow = co.ownership || {};
+  if (eh.available) {
+    const items = (eh.quarters || []).slice().reverse().map((q) => ({
+      label: periodTick(q.date), est: q.eps_estimate, act: q.eps_reported, surprise: q.surprise_pct,
+      detail: [['Reported', esc(q.date)], ['Estimate', fmt(q.eps_estimate, 2)], ['Actual', fmt(q.eps_reported, 2)],
+        ['Surprise', fmtPct(q.surprise_pct, 1)]],
+    }));
+    const next = (eh.upcoming || [])[0];
+    if (next && Number.isFinite(next.eps_estimate)) {
+      items.push({ label: 'Next', est: next.eps_estimate, upcoming: true, detail: [
+        ['Reports', `${esc(next.date)}${reportTiming(next.timing) ? ', ' + reportTiming(next.timing) : ''}`],
+        ['Estimate', fmt(next.eps_estimate, 2)]] });
+    }
+    vizMount('viz-fin-track', (w) => dumbbellChart({ items, width: w, unit: 'EPS ($)',
+      ariaLabel: `Earnings per share against the estimate: beat in ${eh.beat_count} of ${eh.sample_size} quarters.` }),
+    'Fewer than two reported quarters to compare.');
+  }
+  if (fn.available) {
+    const periods = fn.annual_periods || [];
+    const an = fn.annual || {};
+    const series = (key, fmtv) => periods.map((p, i) => ({
+      label: String(p).slice(0, 4), value: (an[key] || [])[i],
+      detail: [['Fiscal year ending', esc(p)], ['Value', fmtv((an[key] || [])[i])]],
+    })).reverse();
+    const usdc = (v) => (Number.isFinite(v) ? (v < 0 ? '-$' : '$') + fmtCompact(Math.abs(v)) : '—');
+    vizMount('viz-fin-rev', (w) => columnChart({ items: series('revenue', usdc), width: w, format: (v) => usdc(v), ariaLabel: 'Revenue by fiscal year' }));
+    vizMount('viz-fin-ni', (w) => columnChart({ items: series('net_income', usdc), width: w, format: (v) => usdc(v), ariaLabel: 'Net income by fiscal year' }));
+    vizMount('viz-fin-fcf', (w) => columnChart({ items: series('free_cash_flow', usdc), width: w, format: (v) => usdc(v), color: C.s3, ariaLabel: 'Free cash flow by fiscal year' }),
+      'Not reported in these statements.');
+    vizMount('viz-fin-eps', (w) => columnChart({ items: series('diluted_eps', (v) => fmt(v, 2)), width: w, format: (v) => fmt(v, 2), color: C.s7, ariaLabel: 'Diluted EPS by fiscal year' }),
+      'Not reported in these statements.');
+  }
+  if (ow.available) {
+    const inst = ow.institutional_pct_held, ins = ow.insider_pct_held;
+    /* Shares of one whole only when they can be: the source's two figures
+     * overlap for some companies and then sum past 100%. */
+    const whole = Number.isFinite(inst) && inst >= 0 && (Number.isFinite(ins) ? ins : 0) >= 0
+      && inst + (Number.isFinite(ins) ? ins : 0) <= 1.0001;
+    vizMount('viz-fin-owners', (w) => (whole ? shareBars({
+      width: w, labelWidth: 8, ariaLabel: ownersTitle(ow), countLabel: (n) => fmt(n, 1) + '%', showTotal: false,
+      // A translucent neutral: present as the rest of the whole, quieter than either holder.
+      segments: [{ key: 'inst', name: 'Institutions', color: C.s1 }, { key: 'ins', name: 'Insiders', color: C.brand },
+        { key: 'rest', name: 'Everyone else', color: `${C.muted}55` }],
+      rows: [{ label: '', values: { inst: inst * 100, ins: (ins || 0) * 100, rest: Math.max(0, 100 - inst * 100 - (ins || 0) * 100) } }],
+    }) : null), Number.isFinite(inst) ? 'The source\'s institutional and insider figures overlap for this company, so they are not drawn as parts of one whole.'
+      : 'No ownership breakdown for this company.');
+    const i6 = ow.insider_6m || {};
+    vizMount('viz-fin-insiders', (w) => ((i6.purchase_shares || i6.sale_shares) ? divergingBars({
+      width: w, labelWidth: 64, ariaLabel: insiderFlowTitle(ow),
+      format: (v) => fmtCompact(Math.abs(v)) + ' sh',
+      rows: [{ label: 'Bought', value: i6.purchase_shares || 0, detail: [['Shares', fmtCompact(i6.purchase_shares)], ['Trades', fmt(i6.purchase_count, 0)]] },
+        { label: 'Sold', value: -(i6.sale_shares || 0), detail: [['Shares', fmtCompact(i6.sale_shares)], ['Trades', fmt(i6.sale_count, 0)]] }],
+    }) : null), 'No insider purchases or sales in the last six months.');
+  }
+}
+
+function mountExtrasVisuals(x) {
+  if (!x || x.error) return;
+  const a = x.actions || {}, sv = x.short_volume || {}, rel = x.relative || {};
+  if (a.pays_dividend) {
+    vizMount('viz-fin-divs', (w) => columnChart({
+      width: w, height: 150, format: (v) => '$' + fmt(v, 2), ariaLabel: dividendTitle(a),
+      items: (a.annual || []).map((r) => ({ label: `'${String(r.year).slice(2)}`, value: r.total,
+        detail: [['Year', esc(r.year)], ['Paid per share', money(r.total, 2)]] })),
+    }), 'Fewer than two complete years of dividends.');
+  }
+  if ((sv.rows || []).length >= 2) {
+    const rows = sv.rows.slice().reverse();
+    vizMount('viz-fin-sv', (w) => lineChart({
+      width: w, height: 170, labels: rows.map((r) => r.date),
+      series: [{ name: 'Short share of off-exchange volume', values: rows.map((r) => r.short_pct), color: C.brand }],
+      refLines: Number.isFinite(sv.average_pct) ? [{ value: sv.average_pct, color: C.muted, label: 'its average', emphasis: true }] : [],
+      yFormat: (v) => fmt(v, 0) + '%',
+    }));
+  }
+  if (!rel.error && rel.excess) {
+    vizMount('viz-fin-excess', (w) => divergingBars({
+      width: w, labelWidth: 70, format: (v) => fmtPct(v, 1), ariaLabel: excessTitle(rel),
+      rows: ['5d', '20d', '60d', '120d', '252d'].filter((k) => Number.isFinite(rel.excess[k])).map((k) => ({
+        label: k.replace('d', ' days'), value: rel.excess[k],
+        detail: [['Excess return', fmtPct(rel.excess[k], 1)], ['Against', esc(rel.benchmark || '')]] })),
+    }), 'Not enough shared history to compare.');
+  }
+}
+
 /* The versus-the-index tiles, one per window, against the benchmark named. */
 function excessReturnDef(days, benchmark) {
   return `Excess return: the stock's return over the last ${days} trading days minus ${
@@ -14308,7 +14484,10 @@ function renderCompany(co) {
       ${eh.available ? `
         <p class="sub">Beat consensus in ${eh.beat_count} of the last ${eh.sample_size} quarters
           (${fmt(eh.beat_rate_pct, 0)}%), average surprise ${fmtPct(eh.avg_surprise_pct, 1)}.</p>
-        <table class="data">
+        ${vizBlock('viz-fin-track', '', 'Earnings per share against the consensus before each report, and the next estimate. Source: Yahoo Finance.',
+    legendHtml([{ name: 'Estimate', color: C.muted, shape: 'ring' }, { name: 'Reported, beat', color: C.pos, shape: 'dot' },
+      { name: 'Reported, missed', color: C.neg, shape: 'dot' }, { name: 'Next report', color: C.muted, shape: 'ring', dash: true }]))}
+        ${exactFigures(`<table class="data">
           <thead><tr><th>Quarter</th><th>${statLabel('EPS est.', FIN_DEFS.eps_estimate)}</th>
             <th>${statLabel('EPS actual', FIN_DEFS.eps_actual)}</th>
             <th>${statLabel('Surprise', FIN_DEFS.surprise)}</th></tr></thead>
@@ -14318,7 +14497,7 @@ function renderCompany(co) {
             <td>${fmt(q.eps_reported, 2)}</td>
             <td class="${signClass(q.surprise_pct)}">${fmtPct(q.surprise_pct, 1)}</td>
           </tr>`).join('')}</tbody>
-        </table>
+        </table>`)}
         ${(eh.upcoming || []).length ? `<h3>${hg('Next report')}</h3>${kv((eh.upcoming || []).map((u) => [u.date, 'consensus EPS ' + fmt(u.eps_estimate, 2)]))}` : ''}
         <ul class="reasons">${(eh.notes || []).map((n) => `<li>${gloss(n)}</li>`).join('')}</ul>`
     : '<div class="callout">No earnings history. Typical for ETFs and index products.</div>'}
@@ -14329,7 +14508,7 @@ function renderCompany(co) {
     <div class="panel">
       <h2>${hg('Financials')}</h2>
       ${fn.available ? `
-        <p class="sub">Annual statements, most recent first.</p>
+        <p class="sub">From the annual statements: the latest year against the one before it.</p>
         <div class="grid c3" style="margin-bottom:var(--space-3)">
           ${tile('Revenue growth (y/y)', fmtPct((fn.growth || {}).revenue_yoy_pct, 1), null,
     signClass((fn.growth || {}).revenue_yoy_pct), FIN_DEFS.revenue_growth)}
@@ -14337,7 +14516,16 @@ function renderCompany(co) {
     signClass((fn.growth || {}).net_income_yoy_pct), FIN_DEFS.net_income_growth)}
           ${tile('Net margin', fmt((fn.margins || {}).net_pct, 1) + '%', null, '', FIN_DEFS.net_margin)}
         </div>
-        <table class="data">
+        ${(an.revenue || []).filter(Number.isFinite).length >= 2 ? `<div class="viz">
+          <p class="viz-title">${(an.revenue || []).filter(Number.isFinite).length} fiscal years of the statements</p>
+          <p class="viz-sub">Oldest on the left, the latest year in full colour; a loss hangs below the line. Source: the company's annual statements, via Yahoo Finance.</p>
+          <div class="viz-multiples">
+            <div><h4>${statLabel('Revenue', FIN_DEFS.revenue)}</h4><div id="viz-fin-rev" class="viz-host"></div></div>
+            <div><h4>${statLabel('Net income', FIN_DEFS.net_income)}</h4><div id="viz-fin-ni" class="viz-host"></div></div>
+            <div><h4>${statLabel('Free cash flow', FIN_DEFS.free_cash_flow)}</h4><div id="viz-fin-fcf" class="viz-host"></div></div>
+            <div><h4>${statLabel('Diluted EPS', FIN_DEFS.diluted_eps)}</h4><div id="viz-fin-eps" class="viz-host"></div></div>
+          </div></div>` : ''}
+        ${exactFigures(`<table class="data">
           <thead><tr><th>Line</th>${(ap || []).map((p2) => `<th>${esc(p2)}</th>`).join('')}</tr></thead>
           <tbody>
             ${finRow('Revenue', an.revenue, true, FIN_DEFS.revenue)}
@@ -14347,7 +14535,7 @@ function renderCompany(co) {
             ${finRow('Free cash flow', an.free_cash_flow, true, FIN_DEFS.free_cash_flow)}
             ${finRow('Diluted EPS', an.diluted_eps, false, FIN_DEFS.diluted_eps)}
           </tbody>
-        </table>
+        </table>`, 'Exact figures, by year')}
         ${kv([
     ['Cash', '$' + fmtCompact((fn.balance_sheet || {}).cash), '', FIN_DEFS.cash],
     ['Total debt', '$' + fmtCompact((fn.balance_sheet || {}).total_debt), '', FIN_DEFS.total_debt],
@@ -14393,6 +14581,8 @@ function renderCompany(co) {
           ${tile('Top holders', `${ow.holders_adding} adding / ${ow.holders_trimming} trimming`, null, '',
     FIN_DEFS.top_holders)}
         </div>
+        ${vizBlock('viz-fin-owners', ownersTitle(ow), 'Shares held by institutions from their 13F filings and by insiders, against all the shares. Source: Yahoo Finance.')}
+        ${vizBlock('viz-fin-insiders', insiderFlowTitle(ow), 'Shares bought and sold by directors and officers over the last six months, from their Form 4 filings.')}
         ${kv([
     ['Insider purchases (6m)', `${fmtCompact((ow.insider_6m || {}).purchase_shares)} sh in ${
       fmt((ow.insider_6m || {}).purchase_count, 0)} trades`, '', FIN_DEFS.insider_purchases],
@@ -24244,7 +24434,8 @@ function renderExtras(x) {
       ${tile('Payments on record', fmt(Number.isFinite(a.payment_count) ? a.payment_count
     : a.dividends.length, 0), `most recent ${fmt(a.dividends.length, 0)} shown`, '', FIN_DEFS.div_count)}
     </div>
-    <table class="data">
+    ${vizBlock('viz-fin-divs', dividendTitle(a), 'Dividends per share in each complete calendar year, counted by ex-dividend date. Source: Yahoo Finance.')}
+    ${exactFigures(`<table class="data">
       <thead><tr><th>Year</th><th>${statLabel('Total paid', FIN_DEFS.div_year_total)}</th>
         <th>${statLabel('Change', FIN_DEFS.div_year_change)}</th></tr></thead>
       <tbody>${(a.annual || []).slice().reverse().map((row, i, arr) => {
@@ -24253,7 +24444,7 @@ function renderExtras(x) {
     return `<tr><td class="name">${row.year}</td><td>${money(row.total, 2)}</td>
       <td class="${signClass(chg)}">${chg === null ? '—' : fmtPct(chg, 1)}</td></tr>`;
   }).join('')}</tbody>
-    </table>
+    </table>`, 'Exact figures, by year')}
     <p class="caveat">${esc(a.note || '')}</p>` : `
     <h3>${hg('Dividends')}</h3>
     <div class="callout">No dividend on record for ${esc(x.ticker)}.</div>`;
@@ -24268,7 +24459,8 @@ function renderExtras(x) {
 
   const svBlock = (sv.rows || []).length ? `
     <h3 style="margin-top:var(--space-4)">${hg('Off-exchange short volume')}</h3>
-    <div class="grid c4" style="margin-bottom:var(--space-2)">
+    ${vizBlock('viz-fin-sv', shortVolumeTitle(sv), 'Short sales as a share of each day\'s off-exchange volume, against this stock\'s own average. Source: FINRA daily files.')}
+    ${exactFigures(`<div class="grid c4" style="margin:var(--space-2) 0">
       ${tile('Latest', fmt(sv.latest_pct, 1) + '%', esc((sv.rows[0] || {}).date || ''), '',
     FIN_DEFS.sv_latest)}
       ${tile(`${fmt(sv.days, 0)}-day average`, fmt(sv.average_pct, 1) + '%',
@@ -24277,7 +24469,7 @@ function renderExtras(x) {
     fmtPct((sv.latest_pct || 0) - (sv.average_pct || 0), 1),
     'percentage points', signClass((sv.average_pct || 0) - (sv.latest_pct || 0)), FIN_DEFS.sv_vs)}
       ${tile('Days on record', fmt(sv.days, 0), 'FINRA publishes daily', '', FIN_DEFS.sv_days)}
-    </div>
+    </div>`)}
     <p class="caveat"><strong>Read this against its own average, not against 50%.</strong>
       ${esc(sv.caveat || '')}</p>` : `
     <h3 style="margin-top:var(--space-4)">${hg('Off-exchange short volume')}</h3>
@@ -24300,13 +24492,14 @@ function renderExtras(x) {
     <div class="callout">${esc(rel.error)}</div>` : `
     <h3 style="margin-top:var(--space-4)">${hg('Versus the index')} <span
       class="th-plain">· vs ${esc(rel.benchmark)}</span></h3>
-    <div class="grid c5" style="margin-bottom:var(--space-2)">
+    ${vizBlock('viz-fin-excess', excessTitle(rel), `The stock's return minus ${rel.benchmark || 'the benchmark'}'s over each window, in percentage points.`)}
+    ${exactFigures(`<div class="grid c5" style="margin:var(--space-2) 0">
       ${['5d', '20d', '60d', '120d', '252d'].map((k) => tile(k.replace('d', ' days'),
     (rel.excess || {})[k] === null || (rel.excess || {})[k] === undefined
       ? '—' : fmtPct(rel.excess[k], 1),
     'excess return', signClass((rel.excess || {})[k]),
     excessReturnDef(parseInt(k, 10), rel.benchmark))).join('')}
-    </div>
+    </div>`)}
     <div id="chart-relative" class="chart-host"></div>
     <p class="caveat">${esc(rel.note || '')}</p>`;
 
@@ -26157,14 +26350,17 @@ function renderEarnings(d) {
 
     <div class="panel">
       <h2>${hg('Estimate revisions')}</h2>
+      ${rev.available ? vizBlock('viz-earn-revisions', rev.direction && rev.direction !== 'unknown'
+    ? `Full-year estimates ${rev.direction} over 90 days` : '',
+  'How each period\'s EPS estimate has changed over 90 days, as a share of what it was. Hover for 30 days and the analysts behind it.') : ''}
       <p class="sub">${gloss(rev.note || '')}</p>
-      ${rev.available ? `
+      ${rev.available ? exactFigures(`
       <table class="data">
         <thead><tr><th>Period</th><th>${statLabel('EPS est.', EARN_DEFS.rev_eps)}</th>
           <th>${statLabel('30d', EARN_DEFS.rev_30d)}</th><th>${statLabel('90d', EARN_DEFS.rev_90d)}</th>
           <th>${statLabel('Analysts', EARN_DEFS.rev_analysts)}</th></tr></thead>
         <tbody>${revRows}</tbody>
-      </table>` : ''}
+      </table>`) : ''}
       <p class="caveat">${gloss(rev.caveat || '')}</p>
     </div>
   </div>
@@ -26172,7 +26368,13 @@ function renderEarnings(d) {
   <div class="panel span2 gap">
     <h2>${hg('Surprise history')}</h2>
     ${sp.available ? `
-    <p class="sub">Reported EPS against consensus, and how the stock moved in the session that reacted.</p>
+    ${vizBlock('viz-earn-surprise', sp.beat_count !== undefined && sp.quarters
+    ? `Beat the estimate in ${sp.beat_count} of the last ${sp.quarters} quarters` : '',
+  'Earnings per share: the consensus before each report, what was reported, and the stock\'s move in the session that reacted. Source: Yahoo Finance.',
+  legendHtml([{ name: 'Estimate', color: C.muted, shape: 'ring' },
+    { name: 'Reported, beat', color: C.pos, shape: 'dot' },
+    { name: 'Reported, missed', color: C.neg, shape: 'dot' },
+    { name: 'Next report', color: C.muted, shape: 'ring', dash: true }]))}
     <div class="grid c4" style="margin-bottom:var(--space-3)">
       ${tile('Average surprise', fmtPct(sp.avg_surprise_pct, 1), 'reported vs consensus',
     signClass(sp.avg_surprise_pct), EARN_DEFS.avg_surprise)}
@@ -26186,26 +26388,34 @@ function renderEarnings(d) {
       ? 'no misses in sample' : 'reacting session', signClass(sp.avg_move_on_miss_pct), EARN_DEFS.avg_move_miss)}
     </div>
     ${(sp.notes || []).map((n) => `<div class="callout info">${gloss(n)}</div>`).join('')}
-    <table class="data">
+    ${exactFigures(`<table class="data">
       <thead><tr><th>Report date</th><th>${statLabel('EPS est.', FIN_DEFS.eps_estimate)}</th>
         <th>${statLabel('EPS reported', FIN_DEFS.eps_actual)}</th><th>${statLabel('Surprise', FIN_DEFS.surprise)}</th>
         ${/* "Move after", not "Next session": for a report before the open the
             session that reacts is the report day's own. */''}
         <th>${statLabel('Move after', EARN_DEFS.move_after)}</th></tr></thead>
       <tbody>${surpriseRows}</tbody>
-    </table>` : '<div class="callout">No reported earnings history available for this ticker.</div>'}
+    </table>`)}` : '<div class="callout">No reported earnings history available for this ticker.</div>'}
   </div>
 
   <div class="panel span2 gap">
     <h2>${hg('Financial growth')} <span class="th-plain">· quarterly, year over year</span></h2>
     ${(gr.notes || []).map((n) => `<div class="callout info">${gloss(n)}</div>`).join('')}
-    ${qRows ? `<table class="data">
+    ${(gr.quarterly || []).length >= 2 ? `<div class="viz">
+      <p class="viz-title">The last ${(gr.quarterly || []).length} quarters</p>
+      <p class="viz-sub">From the company's quarterly statements, oldest on the left. Source: Yahoo Finance.</p>
+      <div class="viz-multiples">
+        <div><h4>Revenue</h4><div id="viz-earn-q-rev" class="viz-host"></div></div>
+        <div><h4>Net income</h4><div id="viz-earn-q-ni" class="viz-host"></div></div>
+        <div><h4>Operating margin</h4><div id="viz-earn-q-om" class="viz-host"></div></div>
+      </div></div>` : ''}
+    ${qRows ? `${exactFigures(`<table class="data">
       <thead><tr><th>Quarter</th><th>${statLabel('Revenue', FIN_DEFS.revenue)}</th>
         <th>${statLabel('YoY', EARN_DEFS.q_rev_yoy)}</th><th>${statLabel('Net income', FIN_DEFS.net_income)}</th>
         <th>${statLabel('YoY', EARN_DEFS.q_ni_yoy)}</th><th>${statLabel('Gross margin', FIN_DEFS.gross_margin)}</th>
         <th>${statLabel('Op margin', FIN_DEFS.operating_margin)}</th></tr></thead>
       <tbody>${qRows}</tbody>
-    </table>
+    </table>`, 'Exact figures, by quarter')}
     <p class="caveat">The free feed carries only five quarters of statements, so year-over-year
       growth is computable for the most recent quarter alone. Earlier rows still show the level and
       margin trend; the annual table below covers multi-year growth.</p>` : '<div class="callout">No quarterly statements available.</div>'}
@@ -26228,8 +26438,16 @@ function renderEarnings(d) {
 
   <div class="panel span2">
     <h2>${hg('Analyst view')}</h2>
+    ${an.analyst_count ? vizBlock('viz-earn-ratings', an.buy_share_pct !== null && an.buy_share_pct !== undefined
+    ? `${fmt(an.buy_share_pct, 0)}% of ${an.analyst_count} analysts rate it a buy` : '',
+  'Ratings this month and in each of the three before it, strong ratings counted with the plain ones. Source: Yahoo Finance.',
+  legendHtml([{ name: 'Buy', color: C.pos, shape: 'box' }, { name: 'Hold', color: C.ink2, shape: 'box' },
+    { name: 'Sell', color: C.neg, shape: 'box' }])) : ''}
+    ${an.target_low && an.target_high ? vizBlock('viz-earn-targets', an.upside_pct !== null && an.upside_pct !== undefined
+    ? `Mean target ${usd(an.target_mean)}, ${fmt(Math.abs(an.upside_pct), 0)}% ${an.upside_pct >= 0 ? 'above' : 'below'} the price` : '',
+  'The lowest and highest published price targets, the mean of them, and the price now.') : ''}
     ${(an.notes || []).map((n) => `<div class="callout info">${gloss(n)}</div>`).join('')}
-    <div class="grid c4" style="margin-bottom:var(--space-3)">
+    ${exactFigures(`<div class="grid c4" style="margin:var(--space-2) 0 var(--space-3)">
       ${tile('Mean analyst target', usd(an.target_mean), an.target_low && an.target_high
     ? `Individual targets range ${usd(an.target_low)} – ${usd(an.target_high)}` : null, '', EARN_DEFS.target_mean)}
       ${tile('Implied upside', fmtPct(an.upside_pct, 0), 'to mean target', signClass(an.upside_pct),
@@ -26244,10 +26462,85 @@ function renderEarnings(d) {
       <thead><tr><th>${statLabel('Period', EARN_DEFS.rating_period)}</th><th>Strong buy</th><th>Buy</th><th>Hold</th>
         <th>Sell</th><th>Strong sell</th></tr></thead>
       <tbody>${ratingRows}</tbody>
-    </table>` : ''}
+    </table>` : ''}`)}
     <p class="caveat">Price targets are sentiment, not forecasts. They cluster above spot in almost every market.</p>
   </div>
   `;
+  mountEarningsVisuals(d);
+}
+
+/* The Earnings tab's charts, from the payload it has just drawn. */
+function mountEarningsVisuals(d) {
+  const sp = d.surprise || {}, nr = d.next_report || {}, rev = d.revisions || {};
+  const gr = d.growth || {}, an = d.analyst || {}, lr = d.latest_result || {};
+  if (sp.available) {
+    const items = (sp.rows || []).slice().reverse().map((r) => ({
+      label: periodTick(r.date), est: r.eps_estimate, act: r.eps_reported, move: r.next_day_move_pct,
+      surprise: r.surprise_pct,
+      detail: [['Reported', esc(r.date)], ['Estimate', fmt(r.eps_estimate, 2)], ['Actual', fmt(r.eps_reported, 2)],
+        ['Surprise', fmtPct(r.surprise_pct, 1)], ['Move after', fmtPct(r.next_day_move_pct, 1)]],
+    }));
+    if (nr.date && Number.isFinite(nr.eps_consensus) && !lr.just_reported) {
+      items.push({
+        label: 'Next', est: nr.eps_consensus, upcoming: true,
+        detail: [['Reports', `${esc(nr.date)}${reportTiming(nr.timing) ? ', ' + reportTiming(nr.timing) : ''}${
+          nr.confirmed === false ? ' (not confirmed)' : ''}`], ['Estimate', fmt(nr.eps_consensus, 2)],
+        ...(nr.eps_low && nr.eps_high ? [['Range', `${fmt(nr.eps_low, 2)} – ${fmt(nr.eps_high, 2)}`]] : [])],
+      });
+    }
+    vizMount('viz-earn-surprise', (w) => dumbbellChart({
+      items, width: w, unit: 'EPS ($)', format: (v) => fmt(v, 2),
+      ariaLabel: `Earnings per share against the estimate for the last ${(sp.rows || []).length} quarters. ${
+        sp.beat_count} beat the estimate.`,
+    }), 'Fewer than two reported quarters to compare.');
+  }
+  if (rev.available) {
+    vizMount('viz-earn-revisions', (w) => divergingBars({
+      width: w, labelWidth: 140, format: (v) => fmtPct(v, 1),
+      ariaLabel: 'Change in EPS estimates over 90 days, by period.',
+      rows: (rev.rows || []).filter((r) => Number.isFinite(r.chg_90d_pct)).map((r) => ({
+        label: r.label, value: r.chg_90d_pct,
+        detail: [['Estimate now', fmt(r.current, 2)], ['Change, 30 days', fmtPct(r.chg_30d_pct, 1)],
+          ['Change, 90 days', fmtPct(r.chg_90d_pct, 1)],
+          ['Analysts, 30 days', r.analysts_up_30d !== null && r.analysts_up_30d !== undefined
+            ? `${r.analysts_up_30d} raised, ${r.analysts_down_30d || 0} cut` : '—']],
+      })),
+    }), 'No estimate changes on record.');
+  }
+  const qs = (gr.quarterly || []).slice().reverse();
+  const col = (key, fmtv) => qs.map((r) => ({
+    label: periodTick(r.period), value: r[key],
+    detail: [['Quarter', esc(r.period)], ['Value', fmtv(r[key])]],
+  }));
+  vizMount('viz-earn-q-rev', (w) => columnChart({ items: col('revenue', (v) => '$' + fmtCompact(v)), width: w,
+    format: (v) => '$' + fmtCompact(v, 0), ariaLabel: 'Quarterly revenue' }));
+  vizMount('viz-earn-q-ni', (w) => columnChart({ items: col('net_income', (v) => '$' + fmtCompact(v)), width: w,
+    format: (v) => '$' + fmtCompact(v, 0), ariaLabel: 'Quarterly net income' }));
+  // Banks and insurers report no operating income, so this one says so.
+  vizMount('viz-earn-q-om', (w) => columnChart({ items: col('operating_margin_pct', (v) => fmt(v, 1) + '%'), width: w,
+    format: (v) => fmt(v, 0) + '%', color: C.s7, ariaLabel: 'Quarterly operating margin' }),
+  'Not reported in these statements.');
+  if (an.analyst_count) {
+    const name = (p) => (p === '0m' ? 'Now' : String(p).replace(/^-(\d+)m$/, '$1 mo ago'));
+    vizMount('viz-earn-ratings', (w) => shareBars({
+      width: w, labelWidth: 72, ariaLabel: `Analyst ratings: ${fmt(an.buy_share_pct, 0)} percent buy.`,
+      segments: [{ key: 'buy', name: 'Buy', color: C.pos }, { key: 'hold', name: 'Hold', color: C.ink2 },
+        { key: 'sell', name: 'Sell', color: C.neg }],
+      rows: (an.ratings || []).map((r) => ({ label: name(r.period), values: {
+        buy: (r.strong_buy || 0) + (r.buy || 0), hold: r.hold || 0, sell: (r.sell || 0) + (r.strong_sell || 0) } })),
+      countLabel: (n) => fmt(n, 0),
+    }), 'No ratings on record.');
+  }
+  if (an.target_low && an.target_high) {
+    const spot = an.target_mean && an.upside_pct !== null && an.upside_pct !== undefined
+      ? an.target_mean / (1 + an.upside_pct / 100) : null;
+    vizMount('viz-earn-targets', (w) => rangeChart({
+      width: w, low: an.target_low, high: an.target_high, format: (v) => usd(v), trackLabel: 'Published targets',
+      ariaLabel: `Analyst price targets from ${usd(an.target_low)} to ${usd(an.target_high)}, mean ${usd(an.target_mean)}.`,
+      marks: [{ value: an.target_mean, label: 'Mean', color: C.brand },
+        ...(spot ? [{ value: spot, label: 'Price', color: C.ink, primary: true }] : [])],
+    }));
+  }
 }
 
 /* Roth inputs persist in localStorage rather than on the server: holdings are the

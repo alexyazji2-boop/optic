@@ -81,6 +81,9 @@ def _next_report(history: List[Dict[str, Any]], calendar: Dict[str, Any],
 
     out: Dict[str, Any] = {
         "date": date,
+        # Before the open or after the close, when the feed times it: the chart
+        # labels the coming result with it, as "after the close".
+        "timing": future[0].get("timing") if future and future[0]["date"] == date else None,
         "days_away": None,
         "confirmed": calendar.get("confirmed"),
         "eps_consensus": calendar.get("eps_avg") or (future[0].get("eps_estimate") if future else None),
@@ -748,7 +751,9 @@ def _analyst(view: Dict[str, Any], spot: Optional[float]) -> Dict[str, Any]:
 
     notes: List[str] = []
     if out.get("upside_pct") is not None:
-        notes.append(f"Mean price target implies {out['upside_pct']:+.0f}% from here.")
+        # One decimal, as the tiles and chart title round it: "+12%" here
+        # beside a tile saying "+13%" was 12.5 rounded two ways.
+        notes.append(f"Mean price target implies {out['upside_pct']:+.1f}% from here.")
         if out["upside_pct"] > 40:
             notes.append(
                 "That's a wide gap. Either the target is stale or the market disagrees with the "

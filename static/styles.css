@@ -2143,6 +2143,9 @@ table.data td.name.num { font-variant-numeric: tabular-nums; }
 .legend .key { display: inline-flex; align-items: center; gap: var(--space-1); }
 .legend .swatch { width: 12px; height: 2px; border-radius: var(--r-xs); }
 .legend .swatch.box { height: 10px; width: 10px; border-radius: var(--r-xs); }
+/* Estimated against actual, told apart by shape as well as colour. */
+.legend .swatch.ring { width: 10px; height: 10px; border-radius: 50%; border: 2px solid; box-sizing: border-box; }
+.legend .swatch.dot { width: 10px; height: 10px; border-radius: 50%; }
 
 .tooltip {
   position: fixed;
@@ -17127,3 +17130,28 @@ table.data.ss-table tr.ss-row > td:nth-child(6) { white-space: normal; min-width
   border-radius: 50%;
   background: var(--warn);
 }
+
+/* ======================================================== visual-first panels
+ * A chart that answers one question: its insight as the title, what it is
+ * drawn from beneath it, and the exact figures a hover, a tap or a Tab away.
+ * The tables stay, behind "Exact figures", for reading across precisely. */
+.viz { margin: var(--space-2) 0 var(--space-4); }
+.viz-title { margin: 0 0 var(--space-1); font-size: var(--t-body); font-weight: 600; color: var(--ink); }
+.viz-sub { margin: 0 0 var(--space-2); font-size: var(--t-caption); color: var(--ink-muted); }
+.viz-host { min-height: 60px; }
+.viz-none { margin: var(--space-2) 0; font-size: var(--t-small); color: var(--ink-muted); }
+.viz-multiples { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(13rem, 100%), 1fr)); gap: var(--space-3); }
+.viz-multiples h4 { margin: 0 0 var(--space-1); font-size: var(--t-small); font-weight: 600; color: var(--ink-2); }
+.viz-mark { outline: none; cursor: default; }
+.viz-mark:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+details.exact { margin: var(--space-2) 0 0; }
+details.exact > summary {
+  cursor: pointer; font-size: var(--t-small); color: var(--ink-2); list-style: none;
+  transition: color var(--dur-ui) var(--ease-ui);
+}
+details.exact > summary::-webkit-details-marker { display: none; }
+details.exact > summary::before { content: '\25B8'; display: inline-block; margin-right: var(--space-1); transition: transform var(--dur-ui) var(--ease-ui); }
+details.exact[open] > summary::before { transform: rotate(90deg); }
+details.exact > summary:hover { color: var(--ink); }
+details.exact > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-xs); }
+details.exact > .table-scroll, details.exact > table { margin-top: var(--space-2); }

@@ -2663,6 +2663,16 @@ function legend(items, boxed = false) {
      * does, and two legend rows for one overlay is worse than one honest key.
      * Hard stops, not a blend: the two states are discrete. */
     if (it.split) sw.style.background = `linear-gradient(90deg, ${it.color} 0 50%, ${it.split} 50% 100%)`;
+    /* A ring or a dot, for a chart that tells estimated from actual by shape as
+     * well as colour: an estimate is drawn hollow, a result filled. */
+    if (it.shape === 'ring') {
+      sw.className = 'swatch ring';
+      sw.style.background = 'transparent';
+      sw.style.borderColor = it.color;
+      if (it.dash) sw.style.borderStyle = 'dashed';
+    } else if (it.shape === 'dot') {
+      sw.className = 'swatch dot';
+    }
     key.appendChild(sw);
     key.appendChild(document.createTextNode(it.name));
     div.appendChild(key);
@@ -2680,7 +2690,7 @@ function divergingBars(opts) {
   const {
     rows = [], height = null, posColor = C.pos, negColor = C.neg,
     format = (v) => fmtCompact(v), rowHeight = 20, markerRow = null,
-    markerLabel = 'spot', axisLabel = '', width = 720,
+    markerLabel = 'spot', axisLabel = '', width = 720, labelWidth = 58, ariaLabel = '',
   } = opts;
 
   if (!rows.length) return document.createTextNode('');
@@ -2688,7 +2698,7 @@ function divergingBars(opts) {
   const W = width;
   const barH = Math.min(16, rowHeight - 6);
   const H = height || rows.length * rowHeight + 30;
-  const m = { t: 8, r: 74, b: 20, l: 58 };
+  const m = { t: 8, r: 74, b: 20, l: labelWidth };
   const plotW = W - m.l - m.r;
   const plotH = H - m.t - m.b;
 
@@ -2698,6 +2708,7 @@ function divergingBars(opts) {
   const Y = (i) => m.t + (i + 0.5) * (plotH / rows.length);
 
   const root = svgRoot(W, H);
+  if (ariaLabel) root.setAttribute('aria-label', ariaLabel);
 
   root.appendChild(s('line', {
     x1: mid, y1: m.t, x2: mid, y2: m.t + plotH, stroke: C.baseline, 'stroke-width': 1,
@@ -2716,9 +2727,7 @@ function divergingBars(opts) {
       ? `M${mid},${y} H${mid + Math.max(w - rx, 0)} q${rx},0 ${rx},${rx} v${barH - 2 * rx} q0,${rx} -${rx},${rx} H${mid} Z`
       : `M${mid},${y} H${x + rx} q-${rx},0 -${rx},${rx} v${barH - 2 * rx} q0,${rx} ${rx},${rx} H${mid} Z`;
     const bar = s('path', { d: w < 1 ? `M${mid},${y} h1 v${barH} h-1 Z` : path, fill: color });
-    bindScrub(bar, (evt) => showTip(
-      tipRows(r.label, (r.detail || [['Value', format(v)]])), evt,
-    ), hideTip);
+    focusMark(bar, tipRows(r.label, (r.detail || [['Value', format(v)]])), `${r.label}: ${format(v)}`);
     root.appendChild(bar);
 
     root.appendChild(s('text', {
@@ -3246,5 +3255,327 @@ function bubbleChart(points, opts = {}) {
       }
     });
 
+  return root;
+}
+
+
+/* ===================================================== visual-first primitives
+ *
+ * Asked for as "lead with the visual and keep precise numerical detail
+ * available": charts that answer one question each, with the exact figures a
+ * hover or a keyboard focus away and the table still on the page beneath.
+ * Shared rules, kept in these helpers rather than in each chart:
+ *
+ *   - every mark that carries a value can be hovered, tapped, or reached with
+ *     Tab, and says its exact figure (focusMark);
+ *   - the svg carries a sentence for a screen reader (ariaLabel);
+ *   - bars start at zero; dot plots do not have to, because a dot's position
+ *     is read against its neighbours, not against an axis it touches;
+ *   - estimated is told from actual by shape (a ring against a dot), not by
+ *     colour alone;
+ *   - a chart with too little to show returns null, and the caller says so in
+ *     words, instead of drawing one lonely mark.
+ */
+
+/* Hover, tap and keyboard for one mark. The keyboard half places the readout
+ * at the mark, since a focus event has no pointer position. */
+function focusMark(node, tipHtml, label) {
+  node.setAttribute('tabindex', '0');
+  node.setAttribute('role', 'img');
+  if (label) node.setAttribute('aria-label', label);
+  node.setAttribute('class', ((node.getAttribute('class') || '') + ' viz-mark').trim());
+  bindScrub(node, (evt) => showTip(tipHtml, evt), hideTip);
+  node.addEventListener('focus', () => {
+    const r = node.getBoundingClientRect();
+    showTip(tipHtml, { clientX: r.left + r.width / 2, clientY: r.top });
+  });
+  node.addEventListener('blur', hideTip);
+  return node;
+}
+
+function textWidthGuess(text, size) { return String(text).length * size * 0.56; }
+
+/**
+ * Estimated against actual, period by period: a ring for the estimate, a dot for
+ * the result, joined in the colour of the gap. Optional `move` per item draws a
+ * strip of small bars underneath for the price reaction to each result, so a
+ * beat that was sold is visible as a green pair over a red bar.
+ *
+ * items: [{label, est, act, upcoming, move, detail: [[k, v]...]}], oldest first.
+ */
+function dumbbellChart(opts) {
+  const {
+    items = [], width = 720, format = (v) => fmt(v, 2), moveFormat = (v) => fmtPct(v, 1),
+    unit = '', ariaLabel = '', moveLabel = 'Move after',
+  } = opts;
+  const pts = items.filter((it) => Number.isFinite(it.est) || Number.isFinite(it.act));
+  if (pts.length < 2) return null;
+  const hasMoves = pts.some((it) => Number.isFinite(it.move));
+  const W = width;
+  const plotH = 150;
+  const stripH = hasMoves ? 52 : 0;
+  // The unit sits above the plot, clear of the top tick.
+  const m = { t: unit ? 24 : 12, r: 14, b: 30 + stripH, l: 52 };
+  const H = m.t + plotH + m.b;
+  const values = [];
+  pts.forEach((it) => { if (Number.isFinite(it.est)) values.push(it.est); if (Number.isFinite(it.act)) values.push(it.act); });
+  let [lo, hi] = extentOf(values);
+  const pad = (hi - lo) * 0.18 || Math.abs(hi) * 0.2 || 1;
+  lo -= pad; hi += pad;
+  const ticks = niceTicks(lo, hi, 4);
+  lo = Math.min(lo, ticks[0]); hi = Math.max(hi, ticks[ticks.length - 1]);
+  const band = (W - m.l - m.r) / pts.length;
+  const X = (i) => m.l + band * (i + 0.5);
+  const Y = (v) => m.t + plotH - ((v - lo) / (hi - lo || 1)) * plotH;
+  const root = svgRoot(W, H);
+  root.setAttribute('aria-label', ariaLabel);
+
+  ticks.forEach((t) => {
+    root.appendChild(s('line', { x1: m.l, x2: W - m.r, y1: Y(t), y2: Y(t), stroke: C.grid, 'stroke-width': 1 }));
+    root.appendChild(s('text', {
+      x: m.l - 8, y: Y(t) + 4, fill: C.muted, 'font-size': CF.tick, 'font-weight': CW.tick,
+      'text-anchor': 'end', 'font-variant-numeric': 'tabular-nums',
+    }, format(t)));
+  });
+  if (lo < 0 && hi > 0) {
+    root.appendChild(s('line', { x1: m.l, x2: W - m.r, y1: Y(0), y2: Y(0), stroke: C.baseline, 'stroke-width': 1 }));
+  }
+  if (unit) {
+    root.appendChild(s('text', {
+      x: m.l, y: 4, fill: C.muted, 'font-size': CF.micro, 'dominant-baseline': 'hanging',
+    }, unit));
+  }
+
+  const maxMove = Math.max(...pts.map((it) => Math.abs(it.move || 0)), 0.01);
+  const stripTop = m.t + plotH + 30;
+  const stripMid = stripTop + 10 + (stripH - 10) / 2 - 4;
+  if (hasMoves) {
+    // Its name above the strip, where it has the width a margin label lacks.
+    root.appendChild(s('text', {
+      x: m.l, y: stripTop + 2, fill: C.muted, 'font-size': CF.micro, 'dominant-baseline': 'hanging',
+    }, `${moveLabel}, in the session that reacted`));
+    root.appendChild(s('line', { x1: m.l, x2: W - m.r, y1: stripMid, y2: stripMid, stroke: C.baseline, 'stroke-width': 1 }));
+  }
+
+  const labelEvery = Math.max(1, Math.ceil(36 / band));
+  pts.forEach((it, i) => {
+    const g = s('g', {});
+    const x = X(i);
+    const hasBoth = Number.isFinite(it.est) && Number.isFinite(it.act);
+    const beat = hasBoth && it.act >= it.est;
+    if (hasBoth) {
+      g.appendChild(s('line', {
+        x1: x, x2: x, y1: Y(it.est), y2: Y(it.act), stroke: beat ? C.pos : C.neg,
+        'stroke-width': 2, 'stroke-linecap': 'round', opacity: 0.85,
+      }));
+    }
+    if (Number.isFinite(it.est)) {
+      g.appendChild(s('circle', {
+        cx: x, cy: Y(it.est), r: 5.5, fill: C.surface, stroke: C.muted, 'stroke-width': 2,
+        'stroke-dasharray': it.upcoming ? '2.5 2' : null,
+      }));
+    }
+    if (Number.isFinite(it.act)) {
+      g.appendChild(s('circle', {
+        cx: x, cy: Y(it.act), r: 6, fill: hasBoth ? (beat ? C.pos : C.neg) : C.brand,
+        stroke: C.surface, 'stroke-width': 1.5,
+      }));
+    }
+    /* The size of the beat or miss, in words above the pair, where a column is
+     * wide enough to hold it. Seasonal swings in EPS set the scale, so a gap of
+     * a few cents can be two pixels tall; the percentage says it at any scale. */
+    if (hasBoth && Number.isFinite(it.surprise) && band >= 40) {
+      g.appendChild(s('text', {
+        x, y: Math.min(Y(it.est), Y(it.act)) - 11, fill: beat ? C.pos : C.neg, 'font-size': CF.micro,
+        'font-weight': CW.label, 'text-anchor': 'middle', 'font-variant-numeric': 'tabular-nums',
+      }, fmtPct(it.surprise, 0)));
+    }
+    if (hasMoves && Number.isFinite(it.move)) {
+      const h = Math.max(1.5, (Math.abs(it.move) / maxMove) * ((stripH - 10) / 2 - 5));
+      g.appendChild(s('rect', {
+        x: x - Math.min(9, band * 0.28), width: Math.min(18, band * 0.56), rx: 2,
+        y: it.move >= 0 ? stripMid - h : stripMid, height: h, fill: it.move >= 0 ? C.pos : C.neg,
+      }));
+    }
+    if (i % labelEvery === 0 || i === pts.length - 1) {
+      root.appendChild(s('text', {
+        x, y: m.t + plotH + 18, fill: it.upcoming ? C.brand : C.ink2, 'font-size': CF.tick,
+        'font-weight': it.upcoming ? CW.label : CW.tick, 'text-anchor': 'middle',
+      }, it.label));
+    }
+    // The hit area is the whole column, so a small dot is not a small target.
+    const hit = s('rect', { x: x - band / 2, y: m.t, width: band, height: plotH + 28 + stripH, fill: 'transparent' });
+    g.appendChild(hit);
+    const say = [it.label];
+    if (Number.isFinite(it.est)) say.push(`estimate ${format(it.est)}`);
+    if (Number.isFinite(it.act)) say.push(`actual ${format(it.act)}`);
+    if (Number.isFinite(it.move)) say.push(`${moveLabel.toLowerCase()} ${moveFormat(it.move)}`);
+    focusMark(g, tipRows(escapeText(it.label), it.detail || []), say.join(', '));
+    root.appendChild(g);
+  });
+  return root;
+}
+
+/**
+ * Shares of a whole, one row per period: analyst ratings now and a month ago,
+ * ownership by holder type. Segments are labelled in words inside the bar when
+ * they fit, and every one says its count and share when hovered or focused.
+ *
+ * rows: [{label, values: {key: number}}]; segments: [{key, name, color}].
+ */
+function shareBars(opts) {
+  const { rows = [], segments = [], width = 720, rowHeight = 30, labelWidth = 64, ariaLabel = '',
+    countLabel = (n) => fmt(n, 0), unit = '', showTotal = true } = opts;
+  const usable = rows.filter((r) => segments.some((sg) => (r.values[sg.key] || 0) > 0));
+  if (!usable.length) return null;
+  const W = width;
+  const m = { t: 4, r: showTotal ? 44 : 4, b: 4, l: labelWidth };
+  const H = m.t + usable.length * rowHeight + m.b;
+  const plotW = W - m.l - m.r;
+  const barH = Math.min(18, rowHeight - 10);
+  const root = svgRoot(W, H);
+  root.setAttribute('aria-label', ariaLabel);
+  usable.forEach((r, i) => {
+    const total = segments.reduce((sum, sg) => sum + Math.max(0, r.values[sg.key] || 0), 0);
+    const y = m.t + i * rowHeight + (rowHeight - barH) / 2;
+    root.appendChild(s('text', {
+      x: m.l - 8, y: y + barH / 2 + 4, fill: C.ink2, 'font-size': CF.tick, 'font-weight': CW.tick,
+      'text-anchor': 'end',
+    }, r.label));
+    let x = m.l;
+    segments.forEach((sg) => {
+      const n = Math.max(0, r.values[sg.key] || 0);
+      if (!n || !total) return;
+      const w = (n / total) * plotW;
+      const share = (n / total) * 100;
+      const g = s('g', {});
+      g.appendChild(s('rect', { x: x + 1, y, width: Math.max(1, w - 2), height: barH, rx: 3, fill: sg.color }));
+      const text = `${sg.name} ${fmt(share, 0)}%`;
+      if (textWidthGuess(text, CF.micro) + 8 < w) {
+        g.appendChild(s('text', {
+          x: x + 6, y: y + barH / 2 + 4, fill: inkOn(sg.color), 'font-size': CF.micro,
+          'font-weight': CW.label,
+        }, text));
+      }
+      focusMark(g, tipRows(escapeText(`${r.label} · ${sg.name}`), [
+        ['Count', countLabel(n) + (unit ? ` ${unit}` : '')], ['Share', `${fmt(share, 1)}%`],
+        ['Of', countLabel(total) + (unit ? ` ${unit}` : '')]]), `${r.label}: ${sg.name} ${fmt(share, 0)} percent`);
+      root.appendChild(g);
+      x += w;
+    });
+    if (showTotal) {
+      root.appendChild(s('text', {
+        x: W - m.r + 8, y: y + barH / 2 + 4, fill: C.muted, 'font-size': CF.tick,
+        'font-variant-numeric': 'tabular-nums',
+      }, countLabel(total)));
+    }
+  });
+  return root;
+}
+
+/**
+ * Columns over periods for one measure, from a zero baseline, with losses
+ * below it. Small enough to set three side by side, which is how revenue,
+ * profit and cash flow read as one story rather than three tables.
+ *
+ * items: [{label, value, detail}], oldest first.
+ */
+function columnChart(opts) {
+  const { items = [], width = 240, height = 140, format = (v) => fmtCompact(v), color = C.brand,
+    negColor = C.neg, ariaLabel = '', highlightLast = true } = opts;
+  const pts = items.filter((it) => Number.isFinite(it.value));
+  if (pts.length < 2) return null;
+  const W = width;
+  const m = { t: 18, r: 6, b: 22, l: 6 };
+  const plotH = height - m.t - m.b;
+  const lo = Math.min(0, ...pts.map((it) => it.value));
+  const hi = Math.max(0, ...pts.map((it) => it.value));
+  const Y = (v) => m.t + plotH - ((v - lo) / (hi - lo || 1)) * plotH;
+  const band = (W - m.l - m.r) / pts.length;
+  const barW = Math.min(34, band * 0.62);
+  const root = svgRoot(W, height);
+  root.setAttribute('aria-label', ariaLabel);
+  root.appendChild(s('line', { x1: m.l, x2: W - m.r, y1: Y(0), y2: Y(0), stroke: C.baseline, 'stroke-width': 1 }));
+  // Value labels where a column has the width for one, and always on the
+  // latest; a crowded row reads its values on hover instead of on each other.
+  const roomy = band >= 40;
+  const labelEvery = Math.max(1, Math.ceil(26 / band));
+  pts.forEach((it, i) => {
+    const x = m.l + band * (i + 0.5);
+    const y0 = Y(0), y1 = Y(it.value);
+    const top = Math.min(y0, y1), h = Math.max(1, Math.abs(y1 - y0));
+    const last = highlightLast && i === pts.length - 1;
+    const fill = it.value < 0 ? negColor : color;
+    const g = s('g', {});
+    g.appendChild(s('rect', { x: x - barW / 2, y: top, width: barW, height: h, rx: 3, fill, opacity: last ? 1 : 0.62 }));
+    if (roomy || last) {
+      g.appendChild(s('text', {
+        x: last && !roomy ? Math.min(x, W - m.r - textWidthGuess(format(it.value), CF.micro) / 2) : x,
+        y: it.value < 0 ? top + h + 12 : top - 5, fill: last ? C.ink : C.muted, 'font-size': CF.micro,
+        'font-weight': last ? CW.label : CW.tick, 'text-anchor': 'middle', 'font-variant-numeric': 'tabular-nums',
+      }, format(it.value)));
+    }
+    if (i % labelEvery === 0 || i === pts.length - 1) {
+      root.appendChild(s('text', {
+        x, y: height - 6, fill: C.ink2, 'font-size': CF.micro, 'text-anchor': 'middle',
+      }, it.label));
+    }
+    g.appendChild(s('rect', { x: x - band / 2, y: m.t - 14, width: band, height: plotH + 14, fill: 'transparent' }));
+    focusMark(g, tipRows(escapeText(it.label), it.detail || [['Value', format(it.value)]]), `${it.label}: ${format(it.value)}`);
+    root.appendChild(g);
+  });
+  return root;
+}
+
+/**
+ * Where a set of values sits on one line: the analysts' target range with the
+ * price and the mean on it, a fair-value band against the price. The track is
+ * the range; each mark is a labelled tick, named in words beside it.
+ *
+ * marks: [{value, label, color, primary}]
+ */
+function rangeChart(opts) {
+  const { low, high, marks = [], width = 720, format = (v) => fmt(v, 2), ariaLabel = '', trackLabel = '' } = opts;
+  const vals = [low, high, ...marks.map((mk) => mk.value)].filter(Number.isFinite);
+  if (vals.length < 2 || !Number.isFinite(low) || !Number.isFinite(high) || high <= low) return null;
+  const W = width, H = 74;
+  const m = { l: 16, r: 16 };
+  let [lo, hi] = extentOf(vals);
+  const pad = (hi - lo) * 0.08;
+  lo -= pad; hi += pad;
+  const X = (v) => m.l + ((v - lo) / (hi - lo)) * (W - m.l - m.r);
+  const trackY = 40;
+  const root = svgRoot(W, H);
+  root.setAttribute('aria-label', ariaLabel);
+  const track = s('g', {});
+  track.appendChild(s('rect', { x: X(low), y: trackY - 4, width: Math.max(2, X(high) - X(low)), height: 8, rx: 4, fill: C.grid }));
+  [[low, 'Low'], [high, 'High']].forEach(([v, name]) => {
+    root.appendChild(s('text', {
+      x: X(v), y: trackY + 22, fill: C.muted, 'font-size': CF.micro, 'text-anchor': v === low ? 'start' : 'end',
+      'font-variant-numeric': 'tabular-nums',
+    }, `${name} ${format(v)}`));
+  });
+  focusMark(track, tipRows(escapeText(trackLabel || 'Range'), [['Low', format(low)], ['High', format(high)]]),
+    `${trackLabel || 'Range'} from ${format(low)} to ${format(high)}`);
+  root.appendChild(track);
+  /* Labels side by side when two marks are close: the left one ends at its
+   * tick and the right one starts at its own, so neither sits on the other.
+   * Stacking them read as one label with two numbers in it. */
+  const shown = marks.filter((mk) => Number.isFinite(mk.value)).map((mk) => ({ mk, x: X(mk.value), anchor: 'middle' }))
+    .sort((a, b) => a.x - b.x);
+  for (let i = 0; i + 1 < shown.length; i += 1) {
+    if (shown[i + 1].x - shown[i].x < 90) { shown[i].anchor = 'end'; shown[i + 1].anchor = 'start'; }
+  }
+  shown.forEach(({ mk, x, anchor }) => {
+    const g = s('g', {});
+    g.appendChild(s('line', { x1: x, x2: x, y1: trackY - 9, y2: trackY + 9, stroke: mk.color || C.ink, 'stroke-width': mk.primary ? 3 : 2, 'stroke-linecap': 'round' }));
+    const tx = anchor === 'end' ? x - 5 : anchor === 'start' ? x + 5 : x;
+    g.appendChild(s('text', {
+      x: Math.max(m.l, Math.min(W - m.r, tx)), y: trackY - 15, fill: mk.color || C.ink, 'font-size': CF.micro,
+      'font-weight': mk.primary ? CW.tag : CW.label, 'text-anchor': anchor,
+    }, `${mk.label} ${format(mk.value)}`));
+    focusMark(g, tipRows(escapeText(mk.label), [['Value', format(mk.value)]]), `${mk.label} ${format(mk.value)}`);
+    root.appendChild(g);
+  });
   return root;
 }
