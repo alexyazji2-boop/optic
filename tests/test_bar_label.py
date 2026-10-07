@@ -83,8 +83,9 @@ def test_a_label_it_cannot_read_survives_unchanged():
 
 def test_both_tooltips_use_it():
     """The MACD pane builds its own tooltip from the same labels, and was the
-    second place showing a machine timestamp."""
-    assert SRC.count("barLabelText(labels[i])") == 2
+    second place showing a machine timestamp. The keyboard readout, which says
+    the same bar in words, is the third."""
+    assert SRC.count("barLabelText(labels[i])") == 3
 
 
 def test_the_axis_still_converts():

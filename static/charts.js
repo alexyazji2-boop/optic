@@ -199,11 +199,15 @@ function s(tag, attrs = {}, text) {
   return node;
 }
 
+/* A group, not an image: ARIA makes an image's children presentational, so
+ * the bars, dots and readout a chart lets the keyboard reach inside it were
+ * focusable and never announced. A chart that is only decoration beside its
+ * own figure (inlineBar, sparkline) hides itself instead. */
 function svgRoot(width, height) {
   const root = s('svg', {
     class: 'chart', viewBox: `0 0 ${width} ${height}`,
     width: '100%', height, preserveAspectRatio: 'xMidYMid meet',
-    role: 'img',
+    role: 'group',
   });
   return root;
 }
@@ -1637,6 +1641,18 @@ function lineChart(opts) {
         x: cx - 5, y: m.t, width: 10, height: priceH, fill: 'transparent',
       }));
       mark.appendChild(s('title', {}, mk.detail));
+      /* Reachable from the keyboard too: a <title> shows to a pointer only.
+       * Focus reads it into the chart's tooltip; there is still no hover
+       * binding, for the reason above. */
+      mark.setAttribute('tabindex', '0');
+      mark.setAttribute('role', 'img');
+      mark.setAttribute('aria-label', mk.detail);
+      mark.setAttribute('class', 'viz-mark');
+      mark.addEventListener('focus', () => {
+        const r = mark.getBoundingClientRect();
+        showTip(tipRows(escapeText(mk.label || 'Marker'), [['', escapeText(mk.detail)]]), { clientX: r.left + r.width / 2, clientY: r.top });
+      });
+      mark.addEventListener('blur', hideTip);
     }
     if (mk.label) {
       // Flip the anchor near the right edge so the text stays inside the plot.
@@ -2497,19 +2513,12 @@ function lineChart(opts) {
     });
   }
 
-  bindScrub(overlay, (evt) => {
-    const box = root.getBoundingClientRect();
-    const scale = W / box.width;
-    const localX = (evt.clientX - box.left) * scale;
-    let i = Math.round(((localX - m.l) / plotW) * (n - 1));
-    i = Math.max(0, Math.min(n - 1, i));
+  /* One bar's readout: the crosshair, the dots and the tooltip, for the
+   * pointer and for the keyboard alike. Returns the readout in words. */
+  const readBar = (i, evt) => {
     cross.setAttribute('x1', X(i));
     cross.setAttribute('x2', X(i));
     cross.setAttribute('opacity', 0.45);
-    // A hand over a marker that opens something, the crosshair elsewhere.
-    if (onEventClick) {
-      overlay.style.cursor = eventAt(evt.clientX, evt.clientY) ? 'pointer' : 'crosshair';
-    }
     const rows = [];
     // Open, high and low first, when the caller supplied candles. The series
     // loop below only sees closing values, so on a candle chart the readout
@@ -2572,13 +2581,61 @@ function lineChart(opts) {
     // track it. Index only: this function knows nothing about what the caller
     // wants to display, and passing the bar would mean guessing.
     if (onHover) onHover(i);
-  }, () => {
+    const said = series.filter((se) => isFinite(se.values[i]) && se.values[i] !== null)
+      .map((se) => `${se.name} ${(valueFormat || yFormat)(se.values[i])}`);
+    return `${barLabelText(labels[i]) || `Point ${i + 1}`}: ${said.join(', ') || 'no value'}`;
+  };
+  const clearBar = () => {
     hideTip();
     cross.setAttribute('opacity', 0);
     dots.forEach((d) => d.setAttribute('opacity', 0));
     lightVol(-1);
     // null means "cursor gone" — distinct from bar 0, which is a real bar.
     if (onHover) onHover(null);
+  };
+  bindScrub(overlay, (evt) => {
+    const box = root.getBoundingClientRect();
+    const scale = W / box.width;
+    const localX = (evt.clientX - box.left) * scale;
+    let i = Math.round(((localX - m.l) / plotW) * (n - 1));
+    i = Math.max(0, Math.min(n - 1, i));
+    // A hand over a marker that opens something, the crosshair elsewhere.
+    if (onEventClick) {
+      overlay.style.cursor = eventAt(evt.clientX, evt.clientY) ? 'pointer' : 'crosshair';
+    }
+    readBar(i, evt);
+  }, clearBar);
+
+  /* The readout from the keyboard, as a slider over the bars: one stop per
+   * chart, the arrow keys move a bar (with Shift, ten), Home and End go to
+   * the ends, and the value is said as the slider's text. A chart's figures
+   * were reachable only by pointing at them. */
+  let keyAt = n - 1;
+  const keyAnchor = (i) => {
+    const box = root.getBoundingClientRect();
+    const scale = W / (box.width || W);
+    return { clientX: box.left + X(i) / scale, clientY: box.top + m.t / scale };
+  };
+  const keyRead = (i) => {
+    keyAt = Math.max(0, Math.min(n - 1, i));
+    const text = readBar(keyAt, keyAnchor(keyAt));
+    overlay.setAttribute('aria-valuenow', String(keyAt + 1));
+    overlay.setAttribute('aria-valuetext', text);
+  };
+  overlay.setAttribute('tabindex', '0');
+  overlay.setAttribute('role', 'slider');
+  overlay.setAttribute('aria-valuemin', '1');
+  overlay.setAttribute('aria-valuemax', String(n));
+  overlay.setAttribute('aria-label', `${series.map((se) => se.name).filter(Boolean).join(', ') || 'Chart'}, point by point`);
+  overlay.addEventListener('focus', () => keyRead(keyAt));
+  overlay.addEventListener('blur', clearBar);
+  overlay.addEventListener('keydown', (evt) => {
+    const step = evt.shiftKey ? 10 : 1;
+    const to = evt.key === 'ArrowLeft' ? keyAt - step : evt.key === 'ArrowRight' ? keyAt + step
+      : evt.key === 'Home' ? 0 : evt.key === 'End' ? n - 1 : null;
+    if (to === null) return;
+    evt.preventDefault();
+    keyRead(to);
   });
   root.appendChild(overlay);
 
@@ -2731,7 +2788,7 @@ function divergingBars(opts) {
       ? `M${mid},${y} H${mid + Math.max(w - rx, 0)} q${rx},0 ${rx},${rx} v${barH - 2 * rx} q0,${rx} -${rx},${rx} H${mid} Z`
       : `M${mid},${y} H${x + rx} q-${rx},0 -${rx},${rx} v${barH - 2 * rx} q0,${rx} ${rx},${rx} H${mid} Z`;
     const bar = s('path', { d: w < 1 ? `M${mid},${y} h1 v${barH} h-1 Z` : path, fill: color });
-    focusMark(bar, tipRows(r.label, (r.detail || [['Value', format(v)]])), `${r.label}: ${format(v)}`);
+    focusMark(bar, tipRows(escapeText(r.label), (r.detail || [['Value', format(v)]])), `${r.label}: ${format(v)}`);
     root.appendChild(bar);
 
     root.appendChild(s('text', {
@@ -2768,6 +2825,7 @@ function divergingBars(opts) {
 /** Inline mini bar for table cells: one measure, diverging around zero. */
 function inlineBar(value, maxAbs, width = 76, height = 9, opts = {}) {
   const root = svgRoot(width, height);
+  root.setAttribute('aria-hidden', 'true');      // the figure beside it says it
   root.setAttribute('width', width);
   root.setAttribute('height', height);
   root.style.width = width + 'px';
@@ -2993,6 +3051,7 @@ function sparkline(values, width = 96, height = 26, color = C.brand) {
   const lo = Math.min(...clean), hi = Math.max(...clean);
   const span = hi - lo || 1;
   const root = svgRoot(width, height);
+  root.setAttribute('aria-hidden', 'true');      // a shape beside the figures it summarises
   root.setAttribute('width', width);
   root.setAttribute('height', height);
   root.style.width = width + 'px';
@@ -3348,15 +3407,15 @@ function rotationChart(sectors, opts = {}) {
     // on a 720px square are close together, and a 5px target is a miss.
     const hit = s('circle', { cx: X(last.strength), cy: Y(last.momentum), r: 14,
       fill: 'transparent', style: 'cursor:pointer' });
-    hit.addEventListener('mouseenter', (evt) => showTip(tipRows(
-      `${sec.symbol} · ${sec.name}`, [
-        ['Quadrant', sec.quadrant],
-        ['Relative strength', fmt(last.strength, 2)],
-        ['Relative momentum', fmt(last.momentum, 2)],
-        ['Change on the week', `${fmt(sec.d_strength, 2)} strength, ${fmt(sec.d_momentum, 2)} momentum`],
-        ['Tail', `${path.length} weeks to ${last.date}`],
-      ]), evt));
-    hit.addEventListener('mouseleave', hideTip);
+    // Through focusMark, so the keyboard reaches each sector too; it was a
+    // mouseenter, and the chart's eleven readings were pointer-only.
+    focusMark(hit, tipRows(escapeText(`${sec.symbol} · ${sec.name}`), [
+      ['Quadrant', escapeText(sec.quadrant)],
+      ['Relative strength', fmt(last.strength, 2)],
+      ['Relative momentum', fmt(last.momentum, 2)],
+      ['Change on the week', `${fmt(sec.d_strength, 2)} strength, ${fmt(sec.d_momentum, 2)} momentum`],
+      ['Tail', `${path.length} weeks to ${escapeText(last.date)}`],
+    ]), `${sec.symbol} ${sec.name}: ${sec.quadrant}, strength ${fmt(last.strength, 2)}, momentum ${fmt(last.momentum, 2)}`);
     root.appendChild(hit);
   });
 
@@ -3446,13 +3505,13 @@ function bubbleChart(points, opts = {}) {
         cx, cy, r, fill: p.color || C.brand, 'fill-opacity': 0.75,
         stroke: C.surface, 'stroke-width': 1.5, style: 'cursor:pointer',
       });
-      dot.addEventListener('mouseenter', (evt) => showTip(tipRows(
-        `${p.label}${p.name ? ' · ' + p.name : ''}`, [
-          [opts.xLabel || 'x', fmt(p.x, 2) + (opts.xUnit === '%' ? '%' : '')],
-          [opts.yLabel || 'y', fmt(p.y, 2) + (opts.yUnit === '%' ? '%' : '')],
-          ['Size', fmtCompact(p.size, 1)],
-        ]), evt));
-      dot.addEventListener('mouseleave', hideTip);
+      const xs = fmt(p.x, 2) + (opts.xUnit === '%' ? '%' : '');
+      const ys = fmt(p.y, 2) + (opts.yUnit === '%' ? '%' : '');
+      focusMark(dot, tipRows(escapeText(`${p.label}${p.name ? ' · ' + p.name : ''}`), [
+        [escapeText(opts.xLabel || 'x'), xs],
+        [escapeText(opts.yLabel || 'y'), ys],
+        ['Size', fmtCompact(p.size, 1)],
+      ]), `${p.label}: ${opts.xLabel || 'x'} ${xs}, ${opts.yLabel || 'y'} ${ys}`);
       root.appendChild(dot);
       if (r >= 9) {
         root.appendChild(s('text', {

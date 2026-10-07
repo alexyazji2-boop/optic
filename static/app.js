@@ -1233,26 +1233,7 @@ const REVEAL_CAP_MS = 900;   // absolute ceiling, so nothing waits about
  * inside a third-width panel; the explanation lives on hover instead of in the
  * header text, which is what was dragging a 320px column out to 565px. */
 const TH_HINTS = {
-  'distance': 'How far this level sits from the current price, as a percentage. Negative means the level is below the stock.',
-  'strength': 'A 0-100 score for how much this level has actually mattered: how many pivots cluster there, how firmly price was rejected, how much volume traded across it, and how recently it was last defended.',
-  'touches': 'How many separate times price reversed at this level, and how long ago it was last tested. More touches means more traders are watching it; a level untouched for a long time matters less.',
-  'last': 'How long ago the level was last tested, in bars. So 17w means seventeen weeks ago on a weekly chart.',
-  'role': 'Whether this level sits below the current price (support, a potential floor) or above it (resistance, a potential ceiling).',
-  'value': 'The current value of the average, in dollars.',
-  'price vs': 'Where the stock is trading relative to that average, as a percentage. Positive means price is above it.',
-  '10-day slope': 'Whether the average itself is rising or falling over the last ten days. The direction of the trend, not just where price sits.',
-  'level': 'The Fibonacci retracement percentage this line is drawn at.',
-  'level ($)': 'The price of the level, with whether it sits below the current price (support) or above it (resistance).',
   'spread': 'The gap between the best bid and the best ask, as a percentage of the mid price. Wider spreads cost more to get in and out of.',
-  'type': 'Call or put.',
-  'setup': 'What the numbers suggest doing, if anything.',
-  'thesis': 'The reasoning behind the pair. Why one side should outperform the other.',
-  'betting on': 'Which way the trade needs the stock to go. Bullish makes money as the stock rises, bearish as it falls. A bought put is a bearish bet even though the contract itself is owned, which is why the direction is spelled out rather than left as long or short.',
-  'paid': 'The price the position was opened at, and underneath it the latest price it is marked at. For an option both are premium per share, not the share price.',
-  'where it stands': 'How far the stock has travelled along the line between the stop and the target. The small tick is where the trade opened, the dot is where the stock is now, and the shaded stretch between them is the ground it has covered.',
-  'up or down': 'Profit or loss at the latest mark, in dollars and as a percentage of what was paid. Nothing is settled until the position closes, so treat every figure here as provisional.',
-  'if stopped': 'The loss this position was sized to take if the stop is hit. It was decided before the trade opened, which is what makes the total risk on the page a real ceiling rather than an estimate.',
-  'signal score': 'How strongly the scan rated this setup when it opened, out of 100. Shown as strength only. The direction it was rating is the Betting on column, so a bearish 44 and a bullish 44 both read as 44 here rather than one of them as minus 44. It is a record of why the trade was taken, not a live reading: it is not recalculated as the position runs.',
 };
 
 /* Whole-label definitions for a figure that means the same wherever it
@@ -1294,6 +1275,53 @@ const LABEL_DEFS = {
  * score. A header whose text varies ("vs SPY") names its entry with
  * data-def-key. These win over the terminal-wide hints. */
 const TABLE_DEFS = {
+  'sr-levels': {
+    'level ($)': 'The price of the level, with whether it sits below the current price as support or above it as resistance. Levels come from where price has repeatedly turned.',
+    distance: 'How far this level sits from the current price, as a percentage. Negative means the level is below the stock, positive that it is above.',
+    strength: 'A 0-100 score for how much this level has actually mattered: how many pivots cluster there, how firmly price was rejected, how much volume traded across it, and how recently it was last defended. A high score is a level the market has kept respecting, not one it must respect again.',
+    touches: 'How many separate times price reversed at this level, and how long ago it was last tested. More touches means more traders are watching it; a level untouched for a long time matters less.',
+  },
+  'fib-levels': {
+    level: 'The Fibonacci retracement this line is drawn at, as a share of the swing it measures; 38.2%, 50% and 61.8% are the ones traders watch most. A pullback that holds near one is commonly read as the trend resuming.',
+    distance: 'How far this level sits from the current price, as a percentage. Negative means the level is below the stock, positive that it is above.',
+    role: 'Whether this level sits below the current price, as support and a potential floor, or above it, as resistance and a potential ceiling. A level can change roles once price closes through it.',
+  },
+  'moving-averages': {
+    value: "The average's current value, in dollars: the mean of the closes over its window. A price above it is trading above its recent norm.",
+    'price vs': 'Where the stock is trading against that average, as a percentage. Positive means the price is above the average, negative that it is below.',
+    '10-day slope': 'Whether the average itself is rising or falling over the last ten days. The direction of the trend, not just where price sits.',
+  },
+  'gamma-levels': {
+    level: 'Which options level the row is: the call and put walls, where dealer gamma is heaviest above and below the price, the gamma pin, where it is heaviest overall, and the strike with the most open interest. These are the prices dealer hedging tends to lean against.',
+    distance: 'How far the level sits from the current price, as a percentage. Negative means it is below the stock, positive that it is above.',
+    exposure: "The dealers' gamma at that strike, in dollars of delta for a 1 percent move in the stock, under the sign convention stated below. Positive gamma tends to damp moves near the level and negative gamma to add to them.",
+  },
+  'unusual-flow': {
+    type: 'Whether the contract is a call, which gains as the stock rises, or a put, which gains as it falls. Either can be bought or sold, so the type alone does not say which way the trade is betting.',
+  },
+  'relperf-crosses': {
+    level: 'The rank line the stock crossed: 80 marks the top fifth of its peers and 20 the bottom fifth. Up through 80 is a name starting to lead; down through 20, one starting to lag.',
+    rank: 'Its percentile rank among its 143 peers on the day it crossed, from 0 to 100. A rank of 97 means it beat 97 percent of them over the window.',
+  },
+  accumulation: {
+    level: "What the zone is drawn from: the 40-week or 200-week average, or a retracement of the past three years' range. These are the prices long-term buyers have tended to step in at before.",
+    distance: 'How far the zone sits from the current price, as a percentage. Negative means it is below the stock, positive that it is above.',
+    role: 'Support when the zone is below the price; resistance, or a level to reclaim for an average, when it is above. It says where the level sits, not that it will hold.',
+  },
+  'insider-feed': {
+    value: 'The dollar value of the transaction as filed: the shares times the price reported on the Form 4. A grant or an exercise can carry a price of zero or one that is not a market price.',
+  },
+  'open-positions': {
+    'betting on': 'Which way the trade needs the stock to go. Bullish makes money as the stock rises, bearish as it falls. A bought put is a bearish bet even though the contract itself is owned, which is why the direction is spelled out rather than left as long or short.',
+    paid: 'The price the position was opened at, and underneath it the latest price it is marked at. For an option both are premium per share, not the share price.',
+    'where it stands': 'How far the stock has travelled along the line between the stop and the target. The small tick is where the trade opened, the dot is where the stock is now, and the shaded stretch between them is the ground it has covered.',
+    'up or down': 'Profit or loss at the latest mark, in dollars and as a percentage of what was paid. Nothing is settled until the position closes, so treat every figure here as provisional.',
+    'if stopped': 'The loss this position was sized to take if the stop is hit. It was decided before the trade opened, which is what makes the total risk on the page a real ceiling rather than an estimate.',
+    'signal score': 'How strongly the scan rated this setup when it opened, out of 100. Shown as strength only. The direction it was rating is the Betting on column, so a bearish 44 and a bullish 44 both read as 44 here rather than one of them as minus 44. It is a record of why the trade was taken, not a live reading: it is not recalculated as the position runs.',
+  },
+  'swing-setups': {
+    setup: 'Which entry rule the row is, such as a breakout above a range or a pullback to an average, read on completed candles. Each arms on its setup, triggers on one exact candle event and is cancelled by its invalidation level.',
+  },
   'sector-rs': {
     composite: 'A blend of relative strength against the benchmark from one week to six months, weighted toward one to three months, plus a few points for trend confirmation: price above its 50 and 200-day averages and the ratio line above its own. Higher means stronger leadership.',
     strength: 'The composite read as a word: strong at 8 or more, improving from 2, neutral in between, deteriorating from minus 2 and weak at minus 8 or below. It names the reading and adds nothing to it.',
@@ -1301,6 +1329,8 @@ const TABLE_DEFS = {
   },
   pairs: {
     ratio: "The first leg's price divided by the second's. A rising ratio means the first is outperforming the second, whatever the market as a whole did.",
+    thesis: 'The reasoning behind the pair: why one side might outperform the other, such as industrials over staples or miners over the market. It is the idea the ratio tests, not a forecast.',
+    setup: "What this table's rules call the ratio's reading: a z-score beyond plus or minus 2 is a mean-reversion setup, and a ratio trending above its 50-day average a momentum setup. It names the reading; it is not an instruction.",
   },
   rotation: {
     quadrant: 'Where the sector sits on the rotation chart: leading is strong and still gaining, weakening is strong but losing ground, lagging is weak and losing, and improving is weak but gaining. Sectors tend to pass through them clockwise.',
@@ -1377,6 +1407,7 @@ const TABLE_DEFS = {
     'half against': 'The return if the stock moves half the distance to the target in the wrong direction by the exit date. It shows how quickly the contract loses when the read is wrong.',
   },
   'long-factors': {
+    type: 'What the factor measures: the price trend, risk, valuation, income, timing or a resolved catalyst. Most of the points available come from how the price has behaved.',
     points: 'What this factor added to or took from the long-term score. The column adds up to the total underneath, which is capped between minus 100 and plus 100.',
   },
   paper: {
@@ -5331,7 +5362,7 @@ function renderSetupsTable(rows) {
    * explanation was the widest thing on the row and the first to scroll out
    * of sight, on the one table where it is the point. */
   const own = setupsParams().params;
-  return `<div class="ss-scroll"><table class="data ss-table">
+  return `<div class="ss-scroll"><table class="data ss-table" data-defs="swing-setups">
     <thead><tr>
       <th>Symbol</th><th>Setup</th><th>Status</th><th>Trigger ($)</th>
       <th>Invalidation ($)</th><th>When</th><th><span class="sr-only">Details</span></th>
@@ -11918,7 +11949,7 @@ function renderSwing(d) {
           <h3>${hg('Support & resistance')}</h3>
           <p class="sub" style="margin-bottom:var(--space-2)">From ${chartInterval} candles, matching the
             chart above. Ranked by strength, not just how often price visited.</p>
-          <table class="data">
+          <table class="data" data-defs="sr-levels">
             <!-- Four columns, not six. This table lives in a third-width panel, and
                  role reads naturally under the price while "5 touches, last 17w ago"
                  is one fact, not two. Six columns simply could not fit and the
@@ -11953,7 +11984,7 @@ function renderSwing(d) {
          of ${usd((t.fibonacci || {}).anchor_low)}, so retracements rise into resistance.`
       : `Drawn up from the swing low of ${usd((t.fibonacci || {}).anchor_low)} to the swing high
          of ${usd((t.fibonacci || {}).anchor_high)}, so retracements fall into support.`}</p>
-          <table class="data">
+          <table class="data" data-defs="fib-levels">
             <thead><tr><th>Level</th><th>Price ($)</th><th>Distance</th><th>Role</th></tr></thead>
             <tbody>${((t.fibonacci || {}).levels || []).map((l) => `<tr>
               <td class="name num">${esc(l.label)}${l.is_golden ? ' ★' : ''}</td>
@@ -11970,7 +12001,7 @@ function renderSwing(d) {
              table either way. -->
         <div class="span-all">
           <h3>${hg('Moving averages')}</h3>
-          <table class="data">
+          <table class="data" data-defs="moving-averages">
             <thead><tr><th>MA</th><th>Value</th><th>Price vs</th><th>10-day slope</th></tr></thead>
             <tbody>${Object.entries(t.moving_averages || {}).map(([name, m]) => `<tr>
               <td class="name">${esc(name.toUpperCase())}</td>
@@ -12090,7 +12121,7 @@ function renderSwing(d) {
           <p class="sub">Where the curve crosses zero is the flip point. ${gexFlipSentence(gex)}</p>
           <div id="chart-gamma-profile"></div>
           <h3>${hg('Key levels')}${askPulse('levels')}</h3>
-          <table class="data">
+          <table class="data" data-defs="gamma-levels">
             <thead><tr><th>Level</th><th>Strike ($)</th><th>Distance</th><th>Exposure</th></tr></thead>
             <tbody>
               ${(gex.levels || {}).call_wall ? `<tr><td class="name">${gloss('Call wall')} (heaviest positive gamma above)</td><td>${fmt(gex.levels.call_wall.strike, 1)}</td><td class="${signClass(gex.levels.call_wall.distance_pct)}">${fmtPct(gex.levels.call_wall.distance_pct, 1)}</td><td>$${fmtCompact(gex.levels.call_wall.gex)}</td></tr>` : ''}
@@ -12139,7 +12170,7 @@ function renderSwing(d) {
       <div id="chart-flow"></div>
       <h3>${hg('Notable contracts')}</h3>
       <div class="scroll-y">
-      <table class="data">
+      <table class="data" data-defs="unusual-flow">
         <thead><tr><th>Contract</th><th>Type</th><th>Strike ($)</th><th>Days left</th><th>Volume today</th><th>Open interest</th><th>Volume ÷ OI</th><th>Premium ($)</th><th>Implied vol</th></tr></thead>
         <tbody>${(flow.unusual || []).map((r) => `<tr>
           <td class="name">${esc(r.moneyness)}${r.is_new_position ? ' · new' : ''}</td>
@@ -25310,7 +25341,7 @@ function renderRelPerf(rp) {
     <p class="sub">${esc(rp.headline || '')}</p>
     <div class="grid c2" style="margin-bottom:var(--space-3)">${tiles}</div>
     <div id="chart-relperf" class="chart-host"></div>
-    ${crosses.length ? `<table class="data narrow" style="margin-top:var(--space-3)">
+    ${crosses.length ? `<table class="data narrow" data-defs="relperf-crosses" style="margin-top:var(--space-3)">
       <thead><tr><th>Crossed</th><th>Window</th><th>Level</th><th>Rank</th></tr></thead>
       <tbody>${crosses.map((c) => `<tr>
         <td>${esc(c.date)}</td><td>${esc(c.window)}</td>
@@ -29171,7 +29202,7 @@ function openPositionsPanel(open) {
     ${open.length >= 2 ? vizBlock('viz-trk-open', openPnlTitle(open),
     'Unrealised profit or loss at the latest mark, in dollars. Nothing is settled until a trade closes.') : ''}
 
-    <table class="data">
+    <table class="data" data-defs="open-positions">
       <thead><tr><th>Position</th><th>Betting on</th><th>Size</th><th>Paid</th>
         <th>Where it stands</th><th>Up or down</th><th>If stopped</th><th>Signal score</th>
         <th>Held</th></tr></thead>
@@ -30418,7 +30449,7 @@ function renderLong(d) {
       <ul class="reasons">${(val.notes || []).map((n) => `<li>${gloss(n)}</li>`).join('')}</ul>
       <p class="caveat">${esc(val.caveat || '')}</p>
       <h3>${hg('Accumulation zones')}</h3>
-      <table class="data">
+      <table class="data" data-defs="accumulation">
         <thead><tr><th>Level</th><th>Price ($)</th><th>Distance</th><th>Role</th></tr></thead>
         <tbody>${(h.accumulation_zones || []).map((z) => `<tr>
           <td class="name" style="white-space:normal">${esc(cap(z.label))}</td>
@@ -34754,7 +34785,7 @@ function renderInsiderFeed() {
         * caveats off the page, and table-scroll is the repo's own horizontal
         * one — eight columns including two dates overflowed the panel and the
         * price column was cut off mid-figure. */''}
-    ${rows.length ? `<div class="scroll-y table-scroll"><table class="data">
+    ${rows.length ? `<div class="scroll-y table-scroll"><table class="data" data-defs="insider-feed">
       <thead><tr><th>Filed</th><th>Symbol</th><th>Insider</th><th>Transaction</th>
         <th class="num">Shares</th><th class="num">Price</th><th class="num">Value</th>
         <th>Trade date</th></tr></thead>

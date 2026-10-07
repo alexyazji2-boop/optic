@@ -52,10 +52,11 @@ GENERIC = {"value", "change", "latest", "total", "average", "level", "ratio", "s
            "high", "low", "open", "close", "volume", "shares", "yoy", "30d", "90d"}
 
 
-# Column hints that were global before this rule. "value" already leaked onto
-# the insider table once; these are to move to their own tables' call sites,
-# and the list may only shrink.
-LEGACY_TH = {"last", "value", "level", "type"}
+# Column hints that were global before this rule, moved to their own tables
+# (TABLE_DEFS). They leaked: "Last" was a level's age on three price tables,
+# "Value" a moving average on the insider feed, "Level" a Fibonacci ratio on
+# three others and "Type" a call or put on the long-term factors.
+LEGACY_TH = set()
 
 
 def test_no_generic_label_has_a_terminal_wide_definition():

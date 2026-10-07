@@ -108,18 +108,20 @@ def test_a_tables_own_definition_wins_and_others_keep_theirs():
       }
       TH.prototype.querySelector = function () { return this.innerHTML.indexOf('gloss-term') >= 0 ? {} : null; };
       TH.prototype.closest = function () { return this._t && this._t.dataset.defs ? this._t : null; };
-      var rot = { dataset: { defs: 'rotation' } }, levels = { dataset: {} }, seas = { dataset: { defs: 'seasonality' } };
+      var rot = { dataset: { defs: 'rotation' } }, levels = { dataset: { defs: 'sr-levels' } }, seas = { dataset: { defs: 'seasonality' } };
+      var bare = { dataset: {} };
       var ths = [new TH('Strength', rot), new TH('Strength', levels), new TH('vs QQQ', seas, 'vs-bench'),
-                 new TH('RS 3m', levels)];
+                 new TH('RS 3m', bare), new TH('Strength', bare)];
       glossHeaders({ querySelectorAll: function () { return ths; } });
       var def = function (th) { var m = /data-def="([^"]*)"/.exec(th.innerHTML); return m ? m[1] : null; };
-      R.rot = def(ths[0]); R.levels = def(ths[1]); R.bench = def(ths[2]); R.rs = def(ths[3]);
-      R.want = { rot: esc(TABLE_DEFS.rotation.strength), levels: esc(TH_HINTS.strength),
+      R.rot = def(ths[0]); R.levels = def(ths[1]); R.bench = def(ths[2]); R.rs = def(ths[3]); R.bare = def(ths[4]);
+      R.want = { rot: esc(TABLE_DEFS.rotation.strength), levels: esc(TABLE_DEFS['sr-levels'].strength),
                  bench: esc(TABLE_DEFS.seasonality['vs-bench']), rs: esc(LABEL_DEFS['rs 3m']) };
     """)
     for k in ("rot", "levels", "bench", "rs"):
         assert out[k] == out["want"][k], k
     assert out["rot"] != out["levels"], "the rotation table's Strength is not a support level's"
+    assert out["bare"] is None, "a generic column outside its table is not guessed at"
 
 
 def test_the_sector_heatmap_says_what_its_figure_is():
