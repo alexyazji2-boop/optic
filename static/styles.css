@@ -15783,6 +15783,33 @@ body.ws-max[data-view="chart"] main { padding: 0; }
    tables they scrolled sideways there exactly as on a phone; a full desktop
    keeps the table. Same reasoning as `#hm-watch, .wv-panel` for the rows. */
 .cq-cards { container-type: inline-size; }
+/* The Read's markets overnight, one card each: the market and its session's
+   move, then 5 and 20 days, then how closely it has moved with the S&P.
+   693 to 771px wide in a 299px box on a phone. */
+@container (max-width: 719px) {
+  table.gm-table thead { display: none; }
+  table.gm-table { min-width: 0; width: 100%; }
+  table.gm-table, table.gm-table tbody { display: block; }
+  table.gm-table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    grid-template-areas: 'name d1' 'd5 d20' 'rho rho';
+    column-gap: var(--space-2);
+    row-gap: var(--space-0);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border);
+  }
+  table.gm-table td { display: block; padding: 0; border: 0; text-align: left; white-space: normal; }
+  table.gm-table td.gm-name { grid-area: name; }
+  table.gm-table td.gm-d1 { grid-area: d1; text-align: right; font-weight: 600; }
+  table.gm-table td.gm-d5 { grid-area: d5; }
+  table.gm-table td.gm-d20 { grid-area: d20; text-align: right; }
+  table.gm-table td.gm-rho { grid-area: rho; }
+  table.gm-table td.gm-d5::before { content: '5 days '; color: var(--ink-muted); font-weight: 400; }
+  table.gm-table td.gm-d20::before { content: '20 days '; color: var(--ink-muted); font-weight: 400; }
+  table.gm-table td.gm-rho::before { content: 'With the S&P '; color: var(--ink-muted); }
+}
+
 /* Reliability pass: an action per card on a phone. As a table at 375px the
    page showed the date, the symbol and half the firm's name, and the target,
    the action and the rating, which are what the row is for, sat off to the

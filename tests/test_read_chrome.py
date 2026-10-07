@@ -254,3 +254,17 @@ def test_a_section_headed_by_the_days_content_is_indexed_by_what_it_is():
     assert 'title="${esc(named || full)}"' in body
     assert '<div class="panel span-all catmode" data-sec-label="Catalyst mode">' in APP
     assert '<div class="panel span-all weekly" data-sec-label="Weekly analysis">' in APP
+
+
+def test_the_overnight_markets_are_cards_in_a_narrow_box():
+    """693 to 771px of table in a 299px box on a phone: the market's name and
+    then a sideways scroll for its move and its correlation to the S&P."""
+    css = open("static/styles.css", encoding="utf-8").read()
+    block = css[css.index("table.gm-table thead { display: none; }") - 400:]
+    block = block[:block.index("\n}\n")]
+    assert "@container (max-width: 719px) {" in block
+    assert "'name d1' 'd5 d20' 'rho rho'" in block
+    body = APP.split("function renderGlobal(g) {", 1)[1].split("\nasync function ", 1)[0]
+    assert body.count('table-scroll cq-cards"><table class="data pat-table gm-table">') == 2
+    for cell in ("gm-name", "gm-d1", "gm-d5", "gm-d20", "gm-rho"):
+        assert cell in body, cell

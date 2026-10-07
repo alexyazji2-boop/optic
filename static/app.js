@@ -17718,12 +17718,12 @@ function renderGlobal(g) {
   const row = (r) => `<tr class="inst-clickable" data-instrument="${esc(r.symbol)}"
       data-instrument-label="${esc(r.label)}" tabindex="0" role="button"
       title="Open the full chart for ${esc(r.label)}">
-    <td class="name"><span class="inst-link">${esc(r.label)}</span>
+    <td class="name gm-name"><span class="inst-link">${esc(r.label)}</span>
       <span class="pat-sub">${esc(r.region)} · ${esc(r.note)}</span></td>
-    <td class="num ${signClass(r.chg_1d)}">${fmtPct(r.chg_1d, 2)}</td>
-    <td class="num ${signClass(r.chg_5d)}">${fmtPct(r.chg_5d, 2)}</td>
-    <td class="num ${signClass(r.chg_20d)}">${fmtPct(r.chg_20d, 2)}</td>
-    <td class="num">${r.corr_spx === null || r.corr_spx === undefined ? '—'
+    <td class="num gm-d1 ${signClass(r.chg_1d)}">${fmtPct(r.chg_1d, 2)}</td>
+    <td class="num gm-d5 ${signClass(r.chg_5d)}">${fmtPct(r.chg_5d, 2)}</td>
+    <td class="num gm-d20 ${signClass(r.chg_20d)}">${fmtPct(r.chg_20d, 2)}</td>
+    <td class="num gm-rho">${r.corr_spx === null || r.corr_spx === undefined ? '—'
     : `<span class="gm-corr ${r.corr_spx >= g.corr_threshold ? 'linked' : 'loose'}"
         >${fmt(r.corr_spx, 2)}</span>`}
       <span class="pat-sub">${esc(r.corr_read || '')}</span></td>
@@ -17739,7 +17739,7 @@ function renderGlobal(g) {
       <h3 class="pat-head">${esc(sess.label)}</h3>
       <p class="caveat" style="margin-top:0">${sess.advancing} up, ${sess.declining} down,
         average ${fmtPct(sess.avg_move_pct, 2)} on the session.</p>
-      <div class="table-scroll"><table class="data pat-table">
+      <div class="table-scroll cq-cards"><table class="data pat-table gm-table">
         <thead><tr><th>Market</th><th class="num">Session</th><th class="num">5 days</th>
           <th class="num">20 days</th>
           <th class="num">Correlation to the S&amp;P</th></tr></thead>
@@ -17747,7 +17747,7 @@ function renderGlobal(g) {
       </table></div>`).join('')}
 
     ${(g.crosses || []).length ? `<h3 class="pat-head">What carries it into US hours</h3>
-    <div class="table-scroll"><table class="data pat-table">
+    <div class="table-scroll cq-cards"><table class="data pat-table gm-table">
       <thead><tr><th>Cross</th><th class="num">1 day</th><th class="num">5 days</th>
         <th class="num">20 days</th><th class="num">Correlation to the S&amp;P</th></tr></thead>
       <tbody>${g.crosses.map(row).join('')}</tbody>
