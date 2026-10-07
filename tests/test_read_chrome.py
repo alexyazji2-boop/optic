@@ -260,7 +260,8 @@ def test_the_overnight_markets_are_cards_in_a_narrow_box():
     """693 to 771px of table in a 299px box on a phone: the market's name and
     then a sideways scroll for its move and its correlation to the S&P."""
     css = open("static/styles.css", encoding="utf-8").read()
-    block = css[css.index("table.gm-table thead { display: none; }") - 400:]
+    at = css.index("table.gm-table thead { display: none; }")
+    block = css[css.rfind("@container", 0, at):]
     block = block[:block.index("\n}\n")]
     assert "@container (max-width: 719px) {" in block
     assert "'name d1' 'd5 d20' 'rho rho'" in block
@@ -268,3 +269,17 @@ def test_the_overnight_markets_are_cards_in_a_narrow_box():
     assert body.count('table-scroll cq-cards"><table class="data pat-table gm-table">') == 2
     for cell in ("gm-name", "gm-d1", "gm-d5", "gm-d20", "gm-rho"):
         assert cell in body, cell
+
+
+def test_a_catalysts_companies_are_cards_in_a_narrow_box():
+    """The Why column ran on one line, 580px of it, and each catalyst's table
+    of connected companies was 1,032px wide in a 297px box on a phone."""
+    css = open("static/styles.css", encoding="utf-8").read()
+    at = css.index("table.cat-co-table thead { display: none; }")
+    block = css[css.rfind("@container", 0, at):]
+    block = block[:block.index("\n}\n")]
+    assert "@container (max-width: 719px) {" in block
+    card = APP.split("function catalystCard(c) {", 1)[1].split("\n}\n", 1)[0]
+    assert '<div class="cat-body cq-cards">' in card and 'class="data cat-co-table"' in card
+    for cell in ("cc-sym", "cc-co", "cc-link", "cc-read", "cc-why"):
+        assert cell in card and "td.%s {" % cell in block, cell

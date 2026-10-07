@@ -15834,6 +15834,30 @@ body.ws-max[data-view="chart"] main { padding: 0; }
   table.ex-sector-table td.exs-month::before { content: 'Month '; color: var(--ink-muted); }
 }
 
+/* A catalyst's connected companies: ticker and how it is linked, the
+   company, then why. The Why column ran on one line, 580px of it, and the
+   table was 1,032px wide in a 297px box on a phone. */
+@container (max-width: 719px) {
+  table.cat-co-table thead { display: none; }
+  table.cat-co-table { min-width: 0; width: 100%; }
+  table.cat-co-table, table.cat-co-table tbody { display: block; }
+  table.cat-co-table tr {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr) max-content;
+    grid-template-areas: 'sym link read' 'co co co' 'why why why';
+    column-gap: var(--space-2);
+    row-gap: var(--space-0);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border);
+  }
+  table.cat-co-table td { display: block; padding: 0; border: 0; text-align: left; white-space: normal; }
+  table.cat-co-table td.cc-sym { grid-area: sym; }
+  table.cat-co-table td.cc-link { grid-area: link; }
+  table.cat-co-table td.cc-read { grid-area: read; text-align: right; }
+  table.cat-co-table td.cc-co { grid-area: co; }
+  table.cat-co-table td.cc-why { grid-area: why; }
+}
+
 /* Reliability pass: an action per card on a phone. As a table at 375px the
    page showed the date, the symbol and half the firm's name, and the target,
    the action and the rating, which are what the row is for, sat off to the

@@ -15660,13 +15660,14 @@ const CAT_BASIS = {
 };
 
 function catalystCard(c) {
+  // Each cell named, for the narrow card in styles.css (.cat-co-table).
   const companies = (c.companies || []).map((co) => `<tr>
-    <td class="name"><button type="button" class="tkr" data-analyse="${esc(co.ticker)}"
+    <td class="name cc-sym"><button type="button" class="tkr" data-analyse="${esc(co.ticker)}"
       >${esc(co.ticker)}</button></td>
-    <td class="name dim">${esc(co.name)}</td>
-    <td><span class="cat-tag ${CAT_DIRECT_CLASS[co.directness] || 'flat'}">${esc(co.directness)}</span></td>
-    <td><span class="cat-tag ${CAT_STRENGTH_CLASS[co.strength] || 'flat'}">${esc(co.strength)}</span></td>
-    <td class="name" style="color:var(--ink-2);font-size:var(--t-micro)">${esc(co.why || '')}</td>
+    <td class="name dim cc-co">${esc(co.name)}</td>
+    <td class="cc-link"><span class="cat-tag ${CAT_DIRECT_CLASS[co.directness] || 'flat'}">${esc(co.directness)}</span></td>
+    <td class="cc-read"><span class="cat-tag ${CAT_STRENGTH_CLASS[co.strength] || 'flat'}">${esc(co.strength)}</span></td>
+    <td class="name cc-why" style="color:var(--ink-2);font-size:var(--t-micro)">${esc(co.why || '')}</td>
   </tr>`).join('');
 
   return `<details class="cat-card">
@@ -15685,8 +15686,8 @@ function catalystCard(c) {
       <div class="cat-themes">${(c.themes || []).map((t) => esc(t)).join(' · ')}</div>
       <i class="cal-caret" aria-hidden="true"></i>
     </summary>
-    <div class="cat-body">
-      ${companies ? `<table class="data">
+    <div class="cat-body cq-cards">
+      ${companies ? `<table class="data cat-co-table">
         <thead><tr><th>Ticker</th><th>Company</th><th>Link</th><th>Read-through</th><th>Why</th></tr></thead>
         <tbody>${companies}</tbody>
       </table>
