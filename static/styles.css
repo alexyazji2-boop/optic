@@ -17475,3 +17475,22 @@ table.heat td.name { text-align: left; font-weight: 500; }
   background: var(--ink-muted);
 }
 .pl-scale { margin: var(--space-3) 0 0; font-size: var(--t-caption); color: var(--ink-muted); }
+.hm-date { font-size: var(--t-small); color: var(--ink-muted); }
+
+/* The skip link: off screen until it is focused, then the first thing drawn. */
+.skip-link {
+  position: fixed;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: 200;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--r-sm);
+  background: var(--btn-primary);
+  color: var(--btn-primary-ink);
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+.skip-link:focus, .skip-link:focus-visible { transform: none; outline: 2px solid var(--focus); outline-offset: 2px; }
+main:focus { outline: none; }
+main > .view:focus { outline: none; }

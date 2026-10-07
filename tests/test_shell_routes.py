@@ -216,3 +216,21 @@ def test_a_tablet_opens_on_the_collapsed_rail_until_the_reader_chooses():
 
 def test_the_phone_search_hint_fits():
     assert "const PHONE_SEARCH_HINT = 'Ticker or company';" in APP
+
+
+def test_the_first_tab_stop_skips_the_chrome():
+    html = (ROOT / "static/index.html").read_text()
+    body = html[html.index("<body"):]
+    assert body.index('class="skip-link"') < body.index('<div class="app">')
+    assert '<main id="main" tabindex="-1">' in html
+    click = APP.split("const skip = evt.target && evt.target.closest && evt.target.closest('[data-skip-main]');", 1)[1]
+    click = click[:click.index("\n});")]
+    assert "views[STATE.view]" in click and "evt.preventDefault();" in click, "the route stays in the hash"
+    assert ".skip-link:focus" in CSS
+
+
+def test_home_is_dated_and_does_not_say_the_session_twice():
+    home = APP[APP.index("async function loadHomeMarket(opts = {}) {"):]
+    home = home[:home.index("\n}\n")]
+    assert "hm-session" not in home
+    assert 'class="hm-date">${esc(homeDateLine(session))}' in home

@@ -4857,9 +4857,12 @@ async function loadHomeMarket(opts = {}) {
   const html = `
     <div class="hm-greet">
       <h2 class="hm-hello">${esc(homeHello())}</h2>
-      <span class="hm-session is-${session.is_open ? 'open' : 'shut'}">
-        ${esc(holiday ? holiday + ' \u00b7 market closed' : (session.label || ''))}
-      </span>
+      ${/* The day, not the session: the session strip directly above already
+           says "OVERNIGHT" and when the next session opens, and this chip said
+           "Overnight" again. A daily brief is dated. A holiday stays named,
+           because it is why the market is shut. */''}
+      <span class="hm-date">${esc(homeDateLine(session))}${
+  holiday ? ` \u00b7 ${esc(holiday)}, market closed` : ''}</span>
     </div>
     ${/* A main column and a rail, not one grid of equal cells.
          Three equal columns could not fill: a grid row is as tall as its
@@ -9801,6 +9804,16 @@ document.addEventListener('click', (evt) => {
  * `message || text || reason`, none of which an alert row has, so every row
  * on Home was a symbol beside an empty line. /api/home sends at most four, so
  * the link names the place rather than a count it cannot know. */
+/** "Wednesday, October 7": the market's date, from the session payload, so a
+ *  reader west of New York after 9pm is not dated a day behind the desk. */
+function homeDateLine(session) {
+  const iso = (session || {}).now_et;
+  const at = iso ? new Date(iso) : new Date();
+  if (isNaN(at.getTime())) return '';
+  return at.toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', timeZone: 'America/New_York' });
+}
+
 function homeAlerts(data) {
   const rows = data.alerts || [];
   if (!rows.length) return '';
@@ -40490,6 +40503,21 @@ function applyRoute(hash) {
 if (typeof window !== 'undefined' && window.addEventListener) {
   window.addEventListener('popstate', () => applyRoute(location.hash));
 }
+
+/* The skip link moves focus into the page itself, past the chrome, without
+ * putting #main in the address bar where the route is. */
+document.addEventListener('click', (evt) => {
+  const skip = evt.target && evt.target.closest && evt.target.closest('[data-skip-main]');
+  if (!skip) return;
+  evt.preventDefault();
+  // The page's own region, so the next Tab is the first control on the page
+  // and a screen reader announces which page it is (each view is labelled).
+  const target = views[STATE.view] || document.getElementById('main');
+  if (!target) return;
+  if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
+  target.focus({ preventScroll: true });
+  target.scrollIntoView({ block: 'start' });
+});
 
 /* In-page anchors scroll; they do not take the address bar.
  *
