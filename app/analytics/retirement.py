@@ -133,6 +133,11 @@ def _correlations(frames: Dict[str, pd.DataFrame], symbols: List[str]) -> Dict[s
         "symbols": list(corr.columns),
         "matrix": [[_f(corr.iloc[i, j], 2) for j in range(len(corr.columns))]
                    for i in range(len(corr.columns))],
+        # The window is the stretch every one of these funds traded through,
+        # so the youngest fund sets it; the page said "ten years" whatever it was.
+        "sessions": len(joined),
+        "start": str(joined.index[0].date()),
+        "end": str(joined.index[-1].date()),
     }
 
 

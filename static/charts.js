@@ -1050,6 +1050,9 @@ function lineChart(opts) {
     // Off by default so the panels that are deliberately spare — sparklines,
     // the breadth strip — do not grow a gutter they have no use for.
     valueTags = false,
+    // What the chart shows, for a screen reader: the chart's name and its
+    // keyboard readout's. Without it the readout names its series.
+    ariaLabel = '',
     /* With valueTags, the first series is the price the chart is about and is
      * tagged in the direction's colour. Off for lines that are peers, such as
      * Compare's rebased names, where each tag takes its line's own colour. */
@@ -1784,6 +1787,12 @@ function lineChart(opts) {
       at.push(i);
     });
     if (!pts.length) return;
+    /* The faint fill under a data line is drawn only down to a zero the axis
+     * shows. Filled to the plot's floor, a ratio near 1.0 or a P/E of 30
+     * shaded a block whose size meant nothing, and read as the amount of
+     * something. A series that sets its own fill strength is the Area style a
+     * reader picked for a price chart, and keeps its ground. */
+    const zeroInView = (lo <= 0 && hi >= 0) || se.fillOpacity !== undefined;
     /* A tinted line is drawn in runs, one per colour.
      *
      * The segment into a point takes that point's colour, because it is the move
@@ -1806,7 +1815,7 @@ function lineChart(opts) {
       const base = Y(Math.max(lo, 0));
       runs.forEach((run) => {
         const part = pts.slice(run.from, run.to + 1);
-        if (se.fill) {
+        if (se.fill && zeroInView) {
           root.appendChild(s('path', {
             d: `M${part[0].split(',')[0]},${base} L${part.join(' L')} L${
               part[part.length - 1].split(',')[0]},${base} Z`,
@@ -1822,7 +1831,7 @@ function lineChart(opts) {
         }));
       });
     } else {
-      if (se.fill) {
+      if (se.fill && zeroInView) {
         const base = Y(Math.max(lo, 0));
         root.appendChild(s('path', {
           d: `M${pts[0].split(',')[0]},${base} L${pts.join(' L')} L${pts[pts.length - 1].split(',')[0]},${base} Z`,
@@ -2626,7 +2635,8 @@ function lineChart(opts) {
   overlay.setAttribute('role', 'slider');
   overlay.setAttribute('aria-valuemin', '1');
   overlay.setAttribute('aria-valuemax', String(n));
-  overlay.setAttribute('aria-label', `${series.map((se) => se.name).filter(Boolean).join(', ') || 'Chart'}, point by point`);
+  overlay.setAttribute('aria-label', `${ariaLabel || series.map((se) => se.name).filter(Boolean).join(', ') || 'Chart'}, point by point`);
+  if (ariaLabel) root.setAttribute('aria-label', ariaLabel);
   overlay.addEventListener('focus', () => keyRead(keyAt));
   overlay.addEventListener('blur', clearBar);
   overlay.addEventListener('keydown', (evt) => {
@@ -2752,7 +2762,12 @@ function divergingBars(opts) {
     rows = [], height = null, posColor = C.pos, negColor = C.neg,
     format = (v) => fmtCompact(v), rowHeight = 20, markerRow = null,
     markerLabel = 'spot', axisLabel = '', width = 720, labelWidth = 58, ariaLabel = '',
+    // What a full half-width bar stands for, when the scale is fixed (a
+    // correlation runs -1 to +1). Otherwise the largest row sets it.
+    maxAbs: fixedMax = null,
   } = opts;
+  // A row with `estimate` is drawn lighter and outlined: a figure from a model
+  // rather than a quote, said by more than its colour.
 
   if (!rows.length) return document.createTextNode('');
 
@@ -2763,7 +2778,7 @@ function divergingBars(opts) {
   const plotW = W - m.l - m.r;
   const plotH = H - m.t - m.b;
 
-  const maxAbs = Math.max(...rows.map((r) => Math.abs(r.value || 0)), 1);
+  const maxAbs = Number.isFinite(fixedMax) && fixedMax > 0 ? fixedMax : Math.max(...rows.map((r) => Math.abs(r.value || 0)), 1);
   const mid = m.l + plotW / 2;
   const X = (v) => mid + (v / maxAbs) * (plotW / 2);
   const Y = (i) => m.t + (i + 0.5) * (plotH / rows.length);
@@ -2787,7 +2802,8 @@ function divergingBars(opts) {
     const path = v >= 0
       ? `M${mid},${y} H${mid + Math.max(w - rx, 0)} q${rx},0 ${rx},${rx} v${barH - 2 * rx} q0,${rx} -${rx},${rx} H${mid} Z`
       : `M${mid},${y} H${x + rx} q-${rx},0 -${rx},${rx} v${barH - 2 * rx} q0,${rx} ${rx},${rx} H${mid} Z`;
-    const bar = s('path', { d: w < 1 ? `M${mid},${y} h1 v${barH} h-1 Z` : path, fill: color });
+    const bar = s('path', { d: w < 1 ? `M${mid},${y} h1 v${barH} h-1 Z` : path, fill: color,
+      ...(r.estimate ? { 'fill-opacity': 0.4, stroke: color, 'stroke-width': 1, 'stroke-dasharray': '3 2' } : {}) });
     focusMark(bar, tipRows(escapeText(r.label), (r.detail || [['Value', format(v)]])), `${r.label}: ${format(v)}`);
     root.appendChild(bar);
 
@@ -2841,10 +2857,13 @@ function inlineBar(value, maxAbs, width = 76, height = 9, opts = {}) {
   const mid = width / 2;
   root.appendChild(s('line', { x1: mid, y1: 0, x2: mid, y2: height, stroke: C.baseline, 'stroke-width': 1 }));
   if (value !== null && isFinite(value) && maxAbs > 0) {
-    const w = Math.max(1.5, (Math.abs(value) / maxAbs) * (width / 2 - 1));
+    // Clamped: a value past the scale fills its half rather than spilling out of it.
+    const w = Math.max(1.5, Math.min(1, Math.abs(value) / maxAbs) * (width / 2 - 1));
     root.appendChild(s('rect', {
       x: value >= 0 ? mid : mid - w, y: 1, width: w, height: height - 2, rx: 2,
-      fill: value >= 0 ? C.pos : C.neg,
+      // `neutral`: a deviation with no good side (a weight off its target) is
+      // told by which side of the line it is on, not by gain-or-loss colours.
+      fill: opts.neutral ? C.ink2 : value >= 0 ? C.pos : C.neg,
     }));
   }
   return root;
@@ -3773,7 +3792,10 @@ function columnChart(opts) {
     const last = highlightLast && i === pts.length - 1;
     const fill = it.value < 0 ? negColor : color;
     const g = s('g', {});
-    g.appendChild(s('rect', { x: x - barW / 2, y: top, width: barW, height: h, rx: 3, fill, opacity: last ? 1 : 0.62 }));
+    // An item still in progress (this month) is drawn hollow: it is not yet
+    // the figure the others are.
+    g.appendChild(s('rect', { x: x - barW / 2, y: top, width: barW, height: h, rx: 3, fill, opacity: last ? 1 : 0.62,
+      ...(it.partial ? { 'fill-opacity': 0.15, stroke: fill, 'stroke-width': 1.2, 'stroke-dasharray': '3 2' } : {}) }));
     if (roomy || last) {
       g.appendChild(s('text', {
         x: last && !roomy ? Math.min(x, W - m.r - textWidthGuess(format(it.value), CF.micro) / 2) : x,
@@ -3856,8 +3878,10 @@ function rangeChart(opts) {
  * calls to the right, open interest by strike. The strike labels sit in the
  * middle gutter, and a dashed line between two rows marks where the price is.
  *
- * rows: [{label, left, right, detail}], top to bottom as drawn. `showValues`
- * prints each figure at the end of its bar, for a short list read row by row.
+ * rows: [{label, left, right, detail, leftText, rightText}], top to bottom as
+ * drawn. `showValues` prints each figure at the end of its bar, for a short
+ * list read row by row; a row's leftText or rightText is printed in place of
+ * the figure when what is drawn cannot say it (a negative share drawn as none).
  */
 function butterflyBars(opts) {
   const { rows = [], width = 720, rowHeight = 20, leftName = 'Puts', rightName = 'Calls',
@@ -3866,7 +3890,7 @@ function butterflyBars(opts) {
   const usable = rows.filter((r) => (r.left || 0) > 0 || (r.right || 0) > 0);
   if (usable.length < 2) return null;
   const W = width, gutter = 58;
-  const room = showValues ? 44 : 8;
+  const room = showValues ? 58 : 8;
   const m = { t: 20, r: room, b: 6, l: room };
   const H = m.t + usable.length * rowHeight + m.b;
   const half = (W - m.l - m.r - gutter) / 2;
@@ -3885,13 +3909,13 @@ function butterflyBars(opts) {
     if (rw > 0) g.appendChild(s('rect', { x: mid + gutter / 2, y, width: Math.max(1, rw), height: barH, rx: 3, fill: rightColor, opacity: 0.85 }));
     if (showValues) {
       const at = { y: y + barH / 2 + 4, fill: C.muted, 'font-size': CF.micro, 'font-variant-numeric': 'tabular-nums' };
-      g.appendChild(s('text', { ...at, x: mid - gutter / 2 - lw - 4, 'text-anchor': 'end' }, format(r.left || 0)));
-      g.appendChild(s('text', { ...at, x: mid + gutter / 2 + rw + 4 }, format(r.right || 0)));
+      g.appendChild(s('text', { ...at, x: mid - gutter / 2 - lw - 4, 'text-anchor': 'end' }, r.leftText || format(r.left || 0)));
+      g.appendChild(s('text', { ...at, x: mid + gutter / 2 + rw + 4 }, r.rightText || format(r.right || 0)));
     }
     g.appendChild(s('text', { x: mid, y: y + barH / 2 + 4, fill: C.ink2, 'font-size': CF.tick, 'font-weight': CW.tick, 'text-anchor': 'middle', 'font-variant-numeric': 'tabular-nums' }, r.label));
     g.appendChild(s('rect', { x: m.l, y: y - 3, width: W - m.l - m.r, height: rowHeight, fill: 'transparent' }));
     focusMark(g, tipRows(escapeText(r.label), r.detail || [[leftName, format(r.left || 0)], [rightName, format(r.right || 0)]]),
-      `${r.label}: ${leftName.toLowerCase()} ${format(r.left || 0)}, ${rightName.toLowerCase()} ${format(r.right || 0)}`);
+      `${r.label}: ${leftName.toLowerCase()} ${r.leftText || format(r.left || 0)}, ${rightName.toLowerCase()} ${r.rightText || format(r.right || 0)}`);
     root.appendChild(g);
   });
   if (markerRow !== null && markerRow !== undefined && markerRow > 0 && markerRow < usable.length) {

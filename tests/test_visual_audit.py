@@ -87,3 +87,141 @@ def test_the_rotation_and_bubble_charts_are_read_from_the_keyboard():
     assert out["rot"] == ["XLK Tech & <b>Co</b>: leading, strength 102.00, momentum 101.00"]
     assert sorted(out["bub"]) == ["AAA: P/E 1.00, Growth 2.00%", "BBB: P/E 2.00, Growth 1.00%"]
     assert "&lt;b&gt;" in out["tip"] and "<b>Co</b>" not in out["tip"], "a name is text, not markup"
+
+
+def _app(script):
+    import json
+    import os
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    import pytest
+
+    root = Path(__file__).resolve().parent.parent
+    jsc = "/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc"
+    exe = jsc if os.path.exists(jsc) else shutil.which("jsc")
+    if not exe:
+        pytest.skip("no JavaScriptCore on this machine")
+    src = """
+      load('tests/support/browser_stubs.js');
+      document.documentElement.style = document.documentElement.style || {};
+      document.documentElement.style.setProperty = function () {};
+      document.documentElement.style.removeProperty = function () {};
+      try { load('static/charts.js'); load('static/app.js'); } catch (e) {}
+      var R = {};
+    """ + script + "\nprint('RESULT:' + JSON.stringify(R));"
+    out = subprocess.run([exe, "-e", src], capture_output=True, text=True, timeout=60, cwd=str(root))
+    blob = out.stdout + out.stderr
+    assert "RESULT:" in blob, blob[-2000:]
+    return json.loads(blob.split("RESULT:", 1)[1].split("\n")[0])
+
+
+def test_a_chart_with_nothing_to_draw_leaves_no_empty_box():
+    out = _app("""
+      var host = { clientWidth: 480, style: { minHeight: '160px' }, innerHTML: 'old', appendChild: function () {} };
+      R.done = buildChartNow(host, function () { return null; });
+      R.min = host.style.minHeight; R.html = host.innerHTML;
+    """)
+    assert out["done"] is True and out["min"] == "", "the 160px held open for a redraw is given back"
+
+
+# ------------------------------------------------------------ per-route findings
+
+def test_an_area_is_filled_only_down_to_a_zero_the_axis_shows():
+    """Filled to the plot's floor, a ratio near 1.0 shaded a block whose size
+    meant nothing. A change series that crosses zero keeps its fill."""
+    out = _prim(SHIMS + """
+      function fills(values) {
+        var root = lineChart({ width: 400, height: 160, labels: values.map(function (v, i) { return 'd' + i; }),
+          series: [{ name: 'S', values: values, color: C.brand, fill: true }] });
+        return all(root, function (n) { return n.tag === 'path' && n.attrs.opacity === '0.1'; }).length;
+      }
+      R.level = fills([1.02, 1.05, 1.04, 1.08]); R.change = fills([-2, 1, 3, -1]);
+    """)
+    assert out["level"] == 0 and out["change"] == 1
+
+
+def test_a_resumed_pulse_answer_is_painted_as_a_live_one():
+    app = __import__("pathlib").Path(__file__).resolve().parent.parent.joinpath("static/app.js").read_text()
+    body = app[app.index("function pulseResume(id) {"):]
+    body = body[:body.index("\n}\n")]
+    assert "addMsg('assistant', m.content)" in body and "? 'user' : 'bot'" not in body
+    assert "addReplyActions(node, m.content || '', asked)" in body
+
+
+def test_retirement_draws_drift_without_a_side_and_shares_from_zero():
+    out = _app("""
+      var calls = [];
+      inlineBar = function (v, max, w, h, opts) { calls.push([v, max, opts || {}]); return { tag: 'svg' }; };
+      var hosts = [{ dataset: { bar: '-6', barMax: '25' }, appendChild: function () {} },
+                   { dataset: { bar: '100', barMax: '100', barKind: 'share' }, appendChild: function () {} }];
+      rothHost = function () { return { querySelectorAll: function () { return hosts; } }; };
+      var src = renderRoth.toString();
+      R.drift = src.indexOf("share ? { oneSided: true } : { neutral: true }") > 0;
+      R.share = src.indexOf('data-bar-kind="share"') > 0;
+      R.dashed = (src.match(/dash: '5 4'/g) || []).length;
+      R.window = src.indexOf('years every one of these funds has traded through') > 0 && src.indexOf('over ten years') < 0;
+    """)
+    assert out["drift"] and out["share"] and out["dashed"] == 3 and out["window"]
+
+
+def test_the_retirement_correlation_window_is_published():
+    import pandas as pd
+    from app.analytics import retirement
+    idx = pd.bdate_range("2024-01-01", periods=300)
+    frames = {s: pd.DataFrame({"Close": [100 + i * (k + 1) * 0.1 for i in range(300)]}, index=idx)
+              for k, s in enumerate(("AAA", "BBB"))}
+    frames["BBB"] = frames["BBB"].iloc[100:]                    # the younger fund sets the window
+    got = retirement._correlations(frames, ["AAA", "BBB"])
+    assert got["sessions"] == 199 and got["start"] == str(idx[101].date()) and got["end"] == str(idx[-1].date())
+
+
+def test_the_paper_desk_names_every_segment_and_says_which_marks_are_a_models():
+    out = _app("""
+      paperBook = { open: [], closed: [] };
+      ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].forEach(function (t, i) {
+        paperBook.open.push({ id: 'p' + i, ticker: t, direction: t === 'B' ? 'short' : 'long', instrument: 'shares' });
+      });
+      var h = { total: 100, ranked: [['A', 30], ['B', 20], ['C', 15], ['D', 10], ['E', 10], ['F', 5], ['G', 6], ['H', 4]],
+                open: paperBook.open, marked: 8 };
+      R.parts = paperExposureParts(h).map(function (x) { return [x.name, Math.round(x.share * 100)]; });
+      paperMarks = { p0: { mark_source: 'Modelled (no live quote)' }, p1: { mark_source: 'Live chain mid' } };
+      STATE.health = { realtime_chain: true };
+      R.chip = paperMarkStateHTML(h);
+    """)
+    assert out["parts"] == [["A", 30], ["B short", 20], ["C", 15], ["D", 10], ["E", 10], ["F", 5], ["2 others", 10]]
+    assert "1 option estimated by a model" in out["chip"] and "is-delayed" in out["chip"]
+
+
+def test_a_scan_ratio_is_drawn_against_its_whole_and_the_evaluation_says_its_span():
+    out = _app("""
+      var calls = [];
+      inlineBar = function (v, max, w, h, opts) { calls.push(max); return { tag: 'svg' }; };
+      function cell(v) { return { dataset: { scanBar: String(v), kind: 'ratio' }, appendChild: function () {} }; }
+      var set = [cell(0.4), cell(0.2)];
+      fillScanBars({ querySelectorAll: function () { return set; } });
+      R.max = calls; R.span = [evalPeriod({ period: '2y' }), evalPeriod({ period: '6mo' }), evalPeriod({})];
+    """)
+    assert out["max"] == [1, 1], "a share of the 52-week range is out of 1, not the list's largest"
+    assert out["span"] == ["two years", "6 months", ""]
+
+
+def test_the_watchlist_line_is_said_in_words_and_its_column_counts_sessions():
+    out = _app("""
+      R.row = watchRow({ symbol: 'AAA', available: true, price: 10, change_pct: -1, spark: [100, 104, 110], signal: 'bullish' }, {});
+      R.slot = sparkSlot([100, 110]);
+    """)
+    assert "-1.00% today, +10.0% over 3 sessions" in out["row"]
+    assert 'title="Last 2 sessions, +10.0%"' in out["slot"]
+    app = __import__("pathlib").Path(__file__).resolve().parent.parent.joinpath("static/app.js").read_text()
+    assert "<span>30 sessions</span>" in app and "<span>30 days</span>" not in app
+
+
+def test_the_trades_per_day_chart_says_its_window_scale_and_figures():
+    out = _app("""
+      R.html = congressActivityChart([{ date: '2026-09-01', buys: 2, sells: 1, other: 0 },
+        { date: '2026-09-02', buys: 0, sells: 4, other: 1 }], 30);
+    """)
+    assert "the busiest day, Sep 2, had 5." in out["html"] and "2 bought, 5 sold, 1 other" in out["html"]
+    assert "tallest bar 5 on Sep 2" in out["html"]

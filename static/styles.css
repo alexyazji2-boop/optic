@@ -15725,6 +15725,7 @@ body.ws-max[data-view="chart"] main { padding: 0; }
    than fill -- the fill rules above do nothing to an HTML element. */
 .ca-dot.ca-buy { background: var(--pos); }
 .ca-dot.ca-sell { background: var(--neg); }
+.ca-dot.ca-other { background: var(--ink-muted); }
 
 /* The ranking. */
 .ct-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }

@@ -1037,7 +1037,10 @@ function buildChartNow(host, builder) {
   const w = Math.round(host.clientWidth);
   if (!w) return false;
   const el = builder(Math.max(w, 320));
-  if (!el) return true;
+  /* Nothing to draw: give back the height reserved for it. A redraw clears
+   * the old chart and holds 160px open for the new one, and a builder that
+   * found too little data left that box empty on the page. */
+  if (!el) { host.style.minHeight = ''; return true; }
   host.innerHTML = '';
   host.appendChild(el);
   host.style.minHeight = '';
@@ -6257,7 +6260,7 @@ function renderWatchlist() {
     </div>
 
     <div class="wv-cols" aria-hidden="true">
-      <span>Symbol</span><span>Price</span><span>Today</span><span>30 days</span>
+      <span>Symbol</span><span>Price</span><span>Today</span><span>30 sessions</span>
       <span>What changed</span><span>Signal</span><span></span>
     </div>
     <div id="wv-feed">${watchlistFeedHTML({})}</div>
@@ -8131,6 +8134,9 @@ function watchRow(r, opts) {
     </li>`;
   }
   const changed = r.changed || null;
+  // The line in words: it was decoration, and its move was said nowhere.
+  const sp = (r.spark || []).filter(Number.isFinite);
+  const trend = sp.length >= 2 && sp[0] ? `, ${fmtPct((sp[sp.length - 1] / sp[0] - 1) * 100, 1)} over ${sp.length} sessions` : '';
   return `<li class="wl-row">
     ${o.order ? `<span class="wl-move">
       <button type="button" class="wl-move-btn" data-watch-up="${esc(r.symbol)}"
@@ -8142,7 +8148,7 @@ function watchRow(r, opts) {
     </span>` : ''}
     <button type="button" class="wl-open" data-watch-open="${esc(r.symbol)}"
       title="Analyze ${esc(r.symbol)}" aria-label="Analyze ${esc(r.symbol)}: ${esc(
-  fmt(r.price, 2))}, ${esc(fmtPct(r.change_pct, 2))} today, ${esc(changed ? changed.text : 'no change')}, ${
+  fmt(r.price, 2))}, ${esc(fmtPct(r.change_pct, 2))} today${esc(trend)}, ${esc(changed ? changed.text : 'no change')}, ${
   esc(r.signal === 'unknown' ? 'no signal' : r.signal)}">
       <span class="wl-sym">${esc(r.symbol)}</span>
       <span class="wl-price">${fmt(r.price, 2)}</span>
@@ -8175,7 +8181,8 @@ function sparkSlot(values, cls = 'wl-spark', last = 30) {
   const v = (values || []).filter(Number.isFinite).slice(-last);
   if (v.length < 2) return '';
   return `<span class="${cls}" aria-hidden="true" data-spark="${v.join(',')}" data-dir="${
-    v[v.length - 1] >= v[0] ? 'up' : 'down'}" title="Last ${v.length} sessions"></span>`;
+    v[v.length - 1] >= v[0] ? 'up' : 'down'}" title="Last ${v.length} sessions${
+    v[0] ? `, ${fmtPct((v[v.length - 1] / v[0] - 1) * 100, 1)}` : ''}"></span>`;
 }
 
 function fillSparks(root) {
@@ -18255,7 +18262,7 @@ function renderEvaluation(e) {
     ${evalHorizons(e).length ? `<div class="viz">
       ${evalTitle(e) ? `<p class="viz-title">${esc(evalTitle(e))}</p>` : ''}
       <p class="viz-sub">Each score bucket's average return over the horizon against the rest of the universe on
-        the same dates, in percent, with its 95% interval. A line that crosses zero has not shown an edge, and the
+        the same dates, in percent, with its 95% interval${evalPeriod(e) ? `, replayed over ${esc(evalPeriod(e))} of daily bars` : ''}. A line that crosses zero has not shown an edge, and the
         intervals assume independent observations, which overlapping windows are not, so the true ones are wider.</p>
       <div class="viz-multiples wide">${evalHorizons(e).map((h) => `<div>
         <h4>${fmt(h.horizon_sessions, 0)} sessions</h4>
@@ -18272,6 +18279,15 @@ function renderEvaluation(e) {
 
 /* Does the score work, drawn: the buckets' mean excess with its interval at
  * each horizon, on one scale so the horizons can be read across. */
+/* The span the score was replayed over, in words: "2y" is two years. */
+function evalPeriod(e) {
+  const m = /^(\d+)(y|mo|d)$/.exec(String((e || {}).period || ''));
+  if (!m) return '';
+  const n = Number(m[1]);
+  const unit = { y: 'year', mo: 'month', d: 'day' }[m[2]];
+  return `${n === 1 ? 'one' : n === 2 ? 'two' : n === 3 ? 'three' : n === 5 ? 'five' : fmt(n, 0)} ${unit}${n === 1 ? '' : 's'}`;
+}
+
 function evalHorizons(e) {
   return (e.horizons || []).filter((h) => (h.buckets || []).filter((b) => b.n).length >= 2);
 }
@@ -18440,7 +18456,8 @@ function renderPortfolioRisk(r) {
 
   return `<div class="panel span-all">
     <h2>${hg('Book-level risk')}${askPulse('bookrisk')}</h2>
-    <p class="sub">${fmt(r.names, 0)} names, ${usd(r.gross_exposure)} gross. The ledger above
+    <p class="sub">${fmt(r.names, 0)} names, ${usd(r.gross_exposure)} gross${STATE.bookRiskAt
+    ? `, measured ${STATE.bookRiskAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}. The ledger above
       reports each trade on its own; this asks whether they are separate bets.</p>
 
     <div class="fg-hist-row" style="margin-top:var(--space-3)">
@@ -18489,7 +18506,7 @@ function renderPortfolioRisk(r) {
       <div>
         <h3>${hg('Most correlated pairs')}</h3>
         ${pairs ? vizBlock('viz-risk-pairs', pairsTitle(r), `Correlation of daily returns over ${
-  fmt(r.window_sessions, 0)} sessions, from -1 to +1. At 0.7 or more two names behave much like one.`) : ''}
+  fmt(r.window_sessions, 0)} sessions, from -1, moving opposite, to +1, moving together. At 0.7 or more two names behave much like one.`) : ''}
         ${exactFigures(`<table class="data">
           <thead><tr><th>Pair</th><th class="num">${fmt(r.window_sessions, 0)}-day correlation</th></tr></thead>
           <tbody>${pairs || '<tr><td colspan="2">Not enough overlapping history.</td></tr>'}</tbody>
@@ -18536,10 +18553,13 @@ function moneyRiskTitle(r) {
 }
 
 function pairsTitle(r) {
+  // The server orders pairs by the size of the correlation, either way, so the
+  // first can be the most opposite pair; it was titled "move most alike".
   const top = (r.top_pairs || [])[0];
   if (!top) return '';
-  return `${top.a} and ${top.b} move most alike: ${top.correlation > 0 ? '+' : ''}${fmt(top.correlation, 2)} over ${
-    fmt(r.window_sessions, 0)} sessions`;
+  const said = `${top.correlation > 0 ? '+' : ''}${fmt(top.correlation, 2)} over ${fmt(r.window_sessions, 0)} sessions`;
+  return top.correlation >= 0 ? `${top.a} and ${top.b} move most alike: ${said}`
+    : `${top.a} and ${top.b} move most against each other: ${said}`;
 }
 
 function sectorsTitle(r) {
@@ -18558,19 +18578,25 @@ function mountBookRiskVisuals(r) {
     ariaLabel: "Each position's share of the book's money beside its share of the book's risk.",
     rows: measured.map((p) => ({
       label: p.symbol, left: Math.abs(p.weight_pct), right: Math.max(0, p.risk_contribution_pct),
+      // Drawn as none, a hedge's negative share printed "0%", as if it carried no risk.
+      leftText: p.weight_pct < 0 ? `${fmt(Math.abs(p.weight_pct), 0)}% short` : undefined,
+      rightText: p.risk_contribution_pct < 0 ? `${fmt(p.risk_contribution_pct, 0)}%` : undefined,
       detail: [['Share of money', `${fmt(p.weight_pct, 1)}%${p.weight_pct < 0 ? ', short' : ''}`],
         ['Share of risk', `${fmt(p.risk_contribution_pct, 1)}%${p.risk_contribution_pct < 0 ? ', offsetting the rest' : ''}`],
         ['Sector', p.sector || 'Not classified']],
     })),
   }), 'The risk split needs three months of prices for two names or more.');
-  const pairs = (r.top_pairs || []).slice(0, 6);
+  // Signed, from zero, on the whole -1 to +1 scale: drawn by size alone, a
+  // pair moving opposite at -0.8 was a full bar beside the +0.8 ones.
+  const pairs = (r.top_pairs || []).slice(0, 6).slice().sort((a, b) => b.correlation - a.correlation);
   const pairLabels = pairs.map((p) => `${p.a} / ${p.b}`);
-  vizMount('viz-risk-pairs', (w) => rankBars({
-    width: w, max: 1, format: (v) => `${v > 0 ? '+' : ''}${fmt(v, 2)}`,
+  vizMount('viz-risk-pairs', (w) => divergingBars({
+    width: w, maxAbs: 1, rowHeight: 22, format: (v) => `${v > 0 ? '+' : ''}${fmt(v, 2)}`,
     labelWidth: Math.min(150, Math.max(70, ...pairLabels.map((l) => textWidthGuess(l, CF.tick))) + 12),
-    ariaLabel: 'The most correlated pairs of positions.',
-    rows: pairs.map((p, i) => ({ label: pairLabels[i], value: p.correlation, highlight: Math.abs(p.correlation) >= 0.7,
+    ariaLabel: 'The most correlated pairs of positions, from -1 to +1.',
+    rows: pairs.map((p, i) => ({ label: pairLabels[i], value: p.correlation,
       detail: [['Correlation', `${p.correlation > 0 ? '+' : ''}${fmt(p.correlation, 2)}`],
+        ['Reads', p.correlation >= 0.7 ? 'Much like one position' : p.correlation <= -0.7 ? 'Largely offsetting' : 'Partly independent'],
         ['Window', `${fmt(r.window_sessions, 0)} sessions`]] })),
   }));
   const sectors = bookSectors(r);
@@ -18582,12 +18608,27 @@ function mountBookRiskVisuals(r) {
   }), 'No sector data for these positions.');
 }
 
+/* What the risk was measured on: the open positions and their sizes. A scan
+ * or a closed trade changes it; a new mark does not, since the risk comes from
+ * three months of returns. It was measured once and kept for the session, so
+ * after a scan the panel described a book that no longer existed. */
+function bookRiskSignature(t) {
+  return ((t && t.open) || []).map((p) => `${p.id}:${p.qty}`).sort().join(',');
+}
+
 async function loadPortfolioRisk() {
-  if (STATE.bookRisk) return;
+  const sig = bookRiskSignature(STATE.tracker);
+  if (STATE.bookRisk && STATE.bookRiskSig === sig) return;
+  STATE.bookRisk = null;
+  STATE.bookRiskSig = sig;
   try {
-    STATE.bookRisk = await getJSON(
+    const data = await getJSON(
       `/api/portfolio-risk?book=${encodeURIComponent(STATE.trackerBook || 'balanced')}`);
+    if (STATE.bookRiskSig !== sig) return;          // the book changed while it was measured
+    STATE.bookRisk = data;
+    STATE.bookRiskAt = new Date();
   } catch (err) {
+    if (STATE.bookRiskSig !== sig) return;
     STATE.bookRisk = { available: false, reason: err.message };
   }
   const host = document.getElementById('book-risk-host');
@@ -26756,6 +26797,7 @@ function mountCompareVisuals(c) {
     series: perf.series.map((x, i) => ({ name: x.ticker, values: x.values, color: colors[i % colors.length] })),
     refLines: [{ value: 100, color: C.muted, label: 'start', emphasis: true }],
     yFormat: (v) => fmt(v, 0), valueTags: true, directionTag: false,
+    ariaLabel: `${perf.series.map((x) => x.ticker).join(', ')} rebased to 100 on ${perf.start}`,
   }), 'Not enough shared history to draw.');
 }
 
@@ -27606,7 +27648,7 @@ function renderRoth(d) {
         <td>${money(r.current_value)}</td>
         <td>${fmt(r.current_pct, 1)}%</td>
         <td>${fmt(r.target_pct, 1)}%</td>
-        <td class="${signClass(r.drift_pct)}">${fmtPct(r.drift_pct, 1)}</td>
+        <td>${fmtPct(r.drift_pct, 1)}</td>
         <td><span data-bar="${r.drift_pct}" data-bar-max="25"></span></td>
       </tr>`).join('')}</tbody>
     </table>
@@ -27625,7 +27667,7 @@ function renderRoth(d) {
           <td>${esc(r.label)}</td>
           <td><strong>${money(r.dollars)}</strong></td>
           <td>${fmt(r.pct_of_contribution, 1)}%</td>
-          <td><span data-bar="${r.pct_of_contribution}" data-bar-max="100"></span></td>
+          <td><span data-bar="${r.pct_of_contribution}" data-bar-max="100" data-bar-kind="share"></span></td>
         </tr>`).join('')}</tbody>
       </table>` : ''}
       ${rb.overweight_note ? `<div class="callout">${gloss(rb.overweight_note)}</div>` : ''}
@@ -27686,22 +27728,30 @@ function renderRoth(d) {
   ${corrTable ? `
   <div class="panel span2">
     <h2>${hg('Correlation')}</h2>
-    <p class="sub">Daily-return correlation over ten years. Values near 1.00 (orange) mean two funds
+    <p class="sub">Daily-return correlation over the ${corr.sessions
+    ? `${fmt(corr.sessions / 252, 1)} years every one of these funds has traded through, ${esc(corr.start)} to ${esc(corr.end)}`
+    : 'stretch every one of these funds has traded through'}. Values near 1.00 (orange) mean two funds
       are the same bet in different wrappers; low values (green) are what actually diversifies.</p>
     ${corrTable}
   </div>` : ''}
   `;
 
+  /* Drift is a weight off its target, which has no good side, so it is drawn
+   * in one colour either side of the line; a share of the contribution runs up
+   * from zero. Both were the gain-and-loss bar centred on a line, so a fund
+   * taking all of the money filled half its cell, in green. */
   (rothHost() || document).querySelectorAll('[data-bar]').forEach((host) => {
     const max = Number(host.dataset.barMax) || 25;
-    host.appendChild(inlineBar(Number(host.dataset.bar), max, 70, 9));
+    const share = host.dataset.barKind === 'share';
+    host.appendChild(inlineBar(Number(host.dataset.bar), max, 70, 9, share ? { oneSided: true } : { neutral: true }));
   });
 
   if (pr.available && pr.series) {
+    // The band in one neutral colour, dashed as the legend says: orange under
+    // green read as bad and good, and the lines were drawn solid.
     mount('legend-roth', legend([
       { name: 'Central estimate', color: C.brand },
-      { name: 'Lower band', color: C.s2, dash: true },
-      { name: 'Upper band', color: C.s3, dash: true },
+      { name: 'Lower and upper band', color: C.ink2, dash: true },
       { name: 'Contributions only', color: C.s7, dash: true },
     ]));
     mount('chart-roth', (w) => lineChart({
@@ -27710,9 +27760,9 @@ function renderRoth(d) {
       labels: pr.series.map((p) => `yr ${p.year}`),
       series: [
         { name: 'Central estimate', values: pr.series.map((p) => p.balance), color: C.brand },
-        { name: 'Lower band', values: pr.series_low, color: C.s2, width: 1.5, marker: false },
-        { name: 'Upper band', values: pr.series_high, color: C.s3, width: 1.5, marker: false },
-        { name: 'Contributions only', values: pr.series.map((p) => p.contributed), color: C.s7, width: 1.5, marker: false },
+        { name: 'Lower band', values: pr.series_low, color: C.ink2, width: 1.5, marker: false, dash: '5 4' },
+        { name: 'Upper band', values: pr.series_high, color: C.ink2, width: 1.5, marker: false, dash: '5 4' },
+        { name: 'Contributions only', values: pr.series.map((p) => p.contributed), color: C.s7, width: 1.5, marker: false, dash: '5 4' },
       ],
       // The chart pads its range 8% below the lowest value, which on an
       // all-positive money series puts a tick just under zero and renders it
@@ -29086,9 +29136,27 @@ function travelCell(p) {
       <i class="pos-now${cls}" style="left:${at.toFixed(1)}%"
         title="the stock is at ${fmt(t.now, 2)} now"></i>
     </div>
-    <div class="pos-read">${Math.round(at)}% toward target${
-    p.instrument === 'option' ? '<br>measured on the stock' : ''}</div>
+    <div class="pos-read">${travelRead(t)}${p.instrument === 'option' && t.entry !== null
+    ? `<br>on the stock: ${fmt(t.now, 2)}, opened at ${fmt(t.entry, 2)}` : ''}</div>
   </div>`;
+}
+
+/* How far the trade has gone, from where it opened. It read "N% toward
+ * target" measured from the stop, so with a 2:1 target a trade sitting at its
+ * entry read 33%, and one that had lost ground still read as progress. The
+ * share is of the way from the entry to whichever end it is heading for. */
+function travelRead(t) {
+  const span = t.target - t.stop;
+  const raw = span ? (t.now - t.stop) / span : null;
+  if (raw === null) return '';
+  if (raw >= 1) return 'At or past the target';
+  if (raw <= 0) return 'At or past the stop';
+  if (t.from === null) return `${Math.round(raw * 100)}% of the way from stop to target`;
+  if (raw >= t.from) {
+    const room = 1 - t.from;
+    return room > 0 ? `${Math.round(((raw - t.from) / room) * 100)}% of the way from entry to target` : 'At the target';
+  }
+  return t.from > 0 ? `${Math.round(((t.from - raw) / t.from) * 100)}% of the way from entry to the stop` : 'At the stop';
 }
 
 /** One plain sentence of state of play.
@@ -29108,7 +29176,7 @@ function mountTrackerMonths(months) {
     width: w, height: 150, format: (v) => money(v, 0), highlightLast: false, color: C.pos,
     ariaLabel: 'Realised profit or loss by month.',
     items: months.map((m, i) => ({
-      label: periodTick(m.key), value: Number(m.realised_pnl) || 0,
+      label: periodTick(m.key), value: Number(m.realised_pnl) || 0, partial: i === months.length - 1,
       detail: [['Realised', money(m.realised_pnl, 0)], ['Return', fmtPct(m.return_pct, 2)],
         ['Closed', fmt(m.closed_count, 0)], ...(i === months.length - 1 ? [['Status', 'In progress']] : [])],
     })),
@@ -29156,6 +29224,8 @@ function openPnlTitle(open) {
     top.instrument === 'option' ? ' (option)' : ''} is the largest at ${money(top.pnl, 0)}`;
 }
 
+const markModelled = (p) => /^modelled/i.test(String(p.mark_source || ''));
+
 function mountOpenPnl(open) {
   const scored = open.filter((p) => Number.isFinite(Number(p.pnl)))
     .slice().sort((a, b) => Number(b.pnl) - Number(a.pnl));
@@ -29163,11 +29233,11 @@ function mountOpenPnl(open) {
     width: w, rowHeight: 22, labelWidth: 76, format: (v) => money(v, 0),
     ariaLabel: 'Unrealised profit or loss of each open trade.',
     rows: scored.map((p) => ({
-      label: `${p.ticker}${p.instrument === 'option' ? ' opt' : ''}`, value: Number(p.pnl),
-      detail: [['Up or down', money(p.pnl, 0)], ['Return', fmtPct(p.pnl_pct, 1)],
-        ['Marked from', cap(p.mark_source || 'not marked')]],
+      label: `${p.ticker}${p.instrument === 'option' ? ' opt' : ''}`, value: Number(p.pnl), estimate: markModelled(p),
+      detail: [['Up or down', `${money(p.pnl, 0)}${markModelled(p) ? ', estimated' : ''}`], ['Return', fmtPct(p.pnl_pct, 1)],
+        ['Marked from', esc(cap(p.mark_source || 'not marked'))]],
     })),
-  })));
+  })), 'Fewer than two open trades have a mark yet.');
 }
 
 /** The open-positions panel. Split out of renderTracker so it can be placed at
@@ -29200,7 +29270,8 @@ function openPositionsPanel(open) {
 
     ${openStateOfPlay(open)}
     ${open.length >= 2 ? vizBlock('viz-trk-open', openPnlTitle(open),
-    'Unrealised profit or loss at the latest mark, in dollars. Nothing is settled until a trade closes.') : ''}
+    `Unrealised profit or loss at the latest mark, in dollars. Nothing is settled until a trade closes.${
+      open.some(markModelled) ? ' A lighter, outlined bar is marked from a model, with no live quote for the contract.' : ''}`) : ''}
 
     <table class="data" data-defs="open-positions">
       <thead><tr><th>Position</th><th>Betting on</th><th>Size</th><th>Paid</th>
@@ -29774,7 +29845,7 @@ function renderTracker(d) {
     ${months.length > 1 ? `
       <h3 style="margin-top:var(--space-4)">${hg('Consistency')}</h3>
       ${vizBlock('viz-trk-months', monthsTitle(months),
-    `Realised profit or loss by the month trades closed in${bookName ? `, ${bookName} book` : ''}, in dollars. The latest month is still in progress.`)}
+    `Realised profit or loss by the month trades closed in${bookName ? `, ${bookName} book` : ''}, in dollars. The latest month, still in progress, is drawn hollow.`)}
       <table class="data" data-defs="tracker-months">
         <thead><tr><th>Month</th><th>Opened</th><th>Closed</th><th>Realised</th><th>Return</th>
           <th>Win rate</th><th>Expectancy</th><th>Profit factor</th><th>Equity after</th></tr></thead>
@@ -29819,8 +29890,10 @@ function renderTracker(d) {
   </div>` : ''}
 
   ${open.length ? `
-  <div id="book-risk-host" class="span-all">${
-  STATE.bookRisk ? renderPortfolioRisk(STATE.bookRisk) : ''}</div>` : ''}
+  <div id="book-risk-host" class="span-all">${STATE.bookRisk && STATE.bookRiskSig === bookRiskSignature(d)
+    ? renderPortfolioRisk(STATE.bookRisk)
+    : `<div class="panel span-all"><h2>${hg('Book-level risk')}</h2>
+      <p class="sub">Measuring how these positions move together, from three months of returns\u2026</p></div>`}</div>` : ''}
 
   ${closed.length ? `
   <div class="panel span2 gap">
@@ -29897,7 +29970,7 @@ function renderTracker(d) {
   </div>` : ''}`;
   mountOpenPnl(open);
   if (months.length > 1) mountTrackerMonths(months);
-  if (STATE.bookRisk) mountBookRiskVisuals(STATE.bookRisk);
+  if (STATE.bookRisk && STATE.bookRiskSig === bookRiskSignature(d)) mountBookRiskVisuals(STATE.bookRisk);
 }
 
 /* ================================================================== INDICES */
@@ -33171,14 +33244,42 @@ function paperHealth() {
 
 /* Whether the P&L beside it is priced, and from what. All marked, it says
  * which feed; any unmarked, it counts them rather than summing them as zero. */
+/* How many open marks are a model's estimate rather than a quote: an option
+ * with no usable quote is priced by Black-Scholes, and the chip said "Marked
+ * from live quotes" over them all the same. */
+function paperModelled(h) {
+  return h.open.filter((p) => /^modelled/i.test(String((paperMarks[p.id] || {}).mark_source || ''))).length;
+}
+
 function paperMarkStateHTML(h) {
   if (h.marked < h.open.length) {
     return `<span class="data-state is-unavailable"><span class="dot" aria-hidden="true"></span>${
       fmt(h.open.length - h.marked, 0)} of ${fmt(h.open.length, 0)} not marked</span>`;
   }
   const realtime = !!(STATE.health && STATE.health.realtime_chain);
-  return `<span class="data-state ${realtime ? 'is-live' : 'is-delayed'}"><span class="dot" aria-hidden="true"></span>${
-    realtime ? 'Marked from live quotes' : 'Marked from delayed quotes'}</span>`;
+  const modelled = paperModelled(h);
+  return `<span class="data-state ${realtime && !modelled ? 'is-live' : 'is-delayed'}"><span class="dot" aria-hidden="true"></span>${
+    realtime ? 'Marked from live quotes' : 'Marked from delayed quotes'}${
+    modelled ? `; ${fmt(modelled, 0)} option${modelled === 1 ? '' : 's'} estimated by a model` : ''}</span>`;
+}
+
+/* The exposure bar's parts: the six largest names and the rest as one, so
+ * every segment has a name in the key (past six they had none, and past eight
+ * one name's colour was another's), with a short said as one. */
+function paperExposureParts(h) {
+  const total = h.total || 1;
+  const short = (sym) => {
+    const mine = paperBook.open.filter((p) => p.ticker === sym);
+    return mine.length > 0 && mine.every((p) => p.direction === 'short');
+  };
+  const parts = h.ranked.slice(0, 6).map(([sym, v], i) => ({
+    name: `${sym}${short(sym) ? ' short' : ''}`, share: v / total, color: `var(--s${i + 1})` }));
+  const rest = h.ranked.slice(6);
+  if (rest.length) {
+    parts.push({ name: `${rest.length} other${rest.length === 1 ? '' : 's'}`,
+      share: rest.reduce((a, [, v]) => a + v, 0) / total, color: 'var(--ink-muted)' });
+  }
+  return parts;
 }
 
 function paperHealthHTML() {
@@ -33210,16 +33311,21 @@ function paperHealthHTML() {
       <div class="ph-cell"><span class="eyebrow">Open P&amp;L</span>
         <strong class="num ${h.marked ? tone(h.pnl) : ''}">${h.marked
   ? `${h.pnl >= 0 ? '+' : '−'}$${fmtCompact(Math.abs(h.pnl), 2)}` : '—'}</strong>
-        <span class="ph-sub">${h.marked ? 'a quote, not a result' : 'waiting on marks'}</span></div>
+        <span class="ph-sub">${!h.marked ? 'waiting on marks' : paperModelled(h)
+  ? `a quote, not a result; ${fmt(paperModelled(h), 0)} of it a model's estimate` : 'a quote, not a result'}</span></div>
       <div class="ph-cell"><span class="eyebrow">Largest name</span>
         <strong class="num">${fmt(Math.round(h.topShare * 100), 0)}%</strong>
         <span class="ph-sub">${esc(h.top[0])}${names > 3 ? ` · top three ${fmt(Math.round(h.top3 * 100), 0)}%` : ''}</span></div>
     </div>
-    <div class="ph-bar" role="img" aria-label="Exposure by name">${h.ranked.map(([sym, v], i) => `<span
-      class="ph-seg" style="flex-grow:${(v / (h.total || 1)).toFixed(4)};--seg:var(--s${(i % 8) + 1})"
-      title="${esc(sym)} ${fmt(Math.round(v / (h.total || 1) * 100), 0)}%"></span>`).join('')}</div>
-    <ul class="ph-legend">${h.ranked.slice(0, 6).map(([sym, v], i) => `<li><i style="--seg:var(--s${(i % 8) + 1})"></i>${
-  esc(sym)} <span class="num">${fmt(Math.round(v / (h.total || 1) * 100), 0)}%</span></li>`).join('')}</ul>
+    ${(() => {
+    const parts = paperExposureParts(h);
+    const said = parts.map((x) => `${x.name} ${fmt(Math.round(x.share * 100), 0)}%`).join(', ');
+    return `<div class="ph-bar" role="img" aria-label="${esc(`Exposure at cost: ${said}`)}">${parts.map((x) => `<span
+      class="ph-seg" style="flex-grow:${x.share.toFixed(4)};--seg:${x.color}"
+      title="${esc(x.name)} ${fmt(Math.round(x.share * 100), 0)}%"></span>`).join('')}</div>
+    <ul class="ph-legend" aria-hidden="true">${parts.map((x) => `<li><i style="--seg:${x.color}"></i>${
+  esc(x.name)} <span class="num">${fmt(Math.round(x.share * 100), 0)}%</span></li>`).join('')}</ul>`;
+  })()}
     ${h.review.length ? `<h3 class="pt-h3">Needs review</h3>
       <ul class="ph-review">${h.review.map((x) => `<li><span class="ph-review-pos">${paperPosLabel(x.pos)}</span>
         <span class="ph-review-why">${esc(x.why)}</span></li>`).join('')}</ul>` : ''}
@@ -34358,12 +34464,19 @@ function congressActivityChart(rows, days) {
   }).join('');
   const first = list[0].date;
   const last = list[list.length - 1].date;
+  /* The figures in words, and the scale on the page: the bars carried their
+   * counts only in <title>s, which an image hides, and nothing said how tall
+   * the tallest was. */
+  const sum = (k) => list.reduce((a, r) => a + (r[k] || 0), 0);
+  const top = list.reduce((m, r) => ((r.buys + r.sells + r.other) > (m.buys + m.sells + m.other) ? r : m), list[0]);
+  const said = `Disclosed trades by trade date, ${dayLabel(first)} to ${dayLabel(last)}: ${sum('buys')} bought, ${
+    sum('sells')} sold${sum('other') ? `, ${sum('other')} other` : ''}; the busiest day, ${dayLabel(top.date)}, had ${peak}.`;
   return `<div class="ca-wrap">
     <svg class="ca-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
-      role="img" aria-label="Disclosed trades per day over ${days} days">
+      role="img" aria-label="${esc(said)}">
       ${bars}
     </svg>
-    <div class="ca-axis"><span>${esc(dayLabel(first))}</span><span>${esc(dayLabel(last))}</span></div>
+    <div class="ca-axis"><span>${esc(dayLabel(first))}</span><span>tallest bar ${fmt(peak, 0)} on ${esc(dayLabel(top.date))}</span><span>${esc(dayLabel(last))}</span></div>
   </div>`;
 }
 
@@ -34588,9 +34701,12 @@ function congressResults() {
   q.days === d ? ' on' : ''}" data-ins-days="${d}" aria-pressed="${q.days === d}"
             >${d}d</button>`).join('')}
         </div>
+        <p class="viz-sub">The chart is the last ${fmt(c.activity_days || q.days, 0)} days by trade date, of the
+          disclosures counted above. Its latest days are short: trades made there are still being filed.</p>
         ${congressActivityChart(c.activity, c.activity_days)}
         <p class="ca-key"><span class="ca-dot ca-buy"></span> bought
-          <span class="ca-dot ca-sell"></span> sold</p>
+          <span class="ca-dot ca-sell"></span> sold${c.other
+    ? ' <span class="ca-dot ca-other"></span> exchange or similar' : ''}</p>
         <p class="caveat">Dated by when the trade happened, not when it was
           filed. The two run weeks apart: half of these were disclosed
           ${c.lag_median === null || c.lag_median === undefined
@@ -35880,9 +35996,11 @@ function fillScanBars(host) {
   const cells = [...((host && host.querySelectorAll('[data-scan-bar]:not([data-drawn])')) || [])];
   if (!cells.length) return;
   const vals = cells.map((c) => Number(c.dataset.scanBar)).filter(Number.isFinite);
-  const oneSided = SCAN_ONE_SIDED.has(cells[0].dataset.kind);
-  // A percentile rank is out of 100, whatever the list's own largest.
-  const max = cells[0].dataset.kind === 'num' && Math.max(...vals) <= 100 ? 100 : Math.max(...vals.map(Math.abs));
+  const kind = cells[0].dataset.kind;
+  const oneSided = SCAN_ONE_SIDED.has(kind);
+  // A share of its range (0 to 1) and a percentile rank (0 to 100) are drawn
+  // against their whole, not against the list's own largest.
+  const max = kind === 'ratio' ? 1 : kind === 'num' && Math.max(...vals) <= 100 ? 100 : Math.max(...vals.map(Math.abs));
   cells.forEach((c) => {
     c.appendChild(inlineBar(Number(c.dataset.scanBar), max, 52, 8, { oneSided }));
     c.dataset.drawn = '1';
@@ -37568,7 +37686,15 @@ function pulseResume(id) {
   const log = $('#chat-log');
   if (log) {
     log.innerHTML = '';
-    chatState.messages.forEach((m) => addMsg(m.role === 'user' ? 'user' : 'bot', m.content));
+    /* As 'assistant', the role a live answer has: as 'bot' a resumed answer
+     * skipped paintReply, so its [[chart]] and [[src]] tags printed as text,
+     * no chart was drawn and the bubble lost the answer's styling. */
+    let asked = '';
+    chatState.messages.forEach((m) => {
+      if (m.role === 'user') { asked = m.content; addMsg('user', m.content); return; }
+      const node = addMsg('assistant', m.content);
+      addReplyActions(node, m.content || '', asked);
+    });
     // A resumed conversation is history, so it opens where it left off rather
     // than at the top -- of the scroller, which is the body now, not the log.
     const scroller = pulseScroller();
@@ -38557,10 +38683,15 @@ function mountPulseCharts(root) {
       }
       const n = PULSE_CHART_BARS[span] || 63;
       const close = bars.close.slice(-n);
+      const dates = bars.dates.slice(-n);
+      // When the bars run to, said under the chart: they are fetched as it is
+      // drawn, not as of when the answer was written.
+      const cap = box.querySelector('.pc-cap');
+      if (cap && dates.length) cap.textContent = `${cap.textContent}, through ${dates[dates.length - 1]}. Source: Yahoo Finance.`;
       mount(plot.id, (w) => lineChart({
-        width: w, height: 190, valueTags: true,
-        labels: bars.dates.slice(-n),
-        series: [{ name: sym, values: close, color: C.brand, fill: true }],
+        width: w, height: 190, valueTags: true, labels: dates,
+        ariaLabel: `${sym} daily close over the last ${PULSE_CHART_WORDS[span] || 'period'}`,
+        series: [{ name: sym, values: close, color: C.brand }],
       }));
     });
   });

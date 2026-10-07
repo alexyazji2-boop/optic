@@ -103,7 +103,7 @@ def test_the_columns_and_the_header_agree():
     header = re.search(r'<div class="wv-cols" aria-hidden="true">(.*?)</div>', RAW, re.S).group(1)
     # Seven since the 30-day sparkline took a track of its own.
     assert len(cols) == 7 and header.count("<span") == 7, (cols, header)
-    assert "<span>30 days</span>" in header
+    assert "<span>30 sessions</span>" in header
     assert '<section class="panel wv-panel">' in RAW
 
 

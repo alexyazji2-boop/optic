@@ -93,7 +93,7 @@ def test_the_money_and_the_risk_are_drawn_side_by_side():
       R.html = renderPortfolioRisk(RISK);
       mountBookRiskVisuals(RISK);
       build('viz-risk-split'); build('viz-risk-pairs'); build('viz-risk-sectors');
-      R.split = CAPT.butterflyBars[0]; R.pairs = CAPT.rankBars[0]; R.sectors = CAPT.rankBars[1];
+      R.split = CAPT.butterflyBars[0]; R.pairs = CAPT.divergingBars[0]; R.sectors = CAPT.rankBars[0];
       R.brand = C.brand; R.s7 = C.s7;
     """)
     html, split = out["html"], out["split"]
@@ -105,8 +105,11 @@ def test_the_money_and_the_risk_are_drawn_side_by_side():
     assert xlu["left"] == 25.0 and xlu["right"] == 0, "a short's money is its size; a hedge offsets, drawn as none"
     assert dict(xlu["detail"])["Share of risk"] == "-4.0%, offsetting the rest"
     assert split["showValues"] is True and split["leftColor"] == out["brand"] and split["rightColor"] == out["s7"]
-    assert out["pairs"]["max"] == 1 and out["pairs"]["rows"][0]["highlight"] is True
+    pairs = out["pairs"]
+    assert pairs["maxAbs"] == 1, "a correlation is drawn on the whole -1 to +1 scale"
+    assert [r["value"] for r in pairs["rows"]] == [0.81, -0.2], "signed, most alike first"
     assert "TECL and AMD move most alike: +0.81 over 63 sessions" in html
+    assert xlu["leftText"] == "25% short" and xlu["rightText"] == "-4%", "a hedge's share is printed as itself, not 0%"
 
 
 def test_sectors_are_shares_of_the_whole_book_not_a_bar_centred_on_half():
@@ -235,3 +238,68 @@ def test_a_short_list_of_two_sided_bars_prints_its_figures():
     """)
     for want in ("30%", "45%", "70%", "55%"):
         assert want in out["labels"], want
+
+
+def test_a_pair_moving_opposite_is_not_called_alike():
+    out = _app("""
+      RISK.top_pairs = [{ a: 'TLT', b: 'QQQ', correlation: -0.82 }, { a: 'AMD', b: 'NVDA', correlation: 0.6 }];
+      R.title = pairsTitle(RISK);
+    """)
+    assert out["title"] == "TLT and QQQ move most against each other: -0.82 over 63 sessions"
+
+
+def test_the_risk_panel_is_measured_again_when_the_book_changes():
+    out = _app("""
+      var calls = 0;
+      getJSON = function () { calls += 1; return Promise.resolve({ available: true, positions: [] }); };
+      STATE.tracker = { open: [{ id: 1, qty: 10 }] };
+      STATE.bookRisk = { available: true }; STATE.bookRiskSig = bookRiskSignature(STATE.tracker);
+      loadPortfolioRisk();
+      R.same = calls;
+      STATE.tracker = { open: [{ id: 1, qty: 10 }, { id: 2, qty: 3 }] };
+      loadPortfolioRisk();
+      R.changed = calls; R.cleared = STATE.bookRisk === null;
+    """)
+    assert out["same"] == 0, "the same book is not measured twice"
+    assert out["changed"] == 1 and out["cleared"] is True, "a scan that opened a trade measures it again"
+
+
+def test_an_estimated_mark_and_the_month_in_progress_are_drawn_as_what_they_are():
+    out = _app("""
+      mountOpenPnl(OPEN); build('viz-trk-open');
+      R.est = CAPT.divergingBars[0].rows.map(function (r) { return [r.label, !!r.estimate]; });
+      mountTrackerMonths(MONTHS); build('viz-trk-months');
+      R.partial = CAPT.columnChart[0].items.map(function (i) { return !!i.partial; });
+      R.html = openPositionsPanel(OPEN);
+    """)
+    assert ["PANW opt", True] in out["est"] and ["AMD opt", False] in out["est"]
+    assert out["partial"] == [False, False, True]
+    assert "A lighter, outlined bar is marked from a model" in out["html"]
+
+
+@pytest.mark.parametrize("now,want", [
+    (100, "0% of the way from entry to target"),            # at entry, which read 33%
+    (110, "50% of the way from entry to target"),
+    (95, "50% of the way from entry to the stop"),
+    (125, "At or past the target"), (85, "At or past the stop")])
+def test_the_gauge_reads_from_where_the_trade_opened(now, want):
+    out = _app("""
+      R.read = travelRead(positionTravel({ stop: 90, target: 120, entry_spot: 100, mark_spot: %s }));
+    """ % now)
+    assert out["read"] == want
+
+
+def test_the_drawn_primitives_say_what_the_length_cannot():
+    out = _prim("""
+      var root = butterflyBars({ width: 500, showValues: true, format: function (v) { return v + '%'; },
+        rows: [{ label: 'XLU', left: 25, right: 0, leftText: '25% short', rightText: '-4%' }, { label: 'AMD', left: 30, right: 32 }] });
+      R.labels = texts(root);
+      var bars = divergingBars({ width: 400, maxAbs: 1, rows: [{ label: 'a', value: 0.5, estimate: true }, { label: 'b', value: -0.25 }] });
+      var paths = all(bars, function (n) { return n.tag === 'path'; });
+      R.op = paths.map(function (n) { return n.attrs['fill-opacity'] || null; });
+      var col = columnChart({ width: 300, items: [{ label: 'a', value: 2 }, { label: 'b', value: 3, partial: true }] });
+      R.hollow = all(col, function (n) { return n.tag === 'rect' && n.attrs['stroke-dasharray']; }).length;
+    """)
+    assert "25% short" in out["labels"] and "-4%" in out["labels"] and "0%" not in out["labels"]
+    assert out["op"] == ["0.4", None]
+    assert out["hollow"] == 1
