@@ -944,8 +944,35 @@ def state(yf_provider, day: Optional[str] = None, force: bool = False) -> Dict[s
         if prior:
             return {**prior, "archive": archive(), "cached": True, "stale": True,
                     "refreshing": _rebuild_behind(yf_provider, current)}
+        # A new Eastern day with no Read yet: the previous day's, under its
+        # own date, while today's is built. At midnight the key rolls and
+        # nothing exists for it until the loop's next tick, so the first
+        # reader of the day paid for the whole build. Yesterday's Read is
+        # titled with yesterday's date, so serving it says what it is.
+        previous = _previous_read(current)
+        if previous:
+            return {**previous, "archive": archive(), "cached": True, "stale": True,
+                    "previous_day": True,
+                    "refreshing": _rebuild_behind(yf_provider, current)}
 
     return {**build(yf_provider, current), "archive": archive()}
+
+
+def _previous_read(current: str) -> Optional[Dict[str, Any]]:
+    """The day before `current`'s Read, if it was built within 36 hours.
+
+    Older than that it is not the last Read but a gap in the record, and a
+    build on the request is the honest answer."""
+    try:
+        day = (datetime.fromisoformat(current) - timedelta(days=1)).date().isoformat()
+    except ValueError:
+        return None
+    stored = _load(day)
+    if not stored:
+        return None
+    if time.time() - _parse_iso(stored.get("built_at")) > 36 * 3600:
+        return None
+    return stored
 
 
 # Held while a background rebuild of today's Read is running, so a burst of

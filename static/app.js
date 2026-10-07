@@ -31962,7 +31962,7 @@ function roughGap(ms) {
 }
 
 /** The last-updated line for the Read hero, plus when the next one lands. */
-function readUpdatedHTML(iso, refreshing) {
+function readUpdatedHTML(iso, refreshing, previousDay) {
   const zone = activeZone();
   const stamp = stampIn(iso, zone);
   const ago = briefAgo(iso);
@@ -31973,7 +31973,8 @@ function readUpdatedHTML(iso, refreshing) {
     <span class="read-updated-dot"></span>
     <strong>Last updated</strong> ${stamp ? esc(stamp) : 'time not recorded'}${
   ago ? ` <span class="read-updated-ago">· ${esc(ago)}</span>` : ''}${refreshing
-    ? ' <span class="read-newer" id="read-newer">· A newer Read is being built</span>' : ''}
+    ? ` <span class="read-newer" id="read-newer">· ${previousDay
+      ? 'Today\u2019s Read is being built' : 'A newer Read is being built'}</span>` : ''}
   </p>
   `;
 }
@@ -31981,9 +31982,10 @@ function readUpdatedHTML(iso, refreshing) {
 /* Ask again while the newer Read is built, and offer it once it is in.
  *
  * Cheap to ask: while the build runs the server answers with the copy it
- * already has and starts nothing new. Four tries, fifteen seconds apart,
- * covers the builds on record bar the outliers; past that the line says so
- * and a reload will pick it up. */
+ * already has and starts nothing new. Eight tries, fifteen seconds apart:
+ * a first build of the day measured 46.6 seconds here, so the four this
+ * started with gave up on it; past two minutes the line says so and a
+ * reload will pick it up. */
 let briefNewerTimer = null;
 function watchForNewerBrief(shown) {
   clearTimeout(briefNewerTimer);
@@ -31999,11 +32001,11 @@ function watchForNewerBrief(shown) {
       STATE.briefNext = next;
       if (slot) {
         slot.innerHTML = `· <button type="button" class="auth-link" data-brief-newer
-          >A newer Read is ready. Show it</button>`;
+          >${shown.previous_day ? 'Today\u2019s Read is ready' : 'A newer Read is ready'}. Show it</button>`;
       }
       return;
     }
-    if (tries < 4) briefNewerTimer = setTimeout(check, 15000);
+    if (tries < 8) briefNewerTimer = setTimeout(check, 15000);
     else if (slot) slot.textContent = '\u00b7 The newer Read is taking a while. Reload to check again.';
   };
   briefNewerTimer = setTimeout(check, 15000);
@@ -35489,7 +35491,7 @@ function renderBrief(d) {
     <div class="read-hero-top">
       <div>
         <h2>Optic's Read: ${esc(d.day)}${askPulse('morning')}</h2>
-        ${readUpdatedHTML(d.built_at, d.refreshing === true && !d.historical)}
+        ${readUpdatedHTML(d.built_at, d.refreshing === true && !d.historical, d.previous_day === true)}
       </div>
       <div class="read-search">
         <input id="read-q" type="search" placeholder="Search the headlines"

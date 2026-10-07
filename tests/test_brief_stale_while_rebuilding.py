@@ -45,7 +45,11 @@ def builds(monkeypatch):
         return payload
 
     monkeypatch.setattr(brief, "build", build)
-    return calls, release
+    yield calls, release
+    # Let a background rebuild finish before the store's directory goes.
+    release.set()
+    assert brief._REBUILDING.acquire(timeout=5), "a background rebuild never finished"
+    brief._REBUILDING.release()
 
 
 def _aged(day, minutes):
@@ -118,3 +122,28 @@ def test_the_page_offers_the_newer_read_rather_than_repainting():
     assert "renderBrief" not in watch, "it repaints under the reader"
     assert "data-brief-newer" in watch
     assert "closest('[data-brief-newer]')" in app
+
+
+def test_a_new_day_serves_yesterdays_read_under_its_own_date_while_todays_builds(store, builds):
+    """At midnight Eastern the key rolls and nothing exists for it until the
+    loop's next tick, so the first reader of the day paid for the build."""
+    calls, release = builds
+    today = brief.today_key()
+    yesterday = (datetime.fromisoformat(today) - timedelta(days=1)).date().isoformat()
+    _aged(yesterday, 60 * 5)
+    out = brief.state(object())
+    assert out["day"] == yesterday, "it must say which day it is"
+    assert out["previous_day"] is True and out["refreshing"] is True
+    assert _wait_for(lambda: len(calls) == 1)
+    release.set()
+    assert _wait_for(lambda: brief.state(object()).get("day") == today)
+
+
+def test_a_previous_read_too_old_to_stand_in_is_not_served(store, builds):
+    calls, release = builds
+    release.set()
+    today = brief.today_key()
+    yesterday = (datetime.fromisoformat(today) - timedelta(days=1)).date().isoformat()
+    _aged(yesterday, 60 * 40)
+    out = brief.state(object())
+    assert out["day"] == today and "previous_day" not in out
