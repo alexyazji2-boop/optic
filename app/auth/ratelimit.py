@@ -21,7 +21,8 @@ address can lock its owner out on demand. The window here expires on its own.
 from __future__ import annotations
 
 import hashlib
-from typing import Dict, Optional, Tuple
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Optional, Tuple
 
 from fastapi import HTTPException, Request
 
@@ -156,15 +157,30 @@ def clear(kind: str, *raw_buckets: Optional[str]) -> None:
 
 
 def allowance(kind: str, raw_bucket: str, allowed: int,
-              window: int) -> Dict[str, int]:
-    """How much of an allowance is spent, without spending any of it."""
+              window: int) -> Dict[str, Any]:
+    """How much of an allowance is spent, without spending any of it.
+
+    `next_at` is when the oldest use in the window falls out of it, which is
+    when one more becomes available. The window rolls, so "left today" has
+    no midnight to point at, and a reader who has spent it all was told only
+    that it "resets 24 hours after each message" once they had tried again."""
     used = 0
+    next_at = None
     if allowed > 0:
         found = db.row(
-            "SELECT COUNT(*) AS n FROM auth_attempts WHERE kind = ? AND bucket = ? "
-            "AND created_at > ?", (kind, _bucket(raw_bucket), db.in_seconds(-window)))
+            "SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM auth_attempts "
+            "WHERE kind = ? AND bucket = ? AND created_at > ?",
+            (kind, _bucket(raw_bucket), db.in_seconds(-window)))
         used = int((found or {}).get("n") or 0)
-    return {"used": used, "allowed": allowed, "left": max(0, allowed - used)}
+        oldest = (found or {}).get("oldest")
+        if used and oldest:
+            try:
+                at = datetime.strptime(oldest, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+                next_at = (at + timedelta(seconds=window)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            except ValueError:
+                next_at = None
+    return {"used": used, "allowed": allowed, "left": max(0, allowed - used),
+            "next_at": next_at}
 
 
 def spend(kind: str, raw_bucket: str, allowed: int, window: int,

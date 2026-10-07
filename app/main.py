@@ -5424,6 +5424,7 @@ def ai_allowance(request: Request) -> Dict[str, Any]:
             state = auth_ratelimit.allowance("ai_day", bucket, allowed, _DAY)
             state["scope"] = "account"
             state["plan"] = plan["plan"]
+            state["plan_label"] = plan["label"]
             return state
         state = auth_ratelimit.allowance("ai_day", auth_ratelimit.client_ip(request),
                                          GUEST_AI_CALLS_PER_DAY, _DAY)

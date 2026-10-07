@@ -28695,18 +28695,33 @@ function renderAllowanceNote() {
     input.parentNode.insertBefore(host, input);
   }
   const left = state.left;
-  const plural = left === 1 ? 'message' : 'messages';
+  // "1 of 3 messages": the noun goes with the allowance, not with what is left.
+  const plural = state.allowed === 1 ? 'message' : 'messages';
+  /* The window rolls: each message comes back 24 hours after it was sent, so
+   * there is no midnight to name. Spent, the time the next one frees up is
+   * the useful fact, and it was only said after a refused send ("resets 24
+   * hours after each message"). The plan by its label, "Free", not its id. */
+  const back = state.next_at ? timeIn(state.next_at, activeZone()) + (() => {
+    // Inside 24 hours, so the only other day it can be is tomorrow.
+    try {
+      const day = (d) => d.toLocaleDateString('en-US', { timeZone: activeZone() });
+      return day(new Date(state.next_at)) !== day(new Date()) ? ' tomorrow' : '';
+    } catch (e) { return ''; }
+  })() : '';
+  const nextLine = back ? ` The next one is back at ${esc(back)}.` : '';
   if (state.scope === 'guest') {
     host.innerHTML = left > 0
-      ? `${left} of ${state.allowed} ${plural} left today.
+      ? `${left} of ${state.allowed} ${plural} left in the last 24 hours.
          <button type="button" data-auth-open="signup">Create a free account</button>
          for ${state.signed_in_allowance} a day.`
-      : `Today's guest allowance is used up.
+      : `The guest allowance is used up.${nextLine}
          <button type="button" data-auth-open="signup">Create a free account</button>
          for ${state.signed_in_allowance} a day. Every other panel stays open.`;
   } else {
-    host.innerHTML = `${left} of ${state.allowed} ${plural} left today on the
-      ${esc(state.plan || 'free')} plan.`;
+    const plan = esc(state.plan_label || cap(state.plan || 'free'));
+    host.innerHTML = left > 0
+      ? `${left} of ${state.allowed} ${plural} left in the last 24 hours on the ${plan} plan.`
+      : `All ${state.allowed} of the ${plan} plan's messages are used.${nextLine}`;
   }
   host.classList.toggle('spent', left <= 0);
 }
