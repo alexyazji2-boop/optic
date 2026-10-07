@@ -74,7 +74,8 @@ def test_a_404_is_a_missing_symbol_and_leaves_the_recent_list():
     assert out["missing"] is True and out["failed"] == "ZZZZQ"
     assert out["recent"] == ["MSFT"], "the name it could not find is not offered back"
     html = out["html"]
-    assert "No symbol called ZZZZQ" in html and "data-open-palette" in html
+    assert "No symbol called ZZZZQ" in html and 'data-open-palette="ZZZZQ"' in html, \
+        "Search again opens on what was typed, to correct rather than retype"
     assert 'data-sym-suggest="ZZZZQ"' in html
     assert "ERROR" not in html and "Try again" not in html, "a retry cannot find a name that is not there"
 

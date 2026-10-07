@@ -76,3 +76,12 @@ def test_no_double_hyphen_stands_in_for_a_dash_in_these_readings():
     for gone in ("reaches net income`\n        + (num(m.gross_pct) !== null\n          ? ` -- ",
                  "netSh), 1)} -- under a tenth", "filters${share === null ? '' : ` -- "):
         assert gone not in APP, gone
+
+
+def test_the_options_tab_is_called_what_the_strip_calls_it():
+    """"Back to Swing", "shared with the Swing tab", "The Swing / Options and
+    Macro tabs": the tab strip has said Options since the Dossier."""
+    assert "swing: 'Options', earnings: 'Earnings'," in APP
+    assert "The Swing / Options and Macro tabs" not in APP
+    assert "Overlay settings are shared with the Swing tab" not in APP
+    assert "Changes apply to the Charting tab and the Swing chart" not in APP

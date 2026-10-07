@@ -20946,7 +20946,7 @@ function wsManagePanel() {
       <p class="ws-modal-foot">Colours come from the palette the charts already
         draw from, which is the set checked for separation under colour-vision
         simulation. A free hex can land invisibly on top of a line that is
-        already there. Changes apply to the Charting tab and the Swing chart
+        already there. Changes apply to the Charting tab and the Options tab's chart
         together, and are remembered on this device.</p>
     </div>
   </div>`;
@@ -21022,8 +21022,8 @@ function renderChartWorkspace(d) {
     host.innerHTML = `<div class="ws-empty">
       <h2>Charting</h2>
       <p class="sub">A full-height chart with its own toolbar, overlays and drawings.
-        Overlay settings are shared with the Swing tab, so a moving average you recolour
-        here is that colour there too.</p>
+        Overlay settings are shared with the Options tab's chart, so a moving average you
+        recolour here is that colour there too.</p>
       <form class="ws-load" id="ws-form">
         <input id="ws-symbol" type="text" placeholder="Ticker" autocomplete="off"
           spellcheck="false" aria-label="Ticker to chart">
@@ -27776,8 +27776,8 @@ function renderEarnings(d) {
   if (d.not_applicable) {
     views.earnings.innerHTML = securityHeader('earnings') + `<div class="panel"><h2>No earnings for ${esc(d.ticker || '')}</h2>
       <div class="callout info">${esc(d.reason)}</div>
-      <p class="sub" style="margin-top:var(--space-3)">The Swing / Options and Macro tabs all work
-        normally for this ticker.</p></div>`;
+      <p class="sub" style="margin-top:var(--space-3)">Its Overview, Chart, Options and Investing
+        tabs work as they do for any symbol.</p></div>`;
     return;
   }
 
@@ -32124,8 +32124,8 @@ function tickerErrorHTML(err, ticker) {
     <p class="sub">The data feed has no price for it. Check the spelling, or search
       by the company's name.</p>
     <div class="sym-suggest" data-sym-suggest="${esc(ticker)}" hidden></div>
-    <div class="empty-acts"><button type="button" class="btn primary" data-open-palette
-      >Search again</button></div>
+    <div class="empty-acts"><button type="button" class="btn primary"
+      data-open-palette="${esc(ticker)}">Search again</button></div>
   </div>`;
 }
 
@@ -41293,7 +41293,9 @@ if (window.OpticAuth && window.OpticAuth.on) {
 // Human names for the views, for the gear's tooltip.
 const VIEW_NAMES = {
   chart: 'Charting',
-  home: 'Home', swing: 'Swing', earnings: 'Earnings',
+  // 'Options', as the tab strip names it. "Back to Swing" named a tab the
+  // reader had never seen.
+  home: 'Home', swing: 'Options', earnings: 'Earnings',
   market: 'Macro', indices: 'Indices', long: 'Investing', roth: 'Retirement',
   tracker: "Optic Portfolio", settings: 'Settings', brief: "Optic's Read",
 };
