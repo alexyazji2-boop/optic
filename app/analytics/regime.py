@@ -49,6 +49,17 @@ VIX_CALM, VIX_STRESSED = 16.0, 30.0
 # Share of sectors above their 200-day that counts as healthy participation.
 BREADTH_HEALTHY, BREADTH_WEAK = 65.0, 35.0
 
+# How each input is put on -100 to +100, in words, for the panel.
+SCALES = {
+    "trend": "0 when the S&P is flat over a week and a month on average; +100 at a 5% gain, -100 at a 5% loss",
+    "breadth": "0 when {:.0f}% of sectors are above their 200-day average; +100 at {:.0f}%, -100 at {:.0f}%".format(
+        (BREADTH_HEALTHY + BREADTH_WEAK) / 2.0, BREADTH_HEALTHY, BREADTH_WEAK),
+    "volatility": ("0 at a VIX of {:.0f}; +100 at {:.0f}, -100 at {:.0f}, less 1.5 points for each 1% "
+                   "the VIX rose today").format((VIX_CALM + VIX_STRESSED) / 2.0, VIX_CALM, VIX_STRESSED),
+    "participation": "0 when small caps match the S&P over a month; +100 at 4 points ahead, -100 at 4 behind",
+    "leadership": "0 when half the sectors are up today; +100 when all are, -100 when none are",
+}
+
 
 def _num(value: Any) -> Optional[float]:
     if value is None or isinstance(value, bool):
@@ -82,6 +93,7 @@ def score(overview: Dict[str, Any]) -> Dict[str, Any]:
     vix = indices.get("^VIX") or indices.get("VIX") or {}
 
     components: Dict[str, Optional[float]] = {}
+    unclipped: Dict[str, float] = {}
     notes: List[str] = []
 
     # -- trend: where the index has been over a week and a month ---------------
@@ -90,6 +102,7 @@ def score(overview: Dict[str, Any]) -> Dict[str, Any]:
         parts = [p for p in (spy_week, spy_month) if p is not None]
         # A month is the anchor; 5% over a month is a strong trend, so scale to that.
         raw = sum(parts) / len(parts)
+        unclipped["trend"] = raw / 5.0 * 100.0
         components["trend"] = _clip(raw / 5.0 * 100.0)
         notes.append("S&P {:+.1f}% over a month and {:+.1f}% over a week".format(
             spy_month if spy_month is not None else 0.0,
@@ -101,6 +114,7 @@ def score(overview: Dict[str, Any]) -> Dict[str, Any]:
         # Map the healthy/weak band onto the score linearly around the midpoint.
         mid = (BREADTH_HEALTHY + BREADTH_WEAK) / 2.0
         span = (BREADTH_HEALTHY - BREADTH_WEAK) / 2.0
+        unclipped["breadth"] = (breadth - mid) / span * 100.0
         components["breadth"] = _clip((breadth - mid) / span * 100.0)
         notes.append("{:.0f}% of sectors above their 200-day".format(breadth))
 
@@ -110,10 +124,13 @@ def score(overview: Dict[str, Any]) -> Dict[str, Any]:
         # Low VIX is risk-on. Invert and scale across the calm..stressed band.
         mid = (VIX_CALM + VIX_STRESSED) / 2.0
         span = (VIX_STRESSED - VIX_CALM) / 2.0
-        level = _clip((mid - vix_last) / span * 100.0)
+        raw_level = (mid - vix_last) / span * 100.0
+        level = _clip(raw_level)
         # A sharp rise matters even from a low base, so nudge on the day move.
         if vix_day is not None:
-            level = _clip(level - vix_day * 1.5)
+            raw_level = level - vix_day * 1.5
+            level = _clip(raw_level)
+        unclipped["volatility"] = raw_level
         components["volatility"] = level
         notes.append("VIX {:.1f}{}".format(
             vix_last, " ({:+.1f}% today)".format(vix_day) if vix_day is not None else ""))
@@ -123,6 +140,7 @@ def score(overview: Dict[str, Any]) -> Dict[str, Any]:
     if iwm_month is not None and spy_m is not None:
         spread = iwm_month - spy_m
         # Small caps leading is a genuine risk-on tell; lagging badly is a warning.
+        unclipped["participation"] = spread / 4.0 * 100.0
         components["participation"] = _clip(spread / 4.0 * 100.0)
         notes.append("small caps {} the S&P by {:.1f} points over a month".format(
             "leading" if spread >= 0 else "lagging", abs(spread)))
@@ -197,6 +215,10 @@ def score(overview: Dict[str, Any]) -> Dict[str, Any]:
         "weights": {k: round(WEIGHTS[k] * 100 / total_weight, 1) for k in usable},
         "agreement_pct": round(agree / len(usable) * 100.0, 0),
         "conflicts": conflicts,
+        # What zero and the ends of each input's bar are, and which inputs ran
+        # past the end and were cut to it: a bar at +100 can be far beyond it.
+        "scales": {k: SCALES[k] for k in usable if k in SCALES},
+        "clipped": sorted(k for k, v in unclipped.items() if k in usable and abs(v) > 100.0),
         "notes": notes,
         "scale_note": (
             "Supportive above +12, strongly so above +40, and the mirror image below. "

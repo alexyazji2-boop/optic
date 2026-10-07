@@ -3307,7 +3307,9 @@ function macdChart(macd, signal, hist, labels, width = 720, opts = {}) {
 function rotationChart(sectors, opts = {}) {
   const width = opts.width || 720;
   const height = opts.height || 520;
-  const m = { l: 44, r: 16, t: 16, b: 34 };
+  // Room for the axis titles, which were only in the prose under the chart.
+  const m = { l: 58, r: 16, t: 16, b: 44 };
+  if (!(sectors || []).some((sec) => (sec.path || []).some((p) => Number.isFinite(p.strength)))) return null;
   const plotW = width - m.l - m.r;
   const plotH = height - m.t - m.b;
 
@@ -3325,7 +3327,12 @@ function rotationChart(sectors, opts = {}) {
   const Y = (v) => m.t + plotH - ((v - lo) / (hi - lo)) * plotH;
 
   const root = svgRoot(width, height);
-  root.setAttribute('aria-label', 'Sector relative rotation');
+  root.setAttribute('aria-label', `Sector relative rotation${opts.asOf ? `, weekly, to ${opts.asOf}` : ''}: relative strength across, relative momentum up, 100 is each sector's own norm`);
+  root.appendChild(s('text', { x: m.l + plotW / 2, y: height - 6, 'text-anchor': 'middle', fill: C.ink2,
+    'font-size': CF.title }, 'Relative strength, 100 is its own norm \u2192'));
+  const yt = s('text', { x: 14, y: m.t + plotH / 2, 'text-anchor': 'middle', fill: C.ink2, 'font-size': CF.title,
+    transform: `rotate(-90 14 ${m.t + plotH / 2})` }, 'Relative momentum \u2192');
+  root.appendChild(yt);
 
   const cx = X(100), cy = Y(100);
 

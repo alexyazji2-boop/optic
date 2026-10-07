@@ -4693,23 +4693,29 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
   top: 50%;
   width: 15px; height: 15px;
   /* Centred by transform rather than a -7.5px margin: the margin had to equal
-     half the width, so any change to the width silently un-centred it. */
-  transform: translateX(-50%);
+     half the width, so any change to the width silently un-centred it. One
+     transform for both axes: a second declaration below the first replaced
+     it, and the dot sat 7.5px right of its reading. */
+  transform: translate(-50%, -50%);
   border-radius: 50%;
   background: var(--ink);
   border: 2px solid var(--surface);
-  transform: translateY(-50%);
   box-shadow: var(--elev-1);
 }
+/* Each band's name at the middle of its band. Spread evenly, the five names
+ * sat over bands that are not even (0, 25, 45, 55, 75, 100), so "Neutral" was
+ * over the fear band's edge; the ticks mark where each band starts. */
 .fg-scale-labels {
-  display: flex;
-  justify-content: space-between;
+  position: relative;
+  height: 1.5em;
   margin-top: var(--space-2);
   font-size: var(--t-micro);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--ink-muted);
 }
+.fg-scale-labels span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.fg-tick { position: absolute; top: -2px; bottom: -2px; width: 2px; transform: translateX(-1px); background: var(--surface); }
 
 .fg-hist-row { display: flex; gap: var(--space-3); flex-wrap: wrap; margin-top: var(--space-5); }
 .fg-hbox {
@@ -8821,6 +8827,7 @@ table.data tr.fx-detail td,
   overflow: hidden;
   transition: filter 90ms ease;
 }
+.map-tile:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; z-index: 1; }
 .map-tile:hover { filter: brightness(1.25); }
 .map-tile-sym {
   font-size: var(--t-caption);
@@ -17193,6 +17200,10 @@ details.exact > .table-scroll, details.exact > table { margin-top: var(--space-2
 .tl-key.up { color: var(--pos); }
 .tl-key.down { color: var(--neg); }
 .tl-key.flat { color: var(--ink-muted); }
+
+/* A ratio stretched beyond two standard deviations: weight, not a colour
+ * that would read as a call on which way it goes next. */
+.z-stretched { font-weight: 600; color: var(--ink); }
 
 /* A scan's ranked column: a bar in each cell, scaled to the list, and a mark on
  * the header saying the order comes from it. */

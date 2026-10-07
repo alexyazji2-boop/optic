@@ -225,3 +225,117 @@ def test_the_trades_per_day_chart_says_its_window_scale_and_figures():
     """)
     assert "the busiest day, Sep 2, had 5." in out["html"] and "2 bought, 5 sold, 1 other" in out["html"]
     assert "tallest bar 5 on Sep 2" in out["html"]
+
+
+# ------------------------------------------------------------ Markets and the Read
+
+def _src(name):
+    app = __import__("pathlib").Path(__file__).resolve().parent.parent.joinpath("static/app.js").read_text()
+    i = app.index(name)
+    return app[i:app.index("\n}\n", i)]
+
+
+def test_the_economic_series_and_bubble_map_survive_a_re_render():
+    """renderMarket rebuilds their hosts on every 20-second refresh, resize and
+    return to the tab, and only their loaders drew them, which return early from
+    cache: both charts went empty. The loaders also wrote into the host captured
+    before the request, which a re-render had replaced."""
+    body = _src("function renderMarket(d) {")
+    assert "mountEconChart();" in body and "mountStockMapChart();" in body
+    for loader, host in (("async function loadEcon(", "econ-host"), ("async function loadStockMap(", "stockmap-host")):
+        src = _src(loader)
+        after = src[src.index("await getJSON"):]
+        assert f"document.getElementById('{host}')" in after, loader
+
+
+def test_the_economic_chart_says_its_unit():
+    out = _app("""
+      var got = null;
+      mount = function (id, build) { got = build(500); };
+      lineChart = function (o) { return o; };
+      STATE.econ = { values: [3.1, 3.4], dates: ['2026-08-01', '2026-09-01'], unit: '%', label: 'CPI', form_label: 'year on year', min: 3.1 };
+      mountEconChart();
+      R.y = got.yFormat(3.4); R.v = got.valueFormat(3.4); R.aria = got.ariaLabel;
+    """)
+    assert out == {"y": "3.4%", "v": "3.40%", "aria": "CPI, year on year"}
+
+
+def test_the_fear_and_greed_marker_and_band_names_sit_where_they_mean():
+    css = __import__("pathlib").Path(__file__).resolve().parent.parent.joinpath("static/styles.css").read_text()
+    rule = css[css.index(".fg-marker {"):]
+    rule = rule[:rule.index("}")]
+    assert rule.count("transform:") == 1 and "translate(-50%, -50%)" in rule, "a second transform replaced the first"
+    body = _src("function renderSentiment(f) {")
+    for at, name in (("12.5", "Extreme fear"), ("35", "Fear"), ("50", "Neutral"), ("65", "Greed"), ("87.5", "Extreme greed")):
+        assert f'<span style="left:{at}%">{name}</span>' in body, name
+    assert "[25, 45, 55, 75]" in body, "a tick where each band starts"
+
+
+def test_the_regime_says_each_inputs_scale_and_does_not_overstate_agreement():
+    from app.analytics import regime
+    got = regime.score({"groups": {
+        "indices": [{"symbol": "SPY", "week": 3.0, "month": 11.0}, {"symbol": "IWM", "month": 1.0},
+                    {"symbol": "^VIX", "last": 22.0, "day": 0.0}],
+        "sectors": [{"day": 0.5}, {"day": -0.4}, {"day": 0.2}, {"day": -0.1}, {"day": 0.3}]},
+        "sector_breadth_pct": 50.0})
+    assert got["clipped"] == ["participation", "trend"], "a 7% average is past the 5% limit; small caps 10 points behind past 4"
+    assert set(got["scales"]) == set(got["components"])
+    out = _app("""
+      R.mixed = briefRegime({ available: true, score: 5, components: { trend: 40, breadth: -30, volatility: 5 },
+        weights: { trend: 40, breadth: 30, volatility: 30 }, agreement_pct: 67, conflicts: [],
+        scales: { trend: '0 when flat' }, clipped: ['trend'] });
+      R.all = briefRegime({ available: true, score: 30, components: { trend: 40, breadth: 30 },
+        weights: { trend: 50, breadth: 50 }, agreement_pct: 100, conflicts: [] });
+    """)
+    assert "2 of 3 inputs point the same way" in out["mixed"] and "All 3" not in out["mixed"]
+    assert "Scored 0 when flat." in out["mixed"] and "at the limit" in out["mixed"]
+    assert "All 2 inputs point the same way as the composite." in out["all"]
+
+
+def test_a_rise_is_never_painted_red_and_the_map_is_reached_from_the_keyboard():
+    out = _app("""
+      var dom = { min: 1, max: 9, higher_is_better: true };
+      R.rise = mapColour(2, dom, '%'); R.pos = C.pos;
+      R.pe = mapColour(30, { min: 10, max: 40, higher_is_better: false }, 'x'); R.neg = C.neg;
+      R.html = renderStockMap({ template: { shape: 'tile', label: 'Sectors this month', color: 'chg_20d', size: 'market_cap' },
+        measures: { chg_20d: { label: '20-day change', unit: '%' }, market_cap: { label: 'Market cap', unit: '$' } },
+        colour_domain: dom, drillable: ['XLK'], templates: [],
+        layout: [{ symbol: 'XLK', name: 'Technology', x: 0, y: 0, w: 50, h: 50, values: { chg_20d: 2, market_cap: 1e12 } }] });
+    """)
+    assert out["pos"] in out["rise"], "a 2% rise in a month when everything rose is green, not red"
+    assert out["neg"] in out["pe"], "a multiple still diverges around the middle of its range"
+    html = out["html"]
+    assert 'role="group"' in html and 'role="img"' not in html
+    assert 'tabindex="0" role="button" aria-label="Technology (XLK): 20-day change +2.0%, Market cap' in html
+    assert "Opens its holdings" in html and "Green above zero and red below" in html
+
+
+def test_a_panel_loaded_once_says_when():
+    out = _app("""
+      var x = stampFetched({ a: 1 });
+      R.keys = Object.keys(x); R.line = fetchedLine(x); R.none = fetchedLine({});
+    """)
+    assert out["keys"] == ["a"], "the stamp is not part of the payload"
+    assert "Fetched at" in out["line"] and "does not refresh on its own" in out["line"] and out["none"] == ""
+    for name in ("function renderCorrelation(", "function renderSentiment(", "function renderSectorBoard(",
+                 "function renderForex(", "function renderStockMap(", "function renderEcon("):
+        assert "fetchedLine(" in _src(name), name
+
+
+def test_the_rotation_chart_names_its_axes_and_draws_nothing_without_tracks():
+    out = _prim("""
+      var root = rotationChart([{ symbol: 'XLK', name: 'Tech', quadrant: 'leading', d_strength: 0, d_momentum: 0,
+        path: [{ strength: 101, momentum: 100.5, date: '2026-09-25' }, { strength: 102, momentum: 101, date: '2026-10-02' }] }],
+        { width: 600, height: 420, asOf: '2026-10-02' });
+      R.labels = texts(root); R.aria = root.attrs['aria-label'];
+      R.none = rotationChart([], { width: 600 });
+    """)
+    assert "Relative strength, 100 is its own norm →" in out["labels"] and "Relative momentum →" in out["labels"]
+    assert "to 2026-10-02" in out["aria"] and out["none"] is None
+
+
+def test_the_sector_table_lost_its_decoration_and_pairs_do_not_call_a_reversal():
+    body = _src("function renderMarket(d) {")
+    assert "<th>Composite</th><th></th>" not in body and "data-bar=\"${r.composite}\"" not in body
+    assert "'z-stretched'" in body and "signClass(-p.zscore_60d)" not in body
+    assert "<th>90 sessions</th>" in body

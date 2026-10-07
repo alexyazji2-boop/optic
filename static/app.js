@@ -18404,13 +18404,14 @@ function renderCorrelation(c) {
       above 1.0, which means this basket is not representing the index well right now.
       The clipped figure above is shown, but treat the level as unreliable today.</div>` : ''}
     <p class="caveat">${gloss(c.method || '')}</p>
+    ${fetchedLine(c)}
   </div>`;
 }
 
 async function loadCorrelation() {
   if (STATE.correlation) return;
   try {
-    STATE.correlation = await getJSON('/api/implied-correlation');
+    STATE.correlation = stampFetched(await getJSON('/api/implied-correlation'));
   } catch (err) {
     STATE.correlation = { available: false, reason: err.message };
   }
@@ -18689,9 +18690,9 @@ function renderSentiment(f) {
     </div>
 
     <div class="fg-scale">
-      <div class="fg-scale-bar"><i class="fg-marker" style="left:${pos}%"></i></div>
-      <div class="fg-scale-labels">
-        <span>Extreme fear</span><span>Fear</span><span>Neutral</span><span>Greed</span><span>Extreme greed</span>
+      <div class="fg-scale-bar">${[25, 45, 55, 75].map((b) => `<i class="fg-tick" style="left:${b}%"></i>`).join('')}<i class="fg-marker" style="left:${pos}%"></i></div>
+      <div class="fg-scale-labels" aria-hidden="true">
+        <span style="left:12.5%">Extreme fear</span><span style="left:35%">Fear</span><span style="left:50%">Neutral</span><span style="left:65%">Greed</span><span style="left:87.5%">Extreme greed</span>
       </div>
     </div>
 
@@ -18706,6 +18707,7 @@ function renderSentiment(f) {
 
     <p class="caveat">${esc(f.caveat || '')}</p>
     <p class="caveat">${gloss(f.method || '')}</p>
+    ${fetchedLine(f)}
   </div>`;
 }
 
@@ -18885,6 +18887,7 @@ function renderSectorBoard(b) {
         Δ to breakdown how far above the level it must hold. Negative means price is the
         wrong side of that level already.</p>
       <p class="caveat">${gloss(b.method || '')}</p>
+      ${fetchedLine(b)}
       <div id="sector-read-host"></div>
     </div>
   </div>
@@ -18951,7 +18954,7 @@ function renderRotation(r) {
       Each sector trails ${fmt(r.tail, 0)} weeks of history, so you can see not just where it
       is but which way it is heading. Sectors tend to travel clockwise.
       Improving → Leading → Weakening → Lagging. Though plenty turn back
-      without completing the loop.</p>
+      without completing the loop.${r.as_of ? ` Weekly closes to ${esc(r.as_of)}.` : ''}</p>
 
     <div class="rot-tallies">${tally}</div>
 
@@ -25012,6 +25015,7 @@ function renderForex(fx) {
       the current reading; where a pair has no defensible read across to US
       equities it says so rather than inventing one. EUR/GBP and USD/INR are two
       that do.</p>
+    ${fetchedLine(fx)}
   </div>`;
 }
 
@@ -25021,7 +25025,7 @@ async function loadForex(force, query) {
   if (STATE.forex && !force && q === (STATE.forexQuery || '')) return;
   STATE.forexQuery = q;
   try {
-    STATE.forex = await getJSON(`/api/forex?q=${encodeURIComponent(q)}`);
+    STATE.forex = stampFetched(await getJSON(`/api/forex?q=${encodeURIComponent(q)}`));
   } catch (err) {
     STATE.forex = { error: err.message };
   }
@@ -25042,7 +25046,7 @@ async function loadForex(force, query) {
  * The server does the squarify layout in 0-100 space, so this only has to scale
  * it to the pixels available — which means a resize is a re-scale, not a refetch.
  */
-function mapColour(value, domain) {
+function mapColour(value, domain, unit) {
   if (value === null || value === undefined) return C.grid;
   const { min, max, higher_is_better: hib } = domain || {};
   if (min === null || max === null || min === undefined || max === undefined) return C.grid;
@@ -25054,9 +25058,18 @@ function mapColour(value, domain) {
     const t = Math.max(0, Math.min(1, (value - min) / span));
     return `color-mix(in srgb, ${C.brand} ${Math.round(t * 85 + 15)}%, ${C.surface})`;
   }
-  // Diverging around the midpoint, so the neutral colour lands on the middle of
-  // the range rather than on zero — a month where every sector rose should not
-  // paint the whole map green.
+  /* A percentage (a change, growth, a margin) diverges around zero, where it
+   * changes meaning: around the middle of the range, a sector that rose was
+   * painted red, beside a heatmap where red means behind. A month when every
+   * sector rose is all green, deeper the more it rose, which is what happened. */
+  if (unit === '%') {
+    const reach = Math.max(Math.abs(min), Math.abs(max)) || 1;
+    const t0 = Math.max(0, Math.min(1, Math.abs(value) / reach));
+    const good0 = hib ? value >= 0 : value <= 0;
+    return `color-mix(in srgb, ${good0 ? C.pos : C.neg} ${Math.round(t0 * 78 + 8)}%, ${C.surface})`;
+  }
+  // A multiple diverges around the middle of its range: cheap and dear are
+  // relative, and there is no zero to centre on.
   const mid = (min + max) / 2;
   const t = Math.max(0, Math.min(1, Math.abs(value - mid) / (span / 2)));
   const good = hib ? value >= mid : value <= mid;
@@ -25090,18 +25103,24 @@ function renderStockMap(sm) {
   let body = '';
   if (tpl.shape === 'tile') {
     const tiles = sm.layout || [];
-    body = `<div class="map-tiles" role="img"
-      aria-label="${esc(tpl.label)} treemap">
+    /* A group of tiles the keyboard can reach, each saying its own figures.
+     * It was one image to a screen reader, and the tiles took the mouse only. */
+    const cUnit = (M[tpl.color] || {}).unit;
+    body = `<div class="map-tiles" role="group"
+      aria-label="${esc(tpl.label)}: tile size is ${esc((M[tpl.size] || {}).label)}, colour is ${esc((M[tpl.color] || {}).label)}">
       ${tiles.map((t) => {
     const cv = t.values[tpl.color];
     const sv = t.values[tpl.size];
+    const drills = (sm.drillable || []).includes(t.symbol);
+    const said = `${t.name} (${t.symbol}): ${(M[tpl.color] || {}).label} ${mapValue(cv, M[tpl.color])}, ${
+      (M[tpl.size] || {}).label} ${mapValue(sv, M[tpl.size])}${drills ? '. Opens its holdings' : ''}`;
     // Labels only where the tile can hold them. A ticker overflowing a 2%
     // sliver is worse than an unlabelled sliver you can hover.
     const roomy = t.w > 9 && t.h > 7;
     return `<div class="map-tile" style="left:${t.x}%;top:${t.y}%;
-        width:${t.w}%;height:${t.h}%;background:${mapColour(cv, dom)}"
-        ${(sm.drillable || []).includes(t.symbol)
-    ? `data-map-sector="${esc(t.symbol)}"` : ''}
+        width:${t.w}%;height:${t.h}%;background:${mapColour(cv, dom, cUnit)}"
+        tabindex="0" role="button" aria-label="${esc(said)}"
+        ${drills ? `data-map-sector="${esc(t.symbol)}"` : ''}
         data-instrument="${esc(t.symbol)}" data-instrument-label="${esc(t.name)}"
         title="${esc(t.name)} (${esc(t.symbol)}): ${esc((M[tpl.color] || {}).label)}: ${
   mapValue(cv, M[tpl.color])}, ${esc((M[tpl.size] || {}).label)}: ${mapValue(sv, M[tpl.size])}">
@@ -25113,8 +25132,10 @@ function renderStockMap(sm) {
     <p class="map-legend">Tile size is <strong>${esc((M[tpl.size] || {}).label)}</strong>,
       colour is <strong>${esc((M[tpl.color] || {}).label)}</strong>
       (${mapValue(dom.min, M[tpl.color])} to ${mapValue(dom.max, M[tpl.color])}).
-      Colour diverges around the middle of the range, not around zero. A month
-      when everything rose should not paint the whole map green.</p>`;
+      ${cUnit === '%' ? 'Green above zero and red below, deeper the larger it is.'
+    : (dom.higher_is_better === null || dom.higher_is_better === undefined)
+      ? 'Deeper is higher; neither end is better.'
+      : 'Colour diverges around the middle of the range: there is no zero for a multiple to centre on.'}</p>`;
   } else {
     body = `<div id="map-bubbles" class="chart-host"></div>
     <p class="map-legend">Across is <strong>${esc((M[tpl.x] || {}).label)}</strong>,
@@ -25159,6 +25180,7 @@ function renderStockMap(sm) {
     + 'table beneath. A tile is only as good as the measure under it: price-to-book '
     + 'means something for a bank and close to nothing for a software company, and '
     + 'a high dividend yield is more often a falling price than a generous board.')}</p>
+    ${fetchedLine(sm)}
   </div>`;
 }
 
@@ -25175,15 +25197,16 @@ async function loadStockMap(template, force, sector) {
   if (host) host.innerHTML = `<div class="panel span2 gap">${loadingHTML(
     s ? `${s} holdings` : 'stock map')}</div>`;
   try {
-    STATE.stockMap = await getJSON(`/api/stockmap?template=${encodeURIComponent(t)}${
-      s ? `&sector=${encodeURIComponent(s)}` : ''}`);
+    STATE.stockMap = stampFetched(await getJSON(`/api/stockmap?template=${encodeURIComponent(t)}${
+      s ? `&sector=${encodeURIComponent(s)}` : ''}`));
   } catch (err) {
     STATE.stockMap = { error: err.message };
   }
-  if (!host || STATE.view !== 'market') return;
-  host.innerHTML = renderStockMap(STATE.stockMap);
+  const live = document.getElementById('stockmap-host');      // see loadEcon
+  if (!live || STATE.view !== 'market') return;
+  live.innerHTML = renderStockMap(STATE.stockMap);
   mountStockMapChart();
-  revealPanels(host);
+  revealPanels(live);
 }
 
 function mountStockMapChart() {
@@ -25198,7 +25221,7 @@ function mountStockMapChart() {
     x: r.values[tpl.x],
     y: r.values[tpl.y],
     size: r.values[tpl.size],
-    color: mapColour(r.values[tpl.color], dom),
+    color: mapColour(r.values[tpl.color], dom, (sm.measures[tpl.color] || {}).unit),
   })), {
     width: w,
     height: Math.min(Math.max(w * 0.6, 320), 480),
@@ -25560,6 +25583,7 @@ function renderEcon(e) {
     <p class="sub">${esc(cat.note || '')}</p>
     ${picker}
     ${body}
+    ${fetchedLine(e)}
   </div>`;
 }
 
@@ -25579,28 +25603,54 @@ async function loadEcon(code, force) {
     STATE.econ = 'loading';
     host.innerHTML = renderEcon(STATE.econ);
   }
-  try { STATE.econ = await getJSON(`/api/econ/${encodeURIComponent(c)}`); }
+  try { STATE.econ = stampFetched(await getJSON(`/api/econ/${encodeURIComponent(c)}`)); }
   catch (err) { STATE.econ = { error: err.message }; }
-  if (!host || STATE.view !== 'market') return;
-  host.innerHTML = renderEcon(STATE.econ);
+  /* The host as it is now: Macro re-renders on its 20-second refresh, and the
+   * one captured before the request had been replaced, so the answer went
+   * into a detached box and the page sat on "Loading the series". */
+  const live = document.getElementById('econ-host');
+  if (!live || STATE.view !== 'market') return;
+  live.innerHTML = renderEcon(STATE.econ);
   mountEconChart();
-  revealPanels(host);
+  revealPanels(live);
 }
 
 function mountEconChart() {
   const e = STATE.econ;
   if (!e || e === 'loading' || e.error || !(e.values || []).length) return;
+  // In the series' own unit, as the tiles above it are: the axis and the tag
+  // printed bare numbers under a percent or a thousands of jobs.
+  const u = e.unit === '$' ? 'bn' : (e.unit || '');
   mount('chart-econ', (w) => lineChart({
     width: w,
     height: 260,
     labels: e.dates || [],
     series: [{ name: e.label, values: e.values, color: C.brand, fill: true }],
     valueTags: true,
+    ariaLabel: `${e.label}, ${e.form_label || ''}`.replace(/, $/, ''),
     // Zero matters on a change series and not on a level, so it is drawn only
     // where the series can actually cross it.
     zeroLine: e.form !== 'level' || (e.min !== null && e.min < 0),
-    yFormat: (v) => fmt(v, Math.abs(v) < 10 ? 1 : 0),
+    yFormat: (v) => `${fmt(v, Math.abs(v) < 10 ? 1 : 0)}${u}`,
+    valueFormat: (v) => `${fmt(v, Math.abs(v) < 10 ? 2 : 1)}${u}`,
   }));
+}
+
+/* When a panel's figures were fetched, for the panels Macro and the Read load
+ * once a page: beside tables that refresh every 20 seconds, a currency or a
+ * sector board with no time on it read as current. */
+function stampFetched(obj) {
+  if (obj && typeof obj === 'object') {
+    Object.defineProperty(obj, '__fetchedAt', { value: new Date(), enumerable: false, configurable: true });
+  }
+  return obj;
+}
+
+function fetchedLine(obj) {
+  const at = obj && obj.__fetchedAt;
+  if (!at) return '';
+  return `<p class="caveat fetched-at">Fetched at ${esc(at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}.
+    This panel does not refresh on its own; reloading the page fetches it again.</p>`;
 }
 
 /* An rgba from a theme hex, for a cell tinted by its value. */
@@ -25741,7 +25791,6 @@ function renderMarket(d) {
   };
   const groupLabel = (g) => GROUP_LABELS[g] || cap(g);
 
-  const sectorMax = Math.max(10, ...(s.sectors || []).map((r) => Math.abs(r.composite || 0)));
 
   // The whole row opens the chart. `data-instrument` is the opt-in: any other
   // table in the terminal gets the same behaviour by carrying these two
@@ -25836,7 +25885,7 @@ function renderMarket(d) {
     ${groupOrder.filter((g) => (m.groups || {})[g]).map((g) => `
       <h3>${hg(groupLabel(g))}</h3>
       <table class="data">
-        <thead><tr><th>Instrument</th><th>Last</th><th>1d</th><th>5d</th><th>20d</th><th>vs 200d</th><th>RSI</th><th>90-day</th></tr></thead>
+        <thead><tr><th>Instrument</th><th>Last</th><th>1d</th><th>5d</th><th>20d</th><th>vs 200d</th><th>RSI</th><th>90 sessions</th></tr></thead>
         <tbody>${m.groups[g].filter((r) => !r.error).map(instRow).join('')}</tbody>
       </table>`).join('')}
   </div>
@@ -25874,12 +25923,11 @@ function renderMarket(d) {
       <p class="sub">Ranked on the ratio line against ${esc(s.benchmark || 'SPY')}. Leadership, not beta. Composite blends 1-week to 6-month relative strength with trend confirmation.</p>
       ${sectorHeatHTML(s)}
       ${exactFigures(`<table class="data" data-defs="sector-rs">
-        <thead><tr><th>#</th><th>Sector</th><th>Composite</th><th></th><th>RS 1w</th><th>RS 1m</th><th>RS 3m</th><th>RS 6m</th><th>RSI</th><th>vs 50d</th><th>vs 200d</th><th>Strength</th></tr></thead>
+        <thead><tr><th>#</th><th>Sector</th><th>Composite</th><th>RS 1w</th><th>RS 1m</th><th>RS 3m</th><th>RS 6m</th><th>RSI</th><th>vs 50d</th><th>vs 200d</th><th>Strength</th></tr></thead>
         <tbody>${(s.sectors || []).map((r) => `<tr>
           <td>${r.rank}</td>
           <td class="name">${esc(r.name)} <span class="muted">${esc(r.symbol)}</span></td>
           <td class="${signClass(r.composite)}">${fmt(r.composite, 1)}</td>
-          <td><span data-bar-max="${sectorMax}" data-bar="${r.composite}"></span></td>
           <td class="${signClass((r.rs || {}).rs_1w)}">${fmtPct((r.rs || {}).rs_1w, 1)}</td>
           <td class="${signClass((r.rs || {}).rs_1m)}">${fmtPct((r.rs || {}).rs_1m, 1)}</td>
           <td class="${signClass((r.rs || {}).rs_3m)}">${fmtPct((r.rs || {}).rs_3m, 1)}</td>
@@ -25947,14 +25995,17 @@ function renderMarket(d) {
 
   <div class="panel">
     <h2>${hg('Ratio pair trades')}</h2>
-    <p class="sub">Each row is one ratio line. A z-score beyond ±2 is a mean-reversion setup; a trending ratio above its 50-day is a momentum setup. Sorted by how stretched they are.</p>
+    <p class="sub">Each row is one ratio line. A z-score beyond ±2 is a mean-reversion setup; a trending ratio above its 50-day is a momentum setup. Sorted by how stretched they are; a z-score in bold is beyond ±2.</p>
     <table class="data" data-defs="pairs">
       <thead><tr><th>Pair</th><th>Thesis</th><th>Ratio</th><th>z (60d)</th><th>5d</th><th>20d</th><th>60d</th><th>Setup</th></tr></thead>
       <tbody>${(s.pairs || []).map((p) => `<tr>
         <td class="name"><strong>${esc(p.pair)}</strong></td>
         <td class="name" style="color:var(--ink-2);white-space:normal;max-width:230px">${esc(cap(p.thesis))}</td>
         <td>${fmt(p.ratio, 4)}</td>
-        <td class="${Math.abs(p.zscore_60d) >= 2 ? signClass(-p.zscore_60d) : 'flat'}">${fmt(p.zscore_60d, 2)}</td>
+        ${/* Stretched is marked, not coloured as a call: red for a ratio stretched up
+           * read as a prediction it would fall, which the z-score does not make. */''}
+        <td class="${Math.abs(p.zscore_60d) >= 2 ? 'z-stretched' : ''}">${fmt(p.zscore_60d, 2)}${
+  Math.abs(p.zscore_60d) >= 2 ? '<span class="sr-only"> (stretched)</span>' : ''}</td>
         <td class="${signClass(p.chg_5d)}">${fmtPct(p.chg_5d, 1)}</td>
         <td class="${signClass(p.chg_20d)}">${fmtPct(p.chg_20d, 1)}</td>
         <td class="${signClass(p.chg_60d)}">${fmtPct(p.chg_60d, 1)}</td>
@@ -25971,9 +26022,9 @@ function renderMarket(d) {
       host.appendChild(sparkline(vals, 96, 24, priceLineColor(vals)));
     } catch (e) { /* skip */ }
   });
-  views.market.querySelectorAll('[data-bar]').forEach((host) => {
-    host.appendChild(inlineBar(Number(host.dataset.bar), Number(host.dataset.barMax) || sectorMax, 70, 9));
-  });
+  /* No inline bars here any more: the composite's was inside the folded
+   * exact figures, beside the same number, under a blank header, and the
+   * heatmap above already draws the sectors. */
   (m.ratios || []).forEach((r, i) => {
     mount(`ratio-chart-${i}`, (w) => lineChart({
       width: w,
@@ -25985,11 +26036,17 @@ function renderMarket(d) {
 
   if (STATE.rotation && !STATE.rotation.error) {
     mount('chart-rotation', (w) => rotationChart(STATE.rotation.sectors || [], {
-      width: w, height: Math.min(Math.max(w * 0.72, 380), 560),
+      width: w, height: Math.min(Math.max(w * 0.72, 380), 560), asOf: STATE.rotation.as_of,
     }));
   }
 
   mountMarketVisuals(m);
+  /* The economic series and the stock map's bubbles, from what is in hand.
+   * Each was drawn only by its own loader, and this render rebuilds their
+   * hosts: every 20-second refresh, resize and return to the tab wiped them,
+   * and the loaders return early from cache, so they stayed empty. */
+  mountEconChart();
+  mountStockMapChart();
   if (evc.series) {
     mount('chart-breadth', (w) => lineChart({
       width: w,
@@ -30653,7 +30710,7 @@ async function loadRotation(force) {
     host.innerHTML = renderRotation(STATE.rotation);
     if (!STATE.rotation.error) {
       mount('chart-rotation', (w) => rotationChart(STATE.rotation.sectors || [], {
-        width: w, height: Math.min(Math.max(w * 0.72, 380), 560),
+        width: w, height: Math.min(Math.max(w * 0.72, 380), 560), asOf: STATE.rotation.as_of,
       }));
     }
     revealPanels(host);
@@ -32569,11 +32626,18 @@ function briefRegime(r) {
   const rows = Object.keys(REGIME_LABELS)
     .filter((k) => comps[k] !== undefined && comps[k] !== null)
     .map((k) => `<tr>
-      <td class="name">${glossTerm(esc(REGIME_LABELS[k]), REGIME_WHY[k], explainPolicy())}</td>
+      <td class="name">${glossTerm(esc(REGIME_LABELS[k]), `${REGIME_WHY[k]}${
+  (r.scales || {})[k] ? ` Scored ${r.scales[k]}.` : ''}`, explainPolicy())}</td>
       <td style="width:44%">${regimeBar(comps[k])}</td>
-      <td class="num ${signClass(comps[k])}">${comps[k] > 0 ? '+' : ''}${fmt(comps[k], 0)}</td>
+      <td class="num ${signClass(comps[k])}">${comps[k] > 0 ? '+' : ''}${fmt(comps[k], 0)}${
+  (r.clipped || []).includes(k) ? '<span class="muted"> at the limit</span>' : ''}</td>
       <td class="num muted">${fmt(weights[k], 0)}%</td>
     </tr>`).join('');
+  /* "All N point the same way" only when they do. Conflicts are looked for
+   * only when the composite is beyond its bands, so a mixed tape had none and
+   * printed that sentence beside 60% agreement. */
+  const n = Object.keys(comps).length;
+  const agreeing = r.agreement_pct === undefined ? null : Math.round((r.agreement_pct / 100) * n);
 
   return `<div class="panel">
     <h2>${hg('Market regime score')}${askPulse('regime')}</h2>
@@ -32598,8 +32662,11 @@ function briefRegime(r) {
       <strong>Not everything agrees.</strong> ${esc(r.conflicts.join('; '))}. A composite
       built from inputs pulling in opposite directions is a weaker read than the same
       number with everything aligned.</div>`
-    : `<p class="caveat">All ${Object.keys(comps).length} inputs point the same way as the
-      composite${r.agreement_pct !== undefined ? ` (${fmt(r.agreement_pct, 0)}% agreement)` : ''}.</p>`}
+    : agreeing === n ? `<p class="caveat">All ${n} inputs point the same way as the composite.</p>`
+      : agreeing !== null ? `<p class="caveat">${agreeing} of ${n} inputs point the same way as the composite, or
+        are near their neutral point.</p>` : ''}
+    <p class="caveat">Each bar is its input scored from -100 to +100 around that input's own neutral point, which its
+      definition gives; a bar at the end may be past it.</p>
     <p class="caveat">${gloss(r.scale_note || '')}</p>
     <p class="caveat">${gloss(r.method || '')}</p>
   </div>`;
@@ -36156,7 +36223,7 @@ function earningsMarkersFor(ps, symbol) {
 async function loadSentiment() {
   if (STATE.sentiment) return;
   try {
-    STATE.sentiment = await getJSON('/api/sentiment');
+    STATE.sentiment = stampFetched(await getJSON('/api/sentiment'));
     mountPanel('sentiment-host', renderSentiment(STATE.sentiment));
   } catch (err) {
     console.warn('Sentiment unavailable:', err.message);
@@ -36176,7 +36243,7 @@ async function loadIndexBoard() {
 async function loadSectorBoard() {
   if (STATE.sectorBoard) return;
   try {
-    STATE.sectorBoard = await getJSON('/api/sectors/board');
+    STATE.sectorBoard = stampFetched(await getJSON('/api/sectors/board'));
     if (STATE.market) renderMarket(STATE.market);
   } catch (err) {
     console.warn('Sector board unavailable:', err.message);
@@ -42793,6 +42860,14 @@ document.addEventListener('keydown', (evt) => {
   // Unless it picked a suggestion, which the box handles and marks.
   if (evt.key === 'Enter' && !evt.defaultPrevented && evt.target.closest('[data-cmp-input]')) {
     runCompare();
+  }
+  // A sector tile drills into its holdings from the keyboard, as a click does;
+  // without this, Enter opened the sector's chart instead.
+  const drillKey = evt.target.closest('[data-map-sector]');
+  if (drillKey && (evt.key === 'Enter' || evt.key === ' ')) {
+    evt.preventDefault();
+    loadStockMap(STATE.stockMapTemplate, true, drillKey.dataset.mapSector);
+    return;
   }
   // A row advertised as role="button" has to work from the keyboard, or the
   // affordance is a lie to anyone not using a mouse.
