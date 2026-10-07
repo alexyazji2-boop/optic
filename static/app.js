@@ -34302,11 +34302,13 @@ async function loadAnalysts(force) {
         + filters)
       : await getJSON('/api/analysts/latest?' + filters.slice(1));
   } catch (err) {
-    data = { available: false, reason: err.message };
+    data = { available: false, reason: err.message, failed: true };
   }
   // A later press owns the page.
   if (seq !== analystSeq) return;
-  STATE.analysts = data;
+  /* A failed request is drawn, not kept: kept, every later visit repainted
+   * the failure without asking again. */
+  STATE.analysts = data.failed ? null : data;
   mountAnalysts(data);
   revealPanels(host);
 }
@@ -34384,6 +34386,13 @@ function analystsHTML(d) {
   const head = `<h2 tabindex="-1">Analyst actions${sym ? `: ${esc(sym)}` : ''}</h2>`;
   if (!d) {
     return `<div class="panel span-all">${head}${filters}<p class="sub">Loading.</p></div>`;
+  }
+  /* Two different absences. The server saying the feed is not there yet is a
+   * state, and its sentence is the answer; the request failing is an error,
+   * which printed the bare message under the filters with no way to ask
+   * again. It gets the app's error box and Try again. */
+  if (d.failed) {
+    return `<div class="panel span-all">${head}${filters}${errorHTML(d.reason)}</div>`;
   }
   if (!d.available) {
     return `<div class="panel span-all">${head}${filters}

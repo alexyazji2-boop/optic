@@ -369,3 +369,16 @@ def test_a_phone_gets_a_card_per_action_with_every_field_on_it():
     row = APP.split("function analystRowHTML(", 1)[1].split("\n}\n", 1)[0]
     for cell in ("an-date", "an-firm", "an-prior", "an-target", "an-act", "an-rate"):
         assert cell in row, cell
+
+
+def test_a_failed_request_is_an_error_with_a_retry_and_is_not_kept():
+    """The request failing printed the bare message under the filters with no
+    way to ask again, and the failure was kept, so every later visit
+    repainted it without asking. The server's own "not available" stays a
+    state with its sentence."""
+    load = APP.split("async function loadAnalysts(force) {", 1)[1].split("\n}\n", 1)[0]
+    assert "data = { available: false, reason: err.message, failed: true };" in load
+    assert "STATE.analysts = data.failed ? null : data;" in load
+    page = APP.split("function analystsHTML(d) {", 1)[1].split("\n}\n", 1)[0]
+    assert page.index("if (d.failed) {") < page.index("if (!d.available) {")
+    assert "${errorHTML(d.reason)}" in page
