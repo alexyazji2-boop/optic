@@ -14370,7 +14370,7 @@ function congressRow(t) {
   esc(cap(t.transaction || ''))}</td>
     <td class="ins-desc">${t.description ? esc(t.description)
     : '<span class="muted">None given</span>'}</td>
-    <td>${esc(t.traded_iso || t.traded || '')}</td>
+    <td>${t.date_suspect ? congressSuspectDate(t) : esc(t.traded_iso || t.traded || '')}</td>
     <td class="${lag !== null && lag !== undefined && lag > 30 ? 'muted' : ''}">${
   lag === null || lag === undefined ? '—' : `${fmt(lag, 0)}d`}</td>
     <td style="font-variant-numeric:tabular-nums">${band}</td>
@@ -34871,6 +34871,13 @@ const CONGRESS_OWNERS = {
   DC: { label: 'Child', title: "A dependent child's account" },
 };
 
+/** The trade date of a row whose filing dates the trade after the filing. */
+function congressSuspectDate(t) {
+  return `<span class="ins-date-suspect" title="The filing gives this trade date, which is
+    after the date the filing was received, so one of the two is a typo in the filing.
+    Shown as filed.">${esc(t.traded_iso || t.traded || '')} <span class="ins-as-filed">as filed</span></span>`;
+}
+
 function insCongressRow(t) {
   const band = `$${fmtCompact(t.amount_low, 0)} – $${fmtCompact(t.amount_high, 0)}`;
   const owner = CONGRESS_OWNERS[t.owner] || { label: 'Self', title: "The member's own account" };
@@ -34893,9 +34900,14 @@ function insCongressRow(t) {
     <td class="ins-desc">${t.description ? esc(t.description)
     : '<span class="muted">None given</span>'}</td>
     <td class="num">${band}</td>
-    <td>${esc(dayLabel(t.traded_iso) || t.traded || '')}</td>
+    ${/* A trade the filing dates after itself (see _date_suspect): the year
+         is printed, because "Dec 26" beside "Feb 9" looks like an ordinary
+         late filing, and the gap is not computed from a date that is wrong. */''}
+    <td>${t.date_suspect ? congressSuspectDate(t)
+    : esc(dayLabel(t.traded_iso) || t.traded || '')}</td>
     <td>${esc(dayLabel(t.filed) || '')}</td>
-    <td class="num${late ? ' neg' : ''}">${
+    <td class="num${late ? ' neg' : ''}"${t.date_suspect
+    ? ' title="Not computed: the trade date in this filing is after the filing itself."' : ''}>${
   lag === null || lag === undefined ? '—' : `${fmt(lag, 0)}d`}</td>
     <td class="ins-more">${t.source_url ? `<a href="${esc(t.source_url)}"
       target="_blank" rel="noopener" title="The filing itself, on the Clerk's server"
@@ -35017,6 +35029,39 @@ function renderCongressFacet() {
   renderContracts()}</div>`;
 }
 
+/* The per-day chart, its key and what it does not show.
+ *
+ * Drawn only when a day in the window has a trade on it. A slice whose only
+ * trade is dated after its own filing (see _date_suspect) has nothing the
+ * chart can place, and the panel described a chart and drew its key over an
+ * empty space, then said half the trades were disclosed "some days or more
+ * after the fact": a figure it did not have, phrased as one. */
+function congressChartBlock(c, q) {
+  const n = c.count || 0;
+  const days = c.activity || [];
+  const charted = days.some((d) => (d.buys + d.sells + d.other) > 0);
+  const odd = c.dates_suspect || 0;
+  const lag = c.lag_median === null || c.lag_median === undefined ? ''
+    : ` The two run weeks apart: half of these were disclosed ${fmt(c.lag_median, 0)} days
+      or more after the fact${c.lag_max ? `, and the slowest in this slice took ${fmt(c.lag_max, 0)}` : ''}.`;
+  const oddNote = odd ? ` ${odd === 1 ? 'One filing dates its trade' : `${fmt(odd, 0)} filings date their trades`}
+      after the filing itself, so one of the two dates is a typo; ${odd === 1 ? 'it is' : 'they are'}
+      listed as filed and left out of the chart and the figures here.` : '';
+  if (!charted) {
+    return `<p class="hm-none">Nothing to chart: ${odd && odd >= n
+      ? `the ${n === 1 ? 'trade here is' : 'trades here are'} dated after the filing that reports ${n === 1 ? 'it' : 'them'}.`
+      : 'no trade here has a trade date the chart can place.'}</p>
+      ${lag || oddNote ? `<p class="caveat">${lag.trim()}${oddNote}</p>` : ''}`;
+  }
+  return `<p class="viz-sub">The chart is the last ${fmt(c.activity_days || q.days, 0)} days by trade date, of the
+      disclosures counted above. Its latest days are short: trades made there are still being filed.</p>
+    ${congressActivityChart(days, c.activity_days)}
+    <p class="ca-key"><span class="ca-dot ca-buy"></span> bought
+      <span class="ca-dot ca-sell"></span> sold${c.other
+    ? ' <span class="ca-dot ca-other"></span> exchange or similar' : ''}</p>
+    <p class="caveat">Dated by when the trade happened, not when it was filed.${lag}${oddNote}</p>`;
+}
+
 function congressResults() {
   const c = STATE.insCongress;
   if (!c) {
@@ -35043,17 +35088,7 @@ function congressResults() {
   q.days === d ? ' on' : ''}" data-ins-days="${d}" aria-pressed="${q.days === d}"
             >${d}d</button>`).join('')}
         </div>
-        <p class="viz-sub">The chart is the last ${fmt(c.activity_days || q.days, 0)} days by trade date, of the
-          disclosures counted above. Its latest days are short: trades made there are still being filed.</p>
-        ${congressActivityChart(c.activity, c.activity_days)}
-        <p class="ca-key"><span class="ca-dot ca-buy"></span> bought
-          <span class="ca-dot ca-sell"></span> sold${c.other
-    ? ' <span class="ca-dot ca-other"></span> exchange or similar' : ''}</p>
-        <p class="caveat">Dated by when the trade happened, not when it was
-          filed. The two run weeks apart: half of these were disclosed
-          ${c.lag_median === null || c.lag_median === undefined
-    ? 'some days' : `${fmt(c.lag_median, 0)} days`} or more after the fact${
-  c.lag_max ? `, and the slowest in this slice took ${fmt(c.lag_max, 0)}` : ''}.</p>
+        ${congressChartBlock(c, q)}
       </div>
       <div class="panel">
         <h2>${hg('Most disclosed')}</h2>

@@ -311,11 +311,36 @@ def _iso(us_date: str) -> Optional[str]:
         return None
 
 
-def _disclosure_lag(traded: str, notified: str) -> Optional[int]:
-    a, b = _iso(traded), _iso(notified)
+def _disclosure_lag(traded: str, later: str) -> Optional[int]:
+    """Days from the trade to a later date on the same row, either format.
+
+    The row's "Filed after" is trade to FILING, which is what the 45-day limit
+    in the STOCK Act counts and what "disclosed N days after the fact" means.
+    It was trade to NOTIFICATION, the date the member learned of the trade,
+    which differs from the trade date on 2,588 of 2,838 rows in the 2026
+    record: a row read "Traded Sep 28, Disclosed Oct 2, Filed after 0d", the
+    two dates four days apart in the cells beside it."""
+    a = _iso(traded) or (traded if _ISO_DAY.match(traded or "") else None)
+    b = _iso(later) or (later if _ISO_DAY.match(later or "") else None)
     if not a or not b:
         return None
     return (datetime.fromisoformat(b) - datetime.fromisoformat(a)).days
+
+
+_ISO_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _date_suspect(traded_iso: Optional[str], filed_iso: Optional[str]) -> bool:
+    """A trade dated after the filing that reports it cannot be right.
+
+    Two rows in the 2026 record: SONY "traded 12/26/2026" in a filing received
+    on Feb 9, and PINS traded Jun 11 in one received Jun 1. One of the dates is
+    a typo in the filing. The SONY row was the newest trade in the archive, so
+    the per-day chart's thirty days ran Nov 27 to Dec 26 of a year that has not
+    happened and drew one bar; it also topped the table and printed a lag of
+    -339 days. The row stays, as filed, and is marked; it no longer sets the
+    window, the order or the lag figures."""
+    return bool(traded_iso and filed_iso and traded_iso > filed_iso)
 
 
 def refresh(year: Optional[int] = None, budget: Optional[int] = None) -> Dict[str, Any]:
@@ -391,19 +416,26 @@ def _refresh(year: Optional[int], budget: Optional[int]) -> Dict[str, Any]:
             continue
         parsed += 1
         member = _member_name(entry, out["member"])
+        filed = _iso(entry["filed"])
         for row in out["rows"]:
+            traded_iso = _iso(row["traded"])
+            suspect = _date_suspect(traded_iso, filed)
             trades.append({
                 **row,
                 "member": member,
                 "district": out["district"] or entry["district"],
-                "filed": _iso(entry["filed"]),
-                "traded_iso": _iso(row["traded"]),
-                "disclosure_lag_days": _disclosure_lag(row["traded"], row["notified"]),
+                "filed": filed,
+                "traded_iso": traded_iso,
+                "date_suspect": suspect,
+                "disclosure_lag_days": None if suspect else _disclosure_lag(row["traded"], filed or ""),
+                "notice_lag_days": None if suspect else _disclosure_lag(row["traded"], row["notified"]),
                 "doc_id": entry["doc_id"],
                 "source_url": HOUSE_PTR.format(year=year, doc=entry["doc_id"]),
             })
 
-    trades.sort(key=lambda t: (t["traded_iso"] or "", t["filed"] or ""), reverse=True)
+    # A row whose trade date cannot be right sorts by when it was filed.
+    trades.sort(key=lambda t: ((t["filed"] if t.get("date_suspect") else t["traded_iso"]) or "",
+                               t["filed"] or ""), reverse=True)
     with _LOCK:
         _MEM.update(at=time.time(), trades=trades, index_at=datetime.now(timezone.utc).isoformat(),
                     parsed=parsed, known=len(index), backlog=waiting)
@@ -451,7 +483,7 @@ def _activity(trades: List[Dict[str, Any]], days: int) -> List[Dict[str, Any]]:
     """
     if days <= 0:
         return []
-    dated = [t for t in trades if t.get("traded_iso")]
+    dated = [t for t in trades if t.get("traded_iso") and not t.get("date_suspect")]
     if not dated:
         return []
     last = max(t["traded_iso"] for t in dated)
@@ -555,8 +587,10 @@ def summary(ticker: Optional[str] = None, limit: int = 60, *,
         "lag_median": round(statistics.median(lags)) if lags else None,
         "lag_max": lags[-1] if lags else None,
         "latest_filed": max(filed) if filed else None,
-        "latest_traded": max((t["traded_iso"] for t in trades if t.get("traded_iso")),
+        "latest_traded": max((t["traded_iso"] for t in trades
+                              if t.get("traded_iso") and not t.get("date_suspect")),
                              default=None),
+        "dates_suspect": sum(1 for t in trades if t.get("date_suspect")),
         # A band per trade means the total is a band. Reported as two numbers
         # rather than a midpoint, because a midpoint is a figure nobody filed.
         "amount_low": sum(t["amount_low"] for t in trades),

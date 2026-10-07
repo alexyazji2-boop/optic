@@ -15769,6 +15769,10 @@ body.ws-max[data-view="chart"] main { padding: 0; }
 /* The filer's own words about the trade, which run to a sentence about an
    option's strike and expiry: wrapped in a column of its own width rather
    than stretching the table a sentence wide. */
+/* Reliability pass: a trade date the filing itself contradicts. Marked in the
+   warning colour and in words, never by colour alone. */
+.ins-date-suspect { color: var(--warn); font-variant-numeric: tabular-nums; cursor: help; }
+.ins-as-filed { font-size: var(--t-micro); text-transform: uppercase; letter-spacing: 0.06em; }
 .ins-row .ins-desc {
   white-space: normal;
   min-width: 14rem;

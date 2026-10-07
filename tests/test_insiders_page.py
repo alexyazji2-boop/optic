@@ -115,8 +115,11 @@ def test_the_chart_says_which_date_it_is_using():
     """The trade date and the filing date run weeks apart -- the median gap in
     the live archive is 14 days and the longest is 476. A per-day chart that
     did not say which one it plotted would be unreadable in either reading."""
+    # The chart, its key and its caveat moved into congressChartBlock, which
+    # draws them only when there is a dated trade to place.
     body = function("congressResults")
-    assert "when the trade happened, not when it was" in body
+    assert "congressChartBlock(c, q)" in body
+    assert "when the trade happened, not when it was" in function("congressChartBlock")
     fn = function("_activity") if False else (ROOT / "app/analytics/congress.py").read_text()
     assert "Keyed on the TRADE date" in fn
 
