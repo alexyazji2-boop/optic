@@ -15802,6 +15802,96 @@ body.ws-max[data-view="chart"] main { padding: 0; }
 /* The filer's own words about the trade, which run to a sentence about an
    option's strike and expiry: wrapped in a column of its own width rather
    than stretching the table a sentence wide. */
+/* Reliability pass: a filing per card on a phone. The ten-column table was
+   1,088px wide in a 299px box, so a reader saw a member's name and scrolled
+   sideways for the symbol, the direction and the amount. */
+@media (max-width: 559px) {
+  table.ins-table thead { display: none; }
+  table.ins-table { min-width: 0; width: 100%; }
+  table.ins-table, table.ins-table tbody { display: block; }
+  table.ins-table tr.ins-row {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr) max-content;
+    grid-template-areas: 'sym tx amt' 'member member owner' 'traded traded lag'
+      'filed filed more' 'desc desc desc';
+    column-gap: var(--space-2);
+    row-gap: var(--space-0);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border);
+  }
+  table.ins-table td { display: block; padding: 0; border: 0; text-align: left; white-space: normal; }
+  table.ins-table td.ic-sym { grid-area: sym; }
+  table.ins-table td.ic-tx { grid-area: tx; }
+  table.ins-table td.ic-amt { grid-area: amt; text-align: right; }
+  table.ins-table td.ic-member { grid-area: member; }
+  table.ins-table td.ic-owner { grid-area: owner; text-align: right; color: var(--ink-muted); }
+  table.ins-table td.ic-traded { grid-area: traded; }
+  table.ins-table td.ic-lag { grid-area: lag; text-align: right; }
+  table.ins-table td.ic-filed { grid-area: filed; }
+  table.ins-table td.ins-more { grid-area: more; text-align: right; }
+  table.ins-table td.ins-desc { grid-area: desc; color: var(--ink-muted); }
+  table.ins-table td.ins-desc.is-none { display: none; }
+  table.ins-table td.ic-traded::before { content: 'Traded '; color: var(--ink-muted); }
+  table.ins-table td.ic-filed::before { content: 'Disclosed '; color: var(--ink-muted); }
+  table.ins-table td.ic-lag::before { content: 'Filed after '; color: var(--ink-muted); }
+}
+
+/* The same for a federal award: who and how much on the first line, the
+   agency under it, the start date and the link last. 1,116px wide at 375. */
+@media (max-width: 559px) {
+  table.ct-table thead { display: none; }
+  table.ct-table { min-width: 0; width: 100%; }
+  table.ct-table, table.ct-table tbody { display: block; }
+  table.ct-table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    grid-template-areas: 'who amt' 'agency agency' 'start more';
+    column-gap: var(--space-2);
+    row-gap: var(--space-0);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border);
+  }
+  table.ct-table td { display: block; padding: 0; border: 0; text-align: left; white-space: normal; }
+  table.ct-table td.ct-who { grid-area: who; }
+  table.ct-table td.ct-amt { grid-area: amt; text-align: right; }
+  table.ct-table td.ct-agency { grid-area: agency; color: var(--ink-2); }
+  table.ct-table td.ct-start { grid-area: start; color: var(--ink-muted); }
+  table.ct-table td.ct-start::before { content: 'Started '; }
+  table.ct-table td.ins-more { grid-area: more; text-align: right; }
+}
+
+/* And a Form 4: symbol, direction and value first, then who, then the size
+   and price, then the trade date, and when it was filed on a line of its own,
+   since EDGAR's acceptance time is long. 909px wide at 375. */
+@media (max-width: 559px) {
+  table.if-table thead { display: none; }
+  table.if-table { min-width: 0; width: 100%; }
+  table.if-table, table.if-table tbody { display: block; }
+  table.if-table tr {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr) max-content;
+    grid-template-areas: 'sym tx value' 'who who who' 'shares shares price' 'date date date'
+      'filed filed filed';
+    column-gap: var(--space-2);
+    row-gap: var(--space-0);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border);
+  }
+  table.if-table td { display: block; padding: 0; border: 0; text-align: left; white-space: normal; }
+  table.if-table td.if-sym { grid-area: sym; }
+  table.if-table td.if-tx { grid-area: tx; }
+  table.if-table td.if-value { grid-area: value; text-align: right; }
+  table.if-table td.if-who { grid-area: who; }
+  table.if-table td.if-shares { grid-area: shares; }
+  table.if-table td.if-price { grid-area: price; text-align: right; }
+  table.if-table td.if-date { grid-area: date; }
+  table.if-table td.if-filed { grid-area: filed; color: var(--ink-muted); }
+  table.if-table td.if-shares::before { content: 'Shares '; color: var(--ink-muted); }
+  table.if-table td.if-price::before { content: 'at '; color: var(--ink-muted); }
+  table.if-table td.if-date::before { content: 'Traded '; color: var(--ink-muted); }
+  table.if-table td.if-filed::before { content: 'Filed '; }
+}
+
 /* Reliability pass: a trade date the filing itself contradicts. Marked in the
    warning colour and in words, never by colour alone. */
 .ins-date-suspect { color: var(--warn); font-variant-numeric: tabular-nums; cursor: help; }

@@ -33134,21 +33134,22 @@ function insiderFeedRow(r) {
     ? '\u2014' : insiderShares(r.shares);
   const price = r.price ? '$' + fmt(r.price, 2) : '\u2014';
   const value = r.value ? '$' + fmtCompact(r.value, 1) : '';
+  // Each cell named, for the phone card in styles.css (.if-table).
   return `<tr>
-    <td>${insiderWhen(r.filed_at)}</td>
-    <td class="name">${r.ticker
+    <td class="if-filed">${insiderWhen(r.filed_at)}</td>
+    <td class="name if-sym">${r.ticker
     ? `<button type="button" class="tkr" data-analyse="${esc(r.ticker)}"
         >${esc(r.ticker)}</button>`
     : `<span class="subnote" title="${esc(r.issuer || '')}">no ticker</span>`}</td>
-    <td>${esc((r.insider || '').slice(0, 30))}
+    <td class="if-who">${esc((r.insider || '').slice(0, 30))}
       ${(r.roles || []).length
     ? `<span class="ins-role">${esc(r.roles.join(', ').slice(0, 34))}</span>` : ''}</td>
-    <td><span class="ins-code ${tone}" title="${esc(r.code_note || '')}"
+    <td class="if-tx"><span class="ins-code ${tone}" title="${esc(r.code_note || '')}"
       >${esc(r.code_label || r.code || '')}</span></td>
-    <td class="num">${shares}</td>
-    <td class="num">${price}</td>
-    <td class="num">${value}</td>
-    <td>${esc(r.date || '')}</td>
+    <td class="num if-shares">${shares}</td>
+    <td class="num if-price">${price}</td>
+    <td class="num if-value">${value}</td>
+    <td class="if-date">${esc(r.date || '')}</td>
   </tr>`;
 }
 
@@ -34988,22 +34989,23 @@ function insCongressRow(t) {
    * are in the last column already. A dead attribute does not error, it takes
    * the click and does nothing, which reads as a slow app rather than a
    * missing feature. tests/test_insiders_page.py audits the pair. */
+  // Each cell named, for the phone card in styles.css (.ins-table).
   return `<tr class="ins-row">
-    <td class="name">${esc(t.member || '')}</td>
-    <td title="${esc(owner.title)}">${esc(owner.label)}</td>
-    <td><button type="button" class="ct-sym" data-ins-pick="${esc(t.ticker || '')}"
+    <td class="name ic-member">${esc(t.member || '')}</td>
+    <td class="ic-owner" title="${esc(owner.title)}">${esc(owner.label)}</td>
+    <td class="ic-sym"><button type="button" class="ct-sym" data-ins-pick="${esc(t.ticker || '')}"
       >${esc(t.ticker || '—')}</button></td>
-    <td><span class="ins-side ${tone}">${esc(cap(t.transaction || t.side || ''))}</span></td>
-    <td class="ins-desc">${t.description ? esc(t.description)
+    <td class="ic-tx"><span class="ins-side ${tone}">${esc(cap(t.transaction || t.side || ''))}</span></td>
+    <td class="ins-desc${t.description ? '' : ' is-none'}">${t.description ? esc(t.description)
     : '<span class="muted">None given</span>'}</td>
-    <td class="num">${band}</td>
+    <td class="num ic-amt">${band}</td>
     ${/* A trade the filing dates after itself (see _date_suspect): the year
          is printed, because "Dec 26" beside "Feb 9" looks like an ordinary
          late filing, and the gap is not computed from a date that is wrong. */''}
-    <td>${t.date_suspect ? congressSuspectDate(t)
+    <td class="ic-traded">${t.date_suspect ? congressSuspectDate(t)
     : esc(dayLabel(t.traded_iso) || t.traded || '')}</td>
-    <td>${esc(dayLabel(t.filed) || '')}</td>
-    <td class="num${late ? ' neg' : ''}"${t.date_suspect
+    <td class="ic-filed">${esc(dayLabel(t.filed) || '')}</td>
+    <td class="num ic-lag${late ? ' neg' : ''}"${t.date_suspect
     ? ' title="Not computed: the trade date in this filing is after the filing itself."' : ''}>${
   lag === null || lag === undefined ? '—' : `${fmt(lag, 0)}d`}</td>
     <td class="ins-more">${t.source_url ? `<a href="${esc(t.source_url)}"
@@ -35031,12 +35033,12 @@ function insCongressRow(t) {
 
 function contractRow(a) {
   return `<tr>
-    <td class="name">${esc(a.recipient || '')}${a.state
+    <td class="name ct-who">${esc(a.recipient || '')}${a.state
     ? ` <span class="muted">${esc(a.state)}</span>` : ''}</td>
-    <td>${esc(a.agency || '')}${a.sub_agency && a.sub_agency !== a.agency
+    <td class="ct-agency">${esc(a.agency || '')}${a.sub_agency && a.sub_agency !== a.agency
     ? `<span class="ct-sub"> · ${esc(a.sub_agency)}</span>` : ''}</td>
-    <td class="num">$${fmtCompact(a.amount, 1)}</td>
-    <td>${esc(dayLabel(a.start) || '')}</td>
+    <td class="num ct-amt">$${fmtCompact(a.amount, 1)}</td>
+    <td class="ct-start">${esc(dayLabel(a.start) || '')}</td>
     <td class="ins-more">${a.url
     ? `<a href="${esc(a.url)}" target="_blank" rel="noopener"
         title="${esc(a.description || 'The award on USAspending')}">Award</a>` : ''}</td>
@@ -35071,7 +35073,7 @@ function renderContracts() {
     <h2>${hg('Federal contracts')}${company && c.matched ? `<span class="th-plain">
       · ${esc(c.ticker)}</span>` : ''}</h2>
     <p class="sub">${head}</p>
-    ${rows.length ? `<div class="table-scroll"><table class="data">
+    ${rows.length ? `<div class="table-scroll"><table class="data ct-table">
       <thead><tr><th>${company ? 'Award' : 'Recipient'}</th><th>Agency</th>
         <th class="num">Amount</th><th>Started</th><th></th></tr></thead>
       <tbody>${rows.map(contractRow).join('')}</tbody>
@@ -35198,7 +35200,7 @@ function congressResults() {
     <div class="panel">
       <h2>${hg('The filings')}${n > (c.trades || []).length ? `<span class="th-plain">
         · newest ${fmt((c.trades || []).length, 0)} of ${fmt(n, 0)}</span>` : ''}</h2>
-      <div class="scroll-y table-scroll"><table class="data">
+      <div class="scroll-y table-scroll"><table class="data ins-table">
         <thead><tr><th>Member</th><th title="Whose account: the member's own, a spouse's, a joint one or a dependent child's">Owner</th>
           <th>Symbol</th><th>Transaction</th><th>Description</th>
           <th class="num">Amount</th><th>Traded</th><th>Disclosed</th>
@@ -35375,7 +35377,7 @@ function renderInsiderFeed() {
         * caveats off the page, and table-scroll is the repo's own horizontal
         * one — eight columns including two dates overflowed the panel and the
         * price column was cut off mid-figure. */''}
-    ${rows.length ? `<div class="scroll-y table-scroll"><table class="data" data-defs="insider-feed">
+    ${rows.length ? `<div class="scroll-y table-scroll"><table class="data if-table" data-defs="insider-feed">
       <thead><tr><th>Filed</th><th>Symbol</th><th>Insider</th><th>Transaction</th>
         <th class="num">Shares</th><th class="num">Price</th><th class="num">Value</th>
         <th>Trade date</th></tr></thead>

@@ -284,3 +284,22 @@ def test_the_key_swatches_are_filled_as_html_not_as_svg():
     block = CSS[CSS.index("Insiders page"):]
     assert ".ca-dot.ca-buy { background: var(--pos); }" in block
     assert ".ca-buy { fill: var(--pos); }" in block
+
+
+def test_each_insiders_table_is_a_card_per_row_on_a_phone():
+    """At 375px the three tables were 1,088px (House filings), 909px (Form 4)
+    and 1,116px (federal awards) wide in a 299px box: a reader saw a member's
+    name and scrolled sideways for the symbol, the direction and the amount.
+    Each row is a card under 560px, each cell placed by its class."""
+    css = (ROOT / "static/styles.css").read_text()
+    app = (ROOT / "static/app.js").read_text()
+    for table, cells in (("ins-table", ("ic-sym", "ic-tx", "ic-amt", "ic-member", "ic-traded",
+                                        "ic-filed", "ic-lag")),
+                         ("if-table", ("if-sym", "if-tx", "if-value", "if-who", "if-shares",
+                                       "if-price", "if-date", "if-filed")),
+                         ("ct-table", ("ct-who", "ct-amt", "ct-agency", "ct-start"))):
+        assert "table.%s { min-width: 0; width: 100%%; }" % table in css, table
+        assert 'class="data %s' % table in app, table
+        for cell in cells:
+            assert "table.%s td.%s {" % (table, cell) in css, (table, cell)
+            assert cell in app, cell
