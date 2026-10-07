@@ -426,7 +426,6 @@ const SECURITY_OWN_SYMBOL = new Set(['chart']);
 const GLOSSARY = {
   'auto trend lines': "Lines Optic fits to the swing highs and lows it has already found, rather than lines someone drew. A support line connects lows that held; a resistance line connects highs that capped. Each one is kept only if price actually touched it more than twice and it is still within reach of the current price, and the panel says how many candidates were rejected. They describe where price has turned before. They are not a forecast that it will turn there again.",
   'trend line': "A straight line connecting two or more highs or lows, used to say where a trend has been respected. Its usefulness is entirely in how many times price touched it: a line through two points can be drawn through almost any chart.",
-  'liquidity': "How easily something can be bought or sold without moving its price. A stock trading a few hundred thousand dollars a day is illiquid: your own order becomes the market, and the price you get is nothing like the price you saw.",
   'dollar volume': "Share price multiplied by shares traded. The actual money changing hands each day. A better liquidity measure than share count, since a million shares of a $2 stock is a far smaller market than a million shares of a $200 one.",
   'screen': "A first-pass filter over a large list of stocks, used to decide which few deserve real analysis. A screen ranks candidates; it does not decide whether a trade is good.",
   'universe': "The full set of stocks a strategy is allowed to consider before any filtering. A strategy that only ever looks at ten names has a ten-name universe, however sophisticated the rest of it is.",
@@ -477,7 +476,8 @@ const GLOSSARY = {
   'moving average': "The average closing price over a set number of past days, used to smooth out day-to-day noise and show the underlying trend.",
   'overbought': "A stock has risen quickly enough that it may be due for a pause or pullback.",
   'oversold': "A stock has fallen quickly enough that it may be due for a bounce.",
-  'liquidity': "How easily a stock or option can be bought or sold without moving its price much. Low liquidity means wide bid/ask spreads and harder fills.",
+  // One entry: there were two, and an object literal keeps only the later.
+  'liquidity': "How easily a stock or option can be bought or sold without moving its price much. Low liquidity means wide bid/ask spreads and harder fills: in a stock trading a few hundred thousand dollars a day, your own order becomes the market.",
   'bid/ask spread': "The gap between the highest price a buyer will pay (bid) and the lowest price a seller will accept (ask). A wide spread makes a trade more expensive to enter and exit.",
   'vwap': "Volume-Weighted Average Price. The average price paid today, weighted by how much volume traded at each price. Above VWAP is generally considered strong for the day; below is weak.",
   'opening range': "The high and low price set in the first few minutes after the market opens. Breaking above or below it is a common early signal of the day's direction.",
@@ -644,9 +644,9 @@ const HEADER_DEFS = {
   '\u0394 to break': 'How far price is from the level it would have to clear for the short-term trend to turn up. Negative means it is still underneath.',
   '\u0394 to breakdown': 'How far price is above the level that would turn the short-term trend down. Negative means it has already broken.',
   'market regime score': 'One number for what kind of market this is right now. Is the tape helping a position or working against it. Built from index trend, sector breadth, the VIX, whether small caps are confirming, and how many sectors are participating.',
-  'vex. Dealer vanna exposure': 'How much dealer hedging demand changes when implied volatility moves, rather than when price moves. Gamma answers "what if the stock moves"; vanna answers "what if the market re-prices risk".',
-  'cex. Dealer charm exposure': 'How much dealer hedging demand changes from time passing alone, with neither price nor volatility moving. It builds into expiry, which is why the last days of an options cycle have a drift of their own.',
-  'gex. Dealer gamma exposure': 'An estimate of how much stock market-makers must buy or sell to stay hedged as price moves. It hints at whether the tape will feel calm and range-bound or fast and trending.',
+  'vex. dealer vanna exposure': 'How much dealer hedging demand changes when implied volatility moves, rather than when price moves. Gamma answers "what if the stock moves"; vanna answers "what if the market re-prices risk".',
+  'cex. dealer charm exposure': 'How much dealer hedging demand changes from time passing alone, with neither price nor volatility moving. It builds into expiry, which is why the last days of an options cycle have a drift of their own.',
+  'gex. dealer gamma exposure': 'An estimate of how much stock market-makers must buy or sell to stay hedged as price moves. It hints at whether the tape will feel calm and range-bound or fast and trending.',
   'call vs put flow': "Whether today's options activity leans toward bullish bets (calls) or bearish bets (puts). A read on positioning, not a promise of direction.",
   'net premium by strike': 'How much money is actually being spent at each strike price, showing where traders are placing real bets rather than just quoting.',
   'buy calls / puts': 'Straightforward directional trades. Buying a call to bet the stock rises, or a put to bet it falls. Simple, but all the premium is at risk.',
@@ -668,7 +668,8 @@ const HEADER_DEFS = {
   // ---- earnings
   'latest result': "The quarter the company just reported: what it delivered against what analysts expected. A beat is only half the story. The session after the print is what says whether the market cared, and a company can beat and still sell off.",
   'reported eps': "Earnings per share the company actually delivered for the quarter, next to the figure analysts had modelled. The gap between them is the surprise.",
-  'next report': "When the company next reports results, what analysts expect, and how much movement the options market is charging for the event.",
+  // One entry, the two merged: the later one silently replaced this.
+  'next report': "When the company next reports results, what analysts expect, and how much movement the options market is charging for the event. Options usually stay expensive into that date and cheapen sharply after it.",
   'event pricing': "Whether the options are expensive or cheap for the period they cover, measured against how far this stock has actually moved over the same span. Expensive favors selling premium; cheap favors buying it.",
   'estimate revisions': "Whether analysts have been raising or cutting their forecasts recently. Estimates move in response to company guidance, so the direction of travel is the closest public read on guidance you can get from free data.",
   'surprise history': "How reported earnings compared with consensus in past quarters, and (more usefully) what the stock actually did the session afterwards. A company can beat every quarter and still sell off.",
@@ -749,7 +750,6 @@ const HEADER_DEFS = {
   'accumulation zones': 'Price areas where long-term buyers have historically stepped in. Useful for staging purchases rather than buying all at once.',
   'headlines': 'Recent news articles, each scored for tone.',
   'catalyst types detected': 'The kinds of events the headlines mention. Earnings, guidance, product news, legal, or M&A.',
-  'next report': 'When the company next reports earnings. Options usually stay expensive into that date and cheapen sharply after it.',
   'recent insider transactions': 'Buying and selling by the company’s own executives and directors.',
   'largest reported holders': 'The biggest institutional shareholders, from their most recent filings.',
   'why': 'The specific readings behind this verdict, so you can judge the reasoning rather than trusting the score.',
@@ -843,8 +843,14 @@ function titleCaseIn(root) {
   titleCaseIn(document.body);
 }());
 
+/* Lookups normalised once, so a key written with a capital still matches.
+ * Three were ('GEX. Dealer gamma exposure' and its vanna and charm
+ * siblings), and hg() lowercases the title, so none of them was ever shown. */
+const HEADER_DEF_INDEX = Object.fromEntries(Object.entries(HEADER_DEFS)
+  .map(([k, v]) => [k.toLowerCase().replace(/\s+/g, ' ').trim(), v]));
+
 function hg(title) {
-  const def = HEADER_DEFS[String(title).toLowerCase().replace(/\s+/g, ' ').trim()];
+  const def = HEADER_DEF_INDEX[String(title).toLowerCase().replace(/\s+/g, ' ').trim()];
   if (!def) return esc(title);
   return glossTerm(esc(title), def, explainPolicy());
 }
@@ -1193,6 +1199,16 @@ const TH_HINTS = {
   'signal score': 'How strongly the scan rated this setup when it opened, out of 100. Shown as strength only. The direction it was rating is the Betting on column, so a bearish 44 and a bullish 44 both read as 44 here rather than one of them as minus 44. It is a record of why the trade was taken, not a live reading: it is not recalculated as the position runs.',
 };
 
+/* Whole-label definitions for a figure that means the same wherever it
+ * appears ("IV rank", "Max pain"): a tile, a list row or a column header with
+ * that label is explained by it unless its call site passes its own. Specific
+ * labels only. A generic one ("Value", "Change", "Latest") means something
+ * different in every panel, which is how a moving average's "Value" ended up
+ * on an insider table, so those take their definition at the call site
+ * (tests/test_terminology.py keeps them out of here). */
+const LABEL_DEFS = {
+};
+
 /** Give table headers the same hover definitions as prose.
  *
  * Column headers are the one place with no room to explain an abbreviation, and
@@ -1204,7 +1220,8 @@ function glossHeaders(host) {
     if (th.querySelector('.gloss-term')) return;      // already processed
     const text = th.textContent;
     if (!text || !text.trim()) return;
-    const whole = TH_HINTS[text.trim().toLowerCase()];
+    const key = text.trim().toLowerCase().replace(/\s+/g, ' ');
+    const whole = TH_HINTS[key] || LABEL_DEFS[key];
     if (whole) {
       // Through glossTerm, not hand-rolled. Three call sites emitted this
       // markup directly and so ignored the reader's mode: measured at 13 terms
@@ -1464,7 +1481,8 @@ function toneChipConviction(conviction) {
  * (Key stats, the Financials tab), so "% of float short" says what that figure
  * is, rather than defining "float" inside it; otherwise glossed word by word. */
 function statLabel(label, def) {
-  return def ? glossTerm(esc(cap(label)), def, explainPolicy()) : gloss(cap(label));
+  const whole = def || LABEL_DEFS[String(label).toLowerCase().replace(/\s+/g, ' ').trim()];
+  return whole ? glossTerm(esc(cap(label)), whole, explainPolicy()) : gloss(cap(label));
 }
 
 /* Rows of [label, figure, class, definition]. A defined label marks its <dt>
