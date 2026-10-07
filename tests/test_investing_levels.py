@@ -228,17 +228,20 @@ def test_the_weekly_averages_are_computed_before_the_window_is_applied():
     caller = investing_chart_code()
     assert "smaSeries(ltSer.close" not in caller, \
         "computing from the windowed closes is what cut both lines off"
-    assert "const ltMa = (period) => (ltSer.ma || {})[period] || null;" in caller
+    assert "ltMaLines(ltSer, unit," in caller
+    assert "(ser.ma || {})[period]" in body_of("ltMaLines")
 
 
-def test_an_average_longer_than_the_history_is_dropped_not_drawn_empty():
+def test_an_average_longer_than_the_history_is_not_drawn_and_the_key_says_why():
     """200 months needs ~17 years and the payload holds twelve, so the monthly
-    rollup has no 200-bar average. The legend follows the same test, so a line
-    that is not drawn is not named."""
+    rollup has no 200-bar average. It is not drawn, and the key says what it
+    needs, as the Options chart's "200-week SMA (needs 200 bars)" does, rather
+    than naming a line that is not there without a reason."""
     fn = body_of("ltSlice")
     assert "full.some((v) => v !== null) ? cut(full) : null" in fn
     caller = investing_chart_code()
-    assert "...(ltMa200 ? [{ name: `200-${unit} average`" in caller
+    assert "...ltMas.filter((m) => m.values).map(" in caller
+    assert "`needs ${period} ${unit}s`" in body_of("ltMaLines")
 
 
 def test_the_periods_are_named_once():

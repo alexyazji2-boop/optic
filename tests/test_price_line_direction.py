@@ -103,7 +103,7 @@ def test_every_price_chart_draws_its_line_in_its_direction():
     assert "const lineColor = candles ? C.brand : priceLineColor(d.close);" in inst
     assert "values: d.close, color: lineColor," in inst
     assert "color: priceLineColor(ltSer.close) }" in APP
-    assert "values: ltSer.close, color: priceLineColor(ltSer.close), hidden: ltCandles" in APP
+    assert "values: ltSer.close, color: ltCandles ? C.ink : priceLineColor(ltSer.close), hidden: ltCandles" in APP
     assert "host.appendChild(sparkline(vals, 96, 24, priceLineColor(vals)));" in APP
     assert "chartColor('line')" not in APP, "a price line still reads the single-slot default"
 

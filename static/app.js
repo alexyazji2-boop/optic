@@ -2681,6 +2681,9 @@ function aggregateMonthly(ser) {
 /* Periods for the two averages this view is about, in BARS of the chosen
    interval — 40 and 200 weeks, or 40 and 200 months. */
 const LT_MA_PERIODS = [40, 200];
+// Twelve years of weeks, less a few for holidays and a listing week: what
+// longterm.py's `period="12y"` returns for a stock older than that.
+const LT_PAYLOAD_WEEKS = 12 * 52 - 8;
 
 function ltSlice(ser, rangeKey, intervalKey) {
   const base = intervalKey === 'monthly' ? aggregateMonthly(ser) : ser;
@@ -3269,7 +3272,8 @@ async function loadAllBars(symbol, size) {
  * is skipped when nothing it asks for has changed. */
 function allBarsArrived(symbol, size) {
   if (STATE.view === 'long') {
-    if (size === 'weekly' && ltRange === 'all'
+    const lt = ((STATE.long || {}).holding || {}).long_trend;
+    if (size === 'weekly' && ltNeedsAllBars(lt)
         && ((STATE.long || {}).holding || {}).ticker === symbol) {
       ltWindow = null;
       ltRedrawChart();
@@ -11893,27 +11897,10 @@ function swingPriceBlock(d, ps, ctx) {
       valueFormat: (x) => fmt(x, 2),
     }));
 
-    // 'clip' drops levels outside the plotted price range — without that, a level
-    // 25% away compresses the actual price action into a band in the middle. But
-    // a silently missing line looks like a bug, so the count is reported.
-    // Mirrors lineChart's own rule (data span plus 16% slack) so the count can't
-    // disagree with what actually got drawn.
-    const priced = (ps.close || []).filter((v) => v !== null && isFinite(v));
-    const dLo = Math.min(...priced);
-    const dHi = Math.max(...priced);
-    const slack = (dHi - dLo) * 0.16;
-    const offScale = overlayRefs.filter(
-      (r) => isFinite(r.value) && (r.value < dLo - slack || r.value > dHi + slack));
     const note = document.getElementById('chart-price-note');
     if (note) {
-      const one = offScale.length === 1;
-      note.innerHTML = offScale.length
-        ? `<p class="caveat" style="margin:var(--space-2) 0 0">${offScale.length} level${one ? '' : 's'} ${
-          one ? 'sits' : 'sit'} too far outside the price range on screen to draw, so ${
-          one ? "it isn't" : "they aren't"} shown here: ${one ? 'it is' : 'they are'} still
-          listed in the tables below. Widen the timeframe to bring ${
-          one ? 'it' : 'them'} into view.</p>`
-        : '';
+      const off = levelsOffScaleText(overlayRefs, ps.close);
+      note.innerHTML = off ? `<p class="caveat" style="margin:var(--space-2) 0 0">${esc(off)}</p>` : '';
     }
   } else {
     /* No bars to plot. There was no else here at all, so the mount kept the
@@ -30960,13 +30947,34 @@ function ltFullSeries(lt) {
   return ltSlice(ltSource(lt), 'all', ltInterval);
 }
 
-/* The weeks before any roll-up: the payload's twelve years, and on All every
- * week since the listing once they are here. See allBarsFor. */
+/* The weeks before any roll-up: the payload's twelve years, and every week
+ * since the listing once they are here whenever the window needs them. See
+ * allBarsFor and ltNeedsAllBars. */
 function ltSource(lt) {
   const base = lt.series || {};
-  if (ltRange !== 'all') return base;
+  if (!ltNeedsAllBars(lt)) return base;
   const sym = ((STATE.long || {}).holding || {}).ticker;
   return allBarsFor(sym, 'weekly', (base.dates || []).length) || base;
+}
+
+/* Whether the window needs weeks the payload does not hold: All itself, or the
+ * bars before the window's first one that its longest average is computed
+ * from. On 10Y the payload's twelve years leave two years of lead-in for a
+ * 200-week average that needs four, so on any stock older than the payload
+ * the 200-week line began about two years into the chart, measured on AAPL.
+ * The monthly rollup asks on every range: 200 months is longer than the
+ * payload, and an older stock has them. */
+function ltNeedsAllBars(lt) {
+  if (ltRange === 'all') return true;
+  const spec = LT_RANGES.find((r) => r.key === ltRange) || LT_RANGES[2];
+  const monthly = ltInterval === 'monthly';
+  const want = monthly ? spec.monthly : spec.weekly;
+  const weeks = (((lt || {}).series || {}).dates || []).length;
+  // The server asks for twelve years. Fewer back means the payload already
+  // starts at the listing, and there is nothing older to fetch.
+  if (weeks < LT_PAYLOAD_WEEKS) return false;
+  const held = monthly ? Math.floor(weeks * 12 / 52) : weeks;
+  return want + Math.max(...LT_MA_PERIODS) - 1 > held;
 }
 
 function ltSeries(lt) {
@@ -31155,13 +31163,12 @@ function ltPriceBlock(h, lt, ltLevels) {
      * Periods are in BARS, taking their unit from the interval, which is what
      * the Swing chart already does ('20-week SMA' on weekly, '20-day' on
      * daily). A 200-bar average needs 200 bars, and on the monthly rollup of a
-     * twelve-year series there are only ~144 — so it is dropped rather than
-     * drawn as an empty line, and the legend follows the same test.
+     * twelve-year series there are only ~144 — so it is not drawn, and the key
+     * says what it needs, as the Options chart's does. See ltMaLines.
      *
      * Computed in ltSlice, over the full history, and cut with the rest of the
      * series. Computing them here from `ltSer.close` is what made both lines
      * start partway into the chart. */
-    const ltMa = (period) => (ltSer.ma || {})[period] || null;
     /* Always drawn, deliberately not behind the shared Moving averages toggle.
      *
      * That toggle governs discretionary overlays on a daily chart, defaults to
@@ -31169,16 +31176,22 @@ function ltPriceBlock(h, lt, ltLevels) {
      * the two lines this panel argues from ("price is above its 40-week
      * average" is the phase read) for anyone who had not turned on a switch
      * that lives on another tab. On the long-horizon view these averages are
-     * the subject, not an overlay. */
-    const ltMa40 = ltMa(40);
-    const ltMa200 = ltMa(200);
+     * the subject, not an overlay.
+     *
+     * The Options chart's colours, names and slots: the 40-week average takes
+     * the middle average's colour and the 200-week the slow one's, from the
+     * same maColorsOnChart, so a colour picked in the dialog reaches both and a
+     * default that collides with the price line moves on both. These read
+     * `overlayStyle` directly, which skipped that check, and were called
+     * "40-week average" beside the Options chart's "50-week SMA". */
+    const maOn = maColorsOnChart(ltCandles);
+    const ltMas = ltMaLines(ltSer, unit, { 40: maOn.sma50, 200: maOn.sma200 });
 
     mount('legend-weekly', legend([
       ...(ltCandles
-        ? [{ name: `Up ${unit}`, color: C.s3 }, { name: `Down ${unit}`, color: C.s8 }]
-        : [{ name: `${ltSer.monthly ? 'Monthly' : 'Weekly'} close`, color: priceLineColor(ltSer.close) }]),
-      ...(ltMa40 ? [{ name: `40-${unit} average`, color: overlayStyle('sma50').color }] : []),
-      ...(ltMa200 ? [{ name: `200-${unit} average`, color: overlayStyle('sma200').color }] : []),
+        ? [{ name: `Up ${unit}`, color: chartColor('up') }, { name: `Down ${unit}`, color: chartColor('down') }]
+        : [{ name: 'Close', color: priceLineColor(ltSer.close) }]),
+      ...ltMas.map((m) => ({ name: m.name + (m.short ? ` (${m.short})` : ''), color: m.color })),
       ...(showVol ? [{ name: 'Volume', color: C.ink2 }] : []),
       /* Gated on the flag, and no longer dashed.
        *
@@ -31209,16 +31222,16 @@ function ltPriceBlock(h, lt, ltLevels) {
       // Honours the same shared Volume toggle as every other price chart. The
       // weekly payload has carried volume all along and this chart dropped it.
       volume: showVol ? (ltSer.volume || null) : null,
+      candleUp: chartColor('up'),
+      candleDown: chartColor('down'),
+      volUp: chartColors.up || null,
+      volDown: chartColors.down || null,
       series: [
-        { name: `${ltSer.monthly ? 'Monthly' : 'Weekly'} close`,
-          values: ltSer.close, color: priceLineColor(ltSer.close), hidden: ltCandles,
+        { name: 'Close',
+          values: ltSer.close, color: ltCandles ? C.ink : priceLineColor(ltSer.close), hidden: ltCandles,
           fill: !ltCandles && ltMode === 'area', fillOpacity: AREA_FILL_OPACITY },
-        ...(ltMa40 ? [{ name: `40-${unit} average`, values: ltMa40,
-          color: overlayStyle('sma50').color, width: overlayStyle('sma50').width,
-          marker: false }] : []),
-        ...(ltMa200 ? [{ name: `200-${unit} average`, values: ltMa200,
-          color: overlayStyle('sma200').color, width: overlayStyle('sma200').width,
-          marker: false }] : []),
+        ...ltMas.filter((m) => m.values).map((m) => ({ name: m.name, values: m.values,
+          color: m.color, width: overlayStyle(m.slot).width, marker: false })),
       ],
       candles: ltCandles
         ? { open: ltSer.open, high: ltSer.high, low: ltSer.low, close: ltSer.close }
@@ -31233,15 +31246,84 @@ function ltPriceBlock(h, lt, ltLevels) {
          chart draws twelve years. */
       bands: showSR ? srBands(ltLevels.support_resistance || [],
         ltLevels.atr14, ltLevels.spot) : [],
-      // Labels hug the left edge here. On a twelve-year chart the newest bars are
-      // crowded against the right, so right-aligned tags covered the price action
-      // they were annotating — which is what made this chart hard to read.
-      refLabelSide: 'left',
+      /* Right, as on the Options chart. They hugged the left edge here, in the
+       * golden colour beside the axis, so the same 61.8% level was labelled on
+       * opposite sides of two charts of one stock. */
       refLineFit: 'clip',
       yFormat: priceAxisLabel,
       valueFormat: (x) => fmt(x, 2),
     }));
+
+    const note = document.getElementById('chart-weekly-note');
+    if (note) {
+      const said = ltMaNote(ltMas, h.ticker, ltFullSeries(lt), unit);
+      const off = levelsOffScaleText(zoneRefs, ltSer.close);
+      note.innerHTML = [said, off].filter(Boolean)
+        .map((t) => `<p class="caveat" style="margin:var(--space-2) 0 0">${esc(t)}</p>`).join('');
+    }
   }
+}
+
+/* The two averages as the chart draws them, with what the key says about
+ * each: '' when the line runs the width of the window, the month it starts in
+ * when it begins inside it, and how many bars it needs when there is no line. */
+function ltMaLines(ser, unit, colors) {
+  const first = (arr) => (arr || []).findIndex((v) => Number.isFinite(v));
+  return LT_MA_PERIODS.map((period) => {
+    const values = (ser.ma || {})[period] || null;
+    const at = values ? first(values) : -1;
+    const start = at > 0 ? (ser.dates || [])[at] : null;
+    return {
+      period, values: at >= 0 ? values : null, color: colors[period],
+      slot: period === 40 ? 'sma50' : 'sma200',
+      name: `${period}-${unit} SMA`,
+      start,
+      short: at < 0 ? `needs ${period} ${unit}s` : (start ? `from ${ltMonthYear(start)}` : ''),
+    };
+  });
+}
+
+/* Why an average begins partway across, or has no line at all. It is not
+ * drawn where it cannot be computed: a 200-week average is the mean of the 200
+ * weeks before it, and COIN listed in April 2021, so its first one is February
+ * 2025. Said in words, because a line that starts in the middle of a chart
+ * reads as a fault. */
+function ltMaNote(mas, ticker, full, unit) {
+  const begun = (full.dates || [])[0];
+  const late = mas.filter((m) => m.start || !m.values);
+  if (!late.length || !begun) return '';
+  const parts = late.map((m) => (m.values
+    ? `the ${m.period}-${unit} starts in ${ltMonthYear(m.start)}`
+    : `the ${m.period}-${unit} has none yet`));
+  return `Optic's price history for ${ticker} begins in ${ltMonthYear(begun)}. An average has no value until it has as many ${
+    unit}s of closes as its length, so ${parts.join(' and ')}.`;
+}
+
+/* 'clip' drops levels outside the plotted price range — without that, a level
+ * 25% away compresses the actual price action into a band in the middle. But
+ * a silently missing line looks like a bug, so the count is reported, on the
+ * Options chart and the Investing one alike. Mirrors lineChart's own rule
+ * (data span plus 16% slack) so the count can't disagree with what got drawn. */
+function levelsOffScaleText(refs, closes) {
+  const priced = (closes || []).filter((v) => v !== null && isFinite(v));
+  if (!priced.length) return '';
+  const dLo = Math.min(...priced);
+  const dHi = Math.max(...priced);
+  const slack = (dHi - dLo) * 0.16;
+  const n = (refs || []).filter(
+    (r) => isFinite(r.value) && (r.value < dLo - slack || r.value > dHi + slack)).length;
+  if (!n) return '';
+  const one = n === 1;
+  return `${n} level${one ? '' : 's'} ${one ? 'sits' : 'sit'} too far outside the price range on screen to draw, so ${
+    one ? "it isn't" : "they aren't"} shown here: ${one ? 'it is' : 'they are'} still listed in the tables below. Widen the timeframe to bring ${
+    one ? 'it' : 'them'} into view.`;
+}
+
+/* 'Feb 2025' from '2025-02-03'. */
+function ltMonthYear(iso) {
+  const m = /^(\d{4})-(\d{2})/.exec(String(iso || ''));
+  if (!m) return '';
+  return `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(m[2]) - 1]} ${m[1]}`;
 }
 
 function renderLong(d) {
@@ -31340,6 +31422,7 @@ function renderLong(d) {
       <div id="lt-toolbar"></div>
       <div id="legend-weekly"></div>
       <div id="chart-weekly"></div>
+      <div id="chart-weekly-note"></div>
       <div class="grid c3" style="margin-top:var(--space-3)">
         ${tile('vs 40-week SMA', fmtPct(lt.vs_40w_sma, 1), `level ${fmt(lt.sma_40w, 2)}`, signClass(lt.vs_40w_sma))}
         ${tile('vs 200-week SMA', fmtPct(lt.vs_200w_sma, 1), `level ${fmt(lt.sma_200w, 2)}`, signClass(lt.vs_200w_sma))}

@@ -93,8 +93,9 @@ def test_volume_keeps_its_own_pair_unless_a_colour_was_chosen():
     """The volume strip is pos/neg and the candles are s3/s8: they were never
     the same pair. Passing chartColor() for volume would move every
     deployment's volume bars off pos/neg the moment this shipped."""
-    assert APP_JS.count("volUp: chartColors.up || null") == 2      # both charts
-    assert APP_JS.count("volDown: chartColors.down || null") == 2
+    # Both charts, and the Investing chart since it took the Options chart's colours.
+    assert APP_JS.count("volUp: chartColors.up || null") == 3
+    assert APP_JS.count("volDown: chartColors.down || null") == 3
     assert "volUp: chartColor(" not in APP_JS
     assert "volUp || C.pos" in CHARTS_JS
     assert "volDown || C.neg" in CHARTS_JS
@@ -106,9 +107,10 @@ def test_both_charts_get_the_same_colours():
 
     Three, not two, since the Swing setups row chart: it draws the same
     instrument's candles a few inches below the Swing chart, in the colours
-    the reader chose for both."""
-    assert APP_JS.count("candleUp: chartColor('up')") == 3
-    assert APP_JS.count("candleDown: chartColor('down')") == 3
+    the reader chose for both. Four since the Investing chart: its candles
+    were the theme's s3/s8 whatever the reader had chosen."""
+    assert APP_JS.count("candleUp: chartColor('up')") == 4
+    assert APP_JS.count("candleDown: chartColor('down')") == 4
     assert "candleUp: chartColor('up'), candleDown: chartColor('down')," in \
         APP_JS[APP_JS.index("function setupChartNode("):]
     # Both `Close` series, by name. A global count of chartColor('line') was the
