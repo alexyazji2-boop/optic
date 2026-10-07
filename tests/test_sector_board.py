@@ -185,3 +185,15 @@ def test_rotation_is_a_shape_and_not_a_string():
     assert isinstance(rot, dict)
     assert set(rot) >= {"state", "label", "note"}
     assert rot["label"] and not rot["label"].startswith("{")
+
+
+def test_the_index_board_does_not_describe_a_rotation_it_does_not_show():
+    """The Indices page prints this method beside SPY, QQQ, IWM and DIA. Its
+    rotation half described "the sector's return against SPY's", on a page
+    with no rotation column, about a board whose first row is SPY."""
+    from app.analytics import sector_board as sb
+    assert "Rotation" not in sb._method(sb.INDEX_ETFS)
+    assert "prior completed session's high" in sb._method(sb.INDEX_ETFS)
+    assert "Rotation is separate and relative" in sb._method(sb.SECTORS)
+    app = open("static/app.js", encoding="utf-8").read()
+    assert "${sectorReadButton(r.symbol, 'Index')}" in app, "Sector Read under SPY"

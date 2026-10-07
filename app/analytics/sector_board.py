@@ -144,6 +144,29 @@ def _summary(trend: str, bull_above: float, bear_below: float) -> str:
     return "Inside prior session range ({:,.2f} – {:,.2f}).".format(bear_below, bull_above)
 
 
+def _method(entries: List[Dict[str, str]]) -> str:
+    """How the board reads, for the board it is printed under.
+
+    The Indices page draws these levels for SPY, QQQ, IWM and DIA and prints
+    this beside them; the rotation half described "the sector's return against
+    SPY's", on a page with no rotation column, about a board whose first row
+    is SPY. Rotation is only described where it is shown."""
+    levels = (
+        "Bull above and bear below are the prior completed session's high and "
+        "low. The two prices the overnight and pre-market session traded "
+        "against. Above the high is an overnight uptrend, below the low a "
+        "downtrend, between them undecided. There is no futures feed behind "
+        "this: the levels come from regular-session daily bars, and the label "
+        "describes what the level is rather than claiming to have watched the "
+        "overnight tape.")
+    if entries is INDEX_ETFS:
+        return levels
+    return levels + (
+        " Rotation is separate and relative. The sector's return against {}'s "
+        "over {} and {} sessions, needing both windows to agree before it counts "
+        "as anything.".format(BENCHMARK, ROTATION_FAST, ROTATION_SLOW))
+
+
 def build(provider, entries: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
     """One row per instrument, against its own overnight levels."""
     entries = entries or SECTORS
@@ -228,18 +251,7 @@ def build(provider, entries: Optional[List[Dict[str, str]]] = None) -> Dict[str,
             "rotating_in": sum(1 for r in usable if r["rotation"]["state"] == "in"),
             "rotating_out": sum(1 for r in usable if r["rotation"]["state"] == "out"),
         },
-        "method": (
-            "Bull above and bear below are the prior completed session's high and "
-            "low. The two prices the overnight and pre-market session traded "
-            "against. Above the high is an overnight uptrend, below the low a "
-            "downtrend, between them undecided. There is no futures feed behind "
-            "this: the levels come from regular-session daily bars, and the label "
-            "describes what the level is rather than claiming to have watched the "
-            "overnight tape. Rotation is separate and relative. The sector's "
-            "return against {}'s over {} and {} sessions, needing both windows to "
-            "agree before it counts as anything.".format(
-                BENCHMARK, ROTATION_FAST, ROTATION_SLOW)
-        ),
+        "method": _method(entries),
     }
 
 def detail(provider, symbol: str) -> Dict[str, Any]:

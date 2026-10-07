@@ -18873,9 +18873,11 @@ function renderSentiment(f) {
  * mechanical summary sentence is already on the card while it loads. */
 const SECTOR_STANCE_CLASS = { constructive: 'up', cautious: 'down', 'two-sided': 'flat' };
 
-function sectorReadButton(symbol) {
+/* Named for what it reads. The Indices board draws the same button under
+ * SPY, QQQ, IWM and DIA, where "Sector Read" named something they are not. */
+function sectorReadButton(symbol, kind = 'Sector') {
   return `<button type="button" class="sector-read-btn" data-sector-read="${esc(symbol)}"
-    >Sector Read <span aria-hidden="true">\u203a</span></button>`;
+    >${esc(kind)} Read <span aria-hidden="true">\u203a</span></button>`;
 }
 
 function renderSectorRead(host) {
@@ -18950,7 +18952,7 @@ function renderIndexBoard(b) {
         <div><span class="idx-lbl">Bear below</span><span class="idx-val neg">$${fmt(r.bear_below, 2)}</span></div>
       </div>
       <p class="idx-summary">${esc(r.summary || '')}</p>
-      ${sectorReadButton(r.symbol)}
+      ${sectorReadButton(r.symbol, 'Index')}
     </div>`;
   }).join('');
   if (!cards) return '';
