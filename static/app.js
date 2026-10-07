@@ -14124,9 +14124,9 @@ function exploreReadings(scans, moves, sectors, benchmark = 'SPY') {
       verdict: quiet ? 'Nothing beyond a normal day'
         : `${name} ${fmtPct(top.chg_1d, 1)}`,
       detail: quiet
-        ? `Of everything Optic tracks, the largest move against its own typical `
-          + `daily range was ${name} at ${fmtPct(top.chg_1d, 1)}, ${fmt(top.rel, 1)}x a `
-          + 'normal day. Nothing cleared one.'
+        ? `Of everything Optic tracks, the largest move for its size was ${name} at `
+          + `${fmtPct(top.chg_1d, 1)}, ${fmt(top.rel, 1)}x a normal day for it. `
+          + 'Nothing moved more than it usually does.'
         : 'Ranked against each instrument\'s own typical daily range rather '
           + 'than by raw percent'
           + (num(top.rel) ? `, so this is ${fmt(top.rel, 1)}x a normal day for it` : '')
