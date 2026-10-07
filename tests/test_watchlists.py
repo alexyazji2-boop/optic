@@ -208,3 +208,23 @@ def test_reorder_is_csrf_guarded_and_owner_scoped():
                                  ".wv-search", ".wl-move", ".wl-move-btn"])
 def test_the_list_ui_is_styled(cls):
     assert re.search(re.escape(cls) + r"[\s,{:]", STYLES), f"{cls} has no rule"
+
+
+def test_an_empty_list_draws_no_controls_with_nothing_to_act_on():
+    """Seven sorts, four filters, a search box and the column headings sat over
+    "Nothing on the watchlist yet", under a subtitle describing the rows."""
+    body = APP_JS.split("function renderWatchlist() {", 1)[1].split("\n}\n", 1)[0]
+    assert "const empty = !list.length;" in body
+    gated = body[body.index("${empty ? '' : `"):]
+    for part in ('class="wv-sorts"', 'class="wv-filters"', 'class="wv-search"', 'class="wv-cols"'):
+        assert part in gated[:gated.index('<div id="wv-feed">')], part
+    assert "Add a symbol here, or press Watch" in body
+
+
+def test_an_accounts_open_list_survives_a_reload():
+    """A guest's choice was saved with their lists; an account's lived in memory,
+    so every reload opened the first list again."""
+    assert "'optic.watchlist.account.v1'," in APP_JS.split("const PERSONAL_KEYS = [", 1)[1][:2500]
+    switch = APP_JS.split("async function watchListSwitch(id) {", 1)[1].split("\n}\n", 1)[0]
+    assert "watchAccountListRemember(found.id);" in switch
+    assert "find((w) => w.id === remembered)" in APP_JS

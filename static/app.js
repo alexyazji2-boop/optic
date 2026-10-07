@@ -132,6 +132,7 @@ const PERSONAL_KEYS = [
   'optic.research.v1',           // saved research, signed out
   'optic.chart.watch.v1',        // the watchlist, signed out
   'optic.watchlists.v1',         // named watchlists, signed out
+  'optic.watchlist.account.v1',  // which of the account's lists is open
   'optic.watches.v1',            // watches, signed out
   'optic.screener.v1',           // the screen being built
   'optic.signals.v1',            // swing-setup signals that fired, signed out
@@ -6218,6 +6219,10 @@ function renderWatchlist() {
   const host = views.watchlist;
   const list = watchList();
   const active = watchActiveList();
+  /* An empty list drew seven sorts, four filters, a search box and a row of
+   * column headings over "Nothing on the watchlist yet", and its subtitle
+   * described the rows. The controls arrive with the first symbol. */
+  const empty = !list.length;
   host.innerHTML = `
   ${/* Above the card, not in it. It chooses WHICH list the card below is
       showing, which is the same job `.scan-modes` does above the Scan
@@ -6230,9 +6235,11 @@ function renderWatchlist() {
         ${/* The count lives in its own span so the feed repaint can update it.
             * Read once at render, it went stale the moment a row was removed —
             * "5 names" above four rows. */''}
-        <p class="wv-sub"><span id="wv-count">${watchCountLabel()}</span>
+        <p class="wv-sub">${empty
+    ? 'Add a symbol here, or press Watch on any stock\u2019s page. Each row then says what changed, or says nothing when nothing did.'
+    : `<span id="wv-count">${watchCountLabel()}</span>
           Every row says what changed, or says nothing when nothing did.
-          <span id="wv-shown" class="wv-shown">${esc(watchShownLabel())}</span></p>
+          <span id="wv-shown" class="wv-shown">${esc(watchShownLabel())}</span>`}</p>
       </div>
       <form class="wv-add" id="wv-add-form">
         <input id="wv-add" type="text" placeholder="Add a symbol" spellcheck="false"
@@ -6243,6 +6250,7 @@ function renderWatchlist() {
     </div>
 
     <div id="wv-pulse">${watchPulseHTML(((STATE.watchlist || {}).rows) || [])}</div>
+    ${empty ? '' : `
     ${/* Labelled like the filter row under it. Seven unlabelled pills above
         * a row headed "Show" read as more filters, and pressing one reordered
         * the list instead of narrowing it. */''}
@@ -6274,7 +6282,7 @@ function renderWatchlist() {
     <div class="wv-cols" aria-hidden="true">
       <span>Symbol</span><span>Price</span><span>Today</span><span>30 sessions</span>
       <span>What changed</span><span>Signal</span><span></span>
-    </div>
+    </div>`}
     <div id="wv-feed">${watchlistFeedHTML({})}</div>
 
     <p class="wv-method">${gloss((STATE.watchlist || {}).method || '')}</p>
@@ -7777,6 +7785,20 @@ function watchSave(list) {
 const WATCHLISTS_KEY = 'optic.watchlists.v1';
 const WATCHLIST_LIMIT = 12;
 
+/* Which of an account's lists is open, kept in this browser.
+ *
+ * A guest's choice was saved with their lists; an account's lived in memory
+ * only, so every reload opened the first list again whichever one the reader
+ * had been working in. The id is the account's own, and it is a personal key,
+ * shelved with the rest of the account's things when somebody else signs in. */
+const WATCH_ACCOUNT_LIST_KEY = 'optic.watchlist.account.v1';
+function watchAccountListRemember(id) {
+  try { if (id) localStorage.setItem(WATCH_ACCOUNT_LIST_KEY, id); } catch (e) { /* private mode */ }
+}
+function watchAccountListRemembered() {
+  try { return localStorage.getItem(WATCH_ACCOUNT_LIST_KEY); } catch (e) { return null; }
+}
+
 /* How many lists this reader may keep, and the sentence when they are at it.
  *
  * Signed in, the plan's number: Free keeps 3, which the server enforces. The
@@ -7882,7 +7904,7 @@ function watchAdoptAccountLists(lists, preferId) {
     || ACCOUNT.watchlists[0] || null;
   ACCOUNT.listId = wanted ? wanted.id : null;
   ACCOUNT.watchlist = wanted ? (wanted.symbols || []) : null;
-  if (wanted) watchSave(wanted.symbols || []);
+  if (wanted) { watchSave(wanted.symbols || []); watchAccountListRemember(wanted.id); }
 }
 
 async function watchListSwitch(id) {
@@ -7892,6 +7914,7 @@ async function watchListSwitch(id) {
     ACCOUNT.listId = found.id;
     ACCOUNT.watchlist = found.symbols || [];
     watchSave(found.symbols || []);
+    watchAccountListRemember(found.id);
   } else {
     const state = localLists();
     if (!state.lists.some((l) => l.id === id)) return;
@@ -28498,7 +28521,9 @@ async function accountLoad() {
     // ACCOUNT.watchlist stays its symbols, so every existing reader is
     // unchanged by there being more than one.
     ACCOUNT.watchlists = lists.watchlists || [];
-    const first = (lists.watchlists || [])[0];
+    const remembered = watchAccountListRemembered();
+    const first = (lists.watchlists || []).find((w) => w.id === remembered)
+      || (lists.watchlists || [])[0];
     if (first) {
       ACCOUNT.listId = first.id;
       ACCOUNT.watchlist = first.symbols || [];
