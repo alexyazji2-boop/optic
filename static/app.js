@@ -11736,7 +11736,8 @@ function renderSwing(d) {
     ['Dealer option delta, model (DEX)', '$' + fmtCompact((gex.totals || {}).net_dex) + ' (hedged by about as much stock, sold)'],
   ])}
       <h3>${hg('At-the-money greeks by expiry')}</h3>
-      <div class="scroll-y">
+      ${vizBlock('viz-opt-term', termStructureTitle(gk), 'At-the-money implied volatility at each expiry used, the average of the call and the put. Source: the options chain.')}
+      ${exactFigures(`<div class="scroll-y">
       <table class="data">
         <thead><tr><th>Expiry</th><th>Days left</th><th>Strike ($)</th><th>Call delta</th><th>Put delta</th><th>Gamma</th><th>Implied vol</th><th>Theta ($/day)</th><th>Theta (%/day)</th></tr></thead>
         <tbody>${(gk.atm_greeks || []).map((r) => `<tr>
@@ -11749,7 +11750,7 @@ function renderSwing(d) {
           <td class="down">${fmt((r.call || {}).theta_per_day, 3)}</td>
           <td class="down">${fmt((r.call || {}).theta_pct_daily, 2)}%</td>
         </tr>`).join('')}</tbody>
-      </table></div>
+      </table></div>`)}
     </div>
 
     <div class="panel">
@@ -11765,15 +11766,17 @@ function renderSwing(d) {
     ['Charm across open interest (unsigned, shares)', fmtCompact((gk.second_order || {}).net_charm)],
   ])}
       <p class="caveat">${esc((gk.second_order || {}).note || '')}</p>
+      ${vizBlock('viz-opt-oi', oiByStrikeTitle(gex), 'Open interest at each strike near the price, puts to the left and calls to the right. Hover for volume. Source: the options chain.')}
       <h3>${hg('Gamma concentration by expiry')}</h3>
-      <table class="data">
+      ${vizBlock('viz-opt-expiry', expiryGammaTitle(gk), '')}
+      ${exactFigures(`<table class="data">
         <thead><tr><th>Expiry</th><th>DTE</th><th>Gamma (OI)</th><th>Share</th><th>Open interest</th></tr></thead>
         <tbody>${((gk.gamma || {}).by_expiry || []).map((r) => `<tr>
           <td class="name">${esc(r.expiry)}</td><td>${r.dte}</td>
           <td>${fmtCompact(r.gamma_oi)}</td><td>${fmt(r.share_pct, 1)}%</td>
           <td>${fmtCompact(r.open_interest)}</td>
         </tr>`).join('')}</tbody>
-      </table>
+      </table>`)}
     </div>
   </div>
 
@@ -11820,7 +11823,9 @@ function renderSwing(d) {
     <div class="panel">
       <h2>${hg('Call vs put flow')}${askPulse('flow')}</h2>
       <p class="sub">${toneChip(flow.stance)} score ${flow.flow_score > 0 ? '+' : ''}${fmt(flow.flow_score, 0)}</p>
-      ${kv([
+      ${vizBlock('viz-opt-split', callPutTitle(flow), 'Calls against puts in today\'s volume, the open interest, the premium paid, and the premium on positions opened today.',
+    legendHtml([{ name: 'Calls', color: C.pos, shape: 'box' }, { name: 'Puts', color: C.neg, shape: 'box' }]))}
+      ${exactFigures(kv([
     ['Call volume', fmtCompact((flow.volume || {}).calls)],
     ['Put volume', fmtCompact((flow.volume || {}).puts)],
     ['Put/call volume ratio', fmt((flow.volume || {}).put_call_ratio, 2)],
@@ -11831,7 +11836,7 @@ function renderSwing(d) {
     ['New-position premium (calls)', '$' + fmtCompact((flow.new_positions || {}).call_premium)],
     ['New-position premium (puts)', '$' + fmtCompact((flow.new_positions || {}).put_premium)],
     ['OTM put IV − call IV', `${fmt((flow.iv_skew || {}).put_minus_call_vol_pts, 1)} vol pts`],
-  ])}
+  ]))}
       <ul class="reasons">${(flow.notes || []).map((n) => `<li>${gloss(n)}</li>`).join('')}</ul>
       <p class="caveat">${esc(flow.method || '')}</p>
     </div>
@@ -12109,6 +12114,94 @@ function renderSwing(d) {
       axisLabel: 'net premium traded today',
     }));
   }
+  mountOptionsVisuals(d);
+}
+
+/* ------------------------------------------------------ the Options visuals */
+
+/* A stable id for an idea's payoff chart: kept on the idea, so the same card
+ * keeps the same host across the tab's 20-second refreshes. */
+let PAYOFF_SEQ = 0;
+function payoffId(idea) {
+  if (!idea.__payoff) Object.defineProperty(idea, '__payoff', { value: `viz-payoff-${++PAYOFF_SEQ}`, enumerable: false });
+  return idea.__payoff;
+}
+
+function termStructureTitle(gk) {
+  const rows = (gk.atm_greeks || []).filter((r) => r.call && r.put && Number.isFinite(r.call.iv) && Number.isFinite(r.put.iv));
+  if (rows.length < 2) return '';
+  const iv = (r) => ((r.call.iv + r.put.iv) / 2) * 100;
+  const first = rows[0], last = rows[rows.length - 1];
+  const dir = iv(last) > iv(first) + 0.5 ? 'rises' : iv(last) < iv(first) - 0.5 ? 'falls' : 'holds level';
+  return `Implied volatility ${dir} from ${fmt(iv(first), 0)}% at ${first.dte} days to ${fmt(iv(last), 0)}% at ${last.dte}`;
+}
+
+function oiByStrikeTitle(gex) {
+  const top = (gex.by_strike || []).reduce((best, r) => ((r.call_oi || 0) + (r.put_oi || 0) > ((best && (best.call_oi || 0) + (best.put_oi || 0)) || 0) ? r : best), null);
+  return top ? `The most open interest sits at the ${fmt(top.strike, 0)} strike` : '';
+}
+
+function expiryGammaTitle(gk) {
+  const rows = (gk.gamma || {}).by_expiry || [];
+  const top = rows.reduce((best, r) => (!best || (r.share_pct || 0) > (best.share_pct || 0) ? r : best), null);
+  return top ? `${fmt(top.share_pct, 0)}% of the chain's gamma is in the ${periodDay(top.expiry)} expiry` : '';
+}
+
+function callPutTitle(flow) {
+  const share = (flow.premium || {}).call_share_pct;
+  return Number.isFinite(share) ? `Calls took ${fmt(share, 0)}% of today's option premium` : '';
+}
+
+/* "2026-10-12" as "Oct 12". */
+function periodDay(value) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ''));
+  if (!m) return String(value || '');
+  return `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(m[2]) - 1]} ${Number(m[3])}`;
+}
+
+function mountOptionsVisuals(d) {
+  const gk = d.greeks || {}, gex = d.gex || {}, flow = d.flow || {}, spot = (d.quote || {}).price;
+  const atm = (gk.atm_greeks || []).filter((r) => r.call && r.put && Number.isFinite(r.call.iv) && Number.isFinite(r.put.iv));
+  vizMount('viz-opt-term', (w) => columnChart({
+    width: w, height: 140, color: C.s7, format: (v) => fmt(v, 1) + '%', ariaLabel: termStructureTitle(gk),
+    items: atm.map((r) => ({ label: `${r.dte}d`, value: ((r.call.iv + r.put.iv) / 2) * 100,
+      detail: [['Expiry', esc(r.expiry)], ['Call IV', fmt(r.call.iv * 100, 1) + '%'], ['Put IV', fmt(r.put.iv * 100, 1) + '%'],
+        ['Strike', fmt(r.call.strike, 1)]] })),
+  }), 'Fewer than two expiries with an at-the-money quote.');
+  const strikes = (gex.by_strike || []).slice().sort((x, y) => y.strike - x.strike);
+  const spotRow = Number.isFinite(spot) ? strikes.findIndex((r) => r.strike < spot) : -1;
+  vizMount('viz-opt-oi', (w) => butterflyBars({
+    width: w, ariaLabel: oiByStrikeTitle(gex), format: (v) => fmtCompact(v),
+    markerRow: spotRow > 0 ? spotRow : null, markerLabel: Number.isFinite(spot) ? `price ${fmt(spot, 2)}` : '',
+    rows: strikes.map((r) => ({ label: fmt(r.strike, 0), left: r.put_oi || 0, right: r.call_oi || 0,
+      detail: [['Put open interest', fmtCompact(r.put_oi)], ['Call open interest', fmtCompact(r.call_oi)],
+        ['Put / call volume today', `${fmtCompact(r.put_vol)} / ${fmtCompact(r.call_vol)}`]] })),
+  }), 'No open interest by strike in this chain.');
+  const exp = ((gk.gamma || {}).by_expiry || []);
+  const topShare = Math.max(...exp.map((r) => r.share_pct || 0), 0);
+  vizMount('viz-opt-expiry', (w) => rankBars({
+    width: w, labelWidth: 96, format: (v) => fmt(v, 1) + '%', ariaLabel: expiryGammaTitle(gk),
+    rows: exp.map((r) => ({ label: `${periodDay(r.expiry)} · ${r.dte}d`, value: r.share_pct, highlight: r.share_pct === topShare,
+      detail: [['Share of gamma', fmt(r.share_pct, 1) + '%'], ['Gamma (OI-weighted)', fmtCompact(r.gamma_oi)],
+        ['Open interest', fmtCompact(r.open_interest)]] })),
+  }), 'No expiries with open interest.');
+  const pair = (block) => ({ calls: (block || {}).calls || 0, puts: (block || {}).puts || 0 });
+  const np = flow.new_positions || {};
+  vizMount('viz-opt-split', (w) => shareBars({
+    width: w, labelWidth: 108, ariaLabel: callPutTitle(flow),
+    segments: [{ key: 'calls', name: 'Calls', color: C.pos }, { key: 'puts', name: 'Puts', color: C.neg }],
+    countLabel: (n) => fmtCompact(n),
+    rows: [{ label: 'Volume', values: pair(flow.volume) }, { label: 'Open interest', values: pair(flow.open_interest) },
+      { label: 'Premium', values: pair(flow.premium) },
+      { label: 'New positions', values: { calls: np.call_premium || 0, puts: np.put_premium || 0 } }],
+  }), 'No volume or open interest today.');
+  [...(d.naked_ideas || []), ...(d.strategy_ideas || [])].forEach((idea) => {
+    if (!idea || !idea.__payoff || !(idea.legs || []).length) return;
+    vizMount(idea.__payoff, (w) => payoffChart({
+      width: w, legs: idea.legs, spot,
+      ariaLabel: `${idea.name}: profit or loss at expiry for one contract.`,
+    }), 'Not every leg has a price, so the payoff cannot be drawn.');
+  });
 }
 
 /* --------------------------------------------------------- entry plan panel */
@@ -14659,6 +14752,9 @@ function renderIdea(idea) {
       <span class="subnote sm">${esc(idea.expiry)} · ${idea.dte}d</span>
     </div>
     <div class="idea-why">${gloss(idea.rationale)}</div>
+    ${(idea.legs || []).length ? `<div class="viz idea-payoff">
+      <p class="viz-sub">Profit or loss at expiry for one contract, at mid prices: green above zero, red below.</p>
+      <div id="${payoffId(idea)}" class="viz-host"></div></div>` : ''}
     ${(idea.legs || []).map((l) => `<div class="leg">
       <span class="${l.action === 'BUY' ? 'buy' : 'sell'}">${esc(l.action)}</span>
       <span>${esc(l.type)}</span>

@@ -3579,3 +3579,189 @@ function rangeChart(opts) {
   });
   return root;
 }
+
+/**
+ * Two sides of one row, against one scale: puts to the left of the strike and
+ * calls to the right, open interest by strike. The strike labels sit in the
+ * middle gutter, and a dashed line between two rows marks where the price is.
+ *
+ * rows: [{label, left, right, detail}], top to bottom as drawn.
+ */
+function butterflyBars(opts) {
+  const { rows = [], width = 720, rowHeight = 20, leftName = 'Puts', rightName = 'Calls',
+    leftColor = C.neg, rightColor = C.pos, format = (v) => fmtCompact(v), markerRow = null,
+    markerLabel = '', ariaLabel = '' } = opts;
+  const usable = rows.filter((r) => (r.left || 0) > 0 || (r.right || 0) > 0);
+  if (usable.length < 2) return null;
+  const W = width, gutter = 58;
+  const m = { t: 20, r: 8, b: 6, l: 8 };
+  const H = m.t + usable.length * rowHeight + m.b;
+  const half = (W - m.l - m.r - gutter) / 2;
+  const mid = m.l + half + gutter / 2;
+  const maxV = Math.max(...usable.map((r) => Math.max(r.left || 0, r.right || 0)), 1);
+  const barH = Math.min(14, rowHeight - 6);
+  const root = svgRoot(W, H);
+  root.setAttribute('aria-label', ariaLabel);
+  root.appendChild(s('text', { x: mid - gutter / 2 - 4, y: 12, fill: leftColor, 'font-size': CF.micro, 'font-weight': CW.label, 'text-anchor': 'end' }, `◀ ${leftName}`));
+  root.appendChild(s('text', { x: mid + gutter / 2 + 4, y: 12, fill: rightColor, 'font-size': CF.micro, 'font-weight': CW.label }, `${rightName} ▶`));
+  usable.forEach((r, i) => {
+    const y = m.t + i * rowHeight + (rowHeight - barH) / 2;
+    const g = s('g', {});
+    const lw = ((r.left || 0) / maxV) * half, rw = ((r.right || 0) / maxV) * half;
+    if (lw > 0) g.appendChild(s('rect', { x: mid - gutter / 2 - lw, y, width: Math.max(1, lw), height: barH, rx: 3, fill: leftColor, opacity: 0.85 }));
+    if (rw > 0) g.appendChild(s('rect', { x: mid + gutter / 2, y, width: Math.max(1, rw), height: barH, rx: 3, fill: rightColor, opacity: 0.85 }));
+    g.appendChild(s('text', { x: mid, y: y + barH / 2 + 4, fill: C.ink2, 'font-size': CF.tick, 'font-weight': CW.tick, 'text-anchor': 'middle', 'font-variant-numeric': 'tabular-nums' }, r.label));
+    g.appendChild(s('rect', { x: m.l, y: y - 3, width: W - m.l - m.r, height: rowHeight, fill: 'transparent' }));
+    focusMark(g, tipRows(escapeText(r.label), r.detail || [[leftName, format(r.left || 0)], [rightName, format(r.right || 0)]]),
+      `${r.label}: ${leftName.toLowerCase()} ${format(r.left || 0)}, ${rightName.toLowerCase()} ${format(r.right || 0)}`);
+    root.appendChild(g);
+  });
+  if (markerRow !== null && markerRow !== undefined && markerRow > 0 && markerRow < usable.length) {
+    const y = m.t + markerRow * rowHeight;
+    root.appendChild(s('line', { x1: m.l, x2: W - m.r, y1: y, y2: y, stroke: C.warn, 'stroke-width': 1, 'stroke-dasharray': '4 3' }));
+    if (markerLabel) root.appendChild(s('text', { x: W - m.r, y: y - 3, fill: C.warn, 'font-size': CF.micro, 'text-anchor': 'end' }, markerLabel));
+  }
+  return root;
+}
+
+/**
+ * Ranked bars from zero, one side only: where a whole is concentrated (gamma
+ * by expiry), or a ranked list (sectors, matches). The highlighted row is the
+ * one the title names.
+ *
+ * rows: [{label, value, detail, highlight}]
+ */
+function rankBars(opts) {
+  const { rows = [], width = 720, rowHeight = 24, labelWidth = 90, format = (v) => fmt(v, 1),
+    color = C.brand, ariaLabel = '' } = opts;
+  const usable = rows.filter((r) => Number.isFinite(r.value));
+  if (!usable.length) return null;
+  const W = width;
+  const m = { t: 4, r: 64, b: 4, l: labelWidth };
+  const H = m.t + usable.length * rowHeight + m.b;
+  const plotW = W - m.l - m.r;
+  const maxV = Math.max(...usable.map((r) => Math.abs(r.value)), 1e-9);
+  const barH = Math.min(14, rowHeight - 8);
+  const root = svgRoot(W, H);
+  root.setAttribute('aria-label', ariaLabel);
+  usable.forEach((r, i) => {
+    const y = m.t + i * rowHeight + (rowHeight - barH) / 2;
+    const w = Math.max(1.5, (Math.abs(r.value) / maxV) * plotW);
+    const g = s('g', {});
+    root.appendChild(s('text', { x: m.l - 8, y: y + barH / 2 + 4, fill: r.highlight ? C.ink : C.ink2, 'font-size': CF.tick, 'font-weight': r.highlight ? CW.label : CW.tick, 'text-anchor': 'end' }, r.label));
+    g.appendChild(s('rect', { x: m.l, y, width: w, height: barH, rx: 3, fill: r.value < 0 ? C.neg : color, opacity: r.highlight ? 1 : 0.6 }));
+    g.appendChild(s('text', { x: m.l + w + 6, y: y + barH / 2 + 4, fill: r.highlight ? C.ink : C.muted, 'font-size': CF.tick, 'font-variant-numeric': 'tabular-nums', 'font-weight': r.highlight ? CW.label : CW.tick }, format(r.value)));
+    g.appendChild(s('rect', { x: m.l, y: y - 4, width: plotW, height: rowHeight, fill: 'transparent' }));
+    focusMark(g, tipRows(escapeText(r.label), r.detail || [['Value', format(r.value)]]), `${r.label}: ${format(r.value)}`);
+    root.appendChild(g);
+  });
+  return root;
+}
+
+/* Profit or loss at expiry of option legs, per share. Exact: each leg's value
+ * at expiry is its intrinsic value, less what was paid or plus what was taken
+ * in, so the curve is straight between strikes and bends only at them. */
+function payoffAt(legs, price) {
+  return legs.reduce((sum, l) => {
+    const intrinsic = l.type === 'CALL' ? Math.max(price - l.strike, 0) : Math.max(l.strike - price, 0);
+    const pl = intrinsic - l.mid;
+    return sum + (l.action === 'SELL' ? -pl : pl) * (l.qty || 1);
+  }, 0);
+}
+
+/**
+ * Profit and loss at expiry against the stock's price, for one contract of a
+ * strategy: profit shaded green above zero, loss shaded red below, the price
+ * now and each breakeven marked. Hover or arrow keys read the result at any
+ * price. An end that keeps rising or falling past the drawn range says so.
+ */
+function payoffChart(opts) {
+  const { legs = [], spot, width = 600, height = 190, multiplier = 100, ariaLabel = '' } = opts;
+  const usable = legs.filter((l) => Number.isFinite(l.strike) && Number.isFinite(l.mid) && (l.type === 'CALL' || l.type === 'PUT'));
+  if (!usable.length || usable.length !== legs.length || !Number.isFinite(spot)) return null;
+  const strikes = usable.map((l) => l.strike);
+  let lo = Math.min(spot, ...strikes), hi = Math.max(spot, ...strikes);
+  const span = Math.max(hi - lo, spot * 0.06);
+  lo = Math.max(0, lo - span * 0.6); hi += span * 0.6;
+  const xs = [lo, ...strikes.slice().sort((a, b) => a - b), hi].filter((v, i, a) => i === 0 || v !== a[i - 1]);
+  const pl = (p) => payoffAt(usable, p) * multiplier;
+  const ys = xs.map(pl);
+  const zeroCross = [];
+  for (let i = 0; i + 1 < xs.length; i += 1) {
+    if ((ys[i] < 0 && ys[i + 1] > 0) || (ys[i] > 0 && ys[i + 1] < 0)) {
+      zeroCross.push(xs[i] + (xs[i + 1] - xs[i]) * (-ys[i] / (ys[i + 1] - ys[i])));
+    }
+  }
+  const W = width, H = height;
+  const m = { t: 16, r: 14, b: 26, l: 58 };
+  let [ymin, ymax] = extentOf([...ys, 0]);
+  const pad = (ymax - ymin) * 0.12 || 1;
+  ymin -= pad; ymax += pad;
+  const X = (p) => m.l + ((p - lo) / (hi - lo)) * (W - m.l - m.r);
+  const Y = (v) => m.t + (H - m.t - m.b) - ((v - ymin) / (ymax - ymin)) * (H - m.t - m.b);
+  const root = svgRoot(W, H);
+  root.setAttribute('aria-label', ariaLabel);
+  const money = (v) => `${v < 0 ? '-' : v > 0 ? '+' : ''}$${fmt(Math.abs(v), 0)}`;
+  niceTicks(ymin, ymax, 4).forEach((t) => {
+    root.appendChild(s('line', { x1: m.l, x2: W - m.r, y1: Y(t), y2: Y(t), stroke: C.grid, 'stroke-width': 1 }));
+    root.appendChild(s('text', { x: m.l - 8, y: Y(t) + 4, fill: C.muted, 'font-size': CF.micro, 'text-anchor': 'end', 'font-variant-numeric': 'tabular-nums' }, money(t)));
+  });
+  /* Profit and loss areas, clipped at zero so each colour covers its own side.
+   * The breakevens are vertices too: without them the clipped outline joins a
+   * strike straight to the edge, and the shading crosses the line between. */
+  const vx = [...xs, ...zeroCross].sort((p1, p2) => p1 - p2);
+  const pts = vx.map((p) => [X(p), Y(pl(p))]);
+  const area = (above) => {
+    const y0 = Y(0);
+    const clip = pts.map(([x, y]) => [x, above ? Math.min(y, y0) : Math.max(y, y0)]);
+    return `M${X(lo)},${y0} ` + clip.map(([x, y]) => `L${x},${y}`).join(' ') + ` L${X(hi)},${y0} Z`;
+  };
+  root.appendChild(s('path', { d: area(true), fill: C.pos, opacity: 0.16 }));
+  root.appendChild(s('path', { d: area(false), fill: C.neg, opacity: 0.16 }));
+  root.appendChild(s('line', { x1: m.l, x2: W - m.r, y1: Y(0), y2: Y(0), stroke: C.baseline, 'stroke-width': 1 }));
+  root.appendChild(s('polyline', { points: pts.map(([x, y]) => `${x},${y}`).join(' '), fill: 'none', stroke: C.ink, 'stroke-width': 2, 'stroke-linejoin': 'round' }));
+  root.appendChild(s('line', { x1: X(spot), x2: X(spot), y1: m.t, y2: H - m.b, stroke: C.warn, 'stroke-width': 1, 'stroke-dasharray': '4 3' }));
+  root.appendChild(s('text', { x: X(spot), y: m.t - 4, fill: C.warn, 'font-size': CF.micro, 'text-anchor': 'middle' }, `now ${fmt(spot, 2)}`));
+  zeroCross.forEach((b) => {
+    root.appendChild(s('circle', { cx: X(b), cy: Y(0), r: 3.5, fill: C.surface, stroke: C.ink, 'stroke-width': 1.5 }));
+    root.appendChild(s('text', { x: X(b), y: H - 8, fill: C.ink2, 'font-size': CF.micro, 'text-anchor': 'middle', 'font-variant-numeric': 'tabular-nums' }, `breakeven ${fmt(b, 2)}`));
+  });
+  const slope = (a, b) => pl(b) - pl(a);
+  const rightSlope = slope(hi - 0.01, hi), leftSlope = slope(lo, lo + 0.01);
+  if (Math.abs(rightSlope) > 1e-9) {
+    root.appendChild(s('text', { x: W - m.r, y: Y(ys[ys.length - 1]) + (rightSlope > 0 ? -6 : 14), fill: rightSlope > 0 ? C.pos : C.neg, 'font-size': CF.micro, 'text-anchor': 'end' }, rightSlope > 0 ? 'keeps rising' : 'keeps falling'));
+  }
+  if (Math.abs(leftSlope) > 1e-9 && lo > 0) {
+    root.appendChild(s('text', { x: m.l + 4, y: Y(ys[0]) + (leftSlope < 0 ? -6 : 14), fill: leftSlope < 0 ? C.pos : C.neg, 'font-size': CF.micro }, leftSlope < 0 ? 'rises as it falls' : 'keeps falling'));
+  }
+  // The readout: hover anywhere, or Tab in and walk the price with the arrows.
+  const hit = s('rect', { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: 'transparent' });
+  const tipAt = (p) => tipRows(`At ${fmt(p, 2)} on expiry`, [['For one contract', money(pl(p))], ['Price now', fmt(spot, 2)]]);
+  let cursor = spot;
+  bindScrub(hit, (evt) => {
+    const box = root.getBoundingClientRect ? root.getBoundingClientRect() : { left: 0, width: W };
+    const px = ((evt.clientX - box.left) / (box.width || W)) * W;
+    const p = lo + ((px - m.l) / (W - m.l - m.r)) * (hi - lo);
+    showTip(tipAt(Math.max(lo, Math.min(hi, p))), evt);
+  }, hideTip);
+  hit.setAttribute('tabindex', '0');
+  hit.setAttribute('role', 'img');
+  hit.setAttribute('aria-label', `${ariaLabel} Use the arrow keys to read the result at other prices.`);
+  hit.setAttribute('class', 'viz-mark');
+  const showCursor = () => {
+    const r = hit.getBoundingClientRect ? hit.getBoundingClientRect() : { left: 0, top: 0, width: W };
+    showTip(tipAt(cursor), { clientX: r.left + ((X(cursor) - m.l) / (W - m.l - m.r)) * r.width, clientY: r.top });
+  };
+  hit.addEventListener('focus', showCursor);
+  hit.addEventListener('blur', hideTip);
+  hit.addEventListener('keydown', (evt) => {
+    const step = (hi - lo) / 40;
+    if (evt.key === 'ArrowRight') cursor = Math.min(hi, cursor + step);
+    else if (evt.key === 'ArrowLeft') cursor = Math.max(lo, cursor - step);
+    else return;
+    if (evt.preventDefault) evt.preventDefault();
+    showCursor();
+  });
+  root.appendChild(hit);
+  return root;
+}

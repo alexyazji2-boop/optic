@@ -17155,3 +17155,7 @@ details.exact[open] > summary::before { transform: rotate(90deg); }
 details.exact > summary:hover { color: var(--ink); }
 details.exact > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-xs); }
 details.exact > .table-scroll, details.exact > table { margin-top: var(--space-2); }
+
+/* A payoff diagram inside an idea card: the card's own width, no extra frame. */
+.idea-payoff { margin: var(--space-2) 0; }
+.idea-payoff .viz-sub { margin-bottom: var(--space-1); }
