@@ -17196,6 +17196,13 @@ details.exact > .table-scroll, details.exact > table { margin-top: var(--space-2
 .cs-none { font-size: var(--t-caption); color: var(--ink-muted); }
 .cs-more { margin: 0; padding-left: var(--space-2); }
 
+/* A scan's ranked column: a bar in each cell, scaled to the list, and a mark on
+ * the header saying the order comes from it. */
+.scan-bar { display: inline-block; vertical-align: middle; margin-right: var(--space-2); line-height: 0; }
+.scan-bar svg { display: block; }
+.scan-rank-mark { color: var(--brand); font-size: var(--t-caption); }
+.viz-multiples.wide { grid-template-columns: repeat(auto-fit, minmax(min(19rem, 100%), 1fr)); }
+
 /* The sector heatmap: a table whose cells carry their figure and sign, tinted
  * by how strongly within their column. The tint is behind the text, never the
  * only cue. */

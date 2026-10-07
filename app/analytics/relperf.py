@@ -369,6 +369,7 @@ def run_scan(provider, scan_id: str, limit: int = 20) -> Dict[str, Any]:
         "blind_spot": spec["blind_spot"],
         "columns": COLUMNS,
         "rows": res["rows"],
+        "ranked_by": {"key": "rank", "order": "asc" if spec["kind"] == "laggards" else "desc"},
         "matched": len(res["rows"]),
         "considered": res["universe_size"],
         "universe_size": res["universe_size"],

@@ -18002,12 +18002,61 @@ function renderEvaluation(e) {
     </table>
     <p class="caveat">${gloss(e.control_note || '')}</p>
 
+    ${evalHorizons(e).length ? `<div class="viz">
+      ${evalTitle(e) ? `<p class="viz-title">${esc(evalTitle(e))}</p>` : ''}
+      <p class="viz-sub">Each score bucket's average return over the horizon against the rest of the universe on
+        the same dates, in percent, with its 95% interval. A line that crosses zero has not shown an edge, and the
+        intervals assume independent observations, which overlapping windows are not, so the true ones are wider.</p>
+      <div class="viz-multiples wide">${evalHorizons(e).map((h) => `<div>
+        <h4>${fmt(h.horizon_sessions, 0)} sessions</h4>
+        <div id="viz-eval-${esc(String(h.horizon_sessions))}" class="viz-host"></div></div>`).join('')}</div>
+    </div>` : ''}
+
     <div style="margin-top:var(--space-4)">${detail}</div>
 
     <p class="caveat">${gloss(e.interpretation || '')}</p>
     <div class="callout"><strong>What this cannot fix.</strong>
       <ul class="reasons">${(e.biases || []).map((b) => `<li>${esc(b)}</li>`).join('')}</ul></div>
   </div>`;
+}
+
+/* Does the score work, drawn: the buckets' mean excess with its interval at
+ * each horizon, on one scale so the horizons can be read across. */
+function evalHorizons(e) {
+  return (e.horizons || []).filter((h) => (h.buckets || []).filter((b) => b.n).length >= 2);
+}
+
+function evalTitle(e) {
+  const hz = evalHorizons(e);
+  const end = (name) => hz.map((h) => (h.buckets || []).find((b) => b.bucket === name))
+    .filter((b) => b && b.n && b.ci95_pct);
+  const bulls = end('strongly bullish'), bears = end('strongly bearish');
+  if (!bulls.length && !bears.length) return '';
+  const up = bulls.filter((b) => b.ci95_pct[0] > 0).length;
+  const down = bears.filter((b) => b.ci95_pct[1] < 0).length;
+  const n = Math.max(bulls.length, bears.length);
+  if (!up && !down) return 'Neither end of the score clears its interval at any horizon';
+  const said = (k) => (k ? `${k} of ${n} horizons` : 'no horizon');
+  return `Strongly bearish scores trailed the rest at ${said(down)}, clear of their interval; strongly bullish ones beat it at ${said(up)}`;
+}
+
+function mountEvaluation(e) {
+  const hz = evalHorizons(e);
+  const ends = hz.flatMap((h) => (h.buckets || []).filter((b) => b.n)
+    .flatMap((b) => [b.mean_pct, ...(b.ci95_pct || [])])).filter(Number.isFinite);
+  const domain = ends.length ? [Math.min(0, ...ends), Math.max(0, ...ends)] : null;
+  hz.forEach((h) => {
+    vizMount(`viz-eval-${h.horizon_sessions}`, (w) => intervalChart({
+      width: w, domain, labelWidth: 112, zeroLabel: '0%', format: (v) => `${v > 0 ? '+' : ''}${fmt(v, 2)}%`,
+      ariaLabel: `Mean excess return by score bucket over ${h.horizon_sessions} sessions, with 95% intervals.`,
+      rows: (h.buckets || []).filter((b) => b.n).map((b) => ({
+        label: cap(b.bucket), value: b.mean_pct, lo: (b.ci95_pct || [])[0], hi: (b.ci95_pct || [])[1],
+        detail: [['Mean excess', `${b.mean_pct > 0 ? '+' : ''}${fmt(b.mean_pct, 2)}%`],
+          ['95% interval', b.ci95_pct ? `${fmt(b.ci95_pct[0], 2)} to ${fmt(b.ci95_pct[1], 2)}%` : 'Not enough observations'],
+          ['Hit rate', `${fmt(b.hit_rate_pct, 1)}%`], ['Observations', fmt(b.n, 0)]],
+      })),
+    }), 'Too few observations in the buckets to draw.');
+  });
 }
 
 async function loadEvaluation() {
@@ -18018,7 +18067,11 @@ async function loadEvaluation() {
     STATE.evaluation = { available: false, reason: err.message };
   }
   const host = document.getElementById('eval-host');
-  if (host) { host.innerHTML = renderEvaluation(STATE.evaluation); revealPanels(host); }
+  if (host) {
+    host.innerHTML = renderEvaluation(STATE.evaluation);
+    revealPanels(host);
+    if (STATE.evaluation.available) mountEvaluation(STATE.evaluation);
+  }
 }
 
 /* Implied correlation and the expiry clock.
@@ -35227,12 +35280,22 @@ function renderScan(cat, res) {
   }
 
   const cols = res.columns || [];
+  const rk = res.ranked_by && cols.some((c) => c.key === res.ranked_by.key) ? res.ranked_by : null;
+  /* Bars in the ranked column only where they tell the rows apart. The top 25
+   * momentum scores run 74 to 82, and a bar for each drew the same bar 25
+   * times; a list whose figures spread by a third or more (dollar volume, the
+   * month's biggest movers) has a shape worth seeing. */
+  const rkVals = rk ? (res.rows || []).map((r) => Math.abs(Number(r[rk.key]))).filter(Number.isFinite) : [];
+  const rkTop = rkVals.length ? Math.max(...rkVals) : 0;
+  const barred = !!rk && rkVals.length >= 3 && rkTop > 0 && (rkTop - Math.min(...rkVals)) / rkTop >= 0.35;
   const rows = (res.rows || []).map((r) => `<tr>
     <td class="name"><button type="button" class="tkr" data-analyse="${esc(r.symbol)}"
       >${esc(r.symbol)}</button></td>
     <td class="num">${r.price === null || r.price === undefined
     ? '\u2014' : fmt(r.price, 2)}</td>
-    ${cols.map((c) => `<td class="num">${scanCell(c.kind, r[c.key])}</td>`).join('')}
+    ${cols.map((c) => `<td class="num">${barred && c.key === rk.key && Number.isFinite(r[c.key])
+    ? `<span class="scan-bar" aria-hidden="true" data-scan-bar="${r[c.key]}" data-kind="${esc(c.kind)}"></span>` : ''}${
+  scanCell(c.kind, r[c.key])}</td>`).join('')}
   </tr>`).join('');
 
   const readings = scanReadings(res) || [];
@@ -35243,11 +35306,14 @@ function renderScan(cat, res) {
       today's. A scan is a claim about now.</div>` : ''}
     <p class="note" style="color:var(--ink-muted);margin:0 0 var(--space-2)">
       ${fmt(res.matched, 0)} matched${res.matched > res.shown
-    ? `, showing the first ${fmt(res.shown, 0)}` : ''}${res.age_hours !== null
+    ? `, showing the first ${fmt(res.shown, 0)}` : ''}${Number.isFinite(res.age_hours)
     ? ` · ranking ${fmt(res.age_hours, 1)}h old` : ''}</p>
     ${rows ? `<div class="table-scroll"><table class="data">
       <thead><tr><th>Symbol</th><th class="num">Price</th>${
-  cols.map((c) => `<th class="num">${esc(c.label)}</th>`).join('')}</tr></thead>
+  cols.map((c) => (rk && c.key === rk.key ? `<th class="num" aria-sort="${rk.order === 'asc' ? 'ascending' : 'descending'}"
+    title="${rk.order === 'abs' ? 'Ranked by size, either way' : rk.order === 'asc' ? 'Ranked lowest first' : 'Ranked highest first'}">${
+  esc(c.label)}<span class="scan-rank-mark" aria-hidden="true"> ${rk.order === 'asc' ? '\u25b2' : '\u25bc'}</span></th>`
+    : `<th class="num">${esc(c.label)}</th>`)).join('')}</tr></thead>
       <tbody>${rows}</tbody>
     </table></div>` : `<div class="callout">Nothing currently matches this scan. That is a
       result, not a failure. These conditions are meant to be selective.</div>`}
@@ -35288,7 +35354,7 @@ async function runScan(id, quiet) {
   // Not when asking again while the ranking builds: the progress line stays up.
   if (!quiet) {
     views.scan.innerHTML = renderScan(cat, 'loading');
-    bindScanPills();
+    afterScanPaint();
   }
   try {
     const res = await getJSON(`/api/scanners/${encodeURIComponent(id)}`);
@@ -35309,7 +35375,7 @@ async function runScan(id, quiet) {
     STATE.scanResult = { available: false, reason: err.message };
     views.scan.innerHTML = renderScan(cat, STATE.scanResult);
   }
-  bindScanPills();
+  afterScanPaint();
   revealPanels(views.scan);
   if (STATE.scanResult && STATE.scanResult.building) {
     scanWhenBuilt(() => STATE.view === 'scan' && STATE.scanMode !== 'build' && STATE.scanId === id,
@@ -35364,7 +35430,7 @@ document.addEventListener('click', (evt) => {
     STATE.scanMode = mode.dataset.scanMode;
     const paint = () => {
       views.scan.innerHTML = renderScan(STATE.scan || { scans: [] }, STATE.scanResult);
-      bindScanPills();
+      afterScanPaint();
       revealPanels(views.scan);
     };
     paint();
@@ -35496,6 +35562,29 @@ document.addEventListener('change', (evt) => {
   if (t.hasAttribute && t.hasAttribute('data-sc-sort')) { spec.sort = t.value; screenerSave(); return; }
   if (t.hasAttribute && t.hasAttribute('data-sc-dir')) { spec.direction = t.value; screenerSave(); }
 });
+
+/* The ranked column's bars, scaled to the largest in the list: diverging from
+ * zero for a signed measure, from the left for one that only runs up. */
+const SCAN_ONE_SIDED = new Set(['usd', 'mult', 'ratio', 'pct_plain', 'num']);
+
+function fillScanBars(host) {
+  const cells = [...((host && host.querySelectorAll('[data-scan-bar]:not([data-drawn])')) || [])];
+  if (!cells.length) return;
+  const vals = cells.map((c) => Number(c.dataset.scanBar)).filter(Number.isFinite);
+  const oneSided = SCAN_ONE_SIDED.has(cells[0].dataset.kind);
+  // A percentile rank is out of 100, whatever the list's own largest.
+  const max = cells[0].dataset.kind === 'num' && Math.max(...vals) <= 100 ? 100 : Math.max(...vals.map(Math.abs));
+  cells.forEach((c) => {
+    c.appendChild(inlineBar(Number(c.dataset.scanBar), max, 52, 8, { oneSided }));
+    c.dataset.drawn = '1';
+  });
+}
+
+function afterScanPaint() {
+  bindScanPills();
+  fillScanBars(views.scan);
+  if (STATE.evaluation && STATE.evaluation.available) mountEvaluation(STATE.evaluation);
+}
 
 function bindScanPills() {
   views.scan.querySelectorAll('[data-scan-group]').forEach((b) => {

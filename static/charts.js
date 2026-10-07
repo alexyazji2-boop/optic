@@ -2762,11 +2762,20 @@ function divergingBars(opts) {
 }
 
 /** Inline mini bar for table cells: one measure, diverging around zero. */
-function inlineBar(value, maxAbs, width = 76, height = 9) {
+function inlineBar(value, maxAbs, width = 76, height = 9, opts = {}) {
   const root = svgRoot(width, height);
   root.setAttribute('width', width);
   root.setAttribute('height', height);
   root.style.width = width + 'px';
+  /* One-sided: a measure that only runs up from zero (dollar volume, a
+   * ratio, a percentile) is a bar from the left edge, not half of one. */
+  if (opts.oneSided) {
+    if (value !== null && isFinite(value) && maxAbs > 0) {
+      const w = Math.max(1.5, Math.min(1, Math.abs(value) / maxAbs) * (width - 1));
+      root.appendChild(s('rect', { x: 0, y: 1, width: w, height: height - 2, rx: 2, fill: C.brand, opacity: 0.85 }));
+    }
+    return root;
+  }
   const mid = width / 2;
   root.appendChild(s('line', { x1: mid, y1: 0, x2: mid, y2: height, stroke: C.baseline, 'stroke-width': 1 }));
   if (value !== null && isFinite(value) && maxAbs > 0) {
@@ -2776,6 +2785,51 @@ function inlineBar(value, maxAbs, width = 76, height = 9) {
       fill: value >= 0 ? C.pos : C.neg,
     }));
   }
+  return root;
+}
+
+/**
+ * Estimates with their uncertainty: a dot at each row's value and a line across
+ * its interval, against a dashed zero. A row whose line crosses zero has not
+ * shown it differs from zero, and is drawn grey for it; one clear of zero takes
+ * the colour of its sign. Every row of a set of these shares `domain`, so small
+ * multiples can be read across.
+ *
+ * rows: [{label, value, lo, hi, detail}]
+ */
+function intervalChart(opts) {
+  const { rows = [], width = 320, rowHeight = 24, labelWidth = 96, format = (v) => fmt(v, 2),
+    domain = null, ariaLabel = '', zeroLabel = '0' } = opts;
+  const usable = rows.filter((r) => Number.isFinite(r.value));
+  if (usable.length < 2) return null;
+  const ends = usable.flatMap((r) => [r.value, r.lo, r.hi]).filter(Number.isFinite);
+  let lo = domain ? domain[0] : Math.min(0, ...ends);
+  let hi = domain ? domain[1] : Math.max(0, ...ends);
+  const pad = (hi - lo) * 0.06 || 1;
+  lo -= pad; hi += pad;
+  const W = width;
+  const m = { t: 6, r: 52, b: 20, l: labelWidth };
+  const H = m.t + usable.length * rowHeight + m.b;
+  const X = (v) => m.l + ((v - lo) / (hi - lo)) * (W - m.l - m.r);
+  const root = svgRoot(W, H);
+  root.setAttribute('aria-label', ariaLabel);
+  root.appendChild(s('line', { x1: X(0), x2: X(0), y1: m.t, y2: H - m.b, stroke: C.baseline, 'stroke-width': 1, 'stroke-dasharray': '3 3' }));
+  root.appendChild(s('text', { x: X(0), y: H - 6, fill: C.muted, 'font-size': CF.micro, 'text-anchor': 'middle' }, zeroLabel));
+  usable.forEach((r, i) => {
+    const y = m.t + i * rowHeight + rowHeight / 2;
+    const ranged = Number.isFinite(r.lo) && Number.isFinite(r.hi);
+    const unclear = ranged && r.lo <= 0 && r.hi >= 0;
+    const color = !ranged || unclear ? C.muted : (r.value >= 0 ? C.pos : C.neg);
+    const g = s('g', {});
+    root.appendChild(s('text', { x: m.l - 8, y: y + 4, fill: C.ink2, 'font-size': CF.tick, 'text-anchor': 'end' }, r.label));
+    if (ranged) g.appendChild(s('line', { x1: X(r.lo), x2: X(r.hi), y1: y, y2: y, stroke: color, 'stroke-width': 2, 'stroke-linecap': 'round' }));
+    g.appendChild(s('circle', { cx: X(r.value), cy: y, r: 4, fill: color }));
+    g.appendChild(s('text', { x: W - m.r + 6, y: y + 4, fill: unclear ? C.muted : C.ink, 'font-size': CF.micro, 'font-variant-numeric': 'tabular-nums' }, format(r.value)));
+    g.appendChild(s('rect', { x: m.l, y: y - rowHeight / 2, width: W - m.l - m.r, height: rowHeight, fill: 'transparent' }));
+    const say = ranged ? `${format(r.value)}, interval ${format(r.lo)} to ${format(r.hi)}${unclear ? ', crosses zero' : ''}` : format(r.value);
+    focusMark(g, tipRows(escapeText(r.label), r.detail || [['Value', say]]), `${r.label}: ${say}`);
+    root.appendChild(g);
+  });
   return root;
 }
 

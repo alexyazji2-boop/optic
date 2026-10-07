@@ -384,6 +384,26 @@ SCANS: List[Dict[str, Any]] = [
 
 SCAN_BY_ID = {s["id"]: s for s in SCANS}
 
+# The column each scan's list is ordered by, and which way: "abs" is by size
+# either way. Published with the result so the table can say which column the
+# order comes from; it is not always the first, and a sort is a lambda the page
+# cannot read.
+RANKED_BY = {
+    "movers": ("roc20", "abs"),
+    "gainers-volume": ("roc20", "desc"),
+    "decliners-volume": ("roc20", "asc"),
+    "volume-leaders": ("dollar_volume", "desc"),
+    "high-risk-up": ("score", "desc"),
+    "high-risk-down": ("score", "asc"),
+    "momentum": ("score", "desc"),
+    "breakout": ("range_position", "desc"),
+    "pullback": ("score", "desc"),
+    "volume": ("volume_expansion", "desc"),
+    "steady": ("atr_pct", "asc"),
+    "extended": ("roc20", "desc"),
+    "downtrend": ("roc60", "asc"),
+}
+
 # What each column means, in the reader's terms rather than the field name's.
 COLUMN_LABELS = {
     "score": "Score",
@@ -465,6 +485,8 @@ def run(ranking: Optional[Dict[str, Any]], scan_id: str,
         "columns": [{"key": c, "label": COLUMN_LABELS.get(c, c),
                      "kind": COLUMN_KINDS.get(c, "num")} for c in scan["columns"]],
         "rows": out_rows,
+        "ranked_by": ({"key": RANKED_BY[scan_id][0], "order": RANKED_BY[scan_id][1]}
+                      if scan_id in RANKED_BY else None),
         "matched": len(hits),
         "considered": len(rows),
         "universe_size": (ranking or {}).get("universe_size"),
