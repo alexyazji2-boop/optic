@@ -196,7 +196,8 @@ def test_the_options_charts_are_handed_their_data():
     assert [r["label"] for r in out["oi"]["rows"]] == ["$340", "$330"] and out["oi"]["markerRow"] == 1
     assert out["oi"]["markerLabel"] == "price $333.60"
     assert out["exp"] == [["Oct 12 · 6d", False], ["Dec 18 · 73d", True]]
-    assert out["split"] == ["Volume", "Open interest", "Premium", "New positions"]
+    # Time value, the premium paid above intrinsic value (app/analytics/flow.py).
+    assert out["split"] == ["Volume", "Open interest", "Time value", "New positions"]
     assert out["payoff"]["spot"] == 333.6 and out["payoff"]["legs"][0]["strike"] == 335
     assert out["titles"] == ["Implied volatility rises from 22% at 6 days to 25% at 73",
                              "The most open interest sits at the 340 strike",

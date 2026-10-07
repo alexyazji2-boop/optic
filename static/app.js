@@ -12577,18 +12577,18 @@ function renderSwing(d) {
     <div class="panel">
       <h2>${hg('Call vs put flow')}${askPulse('flow')}</h2>
       <p class="sub">${toneChip(flow.stance)} score ${flow.flow_score > 0 ? '+' : ''}${fmt(flow.flow_score, 0)}</p>
-      ${vizBlock('viz-opt-split', callPutTitle(flow), 'Calls against puts in today\'s volume, the open interest, the premium paid, and the premium on positions opened today.',
+      ${vizBlock('viz-opt-split', callPutTitle(flow), 'Calls against puts in today\'s volume, the open interest, the time value bought, and the time value on positions opened today.',
     legendHtml([{ name: 'Calls', color: C.pos, shape: 'box' }, { name: 'Puts', color: C.neg, shape: 'box' }]))}
       ${exactFigures(kv([
     ['Call volume', fmtCompact((flow.volume || {}).calls)],
     ['Put volume', fmtCompact((flow.volume || {}).puts)],
     ['Put/call volume ratio', fmt((flow.volume || {}).put_call_ratio, 2)],
     ['Put/call OI ratio', fmt((flow.open_interest || {}).put_call_ratio, 2)],
-    ['Call premium', usdCompact((flow.premium || {}).calls)],
-    ['Put premium', usdCompact((flow.premium || {}).puts)],
-    ['Call share of premium', `${fmt((flow.premium || {}).call_share_pct, 1)}%`],
-    ['New-position premium (calls)', usdCompact((flow.new_positions || {}).call_premium)],
-    ['New-position premium (puts)', usdCompact((flow.new_positions || {}).put_premium)],
+    ['Call time value bought', usdCompact((flow.premium || {}).calls)],
+    ['Put time value bought', usdCompact((flow.premium || {}).puts)],
+    ['Call share of time value', `${fmt((flow.premium || {}).call_share_pct, 1)}%`],
+    ['New-position time value (calls)', usdCompact((flow.new_positions || {}).call_premium)],
+    ['New-position time value (puts)', usdCompact((flow.new_positions || {}).put_premium)],
     ['OTM put IV − call IV', `${fmt((flow.iv_skew || {}).put_minus_call_vol_pts, 1)} vol pts`],
   ]))}
       <ul class="reasons">${(flow.notes || []).map((n) => `<li>${gloss(n)}</li>`).join('')}</ul>
@@ -12597,8 +12597,13 @@ function renderSwing(d) {
 
     <div class="panel">
       <h2>${hg('Net premium by strike')}</h2>
-      <p class="sub">Calls positive, puts negative. Where today's money actually went${(flow.by_strike || []).length
-    ? `: the ${fmt(flow.by_strike.length, 0)} strikes with the most premium traded${chainScope(d) ? `, from ${chainScope(d)}` : ''}` : ''}.</p>
+      ${/* Time value, not the whole price: see app/analytics/flow.py. The
+           whole price let a $10 call on a $180 stock, which is the stock
+           bought another way, lead "where today's money went". */''}
+      <p class="sub">Calls positive, puts negative. Where today's option money went${(flow.by_strike || []).length
+    ? `: the ${fmt(flow.by_strike.length, 0)} strikes with the most time value bought${chainScope(d) ? `, from ${chainScope(d)}` : ''}` : ''}.
+        Time value is what was paid above a contract's intrinsic value, so a deep in-the-money
+        contract, priced mostly as the stock itself, adds little here.</p>
       ${(flow.by_strike || []).length ? '' : '<p class="viz-none">No premium traded at any strike today.</p>'}
       <div id="legend-flow"></div>
       <div id="chart-flow"></div>
@@ -12611,10 +12616,12 @@ function renderSwing(d) {
           <td class="name" style="color:${r.type === 'CALL' ? 'var(--pos)' : 'var(--neg)'}">${esc(r.type)}</td>
           <td>${fmt(r.strike, 1)}</td><td>${fmt(r.dte, 0)}</td>
           <td>${fmtCompact(r.volume)}</td><td>${fmtCompact(r.open_interest)}</td>
-          <td>${fmt(r.vol_oi_ratio, 1)}</td><td>$${fmtCompact(r.premium)}</td>
+          <td>${fmt(r.vol_oi_ratio, 1)}</td><td>$${fmtCompact(r.premium_total ?? r.premium)}</td>
           <td>${fmt((r.iv || 0) * 100, 1)}%</td>
         </tr>`).join('') || '<tr><td colspan="9" class="muted">No unusual activity above the volume and premium thresholds.</td></tr>'}</tbody>
       </table></div>
+      <p class="caveat">Chosen and ordered by the time value bought, at least $25K of it on 50 or
+        more contracts. Premium is the whole price paid, intrinsic value included.</p>
     </div>
   </div>
 
@@ -12888,7 +12895,7 @@ function renderSwing(d) {
         ],
       })),
       format: (x) => usdCompact(x),
-      axisLabel: 'net premium traded today',
+      axisLabel: 'net time value bought today',
     }));
   }
   mountOptionsVisuals(d);
@@ -12981,7 +12988,7 @@ function mountOptionsVisuals(d) {
     countLabel: (n) => fmtCompact(n),
     rows: [{ label: 'Volume', values: pair(flow.volume), unit: 'contracts' },
       { label: 'Open interest', values: pair(flow.open_interest), unit: 'contracts' },
-      { label: 'Premium', values: pair(flow.premium), countLabel: (n) => `$${fmtCompact(n)}`, unit: '' },
+      { label: 'Time value', values: pair(flow.premium), countLabel: (n) => `$${fmtCompact(n)}`, unit: '' },
       { label: 'New positions', values: { calls: np.call_premium || 0, puts: np.put_premium || 0 },
         countLabel: (n) => `$${fmtCompact(n)}`, unit: '' }],
   }), 'No volume or open interest today.');

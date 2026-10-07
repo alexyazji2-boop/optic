@@ -44,7 +44,25 @@ def analyse(chain: pd.DataFrame, spot: float, top_n: int = 12) -> Dict[str, Any]
     df["volume"] = df["volume"].fillna(0.0)
     df["open_interest"] = df["open_interest"].fillna(0.0)
     df["price_used"] = df["mid"].fillna(df["last"]).fillna(0.0)
-    df["premium"] = df["volume"] * 100.0 * df["price_used"]
+    # Premium is counted on time value: what was paid above each contract's
+    # intrinsic value, the part that is a bet on the option rather than the
+    # stock's own worth carried in it.
+    #
+    # Counted on the whole price, deep in-the-money contracts led every reading.
+    # On COIN at $179.52 on 2026-10-07 the top of "where today's money went"
+    # was the $10 and $20 calls, 90 contracts at about $150 each, nearly all of
+    # it intrinsic, which is stock bought another way; then puts struck at
+    # $370 to $790, $190 to $610 in the money; while the strikes around the
+    # price, where thousands of contracts traded, came below them. Of $9.36M of
+    # put "premium", $8.57M was in the money, so the put share of the money
+    # was mostly the intrinsic value of a few far contracts. The whole price is
+    # kept beside it as `total_paid`.
+    is_call = df["is_call"].astype(bool)
+    intrinsic = np.where(is_call, np.maximum(spot - df["strike"], 0.0),
+                         np.maximum(df["strike"] - spot, 0.0))
+    df["time_value"] = np.maximum(df["price_used"] - intrinsic, 0.0)
+    df["premium_total"] = df["volume"] * 100.0 * df["price_used"]
+    df["premium"] = df["volume"] * 100.0 * df["time_value"]
     df["notional"] = df["volume"] * 100.0 * df["strike"]
 
     calls = df[df["is_call"]]
@@ -56,6 +74,8 @@ def analyse(chain: pd.DataFrame, spot: float, top_n: int = 12) -> Dict[str, Any]
     put_oi = float(puts["open_interest"].sum())
     call_prem = float(calls["premium"].sum())
     put_prem = float(puts["premium"].sum())
+    call_paid = float(calls["premium_total"].sum())
+    put_paid = float(puts["premium_total"].sum())
 
     total_vol = call_vol + put_vol
     total_prem = call_prem + put_prem
@@ -92,9 +112,18 @@ def analyse(chain: pd.DataFrame, spot: float, top_n: int = 12) -> Dict[str, Any]
     strike_flow["gross"] = strike_flow["call_premium"] + strike_flow["put_premium"]
     top_strikes = strike_flow.nlargest(top_n, "gross").sort_values("strike")
 
-    # --- IV skew: 25-delta-ish proxy using nearest OTM contracts either side
-    call_iv = _f(otm_calls.nsmallest(5, "strike")["iv"].median()) if not otm_calls.empty else None
-    put_iv = _f(otm_puts.nlargest(5, "strike")["iv"].median()) if not otm_puts.empty else None
+    # --- IV skew: 25-delta-ish proxy using nearest OTM contracts either side.
+    # Quoted contracts only. An unquoted one carries the feed's placeholder
+    # volatility (0.125, 0.25), and at 9:36am ET on 2026-10-07 AAPL's skew read
+    # 0.0 "puts and calls priced level" from placeholders on both sides.
+    def quoted(frame: pd.DataFrame) -> pd.DataFrame:
+        if "bid" not in frame or "ask" not in frame:
+            return frame
+        return frame[(frame["bid"].fillna(0) > 0) & (frame["ask"].fillna(0) > 0)]
+
+    q_calls, q_puts = quoted(otm_calls), quoted(otm_puts)
+    call_iv = _f(q_calls.nsmallest(5, "strike")["iv"].median()) if not q_calls.empty else None
+    put_iv = _f(q_puts.nlargest(5, "strike")["iv"].median()) if not q_puts.empty else None
     skew = None
     if call_iv is not None and put_iv is not None:
         skew = round((put_iv - call_iv) * 100.0, 3)
@@ -124,10 +153,10 @@ def analyse(chain: pd.DataFrame, spot: float, top_n: int = 12) -> Dict[str, Any]
     if prem_share is not None:
         if prem_share > 0.65:
             score += 25
-            notes.append("{:.0f}% of premium spent on calls".format(prem_share * 100))
+            notes.append("{:.0f}% of the time value bought went on calls".format(prem_share * 100))
         elif prem_share < 0.35:
             score -= 25
-            notes.append("{:.0f}% of premium spent on puts".format((1 - prem_share) * 100))
+            notes.append("{:.0f}% of the time value bought went on puts".format((1 - prem_share) * 100))
 
     new_total = new_call_prem + new_put_prem
     if new_total > 0:
@@ -170,7 +199,8 @@ def analyse(chain: pd.DataFrame, spot: float, top_n: int = 12) -> Dict[str, Any]
         stance = "neutral"
 
     return {
-        "method": "Volume/OI proxy. No trade tape on free data, side is inferred not observed",
+        "method": ("Volume/OI proxy. No trade tape on free data, side is inferred not observed. "
+                   "Premium is time value: what was paid above each contract's intrinsic value"),
         "stance": stance,
         "flow_score": score,
         "notes": notes,
@@ -187,11 +217,14 @@ def analyse(chain: pd.DataFrame, spot: float, top_n: int = 12) -> Dict[str, Any]
             "put_call_ratio": _safe_ratio(put_oi, call_oi),
         },
         "premium": {
+            "basis": "time value",
             "calls": call_prem,
             "puts": put_prem,
             "total": total_prem,
             "call_share_pct": None if not total_prem else round(call_prem / total_prem * 100.0, 2),
             "net": call_prem - put_prem,
+            # The whole price, intrinsic value included, for reference.
+            "total_paid": {"calls": call_paid, "puts": put_paid, "total": call_paid + put_paid},
         },
         "new_positions": {
             "definition": "contracts where today's volume exceeded standing open interest",
@@ -233,6 +266,7 @@ def analyse(chain: pd.DataFrame, spot: float, top_n: int = 12) -> Dict[str, Any]
                 "open_interest": _f(r["open_interest"]),
                 "vol_oi_ratio": _f(r.get("vol_oi_ratio")),
                 "premium": _f(r["premium"]),
+                "premium_total": _f(r["premium_total"]),
                 "iv": _f(r["iv"]),
                 "is_new_position": bool(r["volume"] > r["open_interest"]),
                 "moneyness": "OTM"

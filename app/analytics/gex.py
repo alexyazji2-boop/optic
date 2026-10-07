@@ -61,6 +61,11 @@ from .greeks import greeks
 # known; see the module docstring.
 CONTRACT_MULTIPLIER = quotes.STANDARD_MULTIPLIER
 
+
+# The least share of the largest strike's absolute gamma exposure a strike
+# must carry to be named a call or put wall (see analyse).
+WALL_MIN_SHARE = 0.05
+
 ASSUMPTION = ("Model assumption, not observed positions: dealers are long the calls "
               "customers sold and short the puts customers bought, so calls count as "
               "positive gamma exposure and puts as negative. Open interest shows how "
@@ -266,8 +271,15 @@ def analyse(
     # or below spot: short dealer gamma there adds to a fall through it, which
     # is why it is not called support here. Both used to be taken from either
     # side of spot, so a "ceiling" could sit under the price.
-    above = by_strike[(by_strike["strike"] >= spot) & (by_strike["net_gex"] > 0)]
-    below = by_strike[(by_strike["strike"] <= spot) & (by_strike["net_gex"] < 0)]
+    # And only a strike that carries a real share of the chain's exposure. On
+    # AAPL at 9:36am ET on 2026-10-07 the "put wall" was the $20 strike, 94%
+    # below the price, at -$5.8k of gamma against $24M at the pin: the most
+    # negative strike below spot existed and was noise, and the panel named it
+    # a level where hedging adds to a fall. A wall under WALL_MIN_SHARE of the
+    # largest strike's exposure is no wall.
+    floor = WALL_MIN_SHARE * float(by_strike["abs_gex"].max() or 0.0)
+    above = by_strike[(by_strike["strike"] >= spot) & (by_strike["net_gex"] > floor)]
+    below = by_strike[(by_strike["strike"] <= spot) & (by_strike["net_gex"] < -floor)]
     call_wall = above.loc[above["net_gex"].idxmax()] if not above.empty else None
     put_wall = below.loc[below["net_gex"].idxmin()] if not below.empty else None
     max_oi_strike = by_strike.loc[(by_strike["call_oi"] + by_strike["put_oi"]).idxmax()]

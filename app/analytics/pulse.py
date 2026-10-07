@@ -524,7 +524,7 @@ def options_brief(payload: Dict[str, Any]) -> Dict[str, Any]:
         items.append({
             "label": "Premium",
             "value": "{:.0f}% calls".format(share),
-            "note": "by dollars paid, not contract count",
+            "note": "of the time value bought, not the contract count",
             "tone": "up" if share > 55 else ("down" if share < 45 else "flat"),
         })
 
