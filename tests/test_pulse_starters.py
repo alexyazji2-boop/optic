@@ -44,20 +44,15 @@ def test_the_symbol_cards_actually_name_the_symbol():
             assert "{T}" in line, f"ticker card with no substitution: {line.strip()[:60]}"
 
 
-def test_pulse_opens_with_a_greeting_and_three_asks_before_the_expander():
-    """Pulse starts the conversation itself (asked for as "have pulse start
-    off the conversation with the user like this"): a greeting in its voice,
-    three short asks, and every starter one press away behind the expander.
-    The asks draft into the box like the starters, through the same
-    `.pulse-card` handler, so nothing is sent until Send."""
+def test_three_show_before_the_expander():
+    """Three, not four, and the reason is the grid rather than the count.
+    `.pulse-cards` resolves to three columns at the panel's usual width, so a
+    fourth card wrapped onto a row of its own beside two card-widths of
+    nothing -- a full row then a stub, right above "See more examples", which
+    reads as cut off rather than deliberately shortened."""
     body = APP_JS.split("function pulseStarters(", 1)[1].split("\nfunction ", 1)[0]
-    assert "What would you like to look into?" in body
-    asks = APP_JS.split("function pulseQuickAsks(", 1)[1].split("\n}\n", 1)[0]
-    labels = re.findall(r"label: '([^']+)'", asks)
-    assert labels == ["Summarize the latest news", "What are the key risks?", "Explain the chart"]
-    assert "chartPulsePrompt(sym)" in asks, "the same question as the chart's Explain button"
-    assert 'class="pulse-card pulse-chip"' in body
-    assert "${expanded ? `" in body and "usable.map(" in body, "every usable starter behind the expander"
+    assert "usable.slice(0, PULSE_STARTERS_SHOWN)" in body
+    assert re.search(r"const PULSE_STARTERS_SHOWN = 3;", APP_JS)
 
 
 def test_the_expander_still_has_something_to_expand_to():
@@ -101,3 +96,11 @@ def test_the_expander_toggles_both_ways():
         handler = APP_JS.split(f"closest('[{attr}]')", 1)[1][:120]
         assert f"pulseStartersExpanded = {expected}" in handler
         assert "renderPulseEmpty()" in handler
+
+
+def test_pulse_greets_before_the_starters():
+    """Pulse opens the conversation in its own voice, beside the Optic mark,
+    and the numbered starters follow it unchanged."""
+    body = APP_JS.split("function pulseStarters(", 1)[1].split("\n}\n", 1)[0]
+    assert "What would you like to look into?" in body
+    assert body.index('class="pulse-hello"') < body.index('class="pulse-cards"')
