@@ -12119,9 +12119,8 @@ function renderSwing(d) {
         <div>
           <div class="hero-label">Composite</div>
           <div class="hero ${Math.round(v.composite_score || 0) === 0
-    ? 'flat' : signClass(v.composite_score)}">${
-  Math.round(v.composite_score || 0) > 0 ? '+' : ''}${fmt(v.composite_score, 0)}</div>
-          <div class="note subnote sm">Out of ±100</div>
+    ? 'flat' : signClass(v.composite_score)}">${score100HTML(score100(v.composite_score))}</div>
+          <div class="note subnote sm">50 is neutral, 0 fully bearish, 100 fully bullish</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:var(--space-2)">
           ${toneChip(v.stance)}
@@ -12162,7 +12161,8 @@ function renderSwing(d) {
         </tr>`).join('')}
         <tr style="border-top:1px solid var(--border-strong)">
           <td class="name"><strong>Composite</strong></td><td></td><td></td><td></td>
-          <td class="${signClass(v.composite_score)}"><strong>${v.composite_score > 0 ? '+' : ''}${fmt(v.composite_score, 1)}</strong></td>
+          <td class="${signClass(v.composite_score)}"><strong>${v.composite_score > 0 ? '+' : ''}${fmt(v.composite_score, 1)}</strong>${
+  score100(v.composite_score) === null ? '' : `<div class="caveat" style="margin:var(--space-0) 0 0">${fmt(score100(v.composite_score), 0)} of 100</div>`}</td>
           <td></td>
         </tr>
         </tbody>
@@ -31489,6 +31489,31 @@ function ltMonthYear(iso) {
   return `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(m[2]) - 1]} ${m[1]}`;
 }
 
+/* A conviction score on 0 to 100. Asked for as "change the rating scale from
+ * 0-100, not -100 to 100", after "Of a possible +97" read as a puzzle. The
+ * server's signed score is unchanged and still drives every label; this only
+ * re-reads it for the headline: the worst possible maps to 0, the best to 100
+ * and zero, no edge either way, to 50. Each side is scaled to its own limit
+ * because the long-term model's limits are not symmetric (-86 to +97). */
+function score100(score, min, max) {
+  if (score === null || score === undefined || !Number.isFinite(Number(score))) return null;
+  const lo = Number.isFinite(min) && min < 0 ? min : -100;
+  const hi = Number.isFinite(max) && max > 0 ? max : 100;
+  const s = Math.max(lo, Math.min(hi, Number(score)));
+  return s >= 0 ? 50 + 50 * s / hi : 50 - 50 * s / lo;
+}
+
+/** "81" with a small "/100", or a dash. */
+function score100HTML(n) {
+  return n === null ? '\u2014' : `${fmt(n, 0)}<span class="hero-of">/100</span>`;
+}
+
+/** The long-term conviction on 0 to 100, against the model's own limits. */
+function longScore100(h, score) {
+  const sc = (h || {}).conviction_scale || {};
+  return score100(score, sc.min_possible, sc.max_possible);
+}
+
 function renderLong(d) {
   hideTip();
   const h = d.holding || {};
@@ -31512,9 +31537,8 @@ function renderLong(d) {
       <div style="display:flex;align-items:flex-end;gap:var(--space-5);flex-wrap:wrap">
         <div>
           <div class="hero-label">Conviction</div>
-          <div class="hero ${signClass(h.conviction_score)}">${h.conviction_score > 0 ? '+' : ''}${fmt(h.conviction_score, 0)}</div>
-          <div class="note subnote sm">Of a possible
-            +${fmt((h.conviction_scale || {}).max_possible, 0)}</div>
+          <div class="hero ${signClass(h.conviction_score)}">${score100HTML(longScore100(h, h.conviction_score))}</div>
+          <div class="note subnote sm">50 is neutral, 100 is every factor at its best</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:var(--space-2)">
           ${toneChip(h.conviction)}
@@ -31539,9 +31563,11 @@ function renderLong(d) {
         <tr style="border-top:1px solid var(--border-strong)">
           <td class="name"><strong>Total</strong></td><td></td>
           <td class="${signClass(h.conviction_score)}"><strong>${h.conviction_score > 0 ? '+' : ''}${fmt(h.conviction_score, 0)}</strong></td>
-          <td class="subnote sm">${
+          <td class="subnote sm">${longScore100(h, h.conviction_score) === null ? ''
+    : `${fmt(longScore100(h, h.conviction_score), 0)} of 100. `}${
   (h.conviction_scale || {}).thresholds
-    ? 'High at ' + h.conviction_scale.thresholds.high + '+, moderate at ' + h.conviction_scale.thresholds.moderate + '+' : ''}</td>
+    ? 'High at ' + fmt(longScore100(h, h.conviction_scale.thresholds.high), 0) + '+, moderate at '
+      + fmt(longScore100(h, h.conviction_scale.thresholds.moderate), 0) + '+' : ''}</td>
         </tr></tbody>
       </table>
       <p class="caveat">This is a trend-and-relative-strength model with a valuation sanity
@@ -38629,9 +38655,9 @@ function updateStatus() {
     else parts.push('No scheduled report');
   } else if (STATE.view === 'long') {
     if (holding.conviction) {
+      const of100 = longScore100(holding, holding.conviction_score);
       parts.push(`Conviction: ${esc(cap(holding.conviction))}${
-        holding.conviction_score !== undefined && holding.conviction_score !== null
-          ? ` (${fmt(holding.conviction_score, 0)})` : ''}`);
+        of100 === null ? '' : ` (${fmt(of100, 0)}/100)`}`);
     }
   } else if (STATE.view === 'market') {
     // macro.regime is a string, not an object.
