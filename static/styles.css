@@ -689,9 +689,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 button, summary, [role="button"] {
   transition: color var(--dur-ui, 120ms) var(--ease-ui, ease),
               background-color var(--dur-ui, 120ms) var(--ease-ui, ease),
-              border-color var(--dur-ui, 120ms) var(--ease-ui, ease),
-              box-shadow var(--dur-ui, 120ms) var(--ease-ui, ease),
-              border-radius var(--dur-ui, 120ms) var(--ease-ui, ease);
+              border-color var(--dur-ui, 120ms) var(--ease-ui, ease);
 }
 
 /* ------------------------------------------------------------------ chrome */
@@ -6264,6 +6262,9 @@ details.ind-explain > summary::-webkit-details-marker { display: none; }
 details.ind-explain > summary:hover { color: var(--ink); }
 details.ind-explain > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 details.ind-explain[open] > summary .cal-caret { transform: rotate(90deg); }
+/* A one-line disclosure ("The whole desk"): the caret sits on the text's
+   centre line, not the first-line offset the wrapping calendar rows need. */
+details.ind-explain > summary .cal-caret { align-self: center; margin-top: 0; }
 
 .ind-explain-body {
   margin-top: var(--space-2);
@@ -18492,10 +18493,17 @@ footer.legal > .legal-full {
                 0 0 0 calc(var(--hover-pad, 0px) + 1.5px) var(--hover-ring-out, transparent),
                 inset 0 0 0 1.5px var(--hover-ring-in, var(--hover-gold));
     color: var(--ink);
+    /* A plain fade: the pill's shape and outline arrive at once and only the
+       wash and the ink ease in. Animating the corners and the shadow spread
+       made the outline grow and morph from a square, which read as busy. */
+    transition: color var(--dur-ui, 120ms) var(--ease-ui, ease),
+                background-color var(--dur-ui, 120ms) var(--ease-ui, ease),
+                border-color var(--dur-ui, 120ms) var(--ease-ui, ease);
   }
   .btn.primary:not(:disabled):not([aria-disabled="true"]):hover {
     border-radius: var(--r-pill);
     box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--hover-gold);
+    transition: color var(--dur-ui, 120ms) var(--ease-ui, ease);
   }
 }
 

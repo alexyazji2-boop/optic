@@ -43,3 +43,19 @@ def test_cards_keep_their_corners_and_bare_links_get_room():
 def test_the_primary_button_keeps_its_gold_fill():
     rule = _block('  .btn.primary:not(:disabled):not([aria-disabled="true"]):hover {')
     assert "background" not in rule and "var(--hover-gold)" in rule
+
+
+def test_the_hover_is_a_plain_fade_not_a_morph():
+    """Asked for as "use a simpler animation when hovering over the text": the
+    corners and the outline's spread no longer animate, so the pill does not
+    grow out of a square. Only colour, wash and edge ease."""
+    rule = _block('  button:not(:disabled):not([aria-disabled="true"]):not(.primary):hover,')
+    eased = rule.split("transition:", 1)[1]
+    assert "box-shadow" not in eased and "border-radius" not in eased
+    base = _block('button, summary, [role="button"] {')
+    assert "box-shadow" not in base and "border-radius" not in base
+
+
+def test_a_one_line_disclosures_caret_sits_on_the_text_centre():
+    assert "details.ind-explain > summary .cal-caret { align-self: center; margin-top: 0; }" in CSS
+
