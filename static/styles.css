@@ -15118,6 +15118,7 @@ body[data-view="chart"] .ses-fold { display: none; }
   border-top: 1px solid var(--border);
 }
 .rail-foot .icon-btn {
+  transition: color var(--dur-ui, 120ms) ease, background-color var(--dur-ui, 120ms) ease;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -18493,26 +18494,24 @@ footer.legal > .legal-full {
 
 /* ================================================== the gold hover pill ===
  *
- * Asked for as "from now on, every time you hover over a button, use [the
- * "Why the gap?" chip] as a reference, but change the color scheme to the
- * gold in the optic logo". Every button, summary and role="button" control
- * takes the same hover: a pill outlined in the mark's gold over a faint gold
- * wash, with ink text.
+ * Asked for as "every time you hover over a button, use [the "Why the gap?"
+ * chip] as a reference, but change the color scheme to the gold in the optic
+ * logo", then narrowed the same day: "dont do this for every button, do it
+ * only for the ones necessary" (shown on the gold Sign in button, which took
+ * an outline it did not need).
  *
- * Drawn with box-shadow rather than a border, so nothing moves by a pixel
- * when the pointer arrives. Specific enough to beat the per-component hovers
- * it replaces; the pieces that must differ say so through custom properties
- * at zero specificity rather than by out-shouting this rule:
- *   --hover-r    a card keeps its own corners instead of becoming a stadium;
- *   --hover-pad  a control with no padding of its own (a text link, a
- *                disclosure summary) gets the pill drawn outside its box, so
- *                the outline does not touch the words.
- * Disabled and unavailable controls are left alone, and so is a clamped
- * paragraph's "more" (a paragraph, not a button to the eye). The gold
- * primary button keeps its fill and takes the outline around it.
- * Hover-capable pointers only: on a touch screen a tap would leave it lit. */
-:where(.ov-card, .pulse-card) { --hover-r: var(--r-md); }
-:where(.cc-move, .cc-q, .ms-cell, summary.ht-row) { --hover-r: var(--r-sm); }
+ * So it is opt-in: the quiet controls whose only affordance is their words,
+ * which is where the pill earns its place -- disclosure rows ("The whole
+ * desk"), the Ask Pulse chips, filter pills and chips, secondary buttons,
+ * text links that act as buttons, and the rail. A solid gold button, a card,
+ * a tab and a toolbar glyph keep the hover they were designed with.
+ *
+ * Drawn with box-shadow rather than a border, so nothing moves when the
+ * pointer arrives. A control with no padding of its own (a text link, a
+ * disclosure summary) gets the pill drawn outside its box (--hover-pad), so
+ * the outline does not touch the words. Disabled controls are left alone, and
+ * only colour fades. Hover-capable pointers only: on a touch screen a tap
+ * would leave it lit. */
 :where(summary, .hm-more, .ht-more, .ht-rest, .foot-link, .cs-note-btn) {
   --hover-pad: calc(6px * var(--ui-scale));
   --hover-bg: var(--hover-gold-solid);
@@ -18522,27 +18521,34 @@ footer.legal > .legal-full {
 :where(summary.ht-row) { --hover-pad: 0px; --hover-bg: var(--hover-gold-fill); --hover-ring-in: var(--hover-gold); --hover-ring-out: transparent; }
 
 @media (hover: hover) {
-  button:not(:disabled):not([aria-disabled="true"]):not(.primary):hover,
   summary:not(:disabled):not([aria-disabled="true"]):hover,
-  [role="button"]:not(:disabled):not([aria-disabled="true"]):not(.clamp-prose):hover {
+  .ask-pulse:not(:disabled):not([aria-disabled="true"]):hover,
+  .pill:not(:disabled):not([aria-disabled="true"]):hover,
+  .sec-chip:not(:disabled):not([aria-disabled="true"]):hover,
+  .wl-chip:not(:disabled):not([aria-disabled="true"]):hover,
+  .bulk-btn:not(:disabled):not([aria-disabled="true"]):hover,
+  .btn:not(.primary):not(:disabled):not([aria-disabled="true"]):hover,
+  .hm-more:not(:disabled):not([aria-disabled="true"]):hover,
+  .ht-more:not(:disabled):not([aria-disabled="true"]):hover,
+  .ht-rest:not(:disabled):not([aria-disabled="true"]):hover,
+  .foot-link:not(:disabled):not([aria-disabled="true"]):hover,
+  .cs-note-btn:not(:disabled):not([aria-disabled="true"]):hover,
+  .rail nav.tabs-group .nav-top:not(:disabled):not([aria-disabled="true"]):hover,
+  .nav-page:not(:disabled):not([aria-disabled="true"]):hover,
+  .rail-foot .icon-btn:not(:disabled):not([aria-disabled="true"]):hover,
+  .brand:not(:disabled):not([aria-disabled="true"]):hover {
     border-color: var(--hover-gold);
-    border-radius: var(--hover-r, var(--r-pill));
+    border-radius: var(--r-pill);
     background-color: var(--hover-bg, var(--hover-gold-fill));
     box-shadow: 0 0 0 var(--hover-pad, 0px) var(--hover-gold-solid),
                 0 0 0 calc(var(--hover-pad, 0px) + 1.5px) var(--hover-ring-out, transparent),
                 inset 0 0 0 1.5px var(--hover-ring-in, var(--hover-gold));
     color: var(--ink);
     /* A plain fade: the pill's shape and outline arrive at once and only the
-       wash and the ink ease in. Animating the corners and the shadow spread
-       made the outline grow and morph from a square, which read as busy. */
+       wash and the ink ease in. */
     transition: color var(--dur-ui, 120ms) var(--ease-ui, ease),
                 background-color var(--dur-ui, 120ms) var(--ease-ui, ease),
                 border-color var(--dur-ui, 120ms) var(--ease-ui, ease);
-  }
-  .btn.primary:not(:disabled):not([aria-disabled="true"]):hover {
-    border-radius: var(--r-pill);
-    box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--hover-gold);
-    transition: color var(--dur-ui, 120ms) var(--ease-ui, ease);
   }
 }
 

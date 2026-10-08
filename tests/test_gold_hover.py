@@ -1,12 +1,15 @@
-"""Every button's hover is the same outlined pill, in the Optic mark's gold.
+"""The gold hover pill, on the controls that need it.
 
 Asked for on 2026-10-08 as "from now on, every time you hover over a button,
 use [the 'Why the gap?' chip] as a reference, but change the color scheme to
-the gold in the optic logo".
+the gold in the optic logo", then narrowed the same day: "dont do this for
+every button, do it only for the ones necessary".
 """
 from pathlib import Path
 
 CSS = (Path(__file__).resolve().parent.parent / "static/styles.css").read_text()
+
+HEAD = '  summary:not(:disabled):not([aria-disabled="true"]):hover,'
 
 
 def _block(head):
@@ -14,13 +17,23 @@ def _block(head):
     return CSS[at:CSS.index("}", at)]
 
 
-def test_the_hover_reaches_every_kind_of_button_and_skips_disabled_ones():
-    rule = _block('  button:not(:disabled):not([aria-disabled="true"]):not(.primary):hover,')
-    assert 'summary:not(:disabled):not([aria-disabled="true"]):hover,' in rule
-    assert '[role="button"]:not(:disabled):not([aria-disabled="true"]):not(.clamp-prose):hover {' in rule
-    assert "border-radius: var(--hover-r, var(--r-pill));" in rule
+def test_the_hover_is_opt_in_for_quiet_controls_and_skips_disabled_ones():
+    rule = _block(HEAD)
+    for sel in (".ask-pulse", ".pill", ".sec-chip", ".btn:not(.primary)", ".hm-more",
+                ".rail nav.tabs-group .nav-top", ".brand"):
+        assert "  %s:not(:disabled)" % sel in rule, sel
+    assert "border-radius: var(--r-pill);" in rule
     assert "var(--hover-gold)" in rule and "color: var(--ink);" in rule
-    assert "@media (hover: hover) {\n  button:not(:disabled)" in CSS, "no sticky hover after a tap"
+    assert "@media (hover: hover) {\n" + HEAD in CSS, "no sticky hover after a tap"
+
+
+def test_not_every_button_takes_it():
+    """The solid gold button, cards, tabs and toolbar glyphs keep their own hover."""
+    rule = _block(HEAD)
+    assert "\n  button:not(" not in rule and "[role=\"button\"]" not in rule
+    for sel in (".btn.primary", ".ov-card", ".pulse-card", ".sec-tab", ".panel-toggle"):
+        assert sel + ":not(" not in rule, sel
+    assert '.btn.primary:not(:disabled):not([aria-disabled="true"]):hover {' not in CSS
 
 
 def test_the_gold_is_the_marks_gold_and_holds_up_on_white():
@@ -30,26 +43,20 @@ def test_the_gold_is_the_marks_gold_and_holds_up_on_white():
 
 
 def test_nothing_moves_when_the_pointer_arrives():
-    rule = _block('  button:not(:disabled):not([aria-disabled="true"]):not(.primary):hover,')
+    rule = _block(HEAD)
     assert "padding" not in rule and "border-width" not in rule and "margin" not in rule
     assert "box-shadow:" in rule
 
 
-def test_cards_keep_their_corners_and_bare_links_get_room():
-    assert ":where(.ov-card, .pulse-card) { --hover-r: var(--r-md); }" in CSS
+def test_bare_links_get_room():
     assert ":where(summary, .hm-more, .ht-more, .ht-rest, .foot-link, .cs-note-btn) {" in CSS
-
-
-def test_the_primary_button_keeps_its_gold_fill():
-    rule = _block('  .btn.primary:not(:disabled):not([aria-disabled="true"]):hover {')
-    assert "background" not in rule and "var(--hover-gold)" in rule
 
 
 def test_the_hover_is_a_plain_fade_not_a_morph():
     """Asked for as "use a simpler animation when hovering over the text": the
-    corners and the outline's spread no longer animate, so the pill does not
-    grow out of a square. Only colour, wash and edge ease."""
-    rule = _block('  button:not(:disabled):not([aria-disabled="true"]):not(.primary):hover,')
+    corners and the outline's spread do not animate. Only colour, wash and
+    edge ease."""
+    rule = _block(HEAD)
     eased = rule.split("transition:", 1)[1]
     assert "box-shadow" not in eased and "border-radius" not in eased
     base = _block('button, summary, [role="button"] {')
