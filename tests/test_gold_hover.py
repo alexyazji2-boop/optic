@@ -89,3 +89,14 @@ def test_rail_tooltips_only_when_the_labels_are_hidden():
     assert "  labelNavSections(nav);\n  syncRailTitles();" in APP, "re-run after every nav paint"
     assert "gear.dataset.railTitle = open" in APP
 
+
+def test_the_brand_sits_in_the_middle_of_its_hover_oval():
+    """ "make sure the text is always in the center of the oval": the brand hugs
+    its mark and wordmark with one padding on all four sides, and the rule under
+    it is the nav's edge, so the hover cannot turn it gold or bend it."""
+    rule = _block(".rail > .brand {\n  margin: 0;")
+    assert "padding: calc(8px * var(--ui-scale));" in rule and "width: fit-content;" in rule
+    assert "border-bottom" not in rule
+    assert ".rail > .brand + nav.tabs-group {\n  border-top: 1px solid var(--ws-line);" in CSS
+    assert "body.rail-tight .rail > .brand { width: 100%; }" in CSS
+
