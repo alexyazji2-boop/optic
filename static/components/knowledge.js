@@ -151,7 +151,7 @@
       + '<button type="button" class="km-btn oc-field" data-km-toggle'
       + ' aria-haspopup="true" aria-expanded="' + (open ? 'true' : 'false') + '"'
       + ' title="How much financial detail Optic assumes">'
-      + (o.compact ? '' : '<span class="km-eyebrow">Optic mode</span>')
+      + (o.compact ? '' : '<span class="km-eyebrow">Optic Mode</span>')
       /* No fallback label. Hardcoding "Financially Literate" here would be a
          second copy of a string the server owns, and the two would drift the
          day one of them is reworded. Until the catalogue lands the chip shows
