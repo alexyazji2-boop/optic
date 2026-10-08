@@ -4214,6 +4214,22 @@ function syncLogoBlinks() {
   });
 }
 
+/* The rail's tooltips, only while they say something the rail does not.
+ *
+ * Collapsed to icons, "Markets" on hover is the only place the word appears.
+ * Expanded, the label is on the row already, and the browser's tooltip opened
+ * under the pointer on top of the hover outline repeating it ("ALOT of
+ * inconsistencies here"). The name is kept in `data-rail-title` so collapsing
+ * puts it back; the accessible name is the visible label either way. */
+function syncRailTitles() {
+  const tight = document.body.classList.contains('rail-tight');
+  document.querySelectorAll('#rail nav.tabs-group .nav-top, #rail .rail-foot .icon-btn').forEach((el) => {
+    if (!el.dataset.railTitle && el.getAttribute('title')) el.dataset.railTitle = el.getAttribute('title');
+    if (tight && el.dataset.railTitle) el.setAttribute('title', el.dataset.railTitle);
+    else el.removeAttribute('title');
+  });
+}
+
 function applyRail(tight) {
   document.body.classList.toggle('rail-tight', tight);
   syncLogoBlinks();
@@ -4223,9 +4239,11 @@ function applyRail(tight) {
     const label = tight ? 'Expand the sidebar' : 'Collapse the sidebar';
     btn.setAttribute('aria-label', label);
     btn.title = label;
+    btn.dataset.railTitle = label;
     const text = btn.querySelector('.rail-label');
     if (text) text.textContent = tight ? 'Expand' : 'Collapse';
   }
+  syncRailTitles();
   /* Nothing is stored here. Writing the state on every application is what
    * made RAIL_KEY meaningless, and with a width-led default it would save the
    * width's answer as the reader's: a tablet's automatic collapse came back
@@ -41303,6 +41321,7 @@ function paintNav(view) {
     </div>`;
   }).join('');
   labelNavSections(nav);
+  syncRailTitles();
 
   /* The second row is gone on a desktop, where the rail's menus carry a
    * section's pages, and CSS keeps it off there. On a phone the rail is gone
@@ -41696,9 +41715,10 @@ function switchView(view, force) {
     const open = view === 'settings';
     gear.setAttribute('aria-pressed', String(open));
     gear.setAttribute('aria-label', open ? 'Close settings' : 'Settings');
-    gear.title = open
+    gear.dataset.railTitle = open
       ? `Close settings. Back to ${VIEW_NAMES[viewBeforeSettings] || 'Home'}`
       : 'Settings. Appearance and time zone';
+    syncRailTitles();
   }
   // Reconcile the search box with what's actually loaded. The two had drifted —
   // the status line said MSFT while the box sat empty — and rather than hunt every

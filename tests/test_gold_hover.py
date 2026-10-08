@@ -59,3 +59,33 @@ def test_the_hover_is_a_plain_fade_not_a_morph():
 def test_a_one_line_disclosures_caret_sits_on_the_text_centre():
     assert "details.ind-explain > summary .cal-caret { align-self: center; margin-top: 0; }" in CSS
 
+
+def test_the_rails_menu_arrows_sit_on_their_rows_centre():
+    """Pinned 4px from the row's top, the arrow sat above "Markets" and the
+    hover pill's outline made it plain: "center these arrows"."""
+    assert ".rail nav.tabs-group .nav-caret { top: calc(50% - 2px);" in CSS
+
+
+APP = (Path(__file__).resolve().parent.parent / "static/app.js").read_text()
+
+
+def test_the_rails_rows_are_one_system():
+    """Reported as "ALOT of inconsistencies": footer rows 38px against 42,
+    18px glyphs against 16, a 14px gap where every other pair had 1px, the
+    flyout's pages at 16.7px under 14.4px labels, and the current section a
+    square box with a blue edge beside a gold hover pill."""
+    assert ".rail .rail-foot .icon-btn > svg { width: 16px; height: 16px; }" in CSS
+    assert "  height: auto;\n  min-height: 38px;" in CSS
+    assert ".rail-toggle { position: relative; margin-top: 0; }" in CSS
+    assert ".rail nav.tabs-group .nav-page { font-size: var(--t-body); color: var(--rail-ink); }" in CSS
+    assert "background: var(--hover-gold, var(--accent));" in CSS, "one colour for 'you are here'"
+
+
+def test_rail_tooltips_only_when_the_labels_are_hidden():
+    fn = APP[APP.index("function syncRailTitles() {"):]
+    fn = fn[:fn.index("\n}\n")]
+    assert "if (tight && el.dataset.railTitle) el.setAttribute('title', el.dataset.railTitle);" in fn
+    assert "else el.removeAttribute('title');" in fn
+    assert "  labelNavSections(nav);\n  syncRailTitles();" in APP, "re-run after every nav paint"
+    assert "gear.dataset.railTitle = open" in APP
+

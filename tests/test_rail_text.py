@@ -63,7 +63,12 @@ def test_the_current_section_still_stands_out():
     active = _rule('.rail nav.tabs-group .nav-top[aria-selected="true"],\n'
                    '.rail nav.tabs-group .nav-item.on > .nav-top')
     assert "color: var(--ink);" in active and "background: var(--surface-2);" in active
-    assert "box-shadow: inset 2px 0 0 var(--s1);" in active
+    # Marked by a raised pill and a gold glyph since 2026-10-08, when the
+    # blue edge on a square box beside a gold hover pill was reported as one
+    # of "ALOT of inconsistencies". Still marked, just in the rail's own terms.
+    assert "border-radius: var(--r-pill);" in active
+    assert (".rail nav.tabs-group .nav-item.on > .nav-top .nav-icon { color: var(--hover-gold); }"
+            in CSS)
     assert "color: var(--ink);" in _rule(".rail nav.tabs-group .nav-top:hover")
 
 

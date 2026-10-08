@@ -6493,7 +6493,7 @@ details.ind-explain > summary .cal-caret { align-self: center; margin-top: 0; }
   width: 3px;
   height: 15px;
   border-radius: 2px;
-  background: var(--accent, var(--s1));
+  background: var(--hover-gold, var(--accent));
 }
 
 /* Home has its own search, the page's main control, 120px below this one.
@@ -15088,13 +15088,16 @@ body[data-view="chart"] .ses-fold { display: none; }
  * Safe to unpin because this rail's content does not grow with data: a brand
  * row, six sections and two footer buttons, about 470px all told. That is the
  * same assumption the `overflow: visible` note above already rests on. */
-.rail-foot { margin-top: calc(14px * var(--ui-scale)); display: flex; flex-direction: column; gap: var(--space-1); padding-top: calc(8px * var(--ui-scale)); border-top: 1px solid var(--ws-line); }
+.rail-foot { margin-top: calc(14px * var(--ui-scale)); display: flex; flex-direction: column; gap: 1px; padding-top: calc(8px * var(--ui-scale)); border-top: 1px solid var(--ws-line); }
 /* Settings is a destination and Collapse is a control of the rail itself, so
    a hairline separates them rather than a gap: at `--space-1` they read as one
    pair of related buttons, and clicking the wrong one of a pair costs a page.
    Drawn as a pseudo-element, not `border-top` on the button -- a border there
    is inside the hover background and squares off its top corner. */
-.rail-toggle { position: relative; margin-top: var(--space-2); }
+/* No margin of its own any more: the workspace rail hides the hairline below,
+   and the margin it made room for left a 14px gap between Settings and
+   Collapse against 1px between every other pair of rows. */
+.rail-toggle { position: relative; margin-top: 0; }
 .rail-toggle::before {
   content: "";
   position: absolute;
@@ -15108,6 +15111,9 @@ body[data-view="chart"] .ses-fold { display: none; }
   align-items: center;
   gap: var(--space-2);
   width: 100%;
+  /* Sized by its padding like a nav row (42px), not .icon-btn's fixed 38. */
+  height: auto;
+  min-height: 38px;
   justify-content: flex-start;
   padding: var(--space-2);
   color: var(--rail-ink);
@@ -15217,15 +15223,23 @@ body.rail-tight .rail nav.tabs-group .nav-top { overflow: hidden; }
 .rail nav.tabs-group .nav-top[aria-selected="true"] .nav-icon,
 .rail nav.tabs-group .nav-item.on > .nav-top .nav-icon { opacity: 1; }
 .nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-/* The current section, marked on the edge the eye already follows down. */
+/* The current section: a raised pill, the hover pill's shape, with its glyph
+   in the mark's gold. It was a square-cornered box with a blue edge while the
+   hover beside it was a gold pill, two shapes and two colours for one row. */
 .rail nav.tabs-group .nav-top[aria-selected="true"],
 .rail nav.tabs-group .nav-item.on > .nav-top {
   background: var(--surface-2);
   color: var(--ink);
-  box-shadow: inset 2px 0 0 var(--s1);
+  border-radius: var(--r-pill);
+  box-shadow: none;
 }
+.rail nav.tabs-group .nav-top[aria-selected="true"] .nav-icon,
+.rail nav.tabs-group .nav-item.on > .nav-top .nav-icon { color: var(--hover-gold); }
 /* The caret points along the axis the menu opens on. */
-.rail nav.tabs-group .nav-caret { margin-left: auto; transform: rotate(-90deg); }
+/* Centred on the row, not pinned 4px from its top: beside the word it opens,
+   which the hover pill's outline made plain when it sat high. The caret is a
+   4px-tall triangle, so half of that comes back off the 50%. */
+.rail nav.tabs-group .nav-caret { top: calc(50% - 2px); margin-left: auto; transform: rotate(-90deg); }
 
 /* Menus fly out to the right of the rail rather than dropping below a tab. */
 .rail nav.tabs-group .nav-menu {
@@ -15341,7 +15355,7 @@ body.rail-tight .rail nav.tabs-group .nav-menu { left: 56px; }
   /* Last in the row and not shrinkable, so the gear is always at the right
      end and always on screen. Measured at 375x812: 323-361 whatever the nav's
      scroll position. */
-  .rail-foot { margin-top: 0; flex-direction: row; flex: none; }
+  .rail-foot { margin-top: 0; flex-direction: row; flex: none; gap: var(--space-1); }
   /* The rail is out of flow, so the content has to be pushed past it. On the
      header, not on `.statusline` or `main`: the header is sticky and therefore
      still in flow, so its bottom margin reserves the space whatever follows it
@@ -18024,11 +18038,20 @@ body.rail-tight .rail nav.tabs-group .nav-sec {
    underline under a selected tab is not drawn inside it. */
 .rail nav.tabs-group .nav-top::after { content: none; }
 .rail nav.tabs-group .nav-top .nav-icon { width: 16px; height: 16px; opacity: 0.75; }
+/* The footer's glyphs on the same 16px as the nav's, so its labels start on
+   the nav labels' line (46.9px, not 48.9). */
+.rail .rail-foot .icon-btn > svg { width: 16px; height: 16px; }
+/* A section's pages at the rail's own size and ink. `nav.tabs button` (0,1,2)
+   outranked `.nav-page` and set them in the lead size, 16.7px beside 14.4px
+   labels on the rows they open from. */
+.rail nav.tabs-group .nav-page { font-size: var(--t-body); color: var(--rail-ink); }
+.rail nav.tabs-group .nav-page.current { color: var(--ink); border-radius: var(--r-pill); }
 .rail nav.tabs-group .nav-top[aria-selected="true"] .nav-icon,
 .rail nav.tabs-group .nav-item.on > .nav-top .nav-icon { opacity: 1; }
 .rail .brand-text > span { color: var(--ink-2); }
 .rail-toggle::before { display: none; }
-.rail-settings[aria-pressed="true"] { background: var(--surface-2); box-shadow: inset 2px 0 0 var(--s1); }
+.rail-settings[aria-pressed="true"] { background: var(--surface-2); border-radius: var(--r-pill); box-shadow: none; }
+.rail-settings[aria-pressed="true"] > svg { color: var(--hover-gold); }
 
 /* The search box's glass, drawn rather than shipped as a glyph. */
 .search .combo { position: relative; }
