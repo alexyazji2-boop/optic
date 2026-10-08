@@ -15099,7 +15099,7 @@ body[data-view="chart"] .ses-fold { display: none; }
  * Safe to unpin because this rail's content does not grow with data: a brand
  * row, six sections and two footer buttons, about 470px all told. That is the
  * same assumption the `overflow: visible` note above already rests on. */
-.rail-foot { margin-top: calc(14px * var(--ui-scale)); display: flex; flex-direction: column; gap: 1px; padding-top: calc(8px * var(--ui-scale)); border-top: 1px solid var(--ws-line); }
+.rail-foot { margin-top: calc(14px * var(--ui-scale)); display: flex; flex-direction: column; gap: var(--space-1); padding-top: calc(8px * var(--ui-scale)); border-top: 1px solid var(--ws-line); }
 /* Settings is a destination and Collapse is a control of the rail itself, so
    a hairline separates them rather than a gap: at `--space-1` they read as one
    pair of related buttons, and clicking the wrong one of a pair costs a page.
@@ -15196,7 +15196,11 @@ body.rail-tight .rail nav.tabs-group .nav-top { overflow: hidden; }
   flex-direction: column;
   flex-wrap: nowrap;
   align-items: stretch;
-  gap: 1px;
+  /* Room between rows for the pills: the current section's raised pill and
+     the gold hover pill on the row beside it touched at 1px, and in the
+     collapsed rail their circles ran into each other ("dont have the circles
+     overlap"). */
+  gap: var(--space-1);
   overflow: visible;
   min-height: 0;
 }
@@ -15522,6 +15526,8 @@ body.rail-tight .rail nav.tabs-group .nav-menu { left: 56px; }
   .rail { padding-top: var(--space-1); padding-bottom: var(--space-1); z-index: 55; }
   .rail nav.tabs-group .nav-top { padding-top: var(--space-0); padding-bottom: var(--space-0); }
   .rail nav.tabs-group .nav-top, .rail .rail-foot .icon-btn { min-height: 34px; }
+  /* Every pixel of height counts this short; 2px still keeps two pills apart. */
+  .rail nav.tabs-group, .rail-foot { gap: 2px; }
 }
 .app-main > * { min-width: 0; }
 .rail .icon-btn svg,

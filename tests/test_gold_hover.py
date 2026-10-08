@@ -107,3 +107,13 @@ def test_the_brand_sits_in_the_middle_of_its_hover_oval():
     assert ".rail > .brand + nav.tabs-group {\n  border-top: 1px solid var(--ws-line);" in CSS
     assert "body.rail-tight .rail > .brand { width: 100%; }" in CSS
 
+
+def test_rail_pills_never_touch():
+    """'dont have the circles overlap': the current section's pill and the hover
+    pill beside it sat 1px apart, and touched in the collapsed rail."""
+    nav = CSS[CSS.index(".rail nav.tabs-group {\n  display: flex;"):]
+    nav = nav[:nav.index("}")]
+    assert "gap: var(--space-1);" in nav and "gap: 1px;" not in nav
+    assert ".rail-foot { margin-top: calc(14px * var(--ui-scale)); display: flex; flex-direction: column; gap: var(--space-1);" in CSS
+    assert "  .rail nav.tabs-group, .rail-foot { gap: 2px; }" in CSS
+
