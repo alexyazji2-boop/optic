@@ -17441,7 +17441,10 @@ details.exact > .table-scroll, details.exact > table { margin-top: var(--space-2
 .wl-spark svg { display: block; }
 
 /* A month's line in each strip cell and beside each of today's moves. */
-.ms-spark { display: block; width: 64px; height: 16px; margin-top: 2px; }
+/* Across both of the cell's columns and centred under them. It sat in the
+   first column alone, so it lined up under the price and left the change's
+   side of the cell empty. */
+.ms-spark { display: block; width: 64px; height: 16px; margin-top: 2px; grid-column: 1 / -1; justify-self: center; }
 .cc-spark { display: inline-block; width: 56px; height: 18px; vertical-align: middle; }
 .ms-spark svg, .cc-spark svg { display: block; }
 
@@ -18283,4 +18286,24 @@ footer.legal > .legal-full {
 }
 @container vizm (min-width: 1340px) {
   .viz-multiples:has(> :nth-child(4):last-child) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* ------------------------------------------------ the market band, live
+ *
+ * The dot at the end of each instrument's line blinks, asked for by the
+ * reader: the band reads as a live board rather than a printout. Only the
+ * dot moves, and only its opacity and size, so nothing reflows and the line
+ * itself stays still to be read. A reader who asks for less motion gets the
+ * dot still. */
+@keyframes spark-blink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.2; transform: scale(0.6); }
+}
+.ms-spark svg circle {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: spark-blink 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ms-spark svg circle { animation: none; }
 }

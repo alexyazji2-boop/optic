@@ -21606,6 +21606,65 @@ function wsPanesHTML() {
   </div>`).join('');
 }
 
+/* One crosshair through every pane.
+ *
+ * Asked for as "when the panes are open, have this line follow along the
+ * cursor through all panes". Each chart draws its own crosshair and only
+ * while the pointer is over it, so with RSI and MACD open the line stopped at
+ * the bottom of the price plot and the panes under it said nothing about the
+ * bar being read. Now the chart under the pointer draws its crosshair as
+ * before, and every other chart in the workspace puts its own at the same
+ * instant: the same screen x, kept inside each chart's own plot, so the line
+ * runs down the stack and never across an axis or a pane's header. Only the
+ * line follows; each chart's tooltip and dots stay its own.
+ *
+ * Read after the hovered chart has placed its line: this listens on the
+ * document, so it runs once the chart's own handler on its plot has. */
+function wsCrosshairLines(canvas) {
+  return [...canvas.querySelectorAll('svg > line[data-xh]')];
+}
+function wsSyncCrosshair(evt) {
+  const target = evt.target;
+  const canvas = target && target.closest && target.closest('#view-chart .ws-canvas');
+  if (!canvas) return;
+  const lines = wsCrosshairLines(canvas);
+  if (lines.length < 2) return;
+  const svg = target.closest('svg');
+  const own = svg ? svg.querySelector(':scope > line[data-xh]') : null;
+  const live = own && Number(own.getAttribute('opacity')) > 0;
+  let clientX = null;
+  if (live) {
+    const r = svg.getBoundingClientRect();
+    const vb = svg.viewBox && svg.viewBox.baseVal;
+    const scale = vb && vb.width ? r.width / vb.width : 1;
+    clientX = r.left + Number(own.getAttribute('x1')) * scale;
+  }
+  lines.forEach((line) => {
+    if (line === own) return;
+    if (clientX === null) { line.setAttribute('opacity', 0); return; }
+    const box = line.ownerSVGElement;
+    const r = box.getBoundingClientRect();
+    const vb = box.viewBox && box.viewBox.baseVal;
+    const x = (clientX - r.left) * (vb && vb.width && r.width ? vb.width / r.width : 1);
+    const lo = Number(line.dataset.xhL), hi = Number(line.dataset.xhR);
+    if (!(x >= lo - 0.5 && x <= hi + 0.5)) { line.setAttribute('opacity', 0); return; }
+    line.setAttribute('x1', x);
+    line.setAttribute('x2', x);
+    line.setAttribute('opacity', 0.45);
+  });
+}
+function wsClearCrosshairs(evt) {
+  const from = evt.target && evt.target.closest && evt.target.closest('#view-chart .ws-canvas');
+  if (!from) return;
+  const to = evt.relatedTarget && evt.relatedTarget.closest && evt.relatedTarget.closest('#view-chart .ws-canvas');
+  if (to === from) return;
+  wsCrosshairLines(from).forEach((line) => line.setAttribute('opacity', 0));
+}
+if (typeof document !== 'undefined' && document.addEventListener) {
+  document.addEventListener('pointermove', wsSyncCrosshair);
+  document.addEventListener('pointerout', wsClearCrosshairs);
+}
+
 /* Which panes draw on in the next wsMountPanes: '*' when a new payload has
  * arrived, a pane's id when it has just been opened from the Panes menu, and
  * null otherwise. Read and cleared there.

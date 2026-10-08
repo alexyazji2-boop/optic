@@ -2292,8 +2292,12 @@ function lineChart(opts) {
   }
 
   // ------------------------------------------------------- hover layer
+  /* `data-xh` and the plot's two edges let a stack of charts share one
+   * crosshair (wsSyncCrosshair in app.js): it reads where this line is and
+   * sets the same instant on the charts above and below. */
   const cross = s('line', {
     y1: m.t, y2: m.t + plotH, stroke: C.ink2, 'stroke-width': 1, opacity: 0,
+    'data-xh': '1', 'data-xh-l': m.l, 'data-xh-r': m.l + plotW,
   });
   root.appendChild(cross);
   const dots = series.map((se) => {
@@ -3326,7 +3330,8 @@ function macdChart(macd, signal, hist, labels, width = 720, opts = {}) {
     }
   }
 
-  const cross = s('line', { y1: m.t, y2: m.t + plotH, stroke: C.ink2, 'stroke-width': 1, opacity: 0 });
+  const cross = s('line', { y1: m.t, y2: m.t + plotH, stroke: C.ink2, 'stroke-width': 1, opacity: 0,
+    'data-xh': '1', 'data-xh-l': m.l, 'data-xh-r': m.l + plotW });
   root.appendChild(cross);
   const overlay = s('rect', { x: m.l, y: m.t, width: plotW, height: plotH, fill: 'transparent', style: 'cursor:crosshair' });
   const readBar = (i, evt) => {

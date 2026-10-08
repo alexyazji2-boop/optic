@@ -251,3 +251,66 @@ def test_four_small_multiples_are_never_drawn_under_the_chart_floor():
 
 def test_the_search_gives_way_when_pulse_shares_the_bar():
     assert "body.chat-open:not(.chat-full) header.topbar .search input" in CSS_NC
+
+
+# --------------------------------------------- one crosshair through the panes
+
+CHARTS = (ROOT / "static/charts.js").read_text(encoding="utf-8")
+
+
+def test_every_chart_crosshair_names_its_plot_edges():
+    """The line a stack shares has to say where its own plot is, or a pane
+    with a narrower plot would draw the line across its axis."""
+    crosses = re.findall(r"const cross = s\('line', \{(.*?)\}\);", CHARTS, re.S)
+    assert len(crosses) == 2, "lineChart's and the MACD pane's"
+    for body in crosses:
+        assert "'data-xh': '1'" in body
+        assert "'data-xh-l': m.l" in body and "'data-xh-r': m.l + plotW" in body
+
+
+def test_the_sync_listens_where_it_runs_after_the_charts_own_handler():
+    assert "document.addEventListener('pointermove', wsSyncCrosshair);" in JS
+    assert "document.addEventListener('pointerout', wsClearCrosshairs);" in JS
+    assert "'#view-chart .ws-canvas'" in _fn("wsSyncCrosshair"), "the workspace only"
+
+
+@needs_jsc
+def test_the_hovered_charts_line_is_copied_to_the_others_inside_their_plots(tmp_path):
+    """Three charts stacked: the price chart at 2x scale, RSI and MACD at 1x
+    with a narrower plot. Hovering the price chart at screen x 300 puts the
+    other two lines at their own x for 300; hovering past a pane's plot hides
+    that pane's line; a pointer off any live crosshair clears them all."""
+    script = """
+    function line(l, r, opacity, x) {
+      var attrs = { opacity: String(opacity), x1: String(x || 0) };
+      var el = { dataset: { xhL: String(l), xhR: String(r) },
+        getAttribute: function (k) { return attrs[k]; },
+        setAttribute: function (k, v) { attrs[k] = String(v); } };
+      return el;
+    }
+    function chart(left, width, vbWidth, ln) {
+      var svg = { viewBox: { baseVal: { width: vbWidth } },
+        getBoundingClientRect: function () { return { left: left, width: width }; },
+        querySelector: function () { return ln; },
+        closest: function () { return svg; } };
+      ln.ownerSVGElement = svg; return svg;
+    }
+    var price = line(8, 900, 0.45, 100), rsi = line(8, 400, 0, 0), macd = line(8, 400, 0, 0);
+    var priceSvg = chart(100, 450, 900, price), rsiSvg = chart(100, 450, 450, rsi), macdSvg = chart(100, 450, 450, macd);
+    var canvas = { querySelectorAll: function () { return [price, rsi, macd]; } };
+    function target(svg) { return { closest: function (sel) { return sel === 'svg' ? svg : canvas; } }; }
+    %s
+    %s
+    wsSyncCrosshair({ target: target(priceSvg) });
+    print([rsi.getAttribute('opacity'), rsi.getAttribute('x1'), macd.getAttribute('x1')].join(' '));
+    price.setAttribute('x1', 880);            // screen 540: past the panes' plots (100 + 400 = 500)
+    wsSyncCrosshair({ target: target(priceSvg) });
+    print([rsi.getAttribute('opacity'), macd.getAttribute('opacity')].join(' '));
+    price.setAttribute('x1', 100); price.setAttribute('opacity', 0);   // off the plot
+    wsSyncCrosshair({ target: target(priceSvg) });
+    print([rsi.getAttribute('opacity'), macd.getAttribute('opacity')].join(' '));
+    """ % (_fn("wsCrosshairLines"), _fn("wsSyncCrosshair"))
+    lines = _run(tmp_path, script)
+    # Price line at svg x 100 on a 2x chart starting at screen 100 is screen 150;
+    # on the 1x panes that is svg x 50.
+    assert lines == ["0.45 50 50", "0 0", "0 0"], lines
