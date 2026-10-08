@@ -39735,49 +39735,56 @@ const PULSE_STARTERS = [
   { need: null, text: 'Which chart patterns has this terminal measured as actually working, and at what hit rate?' },
 ];
 
-/* Three, because the grid is three across.
+
+/* Pulse opens the conversation itself.
  *
- * `.pulse-cards` is `repeat(auto-fit, minmax(210px, 1fr))`, which lands on
- * three columns at the panel's usual width. At four, the fourth card wrapped
- * onto a row of its own and sat there next to two card-widths of nothing --
- * a full row followed by a stub, directly above "See more examples", which
- * reads as the list having been cut off mid-thought rather than deliberately
- * shortened. Three fills the row exactly and the expander does the rest.
- */
-const PULSE_STARTERS_SHOWN = 3;
+ * Asked for as "have pulse start off the conversation with the user like
+ * this": a greeting in Pulse's own voice, in a bubble where its replies will
+ * be, and three short chips under it. It replaced a centred logo, a heading
+ * and three numbered cards, which read as a form to fill in rather than as
+ * the start of a conversation. The chips draft their question into the box
+ * like every starter here (nothing is sent until Send), name the loaded
+ * symbol when there is one, and "Explain the chart" drafts the same question
+ * as the chart's own Explain button. The twelve starters stay one press away
+ * behind "More ideas". */
+function pulseQuickAsks(sym) {
+  return [
+    { label: 'Summarize the latest news',
+      q: sym ? `Summarize the latest news on ${sym}.` : 'Summarize the latest market news.' },
+    { label: 'What are the key risks?',
+      q: sym ? `What are the key risks for ${sym} right now?` : 'What are the key risks in the market right now?' },
+    { label: 'Explain the chart',
+      q: (sym && chartPulsePrompt(sym)) || 'Explain the chart on screen.' },
+  ];
+}
 
 function pulseStarters(expanded) {
   const sym = STATE.ticker || STATE.chartSymbol || '';
   const usable = PULSE_STARTERS.filter((c) => !c.need || sym);
-  const shown = expanded ? usable : usable.slice(0, PULSE_STARTERS_SHOWN);
-  return `<div class="pulse-empty">
-    ${/* The Optic mark, not a character and not the Pulse waveform.
-         A snowman lived here through several passes and the verdict was that
-         it looked creepy; the waveform that replaced it is the button's own
-         glyph, which is right at 17px and thin at 76. The aperture is the
-         thing the product is named for, and it is the same drawing the
-         header and the home page carry.
-
-         Still the only greeting here: a first draft put one in `#chat-log`
-         as well and it rendered under this, so the panel introduced itself
-         twice. */''}
-    ${opticMarkHTML('pulse-logo')}
-    <h3>What would you like to look at?</h3>
-    <p class="pulse-empty-sub">Pulse reads the terminal's own computed output for
-      whatever is on screen${sym ? `· currently <strong>${esc(sym)}</strong>` : ''}.
-      Ask anything, or start with one of these.</p>
-    <div class="pulse-cards">
-      ${shown.map((c, i) => {
-    const text = c.text.replace(/\{T\}/g, sym || 'the symbol');
-    return `<button type="button" class="pulse-card" data-q="${esc(text)}">
-        <span class="pulse-card-n">${i + 1}</span>
-        <span>${esc(text)}</span>
-      </button>`;
-  }).join('')}
+  return `<div class="pulse-empty pulse-opening">
+    ${/* The Optic mark stays the panel's one graphic (it is the product's
+         aperture, not a character), now sat beside the greeting the way an
+         avatar sits beside a reply. Still the only greeting: nothing is put
+         in `#chat-log`, so the panel never introduces itself twice. */''}
+    <div class="pulse-hello-row">
+      ${opticMarkHTML('pulse-logo')}
+      <div class="pulse-hello" role="note">Hi, I'm ${esc(ASSISTANT_NAME)}. What would you like to look into?</div>
     </div>
-    ${usable.length > shown.length
-    ? '<button type="button" class="pulse-more" data-pulse-more>See more examples</button>'
-    : (expanded ? '<button type="button" class="pulse-more" data-pulse-less>Show fewer</button>' : '')}
+    <div class="pulse-chips">
+      ${pulseQuickAsks(sym).map((a) => `<button type="button" class="pulse-card pulse-chip"
+        data-q="${esc(a.q)}">${esc(a.label)}</button>`).join('')}
+    </div>
+    ${expanded ? `<div class="pulse-chips pulse-chips-more">
+      ${usable.map((c) => {
+    const text = c.text.replace(/\{T\}/g, sym || 'the symbol');
+    return `<button type="button" class="pulse-card pulse-chip" data-q="${esc(text)}">${esc(text)}</button>`;
+  }).join('')}
+    </div>` : ''}
+    ${expanded
+    ? '<button type="button" class="pulse-more" data-pulse-less>Fewer ideas</button>'
+    : '<button type="button" class="pulse-more" data-pulse-more>More ideas</button>'}
+    <p class="pulse-empty-sub">Pulse reads the terminal's own computed output for
+      whatever is on screen${sym ? `· currently <strong>${esc(sym)}</strong>` : ''}.</p>
     ${sym ? '' : `<p class="pulse-empty-note">Load a ticker to unlock the
       symbol-specific prompts. Everything above works without one.</p>`}
   </div>`;

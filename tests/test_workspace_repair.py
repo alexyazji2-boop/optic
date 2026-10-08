@@ -213,11 +213,19 @@ def test_the_content_column_is_centred_and_capped():
     assert "max-width: var(--ws-content-max)" in body and "margin-inline: auto" in body
 
 
-def test_homes_lockup_is_one_centred_group():
-    m = re.search(r"@media \(min-width: 1100px\) \{\s*#view-home > \.home \{([^}]*)\}", CSS_NC)
-    assert m, "the lockup grid"
-    assert "minmax(0, 1fr) auto" in m.group(1) and m.group(1).rstrip().count("minmax(0, 1fr)") >= 2, \
-        "equal flexible tracks either side, so the group sits in the middle"
+def test_homes_search_sits_in_the_middle_and_the_brand_fills_its_side():
+    """The search column is centred: equal flexible tracks either side of it.
+    The brand is in the left track, set against the search, and scales with
+    Home's own width, so the left of the page is filled rather than empty."""
+    assert "#view-home { container: homehead / inline-size; }" in CSS_NC
+    block = CSS_NC[CSS_NC.index("@container homehead (min-width: 1000px)"):]
+    grid = re.search(r"#view-home > \.home \{([^}]*)\}", block).group(1)
+    assert "grid-template-columns: minmax(0, 1fr) minmax(0, 56%) minmax(0, 1fr);" in grid
+    brand = re.search(r"#view-home > \.home > \.home-brand \{([^}]*)\}", block).group(1)
+    assert "grid-column: 1;" in brand and "justify-self: end;" in brand
+    assert "cqi" in brand, "sized from Home's width, not one fixed size"
+    search = re.search(r"#view-home > \.home > \.home-search,\s*#view-home > \.home > \.home-quick \{([^}]*)\}", block).group(1)
+    assert "grid-column: 2;" in search
 
 
 def test_homes_band_holds_its_place_only_while_home_is_loading():

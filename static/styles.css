@@ -18146,37 +18146,55 @@ table.data tr > :last-child { padding-right: calc(4px * var(--ui-scale)); }
    The order of the page is untouched; the brand row and the search only
    share a line. */
 #view-home > .home { padding-top: 0; }
-/* One centred lockup: the mark and name, then the search with the jump list
- * under it, as a group in the middle of the page. The first version put the
- * brand at the left edge and pushed the search to the right one, which left a
- * dead gap between them that grew with the window (measured 0 at 1100 and
- * 400px at 1680) and cut the placeholder off at 1024. Under 1100px the
- * lockup stacks, centred, as it always did. */
-@media (min-width: 1100px) {
+/* The search in the middle of the page, the mark and name filling the side
+ * of it.
+ *
+ * The first lockup was a centred group of brand plus search, which left the
+ * page's left edge empty and put the search right of centre; asked for as
+ * "fill up this space to the left, expand the optic terminal part and keep
+ * the search bar centered and aligned". The search and its jump list now take
+ * the middle 56% of Home's own width, centred, the list aligned under the
+ * box, and the brand takes the column to its left, set against the search
+ * and scaled with that column (cqi: a hundredth of Home's width), so it fills
+ * the space at any width instead of sitting at one size in the middle of it.
+ * A container query, not a media query: Home's width is what the rail and
+ * Pulse leave, not the window's. Below 1000px of that there is no room
+ * beside the search and the lockup stacks, centred, as it always did. */
+#view-home { container: homehead / inline-size; }
+@container homehead (min-width: 1000px) {
   #view-home > .home {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, calc(620px * var(--ui-scale))) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 56%) minmax(0, 1fr);
     column-gap: calc(28px * var(--ui-scale));
     align-items: center;
   }
   #view-home > .home > * { grid-column: 1 / -1; min-width: 0; }
+  /* On the search's own row, with the search's own margins, so the mark and
+     the box share a centre line; the jump list goes under the box alone. */
   #view-home > .home > .home-brand {
-    grid-column: 2;
-    grid-row: span 2;
+    grid-column: 1;
+    justify-self: end;
     justify-content: flex-end;
-    gap: calc(12px * var(--ui-scale));
-    max-width: none;
-    margin: calc(6px * var(--ui-scale)) 0 calc(20px * var(--ui-scale));
+    gap: 0.35em;
+    max-width: 100%;
+    margin: calc(6px * var(--ui-scale)) 0 calc(8px * var(--ui-scale));
+    font-size: clamp(calc(22px * var(--ui-scale)), 2.35cqi, calc(46px * var(--ui-scale)));
+  }
+  #view-home .home-brand .home-logo { width: 1.3em; height: 1.3em; }
+  #view-home .home-brand .home-title {
+    font-size: 1em;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    white-space: nowrap;
   }
   #view-home > .home > .home-search,
   #view-home > .home > .home-quick {
-    grid-column: 3;
+    grid-column: 2;
     width: 100%;
     max-width: none;
   }
   #view-home > .home > .home-search { margin: calc(6px * var(--ui-scale)) 0 calc(8px * var(--ui-scale)); }
   #view-home > .home > .home-quick { justify-content: flex-start; margin: 0 0 calc(20px * var(--ui-scale)); }
-  #view-home .home-title { font-size: var(--t-title); font-weight: 600; letter-spacing: -0.02em; }
 }
 #view-home .home-title span { color: var(--ink-2); }
 
@@ -18306,4 +18324,82 @@ footer.legal > .legal-full {
 }
 @media (prefers-reduced-motion: reduce) {
   .ms-spark svg circle { animation: none; }
+}
+
+/* ------------------------------------------------- Pulse opens the talk
+ *
+ * The empty state as the first turn of a conversation: Pulse's greeting in
+ * a bubble where its replies appear, three short asks as chips under it,
+ * left-aligned like the messages that follow. */
+#chat .pulse-empty.pulse-opening {
+  align-items: stretch;
+  text-align: left;
+  gap: var(--space-3);
+  padding: var(--space-3) 0 0;
+}
+.pulse-hello-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+#chat .pulse-opening .pulse-logo {
+  flex: none;
+  width: calc(30px * var(--ui-scale));
+  height: calc(30px * var(--ui-scale));
+  margin: calc(9px * var(--ui-scale)) 0 0;
+  color: var(--brand);
+}
+/* Everything under the greeting lines up with the bubble, not the mark. */
+#chat .pulse-opening > :not(.pulse-hello-row) {
+  margin-left: calc(30px * var(--ui-scale) + var(--space-2));
+}
+.pulse-hello {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: calc(14px * var(--ui-scale)) calc(16px * var(--ui-scale));
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--plane) 70%, var(--surface));
+  color: var(--ink);
+  font-size: var(--t-lead);
+  line-height: 1.45;
+}
+.pulse-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+#chat .pulse-card.pulse-chip {
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+  min-height: calc(34px * var(--ui-scale));
+  padding: calc(6px * var(--ui-scale)) calc(14px * var(--ui-scale));
+  border: 1px solid var(--ws-line-strong);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: var(--t-body);
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  transition: color var(--dur-ui) var(--ease-ui), border-color var(--dur-ui) var(--ease-ui),
+              background-color var(--dur-ui) var(--ease-ui);
+}
+@media (hover: hover) {
+  #chat .pulse-card.pulse-chip:hover {
+    color: var(--ink);
+    border-color: var(--ws-brand-edge);
+    background: var(--sys-fill);
+  }
+}
+#chat .pulse-card.pulse-chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+#chat .pulse-chips-more .pulse-card.pulse-chip { border-radius: var(--r-md); }
+#chat .pulse-opening .pulse-more { align-self: flex-start; }
+#chat .pulse-opening .pulse-empty-sub,
+#chat .pulse-opening .pulse-empty-note {
+  margin-block: 0;
+  max-width: none;
+  font-size: var(--t-caption);
+  color: var(--ink-muted);
 }
