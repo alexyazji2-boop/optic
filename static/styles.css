@@ -684,6 +684,15 @@ html, body {
 }
 
 button, input, select, textarea { font: inherit; color: inherit; }
+/* Every button eases into the gold hover pill (the rule is at the foot of this
+   file). Element-level, so a component's own transition still wins. */
+button, summary, [role="button"] {
+  transition: color var(--dur-ui, 120ms) var(--ease-ui, ease),
+              background-color var(--dur-ui, 120ms) var(--ease-ui, ease),
+              border-color var(--dur-ui, 120ms) var(--ease-ui, ease),
+              box-shadow var(--dur-ui, 120ms) var(--ease-ui, ease),
+              border-radius var(--dur-ui, 120ms) var(--ease-ui, ease);
+}
 
 /* ------------------------------------------------------------------ chrome */
 
@@ -3984,12 +3993,18 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
 .panel > h2.is-toggle {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  /* About a word space across, so "Long-term view · AAPL" reads as one title
+     rather than two items: the " · AAPL" text is a flex item of its own, and
+     a full gap before it doubled the space around the dot. The chip and the
+     chevron keep their distance with their own margins. */
+  column-gap: 0.3em;
+  row-gap: var(--space-2);
   cursor: pointer;
   user-select: none;
   margin-bottom: 0;
 }
 .panel.is-open > h2.is-toggle { margin-bottom: var(--space-4); }
+.panel > h2.is-toggle > .ask-pulse { margin-left: var(--space-1); }
 .panel > h2.is-toggle:hover { color: var(--ink); }
 
 .panel-toggle {
@@ -17927,6 +17942,12 @@ main > .view:focus { outline: none; }
   --ws-brand-edge: color-mix(in srgb, var(--brand) 60%, transparent);
   /* The notch at the start of a pane's header row. */
   --ws-notch: color-mix(in srgb, var(--brand) 75%, transparent);
+  /* Every button's hover: an outlined pill in the Optic mark's gold. */
+  --hover-gold: var(--asset-brand);
+  --hover-gold-fill: color-mix(in srgb, var(--asset-brand) 14%, transparent);
+  /* The same wash made opaque over the surface, for a pill drawn outside its
+     box: a see-through spread would show the gold ring through it. */
+  --hover-gold-solid: color-mix(in srgb, var(--asset-brand) 14%, var(--surface));
   --ws-eyebrow: var(--brand);
   /* The header band of a pane: a breath of ink over the panel surface. */
   --ws-head-bg: color-mix(in srgb, var(--ink) 2.5%, var(--surface));
@@ -17951,6 +17972,11 @@ main > .view:focus { outline: none; }
   --ws-eyebrow: color-mix(in srgb, var(--brand) 75%, var(--ink));
   --ws-inset: color-mix(in srgb, var(--ink) 3%, var(--surface));
   --ws-head-bg: color-mix(in srgb, var(--ink) 1.8%, var(--surface));
+  /* The mark's gold is about 2:1 on white; a share of ink keeps the hover
+     outline visible as a boundary (3:1) without leaving the gold. */
+  --hover-gold: color-mix(in srgb, var(--asset-brand) 72%, var(--ink));
+  --hover-gold-fill: color-mix(in srgb, var(--asset-brand) 16%, transparent);
+  --hover-gold-solid: color-mix(in srgb, var(--asset-brand) 16%, var(--surface));
 }
 
 /* ---------------------------------------------------------- label face */
@@ -18138,7 +18164,11 @@ body.rail-tight .rail nav.tabs-group .nav-sec {
    the way a terminal window carries its title: the band reaches the pane's
    corners, so the header reads as the pane's frame rather than as text
    sitting on it. */
-.panel > h2:first-child {
+/* `.is-open > .is-toggle` is listed too: the ruled-header rule above outranks a
+   bare `:first-child` and reset the band's top padding, so a collapsible pane's
+   band stopped 15px short of its top edge with the notch drawn under the title. */
+.panel > h2:first-child,
+.panel.is-open > h2.is-toggle:first-child {
   margin-top: calc(-1 * var(--ws-pad));
   padding-top: calc(var(--ws-pad) - 2px);
   border-radius: var(--r-lg) var(--r-lg) 0 0;
@@ -18420,3 +18450,52 @@ footer.legal > .legal-full {
   margin-block: 0;
   max-width: none;
 }
+
+/* ================================================== the gold hover pill ===
+ *
+ * Asked for as "from now on, every time you hover over a button, use [the
+ * "Why the gap?" chip] as a reference, but change the color scheme to the
+ * gold in the optic logo". Every button, summary and role="button" control
+ * takes the same hover: a pill outlined in the mark's gold over a faint gold
+ * wash, with ink text.
+ *
+ * Drawn with box-shadow rather than a border, so nothing moves by a pixel
+ * when the pointer arrives. Specific enough to beat the per-component hovers
+ * it replaces; the pieces that must differ say so through custom properties
+ * at zero specificity rather than by out-shouting this rule:
+ *   --hover-r    a card keeps its own corners instead of becoming a stadium;
+ *   --hover-pad  a control with no padding of its own (a text link, a
+ *                disclosure summary) gets the pill drawn outside its box, so
+ *                the outline does not touch the words.
+ * Disabled and unavailable controls are left alone, and so is a clamped
+ * paragraph's "more" (a paragraph, not a button to the eye). The gold
+ * primary button keeps its fill and takes the outline around it.
+ * Hover-capable pointers only: on a touch screen a tap would leave it lit. */
+:where(.ov-card, .pulse-card) { --hover-r: var(--r-md); }
+:where(.cc-move, .cc-q, .ms-cell, summary.ht-row) { --hover-r: var(--r-sm); }
+:where(summary, .hm-more, .ht-more, .ht-rest, .foot-link, .cs-note-btn) {
+  --hover-pad: calc(6px * var(--ui-scale));
+  --hover-bg: var(--hover-gold-solid);
+  --hover-ring-in: transparent;
+  --hover-ring-out: var(--hover-gold);
+}
+:where(summary.ht-row) { --hover-pad: 0px; --hover-bg: var(--hover-gold-fill); --hover-ring-in: var(--hover-gold); --hover-ring-out: transparent; }
+
+@media (hover: hover) {
+  button:not(:disabled):not([aria-disabled="true"]):not(.primary):hover,
+  summary:not(:disabled):not([aria-disabled="true"]):hover,
+  [role="button"]:not(:disabled):not([aria-disabled="true"]):not(.clamp-prose):hover {
+    border-color: var(--hover-gold);
+    border-radius: var(--hover-r, var(--r-pill));
+    background-color: var(--hover-bg, var(--hover-gold-fill));
+    box-shadow: 0 0 0 var(--hover-pad, 0px) var(--hover-gold-solid),
+                0 0 0 calc(var(--hover-pad, 0px) + 1.5px) var(--hover-ring-out, transparent),
+                inset 0 0 0 1.5px var(--hover-ring-in, var(--hover-gold));
+    color: var(--ink);
+  }
+  .btn.primary:not(:disabled):not([aria-disabled="true"]):hover {
+    border-radius: var(--r-pill);
+    box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--hover-gold);
+  }
+}
+

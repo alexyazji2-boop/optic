@@ -43408,10 +43408,35 @@ $('#chat-send').addEventListener('click', () => {
   sendChat(text);
 });
 $('#chat-research').addEventListener('click', runResearch);
+/* The question quoted in the box's placeholder, as a draft: "What does the
+ * gamma profile imply for a swing long here?". Empty when the placeholder has
+ * no example in it (the unavailable state replaces it with a reason). */
+function pulsePlaceholderAsk(box) {
+  const m = /"([^"]+)"/.exec((box && box.placeholder) || '');
+  if (!m) return '';
+  const q = m[1].trim();
+  return q.charAt(0).toUpperCase() + q.slice(1);
+}
+
 $('#chat-input').addEventListener('keydown', (evt) => {
   if (evt.key === 'Enter' && (evt.metaKey || evt.ctrlKey)) {
     evt.preventDefault();
     $('#chat-send').click();
+    return;
+  }
+  /* Tab on an empty box takes the example the placeholder offers, the way a
+   * shell completes what it suggests. Asked for as "entering the tab button
+   * should load the prompt". Only while the box is empty: once there is text,
+   * Tab moves focus on as everywhere else, so the box never traps the key. */
+  if (evt.key === 'Tab' && !evt.shiftKey && !evt.altKey && !evt.metaKey && !evt.ctrlKey) {
+    const box = evt.currentTarget;
+    if (box.value.trim()) return;
+    const ask = pulsePlaceholderAsk(box);
+    if (!ask) return;
+    evt.preventDefault();
+    box.value = ask;
+    box.setSelectionRange(ask.length, ask.length);
+    box.dispatchEvent(new Event('input', { bubbles: true }));
   }
 });
 function onPulseSuggestion(evt) {
