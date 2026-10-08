@@ -248,7 +248,9 @@ CSS_CODE = re.sub(r"/\*.*?\*/", "", CSS, flags=re.S)
 
 
 def test_the_two_heading_tiers_exist_and_scale():
-    for token, base in (("--t-title", "28px"), ("--t-hero", "42px")):
+    # 22 and 36 since the workspace redesign (2026-10-07) brought the whole
+    # type scale down a notch; what this guards is that both tiers scale.
+    for token, base in (("--t-title", "22px"), ("--t-hero", "36px")):
         decl = re.search(re.escape(token) + r":\s*([^;]+);", CSS_CODE)
         assert decl, token
         value = decl.group(1)

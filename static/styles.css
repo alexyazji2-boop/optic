@@ -398,13 +398,13 @@
    * slightly narrower, so 15px Inter reads at about the optical size of the 14px
    * system font it replaces; holding 14 would have made the app quietly smaller
    * than it was. */
-  --t-micro: calc(10px * var(--ui-scale));   /* uppercase micro-labels, legends, chart ticks */
-  --t-caption: calc(11px * var(--ui-scale)); /* captions, caveats, secondary notes */
-  --t-small: calc(13px * var(--ui-scale));   /* dense table cells */
-  --t-body: calc(13px * var(--ui-scale));    /* table body, key-value readings */
-  --t-base: calc(15px * var(--ui-scale));    /* prose default */
-  --t-lead: calc(15px * var(--ui-scale));    /* navigation, emphasised UI */
-  --t-heading: calc(18px * var(--ui-scale)); /* sub-headings */
+  --t-micro: calc(9.5px * var(--ui-scale));   /* uppercase micro-labels, legends, chart ticks */
+  --t-caption: calc(10.5px * var(--ui-scale)); /* captions, caveats, secondary notes */
+  --t-small: calc(12px * var(--ui-scale));   /* dense table cells */
+  --t-body: calc(12.5px * var(--ui-scale));    /* table body, key-value readings */
+  --t-base: calc(13.5px * var(--ui-scale));    /* prose default */
+  --t-lead: calc(14.5px * var(--ui-scale));    /* navigation, emphasised UI */
+  --t-heading: calc(15px * var(--ui-scale)); /* sub-headings */
   /* The top of the heading ramp, and the two tiers that were missing from it.
    *
    * Page titles were a literal `32px` and the home display line a literal
@@ -421,11 +421,11 @@
    * respond, not what they are. The d-tiers below are for figures, which is
    * why a heading could not simply borrow one: --t-d3 would have taken the
    * page title from 32px to 27.6px. */
-  --t-title: calc(28px * var(--ui-scale));   /* page and section titles */
-  --t-hero: calc(42px * var(--ui-scale));    /* the home page's one display line */
-  --t-d3: calc(24px * var(--ui-scale));      /* tile values */
-  --t-d2: calc(32px * var(--ui-scale));      /* secondary figures */
-  --t-d1: calc(44px * var(--ui-scale));      /* the one number a panel is about */
+  --t-title: calc(22px * var(--ui-scale));   /* page and section titles */
+  --t-hero: calc(36px * var(--ui-scale));    /* the home page's one display line */
+  --t-d3: calc(20px * var(--ui-scale));      /* tile values */
+  --t-d2: calc(26px * var(--ui-scale));      /* secondary figures */
+  --t-d1: calc(36px * var(--ui-scale));      /* the one number a panel is about */
 
   /* Radii, likewise collapsed from eight values to five. Panels sit at 12px:
      softer than the old 8px, which is what makes a dense dashboard read as
@@ -462,12 +462,12 @@
    * where the radius is a function of the element's own height rather than a
    * step on a scale -- see the exceptions block at the foot of this file. */
   --r-xs: 4px;          /* inline marks, bars, strip segments */
-  --r-sm: 8px;          /* inputs, small controls */
-  --r-ctl: 10px;        /* buttons, selects, text inputs */
-  --r-chrome: 12px;     /* sticky bars, the palette, skeletons */
-  --r-md: 8px;          /* buttons, selects, callouts — merged with --r-sm,
+  --r-sm: 5px;          /* inputs, small controls */
+  --r-ctl: 6px;        /* buttons, selects, text inputs */
+  --r-chrome: 8px;     /* sticky bars, the palette, skeletons */
+  --r-md: 6px;          /* buttons, selects, callouts — merged with --r-sm,
                            which sat two pixels away and read as a mistake */
-  --r-lg: 14px;         /* panels, cards, tiles */
+  --r-lg: 8px;         /* panels, cards, tiles */
   --r-pill: 999px;
   /* Nothing else may hold a bare pixel radius. The exceptions are 1px, 2px and
    * 3px on bar fills, legend keys, skeleton bars and dots -- elements 3 to 8
@@ -637,7 +637,7 @@
 html, body {
   margin: 0;
   padding: 0;
-  background: var(--plane);
+  background: var(--ws-plane);
   color: var(--ink);
   font-family: var(--sans);
   font-size: var(--t-base);
@@ -680,6 +680,7 @@ html, body {
    * reported nothing. That took the panel reveals with it.
    *
    * Both properties want the root left alone, so the clipping moved to main. */
+  font-feature-settings: "cv11" 1, "ss01" 1;
 }
 
 button, input, select, textarea { font: inherit; color: inherit; }
@@ -700,13 +701,14 @@ header.topbar {
      110px of the row on separation alone, and the strip beside them was folding
      for want of rather less than that. */
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  background: var(--plane);
-  border-bottom: 1px solid var(--border);
+  padding: calc(8px * var(--ui-scale)) var(--ws-gutter);
+  background: color-mix(in srgb, var(--ws-plane) 88%, transparent);
+  border-bottom: 1px solid var(--ws-line);
   /* Single row. With eight tabs plus the search box and the assistant button,
      wrapping used to drop Pulse onto its own line and break tab labels across
      two — the tab strip scrolls instead. */
   flex-wrap: nowrap;
+  min-height: var(--ws-bar-h);
 }
 
 .brand {
@@ -783,15 +785,18 @@ header.topbar {
      here: once by forgetting `text-transform`, once by trusting the `font`
      shorthand. The real minimum at this size is 191px; 200 leaves nine. */
   width: 200px;
-  font-size: var(--t-body);
-  padding: var(--space-2) var(--space-3);
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
+  font-size: var(--t-small);
+  padding: 0 calc(12px * var(--ui-scale)) 0 calc(32px * var(--ui-scale));
+  background: var(--ws-inset);
+  border: 1px solid var(--ws-line-strong);
   border-radius: var(--r-md);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-variant-numeric: tabular-nums;
   transition: border-color var(--dur-ui) ease, box-shadow var(--dur-ui) ease;
+  height: calc(32px * var(--ui-scale));
+  font-family: var(--label-face);
+  color: var(--ink);
 }
 /* The outline is the accessible focus ring and stays. The border and the faint
    wash under it are the premium half: the product's primary entry point reads
@@ -980,11 +985,11 @@ nav.tabs button[aria-selected="true"]::after {
    dropping the clamp changed no height a reader sees; a clipped row with no
    button left is the one state that hides a reading for good. */
 .statusline {
-  padding: var(--space-2) var(--space-5);
-  font-size: var(--t-small);
+  padding: calc(5px * var(--ui-scale)) var(--ws-gutter);
+  font-size: var(--t-caption);
   color: var(--ink-muted);
-  background: var(--glass);
-  border-bottom: 1px solid var(--glass-edge);
+  background: var(--ws-plane);
+  border-bottom: 1px solid var(--ws-line);
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
@@ -1004,7 +1009,7 @@ nav.tabs button[aria-selected="true"]::after {
   }
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .statusline { background: var(--plane); }
+  .statusline { background: var(--ws-plane); }
 }
 
 /* No transition on padding: animating a layout property forces full-document
@@ -1091,7 +1096,7 @@ main { padding: var(--space-6) var(--space-6) var(--space-8); isolation: isolate
    * Not smaller than this: the panel border has to read as a container rather
    * than as a line drawn around text, and --space-5 is where that still
    * holds. */
-  padding: var(--space-5) var(--space-6);
+  padding: var(--ws-pad) calc(16px * var(--ui-scale));
   min-width: 0;
   overflow-x: auto;
   background-image:
@@ -1197,8 +1202,10 @@ main { padding: var(--space-6) var(--space-6) var(--space-8); isolation: isolate
      the original type scale that field was 53px tall and the mark stopped at
      52. The UI scale since took the field to 61, so the same rule now puts the
      mark at 60: the number moved because the thing it is measured against did,
-     not because the rule changed. */
-  width: 60px; height: 60px;
+     not because the rule changed. The workspace redesign took the field to
+     38px and moved the mark beside it rather than over it, and the same rule
+     puts the mark at 40. */
+  width: 40px; height: 40px;
   color: var(--ink-2);
   margin-bottom: 0;
   flex: 0 0 auto;
@@ -1415,34 +1422,36 @@ body:not([data-view="home"]) .brand-mark-dot {
 .home-search input {
   flex: 1 1 240px;
   min-width: 0;
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--r-lg);
+  background: var(--ws-inset);
+  border: 1px solid var(--ws-line-strong);
+  border-radius: var(--r-ctl);
   color: var(--ink);
   font: inherit;
-  font-size: var(--t-heading);
+  font-size: var(--t-base);
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  padding: var(--space-3) var(--space-4);
+  padding: 0 calc(14px * var(--ui-scale));
+  height: calc(38px * var(--ui-scale));
 }
 .home-search input::placeholder { color: var(--ink-muted); letter-spacing: 0.02em; text-transform: none; }
 .home-search input:focus { outline: none; border-color: var(--s1); }
-.home-search button { padding: var(--space-3) var(--space-6); font-size: var(--t-lead); border-radius: var(--r-lg); }
+.home-search button { padding: 0 calc(18px * var(--ui-scale)); font-size: var(--t-body); border-radius: var(--r-ctl); min-height: 0; height: calc(38px * var(--ui-scale)); }
 
-.home-quick { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-7); }
-.home-quick .label { font-size: var(--t-small); color: var(--ink-muted); }
+.home-quick { display: flex; align-items: center; gap: calc(6px * var(--ui-scale)); flex-wrap: wrap; margin-bottom: var(--space-7); }
+.home-quick .label { font-size: var(--t-caption); color: var(--ink-muted); }
 .home-quick button {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  background: var(--sys-fill);
+  border: 1px solid var(--ws-line);
   border-radius: var(--r-pill);
   color: var(--ink-2);
   font: inherit;
-  font-size: var(--t-small);
-  letter-spacing: 0.04em;
-  padding: var(--space-1) var(--space-3);
+  font-size: var(--t-caption);
+  letter-spacing: 0.03em;
+  padding: calc(2px * var(--ui-scale)) calc(10px * var(--ui-scale));
   cursor: pointer;
+  font-family: var(--label-face);
 }
-.home-quick button:hover { color: var(--ink); border-color: var(--s1); }
+.home-quick button:hover { color: var(--ink); border-color: var(--ws-brand-edge); }
 
 .home-foot {
   margin-top: var(--space-7);
@@ -1521,7 +1530,7 @@ body:not([data-view="home"]) .brand-mark-dot {
   padding: var(--space-1) var(--space-2);
 }
 .range-pick select:focus { outline: none; border-color: var(--s1); }
-.seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--r-md); overflow: hidden; }
+.seg { display: inline-flex; border: 1px solid var(--ws-line-strong); border-radius: var(--r-md); overflow: hidden; background: var(--ws-inset); }
 .seg button {
   background: transparent;
   border: none;
@@ -1531,7 +1540,7 @@ body:not([data-view="home"]) .brand-mark-dot {
   padding: var(--space-1) var(--space-3);
   cursor: pointer;
 }
-.seg button + button { border-left: 1px solid var(--border-strong); }
+.seg button + button { border-left: 1px solid var(--ws-line); }
 .seg button:hover { background: var(--surface-2); color: var(--ink); }
 /* --btn-primary, not --s1.
  *
@@ -1546,8 +1555,10 @@ body:not([data-view="home"]) .brand-mark-dot {
  * 4.72:1. Hardcoded #fff also becomes the token, so a theme cannot change the
  * fill and leave the ink behind. */
 .seg button[aria-pressed="true"] {
-  background: var(--btn-primary);
-  color: var(--btn-primary-ink);
+  background: var(--ws-brand-tint);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ws-brand-edge);
+  font-weight: 600;
 }
 
 /* The chart style as three icons: candles, a line, an area. The segmented
@@ -1773,8 +1784,9 @@ table.data.narrow { min-width: 0; }
   font-size: var(--t-heading);
   font-weight: 600;
   letter-spacing: -0.01em;
-  line-height: 1.25;
+  line-height: 1.3;
   color: var(--ink);
+  background: linear-gradient(var(--ws-notch), var(--ws-notch)) no-repeat calc(16px * var(--ui-scale) - 9px) 0.22em / 2px 0.95em;
 }
 .panel > .sub {
   margin: 0 0 var(--space-3);
@@ -1935,12 +1947,13 @@ table.data.narrow { min-width: 0; }
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-0) var(--space-2);
+  padding: 0 calc(8px * var(--ui-scale));
   border-radius: var(--r-pill);
-  border: 1px solid var(--border-strong);
-  font-size: var(--t-small);
+  border: 1px solid var(--ws-line);
+  font-size: var(--t-caption);
   color: var(--ink-2);
-  background: var(--surface-2);
+  background: var(--sys-fill);
+  min-height: calc(20px * var(--ui-scale));
 }
 .chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-muted); flex: none; }
 .chip.bull .dot { background: var(--pos); }
@@ -1954,9 +1967,9 @@ ul.reasons li { margin-bottom: var(--space-1); }
 .callout {
   margin-top: var(--space-3);
   padding: var(--space-2) var(--space-3);
-  border-left: 3px solid var(--warn);
-  background: var(--surface-2);
-  border-radius: 0 var(--r-md) var(--r-md) 0;
+  border-left: 2px solid var(--warn);
+  background: var(--ws-inset);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
   font-size: var(--t-body);
   color: var(--ink-2);
 }
@@ -2009,11 +2022,12 @@ ul.reasons li { margin-bottom: var(--space-1); }
   background: linear-gradient(to right, transparent, var(--surface) var(--space-5));
 }
 .clamp-prose.is-open::after { content: ' less'; color: var(--s1); }
-/* Outside a panel the page plane is what sits behind the text. */
+/* Outside a panel the page plane is what sits behind the text: the
+   workspace plane, which in the light theme is no longer the paper white. */
 .view > .clamp-prose.is-clamped::after,
 .pl-block .clamp-prose.is-clamped::after,
 .pl-hero .clamp-prose.is-clamped::after {
-  background: linear-gradient(to right, transparent, var(--plane) var(--space-5));
+  background: linear-gradient(to right, transparent, var(--ws-plane) var(--space-5));
 }
 
 .gloss-term {
@@ -2068,24 +2082,24 @@ table.data tbody tr:hover { background: var(--raised); }
 
 table.data th {
   text-align: right;
-  padding: var(--space-1) var(--space-2);
+  padding: calc(6px * var(--ui-scale)) calc(10px * var(--ui-scale));
   /* Sentence case, at the small size, in secondary rather than muted ink.
      It was 12.65px uppercase with 0.04em tracking in --ink-muted, which made
      the row you scan to find a column the least legible text in the table.
      Measured against the two references that do this well: shadcn's dashboard
      runs 14px sentence case at near-full ink and Tremor the same. Neither
      uppercases anything. */
-  color: var(--ink-2);
+  color: var(--ink-muted);
   font-weight: 500;
   font-size: var(--t-small);
-  border-bottom: 1px solid var(--baseline);
+  border-bottom: 1px solid var(--ws-line-strong);
   white-space: nowrap;
 }
 table.data th:first-child, table.data td:first-child { text-align: left; }
 table.data td {
   text-align: right;
-  padding: var(--space-1) var(--space-2);
-  border-bottom: 1px solid var(--grid);
+  padding: calc(7px * var(--ui-scale)) calc(10px * var(--ui-scale));
+  border-bottom: 1px solid var(--ws-line);
   white-space: nowrap;
   /* Lining figures, on the densest surface in the product.
    *
@@ -2494,9 +2508,9 @@ body.chat-resizing svg { pointer-events: none; }
    the header rather than as another panel competing for attention. */
 
 .sessionbar {
-  padding: var(--space-2) var(--space-5);
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  padding: calc(6px * var(--ui-scale)) var(--ws-gutter);
+  border-bottom: 1px solid var(--ws-line);
+  background: var(--ws-plane);
 }
 .ses-main {
   display: flex;
@@ -2935,9 +2949,10 @@ body.chat-open footer.legal { padding-right: var(--chat-w); }
 .seg-opt:hover { background: var(--surface-2); color: var(--ink); }
 /* Same correction as .seg button above, same 3.64:1 reason. */
 .seg-opt.on {
-  background: var(--btn-primary);
-  border-color: var(--btn-primary);
-  color: var(--btn-primary-ink);
+  background: var(--ws-brand-tint);
+  border-color: var(--ws-brand-edge);
+  color: var(--ink);
+  font-weight: 600;
 }
 /* A segmented control in a narrow settings row.
  *
@@ -3883,14 +3898,15 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
   transition: background 120ms ease, color 120ms ease;
   min-width: 34px;
 }
-.pill:hover { color: var(--ink); }
+.pill:hover { color: var(--ink); background: var(--sys-fill-hover); }
 .pill.on {
   /* --btn-primary, not --s1. White on --s1 (#3987e5) is 3.64:1; --btn-primary
      exists precisely because a fill that carries white text needs to clear
      4.5:1, and it does at 4.72. --s1 stays what it is: a line colour on charts,
      where nothing sits on top of it. */
-  background: var(--btn-primary);
-  color: var(--btn-primary-ink);
+  background: var(--ws-brand-tint);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ws-brand-edge);
 }
 .pill:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
@@ -6597,7 +6613,7 @@ main {
      `body.chat-open main` below still sets its own margin-right; this only
      stops the element asking to be centred in a column it should fill. */
   margin: 0;
-  padding: var(--space-6) var(--space-5) var(--space-8);
+  padding: calc(20px * var(--ui-scale)) var(--ws-gutter) calc(40px * var(--ui-scale));
 }
 body.chat-open main { padding-right: var(--space-5); margin-right: var(--chat-w); }
 
@@ -6750,7 +6766,7 @@ header.topbar {
   }
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  header.topbar { background: var(--plane); }
+  header.topbar { background: var(--ws-plane); }
 }
 
 /* Big numbers get tighter tracking — at 30px and up the default spacing reads
@@ -8979,18 +8995,42 @@ body:not(.chat-open) .ws-body.narrow.dock-open .ws-dock {
 .ws-body { position: relative; }
 
 /* Below 900px the widget rail turns into a horizontal strip along the bottom,
-   so the overlay clears the bottom rather than the right.
+   and an open widget takes a row of its own under the chart rather than
+   floating over it. (Workspace redesign, 2026-10-07.)
+
+   Measured with Notes open, before this. At 375x812 the open-dock grid rule
+   above (`auto 1fr auto`, written for a side rail) beat the phone's single
+   column, the tool row took the first column and the chart's column came
+   out 0px wide, so opening any widget made the chart disappear; over where
+   it had been, a 311x404 float held a 180px widget. At 768x1024 the float was
+   320x834 over the right half of a 615px chart, which is where the latest
+   bars and the price axis are, again around a 180px widget. That is the
+   "Notes covers the chart" finding in the 2026-10-07 review, and on a phone
+   it was worse than reported: the chart was not covered, it was gone.
+
+   In its own row the dock is as tall as what it holds and never more than
+   about 40% of the screen, and nothing is drawn over the chart. Which widgets
+   exist, what they do, and how they open and close are unchanged.
 
    AFTER the rule it adjusts, not before. The selector is identical, so source
-   order is the only thing deciding — placed above, its `right: 0` lost to the
-   base rule's `right: 62px` and the overlay stayed clear of a rail that was no
-   longer on that edge. */
+   order is the only thing deciding. */
 @media (max-width: 900px) {
   body:not(.chat-open) .ws-body.narrow.dock-open .ws-dock {
-    right: 0;
-    bottom: 66px;
-    width: min(320px, 92%);
+    position: static;
+    grid-column: 1 / -1;
+    width: auto;
+    max-height: min(40vh, 300px);
+    border-left: 0;
+    border-top: 1px solid var(--ws-line-strong);
+    box-shadow: none;
+    overflow-y: auto;
   }
+  body:not(.chat-open) .ws-body.narrow.dock-open { grid-template-columns: auto minmax(0, 1fr); }
+}
+/* A phone's chart is one column, so the tool row sits above it rather than
+   beside it, open widget or not. */
+@media (max-width: 559px) {
+  body:not(.chat-open) .ws-body.narrow.dock-open { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* The tool rail loses its labels-by-title breathing room too.
@@ -10433,7 +10473,7 @@ body.cp-open { overflow: hidden; }
  * before its own contents break rather than by the screen: these hold a symbol,
  * a price, a change and a short verdict, which needs about 420px. So the
  * breakpoints are 2 x 420 plus gutters, then 3. */
-.hm-market { margin: var(--space-7) 0 var(--space-6); }
+.hm-market { margin: calc(20px * var(--ui-scale)) 0 var(--space-6); }
 
 /* ---- the board ------------------------------------------------------------
  *
@@ -10464,7 +10504,7 @@ body.cp-open { overflow: hidden; }
 .hm-rail {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: calc(14px * var(--ui-scale));
   min-width: 0;                 /* or the movers table's width sets the column */
 }
 
@@ -10528,11 +10568,13 @@ body.cp-open { overflow: hidden; }
   align-items: baseline;
   flex-wrap: wrap;
   gap: var(--space-3);
-  margin-bottom: var(--space-5);
+  margin-bottom: calc(14px * var(--ui-scale));
+  padding-bottom: calc(10px * var(--ui-scale));
+  border-bottom: 1px solid var(--ws-line);
 }
 .hm-hello {
   font-family: var(--display);
-  font-size: var(--t-d3, 28px);
+  font-size: var(--t-title);
   font-weight: 600;
   letter-spacing: -0.02em;
   margin: 0;
@@ -10675,10 +10717,10 @@ body.cp-open { overflow: hidden; }
    clips the track to its rounded corners, so the border stays whole while the
    cells move. */
 .ms-strip {
-  margin: 0 0 var(--space-5);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--raised);
+  margin: 0 0 calc(16px * var(--ui-scale));
+  border: 1px solid var(--ws-line);
+  border-radius: var(--r-lg);
+  background: var(--ws-panel);
   overflow: hidden;
 }
 .ms-track {
@@ -10748,29 +10790,33 @@ body.cp-open { overflow: hidden; }
      now need about 930px where they needed about 1,070, so the strip fits
      the column on a 1280px screen instead of scrolling. */
   min-width: 112px;
-  padding: calc(var(--space-1) + var(--space-0)) var(--space-2);
+  padding: calc(10px * var(--ui-scale)) calc(14px * var(--ui-scale));
   border: 0;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--ws-line);
   background: none;
   text-align: center;
   cursor: pointer;
   transition: background var(--dur-ui) var(--ease-ui);
 }
 .ms-cell:last-child { border-right: 0; }
-.ms-cell:hover { background: var(--surface); }
+.ms-cell:hover { background: var(--sys-fill); }
 
 .ms-label {
   grid-column: 1 / -1;
   font-size: var(--t-micro);
-  letter-spacing: 0.01em;
+  letter-spacing: 0.09em;
   color: var(--ink-muted);
+  font-family: var(--label-face);
+  text-transform: uppercase;
+  font-weight: 600;
 }
 /* Tabular figures so the strip does not jitter as quotes update, and so the
    values line up against each other when scanned. */
 .ms-last {
-  font: 600 var(--t-body)/1.2 var(--sans);
+  font: 600 var(--t-lead)/1.2 var(--sans);
   font-variant-numeric: tabular-nums;
   color: var(--ink);
+  letter-spacing: -0.01em;
 }
 .ms-chg { font-size: var(--t-caption); font-variant-numeric: tabular-nums; }
 .ms-word {
@@ -10914,17 +10960,21 @@ body.cp-open { overflow: hidden; }
    all, and the blocks ran into each other. */
 .hm-block {
   padding: var(--space-4) var(--space-5) var(--space-5);
-  border: 1px solid var(--border);
+  border: 1px solid var(--ws-line);
   border-radius: var(--r-md);
-  background: var(--surface);
+  background: var(--ws-panel);
   min-width: 0;
 }
 .hm-block-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
   margin-bottom: var(--space-3);
+  margin: calc(-2px * var(--ui-scale)) calc(-16px * var(--ui-scale)) calc(12px * var(--ui-scale));
+  padding: 0 calc(16px * var(--ui-scale)) calc(10px * var(--ui-scale));
+  border-bottom: 1px solid var(--ws-line);
+  background: linear-gradient(var(--ws-notch), var(--ws-notch)) no-repeat calc(16px * var(--ui-scale) - 9px) calc(50% - 5px) / 2px 0.95em;
 }
 .hm-h {
   font-family: var(--display);
@@ -13483,20 +13533,20 @@ body.auth-open { overflow: hidden; }
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-3) 0 0;
+  padding: calc(12px * var(--ui-scale)) 0 0;
   margin-bottom: var(--space-3);
   /* --plane, which is what header.topbar uses. This said var(--bg), which is
      not a token this stylesheet defines and has no fallback, so it resolved to
      nothing: the sticky header was transparent and the panels scrolled through
      it. Visible for the whole time the workspace existed. */
-  background: var(--plane);
-  border-bottom: 1px solid var(--border);
+  background: var(--ws-plane);
+  border-bottom: 1px solid var(--ws-line);
 }
 .sec-id {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: var(--space-2) var(--space-3);
+  gap: calc(6px * var(--ui-scale)) var(--space-3);
 }
 /* The number first, then the name.
  *
@@ -13523,7 +13573,7 @@ body.auth-open { overflow: hidden; }
 .sec-chg.up { color: var(--pos); }
 .sec-chg.down { color: var(--neg); }
 .sec-chg.flat { color: var(--ink-muted); }
-.sec-meta { color: var(--ink-muted); font-size: var(--t-small); margin-left: auto; }
+.sec-meta { color: var(--ink-muted); font-size: var(--t-caption); margin-left: auto; font-family: var(--label-face); letter-spacing: 0.04em; }
 /* `.sec-id` aligns on baseline, which suits text beside text and gives a
    bordered chip nowhere sensible to sit beside a display-size price. Centred
    on its own line instead. */
@@ -13536,19 +13586,20 @@ body.auth-open { overflow: hidden; }
    long company name wrapped on a laptop and pushed the page down by a row. */
 .sec-tabs {
   display: flex;
-  gap: var(--space-1);
+  gap: 0;
   overflow-x: auto;
   scrollbar-width: none;
+  margin-bottom: -1px;
 }
 .sec-tabs::-webkit-scrollbar { display: none; }
 .sec-tab {
   flex: none;
-  padding: var(--space-2) var(--space-3);
+  padding: calc(8px * var(--ui-scale)) calc(12px * var(--ui-scale));
   border: 0;
   border-bottom: 2px solid transparent;
   background: none;
   color: var(--ink-muted);
-  font-size: var(--t-small);
+  font-size: var(--t-body);
   font-weight: 600;
   cursor: pointer;
   transition: color 0.12s ease, border-color 0.12s ease;
@@ -14616,7 +14667,7 @@ body.chat-full .rp { display: none; }
   --display: "Host Grotesk Variable", "Host Grotesk", var(--sans);
 }
 
-body, .msg { font-family: "Host Grotesk Variable", "Host Grotesk", system-ui, sans-serif; }
+body, .msg { font-family: var(--sans); }
 
 /* Light and large. Weight 400 at 32px is the single loudest signal in the
    reference: every section heading on it is set that way. */
@@ -14663,9 +14714,9 @@ h3 { font-weight: 400; letter-spacing: -0.01em; }
 
 /* Air. Roughly double, which is still nowhere near the reference's own, and
    the compromise is deliberate: its spacing on a data table would be absurd. */
-.grid { gap: var(--space-6); }
-.hm-board { gap: var(--space-7); }
-.hm-block { padding: var(--space-6) var(--space-7); }
+.grid { gap: calc(14px * var(--ui-scale)); }
+.hm-board { gap: calc(14px * var(--ui-scale)); }
+.hm-block { padding: var(--ws-pad) calc(16px * var(--ui-scale)); }
 main { padding-top: var(--space-7); }
 .panel > h2 { margin-bottom: var(--space-4); }
 
@@ -14676,7 +14727,7 @@ main { padding-top: var(--space-7); }
    undo for this whole restyle is reverting its commit. */
 .hm-block, .tile {
   border-radius: var(--r-lg);
-  border-color: rgba(255, 255, 255, 0.08);
+  border-color: var(--ws-line);
 }
 
 /* ---- Asset restyle: the phone -------------------------------------------
@@ -14962,11 +15013,11 @@ body[data-view="chart"] .ses-fold { display: none; }
   height: 100dvh;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  width: 212px;
-  padding: var(--space-3) var(--space-2);
-  background: var(--surface);
-  border-right: 1px solid var(--border);
+  gap: 0;
+  width: var(--ws-rail-w);
+  padding: calc(12px * var(--ui-scale)) calc(10px * var(--ui-scale));
+  background: var(--ws-rail-bg);
+  border-right: 1px solid var(--ws-line);
   /* Not `overflow-y: auto`.
    *
    * Per spec, an `overflow` of `visible` on one axis computes to `auto` when
@@ -14985,17 +15036,21 @@ body[data-view="chart"] .ses-fold { display: none; }
 }
 /* The brand sits at the top of the rail rather than in the bar. */
 .rail > .brand {
-  margin: 0 0 var(--space-3);
-  padding: var(--space-2);
+  margin: 0 0 calc(10px * var(--ui-scale));
+  padding: calc(4px * var(--ui-scale)) calc(8px * var(--ui-scale)) calc(12px * var(--ui-scale));
   width: 100%;
   justify-content: flex-start;
+  border-bottom: 1px solid var(--ws-line);
+  border-radius: 0;
 }
 .rail .brand-text {
   display: inline;
-  font-size: var(--t-caption);
-  letter-spacing: 0.08em;
+  font-size: calc(10.5px * var(--ui-scale));
+  letter-spacing: 0.16em;
   color: var(--rail-ink);
   white-space: nowrap;
+  font-family: var(--label-face);
+  font-weight: 700;
 }
 /* Follows the nav rather than being pinned to the floor.
  *
@@ -15008,7 +15063,7 @@ body[data-view="chart"] .ses-fold { display: none; }
  * Safe to unpin because this rail's content does not grow with data: a brand
  * row, six sections and two footer buttons, about 470px all told. That is the
  * same assumption the `overflow: visible` note above already rests on. */
-.rail-foot { margin-top: var(--space-5); display: flex; flex-direction: column; gap: var(--space-1); }
+.rail-foot { margin-top: calc(14px * var(--ui-scale)); display: flex; flex-direction: column; gap: var(--space-1); padding-top: calc(8px * var(--ui-scale)); border-top: 1px solid var(--ws-line); }
 /* Settings is a destination and Collapse is a control of the rail itself, so
    a hairline separates them rather than a gap: at `--space-1` they read as one
    pair of related buttons, and clicking the wrong one of a pair costs a page.
@@ -15032,7 +15087,7 @@ body[data-view="chart"] .ses-fold { display: none; }
   padding: var(--space-2);
   color: var(--rail-ink);
 }
-.rail-label { font-size: var(--t-small); color: var(--rail-ink); white-space: nowrap; }
+.rail-label { font-size: var(--t-body); color: var(--rail-ink); white-space: nowrap; font-weight: 500; }
 
 /* Collapsed: icons only.
  *
@@ -15096,7 +15151,7 @@ body.rail-tight .rail nav.tabs-group .nav-top { overflow: hidden; }
   flex-direction: column;
   flex-wrap: nowrap;
   align-items: stretch;
-  gap: var(--space-0);
+  gap: 1px;
   overflow: visible;
   min-height: 0;
 }
@@ -15118,7 +15173,7 @@ body.rail-tight .rail nav.tabs-group .nav-top { overflow: hidden; }
    * little wider, which is what a logo is allowed to do. */
   padding: var(--space-2);
   border-radius: var(--r-sm);
-  font-size: var(--t-small);
+  font-size: var(--t-body);
   color: var(--rail-ink);
   text-align: left;
   white-space: nowrap;
@@ -15127,8 +15182,9 @@ body.rail-tight .rail nav.tabs-group .nav-top { overflow: hidden; }
      Paint-level properties only -- animating a layout property forces a
      document reflow per frame. */
   transition: background-color var(--dur-ui, 120ms) ease, color var(--dur-ui, 120ms) ease;
+  font-weight: 500;
 }
-.rail nav.tabs-group .nav-top:hover { background: var(--bg-hover); color: var(--ink); }
+.rail nav.tabs-group .nav-top:hover { background: var(--sys-fill-hover); color: var(--ink); }
 /* Fixed, so a section's glyph sits on the same axis whether the rail is open
    or collapsed -- the label appears and disappears beside it rather than
    moving it. */
@@ -16707,7 +16763,7 @@ table.data.accounts-table td.ac-who { white-space: normal; min-width: 120px; wid
 @media (min-width: 560px) {
   .panel > h2, .hm-h, .wv-head h2, .ht-title, .hm-block-head > h2 {
     font-family: var(--display);
-    font-size: calc(19px * var(--ui-scale));
+    font-size: var(--t-heading);
     font-weight: 600;
     letter-spacing: -0.012em;
     line-height: 1.25;
@@ -16819,7 +16875,7 @@ table.data.accounts-table td.ac-who { white-space: normal; min-width: 120px; wid
 
 /* ---------------------------------------------------- the Dossier header */
 
-.sec-sym { font-family: var(--display); font-size: calc(22px * var(--ui-scale)); }
+.sec-sym { font-family: var(--label-face); font-size: calc(20px * var(--ui-scale)); font-weight: 600; letter-spacing: 0.02em; }
 .sec-px { font-family: var(--display); font-size: calc(26px * var(--ui-scale)); font-weight: 600; letter-spacing: -0.02em; }
 .sec-chg {
   padding: var(--space-0) var(--space-2);
@@ -17726,7 +17782,7 @@ table.heat td.name { text-align: left; font-weight: 500; }
 .cs-key-item.impact-high { border-left-color: var(--warn); }
 .cs-key-item.is-earnings { border-left-style: dashed; }
 .cs-day.is-closed { background: transparent; border-style: dashed; }
-.ms-asof { margin: var(--space-1) 0 0; font-size: var(--t-caption); color: var(--ink-muted); text-align: right; }
+.ms-asof { margin: var(--space-1) 0 0; font-size: var(--t-micro); color: var(--ink-muted); text-align: right; }
 
 /* ============================================================ OVERVIEW ===
  * The Pulse inputs as signed bars: a middle line, five cells either side. */
@@ -17739,7 +17795,7 @@ table.heat td.name { text-align: left; font-weight: 500; }
   background: var(--ink-muted);
 }
 .pl-scale { margin: var(--space-3) 0 0; font-size: var(--t-caption); color: var(--ink-muted); }
-.hm-date { font-size: var(--t-small); color: var(--ink-muted); }
+.hm-date { font-size: var(--t-caption); color: var(--ink-muted); font-family: var(--label-face); letter-spacing: 0.04em; }
 
 /* The skip link: off screen until it is focused, then the first thing drawn. */
 .skip-link {
@@ -17758,3 +17814,473 @@ table.heat td.name { text-align: left; font-weight: 500; }
 .skip-link:focus, .skip-link:focus-visible { transform: none; outline: 2px solid var(--focus); outline-offset: 2px; }
 main:focus { outline: none; }
 main > .view:focus { outline: none; }
+
+/* =====================================================================
+   WORKSPACE REDESIGN (2026-10-07)
+   =====================================================================
+   The whole terminal restyled: the frame, the type, panels, tables and
+   controls, and each page's composition. It changes how things look and
+   where they sit, never what they do: no markup the scripts read was
+   renamed, no control removed, and every colour is a token, so both
+   themes carry it and a reader's chart colours still win.
+
+   The look borrows a terminal's composition (a rail grouped into
+   sections, a thin context bar, compact panes with a ruled header row,
+   tight tables with label-face headings) and a dashboard's reading order
+   (a page header that says where you are and what the page is for, one
+   lead figure per block, a market band at the top of Home).
+
+   Where the change lives. Base components were restyled where they are
+   declared (`.panel`, `.tile`, `.chip`, `.seg`, `.pill.on`, `.callout`,
+   `table.data th/td`, the rail, the top bar, the session strip, the
+   Dossier header, Home's blocks), because a base restyled from the foot
+   beats every rule written for one instance of it and every phone
+   override written after it (see tests/test_ux_system.py and
+   tests/test_phone_workspace.py). The type steps and the radii were
+   changed in the token block, where a scale is declared once: type came
+   down a notch so a panel reads as a pane rather than a page, and the
+   corners went from 8-14px to 5-8px so it reads as a pane in a workspace
+   rather than a card on a page. What is below is only what is new: the
+   workspace tokens, the label face, the rail's section labels, the page
+   header, the panel header row, and the Home composition.
+
+   The previous frontend is kept whole in
+   ~/Optic/backups/frontend-2026-10-07 (see RESTORE.md there). */
+
+/* ------------------------------------------------------------- tokens */
+
+:root {
+  /* Inter for the interface: the densest of the faces already loaded, with
+     real tabular figures. Host Grotesk stays the display face (the Asset
+     restyle's --display), so headings keep the voice they had. */
+  --sans: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* The secondary face, one across the whole terminal: Space Grotesk,
+     already loaded, for every label (eyebrows, section names, the session,
+     the market band) and every code (tickers, the symbol box, the symbol on
+     a Dossier). It replaced a monospace on the reader's call ("good idea
+     here, but change the fonts of these", then "switch the tickers too and
+     keep the secondary font consistent throughout"), so the same small
+     engraved voice is proportional rather than typewritten. */
+  --label-face: "Space Grotesk Variable", "Space Grotesk", var(--sans);
+
+  /* Workspace surfaces, mixed from each theme's own tokens. */
+  --ws-plane: var(--plane);
+  --ws-rail-bg: color-mix(in srgb, var(--surface) 55%, var(--plane));
+  --ws-panel: var(--surface);
+  --ws-inset: color-mix(in srgb, var(--ink) 3.5%, var(--surface));
+  --ws-line: var(--sys-line);
+  --ws-line-strong: var(--sys-line-strong);
+  /* Chosen, as a tint and an edge: a row of filters is not a row of
+     primary buttons, and the chosen word also turns bold, so colour is
+     never the only sign. */
+  --ws-brand-tint: color-mix(in srgb, var(--brand) 14%, transparent);
+  --ws-brand-edge: color-mix(in srgb, var(--brand) 60%, transparent);
+  /* The notch at the start of a pane's header row. */
+  --ws-notch: color-mix(in srgb, var(--brand) 75%, transparent);
+  --ws-eyebrow: var(--brand);
+  /* The header band of a pane: a breath of ink over the panel surface. */
+  --ws-head-bg: color-mix(in srgb, var(--ink) 2.5%, var(--surface));
+  --ws-rail-w: 228px;
+  /* The widest the content column grows. Centred in whatever the rail and
+     Pulse leave, so a 2560px window gets a measured page rather than panels
+     2,300px wide with their text against the left edge. */
+  --ws-content-max: 1680px;
+  --ws-gutter: calc(20px * var(--ui-scale));
+  --ws-pad: calc(14px * var(--ui-scale));
+  --ws-bar-h: calc(48px * var(--ui-scale));
+}
+/* In the light theme the page and a panel were one colour (--plane and
+   --surface are both the paper white), so a pane was only its hairline.
+   The page takes the theme's own second surface instead, and panels and
+   the rail stand off it in white. */
+:root[data-theme="light"] {
+  --ws-plane: var(--surface-2);
+  --ws-rail-bg: var(--surface);
+  /* The light brand on the light page is about 4.1:1, short of 4.5 for
+     text this small; a quarter of the ink brings it past 5. */
+  --ws-eyebrow: color-mix(in srgb, var(--brand) 75%, var(--ink));
+  --ws-inset: color-mix(in srgb, var(--ink) 3%, var(--surface));
+  --ws-head-bg: color-mix(in srgb, var(--ink) 1.8%, var(--surface));
+}
+
+/* ---------------------------------------------------------- label face */
+
+/* Small, uppercase, spaced: the voice of a word that names what is
+   under it rather than saying anything itself. Zero specificity, so any
+   rule that sets a face or tracking for one of these still wins. */
+:where(.eyebrow, .pl-eyebrow, .hero-label, .idx-lbl, .ph-eyebrow, .nav-sec,
+       .ses-phase, .wv-filter-label) {
+  font-family: var(--label-face);
+  font-weight: 600;
+  letter-spacing: 0.09em;
+}
+:where(.eyebrow, .pl-eyebrow, .ph-eyebrow, .nav-sec) { text-transform: uppercase; }
+/* Symbols read as codes, in the same secondary face. */
+:where(.tkr, td.name strong, .px-sym, .sec-mini strong, .ws-head > strong) {
+  font-family: var(--label-face);
+  letter-spacing: 0.01em;
+}
+
+/* --------------------------------------------------------------- frame */
+
+/* The rail's section labels between groups of destinations. Drawn by
+   labelNavSections and hidden from assistive tech: the buttons carry
+   their own names. Collapsed to icons, a label becomes a hairline. */
+.rail nav.tabs-group .nav-sec {
+  margin: calc(14px * var(--ui-scale)) 0 calc(4px * var(--ui-scale));
+  padding: 0 calc(8px * var(--ui-scale));
+  font-size: var(--t-micro);
+  font-weight: 500;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+.rail nav.tabs-group .nav-sec:first-child { margin-top: calc(4px * var(--ui-scale)); }
+body.rail-tight .rail nav.tabs-group .nav-sec {
+  margin: calc(8px * var(--ui-scale)) calc(10px * var(--ui-scale));
+  padding: 0;
+  height: 1px;
+  overflow: hidden;
+  background: var(--ws-line);
+  color: transparent;
+}
+/* The rail marks the current section with a gold edge; the strip-era
+   underline under a selected tab is not drawn inside it. */
+.rail nav.tabs-group .nav-top::after { content: none; }
+.rail nav.tabs-group .nav-top .nav-icon { width: 16px; height: 16px; opacity: 0.75; }
+.rail nav.tabs-group .nav-top[aria-selected="true"] .nav-icon,
+.rail nav.tabs-group .nav-item.on > .nav-top .nav-icon { opacity: 1; }
+.rail .brand-text > span { color: var(--ink-2); }
+.rail-toggle::before { display: none; }
+.rail-settings[aria-pressed="true"] { background: var(--surface-2); box-shadow: inset 2px 0 0 var(--s1); }
+
+/* The search box's glass, drawn rather than shipped as a glyph. */
+.search .combo { position: relative; }
+.search .combo::before,
+.search .combo::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  pointer-events: none;
+}
+.search .combo::before {
+  left: calc(11px * var(--ui-scale));
+  width: 12px;
+  height: 12px;
+  margin-top: -7px;
+  border: 1.6px solid var(--ink-muted);
+  border-radius: 50%;
+}
+.search .combo::after {
+  left: calc(11px * var(--ui-scale) + 11px);
+  width: 5px;
+  height: 1.6px;
+  margin-top: 4px;
+  background: var(--ink-muted);
+  transform: rotate(45deg);
+  transform-origin: left center;
+}
+@media (min-width: 900px) {
+  header.topbar .search input { width: calc(300px * var(--ui-scale)); }
+  /* With Pulse beside the page the bar has the page's width, not the
+     window's: at 1024 with Pulse open, a 345px box pushed Pulse's own
+     button onto a second row and the section tabs onto a third (162px of
+     bar). The box is the one thing in the row that can give. */
+  body.chat-open:not(.chat-full) header.topbar .search input { width: calc(190px * var(--ui-scale)); }
+}
+@supports (backdrop-filter: blur(1px)) {
+  .app-main > header.topbar { backdrop-filter: saturate(140%) blur(10px); }
+}
+
+/* A section's pages, as a segmented track in the context bar. The same
+   buttons paintNav has always written; only the shape changes. */
+@media (min-width: 560px) {
+  header.topbar nav.tabs-sub#subnav:not([hidden]) {
+    margin-left: calc(6px * var(--ui-scale));
+    padding: 2px;
+    gap: 2px;
+    border: 1px solid var(--ws-line);
+    border-radius: var(--r-chrome);
+    background: var(--ws-inset);
+  }
+  header.topbar nav.tabs-sub#subnav button {
+    min-height: calc(26px * var(--ui-scale));
+    padding: 0 calc(11px * var(--ui-scale));
+    border: 0;
+    border-radius: var(--r-ctl);
+    background: transparent;
+    font-weight: 500;
+  }
+  header.topbar nav.tabs-sub#subnav button[aria-selected="true"] {
+    color: var(--ink);
+    background: var(--surface);
+    box-shadow: 0 0 0 1px var(--ws-line-strong), 0 1px 2px var(--shadow-ink);
+    font-weight: 600;
+  }
+}
+
+.sessionbar .ses-phase { font-size: var(--t-caption); font-weight: 600; text-transform: uppercase; }
+.sessionbar .ses-sub { font-size: var(--t-caption); color: var(--ink-muted); }
+
+/* ---------------------------------------------------------- page header */
+
+/* Where you are and what the page is for, above every page that has no
+   header of its own. The words are the navigation's: the section's name,
+   the page's name, and the description its menu already carried as a
+   tooltip (SUB_TITLES), so nothing here is new copy. */
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin: 0 0 calc(16px * var(--ui-scale));
+  padding-bottom: calc(14px * var(--ui-scale));
+  border-bottom: 1px solid var(--ws-line);
+}
+.page-head[hidden] { display: none; }
+.ph-eyebrow {
+  margin: 0 0 calc(4px * var(--ui-scale));
+  font-size: var(--t-micro);
+  font-weight: 500;
+  color: var(--ws-eyebrow);
+}
+.ph-title {
+  margin: 0;
+  font-family: var(--display);
+  font-size: var(--t-title);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--ink);
+}
+.ph-desc {
+  margin: calc(4px * var(--ui-scale)) 0 0;
+  max-width: 72ch;
+  font-size: var(--t-body);
+  color: var(--ink-muted);
+}
+/* Not on a phone. There the section's pages are chips under the top bar
+   and the chosen one already names the page; a header would repeat it and
+   push the first reading down by about 70px. */
+@media (max-width: 559px) {
+  .page-head:not([hidden]) { display: none; }
+  .search input { font-family: var(--sans); }
+}
+
+/* --------------------------------------------------------------- panels */
+
+/* The header row. Ruled across the whole pane, so a title reads as the
+   pane's label rather than the first line of its text, with the notch in
+   the gutter (drawn by `.panel > h2` itself). A collapsed pane is its
+   header alone and has no rule to draw. */
+.panel > h2:not(.is-toggle),
+.panel.is-open > h2.is-toggle {
+  margin: calc(-2px * var(--ui-scale)) calc(-16px * var(--ui-scale)) calc(12px * var(--ui-scale));
+  padding: 0 calc(16px * var(--ui-scale)) calc(10px * var(--ui-scale));
+  border-bottom: 1px solid var(--ws-line);
+}
+.panel:not(.is-open) > h2.is-toggle {
+  margin-left: calc(-16px * var(--ui-scale));
+  margin-right: calc(-16px * var(--ui-scale));
+  padding-left: calc(16px * var(--ui-scale));
+  padding-right: calc(16px * var(--ui-scale));
+}
+/* A pane whose header comes first wears it as a band across its top edge,
+   the way a terminal window carries its title: the band reaches the pane's
+   corners, so the header reads as the pane's frame rather than as text
+   sitting on it. */
+.panel > h2:first-child {
+  margin-top: calc(-1 * var(--ws-pad));
+  padding-top: calc(var(--ws-pad) - 2px);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  background-color: var(--ws-head-bg);
+  background-position: calc(16px * var(--ui-scale) - 9px) calc(var(--ws-pad) - 2px + 0.22em);
+}
+.panel:not(.is-open) > h2.is-toggle:first-child {
+  margin-bottom: calc(-1 * var(--ws-pad));
+  padding-bottom: calc(var(--ws-pad) - 2px);
+  border-radius: var(--r-lg);
+}
+@media (max-width: 559px) {
+  .panel > h2:first-child {
+    margin-top: calc(-1 * var(--space-3));
+    padding-top: calc(var(--space-3) - 2px);
+    background-position: calc(var(--space-4) - 9px) calc(var(--space-3) - 2px + 0.22em);
+  }
+  .panel:not(.is-open) > h2.is-toggle:first-child {
+    margin-bottom: calc(-1 * var(--space-3));
+    padding-bottom: calc(var(--space-3) - 2px);
+  }
+  .panel > h2:not(.is-toggle),
+  .panel.is-open > h2.is-toggle {
+    margin-left: calc(-1 * var(--space-4));
+    margin-right: calc(-1 * var(--space-4));
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+  }
+  .panel:not(.is-open) > h2.is-toggle {
+    margin-left: calc(-1 * var(--space-4));
+    margin-right: calc(-1 * var(--space-4));
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+  }
+}
+.panel > h2 .th-plain { font-family: var(--sans); font-weight: 400; color: var(--ink-muted); }
+
+/* Table rows end on the pane's edge rather than on a rule, and the first
+   and last cells sit on the pane's own padding. */
+table.data tbody tr:last-child > td { border-bottom: 0; }
+table.data tr > :first-child { padding-left: calc(4px * var(--ui-scale)); }
+table.data tr > :last-child { padding-right: calc(4px * var(--ui-scale)); }
+@media (hover: hover) {
+  table.data tbody tr:hover > td { background: var(--sys-fill); }
+}
+
+/* ----------------------------------------------------------------- home */
+
+/* Home as a dashboard: the market band first, then one header row (the
+   mark and the name on the left, the search and the jump list on the
+   right) in place of a centred lockup about 200px tall, then the blocks.
+   The order of the page is untouched; the brand row and the search only
+   share a line. */
+#view-home > .home { padding-top: 0; }
+/* One centred lockup: the mark and name, then the search with the jump list
+ * under it, as a group in the middle of the page. The first version put the
+ * brand at the left edge and pushed the search to the right one, which left a
+ * dead gap between them that grew with the window (measured 0 at 1100 and
+ * 400px at 1680) and cut the placeholder off at 1024. Under 1100px the
+ * lockup stacks, centred, as it always did. */
+@media (min-width: 1100px) {
+  #view-home > .home {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, calc(620px * var(--ui-scale))) minmax(0, 1fr);
+    column-gap: calc(28px * var(--ui-scale));
+    align-items: center;
+  }
+  #view-home > .home > * { grid-column: 1 / -1; min-width: 0; }
+  #view-home > .home > .home-brand {
+    grid-column: 2;
+    grid-row: span 2;
+    justify-content: flex-end;
+    gap: calc(12px * var(--ui-scale));
+    max-width: none;
+    margin: calc(6px * var(--ui-scale)) 0 calc(20px * var(--ui-scale));
+  }
+  #view-home > .home > .home-search,
+  #view-home > .home > .home-quick {
+    grid-column: 3;
+    width: 100%;
+    max-width: none;
+  }
+  #view-home > .home > .home-search { margin: calc(6px * var(--ui-scale)) 0 calc(8px * var(--ui-scale)); }
+  #view-home > .home > .home-quick { justify-content: flex-start; margin: 0 0 calc(20px * var(--ui-scale)); }
+  #view-home .home-title { font-size: var(--t-title); font-weight: 600; letter-spacing: -0.02em; }
+}
+#view-home .home-title span { color: var(--ink-2); }
+
+/* =====================================================================
+   REPAIR PASS (2026-10-08)
+   =====================================================================
+   Layout and chart defects found by the second audit of the redesign, each
+   with the width it was measured at. The pre-repair redesign is kept in
+   ~/Optic/backups/redesign-pre-repair-2026-10-07. */
+
+/* ------------------------------------------------------ the content column
+ *
+ * Centred, and never wider than --ws-content-max. Every page but the chart
+ * workspace, which is a tool and takes the whole width. `main` already
+ * excludes the rail and reserves Pulse's column, so centring inside it is
+ * centring in the space the reader actually has. */
+main > .view:not(.view-workspace),
+main > .page-head {
+  max-width: var(--ws-content-max);
+  margin-inline: auto;
+}
+footer.legal > .legal-line,
+footer.legal > .legal-full {
+  max-width: var(--ws-content-max);
+  margin-inline: auto;
+}
+
+/* ------------------------------------------------- Home: no jump on arrival
+ *
+ * The market band is filled by /api/home a moment after the page draws, and
+ * the brand, the search and everything under them dropped about 110px when it
+ * landed. While Home's own skeleton is up, the band's place is held at its
+ * height. If the read fails, the skeleton is replaced by the message and the
+ * hold goes with it, so nothing is reserved for a band that never comes. */
+.home:has(#hm-market .hm-skel) > #cc-strip:empty {
+  /* The band and its "As of" line: 132px at 1440 in Default text, and it
+     scales with the reader's text size like everything in it. */
+  min-height: calc(115px * var(--ui-scale));
+  background:
+    linear-gradient(var(--ws-panel), var(--ws-panel)) top / 100% calc(82px * var(--ui-scale)) no-repeat;
+  border-radius: var(--r-lg);
+}
+
+/* ------------------------------------------------ the Dossier on a phone
+ *
+ * Not sticky below 560px. The header (symbol, price, the stage and state
+ * chips, three actions and two rows of section tabs) stayed pinned while
+ * scrolling and measured 269px in the original and 330px here, of an 812px
+ * screen that already gives 66px to the top bar and 57px to the bottom one:
+ * the page scrolled through a 360px slot. The mobile bar and the tabs at the
+ * top of the page are how a phone moves between sections. The section index,
+ * which sat below the pinned header, now sits below the top bar alone. */
+@media (max-width: 559px) {
+  .sec-head { position: static; }
+  .sec-index { top: calc(var(--topbar-h, 106px) + var(--space-1)); }
+  .panel[data-collapsible="1"] { scroll-margin-top: calc(var(--topbar-h, 106px) + 60px); }
+}
+
+/* Section tabs wrap rather than hide. At 768px "Financials" was cut off at the
+ * panel edge and News was not on screen at all, in a row with no scrollbar
+ * and no fade to say it scrolled. Same rule the phone already had. */
+@media (max-width: 1279px) {
+  .sec-head .sec-tabs { flex-wrap: wrap; overflow: visible; row-gap: 0; }
+}
+
+/* ---------------------------------------- a heading with controls in it
+ *
+ * On a narrow screen a panel heading that also holds a button and a note
+ * squeezed its own title into a column: "Price, Moving Averages & Fibonacci"
+ * was five lines at 375px, beside an "Explain chart" button and "· daily
+ * bars, 126 of 501 shown". The title and the collapse caret keep the first
+ * line; anything else in the heading drops to the line under it. Nothing is
+ * removed or reordered for a screen reader: `order` only moves the boxes. */
+@media (max-width: 719px) {
+  .panel > h2.is-toggle { flex-wrap: wrap; row-gap: var(--space-1); }
+  .panel > h2.is-toggle > :first-child:not(.panel-toggle) { flex: 1 1 0; min-width: 0; }
+  .panel > h2.is-toggle > :not(:first-child):not(.panel-toggle) { order: 2; }
+  .panel > h2.is-toggle > .panel-toggle { order: 1; }
+  .panel > h2.is-toggle::after { content: ""; order: 1; flex-basis: 100%; height: 0; }
+}
+
+/* --------------------------------------------- the session strip, tablet
+ *
+ * Between the phone and 1080px the strip spent a whole row on "Market
+ * hours" alone, right-aligned under the clock: about 130px of chrome on a
+ * 1024px-tall tablet before the page began. The button now shares the
+ * clock's row and the timeline takes the row under both. */
+@media (min-width: 560px) and (max-width: 1079px) {
+  .sessionbar .ses-main { flex-wrap: wrap; row-gap: var(--space-2); }
+  .sessionbar .ses-strip { order: 9; flex: 1 0 100%; }
+  .sessionbar .ses-detail-btn { margin-left: auto; }
+  /* The clock's line is the one that can wrap; sized from zero so the price
+     and the button keep the row rather than being pushed under it. */
+  .sessionbar .ses-head { flex: 1 1 0; min-width: calc(180px * var(--ui-scale)); }
+}
+
+/* ---------------------------------------------------- small multiples
+ *
+ * Every chart is drawn at least 320 wide (buildChartNow's floor), so four
+ * across in a 1127px panel drew each of the Financials tab's charts at 320
+ * and showed it at 271: every label and figure at 85%, centred in a gap. A
+ * set of four goes four across only where each has its 320, two across where
+ * two fit, and one above the other on a phone. */
+.viz:has(> .viz-multiples) { container: vizm / inline-size; }
+@container vizm (min-width: 600px) {
+  .viz-multiples:has(> :nth-child(4):last-child) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container vizm (min-width: 1340px) {
+  .viz-multiples:has(> :nth-child(4):last-child) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}

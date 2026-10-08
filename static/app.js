@@ -4079,11 +4079,13 @@ function installChatResize() {
   /* A window that shrinks below the stored width has to re-clamp, or the panel
    * is wider than the screen and the page is unreachable. `transient` so a
    * temporary narrow window does not overwrite the chosen width. */
+  /* And a width nobody chose follows the window. The window-aware default
+   * was computed once, at load: opened on a 1440px window, Pulse kept its
+   * 520px when the window was narrowed to 1024, and the page beside it went
+   * from 692px to 276px. storedChatWidth() is the reader's saved width when
+   * there is one and the default for this window when there is not. */
   window.addEventListener('resize', () => {
-    const cur = parseInt(
-      getComputedStyle(document.documentElement).getPropertyValue('--chat-w'), 10)
-      || defaultChatWidth();
-    applyChatWidth(Math.min(cur, chatMaxWidth()), { transient: true });
+    applyChatWidth(Math.min(storedChatWidth(), chatMaxWidth()), { transient: true });
   });
 }
 
@@ -4173,6 +4175,10 @@ const RAIL_KEY = 'optic.rail.tight';
  * button, so it still counts as a choice. */
 const RAIL_CHOICE_KEY = 'optic.rail.tight.v2';
 const RAIL_AUTO_QUERY = '(min-width: 560px) and (max-width: 1023px)';
+// Where the rail gives way to Pulse; see syncRailWithChat.
+const RAIL_YIELD_QUERY = '(min-width: 560px) and (max-width: 1279px)';
+let railYielded = false;
+let railHeldByReader = false;   // pressed while Pulse was open: leave it be
 
 function railChoice() {
   try {
@@ -4240,6 +4246,8 @@ function initRail() {
   const btn = document.getElementById('rail-toggle');
   if (btn) {
     btn.addEventListener('click', () => {
+      railYielded = false;   // the reader has taken it over
+      if (document.body.classList.contains('chat-open')) railHeldByReader = true;
       const tight = !document.body.classList.contains('rail-tight');
       try { localStorage.setItem(RAIL_CHOICE_KEY, tight ? '1' : '0'); }
       catch (e) { /* private mode: it just forgets between loads */ }
@@ -4249,10 +4257,45 @@ function initRail() {
   // A window crossing the line follows it, until the reader has chosen.
   if (typeof matchMedia === 'function') {
     const mq = matchMedia(RAIL_AUTO_QUERY);
-    const follow = () => { if (railChoice() === null) applyRail(railDefault()); };
+    const follow = () => { if (railChoice() === null && !railYielded) applyRail(railDefault()); };
     if (mq.addEventListener) mq.addEventListener('change', follow);
+    const yq = matchMedia(RAIL_YIELD_QUERY);
+    if (yq.addEventListener) yq.addEventListener('change', syncRailWithChat);
+  }
+  // Pulse opening, closing, or switching between split and cover all change
+  // the body's class, so one observer sees every route to it.
+  if (typeof MutationObserver === 'function') {
+    new MutationObserver(syncRailWithChat).observe(document.body,
+      { attributes: true, attributeFilter: ['class'] });
   }
   trackRailHeight();
+}
+
+/* The rail gives its labels to the page while Pulse is open beside it.
+ *
+ * Measured at 1024x768 with Pulse open: the expanded rail (228px) and Pulse
+ * (368px, more when it was opened on a wider window) left the page 276px or
+ * less, the top bar stacked into three rows and every panel was a column of
+ * one word per line. Under 1280px, while Pulse splits the screen, the rail
+ * collapses to its icons, which hands 168px back to the page, and on close it
+ * returns to whatever it was: the reader's choice, or the width's default.
+ * Nothing is stored. Pressing Collapse/Expand meanwhile is the reader taking
+ * it over, and that choice stands. */
+function syncRailWithChat() {
+  const body = document.body;
+  const squeezed = body.classList.contains('chat-open') && !body.classList.contains('chat-full')
+    && typeof matchMedia === 'function' && matchMedia(RAIL_YIELD_QUERY).matches;
+  if (squeezed && !railYielded && !railHeldByReader && !body.classList.contains('rail-tight')) {
+    railYielded = true;
+    applyRail(true);
+  } else if (!squeezed) {
+    railHeldByReader = false;
+    if (railYielded) {
+      railYielded = false;
+      const chosen = railChoice();
+      applyRail(chosen === null ? railDefault() : chosen);
+    }
+  }
 }
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initRail);
@@ -4396,6 +4439,11 @@ function renderHome() {
       <span class="dot-sep"><span class="chip neutral" style="padding:var(--space-0) var(--space-2)"><span class="dot"></span>Checking data source…</span></span>
     </div>
   </div>`;
+  /* The footer's answer comes from one read of /api/health at boot, and this
+   * render wrote "Checking data source…" over it on every later visit to Home,
+   * where nothing ever replaced it: the chip said it was checking for the rest
+   * of the session. With the answer already in hand it is drawn now. */
+  if (STATE.health) renderHomeStatus(STATE.health);
 
   /* The first screen anyone sees had no entrance of its own.
    *
@@ -41130,6 +41178,7 @@ function paintNav(view) {
       </div>
     </div>`;
   }).join('');
+  labelNavSections(nav);
 
   /* The second row is gone on a desktop, where the rail's menus carry a
    * section's pages, and CSS keeps it off there. On a phone the rail is gone
@@ -41147,6 +41196,68 @@ function paintNav(view) {
   }
 
   navMenuSides();
+}
+
+/* The rail's sections, as labels between its groups. Labels only: the
+ * groups, their order and their pages are NAV_GROUPS as before, and the
+ * labels are hidden from assistive tech because every button carries its own
+ * name. Research is everything for finding and reading; Tracking is what you
+ * keep coming back to; Owner is the one group a reader never sees. */
+const NAV_SECTIONS = {
+  home: 'Research', security: 'Research', analyse: 'Research',
+  market: 'Research', discover: 'Research',
+  portfolio: 'Tracking', follow: 'Tracking',
+  reports: 'Owner',
+};
+
+function labelNavSections(nav) {
+  let current = null;
+  nav.querySelectorAll(':scope > [data-group], :scope > .nav-item').forEach((el) => {
+    const btn = el.matches('[data-group]') ? el : el.querySelector('[data-group]');
+    const section = btn && NAV_SECTIONS[btn.dataset.group];
+    if (section && section !== current) {
+      const label = document.createElement('p');
+      label.className = 'nav-sec';
+      label.setAttribute('aria-hidden', 'true');
+      label.textContent = section;
+      el.before(label);
+    }
+    current = section || current;
+  });
+}
+
+/* The page header: section, page, and the one line saying what the page is
+ * for. Every word comes from the navigation's own labels: the group's name,
+ * and the description SUB_TITLES already gave the menu as a tooltip ("Optic's
+ * Read. The daily market, macro and world summary" is a title and a
+ * description). Pages with a header of their own get none: Home, every
+ * Dossier page (securityHeader names the symbol), the single-instrument
+ * chart, Paper Desk and Insiders. */
+const PAGE_HEAD_OWN = new Set(['home', 'instrument', 'paper', 'insiders']);
+
+function paintPageHead(view) {
+  const host = document.getElementById('page-head');
+  if (!host) return;
+  if (PAGE_HEAD_OWN.has(view) || SECURITY_VIEWS.includes(view)) {
+    host.hidden = true;
+    host.innerHTML = '';
+    return;
+  }
+  const group = NAV_GROUPS.find((g) => g.views.includes(view));
+  // Settings has no SUB_TITLES entry, and the gear's "Appearance and time
+  // zone" would undersell a page that opens on the account: the title alone.
+  const full = SUB_TITLES[view] || '';
+  const cut = full.indexOf('. ');
+  const title = view === 'settings' ? 'Settings'
+    : (cut > 0 ? full.slice(0, cut) : (SUB_LABELS[view] || view));
+  const desc = cut > 0 ? full.slice(cut + 2) : full;
+  const eyebrow = group ? navGroupLabel(group) : '';
+  host.innerHTML = `<div class="ph-text">
+      ${eyebrow && eyebrow !== title ? `<p class="ph-eyebrow">${esc(eyebrow)}</p>` : ''}
+      <h1 class="ph-title">${esc(title)}</h1>
+      ${desc ? `<p class="ph-desc">${esc(desc)}</p>` : ''}
+    </div>`;
+  host.hidden = false;
 }
 
 /* Which side each dropdown opens from, measured rather than assumed.
@@ -41453,6 +41564,7 @@ function switchView(view, force) {
   if (view !== 'settings') NAV_LAST[groupForView(view)] = view;
   paintNav(view);
   paintMobileTabs(view);
+  paintPageHead(view);
   // The settings gear sits in the top bar, not the tab strip, so it isn't covered
   // by the loop above.
   const gear = $('#settings-btn');
@@ -41474,6 +41586,7 @@ function switchView(view, force) {
   }
 
   loadView(view, !!force);
+  redrawIfStale(view);
   // Studies and trend lines are per bar size, as a size pressed on the tab
   // asks again for them; loadChartWorkspace has set the symbol by now.
   if (reopened) {
@@ -41835,10 +41948,28 @@ const watchWidth = (el) => {
     // cascade mid-flight, and a 15px difference isn't worth a redraw anyway.
     if (!w || Math.abs(w - lastMainWidth) < 24) return;
     lastMainWidth = w;
+    // Every other view was drawn at the old width; see VIEWS_DRAWN_STALE.
+    Object.keys(views).forEach((k) => { if (k !== STATE.view) VIEWS_DRAWN_STALE.add(k); });
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(rerenderActiveView, 150);
   }).observe(el);
 };
+
+/* Views drawn at a width the page no longer has.
+ *
+ * The observer above redraws the view on screen, and only it. A view rendered
+ * earlier keeps its charts at the width they were built for, and switching
+ * back to it shows that render as it was: measured after loading Options at
+ * 1440px and narrowing the window to 1024, every chart on it was a 1127-wide
+ * drawing scaled into a 711px box, the labels at 63% and the plot centred in
+ * a band of empty panel. A stale view is redrawn on its way back on screen,
+ * through the same rerenderActiveView the resize path uses. */
+const VIEWS_DRAWN_STALE = new Set();
+function redrawIfStale(view) {
+  if (!VIEWS_DRAWN_STALE.delete(view)) return;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(rerenderActiveView, 60);
+}
 watchWidth(document.querySelector('main'));
 
 /* --------------------------------------------------------- symbol typeahead

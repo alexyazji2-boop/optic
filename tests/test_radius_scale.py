@@ -46,8 +46,10 @@ def test_the_scale_names_every_step_the_app_draws():
     """Six steps, because six is what it draws: marks, small controls,
     buttons, chrome, cards, pills."""
     t = _tokens()
-    assert t == {"r-xs": "4px", "r-sm": "8px", "r-ctl": "10px",
-                 "r-chrome": "12px", "r-md": "8px", "r-lg": "14px",
+    # The workspace redesign (2026-10-07) squared the chrome: a pane in a
+    # workspace at 8px rather than a card on a page at 14px. Still six steps.
+    assert t == {"r-xs": "4px", "r-sm": "5px", "r-ctl": "6px",
+                 "r-chrome": "8px", "r-md": "6px", "r-lg": "8px",
                  "r-pill": "999px"}, t
 
 
@@ -57,7 +59,7 @@ def test_the_card_token_is_the_radius_cards_are_drawn_at():
     panel = CSS.split("\n.panel {", 1)[1]
     panel = panel[:panel.index("}")]
     assert "border-radius: var(--r-lg);" in panel
-    assert _tokens()["r-lg"] == "14px"
+    assert _tokens()["r-lg"] == "8px"
 
 
 def test_nothing_holds_a_bare_radius_of_four_pixels_or_more():

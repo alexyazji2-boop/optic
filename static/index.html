@@ -252,6 +252,10 @@
 <div class="sessionbar" id="sessionbar" hidden></div>
 
 <main id="main" tabindex="-1">
+  <!-- The page header: section, page and what the page is for. Filled by
+       paintPageHead on every switch and hidden on pages that have a header of
+       their own (Home, the Dossier, the chart, Paper Desk, Insiders). -->
+  <header class="page-head" id="page-head" hidden></header>
   <section class="view active" id="view-home" role="tabpanel" aria-label="Home"></section>
   <section class="view" id="view-brief" role="tabpanel" aria-label="Optic&apos;s Read. Daily summary"></section>
   <!-- The Dossier. One traded thing, seven sections, one persistent header.
