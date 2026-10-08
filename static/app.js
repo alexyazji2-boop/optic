@@ -18346,9 +18346,42 @@ function starsText(n) {
 }
 
 /* Optic's own star rating for a stock: the price against its fair value range,
-   in five steps. Shown above the range it comes from, and named as Optic's. */
-function renderStarBlock(r) {
+   in five steps. Shown above the range it comes from, and named as Optic's.
+ *
+ * The rule was one sentence ("5 stars below the fair value range, 4 below its
+ * middle, 3 within 3% of the middle, 2 above it, 1 above the range") and it
+ * was asked about as "i cant even tell what this means". It is now said with
+ * this stock's own numbers, and the five steps are drawn as a scale from
+ * cheapest to dearest with today's step lit. The stars themselves are still
+ * the server's; nothing here re-rates anything. */
+/** Where today's price sits, in a sentence with this stock's own figures. */
+function starPlainRead(r, f) {
+  if (!f || ![f.price, f.low, f.mid, f.high].every(Number.isFinite)) return '';
+  const off = (a, b) => `${Math.round(Math.abs(a / b - 1) * 100)}%`;
+  const where = {
+    5: `${off(f.price, f.low)} below the bottom of that range`,
+    4: `${off(f.price, f.mid)} below the middle of that range`,
+    3: 'close to the middle of that range',
+    2: `${off(f.price, f.mid)} above the middle of that range`,
+    1: `${off(f.price, f.high)} above the top of that range`,
+  }[r.stars];
+  if (!where) return '';
+  return `At the P/E it usually trades at, today's earnings put its fair value between
+    <strong>${usd(f.low, 0)}</strong> and <strong>${usd(f.high, 0)}</strong>. At
+    <strong>${usd(f.price, 2)}</strong>, it is ${where}.`;
+}
+
+function renderStarBlock(r, f) {
   if (!r || !r.available) return '';
+  const band = ((r.rule || '').match(/within (\d+(?:\.\d+)?)%/) || [])[1];
+  const plain = starPlainRead(r, f);
+  const steps = [
+    { stars: 5, label: 'Below the range' },
+    { stars: 4, label: 'Below the middle' },
+    { stars: 3, label: 'Near the middle' },
+    { stars: 2, label: 'Above the middle' },
+    { stars: 1, label: 'Above the range' },
+  ];
   return `<div class="panel span-all os-panel">
     <div class="os-row">
       <div>
@@ -18357,9 +18390,19 @@ function renderStarBlock(r) {
       </div>
       <div class="os-read">
         <strong>${esc(r.word)}</strong>
-        <p class="sub" style="margin:var(--space-1) 0 0">${esc(r.rule)}</p>
+        ${plain ? `<p class="os-plain">${plain}</p>` : ''}
       </div>
     </div>
+    <ol class="os-scale" aria-label="How the stars are given, cheapest against its own past first">
+      ${steps.map((st) => `<li class="os-step${st.stars === r.stars ? ' is-now' : ''}"${
+    st.stars === r.stars ? ' aria-current="true"' : ''}
+        title="${st.stars === 3 && band ? `Within ${esc(band)}% of the middle` : esc(st.label)}">
+        <span class="os-step-stars" aria-hidden="true">${'\u2605'.repeat(st.stars)}</span>
+        <span class="os-step-label">${esc(st.label)}</span>
+        <span class="sr-only">, ${st.stars} ${st.stars === 1 ? 'star' : 'stars'}</span>
+      </li>`).join('')}
+    </ol>
+    <div class="os-scale-ends" aria-hidden="true"><span>Cheaper than usual</span><span>Pricier than usual</span></div>
     <p class="caveat">${esc(r.note)}</p>
   </div>`;
 }
@@ -18436,7 +18479,7 @@ function renderFairValue(d) {
   if (!d) return '';
   const blocks = [renderMorningstarBlock(d.morningstar), renderFairValueBlock(d.fair_value),
     renderAnalystsBlock(d.analysts)].filter(Boolean);
-  const stars = renderStarBlock(d.stars);
+  const stars = renderStarBlock(d.stars, d.fair_value);
   return `${stars}${yardsticksHTML(d)}${blocks.length ? `<div class="grid c2 gap">${blocks.join('')}</div>` : ''}${
     renderDividendBlock(d.dividend)}`;
 }

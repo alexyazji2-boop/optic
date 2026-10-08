@@ -187,7 +187,7 @@ def _run(script):
     pieces = "\n".join(piece(h) for h in (
         "function renderFairValueBlock(", "function renderAnalystsBlock(",
         "function renderDividendBlock(", "function renderMorningstarBlock(", "function starsText(",
-        "function renderStarBlock(", "function yardstickRows(", "function yardstickPrice(",
+        "function starPlainRead(", "function renderStarBlock(", "function yardstickRows(", "function yardstickPrice(",
         "function yardsticksTitle(", "function yardsticksHTML(", "function renderFairValue("))
     prelude = """
       function esc(v) { return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
@@ -226,6 +226,38 @@ def test_the_panels_show_the_range_the_verdict_and_what_it_cannot_do():
                  "Dividend score", 'class="fv-score-n up">68<', "Solid",
                  "Years of increases", "23 years in a row", "25 of 25", "cannot see debt"):
         assert text in out, text
+
+
+def test_the_star_rating_is_said_with_the_stocks_own_numbers_and_drawn_as_a_scale():
+    """Asked about as "i cant even tell what this means": the rule sentence
+    ("5 stars below the fair value range, 4 below its middle...") is replaced
+    by where this price sits in this stock's range, in dollars and percent,
+    and the five steps drawn cheapest first with today's lit. The stars are
+    still the server's."""
+    dear = fv.star_rating(FAIR)
+    assert dear["stars"] == 1
+    cheap_fair = dict(FAIR, price=250.0)
+    cheap = fv.star_rating(cheap_fair)
+    assert cheap["stars"] == 4
+    out = _run("print('RESULT:' + JSON.stringify([renderFairValue(%s), renderFairValue(%s)]));" % (
+        json.dumps({"fair_value": FAIR, "stars": dear, "analysts": {"available": False},
+                    "dividend": {"available": False}}),
+        json.dumps({"fair_value": cheap_fair, "stars": cheap, "analysts": {"available": False},
+                    "dividend": {"available": False}})))
+    top, under = out
+    assert "<strong>$243</strong> and <strong>$304</strong>" in top
+    assert "<strong>$333.69</strong>, it is 10% above the top of that range." in top
+    assert "8% below the middle of that range." in under
+    assert "4 below its middle" not in top, "the old rule sentence is gone"
+    for shown, lit in ((top, "Above the range"), (under, "Below the middle")):
+        assert shown.count('<li class="os-step') == 5
+        now = shown.split('class="os-step is-now" aria-current="true"', 1)[1].split("</li>", 1)[0]
+        assert lit in now
+    labels = [l.split("</span>")[0] for l in top.split('class="os-step-label">')[1:]]
+    assert labels == ["Below the range", "Below the middle", "Near the middle",
+                      "Above the middle", "Above the range"], "cheapest first"
+    assert 'title="Within 3% of the middle"' in top
+    assert "not a recommendation to buy or sell" in top
 
 
 def test_a_wide_range_has_numbers_and_a_note_but_no_verdict_and_nothing_empty_is_shown():
