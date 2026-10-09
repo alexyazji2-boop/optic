@@ -1,15 +1,16 @@
-"""The gold hover pill, on the controls that need it.
+"""The gold hover pill, in the sidebar only.
 
-Asked for on 2026-10-08 as "from now on, every time you hover over a button,
-use [the 'Why the gap?' chip] as a reference, but change the color scheme to
-the gold in the optic logo", then narrowed the same day: "dont do this for
-every button, do it only for the ones necessary".
+Asked for on 2026-10-08 as "every time you hover over a button, use [the 'Why
+the gap?' chip] as a reference, but change the color scheme to the gold in the
+optic logo", narrowed to "only the ones necessary", then on 2026-10-09 to "keep
+this feature ONLY for the sidebar, remove this across the remainder of the
+terminal".
 """
 from pathlib import Path
 
 CSS = (Path(__file__).resolve().parent.parent / "static/styles.css").read_text()
 
-HEAD = '  summary:not(:disabled):not([aria-disabled="true"]):hover,'
+HEAD = '  .rail nav.tabs-group .nav-top:not(:disabled):not([aria-disabled="true"]):hover,'
 
 
 def _block(head):
@@ -17,23 +18,23 @@ def _block(head):
     return CSS[at:CSS.index("}", at)]
 
 
-def test_the_hover_is_opt_in_for_quiet_controls_and_skips_disabled_ones():
+def test_the_sidebar_takes_the_gold_pill():
     rule = _block(HEAD)
-    for sel in (".ask-pulse", ".pill", ".sec-chip", ".btn:not(.primary)", ".hm-more",
-                ".rail nav.tabs-group .nav-top", ".brand"):
+    for sel in (".nav-page", ".rail-foot .icon-btn", ".brand"):
         assert "  %s:not(:disabled)" % sel in rule, sel
     assert "border-radius: var(--r-pill);" in rule
     assert "var(--hover-gold)" in rule and "color: var(--ink);" in rule
     assert "@media (hover: hover) {\n" + HEAD in CSS, "no sticky hover after a tap"
 
 
-def test_not_every_button_takes_it():
-    """The solid gold button, cards, tabs and toolbar glyphs keep their own hover."""
+def test_nothing_outside_the_sidebar_does():
+    """The top bar's Sign in (a secondary .btn), chips, pills, disclosure rows
+    and text links all keep their own hover."""
     rule = _block(HEAD)
-    assert "\n  button:not(" not in rule and "[role=\"button\"]" not in rule
-    for sel in (".btn.primary", ".ov-card", ".pulse-card", ".sec-tab", ".panel-toggle"):
-        assert sel + ":not(" not in rule, sel
-    assert '.btn.primary:not(:disabled):not([aria-disabled="true"]):hover {' not in CSS
+    for sel in ("summary", ".btn", ".ask-pulse", ".pill", ".sec-chip", ".wl-chip", ".bulk-btn",
+                ".hm-more", ".foot-link", "button:not(", '[role="button"]'):
+        assert "\n  %s" % sel not in rule, sel
+    assert "--hover-pad" not in CSS and "--hover-gold-solid" not in CSS
 
 
 def test_the_gold_is_the_marks_gold_and_holds_up_on_white():
@@ -46,10 +47,6 @@ def test_nothing_moves_when_the_pointer_arrives():
     rule = _block(HEAD)
     assert "padding" not in rule and "border-width" not in rule and "margin" not in rule
     assert "box-shadow:" in rule
-
-
-def test_bare_links_get_room():
-    assert ":where(summary, .hm-more, .ht-more, .ht-rest, .foot-link, .cs-note-btn) {" in CSS
 
 
 def test_the_hover_is_a_plain_fade_not_a_morph():

@@ -17989,9 +17989,6 @@ main > .view:focus { outline: none; }
   /* Every button's hover: an outlined pill in the Optic mark's gold. */
   --hover-gold: var(--asset-brand);
   --hover-gold-fill: color-mix(in srgb, var(--asset-brand) 14%, transparent);
-  /* The same wash made opaque over the surface, for a pill drawn outside its
-     box: a see-through spread would show the gold ring through it. */
-  --hover-gold-solid: color-mix(in srgb, var(--asset-brand) 14%, var(--surface));
   --ws-eyebrow: var(--brand);
   /* The header band of a pane: a breath of ink over the panel surface. */
   --ws-head-bg: color-mix(in srgb, var(--ink) 2.5%, var(--surface));
@@ -18020,7 +18017,6 @@ main > .view:focus { outline: none; }
      outline visible as a boundary (3:1) without leaving the gold. */
   --hover-gold: color-mix(in srgb, var(--asset-brand) 72%, var(--ink));
   --hover-gold-fill: color-mix(in srgb, var(--asset-brand) 16%, transparent);
-  --hover-gold-solid: color-mix(in srgb, var(--asset-brand) 16%, var(--surface));
 }
 
 /* ---------------------------------------------------------- label face */
@@ -18505,55 +18501,26 @@ footer.legal > .legal-full {
 
 /* ================================================== the gold hover pill ===
  *
- * Asked for as "every time you hover over a button, use [the "Why the gap?"
- * chip] as a reference, but change the color scheme to the gold in the optic
- * logo", then narrowed the same day: "dont do this for every button, do it
- * only for the ones necessary" (shown on the gold Sign in button, which took
- * an outline it did not need).
- *
- * So it is opt-in: the quiet controls whose only affordance is their words,
- * which is where the pill earns its place -- disclosure rows ("The whole
- * desk"), the Ask Pulse chips, filter pills and chips, secondary buttons,
- * text links that act as buttons, and the rail. A solid gold button, a card,
- * a tab and a toolbar glyph keep the hover they were designed with.
+ * The sidebar's hover, and only the sidebar's. It began as "every time you
+ * hover over a button, use [the "Why the gap?" chip] as a reference, but in
+ * the gold of the optic logo", was narrowed to "only the ones necessary", and
+ * then to "keep this feature ONLY for the sidebar, remove this across the
+ * remainder of the terminal" (shown on the top bar's Sign in button). So the
+ * rail's rows, the menus that fly out of it, Settings, Collapse and the brand
+ * take it; every other control keeps the hover it was designed with.
  *
  * Drawn with box-shadow rather than a border, so nothing moves when the
- * pointer arrives. A control with no padding of its own (a text link, a
- * disclosure summary) gets the pill drawn outside its box (--hover-pad), so
- * the outline does not touch the words. Disabled controls are left alone, and
- * only colour fades. Hover-capable pointers only: on a touch screen a tap
- * would leave it lit. */
-:where(summary, .hm-more, .ht-more, .ht-rest, .foot-link, .cs-note-btn) {
-  --hover-pad: calc(6px * var(--ui-scale));
-  --hover-bg: var(--hover-gold-solid);
-  --hover-ring-in: transparent;
-  --hover-ring-out: var(--hover-gold);
-}
-:where(summary.ht-row) { --hover-pad: 0px; --hover-bg: var(--hover-gold-fill); --hover-ring-in: var(--hover-gold); --hover-ring-out: transparent; }
-
+ * pointer arrives; only colour fades. Disabled controls are left alone.
+ * Hover-capable pointers only: on a touch screen a tap would leave it lit. */
 @media (hover: hover) {
-  summary:not(:disabled):not([aria-disabled="true"]):hover,
-  .ask-pulse:not(:disabled):not([aria-disabled="true"]):hover,
-  .pill:not(:disabled):not([aria-disabled="true"]):hover,
-  .sec-chip:not(:disabled):not([aria-disabled="true"]):hover,
-  .wl-chip:not(:disabled):not([aria-disabled="true"]):hover,
-  .bulk-btn:not(:disabled):not([aria-disabled="true"]):hover,
-  .btn:not(.primary):not(:disabled):not([aria-disabled="true"]):hover,
-  .hm-more:not(:disabled):not([aria-disabled="true"]):hover,
-  .ht-more:not(:disabled):not([aria-disabled="true"]):hover,
-  .ht-rest:not(:disabled):not([aria-disabled="true"]):hover,
-  .foot-link:not(:disabled):not([aria-disabled="true"]):hover,
-  .cs-note-btn:not(:disabled):not([aria-disabled="true"]):hover,
   .rail nav.tabs-group .nav-top:not(:disabled):not([aria-disabled="true"]):hover,
   .nav-page:not(:disabled):not([aria-disabled="true"]):hover,
   .rail-foot .icon-btn:not(:disabled):not([aria-disabled="true"]):hover,
   .brand:not(:disabled):not([aria-disabled="true"]):hover {
     border-color: var(--hover-gold);
     border-radius: var(--r-pill);
-    background-color: var(--hover-bg, var(--hover-gold-fill));
-    box-shadow: 0 0 0 var(--hover-pad, 0px) var(--hover-gold-solid),
-                0 0 0 calc(var(--hover-pad, 0px) + 1.5px) var(--hover-ring-out, transparent),
-                inset 0 0 0 1.5px var(--hover-ring-in, var(--hover-gold));
+    background-color: var(--hover-gold-fill);
+    box-shadow: inset 0 0 0 1.5px var(--hover-gold);
     color: var(--ink);
     /* A plain fade: the pill's shape and outline arrive at once and only the
        wash and the ink ease in. */
