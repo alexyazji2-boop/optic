@@ -1052,6 +1052,21 @@ function buildChartNow(host, builder) {
   return true;
 }
 
+/* Draw the charts a render mounts with the sweep-in, then put the flag back.
+ *
+ * For a page being opened, not refreshed. Asked for as "show the chart
+ * animation when the subtab ... loads": the futures chart opened from Home
+ * never swept, and a section page reopened from memory (Read after Macro,
+ * Investing after Earnings) re-rendered with whatever flag the last view left,
+ * which after a silent refresh is off. mount() reads the flag when each chart
+ * is asked for, so setting it around the render is enough; a silent refresh
+ * never comes through here, and Reduce Motion still wins inside charts.js. */
+function sweepCharts(render) {
+  const was = chartAnimationOn();
+  setChartAnimation(true);
+  try { return render(); } finally { setChartAnimation(was); }
+}
+
 /* A builder that draws on, or does not, as its mount decided. Restores the
  * flag afterwards, since the next build in the queue has its own answer. */
 function drawnAs(build, animate) {
@@ -15132,6 +15147,8 @@ const FIN_DEFS = {
   debt_to_equity: GLOSSARY['debt to equity'] + " It turns negative when years of buybacks or losses have pushed shareholders' equity below zero, and then no longer reads as a measure of leverage.",
   gross_margin: GLOSSARY['gross margin'],
   operating_margin: GLOSSARY['operating margin'],
+  ebitda: GLOSSARY.ebitda + ' This is the latest fiscal year, from the annual statement.',
+  ebitda_margin: "EBITDA as a percentage of revenue: of every dollar of sales, how many cents were left before interest, tax, depreciation and amortisation. Above the operating margin by the depreciation and amortisation it leaves out, so the gap is widest at capital-heavy companies.",
   // ---- ownership
   insider_net: "Shares the company's directors and officers bought, minus shares they sold, over the last six months, from their Form 4 filings. Positive means they were net buyers, the rarer and more telling direction.",
   institutional: GLOSSARY['institutional ownership'] + ' From their quarterly 13F filings, which arrive up to 45 days after the quarter they cover.',
@@ -15668,6 +15685,9 @@ function renderCompany(co) {
   const ap = fn.annual_periods || [];
   const an = fn.annual || {};
 
+  /* A margin, or a dash. `fmt` gives "—" for a missing figure and the "%"
+     was added after it, so a bank's operating margin read "—%". */
+  const finPct = (v) => (Number.isFinite(v) ? fmt(v, 1) + '%' : '\u2014');
   const finRow = (label, values, money, def) => `<tr>
     <td class="name">${statLabel(label, def)}</td>
     ${(ap || []).map((_, i) => `<td>${values && values[i] !== null && values[i] !== undefined
@@ -15732,7 +15752,7 @@ function renderCompany(co) {
     signClass((fn.growth || {}).revenue_yoy_pct), FIN_DEFS.revenue_growth)}
           ${tile('Net income growth', fmtPct((fn.growth || {}).net_income_yoy_pct, 1), null,
     signClass((fn.growth || {}).net_income_yoy_pct), FIN_DEFS.net_income_growth)}
-          ${tile('Net margin', fmt((fn.margins || {}).net_pct, 1) + '%', null, '', FIN_DEFS.net_margin)}
+          ${tile('Net margin', finPct((fn.margins || {}).net_pct), null, '', FIN_DEFS.net_margin)}
         </div>
         ${(an.revenue || []).filter(Number.isFinite).length >= 2 ? `<div class="viz">
           <p class="viz-title">${(an.revenue || []).filter(Number.isFinite).length} fiscal years of the statements</p>
@@ -15749,6 +15769,7 @@ function renderCompany(co) {
             ${finRow('Revenue', an.revenue, true, FIN_DEFS.revenue)}
             ${finRow('Gross profit', an.gross_profit, true, FIN_DEFS.gross_profit)}
             ${finRow('Operating income', an.operating_income, true, FIN_DEFS.operating_income)}
+            ${(an.ebitda || []).some(Number.isFinite) ? finRow('EBITDA', an.ebitda, true, FIN_DEFS.ebitda) : ''}
             ${finRow('Net income', an.net_income, true, FIN_DEFS.net_income)}
             ${finRow('Free cash flow', an.free_cash_flow, true, FIN_DEFS.free_cash_flow)}
             ${finRow('Diluted EPS', an.diluted_eps, false, FIN_DEFS.diluted_eps)}
@@ -15764,8 +15785,15 @@ function renderCompany(co) {
       ? ['Net debt', usdCompact(-(fn.balance_sheet || {}).net_cash), '', FIN_DEFS.net_cash]
       : ['Net cash position', usdCompact((fn.balance_sheet || {}).net_cash), '', FIN_DEFS.net_cash]),
     ['Debt / equity', fmt((fn.balance_sheet || {}).debt_to_equity, 2), '', FIN_DEFS.debt_to_equity],
-    ['Gross margin', fmt((fn.margins || {}).gross_pct, 1) + '%', '', FIN_DEFS.gross_margin],
-    ['Operating margin', fmt((fn.margins || {}).operating_pct, 1) + '%', '', FIN_DEFS.operating_margin],
+    ['Gross margin', finPct((fn.margins || {}).gross_pct), '', FIN_DEFS.gross_margin],
+    ['Operating margin', finPct((fn.margins || {}).operating_pct), '', FIN_DEFS.operating_margin],
+    /* Asked for as "when looking at financials add a companies EBITDA metric
+     * as well". The latest fiscal year's, and its margin beside the operating
+     * margin it sits above. A bank or an insurer files no EBITDA line, and
+     * that is said rather than shown as a dash that reads like missing data. */
+    ['EBITDA', Number.isFinite((an.ebitda || [])[0]) ? usdCompact(an.ebitda[0]) : 'Not reported', '', FIN_DEFS.ebitda],
+    ['EBITDA margin', Number.isFinite((fn.margins || {}).ebitda_pct)
+      ? fmt(fn.margins.ebitda_pct, 1) + '%' : 'Not reported', '', FIN_DEFS.ebitda_margin],
   ])}
         <ul class="reasons">${(fn.notes || []).map((n) => `<li>${gloss(n)}</li>`).join('')}</ul>`
     : `<div class="callout">${esc(fn.note || 'No financial statements for this security.')}</div>`}
@@ -18140,7 +18168,7 @@ async function loadInstrument(force) {
   const key = `${inst.symbol}|${instrumentRange}`;
   if (STATE.instrumentKey === key && !force) {
     views.instrument.innerHTML = renderInstrument(STATE.instrumentData);
-    drawInstrumentChart(STATE.instrumentData);
+    sweepCharts(() => drawInstrumentChart(STATE.instrumentData));
     return;
   }
   STATE.instrumentKey = key;
@@ -18157,7 +18185,7 @@ async function loadInstrument(force) {
   if (STATE.instrumentKey !== key) return;
   STATE.instrumentData = payload;
   views.instrument.innerHTML = renderInstrument(payload);
-  drawInstrumentChart(payload);
+  sweepCharts(() => drawInstrumentChart(payload));
   revealPanels(views.instrument);
 }
 
@@ -36565,7 +36593,7 @@ async function loadBrief(force, opts = {}) {
   const day = opts.day || null;
   // A day switch has to refetch even when today's brief is already in STATE.
   if (STATE.brief && !force && !day && STATE.briefDay === null) {
-    renderBrief(STATE.brief); revealPanels(views.brief); loadSentiment(); loadWeekly(); loadCatalystMode(); loadCatalysts(); loadPriority(); loadGlobal(); return;
+    sweepCharts(() => renderBrief(STATE.brief)); revealPanels(views.brief); loadSentiment(); loadWeekly(); loadCatalystMode(); loadCatalysts(); loadPriority(); loadGlobal(); return;
   }
   if (!silent) {
     views.brief.innerHTML = loadingHTML(day
@@ -37691,7 +37719,7 @@ function macroFactors(m) {
 async function loadMarket(force, opts = {}) {
   const silent = !!opts.silent;
   if (STATE.market && STATE.market.sectors && !force) {
-    renderMarket(STATE.market); revealPanels(views.market); loadSectorBoard(); loadCorrelation(); return;
+    sweepCharts(() => renderMarket(STATE.market)); revealPanels(views.market); loadSectorBoard(); loadCorrelation(); return;
   }
   if (!silent) beginLoad(views.market, 'macro and sector data (this pulls ~40 symbols)');
   try {
@@ -37724,7 +37752,7 @@ async function loadMarket(force, opts = {}) {
 async function loadLong(force, opts = {}) {
   const silent = !!opts.silent;
   if (STATE.long && STATE.long.ticker === STATE.ticker && !force) {
-    renderLong(STATE.long); revealPanels(views.long); loadValuationInputs(); return;
+    sweepCharts(() => renderLong(STATE.long)); revealPanels(views.long); loadValuationInputs(); return;
   }
   if (!silent) beginLoad(views.long, `10-year history for ${STATE.ticker} and the major indices`);
   try {
@@ -37750,7 +37778,7 @@ async function loadLong(force, opts = {}) {
 
 async function loadRoth(force, opts = {}) {
   const silent = !!opts.silent;
-  if (STATE.roth && !force) { renderRoth(STATE.roth); revealPanels(rothHost() || document.body); return; }
+  if (STATE.roth && !force) { sweepCharts(() => renderRoth(STATE.roth)); revealPanels(rothHost() || document.body); return; }
   if (!silent) (rothHost() || {}).innerHTML = loadingHTML('ten years of history for the fund universe');
   try {
     // POST, not GET: a portfolio has no business in a URL, browser history or an
@@ -37780,7 +37808,7 @@ async function loadTracker(force, opts = {}) {
   const silent = !!opts.silent;
   // Shared ledger, so nothing about the loaded ticker invalidates it.
   if (STATE.tracker && !force) {
-    renderTracker(STATE.tracker); revealPanels(views.tracker);
+    sweepCharts(() => renderTracker(STATE.tracker)); revealPanels(views.tracker);
     loadPortfolioRisk(); return;
   }
   if (!silent) beginLoad(views.tracker, "Optic's own position ledger");
@@ -37879,7 +37907,7 @@ async function loadIndices(force, opts = {}) {
   // Market-wide, so unlike the ticker panels there's nothing to invalidate when
   // the symbol changes — only an explicit refresh refetches.
   if (STATE.indices && !force) {
-    renderIndices(STATE.indices); revealPanels(views.indices); loadIndexBoard(); return;
+    sweepCharts(() => renderIndices(STATE.indices)); revealPanels(views.indices); loadIndexBoard(); return;
   }
   if (!silent) beginLoad(views.indices, 'index history (this pulls 10 years per index)');
   try {
@@ -37911,7 +37939,7 @@ async function loadEarnings(force, opts = {}) {
     return;
   }
   if (STATE.earnings && STATE.earnings.ticker === STATE.ticker && !force) {
-    renderEarnings(STATE.earnings); revealPanels(views.earnings);
+    sweepCharts(() => renderEarnings(STATE.earnings)); revealPanels(views.earnings);
     loadEarningsBrief(STATE.ticker); return;
   }
   if (!silent) beginLoad(views.earnings, `earnings data for ${STATE.ticker}`);

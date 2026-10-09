@@ -18,6 +18,10 @@ ROW_ALIASES = {
     "revenue": ("Total Revenue", "Operating Revenue"),
     "gross_profit": ("Gross Profit",),
     "operating_income": ("Total Operating Income As Reported", "Operating Income"),
+    # The statement's own EBITDA line, as Yahoo carries it. Not "Normalized
+    # EBITDA", which also strips unusual items and is a different figure. Banks
+    # and insurers report none, and the field is left empty rather than built.
+    "ebitda": ("EBITDA",),
     "net_income": (
         "Net Income Common Stockholders",
         "Net Income",
@@ -153,6 +157,7 @@ def analyse_financials(raw: Dict[str, Any]) -> Dict[str, Any]:
     ni_a = _pick_row(annual, "net_income")
     gp_a = _pick_row(annual, "gross_profit")
     oi_a = _pick_row(annual, "operating_income")
+    ebitda_a = _pick_row(annual, "ebitda")
     eps_a = _pick_row(annual, "diluted_eps")
 
     rev_q = _pick_row(quarterly, "revenue")
@@ -195,6 +200,7 @@ def analyse_financials(raw: Dict[str, Any]) -> Dict[str, Any]:
 
     gm = margin(gp_a, rev_a)
     om = margin(oi_a, rev_a)
+    em = margin(ebitda_a, rev_a)
     nm = margin(ni_a, rev_a)
     if gm is not None:
         notes.append("Gross margin {:.1f}%, operating margin {}, net margin {}.".format(
@@ -213,11 +219,11 @@ def analyse_financials(raw: Dict[str, Any]) -> Dict[str, Any]:
         "annual_periods": (annual or {}).get("periods"),
         "quarterly_periods": (quarterly or {}).get("periods"),
         "annual": {
-            "revenue": rev_a, "gross_profit": gp_a, "operating_income": oi_a,
+            "revenue": rev_a, "gross_profit": gp_a, "operating_income": oi_a, "ebitda": ebitda_a,
             "net_income": ni_a, "diluted_eps": eps_a, "free_cash_flow": fcf,
         },
         "quarterly": {"revenue": rev_q, "net_income": ni_q, "diluted_eps": eps_q},
-        "margins": {"gross_pct": gm, "operating_pct": om, "net_pct": nm},
+        "margins": {"gross_pct": gm, "operating_pct": om, "ebitda_pct": em, "net_pct": nm},
         "growth": {
             "revenue_yoy_pct": rev_growth,
             "net_income_yoy_pct": ni_growth,
