@@ -498,6 +498,20 @@ def auth_methods(user_id: str) -> Dict[str, Any]:
 # ------------------------------------------------------------- accounts page
 
 
+def _last_active(last_login: Optional[str], session_used: Optional[str]) -> Optional[str]:
+    """When the person last used the site, not only when they last signed in.
+
+    Asked for after "Last sign-in" read as stale: a remembered session lasts 30
+    days and slides forward on every visit (`touch_session`, from
+    /api/auth/me on each load), so a regular reader can go weeks without a new
+    sign-in. Their sessions' `last_used_at` is the visit. Signing out deletes
+    that session, so the later of the newest remaining session's use and the
+    last sign-in is what is known; both are `db.utcnow()` strings, which sort
+    as times."""
+    known = [t for t in (last_login, session_used) if t]
+    return max(known) if known else None
+
+
 def accounts_overview() -> Dict[str, Any]:
     """Everyone who has made an account, for the owner's Accounts page.
 
@@ -512,6 +526,7 @@ def accounts_overview() -> Dict[str, Any]:
     rows = db.rows(
         "SELECT u.id, u.email, u.first_name, u.last_name, u.email_verified, u.is_active, "
         "u.created_at, u.last_login_at, "
+        "(SELECT MAX(s.last_used_at) FROM sessions s WHERE s.user_id = u.id) AS session_used_at, "
         "EXISTS(SELECT 1 FROM user_passwords p WHERE p.user_id = u.id) AS has_password, "
         "(SELECT COUNT(*) FROM passkeys k WHERE k.user_id = u.id) AS passkeys "
         "FROM users u ORDER BY u.created_at DESC")
@@ -537,6 +552,7 @@ def accounts_overview() -> Dict[str, Any]:
             "is_active": bool(r["is_active"]),
             "created_at": r["created_at"],
             "last_login_at": r["last_login_at"],
+            "last_active_at": _last_active(r["last_login_at"], r["session_used_at"]),
             "methods": methods,
         })
     return {

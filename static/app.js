@@ -35563,12 +35563,18 @@ function accountRowHTML(a, zone) {
   const name = `${a.first_name || ''} ${a.last_name || ''}`.trim() || '(no name)';
   const joined = a.created_at ? accountStamp(a.created_at, zone) : '';
   const seen = a.last_login_at ? accountStamp(a.last_login_at, zone) : 'Never';
+  /* The last visit, which a remembered 30-day session never turns into a new
+     sign-in. Older servers do not send it; then the column says so rather than
+     repeating the sign-in time as if it were activity. */
+  const active = a.last_active_at ? accountStamp(a.last_active_at, zone)
+    : (a.last_active_at === null ? 'Never' : '\u2014');
   let status = a.email_verified ? 'Verified' : 'Not verified';
   if (!a.is_active) status = 'Deactivated';
   return `<tr>
     <td class="name ac-who"><span class="ac-name">${esc(name)}</span>
       <span class="ac-email">${esc(a.email || '').replace(/@/g, '<wbr>@').replace(/\./g, '.<wbr>')}</span></td>
     <td class="name">${esc(joined)}</td>
+    <td class="name">${esc(active)}</td>
     <td class="name">${esc(seen)}</td>
     <td class="name">${esc((a.methods || []).join(', ') || 'None')}</td>
     <td class="name">${esc(status)}</td>
@@ -35591,7 +35597,7 @@ function accountsHTML(data) {
      trackpad. */
   const table = list.length ? `<div class="table-scroll ac-scroll" tabindex="0" role="region"
       aria-label="Accounts table, scrolls sideways"><table class="data accounts-table">
-      <thead><tr><th>Person</th><th>Joined</th><th>Last sign-in</th>
+      <thead><tr><th>Person</th><th>Joined</th><th>Last active</th><th>Last sign-in</th>
         <th>Signs in with</th><th>Status</th></tr></thead>
       <tbody>${list.map((a) => accountRowHTML(a, zone)).join('')}</tbody>
     </table></div>` : '';
@@ -35599,7 +35605,9 @@ function accountsHTML(data) {
     <h2 tabindex="-1">Accounts</h2>
     <p class="sub">${esc(lead)}</p>
     ${table}
-    <p class="caveat">Newest first, times in your time zone. Only this account can open
+    <p class="caveat">Newest first, times in your time zone. Last active is the last time
+      the person opened the site while signed in; a remembered session can last 30 days
+      without a new sign-in, which is why the two differ. Only this account can open
       this page. Passwords and sign-in tokens are never shown or sent here.</p>
   </div>`;
 }
