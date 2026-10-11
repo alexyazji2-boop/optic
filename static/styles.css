@@ -19076,3 +19076,17 @@ footer.legal > .legal-full {
 .tk-sizing > summary:hover { color: var(--ink); }
 .tk-sizing > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-xs); }
 .chat-desc { margin: 0; padding: var(--space-1) var(--space-4) var(--space-2); font-size: var(--t-caption); line-height: 1.45; color: var(--ink-muted); border-bottom: 1px solid var(--border); }
+
+/* The Optic Score: short- and long-term conviction on one 0-100 scale. */
+.osc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-4); }
+.osc-tile { padding: var(--space-3) var(--space-4); background: var(--raised); border: 1px solid var(--border); border-radius: var(--r-md); min-width: 0; }
+.osc-label { margin: 0; font-size: var(--t-small); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-2); }
+.osc-horizon { margin-left: var(--space-1); font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--ink-muted); }
+.osc-num { margin: var(--space-1) 0 0; font: 600 var(--t-d1)/1.1 var(--display); font-variant-numeric: tabular-nums; color: var(--ink); }
+.osc-num.up { color: var(--pos); }
+.osc-num.down { color: var(--neg); }
+.osc-of { margin-left: 2px; font-size: var(--t-base); font-weight: 500; color: var(--ink-muted); }
+.osc-none { color: var(--ink-muted); }
+.osc-words { margin: var(--space-1) 0 0; font-size: var(--t-base); font-weight: 600; color: var(--ink); }
+.osc-basis { margin: var(--space-2) 0 0; font-size: var(--t-small); line-height: 1.5; color: var(--ink-muted); }
+.osc .lt-conflict { margin-top: var(--space-4); }

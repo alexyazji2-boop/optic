@@ -16217,6 +16217,88 @@ function ovMethodHTML(d) {
   </section>`;
 }
 
+/* The Optic Score: both conviction readings on one 0-100 scale, on the
+ * Overview. Asked for as "give a conviction score for short term and long
+ * term in the overview ... from 0-100".
+ *
+ * Short term is the swing verdict's composite (-100 to +100), from the
+ * ticker payload already here. Long term is the long-term model's conviction
+ * score, which comes with /api/longterm/{T}: no model call, fetched once per
+ * symbol into its own slot (STATE.ovLong) rather than STATE.long, so the
+ * Investing tab still runs its own first load (P/E history and the rest).
+ * Both go through score100 / longScore100, the same mapping the Options and
+ * Investing headlines use, so the three pages show one number for one
+ * reading: the worst possible is 0, no edge is 50, the best is 100. */
+function ovScoreTile(label, horizon, n, words, basis, view, viewLabel) {
+  const cls = n === null ? '' : n >= 55 ? ' up' : n <= 45 ? ' down' : '';
+  return `<div class="osc-tile">
+    <p class="osc-label">${esc(label)} <span class="osc-horizon">${esc(horizon)}</span></p>
+    <p class="osc-num${cls}">${n === null ? '<span class="osc-none">—</span>'
+    : `${fmt(n, 0)}<span class="osc-of">/100</span>`}</p>
+    ${words ? `<p class="osc-words">${esc(words)}</p>` : ''}
+    <p class="osc-basis">${esc(basis)}</p>
+    <p class="ov-fine"><button type="button" class="ov-linkbtn" data-sec-view="${esc(view)}"
+      data-sec-sym="${esc(STATE.ticker || '')}">${esc(viewLabel)}</button></p>
+  </div>`;
+}
+
+function ovScoreHTML(d) {
+  const sym = STATE.ticker || '';
+  const v = d.verdict || {};
+  const p = d.pulse || {};
+  const short = score100(v.composite_score);
+  const shortWords = [cap(String(p.stance || v.stance || '')), convictionWords(p.conviction || v.conviction)]
+    .filter(Boolean).join(' · ');
+  const lt = STATE.ovLong && STATE.ovLong.ticker === sym ? STATE.ovLong : null;
+  const h = lt && lt.holding;
+  let long = null;
+  let longWords = '';
+  let longNote = '';
+  if (!lt) longNote = 'Working out the long-term score…';
+  else if (lt.error || !h || h.error) longNote = `The long-term score is not available: ${(h && h.error) || lt.error || 'no data'}.`;
+  else {
+    long = longScore100(h, h.conviction_score);
+    longWords = cap([h.conviction ? convictionWords(h.conviction) : '', cap((h.long_trend || {}).phase || '')]
+      .filter(Boolean).join(' · '));
+  }
+  let apart = '';
+  if (short !== null && long !== null && Math.abs(short - long) >= 25) {
+    apart = short > long
+      ? 'The two horizons disagree: the recent signals are stronger than the long-run record. A short-term lift inside a weaker long-term picture can fade.'
+      : 'The two horizons disagree: the long-run record is stronger than the recent signals. A strong long-term picture can still go through weak weeks.';
+  }
+  return `<section class="ov-sec osc" id="ov-score" aria-labelledby="ov-score-h">
+    <h2 class="ov-q" id="ov-score-h">Optic Score</h2>
+    <div class="osc-grid">
+      ${ovScoreTile('Short term', 'next few weeks', short, shortWords,
+    'Chart trend, options positioning, news tone and the economy, weighted into one reading.', 'swing', 'See how it is scored on Options')}
+      ${ovScoreTile('Long term', 'years', long, longWords || longNote,
+    'Long-run price trend, five-year return against the S&P 500, return for the risk taken, valuation, distance from the high and the dividend.', 'long', 'See how it is scored on Investing')}
+    </div>
+    ${apart ? `<p class="lt-conflict">${esc(apart)}</p>` : ''}
+    <p class="ov-fine">50 means no edge either way; above 50 the inputs lean favourable, below 50 unfavourable, and 100 is every input at its best. Each score is a rule-based summary of past data, not a forecast, a price target or a recommendation to buy or sell.</p>
+  </section>`;
+}
+
+/* The long-term score for the Overview, once per symbol. Free: the long-term
+ * model reads prices, statements and keyword-scored news, and calls no model. */
+async function loadOverviewLongScore() {
+  const sym = STATE.ticker;
+  if (!sym || (STATE.ovLong && STATE.ovLong.ticker === sym)) return;
+  let data;
+  try {
+    // Reuse the Investing tab's payload when it is already here.
+    data = STATE.long && STATE.long.ticker === sym ? STATE.long
+      : await getJSON(`/api/longterm/${encodeURIComponent(sym)}?indices=false`);
+  } catch (err) {
+    data = { error: err.message };
+  }
+  if (STATE.ticker !== sym) return;
+  STATE.ovLong = { ticker: sym, holding: data.holding || null, error: data.error || null };
+  const host = document.getElementById('ov-score');
+  if (host && STATE.view === 'overview' && STATE.swing) host.outerHTML = ovScoreHTML(STATE.swing);
+}
+
 function renderOverviewView() {
   const d = STATE.swing || {};
   const q = d.quote || {};
@@ -16247,6 +16329,7 @@ function renderOverviewView() {
     <div class="ov-simple">
     ${ovAboutHTML()}
     <div id="ov-takeaways">${ovTakeawaysHTML(d, biz, price, factors)}</div>
+    ${d.verdict ? ovScoreHTML(d) : ''}
     ${!biz && (fin.note || fin.notes) ? `<p class="caveat">${esc(fin.note || fin.notes)}</p>` : ''}
     ${overviewChartHTML(d)}
     ${ess ? `<section class="ov-sec" aria-labelledby="ov-ess-h">
@@ -16303,6 +16386,7 @@ function renderOverviewView() {
   mountOverviewChart(d);
   ovFitAbout();
   loadFairValue();
+  loadOverviewLongScore();
 }
 
 /* ------------------------------------------------------------ company panel */
