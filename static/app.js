@@ -5135,9 +5135,9 @@ function renderHomeStatus(health) {
 const MOBILE_TABS = [
   { view: 'home', label: 'Home', nav: 'home' },
   // The desktop's word for it, so a reader learns the product once.
-  { view: 'overview', label: 'Research', nav: 'security' },
+  { view: 'overview', label: 'Dossier', nav: 'security' },
   { group: 'market', label: 'Markets', nav: 'market' },
-  { group: 'discover', label: 'Find stocks', nav: 'discover' },
+  { group: 'discover', label: 'Discover', nav: 'discover' },
   { more: true, label: 'More', nav: 'more' },
 ];
 
@@ -10075,8 +10075,8 @@ const PALETTE_PLACES = [
   { view: 'watchlist', label: 'Watchlist', terms: 'watchlist watching follow list' },
   { view: 'alerts', label: 'Alerts', terms: 'alerts alarms notifications fired' },
   { view: 'compare', label: 'Compare', terms: 'compare versus vs side by side' },
-  { view: 'overview', label: 'Company research: Overview',
-    terms: 'overview dossier company research ticker security summary company snapshot' },
+  { view: 'overview', label: 'Dossier: Overview',
+    terms: 'overview dossier ticker security summary company snapshot' },
   { view: 'chart', label: 'Chart', terms: 'chart charting drawings indicators advanced' },
   { view: 'financials', label: 'Financials',
     terms: 'financials revenue margin cash ownership short interest statements' },
@@ -14008,7 +14008,7 @@ function securityHeader(view, opts = {}) {
       <strong>${esc(sym)}</strong>${has ? ` <span class="sec-mini-px">${fmt(price, 2)}</span>
       <span class="sec-chg ${dir}">${Number.isFinite(pct) ? `${pct >= 0 ? '+' : ''}${fmt(pct, 2)}%` : ''}</span>` : ''}
     </span>` : ''}
-    <nav class="sec-tabs" role="tablist" aria-label="Company research sections">${tabs}</nav>
+    <nav class="sec-tabs" role="tablist" aria-label="Dossier sections">${tabs}</nav>
     ${/* On every facet but Charting, compact included: Options drops the
          identity row because its price card says it, but the actions are not
          on that card. Charting has its own toolbar and every row there comes
@@ -40302,7 +40302,7 @@ function pulseSubject() {
   }
   if (['tracker', 'paper', 'roth'].includes(v)) return { kind: 'portfolio', label: VIEW_NAMES[v] || 'Positions' };
   if (['watchlist', 'alerts'].includes(v)) return { kind: 'watchlist', label: 'Your watchlist' };
-  if (['scan', 'explore', 'insiders', 'analysts'].includes(v)) return { kind: 'screen', label: VIEW_NAMES[v] || 'Find stocks' };
+  if (['scan', 'explore', 'insiders', 'analysts'].includes(v)) return { kind: 'screen', label: VIEW_NAMES[v] || 'Discover' };
   return { kind: 'market', label: 'The market today' };
 }
 
@@ -41993,7 +41993,7 @@ const NAV_GROUPS = [
    *
    * The duplication is the cheaper problem. It costs width on a rail that has
    * room for it; the flattening cost a click on every navigation. */
-  { id: 'security', label: 'Company research', views: SECURITY_VIEWS },
+  { id: 'security', label: 'Dossier', views: SECURITY_VIEWS },
   /* Its own section again.
    *
    * It was folded into the Dossier group to get the top strip from eight
@@ -42013,7 +42013,7 @@ const NAV_GROUPS = [
    * They answer different questions and are still two separate pages -- what
    * changed is that they stopped each costing a slot in the top row for it.
    * Both are "I do not have a symbol yet", which is one destination. */
-  { id: 'discover', label: 'Find stocks', views: ['explore', 'scan', 'insiders', 'analysts'] },
+  { id: 'discover', label: 'Discover', views: ['explore', 'scan', 'insiders', 'analysts'] },
   /* The group is "Positions"; the view inside it keeps the name "Optic's
    * Positions". Both are deliberate.
    *
@@ -42100,42 +42100,38 @@ function navGroupLabel(group) {
 const SUB_LABELS = {
   overview: 'Overview', chart: 'Chart', financials: 'Financials', news: 'News',
   swing: 'Options', earnings: 'Earnings', compare: 'Compare', long: 'Investing',
-  brief: 'Daily read', market: 'Macro', indices: 'Indices',
+  brief: 'Read', market: 'Macro', indices: 'Indices',
   watchlist: 'Watchlist', alerts: 'Alerts',
-  explore: 'Explore', scan: 'Screeners', insiders: 'Insiders', analysts: 'Analysts',
+  explore: 'Explore', scan: 'Scan', insiders: 'Insiders', analysts: 'Analysts',
   reports: 'Problem Reports', usage: 'Claude usage', accounts: 'Accounts',
   tracker: "Optic Portfolio", paper: 'Paper Desk', roth: 'Retirement',
 };
 
-/* Each page's title and, after the first full stop, what it is for, in the
- * words of the task rather than the machinery. Simplify pass (2026-10-11):
- * "Greeks, gamma, flow and strategies" described Options to people who
- * already knew what it held, which is nobody arriving for the first time. */
 const SUB_TITLES = {
-  overview: 'Overview. What the company does, how it is doing and what to look at next',
-  chart: 'Chart. Full-height price chart, with indicators and drawings when you want them',
-  financials: 'Financials. Revenue, profit, cash, debt and who owns the shares',
-  news: 'News. Recent headlines about this company, tagged by topic and tone',
-  swing: "Options. How traders are positioned in this stock's options, and the short-term setup",
-  earnings: 'Earnings. The next report, what is expected, and how past reports went',
-  compare: 'Compare. Two to four stocks side by side',
+  overview: 'Overview. The whole dossier on one page',
+  chart: 'Chart. Full-height chart, overlays and drawings',
+  financials: 'Financials. Revenue, margins, cash, ownership and short interest',
+  news: 'News. Headlines for this company, scored and tagged',
+  swing: 'Options. Greeks, gamma, flow and strategies, with the swing setup and levels',
+  earnings: 'Earnings analysis and the pre-earnings brief',
+  compare: 'Compare two to four tickers side by side',
   instrument: 'Full history for one cross-asset instrument',
-  long: 'Investing. Valuation, long-term returns and the case for holding',
-  brief: "Daily read. Optic's daily summary of markets, the economy and world news",
-  market: 'Macro. The economy, interest rates and which sectors are leading',
-  indices: 'Indices. The long-run trend of the major stock market indices',
+  long: 'Investing. Valuation history, drawdown, accumulation zones and conviction',
+  brief: "Optic's Read. The daily market, macro and world summary",
+  market: 'Macro regime and sector rotation',
+  indices: 'Major index long-run cycle',
   watchlist: 'Watchlist. What changed on the names you follow',
   alerts: 'Alerts. What fired, and why it was worth telling you',
-  explore: "Explore. Browse sectors, themes and today's biggest movers, with no symbol in mind",
-  insiders: 'Insiders. Trades disclosed by company executives and members of Congress',
-  analysts: 'Analysts. Rating and price-target changes by firm, newest first',
+  explore: 'Explore. Browse sectors, themes and what is moving, with no symbol',
+  insiders: 'Insiders. Company Form 4s and what members of the House disclosed',
+  analysts: 'Analysts. Rating and price-target actions by firm, newest first',
   reports: 'Problem Reports. What readers have told you is broken',
   usage: 'Claude usage. What the model has cost, by feature',
   accounts: 'Accounts. Everyone who has signed up, newest first',
-  paper: 'Paper Desk. Practise with your own pretend trades, priced by the terminal',
-  scan: 'Screeners. Ready-made lists of stocks that match a set of rules',
-  tracker: "Optic Portfolio. The terminal's own practice record, with no real money",
-  roth: 'Retirement. A rules-based example portfolio for a Roth IRA, to compare with your own',
+  paper: 'Paper Desk. Your own book, entered by hand and priced by the terminal',
+  scan: 'Scan. Named screens over the ranked universe',
+  tracker: "Optic Portfolio. The terminal's own paper-traded record",
+  roth: 'Retirement. A rules-based model allocation to compare your own against',
 };
 
 /** Which group a view belongs to. */

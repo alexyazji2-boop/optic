@@ -94,11 +94,8 @@ def test_the_tab_is_named_for_its_contents():
     terminal is making, so the prefix says whose. A dossier is a container of
     facts about someone else's company, so there was nothing for it to resolve,
     and a nav strip pays for the extra word on every render."""
-    # Renamed to "Company research" in the simplify pass (2026-10-11): readers
-    # with finance backgrounds still had to be told what a dossier held, and
-    # the task is researching a company. It still names the contents.
     label = re.search(r"\{ id: 'security', label: '([^']+)'", APP_JS).group(1)
-    assert label == "Company research", label
+    assert label == "Dossier", label
 
 
 def test_the_missing_symbol_copy_is_left_alone():

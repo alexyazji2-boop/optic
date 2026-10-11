@@ -44,7 +44,7 @@ def test_the_bottom_bar_is_four_places_and_more():
     tabs = APP[APP.index("const MOBILE_TABS = ["):]
     tabs = tabs[:tabs.index("\n];")]
     labels = re.findall(r"label: '([^']+)'", tabs)
-    assert labels == ["Home", "Research", "Markets", "Find stocks", "More"]
+    assert labels == ["Home", "Dossier", "Markets", "Discover", "More"]
     assert "{ group: 'market'" in tabs and "{ group: 'discover'" in tabs and "{ more: true" in tabs
 
 
