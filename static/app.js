@@ -16149,17 +16149,17 @@ function ovFactorsHTML(d, factors) {
       aria-label="Evidence for: ${esc(f.text)}">Evidence</button>` : ''}</li>`;
   const drivers = ovDrivers(d);
   return `<section class="ov-sec" id="ov-drivers" aria-labelledby="ov-drv-h">
-    <h2 class="ov-q" id="ov-drv-h">What is driving the stock, and what could go wrong?</h2>
+    <h2 class="ov-q" id="ov-drv-h">Bull case and bear case</h2>
     <div class="ov-cols">
       <div>
-        <h3 class="ov-h3">In its favour</h3>
+        <h3 class="ov-h3">Bull case</h3>
         ${factors.pos.length ? `<ul class="ov-list is-pos">${factors.pos.map((f) => item(f, false)).join('')}</ul>`
-    : '<p class="ov-none">Nothing in the data Optic holds stands out as a clear positive.</p>'}
+    : '<p class="ov-none">No bull-case point stands out in the data Optic holds.</p>'}
       </div>
       <div>
-        <h3 class="ov-h3">Main risks</h3>
+        <h3 class="ov-h3">Bear case</h3>
         ${factors.neg.length ? `<ul class="ov-list is-neg">${factors.neg.map((f) => item(f, true)).join('')}</ul>`
-    : '<p class="ov-none">No specific risk flags in the data Optic holds. That is not the same as no risk: every stock can fall.</p>'}
+    : '<p class="ov-none">No bear-case point stands out in the data Optic holds. That is not the same as no risk: every stock can fall.</p>'}
       </div>
     </div>
     ${drivers.length ? `<details class="ov-ev ov-drivers"><summary>What has been moving it recently</summary>
