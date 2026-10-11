@@ -23,10 +23,10 @@
      closes up into a grey smudge at 16px, and a transparent icon inverts itself
      between light and dark browser chrome. The PNGs exist because Apple's
      touch icon and the Android install prompt do not read SVG. -->
-<link rel="icon" href="/icon.svg?v=513" type="image/svg+xml">
-<link rel="icon" href="/icon-192.png?v=513" sizes="192x192" type="image/png">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=513">
-<link rel="manifest" href="/site.webmanifest?v=513">
+<link rel="icon" href="/icon.svg?v=514" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png?v=514" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=514">
+<link rel="manifest" href="/site.webmanifest?v=514">
 <!-- This is what keeps the site out of search results, and robots.txt no longer
      duplicates it. The two are honoured at different stages and only one of
      them can do this job: a crawler told not to fetch a page never sees the
@@ -61,7 +61,7 @@
      as the other three. Part of the Asset restyle; see the block at the foot of
      styles.css, which is the whole of that change and the whole of its undo. -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/host-grotesk/index.css">
-<link rel="stylesheet" href="styles.css?v=513">
+<link rel="stylesheet" href="styles.css?v=514">
 <!-- The reader's size preference, applied before the first paint.
      Inline and synchronous on purpose: app.js is loaded at the end of the body,
      so anything done there runs after the page has already been laid out once,
@@ -240,7 +240,7 @@
        (loading / guest / user) specifically to avoid it. -->
   <div class="account-slot topbar-right" id="account-slot"></div>
 
-  <button class="btn primary" id="chat-toggle"><span class="pulse-mark" id="pulse-mark-btn"></span>&nbsp;Pulse</button>
+  <button class="btn primary" id="chat-toggle" title="Ask Pulse, Optic's assistant, about the stock or market on screen"><span class="pulse-mark" id="pulse-mark-btn"></span>&nbsp;Ask Pulse</button>
 </header>
 
 <div class="statusline" id="statusline">
@@ -262,7 +262,7 @@
        Overview, Financials and News are new sections; swing, earnings, chart and
        long keep their own ids so every existing loader and deep link still
        resolves. -->
-  <section class="view" id="view-overview" role="tabpanel" aria-label="Dossier overview"></section>
+  <section class="view" id="view-overview" role="tabpanel" aria-label="Company research overview"></section>
   <section class="view" id="view-swing" role="tabpanel" aria-label="Options. Swing setup, levels, greeks and flow"></section>
   <section class="view" id="view-financials" role="tabpanel" aria-label="Company financials"></section>
   <section class="view" id="view-news" role="tabpanel" aria-label="Company news"></section>
@@ -475,7 +475,7 @@
 <!-- Before app.js: it exposes window.OpticAuth, which app.js reads at load to
      decide whether the watchlist and the saved research come from the account or
      from this browser. -->
-<script src="auth.js?v=513"></script>
-<script src="app.js?v=513"></script>
+<script src="auth.js?v=514"></script>
+<script src="app.js?v=514"></script>
 </body>
 </html>

@@ -646,9 +646,9 @@ const HEADER_DEFS = {
   '\u0394 to break': 'How far price is from the level it would have to clear for the short-term trend to turn up. Negative means it is still underneath.',
   '\u0394 to breakdown': 'How far price is above the level that would turn the short-term trend down. Negative means it has already broken.',
   'market regime score': 'One number for what kind of market this is right now. Is the tape helping a position or working against it. Built from index trend, sector breadth, the VIX, whether small caps are confirming, and how many sectors are participating.',
-  'vex. dealer vanna exposure': 'How much dealer hedging demand changes when implied volatility moves, rather than when price moves. Gamma answers "what if the stock moves"; vanna answers "what if the market re-prices risk".',
+  'options positioning: dealer vanna (vex)': 'How much dealer hedging demand changes when implied volatility moves, rather than when price moves. Gamma answers "what if the stock moves"; vanna answers "what if the market re-prices risk".',
   'cex. dealer charm exposure': 'How much dealer hedging demand changes from time passing alone, with neither price nor volatility moving. It builds into expiry, which is why the last days of an options cycle have a drift of their own.',
-  'gex. dealer gamma exposure': 'An estimate of how much stock market-makers must buy or sell to stay hedged as price moves. It hints at whether the tape will feel calm and range-bound or fast and trending.',
+  'options positioning: dealer gamma (gex)': 'An estimate of how much stock market-makers must buy or sell to stay hedged as price moves. It hints at whether the tape will feel calm and range-bound or fast and trending.',
   'call vs put flow': "Whether today's options activity leans toward bullish bets (calls) or bearish bets (puts). A read on positioning, not a promise of direction.",
   'net premium by strike': 'How much money is actually being spent at each strike price, showing where traders are placing real bets rather than just quoting.',
   'buy calls / puts': 'Straightforward directional trades. Buying a call to bet the stock rises, or a put to bet it falls. Simple, but all the premium is at risk.',
@@ -5135,9 +5135,9 @@ function renderHomeStatus(health) {
 const MOBILE_TABS = [
   { view: 'home', label: 'Home', nav: 'home' },
   // The desktop's word for it, so a reader learns the product once.
-  { view: 'overview', label: 'Dossier', nav: 'security' },
+  { view: 'overview', label: 'Research', nav: 'security' },
   { group: 'market', label: 'Markets', nav: 'market' },
-  { group: 'discover', label: 'Discover', nav: 'discover' },
+  { group: 'discover', label: 'Find stocks', nav: 'discover' },
   { more: true, label: 'More', nav: 'more' },
 ];
 
@@ -10075,8 +10075,8 @@ const PALETTE_PLACES = [
   { view: 'watchlist', label: 'Watchlist', terms: 'watchlist watching follow list' },
   { view: 'alerts', label: 'Alerts', terms: 'alerts alarms notifications fired' },
   { view: 'compare', label: 'Compare', terms: 'compare versus vs side by side' },
-  { view: 'overview', label: 'Dossier: Overview',
-    terms: 'overview dossier ticker security summary company snapshot' },
+  { view: 'overview', label: 'Company research: Overview',
+    terms: 'overview dossier company research ticker security summary company snapshot' },
   { view: 'chart', label: 'Chart', terms: 'chart charting drawings indicators advanced' },
   { view: 'financials', label: 'Financials',
     terms: 'financials revenue margin cash ownership short interest statements' },
@@ -12625,7 +12625,7 @@ function renderSwing(d) {
 
   <div class="grid c2 gap">
     <div class="panel span2">
-      <h2>${hg('GEX. Dealer gamma exposure')}${askPulse('gex')}</h2>
+      <h2>${hg('Options positioning: dealer gamma (GEX)')}${askPulse('gex')}</h2>
       <p class="sub">Net ${(gex.totals || {}).net_gex >= 0 ? '+' : ''}${usdCompact((gex.totals || {}).net_gex)} of dealer delta per 1% move.
         Regime: <strong>${esc((gex.regime || {}).state || '')}</strong>.
         ${(gex.regime || {}).flip_point ? `Gamma flip at <strong>${fmt(gex.regime.flip_point, 2)}</strong> (${fmtPct((gex.regime || {}).flip_distance_pct, 2)} away).` : ''}</p>
@@ -13720,12 +13720,42 @@ function secDataStateHTML(q) {
     <span class="dot" aria-hidden="true"></span>${esc(label)}${stamp ? ` · ${esc(stamp)}` : ''}</span>`;
 }
 
+/* "Show advanced analysis": the one visible control for how much of the
+ * specialist machinery a page shows open. It is the reader's Optic Mode
+ * level, read as a switch (OpticKnowledge.setSpecialist), so there is still one
+ * preference: the switch and the Optic Mode menu in Settings and Pulse can
+ * never disagree. Off is the default, because the default rung is Financially
+ * Literate. Every panel stays on the page either way; off only means the
+ * specialist ones start folded and the plain-language summaries lead. */
+const ADV_VIEWS = new Set(['overview', 'swing', 'long', 'earnings', 'financials', 'news',
+  'market', 'brief', 'indices', 'tracker', 'roth', 'explore', 'scan', 'compare']);
+
+function advancedOn() {
+  return !!(window.OpticKnowledge && window.OpticKnowledge.specialistOn
+    && window.OpticKnowledge.specialistOn());
+}
+
+function advancedToggleHTML() {
+  const on = advancedOn();
+  return `<button type="button" class="adv-toggle" role="switch" aria-checked="${on}" data-adv-toggle
+    title="Opens the specialist panels, full terminology and methodology on every page. Same setting as Optic Mode in Settings.">
+    <span class="adv-track" aria-hidden="true"><span class="adv-knob"></span></span>
+    <span class="adv-label">Show advanced analysis</span></button>`;
+}
+
+/** Every copy of the switch, after the level moves from anywhere. */
+function syncAdvancedToggles() {
+  const on = String(advancedOn());
+  document.querySelectorAll('[data-adv-toggle]').forEach((b) => b.setAttribute('aria-checked', on));
+}
+
 /* The three things a reader does to a security from anywhere in the Dossier:
  * keep it, be told about it, and ask about it. They were each reachable, from
  * three different pages; now they sit on the header that names the symbol. */
 function secActionsHTML(sym) {
   const watched = watchList().includes(String(sym).toUpperCase());
   return `<div class="sec-actions" role="group" aria-label="Actions for ${esc(sym)}">
+    ${advancedToggleHTML()}
     <button type="button" class="btn sm sec-act${watched ? ' on' : ''}" data-sec-watch="${esc(sym)}"
       aria-pressed="${watched}" title="${watched ? 'Remove from your watchlist' : 'Add to your watchlist'}"
       ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.6 2.5 5.3 5.7.7-4.2 3.9 1.1 5.7L12 16.4l-5.1 2.8L8 13.5 3.8 9.6l5.7-.7Z"/></svg
@@ -13920,7 +13950,7 @@ function securityHeader(view, opts = {}) {
       <strong>${esc(sym)}</strong>${has ? ` <span class="sec-mini-px">${fmt(price, 2)}</span>
       <span class="sec-chg ${dir}">${Number.isFinite(pct) ? `${pct >= 0 ? '+' : ''}${fmt(pct, 2)}%` : ''}</span>` : ''}
     </span>` : ''}
-    <nav class="sec-tabs" role="tablist" aria-label="Dossier sections">${tabs}</nav>
+    <nav class="sec-tabs" role="tablist" aria-label="Company research sections">${tabs}</nav>
     ${/* On every facet but Charting, compact included: Options drops the
          identity row because its price card says it, but the actions are not
          on that card. Charting has its own toolbar and every row there comes
@@ -15618,12 +15648,506 @@ function mountOverviewChart(d) {
   }
 }
 
+/* ---- The Overview in five questions ---------------------------------------
+ *
+ * "Complex analysis, presented simply." Readers, finance graduates among
+ * them, called the old Overview valuable and overwhelming. It opened on the
+ * short-term signal score: a stance, five factor bars and a paragraph about
+ * out-of-sample skill. Then came eighteen statistics, a chart and six facet
+ * cards, and nothing on the page said what the company does.
+ *
+ * So the page now answers five questions in order: what the company does, how
+ * the business is performing, what is driving the stock, what the main risks
+ * are, and what to look at next. Every sentence below is built from the
+ * /api/ticker and /api/session payloads the Dossier already loads, by fixed
+ * rules, with no model call. Where the data is missing or the readings
+ * disagree, the page says so instead of picking a side.
+ *
+ * Business figures and the share price are kept apart on purpose. "Revenue
+ * grew" and "the stock rose" are different claims, and running them together
+ * is how a page implies one caused the other.
+ *
+ * Nothing was removed. The signal score, all eighteen statistics, the facet
+ * cards and the full headlines sit under "Advanced research" at the foot of
+ * the page. That section opens by itself at the Advanced and Professional
+ * levels of the reader's own knowledge setting (OpticKnowledge). */
+
+/* Plain direction words for a percentage change. Under 1% either way counts as
+ * flat, because "grew 0.3%" read as growth by most readers. */
+function ovMove(x, up = 'grew', down = 'fell', flat = 'was roughly flat') {
+  if (!Number.isFinite(x)) return '';
+  if (x >= 1) return up;
+  if (x <= -1) return down;
+  return flat;
+}
+
+/* How the business is doing: the latest fiscal year from the statements,
+ * with the latest quarter beside it when the two disagree. */
+function ovBusinessRead(d) {
+  const fn = ((d.company || {}).financials) || {};
+  const q = d.quote || {};
+  const g = fn.growth || {};
+  const m = fn.margins || {};
+  const period = (fn.annual_periods || [])[0];
+  const fy = period ? `fiscal year to ${period}` : 'latest fiscal year';
+  const qRev = Number.isFinite(q.revenue_growth) ? q.revenue_growth * 100 : null;
+  let rev = fn.available ? g.revenue_yoy_pct : null;
+  const ni = fn.available ? g.net_income_yoy_pct : null;
+  const net = fn.available && Number.isFinite(m.net_pct) ? m.net_pct
+    : (Number.isFinite(q.profit_margin) ? q.profit_margin * 100 : null);
+  let basis = 'in the latest fiscal year';
+  if (!Number.isFinite(rev) && Number.isFinite(qRev)) {
+    rev = qRev;
+    basis = 'in the latest quarter, against the same quarter a year earlier';
+  }
+  if (!Number.isFinite(rev) && !Number.isFinite(net)) return null;
+
+  let text;
+  if (Number.isFinite(rev) && Number.isFinite(ni) && basis.startsWith('in the latest fiscal')) {
+    if (rev >= 1 && ni >= 1) text = 'Revenue and profit both grew in the latest fiscal year.';
+    else if (rev >= 1 && ni <= -1) text = 'Revenue grew in the latest fiscal year, but profit fell.';
+    else if (rev <= -1 && ni >= 1) text = 'Revenue fell in the latest fiscal year, but profit grew.';
+    else if (rev <= -1 && ni <= -1) text = 'Revenue and profit both fell in the latest fiscal year.';
+    else text = `Revenue ${ovMove(rev)} and profit ${ovMove(ni)} in the latest fiscal year.`;
+  } else if (Number.isFinite(rev)) {
+    text = `Revenue ${ovMove(rev)} ${basis}${Number.isFinite(net) && net < 0
+      ? ', and the company is not yet profitable' : ''}.`;
+  } else {
+    text = net >= 0 ? 'The company is profitable.' : 'The company is losing money.';
+  }
+
+  // The margin in cents per dollar, which needs no definition.
+  let why = '';
+  if (Number.isFinite(net)) {
+    why = net >= 0
+      ? `It kept about ${fmt(net, 0)} cents of profit from each dollar of sales.`
+      : `It lost about ${fmt(-net, 0)} cents on each dollar of sales.`;
+  }
+  // Annual and quarterly growth pointing in different directions.
+  let conflict = '';
+  if (basis.startsWith('in the latest fiscal') && Number.isFinite(rev) && Number.isFinite(qRev)
+      && ((rev >= 1 && qRev <= -1) || (rev <= -1 && qRev >= 1))) {
+    conflict = `The latest quarter points the other way: revenue ${qRev >= 0 ? 'rose' : 'fell'} ${
+      fmt(Math.abs(qRev), 1)}% against the same quarter a year earlier. Annual figures move slowly, so a turn shows in the quarters first.`;
+  }
+  const evidence = [];
+  if (fn.available && Number.isFinite(g.revenue_yoy_pct)) evidence.push(['Revenue growth, ' + fy, fmtPct(g.revenue_yoy_pct, 1)]);
+  if (fn.available && Number.isFinite(ni)) evidence.push(['Net income growth, ' + fy, fmtPct(ni, 1)]);
+  if (fn.available && !Number.isFinite(ni) && Number.isFinite(g.revenue_yoy_pct)) {
+    evidence.push(['Net income growth', 'Not meaningful: the earlier year was a loss or is missing']);
+  }
+  if (Number.isFinite(net)) evidence.push([fn.available && Number.isFinite(m.net_pct) ? 'Net margin, ' + fy : 'Profit margin, 12 months', fmt(net, 1) + '%']);
+  if (Number.isFinite(qRev)) evidence.push(['Revenue, latest quarter against a year earlier', fmtPct(qRev, 1)]);
+  const tone = Number.isFinite(rev) && rev >= 1 && (!Number.isFinite(ni) || ni >= 1) && (!Number.isFinite(net) || net > 0) ? 'good'
+    : Number.isFinite(rev) && rev <= -1 && (!Number.isFinite(ni) || ni <= -1) ? 'bad' : 'mixed';
+  return { text, why, conflict, evidence, tone,
+    source: fn.available ? "The company's annual statements and latest quarter, via Yahoo Finance." : 'Yahoo Finance.' };
+}
+
+/* How the share price has behaved: the year, the last three months, and the
+ * distance from the year's highest close. About the stock, not the business. */
+function ovPriceRead(d) {
+  const { dates, close } = overviewSeries(d);
+  if (close.length < 20) return null;
+  const last = close[close.length - 1];
+  const yr = (last / close[0] - 1) * 100;
+  const span = close.length >= OV_SESSIONS - 12 ? 'over the past year' : `over the last ${fmt(close.length, 0)} sessions`;
+  const m3 = close.length > 64 ? (last / close[close.length - 64] - 1) * 100 : null;
+  const off = (last / Math.max(...close) - 1) * 100;
+  const yrWords = Math.abs(yr) < 2 ? `little changed ${span}` : `${yr >= 0 ? 'up' : 'down'} ${fmt(Math.abs(yr), 0)}% ${span}`;
+  let text;
+  if (Number.isFinite(m3) && yr >= 5 && m3 <= -5) {
+    text = `The share price is ${yrWords}, but has fallen ${fmt(Math.abs(m3), 0)}% over the last three months.`;
+  } else if (Number.isFinite(m3) && yr <= -5 && m3 >= 5) {
+    text = `The share price is ${yrWords}, but has risen ${fmt(m3, 0)}% over the last three months.`;
+  } else {
+    text = `The share price is ${yrWords}${off > -3 ? ', close to its highest close of that period'
+      : `, ${fmt(Math.abs(off), 0)}% below its highest close`}.`;
+  }
+  const evidence = [[`Change ${span}`, fmtPct(yr, 1)]];
+  if (Number.isFinite(m3)) evidence.push(['Change over the last three months', fmtPct(m3, 1)]);
+  evidence.push(['Below the highest close of the period', off > -0.05 ? 'At it' : fmtPct(off, 1)]);
+  const q = d.quote || {};
+  if (Number.isFinite(q.fifty_two_low) && Number.isFinite(q.fifty_two_high)) {
+    evidence.push(['52-week range', `${usd(q.fifty_two_low)} to ${usd(q.fifty_two_high)}`]);
+  }
+  // The explanation is the recent stretch, unless the headline already used it.
+  const why = Number.isFinite(m3) && !text.includes('three months')
+    ? `Over the last three months it is ${Math.abs(m3) < 2 ? 'little changed' : `${m3 >= 0 ? 'up' : 'down'} ${fmt(Math.abs(m3), 0)}%`}.`
+    : '';
+  return { text, why, evidence, yr, m3, off, through: dates[dates.length - 1],
+    tone: yr >= 2 ? 'good' : yr <= -2 ? 'bad' : 'mixed' };
+}
+
+/* What has been moving the stock, as far as the data can say. Each line is
+ * hedged in its own words: the news is what was published, the comparison is
+ * arithmetic, and the signal read is Optic's model. */
+function ovDrivers(d) {
+  const out = [];
+  const story = (d.digest || {}).story;
+  if (story && story.title) {
+    out.push({ kind: 'News', text: story.title, note: [story.publisher, story.age_words].filter(Boolean).join(' · '),
+      view: 'news', url: story.url });
+  }
+  const sc = d.sector_confirm || {};
+  if (sc.available && sc.rs_vs_spy_label && sc.rs_vs_sector_label) {
+    out.push({ kind: 'Market and sector',
+      text: `Over the last ${fmt(sc.window_sessions || 21, 0)} sessions: ${String(sc.rs_vs_spy_label).replace('SPY', 'the S&P 500')}, and ${String(sc.rs_vs_sector_label).toLowerCase()} (${sc.etf_name || sc.sector || 'sector'}).`,
+      note: `Stock ${fmtPct(sc.stock_return_pct, 1)}, sector fund ${fmtPct(sc.etf_return_pct, 1)}, S&P 500 ${fmtPct(sc.spy_return_pct, 1)}.` });
+  }
+  const p = d.pulse || {};
+  const why = d.why || {};
+  const tops = (why.reasons || []).slice(0, 2).map((r) => r.headline).filter(Boolean);
+  if (p.stance) {
+    out.push({ kind: "Optic's short-term signals",
+      text: `${cap(String(p.stance))}${p.conviction ? `, ${convictionWords(p.conviction)}` : ''}${tops.length ? `. Strongest inputs: ${tops.join('; ').toLowerCase()}` : ''}.`,
+      note: 'A model reading of charts, options activity, news tone and the economy over weeks, not a forecast or a reason for today’s move.',
+      view: 'swing' });
+  }
+  const reg = ((d.gex || {}).regime) || {};
+  if (reg.state === 'negative' || reg.state === 'positive') {
+    out.push({ kind: 'Options positioning',
+      text: reg.state === 'negative' ? 'Options positioning may amplify price swings.' : 'Options positioning may dampen price swings.',
+      note: 'Based on an assumption about how options dealers hedge, not on positions anyone has reported.', view: 'swing' });
+  }
+  return out;
+}
+
+/* Fair value, once its own request has landed and only for this symbol. */
+function ovStars() {
+  const fv = STATE.fairValueFor === STATE.ticker ? STATE.fairValue : null;
+  const r = fv && fv.stars;
+  return r && r.available ? r : null;
+}
+
+/* What is working for the company and against it. Only what the payload
+ * shows, never a ranking of importance. */
+function ovFactors(d) {
+  const fn = ((d.company || {}).financials) || {};
+  const g = fn.growth || {};
+  const bs = fn.balance_sheet || {};
+  const q = d.quote || {};
+  const news = d.news || {};
+  const si = (d.company || {}).short_interest || {};
+  const ow = (d.company || {}).ownership || {};
+  const eh = (d.company || {}).earnings_history || {};
+  const sc = d.sector_confirm || {};
+  const price = ovPriceRead(d);
+  const stars = ovStars();
+  const net = Number.isFinite((fn.margins || {}).net_pct) ? fn.margins.net_pct
+    : (Number.isFinite(q.profit_margin) ? q.profit_margin * 100 : null);
+  const pos = [];
+  const neg = [];
+
+  if (fn.available && Number.isFinite(g.revenue_yoy_pct) && g.revenue_yoy_pct >= 1) {
+    pos.push({ text: `Revenue grew ${fmt(g.revenue_yoy_pct, 1)}% in the latest fiscal year`, view: 'financials' });
+  }
+  if (Number.isFinite(net) && net > 0) pos.push({ text: `Profitable: about ${fmt(net, 0)} cents of profit per dollar of sales`, view: 'financials' });
+  if (eh.available && eh.sample_size >= 4 && eh.beat_count > eh.sample_size / 2) {
+    pos.push({ text: `Beat analysts' earnings estimates in ${eh.beat_count} of the last ${eh.sample_size} quarters`, view: 'earnings' });
+  }
+  if (Number.isFinite(bs.net_cash) && bs.net_cash > 0) pos.push({ text: `Holds more cash than debt (${usdCompact(bs.net_cash)} net cash)`, view: 'financials' });
+  if (ow.available && ow.insider_signal === 'buying') pos.push({ text: 'Company insiders bought more shares than they sold over six months', view: 'financials' });
+  if (stars && stars.stars >= 4) pos.push({ text: `Optic star rating ${stars.stars} of 5: ${String(stars.word || '').toLowerCase()}`, view: 'long' });
+  if (price && price.yr >= 5) pos.push({ text: `Share price up ${fmt(price.yr, 0)}% over the period shown`, view: 'chart' });
+  if (sc.available && /outperform|leading|ahead/i.test(String(sc.rs_vs_sector_label || ''))) {
+    pos.push({ text: `Ahead of its sector over the last ${fmt(sc.window_sessions || 21, 0)} sessions` });
+  }
+
+  const days = news.days_to_earnings;
+  if (news.earnings_date && Number.isFinite(days) && days >= 0 && days <= 45) {
+    neg.push({ text: `Earnings report on ${shortDate(news.earnings_date)}, in ${days} day${days === 1 ? '' : 's'}`,
+      why: 'Results and guidance can move the price sharply in either direction.', view: 'earnings' });
+  }
+  if (Number.isFinite(net) && net < 0) {
+    neg.push({ text: 'The company lost money over the latest period',
+      why: 'Losses are paid for from cash, borrowing or new shares until the business turns a profit.', view: 'financials' });
+  }
+  if (fn.available && Number.isFinite(g.revenue_yoy_pct) && g.revenue_yoy_pct <= -1) {
+    neg.push({ text: `Revenue fell ${fmt(Math.abs(g.revenue_yoy_pct), 1)}% in the latest fiscal year`,
+      why: 'Falling sales make it harder to grow profit.', view: 'financials' });
+  }
+  if (fn.available && Number.isFinite(g.net_income_yoy_pct) && g.net_income_yoy_pct <= -1) {
+    neg.push({ text: `Net income fell ${fmt(Math.abs(g.net_income_yoy_pct), 1)}% in the latest fiscal year`,
+      why: 'One-off gains and charges move profit more than sales, so check the statements before reading much into it.', view: 'financials' });
+  }
+  if (Number.isFinite(bs.net_cash) && bs.net_cash < 0 && Number.isFinite(net) && net < 0) {
+    neg.push({ text: `Owes ${usdCompact(-bs.net_cash)} more than it holds in cash while losing money`,
+      why: 'Debt has to be paid or refinanced whether or not the business recovers.', view: 'financials' });
+  }
+  if (stars && stars.stars <= 2) {
+    neg.push({ text: `Optic star rating ${stars.stars} of 5: ${String(stars.word || '').toLowerCase()}`,
+      why: "Optic's fair-value model places the price above the range it treats as usual for this company. A model estimate, not a verdict.", view: 'long' });
+  }
+  if (si.available && si.squeeze_potential && !/^low/i.test(String(si.squeeze_potential)) && Number.isFinite(si.percent_of_float)) {
+    neg.push({ text: `${fmt(si.percent_of_float * 100, 1)}% of the tradable shares are sold short`,
+      why: 'Many investors are betting the price will fall, and short sellers buying back can also cause sudden rises.', view: 'financials' });
+  }
+  if (sc.available && /lag/i.test(String(sc.rs_vs_sector_label || ''))) {
+    neg.push({ text: `Has lagged its sector over the last ${fmt(sc.window_sessions || 21, 0)} sessions`,
+      why: sc.conflict || 'Peers in the same industry have done better over the same weeks.' });
+  }
+  if (((d.gex || {}).regime || {}).state === 'negative') {
+    neg.push({ text: 'Options positioning may amplify price swings',
+      why: "Under Optic's model of how options dealers hedge, their trading could add to moves in either direction. An assumption, not reported positions.", view: 'swing' });
+  }
+  if (String(news.overall_tone || '').includes('bear')) {
+    neg.push({ text: 'Recent headlines lean negative',
+      why: `Scored from ${fmt(news.article_count || 0, 0)} headlines by a fixed word list. It measures tone, not whether the news is true or important.`, view: 'news' });
+  }
+  if (price && price.off <= -20) {
+    neg.push({ text: `Trading ${fmt(Math.abs(price.off), 0)}% below its highest close of the period`,
+      why: 'A long fall can reflect a real change in the business, or a market that has moved on from it.', view: 'chart' });
+  }
+  return { pos: pos.slice(0, 4), neg: neg.slice(0, 4) };
+}
+
+/* Dates ahead that could matter: the company's own first, then the week's
+ * economic releases. Options-expiry and positioning-report dates are for the
+ * advanced view. */
+function ovEvents(d, advanced) {
+  const out = [];
+  const news = d.news || {};
+  const up = ((((d.company || {}).earnings_history) || {}).upcoming || [])[0];
+  const date = news.earnings_date || (up && up.date);
+  if (date) {
+    const days = news.days_to_earnings;
+    out.push({ date, label: 'Earnings report', detail: [Number.isFinite(days) && days >= 0 ? `in ${days} day${days === 1 ? '' : 's'}` : '',
+      up && reportTiming(up.timing) ? reportTiming(up.timing) : '',
+      up && Number.isFinite(up.eps_estimate) ? `analysts expect EPS of ${fmt(up.eps_estimate, 2)}` : ''].filter(Boolean).join(', '),
+    view: 'earnings' });
+  }
+  const wn = d.whats_next || {};
+  (wn.this_week || []).forEach((e) => {
+    const special = e.kind === 'expiry' || /\b(COT|Opex|expiry)\b/i.test(String(e.label || ''));
+    if (special && !advanced) return;
+    out.push({ date: e.date, label: String(e.label || '').replace(/\s*\(([^)]*)\)\s*$/, (m, inner) =>
+      (String(e.label).toLowerCase().includes(inner.toLowerCase()) ? '' : ` (${inner})`)), detail: e.detail || '' });
+  });
+  return out.slice(0, advanced ? 8 : 4);
+}
+
+/* Where to go next, from what the page found. Every step is a link to an
+ * existing page, plus a Pulse question that is drafted and never sent. */
+function ovNextSteps(d, factors) {
+  const sym = STATE.ticker || '';
+  const news = d.news || {};
+  const fund = symbolIsFund(sym);
+  const steps = [];
+  const days = news.days_to_earnings;
+  if (news.earnings_date && Number.isFinite(days) && days >= 0 && days <= 45) {
+    steps.push({ text: `Review past results before the report on ${shortDate(news.earnings_date)}`, view: 'earnings' });
+  }
+  if (!fund) steps.push({ text: factors.neg.some((f) => f.view === 'financials') ? 'Check the statements behind the weaker figures' : 'Read the full financial statements', view: 'financials' });
+  steps.push({ text: 'See how the price compares with its own valuation history', view: 'long' });
+  if (news.article_count) steps.push({ text: `Read the ${news.article_count} latest headline${news.article_count === 1 ? '' : 's'}`, view: 'news' });
+  steps.push({ text: `Compare ${sym} side by side with a competitor`, compare: true });
+  return steps.slice(0, 4);
+}
+
+/* The four figures most readers look a stock up for, plus its range and
+ * yield. The full eighteen are under Advanced research. */
+const OV_ESSENTIALS = ['market_cap', 'pe_trailing', 'revenue_growth', 'profit_margin', 'dividend_yield', 'high_52', 'low_52'];
+
+function ovEssentialsHTML(q, short) {
+  if (!q || q.price === null || q.price === undefined) return '';
+  const all = keyStatRows(q, short);
+  const ids = OV_ESSENTIALS.filter((id) => all[id] && all[id][1] !== null);
+  if (!ids.length) return '';
+  const policy = explainPolicy();
+  return `<dl class="ks-grid ov-ess">${ids.map((id) => `<div class="ks-row" data-gloss-row><dt>${
+    glossTerm(esc(all[id][0]), KEY_STAT_DEFS[id], policy)}</dt><dd>${esc(all[id][1])}</dd></div>`).join('')}</dl>`;
+}
+
+/* What the company does, in its own filing's words, from the session payload
+ * (/api/session/{T} carries the profile). It lands after the page, so it has
+ * its own host and is painted again when it arrives. */
+function ovAboutHTML() {
+  const sym = STATE.ticker || '';
+  const sess = STATE.session && STATE.session.ticker === sym ? STATE.session : null;
+  const prof = (sess && sess.profile) || {};
+  const q = facetQuote(sym);
+  const name = prof.name || q.name || sym;
+  const meta = [
+    prof.is_fund ? prof.category : (prof.sector || q.sector),
+    prof.is_fund ? prof.fund_family : (prof.industry || q.industry),
+    prof.employees ? `${fmtCompact(prof.employees, 0)} employees` : null,
+    prof.city && prof.country ? `${prof.city}, ${prof.country}` : prof.country,
+  ].filter(Boolean);
+  let body;
+  if (!sess) {
+    body = '<p class="ov-about-text muted">Loading the company description…</p>';
+  } else if (prof.summary) {
+    body = `<p class="ov-about-text is-clamped" id="ov-about-text">${esc(prof.summary)}</p>
+      <button type="button" class="ov-linkbtn" data-ov-about-more aria-expanded="false"
+        aria-controls="ov-about-text">Read the full description</button>`;
+  } else {
+    body = '<p class="ov-about-text muted">The data feed has no business description for this symbol.</p>';
+  }
+  return `<section class="ov-sec ov-about" id="ov-about" aria-labelledby="ov-about-h">
+    <h2 class="ov-q" id="ov-about-h">What does ${esc(name)} do?</h2>
+    ${meta.length ? `<p class="ov-meta">${meta.map(esc).join(' · ')}</p>` : ''}
+    ${body}
+    ${prof.summary ? '<p class="ov-fine">In the company’s own words, as the data feed holds them. The description may be out of date.</p>' : ''}
+  </section>`;
+}
+
+/* Hide "Read the full description" when the text already fits. */
+function ovFitAbout() {
+  const text = document.getElementById('ov-about-text');
+  const btn = views.overview && views.overview.querySelector('[data-ov-about-more]');
+  if (!text || !btn || !text.clientHeight) return;
+  if (text.scrollHeight <= text.clientHeight + 1) btn.hidden = true;
+}
+
+function refreshOverviewFindings() {
+  const d = STATE.swing || {};
+  const factors = ovFactors(d);
+  const take = document.getElementById('ov-takeaways');
+  const fac = document.getElementById('ov-factors');
+  const biz = symbolIsFund(STATE.ticker) ? null : ovBusinessRead(d);
+  if (take) take.innerHTML = ovTakeawaysHTML(d, biz, ovPriceRead(d), factors);
+  if (fac) fac.innerHTML = ovFactorsHTML(d, factors);
+}
+
+function refreshOverviewAbout() {
+  const host = document.getElementById('ov-about');
+  if (!host || STATE.view !== 'overview') return;
+  host.outerHTML = ovAboutHTML();
+  ovFitAbout();
+}
+
+/* A finding, its explanation, and the figures behind it. */
+function ovEvidenceHTML(rows, source, view, viewLabel) {
+  if (!rows || !rows.length) return '';
+  return `<details class="ov-ev"><summary>Show the figures</summary>
+    <dl class="ov-ev-list">${rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
+    ${source || view ? `<p class="ov-fine">${source ? esc(source) + ' ' : ''}${view
+    ? `<button type="button" class="ov-linkbtn" data-sec-view="${esc(view)}" data-sec-sym="${esc(STATE.ticker || '')}">${esc(viewLabel)}</button>` : ''}</p>` : ''}
+  </details>`;
+}
+
+function ovTakeawaysHTML(d, biz, price, factors) {
+  const cards = [];
+  if (biz) {
+    cards.push(`<li class="ov-take is-${biz.tone}">
+      <p class="ov-take-kind">The business</p>
+      <p class="ov-take-text">${esc(biz.text)}</p>
+      ${biz.why || biz.conflict ? `<p class="ov-take-why">${esc([biz.why, biz.conflict].filter(Boolean).join(' '))}</p>` : ''}
+      ${ovEvidenceHTML(biz.evidence, biz.source, 'financials', 'Open Financials')}
+    </li>`);
+  }
+  if (price) {
+    cards.push(`<li class="ov-take is-${price.tone}">
+      <p class="ov-take-kind">The share price</p>
+      <p class="ov-take-text">${esc(price.text)}</p>
+      <p class="ov-take-why">${price.why ? esc(price.why) + ' ' : ''}This describes the stock, not the business.</p>
+      ${ovEvidenceHTML(price.evidence, `Daily closes through ${price.through}. Source: ${priceSourceName(d)}.`, 'chart', 'Open the chart')}
+    </li>`);
+  }
+  const risk = factors.neg[0];
+  if (risk) {
+    cards.push(`<li class="ov-take is-bad">
+      <p class="ov-take-kind">A risk to weigh</p>
+      <p class="ov-take-text">${esc(risk.text)}.</p>
+      <p class="ov-take-why">${esc(risk.why || '')}</p>
+      ${risk.view ? `<p class="ov-fine"><button type="button" class="ov-linkbtn" data-sec-view="${esc(risk.view)}"
+        data-sec-sym="${esc(STATE.ticker || '')}">See the evidence on ${esc(SUB_LABELS[risk.view] || risk.view)}</button></p>` : ''}
+    </li>`);
+  }
+  if (!cards.length) {
+    return `<section class="ov-sec" aria-labelledby="ov-take-h"><h2 class="ov-q" id="ov-take-h">Key takeaways</h2>
+      <p class="ov-take-why">Not enough data has loaded for this symbol to state anything with confidence. The figures below are what the feed returned.</p></section>`;
+  }
+  return `<section class="ov-sec" aria-labelledby="ov-take-h">
+    <h2 class="ov-q" id="ov-take-h">Key takeaways</h2>
+    <ol class="ov-takes">${cards.join('')}</ol>
+  </section>`;
+}
+
+function ovFactorsHTML(d, factors) {
+  const sym = esc(STATE.ticker || '');
+  const item = (f, withWhy) => `<li><span class="ov-f-text">${esc(f.text)}</span>${withWhy && f.why
+    ? `<span class="ov-f-why">${esc(f.why)}</span>` : ''}${f.view
+    ? ` <button type="button" class="ov-linkbtn" data-sec-view="${esc(f.view)}" data-sec-sym="${sym}"
+      aria-label="Evidence for: ${esc(f.text)}">Evidence</button>` : ''}</li>`;
+  const drivers = ovDrivers(d);
+  return `<section class="ov-sec" id="ov-drivers" aria-labelledby="ov-drv-h">
+    <h2 class="ov-q" id="ov-drv-h">What is driving the stock, and what could go wrong?</h2>
+    <div class="ov-cols">
+      <div>
+        <h3 class="ov-h3">In its favour</h3>
+        ${factors.pos.length ? `<ul class="ov-list is-pos">${factors.pos.map((f) => item(f, false)).join('')}</ul>`
+    : '<p class="ov-none">Nothing in the data Optic holds stands out as a clear positive.</p>'}
+      </div>
+      <div>
+        <h3 class="ov-h3">Main risks</h3>
+        ${factors.neg.length ? `<ul class="ov-list is-neg">${factors.neg.map((f) => item(f, true)).join('')}</ul>`
+    : '<p class="ov-none">No specific risk flags in the data Optic holds. That is not the same as no risk: every stock can fall.</p>'}
+      </div>
+    </div>
+    ${drivers.length ? `<details class="ov-ev ov-drivers"><summary>What has been moving it recently</summary>
+      <ul class="ov-drv">${drivers.map((x) => `<li><span class="ov-drv-kind">${esc(x.kind)}</span>
+        <span class="ov-drv-text">${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer nofollow">${esc(x.text)}</a>` : esc(x.text)}</span>
+        ${x.note ? `<span class="ov-f-why">${esc(x.note)}</span>` : ''}</li>`).join('')}</ul>
+      <p class="ov-fine">None of these proves why the price moved. Prices also move on things no data feed records.</p>
+    </details>` : ''}
+    <p class="ov-fine">Listed from the data on this page by fixed rules, not ranked by importance and not written by a model. Not investment advice.</p>
+  </section>`;
+}
+
+function ovNextHTML(d, factors, advanced) {
+  const sym = STATE.ticker || '';
+  const events = ovEvents(d, advanced);
+  const steps = ovNextSteps(d, factors);
+  return `<section class="ov-sec" id="ov-next" aria-labelledby="ov-next-h">
+    <h2 class="ov-q" id="ov-next-h">What should I look at next?</h2>
+    <div class="ov-cols">
+      <div>
+        <h3 class="ov-h3">Coming up</h3>
+        ${events.length ? `<ul class="ov-events">${events.map((e) => `<li>
+          <span class="ov-ev-date">${esc(e.date ? shortDate(e.date) : '')}</span>
+          <span class="ov-ev-what"><strong>${esc(e.label)}</strong>${e.detail ? `<span class="ov-f-why">${esc(e.detail)}</span>` : ''}</span>
+        </li>`).join('')}</ul>
+        <p class="ov-fine">Scheduled dates only. A date is not a forecast of what happens on it.</p>`
+    : '<p class="ov-none">No scheduled company events or economic releases in the data for the coming days.</p>'}
+      </div>
+      <div>
+        <h3 class="ov-h3">Research steps</h3>
+        <ul class="ov-steps">${steps.map((s) => `<li><button type="button" class="ov-step"
+          ${s.compare ? `data-ov-compare="${esc(sym)}"` : `data-sec-view="${esc(s.view)}" data-sec-sym="${esc(sym)}"`}>
+          <span>${esc(s.text)}</span><span class="ov-step-to" aria-hidden="true">${esc(s.compare ? 'Compare' : SUB_LABELS[s.view] || '')} →</span></button></li>`).join('')}
+          <li><button type="button" class="ov-step" data-ov-ask="${esc(sym)}">
+            <span>Ask Pulse a question about ${esc(sym)}</span><span class="ov-step-to" aria-hidden="true">Ask Pulse →</span></button></li>
+        </ul>
+        <p class="ov-fine">Ask Pulse writes a question for you to edit. Nothing is sent until you press Send.</p>
+      </div>
+    </div>
+  </section>`;
+}
+
+function ovMethodHTML(d) {
+  const built = agoWords(d.generated_at);
+  return `<section class="ov-method" aria-label="How this page is built">
+    <h3 class="ov-h3">How this page is built</h3>
+    <ul>
+      <li>Every sentence above comes from the figures on this page by fixed rules. No AI model writes them, so the same data gives the same words.</li>
+      <li>Business figures come from the company's filed statements via Yahoo Finance. The latest fiscal year can be months old, and the latest quarter is shown beside it when the two disagree.</li>
+      <li>Price figures are daily closes from ${esc(priceSourceName(d))}${built ? `, gathered ${esc(built)}` : ''}. Outside market hours the price is the last close.</li>
+      <li>Changes under 1% either way are described as roughly flat.</li>
+      <li>Optic's short-term signal score, its star rating and its options readings are models. Each carries its own method and limits on its page.</li>
+      <li>Nothing here is a recommendation to buy or sell.</li>
+    </ul>
+  </section>`;
+}
+
 function renderOverviewView() {
   const d = STATE.swing || {};
   const q = d.quote || {};
   const news = d.news || {};
   const fin = ((d.company || {}).financials) || {};
   const pulse = d.pulse || {};
+  const advanced = knowledgeLevel() >= 2;
 
   // Where today sits in the 52-week range: the single most compact answer to
   // "is this thing high or low", and it needs both ends to mean anything.
@@ -15638,14 +16162,33 @@ function renderOverviewView() {
   const margin = q.profit_margin;
 
   const heads = (news.articles || []).slice(0, 3);
+  const biz = symbolIsFund(STATE.ticker) ? null : ovBusinessRead(d);
+  const price = ovPriceRead(d);
+  const factors = ovFactors(d);
+  const ess = ovEssentialsHTML(q, (d.company || {}).short_interest);
 
   views.overview.innerHTML = `${securityHeader('overview')}
+    <div class="ov-simple">
+    ${ovAboutHTML()}
+    <div id="ov-takeaways">${ovTakeawaysHTML(d, biz, price, factors)}</div>
+    ${!biz && (fin.note || fin.notes) ? `<p class="caveat">${esc(fin.note || fin.notes)}</p>` : ''}
+    ${overviewChartHTML(d)}
+    ${ess ? `<section class="ov-sec" aria-labelledby="ov-ess-h">
+      <h2 class="ov-q" id="ov-ess-h">Key figures</h2>
+      ${ess}
+      <p class="ov-fine">Select a label for what it means. All eighteen figures are under Advanced research below.</p>
+    </section>` : ''}
+    <div id="ov-factors">${ovFactorsHTML(d, factors)}</div>
+    ${ovNextHTML(d, factors, advanced)}
+    <details class="ov-adv" id="ov-advanced"${advanced ? ' open' : ''}>
+      <summary><span class="ov-adv-title">Advanced research</span>
+        <span class="ov-adv-sub">Optic's short-term signal score, all key statistics, every section at a glance, headlines and method</span></summary>
+      <div class="ov-adv-body">
     ${renderOpticPulse(d)}
     ${keyStatsHTML(q, { view: 'overview', short: (d.company || {}).short_interest })}
-    ${overviewChartHTML(d)}
-    <div class="panel">
+    <div class="panel" data-fixed="1">
       <h2>${hg('The rest of this ticker')}</h2>
-      <p class="sub">One reading from each facet, so the row says what is there
+      <p class="sub">One reading from each section, so the row says what is there
         rather than only where to click.</p>
       <div class="ov-cards">
         ${overviewCard('chart', 'Chart',
@@ -15659,24 +16202,29 @@ function renderOverviewView() {
     days !== null && days !== undefined ? `in ${days} days` : 'no date published')}
         ${symbolIsFund(STATE.ticker) ? '' : overviewCard('financials', 'Financials',
     Number.isFinite(growth) ? `${(growth * 100).toFixed(1)}%` : null,
-    Number.isFinite(margin) ? `revenue growth \u00b7 ${(margin * 100).toFixed(1)}% margin`
+    Number.isFinite(margin) ? `revenue growth · ${(margin * 100).toFixed(1)}% margin`
       : 'revenue growth')}
         ${overviewCard('news', 'News',
     news.article_count ? String(news.article_count) : null,
-    news.overall_tone ? `headlines \u00b7 ${news.overall_tone}` : 'headlines')}
+    news.overall_tone ? `headlines · ${news.overall_tone}` : 'headlines')}
         ${ovInvestingCard()}
       </div>
     </div>
-    ${heads.length ? `<div class="panel">
+    ${heads.length ? `<div class="panel" data-fixed="1">
       <h2>${hg('Latest headlines')}</h2>
       ${heads.map(newsArticleRow).join('')}
       <button type="button" class="btn ov-more" data-sec-view="news"
         data-sec-sym="${esc(STATE.ticker || '')}">All ${
   news.article_count || heads.length} headlines</button>
     </div>` : ''}
-    ${fin.available === false && (fin.note || fin.notes) ? `<p class="caveat">${esc(fin.note || fin.notes)}</p>` : ''}`;
+    ${biz && fin.available === false && (fin.note || fin.notes) ? `<p class="caveat">${esc(fin.note || fin.notes)}</p>` : ''}
+    ${ovMethodHTML(d)}
+      </div>
+    </details>
+    </div>`;
   revealPanels(views.overview);
   mountOverviewChart(d);
+  ovFitAbout();
   loadFairValue();
 }
 
@@ -32035,6 +32583,10 @@ async function loadFairValue(force) {
   // The Overview's Investing card takes the stars in place.
   const card = views.overview && views.overview.querySelector('.ov-card[data-sec-view="long"]');
   if (card && STATE.view === 'overview') card.outerHTML = ovInvestingCard();
+  /* And the plain-language sections that read the rating, when it moves
+   * them. Repainted in place, not by a full render: the chart and the
+   * description would flash for a sentence that may not change. */
+  if (STATE.view === 'overview' && STATE.swing && STATE.swing.ticker === sym) refreshOverviewFindings();
 }
 
 /* ======================================================= valuation scenarios
@@ -33783,7 +34335,7 @@ function renderVanna(gex) {
 
   return `<div class="grid c2 gap">
     <div class="panel span2">
-      <h2>${hg('VEX. Dealer vanna exposure')}${askPulse('vanna')}</h2>
+      <h2>${hg('Options positioning: dealer vanna (VEX)')}${askPulse('vanna')}</h2>
       <p class="sub">Dealer hedging responds to three things, and gamma is only one.
         Delta moves when the stock moves, when implied volatility moves, and when time
         passes. These are the other two.</p>
@@ -38615,6 +39167,8 @@ async function loadSession(force) {
     STATE.session = data;
     renderSessionBar();
     completeSecurityHeader();
+    // The Overview's "What does it do?" reads the profile this carries.
+    refreshOverviewAbout();
     // The Quote panel keys its extended-hours block off the session phase, and
     // the swing view usually paints before this request lands.
     if (firstLoad && STATE.view === 'swing' && STATE.swing) renderSwing(STATE.swing);
@@ -39575,7 +40129,7 @@ function pulseSubject() {
   }
   if (['tracker', 'paper', 'roth'].includes(v)) return { kind: 'portfolio', label: VIEW_NAMES[v] || 'Positions' };
   if (['watchlist', 'alerts'].includes(v)) return { kind: 'watchlist', label: 'Your watchlist' };
-  if (['scan', 'explore', 'insiders', 'analysts'].includes(v)) return { kind: 'screen', label: VIEW_NAMES[v] || 'Discover' };
+  if (['scan', 'explore', 'insiders', 'analysts'].includes(v)) return { kind: 'screen', label: VIEW_NAMES[v] || 'Find stocks' };
   return { kind: 'market', label: 'The market today' };
 }
 
@@ -41266,7 +41820,7 @@ const NAV_GROUPS = [
    *
    * The duplication is the cheaper problem. It costs width on a rail that has
    * room for it; the flattening cost a click on every navigation. */
-  { id: 'security', label: 'Dossier', views: SECURITY_VIEWS },
+  { id: 'security', label: 'Company research', views: SECURITY_VIEWS },
   /* Its own section again.
    *
    * It was folded into the Dossier group to get the top strip from eight
@@ -41286,7 +41840,7 @@ const NAV_GROUPS = [
    * They answer different questions and are still two separate pages -- what
    * changed is that they stopped each costing a slot in the top row for it.
    * Both are "I do not have a symbol yet", which is one destination. */
-  { id: 'discover', label: 'Discover', views: ['explore', 'scan', 'insiders', 'analysts'] },
+  { id: 'discover', label: 'Find stocks', views: ['explore', 'scan', 'insiders', 'analysts'] },
   /* The group is "Positions"; the view inside it keeps the name "Optic's
    * Positions". Both are deliberate.
    *
@@ -41373,38 +41927,42 @@ function navGroupLabel(group) {
 const SUB_LABELS = {
   overview: 'Overview', chart: 'Chart', financials: 'Financials', news: 'News',
   swing: 'Options', earnings: 'Earnings', compare: 'Compare', long: 'Investing',
-  brief: 'Read', market: 'Macro', indices: 'Indices',
+  brief: 'Daily read', market: 'Macro', indices: 'Indices',
   watchlist: 'Watchlist', alerts: 'Alerts',
-  explore: 'Explore', scan: 'Scan', insiders: 'Insiders', analysts: 'Analysts',
+  explore: 'Explore', scan: 'Screeners', insiders: 'Insiders', analysts: 'Analysts',
   reports: 'Problem Reports', usage: 'Claude usage', accounts: 'Accounts',
   tracker: "Optic Portfolio", paper: 'Paper Desk', roth: 'Retirement',
 };
 
+/* Each page's title and, after the first full stop, what it is for, in the
+ * words of the task rather than the machinery. Simplify pass (2026-10-11):
+ * "Greeks, gamma, flow and strategies" described Options to people who
+ * already knew what it held, which is nobody arriving for the first time. */
 const SUB_TITLES = {
-  overview: 'Overview. The whole dossier on one page',
-  chart: 'Chart. Full-height chart, overlays and drawings',
-  financials: 'Financials. Revenue, margins, cash, ownership and short interest',
-  news: 'News. Headlines for this company, scored and tagged',
-  swing: 'Options. Greeks, gamma, flow and strategies, with the swing setup and levels',
-  earnings: 'Earnings analysis and the pre-earnings brief',
-  compare: 'Compare two to four tickers side by side',
+  overview: 'Overview. What the company does, how it is doing and what to look at next',
+  chart: 'Chart. Full-height price chart, with indicators and drawings when you want them',
+  financials: 'Financials. Revenue, profit, cash, debt and who owns the shares',
+  news: 'News. Recent headlines about this company, tagged by topic and tone',
+  swing: "Options. How traders are positioned in this stock's options, and the short-term setup",
+  earnings: 'Earnings. The next report, what is expected, and how past reports went',
+  compare: 'Compare. Two to four stocks side by side',
   instrument: 'Full history for one cross-asset instrument',
-  long: 'Investing. Valuation history, drawdown, accumulation zones and conviction',
-  brief: "Optic's Read. The daily market, macro and world summary",
-  market: 'Macro regime and sector rotation',
-  indices: 'Major index long-run cycle',
+  long: 'Investing. Valuation, long-term returns and the case for holding',
+  brief: "Daily read. Optic's daily summary of markets, the economy and world news",
+  market: 'Macro. The economy, interest rates and which sectors are leading',
+  indices: 'Indices. The long-run trend of the major stock market indices',
   watchlist: 'Watchlist. What changed on the names you follow',
   alerts: 'Alerts. What fired, and why it was worth telling you',
-  explore: 'Explore. Browse sectors, themes and what is moving, with no symbol',
-  insiders: 'Insiders. Company Form 4s and what members of the House disclosed',
-  analysts: 'Analysts. Rating and price-target actions by firm, newest first',
+  explore: "Explore. Browse sectors, themes and today's biggest movers, with no symbol in mind",
+  insiders: 'Insiders. Trades disclosed by company executives and members of Congress',
+  analysts: 'Analysts. Rating and price-target changes by firm, newest first',
   reports: 'Problem Reports. What readers have told you is broken',
   usage: 'Claude usage. What the model has cost, by feature',
   accounts: 'Accounts. Everyone who has signed up, newest first',
-  paper: 'Paper Desk. Your own book, entered by hand and priced by the terminal',
-  scan: 'Scan. Named screens over the ranked universe',
-  tracker: "Optic Portfolio. The terminal's own paper-traded record",
-  roth: 'Retirement. A rules-based model allocation to compare your own against',
+  paper: 'Paper Desk. Practise with your own pretend trades, priced by the terminal',
+  scan: 'Screeners. Ready-made lists of stocks that match a set of rules',
+  tracker: "Optic Portfolio. The terminal's own practice record, with no real money",
+  roth: 'Retirement. A rules-based example portfolio for a Roth IRA, to compare with your own',
 };
 
 /** Which group a view belongs to. */
@@ -41783,7 +42341,8 @@ function paintPageHead(view) {
       ${eyebrow && eyebrow !== title ? `<p class="ph-eyebrow">${esc(eyebrow)}</p>` : ''}
       <h1 class="ph-title">${esc(title)}</h1>
       ${desc ? `<p class="ph-desc">${esc(desc)}</p>` : ''}
-    </div>`;
+    </div>
+    ${ADV_VIEWS.has(view) ? `<div class="ph-acts">${advancedToggleHTML()}</div>` : ''}`;
   host.hidden = false;
 }
 
@@ -42286,6 +42845,45 @@ document.addEventListener('click', (evt) => {
    * These buttons live inside the views, not inside nav.tabs, so the scoped
    * rule below cannot see them at all — the same trap the nav dropdowns hit,
    * where the markup rendered and the clicks went nowhere. */
+  /* The Overview's own controls: the description's full text, the compare
+   * step and the drafted Pulse question (drafted only; Send spends). */
+  const advBtn = evt.target.closest('[data-adv-toggle]');
+  if (advBtn && window.OpticKnowledge && window.OpticKnowledge.setSpecialist) {
+    const inPageHead = !!advBtn.closest('#page-head');
+    window.OpticKnowledge.setSpecialist(!advancedOn());
+    syncAdvancedToggles();
+    /* The level change re-renders the view, which replaces the switch the
+     * reader just pressed. Focus goes to its replacement so a keyboard or
+     * screen-reader user stays where they were. */
+    setTimeout(() => {
+      const scope = inPageHead ? document.getElementById('page-head') : views[STATE.view];
+      const again = scope && scope.querySelector('[data-adv-toggle]');
+      if (again && document.activeElement !== again) again.focus({ preventScroll: true });
+    }, 0);
+    return;
+  }
+  const aboutMore = evt.target.closest('[data-ov-about-more]');
+  if (aboutMore) {
+    const text = document.getElementById('ov-about-text');
+    if (text) {
+      const open = text.classList.toggle('is-clamped') === false;
+      aboutMore.setAttribute('aria-expanded', String(open));
+      aboutMore.textContent = open ? 'Show less' : 'Read the full description';
+    }
+    return;
+  }
+  const ovCompare = evt.target.closest('[data-ov-compare]');
+  if (ovCompare) {
+    STATE.compareInputs = [ovCompare.dataset.ovCompare, '', ''];
+    switchView('compare');
+    return;
+  }
+  const ovAsk = evt.target.closest('[data-ov-ask]');
+  if (ovAsk) {
+    const sym = ovAsk.dataset.ovAsk;
+    draftPulse(`Using the figures Optic has for ${sym}, what are the main things a long-term investor should understand about it, and what would change that picture?`);
+    return;
+  }
   const secBtn = evt.target.closest('[data-sec-view]');
   if (secBtn) {
     const to = secBtn.dataset.secView;
@@ -43989,8 +44587,17 @@ function applyKnowledgeLevel() {
      levels, because renderSwing never ran again.
      A forced load would work and costs a twenty-second provider call on the
      Options tab, for a control that changes how a word is underlined. */
+  syncAdvancedToggles();
   if (STATE.view === 'settings') { renderSettings(); return; }
   if (STATE.view === 'home') { renderHome(); return; }
+  /* The Dossier facets that paint from the shared ticker payload: a
+   * re-render from memory, never the forced reload below, which would spend
+   * a several-second /api/ticker call to change what is folded. */
+  if (STATE.swing && STATE.swing.ticker === STATE.ticker) {
+    if (STATE.view === 'overview') { renderOverviewView(); return; }
+    if (STATE.view === 'financials') { renderFinancialsView(); return; }
+    if (STATE.view === 'news') { renderNewsView(); return; }
+  }
   if (rerenderActiveView()) return;
   // Views whose loader owns and caches their markup. A forced load is the only
   // way to regenerate those, and a level change is rare enough to spend it.
@@ -44069,7 +44676,7 @@ function panelIsHidden(view, title) {
  * Titles are lower-cased headings, matched by `includes` the same way
  * PANELS_ADVANCED is, so nothing here needs an edit to any template. */
 const PANELS_DENSE = {
-  swing: ['vex.', 'net premium by strike', 'gamma concentration by expiry',
+  swing: ['dealer vanna (vex)', 'net premium by strike', 'gamma concentration by expiry',
     'at-the-money greeks by expiry'],
   market: ['niche industries', 'themes & sub-industries'],
   long: [],
@@ -44104,7 +44711,7 @@ const PANELS_SIMPLE_HIDES = {
 
 const PANELS_ADVANCED = {
   swing: [
-    'delta analysis', 'gamma analysis', 'gex.', 'vex.',
+    'delta analysis', 'gamma analysis', 'dealer gamma (gex)', 'dealer vanna (vex)',
     'call vs put flow', 'net premium by strike', 'buy calls / puts',
     'options strategies', 'strike & entry recommendation',
   ],

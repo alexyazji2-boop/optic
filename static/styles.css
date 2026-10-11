@@ -18747,3 +18747,250 @@ footer.legal > .legal-full {
 }
 /* Reduced motion needs no rule here: with no choice saved, scout.js reads
    prefers-reduced-motion and shows the resting frame only ("Still"). */
+
+/* ================================================ the five-question Overview ===
+ *
+ * Simplify pass (2026-10-11). Built for "Complex analysis, presented simply":
+ * the default Overview answers what the company does, how the business is
+ * doing, what is moving the stock, what could go wrong and what to look at
+ * next. Conclusions are set in the largest type, the figures behind them sit
+ * one step down in a disclosure, and the specialist material is gathered under
+ * one labelled "Advanced research" bar at the foot. New selectors only; no
+ * base class is restyled here. */
+.ov-simple { display: flex; flex-direction: column; gap: var(--space-5); margin-top: var(--space-5); }
+.ov-sec {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: var(--space-5) calc(18px * var(--ui-scale));
+  min-width: 0;
+}
+.ov-q {
+  margin: 0 0 var(--space-3);
+  font: 600 var(--t-title)/1.2 var(--display);
+  font-size: calc(18px * var(--ui-scale));
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+.ov-h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--t-small);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+}
+.ov-meta { margin: 0 0 var(--space-2); font-size: var(--t-small); color: var(--ink-muted); }
+.ov-about-text {
+  margin: 0;
+  max-width: 76ch;
+  font-size: var(--t-lead);
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+.ov-about-text.is-clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ov-fine {
+  margin: var(--space-2) 0 0;
+  max-width: 80ch;
+  font-size: var(--t-caption);
+  line-height: 1.5;
+  color: var(--ink-muted);
+}
+.ov-none { margin: 0; font-size: var(--t-base); line-height: 1.5; color: var(--ink-2); }
+.ov-linkbtn {
+  background: none;
+  border: 0;
+  padding: var(--space-1) 0;
+  font: 500 var(--t-small)/1.3 var(--sans);
+  color: var(--s1);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.ov-linkbtn:hover { color: var(--ink); }
+.ov-linkbtn:focus-visible,
+.ov-step:focus-visible,
+.ov-ev > summary:focus-visible,
+.ov-adv > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-xs); }
+
+/* Key takeaways: the page's conclusions, so the largest prose on it. */
+.ov-takes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: var(--space-4);
+}
+.ov-take {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-3);
+  border-left: 3px solid var(--ink-muted);
+  background: var(--raised);
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+  min-width: 0;
+}
+.ov-take.is-good { border-left-color: var(--pos); }
+.ov-take.is-bad { border-left-color: var(--neg); }
+.ov-take.is-mixed { border-left-color: var(--warn); }
+.ov-take-kind {
+  margin: 0;
+  font-size: var(--t-micro);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+}
+.ov-take-text { margin: 0; font-size: var(--t-lead); font-weight: 600; line-height: 1.4; color: var(--ink); }
+.ov-take-why { margin: 0; font-size: var(--t-base); line-height: 1.55; color: var(--ink-2); }
+
+/* The figures behind a finding, one press away. */
+.ov-ev { margin-top: auto; }
+.ov-ev > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--t-small);
+  color: var(--ink-2);
+  padding: var(--space-1) 0;
+}
+.ov-ev > summary::-webkit-details-marker { display: none; }
+.ov-ev > summary::before { content: '\25B8'; display: inline-block; margin-right: var(--space-1); transition: transform var(--dur-ui) var(--ease-ui); }
+.ov-ev[open] > summary::before { transform: rotate(90deg); }
+.ov-ev > summary:hover { color: var(--ink); }
+.ov-ev-list { margin: var(--space-2) 0 0; display: grid; gap: var(--space-1); }
+.ov-ev-list > div { display: flex; justify-content: space-between; gap: var(--space-3); padding: var(--space-1) 0; border-bottom: 1px solid var(--border); }
+.ov-ev-list dt { margin: 0; font-size: var(--t-small); color: var(--ink-muted); }
+.ov-ev-list dd { margin: 0; font-size: var(--t-small); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); }
+
+/* For and against, events and next steps: two columns that stack on a phone. */
+.ov-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-5) var(--space-7); }
+.ov-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.ov-list li { position: relative; padding-left: var(--space-4); font-size: var(--t-base); line-height: 1.5; color: var(--ink); }
+.ov-list li::before { content: ''; position: absolute; left: 0; top: 0.55em; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-muted); }
+.ov-list.is-pos li::before { background: var(--pos); }
+.ov-list.is-neg li::before { background: var(--neg); }
+.ov-f-why { display: block; margin-top: 2px; font-size: var(--t-small); line-height: 1.5; color: var(--ink-muted); }
+.ov-drivers { margin-top: var(--space-4); }
+.ov-drv { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.ov-drv li { font-size: var(--t-base); line-height: 1.5; color: var(--ink); }
+.ov-drv-kind { display: block; font-size: var(--t-micro); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+.ov-drv a { color: var(--ink); }
+.ov-events { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.ov-events li { display: grid; grid-template-columns: calc(64px * var(--ui-scale)) 1fr; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
+.ov-events li:last-child { border-bottom: 0; }
+.ov-ev-date { font-size: var(--t-small); font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.ov-ev-what { font-size: var(--t-base); line-height: 1.4; color: var(--ink); }
+.ov-ev-what strong { font-weight: 600; }
+.ov-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.ov-step {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  font: 500 var(--t-base)/1.35 var(--sans);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-ui) var(--ease-ui), border-color var(--dur-ui) var(--ease-ui);
+}
+.ov-step:hover { background: var(--bg-hover); border-color: var(--border-strong); }
+.ov-step-to { flex: none; font-size: var(--t-small); color: var(--ink-muted); white-space: nowrap; }
+
+/* The essential figures: the key-stats grid, fewer and roomier. */
+.ov-ess { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+
+/* Advanced research: one labelled bar, everything specialist behind it. */
+.ov-adv {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+.ov-adv > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-4) calc(18px * var(--ui-scale));
+}
+.ov-adv > summary::-webkit-details-marker { display: none; }
+.ov-adv > summary::before { content: '\25B8'; color: var(--ink-muted); transition: transform var(--dur-ui) var(--ease-ui); }
+.ov-adv[open] > summary::before { transform: rotate(90deg); }
+.ov-adv-title { font: 600 var(--t-heading)/1.3 var(--display); color: var(--ink); }
+.ov-adv-sub { font-size: var(--t-small); color: var(--ink-muted); }
+.ov-adv-body { display: flex; flex-direction: column; gap: var(--space-5); padding: 0 calc(18px * var(--ui-scale)) var(--space-5); }
+.ov-method ul { margin: 0; padding-left: var(--space-5); display: flex; flex-direction: column; gap: var(--space-1); }
+.ov-method li { font-size: var(--t-small); line-height: 1.5; color: var(--ink-2); max-width: 90ch; }
+@media (max-width: 559px) {
+  .ov-sec, .ov-adv > summary { padding-left: var(--space-4); padding-right: var(--space-4); }
+  .ov-adv-body { padding-left: var(--space-3); padding-right: var(--space-3); }
+  .ov-q { font-size: calc(16.5px * var(--ui-scale)); }
+  .ov-takes { grid-template-columns: 1fr; }
+}
+.ov-list .ov-linkbtn { color: var(--ink-muted); font-size: var(--t-caption); }
+.ov-list .ov-linkbtn:hover { color: var(--ink); }
+
+/* "Show advanced analysis": a switch, on the Dossier header and on every page
+ * header where it changes something. Gold when on, the brand's own colour;
+ * hover is the control's own (the gold pill is the sidebar's alone). */
+.adv-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--r-ctl);
+  font: 500 var(--t-small)/1 var(--sans);
+  color: var(--ink-2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--dur-ui) var(--ease-ui), border-color var(--dur-ui) var(--ease-ui);
+}
+.adv-toggle:hover { color: var(--ink); border-color: var(--border-strong); }
+.adv-toggle:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.adv-track {
+  position: relative;
+  flex: none;
+  width: 26px;
+  height: 15px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  transition: background-color var(--dur-ui) var(--ease-ui);
+}
+.adv-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--ink-muted);
+  transition: transform var(--dur-ui) var(--ease-ui), background-color var(--dur-ui) var(--ease-ui);
+}
+.adv-toggle[aria-checked="true"] { color: var(--ink); }
+.adv-toggle[aria-checked="true"] .adv-track { background: var(--asset-brand); box-shadow: none; }
+.adv-toggle[aria-checked="true"] .adv-knob { transform: translateX(11px); background: var(--asset-brand-ink); }
+.sec-actions .adv-toggle { margin-right: var(--space-2); }
+.ph-acts { flex: none; display: flex; align-items: center; }
+@media (max-width: 559px) {
+  .adv-label { font-size: var(--t-caption); }
+}
+.ov-linkbtn, .ov-ev > summary { transition: color var(--dur-ui) var(--ease-ui); }
+.ov-list .ov-linkbtn { transition: color var(--dur-ui) var(--ease-ui); }

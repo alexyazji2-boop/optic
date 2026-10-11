@@ -495,7 +495,7 @@ SETTINGS = {
     "optic.rail.tight", "optic.rail.tight.v2", "optic.panels.open", "optic.panels.hidden.v1",
     "optic.notices.dismissed", "optic.session.desc", "optic.session.detail.v1",
     "optic.chat.width.v1", "optic.chat.width.v2",
-    "optic.knowledge.v1", "optic.knowledge.asked.v1", "optic.pulse.persona.v1",
+    "optic.knowledge.v1", "optic.knowledge.asked.v1", "optic.knowledge.basic.v1", "optic.pulse.persona.v1",
     "optic.indicators.v2", "optic.ws.panes",
     "optic.lt.mode", "optic.lt.range", "optic.lt.interval",
     "optic.chart.style.v1", "optic.chart.colors.v1", "optic.chart.mode", "optic.chart.range",

@@ -77,8 +77,8 @@ def test_every_heading_definition_reaches_its_heading():
       try { load('static/charts.js'); load('static/app.js'); } catch (e) {}
       explainPolicy = function () { return 'on_demand'; };
       var R = {};
-      R.gex = hg('GEX. Dealer gamma exposure');
-      R.vex = hg('VEX. Dealer vanna exposure');
+      R.gex = hg('Options positioning: dealer gamma (GEX)');
+      R.vex = hg('Options positioning: dealer vanna (VEX)');
       R.missing = Object.keys(HEADER_DEFS).filter(function (k) { return hg(k) === esc(k); });
       print('RESULT:' + JSON.stringify(R));
     """

@@ -88,8 +88,10 @@ def test_the_phone_uses_the_desktop_words():
     This is the same rule the NAV_GROUPS comment already applies to "Optic's
     Positions", which was renamed away from "Portfolio" for it."""
     labels = dict(_mobile_tabs())
-    assert labels.get("overview") == "Dossier", \
-        "the strip calls this group Dossier"
+    # The strip says "Company research"; the phone's bar has room for one
+    # word, so it keeps the second, and the two still name one destination.
+    assert labels.get("overview") == "Research", \
+        "the strip calls this group Company research"
     # Pulse left the bottom bar for the top bar on a phone, where it is the
     # same button, with the same word, as on a desktop.
     assert "ask" not in labels and "label: 'Ask'" not in MOBILE_TABS

@@ -96,7 +96,7 @@ def test_the_options_machinery_is_the_analysis_set():
     """The nine measured on AAPL. Named individually rather than by a prefix,
     because "gamma" alone would also catch the close-defence panel's wording."""
     swing = _advanced()["swing"]
-    for key in ("delta analysis", "gamma analysis", "gex.", "vex.",
+    for key in ("delta analysis", "gamma analysis", "dealer gamma (gex)", "dealer vanna (vex)",
                 "call vs put flow", "net premium by strike", "buy calls / puts",
                 "options strategies", "strike & entry recommendation"):
         assert key in swing, key

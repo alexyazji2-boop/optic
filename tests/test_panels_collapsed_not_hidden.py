@@ -25,8 +25,8 @@ ROOT = Path(__file__).resolve().parent.parent
 APP = (ROOT / "static/app.js").read_text()
 JSC = "/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc"
 
-NINE = ["Delta analysis", "Gamma analysis", "GEX. Dealer gamma exposure",
-        "VEX. Dealer vanna exposure", "Call vs put flow", "Net premium by strike",
+NINE = ["Delta analysis", "Gamma analysis", "Options positioning: dealer gamma (GEX)",
+        "Options positioning: dealer vanna (VEX)", "Call vs put flow", "Net premium by strike",
         "Buy calls / puts", "Options strategies", "Strike & entry recommendation"]
 
 

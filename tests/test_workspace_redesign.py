@@ -121,6 +121,8 @@ def test_the_header_splits_a_title_from_its_description(tmp_path):
     var document = { getElementById: function () { return host; } };
     function esc(s) { return String(s); }
     function navGroupLabel(g) { return g.label; }
+    var ADV_VIEWS = new Set(['brief', 'market']);
+    function advancedToggleHTML() { return '<b>ADV</b>'; }
     var NAV_GROUPS = [
       { id: 'market', label: 'Markets', views: ['brief', 'market', 'indices'] },
       { id: 'follow', label: 'Watchlist', views: ['watchlist', 'alerts'] },
@@ -140,8 +142,10 @@ def test_the_header_splits_a_title_from_its_description(tmp_path):
     out = subprocess.run([JSC, str(path)], capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     lines = dict(line.split(" => ", 1) for line in out.stdout.strip().splitlines())
-    assert lines["brief"] == "Markets / Optic's Read / The daily market, macro and world summary"
-    assert lines["market"] == "Markets / Macro / Macro regime and sector rotation"
+    # Plain-language descriptions since the simplify pass, and the advanced
+    # switch on the pages where it changes something.
+    assert lines["brief"] == "Markets / Daily read / Optic's daily summary of markets, the economy and world news / ADV"
+    assert lines["market"] == "Markets / Macro / The economy, interest rates and which sectors are leading / ADV"
     # The eyebrow is dropped when it would repeat the title.
     assert lines["watchlist"] == "Watchlist / What changed on the names you follow"
     assert lines["settings"] == "Settings"

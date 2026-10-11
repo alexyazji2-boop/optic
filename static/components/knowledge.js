@@ -90,6 +90,36 @@
     });
   }
 
+  /* The "show advanced analysis" switch: the same ladder, read as one switch.
+   *
+   * Not a second preference. On means rung 2 or above, off means a rung below
+   * it, and the switch only ever moves the reader between their own rungs:
+   * turning it on from rung 0 goes to rung 2 and remembers rung 0, so turning
+   * it off returns there rather than to the default. A reader already on
+   * rung 3 who turns it on stays on rung 3. Labels are the server's, so none
+   * is written here (tests/test_knowledge_modes.py). */
+  var BASIC_KEY = 'optic.knowledge.basic.v1';
+
+  function specialistOn() { return level() >= LEVELS.advanced; }
+
+  function setSpecialist(on) {
+    if (on) {
+      if (specialistOn()) return;
+      try { localStorage.setItem(BASIC_KEY, read()); } catch (e) { /* private mode */ }
+      markAsked();
+      set('advanced');
+      return;
+    }
+    if (!specialistOn()) return;
+    var back = null;
+    try { back = localStorage.getItem(BASIC_KEY); } catch (e) { /* private mode */ }
+    if (!back || !Object.prototype.hasOwnProperty.call(LEVELS, back) || LEVELS[back] >= LEVELS.advanced) {
+      back = DEFAULT_MODE;
+    }
+    markAsked();
+    set(back);
+  }
+
   function onChange(fn) { if (typeof fn === 'function') listeners.push(fn); }
 
   /** Has the reader been offered the choice, whatever they did about it? */
@@ -218,6 +248,8 @@
     asked: asked,
     markAsked: markAsked,
     choose: choose,
+    specialistOn: specialistOn,
+    setSpecialist: setSpecialist,
     LEVELS: LEVELS,
     DEFAULT_MODE: DEFAULT_MODE,
     STORE_KEY: STORE_KEY
