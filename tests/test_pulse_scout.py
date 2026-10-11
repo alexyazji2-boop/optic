@@ -1,0 +1,234 @@
+"""Scout, Pulse's mascot: the contracts the browser cannot be trusted to keep.
+
+Asked for on 2026-10-11 with the user's own concept sheet (concept 03,
+"Scout") as a 3D character, then reworked the same day: higher-resolution
+renders, a bigger welcome figure, and motion tied to Pulse's real events
+(the panel opening, typing, a question sent, a search the server reports,
+the answer streaming, its end, an error) instead of a loop of its own.
+Presentation only: nothing here may touch what Pulse sends, streams or costs.
+
+The renders are committed sprites (static/scout/) made by
+optic-brand/scout/render_scout.py, which writes frames.json; the frame
+order there is a contract with FRAME in components/scout.js.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+
+from PIL import Image
+
+ROOT = Path(__file__).resolve().parent.parent
+APP = (ROOT / "static/app.js").read_text(encoding="utf-8")
+CSS = (ROOT / "static/styles.css").read_text(encoding="utf-8")
+HTML = (ROOT / "static/index.html").read_text(encoding="utf-8")
+SCOUT = (ROOT / "static/components/scout.js").read_text(encoding="utf-8")
+MANIFEST = json.loads((ROOT / "static/scout/frames.json").read_text(encoding="utf-8"))
+FRAMES = MANIFEST["frames"]
+
+
+def _fn(name, src=APP):
+    start = src.index("function %s(" % name)
+    return src[start:src.index("\n}", start)]
+
+
+def _proto(name):
+    start = SCOUT.index("Ctl.prototype.%s = function" % name)
+    return SCOUT[start:SCOUT.index("\n  };", start)]
+
+
+def _block(start_marker):
+    start = CSS.index(start_marker)
+    return CSS[start:CSS.index("\n}", start)]
+
+
+def test_the_component_loads_before_app_js():
+    assert HTML.index('src="components/scout.js?v=') < HTML.index('src="app.js?v=')
+
+
+def test_the_frame_order_matches_the_renders():
+    """FRAME in scout.js is the order the renderer wrote. One frame out of
+    place and a blink shows the arm, or a wave shows the concerned face."""
+    order = re.findall(r"'([a-z0-9-]+)': (\d+)", SCOUT[SCOUT.index("var FRAME = {"):SCOUT.index("var COUNT")])
+    assert [n for n, _ in order] == FRAMES
+    assert [int(i) for _, i in order] == list(range(len(FRAMES)))
+    assert "var COUNT = %d;" % len(FRAMES) in SCOUT
+
+
+def test_the_sprites_are_transparent_strips_at_two_densities():
+    """Transparent, or a box shows round him on the dark panel; every frame
+    one size, or a frame position lands between two pictures. The 3x frame
+    covers the welcome figure's largest size (84px x the 1.15 UI scale)."""
+    for kind in ("full", "compact"):
+        for dens in ("2x", "3x"):
+            w, h = MANIFEST[kind][dens]
+            im = Image.open(ROOT / "static/scout" / ("scout-%s@%s.webp" % (kind, dens)))
+            assert im.mode == "RGBA", (kind, dens)
+            assert im.size == (w * len(FRAMES), h), (kind, dens, im.size)
+            alpha = im.getchannel("A")
+            for x in range(len(FRAMES)):
+                assert alpha.getpixel((x * w + 1, 1)) == 0, "frame %d of %s@%s has a background" % (x, kind, dens)
+            assert alpha.getextrema() == (0, 255)
+    assert MANIFEST["full"]["3x"][0] >= 84 * 1.15 * 3 - 2
+    assert MANIFEST["compact"]["3x"][0] >= 40 * 1.15 * 3 - 2
+    hero = Image.open(ROOT / "static/scout/scout.png")
+    assert hero.mode == "RGBA" and hero.getpixel((0, 0))[3] == 0
+
+
+def test_the_box_holds_its_space_and_picks_a_density():
+    base = _block("\n.scout {")
+    full_w, full_h = MANIFEST["full"]["3x"]
+    assert "aspect-ratio: %d / %d" % (full_w, full_h) in base
+    assert "background-size: %d00%% 100%%" % len(FRAMES) in base
+    assert 'image-set(url("scout/scout-full@2x.webp") 2x, url("scout/scout-full@3x.webp") 3x)' in base
+    comp = _block("\n.scout-compact {")
+    cw, ch = MANIFEST["compact"]["3x"]
+    assert "aspect-ratio: %d / %d" % (cw, ch) in comp
+    assert "scout-compact@3x.webp" in comp
+    # The sequencer owns the frames; no CSS animation competes with it.
+    foot = CSS[CSS.index("==== Scout ==="):]
+    assert "@keyframes scout" not in foot
+
+
+def test_the_blink_runs_open_half_closed_half_open():
+    blink = _proto("blink")
+    assert "[[f[1], 45], [f[2], 70], [f[1], 50]]" in blink, "half, closed, half"
+    assert "self.rest()" in blink, "and back to open"
+    for pose in ("idle", "tilt", "curious", "concerned"):
+        assert "%s: ['%s', '%s-half', '%s-closed']" % (pose, pose, pose, pose) in SCOUT
+
+
+def test_pauses_are_five_to_ten_seconds_and_nothing_runs_hidden():
+    assert "rand(5000, 10000)" in SCOUT
+    running = _proto("running")
+    for cond in ("this.visible", "!document.hidden", "motion() !== 'still'", "this.alive()"):
+        assert cond in running, cond
+    assert "IntersectionObserver" in SCOUT and "io.observe(el)" in SCOUT
+    assert "visibilitychange" in SCOUT
+    # A removed figure stops itself: no timers left on a detached node.
+    alive = _proto("alive")
+    assert "isConnected" in alive and "this.stop()" in alive
+    stop = _proto("stop")
+    assert "clearTimeout(this.idleT)" in stop and "io.unobserve(this.el)" in stop
+
+
+def test_motion_setting_full_subtle_still_remembered_and_reduced_by_default():
+    assert "var STORE = 'optic.scout.motion.v1';" in SCOUT
+    assert "v === 'full' || v === 'subtle' || v === 'still'" in SCOUT
+    assert "reduceQuery && reduceQuery.matches ? 'still' : 'full'" in SCOUT
+    # Gestures belong to full alone; subtle keeps poses and single blinks.
+    assert "if (motion() !== 'full') { done(); return; }" in _proto("gesture")
+    menu = _fn("scoutMenuHTML")
+    for v in ("full", "subtle", "still"):
+        assert "radio('%s'," % v in menu
+    assert 'role="menuitemradio"' in menu
+
+
+def test_the_welcome_wave_belongs_to_the_panel_opening():
+    """Not to a render: renderPulseEmpty attaches without a gesture, and the
+    wave comes from the body's chat-open class turning on, at most once a
+    minute."""
+    empty = _fn("renderPulseEmpty")
+    assert "attach(log.querySelector('.pulse-hello-row .scout'), { slot: 'welcome' })" in empty
+    assert "gesture(" not in empty
+    events = _fn("installScoutEvents")
+    assert "attributeFilter: ['class']" in events
+    assert "now && !open && Date.now() - scoutLastWave > 60000" in events
+    assert "c.gesture('wave')" in events
+    assert "\n  installScoutEvents();" in APP
+
+
+def test_typing_tilts_once_not_per_key():
+    events = _fn("installScoutEvents")
+    assert "if (c.state === 'idle') c.set('listening');" in events
+    assert "2500" in events
+    # The same state again restarts nothing.
+    assert "if (state === this.state && !via) return;" in _proto("set")
+
+
+def test_a_question_gets_one_wave_then_thinking():
+    reply = _fn("pulseReplyScout")
+    assert "c.set('thinking', 'ack');" in reply, "thinking, entered by one wave"
+    st = _proto("set")
+    assert st.index("this.state = state;") < st.index("this.gesture(via)"), \
+        "state first, so it holds even when the wave cannot play"
+    for name in ("sendChat", "runResearch"):
+        body = APP[APP.index("async function %s(" % name):]
+        body = body[:body.index("\n}\n")]
+        assert "const scout = pulseReplyScout(node, true);" in body, name
+        fin = body[body.index("} finally {"):]
+        assert "pulseReplyScoutDone(scout, node);" in fin, name
+
+
+def test_searching_only_when_the_server_says_so():
+    """Pulse's own status events (app/ai.py): web search in chat, search and
+    source reading in deep research. Anything else is thinking, and the box
+    says "Checking sources…" only for these."""
+    assert "new Set(['searching the web', 'searching', 'reading and weighing sources'])" in APP
+    ai = (ROOT / "app/ai.py").read_text(encoding="utf-8")
+    for state in ("searching the web", "searching", "reading and weighing sources"):
+        assert '"state": "%s"' % state in ai, state
+    status = _fn("pulseScoutStatus")
+    assert "searching ? 'Checking sources…' : 'Working'" in status
+    stream = APP[APP.index("async function streamTo("):]
+    stream = stream[:stream.index("\n}\n")]
+    assert "pulseScoutStatus(node, state);" in stream
+    assert "if (!acc) pulseScoutStreaming(node);" in stream, "stillness from the first words"
+
+
+def test_endings_nod_concern_or_idle_never_stuck():
+    done = _fn("pulseReplyScoutDone")
+    assert "node.classList.contains('err')" in done and "c.set('error')" in done
+    assert "c.set('idle', 'nod')" in done
+    assert "else c.set('idle');" in done, "an empty ending: idle, no nod"
+    assert "error: 'concerned'" in SCOUT
+    # No celebration exists to be played (the comments may say so; the code
+    # has no such gesture).
+    code = re.sub(r"/\*.*?\*/|//[^\n]*", "", SCOUT.lower(), flags=re.S)
+    for word in ("celebrat", "jump", "cheer", "thumb"):
+        assert word not in code
+
+
+def test_the_menu_sends_nothing_and_is_a_real_menu():
+    act = _fn("scoutMenuAction")
+    for banned in ("sendChat(", "runResearch(", "streamTo(", "fetch(", "draftPulse("):
+        assert banned not in act, banned
+    menu = _fn("scoutMenuHTML")
+    assert 'role="menu"' in menu and menu.count('role="menuitem"') == 2
+    assert "What can I ask?" in menu and "Show example questions" in menu
+    events = _fn("installScoutEvents")
+    for key in ("Escape", "ArrowDown", "ArrowUp", "Home", "End", "Tab"):
+        assert "'%s'" % key in events, key
+    html = SCOUT[SCOUT.index("function html("):SCOUT.index("\n  }", SCOUT.index("function html("))]
+    assert 'aria-haspopup="menu"' in html and 'aria-expanded="false"' in html
+    assert "esc(label)" in _fn("scoutHTML"), "the label is escaped"
+
+
+def test_decorative_figures_are_hidden_and_the_reply_keeps_its_name():
+    assert '<span class="\' + cls + \'" aria-hidden="true"' in SCOUT
+    reply = _fn("pulseReplyScout")
+    assert '<span class="sr-only">${esc(ASSISTANT_NAME)}</span>' in reply
+
+
+def test_the_capability_sentence_is_shared():
+    assert "addMsg('assistant', PULSE_CAN_ASK)" in APP
+    assert "mdLite(PULSE_CAN_ASK)" in _fn("pulseStarters")
+
+
+def test_presentation_only():
+    for banned in ("fetch(", "XMLHttpRequest", "/api/", "sessionStorage", "http://", "https://"):
+        assert banned not in SCOUT, banned
+    foot = CSS[CSS.index("==== Scout ==="):]
+    assert "http" not in foot, "the sprites are this site's files"
+    for name in ("sendChat", "runResearch"):
+        body = APP[APP.index("async function %s(" % name):]
+        body = body[:body.index("\n}\n")]
+        assert body.count("streamTo(") == 1
+
+
+def test_the_expressions_carry_no_market_meaning():
+    code = re.sub(r"/\*.*?\*/|//[^\n]*", "", SCOUT.lower(), flags=re.S)
+    for state in ("bull", "bear", "confident", "happy", "sad", "excited", "worried"):
+        assert not re.search(r"\b%s" % state, code), state

@@ -153,31 +153,20 @@ def test_the_copy_does_not_mention_what_a_message_costs():
     assert "costs" not in reason
 
 
-def test_the_empty_state_carries_the_optic_aperture():
-    """The waveform is drawn for 17px. At 76 it reads thin, and it is the
-    Pulse glyph rather than the mark the product is named for -- so the panel's
-    one large graphic is now the aperture the header and the home page carry.
-
-    Rendered through `opticMarkHTML`, not pasted: there were already two
-    hand-written copies of those three paths and a third would be the one that
-    drifts. tests/test_brand_mark.py compares the generated drawing against
-    index.html's static copy, which is the only pair that still can."""
+def test_the_greeting_carries_scout_and_the_aperture_stays_single():
+    """The greeting's graphic was the Optic aperture from 2026-10-08 until the
+    user asked for Scout, concept 03 of their own snowman sheet, in its place
+    (2026-10-11). The aperture stays everywhere else, and it is still drawn
+    by `opticMarkHTML` alone: there were already two hand-written copies of
+    those three paths and a third would be the one that drifts.
+    tests/test_pulse_scout.py holds the mascot's own contracts."""
     starters = APP[APP.index("function pulseStarters("):]
     starters = starters[:starters.index("\nfunction ")]
-    assert "opticMarkHTML('pulse-logo')" in starters
+    assert "scoutHTML('full')" in starters
+    assert "opticMarkHTML(" not in starters
     assert "pulseMarkHTML(" not in starters, "the waveform is the small mark"
+    # The retired placement left no rules behind.
+    assert "pulse-logo" not in CSS and "pulse-logo" not in APP
     # One drawing: the aperture path appears once in the whole file.
     assert APP.count("M2.6 16C6.3 8.9") == 1, \
         "the aperture is hand-copied somewhere again"
-
-
-def test_the_mark_in_the_panel_does_not_animate():
-    """The header mark blinks everywhere except Home and the home logo irises
-    open on arrival -- both are arrival. This one sits above four cards a
-    reader is reading, and motion beside text being read is motion nobody
-    asked for."""
-    block = CSS.split("\n.pulse-logo {", 1)[1]
-    block = block[:block.index("}")]
-    assert "animation" not in block
-    # And it inherits none, because the animated rules are keyed per prefix.
-    assert ".pulse-logo-eye" not in CSS and ".pulse-logo-line" not in CSS

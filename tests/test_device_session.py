@@ -513,6 +513,10 @@ SETTINGS = {
     "optic.setups.view.v1", "optic.setups.params.v1",
     # A fact about this browser's authenticator, needed before anyone signs in.
     "optic.auth.passkeyMade",
+    # How much Scout, Pulse's mascot, moves on this device (full, subtle,
+    # still). A display preference, like the UI scale, not anything the
+    # reader made.
+    "optic.scout.motion.v1",
     # The session machinery itself.
     "optic.session.holder.v1", "optic.session.next",
     # Where a reload from "Optic has been updated" returns to: this tab only,
@@ -529,6 +533,7 @@ def _personal():
 def _keys_in_use():
     found = set()
     for path in ("static/app.js", "static/auth.js", "static/components/knowledge.js",
+                 "static/components/scout.js",
                  "static/charts.js", "static/index.html"):
         text = (ROOT / path).read_text()
         found |= set(re.findall(r"""['"](optic\.[A-Za-z0-9_.-]+)['"]""", text))

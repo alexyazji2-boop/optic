@@ -99,7 +99,7 @@ def test_the_expander_toggles_both_ways():
 
 
 def test_pulse_greets_before_the_starters():
-    """Pulse opens the conversation in its own voice, beside the Optic mark,
+    """Pulse opens the conversation in its own voice, beside Scout,
     and the numbered starters follow it unchanged."""
     body = APP_JS.split("function pulseStarters(", 1)[1].split("\n}\n", 1)[0]
     assert "What would you like to look into?" in body

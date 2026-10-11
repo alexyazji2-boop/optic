@@ -39200,6 +39200,7 @@ function pulseResume(id) {
     chatState.messages.forEach((m) => {
       if (m.role === 'user') { asked = m.content; addMsg('user', m.content); return; }
       const node = addMsg('assistant', m.content);
+      pulseReplyScout(node, false);
       addReplyActions(node, m.content || '', asked);
     });
     // A resumed conversation is history, so it opens where it left off rather
@@ -39874,14 +39875,21 @@ function pulseStarters(expanded) {
   const usable = PULSE_STARTERS.filter((c) => !c.need || sym);
   const shown = expanded ? usable : usable.slice(0, PULSE_STARTERS_SHOWN);
   return `<div class="pulse-empty pulse-opening">
-    ${/* The Optic mark stays the panel's one graphic (it is the product's
-         aperture, not a character), now sat beside the greeting the way an
-         avatar sits beside a reply. Still the only greeting: nothing is put
-         in `#chat-log`, so the panel never introduces itself twice. */''}
+    ${/* Scout, Pulse's mascot, beside the greeting the way an avatar sits
+         beside a reply (components/scout.js). Asked for by the user with their
+         own concept sheet, in place of the Optic mark that sat here; the mark
+         stays everywhere else. Still the only greeting: nothing is put in
+         `#chat-log`, so the panel never introduces itself twice.
+
+         He is a button here and only here: it opens a small menu (what to
+         ask, the examples, how much he moves). Nothing in it sends a
+         question. */''}
     <div class="pulse-hello-row">
-      ${opticMarkHTML('pulse-logo')}
+      ${scoutHTML('full', `${ASSISTANT_NAME} guide: what to ask, examples and animation`)}
+      ${scoutHTML('full') ? scoutMenuHTML() : ''}
       <div class="pulse-hello" role="note">Hi, I'm ${esc(ASSISTANT_NAME)}. What would you like to look into?</div>
     </div>
+    ${pulseCanAskShown ? `<p class="pulse-can-ask" id="pulse-can-ask" role="note">${mdLite(PULSE_CAN_ASK)}</p>` : ''}
     <p class="pulse-empty-sub">Pulse reads the terminal's own computed output for
       whatever is on screen${sym ? `· currently <strong>${esc(sym)}</strong>` : ''}.
       Ask anything, or start with one of these.</p>
@@ -39920,7 +39928,236 @@ function renderPulseEmpty() {
   const existing = log.querySelector('.pulse-empty');
   if (hasMsgs) { if (existing) existing.remove(); return; }
   log.innerHTML = pulseStarters(pulseStartersExpanded);
+  // A redraw (a new ticker, "See more") is not an arrival: the figure that
+  // comes back just blinks. The wave belongs to the panel opening.
+  if (window.OpticScout) window.OpticScout.attach(log.querySelector('.pulse-hello-row .scout'), { slot: 'welcome' });
   if (pulseBlockedReason()) markPulseControls(true);
+}
+
+/* Scout's markup, or nothing if components/scout.js did not load: the
+ * greeting and the replies read the same without him. With a label he is a
+ * button (the welcome figure); without one he is decorative. */
+function scoutHTML(size, label) {
+  return window.OpticScout ? window.OpticScout.html({ size, label: label ? esc(label) : '' }) : '';
+}
+
+/* What Pulse can be asked, in its own words. The boot greeting says it to a
+ * reader whose Pulse is working, and "What can I ask?" in Scout's menu shows
+ * the same sentence, so the two cannot drift apart. */
+const PULSE_CAN_ASK = 'Ask me anything. About the loaded ticker\'s gamma regime, flow or recommended '
+  + 'strike, about the market as a whole, or attach a chart or PDF. **Deep research** runs live web sources.';
+let pulseCanAskShown = false;
+
+function scoutMenuHTML() {
+  const m = window.OpticScout ? window.OpticScout.motion() : 'full';
+  const radio = (v, label) => `<button type="button" role="menuitemradio" class="scout-mi"
+      aria-checked="${m === v}" data-scout-motion="${v}">${label}</button>`;
+  return `<div class="scout-menu" id="scout-menu" role="menu" aria-label="${esc(ASSISTANT_NAME)} guide" hidden>
+      <button type="button" role="menuitem" class="scout-mi" data-scout-act="ask">${pulseCanAskShown ? 'Hide what I can ask' : 'What can I ask?'}</button>
+      <button type="button" role="menuitem" class="scout-mi" data-scout-act="examples">Show example questions</button>
+      <div class="scout-menu-sep" role="separator"></div>
+      <div class="scout-menu-lab" aria-hidden="true">Animation</div>
+      ${radio('full', 'Full')}${radio('subtle', 'Subtle')}${radio('still', 'Still')}
+    </div>`;
+}
+
+function pulseWelcomeScout() {
+  return document.querySelector('#chat-log .pulse-hello-row .scout');
+}
+
+/* The Scout a reader's typing is addressed to: the welcome figure, or once a
+ * conversation has started, the one beside the latest answer -- unless that
+ * answer is still being written, when he is busy with it already. */
+function pulseScoutListener() {
+  const w = pulseWelcomeScout();
+  if (w) return w;
+  if (chatState.busy) return null;
+  const all = document.querySelectorAll('#chat-log .msg.has-scout .who .scout');
+  return all.length ? all[all.length - 1] : null;
+}
+
+function scoutCtl(el) {
+  return el && window.OpticScout ? window.OpticScout.attach(el, el.closest('.pulse-hello-row')
+    ? { slot: 'welcome' } : { slot: 'reply' }) : null;
+}
+
+/* The compact Scout on a reply, in the row its hidden "Pulse" label holds.
+ *
+ * Only on answers to the reader's questions -- not on the boot greeting or a
+ * one-line notice -- because there it marks where an answer starts. One moves
+ * at a time (the `reply` slot): the newest. Earlier ones keep the frame they
+ * ended on and stand still, so a long conversation has one moving mascot,
+ * not one per answer. Decorative: the label stays for a screen reader, and
+ * the figure is aria-hidden. */
+function pulseReplyScout(node, working) {
+  const who = node && node.querySelector('.who');
+  if (!who || !window.OpticScout) return null;
+  who.innerHTML = `${scoutHTML('compact')}<span class="sr-only">${esc(ASSISTANT_NAME)}</span>`;
+  node.classList.add('has-scout');
+  const el = who.querySelector('.scout');
+  if (working) {
+    // The question is in: one acknowledging wave beside the pending answer,
+    // then thinking. The welcome figure, if it is still there, stops listening.
+    const w = scoutCtl(pulseWelcomeScout());
+    if (w) w.set('idle');
+    // Entered by the wave, which ends in the thinking pose; with Pulse
+    // hidden or motion set lower, the state holds without it.
+    const c = window.OpticScout.attach(el, { slot: 'reply' });
+    c.set('thinking', 'ack');
+  }
+  return el;
+}
+
+/* What the server says it is doing, as Scout's state and the steps box's
+ * title. Only a search the server reports makes him look around and the box
+ * say "Checking sources…"; anything else is thinking. */
+const PULSE_SEARCH_STATES = new Set(['searching the web', 'searching', 'reading and weighing sources']);
+function pulseScoutStatus(node, state) {
+  const searching = PULSE_SEARCH_STATES.has(state);
+  const title = node.querySelector('.pulse-steps:not([data-done]) .ps-title');
+  if (title) title.textContent = searching ? 'Checking sources…' : 'Working';
+  const el = node.querySelector('.who .scout');
+  if (el && el.scoutCtl) el.scoutCtl.set(searching ? 'searching' : 'thinking');
+}
+
+/* The first words of the answer: stillness, so the text has the attention. */
+function pulseScoutStreaming(node) {
+  const el = node.querySelector('.who .scout');
+  if (el && el.scoutCtl && el.scoutCtl.state !== 'streaming') el.scoutCtl.set('streaming');
+}
+
+/* However the reply ends. An error: a gentle concerned face beside the
+ * message that says what failed, and nothing more. An answer: a small nod,
+ * then idle. Nothing at all (the stream ended empty, or was cut off): idle,
+ * because there is nothing to acknowledge. Never left thinking. */
+function pulseReplyScoutDone(el, node) {
+  const c = el && el.scoutCtl;
+  if (!c) return;
+  if (node.classList.contains('err')) { c.set('error'); return; }
+  const said = (node.querySelector('.bubble') || {}).textContent || '';
+  if (said.trim()) c.set('idle', 'nod'); else c.set('idle');
+}
+
+/* The panel opening is the welcome: one wave, then idle. Watched on the
+ * body's class because five different controls open Pulse. Not again within
+ * a minute, so opening and closing it to look at a chart is not a greeting
+ * every time. */
+let scoutLastWave = 0;
+function installScoutEvents() {
+  if (!window.OpticScout || !window.MutationObserver) return;
+  let open = document.body.classList.contains('chat-open');
+  new MutationObserver(() => {
+    const now = document.body.classList.contains('chat-open');
+    if (now && !open && Date.now() - scoutLastWave > 60000) {
+      const c = scoutCtl(pulseWelcomeScout());
+      if (c) { scoutLastWave = Date.now(); c.gesture('wave'); }
+    }
+    if (!now && open) closeScoutMenu(false);
+    open = now;
+  }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+
+  /* Typing: a curious tilt when the box goes from empty to not, held while
+   * the reader types and let go 2.5 s after the last key or when the box is
+   * emptied. Keys inside that window change nothing, so he does not react to
+   * every keystroke. Drafted questions (every Ask and Explain button) arrive
+   * the same way, as an input event. */
+  const box = document.getElementById('chat-input');
+  let quiet = null;
+  if (box) {
+    box.addEventListener('input', () => {
+      const c = scoutCtl(pulseScoutListener());
+      if (!c) return;
+      clearTimeout(quiet);
+      if (!box.value.trim()) { if (c.state === 'listening') c.set('idle'); return; }
+      if (c.state === 'idle') c.set('listening');
+      quiet = setTimeout(() => { if (c.state === 'listening') c.set('idle'); }, 2500);
+    });
+  }
+
+  document.addEventListener('click', (evt) => {
+    if (!evt.target || !evt.target.closest) return;
+    const btn = evt.target.closest('.scout-btn');
+    if (btn) { scoutPressed(btn); return; }
+    const act = evt.target.closest('[data-scout-act]');
+    if (act) { scoutMenuAction(act.dataset.scoutAct); return; }
+    const mo = evt.target.closest('[data-scout-motion]');
+    if (mo) {
+      window.OpticScout.setMotion(mo.dataset.scoutMotion);
+      document.querySelectorAll('[data-scout-motion]').forEach((b) => {
+        b.setAttribute('aria-checked', String(b.dataset.scoutMotion === mo.dataset.scoutMotion));
+      });
+      closeScoutMenu(true);
+      return;
+    }
+    if (!evt.target.closest('#scout-menu')) closeScoutMenu(false);
+  });
+  /* Captured, so it runs before #chat's own Escape, which closes the whole
+   * panel: inside the menu, Escape closes the menu and nothing more. */
+  document.addEventListener('keydown', (evt) => {
+    const menu = document.getElementById('scout-menu');
+    if (!menu || menu.hidden || !evt.target || !evt.target.closest) return;
+    if (!evt.target.closest('#scout-menu')) return;
+    const items = [...menu.querySelectorAll('.scout-mi')];
+    const i = items.indexOf(document.activeElement);
+    if (evt.key === 'Escape') {
+      evt.preventDefault();
+      evt.stopPropagation();
+      closeScoutMenu(true);
+    } else if (evt.key === 'ArrowDown') {
+      evt.preventDefault(); items[(i + 1) % items.length].focus();
+    } else if (evt.key === 'ArrowUp') {
+      evt.preventDefault(); items[(i - 1 + items.length) % items.length].focus();
+    } else if (evt.key === 'Home') { evt.preventDefault(); items[0].focus(); } else if (evt.key === 'End') {
+      evt.preventDefault(); items[items.length - 1].focus();
+    } else if (evt.key === 'Tab') closeScoutMenu(false);
+  }, true);
+}
+
+/* A press on Scout: a short wave or, every other time, a curious tilt, and
+ * the menu. Keyboard and touch reach it the same way, as a button. */
+let scoutPresses = 0;
+function scoutPressed(btn) {
+  const menu = document.getElementById('scout-menu');
+  if (menu && !menu.hidden) { closeScoutMenu(true); return; }
+  const c = scoutCtl(btn.querySelector('.scout'));
+  if (c) c.gesture(scoutPresses++ % 2 ? 'curious' : 'wave');
+  if (!menu) return;
+  menu.hidden = false;
+  btn.setAttribute('aria-expanded', 'true');
+  const first = menu.querySelector('.scout-mi');
+  if (first) first.focus({ preventScroll: true });
+  // The menu hangs below the figure inside the scrolling body; brought fully
+  // into view, or "Still" sat under the box to type into.
+  menu.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+}
+
+function closeScoutMenu(refocus) {
+  const menu = document.getElementById('scout-menu');
+  if (!menu || menu.hidden) return;
+  menu.hidden = true;
+  const btn = document.querySelector('#chat-log .scout-btn');
+  if (btn) {
+    btn.setAttribute('aria-expanded', 'false');
+    if (refocus) btn.focus();
+  }
+}
+
+/* The menu's two actions reuse what the empty state already has: the
+ * capability sentence, and the starter cards with "See more" opened. Neither
+ * sends anything; the examples still go into the box only when pressed. */
+function scoutMenuAction(act) {
+  closeScoutMenu(false);
+  if (act === 'ask') pulseCanAskShown = !pulseCanAskShown;
+  if (act === 'examples') pulseStartersExpanded = true;
+  renderPulseEmpty();
+  const btn = document.querySelector('#chat-log .scout-btn');
+  if (btn) btn.focus({ preventScroll: true });
+  const c = scoutCtl(pulseWelcomeScout());
+  if (act === 'examples') {
+    const cards = document.querySelector('#chat-log .pulse-cards');
+    if (cards) cards.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
+    if (c) c.gesture('point');
+  } else if (c && pulseCanAskShown) c.gesture('curious');
 }
 
 function mdLite(text) {
@@ -40567,6 +40804,7 @@ async function streamTo(url, body, node) {
       const pinned = isPinnedToBottom(logEl);
 
       if (event === 'delta') {
+        if (!acc) pulseScoutStreaming(node);
         acc += payload.text || '';
         if (node.pulseSteps) pulseStepsDone(node); else statusEl.textContent = '';
         render.push(payload.text || '');
@@ -40574,6 +40812,7 @@ async function streamTo(url, body, node) {
         const state = String(payload.state || '');
         if (node.pulseSteps) pulseStepAdd(node, PULSE_STEP_WORDS[state] || cap(state));
         else statusEl.innerHTML = `<span class="spinner"></span>${esc(state)}…`;
+        pulseScoutStatus(node, state);
       } else if (event === 'error') {
         node.classList.add('err');
         if (node.pulseSteps) pulseStepsDone(node, true); else statusEl.textContent = '';
@@ -40755,6 +40994,7 @@ async function sendChat(text) {
   addMsg('user', text + fileNote);
   chatState.messages.push({ role: 'user', content: text + fileNote });
   const node = addMsg('assistant', '');
+  const scout = pulseReplyScout(node, true);
   pulseStepsStart(node, 'Reading what is on your screen');
 
   try {
@@ -40780,6 +41020,7 @@ async function sendChat(text) {
     pulseStepsDone(node, true);
     node.querySelector('.bubble').textContent = err.message;
   } finally {
+    pulseReplyScoutDone(scout, node);
     chatState.busy = false;
     $('#chat-send').disabled = false;
     $('#chat-research').disabled = false;
@@ -40813,6 +41054,7 @@ async function runResearch() {
   addMsg('user', label);
   $('#chat-input').value = '';
   const node = addMsg('assistant', '');
+  const scout = pulseReplyScout(node, true);
   pulseStepsStart(node, 'Searching live sources');
 
   try {
@@ -40827,6 +41069,7 @@ async function runResearch() {
     pulseStepsDone(node, true);
     node.querySelector('.bubble').textContent = err.message;
   } finally {
+    pulseReplyScoutDone(scout, node);
     chatState.busy = false;
     $('#chat-send').disabled = false;
     $('#chat-research').disabled = false;
@@ -45215,6 +45458,7 @@ function restoreReloadPlace() {
   }
   loadCalendarSession();
   mountPulseMarks();
+  installScoutEvents();
   mountMobileTabs();
   renderHome();
   restoreReloadPlace();
@@ -45235,7 +45479,7 @@ function restoreReloadPlace() {
       // rather than as part of the terminal.
       // Marked as the greeting, not a reply: renderPulseEmpty must not mistake
       // it for a conversation in progress and bin the starter cards.
-      addMsg('assistant', `Ask me anything. About the loaded ticker's gamma regime, flow or recommended strike, about the market as a whole, or attach a chart or PDF. **Deep research** runs live web sources.`)
+      addMsg('assistant', PULSE_CAN_ASK)
         .classList.add('msg-greeting');
     }
   } catch (e) {

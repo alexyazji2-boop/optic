@@ -867,16 +867,6 @@ header.topbar {
 .pulse-mark { display: inline-flex; align-items: center; }
 .pulse-glyph { display: block; }
 .pulse-glyph-sm { width: 17px; height: 17px; }
-/* The empty state's anchor is the Optic aperture, not the Pulse waveform.
-   The waveform is drawn for 17px and reads thin at 76; the aperture is the
-   mark the product is named for and is already the header's and the home
-   page's. Same drawing, third placement -- `opticMarkHTML` renders all three.
-
-   It does not blink or iris open here. Those belong to arrival: the header
-   mark blinks everywhere except Home so it has something to do, and the home
-   logo opens once on load. This sits above four cards a reader is reading,
-   and motion beside text you are reading is motion nobody asked for. */
-.pulse-logo { width: 76px; height: 76px; color: var(--ink-2); }
 
 /* The trace redraws itself, the same idiom and the same timing as the brand
    mark's chart line -- `pathLength="100"` normalises the dash maths so the
@@ -8715,7 +8705,6 @@ table.data tr.fx-detail td,
    as the panel introducing itself. The starter cards keep their own grid and
    their text stays left-aligned -- those are things to read, not a greeting. */
 .pulse-empty { padding: var(--space-4) var(--space-3); text-align: center; }
-.pulse-empty .pulse-logo { display: block; margin: 0 auto var(--space-3); }
 .pulse-empty .pulse-empty-sub { margin-inline: auto; max-width: 46ch; }
 .pulse-empty .pulse-cards { text-align: left; }
 .pulse-empty h3 { margin: 0 0 var(--space-2); font-size: var(--t-heading); }
@@ -18487,16 +18476,15 @@ footer.legal > .legal-full {
   gap: var(--space-3);
 }
 .pulse-hello-row[hidden] { display: none; }
-#chat .pulse-opening .pulse-logo {
-  flex: none;
-  width: calc(30px * var(--ui-scale));
-  height: calc(30px * var(--ui-scale));
-  margin: calc(9px * var(--ui-scale)) 0 0;
-  color: var(--brand);
-}
-/* Everything under the greeting lines up with the bubble, not the mark. */
-#chat .pulse-opening > :not(.pulse-hello-row) {
-  margin-left: calc(30px * var(--ui-scale) + var(--space-3));
+/* Scout stands beside the greeting where the Optic mark sat (30px), as a
+   whole figure large enough to read as one: 84px (97 at the default UI
+   scale), which the 3x sprite covers at 288px a frame. What follows the
+   greeting runs the panel's full width; indented by a figure this size, the
+   starter cards lost a fifth of their line on a phone. */
+#chat .pulse-opening { --scout-greet-w: calc(84px * var(--ui-scale)); }
+#chat .pulse-opening .pulse-hello-row {
+  position: relative;
+  align-items: center;
 }
 .pulse-hello {
   flex: 1 1 auto;
@@ -18575,3 +18563,135 @@ footer.legal > .legal-full {
   }
 }
 
+/* ================================================================ Scout ===
+ *
+ * Pulse's mascot, concept 03 from the user's sheet, as 3D renders: one
+ * transparent sprite per size and density, 22 frames in a row (order in
+ * static/scout/frames.json, written by optic-brand/scout/render_scout.py).
+ * components/scout.js picks the frame by background position in response to
+ * Pulse's events; nothing here animates on its own. The box has a fixed width
+ * and aspect ratio, so it holds its space before the image arrives and
+ * nothing around it moves.
+ *
+ * Two densities, chosen by the browser: 2x for ordinary and 2x screens, 3x
+ * for 3x phones. Both are cut from the same supersampled render, never an
+ * enlargement. The plain url() line is for browsers without image-set. */
+.scout {
+  display: block;
+  flex: none;
+  aspect-ratio: 288 / 380;
+  background-repeat: no-repeat;
+  background-position: 0 0;
+  background-size: 2200% 100%;
+  background-image: url("scout/scout-full@2x.webp");
+  background-image: -webkit-image-set(url("scout/scout-full@2x.webp") 2x, url("scout/scout-full@3x.webp") 3x);
+  background-image: image-set(url("scout/scout-full@2x.webp") 2x, url("scout/scout-full@3x.webp") 3x);
+}
+.scout-compact {
+  aspect-ratio: 144 / 156;
+  background-image: url("scout/scout-compact@2x.webp");
+  background-image: -webkit-image-set(url("scout/scout-compact@2x.webp") 2x, url("scout/scout-compact@3x.webp") 3x);
+  background-image: image-set(url("scout/scout-compact@2x.webp") 2x, url("scout/scout-compact@3x.webp") 3x);
+}
+
+/* The welcome figure is a button: it opens the guide menu. No fill and no
+   hover pill (the gold pill is the sidebar's alone); a focus ring for the
+   keyboard, and a 44px-plus target for a thumb. */
+.scout-btn {
+  flex: none;
+  display: block;
+  width: var(--scout-greet-w);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-lg);
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.scout-btn .scout { width: 100%; }
+.scout-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.scout-menu {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  min-width: 15rem;
+  padding: var(--space-1);
+  display: grid;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  box-shadow: var(--elev-3);
+}
+.scout-menu[hidden] { display: none; }
+.scout-mi {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--t-small);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-ui, 120ms) var(--ease-ui, ease);
+}
+.scout-mi:hover, .scout-mi:focus-visible { background: var(--surface-2); outline: none; }
+.scout-mi[role="menuitemradio"]::before {
+  content: "";
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-strong);
+}
+.scout-mi[aria-checked="true"]::before { border-color: var(--brand); background: var(--brand); }
+.scout-menu-sep { height: 1px; margin: var(--space-1) 0; background: var(--border); }
+.scout-menu-lab {
+  padding: var(--space-1) var(--space-2) 0;
+  color: var(--ink-muted);
+  font-size: var(--t-caption);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+#chat .pulse-opening .pulse-can-ask {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px solid var(--brand);
+  color: var(--ink-2);
+}
+
+/* Beside a reply: the bust, in the row the hidden "Pulse" label already
+ * occupies, so it marks where an answer starts without adding a line. The
+ * steps box shares that row; a reply without one starts below. */
+#chat .msg.assistant.has-scout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--space-2);
+  align-items: center;
+}
+#chat .msg.assistant.has-scout > * { grid-column: 1 / -1; }
+#chat .msg.assistant.has-scout > .who {
+  display: block;
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+}
+#chat .msg.assistant.has-scout > .status { grid-column: 2; grid-row: 1; min-width: 0; }
+#chat .msg.assistant.has-scout > .status:empty + .bubble { margin-top: var(--space-1); }
+#chat .msg.assistant.has-scout .pulse-steps { margin-bottom: 0; }
+#chat .msg.assistant.has-scout > .status:not(:empty) ~ .bubble:not(:empty) { margin-top: var(--space-2); }
+#chat .msg .who .scout-compact { width: calc(40px * var(--ui-scale)); }
+
+@media (max-width: 640px) {
+  #chat .pulse-opening { --scout-greet-w: 72px; }
+}
+/* Reduced motion needs no rule here: with no choice saved, scout.js reads
+   prefers-reduced-motion and shows the resting frame only ("Still"). */
