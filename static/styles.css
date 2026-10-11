@@ -18994,3 +18994,85 @@ footer.legal > .legal-full {
 }
 .ov-linkbtn, .ov-ev > summary { transition: color var(--dur-ui) var(--ease-ui); }
 .ov-list .ov-linkbtn { transition: color var(--dur-ui) var(--ease-ui); }
+
+/* "What is this?": the four-part explanation on a specialist panel. Quiet
+ * until opened, so it does not compete with the panel's own reading. */
+.guide { margin: 0 0 var(--space-3); }
+.guide > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 28px;
+  list-style: none;
+  cursor: pointer;
+  font-size: var(--t-small);
+  font-weight: 500;
+  color: var(--ink-2);
+  transition: color var(--dur-ui) var(--ease-ui);
+}
+.guide > summary::-webkit-details-marker { display: none; }
+.guide > summary::before {
+  content: '?';
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ink-muted);
+}
+.guide > summary:hover { color: var(--ink); }
+.guide > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-xs); }
+.guide-body {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-3) var(--space-4);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-3) var(--space-5);
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.guide-body dt { margin: 0 0 2px; font-size: var(--t-micro); font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-muted); }
+.guide-body dd { margin: 0; font-size: var(--t-small); line-height: 1.55; color: var(--ink-2); }
+.adv-block { margin: var(--space-5) 0; }
+.adv-block-body { padding: 0 calc(18px * var(--ui-scale)) var(--space-4); }
+.op-plain { margin: var(--space-5) 0; }
+@media (max-width: 559px) { .adv-block-body { padding: 0 var(--space-3) var(--space-3); } }
+
+/* A folded panel above the reader's level: quieter than the readings the tab
+ * is for, and labelled, so "everything has equal weight" stops being true. */
+.panel.is-specialist:not(.is-open) > h2 { font-weight: 500; color: var(--ink-2); }
+.spec-tag {
+  margin-left: var(--space-2);
+  padding: 1px var(--space-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-xs);
+  font: 500 var(--t-micro)/1.4 var(--sans);
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+  vertical-align: middle;
+}
+.lt-plain { margin: var(--space-5) 0; }
+.lt-conflict {
+  margin: var(--space-4) 0 0;
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--warn);
+  background: var(--raised);
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+  font-size: var(--t-base);
+  line-height: 1.55;
+  color: var(--ink);
+  max-width: 90ch;
+}
+.mk-plain { margin: 0 0 var(--space-5); }
+.tk-sizing { margin-top: var(--space-2); }
+.tk-sizing > summary { cursor: pointer; list-style: none; font-size: var(--t-small); color: var(--ink-2); padding: var(--space-1) 0 var(--space-3); transition: color var(--dur-ui) var(--ease-ui); }
+.tk-sizing > summary::-webkit-details-marker { display: none; }
+.tk-sizing > summary::before { content: '\25B8'; display: inline-block; margin-right: var(--space-1); transition: transform var(--dur-ui) var(--ease-ui); }
+.tk-sizing[open] > summary::before { transform: rotate(90deg); }
+.tk-sizing > summary:hover { color: var(--ink); }
+.tk-sizing > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-xs); }
+.chat-desc { margin: 0; padding: var(--space-1) var(--space-4) var(--space-2); font-size: var(--t-caption); line-height: 1.45; color: var(--ink-muted); border-bottom: 1px solid var(--border); }

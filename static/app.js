@@ -858,7 +858,7 @@ function titleCase(text) {
   });
 }
 
-const TITLE_SKIP = 'button:not(.gloss-term), input, select, .th-plain, .chip, .ask-pulse, .nw-count, .set-count, .rh-count, .pri-count, .al-group-n, time';
+const TITLE_SKIP = 'button:not(.gloss-term), input, select, .th-plain, .chip, .spec-tag, .ask-pulse, .nw-count, .set-count, .rh-count, .pri-count, .al-group-n, time';
 
 function titleCaseHeading(h) {
   const walk = document.createTreeWalker(h, NodeFilter.SHOW_TEXT);
@@ -12042,6 +12042,60 @@ function swingPriceBlock(d, ps, ctx) {
   }
 }
 
+/* ------------------------------------------------ the Options page, plainly
+ *
+ * Simplify pass (2026-10-11). The tab opened on an example option trade
+ * ("IV is rich versus realized: a debit spread...") and a strip of put/call,
+ * premium, unusual activity, skew and gamma walls, before any sentence said
+ * what the page is for. Below the Advanced level it now opens on three plain
+ * findings from the same payload and keeps the machinery one press away in
+ * advBlock. Nothing is computed here that the server did not send. */
+function renderOptionsPlain(d) {
+  const f = d.flow || {};
+  const vol = f.volume || {};
+  const reg = ((d.gex || {}).regime) || {};
+  const p = d.pulse || {};
+  const items = [];
+  if (Number.isFinite(vol.calls) && Number.isFinite(vol.puts) && vol.puts > 0) {
+    const per100 = Math.round((vol.calls / vol.puts) * 100);
+    items.push({ text: per100 >= 105 ? 'Options traders are leaning toward calls, the contracts that pay if the price rises.'
+      : per100 <= 95 ? 'Options traders are leaning toward puts, the contracts that pay if the price falls or protect shares already held.'
+        : 'Options trading is roughly balanced between calls and puts.',
+    why: `About ${fmt(per100, 0)} calls traded for every 100 puts. Optic cannot see who bought or sold, so this shows activity, not intent.` });
+  }
+  if (reg.state === 'positive' || reg.state === 'negative') {
+    items.push({ text: reg.state === 'negative' ? 'Options positioning may amplify price swings.' : 'Options positioning may dampen price swings.',
+      why: reg.state === 'negative'
+        ? 'Under Optic\u2019s model of how options dealers hedge, their trading could add to moves in either direction.'
+        : 'Under Optic\u2019s model of how options dealers hedge, their trading tends to lean against moves, which can keep the price in a range.' });
+  }
+  if (p.stance) {
+    items.push({ text: `Optic\u2019s short-term signals: ${String(p.stance).toLowerCase()}${p.conviction ? `, ${convictionWords(p.conviction)}` : ''}.`,
+      why: 'A model reading over the next few weeks from charts, options activity, news tone and the economy. It is not a forecast.' });
+  }
+  if (knowledgeLevel() >= 2 || !items.length) return '';
+  const sym = esc(d.ticker || STATE.ticker || '');
+  return `<section class="ov-sec op-plain span-all" aria-labelledby="op-plain-h">
+    <h2 class="ov-q" id="op-plain-h">What the options market is saying</h2>
+    <ul class="ov-list">${items.map((x) => `<li><span class="ov-f-text">${esc(x.text)}</span><span class="ov-f-why">${esc(x.why)}</span></li>`).join('')}</ul>
+    <p class="ov-fine">Options can lose their whole value and suit experienced traders. For long-term research, start with
+      <button type="button" class="ov-linkbtn" data-sec-view="overview" data-sec-sym="${sym}">Overview</button> and
+      <button type="button" class="ov-linkbtn" data-sec-view="long" data-sec-sym="${sym}">Investing</button>.
+      The terms used below are explained under each panel's \u201cWhat is this?\u201d.</p>
+  </section>`;
+}
+
+/* A group of specialist blocks behind one labelled bar: open at the Advanced
+ * and Professional levels, folded below them. A <details>, so it needs no
+ * script and is reachable by keyboard, touch and screen reader. */
+function advBlock(title, sub, inner) {
+  if (!String(inner || '').trim()) return '';
+  return `<details class="ov-adv adv-block span-all"${knowledgeLevel() >= 2 ? ' open' : ''}>
+    <summary><span class="ov-adv-title">${esc(title)}</span><span class="ov-adv-sub">${esc(sub)}</span></summary>
+    <div class="adv-block-body">${inner}</div>
+  </details>`;
+}
+
 function renderSwing(d) {
   /* An intraday range with no payload for this symbol has to ask for one.
    *
@@ -12147,12 +12201,15 @@ function renderSwing(d) {
    * are saying, then the levels and the inputs. */
   const html = `
   ${renderPriceHead(d, extQ)}
+  ${renderOptionsPlain(d)}
   ${renderPulseLine(d)}
-  ${renderSetup(d)}
+  ${advBlock('Trade setup, options readings and price levels',
+    'An example option trade, put/call activity, skew, the levels to watch and what is pulling the reading',
+    `${renderSetup(d)}
   ${renderOptionsBrief(d)}
   ${renderWhatsNext(d)}
   ${renderWhyMoving(d)}
-  ${renderFollowUps(d)}
+  ${renderFollowUps(d)}`)}
   ${renderThesis(d)}
   ${renderSetupsShell()}
 
@@ -13723,12 +13780,13 @@ function secDataStateHTML(q) {
 /* "Show advanced analysis": the one visible control for how much of the
  * specialist machinery a page shows open. It is the reader's Optic Mode
  * level, read as a switch (OpticKnowledge.setSpecialist), so there is still one
- * preference: the switch and the Optic Mode menu in Settings and Pulse can
+ * preference: the switch and the Optic Mode menu in Pulse can
  * never disagree. Off is the default, because the default rung is Financially
  * Literate. Every panel stays on the page either way; off only means the
  * specialist ones start folded and the plain-language summaries lead. */
+// Only where it changes something: a switch that does nothing is a broken one.
 const ADV_VIEWS = new Set(['overview', 'swing', 'long', 'earnings', 'financials', 'news',
-  'market', 'brief', 'indices', 'tracker', 'roth', 'explore', 'scan', 'compare']);
+  'market', 'brief', 'indices', 'tracker', 'roth']);
 
 function advancedOn() {
   return !!(window.OpticKnowledge && window.OpticKnowledge.specialistOn
@@ -13738,7 +13796,7 @@ function advancedOn() {
 function advancedToggleHTML() {
   const on = advancedOn();
   return `<button type="button" class="adv-toggle" role="switch" aria-checked="${on}" data-adv-toggle
-    title="Opens the specialist panels, full terminology and methodology on every page. Same setting as Optic Mode in Settings.">
+    title="Opens the specialist panels, full terminology and methodology on every page. Same setting as Optic Mode in the Pulse panel.">
     <span class="adv-track" aria-hidden="true"><span class="adv-knob"></span></span>
     <span class="adv-label">Show advanced analysis</span></button>`;
 }
@@ -16184,6 +16242,7 @@ function renderOverviewView() {
       <summary><span class="ov-adv-title">Advanced research</span>
         <span class="ov-adv-sub">Optic's short-term signal score, all key statistics, every section at a glance, headlines and method</span></summary>
       <div class="ov-adv-body">
+    ${d.pulse ? guideHTML(guideFor('swing', 'swing verdict')) : ''}
     ${renderOpticPulse(d)}
     ${keyStatsHTML(q, { view: 'overview', short: (d.company || {}).short_interest })}
     <div class="panel" data-fixed="1">
@@ -27330,6 +27389,41 @@ function macroExpectedMove(em) {
   </div>`;
 }
 
+/* Macro in plain words (simplify pass, 2026-10-11): the regime, how broad
+ * the market is and where money is moving, from the same payload, before
+ * the scoring tables. Only below the Advanced level; the panels say the
+ * same things in their own terms. */
+function renderMarketPlain(d) {
+  if (knowledgeLevel() >= 2) return '';
+  const m = d.macro || {};
+  const s = d.sectors || {};
+  const br = s.breadth || {};
+  const evc = br.equal_vs_cap || {};
+  const items = [];
+  const regime = String(m.regime || '').toLowerCase();
+  if (regime) {
+    items.push({ text: regime.includes('risk-on') ? 'The wider market backdrop is supportive for stocks.'
+      : regime.includes('risk-off') ? 'The wider market backdrop is cautious.'
+        : 'The wider market backdrop is mixed, with no clear lean either way.',
+    why: `Optic reads volatility, interest rates, the dollar, credit, commodities and crypto together. Its label today: ${m.regime}. A description of recent data, not a forecast.` });
+  }
+  if (Number.isFinite(br.pct_sectors_above_200sma)) {
+    const pct = br.pct_sectors_above_200sma;
+    items.push({ text: pct >= 50 ? 'Most sectors are in long-term uptrends.' : 'Fewer than half of the sectors are in long-term uptrends, so gains are narrow.',
+      why: `${fmt(pct, 0)}% of sectors trade above their 200-day average price${Number.isFinite(evc.chg_3m_pct)
+        ? `. Over three months the average S&P 500 stock has ${evc.chg_3m_pct < 0 ? 'lagged' : 'beaten'} the index by ${fmt(Math.abs(evc.chg_3m_pct), 1)}%, so ${evc.chg_3m_pct < 0 ? 'the largest companies are doing more of the lifting' : 'gains are spread beyond the largest companies'}` : ''}.` });
+  }
+  if (s.rotation_note) {
+    items.push({ text: s.rotation_note, why: 'Sectors gaining and losing ground against the S&P 500 over recent weeks. Leadership can change quickly.' });
+  }
+  if (!items.length) return '';
+  return `<section class="ov-sec mk-plain span-all" aria-labelledby="mk-plain-h">
+    <h2 class="ov-q" id="mk-plain-h">The market today, in brief</h2>
+    <ul class="ov-list">${items.map((x) => `<li><span class="ov-f-text">${esc(x.text)}</span><span class="ov-f-why">${esc(x.why)}</span></li>`).join('')}</ul>
+    <p class="ov-fine">The panels below show the working. Specialist ones are marked Advanced and start folded.</p>
+  </section>`;
+}
+
 function renderMarket(d) {
   hideTip();
   const m = d.macro || {};
@@ -27374,7 +27468,7 @@ function renderMarket(d) {
     <td><span data-spark='${esc(JSON.stringify(r.series || []))}'></span></td>
   </tr>`;
 
-  views.market.innerHTML = `
+  views.market.innerHTML = `${renderMarketPlain(d)}
   <div class="grid c2 gap macro-row">
     <div class="panel">
       <h2>${hg('Macro regime')}</h2>
@@ -29671,18 +29765,18 @@ function renderSettings() {
 
   <div class="panel span2 gap">
     <h2>${hg('How much to show')}</h2>
-    <p class="sub">Simple starts the densest panels collapsed, one press from
-      open. Every panel is on the page either way, and every panel that says
-      what it cannot tell you keeps saying it.</p>
+    <p class="sub">Off, every page leads with plain-language summaries and the
+      specialist panels start folded, one press from open. On, those panels
+      start open with their full terminology and methodology. Every panel is on
+      the page either way, and every panel that says what it cannot tell you
+      keeps saying it.</p>
     <div class="settings-row">
-      <div class="settings-label">Detail
-        <span class="settings-hint">Pro is what the terminal has always shown.
-          Simple starts the derivatives and positioning panels on Options, two
-          dense valuation panels on Investing and five ratio panels on Macro
-          collapsed, one press from open.</span></div>
-      <div class="seg">${UI_MODES.map((m) => `<button type="button"
-        class="seg-opt${uiMode() === m ? ' on' : ''}" data-set-mode="${m}"
-        aria-pressed="${uiMode() === m}">${m === 'pro' ? 'Pro' : 'Simple'}</button>`).join('')}</div>
+      <div class="settings-label">Advanced analysis
+        <span class="settings-hint">The same setting as the switch on each page
+          and as Optic Mode in the Pulse panel: on is Advanced or Professional, off is
+          Simple, Financially Literate or Adaptive. Turning it off returns you to
+          the level you had chosen.</span></div>
+      ${advancedToggleHTML()}
     </div>
   </div>
 
@@ -31491,6 +31585,11 @@ function renderTracker(d) {
     `${fmt(s.open_count || 0, 0)} open now`, signClass(s.unrealised_pnl))}
       ${tile('Total return', fmtPct(s.return_pct, 2), 'realised plus open marks', signClass(s.return_pct))}
     </div>
+    ${/* Simplify pass: the sizing row is how the book manages risk, which
+        * matters to somebody checking the rules and not to somebody asking
+        * how the record has done. Folded below the Advanced level. */''}
+    <details class="tk-sizing"${knowledgeLevel() >= 2 ? ' open' : ''}>
+    <summary>How the book limits its risk</summary>
     <div class="grid c4" style="margin-bottom:var(--space-3)">
       ${tile('Position slots', `${capacity.open_positions || 0} / ${cfg.max_open_positions || '—'}`,
     `${capacity.position_slots_left || 0} left`)}
@@ -31507,6 +31606,7 @@ function renderTracker(d) {
     <p class="caveat">The caps exist because one scan can find many qualifying setups at once.
       Without them it could put a third of the account at risk in an afternoon, on names that are
       often the same bet under different tickers: TQQQ, QQQ and NVIDIA move together.</p>
+    </details>
   </div>
 
   ${openPositionsPanel(open)}
@@ -32196,6 +32296,52 @@ function longScore100(h, score) {
   return score100(score, sc.min_possible, sc.max_possible);
 }
 
+/* The Investing tab in plain words (simplify pass, 2026-10-11).
+ *
+ * The conviction score and the valuation can point opposite ways, and on
+ * AAPL they did: 88 of 100 and "suitable as a core holding" beside a P/E at
+ * the top of its own five-year range and one star of five. Nothing on the
+ * page said the two disagree, or why they can. This says what each one
+ * measures and, when they part, that they do. The star rating lands later
+ * (loadFairValue) and repaints this block in place. */
+function renderLongPlain(h) {
+  if (!h || h.error) return '';
+  const s100 = longScore100(h, h.conviction_score);
+  const vh = h.valuation_history || {};
+  const fv = STATE.fairValueFor === STATE.ticker ? STATE.fairValue : null;
+  const stars = fv && fv.stars && fv.stars.available ? fv.stars : null;
+  const items = [];
+  if (s100 !== null) {
+    const word = s100 >= 60 ? 'strong' : s100 <= 40 ? 'weak' : 'mixed';
+    items.push({ text: `The long-term price record is ${word}: a conviction score of ${fmt(s100, 0)} out of 100.`,
+      why: 'The score is mostly price behaviour: the long-run trend, five-year returns against the S&P 500 and the return for the risk taken. It says how the stock has behaved, not what the business is worth.' });
+  }
+  let rich = null;
+  if (vh.available && Number.isFinite(vh.percentile) && Number.isFinite(vh.current_pe) && Number.isFinite(vh.median_pe)) {
+    rich = vh.percentile >= 80 ? true : vh.percentile <= 20 ? false : null;
+    items.push({ text: rich === true ? 'The shares are expensive against their own history.'
+      : rich === false ? 'The shares are cheap against their own history.' : 'The shares are close to their usual valuation.',
+    why: `A price-to-earnings ratio of ${fmt(vh.current_pe, 1)}, against a median of ${fmt(vh.median_pe, 1)} over the last ${fmt(vh.usable_years, 0)} profitable years${stars ? `. Optic's star rating: ${stars.stars} of 5, ${String(stars.word || '').toLowerCase()}` : ''}.` });
+  } else if (stars) {
+    rich = stars.stars <= 2 ? true : stars.stars >= 4 ? false : null;
+    items.push({ text: `Optic's star rating is ${stars.stars} of 5: ${String(stars.word || '').toLowerCase()}.`,
+      why: 'The price against what the last year of earnings would be worth at the multiples the market has usually paid for this company.' });
+  }
+  if (!items.length) return '<div id="lt-plain"></div>';
+  let conflict = '';
+  if (s100 !== null && rich === true && s100 >= 60) {
+    conflict = 'These two readings disagree. A strong record at a high price can carry on, or the price can drift back toward its usual multiple, and neither figure can say which.';
+  } else if (s100 !== null && rich === false && s100 <= 40) {
+    conflict = 'These two readings disagree. A low price with a weak record can be an opportunity or a business in decline, and neither figure can say which.';
+  }
+  return `<div id="lt-plain"><section class="ov-sec lt-plain span-all" aria-labelledby="lt-plain-h">
+    <h2 class="ov-q" id="lt-plain-h">The long-term picture</h2>
+    <ul class="ov-list">${items.map((x) => `<li><span class="ov-f-text">${esc(x.text)}</span><span class="ov-f-why">${esc(x.why)}</span></li>`).join('')}</ul>
+    ${conflict ? `<p class="lt-conflict">${esc(conflict)}</p>` : ''}
+    <p class="ov-fine">Both are summaries of past figures, not recommendations. The panels below show how each is worked out.</p>
+  </section></div>`;
+}
+
 function renderLong(d) {
   hideTip();
   const h = d.holding || {};
@@ -32211,7 +32357,7 @@ function renderLong(d) {
 
   if (h.error) { views.long.innerHTML = errorHTML(h.error); return; }
 
-  views.long.innerHTML = securityHeader('long') + keyStatsHost('long') + `
+  views.long.innerHTML = securityHeader('long') + keyStatsHost('long') + renderLongPlain(h) + `
   <div class="grid c2 gap">
     <div class="panel">
       <h2>${hg('Long-term view')} · ${esc(h.ticker)}</h2>
@@ -32227,7 +32373,7 @@ function renderLong(d) {
           <span class="chip neutral"><span class="dot"></span>${esc(cap(lt.phase) || '')}</span>
         </div>
       </div>
-      <div class="callout info">${gloss(h.plan || '')}</div>
+      <div class="callout info"><strong>The model's rule at this score:</strong> ${gloss(h.plan || '')}</div>
       ${((h.data_quality || {}).warnings || []).map((w) => `<div class="callout bad">${gloss(w)}</div>`).join('')}
 
       <h3>${hg('What makes up this score')}${askPulse('composite')}</h3>
@@ -32575,6 +32721,10 @@ async function loadFairValue(force) {
   if (STATE.ticker !== sym) return;
   STATE.fairValue = data;
   const host = document.getElementById('fv-host');
+  if (STATE.view === 'long' && STATE.long) {
+    const plain = document.getElementById('lt-plain');
+    if (plain) plain.outerHTML = renderLongPlain((STATE.long || {}).holding);
+  }
   if (host && STATE.view === 'long') {
     host.innerHTML = renderFairValue(data);
     revealPanels(host);
@@ -44718,7 +44868,9 @@ const PANELS_ADVANCED = {
   long: ['multiple and revenue history', 'valuation & accumulation'],
   market: ['cross-asset ratios', 'ratio pair trades',
     'equal-weight vs cap-weight', 'niche industries', 'themes & sub-industries'],
-  earnings: [],
+  /* Simplify pass: the implied move is options pricing, so it starts folded
+     below Advanced like the rest of the options machinery. */
+  earnings: ['event pricing'],
   brief: [],
   indices: [],
   tracker: [],
@@ -45048,7 +45200,7 @@ function headingName(head) {
    * against 8,314px at the default; ux/UX.md 0.1, 2026-10-11). TITLE_SKIP
    * makes the same exception for the same reason. An opened definition
    * (`.gloss-inline`, inserted after the term) is not part of the name. */
-  clone.querySelectorAll('button:not(.gloss-term), .gloss-inline, .th-plain, .lvl-count, .chip, .bk-active')
+  clone.querySelectorAll('button:not(.gloss-term), .gloss-inline, .th-plain, .lvl-count, .chip, .bk-active, .spec-tag')
     .forEach((n) => n.remove());
   return (clone.textContent || '').replace(/\s+/g, ' ').trim();
 }
@@ -45196,7 +45348,8 @@ const SECTION_INDEX_MIN = 6;
  * Returns the node to insert BEFORE: the first thing after the loop, or the
  * view's first child on a view that has no loop. */
 function afterOpticLoop(host) {
-  const blocks = host.querySelectorAll(':scope > .pl-hero, :scope > .pl-block');
+  // `.adv-block` holds the Options tab's loop blocks below the Advanced level.
+  const blocks = host.querySelectorAll(':scope > .pl-hero, :scope > .pl-block' + ', :scope > .adv-block');
   const last = blocks[blocks.length - 1];
   if (last) return last.nextSibling;
   /* No loop on this page, but the workspace header still goes first.
@@ -45482,6 +45635,16 @@ function makePanelsCollapsible(view) {
 
     panel.dataset.collapsible = '1';
     panel.dataset.panelId = id;
+    /* Simplify pass: a panel above the reader's level says so, and steps back
+     * visually (.is-specialist), so a folded specialist panel no longer has
+     * the same weight on the page as the readings the tab is for. */
+    if (panelMinLevel(view, title) > knowledgeLevel()) {
+      panel.classList.add('is-specialist');
+      const tag = document.createElement('span');
+      tag.className = 'spec-tag';
+      tag.textContent = 'Advanced';
+      head.appendChild(tag);
+    }
     panel.classList.toggle('is-open', open);
     panel.classList.toggle('is-closed', !open);
 
@@ -45892,6 +46055,200 @@ document.addEventListener('keydown', (evt) => {
   cav.click();
 });
 
+/* ------------------------------------------------ "What is this?" guides
+ *
+ * Simplify pass (2026-10-11). An acronym expanded is not an explanation: a
+ * reader told that GEX means "gamma exposure" knows a longer name and still
+ * cannot use the number. So each specialist panel carries the four things a
+ * newcomer needs before a figure means anything: what it measures, why anyone
+ * looks at it, how to read the value on screen, and what it cannot establish.
+ *
+ * Written against the code that builds each figure (app/analytics/*), with no
+ * thresholds the panel itself does not use. A <details>, so it works by
+ * keyboard, touch and screen reader with no script, and closed by default
+ * except on the Simple level, where the definitions are the point. Matched on
+ * the panel's heading by substring per view, the same way the panel-level
+ * tables are, so no template needed an edit and a new page gets them by
+ * listing its headings here. */
+const METRIC_GUIDES = [
+  { views: ['swing'], match: ['swing verdict'],
+    measures: "Optic's combined short-term reading of five inputs (the chart trend, dealer gamma, options activity, news tone and the economy) as one score.",
+    why: 'A quick summary of whether the signals Optic tracks lean up or down over the next few weeks, and how strongly they agree.',
+    read: 'Above the midpoint leans bullish, below it bearish. The conviction word says how strong and how consistent the inputs are; near the middle means they are weak or disagree.',
+    limits: "It is not a forecast or a price target, and Optic shows its track record only where it has measured one. It cannot see news it has not received." },
+  { views: ['swing'], match: ['dealer gamma (gex)'],
+    measures: 'An estimate of how much stock options dealers would have to buy or sell to stay hedged as the price moves, added up across every strike. Traders call it gamma exposure, or GEX.',
+    why: 'That hedging can be large enough to calm a stock or to speed it up, so it is used to judge whether moves are likely to be orderly or sharp.',
+    read: 'Positive: dealer hedging tends to sell into rises and buy into falls, which can damp swings. Negative: hedging adds to moves in both directions. The flip point is the price where it changes sign.',
+    limits: 'Nobody reports dealer positions. The figure rests on an assumption about which side of each contract dealers hold, so it is a model, and it is wrong whenever that assumption is.' },
+  { views: ['swing'], match: ['dealer vanna (vex)'],
+    measures: "How much dealers' hedging would change if options got cheaper or dearer (implied volatility moving) while the share price stood still. Traders call it vanna exposure, or VEX.",
+    why: 'Option prices often fall after an event such as earnings, and the hedging that follows can push the stock even with no news.',
+    read: 'The larger the figure, the more a change in option prices would shift hedging. Its sign comes from the same dealer assumption as gamma, so read it beside that panel.',
+    limits: 'A second-order estimate on top of an assumption about who holds each contract. It describes pressure that might arise, not trades that have happened.' },
+  { views: ['swing'], match: ['delta analysis'],
+    measures: 'How much the options open on this stock would gain or lose for a $1 move in the share price, added up across calls and puts (delta).',
+    why: 'It shows whether the options market as a whole is positioned for the price to rise or to fall.',
+    read: 'Positive net delta means the open positions gain if the price rises; negative means they gain if it falls.',
+    limits: 'Open interest counts contracts, not who holds them or why. A large put position can be insurance on shares someone owns rather than a bet against the company.' },
+  { views: ['swing'], match: ['gamma analysis'],
+    measures: "How fast the options' delta changes as the price moves, strike by strike (gamma).",
+    why: 'Strikes with heavy gamma are where hedging is busiest, so the price can stall or speed up around them.',
+    read: 'The tallest bars mark the strikes that matter most to hedging. The call and put walls are the largest concentrations above and below the price.',
+    limits: 'The same dealer-position assumption as gamma exposure. A wall is where hedging is heaviest, not a floor or a ceiling the price must respect.' },
+  { views: ['swing'], match: ['call vs put flow', 'net premium by strike'],
+    measures: 'Activity in calls (which pay if the price rises) against puts (which pay if it falls), weighted by volume and open interest, and the dollars spent at each strike.',
+    why: 'A lean toward calls or toward puts shows which way options traders are positioning.',
+    read: 'A put/call ratio below 1 means more call activity than put activity, above 1 the reverse. Bars above zero mean more was spent on calls at that strike.',
+    limits: 'The free data has no record of individual trades, so Optic cannot tell buyers from sellers. Heavy put activity can be shareholders buying protection rather than betting on a fall.' },
+  { views: ['swing'], match: ['rsi (14)'],
+    measures: 'The Relative Strength Index: the size of recent up days against down days over the last 14 sessions, on a scale of 0 to 100.',
+    why: 'A common way to see whether a move has been unusually one-sided.',
+    read: 'By convention, above 70 is called overbought, below 30 oversold, and around 50 neutral.',
+    limits: 'In a strong trend a stock can stay above 70 or below 30 for weeks. It describes the last 14 sessions and does not predict a reversal.' },
+  { views: ['swing'], match: ['macd (12, 26, 9)'],
+    measures: 'Moving Average Convergence Divergence: the gap between the 12-day and 26-day average prices, and a 9-day average of that gap, called the signal line.',
+    why: 'Traders watch it for momentum turning up or down.',
+    read: 'MACD above its signal line suggests momentum is improving, below it that momentum is fading. The bars show the distance between the two.',
+    limits: 'Built from past prices, so it lags turns. In a sideways market it crosses back and forth with nothing following.' },
+  { views: ['swing'], match: ['price, moving averages'],
+    measures: 'The share price with its averages over recent periods and the common pullback (Fibonacci) levels drawn on.',
+    why: 'It shows the trend at a glance and where earlier moves paused.',
+    read: 'A price above a rising 200-day average is usually called an uptrend; shorter averages above longer ones confirm it.',
+    limits: 'Averages describe the past and turn late. Fibonacci levels are a trading convention, not a law the price follows.' },
+  { views: ['swing'], match: ['strike & entry recommendation', 'buy calls / puts', 'options strategies'],
+    measures: 'Example option trades Optic builds from the current reading, with their cost, most you could lose and break-even price.',
+    why: 'They show how a view on the stock could be expressed with options, and what it would cost.',
+    read: 'Costs are for one contract, which covers 100 shares. Break-even is where the trade stops losing money at expiry.',
+    limits: 'Examples for study, not recommendations. An option can lose its whole value, and the prices here are delayed.' },
+  { views: ['swing'], match: ['volatility context'],
+    measures: "How expensive this stock's options are (implied volatility) against their own past year and against how much the stock has actually been moving.",
+    why: 'It tells you whether buying options is cheap or dear by this stock’s own standard.',
+    read: 'A high IV rank means options cost more than usual for this stock; a low one, less.',
+    limits: 'Implied volatility is the price of uncertainty, not a forecast of direction or of the size of the next move.' },
+  { views: ['swing'], match: ['seasonality'],
+    measures: 'How the stock has done in each calendar month across past years.',
+    why: 'Some businesses and markets have recurring calendar patterns, for example around reporting seasons.',
+    read: 'Each month shows its average return and how often it was positive.',
+    limits: 'A handful of years can produce a pattern by chance, and a past calendar pattern is weak evidence about this year.' },
+  { views: ['swing'], match: ['chart patterns'],
+    measures: 'Shapes in recent price history that traders give names to, such as triangles or double tops, found by fixed rules.',
+    why: 'Some traders use them to time entries and exits.',
+    read: 'Each pattern lists its level and, where Optic has measured it, how often that pattern was followed by a move.',
+    limits: 'Patterns fail often, and finding one after the fact is easier than acting on it.' },
+  { views: ['long'], match: ['long-term view'],
+    measures: "Optic's long-term conviction: the long-run price trend, five-year returns against the S&P 500, return for the risk taken, the forward P/E, how far the price is from its high, and the dividend, combined and shown out of 100.",
+    why: 'A summary of how the multi-year case looks on the figures Optic holds.',
+    read: '50 means no edge either way; higher means more of the inputs are favourable. The breakdown lists what lifts and what drags the score.',
+    limits: 'A rule-based score, not a fair value or a recommendation. It cannot judge management, competition or anything that is not in the numbers.' },
+  { views: ['long'], match: ['valuation vs its own history', 'multiple and revenue history', 'revenue and the multiple'],
+    measures: 'The price-to-earnings ratio, what investors pay for each dollar of yearly profit, today against its own range over past years.',
+    why: 'It shows whether the stock is priced richly or cheaply by its own standard.',
+    read: 'Near the top of its range means investors are paying more than usual for each dollar of earnings; near the bottom, less.',
+    limits: 'A company that has changed can deserve a different multiple. Cheap against its own history is not the same as cheap.' },
+  { views: ['long'], match: ['fair value'],
+    measures: "What the company's last twelve months of earnings would be worth at the price-to-earnings multiples the market has usually paid for it over five years, shown as a range and a star rating.",
+    why: 'It gives a yardstick to read the price against.',
+    read: 'More stars mean the price is lower against that range; fewer, higher.',
+    limits: 'It assumes the usual multiple was right and the business is unchanged. It is a range to compare with, never a target.' },
+  { views: ['long'], match: ['drawdown'],
+    measures: 'How far the price has fallen from its previous high, and the deepest falls in its history.',
+    why: 'It shows what holding the stock has felt like through bad stretches.',
+    read: '-30% means the price is 30% below its previous peak.',
+    limits: 'Past falls do not limit future ones.' },
+  { views: ['long', 'swing'], match: ['weekly structure'],
+    measures: 'The trend on weekly prices, sorted into four stages (basing, advancing, topping, declining) by where the price sits against its 30-week average and which way that average is heading.',
+    why: 'Long-term investors use it to avoid buying into a declining trend.',
+    read: 'Stage 2 is the advancing phase and Stage 4 the declining one; Stages 1 and 3 are the flat turns between them.',
+    limits: 'Stages are clearest after the fact and can change quickly at the turns.' },
+  { views: ['earnings'], match: ['event pricing'],
+    measures: 'The move the options market is pricing for the earnings report (the implied move), against how much the stock has actually moved after past reports.',
+    why: 'It shows whether options look expensive or cheap for the event.',
+    read: 'A ratio above 1 means options are pricing a bigger move than the stock has usually made; below 1, a smaller one.',
+    limits: 'The implied move is about size, not direction, and any single report can move the stock far more or less.' },
+  { views: ['earnings'], match: ['estimate revisions'],
+    measures: "How analysts' forecasts of earnings have changed over the last 30 and 90 days.",
+    why: 'Rising estimates often follow good news from the company itself.',
+    read: 'More analysts raising than cutting is the favourable direction.',
+    limits: 'Analysts often move together and can be wrong together.' },
+  { views: ['financials'], match: ['short interest'],
+    measures: 'Shares sold short, borrowed and sold by investors betting on a fall, as a share of the shares available to trade, and how many days of normal trading it would take to buy them back.',
+    why: 'It shows how many investors are betting against the stock.',
+    read: 'A higher percentage means more bets against. More days to cover means short sellers would take longer to get out, which can make rises sharper.',
+    limits: 'Reported twice a month and about two weeks late. Some short selling is hedging rather than a bet against the company.' },
+  { views: ['financials'], match: ['insider & institutional'],
+    measures: "Shares bought and sold by the company's own directors and officers, and the stakes of large funds, from their required filings.",
+    why: 'Insiders know the business best, and big funds move prices.',
+    read: 'Insider buying is the more telling direction. Fund stakes rising suggests demand from large holders.',
+    limits: 'Much insider selling is planned in advance or pays tax on awarded shares, and fund filings arrive up to 45 days after the quarter.' },
+  { views: ['market'], match: ['macro regime'],
+    measures: 'One risk-on or risk-off reading built from volatility, the dollar, interest rates, commodities, credit and crypto.',
+    why: 'Most stocks move with the wider market, so it helps to know whether conditions favour taking risk.',
+    read: 'Risk-on means those markets are behaving in a way that has tended to suit stocks; risk-off, the opposite.',
+    limits: 'A label on recent data, not a forecast. Turning points are only clear afterwards.' },
+  { views: ['market'], match: ['market breadth'],
+    measures: 'How many stocks are rising against falling, and how many are above their own averages.',
+    why: 'It shows whether a market move is broad or carried by a few large companies.',
+    read: 'Broad participation supports a rally; narrow breadth means a handful of names are doing the work.',
+    limits: 'Breadth can stay narrow for a long time while the index keeps rising.' },
+  { views: ['market'], match: ['sector rotation', 'sector relative strength'],
+    measures: 'Which sectors are gaining or losing ground against the S&P 500.',
+    why: 'Money moving between sectors can be a sign of what investors expect from the economy.',
+    read: 'Sectors improving and ahead of the market are leading; those falling behind are lagging.',
+    limits: 'Leadership can change quickly, and recent strength is no promise of more.' },
+  { views: ['market'], match: ['equal-weight vs cap-weight'],
+    measures: 'The average stock in the S&P 500 (equal weight) against the index weighted by company size.',
+    why: 'It shows whether the largest companies are carrying the index.',
+    read: 'When the size-weighted index leads, gains are concentrated in the biggest names.',
+    limits: 'It says who is leading, not what happens next.' },
+  { views: ['tracker'], match: ['optic portfolio'],
+    measures: "A practice record of trades taken by Optic's own rules, with no real money.",
+    why: 'It shows how the rules have done in practice, kept by the terminal so nobody can edit it.',
+    read: 'Returns are against what each book started with; the open positions are what it holds now.',
+    limits: 'Simulated trades at delayed prices skip the costs and slippage of real trading. Past results do not predict future ones.' },
+  { views: ['brief'], match: ['fear & greed'],
+    measures: 'How much risk appetite there is in the market, on a scale from 0 (extreme fear) to 100 (extreme greed).',
+    why: 'Crowd mood at the extremes is something some investors lean against.',
+    read: 'Low readings mean investors are cautious, high readings that they are eager.',
+    limits: 'It describes where the crowd is, never what happens next or what anything is worth.' },
+];
+
+const GUIDE_PARTS = [['measures', 'What it measures'], ['why', 'Why people use it'],
+  ['read', 'How to read it'], ['limits', 'What it cannot tell you']];
+
+function guideFor(view, title) {
+  const needle = String(title || '').toLowerCase();
+  return METRIC_GUIDES.find((g) => g.views.includes(view) && g.match.some((k) => needle.includes(k))) || null;
+}
+
+function guideHTML(g) {
+  if (!g) return '';
+  const open = knowledgeLevel() === 0 ? ' open' : '';
+  return `<details class="guide"${open} data-guide>
+    <summary>What is this?</summary>
+    <dl class="guide-body">${GUIDE_PARTS.map(([k, label]) => `<div><dt>${label}</dt><dd>${esc(g[k])}</dd></div>`).join('')}</dl>
+  </details>`;
+}
+
+/* Put each matching panel's guide first in its body, once. After
+ * makePanelsCollapsible, so a collapsed panel keeps it with the rest. */
+function addMetricGuides(view) {
+  const host = views[view];
+  if (!host) return;
+  host.querySelectorAll('.panel').forEach((panel) => {
+    if (panel.querySelector(':scope > [data-guide], :scope > .panel-body > [data-guide]')) return;
+    const head = panel.querySelector(':scope > h2');
+    const g = head && guideFor(view, headingName(head));
+    if (!g) return;
+    const holder = document.createElement('div');
+    holder.innerHTML = guideHTML(g);
+    const node = holder.firstElementChild;
+    const body = panel.querySelector(':scope > .panel-body');
+    if (body) body.insertBefore(node, body.firstChild);
+    else head.after(node);
+  });
+}
+
 function chromeView(view) {
   const host = views[view];
   if (!host) return;
@@ -45921,6 +46278,8 @@ function chromeView(view) {
   // After makePanelsCollapsible, which is what sets data-collapsible="1" —
   // the index is built from that attribute, so ordering here is load-bearing.
   buildSectionIndex(view);
+  // The four-part "What is this?" for specialist panels (METRIC_GUIDES).
+  addMetricGuides(view);
 }
 
 /* Views whose chrome is rebuilt when a panel arrives after the render pass.

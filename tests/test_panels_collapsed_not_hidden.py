@@ -98,5 +98,7 @@ def test_no_note_and_the_copy_says_collapsed():
     assert ">Show all</button>" in chooser and "Reset to ${" not in chooser
     settings = APP[APP.index("<h2>${hg('How much to show')}</h2>"):]
     settings = settings[:settings.index("</div>\n  </div>")]
-    assert "Simple starts the densest panels collapsed" in settings
+    # Since the simplify pass the control is the advanced-analysis switch,
+    # and its copy still says the panels fold rather than disappear.
+    assert "specialist panels start folded, one press from open" in settings
     assert "Simple leaves those out" not in settings and "says\n          so where they were" not in settings
