@@ -1,0 +1,46 @@
+{
+ "frames": [
+  "idle",
+  "idle-half",
+  "idle-closed",
+  "lean",
+  "tilt",
+  "tilt-half",
+  "tilt-closed",
+  "curious",
+  "curious-half",
+  "curious-closed",
+  "arm-1",
+  "arm-2",
+  "arm-3",
+  "look-l1",
+  "look-l2",
+  "look-r1",
+  "look-r2",
+  "nod-1",
+  "nod-2",
+  "concerned",
+  "concerned-half",
+  "concerned-closed"
+ ],
+ "full": {
+  "3x": [
+   288,
+   380
+  ],
+  "2x": [
+   192,
+   253
+  ]
+ },
+ "compact": {
+  "3x": [
+   144,
+   156
+  ],
+  "2x": [
+   96,
+   104
+  ]
+ }
+}
