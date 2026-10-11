@@ -13786,7 +13786,7 @@ function secDataStateHTML(q) {
  * specialist ones start folded and the plain-language summaries lead. */
 // Only where it changes something: a switch that does nothing is a broken one.
 const ADV_VIEWS = new Set(['overview', 'swing', 'long', 'earnings', 'financials', 'news',
-  'market', 'brief', 'indices', 'tracker', 'roth']);
+  'market', 'tracker']);
 
 function advancedOn() {
   return !!(window.OpticKnowledge && window.OpticKnowledge.specialistOn
@@ -16032,9 +16032,12 @@ function ovAboutHTML() {
     prof.employees ? `${fmtCompact(prof.employees, 0)} employees` : null,
     prof.city && prof.country ? `${prof.city}, ${prof.country}` : prof.country,
   ].filter(Boolean);
+  const fund = !!prof.is_fund || symbolIsFund(sym);
   let body;
-  if (!sess) {
-    body = '<p class="ov-about-text muted">Loading the company description…</p>';
+  if (!sess && STATE.sessionFailed === sym) {
+    body = '<p class="ov-about-text muted">The description could not be loaded just now. It will appear when the connection recovers.</p>';
+  } else if (!sess) {
+    body = '<p class="ov-about-text muted">Loading the description…</p>';
   } else if (prof.summary) {
     body = `<p class="ov-about-text is-clamped" id="ov-about-text">${esc(prof.summary)}</p>
       <button type="button" class="ov-linkbtn" data-ov-about-more aria-expanded="false"
@@ -16043,10 +16046,10 @@ function ovAboutHTML() {
     body = '<p class="ov-about-text muted">The data feed has no business description for this symbol.</p>';
   }
   return `<section class="ov-sec ov-about" id="ov-about" aria-labelledby="ov-about-h">
-    <h2 class="ov-q" id="ov-about-h">What does ${esc(name)} do?</h2>
+    <h2 class="ov-q" id="ov-about-h">${fund ? `What is ${esc(name)}?` : `What does ${esc(name)} do?`}</h2>
     ${meta.length ? `<p class="ov-meta">${meta.map(esc).join(' · ')}</p>` : ''}
     ${body}
-    ${prof.summary ? '<p class="ov-fine">In the company’s own words, as the data feed holds them. The description may be out of date.</p>' : ''}
+    ${prof.summary ? `<p class="ov-fine">In the ${fund ? 'fund' : 'company'}’s own words, as the data feed holds them. The description may be out of date.</p>` : ''}
   </section>`;
 }
 
@@ -16099,7 +16102,8 @@ function ovTakeawaysHTML(d, biz, price, factors) {
     cards.push(`<li class="ov-take is-${price.tone}">
       <p class="ov-take-kind">The share price</p>
       <p class="ov-take-text">${esc(price.text)}</p>
-      <p class="ov-take-why">${price.why ? esc(price.why) + ' ' : ''}This describes the stock, not the business.</p>
+      <p class="ov-take-why">${price.why ? esc(price.why) + ' ' : ''}${symbolIsFund(STATE.ticker)
+    ? 'This describes the fund’s price, not the businesses it holds.' : 'This describes the stock, not the business.'}</p>
       ${ovEvidenceHTML(price.evidence, `Daily closes through ${price.through}. Source: ${priceSourceName(d)}.`, 'chart', 'Open the chart')}
     </li>`);
   }
@@ -39330,6 +39334,10 @@ async function loadSession(force) {
     updateStatus();
   } catch (err) {
     console.warn('Session strip unavailable:', err.message);
+    // The Overview's description rides on this request; say it failed
+    // rather than leaving "Loading" on screen.
+    STATE.sessionFailed = STATE.ticker;
+    refreshOverviewAbout();
   }
 }
 
