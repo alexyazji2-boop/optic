@@ -12071,7 +12071,7 @@ function renderOptionsPlain(d) {
   }
   if (p.stance) {
     items.push({ text: `Optic\u2019s short-term signals: ${String(p.stance).toLowerCase()}${p.conviction ? `, ${convictionWords(p.conviction)}` : ''}.`,
-      why: 'A model reading over the next few weeks from charts, options activity, news tone and the economy. It is not a forecast.' });
+      why: 'A model reading for the next 2 to 8 weeks from charts, options activity, news tone and the economy. It is not a forecast.' });
   }
   if (knowledgeLevel() >= 2 || !items.length) return '';
   const sym = esc(d.ticker || STATE.ticker || '');
@@ -15859,7 +15859,7 @@ function ovDrivers(d) {
   if (p.stance) {
     out.push({ kind: "Optic's short-term signals",
       text: `${cap(String(p.stance))}${p.conviction ? `, ${convictionWords(p.conviction)}` : ''}${tops.length ? `. Strongest inputs: ${tops.join('; ').toLowerCase()}` : ''}.`,
-      note: 'A model reading of charts, options activity, news tone and the economy over weeks, not a forecast or a reason for today’s move.',
+      note: 'A model reading of charts, options activity, news tone and the economy for the next 2 to 8 weeks, not a forecast or a reason for today’s move.',
       view: 'swing' });
   }
   const reg = ((d.gex || {}).regime) || {};
@@ -16270,10 +16270,10 @@ function ovScoreHTML(d) {
   return `<section class="ov-sec osc" id="ov-score" aria-labelledby="ov-score-h">
     <h2 class="ov-q" id="ov-score-h">Optic Score</h2>
     <div class="osc-grid">
-      ${ovScoreTile('Short term', 'next few weeks', short, shortWords,
-    'Chart trend, options positioning, news tone and the economy, weighted into one reading.', 'swing', 'See how it is scored on Options')}
-      ${ovScoreTile('Long term', 'years', long, longWords || longNote,
-    'Long-run price trend, five-year return against the S&P 500, return for the risk taken, valuation, distance from the high and the dividend.', 'long', 'See how it is scored on Investing')}
+      ${ovScoreTile('Short term', 'the next 2 to 8 weeks', short, shortWords,
+    'Built from the daily chart trend, current options positioning, the tone of recent headlines and the economy, weighted into one reading for a 2-to-8-week swing.', 'swing', 'See how it is scored on Options')}
+      ${ovScoreTile('Long term', 'holding for several years', long, longWords || longNote,
+    'Built from up to five years of history: the 200-week and 40-week price trends, the five-year return against the S&P 500, the last year\'s return for the risk taken, valuation, distance from the high and the dividend.', 'long', 'See how it is scored on Investing')}
     </div>
     ${apart ? `<p class="lt-conflict">${esc(apart)}</p>` : ''}
     <p class="ov-fine">50 means no edge either way; above 50 the inputs lean favourable, below 50 unfavourable, and 100 is every input at its best. Each score is a rule-based summary of past data, not a forecast, a price target or a recommendation to buy or sell.</p>
@@ -46176,7 +46176,7 @@ document.addEventListener('keydown', (evt) => {
 const METRIC_GUIDES = [
   { views: ['swing'], match: ['swing verdict'],
     measures: "Optic's combined short-term reading of five inputs (the chart trend, dealer gamma, options activity, news tone and the economy) as one score.",
-    why: 'A quick summary of whether the signals Optic tracks lean up or down over the next few weeks, and how strongly they agree.',
+    why: 'A quick summary of whether the signals Optic tracks lean up or down over the next 2 to 8 weeks, and how strongly they agree.',
     read: 'Above the midpoint leans bullish, below it bearish. The conviction word says how strong and how consistent the inputs are; near the middle means they are weak or disagree.',
     limits: "It is not a forecast or a price target, and Optic shows its track record only where it has measured one. It cannot see news it has not received." },
   { views: ['swing'], match: ['dealer gamma (gex)'],
