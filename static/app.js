@@ -32342,7 +32342,7 @@ function renderLongPlain(h) {
     <h2 class="ov-q" id="lt-plain-h">The long-term picture</h2>
     <ul class="ov-list">${items.map((x) => `<li><span class="ov-f-text">${esc(x.text)}</span><span class="ov-f-why">${esc(x.why)}</span></li>`).join('')}</ul>
     ${conflict ? `<p class="lt-conflict">${esc(conflict)}</p>` : ''}
-    <p class="ov-fine">Both are summaries of past figures, not recommendations. The panels below show how each is worked out.</p>
+    <p class="ov-fine">Both are summaries of past figures, not recommendations. The words use fixed cut-offs: a record is called strong at 60 or above and weak at 40 or below, and a valuation expensive or cheap in the top or bottom fifth of its own range. The panels below show how each figure is worked out.</p>
   </section></div>`;
 }
 
