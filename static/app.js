@@ -16196,7 +16196,7 @@ function ovMethodHTML(d) {
       <li>Every sentence above comes from the figures on this page by fixed rules. No AI model writes them, so the same data gives the same words.</li>
       <li>Business figures come from the company's filed statements via Yahoo Finance. The latest fiscal year can be months old, and the latest quarter is shown beside it when the two disagree.</li>
       <li>Price figures are daily closes from ${esc(priceSourceName(d))}${built ? `, gathered ${esc(built)}` : ''}. Outside market hours the price is the last close.</li>
-      <li>Changes under 1% either way are described as roughly flat.</li>
+      <li>The wording uses fixed cut-offs, chosen for plain language rather than taken from research: business changes under 1% either way are "roughly flat", price changes under 2% "little changed"; a year and the last three months are called out as pointing different ways when one is up at least 5% and the other down at least 5%; an earnings report within 45 days is listed as a risk; a price 20% or more below its highest close is listed as a risk.</li>
       <li>Optic's short-term signal score, its star rating and its options readings are models. Each carries its own method and limits on its page.</li>
       <li>Nothing here is a recommendation to buy or sell.</li>
     </ul>
