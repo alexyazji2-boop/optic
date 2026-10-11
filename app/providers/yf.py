@@ -740,8 +740,13 @@ class YFinanceProvider(MarketDataProvider):
     def _summary_document(self, ticker: str, reads: Any) -> Optional[Dict[str, Any]]:
         """The quote summary's five modules, as `.info` asks for them. None for
         a symbol it does not know, which `.info` also survives."""
-        return _cached("qsum:" + ticker, self.TTL_SUMMARY,
-                       lambda: reads._fetch(modules=list(self.SUMMARY_MODULES)), gate=False)
+        def build():
+            doc = reads._fetch(modules=list(self.SUMMARY_MODULES))
+            # yfinance answers a refused read (a 401 "Invalid Crumb", a 5xx)
+            # with None rather than raising. Kept, that None was fifteen
+            # minutes of every company having no profile, sector or margins.
+            return doc if doc else _Failed(doc)
+        return _cached("qsum:" + ticker, self.TTL_SUMMARY, build, gate=False)
 
     def _quote_document(self, ticker: str, reads: Any = None) -> Optional[Dict[str, Any]]:
         """The v7 quote: the price, the change, the session and the name."""
@@ -1445,7 +1450,7 @@ class YFinanceProvider(MarketDataProvider):
             labels = {"ETF": "ETF", "MUTUALFUND": "fund", "INDEX": "index",
                       "CURRENCY": "currency", "FUTURE": "futures",
                       "CRYPTOCURRENCY": "crypto"}
-            return {
+            profile = {
                 "ticker": ticker.upper(),
                 "name": info.get("longName") or info.get("shortName") or ticker.upper(),
                 "kind": kind or None,
@@ -1463,6 +1468,14 @@ class YFinanceProvider(MarketDataProvider):
                 "city": info.get("city"),
                 "website": info.get("website"),
             }
+            # A stock or fund with none of the summary document's fields is a
+            # read that half failed, not a company with no description: the
+            # quote answered (so the name and type are here) and the summary
+            # did not. Handed back but not kept, or the Overview said
+            # "no business description" for PepsiCo for a day (2026-10-11).
+            partial = (kind in ("EQUITY", "ETF", "MUTUALFUND")
+                       and not any(profile.get(k) for k in ("summary", "sector", "industry", "category")))
+            return _Failed(profile) if partial else profile
 
         return _cached("profile:" + ticker, 86400, build, gate=False)
 

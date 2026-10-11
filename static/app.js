@@ -16042,10 +16042,17 @@ function ovAboutHTML() {
     body = `<p class="ov-about-text is-clamped" id="ov-about-text">${esc(prof.summary)}</p>
       <button type="button" class="ov-linkbtn" data-ov-about-more aria-expanded="false"
         aria-controls="ov-about-text">Read the full description</button>`;
+  } else if (!fund && !prof.sector && !prof.industry && String(prof.kind || '').toUpperCase() === 'EQUITY') {
+    /* A company with no sector, no industry and no description is a profile
+     * read that half failed upstream, not a company with nothing to say
+     * (seen on PEP, 2026-10-11). The session refresh asks again every minute
+     * and this block repaints when it lands. */
+    body = '<p class="ov-about-text muted">The description did not come through from the data feed just now. Optic will try again within a minute.</p>';
   } else {
     body = '<p class="ov-about-text muted">The data feed has no business description for this symbol.</p>';
   }
-  return `<section class="ov-sec ov-about" id="ov-about" aria-labelledby="ov-about-h">
+  return `<section class="ov-sec ov-about" id="ov-about" aria-labelledby="ov-about-h"
+    data-sig="${esc(sym)}:${sess ? 1 : 0}:${STATE.sessionFailed === sym ? 1 : 0}:${prof.summary ? prof.summary.length : 0}:${prof.sector ? 1 : 0}">
     <h2 class="ov-q" id="ov-about-h">${fund ? `What is ${esc(name)}?` : `What does ${esc(name)} do?`}</h2>
     ${meta.length ? `<p class="ov-meta">${meta.map(esc).join(' · ')}</p>` : ''}
     ${body}
@@ -16074,7 +16081,14 @@ function refreshOverviewFindings() {
 function refreshOverviewAbout() {
   const host = document.getElementById('ov-about');
   if (!host || STATE.view !== 'overview') return;
-  host.outerHTML = ovAboutHTML();
+  /* The session poll calls this every minute. Repainting an unchanged block
+   * would fold a description the reader had just opened, so only a change
+   * in what it says replaces it. */
+  const holder = document.createElement('div');
+  holder.innerHTML = ovAboutHTML();
+  const next = holder.firstElementChild;
+  if (!next || next.dataset.sig === host.dataset.sig) return;
+  host.replaceWith(next);
   ovFitAbout();
 }
 
@@ -39319,6 +39333,7 @@ async function loadSession(force) {
     // symbol's first session payload.
     const firstLoad = !STATE.session || !STATE.session.ticker;
     STATE.session = data;
+    if (STATE.sessionFailed === asked) STATE.sessionFailed = null;
     renderSessionBar();
     completeSecurityHeader();
     // The Overview's "What does it do?" reads the profile this carries.
