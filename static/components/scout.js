@@ -1,9 +1,10 @@
 /* Scout: Pulse's mascot.
  *
  * Concept 03 ("Scout") from the user's snowman sheet, rendered in 3D: two
- * ivory clay snowballs, the Optic aperture inset as each eye with the logo's
- * chart line raised inside it, a carved smile, a muted gold scarf, stub arms
- * and feet. The renders are transparent frames, one sprite per size and
+ * ivory clay snowballs, a muted gold scarf blowing in the wind, stub arms and
+ * feet, and for a face the Pulse mark itself, the ring and heartbeat on the
+ * Pulse button, inset in gold (chosen by the owner over two Optic-lens eyes
+ * and a smile). The renders are transparent frames, one sprite per size and
  * density (static/scout/, made by optic-brand/scout/render_scout.py, which
  * also writes frames.json, the order FRAME below copies). Every frame shares
  * one camera and one light rig, so a blink or a turn is a change of picture,
@@ -22,13 +23,17 @@
  * key), a question sent (one acknowledging wave, then thinking), a search the
  * server reports (a look around), the first words of the answer (stillness),
  * the end (a small nod), an error (a gentle concerned face). Between events
- * he blinks every 5-10 s (open, half, closed, half, open), now and then
- * twice, and, idle, now and then looks curious. Nothing he does says anything
+ * he blinks every 5-10 s (open, half, closed, half, open: a lid over the
+ * ring), now and then twice, and, idle, now and then looks curious: the head
+ * tilts and the ring opens a little wider. His scarf's tail flutters in the
+ * wind while he is on screen with motion set to Full. Nothing he does says anything
  * about a market: no pose reads as up, down, sure or unsure, and the end of an
  * answer gets a nod, never a celebration.
  *
  * One timer per figure, and it runs only while the figure is on screen in a
- * visible tab. A figure removed from the page stops itself on its next tick.
+ * visible tab; the scarf's CSS loop runs only under the same condition (the
+ * is-windy class). A figure removed from the page stops itself on its next
+ * tick.
  *
  * MOTION SETTING. full, subtle (poses and single blinks, no gestures) or
  * still (the resting frame only). Remembered per device; with nothing chosen
@@ -61,8 +66,8 @@
     'curious': 3, 'curious-half': 3, 'curious-closed': 3 };
   var LADDER = ['idle', 'lean', 'tilt', 'curious'];
 
-  /* Each resting pose has its own half and closed eyes, so a blink never
-   * changes the pose it happens in. */
+  /* Each resting pose has its own half-closed and closed lid, so a blink
+   * never changes the pose it happens in. */
   var FACE = {
     idle: ['idle', 'idle-half', 'idle-closed'],
     tilt: ['tilt', 'tilt-half', 'tilt-closed'],
@@ -152,7 +157,7 @@
   Ctl.prototype.show = function (name) {
     this.frameName = name;
     this.el.setAttribute('data-frame', name);
-    this.el.style.backgroundPositionX = (FRAME[name] / (COUNT - 1) * 100).toFixed(4) + '%';
+    this.el.style.setProperty('--scout-x', (FRAME[name] / (COUNT - 1) * 100).toFixed(4) + '%');
   };
   Ctl.prototype.pose = function () {
     return motion() === 'still' ? 'idle' : POSE[this.state] || 'idle';
@@ -273,7 +278,13 @@
     }, ms);
   };
 
+  /* The scarf in the wind: on while he is running at Full, off otherwise. */
+  Ctl.prototype.windy = function (on) {
+    this.el.classList.toggle('is-windy', !!on);
+  };
+
   Ctl.prototype.wake = function () {
+    this.windy(this.running() && motion() === 'full');
     if (!this.running()) { this.rest(); return; }
     var p = this.pending;
     this.pending = null;
@@ -285,6 +296,7 @@
   /* Hidden: no timers, and the resting frame of his state, never a frame
    * from the middle of a gesture. */
   Ctl.prototype.sleep = function () {
+    this.windy(false);
     this.cancel();
     clearTimeout(this.idleT);
     this.idleT = null;
@@ -292,6 +304,7 @@
   };
 
   Ctl.prototype.stop = function () {
+    this.windy(false);
     this.cancel();
     clearTimeout(this.idleT);
     this.idleT = null;

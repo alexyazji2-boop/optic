@@ -95,12 +95,20 @@ def vnoise(p):
 BODY_C, BODY_R = np.array([0.0, 0.80, 0.0]), np.array([0.72, 0.68, 0.64])
 HEAD_C, HEAD_R = np.array([-0.02, 1.99, 0.04]), np.array([0.69, 0.60, 0.62])
 NECK = np.array([0.0, 1.42, 0.0])
-SHOULDER = np.array([0.50, 0.98, 0.20])
-HAND_R = np.array([0.62, 0.72, 0.30])
+# "pulse" is the face the app ships; "optic" (two Optic-lens eyes and a
+# smile) reproduces the first renders, commit 2deec49.
+FACE_STYLE = os.environ.get("SCOUT_FACE", "pulse")
+SHOULDER = np.array([0.52, 0.98, 0.20])
+HAND_R = np.array([0.70, 0.74, 0.27])
+HAND_L = np.array([-0.60, 0.88, 0.38])
+HAND_SIZE = np.array([0.175, 0.22, 0.17])
 DEPTH = 0.034          # how far the eye floor sits below the head's surface
 
 # The logo's chart line, in its 32-unit space with y down (opticMarkHTML).
 TRACE32 = [(7.4, 20.2), (11.4, 15.6), (14.6, 17.8), (18.6, 11.6), (21.6, 14.0), (23.9, 11.4)]
+# The Pulse mark's heartbeat, same space (pulseMarkHTML: a circle of radius
+# 11.2 round the centre, and this trace across it).
+PULSE32 = [(7.6, 16), (10.8, 16), (12.8, 11.4), (15.8, 21.4), (18.0, 15.4), (19.4, 18.2), (23.8, 18.2)]
 
 
 def surface_frame(yaw, pitch, tilt):
@@ -117,16 +125,22 @@ def surface_frame(yaw, pitch, tilt):
 
 
 class Eye:
-    def __init__(self, yaw, pitch, tilt, width, closure, slant=0.0):
+    def __init__(self, yaw, pitch, tilt, width, closure, slant=0.0, ring=False):
         self.s, self.u, self.v = surface_frame(math.radians(yaw), math.radians(pitch), math.radians(tilt))
-        a, b = width / 2, width * 0.68 / 2      # the logo lens is 26.8 x 21.2, flatter here so it reads as an eye
-        self.a, self.b, self.h = a, b, 2 * b
-        self.R = (a * a + b * b) / (2 * b)
-        self.c = self.R - b
+        self.ring = ring          # the Pulse mark's circle instead of the Optic lens
+        if ring:
+            a = b = width / 2
+            self.a, self.b, self.h = a, b, 2 * b
+            self.R, self.c = a, 0.0
+        else:
+            a, b = width / 2, width * 0.68 / 2      # the logo lens is 26.8 x 21.2, flatter here so it reads as an eye
+            self.a, self.b, self.h = a, b, 2 * b
+            self.R = (a * a + b * b) / (2 * b)
+            self.c = self.R - b
         self.closure = closure
         self.slant = slant        # + lifts the lid's inner end: the worried look
-        sc = width / 26.8
-        self.trace = [((x - 16) * sc, -(y - 16) * sc) for x, y in TRACE32]
+        sc = width / (22.4 if ring else 26.8)
+        self.trace = [((x - 16) * sc, -(y - 16) * sc) for x, y in (PULSE32 if ring else TRACE32)]
         self.rim = width * 0.068
         self.tr = width * 0.045
 
@@ -138,6 +152,8 @@ class Eye:
         """Exact distance to the lens (a vesica with its points left and
         right). The max of the two circles is exact inside but too small past
         the points, which thinned the gold rim to a gap at each tip."""
+        if self.ring:
+            return np.hypot(eu, ev) - self.R
         x, y = np.abs(ev), np.abs(eu)
         b, d = self.a, self.c
         tip = (y - b) * d > x * b
@@ -145,6 +161,11 @@ class Eye:
 
     def lid_edge(self, eu):
         low = self.c - np.sqrt(np.maximum(self.R ** 2 - eu ** 2, 0))
+        if self.ring:
+            # One lid over one ring: worry lowers it at both sides alike, so
+            # the face reads as concerned rather than raising one brow.
+            low = -np.sqrt(np.maximum(self.R ** 2 - eu ** 2, 0))
+            return low + self.h * (1 - self.closure) - abs(self.slant) * np.abs(eu)
         return low + self.h * (1 - self.closure) + self.slant * eu
 
     def trace_dist(self, eu, ev):
@@ -183,16 +204,26 @@ class Pose:
            flatter, smaller mouth (never a frown)"""
 
     def __init__(self, tilt=0.0, yaw=0.0, pitch=0.0, cl=0.0, cr=0.0, wide=False,
-                 wave=0.0, worry=0.0, tail=True):
+                 wave=0.0, worry=0.0, tail=True, face=None, wind=0.0, tail_only=False):
         # world = H (local - neck) + neck; points are mapped back with H's transpose.
         self.H = rot_y_m(math.radians(yaw)) @ rot_x_m(math.radians(pitch)) @ rot_z_m(-math.radians(tilt))
         self.wave = math.radians(wave)
-        self.tail = tail
+        self.tail = tail or tail_only
+        self.wind = wind            # 0..1, the phase of the scarf tail's flutter
+        self.tail_only = tail_only  # render the tail alone, the body held out
         k = 0.42 * worry
         cl = max(cl, 0.30 * worry)
         cr = max(cr, 0.30 * worry)
-        self.eyes = [Eye(-20, 6, -10, 0.46, cl, slant=k),
-                     Eye(28, 9, -15, 0.40 * (1.16 if wide else 1.0), cr, slant=-k)]
+        face = face or FACE_STYLE
+        self.smile = face != "pulse"
+        if face == "pulse":
+            # The Pulse mark as the whole face: its ring and heartbeat, the
+            # owner's choice (2026-10-11) over the two Optic eyes and smile.
+            # The curious look opens the ring a little wider.
+            self.eyes = [Eye(9, -1, 0, 0.62 * (1.08 if wide else 1.0), max(cl, cr), slant=k * 0.8, ring=True)]
+        else:
+            self.eyes = [Eye(-20, 6, -10, 0.46, cl, slant=k),
+                         Eye(28, 9, -15, 0.40 * (1.16 if wide else 1.0), cr, slant=-k)]
         self.mouth = surface_frame(math.radians(8), math.radians(-23), math.radians(-4))
         self.smile_w = 0.10 - 0.025 * worry
         self.smile_d = 0.042 - 0.030 * worry
@@ -206,20 +237,22 @@ def scene(p, P, mats=False):
     body = sd_ellipsoid(p, BODY_C, BODY_R)
     feet = np.minimum(sd_ellipsoid(p, np.array([-0.30, 0.13, 0.22]), np.array([0.25, 0.13, 0.27])),
                       sd_ellipsoid(p, np.array([0.31, 0.13, 0.20]), np.array([0.25, 0.13, 0.27])))
-    hl = rot_z(p, np.array([-0.50, 0.92, 0.44]), math.radians(-25))
-    hand_l = sd_ellipsoid(hl, np.array([-0.50, 0.92, 0.44]), np.array([0.14, 0.19, 0.14]))
+    # Hands sized and placed to stand off the body, not melt into it: asked
+    # for "a little more visible" after the first renders.
+    hl = rot_z(p, HAND_L, math.radians(-25))
+    hand_l = sd_ellipsoid(hl, HAND_L, HAND_SIZE)
     # The right arm swings from the shoulder: a short capsule from inside the
     # body to the hand, so a raised hand stays joined to him instead of
     # floating free, and nothing on the body stretches.
     pw = rot_z(p, SHOULDER, -P.wave)
     hr = rot_z(pw, HAND_R, math.radians(28))
-    hand_r = sd_ellipsoid(hr, HAND_R, np.array([0.15, 0.19, 0.15]))
+    hand_r = sd_ellipsoid(hr, HAND_R, HAND_SIZE)
     ba = HAND_R - SHOULDER
     pa = pw - SHOULDER
     h = np.clip((pa @ ba) / (ba @ ba), 0, 1)
     arm = np.linalg.norm(pa - h[:, None] * ba, axis=1) - 0.085
     arm_r = smin(hand_r, arm, 0.05)
-    snow = smin(smin(body, hand_l, 0.05), arm_r, 0.05)
+    snow = smin(smin(body, hand_l, 0.03), arm_r, 0.03)
     snow = np.minimum(snow, feet)
 
     # Head, in its own tilted frame.
@@ -260,6 +293,8 @@ def scene(p, P, mats=False):
     uc = np.clip(su, -sw, sw)
     curve = sd * (uc / sw) ** 2
     smile = np.hypot(np.hypot(su - uc, sv - curve), head0) - 0.019
+    if not P.smile:
+        smile = np.full(len(p), 9.0)
     head = np.maximum(head, -smile)
 
     # Scarf: a ring round the neck, a knot, and a tail flying to the right.
@@ -270,18 +305,23 @@ def scene(p, P, mats=False):
     scarf = (np.hypot(rho / ar, sq[:, 1] / 0.085) - 1) * 0.085
     knot = sd_ellipsoid(p, np.array([0.27, 1.37, 0.33]), np.array([0.11, 0.10, 0.08]))
     scarf = smin(scarf, knot, 0.04)
+    tail = np.full(len(p), 9.0)
     if P.tail:
-        x0, x1 = 0.28, 1.10
+        # The tail in the wind: a wave travelling from the knot to the tip,
+        # growing toward the free end, one cycle per `wind` 0..1 so the
+        # frames loop without a seam.
+        ph = 2 * math.pi * P.wind
+        x0, x1 = 0.28, 1.10 + 0.025 * math.sin(ph)
         t = np.clip((p[:, 0] - x0) / (x1 - x0), 0, 1)
-        cy = 1.36 - 0.06 * t + 0.045 * np.sin(t * 2 * math.pi * 1.25)
-        cz = 0.30 - 0.32 * t
-        hw = 0.075 * (1 + 0.55 * t)
+        cy = 1.36 - 0.06 * t + (0.02 + 0.06 * t) * np.sin(t * 2 * math.pi * 1.25 - ph)
+        cz = 0.30 - 0.32 * t + 0.035 * t * np.sin(t * 2 * math.pi * 0.9 - ph + 1.0)
+        hw = 0.075 * (1 + 0.55 * t) * (1 + 0.07 * np.sin(t * 2 * math.pi - ph))
         ht = 0.022
         dy = np.abs(p[:, 1] - cy) - hw
         dz = np.abs(p[:, 2] - cz) - ht
         rib = np.minimum(np.maximum(dy, dz), 0) + np.hypot(np.maximum(dy, 0), np.maximum(dz, 0)) - 0.012
         ends = np.maximum(x0 - p[:, 0], p[:, 0] - x1 + 0.03 * np.sin(p[:, 1] * 60))
-        tail = np.maximum(rib, ends) * 0.7
+        tail = np.maximum(rib, ends) * 0.6
         scarf = smin(scarf, tail, 0.03)
 
     dist = np.minimum.reduce([snow, head, gold, trace, scarf])
@@ -301,6 +341,7 @@ def scene(p, P, mats=False):
     m[scarf <= dist + 1e-4] = 6
     m[gold <= dist + 1e-4] = 2
     m[trace <= dist + 1e-4] = 3
+    m[(tail <= dist + 1e-4) & (m == 6)] = 7     # the tail: scarf cloth, its own layer
     return dist, m, local
 
 
@@ -399,7 +440,7 @@ def shade(p, P):
     scarfc = S * (wrap * keycol * 0.95 + fill + amb) + G * (0.30 * sh * ndh ** 28)[:, None] \
         + G * env * 0.06 * ao[:, None] + rim * 0.5
 
-    for mid, c in ((0, snowc), (1, snowc), (2, metal), (3, tracec), (4, floor), (5, smilec), (6, scarfc)):
+    for mid, c in ((0, snowc), (1, snowc), (2, metal), (3, tracec), (4, floor), (5, smilec), (6, scarfc), (7, scarfc)):
         sel = m == mid
         col[sel] = c[sel]
     return tonemap(col)
@@ -421,10 +462,17 @@ def trace_rays(P, d):
         alive = alive[~done & ~far]
     rgba = np.zeros((len(d), 4))
     idx = np.nonzero(hit)[0]
+    if P.tail_only and len(idx):
+        # Only rays whose first surface is the tail; the body, lit and
+        # shadowing as usual, is held out (it is the other layer).
+        p = CAM + d[idx] * t[idx, None]
+        idx = idx[scene(p, P, mats=True)[1] == 7]
     if len(idx):
         p = CAM + d[idx] * t[idx, None]
         rgba[idx, :3] = shade(p, P)
         rgba[idx, 3] = 1
+    if P.tail_only:
+        return rgba
     # A soft contact shadow on an invisible floor, so he stands on something.
     miss = np.nonzero(~hit & (d[:, 1] < 0))[0]
     if len(miss):
@@ -484,14 +532,29 @@ COMPACT = ((-0.86, 1.17, 0.46, 2.66), (144, 156))
 HERO = ((-0.92, 1.17, -0.10, 2.66), (900, 1188))
 
 
+# The scarf's tail is its own layer, drawn under the body: WIND phases of one
+# flutter cycle, looped in CSS behind every pose. Under, not over, so a hand
+# raised in front of it (the wave) covers it as it should.
+WIND = 12
+
+
 def job(args):
     kind, i = args
     if kind == "hero":
-        return kind, i, render(Pose(), HERO[0], HERO[1], 2)
-    spec = dict(FRAMES[i][1])
+        return kind, i, (render(Pose(tail=False), HERO[0], HERO[1], 2),
+                         render(Pose(wind=0.0, tail_only=True), HERO[0], HERO[1], 2))
+    if kind.endswith("-tail"):
+        win, size, ss = (COMPACT[0], COMPACT[1], 6) if kind.startswith("compact") else (FULL[0], FULL[1], 4)
+        return kind, i, render(Pose(wind=i / WIND, tail_only=True), win, size, ss)
+    spec = dict(FRAMES[i][1], tail=False)
     if kind == "compact":
         return kind, i, render(Pose(**spec), COMPACT[0], COMPACT[1], 6)
     return kind, i, render(Pose(**spec), FULL[0], FULL[1], 4)
+
+
+def under(top, bottom):
+    """Premultiplied 'over': `top` drawn over `bottom`."""
+    return top + bottom * (1 - top[..., 3:4])
 
 
 def to_rgba8(pre):
@@ -528,6 +591,7 @@ def save_strip(frames, name, w, h):
 
 def main():
     jobs = [("full", i) for i in range(len(FRAMES))] + [("compact", i) for i in range(len(FRAMES))]
+    jobs += [("full-tail", i) for i in range(WIND)] + [("compact-tail", i) for i in range(WIND)]
     if "--no-hero" not in sys.argv:
         jobs.append(("hero", 0))
     os.makedirs(OUT, exist_ok=True)
@@ -537,20 +601,22 @@ def main():
             out[(kind, i)] = img
             print("rendered", kind, i, flush=True)
     n = len(FRAMES)
-    for kind, (_, (w3, h3)) in (("full", FULL), ("compact", COMPACT)):
-        frames3 = [out[(kind, i)] for i in range(n)]
-        if kind == "compact":
+    for kind, (_, (w3, h3)), count in (("full", FULL, n), ("compact", COMPACT, n),
+                                       ("full-tail", FULL, WIND), ("compact-tail", COMPACT, WIND)):
+        frames3 = [out[(kind, i)] for i in range(count)]
+        if kind.startswith("compact"):
             frames3 = [fade_bottom(f) for f in frames3]
         save_strip(frames3, "scout-%s@3x.webp" % kind, w3, h3)
         w2, h2 = round(w3 * 2 / 3), round(h3 * 2 / 3)
         save_strip([resample(f, w2, h2) for f in frames3], "scout-%s@2x.webp" % kind, w2, h2)
     with open(os.path.join(OUT, "frames.json"), "w") as fh:
-        json.dump({"frames": [name for name, _ in FRAMES],
+        json.dump({"frames": [name for name, _ in FRAMES], "wind": WIND,
                    "full": {"3x": list(FULL[1]), "2x": [round(FULL[1][0] * 2 / 3), round(FULL[1][1] * 2 / 3)]},
                    "compact": {"3x": list(COMPACT[1]), "2x": [round(COMPACT[1][0] * 2 / 3), round(COMPACT[1][1] * 2 / 3)]}},
                   fh, indent=1)
     if ("hero", 0) in out:
-        Image.fromarray(to_rgba8(out[("hero", 0)])).save(os.path.join(OUT, "scout.png"), optimize=True)
+        body, tail = out[("hero", 0)]
+        Image.fromarray(to_rgba8(under(body, tail))).save(os.path.join(OUT, "scout.png"), optimize=True)
 
 
 if __name__ == "__main__":

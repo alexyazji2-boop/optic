@@ -4,7 +4,8 @@ Asked for on 2026-10-11 with the user's own concept sheet (concept 03,
 "Scout") as a 3D character, then reworked the same day: higher-resolution
 renders, a bigger welcome figure, and motion tied to Pulse's real events
 (the panel opening, typing, a question sent, a search the server reports,
-the answer streaming, its end, an error) instead of a loop of its own.
+the answer streaming, its end, an error) instead of a loop of its own. Then:
+the Pulse mark as his face, larger hands, and his scarf in the wind.
 Presentation only: nothing here may touch what Pulse sends, streams or costs.
 
 The renders are committed sprites (static/scout/) made by
@@ -60,17 +61,20 @@ def test_the_frame_order_matches_the_renders():
 def test_the_sprites_are_transparent_strips_at_two_densities():
     """Transparent, or a box shows round him on the dark panel; every frame
     one size, or a frame position lands between two pictures. The 3x frame
-    covers the welcome figure's largest size (84px x the 1.15 UI scale)."""
+    covers the welcome figure's largest size (84px x the 1.15 UI scale). The
+    scarf's tail is its own strip of wind phases, the same frame size."""
     for kind in ("full", "compact"):
         for dens in ("2x", "3x"):
             w, h = MANIFEST[kind][dens]
-            im = Image.open(ROOT / "static/scout" / ("scout-%s@%s.webp" % (kind, dens)))
-            assert im.mode == "RGBA", (kind, dens)
-            assert im.size == (w * len(FRAMES), h), (kind, dens, im.size)
-            alpha = im.getchannel("A")
-            for x in range(len(FRAMES)):
-                assert alpha.getpixel((x * w + 1, 1)) == 0, "frame %d of %s@%s has a background" % (x, kind, dens)
-            assert alpha.getextrema() == (0, 255)
+            for layer, count in (("", len(FRAMES)), ("-tail", MANIFEST["wind"])):
+                name = "scout-%s%s@%s.webp" % (kind, layer, dens)
+                im = Image.open(ROOT / "static/scout" / name)
+                assert im.mode == "RGBA", name
+                assert im.size == (w * count, h), (name, im.size)
+                alpha = im.getchannel("A")
+                for x in range(count):
+                    assert alpha.getpixel((x * w + 1, 1)) == 0, "frame %d of %s has a background" % (x, name)
+                assert alpha.getextrema()[0] == 0 and alpha.getextrema()[1] >= 250, name
     assert MANIFEST["full"]["3x"][0] >= 84 * 1.15 * 3 - 2
     assert MANIFEST["compact"]["3x"][0] >= 40 * 1.15 * 3 - 2
     hero = Image.open(ROOT / "static/scout/scout.png")
@@ -81,15 +85,25 @@ def test_the_box_holds_its_space_and_picks_a_density():
     base = _block("\n.scout {")
     full_w, full_h = MANIFEST["full"]["3x"]
     assert "aspect-ratio: %d / %d" % (full_w, full_h) in base
-    assert "background-size: %d00%% 100%%" % len(FRAMES) in base
-    assert 'image-set(url("scout/scout-full@2x.webp") 2x, url("scout/scout-full@3x.webp") 3x)' in base
-    comp = _block("\n.scout-compact {")
+    pose = _block("}\n.scout::after {")
+    assert "background-size: %d00%% 100%%" % len(FRAMES) in pose
+    assert "background-position-x: var(--scout-x);" in pose
+    assert "--scout-x: 0%;" in base
+    assert 'image-set(url("scout/scout-full@2x.webp") 2x, url("scout/scout-full@3x.webp") 3x)' in pose
+    tail = _block("\n.scout::before {")
+    assert "background-size: %d00%% 100%%" % MANIFEST["wind"] in tail
+    assert "scout-full-tail@3x.webp" in tail
     cw, ch = MANIFEST["compact"]["3x"]
-    assert "aspect-ratio: %d / %d" % (cw, ch) in comp
-    assert "scout-compact@3x.webp" in comp
-    # The sequencer owns the frames; no CSS animation competes with it.
+    assert "aspect-ratio: %d / %d" % (cw, ch) in CSS
+    assert "scout-compact@3x.webp" in _block("\n.scout-compact::after {")
+    assert "scout-compact-tail@3x.webp" in _block("\n.scout-compact::before {")
+    # The sequencer owns the poses; the one CSS loop is the scarf, and only
+    # while scout.js marks the figure windy.
     foot = CSS[CSS.index("==== Scout ==="):]
-    assert "@keyframes scout" not in foot
+    assert re.findall(r"@keyframes (scout-[a-z-]+)", foot) == ["scout-wind"]
+    assert ".scout.is-windy::before { animation: scout-wind 1200ms steps(%d, jump-none) infinite; }" \
+        % MANIFEST["wind"] in foot
+    assert "animation" not in _block("\n.scout::before {")
 
 
 def test_the_blink_runs_open_half_closed_half_open():
@@ -112,6 +126,9 @@ def test_pauses_are_five_to_ten_seconds_and_nothing_runs_hidden():
     assert "isConnected" in alive and "this.stop()" in alive
     stop = _proto("stop")
     assert "clearTimeout(this.idleT)" in stop and "io.unobserve(this.el)" in stop
+    # The scarf loops only while he is running at Full; asleep or stopped, it is still.
+    assert "this.windy(this.running() && motion() === 'full');" in _proto("wake")
+    assert "this.windy(false);" in _proto("sleep") and "this.windy(false);" in stop
 
 
 def test_motion_setting_full_subtle_still_remembered_and_reduced_by_default():

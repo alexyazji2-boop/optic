@@ -18565,33 +18565,67 @@ footer.legal > .legal-full {
 
 /* ================================================================ Scout ===
  *
- * Pulse's mascot, concept 03 from the user's sheet, as 3D renders: one
- * transparent sprite per size and density, 22 frames in a row (order in
+ * Pulse's mascot, concept 03 from the user's sheet, as 3D renders with the
+ * Pulse mark as his face: transparent sprites per size and density (order in
  * static/scout/frames.json, written by optic-brand/scout/render_scout.py).
- * components/scout.js picks the frame by background position in response to
- * Pulse's events; nothing here animates on its own. The box has a fixed width
- * and aspect ratio, so it holds its space before the image arrives and
- * nothing around it moves.
+ * components/scout.js picks the pose in response to Pulse's events; the only
+ * loop here is the scarf in the wind, and it runs only when scout.js says.
+ * The box has a fixed width and aspect ratio, so it holds its space before
+ * the image arrives and nothing around it moves.
+ *
+ * Two layers per figure. ::after is the pose (22 frames, picked through
+ * --scout-x). ::before, under it, is the scarf's tail in the wind (12
+ * frames, looped only while scout.js has the figure marked is-windy: on
+ * screen, in a visible tab, motion set to Full). Under rather than over, so
+ * a hand raised in front of the scarf covers it.
  *
  * Two densities, chosen by the browser: 2x for ordinary and 2x screens, 3x
  * for 3x phones. Both are cut from the same supersampled render, never an
  * enlargement. The plain url() line is for browsers without image-set. */
 .scout {
+  /* The pose's position in the strip; scout.js sets it inline per frame. */
+  --scout-x: 0%;
   display: block;
   flex: none;
+  position: relative;
   aspect-ratio: 288 / 380;
+}
+.scout::before,
+.scout::after {
+  content: "";
+  position: absolute;
+  inset: 0;
   background-repeat: no-repeat;
   background-position: 0 0;
+}
+.scout::after {
   background-size: 2200% 100%;
+  background-position-x: var(--scout-x);
   background-image: url("scout/scout-full@2x.webp");
   background-image: -webkit-image-set(url("scout/scout-full@2x.webp") 2x, url("scout/scout-full@3x.webp") 3x);
   background-image: image-set(url("scout/scout-full@2x.webp") 2x, url("scout/scout-full@3x.webp") 3x);
 }
-.scout-compact {
-  aspect-ratio: 144 / 156;
+.scout::before {
+  background-size: 1200% 100%;
+  background-image: url("scout/scout-full-tail@2x.webp");
+  background-image: -webkit-image-set(url("scout/scout-full-tail@2x.webp") 2x, url("scout/scout-full-tail@3x.webp") 3x);
+  background-image: image-set(url("scout/scout-full-tail@2x.webp") 2x, url("scout/scout-full-tail@3x.webp") 3x);
+}
+.scout.is-windy::before { animation: scout-wind 1200ms steps(12, jump-none) infinite; }
+@keyframes scout-wind {
+  from { background-position-x: 0%; }
+  to { background-position-x: 100%; }
+}
+.scout-compact { aspect-ratio: 144 / 156; }
+.scout-compact::after {
   background-image: url("scout/scout-compact@2x.webp");
   background-image: -webkit-image-set(url("scout/scout-compact@2x.webp") 2x, url("scout/scout-compact@3x.webp") 3x);
   background-image: image-set(url("scout/scout-compact@2x.webp") 2x, url("scout/scout-compact@3x.webp") 3x);
+}
+.scout-compact::before {
+  background-image: url("scout/scout-compact-tail@2x.webp");
+  background-image: -webkit-image-set(url("scout/scout-compact-tail@2x.webp") 2x, url("scout/scout-compact-tail@3x.webp") 3x);
+  background-image: image-set(url("scout/scout-compact-tail@2x.webp") 2x, url("scout/scout-compact-tail@3x.webp") 3x);
 }
 
 /* The welcome figure is a button: it opens the guide menu. No fill and no
