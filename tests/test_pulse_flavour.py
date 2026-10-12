@@ -1,4 +1,12 @@
-"""Pulse has a looser voice, now and then.
+"""Pulse's personality: the funny friend on the desk.
+
+2026-10-12, with a screenshot of another assistant roasting a BAC call: "add a
+personality to pulse where it speaks to the user like this, in a joking and
+friendly way". Every reply now, for the neutral analyst; the limits below are
+the ones it always had, plus no slur stand-ins and no jokes about a reader's
+partner or job.
+
+Before that (kept for the history):
 
 Asked for with a screenshot of another assistant answering "would you swing NVDA
 calls into the weekend?" as a trading-forum regular: "have pulse humorous in
@@ -36,14 +44,9 @@ QUESTIONS = [
 ]
 
 
-def test_it_is_a_minority_of_replies_and_the_same_for_the_same_question():
-    chosen = [q for i, q in enumerate(QUESTIONS) if ai.flavour_for(i % 4 + 1, q)]
-    assert 3 <= len(chosen) <= 13, "about one in four, not none and not most: %d" % len(chosen)
-    assert all(ai.flavour_for(2, q) == ai.flavour_for(2, q) for q in QUESTIONS)
-    assert ai.flavour_for(3, QUESTIONS[0].upper() + "  ") == ai.flavour_for(3, QUESTIONS[0]), (
-        "case and trailing space do not change the voice")
-    assert {ai.flavour_for(n, "is TSLA overbought") != "" for n in range(1, 40)} == {True, False}, (
-        "the same words at a different point in a thread can go either way")
+def test_it_is_every_reply_and_the_same_for_the_same_question():
+    assert all(ai.flavour_for(i % 4 + 1, q) == ai.FLAVOUR_PROMPT for i, q in enumerate(QUESTIONS))
+    assert ai.flavour_for(3, QUESTIONS[0].upper() + "  ") == ai.flavour_for(3, QUESTIONS[0])
 
 
 def test_only_the_neutral_analyst_gets_it():
@@ -62,12 +65,16 @@ def test_never_when_the_question_is_about_a_loss_or_asks_for_the_long_form(text)
 
 
 def test_the_block_borrows_the_tone_and_keeps_the_limits():
-    for phrase in ("two jokes at most", "never inside the numbers", "never at the reader's expense",
+    for phrase in ("tease the trade, the market or yourself", "never a joke instead of a number",
+                   "never at the reader's expense as a person",
+                   "no slurs or their stand-ins (\"regard\")",
+                   "no jokes about anybody's partner, job, intelligence or money",
                    "no calling anybody poor, dumb or a loser",
                    "never a rocket, a fire or an emoji",
-                   "a joke is not a finding", "no \"i'd buy these\"", "no \"ride it\"",
-                   "no \"swing those calls\"", "the caveat stays one clause",
-                   "if the reader is down on a position"):
+                   "a joke is not a finding", "no \"i like the play\"", "no \"i'd buy these\"",
+                   "no \"ride it\"", "no \"swing those calls\"", "no \"take the profit\"",
+                   "the caveat stays one clause", "if the reader is down on a position",
+                   "delta is a rough guide to the odds"):
         assert phrase in FLAVOUR, phrase
     assert "—" not in ai.FLAVOUR_PROMPT
     assert "smart money" in FLAVOUR and "volume and open interest" in FLAVOUR
