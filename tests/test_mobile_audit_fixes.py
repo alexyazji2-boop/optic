@@ -75,3 +75,19 @@ def test_touch_screens_get_chart_zoom_buttons_beside_explain_chart():
     assert "Math.max(WS_MIN_BARS, Math.min(cur.total," in step
     assert ".ws-zoom-btns { display: none; }" in CSS
     assert ".ws-zoom-btns { display: flex;" in _media("(pointer: coarse)")
+
+
+def test_milo_on_a_phone_opens_without_the_keyboard_and_fits_above_it():
+    """Safari on an SE: the box was focused on open, the keyboard rose, the
+    header and greeting went off the top. And on a 549px-tall Safari the
+    pickers kept the greeting under the footer; after: greeting row 199-294px
+    against a footer from 298px."""
+    app = (ROOT / "static/app.js").read_text()
+    fn = app[app.index("function pulseFocusBox(box) {"):]
+    fn = fn[:fn.index("\n}\n")]
+    assert "window.matchMedia('(pointer: coarse)').matches) return false;" in fn
+    assert "pulseFocusBox($('#chat-input'));" in app and "$('#chat-input').focus();" not in app
+    assert "root.style.setProperty('--chat-vvh', `${Math.round(vv.height)}px`);" in app
+    assert "body.chat-open aside#chat { height: var(--chat-vvh, 100dvh); top: var(--chat-vvtop, 0); }" in CSS
+    short = _media("(max-width: 640px) and (max-height: 720px)")
+    assert "#chat .chat-body > #chat-persona { order: 3; }" in short

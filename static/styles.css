@@ -2581,6 +2581,15 @@ body.chat-resizing svg { pointer-events: none; }
 @media (max-width: 640px) and (max-height: 720px) {
   .chat-desc { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pulse-persona-blurb, .pulse-modes-h { display: none; }
+  /* The Mode and Persona pickers go after the conversation, one scroll away:
+     above it they kept Milo's greeting just under the footer on an SE
+     (Safari, 549px tall). Order only; the source and tab order are unchanged. */
+  #chat .chat-body { display: flex; flex-direction: column; }
+  #chat .chat-body > #chat-persona { order: 3; }
+  #chat .chat-body > .chat-log { order: 1; }
+  #chat .chat-body > #chat-suggest { order: 2; }
+  /* And the greeting closer under the notice: it ended 6px under the footer. */
+  #chat .chat-log { padding-top: var(--space-1); }
 }
 
 /* ---------------------------------------------------------- session strip
