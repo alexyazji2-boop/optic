@@ -145,6 +145,7 @@
     this.reported = !io;    // whether the observer has measured him yet
     this.pending = null;    // a gesture asked for just before he came on screen
     this.lastCurious = 0;
+    this.lastWave = 0;
   }
 
   Ctl.prototype.alive = function () {
@@ -250,23 +251,35 @@
   };
 
   /* The next thing he does on his own: a blink, now and then two, and idle,
-   * now and then a curious look. While Pulse is searching, a look around
-   * sometimes takes a blink's place; while thinking, a small bob of the head.
-   * Streaming keeps to blinks so the words have the attention. */
+   * now and then a curious look or, on the welcome screen, a wave. While Pulse
+   * is searching, a look around sometimes takes a blink's place; while
+   * thinking, a small bob of the head. Streaming keeps to blinks so the words
+   * have the attention.
+   *
+   * Twice as often as at first (asked for 2026-10-12: "have him blink and wave
+   * in shorter intervals to make it more frequent"): a beat every 2.5-5 s
+   * rather than 5-10, and the welcome figure waves on his own about every
+   * 20-40 s. Waves and looks stay Full-motion only; the small figures beside
+   * answers never wave. */
+  var WAVE_GAP_MS = 20000;
   Ctl.prototype.schedule = function () {
     var self = this;
     clearTimeout(this.idleT);
     this.idleT = null;
     if (!this.running()) return;
     var busy = this.state === 'thinking' || this.state === 'searching';
-    var ms = busy ? rand(3500, 6500) : rand(5000, 10000);
+    var ms = busy ? rand(2000, 4000) : rand(2500, 5000);
     this.idleT = setTimeout(function () {
       self.idleT = null;
       if (!self.running()) return;
       if (self.seq) { self.schedule(); return; }
       var r = Math.random();
       var full = motion() === 'full';
-      if (full && self.state === 'idle' && r < 0.2 && Date.now() - self.lastCurious > 20000) {
+      if (full && self.state === 'idle' && self.slot === 'welcome' && r < 0.3
+          && Date.now() - self.lastWave > WAVE_GAP_MS) {
+        self.lastWave = Date.now();
+        self.gesture('wave');
+      } else if (full && self.state === 'idle' && r < 0.45 && Date.now() - self.lastCurious > 20000) {
         self.lastCurious = Date.now();
         self.gesture('curious');
       } else if (full && self.state === 'searching' && r < 0.45) {

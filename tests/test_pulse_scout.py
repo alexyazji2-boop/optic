@@ -116,7 +116,7 @@ def test_the_blink_runs_open_half_closed_half_open():
 
 
 def test_pauses_are_five_to_ten_seconds_and_nothing_runs_hidden():
-    assert "rand(5000, 10000)" in SCOUT
+    assert "rand(2500, 5000)" in SCOUT and "rand(2000, 4000)" in SCOUT
     running = _proto("running")
     for cond in ("this.visible", "!document.hidden", "motion() !== 'still'", "this.alive()"):
         assert cond in running, cond
@@ -153,7 +153,7 @@ def test_the_welcome_wave_belongs_to_the_panel_opening():
     assert "gesture(" not in empty
     events = _fn("installScoutEvents")
     assert "attributeFilter: ['class']" in events
-    assert "now && !open && Date.now() - scoutLastWave > 60000" in events
+    assert "now && !open && Date.now() - scoutLastWave > 20000" in events
     assert "c.gesture('wave')" in events
     assert "\n  installScoutEvents();" in APP
 
@@ -276,3 +276,15 @@ def test_the_pulse_button_wears_scout_blinking():
     reduced = CSS[CSS.index(':root[data-scout-motion="still"] .scout-badge-fig'):]
     assert "@media (prefers-reduced-motion: reduce)" in reduced[:300]
     assert "setAttribute('data-scout-motion', motion())" in SCOUT
+
+
+def test_he_blinks_and_waves_more_often():
+    """Asked for on 2026-10-12: "have him blink and wave in shorter intervals
+    to make it more frequent". A beat every 2.5-5 s; the welcome figure waves
+    on his own at most every 20 s, at Full motion only."""
+    sched = SCOUT[SCOUT.index("Ctl.prototype.schedule = function () {"):]
+    sched = sched[:sched.index("\n  };")]
+    assert "rand(2500, 5000)" in sched
+    assert "var WAVE_GAP_MS = 20000;" in SCOUT
+    assert "full && self.state === 'idle' && self.slot === 'welcome'" in sched
+    assert "self.gesture('wave');" in sched

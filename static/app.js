@@ -40949,15 +40949,15 @@ function pulseReplyScoutDone(el, node) {
 
 /* The panel opening is the welcome: one wave, then idle. Watched on the
  * body's class because five different controls open Pulse. Not again within
- * a minute, so opening and closing it to look at a chart is not a greeting
- * every time. */
+ * 20 s (it was a minute, shortened 2026-10-12 with the idle waves), so
+ * opening and closing it to glance at a chart is not a greeting every time. */
 let scoutLastWave = 0;
 function installScoutEvents() {
   if (!window.OpticScout || !window.MutationObserver) return;
   let open = document.body.classList.contains('chat-open');
   new MutationObserver(() => {
     const now = document.body.classList.contains('chat-open');
-    if (now && !open && Date.now() - scoutLastWave > 60000) {
+    if (now && !open && Date.now() - scoutLastWave > 20000) {
       const c = scoutCtl(pulseWelcomeScout());
       if (c) { scoutLastWave = Date.now(); c.gesture('wave'); }
     }
