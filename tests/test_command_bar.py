@@ -150,16 +150,29 @@ def test_the_ticker_rows_are_grouped_under_the_symbol():
     """So a five-row block reads as "these are NVDA's" rather than as five
     unrelated destinations."""
     fn = _fn("paletteBuild")
-    assert "group: upper," in fn
+    assert "group: sym," in fn and "rows.push(...symbolRows(upper, 'Analyse this symbol'))" in fn
 
 
 def test_saved_research_is_matched_on_the_ticker_field():
     """A question about AMD that mentions NVDA belongs under AMD, so this
     matches the row's own ticker rather than searching the text."""
     fn = _fn("paletteBuild")
-    assert "String(r.ticker || '').toUpperCase() === upper" in fn
+    assert "String(r.ticker || '').toUpperCase() === sym" in fn
     # savedResearch() already resolves account-vs-local, so this needs no branch.
     assert "savedResearch() || []" in fn
+
+
+def test_a_company_name_is_not_taken_for_a_ticker_once_the_search_answers():
+    """Reported 2026-10-12: "nebius" (six letters) passed looksLikeTicker, so
+    "NEBIUS · Analyse this symbol" held Enter with five shortcuts for a symbol
+    that does not exist, and NBIS · Nebius Group sat out of sight below. When
+    nothing the search found IS the typed text, the guess gives way to the best
+    match and that symbol's rows."""
+    fn = _fn("paletteBuild")
+    assert "!results.some((r) => String(r.symbol || '').toUpperCase() === upper)" in fn
+    assert "rows.splice(guessFrom, guessTo - guessFrom," in fn
+    assert "...symbolRows(String(top.symbol).toUpperCase(), top.name || 'Analyse this symbol'));" in fn
+    assert fn.index("rows.splice(guessFrom") < fn.index("results.forEach((r) => {")
 
 
 def test_nothing_without_a_feed_is_offered():

@@ -10414,14 +10414,15 @@ async function paletteBuild(query, early) {
 
   if (exactPlace) rows.push(placeRow(exactPlace));
 
-  // A bare ticker leads otherwise, because that is the single most common thing
-  // typed into a box on a finance app.
-  if (isTicker) {
-    rows.push({
-      group: 'Open', lead: '\u25CE', label: upper, detail: 'Analyse this symbol',
+  /* A symbol's rows: Open it, the other places it goes, and anything already
+   * asked about it. Used for a bare ticker as typed and, once the search
+   * answers, for the company a typed NAME turned out to be (see below). */
+  const symbolRows = (sym, detail) => {
+    const out = [{
+      group: 'Open', lead: '\u25CE', label: sym, detail,
       tag: exactPlace ? '' : 'enter',
-      run: () => { closePalette(); loadTicker(upper, SEARCH_LANDING); },
-    });
+      run: () => { closePalette(); loadTicker(sym, SEARCH_LANDING); },
+    }];
     /* The other places that symbol goes.
      *
      * Every one of these is a view that already exists and already takes a
@@ -10437,16 +10438,16 @@ async function paletteBuild(query, early) {
      * missing.
      */
     [
-      ['Chart', 'Charting workspace', () => { loadChartWorkspace(upper); switchView('chart'); }],
-      ['News', 'Headlines for this symbol', () => loadTicker(upper, 'brief')],
-      ['Earnings', 'History, estimates and the read', () => loadTicker(upper, 'earnings')],
-      ['Investing', 'Valuation and the decade view', () => loadTicker(upper, 'long')],
+      ['Chart', 'Charting workspace', () => { loadChartWorkspace(sym); switchView('chart'); }],
+      ['News', 'Headlines for this symbol', () => loadTicker(sym, 'brief')],
+      ['Earnings', 'History, estimates and the read', () => loadTicker(sym, 'earnings')],
+      ['Investing', 'Valuation and the decade view', () => loadTicker(sym, 'long')],
       ['Compare', 'Put it beside other names', () => {
-        STATE.compareInputs = [upper, '', ''];
+        STATE.compareInputs = [sym, '', ''];
         switchView('compare');
       }],
-    ].forEach(([label, detail, run]) => rows.push({
-      group: upper, lead: '\u2192', label, detail,
+    ].forEach(([label, d, run]) => out.push({
+      group: sym, lead: '\u2192', label, detail: d,
       run: () => { closePalette(); run(); },
     }));
 
@@ -10457,14 +10458,21 @@ async function paletteBuild(query, early) {
      * the row's own ticker field rather than by searching the question text: a
      * question about AMD that happens to mention NVDA belongs under AMD. */
     (savedResearch() || [])
-      .filter((r) => String(r.ticker || '').toUpperCase() === upper)
+      .filter((r) => String(r.ticker || '').toUpperCase() === sym)
       .slice(0, 3)
-      .forEach((r) => rows.push({
-        group: upper, lead: '\u2727', label: String(r.question || '').slice(0, 60),
+      .forEach((r) => out.push({
+        group: sym, lead: '\u2727', label: String(r.question || '').slice(0, 60),
         detail: 'Saved research',
         run: () => { closePalette(); draftPulse(r.question || ''); },
       }));
-  }
+    return out;
+  };
+
+  // A bare ticker leads otherwise, because that is the single most common thing
+  // typed into a box on a finance app.
+  const guessFrom = rows.length;
+  if (isTicker) rows.push(...symbolRows(upper, 'Analyse this symbol'));
+  const guessTo = rows.length;
 
   places.forEach((p) => { if (p !== exactPlace) rows.push(placeRow(p)); });
 
@@ -10482,6 +10490,21 @@ async function paletteBuild(query, early) {
   }
   // A slower earlier query must not overwrite a faster later one.
   if (seq !== paletteSeq) return null;
+
+  /* A company's name is not its ticker. "nebius" is six letters, so
+   * looksLikeTicker took it for a symbol, and "NEBIUS · Analyse this symbol"
+   * held the Enter row, with five shortcuts for a symbol that does not exist,
+   * while NBIS · Nebius Group sat below them out of sight (reported
+   * 2026-10-12). When the search answers and nothing it found IS what was
+   * typed, the guess is replaced by the best match and that symbol's rows; the
+   * other matches follow as before. */
+  if (isTicker && results.length
+      && !results.some((r) => String(r.symbol || '').toUpperCase() === upper)) {
+    const top = results[0];
+    rows.splice(guessFrom, guessTo - guessFrom,
+      ...symbolRows(String(top.symbol).toUpperCase(), top.name || 'Analyse this symbol'));
+    results = results.slice(1);
+  }
 
   results.forEach((r) => {
     // The exact-match row is already at the top as "Open"; do not offer it twice.
