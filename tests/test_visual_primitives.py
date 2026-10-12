@@ -167,7 +167,9 @@ def test_a_long_row_label_has_room():
       var label = all(root, function (n) { return n.tag === 'text' && n.textContent === 'Current fiscal year'; })[0];
       R.x = Number(label.attrs.x);
     """)
-    assert out["x"] == 132
+    # 133 since chart ticks moved onto --t-caption (12.1px, was 11.5): the
+    # column widens with the text it has to hold.
+    assert out["x"] == 133
 
 
 # ------------------------------------------------------------ a loss under its year

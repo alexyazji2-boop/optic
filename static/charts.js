@@ -27,24 +27,31 @@ const TIP = () => document.getElementById('tooltip');
  * axis ticks, level labels, event markers -- take a weight. Weight buys more
  * legibility per pixel than size at this scale, because the failure is stroke
  * thinness rather than glyph height.
- *
- * `tick` stays a step below `label`: the axis is orientation and the labels are
- * content, and flattening them would leave the plot with no hierarchy at all.
  */
+/* Chart text sits on the stylesheet's type scale (--t-micro 9.5, --t-caption
+ * 10.5, times --ui-scale) so the plot's words are the same sizes as the words
+ * around it and grow with them (type pass, 2026-10-12; before, 10.5-12.5px
+ * fixed). Ticks and labels share a size and differ by weight. */
+const CHART_UI_SCALE = (() => {
+  try {
+    const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ui-scale'));
+    return v > 0 ? v : 1.15;
+  } catch (e) { return 1.15; }
+})();
 const CF = {
-  micro: 10.5,   // session dividers, the densest annotation on the plot
-  tick: 11.5,    // axis ticks
-  label: 12,     // level labels, event markers, band labels
-  tag: 12.5,     // the value tags at the end of each series
-  title: 12,     // axis titles
+  micro: 9.5 * CHART_UI_SCALE,    // --t-micro: session dividers, the densest annotation on the plot
+  tick: 10.5 * CHART_UI_SCALE,    // --t-caption: axis ticks
+  label: 10.5 * CHART_UI_SCALE,   // --t-caption: level labels, event markers, band labels
+  tag: 10.5 * CHART_UI_SCALE,     // --t-caption: the value tags at the end of each series
+  title: 10.5 * CHART_UI_SCALE,   // --t-caption: axis titles
 };
 const CW = {
   tick: 500,
   label: 600,
-  tag: 700,
+  tag: 600,
 };
 
-/* The width a stage name is measured at: 10.5px semibold, about 6px a
+/* The width a stage name is measured at: --t-micro semibold, about 6px a
  * character, estimated rather than measured because the node is not in the
  * document yet (the session captions do the same). */
 const STAGE_NAME_CHAR = 6;
@@ -2051,7 +2058,7 @@ function lineChart(opts) {
       annotLayer.appendChild(s('text', {
         x: x + w / 2, y: t.ty + (t.isPrice ? 4 : 3.7), fill: C.surface,
         'font-size': t.isPrice ? CF.tag : CF.label,
-        'font-weight': t.isPrice ? 700 : 600, 'text-anchor': 'middle',
+        'font-weight': 600, 'text-anchor': 'middle',
         'font-variant-numeric': 'tabular-nums',
       }, text));
       // A 2px stub back to the plot edge, so a tag that had to be nudged still

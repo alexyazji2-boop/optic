@@ -47,20 +47,14 @@
      anyone without that. preconnect so the font request starts during HTML
      parse rather than after the CSS resolves. -->
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-<!-- Switzer, variable: @1 is Fontshare's single-file cut covering 100-900, so a
-     weight change costs no extra request.
-     Inter stays loaded as the fallback, from a different CDN on purpose. If
-     Fontshare is slow or blocked the interface still gets a chosen neo-grotesque
-     rather than whatever the OS defaults to, and one outage cannot take both. -->
-<!-- Plus Jakarta Sans, variable: one file covering 200-800. Inter stays
-     behind it so a slow or blocked CDN degrades to something chosen. -->
+<!-- Two families, one job each (font audit, 2026-10-12). Inter for everything
+     read: text, tables, figures and headings, with its optical-size axis
+     (opsz.css) so a heading set large draws Inter's display cut on its own.
+     Space Grotesk for the secondary voice: labels and tickers. Host Grotesk
+     and Plus Jakarta Sans went: the first was a near-twin of Space Grotesk
+     beside Inter, the second was downloaded and never drawn. -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/inter/opsz.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/space-grotesk/index.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/plus-jakarta-sans/index.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/inter/index.css">
-<!-- Host Grotesk: the reference template's typeface, loaded from the same CDN
-     as the other three. Part of the Asset restyle; see the block at the foot of
-     styles.css, which is the whole of that change and the whole of its undo. -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/host-grotesk/index.css">
 <link rel="stylesheet" href="styles.css?v=514">
 <!-- The reader's size preference, applied before the first paint.
      Inline and synchronous on purpose: app.js is loaded at the end of the body,
