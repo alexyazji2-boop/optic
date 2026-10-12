@@ -41797,7 +41797,10 @@ function digestTime(iso) {
 /* One name's three slots. `compact` drops the method line, for the list. */
 function digestBodyHTML(d, compact) {
   if (!d || d.available === false) {
-    return `<p class="muted">${esc((d && (d.error || d.reason)) || 'No digest for this symbol right now.')}</p>`;
+    // A reason the server wrote is shown; a failed request is said plainly.
+    return `<p class="muted">${esc((d && d.reason) || (d && d.error
+      ? 'The digest could not be loaded just now. The rest of the page is unaffected.'
+      : 'No digest for this symbol right now.'))}</p>`;
   }
   const facts = (d.changed || []).map((f) => `<li>${esc(f.text)}${f.detail ? ` <span class="muted">${esc(f.detail)}</span>` : ''}</li>`).join('');
   const why = (d.explanations || []).map((e) => `<li><a href="${esc(e.url)}" target="_blank" rel="noopener">${
