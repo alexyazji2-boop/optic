@@ -45,6 +45,7 @@ from . import catalysts as catalysts_mod
 from . import catalyst_live as catalyst_live_mod
 from . import live_mirror
 from .analytics import business as business_mod
+from . import digest as digest_mod
 from .analytics import cases as cases_mod
 from .analytics import congress as congress_mod
 from . import papertrade as papertrade_mod
@@ -1282,6 +1283,44 @@ def _briefing_read_soon(symbols: List[str], session: str) -> None:
     threading.Thread(target=work, name="briefing-read", daemon=True).start()
 
 
+def _briefing_report(symbols: List[str], held: List[str]) -> Dict[str, Any]:
+    """The briefing for these names: shared and cached by list and session, so
+    the Briefing panel and the digests read one computation."""
+    now = datetime.now(timezone.utc)
+    per = briefing_mod.period(now)
+    key = (tuple(symbols), tuple(held), per["latest"])
+    hit = _BRIEFING_CACHE.get(key)
+    if hit and time.time() - hit[0] < _BRIEFING_TTL:
+        return hit[1]
+    # The setups scanner's own download: one request for every name, and
+    # the same cache entry when the two are asked about the same list.
+    frames = _setup_frames(symbols, "SPY") or {}
+    bench = frames.get("SPY")
+
+    def bars_for(sym: str):
+        return setups_mod.daily_bars(frames.get(sym), now)
+
+    def setups_for(sym: str):
+        df = frames.get(sym)
+        if df is None or df.empty:
+            return None
+        try:
+            return setups_mod.analyse(sym, df, bench, now=now)
+        except Exception as exc:                              # noqa: BLE001
+            return {"available": False, "reason": str(exc)[:120]}
+
+    out = briefing_mod.build(symbols, held, bars_for, setups_for, per)
+    briefing_mod.note_requested(symbols, now)
+    out["generated_at"] = now.isoformat()
+    if out["unread"]:
+        _briefing_read_soon(out["unread"], per["latest"])
+    else:
+        if len(_BRIEFING_CACHE) > 200:
+            _BRIEFING_CACHE.clear()
+        _BRIEFING_CACHE[key] = (time.time(), out)
+    return out
+
+
 @app.post("/api/briefing")
 async def daily_briefing(request: Request, body: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
     """What changed since yesterday on the reader's watchlist and holdings.
@@ -1309,40 +1348,67 @@ async def daily_briefing(request: Request, body: Dict[str, Any] = Body(default={
                           "compares them session to session."}
 
     def build() -> Dict[str, Any]:
-        now = datetime.now(timezone.utc)
-        per = briefing_mod.period(now)
-        key = (tuple(symbols), tuple(held), per["latest"])
-        hit = _BRIEFING_CACHE.get(key)
-        if hit and time.time() - hit[0] < _BRIEFING_TTL:
-            return hit[1]
-        # The setups scanner's own download: one request for every name, and
-        # the same cache entry when the two are asked about the same list.
-        frames = _setup_frames(symbols, "SPY") or {}
-        bench = frames.get("SPY")
-
-        def bars_for(sym: str):
-            return setups_mod.daily_bars(frames.get(sym), now)
-
-        def setups_for(sym: str):
-            df = frames.get(sym)
-            if df is None or df.empty:
-                return None
-            try:
-                return setups_mod.analyse(sym, df, bench, now=now)
-            except Exception as exc:                              # noqa: BLE001
-                return {"available": False, "reason": str(exc)[:120]}
-
-        out = briefing_mod.build(symbols, held, bars_for, setups_for, per)
-        briefing_mod.note_requested(symbols, now)
-        out["generated_at"] = now.isoformat()
+        out = dict(_briefing_report(symbols, held))
         out["signed_in"] = bool(user)
-        if out["unread"]:
-            _briefing_read_soon(out["unread"], per["latest"])
-        else:
-            if len(_BRIEFING_CACHE) > 200:
-                _BRIEFING_CACHE.clear()
-            _BRIEFING_CACHE[key] = (time.time(), out)
         return out
+
+    return await _run(build)
+
+
+# Digests (2026-10-12): the briefing's observed changes, the company's own
+# headlines around them labelled as possible explanations, and what is left to
+# check. Fixed rules, no model call; shared by every reader of a symbol for the
+# session (app/digest.py).
+_DIGEST_CACHE: Dict[Any, Any] = {}
+_DIGEST_TTL = 900
+DIGEST_MAX_SYMBOLS = 15
+DIGEST_MAX_NEWS = 8
+
+
+def _digest_news(symbol: str) -> Dict[str, Any]:
+    try:
+        return news_mod.analyse(YF_PROVIDER, symbol, 12)
+    except Exception as exc:                                      # noqa: BLE001
+        return {"articles": [], "error": str(exc)[:120]}
+
+
+@app.get("/api/digest/{ticker}")
+async def asset_digest(ticker: str) -> Dict[str, Any]:
+    syms = _setup_symbols(ticker, 1)
+    if not syms:
+        raise HTTPException(status_code=400, detail="That does not look like a ticker.")
+    sym = syms[0]
+
+    def build() -> Dict[str, Any]:
+        per = briefing_mod.period(datetime.now(timezone.utc))
+        key = ("one", sym, per["latest"])
+        hit = _DIGEST_CACHE.get(key)
+        if hit and time.time() - hit[0] < _DIGEST_TTL:
+            return hit[1]
+        out = digest_mod.compose(sym, _briefing_report([sym], []), _digest_news(sym))
+        if len(_DIGEST_CACHE) > 300:
+            _DIGEST_CACHE.clear()
+        _DIGEST_CACHE[key] = (time.time(), out)
+        return out
+
+    return await _run(build)
+
+
+@app.post("/api/digest")
+async def list_digest(body: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """A watchlist digest. The names arrive in the body (a guest's list lives in
+    the browser); nothing about who asked is kept. Headlines are read only for
+    the names that changed, at most DIGEST_MAX_NEWS, to bound the feed calls."""
+    raw = body.get("symbols") if isinstance(body.get("symbols"), list) else []
+    syms = _setup_symbols(",".join(str(x) for x in raw[:200]), DIGEST_MAX_SYMBOLS)
+    if not syms:
+        return {"available": False, "reason": "Add names to the watchlist for a digest."}
+
+    def build() -> Dict[str, Any]:
+        report = _briefing_report(syms, [])
+        changed = [n["symbol"] for n in report.get("names") or [] if n.get("state") == "changed"]
+        news = {s: _digest_news(s) for s in changed[:DIGEST_MAX_NEWS]}
+        return digest_mod.compose_list(syms, report, news)
 
     return await _run(build)
 
@@ -5177,8 +5243,83 @@ async def _market_context() -> Optional[Dict[str, Any]]:
     )
     return out
 
+_PORTFOLIO_WORDS = re.compile(
+    r"\b(portfolio|positions?|holdings?|exposure|concentrat\w*|diversif\w*|my (?:book|trades|paper)|"
+    r"paper trades?|allocation|sector mix|what do i (?:own|hold))\b", re.I)
+PORTFOLIO_MAX_PROFILES = 15
+
+
+def _portfolio_summary(positions: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Sector exposure and concentration of the reader's paper trades.
+
+    Weights are notional at entry (price x quantity, x100 for an option), said
+    so in the note: current prices are not part of this, and the sector comes
+    from each symbol's cached profile. Paper trades only; Optic has no brokerage
+    connection (2026-10-12, portfolio-aware research)."""
+    rows = []
+    for p in positions[:40]:
+        if not isinstance(p, dict):
+            continue
+        sym = str(p.get("ticker") or "").upper()
+        if not re.fullmatch(r"[A-Z][A-Z0-9.\-]{0,9}", sym):
+            continue
+        try:
+            qty = float(p.get("qty") or 0)
+            price = float(p.get("entry_price") or 0)
+        except (TypeError, ValueError):
+            continue
+        mult = 100.0 if str(p.get("instrument") or "").lower() == "option" else 1.0
+        rows.append({"ticker": sym, "notional": abs(qty * price * mult)})
+    total = sum(r["notional"] for r in rows) or 0.0
+    sectors: Dict[str, float] = {}
+    profiles: Dict[str, Optional[str]] = {}
+    for sym in list(dict.fromkeys(r["ticker"] for r in rows))[:PORTFOLIO_MAX_PROFILES]:
+        try:
+            profiles[sym] = (YF_PROVIDER.profile(sym) or {}).get("sector")
+        except Exception:                                         # noqa: BLE001
+            profiles[sym] = None
+    for r in rows:
+        sec = profiles.get(r["ticker"]) or "Unknown"
+        sectors[sec] = sectors.get(sec, 0.0) + r["notional"]
+    by_name: Dict[str, float] = {}
+    for r in rows:
+        by_name[r["ticker"]] = by_name.get(r["ticker"], 0.0) + r["notional"]
+    share = (lambda v: round(100.0 * v / total, 1) if total else None)
+    return {
+        "source": "paper trades the reader entered in Optic; not a brokerage account",
+        "positions": len(rows),
+        "by_sector": sorted(({"sector": k, "share_pct": share(v)} for k, v in sectors.items()),
+                            key=lambda x: -(x["share_pct"] or 0)),
+        "largest": sorted(({"ticker": k, "share_pct": share(v)} for k, v in by_name.items()),
+                          key=lambda x: -(x["share_pct"] or 0))[:5],
+        "note": "Shares are of notional at entry (price x quantity, x100 for options), not of "
+                "current value. Sectors from each symbol's profile; Unknown where none was found.",
+    }
+
+
 async def _augment_chat_context(history: List[Dict[str, Any]],
                                 context: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """The reader's scope first, then what the question is about.
+
+    "No context" means the question alone: nothing is added. A portfolio
+    question with paper trades in the context gets their summary."""
+    focus = (context or {}).get("focus") if isinstance((context or {}).get("focus"), dict) else {}
+    if focus.get("scope") == "none":
+        return context
+    out = await _augment_chat_context_lookups(history, context)
+    last = next((t for t in reversed(history or []) if t.get("role") != "assistant"), None)
+    held = ((out or {}).get("reader_holdings") or {}).get("positions")
+    if last and isinstance(held, list) and held and _PORTFOLIO_WORDS.search(last.get("content") or ""):
+        out = dict(out or {})
+        try:
+            out["portfolio_summary"] = await _run(_portfolio_summary, held)
+        except Exception as exc:                                  # noqa: BLE001
+            logging.getLogger("uvicorn.error").warning("portfolio summary skipped: %s", exc)
+    return out
+
+
+async def _augment_chat_context_lookups(history: List[Dict[str, Any]],
+                                        context: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """Load a ticker the reader named but had not opened.
 
     Pulse only ever saw whatever the browser happened to have on screen, so asking

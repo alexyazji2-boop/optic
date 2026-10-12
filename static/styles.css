@@ -2330,6 +2330,24 @@ body.chat-resizing svg { pointer-events: none; }
 .milo-act-result.ok { color: var(--pos); }
 .milo-act-result.bad { color: var(--warn); }
 .milo-act-off { font-size: var(--t-caption); color: var(--ink-muted); border-style: dashed; }
+/* Digests: three slots, observed first (digestCardHTML). */
+.dg-card { display: flex; flex-direction: column; gap: var(--space-2); }
+.dg-top { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: baseline; }
+.dg-top .muted { font-size: var(--t-caption); }
+.dg-h { margin: var(--space-2) 0 var(--space-1); font-size: var(--t-small); font-weight: 600; color: var(--ink); }
+.dg-tag {
+  margin-left: var(--space-1); padding: 0 var(--space-1); border: 1px solid var(--ws-line);
+  border-radius: var(--r-pill); font-size: var(--t-micro); font-weight: 500; color: var(--ink-muted);
+}
+.dg-list { margin: 0; padding-left: var(--space-4); display: flex; flex-direction: column; gap: var(--space-1); }
+.dg-list a { color: var(--s1); }
+.dg-note { margin: var(--space-1) 0 0; font-size: var(--t-caption); color: var(--ink-muted); }
+.dg-name { border-top: 1px solid var(--border); padding: var(--space-2) 0; }
+.dg-name > summary { cursor: pointer; min-height: 32px; display: flex; align-items: center; gap: var(--space-2); }
+#chat .msg.digest .who .muted { font-weight: 400; text-transform: none; letter-spacing: 0; }
+.pulse-digests { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-3) 0; }
+.pulse-digests .pill { min-height: 36px; }
+.pulse-digests-note { font-size: var(--t-caption); }
 /* An answer that did not finish says so under its text. */
 #chat .msg-ended { margin-top: var(--space-2); font-size: var(--t-caption); color: var(--warn); }
 /* A ticker switch in the conversation: a quiet line, not a message. */
@@ -2553,6 +2571,20 @@ body.chat-resizing svg { pointer-events: none; }
   #chat .chat-actions { flex-wrap: nowrap; gap: var(--space-1); }
   #chat .chat-actions .btn { padding-left: var(--space-2); padding-right: var(--space-2); font-size: var(--t-small); }
   #chat .chat-actions label { margin-left: auto; white-space: nowrap; }
+}
+/* Under 360px the four actions do not fit one row: at 320 they widened the
+   page to 343px and pushed the panel off screen (2026-10-12 audit). The
+   label takes its own line there. */
+@media (max-width: 359px) {
+  #chat .chat-actions { flex-wrap: wrap; }
+  #chat .chat-actions label { margin-left: 0; flex-basis: 100%; }
+}
+/* A short phone (an SE is 549px tall in Safari): the intro to one line and
+   the helper lines go, so the greeting and the conversation keep room. The
+   intro's full text is in its title; the notice stays, folded. */
+@media (max-width: 640px) and (max-height: 720px) {
+  .chat-desc { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pulse-persona-blurb, .pulse-modes-h { display: none; }
 }
 
 /* ---------------------------------------------------------- session strip
@@ -3742,6 +3774,30 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
   nav.tabs button {
     min-height: 44px;
   }
+  /* iOS Safari zooms the page into any field under 16px when it is focused,
+     and every field was (13.8px top search, 15.5px Home search, chat and
+     Compare, 12px screener selects; measured in Safari on iPhone 17 and SE,
+     2026-10-12). A floor, on touch screens only, so desktop type is unchanged.
+     !important because several fields are sized by id rules. */
+  input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea {
+    font-size: max(16px, 1em) !important;
+  }
+  /* More small controls get the same invisible hit area as the links above:
+     calendar notes (18px), "4 more", Milo's close (23px), Full disclaimer
+     (20px), the overlay toggle and ticker buttons in tables (the panel
+     chevron and the ask chips have theirs below). Layout does not move. */
+  .cs-note-btn, .ht-rest, #chat-close, #legal-more, .ws-leg-title,
+  td .tkr, .chat-allow button, .ws-pane-explain {
+    position: relative;
+  }
+  .cs-note-btn::after, .ht-rest::after, #chat-close::after, #legal-more::after,
+  .ws-leg-title::after, td .tkr::after,
+  .chat-allow button::after, .ws-pane-explain::after {
+    content: '';
+    position: absolute;
+    inset: -12px -6px;
+  }
+  .pill, .sec-chip { min-height: 36px; }
 }
 
 /* ------------------------------------------ balanced columns in two-up rows
@@ -6150,7 +6206,12 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
   main { padding: var(--space-3) var(--space-4) var(--space-5); }
 }
 
-@media (max-height: 560px) {
+/* Landscape only (2026-10-12). In Safari an iPhone SE in portrait is 549px
+   tall, so this block ran on it: the top bar stopped being sticky and the
+   search box lost the padding its magnifier sits in, drawing the icon over
+   the typed symbol. A zoomed desktop tab and a phone on its side are both
+   landscape; a portrait phone is not. */
+@media (max-height: 560px) and (orientation: landscape) {
   /* Deeper zoom. The search field keeps a usable target but stops claiming a
      third of the bar, and the brand text goes — the mark alone still identifies
      the app and still navigates home. */
@@ -6159,7 +6220,8 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
   nav.tabs { gap: var(--space-0); }
   .statusline { padding: var(--space-0) var(--space-3); font-size: var(--t-micro); }
   .brand-text { display: none; }
-  .search input { padding: var(--space-1) var(--space-2); }
+  /* Top and bottom only: the left padding is where the magnifier sits. */
+  .search input { padding-top: var(--space-1); padding-bottom: var(--space-1); }
   .btn, .btn.primary { padding: var(--space-1) var(--space-3); }
   main { padding: var(--space-2) var(--space-3) var(--space-4); }
   /* A sticky three-row bar over a 400px viewport is worse than one that scrolls
@@ -7943,6 +8005,14 @@ body[data-view="chart"] main { padding-top: var(--space-2); }
   border-radius: 2px;
   margin: 0 var(--space-0) 0 var(--space-1);
 }
+/* "Explain" beside a reading: hands the figure to Milo (miloExplainButton). */
+.ws-pane-explain {
+  margin-left: var(--space-2); padding: 0 var(--space-2); min-height: 24px;
+  background: none; border: 1px solid var(--ws-line); border-radius: var(--r-pill);
+  color: var(--ink-2); font: inherit; font-size: var(--t-micro); cursor: pointer;
+}
+.ws-pane-explain:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.gloss-milo { margin-left: var(--space-1); }
 .ws-pane-cross { color: var(--ink-2); }
 .ws-pane-cross.up { color: var(--pos); }
 .ws-pane-cross.down { color: var(--neg); }
@@ -11680,12 +11750,22 @@ body.cp-open { overflow: hidden; }
   }
 
   /* Content must clear the bar, or the last panel on every page is unreachable
-     behind it. 52 for the bar plus the inset plus a gap. */
+     behind it. 52 for the bar plus the inset plus a gap. The legal footer
+     comes after main, so it clears the bar too: "Full disclaimer" sat under it
+     on every phone page (2026-10-12 audit). */
   main { padding-bottom: calc(52px + var(--space-6) + env(safe-area-inset-bottom)); }
+  footer.legal { padding-bottom: calc(var(--space-5) + 52px + env(safe-area-inset-bottom)); }
+  /* The footer painted under an empty main and then jumped when the page
+     arrived: Home's layout shift was 1.16 at 390x844 (2026-10-12 audit). */
+  main { min-height: calc(100dvh - var(--topbar-h, 64px)); }
+  /* A 340px box scrolling inside the page caught the finger on Insiders'
+     6,700px table. On a phone the page scrolls; the table runs long. */
+  .scroll-y { max-height: none; }
 
-  /* The command palette has to sit above the bar, and the Pulse panel must not
-     be covered by it either. */
-  aside#chat { padding-bottom: calc(52px + env(safe-area-inset-bottom)); }
+  /* The bar is hidden while Milo is open (body.chat-open .mtabs), so the panel
+     only clears the home indicator. It kept the bar's 52px and showed a dead
+     band under Send at every size (2026-10-12 audit). */
+  aside#chat { padding-bottom: env(safe-area-inset-bottom); }
 }
 
 /* ----------------------------------------------- the onboarding question
@@ -13672,6 +13752,13 @@ body.auth-open { overflow: hidden; }
      it. Visible for the whole time the workspace existed. */
   background: var(--ws-plane);
   border-bottom: 1px solid var(--ws-line);
+}
+/* A landscape phone (the top bar is static there, see the max-height block):
+   a header pinned at the bar's height left a gap above itself and about 110px
+   of a 390px screen for content (2026-10-12 audit). */
+@media (max-height: 560px) and (orientation: landscape) {
+  .sec-head { position: static; }
+  .sec-index { top: var(--space-1); }
 }
 .sec-id {
   display: flex;
@@ -17142,7 +17229,10 @@ table.data.accounts-table td.ac-who { white-space: normal; min-width: 120px; wid
   container-name: sechead;
 }
 .sec-head.has-acts > .sec-id { grid-column: 1 / -1; }
-.sec-actions { display: flex; gap: var(--space-1); padding-bottom: var(--space-2); }
+/* Wraps (2026-10-12): on a phone the row ran past the right edge, and
+   main's overflow clip hid Alert and Ask Milo where nobody could tap them
+   (Safari, iPhone 17 and SE; Chromium 320-430). */
+.sec-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); padding-bottom: var(--space-2); }
 .sec-act svg {
   width: 14px; height: 14px; flex: none;
   fill: none; stroke: currentColor; stroke-width: 1.8;
@@ -17160,6 +17250,8 @@ table.data.accounts-table td.ac-who { white-space: normal; min-width: 120px; wid
 }
 @container sechead (max-width: 480px) {
   .sec-actions .sec-act { flex: 1 1 0; }
+  /* The advanced switch takes its own line; the actions share the next. */
+  .sec-actions .adv-toggle { flex: 1 0 100%; margin-right: 0; }
 }
 
 /* ----------------------------------------------------------------- Pulse */

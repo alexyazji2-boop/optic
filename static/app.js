@@ -952,6 +952,21 @@ document.addEventListener('click', (evt) => {
   // this file, and the day one of them contains an ampersand is not the day to
   // find out it was being parsed as markup.
   box.textContent = term.getAttribute('data-def') || '';
+  // Under a label-and-figure row, the figure itself goes to Milo with the
+  // question (2026-10-12, "Explain this"): the reader's value, not the term.
+  if (row) {
+    const dd = row.querySelector(':scope > dd:not(.gloss-inline)');
+    const label = (term.textContent || '').trim();
+    if (label) {
+      const ask = document.createElement('button');
+      ask.type = 'button';
+      ask.className = 'ov-linkbtn gloss-milo';
+      ask.dataset.miloExplain = JSON.stringify({ label, value: dd ? dd.textContent.trim() : '' });
+      ask.textContent = 'Explain this with Milo';
+      box.appendChild(document.createTextNode(' '));
+      box.appendChild(ask);
+    }
+  }
   if (row) row.appendChild(box);
   else after.insertAdjacentElement('afterend', box);
   term.setAttribute('aria-expanded', 'true');
@@ -16479,6 +16494,7 @@ function renderOverviewView() {
   views.overview.innerHTML = `${securityHeader('overview')}
     <div class="ov-simple">
     ${ovAboutHTML()}
+    <div id="ov-digest"></div>
     <div id="ov-takeaways">${ovTakeawaysHTML(d, biz, price, factors)}</div>
     ${d.verdict ? ovScoreHTML(d) : ''}
     ${!biz && (fin.note || fin.notes) ? `<p class="caveat">${esc(fin.note || fin.notes)}</p>` : ''}
@@ -16538,6 +16554,7 @@ function renderOverviewView() {
   ovFitAbout();
   loadFairValue();
   loadOverviewLongScore();
+  paintOvDigest(STATE.ticker);
 }
 
 /* ------------------------------------------------------------ company panel */
@@ -20899,7 +20916,14 @@ function wsLegend(ps) {
     const key = [[C.pos, 'Above all five averages'], [C.muted, 'Mixed'], [C.neg, 'Below all five averages']];
     rows.push(`<div class="ws-leg-row${hidden ? ' is-hidden' : ''}" data-ws-leg="matrend"
       title="Candles against the 10, 20, 50, 100 and 200-bar simple averages">
-      <span class="ws-leg-name">MA Trend <span class="ws-leg-args">(10, 20, 50, 100, 200)</span></span>
+      <span class="ws-leg-name">MA Trend <span class="ws-leg-args">(10, 20, 50, 100, 200)</span></span>${(() => {
+    const mt = (STATE.chartData && STATE.chartData !== 'loading' ? (wsSeries(STATE.chartData) || {}).maTrend : null) || [];
+    let last = null;
+    for (let i = mt.length - 1; i >= 0 && last === null; i -= 1) last = mt[i];
+    const words = last === 1 ? 'last bar above all five averages' : last === -1 ? 'last bar below all five averages'
+      : last === 0 ? 'last bar mixed against the averages' : '';
+    return miloExplainButton('MA Trend Identifier', words, 'Chart');
+  })()}
       <span class="ws-leg-key">${key.map(([c, n]) => `<span class="ws-leg-sw"
         style="background:${c}" title="${esc(n)}"></span>`).join('')}</span>
       <button type="button" class="ws-leg-btn${hidden ? ' is-off' : ''}"
@@ -22740,7 +22764,7 @@ function wsMountPanes(ps) {
     const cross = lastMacdCross(ps.rsi, ps.rsiSignal || []);
     const last = ps.rsi[ps.rsi.length - 1];
     wsPaneLegend('rsi', `<strong>RSI</strong> 14
-      <span class="ws-pane-val">${fmt(last, 1)}</span>
+      <span class="ws-pane-val">${fmt(last, 1)}</span>${miloExplainButton('RSI (14)', fmt(last, 1), 'Chart')}
       <span class="ws-pane-key" style="background:${C.brand}"></span>RSI
       <span class="ws-pane-key" style="background:${C.s7}"></span>Signal ${RSI_SIGNAL_PERIOD}${
   cross ? ` <span class="ws-pane-cross ${cross.bullish ? 'up' : 'down'}">${
@@ -22785,7 +22809,7 @@ function wsMountPanes(ps) {
     const cross = lastMacdCross(ps.macd, ps.macdSignal || []);
     const last = ps.macd[ps.macd.length - 1];
     wsPaneLegend('macd', `<strong>MACD</strong> 12, 26, 9
-      <span class="ws-pane-val">${fmt(last, 2)}</span>
+      <span class="ws-pane-val">${fmt(last, 2)}</span>${miloExplainButton('MACD (12, 26, 9)', fmt(last, 2), 'Chart')}
       <span class="ws-pane-key" style="background:${C.brand}"></span>MACD
       <span class="ws-pane-key" style="background:${C.s7}"></span>Signal
       <span class="ws-pane-key" style="background:${C.s3}"></span>Histogram${
@@ -22811,7 +22835,8 @@ function wsMountPanes(ps) {
       : last < -TSO_LEVEL ? ['down', 'overextended down'] : null;
     wsPaneLegend('tso', `<strong>Trend Strength</strong> ${TSO_ADX}, ${TSO_RSI}, ${TSO_SMOOTH}
       <span class="ws-pane-val">${fmt(last, 1)}</span>${
-  state ? ` <span class="ws-pane-cross ${state[0]}">${state[1]}</span>` : ''}`);
+  state ? ` <span class="ws-pane-cross ${state[0]}">${state[1]}</span>` : ''}${
+  miloExplainButton('Trend Strength Oscillator (14, 14, 5)', fmt(last, 1) + (state ? `, ${state[1]}` : ''), 'Chart')}`);
     const vals = tso.filter((v) => v !== null);
     drawOn('tso');
     mount('ws-pane-tso', (w) => lineChart({
@@ -40596,6 +40621,29 @@ function chatContextPayload() {
   // The retirement model the chip has always listed, now actually sent, and
   // labelled as the reader's own entries rather than market data.
   if (STATE.roth) ctx.roth = { source: 'retirement inputs the reader entered in this browser', model: STATE.roth };
+  // Digests already on screen: Milo explains them instead of re-researching.
+  const dg = ctx.ticker && DIGESTS.bySym[ctx.ticker];
+  if (dg && dg.data && dg.data.available !== false) ctx.digest = dg.data;
+  if (DIGESTS.list && DIGESTS.list.data && DIGESTS.list.data.available !== false) ctx.watchlist_digest = DIGESTS.list.data;
+  /* The reader's own lists, labelled for what they are (2026-10-12,
+   * "portfolio-aware research"): the watchlist, and paper trades kept in this
+   * browser. Optic has no brokerage connection, and the labels say so, so an
+   * answer can never present these as an account. */
+  const wl = watchList();
+  if (wl.length) {
+    const active = watchActiveList();
+    ctx.reader_watchlist = { source: 'the reader\'s watchlist in Optic', name: (active && active.name) || 'Watchlist',
+      symbols: wl.slice(0, 60) };
+  }
+  const open = (paperBook && Array.isArray(paperBook.open)) ? paperBook.open : [];
+  if (open.length) {
+    ctx.reader_holdings = {
+      source: 'paper trades the reader entered in Optic (simulated, in this browser). Not a brokerage account: Optic has no brokerage connection.',
+      positions: open.slice(0, 40).map((p) => ({ ticker: p.ticker, instrument: p.instrument, direction: p.direction,
+        option_type: p.option_type, strike: p.strike, expiry: p.expiry, qty: p.qty,
+        entry_price: p.entry_price, entry_at: p.entry_at, stop: p.stop, target: p.target })),
+    };
+  }
   if (STATE.swing && STATE.swing.generated_at) ctx.data_as_of = STATE.swing.generated_at;
   return ctx;
 }
@@ -41198,6 +41246,11 @@ function pulseStarters(expanded) {
       <div class="pulse-hello" role="note">Hi, I'm ${esc(ASSISTANT_NAME)}. What would you like to explore?</div>
     </div>
     ${pulseCanAskShown ? `<p class="pulse-can-ask" id="pulse-can-ask" role="note">${mdLite(PULSE_CAN_ASK)}</p>` : ''}
+    <div class="pulse-digests" role="group" aria-label="Digests from Optic's data">
+      ${sym ? `<button type="button" class="pill" data-milo-digest="${esc(sym)}">What changed for ${esc(sym)}?</button>` : ''}
+      <button type="button" class="pill" data-milo-digest="watchlist">What changed on my watchlist?</button>
+      <span class="muted pulse-digests-note">From Optic's data, no AI used</span>
+    </div>
     <p class="pulse-empty-sub">Milo reads the terminal's own computed output for
       whatever is on screen${sym ? `· currently <strong>${esc(sym)}</strong>` : ''}.
       Ask anything, or start with one of these.</p>
@@ -41666,6 +41719,117 @@ function pulseChartsIn(html) {
     PULSE_CHART_WORDS[span]}</div></div>`));
 }
 
+/* Digests (2026-10-12): what changed, what may explain it, what to look at,
+ * from /api/digest. Fixed rules on Optic's own data, shared per symbol and
+ * session, so showing one costs no AI call; Milo is handed the loaded digest
+ * in its context instead of being asked to research the same thing again. */
+const DIGESTS = { bySym: {}, list: null };
+
+async function loadDigest(sym) {
+  const t = String(sym || '').toUpperCase();
+  if (!t) return null;
+  const have = DIGESTS.bySym[t];
+  if (have && Date.now() - have.at < 10 * 60 * 1000) return have.data;
+  try {
+    const data = await getJSON('/api/digest/' + encodeURIComponent(t));
+    DIGESTS.bySym[t] = { at: Date.now(), data };
+    return data;
+  } catch (err) {
+    return { available: false, error: err.message };
+  }
+}
+
+async function loadListDigest() {
+  const symbols = watchList();
+  if (!symbols.length) return { available: false, reason: 'Your watchlist is empty, so there is nothing to digest yet.' };
+  try {
+    const data = await postJSON('/api/digest', { symbols });
+    DIGESTS.list = { at: Date.now(), data, symbols };
+    return data;
+  } catch (err) {
+    return { available: false, error: err.message };
+  }
+}
+
+function digestTime(iso) {
+  if (!iso) return '';
+  try { return `${dayIn(iso, activeZone())} ${timeIn(iso, activeZone())}`; } catch (e) { return ''; }
+}
+
+/* One name's three slots. `compact` drops the method line, for the list. */
+function digestBodyHTML(d, compact) {
+  if (!d || d.available === false) {
+    return `<p class="muted">${esc((d && (d.error || d.reason)) || 'No digest for this symbol right now.')}</p>`;
+  }
+  const facts = (d.changed || []).map((f) => `<li>${esc(f.text)}${f.detail ? ` <span class="muted">${esc(f.detail)}</span>` : ''}</li>`).join('');
+  const why = (d.explanations || []).map((e) => `<li><a href="${esc(e.url)}" target="_blank" rel="noopener">${
+    esc(e.headline || e.url)}</a> <span class="muted">${esc([e.publisher, digestTime(e.published)].filter(Boolean).join(' · '))}</span></li>`).join('');
+  const look = (d.look_closer || []).map((x) => `<li>${esc(x)}</li>`).join('');
+  return `<div class="dg">
+    <h4 class="dg-h">What changed</h4>
+    ${facts ? `<ul class="dg-list">${facts}</ul>` : '<p class="muted">Nothing recorded for the period.</p>'}
+    <h4 class="dg-h">What may explain it <span class="dg-tag">not established</span></h4>
+    ${why ? `<ul class="dg-list">${why}</ul>` : ''}
+    <p class="dg-note">${esc(d.explanations_note || '')}</p>
+    ${look ? `<h4 class="dg-h">Worth a closer look</h4><ul class="dg-list">${look}</ul>` : ''}
+    ${compact ? '' : `<p class="dg-note">${esc(d.method || '')}</p>`}
+  </div>`;
+}
+
+function digestCardHTML(d, title) {
+  const per = d && d.period;
+  const span = per && per.label ? per.label : (per && per.latest ? `Session of ${per.latest}` : '');
+  return `<div class="dg-card" role="region" aria-label="${esc(title)}">
+    <div class="dg-top"><strong>${esc(title)}</strong>
+      <span class="muted">${esc([span, d && d.as_of ? 'as of ' + digestTime(d.as_of) : ''].filter(Boolean).join(' · '))}</span></div>
+    ${d && Array.isArray(d.names)
+    ? (d.names.length ? d.names.map((n) => `<details class="dg-name"${n.state === 'changed' ? ' open' : ''}><summary><span class="tkr">${esc(n.symbol)}</span> <span class="muted">${
+      esc(n.state === 'changed' ? `${(n.changed || []).length} change${(n.changed || []).length === 1 ? '' : 's'}` : n.state)}</span></summary>${digestBodyHTML(n, true)}</details>`).join('')
+      : '<p class="muted">No names to digest.</p>') + `<p class="dg-note">${esc((d && d.method) || '')}</p>`
+    : digestBodyHTML(d, false)}
+  </div>`;
+}
+
+/* Digest in Milo: shown at once from Optic's data, then in the context. */
+async function miloShowDigest(which) {
+  const log = $('#chat-log');
+  if (!log) return;
+  const empty = log.querySelector('.pulse-empty');
+  if (empty) empty.remove();
+  const node = document.createElement('div');
+  node.className = 'msg digest';
+  node.innerHTML = `<div class="who">Optic digest <span class="muted">(Optic's data, no AI)</span></div><div class="bubble"><p class="muted">Gathering the digest…</p></div>`;
+  log.appendChild(node);
+  const sym = which === 'watchlist' ? null : which;
+  const d = sym ? await loadDigest(sym) : await loadListDigest();
+  node.querySelector('.bubble').innerHTML = digestCardHTML(d, sym ? `${sym} digest` : 'Watchlist digest')
+    + `<div class="pulse-ups"><button type="button" class="cc-q" data-ask-text="${esc(sym
+      ? `Using the ${sym} digest, what is the most likely reading of the change, and what could challenge it?`
+      : 'Using my watchlist digest, which change deserves a closer look first, and why?')}">${esc(sym
+      ? 'What could explain this, and what could challenge it?' : 'Which change deserves a closer look first?')}</button></div>`;
+  followStream(pulseScroller(), true);
+}
+
+document.addEventListener('click', (evt) => {
+  const b = evt.target.closest && evt.target.closest('[data-milo-digest]');
+  if (!b) return;
+  miloShowDigest(b.dataset.miloDigest);
+});
+
+/* The Overview's digest, painted when it arrives. */
+async function paintOvDigest(sym) {
+  const host = document.getElementById('ov-digest');
+  if (!host || !sym) return;
+  const d = await loadDigest(sym);
+  const still = document.getElementById('ov-digest');
+  if (!still || STATE.ticker !== sym) return;
+  still.innerHTML = `<section class="ov-sec" aria-labelledby="ov-digest-h">
+    <h2 class="ov-q" id="ov-digest-h">What changed lately</h2>
+    ${digestCardHTML(d, `${sym} digest`)}
+    <button type="button" class="ov-linkbtn" data-milo-explain="${esc(JSON.stringify({ label: `${sym}'s latest change`, value: '', where: 'Overview' }))}">Ask Milo about this</button>
+  </section>`;
+}
+
 /* Milo's actions (2026-10-12).
  *
  * Milo writes `[[action KIND args]]` on a line of its own (FORMAT_PROMPT) and
@@ -41984,6 +42148,7 @@ document.addEventListener('click', async (evt) => {
  * shown, so a tag the model made up never becomes a chip to nowhere. */
 const PULSE_SOURCES = {
   quote: ['Quote', 'overview'],
+  digest: ['Digest', 'overview'],
   verdict: ["Optic's read", 'overview'],
   company: ['Company', 'overview'],
   chart: ['Chart', 'chart'],
@@ -42154,6 +42319,36 @@ function paintReply(bubble, text) {
   wrap.querySelectorAll(':scope > .pulse-ups').forEach((n) => n.remove());
   const rows = followUpsHTML(ups);
   if (rows) bubble.insertAdjacentElement('afterend', rows);
+}
+
+/* "Explain this" (2026-10-12): a figure, signal or score sent to Milo with
+ * its actual value and where it was read, asking the four things the brief
+ * names. Drafted, not sent: the reader sees the question and presses Send,
+ * and the explanation level they chose shapes the answer as with any other. */
+function miloExplainPrompt(item) {
+  const label = String(item.label || '').trim().slice(0, 80);
+  const value = String(item.value || '').trim().slice(0, 60);
+  const sym = String(item.ticker || STATE.chartSymbol && STATE.view === 'chart' && STATE.chartSymbol
+    || STATE.ticker || '').toUpperCase();
+  const where = String(item.where || CHAT_VIEW_LABELS[STATE.view] || VIEW_NAMES[STATE.view] || '').trim();
+  const subject = `${label}${value ? ` (${value})` : ''}${sym ? ` for ${sym}` : ''}${where ? ` on the ${where} page` : ''}`;
+  return `Explain ${subject}: what it measures, why someone would use it, what this value suggests, `
+    + 'and what it cannot tell me.';
+}
+
+document.addEventListener('click', (evt) => {
+  const btn = evt.target.closest && evt.target.closest('[data-milo-explain]');
+  if (!btn) return;
+  evt.preventDefault();
+  evt.stopPropagation();
+  let item = {};
+  try { item = JSON.parse(btn.dataset.miloExplain) || {}; } catch (e) { return; }
+  draftPulse(miloExplainPrompt(item));
+});
+
+function miloExplainButton(label, value, where) {
+  return `<button type="button" class="ws-pane-explain" data-milo-explain="${esc(JSON.stringify({ label, value, where }))}"
+    title="Ask Milo what ${esc(label)} means here" aria-label="Explain ${esc(label)} with Milo">Explain</button>`;
 }
 
 /* A line in the conversation that is neither side speaking: a ticker switch.
