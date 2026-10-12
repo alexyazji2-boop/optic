@@ -24414,6 +24414,13 @@ function chartHostFor(evt, hostId, adapter, wheel) {
   if (wheel && adapter.overlay && evt.target.closest(adapter.overlay)) {
     return document.getElementById(hostId);
   }
+  /* The oscillator panes under the price plot share its time axis, so the
+   * wheel over them zooms the same window. Over them it used to scroll the
+   * page while a notch an inch higher zoomed the chart (2026-10-12: "it is
+   * inconsistent between zooming out the chart and scrolling down the tab"). */
+  if (wheel && adapter.panes && evt.target.closest(adapter.panes)) {
+    return document.getElementById(hostId);
+  }
   return null;
 }
 
@@ -24449,14 +24456,19 @@ function chartZoomTarget(evt, opts = {}) {
   return null;
 }
 
-/** The bar under the pointer, or null when the pointer is outside the plot. */
-function chartBarUnderCursor(target, evt) {
+/** The bar under the pointer, or null when the pointer is outside the plot.
+ *  With `clamp`, a pointer over the margins or the price axis takes the
+ *  nearest edge bar instead: the wheel zooms there too, anchored at that edge. */
+function chartBarUnderCursor(target, evt, opts = {}) {
   const { svg, frame } = target;
   const box = svg.getBoundingClientRect();
   if (!box.width) return null;
   const scale = box.width / frame.width;
-  const px = (evt.clientX - box.left) / scale;
-  if (px < frame.margin.l || px > frame.margin.l + frame.plotW) return null;
+  let px = (evt.clientX - box.left) / scale;
+  if (px < frame.margin.l || px > frame.margin.l + frame.plotW) {
+    if (!opts.clamp) return null;
+    px = Math.max(frame.margin.l, Math.min(frame.margin.l + frame.plotW, px));
+  }
   return Math.max(0, Math.min(frame.bars - 1, frame.indexAt(px)));
 }
 
@@ -24531,13 +24543,15 @@ function zoomedWindowAt(abs, fx, nextSpan) {
   return { from, to: from + nextSpan };
 }
 
-/* How far across the plot the pointer is, 0 to 1, or null off it. */
-function chartPointerFraction(target, evt) {
+/* How far across the plot the pointer is, 0 to 1, or null off it (with
+ * `clamp`, the nearest edge instead). */
+function chartPointerFraction(target, evt, opts = {}) {
   const { svg, frame } = target;
   const box = svg.getBoundingClientRect();
   if (!box.width || !frame.plotW) return null;
   const px = (evt.clientX - box.left) / (box.width / frame.width);
   const fx = (px - frame.margin.l) / frame.plotW;
+  if (opts.clamp) return Math.max(0, Math.min(1, fx));
   return fx < 0 || fx > 1 ? null : fx;
 }
 
@@ -24588,11 +24602,57 @@ function flushChartWheel() {
   w.win = target.adapter.window();
 }
 
+/* One owner per gesture: the page or a chart.
+ *
+ * Reported 2026-10-12: "when I scroll down on the chart, it is inconsistent
+ * between zooming out the chart and scrolling down the tab". Measured with
+ * real wheel events at 1440x700:
+ *  - a trackpad stroke begun above the chart scrolled the page for two events,
+ *    then the chart rose under the pointer and took the other 28 as zoom;
+ *  - the price plot zoomed, while its price axis swallowed the event and the
+ *    RSI and MACD panes, a notch lower, scrolled the page;
+ *  - zoomed fully out, a scroll down over the chart did nothing at all.
+ * So a gesture belongs to whatever it began on until it pauses for
+ * WHEEL_LATCH_MS, the way the browser latches a scroll to one scroller: a
+ * page scroll stays a page scroll when the chart passes under the pointer,
+ * and a zoom stays a zoom when the pointer drifts off the chart or reaches a
+ * limit. A gesture that begins on a chart with nowhere to go that way (every
+ * bar on screen and scrolling out, or the closest zoom and scrolling in) is
+ * the page's. A pinch is always the chart's when over one, because an
+ * unblocked ctrl+wheel zooms the whole page. */
+const WHEEL_LATCH_MS = 200;
+let wheelLatch = null;   // { owner: 'page' | a chart host element, at: ms }
+
+function chartWheelHasRoom(target, evt) {
+  if (evt.ctrlKey || evt.shiftKey) return true;
+  const dx = wheelPixels(evt.deltaX, evt.deltaMode);
+  const dy = wheelPixels(evt.deltaY, evt.deltaMode);
+  if (Math.abs(dx) > Math.abs(dy)) return true;     // a pan
+  const cur = target.adapter.window();
+  const span = cur.to - cur.from;
+  if (dy > 0) return span < cur.total;              // out: is there more to show?
+  if (dy < 0) return span > WS_MIN_BARS;            // in: is there room to zoom?
+  return false;
+}
+
 document.addEventListener('wheel', (evt) => {
+  const now = Number.isFinite(evt.timeStamp) && evt.timeStamp > 0 ? evt.timeStamp : Date.now();
+  const latched = wheelLatch && now - wheelLatch.at >= 0 && now - wheelLatch.at < WHEEL_LATCH_MS
+    ? wheelLatch : null;
+  if (latched && latched.owner === 'page' && !evt.ctrlKey) {
+    latched.at = now;
+    return;
+  }
   let target = chartZoomTarget(evt, { wheel: true });
-  let bar = target ? chartBarUnderCursor(target, evt) : null;
+  let bar = target ? chartBarUnderCursor(target, evt, { clamp: true }) : null;
   let fresh = true;      // false when aimed from the last event; see below
-  if (!target) {
+  if (latched && chartWheel && chartWheel.target.host === latched.owner
+      && (!target || target.host !== latched.owner)) {
+    // This chart's gesture, carrying on with the pointer off it.
+    target = chartWheel.target;
+    bar = chartWheel.bar;
+    fresh = false;
+  } else if (!target) {
     /* Mid-redraw. The chart swaps its SVG between frames, and for that moment
      * there is no frame to aim at. Measured: during a stream of wheel events
      * one in three landed in that gap, and each was left to the page, so the
@@ -24601,13 +24661,19 @@ document.addEventListener('wheel', (evt) => {
      * So a gesture already under way on this chart keeps the event, and it is
      * applied at the last bar it was aimed at. */
     const held = chartZoomHost(evt, { wheel: true });
+    if (!held) wheelLatch = { owner: 'page', at: now };
     if (!held || !chartWheel || chartWheel.target.host !== held.host) return;
     target = chartWheel.target;
     bar = chartWheel.bar;
     fresh = false;
   } else if (bar === null) {
+    wheelLatch = { owner: 'page', at: now };
+    return;
+  } else if (!latched && !chartWheelHasRoom(target, evt)) {
+    wheelLatch = { owner: 'page', at: now };
     return;
   }
+  wheelLatch = { owner: target.host, at: now };
   evt.preventDefault();          // the page must not scroll, or zoom, while the chart does
   // Safari pinching: the gesture handlers below own it.
   if (chartGesture) return;
@@ -24631,7 +24697,7 @@ document.addEventListener('wheel', (evt) => {
    * window themselves: the anchor would be a point no longer under the pointer
    * and the next notch would jump to it. */
   if (fresh) {
-    const fx = chartPointerFraction(target, evt);
+    const fx = chartPointerFraction(target, evt, { clamp: true });
     const cur = target.adapter.window();
     const ours = chartWheel.win && chartWheel.win.from === cur.from && chartWheel.win.to === cur.to;
     const still = Number.isFinite(chartWheel.x) && Math.abs(evt.clientX - chartWheel.x) <= 1;
@@ -24812,6 +24878,8 @@ registerChartZoom('ws-chart', {
   wheelEnabled: () => STATE.view === 'chart' && !!STATE.chartData
     && STATE.chartData !== 'loading',
   overlay: '#ws-draw',
+  // RSI and MACD under the plot: the wheel over them zooms this chart.
+  panes: '.ws-pane',
   window: () => wsWindowNow(STATE.chartData),
   apply: (win) => wsApplyWindow(win),
   redraw: () => wsRedrawChart(),
