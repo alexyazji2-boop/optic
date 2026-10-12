@@ -24,7 +24,7 @@ def test_the_strip_list_keeps_glossary_terms():
     first = strip.split(",")[0].strip()
     assert first == "button:not(.gloss-term)", strip
     # The other chrome still goes.
-    for sel in (".gloss-inline", ".th-plain", ".lvl-count", ".chip", ".bk-active"):
+    for sel in (".gloss-inline", ".th-plain", ".lvl-count", ".chip", ".bk-active", ".spec-tag"):
         assert sel in strip, sel
 
 
