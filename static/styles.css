@@ -2588,8 +2588,12 @@ body.chat-resizing svg { pointer-events: none; }
   #chat .chat-body > #chat-persona { order: 3; }
   #chat .chat-body > .chat-log { order: 1; }
   #chat .chat-body > #chat-suggest { order: 2; }
-  /* And the greeting closer under the notice: it ended 6px under the footer. */
+  /* And the greeting closer under the notice, in a tighter bubble, with the
+     footer's gaps closed up: in Safari its second line was under the footer. */
   #chat .chat-log { padding-top: var(--space-1); }
+  #chat .pulse-hello { padding: var(--space-2) var(--space-3); font-size: var(--t-base); }
+  #chat .pulse-modes { margin-bottom: var(--space-2); }
+  #chat .chat-log > .pulse-empty.pulse-opening { padding-top: var(--space-1); }
 }
 
 /* ---------------------------------------------------------- session strip
