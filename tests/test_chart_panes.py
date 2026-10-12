@@ -217,9 +217,11 @@ def test_the_server_series_is_only_used_when_it_matches_the_bars():
 
 
 def test_nothing_is_computed_when_no_pane_is_open():
-    """A reader who never opens one pays nothing."""
+    """A reader who never opens one pays nothing. The MA Trend Identifier
+    (2026-10-12) rides the same full-length pass, so it opts in on its own."""
     fn = body_of("wsWithOscillators")
-    assert "if (!wsPanesOpen.length) return base;" in fn
+    assert "if (!wsPanesOpen.length && !maTrend) return base;" in fn
+    assert "const maTrend = wsOverlayDrawn('matrend');" in fn
 
 
 def test_the_panes_draw_from_the_series_the_chart_drew():

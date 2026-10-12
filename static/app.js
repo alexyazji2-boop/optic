@@ -3016,6 +3016,30 @@ function tsoSeries(high, low, close, adxPeriod = TSO_ADX, rsiPeriod = TSO_RSI, s
   return smaSeries(raw, smooth);
 }
 
+/* Each bar against the MA Trend Identifier's five averages: 1 when its open
+ * and close are both above all five, -1 when both are below all five, 0 in
+ * between, null before the slowest average exists. */
+function maTrendSeries(open, close, periods = MA_TREND_PERIODS) {
+  const mas = periods.map((p) => smaSeries(close, p));
+  return close.map((c, i) => {
+    const o = open[i];
+    if (c === null || c === undefined || !isFinite(c)) return null;
+    const vals = mas.map((m) => m[i]);
+    if (vals.some((v) => v === null)) return null;
+    const lo = Math.min(c, o === null || o === undefined ? c : o);
+    const hi = Math.max(c, o === null || o === undefined ? c : o);
+    if (lo > Math.max(...vals)) return 1;
+    if (hi < Math.min(...vals)) return -1;
+    return 0;
+  });
+}
+
+/* The colours for a windowed series, or null when the identifier is off. */
+function maTrendTints(ps) {
+  if (!wsOverlayDrawn('matrend') || !Array.isArray(ps.maTrend)) return null;
+  return ps.maTrend.map((v) => (v === 1 ? C.pos : v === -1 ? C.neg : v === 0 ? C.muted : null));
+}
+
 /* ------------------------------------------------- support / resistance (client)
  *
  * Ported from the Python version so levels follow the chart's own interval. A
@@ -3466,6 +3490,14 @@ const SHOW_SESSIONS_KEY = 'optic.chart.sessions.v1';
  * reads the stage either way. */
 let showStages = false;
 const SHOW_STAGES_KEY = 'optic.chart.stages.v1';
+/* TrendSpider's MA Trend Identifier (asked for 2026-10-12 with its "Color
+ * Tells The Story" email): each candle green when it opened and closed above
+ * all five of the 10, 20, 50, 100 and 200-bar simple averages, red when below
+ * all five, grey between. Off by default, like Stages, and it takes the
+ * candles from Stages while it is on (the stage strip along the foot stays). */
+let showMaTrend = false;
+const SHOW_MATREND_KEY = 'optic.chart.matrend.v1';
+const MA_TREND_PERIODS = [10, 20, 50, 100, 200];
 const SHOW_MA_KEY = 'optic.chart.ma.v2';
 
 /* One flag per average, not one per family.
@@ -3785,6 +3817,7 @@ try {
   // `=== 'on'`, as the overlays: off until someone turns it on. A browser that
   // was left on by default stored nothing, so it opens with Stages off too.
   showStages = localStorage.getItem(SHOW_STAGES_KEY) === 'on';
+  showMaTrend = localStorage.getItem(SHOW_MATREND_KEY) === 'on';
   loadSeriesFlags();
 } catch (e) { /* private mode */ }
 
@@ -18175,6 +18208,11 @@ const OVERLAY_DEFS = [
       + 'amber topping, red declining. Turn it off for up and down colours. '
       + 'The colours are the reading, so they are fixed. On intraday bars each '
       + 'takes its week\'s stage.' },
+  { id: 'matrend', label: 'MA Trend Identifier', group: 'Trend', color: 'pos', width: 1,
+    fixed: 'Colours each candle by where it opened and closed against the 10, 20, 50, '
+      + '100 and 200-bar simple averages: green above all five, red below all five, grey '
+      + 'in between. Bars before the 200-bar average exists keep their up and down colours. '
+      + 'While it is on it colours the candles in place of Stages.' },
 ];
 
 const OVERLAY_BY_ID = Object.fromEntries(OVERLAY_DEFS.map((d) => [d.id, d]));
@@ -20575,7 +20613,7 @@ const WS_MENUS = [
   { id: 'indicators',
     label: 'Indicators',
     items: ['sma20', 'sma50', 'sma200', 'ema9', 'ema21', 'ema50',
-      'cloud921', 'cloud2150'],
+      'cloud921', 'cloud2150', 'matrend'],
     manage: true },
   { id: 'volume', label: 'Volume', items: ['vol', 'vbp'] },
   { id: 'events', label: 'Events', items: ['insiders', 'earnmarks', 'sessions'] },
@@ -20627,6 +20665,7 @@ const WS_FLAGS = {
   trends: () => showTrends,
   sessions: () => showSessions,
   stages: () => showStages,
+  matrend: () => showMaTrend,
 };
 
 function wsOverlayOn(id) {
@@ -20823,6 +20862,22 @@ function wsLegend(ps) {
   hidden ? '&#128584;' : '&#128065;'}</button>
       <button type="button" class="ws-leg-btn" data-ws-off="stages"
         title="Remove Weinstein stages">&times;</button>
+    </div>`);
+  }
+  if (wsOverlayOn('matrend')) {
+    const hidden = overlayHidden('matrend');
+    const key = [[C.pos, 'Above all five averages'], [C.muted, 'Mixed'], [C.neg, 'Below all five averages']];
+    rows.push(`<div class="ws-leg-row${hidden ? ' is-hidden' : ''}" data-ws-leg="matrend"
+      title="Candles against the 10, 20, 50, 100 and 200-bar simple averages">
+      <span class="ws-leg-name">MA Trend <span class="ws-leg-args">(10, 20, 50, 100, 200)</span></span>
+      <span class="ws-leg-key">${key.map(([c, n]) => `<span class="ws-leg-sw"
+        style="background:${c}" title="${esc(n)}"></span>`).join('')}</span>
+      <button type="button" class="ws-leg-btn${hidden ? ' is-off' : ''}"
+        data-ws-hide="matrend" aria-pressed="${hidden ? 'true' : 'false'}"
+        title="${hidden ? 'Show' : 'Hide'} MA Trend Identifier">${
+  hidden ? '&#128584;' : '&#128065;'}</button>
+      <button type="button" class="ws-leg-btn" data-ws-off="matrend"
+        title="Remove MA Trend Identifier">&times;</button>
     </div>`);
   }
 
@@ -21908,6 +21963,7 @@ const WS_SETTERS = {
   cloud921: (on) => { showCloudFast = !!on; storeFlag(SHOW_CLOUD_FAST_KEY, on); },
   cloud2150: (on) => { showCloudSlow = !!on; storeFlag(SHOW_CLOUD_SLOW_KEY, on); },
   stages: (on) => { showStages = !!on; storeFlag(SHOW_STAGES_KEY, on); },
+  matrend: (on) => { showMaTrend = !!on; storeFlag(SHOW_MATREND_KEY, on); },
 };
 
 function wsSetOverlay(id, on) {
@@ -22440,10 +22496,11 @@ function wsTogglePane(id) {
 let wsOscMemo = null;
 
 function wsWithOscillators(base, d, recompute) {
-  if (!wsPanesOpen.length) return base;
+  const maTrend = wsOverlayDrawn('matrend');
+  if (!wsPanesOpen.length && !maTrend) return base;
   const closes = base.close || [];
   if (closes.length < 30) return base;
-  const panes = wsPanesOpen.join(',');
+  const panes = wsPanesOpen.join(',') + (maTrend ? '|matrend' : '');
   const memo = wsOscMemo;
   if (memo && memo.base === base && memo.d === d && memo.recompute === !!recompute
       && memo.panes === panes) return memo.out;
@@ -22474,6 +22531,7 @@ function wsWithOscillators(base, d, recompute) {
     // screen.
     out.tso = tsoSeries(base.high || [], base.low || [], closes);
   }
+  if (maTrend) out.maTrend = maTrendSeries(base.open || [], closes);
   if (!base.intraday) wsOscMemo = { base, d, recompute: !!recompute, panes, out };
   return out;
 }
@@ -26049,6 +26107,7 @@ function wsMountChart() {
   // The payload's own symbol, not STATE.chartSymbol: the colours have to be
   // the stages of the bars being drawn. See stageTints.
   const stages = wsStages(ps);
+  const maTint = maTrendTints(ps);
 
   // Kept on a module-level handle so wsEnsureChart can re-run it if the mount
   // is superseded. Reassigned on every call, so it always closes over the
@@ -26073,7 +26132,7 @@ function wsMountChart() {
         open: ps.open || [], high: ps.high || [],
         low: ps.low || [], close: ps.close || [],
       } : null,
-      candleTints: stages ? stages.colors : null,
+      candleTints: maTint || (stages ? stages.colors : null),
       stageBand: stages ? stages.colors : null,
       stageNames: stages ? stages.labels : null,
       /* The reader's colours. See chartColor().
@@ -26140,7 +26199,7 @@ function wsMountChart() {
           color: wsCandles(ps) ? C.ink : priceLineColor(ps.close),
           // Line mode's stage colours. Harmless in candle mode, where this
           // series is not stroked and the candles take the same array.
-          tints: stages ? stages.colors : null,
+          tints: maTint || (stages ? stages.colors : null),
           hidden: wsCandles(ps), fill: !wsCandles(ps) && chartMode === 'area',
           fillOpacity: AREA_FILL_OPACITY },
         /* One entry per average, each gated on its own switch, so the six

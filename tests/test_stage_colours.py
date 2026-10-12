@@ -204,8 +204,8 @@ def test_with_stages_on_the_candles_and_the_line_take_the_stage_colour():
     now: every bar its direction, and the line green or red by its own move."""
     assert "if (!wsCandles(ps)) return null;" not in _fn(APP, "wsStages")
     body = _fn(APP, "wsMountChart")
-    assert "candleTints: stages ? stages.colors : null" in body
-    assert "\n          tints: stages ? stages.colors : null" in body
+    assert "candleTints: maTint || (stages ? stages.colors : null)" in body
+    assert "\n          tints: maTint || (stages ? stages.colors : null)" in body
 
 
 def test_the_sub_charts_draw_no_stages():
@@ -230,9 +230,9 @@ def test_one_array_colours_the_candles_the_line_and_the_names():
     """The candles, the line, the names along the foot and the readout's Stage
     row are one array, so a bar cannot be one stage's colour and another's
     name."""
-    assert APP.count("candleTints: stages ? stages.colors : null") == 1
+    assert APP.count("candleTints: maTint || (stages ? stages.colors : null)") == 1
     # Case matters: candleTints is the candles', `tints` the line's.
-    assert APP.count("tints: stages ? stages.colors : null") == 1
+    assert APP.count("tints: maTint || (stages ? stages.colors : null)") == 1
     assert APP.count("stageBand: stages ? stages.colors : null") == 1
     assert APP.count("stageNames: stages ? stages.labels : null") == 1
     fn = _fn(APP, "stageTints")
