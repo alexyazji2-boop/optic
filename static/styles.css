@@ -3783,12 +3783,12 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
      (20px), the overlay toggle and ticker buttons in tables (the panel
      chevron and the ask chips have theirs below). Layout does not move. */
   .cs-note-btn, .ht-rest, #chat-close, #legal-more, .ws-leg-title,
-  td .tkr, .chat-allow button, .ws-pane-explain, .gloss-term.is-inline {
+  td .tkr, .gloss-term.is-inline, .chat-allow button, .ws-pane-explain {
     position: relative;
   }
   .cs-note-btn::after, .ht-rest::after, #chat-close::after, #legal-more::after,
   .ws-leg-title::after, td .tkr::after,
-  .chat-allow button::after, .ws-pane-explain::after, .gloss-term.is-inline::after {
+  .gloss-term.is-inline::after, .chat-allow button::after, .ws-pane-explain::after {
     content: '';
     position: absolute;
     inset: -12px -6px;
@@ -6270,6 +6270,11 @@ main {
 aside#chat { height: 100vh; }
 @supports (height: 100dvh) {
   aside#chat { height: 100dvh; }
+}
+/* A phone with the keyboard up: the visible viewport, which syncChatViewport
+   publishes while Milo is open. Without it the panel ran under the keyboard. */
+@media (max-width: 640px) {
+  body.chat-open aside#chat { height: var(--chat-vvh, 100dvh); top: var(--chat-vvtop, 0); }
 }
 
 /* The correlation column is the point of the overnight panel, so the two states

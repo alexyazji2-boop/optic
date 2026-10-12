@@ -34785,6 +34785,40 @@ document.addEventListener('keydown', (evt) => {
   if (evt.key === 'Escape' && document.getElementById('explain-pop')) closeExplainer(true);
 });
 
+/* Focus Milo's box, except on a touch screen (2026-10-12, Safari on iPhone
+ * SE and 17): there focusing it raised the keyboard the moment the panel
+ * opened, Safari scrolled the page, and the panel's header and greeting went
+ * off the top with the page showing under it. On a phone the reader taps the
+ * box when they want to type; a drafted question is already in it and Send
+ * is on screen. */
+function pulseFocusBox(box) {
+  if (!box || box.disabled) return false;
+  if (typeof window !== 'undefined' && window.matchMedia
+    && window.matchMedia('(pointer: coarse)').matches) return false;
+  box.focus();
+  return true;
+}
+
+/* While Milo is open on a phone, the panel is the visible viewport: the
+ * keyboard shrinks what Safari shows without resizing the layout, so a
+ * 100dvh panel ran under the keyboard and the page showed above it. */
+function syncChatViewport() {
+  const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+  const root = document.documentElement;
+  if (!root || !root.style || !root.style.setProperty) return;
+  if (!vv || !document.body.classList.contains('chat-open')) {
+    root.style.removeProperty('--chat-vvh');
+    root.style.removeProperty('--chat-vvtop');
+    return;
+  }
+  root.style.setProperty('--chat-vvh', `${Math.round(vv.height)}px`);
+  root.style.setProperty('--chat-vvtop', `${Math.round(vv.offsetTop)}px`);
+}
+if (typeof window !== 'undefined' && window.visualViewport) {
+  window.visualViewport.addEventListener('resize', syncChatViewport);
+  window.visualViewport.addEventListener('scroll', syncChatViewport);
+}
+
 /** Open Pulse with a prompt already typed, ready to send or edit. */
 function openPulseWithText(text) {
   if (!text) return;
@@ -34796,9 +34830,9 @@ function openPulseWithText(text) {
    * the press looked like it had done nothing. The reason is what to show. */
   if (pulseBlockedReason()) { nudgePulseBlocked(); return; }
   box.value = text;
-  box.focus();
-  box.setSelectionRange(text.length, text.length);
+  if (pulseFocusBox(box)) box.setSelectionRange(text.length, text.length);
   box.dispatchEvent(new Event('input', { bubbles: true }));
+  syncChatViewport();
 }
 
 /* Pulse, open on an empty box. The palette's Ask Pulse called
@@ -34808,8 +34842,8 @@ function openPulse() {
   document.body.classList.add('chat-open');
   wsOnChatToggle();
   loadAllowance();
-  const box = $('#chat-input');
-  if (box && !box.disabled) box.focus();
+  pulseFocusBox($('#chat-input'));
+  syncChatViewport();
 }
 
 /* Open Pulse with a button's question in its box, to be edited and sent.
@@ -45663,10 +45697,11 @@ document.addEventListener('submit', (evt) => {
 
 $('#chat-toggle').addEventListener('click', () => {
   document.body.classList.toggle('chat-open');
+  syncChatViewport();
   wsOnChatToggle();
   if (document.body.classList.contains('chat-open')) {
     foldPulseLegal();
-    $('#chat-input').focus();
+    pulseFocusBox($('#chat-input'));
     // What is left of today's allowance, before anything is typed. Refetched on
     // each open rather than cached: another tab may have spent some of it.
     loadAllowance();

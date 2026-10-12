@@ -61,7 +61,8 @@ def _run(scenario):
     exe = JSC if os.path.exists(JSC) else shutil.which("jsc")
     if not exe:
         pytest.skip("no JavaScriptCore on this machine")
-    src = (HARNESS + "\n".join(_fn(n) for n in ("openPulseWithText", "openPulse", "draftPulse"))
+    src = (HARNESS + "\n".join(_fn(n) for n in ("pulseFocusBox", "syncChatViewport", "openPulseWithText",
+                                                    "openPulse", "draftPulse"))
            + "\n" + scenario + "\nprint('TEST_OK');")
     out = subprocess.run([exe, "-e", src], capture_output=True, text=True, timeout=30)
     assert "TEST_OK" in out.stdout, out.stdout + out.stderr

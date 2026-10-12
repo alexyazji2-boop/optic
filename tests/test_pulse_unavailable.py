@@ -212,7 +212,8 @@ def _run_blocked(scenario):
     src = "\n".join([
         "function assert(v, m) { if (!v) throw new Error(m); }", dom,
         _js_fn("pulseBlockedReason"), _js_fn("markPulseControls"),
-        _js_fn("nudgePulseBlocked"), _js_fn("openPulseWithText"),
+        _js_fn("nudgePulseBlocked"), _js_fn("pulseFocusBox"), _js_fn("syncChatViewport"),
+        _js_fn("openPulseWithText"),
         "try {", scenario, "print('TEST_OK'); } catch (e) { print('FAIL ' + e); }",
     ])
     out = subprocess.run([exe, "-e", src], capture_output=True, text=True, timeout=30)
