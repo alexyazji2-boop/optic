@@ -50,6 +50,7 @@ SMA_WEEKS = 30          # Weinstein's own
 SLOPE_WEEKS = 10        # the recent window the average's direction is read over
 PRIOR_WEEKS = 13        # the window before it, which says where the trend came from
 FLAT_PCT = 1.0          # |slope| under this, over SLOPE_WEEKS, is a flat average
+CONFIRM_WEEKS = 2       # closes in a row on the wrong side before a trend stage ends
 
 MIN_WEEKS = SMA_WEEKS + SLOPE_WEEKS + PRIOR_WEEKS
 
@@ -63,11 +64,13 @@ MEANINGS = {
     1: ("After a decline, the 30-week average has gone flat or price has crossed "
         "it against its slope. A base forming."),
     2: ("Price is above a 30-week average that has risen more than 1% over ten "
-        "weeks. The uptrend."),
+        "weeks. The uptrend. A single weekly close back under a still-rising "
+        "average is read as a pullback; two in a row end it."),
     3: ("After an advance, the 30-week average has gone flat or price has crossed "
         "it against its slope. A top forming."),
     4: ("Price is below a 30-week average that has fallen more than 1% over ten "
-        "weeks. The downtrend."),
+        "weeks. The downtrend. A single weekly close back over a still-falling "
+        "average is read as a bounce; two in a row end it."),
 }
 
 # Said on every reading, not only when asked: the house rule that a panel
@@ -132,6 +135,37 @@ def _read_at(clean: Sequence[float], sma: Sequence[Optional[float]], i: int) -> 
             "prior": prior, "trend": trend, "above": above, "came_from": came_from}
 
 
+def _stages(clean: Sequence[float], sma: Sequence[Optional[float]]) -> List[Dict[str, Any]]:
+    """Every week's reading from MIN_WEEKS on, oldest first, with hysteresis.
+
+    The raw rule flipped on a single close: one week just under a still-rising
+    average read "Stage 3 · Topping" and the next week back over it read
+    Stage 2 again. Over ten years that was 18 one-week stages on TSLA and 12
+    brief 2-3-2 round trips on AAPL (measured 2026-10-12), which is where
+    Weinstein would still call it a pullback inside the advance. So a trend
+    stage ends only after CONFIRM_WEEKS closes in a row on the wrong side of the
+    average, or once the average itself stops rising (falling, for Stage 4).
+    Each week still reads only its own past: the hold looks back, never ahead.
+    """
+    out: List[Dict[str, Any]] = []
+    prev = None
+    below = above = 0
+    for i in range(MIN_WEEKS - 1, len(clean)):
+        r = _read_at(clean, sma, i)
+        below = below + 1 if not r["above"] else 0
+        above = above + 1 if r["above"] else 0
+        held = False
+        if prev == 2 and r["stage"] != 2 and r["trend"] == "rising" and below < CONFIRM_WEEKS:
+            r["stage"], held = 2, True
+        elif prev == 4 and r["stage"] != 4 and r["trend"] == "falling" and above < CONFIRM_WEEKS:
+            r["stage"], held = 4, True
+        r["held"] = held
+        r["index"] = i
+        out.append(r)
+        prev = r["stage"]
+    return out
+
+
 def classify(closes: Sequence[float]) -> Dict[str, Any]:
     """The stage for a series of weekly closes, oldest first."""
     clean = [float(c) for c in closes if _valid(c)]
@@ -146,7 +180,7 @@ def classify(closes: Sequence[float]) -> Dict[str, Any]:
         }
 
     sma = _sma(clean, SMA_WEEKS)
-    r = _read_at(clean, sma, len(clean) - 1)
+    r = _stages(clean, sma)[-1]
     stage, price, now = r["stage"], r["price"], r["now"]
     slope, prior, trend = r["slope"], r["prior"], r["trend"]
     above, came_from = r["above"], r["came_from"]
@@ -155,7 +189,17 @@ def classify(closes: Sequence[float]) -> Dict[str, Any]:
     # One word for the chip, the sentence for its title. The chip is read at a
     # glance beside a price; the reason it says "new" belongs a hover away.
     short = None
-    if stage == 2:
+    if r["held"] and stage == 2:
+        short = "pullback"
+        transition = ("Closed below a 30-week average that is still rising. One "
+                      "weekly close below is read as a pullback inside the "
+                      "advance; a second in a row would make it Stage 3.")
+    elif r["held"] and stage == 4:
+        short = "bounce"
+        transition = ("Closed above a 30-week average that is still falling. One "
+                      "weekly close above is read as a bounce inside the "
+                      "decline; a second in a row would make it Stage 1.")
+    elif stage == 2:
         if came_from == "down":
             short = "new"
             transition = ("Newly in Stage 2: the average turned up only "
@@ -226,10 +270,10 @@ def history(weeks: Sequence[date], closes: Sequence[float]) -> List[List[Any]]:
     clean = [c for _, c in pairs]
     sma = _sma(clean, SMA_WEEKS)
     out: List[List[Any]] = []
-    for i in range(MIN_WEEKS - 1, len(clean)):
-        w = pairs[i][0]
+    for r in _stages(clean, sma):
+        w = pairs[r["index"]][0]
         monday = w - timedelta(days=w.weekday())
-        out.append([monday.isoformat(), _read_at(clean, sma, i)["stage"]])
+        out.append([monday.isoformat(), r["stage"]])
     return out
 
 

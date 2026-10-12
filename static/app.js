@@ -3102,6 +3102,15 @@ function computeSRLevels(ps, spot, opts = {}) {
  * on each redraw, and the All range is 16,296 bars on IBM's chart, about 15ms
  * of date arithmetic three times a frame. A property of the function rather
  * than a `const` beside it, which a call before its line would throw on. */
+/* The Monday a week before another Monday's, as the same ISO key. */
+function priorWeekMonday(monday) {
+  if (!monday) return null;
+  const d = new Date(monday + 'T00:00:00Z');
+  if (Number.isNaN(d.getTime())) return null;
+  d.setUTCDate(d.getUTCDate() - 7);
+  return d.toISOString().slice(0, 10);
+}
+
 function weekMonday(iso) {
   const key = String(iso).slice(0, 10);
   const memo = weekMonday.memo || (weekMonday.memo = new Map());
@@ -18077,11 +18086,19 @@ function stagesRedraw(symbol) {
   if (d && d !== 'loading' && d.ticker === symbol) wsRedrawChart({ keepToolbar: true });
 }
 
-function stageTints(symbol, dates, intraday) {
+function stageTints(symbol, dates, intraday, weekly) {
   /* Intraday too, each bar in its week's stage. It was left out on the ground
    * that five-minute bars in one week are one colour, which is true and is what
    * the stage is: the reading does not change inside a week. `intraday` stays
-   * in the signature for the callers; the Stages button turns it off. */
+   * in the signature for the callers; the Stages button turns it off.
+   *
+   * Which week's stage, though. A week's stage is decided by its Friday close,
+   * so painting Monday's bars with it was hindsight: on TSLA's hourly chart the
+   * line turned Stage 3 at the start of the week of 16 February 2026, days
+   * before price closed under the average (reported 2026-10-12). So a daily or
+   * intraday bar takes the stage of the last COMPLETED week, the reading that
+   * stood when it printed; a weekly bar keeps its own, since its close is the
+   * stage's input. */
   if (!wsOverlayDrawn('stages') || !symbol) return null;
   if (!Array.isArray(dates) || !dates.length) return null;
   const r = stageReading(symbol);
@@ -18096,7 +18113,7 @@ function stageTints(symbol, dates, intraday) {
   // for bar with `colors`.
   const labels = [];
   const colors = dates.map((iso) => {
-    const n = byWeek.get(weekMonday(iso)) || 0;
+    const n = byWeek.get(weekly ? weekMonday(iso) : priorWeekMonday(weekMonday(iso))) || 0;
     seen.add(n);
     labels.push(title(n));
     return n ? C['stage' + n] : C.muted;
@@ -18113,7 +18130,7 @@ function stageTints(symbol, dates, intraday) {
 /* The Charting tab's stages, from the one set of inputs its chart, legend and
  * study palette all use, so the three cannot disagree about what is drawn. */
 function wsStages(ps) {
-  return stageTints((STATE.chartData || {}).ticker, ps.dates, !!ps.intraday);
+  return stageTints((STATE.chartData || {}).ticker, ps.dates, !!ps.intraday, !!ps.weekly);
 }
 
 async function paintStage(hostId, symbol, stillCurrent) {

@@ -274,3 +274,44 @@ def test_a_bad_close_drops_its_own_week_and_no_other():
     assert weeks[hole].isoformat() not in keys
     assert keys[-1] == weeks[-1].isoformat()
     assert weeks[hole + 1].isoformat() in keys and weeks[hole - 1].isoformat() in keys
+
+
+# ------------------------------------------------------------- hysteresis
+
+
+def test_one_close_under_a_rising_average_is_a_pullback_not_a_top():
+    """Reported 2026-10-12 on TSLA: the raw rule flipped to Stage 3 on a single
+    weekly close under a still-rising average and back to 2 the next week.
+    One close below is now held as a pullback; two in a row end the advance."""
+    base = _ramp(50, 1.0, 70)
+    one = stage.classify(base + [base[-1] - 25])
+    assert one["stage"] == 2 and one["vs_sma_pct"] < 0 and one["trend"] == "rising"
+    assert one["transition_short"] == "pullback" and "a second in a row" in one["transition"]
+    two = stage.classify(base + [base[-1] - 25, base[-1] - 26])
+    assert two["stage"] == 3 and "first sign of a top" in two["transition"]
+
+
+def test_one_close_over_a_falling_average_is_a_bounce_not_a_base():
+    base = _ramp(200, -1.0, 70)
+    one = stage.classify(base + [base[-1] + 25])
+    assert one["stage"] == 4 and one["vs_sma_pct"] > 0 and one["trend"] == "falling"
+    assert one["transition_short"] == "bounce"
+    assert stage.classify(base + [base[-1] + 25, base[-1] + 26])["stage"] == 1
+
+
+def test_the_hold_never_looks_ahead_and_the_history_agrees_with_the_chip():
+    """A week is held on what came before it only, and the coloured history
+    and the chip for the same week are one reading."""
+    from datetime import date, timedelta
+    base = _ramp(50, 1.0, 70)
+    closes = base + [base[-1] - 25, base[-1] + 5, base[-1] - 25, base[-1] - 26]
+    weeks = [date(2010, 1, 4) + timedelta(weeks=i) for i in range(len(closes))]
+    hist = stage.history(weeks, closes)
+    for k in range(stage.MIN_WEEKS, len(closes) + 1):
+        assert hist[k - stage.MIN_WEEKS][1] == stage.classify(closes[:k])["stage"], k
+    assert [s for _, s in hist[-4:]] == [2, 2, 2, 3]
+
+
+def test_the_confirmation_is_two_weeks_and_says_so():
+    assert stage.CONFIRM_WEEKS == 2
+    assert "two in a row" in stage.MEANINGS[2] and "two in a row" in stage.MEANINGS[4]

@@ -158,7 +158,9 @@ def test_the_key_names_only_the_stages_on_screen():
 
 
 def test_a_bar_finds_its_week_by_the_shared_monday_rule():
-    assert "byWeek.get(weekMonday(iso))" in _fn(APP, "stageTints")
+    # A daily or intraday bar takes the last completed week's stage (no
+    # hindsight inside a week); a weekly bar keeps its own week's.
+    assert "byWeek.get(weekly ? weekMonday(iso) : priorWeekMonday(weekMonday(iso)))" in _fn(APP, "stageTints")
     assert "const weekKey = weekMonday;" in _fn(APP, "aggregateWeekly")
 
 
@@ -190,7 +192,7 @@ def test_the_chart_asks_for_its_own_payloads_symbol():
     """STATE.ticker and STATE.chartSymbol are independent, and the colours have
     to be the stages of the bars being drawn."""
     assert "const stages = wsStages(ps);" in _fn(APP, "wsMountChart")
-    assert "stageTints((STATE.chartData || {}).ticker, ps.dates, !!ps.intraday)" in _fn(APP, "wsStages")
+    assert "stageTints((STATE.chartData || {}).ticker, ps.dates, !!ps.intraday, !!ps.weekly)" in _fn(APP, "wsStages")
 
 
 def test_with_stages_on_the_candles_and_the_line_take_the_stage_colour():
@@ -332,3 +334,22 @@ def test_the_browser_and_the_server_agree_on_every_days_monday():
     want = [(d - dt.timedelta(days=d.weekday())).isoformat() for d in days]
     assert got == want
     assert "JUNK:null" in out
+
+
+
+def test_prior_week_monday_is_seven_days_back_on_the_same_key():
+    import os, shutil, subprocess
+    jsc = "/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc"
+    exe = jsc if os.path.exists(jsc) else shutil.which("jsc")
+    if not exe:
+        import pytest
+        pytest.skip("no JavaScriptCore")
+    src = _fn(APP, "priorWeekMonday") + "\n" + _fn(APP, "weekMonday") + """
+      function eq(a, b) { if (a !== b) throw new Error(a + ' != ' + b); }
+      eq(priorWeekMonday('2026-02-16'), '2026-02-09');
+      eq(priorWeekMonday(weekMonday('2026-02-19T15:30:00Z')), '2026-02-09');
+      eq(priorWeekMonday('2026-01-05'), '2025-12-29');
+      eq(priorWeekMonday(null), null);
+      print('OK');"""
+    out = subprocess.run([exe, "-e", src], capture_output=True, text=True, timeout=20)
+    assert out.stdout.strip().endswith("OK"), out.stdout + out.stderr
