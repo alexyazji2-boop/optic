@@ -82,14 +82,14 @@
 
   /* Gestures, as [frame, ms]. Short on purpose. */
   var GESTURE = {
-    wave: [['arm-1', 80], ['arm-2', 80], ['arm-3', 170], ['arm-2', 110], ['arm-3', 170],
-      ['arm-2', 100], ['arm-1', 80]],
-    ack: [['arm-1', 70], ['arm-2', 140], ['arm-1', 70]],
+    wave: [['arm-1', 60], ['arm-2', 60], ['arm-3', 130], ['arm-2', 80], ['arm-3', 130],
+      ['arm-2', 75], ['arm-1', 60]],
+    ack: [['arm-1', 55], ['arm-2', 105], ['arm-1', 55]],
     nod: [['nod-1', 90], ['nod-2', 170], ['nod-1', 90]],
     look: [['look-l1', 120], ['look-l2', 520], ['look-l1', 110], ['lean', 90],
       ['look-r1', 120], ['look-r2', 520], ['look-r1', 110], ['lean', 90]],
-    curious: [['curious', 1300], ['curious-half', 55], ['curious-closed', 70],
-      ['curious-half', 55], ['curious', 280]],
+    curious: [['curious', 1300], ['curious-half', 40], ['curious-closed', 50],
+      ['curious-half', 40], ['curious', 280]],
     point: [['arm-1', 80], ['arm-2', 950], ['arm-1', 80]],
     bob: [['lean', 260]],
   };
@@ -243,8 +243,8 @@
 
   Ctl.prototype.blink = function (twice) {
     var f = FACE[this.pose()];
-    var steps = [[f[1], 45], [f[2], 70], [f[1], 50]];
-    if (twice) steps = steps.concat([[f[0], 150]], steps);
+    var steps = [[f[1], 35], [f[2], 50], [f[1], 40]];
+    if (twice) steps = steps.concat([[f[0], 120]], steps);
     var self = this;
     this.run(steps, function () { self.rest(); self.schedule(); });
   };

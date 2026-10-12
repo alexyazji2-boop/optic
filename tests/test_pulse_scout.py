@@ -109,7 +109,7 @@ def test_the_box_holds_its_space_and_picks_a_density():
 
 def test_the_blink_runs_open_half_closed_half_open():
     blink = _proto("blink")
-    assert "[[f[1], 45], [f[2], 70], [f[1], 50]]" in blink, "half, closed, half"
+    assert "[[f[1], 35], [f[2], 50], [f[1], 40]]" in blink, "half, closed, half (quickened 2026-10-12)"
     assert "self.rest()" in blink, "and back to open"
     for pose in ("idle", "tilt", "curious", "concerned"):
         assert "%s: ['%s', '%s-half', '%s-closed']" % (pose, pose, pose, pose) in SCOUT
