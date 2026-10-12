@@ -97,7 +97,7 @@ def run_js(scenario):
         "ORIGIN_DOWN_RE",
         "swingRequestId", "swingLoading", "swingInFlight", "chartRequestId",
         "SESSION_LABEL", "AUTO_REFRESH_VIEWS", "autoRefreshPending", "REFRESH_HEALTH", "originGate",
-        "homeDataAt", "HOME_REUSE_MS", "HOME_OFF_HOURS_MS",
+        "homeDataAt", "HOME_REUSE_MS",
         # loadChartWorkspace records the chart's symbol in the address bar.
         "routeApplying",
         # A failed load notes whether the feed said the symbol does not exist.
@@ -239,17 +239,18 @@ def test_a_home_payload_seconds_old_is_not_a_failed_refresh():
 def test_home_keeps_refreshing_when_only_futures_and_crypto_trade():
     """Reported 2026-10-12: at 12:23am Home's strip still said "As of 11:46pm.
     Futures and crypto trade now", because the refresh loop stopped whenever
-    the cash session was shut. Off-hours Home now refreshes once a minute;
-    other views still wait for the cash tape."""
+    the cash session was shut; then, refreshed once a minute, "As of 1:25 am"
+    sat under a 1:27 am clock. Off-hours Home now refreshes on every tick, as in
+    market hours; other views still wait for the cash tape."""
     run_js("""
       phase = 'closed';
-      STATE.view = 'home'; STATE.home = {fetched: 'half a minute ago'};
-      homeDataAt = Date.now() - 30000;
+      STATE.view = 'home'; STATE.home = {fetched: 'a moment ago'};
+      homeDataAt = Date.now() - 2000;
       await tickAutoRefresh();
-      assert(refreshed.length === 0, 'refreshed off-hours before a minute was up');
-      homeDataAt = Date.now() - HOME_OFF_HOURS_MS - 1000;
+      assert(refreshed.length === 0, 'fetched again within the reuse window');
+      homeDataAt = Date.now() - 20000;
       await tickAutoRefresh();
-      assert(refreshed.join() === 'home', 'home did not refresh off-hours');
+      assert(refreshed.join() === 'home', 'home did not refresh on the off-hours tick');
       STATE.view = 'overview'; STATE.swing = {ticker: 'AAPL'};
       await tickAutoRefresh();
       assert(pending.length === 0, 'a closed cash session refreshed the overview');

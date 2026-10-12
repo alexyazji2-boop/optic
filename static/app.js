@@ -4565,9 +4565,6 @@ let homeDataAt = 0;
 // How long a payload is handed back rather than fetched again. Named because
 // the refresh tick asks it too: see tickAutoRefresh.
 const HOME_REUSE_MS = 5000;
-// How often Home refreshes while the cash session is shut and only its
-// futures and crypto are moving (tickAutoRefresh).
-const HOME_OFF_HOURS_MS = 60000;
 
 /** The /api/home payload, fetched at most once per burst. */
 function homeData() {
@@ -39925,15 +39922,19 @@ async function tickAutoRefresh() {
   // While the server is away the requests already waiting will carry on; a
   // tick would only add more to the queue.
   if (document.hidden || originGate) return;
-  if (!isTapeLiveET() && (STATE.view !== 'home' || (STATE.home && Date.now() - homeDataAt < HOME_OFF_HOURS_MS))) return;
+  if (!isTapeLiveET() && STATE.view !== 'home') return;
   /* Home keeps refreshing when the cash session is shut. Its strip carries
    * index futures (Sunday 6pm to Friday 5pm ET) and Bitcoin (always), and it
    * says "Futures and crypto trade now" under an "As of" that stood still: at
    * 12:23am it still read 11:46pm (reported 2026-10-12, "this should
-   * constantly be updating with the time"). Off-hours it asks every minute
-   * rather than every tick; the desk's paid rewrites stay behind their own
-   * 30-minute slot and daily cap on the server. Every other view refreshes
-   * only while the cash tape is live, as before. */
+   * constantly be updating with the time"). It refreshes on every tick, as
+   * in market hours: asking once a minute left "As of 1:25 am" under a clock
+   * reading 1:27 am (reported 2026-10-12, "time is still not accurate with one
+   * another"), since a minute's wait plus a tick can trail the clock by 80 s.
+   * Now the two agree but for the seconds either side of a minute turning.
+   * The desk's paid rewrites stay behind their own 30-minute slot and daily
+   * cap on the server. Every other view refreshes only while the cash tape is
+   * live, as before. */
   if (autoRefreshPending || swingLoading) return;
   autoRefreshPending = true;
   const view = STATE.view;
