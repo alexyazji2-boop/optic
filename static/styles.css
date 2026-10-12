@@ -8826,7 +8826,7 @@ table.data tr.fx-detail td,
 /* Room to breathe, because this panel is usually alone on the page rather than
    one card in a grid, and centred for the same reason. */
 .empty-state {
-  padding: var(--space-7) var(--space-6);
+  padding: var(--space-9) var(--space-6);
   text-align: center;
 }
 .empty-state > h2 { margin-bottom: var(--space-2); }
@@ -16924,32 +16924,31 @@ table.data.accounts-table td.ac-who { white-space: normal; min-width: 120px; wid
 
 /* --------------------------------------------- empty, loading and errors */
 
-/* An empty state is a next step, not an announcement: a mark, the sentence
-   of what would fill it, and the action that does, filled so it reads as
-   the thing to press. */
+/* An empty state is a next step, not an announcement: the title, the
+   sentence of what would fill it, and the action that does, filled so it
+   reads as the thing to press. Spaced out and without the ringed-dot mark
+   that sat above the title (asked for 2026-10-12: "space this out a little
+   more and remove the circle logo"). Its title is plain text, not the
+   banded, notched header a pane wears: this panel has no frame to head. */
 .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-5);
   border-style: dashed;
   border-color: var(--sys-line-strong);
   background: transparent;
 }
 .empty-state[hidden] { display: none; }
-.empty-state::before {
-  content: "";
-  width: calc(36px * var(--ui-scale));
-  height: calc(36px * var(--ui-scale));
-  margin-bottom: var(--space-2);
-  border-radius: 50%;
-  border: 1.5px solid var(--sys-line-strong);
-  background:
-    radial-gradient(circle at 50% 50%, var(--asset-brand) 0 3px, transparent 3.5px),
-    var(--sys-fill);
+.panel.empty-state > h2,
+.panel.empty-state > h2:first-child {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
 }
-.empty-state > h2 { margin: 0; }
-.empty-state > .sub { color: var(--sys-ink-2); }
+.empty-state > .sub { color: var(--sys-ink-2); margin: 0; }
 .empty-acts { margin-top: var(--space-3); }
 .empty-acts .btn { background: var(--btn-primary); color: var(--btn-primary-ink); border-color: transparent; font-weight: 600; }
 
@@ -18592,6 +18591,7 @@ footer.legal > .legal-full {
   background-image: -webkit-image-set(url("scout/scout-compact-tail@2x.webp") 2x, url("scout/scout-compact-tail@3x.webp") 3x);
   background-image: image-set(url("scout/scout-compact-tail@2x.webp") 2x, url("scout/scout-compact-tail@3x.webp") 3x);
 }
+
 /* Scout on the Pulse button: his head in a dark disc where the Pulse mark
    was, so his ivory and gold read against the gold button (2026-10-12). The
    figure is the bust sprite scaled so the head (x 10-108, y 4-92 of the
@@ -18645,7 +18645,6 @@ footer.legal > .legal-full {
 @media (prefers-reduced-motion: reduce) {
   .scout-badge-fig { animation: none; }
 }
-
 
 /* The welcome figure is a button: it opens the guide menu. No fill and no
    hover pill (the gold pill is the sidebar's alone); a focus ring for the
