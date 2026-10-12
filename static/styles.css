@@ -2330,6 +2330,8 @@ body.chat-resizing svg { pointer-events: none; }
 .milo-act-result.ok { color: var(--pos); }
 .milo-act-result.bad { color: var(--warn); }
 .milo-act-off { font-size: var(--t-caption); color: var(--ink-muted); border-style: dashed; }
+/* An answer that did not finish says so under its text. */
+#chat .msg-ended { margin-top: var(--space-2); font-size: var(--t-caption); color: var(--warn); }
 /* A ticker switch in the conversation: a quiet line, not a message. */
 #chat .msg.chat-note {
   margin: var(--space-3) 0; padding: var(--space-2) var(--space-3);

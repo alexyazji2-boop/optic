@@ -41341,7 +41341,8 @@ function pulseScoutStreaming(node) {
 function pulseReplyScoutDone(el, node) {
   const c = el && el.scoutCtl;
   if (!c) return;
-  if (node.classList.contains('err')) { c.set('error'); return; }
+  if (node.classList.contains('err') || node.dataset.ended === 'cut') { c.set('error'); return; }
+  if (node.dataset.ended === 'stopped') { c.set('idle', 'look'); return; }
   const said = (node.querySelector('.bubble') || {}).textContent || '';
   if (said.trim()) c.set('idle', 'nod'); else c.set('idle');
 }
@@ -42367,6 +42368,14 @@ async function streamTo(url, body, node) {
   const sourcesEl = node.querySelector('.sources');
   const render = createStreamRenderer(bubble);
   let acc = '';
+  /* Stoppable (2026-10-12): there was no way to end an answer, so a wrong
+   * question ran to its 8,000-token end. The controller is the Stop button's;
+   * `ended` says how the stream finished, so a cut-off answer is never kept
+   * as a whole one. */
+  const ctl = new AbortController();
+  chatState.abort = ctl;
+  let finished = false;
+  node.dataset.ended = '';
 
   let res;
   try {
@@ -42374,8 +42383,16 @@ async function streamTo(url, body, node) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: ctl.signal,
     });
   } catch (err) {
+    if (ctl.signal.aborted) {
+      node.dataset.ended = 'stopped';
+      if (node.pulseSteps) pulseStepsDone(node);
+      statusEl.textContent = '';
+      bubble.innerHTML = '<span class="muted">Stopped before Milo answered.</span>';
+      return '';
+    }
     /* `fetch` rejects only when there was no HTTP response at all, and the
        message it rejects with is the browser's own: Chrome says "Failed to
        fetch", Safari says "Load failed". Both were reaching the reader
@@ -42420,7 +42437,12 @@ async function streamTo(url, body, node) {
   let buffer = '';
 
   while (true) {
-    const { done, value } = await reader.read();
+    let step;
+    try { step = await reader.read(); } catch (err) {
+      node.dataset.ended = ctl.signal.aborted ? 'stopped' : 'cut';
+      break;
+    }
+    const { done, value } = step;
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
     const chunks = buffer.split('\n\n');
@@ -42451,11 +42473,13 @@ async function streamTo(url, body, node) {
         else statusEl.innerHTML = `<span class="spinner"></span>${esc(state)}…`;
         pulseScoutStatus(node, state);
       } else if (event === 'error') {
+        finished = true;
         node.classList.add('err');
         if (node.pulseSteps) pulseStepsDone(node, true); else statusEl.textContent = '';
         render.flush();
         bubble.innerHTML = mdLite(payload.message || 'Unknown error.');
       } else if (event === 'done') {
+        finished = true;
         if (node.pulseSteps) pulseStepsDone(node); else statusEl.textContent = '';
         render.flush();
         const list = payload.sources || payload.citations || [];
@@ -42470,7 +42494,22 @@ async function streamTo(url, body, node) {
   // However the loop exited — normal end, aborted body, malformed tail — the
   // reader must not be left mid-reveal with text it already received.
   render.flush();
+  if (!finished && !node.dataset.ended) node.dataset.ended = 'cut';
+  if (node.dataset.ended) {
+    if (node.pulseSteps) pulseStepsDone(node, node.dataset.ended === 'cut');
+    statusEl.textContent = '';
+    bubble.insertAdjacentHTML('beforeend', `<p class="msg-ended" role="note">${node.dataset.ended === 'stopped'
+      ? 'Stopped by you. This answer is incomplete.'
+      : 'The connection ended before Milo finished. This answer is incomplete.'}</p>`);
+  }
+  if (chatState.abort === ctl) chatState.abort = null;
   return acc;
+}
+
+/* Stop shows only while an answer is running. */
+function setChatStop(on) {
+  const stop = $('#chat-stop');
+  if (stop) stop.hidden = !on;
 }
 
 /* Staged chat attachments.
@@ -42621,6 +42660,7 @@ async function sendChat(text) {
   chatState.busy = true;
   $('#chat-send').disabled = true;
   $('#chat-research').disabled = true;
+  setChatStop(true);
 
   const files = attachmentsPayload();
   // Name the files in the transcript. The bytes are not kept in chatState — only
@@ -42655,7 +42695,11 @@ async function sendChat(text) {
     }, node);
     clearAttachments();
     if (reply) {
-      chatState.messages.push({ role: 'assistant', content: reply });
+      // A stopped or cut-off answer is kept as one, so a resumed thread (and
+      // the model, next turn) knows it was never finished.
+      const ended = node.dataset.ended;
+      const kept = ended ? `${reply}\n\n[${ended === 'stopped' ? 'Stopped by the reader' : 'Cut off'}: incomplete]` : reply;
+      chatState.messages.push({ role: 'assistant', content: kept });
       addReplyActions(node, reply, text);
     }
     pulsePersist();
@@ -42666,8 +42710,11 @@ async function sendChat(text) {
   } finally {
     pulseReplyScoutDone(scout, node);
     chatState.busy = false;
+    setChatStop(false);
     $('#chat-send').disabled = false;
     $('#chat-research').disabled = false;
+    // The allowance moved: say what is left now, not at the next open.
+    if (typeof loadAllowance === 'function') loadAllowance();
   }
 }
 
@@ -42678,6 +42725,7 @@ async function runResearch() {
   chatState.busy = true;
   $('#chat-send').disabled = true;
   $('#chat-research').disabled = true;
+  setChatStop(true);
 
   const custom = $('#chat-input').value.trim();
   /* With an empty box and no ticker loaded, this used to post
@@ -42715,6 +42763,7 @@ async function runResearch() {
   } finally {
     pulseReplyScoutDone(scout, node);
     chatState.busy = false;
+    setChatStop(false);
     $('#chat-send').disabled = false;
     $('#chat-research').disabled = false;
   }
@@ -45392,6 +45441,9 @@ $('#chat-send').addEventListener('click', () => {
   sendChat(text);
 });
 $('#chat-research').addEventListener('click', runResearch);
+$('#chat-stop').addEventListener('click', () => {
+  if (chatState.abort) chatState.abort.abort();
+});
 /* The question quoted in the box's placeholder, as a draft: "What does the
  * gamma profile imply for a swing long here?". Empty when the placeholder has
  * no example in it (the unavailable state replaces it with a reason). */
