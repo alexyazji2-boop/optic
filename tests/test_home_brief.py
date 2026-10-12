@@ -19,12 +19,18 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 APP = (ROOT / "static/app.js").read_text()
+CSS = (ROOT / "static/styles.css").read_text()
 JSC = "/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc"
 
 
 def _fn(head):
     at = APP.index(head)
     return APP[at:APP.index("\n}\n", at) + 3]
+
+
+def _rule(selector):
+    at = CSS.index("\n" + selector + " {") + 1
+    return CSS[at:CSS.index("}", at)]
 
 
 def _run(script):
@@ -162,6 +168,24 @@ def test_a_report_is_high_impact_only_when_it_moves_the_index():
 def test_the_strip_explains_its_two_cues():
     fn = _fn("function catalystStripHTML(p, nowIso) {")
     assert 'class="cs-key"' in fn and "High impact" in fn and "Company report" in fn
+
+
+def test_the_strip_key_is_legible():
+    """Asked for on 2026-10-11: the key was caption-size grey text behind the
+    strip's own 2px edge, hard to read. Its labels are now reading size in a
+    readable ink, and each leads with a swatch shaped like the strip's edge
+    but larger: amber for high impact, dashed for a company's report."""
+    key = _rule(".cs-key")
+    assert "font-size: var(--t-small)" in key and "color: var(--ink-2)" in key
+    assert "--t-caption" not in key and "--t-micro" not in key and "--ink-muted" not in key
+    swatch = _rule(".cs-key-item::before")
+    assert "width: 4px" in swatch and "border-left: 2px" in _rule(".cs-item")
+    assert "height: calc(18px * var(--ui-scale))" in swatch
+    assert "background: var(--warn)" in _rule(".cs-key-item.impact-high::before")
+    dashed = _rule(".cs-key-item.is-earnings::before")
+    assert "repeating-linear-gradient(to bottom, var(--ink-muted)" in dashed and "transparent" in dashed
+    # The label itself carries no edge any more; the swatch is the cue.
+    assert "border-left" not in _rule(".cs-key-item")
 
 
 def test_the_today_band_goes_stale_and_says_when_it_is_from():

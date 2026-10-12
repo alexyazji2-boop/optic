@@ -17871,19 +17871,36 @@ table.heat td.name { text-align: left; font-weight: 500; }
   .sec-head.compact.show-mini .sec-actions { grid-column: 2; grid-row: 2; justify-content: flex-end; }
 }
 
-/* The week strip's key, and a holiday's cell. The key's items wear the same
-   left edge the strip's items do, so the legend is the cue itself. */
+/* The week strip's key, and a holiday's cell. Each key item leads with a
+   swatch shaped like the strip's item edge (a bar at the left, amber for high
+   impact, broken into dashes for a company's report), twice as wide and
+   taller, so the two cues can be told apart at a glance. It was the strip's
+   own 2px edge on caption-size grey text, which read as a footnote; the
+   labels are now in reading size and ink. The dashes are drawn, three of
+   them, because a 4px dashed border breaks only once over this height and
+   reads as a split bar. */
 .cs-key {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1) var(--space-4);
-  margin: calc(-1 * var(--space-1)) 0 var(--space-3);
-  font-size: var(--t-caption);
-  color: var(--ink-muted);
+  align-items: center;
+  gap: var(--space-2) var(--space-5);
+  margin: 0 0 var(--space-3);
+  font-size: var(--t-small);
+  color: var(--ink-2);
 }
-.cs-key-item { padding-left: var(--space-2); border-left: 2px solid var(--ink-muted); }
-.cs-key-item.impact-high { border-left-color: var(--warn); }
-.cs-key-item.is-earnings { border-left-style: dashed; }
+.cs-key-item { display: inline-flex; align-items: center; gap: var(--space-2); }
+.cs-key-item::before {
+  content: "";
+  flex: none;
+  width: 4px;
+  height: calc(18px * var(--ui-scale));
+  background: var(--ink-muted);
+}
+.cs-key-item.impact-high::before { background: var(--warn); }
+.cs-key-item.is-earnings::before {
+  background: repeating-linear-gradient(to bottom, var(--ink-muted) 0 calc(4px * var(--ui-scale)),
+    transparent 0 calc(7px * var(--ui-scale)));
+}
 .cs-day.is-closed { background: transparent; border-style: dashed; }
 .ms-asof { margin: var(--space-1) 0 0; font-size: var(--t-micro); color: var(--ink-muted); text-align: right; }
 
