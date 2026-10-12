@@ -2534,7 +2534,21 @@ function legalBanner(view) {
  * so it says so above the conversation rather than only in the page footer. */
 function initPulseLegal() {
   const host = document.getElementById('pulse-legal');
-  if (host) host.innerHTML = LEGAL.areas.pulse || '';
+  // A paragraph, so it can fold like every other caveat; see foldPulseLegal.
+  if (host) host.innerHTML = LEGAL.areas.pulse ? `<p class="pulse-legal-text caveat">${LEGAL.areas.pulse}</p>` : '';
+}
+
+/* On a phone the notice folds to its first two lines, the bold "Not
+ * financial advice." lead and the start of the rest, with the caveats' own
+ * "more" (markClampedCaveats). Reported 2026-10-12: "fix the phone chat
+ * greeting so it shows without scrolling". At 390x844 the notice was 179px
+ * of a 363px scroller, and Milo's greeting sat under the input footer until
+ * the reader scrolled. Nothing is removed: one tap or Enter opens it. Wider
+ * screens have the room and keep it open. */
+const CHAT_PHONE_QUERY = '(max-width: 640px)';
+function foldPulseLegal() {
+  if (!window.matchMedia || !window.matchMedia(CHAT_PHONE_QUERY).matches) return;
+  markClampedCaveats(document.getElementById('pulse-legal'));
 }
 
 function initLegalFooter() {
@@ -44893,6 +44907,7 @@ $('#chat-toggle').addEventListener('click', () => {
   document.body.classList.toggle('chat-open');
   wsOnChatToggle();
   if (document.body.classList.contains('chat-open')) {
+    foldPulseLegal();
     $('#chat-input').focus();
     // What is left of today's allowance, before anything is typed. Refetched on
     // each open rather than cached: another tab may have spent some of it.

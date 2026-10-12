@@ -755,7 +755,9 @@ header.topbar {
   flex: none;
   margin-left: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  font-size: var(--t-lead);
+  /* A step under the lead size: "make the 'ask milo' text a little smaller"
+     (2026-10-12), once the label grew from "Pulse" to "Ask Milo". */
+  font-size: var(--t-base);
   font-weight: 500;
   border-radius: var(--r-md);
 }
@@ -2492,6 +2494,15 @@ body.chat-resizing svg { pointer-events: none; }
   .search input { width: 88px; }
   .hero { font-size: var(--t-d2); }
   .idea .leg { font-size: var(--t-caption); }
+  /* Milo's footer on a phone: a shorter box (drag its corner for more) and
+     the four actions on one row, so the greeting above it is on screen when
+     the panel opens. At 375x667 the footer was 307px, the scroller under it
+     168px, and the greeting below the fold (2026-10-12). The box's height was
+     its two rows plus padding, so it is set here rather than its min-height. */
+  #chat .chat-foot textarea { height: 52px; min-height: 52px; }
+  #chat .chat-actions { flex-wrap: nowrap; gap: var(--space-1); }
+  #chat .chat-actions .btn { padding-left: var(--space-2); padding-right: var(--space-2); font-size: var(--t-small); }
+  #chat .chat-actions label { margin-left: auto; white-space: nowrap; }
 }
 
 /* ---------------------------------------------------------- session strip
@@ -2881,6 +2892,9 @@ body.chat-open footer.legal { padding-right: var(--chat-w); }
   color: var(--ink-muted);
 }
 .legal-area.caveat.is-clamped { -webkit-line-clamp: 1; }
+/* Milo's notice is a paragraph inside the card (see foldPulseLegal); the card
+   keeps the spacing, so the paragraph brings none of its own. */
+#pulse-legal .pulse-legal-text { margin: 0; }
 .legal-area strong { color: var(--ink-2); font-weight: 600; margin-right: var(--space-0); }
 
 /* ---------------------------------------------------------------- settings */
