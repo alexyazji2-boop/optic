@@ -90,7 +90,7 @@ def test_the_new_copy_carries_no_em_dash():
     em dash in code that predates this change -- a test about new copy has to
     be bounded by the new copy."""
     start = APP.index("const CTX_MEANS = {")
-    end = APP.index("'Load a ticker or open Macro to give it the numbers.';", start)
+    end = APP.index("'is on, the web; naming a ticker lets it look one up. Press to change.';", start)
     assert chr(0x2014) not in APP[start:end + 60]
 
 

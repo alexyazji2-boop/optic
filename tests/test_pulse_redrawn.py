@@ -46,7 +46,10 @@ def _run(script):
     consts = APP[APP.index("const PULSE_CHART_RE ="):APP.index("const pulseChartBars")]
     # The chart pass hands on to the source chips (test_pulse_sources).
     sources = APP[APP.index("const PULSE_SOURCES = {"):APP.index("function pulseSourcesIn(")]
-    prelude = ("function esc(s) { return String(s); }\n" + consts + sources
+    # And to Milo's action cards (2026-10-12; test_milo_actions).
+    actions = APP[APP.index("const MILO_ACTION_RE ="):APP.index("function miloActResult(")]
+    prelude = ("function esc(s) { return String(s); }\nfunction fmt(v, d) { return Number(v).toFixed(d); }\n"
+               + consts + sources + actions
                + _fn("function pulseChartsIn(html) {") + _fn("function pulseSourcesIn(html) {"))
     out = subprocess.run([exe, "-e", prelude + script], capture_output=True, text=True,
                          timeout=60, cwd=str(ROOT))
@@ -97,7 +100,7 @@ def test_the_steps_are_the_servers_ticked_in_turn_and_folded_once_it_answers():
     assert "if (steps[steps.length - 1] === label) return;" in add, "a repeated event is one step"
     done = _fn("function pulseStepsDone(node, failed) {")
     assert "`Worked through ${n} step${n === 1 ? '' : 's'}`" in done and "box.open = false;" in done
-    assert "pulseStepsStart(node, 'Reading what is on your screen');" in _fn("async function sendChat(text) {")
+    assert "pulseStepsStart(node, chatScope === 'none' ? 'Reading your question' : 'Reading what is on your screen');" in _fn("async function sendChat(text) {")
     assert "pulseStepsStart(node, 'Searching live sources');" in _fn("async function runResearch() {")
 
 

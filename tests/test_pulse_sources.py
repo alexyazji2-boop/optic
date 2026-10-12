@@ -80,7 +80,7 @@ def test_pulse_is_told_when_to_tag_and_when_not_to():
 
 
 def test_chips_render_open_their_panel_and_leave_copy_readable():
-    assert "return pulseSourcesIn(html.replace(PULSE_CHART_RE," in APP, "every reply path renders them"
+    assert "return pulseSourcesIn(miloActionsIn(html).replace(PULSE_CHART_RE," in APP, "every reply path renders them"
     assert "if (window.matchMedia('(max-width: 559px)').matches) $('#chat-close').click();\n    switchView(src.dataset.srcView);" in APP
     assert "pulseSourcesAsText(splitFollowUps(" in APP
     assert ".replace(/\\s?\\[\\[[^\\]\\n]*\\]\\]/g, '')" in APP, "no brackets flash past while streaming"

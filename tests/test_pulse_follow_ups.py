@@ -93,7 +93,11 @@ def test_no_trailing_arrows_leaves_the_text_alone_and_only_the_end_counts():
 def test_the_rows_are_the_home_pages_and_press_into_the_box():
     rows = _fn("followUpsHTML")
     assert 'class="cc-q" data-ask-text="${' in rows and "host.className = 'pulse-ups'" in rows
-    assert "const askText = evt.target.closest('[data-ask-text]');\n  if (askText) { draftPulse(askText.dataset.askText); }" in APP
+    handler = APP[APP.index("const askText = evt.target.closest('[data-ask-text]');"):][:1400]
+    # Under Milo's answer a row sends visibly (2026-10-12); elsewhere it drafts.
+    assert "const followUp = askText.closest('#chat .pulse-ups');" in handler
+    assert "sendChat(askText.dataset.askText);" in handler
+    assert "draftPulse(askText.dataset.askText);" in handler
     assert ".msg .pulse-ups { display: flex; flex-direction: column;" in CSS
 
 

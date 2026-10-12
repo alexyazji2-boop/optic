@@ -5142,7 +5142,22 @@ document.addEventListener('click', (evt) => {
   /* A market question goes into Pulse's box when it is pressed, for the reader
    * to edit and send (see draftPulse). */
   const askText = evt.target.closest('[data-ask-text]');
-  if (askText) { draftPulse(askText.dataset.askText); }
+  if (askText) {
+    /* A follow-up under one of Milo's answers sends, visibly: it lands in the
+     * conversation as the reader's next question, the way it would if they had
+     * typed it (2026-10-12: "clicking one should visibly submit that
+     * question"). Anywhere else a question is still drafted for editing. When
+     * Milo cannot answer (no key, no account) it drafts, so the words are not
+     * lost and the reason is on screen. */
+    const followUp = askText.closest('#chat .pulse-ups');
+    if (followUp && !chatState.busy && !pulseBlockedReason()) {
+      const box = $('#chat-input');
+      if (box) box.value = '';
+      sendChat(askText.dataset.askText);
+      return;
+    }
+    draftPulse(askText.dataset.askText);
+  }
 });
 
 /** Fill in the footer once /api/health is known — real-time vs delayed feed and
@@ -24441,10 +24456,14 @@ function wsRenderDrawings() {
       const y = pts[0][1];
       g.appendChild(line(frame.margin.l, y, frame.margin.l + frame.plotW, y,
         { 'stroke-dasharray': '6 4' }));
+      // A level Milo marked says so, with its reason, so it is never mistaken
+      // for one the reader drew (2026-10-12).
       g.appendChild(el('text', {
         x: frame.margin.l + frame.plotW - 4, y: y - 5, 'text-anchor': 'end',
         fill: colour, 'font-size': 10, 'font-weight': 600,
-      }, fmt(dr.points[0].p, 2)));
+      }, dr.origin === 'milo'
+        ? `Milo \u00b7 ${String(dr.text || 'level').slice(0, 40)} \u00b7 ${fmt(dr.points[0].p, 2)}`
+        : fmt(dr.points[0].p, 2)));
     } else if (dr.kind === 'rect' && pts.length === 2) {
       g.appendChild(el('rect', {
         x: Math.min(pts[0][0], pts[1][0]), y: Math.min(pts[0][1], pts[1][1]),
@@ -28331,7 +28350,7 @@ function savedResearch() {
 function saveResearch(entry) {
   if (signedIn()) {
     const question = entry.question || '';
-    authApi('/api/saved-research', {
+    return authApi('/api/saved-research', {
       method: 'POST',
       body: {
         title: question.slice(0, 200),
@@ -28343,16 +28362,17 @@ function saveResearch(entry) {
       const row = researchFromRow(reply.research);
       ACCOUNT.research = [row, ...(ACCOUNT.research || [])];
       if (STATE.view === 'scan') loadScan(false);
-    }).catch((err) => { window.OpticAuth.toast(err.message, 'bad'); });
-    return;
+      return true;
+    }).catch((err) => { window.OpticAuth.toast(err.message, 'bad'); return false; });
   }
 
   const all = localSavedResearch();
   all.unshift({ ...entry, at: new Date().toISOString() });
   // Capped. A saved list that grows without limit becomes an archive nobody
   // reads, and localStorage has a hard quota that fails silently when hit.
+  let stored = true;
   try { localStorage.setItem(RESEARCH_KEY, JSON.stringify(all.slice(0, 40))); }
-  catch (e) { /* private mode, or quota */ }
+  catch (e) { stored = false; /* private mode, or quota */ }
 
   // The conversion moment from the design, without taking anything away: the
   // question is already saved in this browser, and the offer is to keep it
@@ -28360,6 +28380,8 @@ function saveResearch(entry) {
   if (window.OpticAuth && window.OpticAuth.state().status === 'guest') {
     offerAccountForResearch();
   }
+  // Settled, so a caller (Milo's Save card) reports success only once it held.
+  return Promise.resolve(stored);
 }
 
 let researchOfferShown = false;
@@ -40336,6 +40358,7 @@ function pulsePersist() {
 
 function pulseNewConversation() {
   chatState.messages = [];
+  chatState.lastFocusTicker = null;
   chatState.conversationId = 'c' + Date.now().toString(36)
     + Math.random().toString(36).slice(2, 6);
   const log = $('#chat-log');
@@ -40570,8 +40593,115 @@ function chatContextPayload() {
     }
   }
   ctx.active_view = STATE.view;
+  // The retirement model the chip has always listed, now actually sent, and
+  // labelled as the reader's own entries rather than market data.
+  if (STATE.roth) ctx.roth = { source: 'retirement inputs the reader entered in this browser', model: STATE.roth };
+  if (STATE.swing && STATE.swing.generated_at) ctx.data_as_of = STATE.swing.generated_at;
   return ctx;
 }
+
+/* What Milo is told about the reader's screen (2026-10-12). The context had
+ * every loaded set and a date; nothing said which page or chart timeframe was
+ * up, when it was captured, or that the ticker had changed since the last
+ * question. `chatScope` is the chip's menu: the current page (the default),
+ * the market only, or nothing at all. */
+let chatScope = 'auto';
+const CHAT_SCOPES = {
+  auto: 'This page',
+  market: 'Market only',
+  none: 'No context',
+};
+const CHAT_VIEW_LABELS = {
+  overview: 'Overview', swing: 'Options', long: 'Investing', earnings: 'Earnings',
+  financials: 'Financials', news: 'News', chart: 'Chart',
+};
+
+function chatFocus() {
+  const view = STATE.view || 'home';
+  const onChart = view === 'chart';
+  const ticker = onChart ? (STATE.chartSymbol || STATE.ticker || null)
+    : (TICKER_VIEWS.includes(view) ? (STATE.ticker || null) : null);
+  const focus = {
+    scope: chatScope,
+    view,
+    view_label: CHAT_VIEW_LABELS[view] || VIEW_NAMES[view] || cap(String(view)),
+    ticker: chatScope === 'auto' ? ticker : null,
+    captured_at: new Date().toISOString(),
+  };
+  if (onChart && chatScope === 'auto') {
+    const r = CHART_RANGES.find((x) => x.key === chartRange);
+    focus.chart = { range: r ? r.label : String(chartRange), interval: chartInterval };
+  }
+  if (chatState.lastFocusTicker && focus.ticker && chatState.messages.length) {
+    focus.previous_ticker = chatState.lastFocusTicker;
+  }
+  return focus;
+}
+
+/* The payload for one question, after the chip's choice. */
+function chatContextForSend() {
+  const focus = chatFocus();
+  if (chatScope === 'none') return { focus };
+  const full = chatContextPayload();
+  if (chatScope === 'market') {
+    const out = { focus };
+    ['macro', 'sectors', 'indices', 'read'].forEach((k) => { if (full[k]) out[k] = full[k]; });
+    return out;
+  }
+  return { ...full, focus };
+}
+
+function chatContextLabel() {
+  if (chatScope !== 'auto') return CHAT_SCOPES[chatScope];
+  const f = chatFocus();
+  return f.ticker ? `${f.ticker} \u00b7 ${f.view_label}` : null;
+}
+
+function chatCtxMenuHTML() {
+  const f = chatFocus();
+  const here = f.ticker ? `${f.ticker} on ${f.view_label}` : (f.view_label || 'This page');
+  const opts = [
+    ['auto', `This page (${here})`, 'Everything loaded, led by what is on screen'],
+    ['market', 'Market only', 'Macro, sectors, indices and the daily read; no company data'],
+    ['none', 'No context', 'Only your question; web search still applies if it is on'],
+  ];
+  return `<div class="chat-ctx-menu" id="chat-ctx-menu" role="menu" aria-label="What Milo reads">
+    ${opts.map(([id, label, sub]) => `<button type="button" role="menuitemradio" aria-checked="${chatScope === id}"
+      class="chat-ctx-opt${chatScope === id ? ' on' : ''}" data-chat-scope="${id}">
+      <span>${esc(label)}</span><small>${esc(sub)}</small></button>`).join('')}
+  </div>`;
+}
+
+function setChatCtxMenu(open) {
+  const chip = $('#chat-ctx');
+  if (!chip) return;
+  const old = document.getElementById('chat-ctx-menu');
+  if (old) old.remove();
+  chip.setAttribute('aria-expanded', String(!!open));
+  if (open) chip.insertAdjacentHTML('afterend', chatCtxMenuHTML());
+}
+
+document.addEventListener('click', (evt) => {
+  const chip = evt.target.closest && evt.target.closest('#chat-ctx');
+  if (chip) { setChatCtxMenu(chip.getAttribute('aria-expanded') !== 'true'); return; }
+  const opt = evt.target.closest && evt.target.closest('[data-chat-scope]');
+  if (opt) {
+    chatScope = CHAT_SCOPES[opt.dataset.chatScope] ? opt.dataset.chatScope : 'auto';
+    setChatCtxMenu(false);
+    updateChatContext();
+    return;
+  }
+  if (document.getElementById('chat-ctx-menu') && !(evt.target.closest && evt.target.closest('#chat-ctx-menu'))) {
+    setChatCtxMenu(false);
+  }
+});
+document.addEventListener('keydown', (evt) => {
+  if (evt.key === 'Escape' && document.getElementById('chat-ctx-menu')) {
+    setChatCtxMenu(false);
+    const chip = $('#chat-ctx');
+    if (chip) chip.focus();
+  }
+});
 
 function updateChatContext() {
   // The starter cards name the loaded symbol, so they go stale when it changes.
@@ -40586,8 +40716,12 @@ function updateChatContext() {
   if (STATE.compare && STATE.compare.available === true) bits.push('comparison');
   if (STATE.tracker) bits.push('tracker');
   const chip = $('#chat-ctx');
-  chip.className = 'chip ' + (bits.length ? 'bull' : 'neutral');
-  chip.innerHTML = `<span class="dot"></span><span>${bits.length ? esc(cap(bits.join(' · '))) : 'No context'}</span>`;
+  const scoped = chatContextLabel();
+  const lit = chatScope === 'none' ? false : (chatScope === 'market' || bits.length > 0);
+  chip.className = 'chip ' + (lit ? 'bull' : 'neutral');
+  chip.innerHTML = `<span class="dot"></span><span>${
+    esc(scoped || (bits.length ? cap(bits.join(' · ')) : 'No context'))}</span>`;
+  chip.setAttribute('aria-label', `What Milo reads: ${scoped || (bits.length ? bits.join(', ') : 'nothing loaded')}. Press to change.`);
   /* What the chip means, said on the chip.
    *
    * It lists the data Pulse is handed with every question, one word per set,
@@ -40611,11 +40745,15 @@ function updateChatContext() {
     if (tail === 'options') return b.split(' ')[0] + ', ' + CTX_MEANS.options;
     return CTX_MEANS[b] || b;
   });
-  chip.title = bits.length
-    ? 'What Milo reads with every question: ' + meant.join('; ')
-      + '. It cannot see anything not listed here.'
-    : 'Nothing is loaded, so Milo answers from your question alone. '
-      + 'Load a ticker or open Macro to give it the numbers.';
+  chip.title = chatScope === 'none'
+    ? 'Cleared: Milo gets only your question, plus the web if Web search is on. Press to change.'
+    : chatScope === 'market'
+      ? 'Market only: the macro regime, sectors, indices and the daily read. No company data. Press to change.'
+      : bits.length
+        ? 'What Milo reads with every question: ' + meant.join('; ')
+          + '. It cannot see anything not listed here. Press to change.'
+        : 'Nothing is loaded. Milo has your question, general knowledge and, if Web search '
+          + 'is on, the web; naming a ticker lets it look one up. Press to change.';
 
   /* The chip row above the input is now only for follow-ups on a loaded
    * symbol. The empty-state starter cards cover the "what can I ask" job
@@ -41522,10 +41660,318 @@ const pulseChartBars = new Map();
 let pulseChartSeq = 0;
 
 function pulseChartsIn(html) {
-  return pulseSourcesIn(html.replace(PULSE_CHART_RE, (m, sym, span) => `<div class="pulse-chart" data-sym="${
+  return pulseSourcesIn(miloActionsIn(html).replace(PULSE_CHART_RE, (m, sym, span) => `<div class="pulse-chart" data-sym="${
     sym}" data-span="${span}"><div class="pc-plot"></div><div class="pc-cap">${sym}, daily close over the last ${
     PULSE_CHART_WORDS[span]}</div></div>`));
 }
+
+/* Milo's actions (2026-10-12).
+ *
+ * Milo writes `[[action KIND args]]` on a line of its own (FORMAT_PROMPT) and
+ * the terminal turns it into a card. Milo never performs anything: the reader
+ * presses the card, the arguments are checked against the terminal's own
+ * lists of supported values first, a change that persists (a watchlist, a
+ * saved question, a level on the chart) shows what it will do and asks to be
+ * confirmed, and the card says it is done only after the change has been read
+ * back from where it was stored. Anything else in an action tag becomes a
+ * line saying it is not available, never a button. */
+const MILO_ACTION_RE = /\[\[action ([a-z]+)((?: [^\]\n]*)?)\]\]/g;
+const MILO_SYMBOL = /^[A-Z][A-Z0-9.\-]{0,9}$/;
+const MILO_SECTIONS = {
+  overview: ['overview', 'Overview'], chart: ['chart', 'Chart'], options: ['swing', 'Options'],
+  investing: ['long', 'Investing'], earnings: ['earnings', 'Earnings'],
+  financials: ['financials', 'Financials'], news: ['news', 'News'],
+};
+const MILO_RANGES = ['1m', '3m', '6m', '1y', 'all'];
+const MILO_INTERVALS = ['daily', 'weekly'];
+const MILO_STUDIES = {
+  sma20: 'SMA 20', sma50: 'SMA 50', sma200: 'SMA 200', ema9: 'EMA 9', ema21: 'EMA 21', ema50: 'EMA 50',
+  vol: 'Volume', stages: 'Weinstein stages', matrend: 'MA Trend Identifier',
+  rsi: 'RSI pane', macd: 'MACD pane', tso: 'Trend Strength Oscillator pane',
+};
+const MILO_PERSISTS = new Set(['watch', 'save', 'level']);
+
+/* The arguments after the kind: bare words and "quoted phrases". The reply
+ * has been through mdLite, so a quote may arrive as &quot; or curly. */
+function miloActionArgs(raw) {
+  const text = String(raw || '').replace(/&quot;|[“”]/g, '"').replace(/&#39;|[‘’]/g, "'").trim();
+  const out = [];
+  const re = /"([^"]{0,200})"|(\S+)/g;
+  let m;
+  while ((m = re.exec(text))) out.push(m[1] !== undefined ? m[1] : m[2]);
+  return out;
+}
+
+/* A checked action, or { bad } saying why it cannot be offered. Pure, so the
+ * tests can run every case without a page. */
+function miloParseAction(kind, args) {
+  const sym = (v) => String(v || '').toUpperCase().replace(/^\$/, '');
+  if (kind === 'open') {
+    const t = sym(args[0]);
+    const section = String(args[1] || 'overview').toLowerCase();
+    if (!MILO_SYMBOL.test(t)) return { bad: 'that is not a ticker Optic can open' };
+    if (!MILO_SECTIONS[section]) return { bad: `Optic has no "${section}" section` };
+    return { kind, sym: t, section, label: `Open ${t} · ${MILO_SECTIONS[section][1]}` };
+  }
+  if (kind === 'compare') {
+    const list = [...new Set(args.map(sym).filter((t) => MILO_SYMBOL.test(t)))];
+    if (list.length < 2 || list.length > 4) return { bad: 'Compare takes two to four tickers' };
+    return { kind, syms: list, label: `Compare ${list.join(', ')}` };
+  }
+  if (kind === 'watch') {
+    const t = sym(args[0]);
+    if (!MILO_SYMBOL.test(t)) return { bad: 'that is not a ticker Optic can watch' };
+    const list = String(args[1] || '').trim().slice(0, 60);
+    return { kind, sym: t, list, label: list ? `Add ${t} to “${list}”` : `Add ${t} to a watchlist` };
+  }
+  if (kind === 'chart') {
+    const range = String(args[0] || '').toLowerCase();
+    const interval = String(args[1] || 'daily').toLowerCase();
+    if (!MILO_RANGES.includes(range)) return { bad: `the chart has no ${range || 'such'} range` };
+    if (!MILO_INTERVALS.includes(interval)) return { bad: `the chart has no ${interval} interval here` };
+    return { kind, range, interval, label: `Chart: ${range.toUpperCase()}, ${interval}` };
+  }
+  if (kind === 'indicator') {
+    const id = String(args[0] || '').toLowerCase();
+    if (!MILO_STUDIES[id]) return { bad: `Optic has no "${id}" study` };
+    return { kind, id, label: `Show ${MILO_STUDIES[id]}` };
+  }
+  if (kind === 'screen') {
+    const words = String(args.join(' ') || '').trim().slice(0, 300);
+    if (words.length < 3) return { bad: 'there were no criteria to screen on' };
+    return { kind, words, label: `Find stocks: “${words}”` };
+  }
+  if (kind === 'save') {
+    const q = String(args.join(' ') || '').trim().slice(0, 500);
+    if (q.length < 8) return { bad: 'there was no question to save' };
+    return { kind, question: q, label: 'Save this question to Research' };
+  }
+  if (kind === 'level') {
+    const price = Number(String(args[0] || '').replace(/[$,]/g, ''));
+    const label = String(args[1] || 'Level').trim().slice(0, 40);
+    if (!(price > 0) || !isFinite(price)) return { bad: 'that is not a price' };
+    return { kind, price, note: label, label: `Mark ${fmt(price, 2)} on the chart (${label})` };
+  }
+  return { bad: `Optic cannot "${kind}" from here` };
+}
+
+/* Every number in the context under a name that reads as a price level. A
+ * level Milo offers to draw has to be one of these, so the chart never gets a
+ * line the terminal did not compute. */
+function miloContextLevels(ctx) {
+  const out = [];
+  const LEVELISH = /(level|support|resistance|pivot|sma|ema|fib|retrace|poc|vah|val|wall|flip|high|low|close|price|target|stop|entry|r1|r2|r3|s1|s2|s3)/i;
+  const walk = (v, key, depth) => {
+    if (depth > 6 || v === null || v === undefined) return;
+    if (typeof v === 'number') { if (LEVELISH.test(key) && v > 0 && isFinite(v)) out.push(v); return; }
+    if (Array.isArray(v)) { v.slice(0, 60).forEach((x) => walk(x, key, depth + 1)); return; }
+    if (typeof v === 'object') Object.keys(v).forEach((k) => walk(v[k], k, depth + 1));
+  };
+  walk(ctx || {}, '', 0);
+  return out;
+}
+
+function miloLevelGrounded(price, ctx) {
+  return miloContextLevels(ctx).some((v) => Math.abs(v - price) / price <= 0.0025);
+}
+
+function miloActionCard(a) {
+  if (a.bad) {
+    return `<div class="milo-act milo-act-off" role="note">Not available: ${esc(a.bad)}.</div>`;
+  }
+  const persists = MILO_PERSISTS.has(a.kind);
+  const sub = a.kind === 'watch' ? 'Changes your watchlist. Nothing changes until you confirm.'
+    : a.kind === 'save' ? 'Keeps the question in Research. Nothing is saved until you confirm.'
+      : a.kind === 'level' ? 'Draws a dashed level labelled Milo on your chart. You can remove it.'
+        : a.kind === 'screen' ? 'Opens Scan and runs Find stocks on these words.'
+          : 'Opens it in Optic. Nothing is saved.';
+  return `<div class="milo-act" data-milo-act="${esc(JSON.stringify(a))}">
+    <div class="milo-act-what">${esc(a.label)}</div>
+    <div class="milo-act-sub">${esc(sub)}</div>
+    <div class="milo-act-list"></div>
+    <div class="milo-act-btns">
+      <button type="button" class="btn${persists ? ' primary' : ''}" data-milo-act-go>${persists ? 'Confirm' : 'Go'}</button>
+      ${persists ? '<button type="button" class="btn" data-milo-act-skip>Not now</button>' : ''}
+    </div>
+    <div class="milo-act-result" role="status" aria-live="polite"></div>
+  </div>`;
+}
+
+function miloActionsIn(html) {
+  let n = 0;
+  return html.replace(MILO_ACTION_RE, (m, kind, rest) => {
+    n += 1;
+    if (n > 2) return '';
+    return miloActionCard(miloParseAction(kind, miloActionArgs(rest)));
+  });
+}
+
+function miloActResult(card, text, ok) {
+  const host = card.querySelector('.milo-act-result');
+  if (host) { host.textContent = text; host.className = 'milo-act-result ' + (ok ? 'ok' : 'bad'); }
+  if (ok) {
+    card.dataset.done = '1';
+    card.querySelectorAll('[data-milo-act-go], [data-milo-act-skip]').forEach((b) => { b.disabled = true; });
+  }
+}
+
+/* Click a control the chart's own handler reads, so a range or interval set by
+ * Milo goes through exactly the path a press on the toolbar takes. */
+function miloPressChartControl(attr, value) {
+  const view = views.chart;
+  if (!view) return false;
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.hidden = true;
+  b.setAttribute(attr, value);
+  view.appendChild(b);
+  b.click();
+  b.remove();
+  return true;
+}
+
+function miloWaitFor(test, ms = 4000) {
+  return new Promise((resolve) => {
+    const t0 = Date.now();
+    const tick = () => {
+      if (test()) { resolve(true); return; }
+      if (Date.now() - t0 > ms) { resolve(false); return; }
+      setTimeout(tick, 80);
+    };
+    tick();
+  });
+}
+
+async function miloRunAction(card, a) {
+  if (a.kind === 'open') {
+    loadTicker(a.sym, MILO_SECTIONS[a.section][0]);
+    const ok = await miloWaitFor(() => STATE.ticker === a.sym && STATE.view === MILO_SECTIONS[a.section][0]);
+    return [ok, ok ? `Opened ${a.sym} on ${MILO_SECTIONS[a.section][1]}.` : 'It did not open. Try the search box.'];
+  }
+  if (a.kind === 'compare') {
+    STATE.compareInputs = a.syms.slice();
+    switchView('compare');
+    await runCompare();
+    const ok = !!(STATE.compare && STATE.compare.available === true);
+    return [ok, ok ? `Compare is showing ${a.syms.join(', ')}.`
+      : `Compare could not run: ${(STATE.compare && STATE.compare.reason) || 'no answer from the feed'}.`];
+  }
+  if (a.kind === 'chart' || a.kind === 'indicator') {
+    if (STATE.view !== 'chart') {
+      const sym = STATE.chartSymbol || STATE.ticker;
+      if (!sym) return [false, 'Load a ticker first; the chart needs a symbol.'];
+      loadTicker(sym, 'chart');
+      await miloWaitFor(() => STATE.view === 'chart');
+    }
+    if (a.kind === 'chart') {
+      if (a.interval !== chartInterval) miloPressChartControl('data-ws-interval', a.interval);
+      miloPressChartControl('data-ws-range', a.range);
+      const ok = chartRange === a.range && chartInterval === a.interval;
+      return [ok, ok ? `The chart is on ${a.range.toUpperCase()}, ${a.interval}.` : 'The chart did not take that frame.'];
+    }
+    if (['rsi', 'macd', 'tso'].includes(a.id)) {
+      if (!wsPaneOpen(a.id)) { wsTogglePane(a.id); wsPaneArriving = a.id; wsRepaintWithPanes(); }
+      return [wsPaneOpen(a.id), wsPaneOpen(a.id) ? `${MILO_STUDIES[a.id]} is open.` : 'It did not open.'];
+    }
+    wsSetOverlay(a.id, true);
+    wsRedrawChart();
+    return [wsOverlayOn(a.id), wsOverlayOn(a.id) ? `${MILO_STUDIES[a.id]} is on.` : 'It did not switch on.'];
+  }
+  if (a.kind === 'screen') {
+    switchView('scan');
+    const found = await miloWaitFor(() => document.getElementById('sc-ask-text'));
+    if (!found) return [false, 'Scan did not open.'];
+    document.getElementById('sc-ask-text').value = a.words;
+    const r = await runScanAsk(a.words);
+    const res = r && r.result;
+    if (!r || r.error) return [false, `The screen could not run: ${(r && r.error) || 'no answer'}.`];
+    return [true, res && res.available ? `Scan found ${fmt(res.matched, 0)} matching names.` : 'Scan read the request; its ranking is still building.'];
+  }
+  if (a.kind === 'save') {
+    const have = savedResearch()
+      .some((r) => String(r.question || '').trim().toLowerCase() === a.question.toLowerCase());
+    if (have) return [true, 'That question is already in Research.'];
+    const ok = await saveResearch({ question: a.question, ticker: STATE.ticker || null });
+    return [!!ok, ok ? 'Saved to Research.' : 'It was not saved.'];
+  }
+  if (a.kind === 'watch') {
+    const lists = watchAllLists();
+    let target = null;
+    if (a.list) target = lists.find((l) => l.name.toLowerCase() === a.list.toLowerCase()) || null;
+    if (!target) {
+      const pick = card.querySelector('[data-milo-list]');
+      if (pick) target = lists.find((l) => String(l.id) === pick.value) || null;
+    }
+    if (!target && lists.length > 1) {
+      const host = card.querySelector('.milo-act-list');
+      host.innerHTML = `<label>Which list? <select data-milo-list>${lists.map((l) => `<option value="${
+        esc(String(l.id))}"${String(l.id) === String(watchActiveId()) ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select></label>`;
+      return [null, a.list ? `There is no list called “${a.list}”. Pick one and confirm.` : 'Pick a list and confirm.'];
+    }
+    if (target && String(target.id) !== String(watchActiveId())) await watchListSwitch(target.id);
+    if (watchList().includes(a.sym)) return [true, `${a.sym} is already on ${(watchActiveList() || {}).name || 'your watchlist'}.`];
+    const next = [...new Set([...watchList(), a.sym])];
+    await watchWrite(next);
+    STATE.watchlist = null;
+    loadWatchlist(true);
+    const ok = watchList().includes(a.sym);
+    return [ok, ok ? `Added ${a.sym} to ${(watchActiveList() || {}).name || 'your watchlist'}.` : `${a.sym} was not added.`];
+  }
+  if (a.kind === 'level') {
+    const sym = STATE.chartSymbol;
+    const d = STATE.chartData;
+    if (!sym || !d || d === 'loading') return [false, 'Open the chart first; a level is drawn on the chart on screen.'];
+    const ctx = chatContextPayload();
+    if (!miloLevelGrounded(a.price, ctx)) {
+      return [false, `${fmt(a.price, 2)} is not one of the levels Optic computed for this chart, so it was not drawn.`];
+    }
+    const have = wsDrawings().find((x) => x.origin === 'milo' && x.kind === 'hline'
+      && Math.abs(x.points[0].p - a.price) / a.price < 0.0005);
+    if (have) return [true, `That level is already on the ${sym} chart.`];
+    const dates = (wsSeries(d) || {}).dates || [];
+    const dr = { id: wsDrawId(), kind: 'hline', points: [{ t: dates[dates.length - 1] || null, p: a.price }],
+      color: 'accent', width: 1.6, origin: 'milo', text: a.note };
+    wsSaveDrawings([...wsDrawings(), dr]);
+    wsRenderDrawings();
+    const ok = wsStoredDrawings()[sym] ? wsStoredDrawings()[sym].some((x) => x.id === dr.id) : wsDrawings().some((x) => x.id === dr.id);
+    card.dataset.drawId = dr.id;
+    return [ok, ok ? `Marked ${fmt(a.price, 2)} on the ${sym} chart. Select it and press Delete, or use Remove here, to take it off.` : 'The level was not saved.'];
+  }
+  return [false, 'Optic cannot do that from here.'];
+}
+
+document.addEventListener('click', async (evt) => {
+  const btn = evt.target.closest && evt.target.closest('[data-milo-act-go], [data-milo-act-skip], [data-milo-act-undo]');
+  if (!btn) return;
+  const card = btn.closest('.milo-act');
+  if (!card || card.dataset.running === '1') return;
+  if (btn.hasAttribute('data-milo-act-skip')) { miloActResult(card, 'Left as it was.', true); return; }
+  let a;
+  try { a = JSON.parse(card.dataset.miloAct); } catch (e) { return; }
+  if (btn.hasAttribute('data-milo-act-undo')) {
+    const id = card.dataset.drawId;
+    if (id) { wsSaveDrawings(wsDrawings().filter((x) => x.id !== id)); wsRenderDrawings(); }
+    btn.remove();
+    miloActResult(card, 'Removed from the chart.', true);
+    return;
+  }
+  if (chatState.busy) { miloActResult(card, 'Wait for Milo to finish, then press it.', false); return; }
+  if (card.dataset.done === '1') return;
+  card.dataset.running = '1';
+  btn.disabled = true;
+  let ok; let text;
+  try { [ok, text] = await miloRunAction(card, a); }
+  catch (err) { ok = false; text = `It did not work: ${err.message || 'unknown error'}.`; }
+  card.dataset.running = '';
+  if (ok === null) { btn.disabled = false; miloActResult(card, text, false); return; }
+  if (!ok) btn.disabled = false;
+  miloActResult(card, text, !!ok);
+  if (ok && a.kind === 'level' && card.dataset.drawId) {
+    card.querySelector('.milo-act-btns').insertAdjacentHTML('beforeend',
+      '<button type="button" class="btn" data-milo-act-undo>Remove</button>');
+    card.querySelector('[data-milo-act-undo]').disabled = false;
+  }
+});
 
 /* Where a figure came from.
  *
@@ -41707,6 +42153,19 @@ function paintReply(bubble, text) {
   wrap.querySelectorAll(':scope > .pulse-ups').forEach((n) => n.remove());
   const rows = followUpsHTML(ups);
   if (rows) bubble.insertAdjacentElement('afterend', rows);
+}
+
+/* A line in the conversation that is neither side speaking: a ticker switch.
+ * Shown, not sent; the server's own note to the model says the same thing. */
+function addChatNote(text) {
+  const log = $('#chat-log');
+  if (!log) return null;
+  const el = document.createElement('div');
+  el.className = 'msg chat-note';
+  el.setAttribute('role', 'note');
+  el.textContent = text;
+  log.appendChild(el);
+  return el;
 }
 
 function addMsg(role, text) {
@@ -42169,16 +42628,23 @@ async function sendChat(text) {
   // every subsequent turn.
   const fileNote = files.length
     ? `\n\n[attached: ${files.map((f) => f.name).join(', ')}]` : '';
+  const context = chatContextForSend();
+  const focusTicker = context.focus.ticker;
+  if (context.focus.previous_ticker && focusTicker && context.focus.previous_ticker !== focusTicker) {
+    addChatNote(`Now looking at ${focusTicker} (was ${context.focus.previous_ticker}). `
+      + `Milo is told the earlier answers were about ${context.focus.previous_ticker}.`);
+  }
   addMsg('user', text + fileNote);
   chatState.messages.push({ role: 'user', content: text + fileNote });
+  if (focusTicker) chatState.lastFocusTicker = focusTicker;
   const node = addMsg('assistant', '');
   const scout = pulseReplyScout(node, true);
-  pulseStepsStart(node, 'Reading what is on your screen');
+  pulseStepsStart(node, chatScope === 'none' ? 'Reading your question' : 'Reading what is on your screen');
 
   try {
     const reply = await streamTo('/api/chat', {
       messages: chatState.messages,
-      context: chatContextPayload(),
+      context,
       web: $('#chat-web').checked,
       attachments: files,
       persona: pulsePersona,

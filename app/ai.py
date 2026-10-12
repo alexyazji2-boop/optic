@@ -214,7 +214,8 @@ below still come after it.
 
 End every reply with two or three follow-ups, one per line, each starting with
 `→ `, and write nothing after the last one. The terminal turns them into
-buttons: pressing one puts its words in the reader's message box.
+buttons: pressing one sends its words as the reader's next question, shown in
+the conversation like anything they type.
 
 Build them from the question just asked and the answer you gave. The best are
 the next thing somebody who has just read this answer would want: the figure the
@@ -230,7 +231,9 @@ Only suggest what this terminal can do. You cannot set a price alert on request:
 the alerts inbox exists, but it is fed by the terminal's own scans rather than by
 you. You cannot send email, cannot route an order, and there is no custom
 indicator builder. An offer the reader accepts and you then cannot honour is
-worse than one fewer suggestion.
+worse than one fewer suggestion. Good follow-ups to reach for when they fit:
+"What could challenge this read?", "Explain that more simply", or a comparison
+with a named neighbour.
 
 Leave them out only when the message is a greeting or a thank-you.
 
@@ -243,6 +246,38 @@ closes from its own price history in that spot. One chart per answer at most,
 only for a symbol you are discussing, and say in a sentence beside it what the
 reader should look at. Never write the chart's numbers as if you had read them
 off it: the terminal draws it after you write.
+
+## Actions in the terminal
+
+You can offer a small set of actions. Each is a line of its own, and the
+terminal turns it into a card the reader presses. You never perform an action
+yourself and must never say one is done: the card reports the result after the
+reader presses it. Offer one only when the reader asked for it or it is the
+obvious next step, at most two per answer. The exact forms:
+
+- `[[action open SYMBOL SECTION]]` opens a company on a section: overview,
+  chart, options, investing, earnings, financials or news.
+- `[[action compare SYM1 SYM2]]` opens Compare with two to four symbols.
+- `[[action watch SYMBOL "List name"]]` adds a symbol to a watchlist. Leave the
+  name out to let the reader pick the list. The reader confirms first.
+- `[[action chart RANGE INTERVAL]]` sets the Charting tab's range (1m, 3m, 6m,
+  1y or all) and interval (daily or weekly).
+- `[[action indicator ID]]` switches on a chart study: sma20, sma50, sma200,
+  ema9, ema21, ema50, vol, stages, matrend, rsi, macd or tso.
+- `[[action screen "words"]]` runs the Scan tab's Find stocks on those words.
+  Use the screener's own vocabulary: price, the day's change, 1- and 3-month
+  returns, pullbacks from the 3-month high, the 52-week range, volume, daily
+  range and the 20-, 50- and 200-day averages. It has no fundamentals.
+- `[[action save "question"]]` saves a question to the reader's research list.
+  The reader confirms first.
+- `[[action level PRICE "label"]]` marks a horizontal level on the reader's
+  chart, labelled as yours. Only a level that appears in CONTEXT (a computed
+  support, resistance, pivot, average or retracement), at its CONTEXT value. Never
+  a level you estimated. The reader confirms first and can remove it.
+
+If the reader asks for something these cannot do (an order, an alert, an
+email, a custom indicator), say so in a sentence and offer the nearest one that
+works.
 
 ## Where a figure came from
 
@@ -976,14 +1011,113 @@ def _prune(value: Any, depth: int = 0) -> Any:
     return value
 
 
+# How much of a thread goes back to the model. The whole thread went every
+# turn, unbounded until the 60-message save cap: a long conversation cost more
+# on each message and diluted the newest context (audit, 2026-10-12).
+HISTORY_MAX_TURNS = 24
+HISTORY_MAX_CHARS = 60_000
+
+
+def bound_history(history: Any) -> List[Dict[str, Any]]:
+    """The newest turns that fit, starting on a reader's turn."""
+    turns: List[Dict[str, Any]] = []
+    for turn in history if isinstance(history, list) else []:
+        if not isinstance(turn, dict):
+            continue
+        role = "assistant" if turn.get("role") == "assistant" else "user"
+        text = str(turn.get("content") or "").strip()
+        if text:
+            turns.append({"role": role, "content": text})
+    kept: List[Dict[str, Any]] = []
+    total = 0
+    for turn in reversed(turns):
+        if len(kept) >= HISTORY_MAX_TURNS or (kept and total + len(turn["content"]) > HISTORY_MAX_CHARS):
+            break
+        kept.append(turn)
+        total += len(turn["content"])
+    kept.reverse()
+    while kept and kept[0]["role"] != "user":
+        kept.pop(0)
+    if len(kept) < len(turns) and kept:
+        kept[0] = {"role": "user", "content": "[Earlier turns of this conversation were left out to "
+                   "keep it short.]\n\n" + kept[0]["content"]}
+    return kept
+
+
+_CTX_SYMBOL = re.compile(r"^[A-Z0-9^][A-Z0-9.^=\-]{0,11}$")
+_CTX_WORDS = re.compile(r"^[A-Za-z0-9 &'.,:()/\-]{1,60}$")
+_CTX_STALE_MINUTES = 30
+
+
+def _ctx_word(value: Any, pattern: re.Pattern = _CTX_WORDS) -> Optional[str]:
+    """A short label from the browser, or None. The focus block is the reader's
+    own browser describing its screen; it is still checked, because a label the
+    model reads as an instruction is a way in."""
+    text = str(value or "").strip()
+    return text if pattern.match(text) else None
+
+
+def _ctx_time(value: Any) -> Optional[datetime]:
+    try:
+        when = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    return when if when.tzinfo else when.replace(tzinfo=timezone.utc)
+
+
+def context_header(snapshot: Dict[str, Any], now: Optional[datetime] = None) -> str:
+    """What the reader is looking at, when it was captured and what changed.
+
+    Added 2026-10-12 for "Milo should understand the active ticker, page,
+    selected chart timeframe ... never silently answer using an outdated
+    company snapshot". It was "as of" a date and nothing else, so a thread that
+    moved from AAPL to NVDA carried no word that it had."""
+    now = now or datetime.now(timezone.utc)
+    focus = snapshot.get("focus") if isinstance(snapshot.get("focus"), dict) else {}
+    captured = _ctx_time(focus.get("captured_at"))
+    if captured is None or abs((now - captured).total_seconds()) > 6 * 3600:
+        captured = now
+    lines = ["CONTEXT. Terminal output captured {} (UTC) in the reader's browser; "
+             "quotes are delayed about 15 minutes.".format(captured.strftime("%Y-%m-%d %H:%M"))]
+    scope = focus.get("scope")
+    if scope == "none":
+        lines.append("The reader cleared the context for this question: nothing from their "
+                     "screen was sent. Answer from the question, general knowledge and web "
+                     "search, and say so if a figure would need their screen.")
+    elif scope == "market":
+        lines.append("The reader limited the context to the market: no single-company data "
+                     "was sent, so do not quote company figures as if you had them.")
+    ticker = _ctx_word(focus.get("ticker"), _CTX_SYMBOL)
+    view = _ctx_word(focus.get("view_label"))
+    if ticker or view:
+        where = "The reader is on {}".format(
+            "{}'s {} page".format(ticker, view) if ticker and view else (ticker or "the {} page".format(view)))
+        chart = focus.get("chart") if isinstance(focus.get("chart"), dict) else {}
+        rng, ivl = _ctx_word(chart.get("range")), _ctx_word(chart.get("interval"))
+        if rng or ivl:
+            where += ", with the chart on {}".format(" ".join(x for x in (rng, ivl) if x))
+        lines.append(where + ".")
+    previous = _ctx_word(focus.get("previous_ticker"), _CTX_SYMBOL)
+    if previous and ticker and previous != ticker:
+        lines.append("The reader switched from {p} to {t} since their last question. Earlier "
+                     "answers in this thread were about {p}; everything below is {t}'s. Do not "
+                     "carry {p}'s figures over, and say which symbol you mean.".format(p=previous, t=ticker))
+    fetched = _ctx_time(snapshot.get("data_as_of"))
+    if fetched is not None:
+        age = (captured - fetched).total_seconds() / 60.0
+        if age > _CTX_STALE_MINUTES:
+            lines.append("The company data below was fetched about {} minutes before this "
+                         "question. Where a figure could have moved since, say it may be "
+                         "stale.".format(int(age)))
+    return "\n".join(lines)
+
+
 def build_context(snapshot: Dict[str, Any]) -> str:
-    pruned = _prune(snapshot)
+    pruned = _prune({k: v for k, v in snapshot.items() if k not in ("focus", "data_as_of")})
     body = json.dumps(pruned, indent=1, default=str)
     if len(body) > 90_000:
         body = body[:90_000] + "\n... [context truncated]"
-    return "CONTEXT. Terminal output as of {}:\n```json\n{}\n```".format(
-        date.today().isoformat(), body
-    )
+    return "{}\n```json\n{}\n```".format(context_header(snapshot), body)
 
 
 def _sse(event: str, payload: Dict[str, Any]) -> str:
@@ -2183,12 +2317,7 @@ async def stream_chat(
         )
         return
 
-    messages: List[Dict[str, Any]] = []
-    for turn in history:
-        role = "assistant" if turn.get("role") == "assistant" else "user"
-        text = (turn.get("content") or "").strip()
-        if text:
-            messages.append({"role": role, "content": text})
+    messages = bound_history(history)
 
     if not messages:
         yield _sse("error", {"message": "No message to send."})

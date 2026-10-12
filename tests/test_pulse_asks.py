@@ -119,8 +119,11 @@ def test_every_button_that_asks_only_fills_the_box():
     assert "draftPulse(chartPulsePrompt(askChart.dataset.askChart));" in handler
     topic = _fn("openPulseWith")
     assert topic.rstrip().endswith("draftPulse(text);\n}")
-    ask_text = APP[APP.index("const askText = evt.target.closest('[data-ask-text]');"):][:120]
+    ask_text = APP[APP.index("const askText = evt.target.closest('[data-ask-text]');"):][:1400]
     assert "draftPulse(askText.dataset.askText)" in ask_text
+    # Except a follow-up under Milo's own answer, which sends visibly
+    # (2026-10-12); see test_only_send_deep_research_and_follow_ups_send.
+    assert "const followUp = askText.closest('#chat .pulse-ups');" in ask_text
     starter = APP[APP.index("const starter = evt.target.closest('.pulse-card');"):][:120]
     assert "draftPulse(starter.dataset.q);" in starter
     reask = APP[APP.index("const open = evt.target.closest('[data-research-open]');"):][:700]
@@ -135,13 +138,17 @@ def test_every_button_that_asks_only_fills_the_box():
     assert "$('#pulse-modes').addEventListener('click', onPulseSuggestion);" in APP
 
 
-def test_only_send_and_deep_research_send():
-    """No button but the panel's own Send sends a question: the old sending
-    function is gone, and sendChat is called from nowhere else."""
+def test_only_send_deep_research_and_follow_ups_send():
+    """No button but the panel's own Send sends a question, with one exception
+    since 2026-10-12: a follow-up chip under Milo's answer, pressed while Milo
+    can answer, sends its words as the next visible question ("clicking one
+    should visibly submit that question, rather than triggering hidden
+    background research"). sendChat is called from those two places only."""
     assert "askPulseNow" not in CODE
     calls = [m.start() for m in re.finditer(r"\bsendChat\(", CODE)]
     defined = CODE.index("async function sendChat(") + len("async function ")
     send = CODE[CODE.index("$('#chat-send').addEventListener('click'"):][:200]
-    assert [c for c in calls if c != defined] == [CODE.index("sendChat(text);",
-                                                             CODE.index("$('#chat-send')"))]
+    follow = CODE.index("sendChat(askText.dataset.askText);")
+    assert sorted(c for c in calls if c != defined) == sorted(
+        [CODE.index("sendChat(text);", CODE.index("$('#chat-send')")), follow])
     assert "sendChat(text);" in send

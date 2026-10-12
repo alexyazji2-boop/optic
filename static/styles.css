@@ -2272,6 +2272,7 @@ body.chat-resizing svg { pointer-events: none; }
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  position: relative;   /* the context menu hangs from it */
 }
 #chat .chat-head .title { font-weight: 600; font-size: var(--t-micro); text-transform: uppercase; letter-spacing: 0.08em; font-family: var(--label-face); }
 #chat .chat-head .close { background: none; border: none; color: var(--ink-muted); cursor: pointer; font-size: var(--t-heading); }
@@ -2287,7 +2288,54 @@ body.chat-resizing svg { pointer-events: none; }
  * `min-width: 0` and the ellipsis so a long context list shortens itself
  * instead of shoving the buttons off the panel: the controls must survive the
  * label, not the other way round. The full list is in the chip's title. */
-#chat .chat-head #chat-ctx { margin-right: auto; min-width: 0; }
+#chat .chat-head #chat-ctx {
+  margin-right: auto; min-width: 0;
+  /* A button since 2026-10-12: it opens the menu that changes or clears what
+     Milo reads. 32px tall so it is a fair target beside the icon buttons. */
+  font: inherit; font-size: var(--t-caption); min-height: 32px; cursor: pointer;
+}
+#chat .chat-head #chat-ctx:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.chat-ctx-menu {
+  position: absolute; z-index: 5;
+  top: calc(100% - var(--space-2)); left: var(--space-4);
+  width: min(320px, calc(100% - 2 * var(--space-4)));
+  display: flex; flex-direction: column; gap: var(--space-1);
+  padding: var(--space-2);
+  background: var(--raised); border: 1px solid var(--border-strong); border-radius: var(--r-lg);
+  box-shadow: 0 12px 32px var(--shadow-cast);
+}
+.chat-ctx-opt {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  min-height: 44px; padding: var(--space-2) var(--space-3);
+  background: none; border: 1px solid transparent; border-radius: var(--r-md);
+  color: var(--ink); text-align: left; cursor: pointer; font: inherit;
+}
+.chat-ctx-opt small { color: var(--ink-muted); font-size: var(--t-caption); }
+.chat-ctx-opt.on { border-color: var(--border-strong); background: var(--sys-fill); }
+.chat-ctx-opt:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+/* Milo's action cards: what it will do, then a press. See miloActionCard. */
+.milo-act {
+  margin: var(--space-3) 0; padding: var(--space-3);
+  border: 1px solid var(--border-strong); border-radius: var(--r-lg);
+  background: var(--surface-2);
+  display: flex; flex-direction: column; gap: var(--space-2);
+}
+.milo-act-what { font-weight: 600; color: var(--ink); }
+.milo-act-sub { font-size: var(--t-caption); color: var(--ink-muted); }
+.milo-act-btns { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.milo-act-btns .btn { min-height: 40px; }
+.milo-act-list select { margin-left: var(--space-2); min-height: 36px; font-size: 16px; }
+.milo-act-result:empty { display: none; }
+.milo-act-result { font-size: var(--t-small); }
+.milo-act-result.ok { color: var(--pos); }
+.milo-act-result.bad { color: var(--warn); }
+.milo-act-off { font-size: var(--t-caption); color: var(--ink-muted); border-style: dashed; }
+/* A ticker switch in the conversation: a quiet line, not a message. */
+#chat .msg.chat-note {
+  margin: var(--space-3) 0; padding: var(--space-2) var(--space-3);
+  border-left: 2px solid var(--border-strong);
+  color: var(--ink-muted); font-size: var(--t-caption);
+}
 #chat .chat-head #chat-ctx > span:last-child {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
