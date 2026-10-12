@@ -483,7 +483,7 @@ def test_deleting_the_account_hands_the_browser_to_the_guest_first():
 
 
 def test_settings_says_what_signing_out_does():
-    assert ("Recent symbols, Pulse chats, drawings and notes stay in this browser, kept apart "
+    assert ("Recent symbols, Milo chats, drawings and notes stay in this browser, kept apart "
             "for each account, and signing out puts yours away until you sign in here again.") in RAW
 
 

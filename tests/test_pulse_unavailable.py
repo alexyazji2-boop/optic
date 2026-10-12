@@ -103,8 +103,8 @@ def test_a_blocked_composer_says_which_block_it_is():
     """One placeholder for both reasons would tell a guest that Pulse is
     unavailable when it is available and they are not signed in."""
     fn = _reason()
-    assert "placeholder: 'Pulse is unavailable'" in fn
-    assert "placeholder: 'Sign in to use Pulse'" in fn
+    assert "placeholder: 'Milo is unavailable'" in fn
+    assert "placeholder: 'Sign in to use Milo'" in fn
     render = APP.split("function renderPulseUnavailable() {", 1)[1].split("\nfunction ", 1)[0]
     assert "input.placeholder = reason.placeholder;" in render
 

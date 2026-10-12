@@ -497,13 +497,13 @@ def test_the_ask_pulse_labels_are_actually_different_from_each_other():
     assert len(values) >= 30, len(values)
     # A handful of honest repeats is fine; one label for everything is not.
     assert len(set(values)) >= len(values) - 3, sorted(values)
-    assert "Ask Pulse" not in values, "the generic label is the fallback, not an entry"
+    assert "Ask Milo" not in values, "the generic label is the fallback, not an entry"
 
 
 def test_an_unknown_topic_still_renders_a_usable_button():
     """Adding a topic must not be able to produce an empty pill."""
     fn = APP_JS.split("function askPulse(topic) {", 1)[1].split("\n}", 1)[0]
-    assert "PULSE_ASK_LABELS[topic] || 'Ask Pulse'" in fn
+    assert "PULSE_ASK_LABELS[topic] || 'Ask Milo'" in fn
 
 
 def test_a_panels_stored_identity_does_not_include_its_buttons():
@@ -811,4 +811,4 @@ def test_the_sector_caveat_cannot_become_the_default_action():
     # alone would leave this branch reading a name nothing produces, and two
     # rows would both claim the return key without anything throwing.
     assert "if (r.group === ASK_GROUP) r.tag = ''" in block
-    assert "const ASK_GROUP = 'Ask Pulse';" in APP_JS
+    assert "const ASK_GROUP = 'Ask Milo';" in APP_JS

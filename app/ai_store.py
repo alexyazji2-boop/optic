@@ -96,7 +96,7 @@ FEATURES: Dict[str, str] = {
     "catalyst_read": "Catalyst mode read",
     "weekly": "Weekly update",
     "catalyst_scan": "Catalyst scan",
-    "pulse": "Pulse chat",
+    "pulse": "Milo chat",
     "research": "Deep research",
     "scan": "Scan requests",
 }

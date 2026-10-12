@@ -162,9 +162,9 @@ def test_a_widget_button_that_cannot_act_says_so():
     fn = body_of("wsWidgetRail")
     assert "const reachable = wsDockReachable();" in fn
     assert "reachable ? '' : 'disabled'" in fn
-    assert "Close Pulse to open this panel" in fn
+    assert "Close Milo to open this panel" in fn
     # No em dashes in reader-facing copy.
-    assert "—" not in fn.split("Close Pulse")[1][:120]
+    assert "—" not in fn.split("Close Milo")[1][:120]
 
 
 def test_the_rail_is_rebuilt_when_pulse_opens_or_closes():

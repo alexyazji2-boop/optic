@@ -170,7 +170,7 @@ def test_it_names_the_assistant_the_way_the_app_does():
     throughout, and a test caught the copy importing that wording: the reader
     renamed it and the product's own name wins over the spec's."""
     fn = body_of("knowledgeOnboardingHTML")
-    assert "Ask Pulse" in fn
+    assert "Ask Milo" in fn
     assert "Ask Optic" not in fn
 
 

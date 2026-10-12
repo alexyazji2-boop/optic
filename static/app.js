@@ -1,6 +1,6 @@
 /* Optic Terminal — view layer. */
 
-const ASSISTANT_NAME = 'Pulse';
+const ASSISTANT_NAME = 'Milo';
 
 const STATE = {
   // No ticker until the user picks one — the terminal opens on the home page
@@ -166,7 +166,7 @@ const GUEST_THING_LABELS = {
   'optic.paper.v1': 'paper trades',
   'optic.chart.drawings.v2': 'chart drawings',
   'optic.chart.notes.v1': 'chart notes',
-  'optic.pulse.history.v1': 'Pulse conversations',
+  'optic.pulse.history.v1': 'Milo conversations',
 };
 
 let sessionAskPending = null;   // the question, while it waits for an answer
@@ -2500,7 +2500,7 @@ const LEGAL = {
   // Per-view notice, naming the specific way that view's output could be taken
   // for advice. Generic boilerplate gets skimmed; a specific sentence doesn't.
   areas: {
-    pulse: '<strong>Not financial advice.</strong> Pulse states which way the <em>data</em> leans and how strongly. That is a reading of numbers on this screen, not a recommendation for you: it knows nothing about your horizon, capital, tax position or other holdings, and cannot judge whether any of this suits you. It can be confidently wrong. The inputs are delayed, several are labelled proxies, and a lean is not a forecast.',
+    pulse: '<strong>Not financial advice.</strong> Milo states which way the <em>data</em> leans and how strongly. That is a reading of numbers on this screen, not a recommendation for you: it knows nothing about your horizon, capital, tax position or other holdings, and cannot judge whether any of this suits you. It can be confidently wrong. The inputs are delayed, several are labelled proxies, and a lean is not a forecast.',
     swing: '<strong>Not a recommendation.</strong> The strikes, limit prices, stops and targets on this tab are model output, not advice to place any trade. Options can expire worthless and lose the entire premium.',
     long: '<strong>Not a recommendation.</strong> A conviction score summarises historical data. It says nothing about whether this holding suits your horizon, taxes or existing exposure.',
     roth: '<strong>Not retirement or tax advice.</strong> A rules-based illustration to compare against your own plan. It is not tailored to your income, tax situation, other accounts or goals, and contribution limits and eligibility change. Confirm current rules with the IRS and a licensed professional.',
@@ -5330,7 +5330,7 @@ function moreSheetHTML() {
   document.querySelector('#account-slot .acct-signin')
     ? `<button type="button" class="more-row" data-auth-open="signin" data-more-close>
         <span class="more-lab">Sign in</span>
-        <span class="more-what">A free account, for Pulse and your saved watchlist</span></button>` : ''}</div>
+        <span class="more-what">A free account, for Milo and your saved watchlist</span></button>` : ''}</div>
     </div>
   </div>`;
 }
@@ -9754,7 +9754,7 @@ function marketQuestions(data) {
 
   return `<section class="hm-block">
     <div class="hm-block-head">
-      <h2 class="hm-h">Ask Pulse</h2>
+      <h2 class="hm-h">Ask Milo</h2>
     </div>
     <ul class="cc-qs">${qs.slice(0, 5).map((q) => `<li>
       <button type="button" class="cc-q" data-ask-text="${esc(q)}">${esc(q)}</button>
@@ -10114,7 +10114,7 @@ let paletteSeq = 0;          // guards against a slow search overwriting a fast 
 /* Places the palette can send you, with the words someone would actually type.
  * Keyed off the same view ids switchView already understands, so this cannot
  * offer a destination that does not exist. */
-/* The assistant's name is Pulse, everywhere.
+/* The assistant's name is Milo, everywhere (it was Pulse until 2026-10-12).
  *
  * Three places said "Ask Pulse" — the home panel's heading, a command-bar quick
  * action, and the command bar's own group label — while the button on every
@@ -10127,7 +10127,7 @@ let paletteSeq = 0;          // guards against a slow search overwriting a fast 
  * produces. It would not have thrown — two rows would simply both claim the
  * return key, which is CLAUDE.md's own warning about a parameter compared as a
  * string. */
-const ASK_GROUP = 'Ask Pulse';
+const ASK_GROUP = 'Ask Milo';
 
 const PALETTE_PLACES = [
   { view: 'home', label: 'Home', terms: 'home start' },
@@ -10242,7 +10242,7 @@ const QUICK_ACTIONS = [
     run: () => switchView('compare') },
   { label: 'Charting', detail: 'Drawings, studies and intraday',
     run: () => switchView('chart') },
-  { label: 'Ask Pulse', detail: 'Put a question to the assistant',
+  { label: 'Ask Milo', detail: 'Put a question to the assistant',
     run: () => openPulse() },
 ];
 
@@ -10603,7 +10603,7 @@ async function paletteBuild(query, early) {
     const ask = {
       group: ASK_GROUP, lead: '\u2727', label: q,
       detail: STATE.ticker ? `With ${STATE.ticker} and everything else loaded in context`
-        : 'Pulse answers from whatever is loaded',
+        : 'Milo answers from whatever is loaded',
       tag: isQuestion ? 'enter' : '',
       run: () => { closePalette(); draftPulse(q); },
     };
@@ -11238,9 +11238,9 @@ function renderOpticPulse(d) {
   const src = g.sources || {};
   const fresh = agoWords(g.as_of);
 
-  return `<section class="pl-hero span-all" aria-label="Optic Pulse">
+  return `<section class="pl-hero span-all" aria-label="Optic's read">
     <div class="pl-top">
-      <span class="pl-eyebrow">Optic Pulse</span>
+      <span class="pl-eyebrow">Optic's read</span>
       ${fresh ? `<span class="pl-fresh">Updated ${esc(fresh)}</span>` : ''}
     </div>
 
@@ -13898,7 +13898,7 @@ function advancedOn() {
 function advancedToggleHTML() {
   const on = advancedOn();
   return `<button type="button" class="adv-toggle" role="switch" aria-checked="${on}" data-adv-toggle
-    title="Opens the specialist panels, full terminology and methodology on every page. Same setting as Optic Mode in the Pulse panel.">
+    title="Opens the specialist panels, full terminology and methodology on every page. Same setting as Optic Mode in the Milo panel.">
     <span class="adv-track" aria-hidden="true"><span class="adv-knob"></span></span>
     <span class="adv-label">Show advanced analysis</span></button>`;
 }
@@ -13925,8 +13925,8 @@ function secActionsHTML(sym) {
       ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2H4.5Z"/><path d="M10 21h4"/></svg
       ><span class="sec-act-label">Alert</span></button>
     <button type="button" class="btn sm primary sec-act" data-sec-pulse="${esc(sym)}"
-      title="Open Pulse with ${esc(sym)} as the context"
-      >${pulseMarkHTML('pulse-glyph-sm')}<span class="sec-act-label">Ask Pulse</span></button>
+      title="Open Milo with ${esc(sym)} as the context"
+      >${pulseMarkHTML('pulse-glyph-sm')}<span class="sec-act-label">Ask Milo</span></button>
   </div>`;
 }
 
@@ -16316,9 +16316,9 @@ function ovNextHTML(d, factors, advanced) {
           ${s.compare ? `data-ov-compare="${esc(sym)}"` : `data-sec-view="${esc(s.view)}" data-sec-sym="${esc(sym)}"`}>
           <span>${esc(s.text)}</span><span class="ov-step-to" aria-hidden="true">${esc(s.compare ? 'Compare' : SUB_LABELS[s.view] || '')} →</span></button></li>`).join('')}
           <li><button type="button" class="ov-step" data-ov-ask="${esc(sym)}">
-            <span>Ask Pulse a question about ${esc(sym)}</span><span class="ov-step-to" aria-hidden="true">Ask Pulse →</span></button></li>
+            <span>Ask Milo a question about ${esc(sym)}</span><span class="ov-step-to" aria-hidden="true">Ask Milo →</span></button></li>
         </ul>
-        <p class="ov-fine">Ask Pulse writes a question for you to edit. Nothing is sent until you press Send.</p>
+        <p class="ov-fine">Ask Milo writes a question for you to edit. Nothing is sent until you press Send.</p>
       </div>
     </div>
   </section>`;
@@ -21308,7 +21308,7 @@ function chartReadHTML() {
     <p class="cr-note">From completed daily sessions, whatever the bars on screen. The
       zones are the ones Levels draws. Research only, not a recommendation.</p>
     <button type="button" class="ws-menu-btn cr-explain" data-explain-chart="${esc(sym)}"
-      title="Put a question about this chart in Pulse's box">Explain chart with Pulse</button>`;
+      title="Put a question about this chart in Milo's box">Explain chart with Milo</button>`;
 }
 
 /* One overlay menu, or a direct toggle when it holds a single item.
@@ -23546,7 +23546,7 @@ function wsWidgetRail() {
       data-ws-widget-toggle="${w.id}" aria-pressed="${on}"
       ${reachable ? '' : 'disabled'}
       title="${reachable ? esc(w.label) : esc(w.label
-        + '. Close Pulse to open this panel: there is not room for the chart and both.')}">
+        + '. Close Milo to open this panel: there is not room for the chart and both.')}">
       <span class="ws-wrail-ico" aria-hidden="true">${wsWidgetIcon(w.icon)}</span>
       <span class="ws-wrail-lab">${esc(w.short || w.label)}</span>
     </button>`;
@@ -23563,9 +23563,9 @@ function wsWidgetRail() {
         * is one prompt builder and the two entry points cannot drift. */''}
     <button type="button" class="ws-wrail-btn ws-wrail-pulse"
       data-ask-chart="${esc(STATE.chartSymbol || '')}"
-      title="Have Pulse read this chart and summarise the big picture">
+      title="Have Milo read this chart and summarise the big picture">
       <span class="ws-wrail-ico" aria-hidden="true">${pulseMarkHTML('pulse-glyph-sm')}</span>
-      <span class="ws-wrail-lab">Pulse</span>
+      <span class="ws-wrail-lab">Ask Milo</span>
     </button>
   </div>`;
 }
@@ -28434,7 +28434,7 @@ function renderResearchHub() {
       </ul>
       ${saved.length > 8 ? `<p class="rh-more">${saved.length - 8} older, kept ${
     signedIn() ? 'on your account' : 'in this browser'}.</p>` : ''}
-    </div>` : `<p class="rh-empty">Nothing saved yet. Ask Pulse something and use
+    </div>` : `<p class="rh-empty">Nothing saved yet. Ask Milo something and use
       <strong>Save</strong> on the answer to keep the question here.${
     signedIn() ? '' : ' Saved questions live in this browser until you have an account.'}</p>`}
   </section>`;
@@ -30070,7 +30070,7 @@ function renderSettings() {
     <div class="settings-row">
       <div class="settings-label">Advanced analysis
         <span class="settings-hint">The same setting as the switch on each page
-          and as Optic Mode in the Pulse panel: on is Advanced or Professional, off is
+          and as Optic Mode in the Milo panel: on is Advanced or Professional, off is
           Simple, Financially Literate or Adaptive. Turning it off returns you to
           the level you had chosen.</span></div>
       ${advancedToggleHTML()}
@@ -30118,14 +30118,14 @@ function renderSettings() {
        left it out. Both follow PERSONAL_KEYS now, and signed in, the
        account's half moves to the row below. */
     ['Stored on this device', signedIn()
-      ? 'Theme, time zone, chart preferences, recent symbols, Pulse chats, drawings, notes, Paper Desk trades and Retirement holdings'
+      ? 'Theme, time zone, chart preferences, recent symbols, Milo chats, drawings, notes, Paper Desk trades and Retirement holdings'
       : DEVICE_STORED_GUEST],
     ['Stored on the server', signedIn()
       ? 'Your account: name, email, watchlists, watches, saved research, theses, valuation scenarios, signal history, preferences and sessions'
       : 'Nothing about you'],
   ])}
     <p class="caveat">${signedIn()
-    ? 'Appearance and chart preferences live in this browser. Your watchlist and saved research live on your account, so clearing site data does not lose them. Recent symbols, Pulse chats, drawings and notes stay in this browser, kept apart for each account, and signing out puts yours away until you sign in here again.'
+    ? 'Appearance and chart preferences live in this browser. Your watchlist and saved research live on your account, so clearing site data does not lose them. Recent symbols, Milo chats, drawings and notes stay in this browser, kept apart for each account, and signing out puts yours away until you sign in here again.'
     : 'Settings live in this browser only. Clearing site data resets them.'}</p>
   </div>
 
@@ -30314,16 +30314,16 @@ async function loadAllowance() {
 function pulseBlockedReason() {
   const ai = ACCOUNT.ai;
   if (ai && ai.enabled === false) {
-    return { text: ai.hint || 'Pulse is unavailable.', placeholder: 'Pulse is unavailable' };
+    return { text: ai.hint || 'Milo is unavailable.', placeholder: 'Milo is unavailable' };
   }
   const state = ACCOUNT.allowance;
   if (state && state.requires_account === true) {
     const perDay = Number(state.signed_in_allowance) || 0;
     return {
-      html: `Pulse needs a free account.
+      html: `Milo needs a free account.
         <button type="button" data-auth-open="signup">Create one</button>${
   perDay ? ` for ${perDay} messages a day` : ''}. Every other panel stays open.`,
-      placeholder: 'Sign in to use Pulse',
+      placeholder: 'Sign in to use Milo',
     };
   }
   return null;
@@ -30469,7 +30469,7 @@ function accountFace(user, cls) {
  * build both print. It follows PERSONAL_KEYS: the page is named for its nav
  * label, Retirement, rather than the Roth store it reads. */
 const DEVICE_STORED_GUEST = 'Theme, time zone, chart preferences, your watchlists '
-  + 'and watches, saved research, theses, Pulse chats, drawings, notes, Paper Desk '
+  + 'and watches, saved research, theses, Milo chats, drawings, notes, Paper Desk '
   + 'trades and any Retirement holdings you entered';
 
 function accountGuestPanel() {
@@ -34486,7 +34486,7 @@ function chartPulse(symbol) {
    * The name is on the button itself, so it survives the label going. */
   return `<button type="button" class="chart-pulse is-explain"
     data-explain-chart="${esc(symbol)}" aria-label="Explain chart"
-    title="Have Pulse read this chart: trend, levels, momentum, and what breaks it">${
+    title="Have Milo read this chart: trend, levels, momentum, and what breaks it">${
   pulseMarkHTML('chart-pulse-ico')}<span class="chart-pulse-lab">Explain chart</span></button>`;
 }
 
@@ -34617,13 +34617,13 @@ function explainerHTML(topic) {
 }
 
 function askPulse(topic) {
-  const label = PULSE_ASK_LABELS[topic] || 'Ask Pulse';
+  const label = PULSE_ASK_LABELS[topic] || 'Ask Milo';
   if (ASK_EXPLAINERS[topic]) {
     return `<button type="button" class="ask-pulse" data-explain="${esc(topic)}"
       aria-haspopup="dialog" aria-expanded="false" title="${esc(label)}">${esc(label)}</button>`;
   }
   return `<button type="button" class="ask-pulse" data-ask="${esc(topic)}"
-    title="Ask Pulse: ${esc(label)}">${esc(label)}</button>`;
+    title="Ask Milo: ${esc(label)}">${esc(label)}</button>`;
 }
 
 /* The answer, beside the chip that asked. In the page rather than fixed to the
@@ -34647,7 +34647,7 @@ function openExplainer(btn) {
     </div>
     <div class="explain-body">${body}</div>
     ${PULSE_TOPICS[topic] ? `<button type="button" class="explain-more" data-ask="${esc(topic)}"
-      >Ask Pulse a follow-up</button><span class="explain-cost">Uses a Pulse chat.</span>` : ''}`;
+      >Ask Milo a follow-up</button><span class="explain-cost">Uses a Milo chat.</span>` : ''}`;
   document.body.appendChild(pop);
   const r = btn.getBoundingClientRect();
   const edge = 12;
@@ -38097,7 +38097,7 @@ function scanAskHTML() {
       <div class="sc-ask-actions">
         <button type="submit" class="btn primary">Find symbols now</button>
         <button type="button" class="btn" data-sc-ask-pulse
-          title="Put the request and its matches in Pulse's box, to edit and send">Ask Pulse</button>
+          title="Put the request and its matches in Milo's box, to edit and send">Ask Milo</button>
       </div>
     </form>
     <div class="sc-ask-examples" role="group" aria-label="Examples">
@@ -38119,7 +38119,7 @@ function scanAskResultHTML() {
   const chips = (r.understood || []).map((u) => `<span class="sc-ask-chip">${esc(u)}</span>`).join('');
   const missing = [...(r.unsupported || []), ...((r.unread || []).length
     ? [`not read: ${(r.unread || []).join(' ')}`] : [])];
-  const by = r.read_by === 'pulse' ? 'Read by Pulse' : 'Read by the screener';
+  const by = r.read_by === 'pulse' ? 'Read by Milo' : 'Read by the screener';
   const head = `<div class="sc-ask-read">
       <span class="wv-filter-label">${esc(by)}</span>
       ${chips || '<span class="muted">Nothing in that could be read as a screen.</span>'}
@@ -40598,9 +40598,9 @@ function updateChatContext() {
     return CTX_MEANS[b] || b;
   });
   chip.title = bits.length
-    ? 'What Pulse reads with every question: ' + meant.join('; ')
+    ? 'What Milo reads with every question: ' + meant.join('; ')
       + '. It cannot see anything not listed here.'
-    : 'Nothing is loaded, so Pulse answers from your question alone. '
+    : 'Nothing is loaded, so Milo answers from your question alone. '
       + 'Load a ticker or open Macro to give it the numbers.';
 
   /* The chip row above the input is now only for follow-ups on a loaded
@@ -40757,7 +40757,7 @@ function knowledgeOnboardingHTML() {
            that already explains itself, on the one visit a reader is
            deciding whether the page is too much for them. */''}
       <p class="kob-sub">Optic explains as much as you want. It changes the wording,
-        never the figures, and you can change it any time in Ask Pulse.</p>
+        never the figures, and you can change it any time in Ask Milo.</p>
     </div>
     <div class="kob-opts" role="group" aria-labelledby="kob-h">
       ${modes.map((m) => `<button type="button" class="kob-opt" data-kob-pick="${esc(m.id)}">
@@ -40906,7 +40906,7 @@ function renderPersonaPicker() {
     <div class="pp" data-pp-root>
       <button type="button" class="pp-field oc-field" data-pp-toggle
         aria-haspopup="true" aria-expanded="${ppOpen ? 'true' : 'false'}"
-        title="The lens Pulse answers through">
+        title="The lens Milo answers through">
         <span class="pp-eyebrow">Optic Persona</span>
         <span class="pp-now">${current && current.glyph
     ? esc(current.glyph) + ' ' : ''}${esc(current ? current.label : '')}</span>
@@ -41043,10 +41043,10 @@ function pulseStarters(expanded) {
     <div class="pulse-hello-row">
       ${scoutHTML('full', `${ASSISTANT_NAME} guide: what to ask, examples and animation`)}
       ${scoutHTML('full') ? scoutMenuHTML() : ''}
-      <div class="pulse-hello" role="note">Hi, I'm ${esc(ASSISTANT_NAME)}. What would you like to look into?</div>
+      <div class="pulse-hello" role="note">Hi, I'm ${esc(ASSISTANT_NAME)}. What would you like to explore?</div>
     </div>
     ${pulseCanAskShown ? `<p class="pulse-can-ask" id="pulse-can-ask" role="note">${mdLite(PULSE_CAN_ASK)}</p>` : ''}
-    <p class="pulse-empty-sub">Pulse reads the terminal's own computed output for
+    <p class="pulse-empty-sub">Milo reads the terminal's own computed output for
       whatever is on screen${sym ? `· currently <strong>${esc(sym)}</strong>` : ''}.
       Ask anything, or start with one of these.</p>
     <div class="pulse-cards">

@@ -214,7 +214,7 @@ def test_the_box_has_both_answers_and_shows_how_it_read():
         prompt: scanAskPulsePrompt('Strong stocks on the 200 SMA line', STATE.scanAsk.response) }));
     """ % json.dumps(RESPONSE))
     html, prompt = out["html"], out["prompt"]
-    assert ">Find symbols now</button>" in html and ">Ask Pulse</button>" in html
+    assert ">Find symbols now</button>" in html and ">Ask Milo</button>" in html
     assert "Read by the screener" in html and "Within 3% of the 200-day average" in html
     assert 'data-analyse="GOOGL"' in html and "1 of 484 ranked names match" in html
     assert ">Edit as filters</button>" in html

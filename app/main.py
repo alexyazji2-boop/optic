@@ -4882,7 +4882,7 @@ async def screener_ask(request: Request,
             reading, read_by, unread = stored[0], "pulse", []
             unsupported = list(reading.get("unsupported") or [])
         elif ai.available().get("enabled") is not True:
-            note = "Pulse is not configured here, so only this screen's own reading was used."
+            note = "Milo is not configured here, so only this screen's own reading was used."
         else:
             try:
                 _spend_guard(request)
@@ -4903,7 +4903,7 @@ async def screener_ask(request: Request,
                     unsupported = list(reading["unsupported"])
                     await _run(ai_store.keep, "scan", key, reading)
                 else:
-                    note = (got or {}).get("reason") or "Pulse could not read it this time."
+                    note = (got or {}).get("reason") or "Milo could not read it this time."
 
     filters, states = reading.get("filters") or [], reading.get("states") or []
     spec = {"filters": filters, "states": states, "sort": reading.get("sort") or "score",
@@ -5568,7 +5568,7 @@ def _spend_guard(request: Request) -> None:
             # turn a disk problem into "Pulse is closed to everyone".
             raise HTTPException(
                 status_code=401,
-                detail="Pulse needs a free account. {} messages a day once "
+                detail="Milo needs a free account. {} messages a day once "
                        "you are in, and everything else in the terminal stays "
                        "open either way.".format(
                            auth_store.PLANS["free"]["ai_calls_per_day"]))

@@ -23,10 +23,10 @@
      closes up into a grey smudge at 16px, and a transparent icon inverts itself
      between light and dark browser chrome. The PNGs exist because Apple's
      touch icon and the Android install prompt do not read SVG. -->
-<link rel="icon" href="/icon.svg?v=514" type="image/svg+xml">
-<link rel="icon" href="/icon-192.png?v=514" sizes="192x192" type="image/png">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=514">
-<link rel="manifest" href="/site.webmanifest?v=514">
+<link rel="icon" href="/icon.svg?v=515" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png?v=515" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=515">
+<link rel="manifest" href="/site.webmanifest?v=515">
 <!-- This is what keeps the site out of search results, and robots.txt no longer
      duplicates it. The two are honoured at different stages and only one of
      them can do this job: a crawler told not to fetch a page never sees the
@@ -55,7 +55,7 @@
      beside Inter, the second was downloaded and never drawn. -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/inter/opsz.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/space-grotesk/index.css">
-<link rel="stylesheet" href="styles.css?v=514">
+<link rel="stylesheet" href="styles.css?v=515">
 <!-- The reader's size preference, applied before the first paint.
      Inline and synchronous on purpose: app.js is loaded at the end of the body,
      so anything done there runs after the page has already been laid out once,
@@ -234,7 +234,7 @@
        (loading / guest / user) specifically to avoid it. -->
   <div class="account-slot topbar-right" id="account-slot"></div>
 
-  <button class="btn primary" id="chat-toggle"><span class="pulse-mark" id="pulse-mark-btn"></span>&nbsp;Pulse</button>
+  <button class="btn primary" id="chat-toggle"><span class="pulse-mark" id="pulse-mark-btn"></span>&nbsp;Ask Milo</button>
 </header>
 
 <div class="statusline" id="statusline">
@@ -383,16 +383,16 @@
     </svg><span class="rp-btn-label">Report a Problem</span></button>
 </div>
 
-<aside id="chat" aria-label="Pulse assistant">
+<aside id="chat" aria-label="Milo, your AI research companion">
   <!-- Drag to resize, like a browser's split. A separator rather than a button:
        it has an orientation and a value, and the arrow keys move it. See
        installChatResize in app.js for the clamp and why full width overlays. -->
   <div class="chat-grip" id="chat-grip" role="separator" aria-orientation="vertical"
-       tabindex="0" aria-label="Resize Pulse. Arrow keys to adjust, Home for narrow, End to cover the screen"
+       tabindex="0" aria-label="Resize Milo. Arrow keys to adjust, Home for narrow, End to cover the screen"
        title="Drag to resize"></div>
   <div class="chat-head">
     <span class="pulse-mark" id="pulse-mark-head"></span>
-    <span class="title">Pulse</span>
+    <span class="title">Milo</span>
     <span class="chip neutral" id="chat-ctx"><span class="dot"></span><span>No context</span></span>
     <!-- No New or Save here. A pencil and an arrow shipped in this row on
          2026-10-04 and were removed on the reader's call the next day: bare
@@ -400,7 +400,7 @@
          conversation is the New button in Saved conversations, as it was. -->
     <button class="icon-btn" id="chat-history-btn" title="Saved conversations"
             aria-label="Saved conversations" aria-expanded="false">&#9782;</button>
-    <button class="close" id="chat-close" aria-label="Close assistant">&times;</button>
+    <button class="close" id="chat-close" aria-label="Close Milo">&times;</button>
   </div>
 
   <!-- Everything between the header and the input scrolls as one.
@@ -413,7 +413,7 @@
        beside the input they were 400px that could never be scrolled past. -->
   <!-- What Pulse is, in one line, for the reader who opened it to find out.
        Simplify pass (2026-10-11). -->
-  <p class="chat-desc">Optic's assistant. It answers from the figures on screen, and a
+  <p class="chat-desc">Milo, your AI research companion. It answers from the figures on screen, and a
     question is only sent when you press Send.</p>
   <div class="chat-body" id="chat-body">
     <!-- The response lens. Changes which figures Pulse leads with and how much
@@ -436,7 +436,7 @@
     <div class="pulse-modes-host" id="pulse-modes"></div>
     <!-- Chips for staged files, cleared once the message is sent. -->
     <div class="chat-attachments" id="chat-attachments"></div>
-    <textarea id="chat-input" placeholder="Ask Pulse about the loaded analysis. E.g. &quot;what does the gamma profile imply for a swing long here?&quot;"></textarea>
+    <textarea id="chat-input" placeholder="Ask Milo about the loaded analysis. E.g. &quot;what does the gamma profile imply for a swing long here?&quot;"></textarea>
     <div class="chat-actions">
       <button class="btn primary" id="chat-send">Send</button>
       <button class="btn" id="chat-research">Deep research</button>
@@ -467,13 +467,13 @@
      being global, and tests/test_js_parses.py loads it under JavaScriptCore
      with script semantics. That harness is the only thing that catches a
      deleted function with live call sites. -->
-<script src="components/knowledge.js?v=514"></script>
-<script src="components/scout.js?v=514"></script>
-<script src="charts.js?v=514"></script>
+<script src="components/knowledge.js?v=515"></script>
+<script src="components/scout.js?v=515"></script>
+<script src="charts.js?v=515"></script>
 <!-- Before app.js: it exposes window.OpticAuth, which app.js reads at load to
      decide whether the watchlist and the saved research come from the account or
      from this browser. -->
-<script src="auth.js?v=514"></script>
-<script src="app.js?v=514"></script>
+<script src="auth.js?v=515"></script>
+<script src="app.js?v=515"></script>
 </body>
 </html>

@@ -37,7 +37,7 @@ def test_the_assistant_is_called_pulse_everywhere():
     said "Ask Pulse" and the assistant introduces itself as Pulse. Optic is the
     terminal; Pulse is the thing you ask."""
     assert "Ask Optic" not in APP_JS
-    assert "const ASK_GROUP = 'Ask Pulse';" in APP_JS
+    assert "const ASK_GROUP = 'Ask Milo';" in APP_JS
 
 
 def test_the_group_name_is_one_constant():
@@ -46,7 +46,7 @@ def test_the_group_name_is_one_constant():
     reading the old one — silently, since nothing throws."""
     # The quick-action label spells it too, and that is fine: it is display only.
     # What must be single is the value the comparison reads.
-    assert APP_JS.count("group: 'Ask Pulse'") == 0, "the group name is inlined"
+    assert APP_JS.count("group: 'Ask Milo'") == 0, "the group name is inlined"
     assert "group: ASK_GROUP" in APP_JS
     assert "r.group === ASK_GROUP" in APP_JS
 

@@ -88,12 +88,12 @@ FALLBACK_BETA = "server-side-fallback-2026-07-01"
 # is the whole design of this module and it was only stated in a comment here,
 # where no reader of the app could see it.
 PERSONA_CHANGES: List[str] = [
-    "Which figures Pulse leads with, and how much doubt it carries.",
+    "Which figures Milo leads with, and how much doubt it carries.",
     "The register it writes in.",
 ]
 PERSONA_NEVER_CHANGES: List[str] = [
     "The numbers. Every persona reads the same panels and cites the same figures.",
-    "The risk warnings, and what Pulse will not do.",
+    "The risk warnings, and what Milo will not do.",
 ]
 
 # A glyph that is a text symbol by default (the scales, the shield, the pawn)
@@ -353,10 +353,10 @@ def flavour_for(user_turns: int, text: str, persona: str = "neutral") -> str:
     return FLAVOUR_PROMPT if gate % FLAVOUR_ONE_IN == 0 else ""
 
 
-SYSTEM_PROMPT = """You are Pulse, the analysis assistant built into a personal options-and-markets \
-terminal. Similar in spirit to a research co-pilot sitting next to a trading screen. The name reflects \
-what you do: read the market's vital signs (gamma, flow, momentum, sentiment) in real time, not anything \
-medical. Only introduce yourself by name if asked; don't work it into unrelated answers. The user is a \
+SYSTEM_PROMPT = """You are Milo, the analysis assistant built into a personal options-and-markets \
+terminal. Similar in spirit to a research co-pilot sitting next to a trading screen. If asked who you \
+are, introduce yourself as "Milo, your AI research companion." \
+Only introduce yourself by name if asked; don't work it into unrelated answers. The user is a \
 self-directed trader running their own analysis.
 
 ## What you have
@@ -802,7 +802,7 @@ def _human_error(exc: Exception) -> str:
     # again" -- which told every reader to retry a fault no retry can reach.
     if "not scoped to a workspace" in blob or "anthropic-workspace-id" in blob:
         _note_refused()
-        return ("Pulse is not set up correctly on this deployment: its API key needs "
+        return ("Milo is not set up correctly on this deployment: its API key needs "
                 "a workspace, and Anthropic refuses every request until it has one. "
                 "Asking again will not help; the key has to be changed.")
     # A 400 is the API saying the request itself is wrong, so the same request
@@ -930,7 +930,7 @@ def available() -> Dict[str, Any]:
         # Same branch and same reason as `originIsEphemeral()` on the client:
         # who is reading decides which sentence is true.
         "hint": (
-            "Pulse is not configured on this deployment, so it cannot answer "
+            "Milo is not configured on this deployment, so it cannot answer "
             "questions. Every other panel on the terminal works without it."
             if is_hosted() else
             "Set ANTHROPIC_API_KEY in your environment (or run `ant auth login`) to enable "
@@ -2174,7 +2174,7 @@ async def stream_chat(
             "error",
             {
                 "message": for_reader(
-                    "Pulse is not configured on this deployment, so it cannot "
+                    "Milo is not configured on this deployment, so it cannot "
                     "answer questions. Every other panel on the terminal works "
                     "without it.",
                     "Assistant is not configured. Set ANTHROPIC_API_KEY in your "

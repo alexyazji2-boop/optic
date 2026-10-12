@@ -93,4 +93,4 @@ def test_it_closes_on_the_x_a_click_elsewhere_or_escape_and_pulse_is_one_press_a
     assert "if (evt.key === 'Escape' && document.getElementById('explain-pop')) closeExplainer(true);" in RAW
     pop = _raw_fn("openExplainer")
     assert 'class="explain-more" data-ask="${esc(topic)}"' in pop
-    assert "Uses a Pulse chat." in pop
+    assert "Uses a Milo chat." in pop
