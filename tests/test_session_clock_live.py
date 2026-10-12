@@ -72,10 +72,10 @@ def test_the_line_is_the_time_now_and_not_the_time_of_the_fetch():
       print('RESULT:' + JSON.stringify({ then: then, now: now, away: away }));
     """ % (json.dumps(SESSION), AT_505, AT_519, AT_519))
     assert out["then"] == "Thu 5:05 pm EDT · Overnight in 2 hours and 55 minutes"
-    assert out["now"] == "Thu 5:19 pm EDT · Overnight in 2 hours and 40 minutes", (
-        "whole minutes left, rounded down, as the server counts them")
+    assert out["now"] == "Thu 5:19 pm EDT · Overnight in 2 hours and 41 minutes", (
+        "5:19 on the clock and 8:00 to go is 2:41: the count agrees with the clock")
     assert out["away"].startswith("Thu 10:19 pm "), out["away"]
-    assert "· Thu 5:19 pm ET · Overnight in 2 hours and 40 minutes" in out["away"], (
+    assert "· Thu 5:19 pm ET · Overnight in 2 hours and 41 minutes" in out["away"], (
         "and the market's own clock beside it, at the same moment")
 
 
@@ -92,7 +92,7 @@ def test_every_second_the_line_and_the_marker_follow_the_clock():
       print('RESULT:' + JSON.stringify({ first: first, then: [line.textContent, mark.style.left], asked: asked }));
     """ % (json.dumps(SESSION), AT_505, AT_519))
     assert out["first"] == ["Thu 5:05 pm EDT · Overnight in 2 hours and 55 minutes", "71.18%"]
-    assert out["then"] == ["Thu 5:19 pm EDT · Overnight in 2 hours and 40 minutes", "72.19%"]
+    assert out["then"] == ["Thu 5:19 pm EDT · Overnight in 2 hours and 41 minutes", "72.19%"]
     assert out["asked"] == [], "nothing to ask the server while the session holds"
 
 
@@ -127,3 +127,14 @@ def test_the_minute_refresh_runs_without_a_symbol_and_the_tick_is_wired():
     assert '<span class="ses-sub" id="ses-clock">${esc(sessionClockLine(sess, now))}</span>' in render
     assert "left:${sessionDayPct(now)}%" in render
     assert not re.search(r"sess\.now_et\b", render), "the time of the fetch is not printed"
+
+
+def test_the_countdown_adds_up_with_the_clock_beside_it():
+    """Reported 2026-10-12: "Mon 3:58 pm EDT · After hours in 1 minute"."""
+    out = _run("""
+      var sess = { next: { label: 'After hours', starts_at: '2026-10-12T16:00:00-04:00' } };
+      var at = function (t) { return sessionClockLine(sess, Date.parse('2026-10-12T' + t + '-04:00')); };
+      print('RESULT:' + JSON.stringify([at('15:58:00'), at('15:58:30'), at('15:59:59'), at('16:00:00')]));
+    """)
+    assert out == ["Mon 3:58 pm EDT · After hours in 2 minutes", "Mon 3:58 pm EDT · After hours in 2 minutes",
+                   "Mon 3:59 pm EDT · After hours in 1 minute", "Mon 4 pm EDT · After hours starting now"], out

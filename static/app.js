@@ -39155,9 +39155,12 @@ function sessionClockLine(sess, now) {
     : ` · ${dayIn(iso, 'America/New_York')} ${timeIn(iso, 'America/New_York')} ET`;
   const next = sess.next || {};
   const starts = Date.parse(next.starts_at || '');
-  // Whole minutes left, rounded down, as the server counts them.
+  /* Minutes left counted from the minute on the clock beside it, so the two
+   * add up: at 3:58:30 the line read "After hours in 1 minute" next to
+   * "3:58" (reported 2026-10-12), because 90 seconds rounded down is 1. Up,
+   * it is 2, and 3:58 + 2 is the 4:00 the session starts. */
   const minutes = Number.isFinite(starts)
-    ? Math.max(0, Math.floor((starts - now) / 60000)) : next.minutes_away;
+    ? Math.max(0, Math.ceil((starts - now) / 60000)) : next.minutes_away;
   // "Overnight in any moment" read wrong, and the strip now shows that moment
   // for as long as the server takes to say the session has changed.
   const upcoming = !next.label ? ''
