@@ -60,3 +60,17 @@ def test_milo_fits_320_and_keeps_room_on_short_phones():
     short = _media("(max-width: 640px) and (max-height: 720px)")
     assert ".chat-desc { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }" in short
     assert ".pulse-persona-blurb, .pulse-modes-h { display: none; }" in short
+
+
+def test_touch_screens_get_chart_zoom_buttons_beside_explain_chart():
+    """Only Safari pinches a chart; on Android a pinch did nothing. Measured in
+    Chromium touch emulation at 402px: + took 78 bars to 52, - back to 78, and
+    the buttons sit clear of Explain chart and full screen."""
+    app = (ROOT / "static/app.js").read_text()
+    assert "${wsZoomButtons()}\n        ${chartPulse(STATE.chartSymbol)}" in app
+    step = app[app.index("function wsZoomStep(dir) {"):]
+    step = step[:step.index("\n}\n")]
+    assert "CHART_ZOOM.get('ws-chart')" in step and "zoomedWindow(cur, Math.max(0, span - 1), want)" in step
+    assert "Math.max(WS_MIN_BARS, Math.min(cur.total," in step
+    assert ".ws-zoom-btns { display: none; }" in CSS
+    assert ".ws-zoom-btns { display: flex;" in _media("(pointer: coarse)")

@@ -21659,6 +21659,38 @@ const WS_MAX_ICONS = {
   leave: 'M6 2v4H2M10 2v4h4M10 14v-4h4M6 14v-4H2',
 };
 
+/* Zoom buttons for touch screens (2026-10-12 audit): only Safari pinches a
+ * chart (gesturechange below); on Android a pinch did nothing to the chart or
+ * the page, and two fingers draw the measure. Shown under pointer: coarse
+ * only, beside full screen, and zooming about the latest bar through the same
+ * adapter and window maths as the pinch. */
+function wsZoomButtons() {
+  return `<div class="ws-zoom-btns" role="group" aria-label="Zoom the chart">
+    <button type="button" class="ws-zoom-btn" data-ws-zoom="out" aria-label="Zoom out">&minus;</button>
+    <button type="button" class="ws-zoom-btn" data-ws-zoom="in" aria-label="Zoom in">+</button>
+  </div>`;
+}
+
+function wsZoomStep(dir) {
+  const adapter = CHART_ZOOM.get('ws-chart');
+  if (!adapter || !adapter.window) return false;
+  const cur = adapter.window();
+  if (!cur) return false;
+  const span = cur.to - cur.from;
+  const want = Math.max(WS_MIN_BARS, Math.min(cur.total, Math.round(dir === 'in' ? span / 1.5 : span * 1.5)));
+  if (want === span) return false;
+  const next = zoomedWindow(cur, Math.max(0, span - 1), want);
+  if (adapter.apply(next)) { interactiveRedraw(adapter); return true; }
+  return false;
+}
+
+document.addEventListener('click', (evt) => {
+  const b = evt.target.closest && evt.target.closest('[data-ws-zoom]');
+  if (!b) return;
+  evt.preventDefault();
+  wsZoomStep(b.dataset.wsZoom);
+});
+
 function wsMaxButton() {
   const on = wsIsMaximised();
   return `<button type="button" class="ws-full-btn${on ? ' on' : ''}" data-ws-max
@@ -22280,6 +22312,7 @@ function renderChartWorkspace(d) {
         <span class="${signClass(q.change_pct)}" id="ws-chg">${fmtPct(q.change_pct, 2)}</span>
         <span class="stage-chip" id="stage-ws" hidden></span>
         <span class="ws-head-state">${esc(cap(marketSessionET()))}</span>
+        ${wsZoomButtons()}
         ${chartPulse(STATE.chartSymbol)}
       </div>
       ${wsLegend(ps)}
