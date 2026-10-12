@@ -44416,7 +44416,15 @@ function headingName(head) {
    * whose remembered state had never been written and whose heading matched no
    * default. It opened closed, every time, which read as the press doing
    * nothing at all. */
-  clone.querySelectorAll('button, .th-plain, .lvl-count, .chip, .bk-active')
+  /* `.gloss-term` is kept. At the Simple level a heading's words are
+   * themselves a button (glossTerm's inline mode), so stripping every
+   * button left the name empty: makePanelsCollapsible skipped the panel and
+   * panelMinLevel read "always show", and Simple, the level asked for by
+   * readers who want less, opened every glossed panel (Options 18,894px
+   * against 8,314px at the default; ux/UX.md 0.1, 2026-10-11). TITLE_SKIP
+   * makes the same exception for the same reason. An opened definition
+   * (`.gloss-inline`, inserted after the term) is not part of the name. */
+  clone.querySelectorAll('button:not(.gloss-term), .gloss-inline, .th-plain, .lvl-count, .chip, .bk-active')
     .forEach((n) => n.remove());
   return (clone.textContent || '').replace(/\s+/g, ' ').trim();
 }
