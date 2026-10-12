@@ -321,3 +321,12 @@ def test_it_is_styled_rather_than_inheriting_whatever_is_nearby():
     # The disclosure triangle is suppressed the same way .pl-bars does it; two
     # differently-styled disclosures in one panel read as two kinds of control.
     assert ".pl-more > summary::-webkit-details-marker { display: none; }" in CSS
+
+
+def test_read_more_clears_the_lede():
+    """Seen on INTC on 2026-10-12: "Read more" pulled up the lede's whole bottom
+    margin, sat flush under the headline, and its hover drew over the last line.
+    It now pulls up half of it and is only as wide as its words."""
+    assert ".pl-more { margin: calc(var(--space-2) * -1) 0 var(--space-4); }" in CSS
+    at = CSS.index(".pl-more > summary {")
+    assert "width: fit-content;" in CSS[at:CSS.index("}", at)]

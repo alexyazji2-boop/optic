@@ -10044,9 +10044,15 @@ table.data tr, *::-webkit-scrollbar-thumb { transition: none; }
    continuation of that sentence and not as a new section. Same summary
    treatment .pl-bars used to carry before its summary was removed: a small
    underlined word with no disclosure triangle, which is also how .pl-src
-   renders, so the two remaining disclosures in this panel match. */
-.pl-more { margin: calc(var(--space-4) * -1) 0 var(--space-4); }
+   renders, so the two remaining disclosures in this panel match.
+
+   It pulls up half the lede's bottom margin, not all of it: pulled up the
+   whole way it sat flush under the headline's last line, and its hover and
+   focus treatment drew over the descenders. The summary is only as wide as
+   its words, so nothing drawn round it spans the panel. */
+.pl-more { margin: calc(var(--space-2) * -1) 0 var(--space-4); }
 .pl-more > summary {
+  width: fit-content;
   cursor: pointer;
   list-style: none;
   padding-left: var(--space-4);
