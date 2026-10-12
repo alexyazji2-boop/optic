@@ -1448,7 +1448,9 @@ body:not([data-view="home"]) .brand-mark-dot {
   cursor: pointer;
   font-family: var(--label-face);
 }
-.home-quick button:hover { color: var(--ink); border-color: var(--ws-brand-edge); }
+/* Hover is a neutral edge; the brand edge is the chosen state's (--ws-brand-edge), so a hovered chip
+   no longer looks selected, and gold outlines stay the sidebar's (2026-10-12). */
+.home-quick button:hover { color: var(--ink); border-color: var(--border-strong); background: var(--raised); }
 
 .home-foot {
   margin-top: var(--space-7);
@@ -2839,7 +2841,10 @@ body.chat-open footer.legal { padding-right: var(--chat-w); }
   font-size: var(--t-caption);
   cursor: pointer;
   text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color var(--dur-ui) var(--ease-ui);
 }
+#legal-more:hover { color: var(--ink); }
 .legal-full {
   margin-top: var(--space-3);
   max-width: 110ch;
@@ -5229,8 +5234,12 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
   font-size: var(--t-micro);
   color: var(--s1);
   padding: var(--space-1) 0;
+  transition: color var(--dur-ui) var(--ease-ui);
 }
 .pri-more > summary::-webkit-details-marker { display: none; }
+/* "Show all N": its words brighten and underline on hover. It had only the
+   outside-the-box gold pill until 2026-10-12. */
+.pri-more > summary:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
 .pri-more .cal-caret { position: absolute; right: 2px; top: 9px; }
 
 /* --------------------------------------------------------- explainers ----- */
@@ -6705,58 +6714,22 @@ body.chat-full .sessionbar { padding-right: var(--space-5); }
   border-color: transparent;
   font-weight: 600;
 }
-/* Lift and glow.
+/* Hover and press, inside the button's own edges.
  *
- * A 1px rise plus a coloured shadow drawn from the button's own fill, so the
- * glow belongs to the control rather than being a generic drop shadow. Both are
- * compositor properties (transform, box-shadow), so the hover costs no layout.
- *
- * 1px, not 2 or 3. The button sits in a toolbar next to inputs of the same
- * height; a larger lift makes the row look misaligned while the cursor rests on
- * it. The brightness bump stays, because on a small control the shadow alone is
- * easy to miss.
- *
- * color-mix keeps one source of truth: change --btn-primary and the glow
- * follows. Guarded by @supports because the fallback should be a plain shadow
- * rather than no hover state at all. */
+ * It used to lift 1px and cast a glow mixed from its own gold, 4px down and
+ * 14px wide. On the dark plane that glow spread past the button onto whatever
+ * sat beside it, and the lift moved the button out of line with the inputs
+ * next to it (2026-10-12: "keep hover backgrounds and borders within the
+ * intended control's bounds; hovering must not move surrounding content").
+ * Now the fill brightens on hover and darkens on press, and nothing is drawn
+ * outside the box. Keyboard focus keeps the shared :focus-visible ring. */
 .btn.primary {
-  transition: background-color 0.12s ease, border-color 0.12s ease,
-              filter 0.12s ease, transform 0.16s cubic-bezier(0.22, 0.61, 0.36, 1),
-              box-shadow 0.16s ease;
+  transition: background-color 0.12s ease, border-color 0.12s ease, filter 0.12s ease;
 }
-.btn.primary:hover {
-  filter: brightness(1.08);
-  transform: translateY(-1px);
-  /* Derived from --btn-primary, not a literal. This was
-     rgba(28, 114, 216, 0.38) -- #1c72d8, a blue from before the brand became
-     gold -- so every primary button in the app cast a blue glow on hover
-     against its own gold fill. Mixed from the token so it follows the brand and
-     cannot drift again. */
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--btn-primary) 38%, transparent),
-              0 1px 3px var(--shadow-ink);
-}
-@supports (color: color-mix(in srgb, red 50%, blue)) {
-  .btn.primary:hover {
-    box-shadow: 0 4px 14px color-mix(in srgb, var(--btn-primary) 42%, transparent),
-                0 1px 3px var(--shadow-ink);
-  }
-}
-/* Pressing puts it back down. Without this the button stays lifted through the
-   click, which reads as the press not registering. */
-.btn.primary:active {
-  transform: translateY(0);
-  box-shadow: none;
-  filter: brightness(0.96);
-}
-/* Keyboard users get the same affordance; :focus-visible only, so a mouse click
-   does not leave a lifted button behind after the pointer has gone. */
-.btn.primary:focus-visible {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--btn-primary) 38%, transparent);
-}
+@media (hover: hover) { .btn.primary:hover { filter: brightness(1.08); } }
+.btn.primary:active { filter: brightness(0.94); }
 @media (prefers-reduced-motion: reduce) {
-  .btn.primary { transition: background-color 0.12s ease, filter 0.12s ease; }
-  .btn.primary:hover, .btn.primary:focus-visible { transform: none; }
+  .btn.primary { transition: none; }
 }
 
 /* The top bar loses its fill and keeps only a divider. */
@@ -7627,10 +7600,12 @@ body[data-view="chart"] main { padding-top: var(--space-2); }
   border: 1px solid var(--border-strong);
   border-radius: var(--r-xs);
   cursor: pointer;
-  transition: transform var(--dur-ui) var(--ease-ui),
+  transition: border-color var(--dur-ui) var(--ease-ui),
               box-shadow var(--dur-ui) var(--ease-ui);
 }
-.wc-swatch:hover { transform: scale(1.12); }
+/* Hover darkens the swatch's own edge. It used to scale the swatch 12%, which
+   grew it past its box into the gap and towards its neighbours (2026-10-12). */
+@media (hover: hover) { .wc-swatch:hover { border-color: var(--ink); } }
 
 /* box-shadow rather than an outline or a border: a border would eat 2px of the
    swatch and change the colour area, and the ring needs a gap so it reads
@@ -10946,7 +10921,7 @@ body.cp-open { overflow: hidden; }
 .cc-q:hover,
 .cc-q:focus-visible {
   color: var(--ink);
-  border-color: color-mix(in srgb, var(--btn-primary) 45%, var(--border-strong));
+  border-color: var(--border-strong);
   background: var(--bg-hover);
 }
 .cc-q:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
@@ -11627,7 +11602,8 @@ body.cp-open { overflow: hidden; }
               background var(--dur-ui) var(--ease-ui),
               color var(--dur-ui) var(--ease-ui);
 }
-.kob-opt:hover { border-color: var(--brand); background: var(--raised); color: var(--ink); }
+/* Neutral hover: a gold edge here read as this level being chosen before it was (2026-10-12). */
+.kob-opt:hover { border-color: var(--border-strong); background: var(--raised); color: var(--ink); }
 .kob-opt:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .kob-glyph { font-size: var(--t-heading); line-height: 1; }
 .kob-label { font: 600 var(--t-body)/1.25 var(--sans); color: var(--ink); }
@@ -16019,6 +15995,11 @@ table.sticky-first td:first-child {
   color: var(--ink-2);
 }
 .ins-row .ins-more { white-space: nowrap; font-size: var(--t-caption); }
+/* The filing link: a compact text control, underlined on hover (2026-10-12). */
+.ins-more a { transition: color var(--dur-ui) var(--ease-ui); }
+@media (hover: hover) {
+  .ins-more a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+}
 /* The filer's own words about the trade, which run to a sentence about an
    option's strike and expiry: wrapped in a column of its own width rather
    than stretching the table a sentence wide. */
@@ -16191,9 +16172,18 @@ table.ct-table .ct-later { display: block; color: var(--ink-muted); font-size: v
    rules: Safari needs the webkit pseudo-element and everything else takes
    `list-style`. Without them a disclosure triangle sits in front of the impact
    chip and pushes the whole column in by 14px. */
-.ht-det > summary { cursor: pointer; list-style: none; }
+.ht-det > summary { cursor: pointer; list-style: none; transition: color var(--dur-ui) var(--ease-ui); }
 .ht-det > summary::-webkit-details-marker { display: none; }
 .ht-det > summary::marker { content: ""; }
+/* Hover underlines the row's title: a compact text cue inside the row. These
+   rows had the outside-the-box gold pill until 2026-10-12 and then nothing. */
+@media (hover: hover) {
+  .ht-det > summary:hover .ht-what {
+    text-decoration: underline;
+    text-decoration-color: var(--ink-muted);
+    text-underline-offset: 3px;
+  }
+}
 
 /* Opened, the title is allowed to wrap -- which is the entire point, since the
    thing being revealed is usually the end of it. */
@@ -17050,7 +17040,9 @@ table.data.accounts-table td.ac-who { white-space: normal; min-width: 120px; wid
   cursor: pointer;
   transition: background-color var(--dur-fast) var(--ease-ui), border-color var(--dur-fast) var(--ease-ui);
 }
-.pulse-mode:hover { background: var(--sys-fill-hover); border-color: var(--asset-brand); }
+/* Neutral edge on hover: a gold outline on a pill outside the sidebar is the hover the owner
+   removed everywhere but the rail (2026-10-09, re-applied here 2026-10-12). */
+.pulse-mode:hover { background: var(--sys-fill-hover); border-color: var(--border-strong); }
 .pulse-mode.is-deep { border-style: dashed; }
 #chat-research.is-suggested {
   border-color: var(--asset-brand);
@@ -17725,7 +17717,7 @@ table.heat td.name { text-align: left; font-weight: 500; }
 .sym-pick strong { color: var(--ink); font-weight: 600; }
 .sym-pick span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 22ch; }
 @media (hover: hover) {
-  .sym-pick:hover { border-color: var(--brand); color: var(--ink); }
+  .sym-pick:hover { border-color: var(--border-strong); color: var(--ink); }
 }
 .sec-head.is-missing .sec-px-none { color: var(--warn); }
 

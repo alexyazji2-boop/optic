@@ -203,12 +203,16 @@ def test_the_chart_palette_fallbacks_match_their_tokens():
     assert bad == [], bad
 
 
-def test_the_primary_button_glow_follows_the_brand():
+def test_the_primary_button_hover_stays_inside_the_button():
     """It was `rgba(28, 114, 216, 0.38)` -- #1c72d8, a blue from before the
-    brand became gold -- so every primary button cast a blue glow against its
-    own gold fill. Mixed from the token, so it cannot drift again."""
+    brand became gold -- then a glow mixed from the gold fill, 14px wide, that
+    spread onto whatever sat beside the button, plus a 1px lift. Since
+    2026-10-12 hover only brightens the fill: no glow, no lift."""
     assert "rgba(28, 114, 216" not in CSS_NC
-    assert CSS.count("color-mix(in srgb, var(--btn-primary) 38%, transparent)") == 2
+    assert "color-mix(in srgb, var(--btn-primary) 38%, transparent)" not in CSS
+    hover = CSS[CSS.index(".btn.primary:hover {"):]
+    hover = hover[:hover.index("}")]
+    assert "box-shadow" not in hover and "transform" not in hover
 
 
 def test_one_scrim_and_one_shadow_ink():
