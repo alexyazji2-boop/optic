@@ -16409,7 +16409,8 @@ function ovScoreTile(label, horizon, n, words, basis, view, viewLabel) {
     ${words ? `<p class="osc-words">${esc(words)}</p>` : ''}
     <p class="osc-basis">${esc(basis)}</p>
     <p class="ov-fine"><button type="button" class="ov-linkbtn" data-sec-view="${esc(view)}"
-      data-sec-sym="${esc(STATE.ticker || '')}">${esc(viewLabel)}</button></p>
+      data-sec-sym="${esc(STATE.ticker || '')}">${esc(viewLabel)}</button>${n === null ? ''
+    : miloExplainButton(`Optic Score, ${label.toLowerCase()} (${horizon})`, `${fmt(n, 0)}/100${words ? `, ${words}` : ''}`, 'Overview')}</p>
   </div>`;
 }
 
@@ -19035,6 +19036,12 @@ async function paintStage(hostId, symbol, stillCurrent) {
     r.transition_short ? `<span class="stage-tag">${esc(r.transition_short)}</span>` : ''}`;
   host.setAttribute('aria-label', r.label + (r.transition ? '. ' + r.transition : ''));
   host.hidden = false;
+  // Explain this, beside the chip rather than in it: the chip is a reading.
+  const next = host.nextElementSibling;
+  if (next && next.classList.contains('stage-explain')) next.remove();
+  host.insertAdjacentHTML('afterend', miloExplainButton('Weinstein stage',
+    `Stage ${r.stage} (${r.name})${r.transition_short ? `, ${r.transition_short}` : ''}`, '')
+    .replace('class="ws-pane-explain"', 'class="ws-pane-explain stage-explain"'));
 }
 
 function drawInstrumentChart(d) {
