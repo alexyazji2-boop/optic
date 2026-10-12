@@ -466,6 +466,7 @@ const GLOSSARY = {
   'z-score': "A way to measure how unusual a value is compared to its recent normal range. A z-score of +2 or higher (or -2 or lower) means it's unusually stretched.",
   'basis points': "A tiny unit for measuring rates. 100 basis points equals 1%.",
   'rsi': "Relative Strength Index. A 0-100 gauge of whether a stock has been bought or sold too aggressively recently. Above 70 often means overbought, below 30 often means oversold.",
+  'trend strength oscillator': "TrendSpider's gauge of how strong and how stretched a trend is: ADX (trend strength) and RSI (direction) in one line, smoothed. Above +50 a strong move up may be overextended, below -50 a strong move down.",
   'macd': "A trend-following indicator that compares two moving averages to help spot when momentum is shifting up or down.",
   'atr': "Average True Range. A measure of how much a stock typically moves in a single day. A higher ATR means a more volatile stock.",
   'fibonacci retracement': "A charting tool that marks likely support and resistance price levels using a mathematical ratio, meant to guess where a pullback might stop.",
@@ -2966,6 +2967,53 @@ function macdSeries(closes, fast = 12, slow = 26, signalPeriod = 9) {
   const signal = emaSeries(macd.map((v) => (v === null ? null : v)), signalPeriod);
   const hist = macd.map((v, i) => (v === null || signal[i] === null ? null : v - signal[i]));
   return { macd, signal, hist };
+}
+
+/** Wilder's ADX: how strong a trend is, whichever way it runs, 0-100. */
+function adxSeries(high, low, close, period = 14) {
+  const n = close.length;
+  const out = new Array(n).fill(null);
+  let tr = 0, plus = 0, minus = 0, dxSum = 0, dxCount = 0, adx = null;
+  for (let i = 1; i < n; i += 1) {
+    const h = high[i], l = low[i], pc = close[i - 1];
+    if (![h, l, pc, high[i - 1], low[i - 1]].every((v) => v !== null && v !== undefined && isFinite(v))) continue;
+    const up = h - high[i - 1], down = low[i - 1] - l;
+    const trI = Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));
+    const pI = up > down && up > 0 ? up : 0;
+    const mI = down > up && down > 0 ? down : 0;
+    if (i <= period) {
+      tr += trI; plus += pI; minus += mI;
+      if (i < period) continue;
+    } else {
+      tr = tr - tr / period + trI;
+      plus = plus - plus / period + pI;
+      minus = minus - minus / period + mI;
+    }
+    const pdi = tr ? 100 * plus / tr : 0, mdi = tr ? 100 * minus / tr : 0;
+    const dx = pdi + mdi ? 100 * Math.abs(pdi - mdi) / (pdi + mdi) : 0;
+    if (adx === null) {
+      dxSum += dx; dxCount += 1;
+      if (dxCount === period) { adx = dxSum / period; out[i] = adx; }
+    } else {
+      adx = (adx * (period - 1) + dx) / period;
+      out[i] = adx;
+    }
+  }
+  return out;
+}
+
+/* TrendSpider's Trend Strength Oscillator, as its published script defines
+ * it: ADX rescaled so 25 (where a trend starts to count) is 0 and 100 is 100,
+ * plus RSI centred on 50, smoothed by a 5-bar simple average. Above +50 a
+ * strong trend has run up far and fast, below -50 down: "overextended", in
+ * the script's words. Asked for 2026-10-12 with TrendSpider's KO example. */
+const TSO_ADX = 14, TSO_RSI = 14, TSO_SMOOTH = 5, TSO_LEVEL = 50;
+function tsoSeries(high, low, close, adxPeriod = TSO_ADX, rsiPeriod = TSO_RSI, smooth = TSO_SMOOTH) {
+  const adx = adxSeries(high, low, close, adxPeriod);
+  const rsi = rsiSeries(close, rsiPeriod);
+  const raw = close.map((_, i) => (adx[i] === null || rsi[i] === null ? null
+    : (adx[i] - 25) / 75 * 100 + (rsi[i] - 50)));
+  return smaSeries(raw, smooth);
 }
 
 /* ------------------------------------------------- support / resistance (client)
@@ -22352,6 +22400,7 @@ function wsKeepSize() {
 const WS_PANES = [
   { id: 'rsi', label: 'RSI', height: 132 },
   { id: 'macd', label: 'MACD', height: 132 },
+  { id: 'tso', label: 'Trend Strength Oscillator', height: 132 },
 ];
 const WS_PANES_KEY = 'optic.ws.panes';
 
@@ -22418,6 +22467,12 @@ function wsWithOscillators(base, d, recompute) {
     out.macd = m.macd;
     out.macdSignal = m.signal;
     out.macdHist = m.hist;
+  }
+  if (wsPaneOpen('tso')) {
+    // Always computed here: it needs the highs and lows, and the server sends
+    // no ADX. Over the full history like the others, so it never warms up on
+    // screen.
+    out.tso = tsoSeries(base.high || [], base.low || [], closes);
   }
   if (!base.intraday) wsOscMemo = { base, d, recompute: !!recompute, panes, out };
   return out;
@@ -22658,6 +22713,46 @@ function wsMountPanes(ps) {
   } else if (wsPaneOpen('macd')) {
     wsPaneLegend('macd', '<strong>MACD</strong> 12, 26, 9');
     vizMount('ws-pane-macd', () => null, 'MACD is drawn from 30 bars up, and this range has fewer.');
+  }
+
+  const tso = ps.tso || [];
+  if (wsPaneOpen('tso') && tso.some((v) => v !== null)) {
+    let last = null;
+    for (let i = tso.length - 1; i >= 0 && last === null; i -= 1) last = tso[i];
+    const state = last > TSO_LEVEL ? ['up', 'overextended up']
+      : last < -TSO_LEVEL ? ['down', 'overextended down'] : null;
+    wsPaneLegend('tso', `<strong>Trend Strength</strong> ${TSO_ADX}, ${TSO_RSI}, ${TSO_SMOOTH}
+      <span class="ws-pane-val">${fmt(last, 1)}</span>${
+  state ? ` <span class="ws-pane-cross ${state[0]}">${state[1]}</span>` : ''}`);
+    const vals = tso.filter((v) => v !== null);
+    drawOn('tso');
+    mount('ws-pane-tso', (w) => lineChart({
+      width: w,
+      height: 132,
+      labels: dates,
+      series: [{
+        name: 'Trend Strength', values: tso, color: C.ink2,
+        // Green above +50 and red below -50, as the script colours it.
+        tints: tso.map((v) => (v === null ? null : v > TSO_LEVEL ? C.pos : v < -TSO_LEVEL ? C.neg : null)),
+      }],
+      // Fixed around the two levels so "how near overextended" reads the same
+      // on every symbol; widened only when the line runs past the frame.
+      yDomain: [Math.min(-75, Math.min(...vals) - 5), Math.max(100, Math.max(...vals) + 5)],
+      yTicks: [-TSO_LEVEL, 0, TSO_LEVEL],
+      yFormat: (x) => fmt(x, 0),
+      valueFormat: (x) => fmt(x, 1),
+      refLines: [
+        { value: TSO_LEVEL, label: '', color: C.pos, emphasis: true },
+        { value: 0, label: '', color: C.muted },
+        { value: -TSO_LEVEL, label: '', color: C.neg, emphasis: true },
+      ],
+      valueTags: true,
+      sessions: showSessions ? dates : null,
+    }));
+    setChartAnimation(was);
+  } else if (wsPaneOpen('tso')) {
+    wsPaneLegend('tso', '<strong>Trend Strength</strong> 14, 14, 5');
+    vizMount('ws-pane-tso', () => null, 'The Trend Strength Oscillator is drawn from 30 bars up, and this range has fewer.');
   }
 }
 
