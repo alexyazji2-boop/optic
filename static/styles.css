@@ -2568,16 +2568,12 @@ body.chat-resizing svg { pointer-events: none; }
      168px, and the greeting below the fold (2026-10-12). The box's height was
      its two rows plus padding, so it is set here rather than its min-height. */
   #chat .chat-foot textarea { height: 52px; min-height: 52px; }
-  #chat .chat-actions { flex-wrap: nowrap; gap: var(--space-1); }
+  /* Wraps when it must: one forced row overflowed by 6px in Safari at 402px
+     (the label is wider there than in Chromium) and by 23px at 320. The
+     compact buttons keep it on one row wherever it fits. */
+  #chat .chat-actions { flex-wrap: wrap; gap: var(--space-1); }
   #chat .chat-actions .btn { padding-left: var(--space-2); padding-right: var(--space-2); font-size: var(--t-small); }
   #chat .chat-actions label { margin-left: auto; white-space: nowrap; }
-}
-/* Under 360px the four actions do not fit one row: at 320 they widened the
-   page to 343px and pushed the panel off screen (2026-10-12 audit). The
-   label takes its own line there. */
-@media (max-width: 359px) {
-  #chat .chat-actions { flex-wrap: wrap; }
-  #chat .chat-actions label { margin-left: 0; flex-basis: 100%; }
 }
 /* A short phone (an SE is 549px tall in Safari): the intro to one line and
    the helper lines go, so the greeting and the conversation keep room. The
@@ -3787,12 +3783,12 @@ details[open] > summary .cal-caret { transform: rotate(90deg); }
      (20px), the overlay toggle and ticker buttons in tables (the panel
      chevron and the ask chips have theirs below). Layout does not move. */
   .cs-note-btn, .ht-rest, #chat-close, #legal-more, .ws-leg-title,
-  td .tkr, .chat-allow button, .ws-pane-explain {
+  td .tkr, .chat-allow button, .ws-pane-explain, .gloss-term.is-inline {
     position: relative;
   }
   .cs-note-btn::after, .ht-rest::after, #chat-close::after, #legal-more::after,
   .ws-leg-title::after, td .tkr::after,
-  .chat-allow button::after, .ws-pane-explain::after {
+  .chat-allow button::after, .ws-pane-explain::after, .gloss-term.is-inline::after {
     content: '';
     position: absolute;
     inset: -12px -6px;

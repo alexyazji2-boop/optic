@@ -33,7 +33,7 @@ def test_the_phone_footer_is_one_row_of_actions_and_a_shorter_box():
     media = CSS.rfind("@media", 0, at)
     assert CSS[media:CSS.index("{", media)].strip() == "@media (max-width: 640px)"
     block = CSS[media:CSS.index("\n}\n", at)]
-    assert "#chat .chat-actions { flex-wrap: nowrap;" in block
+    assert "#chat .chat-actions { flex-wrap: wrap; gap: var(--space-1); }" in block
     assert "#chat .chat-actions label { margin-left: auto; white-space: nowrap; }" in block
 
 

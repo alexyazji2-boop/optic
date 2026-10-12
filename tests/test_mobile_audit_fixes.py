@@ -55,8 +55,9 @@ def test_the_short_window_block_is_landscape_only():
 
 
 def test_milo_fits_320_and_keeps_room_on_short_phones():
-    narrow = _media("(max-width: 359px)")
-    assert "#chat .chat-actions { flex-wrap: wrap; }" in narrow
+    phone = _media("(max-width: 640px)")
+    assert "#chat .chat-actions { flex-wrap: wrap; gap: var(--space-1); }" in phone
+    assert "flex-wrap: nowrap" not in phone.split("#chat .chat-actions {")[1].split("}")[0]
     short = _media("(max-width: 640px) and (max-height: 720px)")
     assert ".chat-desc { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }" in short
     assert ".pulse-persona-blurb, .pulse-modes-h { display: none; }" in short
