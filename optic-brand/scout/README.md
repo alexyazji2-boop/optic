@@ -6,9 +6,9 @@ this folder holds what made them.
 
 `render_scout.py` builds Scout as a signed-distance scene and ray-marches it
 in numpy (there is no Blender on the machine and the app has no build step).
-His face is the Pulse mark (the ring and heartbeat on the Pulse button) inset
-in gold; `SCOUT_FACE=optic` reproduces the earlier two Optic-lens eyes and
-smile (commit 2deec49). The render has matte clay grain fixed to each part,
+His face is two Optic-lens eyes, the logo's chart line in each, and a carved
+smile; `SCOUT_FACE=pulse` renders the Pulse-mark face that was tried and set
+aside (commit 07e91b3). The render has matte clay grain fixed to each part,
 a key light, a fill, a hemisphere sky, soft shadows and ambient occlusion. Every frame shares one camera and one
 light rig, so a blink, a turn or a wave changes only the pose. It writes:
 

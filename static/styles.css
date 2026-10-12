@@ -18565,8 +18565,8 @@ footer.legal > .legal-full {
 
 /* ================================================================ Scout ===
  *
- * Pulse's mascot, concept 03 from the user's sheet, as 3D renders with the
- * Pulse mark as his face: transparent sprites per size and density (order in
+ * Pulse's mascot, concept 03 from the user's sheet, as 3D renders:
+ * transparent sprites per size and density (order in
  * static/scout/frames.json, written by optic-brand/scout/render_scout.py).
  * components/scout.js picks the pose in response to Pulse's events; the only
  * loop here is the scarf in the wind, and it runs only when scout.js says.

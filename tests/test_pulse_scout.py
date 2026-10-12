@@ -5,7 +5,8 @@ Asked for on 2026-10-11 with the user's own concept sheet (concept 03,
 renders, a bigger welcome figure, and motion tied to Pulse's real events
 (the panel opening, typing, a question sent, a search the server reports,
 the answer streaming, its end, an error) instead of a loop of its own. Then:
-the Pulse mark as his face, larger hands, and his scarf in the wind.
+larger hands and his scarf in the wind (the Pulse mark was tried as his face
+and set aside for the two eyes).
 Presentation only: nothing here may touch what Pulse sends, streams or costs.
 
 The renders are committed sprites (static/scout/) made by

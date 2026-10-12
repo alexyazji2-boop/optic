@@ -1,12 +1,13 @@
 /* Scout: Pulse's mascot.
  *
  * Concept 03 ("Scout") from the user's snowman sheet, rendered in 3D: two
- * ivory clay snowballs, a muted gold scarf blowing in the wind, stub arms and
- * feet, and for a face the Pulse mark itself, the ring and heartbeat on the
- * Pulse button, inset in gold (chosen by the owner over two Optic-lens eyes
- * and a smile). The renders are transparent frames, one sprite per size and
- * density (static/scout/, made by optic-brand/scout/render_scout.py, which
- * also writes frames.json, the order FRAME below copies). Every frame shares
+ * ivory clay snowballs, the Optic aperture inset as each eye with the logo's
+ * chart line raised inside it, a carved smile, a muted gold scarf blowing in
+ * the wind, stub arms and feet. (The Pulse mark was tried as his whole face
+ * and set aside for the two eyes.) The renders are transparent frames, one
+ * sprite per size and density (static/scout/, made by
+ * optic-brand/scout/render_scout.py, which also writes frames.json, the
+ * order FRAME below copies). Every frame shares
  * one camera and one light rig, so a blink or a turn is a change of picture,
  * never a stretched one.
  *
@@ -23,9 +24,9 @@
  * key), a question sent (one acknowledging wave, then thinking), a search the
  * server reports (a look around), the first words of the answer (stillness),
  * the end (a small nod), an error (a gentle concerned face). Between events
- * he blinks every 5-10 s (open, half, closed, half, open: a lid over the
- * ring), now and then twice, and, idle, now and then looks curious: the head
- * tilts and the ring opens a little wider. His scarf's tail flutters in the
+ * he blinks every 5-10 s (open, half, closed, half, open), now and then
+ * twice, and, idle, now and then looks curious: the head tilts and one eye
+ * opens a little wider. His scarf's tail flutters in the
  * wind while he is on screen with motion set to Full. Nothing he does says anything
  * about a market: no pose reads as up, down, sure or unsure, and the end of an
  * answer gets a nod, never a celebration.

@@ -11,20 +11,14 @@ tilt changes only the pose.
 There is no Blender on the machine this was made on and the app has no build
 step, so the renderer is this file and its output is committed:
 
-    static/scout/scout-full.webp      12 frames, 216x281 each, one row
-    static/scout/scout-compact.webp   the same 12 poses, head and scarf only, 96x84
-    static/scout/scout.png            the resting pose at 4x, for reference
+    static/scout/scout-full@{2x,3x}.webp        the 22 poses in FRAMES, one row (288x380 at 3x)
+    static/scout/scout-compact@{2x,3x}.webp     the same poses as a bust (144x156 at 3x)
+    static/scout/scout-{full,compact}-tail@*.webp  the scarf's tail, WIND phases, drawn under the pose
+    static/scout/frames.json                    the frame order, which components/scout.js copies
+    static/scout/scout.png                      the resting pose with its tail, for reference
 
-Frame order is a contract with styles.css (the `--scout-f` positions):
-
-    0 idle open      1 idle half      2 idle closed
-    3 lean (2.5 deg)
-    4 think open     5 think half     6 think closed      (head at 5 deg)
-    7 curious open   8 curious half   9 curious closed    (8 deg, right eye wider)
-    10 wave low      11 wave high
-
-Run from the repository root:
-    .venv/bin/python optic-brand/scout/render_scout.py
+Run from the repository root (about 25 minutes with everything):
+    .venv/bin/python optic-brand/scout/render_scout.py [--no-tail] [--no-hero]
 """
 
 from __future__ import annotations
@@ -95,9 +89,10 @@ def vnoise(p):
 BODY_C, BODY_R = np.array([0.0, 0.80, 0.0]), np.array([0.72, 0.68, 0.64])
 HEAD_C, HEAD_R = np.array([-0.02, 1.99, 0.04]), np.array([0.69, 0.60, 0.62])
 NECK = np.array([0.0, 1.42, 0.0])
-# "pulse" is the face the app ships; "optic" (two Optic-lens eyes and a
-# smile) reproduces the first renders, commit 2deec49.
-FACE_STYLE = os.environ.get("SCOUT_FACE", "pulse")
+# "optic", two Optic-lens eyes and a smile, is the face the app ships: the
+# owner tried the Pulse mark as the whole face (07e91b3, SCOUT_FACE=pulse)
+# and asked for the two eyes back.
+FACE_STYLE = os.environ.get("SCOUT_FACE", "optic")
 SHOULDER = np.array([0.52, 0.98, 0.20])
 HAND_R = np.array([0.70, 0.74, 0.27])
 HAND_L = np.array([-0.60, 0.88, 0.38])
@@ -166,7 +161,10 @@ class Eye:
             # the face reads as concerned rather than raising one brow.
             low = -np.sqrt(np.maximum(self.R ** 2 - eu ** 2, 0))
             return low + self.h * (1 - self.closure) - abs(self.slant) * np.abs(eu)
-        return low + self.h * (1 - self.closure) + self.slant * eu
+        # The slant fades out over the last 40% of the closure: a fully closed
+        # eye is the plain lash line, since a slanted one runs out of the lens
+        # at one tip and left a broken lid on the concerned blink.
+        return low + self.h * (1 - self.closure) + self.slant * min(1.0, (1 - self.closure) / 0.4) * eu
 
     def trace_dist(self, eu, ev):
         best = None
@@ -217,9 +215,9 @@ class Pose:
         face = face or FACE_STYLE
         self.smile = face != "pulse"
         if face == "pulse":
-            # The Pulse mark as the whole face: its ring and heartbeat, the
-            # owner's choice (2026-10-11) over the two Optic eyes and smile.
-            # The curious look opens the ring a little wider.
+            # The Pulse mark as the whole face: its ring and heartbeat. Tried
+            # and set aside for the two eyes (2026-10-11); kept to reproduce
+            # 07e91b3. The curious look opens the ring a little wider.
             self.eyes = [Eye(9, -1, 0, 0.62 * (1.08 if wide else 1.0), max(cl, cr), slant=k * 0.8, ring=True)]
         else:
             self.eyes = [Eye(-20, 6, -10, 0.46, cl, slant=k),
@@ -591,7 +589,10 @@ def save_strip(frames, name, w, h):
 
 def main():
     jobs = [("full", i) for i in range(len(FRAMES))] + [("compact", i) for i in range(len(FRAMES))]
-    jobs += [("full-tail", i) for i in range(WIND)] + [("compact-tail", i) for i in range(WIND)]
+    # The tail layer holds the body out but none of the face, so a change of
+    # face alone can keep the committed tail strips: --no-tail.
+    if "--no-tail" not in sys.argv:
+        jobs += [("full-tail", i) for i in range(WIND)] + [("compact-tail", i) for i in range(WIND)]
     if "--no-hero" not in sys.argv:
         jobs.append(("hero", 0))
     os.makedirs(OUT, exist_ok=True)
@@ -603,6 +604,8 @@ def main():
     n = len(FRAMES)
     for kind, (_, (w3, h3)), count in (("full", FULL, n), ("compact", COMPACT, n),
                                        ("full-tail", FULL, WIND), ("compact-tail", COMPACT, WIND)):
+        if (kind, 0) not in out:
+            continue
         frames3 = [out[(kind, i)] for i in range(count)]
         if kind.startswith("compact"):
             frames3 = [fade_bottom(f) for f in frames3]
