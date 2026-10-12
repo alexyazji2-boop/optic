@@ -40262,12 +40262,20 @@ function pulseMarkHTML(cls) {
 /* The two marks that live in static markup.
  *
  * `index.html` carries the hosts and this fills them, rather than the SVG
- * being pasted into the page twice: one drawing, one place to change it. Both
- * are small, so both get the reduced mark rather than the face. */
+ * being pasted into the page twice: one drawing, one place to change it. The
+ * panel's header keeps the reduced mark. The Pulse button wears Scout's face
+ * instead, blinking (asked for on 2026-10-12: "change this to the snowman
+ * blinking while keeping the color scheme visible"): his head from the
+ * committed bust sprite on a dark disc, so his ivory and gold read against
+ * the gold button. The blink is CSS on that sprite's own lid frames; see
+ * .scout-badge. */
 function mountPulseMarks() {
   ['pulse-mark-btn', 'pulse-mark-head'].forEach((id) => {
     const host = document.getElementById(id);
-    if (host && !host.firstElementChild) host.innerHTML = pulseMarkHTML('pulse-glyph-sm');
+    if (!host || host.firstElementChild) return;
+    host.innerHTML = id === 'pulse-mark-btn'
+      ? '<span class="scout-badge" aria-hidden="true"><span class="scout-badge-fig"></span></span>'
+      : pulseMarkHTML('pulse-glyph-sm');
   });
 }
 

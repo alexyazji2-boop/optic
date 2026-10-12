@@ -18592,6 +18592,60 @@ footer.legal > .legal-full {
   background-image: -webkit-image-set(url("scout/scout-compact-tail@2x.webp") 2x, url("scout/scout-compact-tail@3x.webp") 3x);
   background-image: image-set(url("scout/scout-compact-tail@2x.webp") 2x, url("scout/scout-compact-tail@3x.webp") 3x);
 }
+/* Scout on the Pulse button: his head in a dark disc where the Pulse mark
+   was, so his ivory and gold read against the gold button (2026-10-12). The
+   figure is the bust sprite scaled so the head (x 10-108, y 4-92 of the
+   144x156 frame) fills about 86% of the disc, with the scarf's top showing
+   at the bottom edge. The blink steps through the sprite's own lid frames
+   (0 open, 1 half, 2 closed) on Scout's quickened timing: once at about 4 s
+   and twice near the end of an 11 s cycle. No blink under reduced motion or
+   with Scout's motion set to Still. */
+.scout-badge {
+  position: relative;
+  display: block;
+  flex: none;
+  width: calc(21px * var(--ui-scale));
+  height: calc(21px * var(--ui-scale));
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--asset-brand-ink);
+}
+.scout-badge-fig {
+  position: absolute;
+  left: -1.8%;
+  top: 7.8%;
+  width: 126.4%;
+  height: 136.9%;
+  background-repeat: no-repeat;
+  background-size: 2200% 100%;
+  background-position: 0% 0;
+  background-image: url("scout/scout-compact@2x.webp");
+  background-image: -webkit-image-set(url("scout/scout-compact@2x.webp") 2x, url("scout/scout-compact@3x.webp") 3x);
+  background-image: image-set(url("scout/scout-compact@2x.webp") 2x, url("scout/scout-compact@3x.webp") 3x);
+  animation: scout-badge-blink 11s step-end infinite;
+}
+/* 1% of 11 s is 110 ms: half 35 ms, closed 50 ms, half 40 ms. */
+@keyframes scout-badge-blink {
+  0%      { background-position-x: 0%; }
+  36%     { background-position-x: 4.7619%; }
+  36.32%  { background-position-x: 9.5238%; }
+  36.77%  { background-position-x: 4.7619%; }
+  37.13%  { background-position-x: 0%; }
+  93%     { background-position-x: 4.7619%; }
+  93.32%  { background-position-x: 9.5238%; }
+  93.77%  { background-position-x: 4.7619%; }
+  94.13%  { background-position-x: 0%; }
+  95.22%  { background-position-x: 4.7619%; }
+  95.54%  { background-position-x: 9.5238%; }
+  95.99%  { background-position-x: 4.7619%; }
+  96.35%  { background-position-x: 0%; }
+  100%    { background-position-x: 0%; }
+}
+:root[data-scout-motion="still"] .scout-badge-fig { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .scout-badge-fig { animation: none; }
+}
+
 
 /* The welcome figure is a button: it opens the guide menu. No fill and no
    hover pill (the gold pill is the sidebar's alone); a focus ring for the

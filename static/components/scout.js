@@ -334,10 +334,18 @@
     return c;
   }
 
+  /* The setting, mirrored onto <html> for what CSS alone animates: the
+   * Pulse button's blinking badge stops when this says still. */
+  function markMotion() {
+    try { document.documentElement.setAttribute('data-scout-motion', motion()); } catch (e) { /* no DOM */ }
+  }
+  markMotion();
+
   function setMotion(v) {
     try {
       if (v === 'full' || v === 'subtle' || v === 'still') global.localStorage.setItem(STORE, v);
     } catch (e) { /* private window: the choice lasts this page */ }
+    markMotion();
     live.slice().forEach(function (c) { c.sleep(); c.wake(); });
   }
 
@@ -345,7 +353,7 @@
     live.slice().forEach(function (c) { if (document.hidden) c.sleep(); else c.wake(); });
   });
   if (reduceQuery) {
-    var onReduce = function () { live.slice().forEach(function (c) { c.sleep(); c.wake(); }); };
+    var onReduce = function () { markMotion(); live.slice().forEach(function (c) { c.sleep(); c.wake(); }); };
     if (reduceQuery.addEventListener) reduceQuery.addEventListener('change', onReduce);
     else if (reduceQuery.addListener) reduceQuery.addListener(onReduce);
   }

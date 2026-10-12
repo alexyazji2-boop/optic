@@ -98,10 +98,10 @@ def test_the_box_holds_its_space_and_picks_a_density():
     assert "aspect-ratio: %d / %d" % (cw, ch) in CSS
     assert "scout-compact@3x.webp" in _block("\n.scout-compact::after {")
     assert "scout-compact-tail@3x.webp" in _block("\n.scout-compact::before {")
-    # The sequencer owns the poses; the one CSS loop is the scarf, and only
-    # while scout.js marks the figure windy.
+    # The sequencer owns the poses; the CSS loops are the scarf, only while
+    # scout.js marks the figure windy, and the Pulse button's blinking badge.
     foot = CSS[CSS.index("==== Scout ==="):]
-    assert re.findall(r"@keyframes (scout-[a-z-]+)", foot) == ["scout-wind"]
+    assert sorted(re.findall(r"@keyframes (scout-[a-z-]+)", foot)) == ["scout-badge-blink", "scout-wind"]
     assert ".scout.is-windy::before { animation: scout-wind 1200ms steps(%d, jump-none) infinite; }" \
         % MANIFEST["wind"] in foot
     assert "animation" not in _block("\n.scout::before {")
@@ -250,3 +250,29 @@ def test_the_expressions_carry_no_market_meaning():
     code = re.sub(r"/\*.*?\*/|//[^\n]*", "", SCOUT.lower(), flags=re.S)
     for state in ("bull", "bear", "confident", "happy", "sad", "excited", "worried"):
         assert not re.search(r"\b%s" % state, code), state
+
+
+def test_the_pulse_button_wears_scout_blinking():
+    """Asked for on 2026-10-12: "change this to the snowman blinking while
+    keeping the color scheme visible". The Pulse button's mark is Scout's head
+    from the bust sprite on a dark disc; the panel header keeps the reduced
+    mark. The blink steps through the sprite's own lid frames (1 half, 2
+    closed) and stops under reduced motion or with Scout's motion set to Still."""
+    mount = APP[APP.index("function mountPulseMarks() {"):]
+    mount = mount[:mount.index("\n}\n")]
+    assert "id === 'pulse-mark-btn'" in mount and 'class="scout-badge"' in mount
+    assert "pulseMarkHTML('pulse-glyph-sm')" in mount, "the panel header keeps the mark"
+    badge = _block("\n.scout-badge {")
+    assert "border-radius: 50%" in badge and "background: var(--asset-brand-ink)" in badge
+    fig = _block("\n.scout-badge-fig {")
+    assert "scout-compact@3x.webp" in fig and "background-size: %d00%% 100%%" % len(FRAMES) in fig
+    assert "animation: scout-badge-blink 11s step-end infinite;" in fig
+    step = 100 / (len(FRAMES) - 1)
+    assert FRAMES.index("idle-half") == 1 and FRAMES.index("idle-closed") == 2
+    blink = CSS[CSS.index("@keyframes scout-badge-blink"):]
+    blink = blink[:blink.index("\n}")]
+    assert "%.4f%%" % step in blink and "%.4f%%" % (2 * step) in blink
+    assert ':root[data-scout-motion="still"] .scout-badge-fig { animation: none; }' in CSS
+    reduced = CSS[CSS.index(':root[data-scout-motion="still"] .scout-badge-fig'):]
+    assert "@media (prefers-reduced-motion: reduce)" in reduced[:300]
+    assert "setAttribute('data-scout-motion', motion())" in SCOUT
