@@ -167,6 +167,20 @@ def _metrics(symbol: str, frame: pd.DataFrame) -> Optional[Dict[str, Any]]:
         "atr_pct": _atr_pct(frame),
         "bars": int(len(frame)),
     }
+    # The day's move and the pullback-after-a-rally pair, for requests like
+    # "2% or more above prev close" and "10% pull back after 20% rally"
+    # (TrendSpider's sample scans, asked for 2026-10-12). The high is the
+    # highest close of the last three months; the rally is into that high from
+    # the lowest close of the six months before it.
+    out["chg1d"] = (round(float(close.iloc[-1] / close.iloc[-2] - 1.0) * 100.0, 2)
+                    if len(close) > 1 and float(close.iloc[-2]) > 0 else None)
+    recent = close.tail(63)
+    hi_at = int(np.argmax(recent.values)) + len(close) - len(recent)
+    high = float(close.iloc[hi_at])
+    before = close.iloc[max(0, hi_at - 126):hi_at + 1]
+    low = float(before.min()) if len(before) else None
+    out["off_high"] = round((price / high - 1.0) * 100.0, 2) if high > 0 else None
+    out["rally"] = round((high / low - 1.0) * 100.0, 2) if low and low > 0 else None
     for key in ("sma20", "sma50", "sma200"):
         if not np.isfinite(out[key]):
             out[key] = None

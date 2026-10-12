@@ -88,6 +88,23 @@ def _rules() -> List[Tuple[re.Pattern, Any]]:
                     {"field": "volume_expansion", "min": 1.2, "max": None}], [],
                    "Breaking out: at the top of the 52-week range on rising volume",
                    ("range_position", "desc")))
+    # "10% pull back after 20% rally": a pullback from the three-month high
+    # after a rally into it. Before the plain "pullback" below, which it would
+    # otherwise be read as.
+    add(r"\b(\d+(?:\.\d+)?)\s*%\s*(?:or\s+more\s+)?(?:pull(?:ing)?[\s-]*backs?|pulled\s+back|drops?|dips?|"
+        r"declines?|off\s+(?:the\s+)?highs?)\s+(?:after|following|from)\s+(?:a\s+)?(\d+(?:\.\d+)?)\s*%\s*"
+        r"(?:rally|rallies|run[\s-]*up|run|gain|advance|move(?:\s+up)?)\b",
+        lambda m: ([{"field": "off_high", "min": None, "max": -float(m.group(1))},
+                    {"field": "rally", "min": float(m.group(2)), "max": None}], [],
+                   "{:g}% or more off the 3-month high after a {:g}% rally into it".format(
+                       float(m.group(1)), float(m.group(2))), ("off_high", "asc")))
+    # The day's move: "2% or more above prev close", "up 3% today".
+    add(r"\b(\d+(?:\.\d+)?)\s*%\s*(?:or\s+more\s+)?(above|over|below|under)\s+(?:the\s+)?"
+        r"(?:prev(?:ious)?\.?|prior|yesterday'?s?|last)\s+(?:day'?s?\s+)?close\b",
+        lambda m: _day(m.group(2).lower() in ("above", "over"), float(m.group(1))))
+    add(r"\b(up|down)\s+(?:more\s+than\s+|over\s+|at\s+least\s+)?(\d+(?:\.\d+)?)\s*%\s*"
+        r"(?:or\s+more\s+)?(?:today|on\s+the\s+day|in\s+a\s+day|yesterday)\b",
+        lambda m: _day(m.group(1).lower() == "up", float(m.group(2))))
     add(r"\b(?:pull(?:ing)?[\s-]*backs?|dips?|dipping|dipped|pulled\s+back)\b",
         lambda m: ([{"field": "pct_from_sma20", "min": None, "max": 0.0}], ["golden"],
                    "Pulling back: under the 20-day inside an uptrend", ("pct_from_sma20", "asc")))
@@ -134,6 +151,14 @@ def _rules() -> List[Tuple[re.Pattern, Any]]:
         r"in\s+a)\s+)?(month|3\s+months|three\s+months|quarter)\b",
         lambda m: _returns(m.group(1).lower(), float(m.group(2)), m.group(3).lower()))
     return out
+
+
+def _day(up: bool, pct: float):
+    if up:
+        return ([{"field": "chg1d", "min": pct, "max": None}], [],
+                "Up {:g}% or more on the last close".format(pct), ("chg1d", "desc"))
+    return ([{"field": "chg1d", "min": None, "max": -pct}], [],
+            "Down {:g}% or more on the last close".format(pct), ("chg1d", "asc"))
 
 
 # After a dollar figure: a size word or letter makes it an amount ($10B, $500

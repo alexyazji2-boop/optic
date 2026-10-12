@@ -98,6 +98,19 @@ FIELDS: List[Dict[str, Any]] = [
      "get": _plain("score"),
      "help": "The ranking's own signed trend and momentum score. Its weights are "
              "judgement rather than a fit, and the scan panel breaks them out."},
+    {"id": "chg1d", "label": "1-day change", "unit": "%", "decimals": 2,
+     "get": _plain("chg1d"),
+     "help": "Last close against the close before it. Delayed daily bars, so "
+             "during the session this is yesterday's move until the day closes."},
+    {"id": "off_high", "label": "Below the 3-month high", "unit": "%", "decimals": 1,
+     "get": _plain("off_high"),
+     "help": "Last close against the highest close of the last three months. "
+             "0 is at the high; -10 is a 10% pullback from it."},
+    {"id": "rally", "label": "Rally into the 3-month high", "unit": "%", "decimals": 1,
+     "get": _plain("rally"),
+     "help": "How far the price rose into that high, from the lowest close of "
+             "the six months before it. With the field above, a pullback after "
+             "a rally."},
     {"id": "pct_from_sma20", "label": "Distance from 20-day average", "unit": "%",
      "decimals": 2, "get": lambda r: _pct_from(r, "sma20"),
      "help": "Negative is below the average."},

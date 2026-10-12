@@ -128,6 +128,7 @@ const SESSION_GUEST = 'guest';                     // account ids are UUIDs
  * listed here or named there as a setting. */
 const PERSONAL_KEYS = [
   'optic.recent.v1',             // symbols opened, offered back by the search bar
+  'optic.scan.recent.v1',        // requests typed into Find stocks, offered back under it
   'optic.pulse.history.v1',      // Pulse conversations
   'optic.research.v1',           // saved research, signed out
   'optic.chart.watch.v1',        // the watchlist, signed out
@@ -38047,7 +38048,41 @@ const SCAN_ASK_EXAMPLES = [
   'Near 52-week highs on heavy volume',
   'Pullbacks in strong uptrends',
   'Under $20 and up 20% in the last 3 months',
+  '10% pull back after 20% rally',
+  '2% or more above prev close',
 ];
+
+/* The reader's own last few requests, newest first, in this browser: "your
+ * recent prompts", as TrendSpider's scanner has them (asked for 2026-10-12).
+ * Only requests that ran; one that failed to send is not a prompt to repeat. */
+const SCAN_RECENT_KEY = 'optic.scan.recent.v1';
+const SCAN_RECENT_MAX = 6;
+
+function scanRecent() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SCAN_RECENT_KEY) || '[]');
+    return Array.isArray(saved) ? saved.filter((q) => typeof q === 'string' && q.trim()).slice(0, SCAN_RECENT_MAX) : [];
+  } catch (e) { return []; }
+}
+
+function rememberScanPrompt(text) {
+  const words = String(text || '').trim();
+  if (!words) return;
+  const next = [words, ...scanRecent().filter((q) => q.toLowerCase() !== words.toLowerCase())]
+    .slice(0, SCAN_RECENT_MAX);
+  try { localStorage.setItem(SCAN_RECENT_KEY, JSON.stringify(next)); } catch (e) { /* private mode */ }
+}
+
+function scanRecentHTML() {
+  const recent = scanRecent();
+  if (!recent.length) return '';
+  return `<div class="sc-ask-examples sc-ask-recent" role="group" aria-label="Your recent prompts">
+      <span class="wv-filter-label">Your recent prompts</span>
+      ${recent.map((q) => `<button type="button" class="pill" data-sc-ask-example="${
+  esc(q)}">${esc(q)}</button>`).join('')}
+      <button type="button" class="ov-linkbtn" data-sc-recent-clear>Clear</button>
+    </div>`;
+}
 
 function scanAskHTML() {
   const ask = STATE.scanAsk || {};
@@ -38070,6 +38105,7 @@ function scanAskHTML() {
       ${SCAN_ASK_EXAMPLES.map((q) => `<button type="button" class="pill" data-sc-ask-example="${
   esc(q)}">${esc(q)}</button>`).join('')}
     </div>
+    <div id="sc-ask-recent">${scanRecentHTML()}</div>
     <div id="sc-ask-result">${scanAskResultHTML()}</div>
   </div>`;
 }
@@ -38091,8 +38127,8 @@ function scanAskResultHTML() {
         title="Open this reading in Build a screen, to change it">Edit as filters</button>` : ''}
     </div>
     ${missing.length ? `<p class="sc-ask-missing">The screen cannot ask about: ${
-  esc(missing.join('; '))}. It filters on price, returns, the 52-week range, volume, the
-      daily range and the 20-, 50- and 200-day averages.</p>` : ''}
+  esc(missing.join('; '))}. It filters on price, the day's change, returns, pullbacks from the
+      3-month high, the 52-week range, volume, the daily range and the 20-, 50- and 200-day averages.</p>` : ''}
     ${r.note ? `<p class="sc-ask-missing">${esc(r.note)}</p>` : ''}`;
   const res = r.result;
   if (!res) return head;
@@ -38128,6 +38164,11 @@ async function runScanAsk(text) {
   }
   if (seq !== scanAskSeq) return null;
   STATE.scanAsk = { text: words, busy: false, response };
+  if (response && !response.error) {
+    rememberScanPrompt(words);
+    const recentHost = document.getElementById('sc-ask-recent');
+    if (recentHost) recentHost.innerHTML = scanRecentHTML();
+  }
   paintScanAsk();
   return response;
 }
@@ -38386,6 +38427,12 @@ document.addEventListener('click', (evt) => {
   /* The request box: an example fills it and runs, Ask Pulse runs it if it has
    * not been and drafts the question, and Edit as filters opens the reading in
    * Build a screen with its matches. */
+  if (evt.target.closest('[data-sc-recent-clear]')) {
+    try { localStorage.removeItem(SCAN_RECENT_KEY); } catch (e) { /* private mode */ }
+    const recentHost = document.getElementById('sc-ask-recent');
+    if (recentHost) recentHost.innerHTML = '';
+    return;
+  }
   const askExample = evt.target.closest('[data-sc-ask-example]');
   if (askExample) {
     const box = document.getElementById('sc-ask-text');
