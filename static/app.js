@@ -16037,6 +16037,26 @@ function ovEssentialsHTML(q, short) {
     glossTerm(esc(all[id][0]), KEY_STAT_DEFS[id], policy)}</dt><dd>${esc(all[id][1])}</dd></div>`).join('')}</dl>`;
 }
 
+/* Where the description came from. From the latest annual report it is
+ * dated and linked, so a reader can see how current it is; Yahoo's text is
+ * the fallback for a symbol with no 10-K or 20-F on EDGAR (reported
+ * 2026-10-12: "The description may be out of date ... make sure that it is
+ * always up to date"). */
+function ovAboutSourceHTML(prof, fund) {
+  if (!prof.summary) return '';
+  const src = prof.summary_source;
+  if (src && src.form_name && src.filed) {
+    const m = String(src.filed).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    // Noon, so a timezone behind UTC cannot roll the date back a day.
+    const filed = m ? new Date(+m[1], +m[2] - 1, +m[3], 12)
+      .toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : src.filed;
+    const link = /^https:\/\/www\.sec\.gov\//.test(src.url || '')
+      ? ` <a href="${esc(src.url)}" target="_blank" rel="noopener">Read the filing</a>` : '';
+    return `<p class="ov-fine">In the company’s own words, from its latest ${esc(src.form_name)}, filed ${esc(filed)}. Optic checks for a newer report every few hours.${link}</p>`;
+  }
+  return `<p class="ov-fine">In the ${fund ? 'fund' : 'company'}’s own words, as the data feed holds them. No annual report on file with the SEC to check it against, so it may lag the latest one.</p>`;
+}
+
 /* What the company does, in its own filing's words, from the session payload
  * (/api/session/{T} carries the profile). It lands after the page, so it has
  * its own host and is painted again when it arrives. */
@@ -16072,11 +16092,11 @@ function ovAboutHTML() {
     body = '<p class="ov-about-text muted">The data feed has no business description for this symbol.</p>';
   }
   return `<section class="ov-sec ov-about" id="ov-about" aria-labelledby="ov-about-h"
-    data-sig="${esc(sym)}:${sess ? 1 : 0}:${STATE.sessionFailed === sym ? 1 : 0}:${prof.summary ? prof.summary.length : 0}:${prof.sector ? 1 : 0}">
+    data-sig="${esc(sym)}:${sess ? 1 : 0}:${STATE.sessionFailed === sym ? 1 : 0}:${prof.summary ? prof.summary.length : 0}:${prof.sector ? 1 : 0}:${esc((prof.summary_source || {}).filed || '')}">
     <h2 class="ov-q" id="ov-about-h">${fund ? `What is ${esc(name)}?` : `What does ${esc(name)} do?`}</h2>
     ${meta.length ? `<p class="ov-meta">${meta.map(esc).join(' · ')}</p>` : ''}
     ${body}
-    ${prof.summary ? `<p class="ov-fine">In the ${fund ? 'fund' : 'company'}’s own words, as the data feed holds them. The description may be out of date.</p>` : ''}
+    ${ovAboutSourceHTML(prof, fund)}
   </section>`;
 }
 

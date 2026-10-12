@@ -44,6 +44,7 @@ from . import weekly as weekly_mod
 from . import catalysts as catalysts_mod
 from . import catalyst_live as catalyst_live_mod
 from . import live_mirror
+from .analytics import business as business_mod
 from .analytics import cases as cases_mod
 from .analytics import congress as congress_mod
 from . import papertrade as papertrade_mod
@@ -2327,6 +2328,16 @@ async def session_prices(ticker: str) -> Dict[str, Any]:
             profile = YF_PROVIDER.profile(symbol)
         except Exception:
             profile = {}
+        # A company's description from its latest annual report, when EDGAR
+        # has one: dated, and current the day a new report is filed. Yahoo's
+        # text is what is left when it has not (app/analytics/business.py).
+        # Never a network call here: the lookup runs in the background and
+        # lands on a later poll of this endpoint.
+        if (profile or {}).get("is_company"):
+            filing = business_mod.latest(symbol)
+            if filing:
+                profile = dict(profile, summary=filing["text"], summary_source={
+                    k: filing.get(k) for k in ("form", "form_name", "filed", "period", "url")})
         return {
             "ticker": symbol,
             "session": session_mod.state(),
