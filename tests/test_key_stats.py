@@ -230,10 +230,12 @@ def test_each_label_explains_itself_by_the_readers_mode():
       R.beta = KEY_STAT_DEFS.beta;
     """)
     demand, inline, off = out["demand"], out["inline"], out["off"]
-    # The Investing tab's seven, each marked.
-    assert demand.count('<dfn class="gloss-term" tabindex="0"') == 7, demand
+    # The Investing tab's seven, each marked. Since 2026-10-12 a label-and-
+    # figure row opens on a tap in "on demand" too: a hover tooltip was all it
+    # gave, which a phone cannot hover, with no room for Explain this.
+    assert demand.count("data-gloss-open") == 7, demand
     assert 'data-def="How far the stock has tended to move' in demand
-    assert '>Beta</dfn>' in demand and '>Market cap</dfn>' in demand
+    assert '>Beta</button>' in demand and '>Market cap</button>' in demand
     # Simple: a control that opens the definition in place.
     assert inline.count("data-gloss-open") == 7 and 'aria-expanded="false"' in inline
     # Professional: the figures, unmarked.

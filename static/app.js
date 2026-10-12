@@ -15695,7 +15695,8 @@ function keyStatsHTML(q, opts = {}) {
   const ids = (KEY_STATS_FOR[opts.view || 'overview'] || KEY_STATS_FOR.overview)
     .filter((id) => all[id] && all[id][1] !== null);
   if (!ids.length) return '';
-  const policy = explainPolicy();
+  // Tap to open, as in ovEssentialsHTML: the row is a label and its figure.
+  const policy = explainPolicy() === 'off' ? 'off' : 'inline';
   const list = `<dl class="ks-grid">${ids.map((id) => `<div class="ks-row" data-gloss-row><dt>${
     glossTerm(esc(all[id][0]), KEY_STAT_DEFS[id], policy)}</dt><dd>${esc(all[id][1])}</dd></div>`).join('')}</dl>`;
   if (opts.bare) return list;
@@ -16158,7 +16159,11 @@ function ovEssentialsHTML(q, short) {
   const all = keyStatRows(q, short);
   const ids = OV_ESSENTIALS.filter((id) => all[id] && all[id][1] !== null);
   if (!ids.length) return '';
-  const policy = explainPolicy();
+  /* Opened by a tap whatever the definitions setting (unless it is off): the
+   * caption says "Select a label", and a hover tooltip was all "on demand"
+   * gave, which a phone cannot hover and which had no room for Explain this
+   * with Milo (2026-10-12, measured in Safari). */
+  const policy = explainPolicy() === 'off' ? 'off' : 'inline';
   return `<dl class="ks-grid ov-ess">${ids.map((id) => `<div class="ks-row" data-gloss-row><dt>${
     glossTerm(esc(all[id][0]), KEY_STAT_DEFS[id], policy)}</dt><dd>${esc(all[id][1])}</dd></div>`).join('')}</dl>`;
 }
