@@ -19483,6 +19483,7 @@ footer.legal > .legal-full {
    tokens only; colour repeats words already on screen (Tight / Fair / Wide,
    a sign on every P/L figure). */
 .op-near { margin-top: var(--space-3); }
+.tr-line { margin-top: var(--space-2); }
 .op-controls { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); align-items: flex-end; margin: var(--space-2) 0 var(--space-3); }
 .op-field { display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--t-caption); color: var(--ink-muted); min-width: 0; }
 .op-field > span { font-family: var(--label-face); font-size: var(--t-micro); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }

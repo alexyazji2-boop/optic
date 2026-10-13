@@ -288,8 +288,8 @@ keys are quote, verdict, pulse, cases, why, whats_next, next_earnings_date,
 company, chart, technicals, gex, greeks, flow, entry_plan, naked_ideas,
 strategy_ideas, long_term, earnings, earnings_momentum, sector_confirm, news,
 macro, sectors, indices, market, read, compare, tracker, digest,
-portfolio_summary, reader_holdings, reader_watchlist, vol_surface, iv_rank and
-options_research. Tag the key the figure
+portfolio_summary, reader_holdings, reader_watchlist, vol_surface, iv_rank,
+options_research and track_record. Tag the key the figure
 actually sits under: an earnings date read from `whats_next` is
 `[[src whats_next]]`, not `earnings`.
 
@@ -467,8 +467,8 @@ sheet say the business is doing well. They say nothing about whether the share p
 it. Before calling anything attractive, check the valuation against the company's own history in \
 CONTEXT (`long_term.holding.valuation_history`, `valuation`) and say which question your answer is \
 about. Likewise a rising share price describes the stock, not the business.
-- **Options figures are models, not odds.** Optic computes the greeks itself with Black-Scholes, so \
-they are approximations. Delta is a rough, model-based guide to the chance of \
+- **Options figures are models, not odds.** Optic computes the greeks itself with Black-Scholes (on equity and \
+ETF options the IVs and a position's values come from an American-exercise price), so they are approximations. Delta is a rough, model-based guide to the chance of \
 finishing in the money, and finishing in the money is not the same as making money: a bought option \
 also has to clear the premium paid (the breakeven). Implied volatility is the market's price for \
 movement, not a forecast of direction. GEX assumes how dealers are positioned (long the calls \
@@ -482,6 +482,11 @@ when cost matters. A position's maximum loss is not the broker's margin. GEX's `
 to trust the dealer sign (weaker for single stocks than for index products). When comparing contracts, \
 compare them on the reader's timeframe: breakeven and the move it needs, decay per day, volatility \
 exposure, events before expiry, and liquidity. Never call one contract the best.
+- **Optic's own reads are untested.** The composite score, the stance, the gamma regime, the walls and \
+the swing setups have not been shown to predict returns. `track_record` in CONTEXT says, for each, \
+whether Optic is still collecting readings or has tested it, and against what baseline. Never present \
+them as an edge or a probability; asked whether they work, say what `track_record` says, with its \
+counts and its baseline, and nothing more.
 - **Volume and open interest do not say who bought.** Free data has no trade tape, so whether a \
 contract was bought or sold, opened or closed, is inferred. Never call flow "institutional buying", \
 "smart money" or "accumulation"; describe the position ("call volume at the 350 strike was 0.1x its \
@@ -1191,7 +1196,7 @@ CONTEXT_SECTION_CAP = 14_000
 
 _ORDER_BASE = [
     "portfolio_summary", "reader_holdings", "auto_loaded", "auto_loaded_note", "screen_candidates",
-    "market", "compare", "ticker", "quote", "pulse", "verdict", "cases", "why", "digest",
+    "market", "compare", "ticker", "quote", "pulse", "verdict", "track_record", "cases", "why", "digest",
     "whats_next", "next_earnings_date", "options_research", "vol_surface", "iv_rank", "rate",
     "reader_watchlist", "active_view", "chart", "technicals",
     "company", "long_term", "earnings", "news", "macro", "sector_confirm", "earnings_momentum",

@@ -6226,12 +6226,103 @@ document.addEventListener('submit', (evt) => {
   loadSetups(true);
 });
 
+/* Track record (Options audit O3). Whether the composite score, the gamma
+ * regime, the walls and the setups have predicted anything. Optic now keeps
+ * each read as it stood (app/signal_archive.py) and /api/validation tests it
+ * against a baseline once there are enough readings; until then each panel
+ * says it is untested, with the count so far. The slot carries that sentence
+ * before the request answers, so the page never implies an edge meanwhile. */
+const TRACK = { body: null, at: 0, loading: false };
+const TRACK_TTL_MS = 30 * 60 * 1000;
+const TRACK_DEFAULT = {
+  composite: 'not yet shown to predict returns.',
+  regime: 'not yet shown that moves are calmer after a positive reading.',
+  walls: 'not yet shown that price stalls at the walls.',
+  setups: 'not yet shown to beat the market.',
+};
+const TRACK_NEED = {
+  composite: '200 readings over 20 trading days',
+  regime: '100 readings in each regime',
+  walls: '50 touches of a wall',
+  setups: '50 observed setups at each horizon',
+};
+
+function trackRecordSlot(name) {
+  return `<p class="caveat tr-line" data-track="${name}">${trackRecordText(name)}</p>`;
+}
+
+function trackSigned(v, d) {
+  return Number.isFinite(v) ? `${v > 0 ? '+' : ''}${fmt(v, d)}` : '—';
+}
+
+function trackRecordText(name) {
+  const c = ((TRACK.body || {}).claims || {})[name];
+  const lead = '<strong>Track record:</strong> ';
+  if (!c) return lead + esc(TRACK_DEFAULT[name] || 'not yet tested.');
+  const n = c.counts || {};
+  if (c.status !== 'tested' || !c.result) {
+    const many = (k, one, more) => `${fmt(k || 0, 0)} ${k === 1 ? one : more}`;
+    const so = {
+      composite: `${many(n.observations, 'reading', 'readings')} over ${many(n.days, 'day', 'days')}`,
+      regime: `${fmt(n.positive || 0, 0)} positive and ${fmt(n.negative || 0, 0)} negative ${n.positive + n.negative === 1 ? 'reading' : 'readings'}`,
+      walls: n.touches ? many(n.touches, 'touch', 'touches') : `${many(n.reads_with_walls, 'reading', 'readings')} with a wall`,
+      setups: many(n.observations, 'observed setup', 'observed setups'),
+    }[name];
+    return lead + `not yet tested. ${c.since ? `Optic began keeping this read on ${esc(shortDate(c.since))}` : 'Optic keeps this read from today'}; a fair test needs ${esc(TRACK_NEED[name])}, so far ${so}. Until then, treat it as a description, not a prediction.`;
+  }
+  const r = c.result;
+  if (name === 'composite') {
+    const chance = r.shuffled_as_good_pct > 5 ? ' Not distinguishable from chance.' : '';
+    return lead + `rank correlation with the next ${r.horizon_days} days' return ${trackSigned(r.mean_rank_correlation, 3)}, against ${r.momentum_rank_correlation === null ? 'no momentum reading' : trackSigned(r.momentum_rank_correlation, 3) + ' for 20-day momentum alone'}; shuffled scores did as well ${fmt(r.shuffled_as_good_pct, 0)}% of the time (${fmt(n.observations, 0)} readings, ${fmt(n.days, 0)} days).${chance}`;
+  }
+  if (name === 'regime') {
+    const h = (r.by_horizon || {})['5d'] || {};
+    return lead + `over 5 days, moves after positive readings averaged ${fmt(h.positive_mean_move_vs_implied, 2)}× the move IV implied, after negative ${fmt(h.negative_mean_move_vs_implied, 2)}× (${fmt(h.n_positive, 0)} and ${fmt(h.n_negative, 0)} readings${Number.isFinite(h.difference_t) ? `, t ${fmt(h.difference_t, 1)}` : ''}).`;
+  }
+  if (name === 'walls') {
+    return lead + `price closed back on the near side the first day it reached a wall ${fmt(r.wall_hold_pct, 0)}% of the time, against ${fmt(r.placebo_hold_pct, 0)}% for the strikes beside it (${fmt(n.touches, 0)} touches, within ${r.horizon_days} days).`;
+  }
+  const h = (r.by_horizon || {})['10 candles'] || {};
+  return lead + `after 10 candles, ${fmt(h.beat_spy_pct, 0)}% of setups beat SPY in their direction, by ${trackSigned(h.mean_excess_pct, 2)}% on average (${fmt(h.n, 0)} setups).`;
+}
+
+function paintTrackRecord() {
+  document.querySelectorAll('[data-track]').forEach((el) => { el.innerHTML = trackRecordText(el.dataset.track); });
+}
+
+async function loadTrackRecord() {
+  if (TRACK.loading) return;
+  if (TRACK.body && Date.now() - TRACK.at < TRACK_TTL_MS) { paintTrackRecord(); return; }
+  TRACK.loading = true;
+  try {
+    TRACK.body = await getJSON('/api/validation');
+    TRACK.at = Date.now();
+  } catch (err) {
+    // The default sentence stays: untested is the honest reading without an answer.
+  } finally {
+    TRACK.loading = false;
+    paintTrackRecord();
+  }
+}
+
+/* What Milo is told: each claim's status, counts and baseline result. */
+function trackRecordContext() {
+  const claims = (TRACK.body || {}).claims;
+  if (!claims) return { status: 'not yet tested', note: 'Optic has not shown that its composite score, gamma regime, walls or setups predict returns.' };
+  const out = {};
+  Object.entries(claims).forEach(([k, c]) => {
+    out[k] = { claim: c.claim, status: c.status, since: c.since, counts: c.counts, needed: c.needed, result: c.result };
+  });
+  return out;
+}
+
 function renderSetupsShell() {
   return `<div class="panel gap span-all" id="swing-setups">
     <h2>${hg('Swing setups')}</h2>
     <p class="sub">Bullish and bearish entry rules on completed candles, each with its
       context, setup, trigger and invalidation. For review: nothing here places a trade,
       and every rule is a hypothesis to test, not a strategy known to work.</p>
+    ${trackRecordSlot('setups')}
     <div id="setups-body">${renderSetupsBody()}</div>
   </div>`;
 }
@@ -12974,7 +13065,9 @@ function gexNearTermHTML(nt) {
   const walls = [wall && wall.strike ? `largest call-side strike ${usd(wall.strike)}` : '',
     pwall && pwall.strike ? `put-side ${usd(pwall.strike)}` : ''].filter(Boolean).join(', ');
   return `<div class="op-near"><p class="sub"><strong>Short-dated expiries</strong> (${(nt.expiries || []).map((e) => esc(shortDate(e))).join(', ')}):
-    net ${sign(nt.net_gex)} per 1% move${share}${walls ? '; ' + walls : ''}. With them, the model's net is ${sign(nt.combined_net_gex)}.</p>
+    net ${sign(nt.net_gex)} per 1% move${share}${walls ? '; ' + walls : ''}. With them, the model's net is ${sign(nt.combined_net_gex)}${
+  Math.sign(nt.combined_net_gex || 0) !== Math.sign(nt.combined_net_gex - nt.net_gex || 0)
+    ? ': the sign changes, so the regime above depends on which expiries are read' : ''}.</p>
     <p class="caveat">${esc(nt.note || '')}</p></div>`;
 }
 
@@ -13115,6 +13208,7 @@ function renderSwing(d) {
     ? `<span class="chip neutral"><span class="dot"></span>${fmt(v.signal_agreement_pct, 0)}% signal agreement</span>` : ''}
         </div>
       </div>
+      ${trackRecordSlot('composite')}
 
       <h3>${hg('What makes up this score')}${askPulse('composite')}</h3>
       <p class="sub">${gloss(v.scale_note || '')}</p>
@@ -13574,6 +13668,7 @@ function renderSwing(d) {
   (gex.regime || {}).flip_zone ? `, within a zone of ${usd(gex.regime.flip_zone.low)} to ${usd(gex.regime.flip_zone.high)} where the model's net gamma is close to zero` : ''}.` : ''}</p>
       <div class="callout info">${gloss((gex.regime || {}).note || '')}<br><br><strong>Walls:</strong> ${gloss((gex.regime || {}).swing_implication || '')}</div>
       ${(gex.regime || {}).sign_note ? `<p class="caveat">${esc(gex.regime.sign_note)}</p>` : ''}
+      ${trackRecordSlot('regime')}${trackRecordSlot('walls')}
       ${gexNearTermHTML(gex.near_term)}
       ${(gex.expiries_used || []).length ? `<p class="caveat">From the ${gex.expiries_used.length} expiries read (${gex.expiries_used.map((e) => esc(shortDate(e))).join(', ')}): adding or dropping an expiry changes the total, and same-day positions are missing because open interest is the previous session's. Rate ${esc(((gex.inputs || {}).rate_pct ?? '') + '%')}; ${esc((gex.inputs || {}).iv || '')}</p>` : ''}
 
@@ -13717,6 +13812,7 @@ function renderSwing(d) {
     if (OPT.data && OPT.sym === STATE.ticker) { paintOptResearch(); paintOptPosition(); }
     else loadOptResearch();
   }
+  loadTrackRecord();
 
   // ---- charts
   /* A 0-100 score (a level's strength) runs up from zero against 100, as its
@@ -41463,6 +41559,7 @@ function chatContextPayload() {
       ctx.rate = s.rate;
       const optCtx = optionsResearchContext();
       if (optCtx) ctx.options_research = optCtx;
+      ctx.track_record = trackRecordContext();
       ctx.cases = s.cases;
       ctx.why = s.why;
       ctx.whats_next = s.whats_next;
@@ -43234,6 +43331,7 @@ const PULSE_SOURCES = {
   vol_surface: ['Options pricing', 'swing'],
   iv_rank: ['IV rank', 'swing'],
   options_research: ['Options research', 'swing'],
+  track_record: ['Track record', 'swing'],
 };
 const PULSE_SRC_RE = /\s?\[\[src ([a-z_]{2,20})\]\]/g;
 

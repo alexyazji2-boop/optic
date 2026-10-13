@@ -70,9 +70,9 @@ Ordered by financial correctness first. Fixtures: saved Friday 2026-10-09 close 
 | C14 | Strategy ideas priced at the mid only | Retail-favoured weeklies average a 12.6% quoted spread (Bryzgalova, Pavlova & Sikorskaya 2023) | Natural cost on every idea; the builder shows mid, natural and slipped-plus-fees | Fixed |
 | C15 | Milo never saw the options research and lost options blocks to the context budget | capture of 7 Options-tab questions | options_research, vol_surface, iv_rank, rate sent and prioritised on the Options tab | Fixed, V |
 | C16 | Greeks used Yahoo's IV with r = 0 | as C1/C4 | Greeks from corrected IV and rate | Fixed |
-| O1 | Expiry selection skips 0-5 DTE (most gamma on index products) | `pick_swing_expiries` | Not changed: stated next to GEX instead | Open (roadmap) |
-| O2 | European model for American equity options | `greeks.py` | OTM-side IV limits the error for pricing; early assignment flagged in the builder | Partly mitigated; binomial with discrete dividends is roadmap |
-| O3 | Composite score, setups, walls have no validated edge | 2026-10-11 analysis F8 | Labelled; not changed here | Open (validation protocol) |
+| O1 | Expiry selection skips 0-5 DTE (most gamma on index products) | `pick_swing_expiries`; SPY at 1pm ET 2026-10-13: the 0-2 day expiries held 64-65% of open gamma, and once flipped the sign (main -$12M, with them +$184M per 1%) | On index products the tab's own read also fetches the listed 0-5 day expiries (in parallel; not in scans) and reads them separately: net, share of gross gamma, walls, combined net, a note when the sign changes, and the previous-session OI caveat | Fixed, V (`tests/test_gex_near_term.py`; live SPY) |
+| O2 | European model for American equity options | `greeks.py`; European solve inflated IV on in-the-money rows solved from their own mid by up to 6.7 (AAPL) and 8.8 (SPY) vol points | `app/analytics/american.py`: Barone-Adesi-Whaley with continuous yield, held to a CRR tree (within 0.5% or $0.10 to six months). Used for the IV solve on equity and ETF options (index options stay European), the builder's values before expiry, and an early-exercise column per contract. Greeks stay Black-Scholes at that IV, stated | Fixed, V (`tests/test_american.py`); discrete dividends remain roadmap |
+| O3 | Composite score, setups, walls have no validated edge | 2026-10-11 analysis F8 | Cannot be backtested honestly (the inputs were never kept), so it is now measured going forward: `app/signal_archive.py` keeps the first in-session read per symbol per day, immutable; `/api/validation` tests each claim against a baseline (composite: daily rank correlation vs 20-day momentum and a within-day shuffle; regime: moves scaled by implied move, positive vs negative; walls: hold rate vs placebo strikes two steps away; setups: direction-signed change minus SPY) once past its minimum (200 readings over 20 days; 100 per regime; 50 touches; 50 setups per horizon). Every panel says "Track record: not yet tested" with counts; Milo is told the reads are untested | Measurement in place, V (`tests/test_signal_archive.py`); **no result yet: the first test is about 20 trading days away** |
 
 ---
 
@@ -82,8 +82,10 @@ Ordered by financial correctness first. Fixtures: saved Friday 2026-10-09 close 
 - **Rate** r: 13-week bill yield, continuous approximation; one rate for all expiries. **Dividend yield** q: the quote's,
   continuous.
 - **Mid** (bid + ask) / 2 for two-sided quotes only. **Spread %** (ask - bid) / mid x 100.
-- **IV**: Black-Scholes-Merton IV solved from the mid by bisection; per (expiry, strike) the OTM side's IV (call if K >= F,
-  put if K < F, F = S e^{(r-q)T}).
+- **IV**: solved from the mid by bisection; per (expiry, strike) the OTM side's IV (call if K >= F, put if K < F,
+  F = S e^{(r-q)T}). Equity and ETF options are solved on the Barone-Adesi-Whaley American price where early exercise is
+  worth a tenth of a cent or more; cash-settled index options (SPX, NDX, RUT, XSP, VIX) on Black-Scholes-Merton.
+- **Early exercise** (research table): BAW value minus Black-Scholes value at the contract's IV, per contract.
 - **Greeks** (`greeks.py`): delta per $1 per share; gamma per $1; vega per 1 vol point; theta per calendar day; rho per
   1%; vanna per vol point; charm per day. Per contract x 100; per position x quantity.
 - **ATM IV**: total variance interpolated in log-moneyness at the forward between the OTM strikes either side.
@@ -150,9 +152,9 @@ Ongoing cost of this pass: none (no paid data, no AI calls; the IV store is one 
 | 1 | Validate the liquidity grade against a few broker tickets during market hours; tune thresholds | Grades are heuristic | S |
 | 2 | Log implied vs realised moves (straddle, 1-SD, event move) per symbol per day | Turns expected-move readings into measured calibration | S |
 | 3 | Store daily OI per contract; show next-day OI change on the activity screen | The only free confirmation that volume opened positions | M |
-| 4 | Read 0-5 DTE expiries into GEX for index products, shown separately | Most index gamma sits there | M |
 | 5 | Reg T margin estimate beside max loss (labelled "typical minimum") | Readers confuse the two | S |
 | 6 | Probability-of-profit with its model and IV named, always beside max loss, calibrated on stored snapshots | A common question; only honest with calibration | M |
-| 7 | Binomial (American) pricer with discrete dividends for single stocks | Deep ITM puts, dividend calls | M |
+| 7 | Discrete dividends in the American pricer (BAW uses a continuous yield) | Calls just before an ex-date | M |
+| 7a | Review the O3 track record when each claim reaches its minimum; drop or relabel any read that does not beat its baseline | The point of measuring | S, from about 2026-11-10 |
 | 8 | Paper Desk options legs analysed with the position engine; portfolio greeks and stress | "How does this affect my overall risk?" | M |
 | 9 | Licensed data and OPRA-derived flow, if the product warrants it | Only way to say anything about intent | L, paid |

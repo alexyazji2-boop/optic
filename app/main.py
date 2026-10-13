@@ -91,6 +91,7 @@ from .analytics import contracts as contracts_mod
 from .analytics import position as position_mod
 from . import watch_runner
 from . import signal_history
+from . import signal_archive
 from . import briefing as briefing_mod
 from .analytics import watches as watches_mod
 from . import events as events_mod
@@ -733,6 +734,16 @@ def _swing_snapshot(
             macro_read = {"error": "macro panel unavailable: {}".format(exc)}
 
     call = swing.verdict(tech, gex_read, flow_read, news_read, macro_read, spot)
+    # O3 (Options audit): the read as it stood, kept once per symbol per
+    # session day so whether it predicts anything can be measured later.
+    try:
+        signal_archive.record(
+            ticker, spot, call, gex_read,
+            strikes=(chain["strike"].tolist() if chain is not None and not chain.empty and not partial else ()),
+            iv30=(surface.get("iv30") or {}).get("iv_pct") if isinstance(surface, dict) else None,
+            macro_included=bool(include_macro), index_like=ticker in gex_mod.INDEX_LIKE)
+    except Exception as exc:                                      # noqa: BLE001
+        logging.getLogger("uvicorn.error").warning("signal archive: %s", exc)
 
     # The reason rides with the headline, so the Setup block can say why there
     # is no setup (a frozen overnight chain) rather than only that there is none.
@@ -1776,6 +1787,66 @@ async def list_digest(body: Dict[str, Any] = Body(default={})) -> Dict[str, Any]
         return digest_mod.compose_list(syms, report, news)
 
     return await _run(build)
+
+
+VALIDATION_TTL = 6 * 3600
+_VALIDATION: Dict[str, Any] = {"at": 0.0, "body": None}
+
+
+def _setup_observations() -> List[Dict[str, Any]]:
+    """Every daily setup trigger's observed closes, once per trigger however
+    many readers were alerted to it. No reader's identity leaves this."""
+    try:
+        got = accounts_db.rows(
+            "SELECT s.symbol, s.strategy, s.direction, s.trigger_at, e.label, e.data_as_of, e.change_pct "
+            "FROM signals s JOIN signal_events e ON e.signal_id = s.id "
+            "WHERE e.kind = 'observation' AND s.timeframe = 'daily' AND e.change_pct IS NOT NULL")
+    except Exception:                                             # noqa: BLE001
+        return []
+    seen, out = set(), []
+    for r in got:
+        key = (r["symbol"], r["strategy"], r["direction"], r["trigger_at"], r["label"])
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            h = int(str(r["label"]).split()[1])
+        except (IndexError, ValueError):
+            continue
+        out.append({"direction": r["direction"], "horizon": h, "trigger_day": str(r["trigger_at"])[:10],
+                    "observed_day": str(r["data_as_of"])[:10], "change_pct": float(r["change_pct"])})
+    return out
+
+
+def _validation_bars(symbols: List[str]) -> Dict[str, pd.DataFrame]:
+    out: Dict[str, pd.DataFrame] = {}
+    for sym in symbols:
+        try:
+            df = PROVIDER.history(sym, period="1y", interval="1d")
+        except Exception:                                         # noqa: BLE001
+            continue
+        if df is not None and not df.empty:
+            out[sym] = df
+    return out
+
+
+@app.get("/api/validation")
+async def validation() -> Dict[str, Any]:
+    """Whether the composite score, the gamma regime, the walls and the swing
+    setups have predicted anything (Options audit O3; app/signal_archive.py).
+    Each claim says "collecting" with its counts until it has enough
+    observations to test against its baseline."""
+    now = time.time()
+    if _VALIDATION["body"] is not None and now - _VALIDATION["at"] < VALIDATION_TTL:
+        return _VALIDATION["body"]
+
+    def build() -> Dict[str, Any]:
+        return signal_archive.evaluate(signal_archive.reads(), _validation_bars, _setup_observations())
+
+    body = await _run(build)
+    body["as_of"] = datetime.now(timezone.utc).isoformat()
+    _VALIDATION.update(at=now, body=body)
+    return body
 
 
 @app.get("/api/signals")
