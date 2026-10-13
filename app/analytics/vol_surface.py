@@ -32,6 +32,12 @@ misread as volatility. This is the convention behind Cboe's VIX strike
 selection and most vendor surfaces. Where neither side has a usable quote the
 feed's IV stays, flagged, and where the feed has none the existing fill does.
 
+For American-exercise underlyings (every equity and ETF option, SPY's too;
+`is_american`) the mids are solved on a Barone-Adesi-Whaley American price
+instead (Options audit O2, app/analytics/american.py), so an in-the-money row
+solved from its own mid, where the OTM side has no quote, no longer reads its
+exercise premium as volatility. Greeks stay Black-Scholes at that IV.
+
 Everything is labelled with its source: `iv_source` is "otm_mid", "own_mid"
 (the OTM side had no quote), "feed" or "filled".
 """
@@ -45,6 +51,8 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 from scipy.special import ndtr
+
+from app.analytics import american as american_mod
 
 ET = ZoneInfo("America/New_York")
 YEAR_SECONDS = 365.0 * 24 * 3600
@@ -148,10 +156,39 @@ def _bs(spot, strike, tau, vol, rate, div, is_call):
     return np.where(is_call, call, put)
 
 
-def solve_iv(price, spot, strike, tau, rate, div, is_call, lo=1e-3, hi=5.0, iters=64):
+def is_american(ticker: Optional[str]) -> bool:
+    """Listed equity and ETF options (SPY's too) are American; the cash-settled
+    index options are European."""
+    return bool(ticker) and str(ticker).upper() not in INDEX_ROOTS
+
+
+def _solve_american(price, spot, strike, tau, rate, div, is_call, lo=1e-3, hi=5.0, iters=50):
+    """Bisection on the Barone-Adesi-Whaley price (Options audit O2). NaN where
+    the price is at or below intrinsic (no time value to solve from) or above
+    the spot for a call or the strike for a put."""
+    intrinsic = np.where(is_call, spot - strike, strike - spot)
+    upper = np.where(is_call, spot, strike)
+    ok = np.isfinite(price) & (price > np.maximum(intrinsic, 0.0) + 1e-9) & (price < upper - 1e-9)
+    a = np.full(price.shape, lo)
+    b = np.full(price.shape, hi)
+    for _ in range(iters):
+        m = 0.5 * (a + b)
+        high = american_mod.baw(spot, strike, tau, m, rate, div, is_call) > price
+        b = np.where(high, m, b)
+        a = np.where(high, a, m)
+    iv = 0.5 * (a + b)
+    return np.where(ok & (iv > lo * 1.5) & (iv < hi * 0.99), iv, np.nan)
+
+
+def solve_iv(price, spot, strike, tau, rate, div, is_call, lo=1e-3, hi=5.0, iters=64, american=False):
     """Vectorised bisection for Black-Scholes IV. NaN where the price lies
     outside the no-arbitrage bounds (below discounted intrinsic, above the
-    spot for a call or the discounted strike for a put)."""
+    spot for a call or the discounted strike for a put).
+
+    With `american`, the contracts early exercise can be worth something for
+    (puts while the rate is positive, calls while the yield is) are solved on
+    the American price instead: the European solve reads that premium as
+    extra volatility."""
     price = np.asarray(price, dtype=float)
     strike = np.asarray(strike, dtype=float)
     tau = np.maximum(np.asarray(tau, dtype=float), MIN_TAU)
@@ -171,11 +208,25 @@ def solve_iv(price, spot, strike, tau, rate, div, is_call, lo=1e-3, hi=5.0, iter
         a = np.where(high, a, m)
     iv = 0.5 * (a + b)
     iv = np.where(ok & (iv > lo * 1.5) & (iv < hi * 0.99), iv, np.nan)
+    if american:
+        matters = np.where(is_call, div > 0, rate > 0) & np.isfinite(price) & (strike > 0)
+        # Only where the right is worth a tenth of a cent a share at the
+        # European IV (or that solve failed): far out of the money the two
+        # agree, and skipping them keeps the solve fast on a full chain.
+        probe = np.where(np.isfinite(iv), iv, 0.3)
+        eep = american_mod.early_exercise_premium(spot, strike, tau, probe, rate, div, is_call)
+        matters &= ~np.isfinite(iv) | (eep > 1e-3)
+        if matters.any():
+            iv = iv.copy()
+            iv[matters] = _solve_american(price[matters], spot, strike[matters], tau[matters],
+                                          rate, div, is_call[matters], lo=lo, hi=hi)
     return iv
 
 
-def resolve_surface(chain: pd.DataFrame, spot: float, rate: float, div: float) -> pd.DataFrame:
-    """Re-solve IVs from two-sided mids, OTM side per strike. Pure: a copy."""
+def resolve_surface(chain: pd.DataFrame, spot: float, rate: float, div: float,
+                    american: bool = False) -> pd.DataFrame:
+    """Re-solve IVs from two-sided mids, OTM side per strike. Pure: a copy.
+    `american` (equity and ETF options) solves on the American price."""
     if chain is None or chain.empty or not spot:
         return chain
     out = chain.copy()
@@ -184,7 +235,7 @@ def resolve_surface(chain: pd.DataFrame, spot: float, rate: float, div: float) -
     out["iv_feed"] = out["iv"]
     filled = out["iv_filled"].astype(bool) if "iv_filled" in out else pd.Series(False, index=out.index)
     solved = solve_iv(out["quote_mid"].to_numpy(), float(spot), out["strike"].to_numpy(),
-                      out["tau"].to_numpy(), rate, div, out["is_call"].to_numpy())
+                      out["tau"].to_numpy(), rate, div, out["is_call"].to_numpy(), american=american)
     out["iv_mid"] = solved
     fwd = spot * np.exp((rate - div) * out["tau"].to_numpy())
     out["otm"] = np.where(out["is_call"].to_numpy(), out["strike"].to_numpy() >= fwd,
@@ -201,9 +252,15 @@ def resolve_surface(chain: pd.DataFrame, spot: float, rate: float, div: float) -
     out["iv"] = iv
     out["iv_source"] = source
     out.attrs.update(chain.attrs)
-    out.attrs["iv_method"] = ("Black-Scholes IV re-solved from each two-sided mid at Optic's rate and "
-                              "dividend yield; the out-of-the-money side's IV is used for both "
-                              "contracts at a strike.")
+    out.attrs["exercise"] = "american" if american else "european"
+    out.attrs["iv_method"] = (
+        ("IV re-solved from each two-sided mid at Optic's rate and dividend yield, on an American-exercise "
+         "price (Barone-Adesi-Whaley) since these options can be exercised early; the out-of-the-money "
+         "side's IV is used for both contracts at a strike, and greeks are Black-Scholes at that IV.")
+        if american else
+        ("Black-Scholes IV re-solved from each two-sided mid at Optic's rate and "
+         "dividend yield; the out-of-the-money side's IV is used for both "
+         "contracts at a strike."))
     return out
 
 

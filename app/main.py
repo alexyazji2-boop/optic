@@ -518,7 +518,8 @@ def _near_term_gex(ticker: str, chain: Optional[pd.DataFrame], swing_chain: Opti
         return {"available": False, "reason": unusable}
     chain = vol_surface_mod.apply_clock(chain)
     chain = vol_surface_mod.apply_quotes(chain)
-    chain = vol_surface_mod.resolve_surface(chain, spot, rate, div)
+    chain = vol_surface_mod.resolve_surface(chain, spot, rate, div,
+                                            american=vol_surface_mod.is_american(ticker))
     read = gex_mod.analyse(chain, spot, rate=rate, div=div, ticker=ticker)
     read.pop("_exposure_frame", None)
     if "error" in read:
@@ -685,7 +686,8 @@ def _swing_snapshot(
             event_date = None
         chain = vol_surface_mod.apply_clock(chain)
         chain = vol_surface_mod.apply_quotes(chain)
-        chain = vol_surface_mod.resolve_surface(chain, spot, rate, div)
+        chain = vol_surface_mod.resolve_surface(chain, spot, rate, div,
+                                                american=vol_surface_mod.is_american(ticker))
         surface = vol_surface_mod.build(chain, spot, rate, div, event_date=event_date)
         iv30 = (surface.get("iv30") or {}).get("iv_pct")
         iv_history_mod.record(ticker, iv30)
@@ -1184,7 +1186,8 @@ def _options_frame(ticker: str, expiries: Optional[List[str]], max_expiries: int
     rate_info = rates_mod.risk_free(YF_PROVIDER)
     chain = vol_surface_mod.apply_clock(chain)
     chain = vol_surface_mod.apply_quotes(chain)
-    chain = vol_surface_mod.resolve_surface(chain, spot, rate_info["rate"], div)
+    chain = vol_surface_mod.resolve_surface(chain, spot, rate_info["rate"], div,
+                                            american=vol_surface_mod.is_american(ticker))
     frame = gex_mod.compute_exposure(chain, spot, rate=rate_info["rate"], div=div, ticker=ticker)
     frame.attrs.update(chain.attrs)
     return quote, float(spot), float(div), rate_info, frame
@@ -1279,7 +1282,8 @@ async def options_research(
         tbl = contracts_mod.table(frame, spot, rate_info["rate"], div, side=side, expiry=exp,
                                   delta_lo=min(delta_lo, delta_hi), delta_hi=max(delta_lo, delta_hi),
                                   max_spread_pct=max_spread, min_oi=min_oi,
-                                  include_unquoted=include_unquoted)
+                                  include_unquoted=include_unquoted,
+                                  american=vol_surface_mod.is_american(sym))
         summary = vol_surface_mod.expiry_rows(frame, spot, rate_info["rate"], div)
         earn = None
         try:
@@ -1384,7 +1388,8 @@ async def options_analyze(ticker: str, payload: Dict[str, Any] = Body(...)) -> D
         if problems:
             raise HTTPException(status_code=422, detail=" ".join(problems))
         out = position_mod.analyse(legs, spot, rate_info["rate"], div, days_forward=days_forward,
-                                   slippage=slippage, fee_per_contract=fee)
+                                   slippage=slippage, fee_per_contract=fee,
+                                   american=vol_surface_mod.is_american(sym))
         flags: List[str] = []
         exd = _ex_dividend(sym)
         first_exp = min((l["expiry"] for l in legs if l["type"] != "stock"), default=None)

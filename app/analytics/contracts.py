@@ -26,6 +26,8 @@ import numpy as np
 import pandas as pd
 from scipy.special import ndtr
 
+from app.analytics import american as american_mod
+
 from . import liquidity as liq
 
 MULT = 100.0
@@ -55,7 +57,8 @@ def table(frame: pd.DataFrame, spot: float, rate: float, div: float, *,
           delta_lo: float = 0.0, delta_hi: float = 1.0,
           max_spread_pct: Optional[float] = None, min_oi: float = 0.0,
           include_unquoted: bool = False,
-          thresholds: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
+          thresholds: Optional[Dict[str, float]] = None,
+          american: bool = False) -> Dict[str, Any]:
     df = frame.copy()
     if expiry:
         df = df[df["expiry"] == expiry]
@@ -69,6 +72,10 @@ def table(frame: pd.DataFrame, spot: float, rate: float, div: float, *,
     d1 = (np.log(spot / k) + (rate - div + 0.5 * vol * vol) * tau) / (vol * np.sqrt(tau))
     d2 = d1 - vol * np.sqrt(tau)
     df["p_itm_model"] = ndtr(d2) if side == "call" else ndtr(-d2)
+    # What the right to exercise early is worth at this IV, per contract: the
+    # part of the price a European model misses (O2).
+    df["_eep"] = (american_mod.early_exercise_premium(spot, k, tau, vol, rate, div, side == "call") * MULT
+                  if american else np.zeros(len(df)))
     grades = liq.grade_frame(df, thresholds)
     df["_grade"] = [g["grade"] for g in grades]
     dropped = {"delta": 0, "spread": 0, "open_interest": 0, "unquoted": 0}
@@ -123,6 +130,8 @@ def table(frame: pd.DataFrame, spot: float, rate: float, div: float, *,
             "cost_mid_contract": _f(mid * MULT, 0) if mid else None,
             "breakeven_ask": _f(be_ask, 2), "breakeven_mid": _f(be_mid, 2),
             "breakeven_move_pct": _f((be_ask / spot - 1) * 100, 2) if be_ask else None,
+            "exercise": "american" if american else "european",
+            "early_exercise_premium_contract": _f(r["_eep"], 2) if american else None,
         })
     rows.sort(key=lambda x: x["strike"])
     return {"rows": rows, "total": total, "shown": len(rows), "filtered_out": dropped}

@@ -12659,11 +12659,11 @@ function optResearchHTML() {
   const dropped = Object.entries(out).filter(([, n]) => n > 0).map(([k, n]) => `${n} by ${k.replace('_', ' ')}`).join(', ');
   const more = OPT.more === null ? knowledgeLevel() >= 2 : OPT.more;
   const toggle = `<button type="button" class="ov-linkbtn op-more" data-op-more aria-pressed="${more}">${more
-    ? 'Fewer columns' : 'More columns: decay, volatility exposure, model chance, open interest'}</button>`;
+    ? 'Fewer columns' : 'More columns: decay, volatility exposure, model chance, open interest, early exercise'}</button>`;
   const table = rows.length ? `${toggle}<div class="table-scroll"><table class="data op-table${more ? ' is-more' : ''}">
     <thead><tr><th class="num">Strike</th><th class="num">Delta</th><th class="num">Bid / ask</th><th>Spread</th>
       <th class="num">IV</th><th class="num">Breakeven</th><th class="num">Cost</th><th class="num op-adv">Decay / day</th>
-      <th class="num op-adv">Per vol pt</th><th class="num op-adv">ITM (model)</th><th class="num op-adv">OI / vol</th><th></th></tr></thead>
+      <th class="num op-adv">Per vol pt</th><th class="num op-adv">ITM (model)</th><th class="num op-adv">OI / vol</th><th class="num op-adv">Early exercise</th><th></th></tr></thead>
     <tbody>${rows.map((r) => `<tr>
       <td class="num"><strong>${fmt(r.strike, r.strike % 1 ? 2 : 0)}</strong><div class="caption">${fmtPct(r.moneyness_pct, 1)}</div></td>
       <td class="num">${fmt(r.delta, 2)}</td>
@@ -12676,6 +12676,7 @@ function optResearchHTML() {
       <td class="num op-adv">${optMoney(r.vega_per_contract)}</td>
       <td class="num op-adv">${r.p_itm_model !== null ? fmt(r.p_itm_model * 100, 0) + '%' : '—'}</td>
       <td class="num op-adv">${fmt(r.open_interest, 0)} / ${fmt(r.volume, 0)}</td>
+      <td class="num op-adv">${r.exercise === 'european' ? '<span class="caption">European</span>' : (r.early_exercise_premium_contract >= 0.5 ? optMoney(r.early_exercise_premium_contract) : '<span class="caption">under $1</span>')}</td>
       <td>${r.mid ? `<button type="button" class="btn sm" data-op-add="${esc(r.contract || '')}" data-op-strike="${r.strike}" data-op-type="${r.type}" data-op-exp="${esc(r.expiry)}"
         aria-label="Add the ${fmt(r.strike, 2)} ${r.type} to the position builder">Add</button>` : ''}</td>
     </tr>`).join('')}</tbody></table></div>`
@@ -12685,6 +12686,7 @@ function optResearchHTML() {
       Cost is one contract (100 shares) at the ask, before fees. Breakeven at expiry is the strike ${OPT.side === 'call' ? 'plus' : 'minus'} the ask.
       Decay is the model's dollars lost per day with nothing else changing; per vol pt is the dollar change for a one-point move in implied volatility.
       ITM (model) is N(d2), the risk-neutral chance of finishing in the money: not a forecast, and not a chance of profit.
+      ${rows.length && rows[0].exercise === 'european' ? 'These index options are European: they can only be exercised at expiry.' : 'Early exercise is what the right to exercise before expiry adds to one contract\'s model price; IVs are solved on that American price.'}
       ${esc(((d.liquidity_method || {}).text) || '')} ${esc(((d.liquidity_method || {}).mid_note) || '')}</p>
     ${OPT.loading ? '<p class="caption" role="status">Updating…</p>' : ''}`;
 }

@@ -23,7 +23,7 @@ def _dates(*days):
 
 
 def _read(chain):
-    chain = vs.resolve_surface(vs.apply_quotes(vs.apply_clock(chain)), SPOT, R, Q)
+    chain = vs.resolve_surface(vs.apply_quotes(vs.apply_clock(chain)), SPOT, R, Q, american=True)
     out = gex_mod.analyse(chain, SPOT, rate=R, div=Q, ticker="SPY")
     out.pop("_exposure_frame", None)
     return chain, out

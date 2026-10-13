@@ -25,9 +25,13 @@ or unbounded when a short call is uncovered. A broker's margin requirement is
 set by its own rules (FINRA 4210 sets the floor) and can be far below the
 maximum loss of an undefined-risk position; this module does not compute it.
 
-**What is not modelled:** early assignment of a short American option (most
-likely on a short call just before an ex-dividend date, or a deep in-the-money
-short put), pin risk at expiry, legs on different expiries settling on
+**Exercise style.** With `american` (equity and ETF options) the values before
+expiry are Barone-Adesi-Whaley American prices, so a long leg's right to
+exercise early is in them (Options audit O2).
+
+**What is not modelled:** whether a short American leg is assigned early, which
+is the holder's choice (most likely on a short call just before an ex-dividend
+date, or a deep in-the-money short put; the endpoint flags both), pin risk at expiry, legs on different expiries settling on
 different days (a calendar's "at expiry" curve is at the first expiry, with
 the later leg valued by the model), dividends beyond a continuous yield.
 """
@@ -38,6 +42,8 @@ from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
 from scipy.special import ndtr
+
+from app.analytics import american as american_mod
 
 from .vol_surface import MIN_TAU
 
@@ -91,6 +97,8 @@ def _leg_value_model(leg: Dict[str, Any], S: np.ndarray, tau: float, r: float, q
     if tau <= MIN_TAU:
         return _leg_value_at_expiry(leg, S)
     vol = max(leg["iv"] + iv_shift, 0.01)
+    if leg.get("american"):
+        return american_mod.baw(S, leg["strike"], tau, vol, r, q, leg["type"] == "call")
     return _bs_vec(S, leg["strike"], tau, vol, r, q, leg["type"] == "call")
 
 
@@ -168,10 +176,12 @@ def _roots(x: np.ndarray, y: np.ndarray) -> List[float]:
 
 def analyse(legs: Sequence[Dict[str, Any]], spot: float, rate: float, div: float,
             days_forward: Optional[float] = None, slippage: float = 0.25,
-            fee_per_contract: float = 0.65, span_pct: float = 0.25) -> Dict[str, Any]:
+            fee_per_contract: float = 0.65, span_pct: float = 0.25,
+            american: bool = False) -> Dict[str, Any]:
     """Each leg: {type: call|put|stock, side: long|short, qty, strike, expiry,
-    tau (years to its expiry), iv (decimal), mid, bid, ask}."""
-    legs = [dict(l) for l in legs]
+    tau (years to its expiry), iv (decimal), mid, bid, ask}. `american`
+    values the legs before expiry on an American-exercise price."""
+    legs = [dict(l, american=american and l.get("type") != "stock") for l in legs]
     if not legs:
         return {"available": False, "reason": "no legs"}
     opt = [l for l in legs if l["type"] != "stock"]
@@ -272,8 +282,13 @@ def analyse(legs: Sequence[Dict[str, Any]], spot: float, rate: float, div: float
         "scenarios": {"moves_pct": [int(m * 100) for m in moves], "rows": scen},
         "assumptions": [
             "P/L is per position in dollars, from the mid entry; the entry block shows the natural price and a slippage-and-fees price.",
-            "Payoff at expiry is exact given the entry price; values before expiry are Black-Scholes estimates at each leg's current IV, held fixed as price moves.",
-            "European exercise: early assignment of a short leg is not modelled.",
+            ("Payoff at expiry is exact given the entry price; values before expiry are American-exercise "
+             "estimates (Barone-Adesi-Whaley) at each leg's current IV, held fixed as price moves; greeks are "
+             "Black-Scholes at that IV." if american else
+             "Payoff at expiry is exact given the entry price; values before expiry are Black-Scholes estimates at each leg's current IV, held fixed as price moves."),
+            ("American exercise: a long leg's value includes the right to exercise early, but whether a short "
+             "leg is assigned early is the holder's choice and is not predicted; see the flags." if american else
+             "European exercise (cash-settled index options): no early assignment."),
             "Rate {:.2%}, dividend yield {:.2%}, continuous.".format(rate, div),
             "Max loss is not your broker's margin requirement, which follows its own rules.",
         ] + (["Legs expire on different dates: 'at expiry' is the first expiry, with later legs valued by the model."] if calendar else []),
