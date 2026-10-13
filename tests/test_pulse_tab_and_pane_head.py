@@ -62,3 +62,42 @@ def test_the_title_and_its_symbol_sit_a_word_space_apart():
     rule = rule[:rule.index("}")]
     assert "column-gap: 0.3em;" in rule and "  gap: var(--space-2);" not in rule
     assert ".panel > h2.is-toggle > .ask-pulse { margin-left: var(--space-1); }" in CSS
+
+
+def test_enter_sends_and_shift_enter_is_a_new_line():
+    """Asked for as "pressing enter on Milo should send the message, not create
+    another line". Run the box's own key handler on simulated keys."""
+    exe = JSC if os.path.exists(JSC) else shutil.which("jsc")
+    if not exe:
+        pytest.skip("no JavaScriptCore on this machine")
+    start = APP.index("$('#chat-input').addEventListener('keydown'")
+    handler = APP[start:APP.index("\n});\n", start) + 4]
+    script = """
+      var clicks = 0, handlerFn = null;
+      var box = { value: 'hi', placeholder: '', addEventListener: function (t, f) { handlerFn = f; } };
+      var send = { click: function () { clicks += 1; } };
+      function $(sel) { return sel === '#chat-input' ? box : send; }
+      function pulsePlaceholderAsk() { return ''; }
+      %s
+      function press(k) {
+        var e = { key: 'Enter', shiftKey: false, altKey: false, metaKey: false, ctrlKey: false,
+                  isComposing: false, keyCode: 13, currentTarget: box, prevented: false,
+                  preventDefault: function () { this.prevented = true; } };
+        for (var p in k) e[p] = k[p];
+        var before = clicks; handlerFn(e);
+        return [clicks - before, e.prevented];
+      }
+      print('RESULT:' + JSON.stringify({
+        enter: press({}), shift: press({ shiftKey: true }), meta: press({ metaKey: true }),
+        ctrl: press({ ctrlKey: true }), alt: press({ altKey: true }),
+        composing: press({ isComposing: true }), ime: press({ keyCode: 229 }),
+        letter: press({ key: 'a', keyCode: 65 }) }));
+    """ % handler
+    out = subprocess.run([exe, "-e", script], capture_output=True, text=True, timeout=60)
+    got = json.loads(out.stdout.split("RESULT:", 1)[1].split("\n")[0])
+    assert got["enter"] == [1, True], "Enter sends, and adds no line"
+    assert got["meta"] == [1, True] and got["ctrl"] == [1, True], "Cmd/Ctrl+Enter still send"
+    assert got["shift"] == [0, False], "Shift+Enter is the new line"
+    assert got["alt"] == [0, False]
+    assert got["composing"] == [0, False] and got["ime"] == [0, False], "Enter confirms an IME"
+    assert got["letter"] == [0, False]

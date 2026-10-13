@@ -45716,7 +45716,15 @@ function pulsePlaceholderAsk(box) {
 }
 
 $('#chat-input').addEventListener('keydown', (evt) => {
-  if (evt.key === 'Enter' && (evt.metaKey || evt.ctrlKey)) {
+  /* Enter sends; Shift+Enter is the new line. Asked for as "pressing enter on
+   * Milo should send the message, not create another line": it was Cmd/Ctrl+
+   * Enter only, which nothing on the panel said, so Enter added lines to a
+   * question that never went. Cmd/Ctrl+Enter still sends for anyone used to
+   * it. Not while an input method is composing (Japanese, Chinese, Korean),
+   * where Enter confirms the characters rather than the message. While Milo is
+   * answering, Send is disabled, so the click does nothing and the draft stays
+   * in the box rather than being cleared. */
+  if (evt.key === 'Enter' && !evt.shiftKey && !evt.altKey && !evt.isComposing && evt.keyCode !== 229) {
     evt.preventDefault();
     $('#chat-send').click();
     return;
