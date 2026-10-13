@@ -85,10 +85,13 @@ def _block(start, css=CSS):
 def test_the_row_layout_follows_the_card_not_the_window():
     assert "#hm-watch, .wv-panel { container-type: inline-size; }" in CSS
     narrow = _block("@container (max-width: 559px) {")
-    # The 30-day line on a third line: beside the price it left the price
-    # 16px of a 308px row. "What changed" has the whole second line, because
-    # sharing it with the signal ellipsised "20-day breakout" on a 375px phone.
-    assert "'sym price chg go' 'sym changed changed go' 'sym trend signal go'" in narrow
+    # Two lines, read across (2026-10-13, "not UI friendly in terms of where
+    # the lines are placed"): symbol and signal, the 30-day line, the price;
+    # then the reason, running under the line, and today's change.
+    assert "'sym signal trend price go' 'changed changed changed chg go'" in narrow
+    # The line is the column that gives way, never the signal or the price:
+    # fixed at 4rem, the full list's phone rows drew it over BULLISH.
+    assert "minmax(3.25rem, max-content) max-content minmax(2rem, 1fr) max-content auto" in narrow
     assert ".wl-go { grid-area: go;" in narrow
     # The window-width version survives only where container queries do not
     # exist. Beside them it came later in the file, and its grid has no `go`
@@ -118,30 +121,24 @@ def test_the_home_board_splits_on_its_own_width():
     assert not loose, "the window-width split still runs beside the container one"
 
 
-def test_the_home_cards_columns_are_spread_evenly():
-    """Asked for from a screenshot as "center these out evenly". The price and
-    what-changed column was a 1fr track, so it took every spare pixel and the
-    gaps either side of it read 21, 86 and 21 pixels on a 379px card. The rows
-    now share the list's columns, each as wide as its widest entry, with an
-    equal spacer between each pair: measured in a browser at 43px apiece, and
-    16px apiece with a nineteen-letter note, which still fitted whole."""
+def test_the_home_cards_rows_share_one_set_of_columns():
+    """Each row was its own grid, so the price track sized itself to its own
+    price and the line started at a different x on every row. The home card's
+    rows take the list's tracks (subgrid): measured in a browser at 295, 334
+    and 380px cards, every signal word starts at one x and every price and
+    change ends at one x, with nothing clipped."""
     block = _block("@supports (grid-template-columns: subgrid) {")
     assert "@container (max-width: 559px) {" in block
     lst = _block(".wl-list.is-compact {", block)
-    tracks = re.search(r"grid-template-columns:\s*([^;]+);", lst).group(1).split()
-    spacer = "minmax(var(--space-2),"
-    # auto, spacer, auto, spacer, auto, spacer, auto: the tokens split the
-    # minmax in two, so rejoin before comparing.
-    joined = " ".join(tracks).replace(spacer + " 1fr)", "SPACER").split()
-    assert joined == ["auto", "SPACER", "auto", "SPACER", "auto", "SPACER", "auto"], joined
+    tracks = re.search(r"grid-template-columns:\s*([^;]+);", lst).group(1)
+    assert tracks == "max-content max-content minmax(2rem, 1fr) max-content auto", tracks
     row = _block(".wl-list.is-compact > .wl-row {", block)
     button = _block(".wl-list.is-compact .wl-open {", block)
     for part in (row, button):
         assert "grid-column: 1 / -1;" in part and "grid-template-columns: subgrid;" in part
-        # Its own gap would replace the list's spacing inside the row.
-        assert "column-gap: normal;" in part
-    assert "'sym . price . chg . go' 'sym . changed . signal . go'" in button
-    assert ".wl-list.is-compact > .wl-row.is-none > .wl-none { grid-column: 3 / -1; }" in block
+    # Its own gap would replace the list's spacing inside the row.
+    assert "column-gap: normal;" in button
+    assert ".wl-list.is-compact > .wl-row.is-none > .wl-none { grid-column: 2 / -1; }" in block
 
 
 def test_only_the_home_card_takes_the_spread():

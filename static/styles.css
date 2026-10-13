@@ -11358,30 +11358,42 @@ body.cp-open { overflow: hidden; }
 #hm-watch, .wv-panel { container-type: inline-size; }
 @container (max-width: 559px) {
   .wv-cols { display: none; }
-  /* 3.75rem and the smaller gap because the second line is where "what
-     changed" sits: at 4.25rem and 12px gaps a 328px card (Pulse open, 1280px
-     window) left it 62px and "No change" needs 75, so it read "No cha...". A
-     five-letter symbol is about 3.4rem in the row's bold face. */
-  /* The 30-day line on a third line of its own, across the price and change
-     tracks. Beside the price it took that track's room: measured in a 308px
-     row, the price had 16px. */
-  /* Reliability pass: the signal moved down beside the line, and "what
-     changed" has the whole second line. Sharing it with BULLISH, a 375px phone
-     gave the reason 102px of the 116 that "20-day breakout" needs, and every
-     row read "20-day brea...": the one word on the row that says why it is
-     there. The signal is a single word and sits fine at the line's end. */
+  /* Two lines, laid out the way a stock list is read (asked for from a
+     screenshot as "not UI friendly in terms of where the lines are placed,
+     reorganize it", 2026-10-13):
+
+       AMD  NEUTRAL       /\/~   605.53  >
+       Lagging the market        +1.90%
+
+     Who and how it is doing on the left, the 30-day line in the middle, the
+     price over today's change on the right, the chevron last. The three-line
+     version before it put the symbol alone in the middle of the row's height,
+     the price above the reason in a quieter colour than the reason, and the
+     line on a third line of its own, so a row was three loose lines and read
+     top to bottom rather than across.
+
+     What the earlier fixes were for still holds. The reason has the second
+     line up to the change, under the line as well: with the line beside it
+     instead, a 334px card cut "Lagging the market" to "Lagging the ...".
+     The line is the column that gives: fixed at 4rem with the signal in the
+     1fr track, the full list's phone rows (a remove button beside each) left
+     the signal 10px and the line was drawn over BULLISH. The line has a fixed track
+     of its own between the signal and the price, so neither is squeezed by
+     it (the price was once left 16px). The signal is one word and sits beside the symbol. */
   .wl-open {
-    grid-template-columns: 3.75rem minmax(0, 1fr) auto auto;
-    grid-template-areas: 'sym price chg go' 'sym changed changed go' 'sym trend signal go';
+    grid-template-columns: minmax(3.25rem, max-content) max-content minmax(2rem, 1fr) max-content auto;
+    grid-template-areas: 'sym signal trend price go' 'changed changed changed chg go';
     column-gap: var(--space-2);
     row-gap: 2px;
+    align-items: baseline;
   }
-  .wl-sym { grid-area: sym; align-self: center; }
-  .wl-price { grid-area: price; }
+  .wl-sym { grid-area: sym; }
+  .wl-signal { grid-area: signal; text-align: left; }
   .wl-trend { grid-area: trend; }
+  .wl-price { grid-area: price; text-align: right; font-size: var(--t-body); color: var(--ink); }
   .wl-chg { grid-area: chg; text-align: right; }
   .wl-changed { grid-area: changed; }
-  .wl-signal { grid-area: signal; text-align: right; }
+  .wl-changed-text { color: var(--ink-2); }
   .wl-go { grid-area: go; align-self: center; }
 }
 /* The word goes last, and only where it would squeeze the numbers. On a 375px
@@ -11390,45 +11402,37 @@ body.cp-open { overflow: hidden; }
 @container (max-width: 329px) {
   .wl-go-word { display: none; }
 }
-/* The home card's four columns, spread evenly across it.
+/* The home card's rows share one set of columns.
  *
- * Asked for from a screenshot as "center these out evenly". The price and
- * what-changed column above is a 1fr track, so it took every spare pixel: its
- * short text sat against the symbol, the change sat against Analyze, and the
- * gap between them was wider than both. Each row was its own grid, so a
- * column could only line up down the list by being a fixed or fr size.
- *
- * Here the rows share the list's columns (subgrid), each as wide as its widest
- * entry, with a spacer track between each pair taking an equal share of what
- * is left. Measured on a 379px card at a 1512px window: 43px between every
- * pair, where it was 21, 86 and 21. A longer note narrows all three spacers
- * alike, and the note is still what gives way first, clipping with its
- * ellipsis once the spacers are down to their minimum. The home card only:
- * the full list has its column headers and its move and remove buttons. And
- * where subgrid is missing, the rows keep the layout above. */
+ * Each row is its own grid, so the price track sized itself to that row's
+ * price and the 30-day line started at a different x on every row. With
+ * subgrid the rows take the list's tracks: the symbol column is as wide as the
+ * widest symbol, so every signal word starts at the same place, and the price
+ * column as wide as the widest price, so the lines and the numbers line up
+ * down the card. The home card only: the full list has its move and remove
+ * buttons beside each row. Where subgrid is missing the rows keep the layout
+ * above, which differs by a few pixels per row and nothing else. */
 @supports (grid-template-columns: subgrid) {
   @container (max-width: 559px) {
     .wl-list.is-compact {
       display: grid;
-      grid-template-columns: auto minmax(var(--space-2), 1fr) auto minmax(var(--space-2), 1fr)
-        auto minmax(var(--space-2), 1fr) auto;
+      grid-template-columns: max-content max-content minmax(2rem, 1fr) max-content auto;
+      column-gap: var(--space-3);
     }
     .wl-list.is-compact > .wl-row {
       grid-column: 1 / -1;
       display: grid;
       grid-template-columns: subgrid;
-      column-gap: normal;
     }
     .wl-list.is-compact .wl-open {
       grid-column: 1 / -1;
       grid-template-columns: subgrid;
-      grid-template-areas: 'sym . price . chg . go' 'sym . changed . signal . go' 'sym . trend trend trend . go';
+      /* Its own gap would replace the list's inside the row. */
       column-gap: normal;
     }
-    .wl-list.is-compact .wl-trend { grid-area: trend; }
-    /* A symbol with no data: its reason runs from the price column to the end. */
+    /* A symbol with no data: its reason runs from the signal column to the end. */
     .wl-list.is-compact > .wl-row.is-none > .wl-sym { grid-column: 1; }
-    .wl-list.is-compact > .wl-row.is-none > .wl-none { grid-column: 3 / -1; }
+    .wl-list.is-compact > .wl-row.is-none > .wl-none { grid-column: 2 / -1; }
   }
 }
 .wl-x {
@@ -11454,17 +11458,19 @@ body.cp-open { overflow: hidden; }
 @supports not (container-type: inline-size) {
   @media (max-width: 559px) {
     .wl-open {
-      grid-template-columns: 3.75rem minmax(0, 1fr) auto auto;
-      grid-template-areas: 'sym price chg go' 'sym changed changed go' 'sym trend signal go';
+      grid-template-columns: minmax(3.25rem, max-content) max-content minmax(2rem, 1fr) max-content auto;
+      grid-template-areas: 'sym signal trend price go' 'changed changed changed chg go';
       column-gap: var(--space-2);
       row-gap: 2px;
+      align-items: baseline;
     }
-    .wl-sym { grid-area: sym; align-self: center; }
-    .wl-price { grid-area: price; }
+    .wl-sym { grid-area: sym; }
+    .wl-signal { grid-area: signal; text-align: left; }
     .wl-trend { grid-area: trend; }
+    .wl-price { grid-area: price; text-align: right; font-size: var(--t-body); color: var(--ink); }
     .wl-chg { grid-area: chg; text-align: right; }
     .wl-changed { grid-area: changed; }
-    .wl-signal { grid-area: signal; text-align: right; }
+    .wl-changed-text { color: var(--ink-2); }
     .wl-go { grid-area: go; align-self: center; }
     .wl-go-word { display: none; }
   }
