@@ -274,3 +274,71 @@ def test_milo_is_told_how_to_read_the_options_research():
                    "maximum loss is not the broker's margin", "never call one contract the best",
                    "`sign_note`"):
         assert phrase in flat, phrase
+
+
+# --------------------------------------------------- textbook reference values
+
+def test_black_scholes_matches_hull_example_15_6():
+    """Hull, Options, Futures and Other Derivatives, the S=42 K=40 r=10%
+    sigma=20% T=0.5 example: call 4.76, put 0.81; call delta N(d1) = 0.7791."""
+    from app.analytics.greeks import bs_price, greeks
+    call = float(bs_price(42.0, np.array([40.0]), np.array([0.5]), np.array([0.2]), 0.10, 0.0, True)[0])
+    put = float(bs_price(42.0, np.array([40.0]), np.array([0.5]), np.array([0.2]), 0.10, 0.0, False)[0])
+    assert call == pytest.approx(4.76, abs=0.005) and put == pytest.approx(0.81, abs=0.005)
+    g = greeks(42.0, np.array([40.0]), np.array([0.5]), np.array([0.2]), 0.10, 0.0, np.array([True]))
+    assert float(g["delta"][0]) == pytest.approx(0.7791, abs=1e-3)
+    # Theta per calendar day and vega per vol point, by finite differences.
+    h = 1e-4
+    up = float(bs_price(42.0, np.array([40.0]), np.array([0.5 - h]), np.array([0.2]), 0.10, 0.0, True)[0])
+    assert float(g["theta"][0]) == pytest.approx((up - call) / h / 365.0, rel=1e-3)
+    v_up = float(bs_price(42.0, np.array([40.0]), np.array([0.5]), np.array([0.21]), 0.10, 0.0, True)[0])
+    assert float(g["vega"][0]) == pytest.approx(v_up - call, rel=0.02)
+
+
+def test_greeks_agree_with_finite_differences_with_a_dividend():
+    from app.analytics.greeks import bs_price, greeks
+    S, K, T, v, r, q = 100.0, 95.0, 0.25, 0.3, 0.04, 0.02
+    g = greeks(S, np.array([K]), np.array([T]), np.array([v]), r, q, np.array([False]))
+    f = lambda s=S, t=T, vol=v: float(bs_price(s, np.array([K]), np.array([t]), np.array([vol]), r, q, False)[0])
+    h = 0.01
+    assert float(g["delta"][0]) == pytest.approx((f(S + h) - f(S - h)) / (2 * h), abs=1e-4)
+    assert float(g["gamma"][0]) == pytest.approx((f(S + h) - 2 * f() + f(S - h)) / h ** 2, rel=1e-2)
+    # Vanna per vol point: d(delta)/d(sigma) / 100.
+    dv = 1e-4
+    d_up = float(greeks(S, np.array([K]), np.array([T]), np.array([v + dv]), r, q, np.array([False]))["delta"][0])
+    d_dn = float(greeks(S, np.array([K]), np.array([T]), np.array([v - dv]), r, q, np.array([False]))["delta"][0])
+    assert float(g["vanna"][0]) == pytest.approx((d_up - d_dn) / (2 * dv) / 100.0, rel=1e-3)
+
+
+def test_iv_solver_round_trips_and_refuses_impossible_prices():
+    from app.analytics.vol_surface import solve_iv
+    S, r, q = 100.0, 0.04, 0.01
+    for vol in (0.05, 0.25, 1.2, 3.0):
+        for k, call in ((80, True), (100, True), (120, False), (100, False)):
+            px = float(_bs_vec([S], k, 0.2, vol, r, q, call)[0])
+            iv = solve_iv(np.array([px]), S, np.array([float(k)]), np.array([0.2]), r, q, np.array([call]))[0]
+            fwd_intr = max((S * np.exp(-q * 0.2) - k * np.exp(-r * 0.2)) * (1 if call else -1), 0.0)
+            if px - fwd_intr > 0.005:
+                assert iv == pytest.approx(vol, rel=2e-3), (vol, k, call)
+            else:
+                # Priced at intrinsic: the price says nothing about volatility.
+                assert np.isnan(iv)
+    # Below intrinsic, above the spot, or zero: no IV rather than a made-up one.
+    bad = solve_iv(np.array([5.0, 150.0, 0.0]), S, np.array([80.0, 100.0, 100.0]), np.array([0.2] * 3), r, q,
+                   np.array([True, True, True]))
+    assert np.isnan(bad).all()
+
+
+def test_an_expiring_contract_has_finite_greeks():
+    from app.analytics.greeks import greeks
+    g = greeks(100.0, np.array([100.0]), np.array([vs.MIN_TAU]), np.array([0.25]), 0.04, 0.0, np.array([True]))
+    assert np.isfinite(g["gamma"][0]) and np.isfinite(g["theta"][0])
+
+
+def test_a_chain_with_no_quotes_resolves_to_the_feed_iv_flagged():
+    df = _chain()
+    df["bid"] = 0.0
+    df["ask"] = 0.0
+    out = vs.resolve_surface(vs.apply_quotes(df), 100.0, 0.04, 0.01)
+    assert set(out["iv_source"]) == {"feed"} and (out["iv"] == 0.99).all()
+    assert vs.build(out, 100.0, 0.04, 0.01)["expiries"][0]["atm_iv_pct"] is None

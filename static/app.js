@@ -17667,6 +17667,7 @@ function renderIdea(idea) {
       ? ['Cost for one', one(idea.cost_for_one, idea.net_debit)] : null,
     idea.credit_for_one !== undefined && idea.credit_for_one !== null
       ? ['You collect, for one', one(idea.credit_for_one, idea.net_credit)] : null,
+    idea.natural_note ? ['Crossing the spread', esc(idea.natural_note)] : null,
     idea.cash_for_one ? ['Cash to set aside', `${usd(idea.cash_for_one, 0)}, the strike for 100 shares`] : null,
     profit ? ['Most it can make, for one', profit] : null,
     idea.risk_for_one !== undefined && idea.risk_for_one !== null
