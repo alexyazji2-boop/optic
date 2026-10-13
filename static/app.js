@@ -6362,14 +6362,16 @@ function thesisSnapshot(d) {
  * `syncFailed` is what the panel reads to tell the truth about where the words
  * are. Set on the entry rather than globally: one symbol failing to sync says
  * nothing about the others. */
-function thesisSave(symbol, fields, d) {
+function thesisSave(symbol, fields, d, extra) {
   const sym = String(symbol || '').toUpperCase();
   if (!sym) return;
   const entry = {
     ...fields,
     saved_at: new Date().toISOString(),
     // The readings as they stood when this was written. The whole feature.
-    snapshot: thesisSnapshot(d),
+    // `extra` carries the Overview's thesis check (its conditions and how
+    // each read when saved), in the same opaque snapshot the server keeps.
+    snapshot: { ...thesisSnapshot(d), ...(extra || {}) },
   };
 
   const local = thesisLocalStore();
@@ -6390,6 +6392,7 @@ function thesisSave(symbol, fields, d) {
       ACCOUNT.theses[sym].syncFailed = true;
     }
     if (STATE.swing) preserveUI(views.swing, () => renderSwing(STATE.swing));
+    refreshThesisCheck();
   });
 }
 
@@ -6570,6 +6573,244 @@ document.addEventListener('click', (evt) => {
   if (!del) return;
   thesisDelete(del.dataset.thesisDelete);
   if (STATE.swing) preserveUI(views.swing, () => renderSwing(STATE.swing));
+});
+
+/* ============================================================ thesis check ===
+ *
+ * "Why are you interested, and what would change your mind?", written as
+ * conditions Optic can check, and checked again on every visit (strategy pass,
+ * 2026-10-12).
+ *
+ * Why this and not another "why is it moving" summary: the competitive
+ * research found that explaining today's move is now free and everywhere
+ * (Yahoo's Scout under every chart, Robinhood's digests, Finviz's hover lines,
+ * Perplexity's dated paragraphs), and that no mainstream research product
+ * tracks a reader's own reasons. The niche tools that do ask the same two
+ * questions and report what changed. Optic already computes every reading a
+ * condition needs, so the check is rules over this page's data: no model, no
+ * cost, the same answer for the same data.
+ *
+ * It replaces nothing. The free-text thesis panel on Options stays hidden as
+ * the reader asked (THESIS_PANEL_HIDDEN); this is a different shape (a short
+ * list of checkable conditions, not four empty boxes) on the Overview, folded
+ * to one line until opened, and stored in the same per-symbol thesis record so
+ * it follows the reader between browsers when signed in.
+ *
+ * The words are the reader's conditions and what the data says about them,
+ * never a recommendation: "2 of 3 of your conditions still hold", not "sell".
+ */
+const THESIS_CHECK_ON = true;
+
+const THESIS_CHECKS = [
+  { id: 'trend', label: 'The price stays above its 200-day average',
+    read(d) {
+      const ma = (((d.technicals || {}).moving_averages) || {}).sma200 || {};
+      const px = (d.quote || {}).price;
+      if (!Number.isFinite(ma.value) || !Number.isFinite(px)) return null;
+      return { ok: px >= ma.value, now: `${usd(px)} against a 200-day average of ${usd(ma.value)}` };
+    } },
+  { id: 'growth', label: 'Revenue keeps growing',
+    read(d) {
+      const q = (d.quote || {}).revenue_growth;
+      const fy = ((((d.company || {}).financials) || {}).growth || {}).revenue_yoy_pct;
+      if (Number.isFinite(q)) return { ok: q > 0, now: `${fmtPct(q * 100, 1)} in the latest quarter against a year earlier` };
+      if (Number.isFinite(fy)) return { ok: fy > 0, now: `${fmtPct(fy, 1)} in the latest fiscal year` };
+      return null;
+    } },
+  { id: 'profit', label: 'It stays profitable',
+    read(d) {
+      const m = ((((d.company || {}).financials) || {}).margins || {}).net_pct;
+      const q = (d.quote || {}).profit_margin;
+      const net = Number.isFinite(m) ? m : (Number.isFinite(q) ? q * 100 : null);
+      if (!Number.isFinite(net)) return null;
+      return { ok: net > 0, now: `net margin ${fmt(net, 1)}%` };
+    } },
+  { id: 'beats', label: 'It keeps meeting or beating earnings estimates',
+    read(d) {
+      const last = ((((d.company || {}).earnings_history) || {}).quarters || [])[0];
+      if (!last || !Number.isFinite(last.surprise_pct)) return null;
+      return { ok: last.surprise_pct >= 0,
+        now: `last report ${shortDate(last.date)}: ${fmtPct(last.surprise_pct, 1)} against the estimate` };
+    } },
+  { id: 'value', label: 'The price stays within 20% of its usual price-to-earnings',
+    read() {
+      const v = ovValuationRead();
+      if (!v) return null;
+      return { ok: v.prem < 20, now: `${fmt(v.cur, 1)} times earnings, ${fmtPct(v.prem, 0)} against its ${v.years}-year average` };
+    } },
+  { id: 'sector', label: 'It keeps up with its sector',
+    read(d) {
+      const sc = d.sector_confirm || {};
+      if (!sc.available || !sc.rs_vs_sector_label) return null;
+      return { ok: !/lag/i.test(sc.rs_vs_sector_label),
+        now: `${String(sc.rs_vs_sector_label).toLowerCase().replace(/\bsector\b/, 'its sector')} over ${fmt(sc.window_sessions || 21, 0)} sessions (${fmtPct(sc.rs_vs_sector_pct, 1)} against it)` };
+    } },
+  { id: 'level', label: 'The price stays above a level I choose', param: true,
+    read(d, level) {
+      const px = (d.quote || {}).price;
+      if (!Number.isFinite(px) || !Number.isFinite(level)) return null;
+      return { ok: px >= level, now: `${usd(px)} against your level of ${usd(level)}` };
+    } },
+];
+
+let thesisCheckEditing = false;
+
+function thesisCheckSaved(sym) {
+  const t = thesisFor(sym);
+  return t && t.snapshot && t.snapshot.check && Array.isArray(t.snapshot.check.items) ? t : null;
+}
+
+function thesisCheckRead(d, item) {
+  const def = THESIS_CHECKS.find((c) => c.id === item.id);
+  if (!def) return null;
+  try { return def.read(d, Number(item.level)); } catch (e) { return null; }
+}
+
+function thesisCheckHTML(d) {
+  if (!THESIS_CHECK_ON || symbolIsFund(STATE.ticker)) return '';
+  const sym = STATE.ticker || '';
+  const saved = thesisCheckSaved(sym);
+  const editing = thesisCheckEditing || !saved;
+  const next = ((((d.company || {}).earnings_history) || {}).upcoming || [])[0];
+  const nextLine = next && next.date
+    ? `<p class="tc-next">Next real test: the earnings report on ${esc(shortDate(next.date))}. Revenue, profit and the estimate conditions update when it is out.</p>` : '';
+  if (!editing) {
+    const items = saved.snapshot.check.items;
+    const rows = items.map((it) => {
+      const def = THESIS_CHECKS.find((c) => c.id === it.id);
+      const r = thesisCheckRead(d, it);
+      const state = !r ? 'unknown' : r.ok ? 'holds' : 'changed';
+      const was = it.was === true ? 'held' : it.was === false ? 'did not hold' : 'could not be checked';
+      const flipped = r && it.was !== undefined && it.was !== null && r.ok !== it.was;
+      return { state, flipped, html: `<li class="tc-item is-${state}">
+        <span class="tc-mark" aria-hidden="true">${state === 'holds' ? '&#10003;' : state === 'changed' ? '&#10005;' : '?'}</span>
+        <span class="tc-body"><span class="tc-label">${esc(def ? def.label.replace('a level I choose', usd(Number(it.level))) : it.id)}</span>
+          <span class="tc-now">${r ? `${state === 'holds' ? (it.was === false ? 'Holds now' : 'Still holds')
+    : (it.was === true ? 'No longer holds' : 'Does not hold')}: ${esc(r.now)}.` : 'Optic could not check this just now: the figure it needs did not load.'}
+          ${flipped ? `<strong class="tc-flip">Changed since you wrote this (it ${esc(was)} then).</strong>` : ''}</span></span>
+      </li>` };
+    });
+    const known = rows.filter((r) => r.state !== 'unknown');
+    const holding = rows.filter((r) => r.state === 'holds').length;
+    const flips = rows.filter((r) => r.flipped).length;
+    const head = !known.length ? 'Optic could not check your conditions just now.'
+      : holding === known.length ? (known.length === 1 ? 'Your condition holds.' : `All ${known.length} of your conditions hold.`)
+        : `${holding} of your ${known.length} conditions hold.`;
+    return `<section class="ov-sec tc" id="ov-thesis" aria-labelledby="tc-h">
+      <h2 class="ov-q" id="tc-h">Your thesis check</h2>
+      <p class="tc-head${holding < known.length ? ' is-changed' : ''}">${esc(head)}${flips ? ` ${flips === 1 ? 'One has' : `${flips} have`} changed since you wrote it.` : ''}</p>
+      <p class="ov-fine">Written ${esc(shortWhen(saved.saved_at) === 'now' ? 'just now' : shortWhen(saved.saved_at))}. Checked against this page's data each time you open it.</p>
+      <ul class="tc-list">${rows.map((r) => r.html).join('')}</ul>
+      ${saved.bull ? `<blockquote class="tc-note">${esc(saved.bull)}</blockquote>` : ''}
+      ${nextLine}
+      <div class="tc-actions">
+        <button type="button" class="btn sm" data-tc-edit>Edit</button>
+        <button type="button" class="btn sm" data-tc-ask="${esc(sym)}">Ask Milo to stress-test it</button>
+        <button type="button" class="btn sm" data-tc-delete="${esc(sym)}">Delete</button>
+      </div>
+      <p class="ov-fine">These are your conditions and what the data says about them. Whether a change breaks your case is your call. ${esc(thesisWhere(saved))}</p>
+    </section>`;
+  }
+  const chosen = saved ? new Map(saved.snapshot.check.items.map((it) => [it.id, it])) : new Map();
+  const opts = THESIS_CHECKS.map((c) => {
+    const it = chosen.get(c.id);
+    const r = c.param ? null : thesisCheckRead(d, { id: c.id });
+    const lvl = it && Number.isFinite(Number(it.level)) ? Number(it.level) : '';
+    return `<li><label class="tc-opt">
+      <input type="checkbox" name="tc" value="${esc(c.id)}"${it ? ' checked' : ''}${!c.param && !r ? ' disabled' : ''}>
+      <span class="tc-opt-body"><span class="tc-label">${esc(c.label)}</span>
+        ${c.param ? `<span class="tc-level"><span class="sr-only">Level in dollars</span>$<input type="number" step="0.01" min="0"
+          inputmode="decimal" name="tc-level" value="${esc(String(lvl))}" placeholder="${esc(fmt(((d.quote || {}).price || 0) * 0.9, 2))}"
+          aria-label="Your level in dollars"></span>`
+    : `<span class="tc-now">${r ? `Today: ${r.ok ? 'holds' : 'does not hold'} (${esc(r.now)})` : 'Not available for this symbol'}</span>`}</span>
+    </label></li>`;
+  }).join('');
+  return `<section class="ov-sec tc" id="ov-thesis" aria-labelledby="tc-h">
+    <details class="tc-start"${saved || thesisCheckEditing ? ' open' : ''}>
+      <summary><span class="ov-q tc-sum" id="tc-h">Start a thesis check</span>
+        <span class="tc-sub">Why are you interested in ${esc(sym)}, and what would change your mind? Pick the conditions that matter to you and Optic checks them each time you come back.</span></summary>
+      <form class="tc-form" data-tc-save="${esc(sym)}">
+        <ul class="tc-opts">${opts}</ul>
+        <label class="tc-note-wrap"><span>In your own words (optional)</span>
+          <textarea name="tc-note" rows="2" maxlength="2000" placeholder="For example: services keep growing faster than hardware.">${esc((saved && saved.bull) || '')}</textarea></label>
+        <div class="tc-actions">
+          <button type="submit" class="btn primary sm">${saved ? 'Save changes' : 'Save my thesis check'}</button>
+          ${saved ? '<button type="button" class="btn sm" data-tc-cancel>Cancel</button>' : ''}
+        </div>
+        <p class="ov-fine">Checked by fixed rules from the data on this page, not by an AI model, and not a recommendation. ${esc(thesisWhere(saved))}</p>
+      </form>
+    </details>
+  </section>`;
+}
+
+function refreshThesisCheck() {
+  const host = document.getElementById('ov-thesis');
+  if (!host || STATE.view !== 'overview' || !STATE.swing) return;
+  const holder = document.createElement('div');
+  holder.innerHTML = thesisCheckHTML(STATE.swing);
+  if (holder.firstElementChild) host.replaceWith(holder.firstElementChild);
+}
+
+document.addEventListener('submit', (evt) => {
+  const form = evt.target.closest && evt.target.closest('[data-tc-save]');
+  if (!form) return;
+  evt.preventDefault();
+  const sym = form.dataset.tcSave;
+  const d = STATE.swing || {};
+  const level = Number((form.querySelector('[name="tc-level"]') || {}).value);
+  const ids = [...form.querySelectorAll('[name="tc"]:checked')].map((b) => b.value);
+  const items = ids.map((id) => {
+    const it = { id };
+    if (id === 'level') {
+      if (!Number.isFinite(level) || level <= 0) return null;
+      it.level = level;
+    }
+    const r = thesisCheckRead(d, it);
+    it.was = r ? r.ok : null;
+    it.was_text = r ? r.now : null;
+    return it;
+  }).filter(Boolean);
+  const note = ((form.querySelector('[name="tc-note"]') || {}).value || '').trim();
+  if (!items.length) {
+    if (!form.querySelector('.tc-err')) {
+      form.insertAdjacentHTML('afterbegin',
+        '<p class="tc-err" role="alert">Pick at least one condition, and a dollar level if you chose that one.</p>');
+    }
+    return;
+  }
+  const labels = items.map((it) => {
+    const def = THESIS_CHECKS.find((c) => c.id === it.id);
+    return def ? def.label.replace('a level I choose', usd(it.level)) : it.id;
+  });
+  // The server keeps prose fields; the conditions go in the opaque snapshot.
+  // `invalidation` carries them as words so a reader who opens the old panel
+  // or an export still sees what they wrote.
+  thesisSave(sym, { bull: note, bear: '', catalysts: '', invalidation: 'Would change my mind if any of these stop holding: ' + labels.join('; ') + '.' },
+    d, { check: { v: 1, items } });
+  thesisCheckEditing = false;
+  refreshThesisCheck();
+});
+
+document.addEventListener('click', (evt) => {
+  if (!evt.target || !evt.target.closest) return;
+  if (evt.target.closest('[data-tc-edit]')) { thesisCheckEditing = true; refreshThesisCheck(); return; }
+  if (evt.target.closest('[data-tc-cancel]')) { thesisCheckEditing = false; refreshThesisCheck(); return; }
+  const del = evt.target.closest('[data-tc-delete]');
+  if (del) {
+    thesisDelete(del.dataset.tcDelete);
+    thesisCheckEditing = false;
+    refreshThesisCheck();
+    return;
+  }
+  const ask = evt.target.closest('[data-tc-ask]');
+  if (ask) {
+    const sym = ask.dataset.tcAsk;
+    const saved = thesisCheckSaved(sym);
+    const conds = saved ? saved.invalidation.replace(/^Would change my mind if any of these stop holding: /, '') : '';
+    /* Drafted, never sent: the reader sees the question and presses Send. */
+    const text = `Stress-test my thesis on ${sym}. My conditions: ${conds}${saved && saved.bull ? ` In my words: "${saved.bull}"` : ''} Using the data on this page, what is the strongest evidence against it, which condition is closest to breaking, and what should I watch next? Treat these as my reasons, not as a recommendation.`;
+    openPulseWithText(text);
+  }
 });
 
 /* ========================================================= watchlist view ===
@@ -16008,6 +16249,56 @@ function ovStars() {
   return r && r.available ? r : null;
 }
 
+/* What the price assumes, kept apart from how the business is doing
+ * (strategy pass, 2026-10-12). The AAPL Overview listed four bull points
+ * about the business and none about the price, while its own long-term data
+ * put the P/E at 39.1 against a four-year median of 28.2, the top of its own
+ * range: a good business and a demanding price, and the page only said the
+ * first. Morningstar separates the two (moat and capital allocation, then
+ * fair value); this is the plain version from data Optic already has.
+ *
+ * The company against its own history, not against a rule of thumb: a
+ * multiple means little without the business's own record, which is also
+ * what the Investing tab's P/E band shows. Fewer than three usable years, or
+ * a loss now, says nothing. Cut-offs (20% either side of the median) are for
+ * plain wording, not from research, and the method note says so. */
+function ovValuationRead() {
+  const sym = STATE.ticker;
+  const lt = (STATE.long && STATE.long.ticker === sym) ? STATE.long
+    : (STATE.ovLongData && STATE.ovLongData.ticker === sym ? STATE.ovLongData : null);
+  const vh = lt && lt.holding && lt.holding.valuation_history;
+  if (!vh || !vh.available || !(vh.usable_years >= 3)) return null;
+  const cur = Number(vh.current_pe);
+  const med = Number(vh.median_pe);
+  if (!Number.isFinite(cur) || !Number.isFinite(med) || cur <= 0 || med <= 0) return null;
+  const prem = (cur / med - 1) * 100;
+  const years = vh.usable_years;
+  const band = Number.isFinite(vh.low_pe) && Number.isFinite(vh.high_pe)
+    ? ` (its range was ${fmt(vh.low_pe, 1)} to ${fmt(vh.high_pe, 1)})` : '';
+  let text;
+  let tone;
+  if (prem >= 20) {
+    text = `The price asks more than usual: ${fmt(cur, 1)} times earnings, against ${fmt(med, 1)} on average over its last ${years} fiscal years.`;
+    tone = 'bad';
+  } else if (prem <= -20) {
+    text = `The price asks less than usual: ${fmt(cur, 1)} times earnings, against ${fmt(med, 1)} on average over its last ${years} fiscal years.`;
+    tone = 'good';
+  } else {
+    text = `The price is in line with its own history: ${fmt(cur, 1)} times earnings, against ${fmt(med, 1)} on average over its last ${years} fiscal years.`;
+    tone = 'mixed';
+  }
+  const why = tone === 'bad'
+    ? 'A strong business can still be an expensive stock. A higher multiple means more good news is already in the price, so a disappointment tends to cost more.'
+    : tone === 'good'
+      ? 'A lower multiple can mean the market expects weaker results ahead, so check the business card beside this before reading it as cheap.'
+      : 'Neither stretched nor discounted against its own record, so the price is not the main question here.';
+  return { text, why, tone, prem, cur, med, years,
+    evidence: [['Price to earnings now (trailing)', fmt(cur, 1)],
+      [`Average over ${years} fiscal years${band}`, fmt(med, 1)],
+      ['Now against that average', fmtPct(prem, 0)]],
+    source: "Each fiscal year's diluted EPS against that year's average closing price, from the company's statements via Yahoo Finance. Trailing only." };
+}
+
 /* What is working for the company and against it. Only what the payload
  * shows, never a ranking of importance. */
 function ovFactors(d) {
@@ -16046,6 +16337,15 @@ function ovFactors(d) {
   if (news.earnings_date && Number.isFinite(days) && days >= 0 && days <= 45) {
     neg.push({ text: `Earnings report on ${shortDate(news.earnings_date)}, in ${days} day${days === 1 ? '' : 's'}`,
       why: 'Results and guidance can move the price sharply in either direction.', view: 'earnings' });
+  }
+  // The price against its own history, once per page and not beside a star
+  // rating that already says the same thing.
+  const val = symbolIsFund(STATE.ticker) || (stars && (stars.stars >= 4 || stars.stars <= 2)) ? null : ovValuationRead();
+  if (val && val.tone === 'bad') {
+    neg.push({ text: `Priced above its own history: ${fmt(val.cur, 1)} times earnings against a ${val.years}-year average of ${fmt(val.med, 1)}`,
+      why: val.why, view: 'long' });
+  } else if (val && val.tone === 'good') {
+    pos.push({ text: `Priced below its own history: ${fmt(val.cur, 1)} times earnings against a ${val.years}-year average of ${fmt(val.med, 1)}`, view: 'long' });
   }
   if (Number.isFinite(net) && net < 0) {
     neg.push({ text: 'The company lost money over the latest period',
@@ -16230,6 +16530,8 @@ function refreshOverviewFindings() {
   const biz = symbolIsFund(STATE.ticker) ? null : ovBusinessRead(d);
   if (take) take.innerHTML = ovTakeawaysHTML(d, biz, ovPriceRead(d), factors);
   if (fac) fac.innerHTML = ovFactorsHTML(d, factors);
+  // Not while the form is open: a repaint would drop what is being typed.
+  if (!document.querySelector('#ov-thesis details[open] form')) refreshThesisCheck();
 }
 
 function refreshOverviewAbout() {
@@ -16266,6 +16568,15 @@ function ovTakeawaysHTML(d, biz, price, factors) {
       ${ovEvidenceHTML(biz.evidence, biz.source, 'financials', 'Open Financials')}
     </li>`);
   }
+  const val = biz ? ovValuationRead() : null;
+  if (val) {
+    cards.push(`<li class="ov-take is-${val.tone}">
+      <p class="ov-take-kind">The price you pay</p>
+      <p class="ov-take-text">${esc(val.text)}</p>
+      <p class="ov-take-why">${esc(val.why)}</p>
+      ${ovEvidenceHTML(val.evidence, val.source, 'long', 'Open Investing')}
+    </li>`);
+  }
   if (price) {
     cards.push(`<li class="ov-take is-${price.tone}">
       <p class="ov-take-kind">The share price</p>
@@ -16275,7 +16586,9 @@ function ovTakeawaysHTML(d, biz, price, factors) {
       ${ovEvidenceHTML(price.evidence, `Daily closes through ${price.through}. Source: ${priceSourceName(d)}.`, 'chart', 'Open the chart')}
     </li>`);
   }
-  const risk = factors.neg[0];
+  // The price card already covers valuation, so the risk card is the next
+  // thing, not the star rating or the P/E saying it a second time.
+  const risk = factors.neg.find((f) => !(val && f.view === 'long'));
   if (risk) {
     cards.push(`<li class="ov-take is-bad">
       <p class="ov-take-kind">A risk to weigh</p>
@@ -16364,7 +16677,7 @@ function ovMethodHTML(d) {
       <li>Every sentence above comes from the figures on this page by fixed rules. No AI model writes them, so the same data gives the same words.</li>
       <li>Business figures come from the company's filed statements via Yahoo Finance. The latest fiscal year can be months old, and the latest quarter is shown beside it when the two disagree.</li>
       <li>Price figures are daily closes from ${esc(priceSourceName(d))}${built ? `, gathered ${esc(built)}` : ''}. Outside market hours the price is the last close.</li>
-      <li>The wording uses fixed cut-offs, chosen for plain language rather than taken from research: business changes under 1% either way are "roughly flat", price changes under 2% "little changed"; a year and the last three months are called out as pointing different ways when one is up at least 5% and the other down at least 5%; an earnings report within 45 days is listed as a risk; a price 20% or more below its highest close is listed as a risk.</li>
+      <li>The wording uses fixed cut-offs, chosen for plain language rather than taken from research: business changes under 1% either way are "roughly flat", price changes under 2% "little changed"; a year and the last three months are called out as pointing different ways when one is up at least 5% and the other down at least 5%; an earnings report within 45 days is listed as a risk; a price 20% or more below its highest close is listed as a risk; a price-to-earnings ratio 20% or more above or below the company's own average over at least three fiscal years is called asking more or less than usual.</li>
       <li>Optic's short-term signal score, its star rating and its options readings are models. Each carries its own method and limits on its page.</li>
       <li>Nothing here is a recommendation to buy or sell.</li>
     </ul>
@@ -16422,6 +16735,15 @@ function ovScoreHTML(d) {
       ? 'The two horizons disagree: the recent signals are stronger than the long-run record. A short-term lift inside a weaker long-term picture can fade.'
       : 'The two horizons disagree: the long-run record is stronger than the recent signals. A strong long-term picture can still go through weak weeks.';
   }
+  /* A high long-term score beside a stretched price, said in one place
+   * (strategy pass, 2026-10-12). AAPL scored 74, "high conviction", with
+   * valuation worth 0 of those points and the P/E at the top of its own
+   * range: the score is mostly trend and track record, and a reader taking
+   * it as "good value" would be reading something it does not measure. */
+  const val = ovValuationRead();
+  const priceNote = long !== null && long >= 60 && val && val.tone === 'bad'
+    ? `The long-term score is built mostly from the price trend and the five-year record. It does not say the price is low: at ${fmt(val.cur, 1)} times earnings against ${fmt(val.med, 1)} on average, the price asks more than usual.`
+    : '';
   return `<section class="ov-sec osc" id="ov-score" aria-labelledby="ov-score-h">
     <h2 class="ov-q" id="ov-score-h">Optic Score</h2>
     <div class="osc-grid">
@@ -16431,6 +16753,7 @@ function ovScoreHTML(d) {
     'Built from up to five years of history: the 200-week and 40-week price trends, the five-year return against the S&P 500, the last year\'s return for the risk taken, valuation, distance from the high and the dividend.', 'long', 'See how it is scored on Investing')}
     </div>
     ${apart ? `<p class="lt-conflict">${esc(apart)}</p>` : ''}
+    ${priceNote ? `<p class="lt-conflict">${esc(priceNote)}</p>` : ''}
     <p class="ov-fine">50 means no edge either way; above 50 the inputs lean favourable, below 50 unfavourable, and 100 is every input at its best. Each score is a rule-based summary of past data, not a forecast, a price target or a recommendation to buy or sell.</p>
   </section>`;
 }
@@ -16450,8 +16773,16 @@ async function loadOverviewLongScore() {
   }
   if (STATE.ticker !== sym) return;
   STATE.ovLong = { ticker: sym, holding: data.holding || null, error: data.error || null };
+  /* The whole payload, in its own slot, for Milo and the Overview's
+   * valuation line: a long-term question turns on the valuation history in
+   * it, and only the score was kept (audit, 2026-10-12). Not STATE.long: the
+   * Investing tab's first load also fetches the P/E history and fair value,
+   * and a pre-filled STATE.long would send it down the cached path instead. */
+  STATE.ovLongData = !data.error && data.holding ? { ...data, ticker: sym } : null;
   const host = document.getElementById('ov-score');
   if (host && STATE.view === 'overview' && STATE.swing) host.outerHTML = ovScoreHTML(STATE.swing);
+  // The price card and the valuation line need this payload.
+  if (STATE.view === 'overview' && STATE.swing && STATE.ovLongData) refreshOverviewFindings();
 }
 
 function renderOverviewView() {
@@ -16494,6 +16825,7 @@ function renderOverviewView() {
       <p class="ov-fine">Select a label for what it means. All eighteen figures are under Advanced research below.</p>
     </section>` : ''}
     <div id="ov-factors">${ovFactorsHTML(d, factors)}</div>
+    ${thesisCheckHTML(d)}
     ${ovNextHTML(d, factors, advanced)}
     <details class="ov-adv" id="ov-advanced"${advanced ? ' open' : ''}>
       <summary><span class="ov-adv-title">Advanced research</span>
@@ -40561,6 +40893,17 @@ function chatContextPayload() {
       ctx.company = s.company;
       ctx.naked_ideas = s.naked_ideas;
       ctx.strategy_ideas = s.strategy_ideas;
+      /* What the Overview itself shows, which never reached Milo: the bull and
+       * bear evidence, "what has been moving it", the dates ahead, Optic's
+       * read and the sector comparison. Asked about the page, Milo was
+       * answering from the panels behind it (audit, 2026-10-12). */
+      ctx.cases = s.cases;
+      ctx.why = s.why;
+      ctx.whats_next = s.whats_next;
+      ctx.pulse = s.pulse;
+      ctx.next_earnings_date = s.next_earnings_date;
+      ctx.sector_confirm = s.sector_confirm;
+      ctx.earnings_momentum = s.earnings_momentum;
     }
   }
   if (STATE.market) {
@@ -40580,6 +40923,7 @@ function chatContextPayload() {
     };
   }
   if (STATE.long) ctx.long_term = STATE.long;
+  else if (STATE.ovLongData && STATE.ovLongData.ticker === STATE.ticker) ctx.long_term = STATE.ovLongData;
   /* The comparison, once one has been run: its scores, ranks, the basis of
    * each horizon and the take, about 4KB for two names. It was never in here,
    * so a question asked from the Compare page went out with whatever else was
@@ -40879,6 +41223,10 @@ function updateChatContext() {
   ] : [];
   const modes = $('#pulse-modes');
   if (modes) modes.innerHTML = pulseModesHTML();
+  if (!pulseBlockedReason()) {
+    const box = $('#chat-input');
+    if (box) box.placeholder = pulsePlaceholder();
+  }
   if (pulseBlockedReason()) markPulseControls(true);
   $('#chat-suggest').innerHTML = suggestions
     .map((q) => `<button type="button" data-q="${esc(q)}">${esc(q.length > 46 ? q.slice(0, 44) + '…' : q)}</button>`)
@@ -40898,6 +41246,24 @@ function pulseSubject() {
   if (['watchlist', 'alerts'].includes(v)) return { kind: 'watchlist', label: 'Your watchlist' };
   if (['scan', 'explore', 'insiders', 'analysts'].includes(v)) return { kind: 'screen', label: VIEW_NAMES[v] || 'Discover' };
   return { kind: 'market', label: 'The market today' };
+}
+
+/* The box names what Milo can see (strategy pass, 2026-10-12). It read "Ask
+ * Milo about the loaded analysis. E.g. what does the gamma profile imply for a
+ * swing long here?" on every page: trader shorthand as the first example a
+ * new reader saw, and nothing about the page they were on. Perplexity's ask
+ * box names the page and tab it is scoped to; this does the same in plain
+ * words. */
+function pulsePlaceholder() {
+  // The quoted part is what Tab drafts into the box (pulsePlaceholderAsk).
+  const sub = pulseSubject();
+  if (sub.kind === 'security' || sub.kind === 'chart') {
+    return `Ask about ${sub.sym}, e.g. "What would change the picture for ${sub.sym}?"`;
+  }
+  if (sub.kind === 'portfolio') return 'Ask about your paper trades, e.g. "How concentrated am I?"';
+  if (sub.kind === 'watchlist') return 'Ask about your watchlist, e.g. "What changed this week?"';
+  if (sub.kind === 'screen') return 'Ask about these results, e.g. "What do they have in common?"';
+  return 'Ask about the market or any company, e.g. "What is moving the market today?"';
 }
 
 /* The research modes. Each drafts a question into the box rather than
@@ -40981,6 +41347,25 @@ let PULSE_PERSONAS = [
   { id: 'neutral', glyph: '\u2696\uFE0F', label: 'Neutral analyst',
     blurb: 'Balanced, cites the numbers.' },
 ];
+
+/* The timeframe Milo answers for (2026-10-12). A third axis beside the level
+ * and the lens: "is it a buy" has a different honest answer for a trade over
+ * the next few weeks and for owning the business for years, and Milo had no
+ * way to know which it was asked. Words in the question still win for that
+ * one answer (app/horizon.py); this is the standing preference, kept with the
+ * other two in this browser and changed with one tap in the panel. */
+const MILO_HORIZON_KEY = 'optic.milo.horizon.v1';
+let MILO_HORIZONS = [
+  { id: 'auto', label: 'Auto', blurb: 'Milo reads the timeframe from your question and says what it assumed.' },
+  { id: 'day', label: 'Day trading', blurb: "Today's session: levels, volume, volatility, liquidity and catalysts." },
+  { id: 'swing', label: 'Swing', blurb: 'Days to weeks: trend, levels, momentum, events and invalidation.' },
+  { id: 'long', label: 'Long term', blurb: 'Years: business quality, valuation, competitive position.' },
+];
+let miloHorizon = 'auto';
+try {
+  const saved = localStorage.getItem(MILO_HORIZON_KEY);
+  if (saved) miloHorizon = saved;
+} catch (e) { /* private mode */ }
 /* What choosing a persona does, and the one thing it cannot. From the server,
    so the menu's promise and the behaviour have one source -- the same reason
    the Optic mode menu reads its footer from the knowledge catalogue. */
@@ -40995,6 +41380,9 @@ async function loadPersonas() {
     if (Array.isArray(d.personas) && d.personas.length) PULSE_PERSONAS = d.personas;
     if (!PULSE_PERSONAS.some((p) => p.id === pulsePersona)) pulsePersona = d.default;
     PULSE_PERSONA_NOTE = { changes: d.changes || [], never_changes: d.never_changes || [] };
+    const hz = d.horizons && Array.isArray(d.horizons.horizons) ? d.horizons.horizons : null;
+    if (hz && hz.length) MILO_HORIZONS = hz;
+    if (!MILO_HORIZONS.some((h) => h.id === miloHorizon)) miloHorizon = 'auto';
   } catch (e) { /* keep the built-in default */ }
   renderPersonaPicker();
 }
@@ -41176,8 +41564,36 @@ function renderPersonaPicker() {
       </button>
       ${ppOpen ? personaMenuHTML() : ''}
     </div>
-    <span class="pulse-persona-blurb">${esc(current ? current.blurb : '')}</span>`;
+    <span class="pulse-persona-blurb">${esc(current ? current.blurb : '')}</span>
+    ${miloHorizonHTML()}`;
 }
+
+/* The timeframe, as one row of four: every choice visible and one tap away,
+ * because a menu would hide the very thing the row is there to show (that
+ * Milo answers differently for a trade and for a holding). */
+function miloHorizonHTML() {
+  const cur = MILO_HORIZONS.find((h) => h.id === miloHorizon) || MILO_HORIZONS[0];
+  const short = { auto: 'Auto', day: 'Day', swing: 'Swing', long: 'Long term' };
+  return `<div class="hz-row" role="radiogroup" aria-label="Timeframe Milo answers for">
+    <span class="hz-lab" id="hz-lab">Timeframe</span>
+    <div class="seg hz-seg">${MILO_HORIZONS.map((h) => `<button type="button" role="radio"
+      class="hz-opt${h.id === cur.id ? ' on' : ''}" aria-checked="${h.id === cur.id}"
+      data-hz-pick="${esc(h.id)}" title="${esc(h.blurb || '')}">${esc(short[h.id] || h.label)}</button>`).join('')}</div>
+    <span class="hz-blurb">${esc(cur.blurb || '')}</span>
+  </div>`;
+}
+
+function setMiloHorizon(id) {
+  if (!id || !MILO_HORIZONS.some((h) => h.id === id)) return;
+  miloHorizon = id;
+  try { localStorage.setItem(MILO_HORIZON_KEY, id); } catch (e) { /* private mode */ }
+  renderPersonaPicker();
+}
+
+document.addEventListener('click', (evt) => {
+  const pick = evt.target && evt.target.closest && evt.target.closest('[data-hz-pick]');
+  if (pick) setMiloHorizon(pick.dataset.hzPick);
+});
 
 /* Record the choice, and remember it.
  *
@@ -42727,6 +43143,16 @@ async function streamTo(url, body, node) {
         acc += payload.text || '';
         if (node.pulseSteps) pulseStepsDone(node); else statusEl.textContent = '';
         render.push(payload.text || '');
+      } else if (event === 'assumed') {
+        /* Said when the question set a timeframe other than the saved one, so
+           the reader can see why this answer reads differently from the last
+           and knows the setting did not change. */
+        const hz = MILO_HORIZONS.find((h) => h.id === payload.horizon);
+        if (hz && payload.horizon_source === 'question' && payload.horizon !== miloHorizon
+            && !node.querySelector('.msg-assumed')) {
+          bubble.insertAdjacentHTML('beforebegin', `<p class="msg-assumed">Answered for a
+            ${esc(hz.label.toLowerCase())} timeframe, from your question. Your setting is unchanged.</p>`);
+        }
       } else if (event === 'status') {
         const state = String(payload.state || '');
         if (node.pulseSteps) pulseStepAdd(node, PULSE_STEP_WORDS[state] || cap(state));
@@ -42952,6 +43378,9 @@ async function sendChat(text) {
       // picks how they are worded, and only Adaptive lets the server re-read
       // the question to decide.
       mode: window.OpticKnowledge ? window.OpticKnowledge.mode() : 'literate',
+      // The third axis: the timeframe. Words in the question override it for
+      // that answer, server-side.
+      horizon: miloHorizon,
     }, node);
     clearAttachments();
     if (reply) {

@@ -66,7 +66,7 @@ HORIZONS: Dict[str, Dict[str, str]] = {
         ),
     },
     "long": {
-        "label": "Long-term",
+        "label": "Long term",
         "blurb": "Years: business quality, valuation, competitive position.",
         "prompt": (
             "## Horizon: years\n"

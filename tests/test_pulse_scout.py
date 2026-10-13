@@ -263,7 +263,9 @@ def test_the_pulse_button_wears_scout_blinking():
     assert "id === 'pulse-mark-btn'" in mount and 'class="scout-badge"' in mount
     assert "pulseMarkHTML('pulse-glyph-sm')" in mount, "the panel header keeps the mark"
     badge = _block("\n.scout-badge {")
-    assert "border-radius: 50%" in badge and "background: var(--asset-brand-ink)" in badge
+    # No dark disc since the strategy pass (2026-10-12): the button is charcoal
+    # and the brief asked for Milo's head "without a surrounding black ring".
+    assert "border-radius: 50%" in badge and "background: transparent" in badge
     fig = _block("\n.scout-badge-fig {")
     assert "scout-compact@3x.webp" in fig and "background-size: %d00%% 100%%" % len(FRAMES) in fig
     assert "animation: scout-badge-blink 11s step-end infinite;" in fig

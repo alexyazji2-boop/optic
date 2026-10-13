@@ -38,7 +38,7 @@ def test_the_placeholder_example_becomes_the_draft():
         % json.dumps(ph))
     out = subprocess.run([exe, "-e", script], capture_output=True, text=True, timeout=60)
     got = json.loads(out.stdout.split("RESULT:", 1)[1].split("\n")[0])
-    assert got == ["What does the gamma profile imply for a swing long here?", "", ""]
+    assert got == ["What is moving the market today?", "", ""]
 
 
 def test_tab_drafts_only_into_an_empty_box_and_never_traps_focus():

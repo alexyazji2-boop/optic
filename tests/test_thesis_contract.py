@@ -20,7 +20,7 @@ def test_saving_captures_a_snapshot():
     """The whole feature. Without the readings as they stood, the panel is a
     notes field and the app can never tell you anything changed."""
     save = _block("function thesisSave(")
-    assert "snapshot: thesisSnapshot(d)" in save
+    assert "snapshot: { ...thesisSnapshot(d)" in save
 
 
 def test_the_snapshot_holds_scalars_not_prose():

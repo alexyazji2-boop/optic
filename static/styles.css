@@ -162,6 +162,10 @@
   --asset-surface: #131517;
   --asset-raised: #232326;
   --asset-brand: #d4b144;
+  /* The Ask Milo button: charcoal and ivory in both themes (strategy pass). */
+  --milo-btn-bg: #1c1917;
+  --milo-btn-hover: #2a2522;
+  --milo-btn-ink: #f5f1ec;
   --asset-brand-ink: #1a1400;
   --btn-primary: #9a6b00;
   --btn-primary-ink: #ffffff;
@@ -836,15 +840,19 @@ header.topbar {
    the label in ink. The top bar's keeps the snowman; the rest show none. The
    gold is the resting look; hover only lifts the fill and keeps the same edge,
    so nothing outside the sidebar gains a gold outline on hover. */
+/* Strategy pass (2026-10-12): the approved look is a charcoal button with a
+   thin gold outline, in both themes, and Milo's head without the dark disc
+   (.scout-badge below). Charcoal is the brand's, so the label is ivory on it
+   whatever the page theme; hover lifts the charcoal and keeps the same edge. */
 .btn.milo-btn {
-  background: transparent;
-  color: var(--ink);
-  border: 1.5px solid var(--asset-brand);
+  background: var(--milo-btn-bg);
+  color: var(--milo-btn-ink);
+  border: 1px solid var(--asset-brand);
   border-radius: var(--r-lg);
   font-weight: 600;
   transition: background-color 0.12s ease, border-color 0.12s ease;
 }
-.btn.milo-btn:hover { background: var(--sys-fill-hover); border-color: var(--asset-brand); }
+.btn.milo-btn:hover { background: var(--milo-btn-hover); color: var(--milo-btn-ink); border-color: var(--asset-brand); }
 .btn:active { background: var(--sys-fill-active); filter: brightness(0.94); }
 /* .btn.primary is defined once, further down with the other button rules.
    It used to be declared here too, as var(--s1) with white text, and again
@@ -8913,6 +8921,46 @@ table.data tr.fx-detail td,
   font-size: var(--t-caption);
   color: var(--ink-muted);
   line-height: 1.45;
+}
+
+/* Strategy pass (2026-10-12): the timeframe row under Optic Mode and Optic
+   Persona. The house segmented control (.seg), the full width of the panel so
+   the four choices never wrap, its blurb on the line below like the persona's. */
+.hz-row {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+}
+.hz-lab {
+  font-size: var(--t-micro);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+  font-family: var(--label-face);
+}
+.hz-seg { flex: 1 1 auto; display: flex; min-width: 0; }
+.hz-seg button { flex: 1 1 0; min-width: 0; padding-inline: var(--space-2); white-space: nowrap; }
+.hz-seg button[aria-checked="true"] {
+  background: var(--ws-brand-tint);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ws-brand-edge);
+  font-weight: 600;
+}
+.hz-blurb {
+  flex: 1 1 100%;
+  font-size: var(--t-caption);
+  color: var(--ink-muted);
+  line-height: 1.45;
+}
+/* Said above an answer when the question set a different timeframe from the
+   saved one. Quiet, because it explains rather than warns. */
+.msg-assumed {
+  margin: 0 0 var(--space-1);
+  font-size: var(--t-caption);
+  color: var(--ink-muted);
 }
 
 /* The empty state is a greeting, so it is centred on the panel.
@@ -18896,7 +18944,11 @@ footer.legal > .legal-full {
   height: calc(21px * var(--ui-scale));
   border-radius: 50%;
   overflow: hidden;
-  background: var(--asset-brand-ink);
+  /* No disc (strategy pass, 2026-10-12): the button is charcoal now, so the
+     ivory head reads against it without one, and the brief asked for Milo's
+     head "without a surrounding black ring". The circular clip stays so the
+     scarf's top is trimmed on a curve rather than a straight line. */
+  background: transparent;
 }
 .scout-badge-fig {
   position: absolute;
@@ -19382,3 +19434,46 @@ footer.legal > .legal-full {
 .osc-words { margin: var(--space-1) 0 0; font-size: var(--t-base); font-weight: 600; color: var(--ink); }
 .osc-basis { margin: var(--space-2) 0 0; font-size: var(--t-small); line-height: 1.5; color: var(--ink-muted); }
 .osc .lt-conflict { margin-top: var(--space-4); }
+
+/* Strategy pass (2026-10-12): the thesis check on the Overview. Folded to one
+   line until opened; once saved, a short list of the reader's conditions with
+   a mark, the reading now and what changed since it was written. Colour only
+   ever repeats the words beside it (holds / no longer holds). */
+.tc-start > summary { cursor: pointer; list-style: none; display: flex; flex-direction: column; gap: var(--space-1); }
+.tc-start > summary::-webkit-details-marker { display: none; }
+.tc-start > summary .tc-sum::before { content: '\25B8'; display: inline-block; margin-right: var(--space-2); transition: transform var(--dur-ui) var(--ease-ui); }
+.tc-start[open] > summary .tc-sum::before { transform: rotate(90deg); }
+.tc-start > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-xs); }
+.tc-sub { font-size: var(--t-base); line-height: 1.55; color: var(--ink-2); max-width: 70ch; }
+.tc-form { margin-top: var(--space-3); display: flex; flex-direction: column; gap: var(--space-3); }
+.tc-opts { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-2) var(--space-4); }
+.tc-opt { display: flex; gap: var(--space-2); align-items: flex-start; padding: var(--space-2); border-radius: var(--r-md); cursor: pointer; transition: background-color var(--dur-ui) var(--ease-ui); }
+.tc-opt:hover { background: var(--sys-fill-hover); }
+.tc-opt input[type="checkbox"] { margin-top: 0.2em; width: 18px; height: 18px; accent-color: var(--brand); flex: none; }
+.tc-opt input[disabled] + .tc-opt-body { opacity: 0.55; }
+.tc-opt-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tc-label { font-size: var(--t-base); color: var(--ink); line-height: 1.45; }
+.tc-now { font-size: var(--t-small); color: var(--ink-muted); line-height: 1.5; }
+.tc-level { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--t-small); color: var(--ink-2); }
+.tc-level input { width: 9em; padding: var(--space-1) var(--space-2); background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: var(--r-sm); font: inherit; }
+.tc-note-wrap { display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--t-small); color: var(--ink-2); }
+.tc-note-wrap textarea { width: 100%; max-width: 70ch; padding: var(--space-2); background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: var(--r-md); font: inherit; font-size: var(--t-base); resize: vertical; }
+.tc-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.tc-err { margin: 0; color: var(--neg); font-size: var(--t-small); }
+.tc-head { margin: 0 0 var(--space-1); font-size: var(--t-lead); font-weight: 600; color: var(--ink); }
+.tc-list { list-style: none; margin: var(--space-3) 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.tc-item { display: flex; gap: var(--space-3); align-items: flex-start; padding: var(--space-2) var(--space-3); background: var(--raised); border-radius: var(--r-md); }
+.tc-mark { flex: none; width: 1.4em; text-align: center; font-weight: 600; color: var(--ink-muted); }
+.tc-item.is-holds .tc-mark { color: var(--pos); }
+.tc-item.is-changed .tc-mark { color: var(--neg); }
+.tc-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tc-flip { display: block; margin-top: 2px; font-size: var(--t-small); color: var(--ink); }
+.tc-note { margin: 0 0 var(--space-3); padding-left: var(--space-3); border-left: 2px solid var(--border); color: var(--ink-2); font-size: var(--t-base); line-height: 1.55; }
+.tc-next { margin: 0 0 var(--space-3); font-size: var(--t-small); color: var(--ink-2); }
+/* On a phone the label takes its own line so "Long-term" is never cut, and the
+   blurb goes (each button's title still says what it does): measured at 390px,
+   the row clipped to "Long-ter" with the label beside it. */
+@media (max-width: 520px) {
+  .hz-lab { flex-basis: 100%; }
+  .hz-blurb { display: none; }
+}
