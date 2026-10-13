@@ -41223,11 +41223,11 @@ function updateChatContext() {
   ] : [];
   const modes = $('#pulse-modes');
   if (modes) modes.innerHTML = pulseModesHTML();
-  if (!pulseBlockedReason()) {
+  if (pulseBlockedReason()) markPulseControls(true);
+  else {
     const box = $('#chat-input');
     if (box) box.placeholder = pulsePlaceholder();
   }
-  if (pulseBlockedReason()) markPulseControls(true);
   $('#chat-suggest').innerHTML = suggestions
     .map((q) => `<button type="button" data-q="${esc(q)}">${esc(q.length > 46 ? q.slice(0, 44) + '…' : q)}</button>`)
     .join('');
@@ -42649,6 +42649,19 @@ const PULSE_SOURCES = {
   read: ['The Read', 'brief'],
   compare: ['Compare', 'compare'],
   tracker: ['Positions', 'tracker'],
+  // The Overview's own blocks and the reader's lists, sent since the strategy
+  // pass (2026-10-12); without these a correct tag was dropped as unknown.
+  cases: ['Bull and bear case', 'overview'],
+  why: ['What moved it', 'overview'],
+  whats_next: ['Coming up', 'overview'],
+  pulse: ["Optic's read", 'overview'],
+  sector_confirm: ['Sector', 'overview'],
+  next_earnings_date: ['Earnings', 'earnings'],
+  earnings_momentum: ['Earnings', 'earnings'],
+  portfolio_summary: ['Paper book', 'paper'],
+  reader_holdings: ['Paper book', 'paper'],
+  reader_watchlist: ['Watchlist', 'watchlist'],
+  market: ['The Read', 'brief'],
 };
 const PULSE_SRC_RE = /\s?\[\[src ([a-z_]{2,20})\]\]/g;
 

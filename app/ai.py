@@ -284,9 +284,13 @@ When you quote a figure from CONTEXT, tag it with its source straight after it:
 `[[src KEY]]`, where KEY is the top-level CONTEXT key that holds the figure,
 for example "Net GEX is **-$412m** per 1% [[src gex]]". The terminal turns the
 tag into a chip naming that panel, which the reader can press to open it. The
-keys are quote, verdict, company, chart, technicals, gex, greeks, flow,
-entry_plan, naked_ideas, strategy_ideas, long_term, earnings, news, macro,
-sectors, indices, read, compare, tracker and digest.
+keys are quote, verdict, pulse, cases, why, whats_next, next_earnings_date,
+company, chart, technicals, gex, greeks, flow, entry_plan, naked_ideas,
+strategy_ideas, long_term, earnings, earnings_momentum, sector_confirm, news,
+macro, sectors, indices, market, read, compare, tracker, digest,
+portfolio_summary, reader_holdings and reader_watchlist. Tag the key the figure
+actually sits under: an earnings date read from `whats_next` is
+`[[src whats_next]]`, not `earnings`.
 
 ## The reader's own lists
 

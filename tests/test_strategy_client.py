@@ -87,3 +87,16 @@ def test_the_ask_milo_button_is_charcoal_with_a_thin_gold_edge_and_no_disc():
     badge = CSS[CSS.index(".scout-badge {"):]
     badge = badge[:badge.index("}")]
     assert "background: transparent;" in badge
+
+
+def test_every_source_key_milo_is_told_about_becomes_a_chip():
+    """The prompt lists the CONTEXT keys Milo may tag; a key missing from
+    PULSE_SOURCES is silently dropped, so a correct citation vanished. The
+    Overview's blocks were sent from 2026-10-12 and had no chip."""
+    from app import ai
+    flat = " ".join(ai.FORMAT_PROMPT.split())
+    listed = flat[flat.index("The keys are "):flat.index("Tag the key the figure")]
+    keys = set(re.findall(r"\b([a-z]+(?:_[a-z]+)*)\b", listed.replace("The keys are", "").replace(" and ", " ")))
+    block = APP[APP.index("const PULSE_SOURCES = {"):APP.index("const PULSE_SRC_RE")]
+    chips = set(re.findall(r"^\s+([a-z_]+): \[", block, re.M))
+    assert keys - {"the", "keys", "are"} <= chips, sorted(keys - chips)
