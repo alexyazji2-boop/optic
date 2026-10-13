@@ -101,3 +101,12 @@ def test_milo_covers_the_whole_phone_including_under_safaris_toolbar():
     block = block[:block.index("\n}\n")]
     assert "body.chat-open main#main, body.chat-open footer.legal { visibility: hidden; }" in block
     assert "html:has(> body.chat-open), body.chat-open { background: var(--surface); }" in block
+
+
+def test_the_ticker_header_shows_the_company_logo_before_the_symbol():
+    """"include the company logo as well of whatever ticker is loaded"
+    (2026-10-12): the chart header's ticker-keyed mark, with its monogram
+    fallback, before the symbol in every ticker page's header."""
+    app = (ROOT / "static/app.js").read_text()
+    assert "${tickerMark(sym, 36)}\n      <span class=\"sec-sym\">${esc(sym)}</span>" in app
+    assert ".sec-id > .co-mark, .sec-id > .stage-explain { align-self: center; }" in CSS

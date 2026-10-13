@@ -13796,6 +13796,9 @@ body.auth-open { overflow: hidden; }
   flex-wrap: wrap;
   gap: calc(6px * var(--ui-scale)) var(--space-3);
 }
+/* The logo and the stage chip's Explain sit on the row's centre line; on the
+   text baseline the square logo rode high and Explain dropped below the chip. */
+.sec-id > .co-mark, .sec-id > .stage-explain { align-self: center; }
 /* The number first, then the name.
  *
  * Measured on AAPL at 1440x950 before this: the symbol was 27.6px/700, the

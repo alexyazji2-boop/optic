@@ -14109,6 +14109,10 @@ function securityHeader(view, opts = {}) {
    * where a third copy would cost rows from a deliberately full-height chart. */
   return `<header class="sec-head${opts.compact ? ' compact' : ''}${view === 'chart' ? '' : ' has-acts'}">
     ${opts.compact ? '' : `<div class="sec-id">
+      ${/* The company's logo before the symbol, from the same ticker-keyed
+           sources as the chart header, falling back to a monogram for a fund,
+           an index or a name nobody serves a logo for (2026-10-12). */''}
+      ${tickerMark(sym, 36)}
       <span class="sec-sym">${esc(sym)}</span>
       ${/* The feed names a fund or a thin listing by its symbol when it has
            no name, which printed "MSFT MSFT 529.30". */''}

@@ -144,6 +144,8 @@ function fmt(v, d) { return Number(v).toFixed(d); }
 function queueMicrotask() {}
 var STATE = { ticker: 'HOOD', swing: null, quickQuote: null };
 function priceIn(html) { var m = /sec-px">([^<]*)</.exec(html); return m ? m[1] : null; }
+// The logo before the symbol (2026-10-12), stubbed with the rest.
+function tickerMark() { return ''; }
 // The header's own satellites, driven by tests/test_ux_system.py; stubbed so
 // this harness measures which price the header picks and nothing else.
 function secDataStateHTML() { return ''; }
