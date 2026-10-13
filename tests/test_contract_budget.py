@@ -229,8 +229,10 @@ def test_with_nothing_to_buy_the_headline_is_a_sentence():
 
 def test_with_a_contract_the_headline_still_carries_its_trigger():
     plan = _plan(None)
-    assert plan["headline"].startswith("Buy the $")
-    assert "but only on" in plan["headline"]
+    # Described, not instructed, since the Options audit (2026-10-13).
+    assert plan["headline"].startswith("An example contract for this setup: the $")
+    assert "for a setup that assumes" in plan["headline"]
+    assert "not a recommendation to trade" in plan["headline"]
 
 
 def test_the_plan_recommends_what_fits_when_its_top_picks_do_not():
@@ -245,7 +247,7 @@ def test_the_plan_recommends_what_fits_when_its_top_picks_do_not():
     assert best is not None, plan["affordability"]["note"]
     assert best["cost_per_contract"] <= limit
     assert plan["affordability"]["refit"] is True
-    assert plan["headline"].startswith("Buy the $")
+    assert plan["headline"].startswith("An example contract for this setup: the $")
 
 
 def test_the_ticket_never_walks_past_the_limit():
@@ -265,7 +267,7 @@ def test_the_ticket_never_walks_past_the_limit():
     assert order["never_pay_more_than"] * 100.0 <= limit + 1e-6
     assert order["limit_price"] <= order["never_pay_more_than"]
     assert order["never_pay_more_than"] >= plan["recommended"]["entry_mid"]
-    assert "for about $" in plan["headline"]
+    assert "a share at the mid" in plan["headline"]
     quoted = float(plan["headline"].split("(")[1].split(" for one")[0].replace("$", "").replace(",", ""))
     assert quoted <= limit, "the headline quotes more than the reader said they can spend"
 

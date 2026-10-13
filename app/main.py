@@ -83,6 +83,10 @@ from .analytics import watchlist as watchlist_mod
 from .analytics import setups as setups_mod
 from . import knowledge as knowledge_mod
 from . import horizon as horizon_mod
+from . import rates as rates_mod
+from . import iv_history as iv_history_mod
+from .analytics import vol_surface as vol_surface_mod
+from .analytics import liquidity as liquidity_mod
 from . import watch_runner
 from . import signal_history
 from . import briefing as briefing_mod
@@ -237,6 +241,13 @@ async def _warn_if_open_and_paid() -> None:
 # greeks is smaller than the bid/ask spread, and hard-coding a stale rate would
 # be worse than being explicit about the simplification.
 RISK_FREE = float(os.environ.get("RISK_FREE_RATE", "0.0"))
+
+
+def _rate() -> float:
+    """The rate every option price here uses: the setting, else the 13-week
+    bill yield, else 0 (app/rates.py). RISK_FREE stays for callers that read
+    the bare setting; it was the 0% every greek used until 2026-10-13."""
+    return rates_mod.risk_free(YF_PROVIDER)["rate"]
 
 # PROVIDER serves the "currently loaded ticker" — quote, chain, expirations,
 # history — the calls that actually benefit from being real-time. It becomes
@@ -587,8 +598,28 @@ def _swing_snapshot(
                 "It often does this outside market hours; the options readings come back "
                 "when it answers."
             ).format(len(listed), ticker)
+    # The rate, the clock, the quotes and the volatility, before anything is
+    # built on them (Options audit, 2026-10-13; see app/rates.py and
+    # app/analytics/vol_surface.py for what each corrects).
+    rate_info = rates_mod.risk_free(YF_PROVIDER)
+    rate = rate_info["rate"]
+    surface: Dict[str, Any] = {"available": False}
+    iv_rank: Dict[str, Any] = {"available": False}
+    event_date = None
     if chain is not None and not chain.empty and not partial:
-        gex_read = gex_mod.analyse(chain, spot, rate=RISK_FREE, div=div, ticker=ticker)
+        try:
+            event_date = legs.get("earnings_date")
+        except Exception:                                         # noqa: BLE001
+            event_date = None
+        chain = vol_surface_mod.apply_clock(chain)
+        chain = vol_surface_mod.apply_quotes(chain)
+        chain = vol_surface_mod.resolve_surface(chain, spot, rate, div)
+        surface = vol_surface_mod.build(chain, spot, rate, div, event_date=event_date)
+        iv30 = (surface.get("iv30") or {}).get("iv_pct")
+        iv_history_mod.record(ticker, iv30)
+        iv_rank = iv_history_mod.rank_for(ticker, iv30, YF_PROVIDER)
+    if chain is not None and not chain.empty and not partial:
+        gex_read = gex_mod.analyse(chain, spot, rate=rate, div=div, ticker=ticker)
         exposure = gex_read.pop("_exposure_frame", None)
         if exposure is not None:
             greeks_read = greeks_panel.analyse(exposure, spot)
@@ -624,7 +655,7 @@ def _swing_snapshot(
             budget=budget,
         )
         entry_plan = entry_mod.build_plan(
-            exposure, spot, call, tech, gex_read, news_read, rate=RISK_FREE, div=div,
+            exposure, spot, call, tech, gex_read, news_read, rate=rate, div=div,
             history=hist, budget=budget,
         )
 
@@ -657,13 +688,13 @@ def _swing_snapshot(
     if PROVIDER.name == "tradier":
         data_caveat = (
             "Quote and options chain are real-time via Tradier. Greeks are computed locally via "
-            "Black-Scholes with a {:.2%} risk-free rate. Company fundamentals and news still come "
-            "from yfinance and are not real-time.".format(RISK_FREE)
+            "Black-Scholes with a {} risk-free rate. Company fundamentals and news still come "
+            "from yfinance and are not real-time.".format(rate_info["label"])
         )
     else:
         data_caveat = (
             "Quotes are delayed ~15 minutes. Greeks are computed locally via "
-            "Black-Scholes with a {:.2%} risk-free rate.".format(RISK_FREE)
+            "Black-Scholes with a {} risk-free rate.".format(rate_info["label"])
         )
 
     payload = {
@@ -680,6 +711,10 @@ def _swing_snapshot(
         # vanishes at the close.
         "patterns": patterns_mod.analyse(hist, spot=spot),
         "gex": gex_read,
+        "vol_surface": surface,
+        "iv_rank": iv_rank,
+        "rate": rate_info,
+        "liquidity_method": liquidity_mod.method(),
         "greeks": greeks_read,
         "flow": flow_read,
         "news": news_read,
@@ -966,7 +1001,7 @@ async def earnings_panel(ticker: str) -> Dict[str, Any]:
     def build() -> Dict[str, Any]:
         ticker_u = ticker.upper().strip()
         quote = PROVIDER.quote(ticker_u)
-        result = earnings_mod.analyse(PROVIDER, YF_PROVIDER, ticker_u, quote, rate=RISK_FREE)
+        result = earnings_mod.analyse(PROVIDER, YF_PROVIDER, ticker_u, quote, rate=_rate())
         result["generated_at"] = datetime.now(timezone.utc).isoformat()
         return result
 
@@ -988,7 +1023,7 @@ async def earnings_brief(ticker: str) -> Dict[str, Any]:
     def build() -> Dict[str, Any]:
         ticker_u = ticker.upper().strip()
         quote = PROVIDER.quote(ticker_u)
-        facts = earnings_mod.analyse(PROVIDER, YF_PROVIDER, ticker_u, quote, rate=RISK_FREE)
+        facts = earnings_mod.analyse(PROVIDER, YF_PROVIDER, ticker_u, quote, rate=_rate())
 
         # What the company has actually filed. This is the only source here for
         # corporate events, and it is a primary one — an 8-K item code is the
@@ -1050,7 +1085,7 @@ async def raw_chain(
         chain = PROVIDER.options_chain(ticker.upper(), expiries=wanted, max_expiries=max_expiries)
         if chain is None or chain.empty:
             raise HTTPException(status_code=404, detail="No options chain for '{}'.".format(ticker))
-        frame = gex_mod.compute_exposure(chain, spot, rate=RISK_FREE, div=quote.get("dividend_yield") or 0.0)
+        frame = gex_mod.compute_exposure(chain, spot, rate=_rate(), div=quote.get("dividend_yield") or 0.0)
         cols = [
             "contract", "expiry", "dte", "strike", "is_call", "bid", "ask", "mid", "last",
             "volume", "open_interest", "iv", "delta", "gamma", "vega", "theta", "gex", "dex",
@@ -1762,7 +1797,7 @@ async def setups_options(
         chain = PROVIDER.options_chain(sym, max_expiries=6)
         frame = None
         if chain is not None and not chain.empty and spot:
-            frame = gex_mod.compute_exposure(chain, spot, rate=RISK_FREE,
+            frame = gex_mod.compute_exposure(chain, spot, rate=_rate(),
                                              div=quote.get("dividend_yield") or 0.0)
         try:
             earnings = YF_PROVIDER.earnings_date(sym)
@@ -1963,7 +1998,7 @@ async def paper_book_mark(payload: Dict[str, Any] = Body(default={})) -> Dict[st
     """
     def build() -> Dict[str, Any]:
         out = papertrade_mod.mark_book(
-            YF_PROVIDER, payload.get("positions") or [], rate=RISK_FREE)
+            YF_PROVIDER, payload.get("positions") or [], rate=_rate())
         out["generated_at"] = datetime.now(timezone.utc).isoformat()
         return out
 
@@ -2503,7 +2538,7 @@ async def tracker_mark(request: Request) -> Dict[str, Any]:
             raise _cooldown_refusal("A refresh", since, wait)
     _PUBLIC_LAST["mark"] = time.time()
     async with _SCAN_LOCK:
-        return await _run(paper.mark_open_positions, PROVIDER, RISK_FREE)
+        return await _run(paper.mark_open_positions, PROVIDER, _rate())
 
 
 async def _do_scan(tickers: Optional[List[str]], trigger: str) -> Dict[str, Any]:
@@ -2511,7 +2546,7 @@ async def _do_scan(tickers: Optional[List[str]], trigger: str) -> Dict[str, Any]
     _BACKGROUND_JOB.set(True)
     async with _SCAN_LOCK:
         result = await _run(
-            paper.run_scan, _tracker_snapshot, PROVIDER, tickers, trigger, RISK_FREE
+            paper.run_scan, _tracker_snapshot, PROVIDER, tickers, trigger, _rate()
         )
     _raise_scan_alerts(result)
     return result
@@ -2808,7 +2843,7 @@ async def _tracker_loop() -> None:
             async with _SCAN_LOCK:
                 if due_for_scan:
                     result = await _run(
-                        paper.run_scan, _tracker_snapshot, PROVIDER, None, "scheduled", RISK_FREE
+                        paper.run_scan, _tracker_snapshot, PROVIDER, None, "scheduled", _rate()
                     )
                     last_scan = now
                     _raise_scan_alerts(result)
@@ -2817,7 +2852,7 @@ async def _tracker_loop() -> None:
                         result["considered"], result["opened"], result["closed"],
                     )
                 else:
-                    await _run(paper.mark_open_positions, PROVIDER, RISK_FREE)
+                    await _run(paper.mark_open_positions, PROVIDER, _rate())
                     if just_closed:
                         log.info("tracker: marked final closing prices")
 

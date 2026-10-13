@@ -62,6 +62,10 @@ from .greeks import greeks
 CONTRACT_MULTIPLIER = quotes.STANDARD_MULTIPLIER
 
 
+# Index products, where the dealer-sign convention has some research support.
+INDEX_LIKE = {"SPY", "SPX", "^SPX", "^GSPC", "QQQ", "^NDX", "NDX", "IWM", "^RUT", "RUT", "DIA",
+              "XSP", "VOO", "IVV"}
+
 # The least share of the largest strike's absolute gamma exposure a strike
 # must carry to be named a call or put wall (see analyse).
 WALL_MIN_SHARE = 0.05
@@ -294,33 +298,84 @@ def analyse(
     regime = "positive" if total_gex > 0 else "negative" if total_gex < 0 else "flat"
     flip = profile["flip_point"]
 
+    # Descriptions, not forecasts (Options audit, 2026-10-13). These read
+    # "Expect mean reversion ... Favours selling premium" and "Long calls and
+    # puts get help from hedging flows": predictions and strategy advice with
+    # no test behind them. What the research supports is narrower: dealer
+    # gamma relates to how large moves are, not to their direction
+    # (Baltussen, Da, Lammers & Martens 2021, on index options), pinning on
+    # expiry day is real but small (Ni, Pearson & Poteshman 2005), and walls
+    # have no published test as support or resistance.
     if regime == "positive":
         regime_note = (
             "Positive net GEX: under the model's assumption dealers are net long gamma, so "
-            "their hedging sells rises and buys falls. Expect mean reversion, suppressed "
-            "realized vol and ranges that hold. Favours selling premium and spreads over "
-            "naked directional longs."
+            "their hedging would sell rises and buy falls, leaning against moves. Research on "
+            "index options links this kind of positioning to smaller moves on average; it says "
+            "nothing about direction."
         )
         swing_note = (
-            "For swings, rallies into the call wall tend to stall and breakouts need a "
-            "catalyst to overcome hedging drag. The put wall below is where negative gamma "
-            "is heaviest: a fall that reaches it is where hedging stops resisting and "
-            "starts adding to the move."
+            "The call wall is where the model puts the most long dealer gamma above the price "
+            "and the put wall the most short gamma below it. Neither has been tested as support "
+            "or resistance; they are where hedging would be largest if the assumption holds."
         )
     elif regime == "negative":
         regime_note = (
             "Negative net GEX: under the model's assumption dealers are net short gamma, so "
-            "their hedging buys rises and sells falls. Expect vol expansion, trend "
-            "continuation and larger daily ranges. Favours long premium and directional swings."
+            "their hedging would buy rises and sell falls, adding to moves. Research on index "
+            "options links this kind of positioning to larger moves on average; it says nothing "
+            "about direction."
         )
         swing_note = (
-            "For swings, momentum breakouts tend to extend rather than revert. Long calls "
-            "and puts get help from hedging flows instead of fighting them, and a stop gets "
-            "hit faster when the move turns."
+            "Under this reading moves in either direction would meet less hedging resistance. "
+            "The walls are where the model puts the most dealer gamma, not tested support or "
+            "resistance."
         )
     else:
         regime_note = "Net GEX is zero: the model's call and put exposure cancel at this price."
         swing_note = "No hedging lean either way at this price under the model."
+
+    # How far to trust the sign. Evidence on who is net long or short options
+    # differs by underlying: for index options the customer side is broadly net
+    # long puts and short calls (Garleanu, Pedersen & Poteshman 2009), which the
+    # convention matches; for single stocks public customers were found net
+    # writers of both calls and puts (Lakonishok, Lee, Pearson & Poteshman
+    # 2007), so the call side's sign may be wrong.
+    index_like = bool(ticker) and str(ticker).upper() in INDEX_LIKE
+    sign_note = (
+        "For index products the sign convention has some support in research on who holds index "
+        "options; it is still an assumption." if index_like else
+        "For a single stock the sign is weaker: research found public customers net writers of "
+        "both calls and puts, so dealers may be short calls rather than long them. Read where "
+        "gamma is concentrated more than its sign."
+    )
+
+    # The share of gross gamma each expiry carries, and the expiries used.
+    by_expiry = []
+    if "expiry" in df.columns:
+        gross = float(np.nansum(df["gex"].abs())) or 1.0
+        for exp, g in df.groupby("expiry"):
+            by_expiry.append({"expiry": exp, "dte": int(g["dte"].iloc[0]) if "dte" in g else None,
+                              "net_gex": _f(float(np.nansum(g["gex"]))),
+                              "share_of_gross_pct": round(float(np.nansum(g["gex"].abs())) / gross * 100.0, 1),
+                              "open_interest": _f(float(g["open_interest"].fillna(0).sum()))})
+        by_expiry.sort(key=lambda r: r["expiry"])
+
+    # The flip as a zone: where the re-priced net GEX is within 15% of its
+    # largest absolute value, around the crossing. A crossing in a flat
+    # stretch of the curve moves a long way on a small change in inputs.
+    flip_zone = None
+    if flip is not None and profile.get("net_gex"):
+        vals = np.array([v if v is not None else np.nan for v in profile["net_gex"]], dtype=float)
+        spots_arr = np.array(profile["spots"], dtype=float)
+        big = np.nanmax(np.abs(vals)) if np.isfinite(vals).any() else 0.0
+        near = np.abs(vals) <= 0.15 * big
+        idx = int(np.argmin(np.abs(spots_arr - flip)))
+        lo_i = hi_i = idx
+        while lo_i > 0 and near[lo_i - 1]:
+            lo_i -= 1
+        while hi_i < len(near) - 1 and near[hi_i + 1]:
+            hi_i += 1
+        flip_zone = {"low": round(float(spots_arr[lo_i]), 2), "high": round(float(spots_arr[hi_i]), 2)}
 
     top = by_strike.nlargest(top_n, "abs_gex").sort_values("strike")
 
@@ -346,7 +401,17 @@ def analyse(
             "flip_point": flip,
             "flip_distance_pct": profile["flip_distance_pct"],
             "flip_direction": profile.get("flip_direction"),
+            "flip_zone": flip_zone,
             "above_flip": None if flip is None else bool(spot > flip),
+            "sign_note": sign_note,
+            "index_like": index_like,
+        },
+        "by_expiry": by_expiry,
+        "expiries_used": [r["expiry"] for r in by_expiry],
+        "inputs": {
+            "rate_pct": round(rate * 100, 3), "dividend_yield_pct": round(div * 100, 3),
+            "open_interest": "the previous session's, as the feed reports it",
+            "iv": df.attrs.get("iv_method") or "the feed's implied volatility",
         },
         "levels": {
             "call_wall": _level(call_wall, spot),

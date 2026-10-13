@@ -58,6 +58,7 @@ from app import alerts as alert_inbox
 from app import catalysts
 from app import db as accounts_db
 from app import feeds
+from app import iv_history
 from app import live_mirror
 from app import paper
 from app import segment_store
@@ -117,6 +118,9 @@ def _real_data_out_of_the_way(tmp_path_factory):
         # test that reads one back gives it a file of its own.
         patch.setattr(segment_store, "DB_PATH",
                       str(tmp_path_factory.mktemp("segments") / "segments.db"))
+        # Optic's own daily implied-volatility readings (the IV rank's history).
+        patch.setattr(iv_history, "DB_PATH",
+                      str(tmp_path_factory.mktemp("iv_history") / "iv_history.db"))
         # And the two file caches, which are data/ as much as the databases are.
         # Neither was moved, and with the network open a full run in a fresh
         # worktree left a 9.1MB data/feed_cache.json holding SEC's ticker
