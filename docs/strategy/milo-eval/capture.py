@@ -225,7 +225,9 @@ async def run(worktree, label, client):
         }
         summary.append(row)
         with open(os.path.join(outdir, case["id"] + ".json"), "w") as fh:
-            json.dump({"case": case, "system": system, "messages": req["messages"], "metrics": row},
+            # No case or checks in the request file: a stand-in model reads it
+            # (2026-10-13, one saw B1's checks before this was split out).
+            json.dump({"id": case["id"], "system": system, "messages": req["messages"], "metrics": row},
                       fh, indent=1, default=str)
     if not only:
         with open(os.path.join(outdir, "summary.json"), "w") as fh:

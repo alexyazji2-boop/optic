@@ -1,0 +1,86 @@
+{
+ "B1": {
+  "A": "before",
+  "B": "after"
+ },
+ "B2": {
+  "A": "after",
+  "B": "before"
+ },
+ "B3": {
+  "A": "after",
+  "B": "before"
+ },
+ "D1": {
+  "A": "after",
+  "B": "before"
+ },
+ "D2": {
+  "A": "after",
+  "B": "before"
+ },
+ "S1": {
+  "A": "after",
+  "B": "before"
+ },
+ "S2": {
+  "A": "after",
+  "B": "before"
+ },
+ "L1": {
+  "A": "before",
+  "B": "after"
+ },
+ "L2": {
+  "A": "after",
+  "B": "before"
+ },
+ "A1": {
+  "A": "after",
+  "B": "before"
+ },
+ "A2": {
+  "A": "after",
+  "B": "before"
+ },
+ "O1": {
+  "A": "after",
+  "B": "before"
+ },
+ "O2": {
+  "A": "after",
+  "B": "before"
+ },
+ "X1": {
+  "A": "before",
+  "B": "after"
+ },
+ "X2": {
+  "A": "before",
+  "B": "after"
+ },
+ "C1": {
+  "A": "after",
+  "B": "before"
+ },
+ "T1": {
+  "A": "after",
+  "B": "before"
+ },
+ "F1": {
+  "A": "after",
+  "B": "before"
+ },
+ "F2": {
+  "A": "before",
+  "B": "after"
+ },
+ "P1": {
+  "A": "before",
+  "B": "after"
+ },
+ "M1": {
+  "A": "before",
+  "B": "after"
+ }
+}

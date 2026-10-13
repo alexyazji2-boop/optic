@@ -15,15 +15,17 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from cases import CASES  # noqa: E402
 
+LABELS = (os.environ.get("A_LABEL", "before"), os.environ.get("B_LABEL", "after"))
+REVIEW = os.environ.get("REVIEW_DIR", "review")
 rng = random.Random(20261012)
-os.makedirs(os.path.join(HERE, "review"), exist_ok=True)
+os.makedirs(os.path.join(HERE, REVIEW), exist_ok=True)
 key, out = {}, ["# Blinded answer pairs\n"]
 for c in CASES:
     ans = {}
-    for lab in ("before", "after"):
+    for lab in LABELS:
         p = os.path.join(HERE, "out", lab, "responses", c["id"] + ".md")
         ans[lab] = open(p).read().strip() if os.path.exists(p) else "(missing)"
-    order = ["before", "after"]
+    order = list(LABELS)
     rng.shuffle(order)
     key[c["id"]] = {"A": order[0], "B": order[1]}
     hist = "".join("\n> {}: {}".format(t["role"], t["content"].replace("\n", " ")[:300])
@@ -34,6 +36,6 @@ for c in CASES:
                    st=" Data captured {} minutes before the question.".format(c["stale_minutes"]) if c.get("stale_minutes") else "",
                    hist=("\n\nEarlier turns:" + hist) if hist else "", q=c["q"],
                    checks="\n".join("- " + x for x in c["checks"]), a=ans[order[0]], b=ans[order[1]]))
-open(os.path.join(HERE, "review", "pairs.md"), "w").write("".join(out))
-json.dump(key, open(os.path.join(HERE, "review", "key.json"), "w"), indent=1)
+open(os.path.join(HERE, REVIEW, "pairs.md"), "w").write("".join(out))
+json.dump(key, open(os.path.join(HERE, REVIEW, "key.json"), "w"), indent=1)
 print("pairs:", len(CASES))

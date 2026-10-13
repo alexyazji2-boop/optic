@@ -1,0 +1,25 @@
+| Case | Question | Level before → after | Horizon after | Context chars before → after | Lost before | Left out after (named to Milo) |
+|---|---|---|---|---|---|---|
+| B1 | Is Apple a good stock to buy? | advanced → literate | — | 90,225 (cut) → 60,135 | sectors, active_view, digest, reader_watchlist, plus a section cut mid-JSON | greeks, flow, entry_plan, naked_ideas, strategy_ideas, sectors |
+| B2 | what does P/E mean and is apple's high? | simple → simple | — | 90,235 (cut) → 60,145 | sectors, active_view, digest, reader_watchlist, plus a section cut mid-JSON | greeks, flow, entry_plan, naked_ideas, strategy_ideas, sectors |
+| B3 | why did apple go up today? | advanced → literate | — | 90,222 (cut) → 60,132 | sectors, active_view, digest, reader_watchlist, plus a section cut mid-JSON | greeks, flow, entry_plan, naked_ideas, strategy_ideas, sectors |
+| D1 | Give me a day trade plan for NVDA at the open tomorr | literate → literate | day | 90,276 (cut) → 60,576 | sectors, active_view, digest, reader_watchlist, plus a section cut mid-JSON | entry_plan, naked_ideas, strategy_ideas, sectors |
+| D2 | Is gamma going to pin NVDA today? | advanced → advanced | — | 90,228 (cut) → 60,365 | sectors, active_view, digest, reader_watchlist, plus a section cut mid-JSON | entry_plan, naked_ideas, sector_confirm, earnings_momentum, sectors |
+| S1 | Is there a swing setup on AAPL for the next 2-3 week | literate → literate | swing | 90,250 (cut) → 60,160 | sectors, active_view, digest, reader_watchlist, plus a section cut mid-JSON | greeks, flow, entry_plan, naked_ideas, strategy_ideas, sectors |
+| S2 | What would invalidate the bullish read? | literate → literate | — | 90,234 (cut) → 59,895 | sectors, active_view, digest, reader_watchlist, plus a section cut mid-JSON | entry_plan, naked_ideas, strategy_ideas, sectors |
+| L1 | I want to hold Apple for 10 years. Is it worth it at | literate → literate | long | 90,260 (cut) → 59,467 | sectors, active_view, digest, reader_watchlist, plus a section cut mid-JSON | gex, greeks, flow, entry_plan, naked_ideas, sectors |
+| L2 | Does the high conviction score square with the valua | advanced → advanced | — | 90,254 (cut) → 60,160 | sectors, long_term, active_view, digest, reader_watchlist, plus a section cut mid-JSON | greeks, flow, entry_plan, naked_ideas, strategy_ideas, sectors |
+| A1 | Decompose the composite. Which inputs disagree, and  | professional → professional | — | 90,300 (cut) → 59,961 | sectors, active_view, digest, reader_watchlist, plus a section cut mid-JSON | entry_plan, naked_ideas, strategy_ideas, sectors |
+| A2 | Put/call is 0.73 with unusual call volume. Is that i | advanced → advanced | — | 90,272 (cut) → 60,030 | sectors, active_view, digest, reader_watchlist, plus a section cut mid-JSON | entry_plan, macro, sectors |
+| O1 | The 360 call has a delta around 0.30, so there's a 3 | literate → literate | — | 90,276 (cut) → 60,034 | sectors, active_view, digest, reader_watchlist, plus a section cut mid-JSON | entry_plan, macro, sectors |
+| O2 | Should I buy weekly calls before earnings? | literate → literate | — | 90,237 (cut) → 59,995 | sectors, active_view, digest, reader_watchlist, plus a section cut mid-JSON | entry_plan, macro, sectors |
+| X1 | is it a buy | advanced → literate | — | 90,207 (cut) → 60,117 | sectors, active_view, digest, reader_watchlist, plus a section cut mid-JSON | greeks, flow, entry_plan, naked_ideas, strategy_ideas, sectors |
+| X2 | thoughts? | advanced → literate | — | 90,205 (cut) → 60,700 | sectors, active_view, digest, reader_watchlist, plus a section cut mid-JSON | greeks, flow, entry_plan, naked_ideas, sectors |
+| C1 | The chart looks bullish but MACD says bearish. Which | literate → literate | — | 90,287 (cut) → 59,948 | sectors, active_view, digest, reader_watchlist, plus a section cut mid-JSON | entry_plan, naked_ideas, strategy_ideas, sectors |
+| T1 | What is AAPL doing right now? | literate → literate | — | 90,225 (cut) → 60,136 | sectors, active_view, digest, reader_watchlist, plus a section cut mid-JSON | greeks, flow, entry_plan, naked_ideas, strategy_ideas, sectors |
+| F1 | And for someone holding for years? | advanced → literate | long | 90,230 (cut) → 59,437 | sectors, active_view, digest, reader_watchlist, plus a section cut mid-JSON | gex, greeks, flow, entry_plan, naked_ideas, sectors |
+| F2 | How does NVDA compare? | literate → literate | — | 90,424 (cut) → 60,919 | sectors, active_view, digest, reader_watchlist, plus a section cut mid-JSON | greeks, flow, entry_plan, naked_ideas, sectors |
+| P1 | How concentrated is my portfolio? | literate → literate | — | 90,228 (cut) → 60,613 | sectors, active_view, digest, reader_watchlist, reader_holdings, portfolio_summary, plus a section cut mid-JSON | greeks, entry_plan, naked_ideas, sectors |
+| M1 | Why is the Nasdaq weaker than the S&P today? | literate → literate | — | 90,233 (cut) → 36,516 | read, active_view, reader_watchlist, market, plus a section cut mid-JSON | nothing |
+
+Average estimated input tokens per message (chars/3.6): before 31,444, after 23,884.
