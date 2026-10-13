@@ -82,6 +82,7 @@ from .analytics import pulse as pulse_mod
 from .analytics import watchlist as watchlist_mod
 from .analytics import setups as setups_mod
 from . import knowledge as knowledge_mod
+from . import horizon as horizon_mod
 from . import watch_runner
 from . import signal_history
 from . import briefing as briefing_mod
@@ -5399,6 +5400,9 @@ async def personas() -> Dict[str, Any]:
         # knowledge catalogue's, because the menu is now the same menu.
         "changes": ai.PERSONA_CHANGES,
         "never_changes": ai.PERSONA_NEVER_CHANGES,
+        # The horizon menu rides here rather than on an endpoint of its own:
+        # it renders in the same header, beside the same two controls.
+        "horizons": horizon_mod.catalogue(),
     }
 
 
@@ -5795,10 +5799,14 @@ async def chat(request: Request,
     # normalised rather than trusted: they come from localStorage, which the
     # reader can edit, and an unknown value has to answer with something.
     mode = knowledge_mod.normalise(payload.get("mode"))
+    # The third axis (2026-10-12): the timeframe the reader is deciding about.
+    # Normalised the same way; words in the question override it per answer.
+    horizon = horizon_mod.normalise(payload.get("horizon"))
     context = await _augment_chat_context(history, context)
     return StreamingResponse(
         ai.stream_chat(history, context=context, use_web=use_web,
-                       attachments=attachments, persona=persona, mode=mode),
+                       attachments=attachments, persona=persona, mode=mode,
+                       horizon=horizon),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

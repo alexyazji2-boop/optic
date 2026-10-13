@@ -233,6 +233,10 @@ def resolve_for_answer(mode: Optional[str], question: str) -> str:
     Kept crude on purpose. A confident classifier that is wrong a quarter of the
     time is worse than a blunt rule a reader can predict, and Pulse gets the
     question itself as well, so the model sees whatever this misses.
+
+    `question` must be the reader's own words. It was handed the turn after the
+    CONTEXT JSON had been prepended, so "gamma" in the page data made "is it a
+    buy" an Advanced question (measured 2026-10-12: 7 of 21 eval questions).
     """
     key = normalise(mode)
     if key != "adaptive":
@@ -241,7 +245,9 @@ def resolve_for_answer(mode: Optional[str], question: str) -> str:
     if not text:
         return DEFAULT_MODE
     teaching = ("what is", "what are", "what does", "explain", "how does",
-                "why does", "in simple terms", "eli5", "beginner")
+                "why does", "in simple terms", "eli5", "beginner", "i'm new",
+                "im new", "new to investing", "new to this", "plain english",
+                "dumb it down", "mean?")
     if any(text.startswith(p) or (" " + p) in text for p in teaching):
         # Asking to be taught is not the same as being a beginner, so this
         # lands on Simple for the wording of one answer and changes nothing
