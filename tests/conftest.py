@@ -249,3 +249,19 @@ def accounts(tmp_path, monkeypatch):
     monkeypatch.setattr(accounts_db, "DB_PATH", str(tmp_path / "accounts.db"))
     accounts_db.migrate()
     return accounts_db
+
+
+@pytest.fixture(autouse=True)
+def _no_research_retrieval(monkeypatch, request):
+    """Milo's research pack reads FRED, EDGAR and the quote feed for each
+    question (app/desk/research.py, main._with_research). The chat-route tests
+    are about allowances, streams and context, so it is a pass-through there;
+    tests/test_desk_edition.py exercises the pack directly with fakes."""
+    if request.node.get_closest_marker("research_live"):
+        return
+    import app.main as m
+
+    async def passthrough(history, context, horizon=None):
+        return context
+    monkeypatch.setattr(m, "_with_research", passthrough)
+

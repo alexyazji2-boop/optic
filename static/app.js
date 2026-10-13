@@ -5156,6 +5156,8 @@ document.addEventListener('click', (evt) => {
   if (go) { switchView(go.dataset.goView); return; }
   /* A market question goes into Pulse's box when it is pressed, for the reader
    * to edit and send (see draftPulse). */
+  const deskAskEl = evt.target.closest('[data-desk-ask]');
+  if (deskAskEl) { deskAsk(deskAskEl.dataset.deskAsk); return; }
   const askText = evt.target.closest('[data-ask-text]');
   if (askText) {
     /* A follow-up under one of Milo's answers sends, visibly: it lands in the
@@ -9714,12 +9716,24 @@ function morningDesk(data) {
       </div>
       ${r.detail ? `<p class="md-rel-detail">${gloss(r.detail)}</p>` : ''}
     </div>`).join('')}` : '';
+  /* The daily edition, when one is kept: its headline and summary lead the
+   * card, with its date and slot, and the whole edition is on the Read page.
+   * An edition from an earlier day says so rather than passing as today's. */
+  const ed = d.edition;
+  const edition = ed && ed.headline ? `<div class="md-edition">
+      <span class="md-ed-kicker">${ed.is_today ? 'Today\u2019s edition' : `Latest edition, ${esc(deskWhen(ed.date))}`} \u00b7 ${esc(ed.slot_label || '')}${
+  ed.test_edition ? ` \u00b7 ${esc(ed.test_edition)}` : ''}</span>
+      <p class="md-ed-head">${esc(ed.headline)}</p>
+      ${ed.summary ? `<p class="md-p">${gloss(ed.summary)}</p>` : ''}
+      <button type="button" class="hm-more md-ed-more" data-go-view="brief">Read the full edition &rarr;</button>
+    </div>` : '';
   return `
     <section class="hm-block md">
       <div class="hm-block-head">
         <h2 class="hm-h">Optic Desk</h2>
         ${askPulse('morning_desk')}
       </div>
+      ${edition}
       ${d.overall ? `<p class="md-p md-overall"><strong>Bottom line:</strong> ${gloss(d.overall)}</p>` : ''}
       ${lead}
       ${leadRest || scenarios || d.note || cal ? `<details class="ind-explain md-more">
@@ -38656,6 +38670,7 @@ function renderBrief(d) {
     : '';
 
   views.brief.innerHTML = `
+  ${d.historical ? '' : '<div id="desk-edition-host"></div>'}
   ${briefStrip(groups.indices)}
 
   ${/* The read sits under the heading that names it.
@@ -38784,12 +38799,200 @@ function renderBrief(d) {
   }
 }
 
+/* ====================================================== Optic Desk edition ===
+ *
+ * The daily newsletter (docs/desk/EDITORIAL-SPEC.md), at the top of the Read
+ * page. One canonical edition per date and slot, written server-side by
+ * app/desk/ and only read here: /api/desk/edition never writes one, so a page
+ * load cannot trigger a generation.
+ *
+ * Every paragraph carries the evidence it cites, and each cited source is a
+ * link beside the claim, with the period or publication time on hover. Each
+ * section has "Ask Milo", which hands Milo the section and its evidence so a
+ * reader can have it explained or challenged.
+ */
+const DESK = { data: null, at: 0, loading: false };
+
+function deskEvidence(id) {
+  const ed = ((DESK.data || {}).edition) || {};
+  return (ed.evidence || []).find((e) => e.id === id) || null;
+}
+
+function deskSourceName(e) {
+  const s = String(e.source || '');
+  if (/^FRED/.test(s)) return 'FRED ' + (e.symbol || '');
+  if (/^Yahoo Finance quote/.test(s)) return 'Quote ' + (e.symbol || '');
+  if (/^Yahoo Finance daily bars/.test(s)) return 'Prices ' + (e.symbol || '');
+  if (/options surface/.test(s)) return 'Options ' + (e.symbol || '');
+  if (/earnings/.test(s)) return 'Earnings ' + (e.symbol || '');
+  if (/fed funds futures/i.test(s)) return 'Fed funds futures';
+  return s.replace(/\s*\(.*$/, '').slice(0, 28) || e.id;
+}
+
+function deskSourceTitle(e) {
+  const bits = [e.label];
+  if (e.period) bits.push('Period: ' + e.period);
+  if (e.published_at) bits.push('Published ' + stampIn(e.published_at, activeZone()));
+  if (e.sources_in_cluster > 1) bits.push(`Carried by ${e.sources_in_cluster} outlets (one report, not separate confirmation)`);
+  if (e.method) bits.push(e.method);
+  return bits.filter(Boolean).join('. ');
+}
+
+function deskCites(u) {
+  const ids = [...new Set((u && u.cites) || [])];
+  const chips = ids.map((id) => {
+    const e = deskEvidence(id);
+    if (!e) return '';
+    const name = esc(deskSourceName(e));
+    const tip = esc(deskSourceTitle(e));
+    return e.url
+      ? `<a class="de-src" href="${esc(e.url)}" target="_blank" rel="noopener noreferrer" title="${tip}">${name}</a>`
+      : `<span class="de-src" title="${tip}">${name}</span>`;
+  }).filter(Boolean);
+  return chips.length ? `<span class="de-srcs" aria-label="Sources">${chips.join('')}</span>` : '';
+}
+
+function deskUnit(u, tag = 'p', cls = 'de-p') {
+  if (!u || !u.text) return '';
+  return `<${tag} class="${cls}">${gloss(u.text)} ${deskCites(u)}</${tag}>`;
+}
+
+function deskAskBtn(sid, title) {
+  return `<button type="button" class="ask-pulse de-ask" data-desk-ask="${esc(sid)}"
+    aria-label="Ask Milo about ${esc(title || 'this section')}">Ask Milo</button>`;
+}
+
+function deskSectionHTML(s) {
+  const title = s.title || '';
+  const head = title ? `<h3 class="de-h">${esc(title)}${deskAskBtn(s.id, title)}</h3>` : '';
+  if (s.id === 'opening') {
+    return `<div class="de-sec de-opening">${(s.paragraphs || []).map((p) => deskUnit(p)).join('')}
+      <div class="de-ask-row">${deskAskBtn('opening', 'the opening')}</div></div>`;
+  }
+  if (s.id === 'numbers') {
+    return `<div class="de-sec">${head}<div class="de-nums">${(s.items || []).map((it) => {
+      const e = deskEvidence(it.evidence) || {};
+      return `<div class="de-num">
+        <div class="de-num-fig">${esc(it.figure || '')}</div>
+        <div class="de-num-label">${esc(it.label || e.label || '')}</div>
+        <div class="de-num-meta">${esc([it.period || e.period, deskSourceName(e)].filter(Boolean).join(' · '))}</div>
+        ${deskUnit(it, 'p', 'de-num-why')}
+      </div>`;
+    }).join('')}</div></div>`;
+  }
+  if (s.id === 'balance') {
+    const col = (label, rows, cls) => (rows || []).length ? `<div class="de-bal ${cls}">
+      <h4 class="de-bal-h">${label}</h4><ul>${rows.map((u) => deskUnit(u, 'li', 'de-li')).join('')}</ul></div>` : '';
+    return `<div class="de-sec">${head}<div class="de-bals">${col('The good', s.good, 'is-good')}${col('The bad', s.bad, 'is-bad')}${col('Unresolved', s.unresolved, 'is-open')}</div></div>`;
+  }
+  if (s.id === 'watch') {
+    return `<div class="de-sec">${head}<ul class="de-watch">${(s.items || []).map((it) => `<li>
+      ${it.when ? `<span class="de-when">${esc(deskWhen(it.when))}</span>` : ''}${deskUnit(it, 'span', 'de-watch-text')}</li>`).join('')}</ul></div>`;
+  }
+  if (s.id === 'takeaways') {
+    return `<div class="de-sec de-take">${head}<ol>${(s.items || []).map((u) => deskUnit(u, 'li', 'de-li')).join('')}</ol></div>`;
+  }
+  const rows = (s.paragraphs || []).map((p) => deskUnit(p)).join('')
+    + ((s.items || []).length ? `<ul class="de-items">${s.items.map((u) => deskUnit(u, 'li', 'de-li')).join('')}</ul>` : '');
+  return `<div class="de-sec">${head}${rows}</div>`;
+}
+
+function deskWhen(iso) {
+  const d = new Date(String(iso).length <= 10 ? iso + 'T12:00:00' : iso);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/New_York' });
+}
+
+function deskEditionHTML(served) {
+  if (!served) return '';
+  if (served.available !== true) {
+    const next = (served.next || {}).at;
+    return `<div class="panel de"><h2>Optic Desk</h2><p class="sub">${esc(served.reason || 'No edition yet.')}${
+      next ? ` The next is due ${esc(stampIn(next, activeZone()))}.` : ''}</p></div>`;
+  }
+  const ed = served.edition || {};
+  const fresh = served.is_current ? '' : `<span class="de-badge is-old">${esc(served.freshness || '')}</span>`;
+  const cutoff = ed.cutoff ? stampIn(ed.cutoff, 'America/New_York') : '';
+  const sections = (ed.sections || []).map(deskSectionHTML).join('');
+  const out = ed.outline || {};
+  const rels = (out.relationships || []).map((r) => `<li><strong>${esc(r.claim)}</strong>: ${esc(r.status)}. ${esc(r.note)}</li>`).join('');
+  const m = ed.metrics || {};
+  const failed = (m.legs_failed || []);
+  /* The panel's own title is "Optic Desk": the Read page makes every panel
+   * heading a fold, so the headline is the first thing inside it, not the
+   * title, where it was cut to one line and folded shut. */
+  return `<div class="panel de" id="desk-edition">
+    <h2>Optic Desk</h2>
+    <div class="de-top">
+      <span class="de-kicker">${esc(ed.slot_label || '')}</span>
+      ${ed.test_edition ? `<span class="de-badge is-test">${esc(ed.test_edition)}</span>` : ''}
+      ${fresh}
+    </div>
+    <h3 class="de-headline">${esc(ed.headline || '')}</h3>
+    <p class="de-meta">${esc(deskWhen(ed.date))} · ${esc(ed.timezone || 'ET')} · information to ${esc(cutoff)}${
+  ed.voice === 'written' ? ` · written by ${esc(ed.written_by || 'the assistant')} from the evidence below and checked before publication`
+    : ' · assembled from the evidence by Optic\'s templates (the written edition was unavailable or did not pass its checks)'}</p>
+    ${ed.summary ? `<div class="de-summary">${deskUnit(ed.summary, 'p', 'de-lede')}</div>` : ''}
+    ${sections}
+    <details class="ind-explain de-adv">
+      <summary>How this edition was made<i class="cal-caret" aria-hidden="true"></i></summary>
+      <p class="de-small">Evidence gathered ${esc(stampIn(ed.gathered_at, 'America/New_York'))}; news since ${esc(stampIn(ed.news_since, 'America/New_York'))}.
+        The lead, the numbers and the relationships below were chosen by code from the evidence; the prose was then written from them and every number checked against its cited source.</p>
+      ${rels ? `<h4 class="de-bal-h">Relationships evaluated</h4><ul class="de-small">${rels}</ul>` : ''}
+      ${(out.limits || []).length ? `<h4 class="de-bal-h">What this edition cannot see</h4><ul class="de-small">${out.limits.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}
+      ${failed.length ? `<p class="de-small">Sources that failed for this edition: ${esc(failed.join(', '))}.</p>` : ''}
+      ${m.check ? `<p class="de-small">Checks: ${m.check.ok ? 'passed' : 'failed'}, ${fmt(((m.check.stats || {}).numbers_checked) || 0, 0)} numbers verified, ${fmt(((m.check.stats || {}).words) || 0, 0)} words.</p>` : ''}
+    </details>
+    <p class="de-small de-disclaim">Research, not advice. Nothing here is a recommendation to buy or sell.</p>
+  </div>`;
+}
+
+function paintDeskEdition() {
+  const host = document.getElementById('desk-edition-host');
+  if (host) host.innerHTML = deskEditionHTML(DESK.data);
+}
+
+async function loadDeskEdition(force) {
+  if (DESK.loading) return;
+  if (DESK.data && !force && Date.now() - DESK.at < 5 * 60 * 1000) { paintDeskEdition(); return; }
+  DESK.loading = true;
+  try {
+    DESK.data = await getJSON('/api/desk/edition');
+    DESK.at = Date.now();
+  } catch (err) {
+    DESK.data = { available: false, reason: "Today's edition could not be loaded." };
+  } finally {
+    DESK.loading = false;
+    paintDeskEdition();
+  }
+}
+
+/* Milo, asked about one section: the section's own text, its title and the
+ * key, so the server attaches the evidence the section cites (and can read it
+ * again where it has moved). Kept until the next question is sent. */
+function deskAsk(sid) {
+  const ed = ((DESK.data || {}).edition) || {};
+  const sec = (ed.sections || []).find((s) => s.id === sid);
+  if (!sec) return;
+  STATE.deskAsk = { key: ed.key, section: sid };
+  const title = sec.title || 'the opening';
+  draftPulse(`About "${title}" in the ${deskWhen(ed.date)} Optic Desk: explain the reasoning, check it against the underlying evidence, and tell me what would change the view.`);
+}
+
+function deskEditionContext() {
+  const ed = ((DESK.data || {}).edition) || null;
+  if (!ed) return null;
+  return { key: ed.key, date: ed.date, slot: ed.slot, headline: ed.headline,
+    summary: (ed.summary || {}).text, is_today: (DESK.data || {}).is_today, voice: ed.voice,
+    sections: (ed.sections || []).map((s) => s.id) };
+}
+
 async function loadBrief(force, opts = {}) {
   const silent = !!opts.silent;
   const day = opts.day || null;
   // A day switch has to refetch even when today's brief is already in STATE.
   if (STATE.brief && !force && !day && STATE.briefDay === null) {
-    sweepCharts(() => renderBrief(STATE.brief)); revealPanels(views.brief); loadSentiment(); loadWeekly(); loadCatalystMode(); loadCatalysts(); loadPriority(); loadGlobal(); return;
+    sweepCharts(() => renderBrief(STATE.brief)); revealPanels(views.brief); loadDeskEdition(); loadSentiment(); loadWeekly(); loadCatalystMode(); loadCatalysts(); loadPriority(); loadGlobal(); return;
   }
   if (!silent) {
     views.brief.innerHTML = loadingHTML(day
@@ -38806,6 +39009,7 @@ async function loadBrief(force, opts = {}) {
     renderBrief(data);
     if (data.refreshing === true && !day) watchForNewerBrief(data);
     // Not awaited: one extra request each, and the tab is already usable.
+    if (!day) loadDeskEdition();
     loadSentiment();
     loadWeekly();
     loadCatalystMode();
@@ -41585,6 +41789,9 @@ function chatContextPayload() {
       calendar: STATE.brief.calendar,
     };
   }
+  const deskCtx = deskEditionContext();
+  if (deskCtx) ctx.desk_edition = deskCtx;
+  if (STATE.deskAsk) ctx.desk_section = STATE.deskAsk;
   if (STATE.long) ctx.long_term = STATE.long;
   else if (STATE.ovLongData && STATE.ovLongData.ticker === STATE.ticker) ctx.long_term = STATE.ovLongData;
   /* The comparison, once one has been run: its scores, ranks, the basis of
@@ -43331,6 +43538,9 @@ const PULSE_SOURCES = {
   vol_surface: ['Options pricing', 'swing'],
   iv_rank: ['IV rank', 'swing'],
   options_research: ['Options research', 'swing'],
+  desk_edition: ['Optic Desk', 'brief'],
+  desk_section: ['Optic Desk', 'brief'],
+  research: ['Sources Milo read', 'overview'],
   track_record: ['Track record', 'swing'],
 };
 const PULSE_SRC_RE = /\s?\[\[src ([a-z_]{2,20})\]\]/g;
@@ -44038,6 +44248,8 @@ async function sendChat(text) {
   const fileNote = files.length
     ? `\n\n[attached: ${files.map((f) => f.name).join(', ')}]` : '';
   const context = chatContextForSend();
+  // A section of the Desk is the subject of this question only.
+  STATE.deskAsk = null;
   const focusTicker = context.focus.ticker;
   if (context.focus.previous_ticker && focusTicker && context.focus.previous_ticker !== focusTicker) {
     addChatNote(`Now looking at ${focusTicker} (was ${context.focus.previous_ticker}). `
@@ -47386,7 +47598,9 @@ const PANELS_OPEN_BY_DEFAULT = {
    * two of the four were also simply wrong: the heading is "Weekly market
    * update", not "weekly market analysis", and "optic's read" names the hero,
    * whose h2 is nested and therefore never collapsible in the first place. */
-  brief: ['overnight', "today's priority", 'weekly market',
+  /* 'optic desk' is the daily edition at the top of the page (2026-10-13):
+     the newsletter itself, so it is open. */
+  brief: ['optic desk', 'overnight', "today's priority", 'weekly market',
     'fear & greed', 'market regime', 'on the calendar', 'official releases',
     'insider filings'],
   /* Renamed panels, stale keys. "The record" became "Optic Portfolio" and

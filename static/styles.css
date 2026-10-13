@@ -14917,6 +14917,67 @@ body.chat-full .rp { display: none; }
   margin-bottom: var(--space-1);
 }
 
+/* The daily edition's headline and summary on the Home card, above the
+   short desk note, linking to the whole edition on the Read page. */
+.md-edition { max-width: var(--md-measure); margin-bottom: var(--space-4); padding-bottom: var(--space-3); border-bottom: 1px solid var(--border); }
+.md-ed-kicker { font-family: var(--label-face); font-size: var(--t-micro); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted); }
+.md-ed-head { margin: var(--space-1) 0 var(--space-2); font-size: var(--t-lead); font-weight: 600; line-height: 1.35; color: var(--ink); text-wrap: balance; }
+.md-ed-more { margin-top: var(--space-1); }
+
+/* Optic Desk, the daily edition, at the top of the Read page. A measure for
+   reading, not a dashboard: running text at about 70 characters, the numbers
+   that matter as a small grid, sources as quiet chips beside each claim. */
+.de { --de-measure: 42rem; }
+.de-top { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.de-kicker { font-family: var(--label-face); font-size: var(--t-micro); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted); }
+.de-badge { font-size: var(--t-micro); border: 1px solid var(--border); border-radius: var(--r-pill); padding: 1px var(--space-2); color: var(--ink-2); }
+.de-badge.is-old { color: var(--warn); border-color: currentColor; }
+.de-badge.is-test { color: var(--ink); border-style: dashed; }
+.de-headline { margin: var(--space-2) 0 var(--space-1); font-size: var(--t-title); line-height: 1.25; text-wrap: balance; max-width: var(--de-measure); }
+.de-meta { margin: 0 0 var(--space-4); font-size: var(--t-caption); color: var(--ink-muted); max-width: var(--de-measure); }
+.de-summary { max-width: var(--de-measure); margin-bottom: var(--space-4); padding: var(--space-3) var(--space-4); background: var(--surface-2); border-radius: var(--r-sm); }
+.de-lede { margin: 0; font-size: var(--t-lead); line-height: 1.65; color: var(--ink); }
+.de-sec { max-width: var(--de-measure); margin-top: var(--space-5); }
+.de-opening { margin-top: 0; }
+.de-h { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; margin: 0 0 var(--space-2); font-size: var(--t-heading); font-weight: 600; color: var(--ink); }
+.de-p, .de-li { font-size: var(--t-base); line-height: 1.7; color: var(--ink-2); margin: 0 0 var(--space-3); }
+.de-items, .de-take ol, .de-bal ul { margin: 0; padding-left: var(--space-5); }
+.de-take .de-li { color: var(--ink); }
+.de-srcs { display: inline-flex; flex-wrap: wrap; gap: 4px; vertical-align: baseline; }
+.de-src { font-size: var(--t-micro); line-height: 1.5; padding: 0 6px; border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--ink-muted); text-decoration: none; white-space: nowrap; }
+a.de-src { transition: color 120ms ease, border-color 120ms ease; }
+a.de-src:hover, a.de-src:focus-visible { color: var(--ink); border-color: var(--ink-muted); }
+.de-ask { font-size: var(--t-micro); }
+.de-ask-row { margin-top: calc(-1 * var(--space-1)); }
+.de-nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: var(--space-3); }
+.de-num { min-width: 0; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--r-sm); }
+.de-num-fig { font-size: var(--t-lead); font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.de-num-label { margin-top: 2px; font-size: var(--t-caption); color: var(--ink); }
+.de-num-meta { margin-top: 2px; font-size: var(--t-micro); color: var(--ink-muted); }
+.de-num-why { margin: var(--space-2) 0 0; font-size: var(--t-caption); line-height: 1.6; color: var(--ink-2); }
+.de-bals { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: var(--space-4); }
+.de-bal { min-width: 0; }
+.de-bal-h { margin: 0 0 var(--space-2); font-family: var(--label-face); font-size: var(--t-micro); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted); }
+.de-bal.is-good .de-bal-h { color: var(--pos); }
+.de-bal.is-bad .de-bal-h { color: var(--neg); }
+.de-watch { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+.de-watch li { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: var(--space-3); align-items: baseline; }
+.de-when { font-size: var(--t-caption); font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.de-watch-text { font-size: var(--t-base); line-height: 1.65; color: var(--ink-2); }
+.de-adv { max-width: var(--de-measure); margin-top: var(--space-5); }
+.de-small { font-size: var(--t-caption); line-height: 1.6; color: var(--ink-muted); }
+.de-disclaim { max-width: var(--de-measure); margin: var(--space-3) 0 0; }
+/* A finger needs a bigger target than a pointer: the section's Ask Milo is a
+   control on its own line (WCAG 2.5.8 asks for 24px), while the source chips
+   sit inside a sentence, where the inline exception applies. */
+@media (pointer: coarse) {
+  .de-ask { min-height: 32px; display: inline-flex; align-items: center; }
+}
+@media (max-width: 559px) {
+  .de-watch li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .de-summary { padding: var(--space-3); }
+}
+
 /* Which voice wrote the desk. Sits with the limits because that is the same
    kind of fact: not a caveat about the numbers, which are identical either way,
    but about how the sentences around them were produced. */

@@ -122,6 +122,7 @@ def test_table_reports_the_early_exercise_premium():
 
 def test_every_pricing_call_site_passes_the_exercise_style():
     src = (ROOT / "app" / "main.py").read_text()
-    assert src.count("american=vol_surface_mod.is_american(") == 5
+    # Five on the Options tab's reads, and the daily edition's index surface.
+    assert src.count("american=vol_surface_mod.is_american(") == 6
     js = (ROOT / "static" / "app.js").read_text()
     assert "Early exercise</th>" in js and "early_exercise_premium_contract" in js

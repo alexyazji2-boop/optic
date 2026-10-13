@@ -92,6 +92,8 @@ from .analytics import position as position_mod
 from . import watch_runner
 from . import signal_history
 from . import signal_archive
+from .desk import edition as desk_edition_mod
+from .desk import research as desk_research_mod
 from . import briefing as briefing_mod
 from .analytics import watches as watches_mod
 from . import events as events_mod
@@ -2646,6 +2648,79 @@ def _desk_moved(then: Dict[str, Optional[float]], now: Dict[str, Optional[float]
     return False
 
 
+def _rate_path_for(events_out: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """What fed funds futures price for the next decision, by the arithmetic in
+    `morning_desk.rate_path`. Shared by the Desk card and the daily edition so
+    the two cannot disagree."""
+    try:
+        quotes = YF_PROVIDER.batch_quote([morning_desk_mod.RATE_SYMBOL])
+        month = YF_PROVIDER.contract_month(morning_desk_mod.RATE_SYMBOL)
+        dff = econ_mod.series("DFF", years=1)
+        effective = ((dff or {}).get("latest") or {}).get("value")
+        meeting = None
+        for row in ((events_out or {}).get("events") or []):
+            title = (row.get("title") or "").lower()
+            # The decision, not its minutes three weeks later: both say FOMC.
+            if ("fomc" in title or "federal open market" in title) and "minutes" not in title:
+                meeting = row.get("at")
+                break
+        return morning_desk_mod.rate_path(
+            quotes.get(morning_desk_mod.RATE_SYMBOL), effective, month, meeting)
+    except Exception as exc:                                    # noqa: BLE001
+        logging.getLogger("uvicorn.error").warning(
+            "morning desk: rate path unavailable: %s", exc)
+        return {"available": False, "reason": "The rate path could not be built."}
+
+
+def _desk_index_surface(sym: str) -> Optional[Dict[str, Any]]:
+    """An index ETF's corrected options surface for the daily edition: the
+    nearest expiry a day or more out, the one nearest a week and the one nearest
+    a month, on the same clock, quotes and IV solve as the Options tab."""
+    listed = _listed_expiries(sym) or []
+    pick: List[str] = []
+    for target in (1, 7, 30):
+        cands = [e for e in listed if vol_surface_mod.expiry_dte(e) >= 1 and e not in pick]
+        if cands:
+            pick.append(min(cands, key=lambda e: abs(vol_surface_mod.expiry_dte(e) - target)))
+    if not pick:
+        return {"available": False, "reason": "no listed expiries"}
+    quote = PROVIDER.quote(sym) or {}
+    spot = quote.get("price")
+    chain = PROVIDER.options_chain(sym, expiries=sorted(pick), max_expiries=len(pick))
+    unusable = _chain_unusable(chain, spot)
+    if chain is None or chain.empty or unusable or not spot:
+        return {"available": False, "reason": unusable or "no chain"}
+    rate = _rate()
+    div = quote.get("dividend_yield") or 0.0
+    chain = vol_surface_mod.apply_clock(chain)
+    chain = vol_surface_mod.apply_quotes(chain)
+    chain = vol_surface_mod.resolve_surface(chain, spot, rate, div,
+                                            american=vol_surface_mod.is_american(sym))
+    return vol_surface_mod.build(chain, spot, rate, div)
+
+
+def _desk_sources() -> "desk_edition_mod.Sources":
+    from .analytics.sectors import SECTORS, THEMES
+
+    def wires() -> List[Dict[str, Any]]:
+        return feeds_mod.load_kind("wire")[0]
+
+    def official() -> List[Dict[str, Any]]:
+        return feeds_mod.load_kind("macro")[0]
+
+    return desk_edition_mod.Sources(
+        provider=YF_PROVIDER,
+        macro=lambda: macro_mod.analyse(YF_PROVIDER),
+        fred_series=lambda code: econ_mod.series(code, years=2),
+        events=lambda: events_mod.upcoming(earlier_today=True),
+        earnings_week=lambda: earnings_week_mod.build(YF_PROVIDER, offset=0),
+        wires=wires, official=official,
+        rate_path=_rate_path_for,
+        index_surface=_desk_index_surface,
+        quotes=lambda syms: YF_PROVIDER.batch_quote(syms),
+        session_mod=session_mod, sectors=SECTORS, themes=THEMES)
+
+
 def _morning_desk(macro: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """Today's desk, from panels already built plus the rate path.
 
@@ -2663,24 +2738,7 @@ def _morning_desk(macro: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         logging.getLogger("uvicorn.error").warning(
             "morning desk: calendar unavailable: %s", exc)
 
-    rate = {"available": False, "reason": "The rate path could not be built."}
-    try:
-        quotes = YF_PROVIDER.batch_quote([morning_desk_mod.RATE_SYMBOL])
-        month = YF_PROVIDER.contract_month(morning_desk_mod.RATE_SYMBOL)
-        dff = econ_mod.series("DFF", years=1)
-        effective = ((dff or {}).get("latest") or {}).get("value")
-        meeting = None
-        for row in ((events_out or {}).get("events") or []):
-            title = (row.get("title") or "").lower()
-            # The decision, not its minutes three weeks later: both say FOMC.
-            if ("fomc" in title or "federal open market" in title) and "minutes" not in title:
-                meeting = row.get("at")
-                break
-        rate = morning_desk_mod.rate_path(
-            quotes.get(morning_desk_mod.RATE_SYMBOL), effective, month, meeting)
-    except Exception as exc:                                    # noqa: BLE001
-        logging.getLogger("uvicorn.error").warning(
-            "morning desk: rate path unavailable: %s", exc)
+    rate = _rate_path_for(events_out)
 
     stories = None
     try:
@@ -2689,8 +2747,12 @@ def _morning_desk(macro: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     except Exception:                                           # noqa: BLE001
         stories = None
 
+    # The desk's date is New York's. `build` defaulted to date.today(), the
+    # server's own date, which on a UTC host turns over at 8pm Eastern and
+    # filed the evening's desk under tomorrow.
     desk = morning_desk_mod.build(macro=macro, events=events_out, rate=rate,
-                                  stories=stories)
+                                  stories=stories,
+                                  today=datetime.now(timezone.utc).astimezone(session_mod.ET).date())
 
     # The prose is an overlay, never a replacement. Every figure in `desk` stays
     # exactly as assembled, so the note and the strip above it cannot disagree,
@@ -2717,6 +2779,20 @@ def _morning_desk(macro: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         for key in ("scenarios", "note", "overall"):
             if prose.get(key):
                 desk[key] = prose[key]
+    # The daily edition's headline and summary, when one is kept: the card
+    # leads with it and links to the whole edition on the Read page. Read from
+    # the store only; the home page never writes an edition.
+    try:
+        served = desk_edition_mod.served(datetime.now(timezone.utc), session_mod)
+        if served.get("available"):
+            ed = served["edition"]
+            desk["edition"] = {"key": ed.get("key"), "date": ed.get("date"), "slot": ed.get("slot"),
+                               "slot_label": ed.get("slot_label"), "headline": ed.get("headline"),
+                               "summary": (ed.get("summary") or {}).get("text"), "is_today": served.get("is_today"),
+                               "freshness": served.get("freshness"), "voice": ed.get("voice"),
+                               "test_edition": ed.get("test_edition")}
+    except Exception as exc:                                    # noqa: BLE001
+        logging.getLogger("uvicorn.error").warning("desk edition summary: %s", exc)
     return desk
 
 
@@ -2862,6 +2938,37 @@ async def news_panel(ticker: str, limit: int = Query(12, ge=1, le=30)) -> Dict[s
 # the tab sees the same page, which is what makes it a record rather than a
 # search. Building is cheap (~1s warm) because the feed layer caches per source
 # and the overview reuses a single batched history call.
+
+@app.get("/api/desk/edition")
+async def desk_edition() -> Dict[str, Any]:
+    """The edition a reader should see now. Reads what is kept and never
+    writes one: a page load cannot trigger a generation."""
+    return desk_edition_mod.served(datetime.now(timezone.utc), session_mod)
+
+
+@app.get("/api/desk/editions")
+async def desk_editions(limit: int = Query(30, ge=1, le=120)) -> Dict[str, Any]:
+    return {"editions": desk_edition_mod.archive(limit)}
+
+
+@app.get("/api/desk/edition/{key}")
+async def desk_edition_by_key(key: str) -> Dict[str, Any]:
+    ed = desk_edition_mod.load(key)
+    if not ed:
+        raise HTTPException(status_code=404, detail="No edition {}.".format(key))
+    return {"available": True, "edition": ed}
+
+
+@app.post("/api/desk/edition/publish")
+async def desk_edition_publish(request: Request, body: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Write an edition now (admin). `slot` defaults to the one due; `force`
+    replaces a kept edition; `test_label` marks it as a test edition."""
+    _write_guard(request)
+    slot = body.get("slot") or desk_edition_mod.due_slot(datetime.now(timezone.utc), session_mod) or "closed"
+    if slot not in desk_edition_mod.SLOT_LABELS:
+        raise HTTPException(status_code=422, detail="Unknown slot.")
+    return await _run(_publish_edition, slot, bool(body.get("force")), body.get("test_label"))
+
 
 @app.get("/api/brief")
 async def daily_brief(
@@ -3545,6 +3652,41 @@ async def _flush_feedback() -> None:
         log.info("feedback flush skipped: %s", exc)
 
 
+# The daily Optic Desk edition (app/desk/). Off unless DESK_EDITION_AUTO is
+# set, because each written edition is a paid call (about 15,000 input and up
+# to 8,000 output tokens on Opus, roughly $0.15 to $0.25, plus at most one
+# repair). Checked every five minutes; a slot is written once, claimed on disk,
+# so a deploy or a second process cannot write it again.
+DESK_EDITION_AUTO = os.environ.get("DESK_EDITION_AUTO", "false").strip().lower() in ("1", "true", "yes", "on")
+DESK_EDITION_POLL_SECONDS = 300
+
+
+def _edition_writer():
+    return ai.write_edition if ai.available().get("enabled") is True else None
+
+
+def _publish_edition(slot: str, force: bool = False, test_label: Optional[str] = None) -> Dict[str, Any]:
+    return desk_edition_mod.publish(
+        _desk_sources(), slot, writer=_edition_writer(), force=force, test_label=test_label,
+        claim=lambda key: ai_store.claim("edition", key, desk_edition_mod.MAX_ATTEMPTS,
+                                         desk_edition_mod.RETRY_SECONDS))
+
+
+async def _edition_loop() -> None:
+    await asyncio.sleep(30)
+    while True:
+        try:
+            slot = desk_edition_mod.due_slot(datetime.now(timezone.utc), session_mod)
+            if slot:
+                key = desk_edition_mod.edition_key(
+                    datetime.now(timezone.utc).astimezone(session_mod.ET).date(), slot)
+                if not desk_edition_mod.load(key):
+                    await _run(_publish_edition, slot)
+        except Exception as exc:                                # noqa: BLE001
+            logging.getLogger("uvicorn.error").warning("desk edition loop: %s", exc)
+        await asyncio.sleep(DESK_EDITION_POLL_SECONDS)
+
+
 @app.on_event("startup")
 async def _start_tracker() -> None:
     paper.init_db()
@@ -3561,6 +3703,8 @@ async def _start_tracker() -> None:
     if TRACKER_AUTO:
         # Held on the app so the reference isn't garbage-collected mid-flight.
         app.state.tracker_task = asyncio.create_task(_tracker_loop())
+    if DESK_EDITION_AUTO:
+        app.state.edition_task = asyncio.create_task(_edition_loop())
 
 
 @app.on_event("shutdown")
@@ -3570,7 +3714,7 @@ async def _stop_tracker() -> None:
     # "task was destroyed but it is pending" on the way out, and the feedback
     # flush sleeps fifteen times longer than that.
     for name in ("tracker_task", "warm_task", "feedback_task", "catalyst_task",
-                 "keepwarm_task"):
+                 "keepwarm_task", "edition_task", "congress_task", "analysts_task"):
         task = getattr(app.state, name, None)
         if task:
             task.cancel()
@@ -5733,6 +5877,59 @@ def _portfolio_summary(positions: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def _research_deps() -> "desk_research_mod.Deps":
+    from .analytics import business as business_mod
+    return desk_research_mod.Deps(
+        provider=YF_PROVIDER,
+        filings=filings_mod.recent,
+        business=lambda t: business_mod.latest(t),
+        news=lambda t: news_mod.analyse(YF_PROVIDER, t),
+        fred_series=lambda code: econ_mod.series(code, years=2),
+        events=lambda: events_mod.upcoming(earlier_today=True),
+        rate_path=_rate_path_for,
+        desk_load=desk_edition_mod.load,
+        ex_dividend=_ex_dividend,
+        session_state=lambda: session_mod.state())
+
+
+def _research_ticker(context: Optional[Dict[str, Any]]) -> Optional[str]:
+    """The company the question is about: the focus, else the one the server
+    auto-loaded, else the open ticker."""
+    ctx = context or {}
+    focus = ctx.get("focus") if isinstance(ctx.get("focus"), dict) else {}
+    if focus.get("ticker"):
+        return str(focus["ticker"]).upper()
+    auto = ctx.get("auto_loaded")
+    if isinstance(auto, dict) and auto:
+        return str(next(iter(auto))).upper()
+    t = ctx.get("ticker")
+    return str(t).upper() if isinstance(t, str) and t else None
+
+
+async def _with_research(history: List[Dict[str, Any]], context: Optional[Dict[str, Any]],
+                         horizon: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Milo's research pack (app/desk/research.py): the underlying sources the
+    question turns on, retrieved by the server and bounded in time."""
+    last = next((t for t in reversed(history or []) if t.get("role") != "assistant"), None)
+    if not last:
+        return context
+    ctx = dict(context or {})
+    sec = ctx.get("desk_section") if isinstance(ctx.get("desk_section"), dict) else None
+    try:
+        hz_id = horizon_mod.resolve(horizon, last.get("content") or "")[0]
+    except Exception:                                           # noqa: BLE001
+        hz_id = horizon
+    try:
+        pack = await _run(desk_research_mod.build, last.get("content") or "", _research_ticker(ctx),
+                          _research_deps(), horizon=hz_id, desk_section=sec)
+    except Exception as exc:                                    # noqa: BLE001
+        logging.getLogger("uvicorn.error").warning("milo research pack skipped: %s", exc)
+        return context
+    if pack.get("items") or pack.get("not_available"):
+        ctx["research"] = pack
+    return ctx
+
+
 async def _augment_chat_context(history: List[Dict[str, Any]],
                                 context: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """The reader's scope first, then what the question is about.
@@ -6238,6 +6435,8 @@ async def chat(request: Request,
     # Normalised the same way; words in the question override it per answer.
     horizon = horizon_mod.normalise(payload.get("horizon"))
     context = await _augment_chat_context(history, context)
+    if ((context or {}).get("focus") or {}).get("scope") != "none":
+        context = await _with_research(history, context, horizon)
     return StreamingResponse(
         ai.stream_chat(history, context=context, use_web=use_web,
                        attachments=attachments, persona=persona, mode=mode,

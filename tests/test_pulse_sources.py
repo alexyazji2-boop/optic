@@ -63,7 +63,10 @@ def test_every_source_is_a_key_the_terminal_sends_and_a_view_it_has():
     # Two are added by the server for the question rather than sent by the
     # browser (main._augment_chat_context): the paper-book summary and the
     # market block. Asserted there instead.
-    server_added = {"portfolio_summary": 'out["portfolio_summary"]', "market": 'out["market"] = market'}
+    # The research pack (app/desk/research.py) is the third, retrieved for the
+    # question in main._with_research.
+    server_added = {"portfolio_summary": 'out["portfolio_summary"]', "market": 'out["market"] = market',
+                    "research": 'ctx["research"] = pack'}
     main_src = open("app/main.py", encoding="utf-8").read()
     for key in keys:
         if key in server_added:
