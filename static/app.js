@@ -5061,8 +5061,8 @@ async function loadHomeMarket(opts = {}) {
    * these same instruments with the same numbers, so keeping both would have
    * been the clutter this redesign is meant to remove. Its one piece of real
    * value, the plain-language reading for VIX and the 10-year, moved into the
-   * strip; `macroWord` is that function and it is still the only place the
-   * wording lives.
+   * strip, and was removed from there on request on 2026-10-12: the
+   * change's colour says the direction.
    */
   const html = `
     <div class="hm-greet">
@@ -8897,23 +8897,6 @@ function homeHello() {
   return `${homeGreeting()}${first ? `, ${first}` : ''}.`;
 }
 
-/* What a move in volatility or the long end actually means, in a few words.
- *
- * Exists so the pulse strip does not need a colour to say it. Both are
- * deliberately plain readings of the direction rather than forecasts: a VIX
- * 2% higher at a level of 16 is still a calm tape, and this word says which way
- * protection got priced, not that anything is wrong.
- *
- * The threshold is on the *change*, not the level, and it is there because an
- * unchanged number with a direction word beside it reads as a move. */
-function macroWord(key, change) {
-  if (change === null || change === undefined) return 'today';
-  if (Math.abs(change) < 0.05) return 'today, flat';
-  if (key === '^VIX') return change > 0 ? 'today, hedging pricier' : 'today, hedging cheaper';
-  if (key === '^TNX') return change > 0 ? 'today, yields up' : 'today, yields down';
-  return 'today';
-}
-
 /* ------------------------------------------------------------------ explore
  *
  * Discovery: the page for when you do not know what you are looking for.
@@ -9155,9 +9138,8 @@ function stripInstrument(data, group, label) {
  * way. No cell claims the move is good or bad, so there is nothing for the
  * colour to contradict.
  *
- * The reading for the two instruments that have one still sits underneath,
- * from `macroWord`, because "4.84, +0.6%" does not tell anyone that yields
- * rose and hedging got dearer.
+ * VIX and the 10-year used to carry a one-line reading of the move
+ * underneath; removed on request, 2026-10-12.
  */
 /* Which of the two the strip is showing.
  *
@@ -9203,8 +9185,6 @@ function marketStripHTML(data) {
     const inst = stripInstrument(data, group, label);
     if (!inst || inst.last === null || inst.last === undefined) return '';
     const chg = inst.chg_1d;
-    const word = (inst.symbol === '^VIX' || inst.symbol === '^TNX')
-      ? macroWord(inst.symbol, chg).replace(/^today,?\s*/, '') : '';
     return `<button type="button" class="ms-cell" data-instrument="${esc(inst.symbol)}"
       data-instrument-label="${esc(label)}"
       title="${esc(label)}${inst.note ? ' · ' + esc(inst.note) : ''}">
@@ -9212,7 +9192,6 @@ function marketStripHTML(data) {
       <span class="ms-last">${fmt(inst.last, inst.last < 20 ? 2 : (inst.last > 1000 ? 0 : 2))}</span>
       ${chg === null || chg === undefined ? ''
     : `<span class="ms-chg ${signClass(chg)}">${esc(moveLabel(inst))}</span>`}
-      ${word && word !== 'flat' ? `<span class="ms-word">${esc(word)}</span>` : ''}
       ${sparkSlot(inst.series, 'ms-spark')}
     </button>`;
   }).filter(Boolean).join('');

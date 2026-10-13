@@ -11046,11 +11046,6 @@ body.cp-open { overflow: hidden; }
   letter-spacing: -0.01em;
 }
 .ms-chg { font-size: var(--t-caption); font-variant-numeric: tabular-nums; }
-.ms-word {
-  grid-column: 1 / -1;
-  font-size: var(--t-micro);
-  color: var(--ink-muted);
-}
 
 /* What matters now. The first substantial block on the page, and the one the
    whole redesign exists to put here, so its heading carries a little more

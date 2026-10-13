@@ -45,7 +45,7 @@ REQUIRED = [
     "wsIndicatorSeries", "wsStudiesMenu",
     # the pieces those sit inside
     "overlayStyle", "setOverlayStyle", "allocateOverlayColors", "seriesDrawn",
-    "wsToolbar", "wsLegend", "wsRedrawChart", "macroWord",
+    "wsToolbar", "wsLegend", "wsRedrawChart",
     # market command centre
     "marketStripHTML", "stripInstrument", "whatMattersNow", "marketQuestions",
     "homeMovers", "openPulseWithText",

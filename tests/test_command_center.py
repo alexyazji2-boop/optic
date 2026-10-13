@@ -62,12 +62,11 @@ def test_a_missing_instrument_drops_its_own_cell():
     assert "if (!cells) return '';" in fn
 
 
-def test_the_strip_keeps_the_plain_language_reading():
-    """`macroWord` was the fix for the red VIX plus. The tile it lived on is
-    gone; the wording is not."""
+def test_the_strip_carries_no_caption_under_vix_and_the_ten_year():
+    """The plain-language reading ("hedging pricier", "yields down") was
+    removed on request, 2026-10-12; the change's colour carries the direction."""
     fn = _fn("marketStripHTML")
-    assert "macroWord(inst.symbol, chg)" in fn
-    assert "'^VIX'" in fn and "'^TNX'" in fn
+    assert "macroWord" not in fn and "ms-word" not in fn
 
 
 def test_the_strip_scrolls_rather_than_wrapping():

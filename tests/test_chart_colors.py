@@ -264,17 +264,16 @@ def test_the_vix_inversion_never_comes_back():
     assert "function homePulseStrip" not in APP_JS
 
 
-def test_the_strip_still_says_the_direction_in_words():
-    """`macroWord` was the fix for the red plus and it is still the only place
-    that wording lives. The strip is now its caller."""
-    fn = _fn(APP_JS, "macroWord")
-    assert "hedging pricier" in fn and "hedging cheaper" in fn
-    assert "yields up" in fn and "yields down" in fn
-    # An unchanged number with a direction word beside it reads as a move.
-    assert "Math.abs(change) < 0.05" in fn
+def test_vix_and_the_ten_year_carry_no_caption():
+    """"remove the hedging and yields text" (2026-10-12). The words under VIX
+    and US 10Y ("hedging pricier", "yields down") were the old fix for a red
+    plus; the strip colours every change by its sign now (below), so the
+    figure says the direction on its own."""
+    assert "function macroWord" not in APP_JS
+    for gone in ("hedging pricier", "hedging cheaper", "yields up", "yields down", "ms-word"):
+        assert gone not in APP_JS, gone
     strip = _fn(APP_JS, "marketStripHTML")
-    assert "macroWord(inst.symbol, chg)" in strip
-    assert "'^VIX'" in strip and "'^TNX'" in strip
+    assert "signClass(chg)" in strip
 
 
 def test_the_strip_colours_every_cell_by_sign():
@@ -286,6 +285,4 @@ def test_the_strip_colours_every_cell_by_sign():
 
 
 def test_no_em_dashes_in_the_copy_a_reader_sees():
-    for text in re.findall(r"'([^'\n]{10,})'", _fn(APP_JS, "macroWord")):
-        assert "—" not in text, text
     assert "—" not in _fn(APP_JS, "markWarnText")
