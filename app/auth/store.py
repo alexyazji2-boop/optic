@@ -625,13 +625,35 @@ PLANS = {
     # changes the copy too. That is deliberate: a hardcoded "5 messages a day"
     # beside a counter that stopped at three is the kind of drift CLAUDE.md
     # records for the direction words in watches.py.
+    #
+    # Brokerage limits (2026-10-12). Free links nothing: every connection is a
+    # monthly charge from the aggregator whether or not anyone looks at it.
+    # Pro's numbers come from the cost model in the brokerage launch report:
+    # three connections and ten accounts cover a reader with a taxable
+    # account, an IRA and a spouse's account at two brokers, and each manual
+    # sync is a paid refresh at the aggregator ($0.05 on SnapTrade's Daily plan), so it is metered.
+    #
+    # Pro's Milo allowance was 400 a day when no plan was on sale. At the
+    # measured ~$0.11 a message that is a ~$1,300 month for one reader on a
+    # $20 plan. 150 a month still lost money on a reader who also used every
+    # paid sync (~-$2 contribution, work/brokerage-launch/model), so it is 15
+    # a day and 100 in any rolling 30 days, and one manual sync a day: the
+    # heaviest possible Pro reader then contributes about $5 at $20.
     "free": {"label": "Free", "ai_calls_per_day": 3, "watchlists": 3,
-             "saved_research": 40},
-    "pro": {"label": "Pro", "ai_calls_per_day": 400, "watchlists": 25,
-            "saved_research": 1000},
+             "saved_research": 40, "brokerage_connections": 0, "brokerage_accounts": 0,
+             "brokerage_manual_syncs_per_day": 0},
+    "pro": {"label": "Pro", "ai_calls_per_day": 15, "ai_calls_per_month": 100, "watchlists": 25,
+            "saved_research": 1000, "brokerage_connections": 3, "brokerage_accounts": 10,
+            "brokerage_manual_syncs_per_day": 1},
     "enterprise": {"label": "Enterprise", "ai_calls_per_day": 4000, "watchlists": 200,
-                   "saved_research": 10000},
+                   "saved_research": 10000, "brokerage_connections": 10, "brokerage_accounts": 40,
+                   "brokerage_manual_syncs_per_day": 10},
 }
+
+# What makes a subscription row count. `past_due` stays entitled while the
+# billing provider retries the card: cutting a reader off on the first failed
+# charge punishes an expired card more than it protects revenue.
+ENTITLED_STATUSES = ("active", "trialing", "past_due")
 
 
 def subscription(user_id: str) -> Dict[str, Any]:
@@ -639,15 +661,17 @@ def subscription(user_id: str) -> Dict[str, Any]:
         "SELECT * FROM subscriptions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
         (user_id,))
     plan = (found or {}).get("plan") or "free"
-    if plan not in PLANS:
+    status = (found or {}).get("status") or "active"
+    if plan not in PLANS or status not in ENTITLED_STATUSES:
         plan = "free"
     limits = PLANS[plan]
     return {
         "plan": plan,
         "label": limits["label"],
-        "status": (found or {}).get("status") or "active",
+        "status": status,
         "provider": (found or {}).get("provider"),
         "current_period_end": (found or {}).get("current_period_end"),
+        "cancel_at_period_end": bool((found or {}).get("cancel_at_period_end")),
         "limits": {k: v for k, v in limits.items() if k != "label"},
     }
 

@@ -29,6 +29,9 @@ from . import (ai, brief as brief_mod, feeds as feeds_mod, legal,
 from . import account as account_mod
 from .valuation import service as valuation_service
 from .valuation import store as valuation_store
+from . import billing as billing_mod
+from .brokerage import routes as brokerage_routes
+from .brokerage import service as brokerage_service
 from . import db as accounts_db
 from .auth import admin as auth_admin
 from .auth import deps as auth_deps
@@ -6710,6 +6713,12 @@ def ai_allowance(request: Request) -> Dict[str, Any]:
             allowed = int(plan["limits"].get("ai_calls_per_day") or 0)
             bucket = auth_ratelimit.key_bucket(user["id"])
             state = auth_ratelimit.allowance("ai_day", bucket, allowed, _DAY)
+            monthly = int(plan["limits"].get("ai_calls_per_month") or 0)
+            if monthly:
+                month = auth_ratelimit.allowance("ai_month", bucket, monthly, 30 * _DAY)
+                state["month"] = month
+                # The panel shows one "left" number; it is whichever runs out first.
+                state["left"] = min(state["left"], month["left"])
             state["scope"] = "account"
             state["plan"] = plan["plan"]
             state["plan_label"] = plan["label"]
@@ -6762,12 +6771,24 @@ def _spend_guard(request: Request) -> None:
             return
         elif user:
             limits = auth_store.subscription(user["id"])["limits"]
+            # The monthly cap (paid plans only) is checked before the daily
+            # spend and recorded after it, so a refusal on either side never
+            # uses up the other.
+            monthly = int(limits.get("ai_calls_per_month") or 0)
+            if monthly and auth_ratelimit.allowance(
+                    "ai_month", auth_ratelimit.key_bucket(user["id"]), monthly, 30 * _DAY)["left"] <= 0:
+                raise HTTPException(
+                    status_code=429,
+                    detail="That is {} assistant messages in the last 30 days, which is what this "
+                           "plan includes. Each one frees up 30 days after it was sent.".format(monthly))
             auth_ratelimit.spend(
                 "ai_day", auth_ratelimit.key_bucket(user["id"]),
                 int(limits.get("ai_calls_per_day") or 0), _DAY,
                 "That is {} assistant messages today, which is what this plan "
                 "includes. The allowance resets 24 hours after each message.".format(
                     limits.get("ai_calls_per_day")))
+            if monthly:
+                auth_ratelimit.record("ai_month", auth_ratelimit.key_bucket(user["id"]))
         elif GUEST_AI_CALLS_PER_DAY <= 0:
             # Raised inside the try on purpose. If `current_user` threw
             # instead, we are in the except below and cannot tell a guest from
@@ -6972,6 +6993,51 @@ def _milo_toolbox(request: Request) -> milo_tools.Toolbox:
     })
 
 
+_LINKED_WORDS = re.compile(
+    r"\b(portfolio|positions?|holdings?|exposure|concentrat\w*|diversif\w*|allocation|"
+    r"my (?:account|accounts|brokerage|stocks|shares|options|book|cash)|what do i (?:own|hold)|"
+    r"earnings|last sync|since (?:my|the) last|sync(?:ed)?)\b", re.I)
+
+
+async def _with_linked_portfolio(request: Request, history: List[Dict[str, Any]],
+                                 context: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """The signed-in reader's linked brokerage portfolio, when the question is
+    about it or they asked from the Brokerage page.
+
+    Built on the server from the caller's own session: the browser cannot send
+    a portfolio, name another reader's, or widen this. Put first in the
+    context dict because `build_context` truncates at 90K characters from the
+    end, and the portfolio is the part of a portfolio question that must
+    survive."""
+    if isinstance(context, dict) and "brokerage_portfolio" in context:
+        # Only the server writes this key. A browser that sends one is
+        # either stale or forging, and the model trusts this block as the
+        # reader's real accounts.
+        context = {k: v for k, v in context.items() if k != "brokerage_portfolio"}
+    focus = (context or {}).get("focus") if isinstance((context or {}).get("focus"), dict) else {}
+    if focus.get("scope") in ("none", "market"):
+        return context
+    try:
+        user = auth_deps.current_user(request)
+    except (sqlite3.Error, OSError):
+        return context
+    if not user:
+        return context
+    last = next((t for t in reversed(history or []) if t.get("role") != "assistant"), None)
+    asked = bool(last and _LINKED_WORDS.search(str(last.get("content") or "")))
+    if not asked and focus.get("view") != "brokerage":
+        return context
+    try:
+        block = await _run(brokerage_service.milo_context, user, **brokerage_routes.LOOKUPS)
+    except Exception as exc:                                      # noqa: BLE001
+        logging.getLogger("uvicorn.error").warning("linked portfolio context skipped: %s",
+                                                   type(exc).__name__)
+        return context
+    if not block:
+        return context
+    return dict({"brokerage_portfolio": block}, **(context or {}))
+
+
 @app.post("/api/chat")
 async def chat(request: Request,
                payload: Dict[str, Any] = Body(...)) -> StreamingResponse:
@@ -6995,6 +7061,7 @@ async def chat(request: Request,
     # Normalised the same way; words in the question override it per answer.
     horizon = horizon_mod.normalise(payload.get("horizon"))
     context = await _augment_chat_context(history, context)
+    context = await _with_linked_portfolio(request, history, context)
     if ((context or {}).get("focus") or {}).get("scope") != "none":
         # Side by side: the research pack and the framework read different
         # sources and neither needs the other's answer, so the slower of the
@@ -7042,6 +7109,35 @@ async def research(request: Request,
 app.include_router(auth_routes.router)
 app.include_router(account_mod.router)
 app.include_router(valuation_store.router)
+app.include_router(billing_mod.router)
+app.include_router(brokerage_routes.router)
+
+
+def _broker_price(sym: str) -> Optional[float]:
+    return (YF_PROVIDER.quote(sym) or {}).get("price")
+
+
+def _fx_to_usd(ccy: str) -> Optional[float]:
+    return (YF_PROVIDER.quote("{}USD=X".format(ccy.upper())) or {}).get("price")
+
+
+# The portfolio overview's outside lookups, all cached in the provider: a
+# sector from the profile, the next earnings date, Optic's own delayed quote
+# for the price check, and an exchange rate.
+brokerage_routes.set_lookups(
+    sector_of=lambda s: (YF_PROVIDER.profile(s) or {}).get("sector"),
+    earnings_of=YF_PROVIDER.earnings_date,
+    optic_price=_broker_price,
+    fx_to_usd=_fx_to_usd,
+)
+
+
+@app.on_event("startup")
+async def _brokerage_background() -> None:
+    """Owed provider deletions, plan lapses and daily syncs. Only when
+    brokerage linking is configured; a deployment without it starts nothing."""
+    if brokerage_service.status()["enabled"]:
+        asyncio.create_task(brokerage_routes.background_loop())
 
 
 @app.on_event("startup")

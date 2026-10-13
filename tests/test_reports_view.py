@@ -122,8 +122,12 @@ def test_the_palette_offers_it_to_the_owner_only():
     places = places[:places.index("\n];")]
     assert "{ view: 'reports', label: 'Problem Reports', owner: true," in places
     code = _code(APP)
-    assert "PALETTE_PLACES.filter((p) => (!p.owner || isOwner())" in code
-    assert "PALETTE_PLACES.filter((p) => !p.owner || isOwner()).slice(0, 6)" in code
+    # Both palette lists go through paletteAllowed, whose first line is the
+    # owner check (it also gates feature pages such as Brokerage).
+    assert "PALETTE_PLACES.filter((p) => paletteAllowed(p)" in code
+    assert "PALETTE_PLACES.filter(paletteAllowed).slice(0, 6)" in code
+    allowed = code.split("function paletteAllowed(p) {", 1)[1].split("\n}", 1)[0]
+    assert "if (p.owner && !isOwner()) return false;" in allowed
 
 
 def test_owner_is_read_from_the_server_not_inferred_on_the_client():

@@ -73,6 +73,12 @@ def test_the_palette_is_not_the_only_way_to_reach_a_view():
     # 6583px page -- so that exemption was quietly hiding exactly the fault
     # this test is named for. It is a mobile tab now and needs no exemption.
     exempt = {"instrument"}
+    # A feature page joins NAV_GROUPS at runtime, and paletteAllowed offers it
+    # only once it has: Brokerage is pushed into the Positions group by
+    # brokerageNavJoin when the server says linking is live. Both halves are
+    # held by tests/test_brokerage_client.py.
+    on_strip |= {"brokerage"} if "group.views.push('brokerage')" in APP and \
+        "p.feature === 'brokerage'" in APP else set()
     orphans = in_palette - on_strip - in_dossier - on_mobile - exempt
     assert not orphans, "reachable only from the palette: {}".format(sorted(orphans))
 

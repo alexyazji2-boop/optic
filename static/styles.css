@@ -13287,6 +13287,9 @@ body.auth-open { overflow: hidden; }
   padding: var(--space-3) 0;
   border-bottom: 1px solid var(--border);
 }
+/* Brokerage: the Settings "Linked brokerages" row is hidden until the
+   feature is live, and the display above would otherwise beat [hidden]. */
+.set-row[hidden] { display: none; }
 
 .set-row:last-child { border-bottom: 0; }
 
@@ -13333,6 +13336,78 @@ body.auth-open { overflow: hidden; }
 
 .set-danger .btn { border-color: color-mix(in srgb, var(--neg) 45%, transparent); }
 .set-danger .btn:hover { background: color-mix(in srgb, var(--neg) 14%, transparent); }
+
+/* Brokerage: the linked-accounts page (view-brokerage). Built from the
+   Settings row vocabulary (set-row-note, set-tag) so a connection reads like
+   the account it belongs to. `.set-tag.warn` is new and only used here: a
+   partial sync or an outage is neither fine nor broken. */
+.set-tag.warn { background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--ink); }
+.bk-flash {
+  grid-column: 1 / -1;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  font-size: var(--t-base);
+}
+.bk-flash.good { border-color: color-mix(in srgb, var(--good) 50%, var(--border)); }
+.bk-flash.bad { border-color: color-mix(in srgb, var(--neg) 50%, var(--border)); }
+.bk-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.bk-head h2 { margin: 0; }
+.bk-conn { padding: var(--space-3) 0; border-top: 1px solid var(--border); }
+.bk-conn:first-of-type { border-top: 0; }
+.bk-conn-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.bk-conn-top strong { margin-right: var(--space-2); }
+.bk-conn-act { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.bk-accts { list-style: none; margin: var(--space-2) 0 0; padding: 0; }
+.bk-accts li {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: var(--space-1) var(--space-3); padding: var(--space-2) 0;
+}
+.bk-acct { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; cursor: pointer; }
+.bk-acct input { width: 18px; height: 18px; }
+.bk-acct-state { font-size: var(--t-small); color: var(--ink-muted); }
+.bk-danger { border-color: color-mix(in srgb, var(--neg) 55%, transparent); }
+.bk-tiles {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-3); margin-top: var(--space-3);
+}
+.bk-tile {
+  display: flex; flex-direction: column; gap: var(--space-1);
+  padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-2);
+}
+.bk-k, .bk-eyebrow {
+  font: 600 var(--t-micro)/1.4 var(--label-face); text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted);
+}
+.bk-eyebrow { margin: var(--space-3) 0 var(--space-1); }
+.bk-v { font-size: var(--t-lead); font-weight: 600; font-variant-numeric: tabular-nums; }
+.bk-v small, .bk-table small { font-size: var(--t-small); font-weight: 500; color: var(--ink-muted); }
+.bk-n { font-size: var(--t-small); color: var(--ink-muted); }
+.bk-asks { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
+.bk-bars { list-style: none; margin: 0; padding: 0; }
+.bk-bars li {
+  display: grid; grid-template-columns: minmax(90px, 38%) 1fr 52px; align-items: center;
+  gap: var(--space-2); padding: var(--space-1) 0; font-size: var(--t-small);
+}
+.bk-bar-l { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk-bar-t { height: 8px; border-radius: var(--r-pill); background: var(--raised); overflow: hidden; }
+.bk-bar-f { display: block; height: 100%; background: var(--s1); }
+.bk-bar-v { text-align: right; font-variant-numeric: tabular-nums; }
+.bk-list, .bk-flags, .bk-perms ul { margin: var(--space-2) 0 0; padding-left: var(--space-5); }
+.bk-list li, .bk-flags li, .bk-perms li { margin: var(--space-1) 0; line-height: 1.5; }
+.bk-flags li { color: var(--ink); }
+.bk-perms summary { cursor: pointer; list-style: none; }
+.bk-perms summary::-webkit-details-marker { display: none; }
+.bk-perms summary h2::after { content: ' +'; color: var(--ink-muted); }
+.bk-perms[open] summary h2::after { content: ' \2212'; }
+table.data.bk-table td.name { text-align: left; white-space: normal; min-width: 140px; }
+.bk-sub { display: block; font-size: var(--t-small); color: var(--ink-muted); }
+.bk-na { color: var(--ink-muted); font-size: var(--t-small); }
+@media (max-width: 559px) {
+  .bk-conn-act { width: 100%; }
+  .bk-conn-act .btn { flex: 1 1 auto; min-height: 44px; }
+  .bk-tiles { grid-template-columns: 1fr 1fr; }
+}
 
 .set-guest {
   display: flex;

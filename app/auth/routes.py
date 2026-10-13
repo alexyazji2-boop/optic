@@ -734,6 +734,16 @@ async def delete_account(request: Request, response: Response,
                                    str(payload.get("password") or ""))
         if not matched:
             raise HTTPException(status_code=401, detail="That password is not correct.")
+    # Two things outside this database go first, each imported here because
+    # both modules import the auth package. A paid subscription is cancelled
+    # at Stripe, so deleting the account cannot leave a card being charged;
+    # if that call fails, nothing is deleted and the reader is told. Then the
+    # brokerage link: the provider-side user is deleted (or queued) and the
+    # data key goes with the local rows.
+    from .. import billing
+    from ..brokerage import service as brokerage
+    billing.cancel_for_deletion(user["id"])
+    brokerage.delete_all(user["id"])
     store.delete_user(user["id"])
     response.delete_cookie(config.COOKIE_NAME, path="/")
     response.delete_cookie(config.CSRF_COOKIE, path="/")

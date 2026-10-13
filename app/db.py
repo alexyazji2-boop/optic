@@ -675,6 +675,128 @@ MIGRATION_11 = [
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_valuations_symbol ON valuations(user_id, symbol)",
 ]
 
+# Read-only brokerage linking and paid plans (2026-10-12).
+#
+# Holdings and balances are never stored as columns. Each account's latest
+# data is one sealed blob (`payload`), encrypted with the owner's data key, and
+# the data key is itself wrapped by a master key that lives only in the
+# environment (`app/vault.py`). Deleting `brokerage_users` is crypto-shredding:
+# backups keep ciphertext nobody can open.
+#
+# An account is unique per user on the provider's own account id, so the same
+# account reached through two connections (a reader who links the same broker
+# twice) is one row and is counted once.
+#
+# `brokerage_purges` deliberately has no foreign key to `users`: it is the
+# record of a provider-side deletion still owed after the account that owned
+# it is gone, and a cascade would delete the reminder with the debt.
+MIGRATION_12 = [
+    """
+    CREATE TABLE IF NOT EXISTS brokerage_users (
+        user_id          TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        provider         TEXT NOT NULL,
+        provider_user_id TEXT NOT NULL,
+        secret           BLOB,
+        dek              BLOB NOT NULL,
+        created_at       TEXT NOT NULL,
+        paused_at        TEXT,
+        provider_removed_at TEXT
+    )
+    """,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_bu_provider ON brokerage_users(provider, provider_user_id)",
+    """
+    CREATE TABLE IF NOT EXISTS brokerage_connections (
+        id                     TEXT PRIMARY KEY,
+        user_id                TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        provider               TEXT NOT NULL,
+        provider_connection_id TEXT NOT NULL,
+        institution            TEXT,
+        status                 TEXT NOT NULL DEFAULT 'pending',
+        status_reason          TEXT,
+        created_at             TEXT NOT NULL,
+        updated_at             TEXT NOT NULL,
+        last_sync_at           TEXT,
+        last_attempt_at        TEXT
+    )
+    """,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_bc_unique "
+    "ON brokerage_connections(user_id, provider, provider_connection_id)",
+    """
+    CREATE TABLE IF NOT EXISTS brokerage_accounts (
+        id                  TEXT PRIMARY KEY,
+        user_id             TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        connection_id       TEXT NOT NULL REFERENCES brokerage_connections(id) ON DELETE CASCADE,
+        provider            TEXT NOT NULL,
+        provider_account_id TEXT NOT NULL,
+        name                TEXT,
+        number_mask         TEXT,
+        institution         TEXT,
+        account_type        TEXT,
+        currency            TEXT,
+        selected            INTEGER NOT NULL DEFAULT 1,
+        sync_state          TEXT NOT NULL DEFAULT 'pending',
+        sync_note           TEXT,
+        last_sync_at        TEXT,
+        broker_as_of        TEXT,
+        payload             BLOB,
+        created_at          TEXT NOT NULL,
+        updated_at          TEXT NOT NULL
+    )
+    """,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_ba_unique "
+    "ON brokerage_accounts(user_id, provider, provider_account_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ba_conn ON brokerage_accounts(connection_id)",
+    """
+    CREATE TABLE IF NOT EXISTS brokerage_snapshots (
+        id         TEXT PRIMARY KEY,
+        user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        taken_at   TEXT NOT NULL,
+        payload    BLOB NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_bs_user ON brokerage_snapshots(user_id, taken_at DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS brokerage_link_states (
+        token_hash   TEXT PRIMARY KEY,
+        user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        reconnect_id TEXT,
+        expires_at   TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS brokerage_purges (
+        id                     TEXT PRIMARY KEY,
+        provider               TEXT NOT NULL,
+        provider_user_id       TEXT NOT NULL,
+        provider_connection_id TEXT,
+        attempts               INTEGER NOT NULL DEFAULT 0,
+        last_error             TEXT,
+        created_at             TEXT NOT NULL
+    )
+    """,
+    # Webhook deliveries already handled, by provider and event id. Stripe and
+    # SnapTrade both retry, and both can deliver the same event twice even
+    # when the first delivery succeeded.
+    """
+    CREATE TABLE IF NOT EXISTS webhook_events (
+        id           TEXT PRIMARY KEY,
+        provider     TEXT NOT NULL,
+        event_type   TEXT,
+        received_at  TEXT NOT NULL
+    )
+    """,
+    # The subscription row predates billing and already had provider columns.
+    # These three are what a real billing provider adds: whether the plan ends
+    # at the period end, the provider's own status word, and the creation time
+    # of the last event applied, so an older event delivered late cannot undo
+    # a newer one.
+    "ALTER TABLE subscriptions ADD COLUMN cancel_at_period_end INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE subscriptions ADD COLUMN provider_status TEXT",
+    "ALTER TABLE subscriptions ADD COLUMN last_event_at INTEGER",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_subs_provider_sub "
+    "ON subscriptions(provider, provider_subscription_id)",
+]
+
 
 # Saved fair-value models: an immutable snapshot of one DCF, the reported
 # base it was run on, the reader's assumptions and the result, so the same
@@ -711,6 +833,7 @@ MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (9, "remember_me", MIGRATION_9),
     (10, "signals", MIGRATION_10),
     (11, "valuations", MIGRATION_11),
+    (12, "brokerage_and_billing", MIGRATION_12),
     (13, "valuation_models", MIGRATION_13),
 ]
 
@@ -759,7 +882,8 @@ def sweep() -> Dict[str, int]:
                               ("password_resets", "expires_at"),
                               ("email_verifications", "expires_at"),
                               ("webauthn_challenges", "expires_at"),
-                              ("oauth_states", "expires_at")):
+                              ("oauth_states", "expires_at"),
+                              ("brokerage_link_states", "expires_at")):
             cur = conn.execute(
                 "DELETE FROM {} WHERE {} < ?".format(table, column), (now,))
             counts[table] = cur.rowcount or 0

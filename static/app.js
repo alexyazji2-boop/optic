@@ -85,6 +85,7 @@ const views = {
   reports: $('#view-reports'),
   usage: $('#view-usage'),
   accounts: $('#view-accounts'),
+  brokerage: $('#view-brokerage'),
   settings: $('#view-settings'),
 };
 
@@ -394,6 +395,7 @@ const TICKERLESS_VIEWS = [
   'scan', 'explore', 'compare', 'instrument', 'chart',
   'overview', 'financials', 'news', 'earnings',
   'watchlist', 'alerts', 'insiders', 'analysts', 'paper', 'reports', 'usage', 'accounts',
+  'brokerage',
 ];
 
 /* The security workspace: the facets of one company, in reading order.
@@ -10748,6 +10750,17 @@ let paletteSeq = 0;          // guards against a slow search overwriting a fast 
  * string. */
 const ASK_GROUP = 'Ask Milo';
 
+/* A place that belongs to a feature is findable only once the feature is
+ * live here: the Brokerage page joins the palette when it joins the menu. */
+function paletteAllowed(p) {
+  if (p.owner && !isOwner()) return false;
+  if (p.feature === 'brokerage') {
+    const g = NAV_GROUPS.find((x) => x.id === 'portfolio');
+    return !!(g && g.views.includes('brokerage'));
+  }
+  return true;
+}
+
 const PALETTE_PLACES = [
   { view: 'home', label: 'Home', terms: 'home start' },
   { view: 'brief', label: "Optic's Read", terms: 'read brief daily market news morning' },
@@ -10787,6 +10800,8 @@ const PALETTE_PLACES = [
        it used to be. */
     terms: 'retirement roth ira allocation contribution funds long term planner pension' },
   { view: 'settings', label: 'Settings', terms: 'settings appearance theme timezone preferences' },
+  { view: 'brokerage', label: 'Brokerage', feature: 'brokerage',
+    terms: 'brokerage broker linked accounts connect schwab fidelity robinhood vanguard holdings my portfolio snaptrade' },
 ];
 
 /* ------------------------------------------------------- recently viewed
@@ -11080,7 +11095,7 @@ async function paletteBuild(query, early) {
       group: 'Actions', lead: '\u2726', label: a.label, detail: a.detail,
       run: () => { closePalette(); a.run(); },
     }));
-    PALETTE_PLACES.filter((p) => !p.owner || isOwner()).slice(0, 6).forEach((p) => rows.push({
+    PALETTE_PLACES.filter(paletteAllowed).slice(0, 6).forEach((p) => rows.push({
       group: 'Go to', lead: '\u2192', label: p.label,
       run: () => { closePalette(); switchView(p.view); },
     }));
@@ -11102,7 +11117,7 @@ async function paletteBuild(query, early) {
    * "co" should not beat the ticker CO on its way to "Compare". */
   const words = (text) => String(text).toLowerCase().split(/\s+/);
   // The owner's page is offered to the signed-in owner only, as the nav does.
-  const places = PALETTE_PLACES.filter((p) => (!p.owner || isOwner())
+  const places = PALETTE_PLACES.filter((p) => paletteAllowed(p)
     && (p.label.toLowerCase().includes(lower) || p.terms.includes(lower)));
   const exactPlace = places.find((p) =>
     p.label.toLowerCase() === lower || words(p.terms).indexOf(lower) !== -1);
@@ -32570,6 +32585,7 @@ function renderSettings() {
   // Passkeys, connected providers and sessions are three more requests. Painted
   // after, so a page that is mostly about the theme is not waiting on them.
   if (signedIn()) paintSecurity();
+  if (signedIn()) fillBillingRow();
 }
 
 /* ============================================================== ACCOUNTS ===
@@ -32991,10 +33007,18 @@ function accountPanels() {
           <span class="set-tag on">${esc(plan.status || 'active')}</span></span>
         <span class="set-row-note">${
     plan.limits ? `${plan.limits.watchlists} watchlists, ${plan.limits.saved_research}
-      saved items, ${plan.limits.ai_calls_per_day} assistant messages a day.` : ''}</span>
+      saved items, ${plan.limits.ai_calls_per_day} assistant messages a day${plan.limits.ai_calls_per_month
+    ? ` (${plan.limits.ai_calls_per_month} in any 30 days)` : ''}.` : ''}${plan.cancel_at_period_end && plan.current_period_end
+    ? ` Ends on ${esc(new Date(plan.current_period_end).toLocaleDateString())}; it will not renew.` : ''}</span>
       </div>
-      <div class="set-row-act"><span class="set-row-note">Plans are not on sale yet.
-        Every account is on Free.</span></div>
+      <div class="set-row-act" id="set-billing-act"><span class="set-row-note">Checking plans...</span></div>
+    </div>
+    <div class="set-row" id="set-brokerage-row" hidden>
+      <div class="set-row-main">
+        <span class="set-row-title">Linked brokerages</span>
+        <span class="set-row-note">Read-only connections, what they can see, and how to disconnect or delete the data.</span>
+      </div>
+      <div class="set-row-act"><button type="button" class="btn" data-go-view="brokerage">Manage</button></div>
     </div>
   </div>
 
@@ -41847,6 +41871,7 @@ function loadView(view, force) {
   if (view === 'indices') return loadIndices(force);
   if (view === 'tracker') return loadTracker(force);
   if (view === 'roth') return loadRoth(force);
+  if (view === 'brokerage') return loadBrokerage(force);
   if (view === 'brief') return loadBrief(force);
   if (view === 'settings') return renderSettings();
   if (view === 'long') return loadLong(force);
@@ -43301,8 +43326,9 @@ function chatContextPayload() {
   if (DIGESTS.list && DIGESTS.list.data && DIGESTS.list.data.available !== false) ctx.watchlist_digest = DIGESTS.list.data;
   /* The reader's own lists, labelled for what they are (2026-10-12,
    * "portfolio-aware research"): the watchlist, and paper trades kept in this
-   * browser. Optic has no brokerage connection, and the labels say so, so an
-   * answer can never present these as an account. */
+   * browser. These are never a brokerage account, and the labels say so; a
+   * linked brokerage is added server-side as `brokerage_portfolio`, from the
+   * session, never from here. */
   const wl = watchList();
   if (wl.length) {
     const active = watchActiveList();
@@ -43312,7 +43338,7 @@ function chatContextPayload() {
   const open = (paperBook && Array.isArray(paperBook.open)) ? paperBook.open : [];
   if (open.length) {
     ctx.reader_holdings = {
-      source: 'paper trades the reader entered in Optic (simulated, in this browser). Not a brokerage account: Optic has no brokerage connection.',
+      source: 'paper trades the reader entered in Optic (simulated, in this browser). Not a brokerage account; linked brokerage holdings, if any, are added by the server as brokerage_portfolio.',
       positions: open.slice(0, 40).map((p) => ({ ticker: p.ticker, instrument: p.instrument, direction: p.direction,
         option_type: p.option_type, strike: p.strike, expiry: p.expiry, qty: p.qty,
         entry_price: p.entry_price, entry_at: p.entry_at, stop: p.stop, target: p.target })),
@@ -45952,6 +45978,536 @@ async function runResearch() {
  * reachable from the home page, which previews both, and from the command
  * palette — see PALETTE_PLACES. No tab moved to make room for them.
  */
+/* ============================================================ BROKERAGE ===
+ *
+ * Read-only brokerage linking (2026-10-12). Connect through the provider's
+ * hosted page, choose which accounts count, see the portfolio, ask Milo.
+ *
+ * The page is off unless the server says the feature is configured
+ * (`/api/brokerage/status` available), and only then does its row join the
+ * Positions menu (`brokerageNavJoin`). A deployment without the provider keys
+ * looks exactly as it did before this shipped.
+ *
+ * Three layers stay visibly separate, as they do in the server's payload and
+ * Milo's prompt: what the broker reported (labelled "From your broker"),
+ * what Optic worked out (labelled "Optic's arithmetic"), and Milo's reading,
+ * which only ever appears in Milo. Every total that leaves something out says
+ * what. A missing cost basis reads "Not supplied", never 0.
+ */
+/** The Plan row's buttons, filled once /api/billing/status answers. The
+ *  plan itself only changes when Stripe's webhook says so; coming back from
+ *  Checkout shows "confirming" until it does. */
+async function fillBillingRow() {
+  const host = document.getElementById('set-billing-act');
+  if (!host) return;
+  let flash = '';
+  try {
+    const params = new URLSearchParams(location.search);
+    const code = params.get('billing');
+    if (code) {
+      params.delete('billing');
+      const q = params.toString();
+      history.replaceState(null, '', location.pathname + (q ? `?${q}` : '') + location.hash);
+      flash = code === 'success' ? 'Thanks. Your plan updates as soon as the payment provider confirms it, usually within a minute.'
+        : 'Checkout cancelled. Nothing was charged.';
+    }
+  } catch (e) { flash = ''; }
+  const r = await brokerFetch('GET', '/api/billing/status');
+  const b = r.ok ? r.data : { available: false, reason: 'Plans could not be checked just now.' };
+  const sub = b.subscription || {};
+  let html = '';
+  if (!b.available) html = `<span class="set-row-note">${esc(b.reason || 'Plans are not on sale yet.')}</span>`;
+  else if (sub.plan === 'pro') html = b.can_manage ? '<button type="button" class="btn" data-billing-portal>Manage billing</button>'
+    : '<span class="set-row-note">Pro, granted by the operator.</span>';
+  else html = `<button type="button" class="btn primary" data-billing-checkout>Upgrade to Pro${b.price_label ? `, ${esc(b.price_label)}` : ''}</button>${
+    b.can_manage ? ' <button type="button" class="btn" data-billing-portal>Billing history</button>' : ''}`;
+  if (b.mode === 'test') html += ' <span class="set-tag off">Test mode</span>';
+  if (flash) html = `<span class="set-row-note">${esc(flash)}</span> ${html}`;
+  host.innerHTML = html;
+  const row = document.getElementById('set-brokerage-row');
+  const g = NAV_GROUPS.find((x) => x.id === 'portfolio');
+  if (row) row.hidden = !(g && g.views.includes('brokerage'));
+}
+
+const BROKER = { status: null, portfolio: null, billing: null, loading: false, error: null, armed: null, flash: null };
+
+const BROKER_FLASH = {
+  linked: ['good', 'Connected. Your accounts are synced below.'],
+  abandoned: ['', 'Connection cancelled. Nothing was linked.'],
+  expired: ['bad', 'That connection link expired or belonged to another sign-in. Start again with Connect.'],
+  unsupported: ['bad', 'That broker or account type is not supported by the provider yet. Nothing was linked.'],
+  error: ['bad', 'The provider could not finish the connection. Nothing was linked; try again in a few minutes.'],
+  limit: ['bad', 'That connection would go over your plan\'s limit, so it was removed straight away.'],
+};
+
+const BROKER_STATUS = {
+  active: ['on', 'Connected'],
+  partial: ['warn', 'Partial sync'],
+  pending: ['warn', 'First sync running'],
+  expired: ['off', 'Needs reconnecting'],
+  outage: ['warn', 'Provider not responding'],
+  error: ['off', 'Sync failed'],
+  unsupported: ['off', 'Not supported'],
+  paused: ['off', 'Paused: plan ended'],
+  closed: ['off', 'Closed'],
+};
+
+const BROKER_ASKS = [
+  'Where is my portfolio concentrated?',
+  'Which upcoming earnings affect my holdings?',
+  'Explain my exposure in plain English.',
+  'What changed since my last sync?',
+];
+
+async function brokerFetch(method, url, body) {
+  const headers = { Accept: 'application/json' };
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const csrf = window.OpticAuth ? window.OpticAuth.csrf() : '';
+  if (csrf) headers['X-Optic-CSRF'] = csrf;
+  let res;
+  try {
+    res = await fetch(url, { method, headers, credentials: 'same-origin',
+      body: body === undefined ? undefined : JSON.stringify(body) });
+  } catch (e) {
+    return { ok: false, status: 0, data: { detail: 'Optic could not be reached. Check your connection.' } };
+  }
+  let data = {};
+  try { data = await res.json(); } catch (e) { data = {}; }
+  return { ok: res.ok, status: res.status, data };
+}
+
+/** Join the Positions menu once the server says linking is configured.
+ *  Added at runtime rather than written into NAV_GROUPS so that a deployment
+ *  without the feature renders the menu it always had. */
+function brokerageNavJoin() {
+  const group = NAV_GROUPS.find((g) => g.id === 'portfolio');
+  if (!group || group.views.includes('brokerage')) return;
+  group.views.push('brokerage');
+  // Both, because a page opened at #/brokerage was painted before the row
+  // existed and the phone bar lit Home for it.
+  if (typeof paintNav === 'function') paintNav(STATE.view);
+  if (typeof paintMobileTabs === 'function') paintMobileTabs(STATE.view);
+}
+
+async function brokerageProbe() {
+  const r = await brokerFetch('GET', '/api/brokerage/status');
+  if (r.ok && r.data && r.data.available) brokerageNavJoin();
+  return r;
+}
+
+function brokerageReadFlash() {
+  let code = null;
+  try {
+    const params = new URLSearchParams(location.search);
+    code = params.get('brokerage');
+    if (code) {
+      params.delete('brokerage');
+      const q = params.toString();
+      history.replaceState(null, '', location.pathname + (q ? `?${q}` : '') + location.hash);
+    }
+  } catch (e) { code = null; }
+  if (code && BROKER_FLASH[code]) BROKER.flash = code;
+}
+
+async function loadBrokerage(force) {
+  const host = views.brokerage;
+  if (!host) return;
+  brokerageReadFlash();
+  if (BROKER.loading) return;
+  if (!BROKER.status || force) host.innerHTML = '<div class="panel span2"><p class="sub">Loading your brokerage connections...</p></div>';
+  BROKER.loading = true;
+  try {
+    const st = await brokerageProbe();
+    BROKER.status = st.ok ? st.data : null;
+    BROKER.error = st.ok ? null : ((st.data && st.data.detail) || 'Could not load brokerage status.');
+    BROKER.portfolio = null;
+    const ent = (BROKER.status && BROKER.status.entitlement) || null;
+    if (ent && !ent.can_link) {
+      const b = await brokerFetch('GET', '/api/billing/status');
+      BROKER.billing = b.ok ? b.data : null;
+    }
+    const conns = (BROKER.status && BROKER.status.connections) || [];
+    if (conns.length) {
+      const p = await brokerFetch('GET', '/api/brokerage/portfolio');
+      BROKER.portfolio = p.ok ? p.data : { available: false, reason: (p.data && p.data.detail) || 'Could not load the portfolio.' };
+    }
+  } finally {
+    BROKER.loading = false;
+  }
+  if (STATE.view === 'brokerage') renderBrokerage();
+}
+
+function bkMoney(v, ccy) {
+  if (v === null || v === undefined || !Number.isFinite(Number(v))) return 'Not supplied';
+  const code = String(ccy || 'USD').toUpperCase();
+  if (code === 'USD') return usd(v);
+  try {
+    return Number(v).toLocaleString('en-US', { style: 'currency', currency: code, minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  } catch (e) {
+    return `${Number(v).toFixed(2)} ${code}`;
+  }
+}
+
+function bkSigned(v, ccy) {
+  if (v === null || v === undefined) return 'Not supplied';
+  const n = Number(v);
+  const cls = n > 0 ? 'pos' : n < 0 ? 'neg' : '';
+  return `<span class="${cls}">${n > 0 ? '+' : ''}${esc(bkMoney(n, ccy))}</span>`;
+}
+
+function bkQty(v) {
+  if (v === null || v === undefined) return 'Not supplied';
+  return Number(v).toLocaleString('en-US', { maximumFractionDigits: 4 });
+}
+
+function bkWhen(iso) {
+  if (!iso) return 'never';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 'unknown';
+  return `${agoWords(iso)} (${d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })})`;
+}
+
+function bkFlashHtml() {
+  if (!BROKER.flash) return '';
+  const [tone, text] = BROKER_FLASH[BROKER.flash];
+  BROKER.flash = null;
+  return `<div class="bk-flash ${tone}" role="status">${esc(text)}</div>`;
+}
+
+function bkPermissions(st, open) {
+  const items = (st && st.permissions) || [];
+  return `<details class="panel span2 bk-perms"${open ? ' open' : ''}>
+    <summary><h2>${hg('What Optic can and cannot see')}</h2></summary>
+    <ul>${items.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>
+    ${st && st.provider ? `<p class="sub">Provider: ${esc(st.provider)}${st.mode === 'sandbox' ? ' (sandbox: test data only)' : ''}.</p>` : ''}
+  </details>`;
+}
+
+function renderBrokerage() {
+  const host = views.brokerage;
+  if (!host) return;
+  const st = BROKER.status;
+  const flash = bkFlashHtml();
+  if (!st) {
+    host.innerHTML = `${flash}<div class="panel span2"><h2>${hg('Brokerage')}</h2>
+      <p class="sub">${esc(BROKER.error || 'Brokerage status is not available right now.')}</p>
+      <button type="button" class="btn" data-bk-reload>Try again</button></div>`;
+    return;
+  }
+  if (!st.available) {
+    host.innerHTML = `${flash}<div class="panel span2"><h2>${hg('Brokerage')}</h2>
+      <p class="sub">${esc(st.reason || 'Brokerage linking is not available on this deployment.')}</p></div>`;
+    return;
+  }
+  if (!st.signed_in) {
+    host.innerHTML = `${flash}<div class="panel span2"><h2>${hg('Link your brokerage')}</h2>
+      <p class="sub">See your real holdings in Optic and ask Milo about them. Read-only: Optic cannot trade or move money.
+        Sign in first; linking is part of the paid plan.</p>
+      <div class="set-row-act"><button type="button" class="btn" data-auth-open="signin">Sign in</button></div></div>
+      ${bkPermissions(st, true)}`;
+    return;
+  }
+  const ent = st.entitlement || {};
+  const conns = st.connections || [];
+  const active = conns.filter((c) => c.status !== 'disconnected');
+  const canAdd = ent.can_link && active.length < (ent.max_connections || 0);
+  const parts = [flash];
+
+  if (!ent.can_link && !conns.length) {
+    parts.push(bkUpgradeCard(ent));
+    parts.push(bkPermissions(st, true));
+    host.innerHTML = parts.join('');
+    return;
+  }
+  if (st.paused_at) {
+    parts.push(`<div class="panel span2"><h2>${hg('Syncing is paused')}</h2>
+      <p class="sub">Your paid plan ended, so these accounts stopped updating on ${esc(new Date(st.paused_at).toLocaleDateString())}.
+        What you see below is the last sync. ${st.provider_closed_at
+    ? 'The connection has been closed at the provider; reconnect after upgrading to resume.'
+    : 'Resubscribe within 7 days to resume where you left off. After 7 days the connection is closed at the provider, and after 30 days Optic deletes its copy.'}
+        You can disconnect or delete everything now on any plan.</p>
+      <div class="set-row-act"><button type="button" class="btn" data-billing-checkout>Resume with Pro</button></div></div>`);
+  }
+
+  parts.push(`<div class="panel span2"><div class="bk-head"><h2>${hg('Connections')}</h2>
+      ${canAdd ? '<button type="button" class="btn primary" data-bk-connect>Connect a brokerage</button>' : ''}</div>
+    <p class="sub">${ent.can_link ? `Your plan links up to ${ent.max_connections} connection${ent.max_connections === 1 ? '' : 's'} and ${ent.max_accounts} accounts.
+      Accounts sync on their own once a day; Sync now is limited to ${ent.manual_syncs_per_day} a day.`
+    : 'Linking and syncing are part of the paid plan. Your stored data stays until you delete it or the retention period ends.'}</p>
+    ${conns.length ? conns.map(bkConnCard).join('') : '<p class="sub">Nothing linked yet. Connect a brokerage to see your holdings here.</p>'}
+  </div>`);
+
+  parts.push(bkPortfolioHtml(BROKER.portfolio, conns));
+  parts.push(bkPermissions(st, !conns.length));
+  if (conns.length) {
+    parts.push(`<div class="panel span2 gap set-danger"><h2>${hg('Delete all brokerage data')}</h2>
+      <p class="sub">Disconnects every brokerage at the provider and deletes everything Optic stored about them, including the
+        encryption key, so backups cannot be read either. Your Optic account stays.</p>
+      <div class="set-row-act">${BROKER.armed === 'all'
+    ? '<button type="button" class="btn bk-danger" data-bk-delete-all="confirm">Yes, delete all brokerage data</button> <button type="button" class="btn" data-bk-disarm>Keep it</button>'
+    : '<button type="button" class="btn" data-bk-delete-all>Delete all brokerage data</button>'}</div></div>`);
+  }
+  host.innerHTML = parts.join('');
+  if (typeof revealPanels === 'function') revealPanels(host);
+}
+
+function bkUpgradeCard(ent) {
+  const bill = BROKER.billing || {};
+  const paid = (BROKER.status && BROKER.status.paid_limits) || {};
+  if (bill.available === false) {
+    return `<div class="panel span2"><h2>${hg('Link your brokerage')}</h2>
+      <p class="sub">Linking is part of the paid plan. ${esc(bill.reason || 'Plans are not on sale yet.')}</p></div>`;
+  }
+  return `<div class="panel span2"><h2>${hg('Link your brokerage with Pro')}</h2>
+    <p class="sub">Connect up to ${esc(String(paid.brokerage_connections || 3))} brokerages read-only, see every account in one
+      portfolio, and ask Milo about your actual holdings: concentration, upcoming earnings, what changed since the last sync.</p>
+    <ul class="bk-list">
+      <li>Read-only through SnapTrade's hosted sign-in. Optic never sees your brokerage password.</li>
+      <li>Daily sync, plus ${esc(String(paid.brokerage_manual_syncs_per_day || 1))} manual sync${(paid.brokerage_manual_syncs_per_day || 1) === 1 ? '' : 's'} a day.</li>
+      <li>Up to ${esc(String(paid.ai_calls_per_day || 15))} Milo messages a day and ${esc(String(paid.ai_calls_per_month || 100))} in any 30 days.</li>
+    </ul>
+    <div class="set-row-act"><button type="button" class="btn primary" data-billing-checkout>Upgrade${
+  bill.price_label ? ` for ${esc(bill.price_label)}` : ''}</button>
+      <span class="set-row-note">You are on ${esc(ent.plan_label || 'Free')}. Cancel any time from Settings.</span></div></div>`;
+}
+
+function bkConnCard(c) {
+  const [tone, label] = BROKER_STATUS[c.status] || ['off', cap(c.status || 'unknown')];
+  const st = BROKER.status || {};
+  const ent = st.entitlement || {};
+  const armed = BROKER.armed === c.id;
+  const reconnect = ['expired', 'closed', 'error'].includes(c.status) && ent.can_link;
+  const canSync = ent.can_link && !['expired', 'closed', 'paused', 'unsupported'].includes(c.status);
+  return `<div class="bk-conn">
+    <div class="bk-conn-top">
+      <div><strong>${esc(c.institution || 'Brokerage')}</strong>
+        <span class="set-tag ${tone}">${esc(label)}</span></div>
+      <div class="bk-conn-act">
+        ${canSync ? `<button type="button" class="btn" data-bk-sync="${esc(c.id)}">Sync now</button>` : ''}
+        ${reconnect ? `<button type="button" class="btn primary" data-bk-reconnect="${esc(c.id)}">Reconnect</button>` : ''}
+        ${armed ? `<button type="button" class="btn bk-danger" data-bk-disconnect="${esc(c.id)}" data-confirm="1">Disconnect and delete</button>
+          <button type="button" class="btn" data-bk-disarm>Keep</button>`
+    : `<button type="button" class="btn" data-bk-disconnect="${esc(c.id)}">Disconnect</button>`}
+      </div>
+    </div>
+    <p class="set-row-note">Last successful sync: ${esc(bkWhen(c.last_sync_at))}${
+  c.status_reason ? `. ${esc(c.status_reason)}` : ''}${armed ? '. Disconnecting removes it at the provider and deletes Optic\'s copy of its data now.' : ''}</p>
+    <ul class="bk-accts">${(c.accounts || []).map((a) => `<li>
+      <label class="bk-acct"><input type="checkbox" data-bk-select="${esc(a.id)}"${a.selected ? ' checked' : ''}>
+        <span><b>${esc(a.name || 'Account')}</b> ${esc(a.number_mask || '')}${a.account_type ? ` · ${esc(a.account_type)}` : ''}${a.currency ? ` · ${esc(a.currency)}` : ''}</span></label>
+      <span class="bk-acct-state">${esc(bkAcctState(a))}</span></li>`).join('')}</ul>
+  </div>`;
+}
+
+function bkAcctState(a) {
+  const s = a.sync_state;
+  if (s === 'ok') return a.broker_as_of ? `Broker data as of ${new Date(a.broker_as_of).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : 'Synced';
+  if (s === 'partial') return a.sync_note || 'Partial: some data did not arrive';
+  if (s === 'stale') return 'Provider did not respond; showing the last good data';
+  if (s === 'failed') return 'Last sync failed; showing the last good data';
+  if (s === 'missing') return 'No longer reported by the broker; left out';
+  if (s === 'pending') return a.sync_note || 'Waiting for first data';
+  return '';
+}
+
+function bkBars(rows, max = 8) {
+  const shown = (rows || []).filter((r) => r.share_pct !== null && r.value > 0).slice(0, max);
+  if (!shown.length) return '<p class="sub">Nothing to show.</p>';
+  return `<ul class="bk-bars">${shown.map((r) => `<li><span class="bk-bar-l">${esc(r.label)}</span>
+    <span class="bk-bar-t"><span class="bk-bar-f" style="width:${Math.max(1, Math.min(100, r.share_pct))}%"></span></span>
+    <span class="bk-bar-v">${r.share_pct.toFixed(1)}%</span></li>`).join('')}</ul>`;
+}
+
+function bkPortfolioHtml(p, conns) {
+  if (!conns.length) return '';
+  if (!p) return '<div class="panel span2"><p class="sub">Loading your portfolio...</p></div>';
+  if (p.available === false) return `<div class="panel span2"><h2>${hg('Portfolio')}</h2><p class="sub">${esc(p.reason || 'No portfolio yet.')}</p></div>`;
+  if (!p.accounts_counted) {
+    return `<div class="panel span2"><h2>${hg('Portfolio')}</h2><p class="sub">${
+      (p.accounts || []).length ? 'No account is selected, or none has synced yet. Tick an account above to count it.'
+        : 'Waiting for the first sync. Accounts appear here once the broker sends data.'}</p></div>`;
+  }
+  const t = p.totals || {};
+  const by = t.by_currency || {};
+  const combined = t.combined_usd;
+  const perf = p.performance || {};
+  const upl = perf.unrealized_pl_by_currency || {};
+  const conc = p.concentration || {};
+  const asOf = (p.as_of || {}).oldest_sync;
+  const totalTile = combined
+    ? `${esc(bkMoney(combined.value, 'USD'))}${combined.approximate ? ' <small>approx.</small>' : ''}`
+    : Object.entries(by).map(([c, b]) => esc(bkMoney(b.total, c))).join('<br>');
+  const cashTile = (p.cash || []).length ? p.cash.map((c) => esc(bkMoney(c.amount, c.currency))).join('<br>') : 'Not supplied';
+  const uplTile = Object.keys(upl).length ? Object.entries(upl).map(([c, v]) => bkSigned(v, c)).join('<br>') : 'Not supplied';
+  const out = [];
+  out.push(`<div class="panel span2"><div class="bk-head"><h2>${hg('Your portfolio')}</h2>
+      <span class="set-row-note">Broker data as of ${esc(bkWhen(asOf))}. Not live.</span></div>
+    <div class="bk-tiles">
+      <div class="bk-tile"><span class="bk-k">Total value</span><span class="bk-v">${totalTile}</span>
+        <span class="bk-n">Optic's arithmetic on your broker's numbers</span></div>
+      <div class="bk-tile"><span class="bk-k">Cash</span><span class="bk-v">${cashTile}</span><span class="bk-n">From your broker</span></div>
+      <div class="bk-tile"><span class="bk-k">Unrealised gain</span><span class="bk-v">${uplTile}</span>
+        <span class="bk-n">${perf.positions_with_basis}/${perf.positions_total} positions have a cost basis${
+  perf.basis_coverage_pct !== null && perf.basis_coverage_pct !== undefined ? ` (${perf.basis_coverage_pct}% of value)` : ''}</span></div>
+      <div class="bk-tile"><span class="bk-k">Largest holding</span><span class="bk-v">${conc.top1_pct !== null && conc.top1_pct !== undefined
+    ? `${esc(((p.holdings || [])[0] || {}).symbol || '')} ${conc.top1_pct}%` : 'Not supplied'}</span>
+        <span class="bk-n">Top 5: ${conc.top5_pct ?? 'n/a'}%. Like ${conc.effective_holdings ?? 'n/a'} equal positions</span></div>
+    </div>
+    <div class="bk-asks">${BROKER_ASKS.map((q) => `<button type="button" class="cc-q" data-ask-text="${esc(q)}">${esc(q)}</button>`).join('')}</div>
+  </div>`);
+
+  out.push(`<div class="panel"><h2>${hg('Allocation')}</h2>
+      <p class="bk-eyebrow">By asset type</p>${bkBars((p.allocation || {}).by_kind)}
+      <p class="bk-eyebrow">By account</p>${bkBars((p.allocation || {}).by_account)}</div>
+    <div class="panel"><h2>${hg('Concentration')}</h2>
+      <p class="bk-eyebrow">By sector (stocks; ETFs not looked through)</p>${bkBars((p.allocation || {}).by_sector)}
+      ${(conc.flags || []).length ? `<ul class="bk-flags">${conc.flags.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>` : '<p class="sub">No single stock above 20% and no sector above 40% of long holdings.</p>'}
+      ${(conc.combined_exposure || []).map((e) => `<p class="sub">${esc(e.symbol)}: ${esc(bkQty(e.shares))} shares plus options controlling ${
+  e.options.map((o) => `${bkQty(o.notional_shares)} shares (${esc(o.option_type || '')} ${esc(String(o.strike))}, ${esc(o.expiry || '')})`).join(', ')}. Not delta-adjusted.</p>`).join('')}
+      <p class="set-row-note">${esc(conc.basis || '')}</p></div>`);
+
+  const rows = (p.holdings || []).map((h) => `<tr>
+      <td class="name"><b>${esc(h.symbol || '')}</b><span class="bk-sub">${esc(h.description || '')}</span></td>
+      <td>${esc((h.accounts || []).join(', '))}</td>
+      <td>${esc(bkQty(h.quantity))}</td>
+      <td>${esc(bkMoney(h.price, h.currency))}</td>
+      <td>${esc(bkMoney(h.market_value, h.currency))}</td>
+      <td>${h.weight_pct !== null && h.weight_pct !== undefined ? `${h.weight_pct}%` : 'n/a'}</td>
+      <td>${h.cost_basis === null ? '<span class="bk-na">Not supplied</span>' : esc(bkMoney(h.cost_basis, h.currency))}</td>
+      <td>${h.unrealized_pl === null ? '<span class="bk-na">Not supplied</span>' : `${bkSigned(h.unrealized_pl, h.currency)}${h.unrealized_pct !== null ? ` <small>${h.unrealized_pct}%</small>` : ''}`}</td>
+    </tr>`).join('');
+  out.push(`<div class="panel span2"><h2>${hg('Holdings')}</h2>
+    <p class="sub">Quantity, price and cost come from your broker. Value, weight and gain are Optic's arithmetic. The same security in
+      several accounts is one row.</p>
+    <div class="ss-scroll"><table class="data bk-table"><thead><tr><th>Holding</th><th>Accounts</th><th>Qty</th><th>Broker price</th>
+      <th>Value</th><th>Weight</th><th>Cost basis</th><th>Unrealised</th></tr></thead><tbody>${rows}</tbody></table></div></div>`);
+
+  if ((p.options || []).length) {
+    out.push(`<div class="panel span2"><h2>${hg('Options')}</h2>
+      <div class="ss-scroll"><table class="data bk-table"><thead><tr><th>Contract</th><th>Account</th><th>Contracts</th><th>Price</th>
+        <th>Est. value</th><th>Cost</th><th>Est. unrealised</th><th>Expires</th></tr></thead><tbody>${p.options.map((o) => `<tr>
+        <td class="name"><b>${esc(o.underlying || '')}</b> ${esc(strikeLabel(o.strike))} ${esc(o.option_type || '')}${o.mini ? ' <small>mini</small>' : ''}</td>
+        <td>${esc(o.account || '')}</td><td>${esc(bkQty(o.contracts))}</td><td>${esc(bkMoney(o.price, o.currency))}</td>
+        <td>${esc(bkMoney(o.market_value_est, o.currency))}</td>
+        <td>${o.cost_basis === null ? '<span class="bk-na">Not supplied</span>' : esc(bkMoney(o.cost_basis, o.currency))}</td>
+        <td>${o.unrealized_pl_est === null ? '<span class="bk-na">Not supplied</span>' : bkSigned(o.unrealized_pl_est, o.currency)}</td>
+        <td>${esc(o.expiry || '')}${o.days_to_expiry !== null ? ` <small>${o.days_to_expiry}d</small>` : ''}</td></tr>`).join('')}</tbody></table></div>
+      <p class="set-row-note">Estimated value is contracts x the broker's price x the contract multiplier. No greeks come through the connection.</p></div>`);
+  }
+
+  const earn = p.earnings_ahead || [];
+  const ch = p.changes;
+  out.push(`<div class="panel"><h2>${hg('Earnings ahead')}</h2>${earn.length
+    ? `<ul class="bk-list">${earn.map((e) => `<li><b>${esc(e.symbol)}</b> ${esc(e.date)} <small>in ${e.days} day${e.days === 1 ? '' : 's'}</small>${
+      e.weight_pct ? `, ${e.weight_pct}% of long holdings` : ''}${e.has_options ? ', and you hold options on it' : ''}</li>`).join('')}</ul>`
+    : '<p class="sub">No reported earnings date in the next 30 days for the stocks Optic checked (up to 25, largest first). ETFs and funds have none.</p>'}
+    <p class="set-row-note">Dates from Optic's market data, not your broker.</p></div>
+    <div class="panel"><h2>${hg('Since your last sync')}</h2>${bkChangesHtml(ch)}</div>`);
+
+  if ((p.unsupported || []).length) {
+    out.push(`<div class="panel span2"><h2>${hg('Not counted')}</h2><ul class="bk-list">${p.unsupported.map((u) =>
+      `<li><b>${esc(u.description)}</b> <small>${esc(u.account || '')}</small>. ${esc(u.reason)}</li>`).join('')}</ul></div>`);
+  }
+  const notes = (p.notes || []).slice();
+  (p.price_checks || []).forEach((c) => notes.push(`${c.symbol}: broker ${bkMoney(c.broker_price, 'USD')} at the last sync, Optic's delayed quote ${bkMoney(c.optic_price, 'USD')} (${c.gap_pct > 0 ? '+' : ''}${c.gap_pct}%).`));
+  out.push(`<div class="panel span2"><h2>${hg('What this cannot tell you')}</h2><ul class="bk-list">
+    ${notes.map((n) => `<li>${esc(n)}</li>`).join('')}
+    <li>No transactions, realised gains, dividends or tax lots come through this connection, so Optic shows unrealised gain against your broker's cost, not a return.</li>
+    <li>This is information, not advice. Nothing here suggests buying, selling or rebalancing.</li></ul></div>`);
+  return out.join('');
+}
+
+function bkChangesHtml(ch) {
+  if (!ch) return '<p class="sub">Shown after your second sync.</p>';
+  const li = [];
+  ch.added.forEach((a) => li.push(`<li><b>New:</b> ${esc(a.label || a.symbol || '')} (${esc(bkQty(a.qty))})</li>`));
+  ch.removed.forEach((a) => li.push(`<li><b>Gone:</b> ${esc(a.label || a.symbol || '')} (was ${esc(bkQty(a.qty))})</li>`));
+  ch.quantity_changed.forEach((a) => li.push(`<li><b>${esc(a.label || a.symbol || '')}:</b> ${esc(bkQty(a.from_qty))} to ${esc(bkQty(a.to_qty))}${a.looks_like ? `. Looks like ${esc(a.looks_like)}` : ''}</li>`));
+  Object.entries(ch.value_change_by_currency || {}).forEach(([c, v]) => li.push(`<li>Total value ${bkSigned(v, c)}, of which prices ${bkSigned((ch.price_effect_by_currency || {})[c] ?? 0, c)}</li>`));
+  return `<ul class="bk-list">${li.join('') || '<li>Nothing moved.</li>'}</ul>
+    <p class="set-row-note">Since ${esc(bkWhen(ch.since))}. ${esc(ch.note || '')}</p>`;
+}
+
+async function brokerageAction(evt) {
+  const t = evt.target.closest && evt.target.closest('[data-bk-connect], [data-bk-reconnect], [data-bk-sync], [data-bk-disconnect], [data-bk-disarm], [data-bk-delete-all], [data-bk-reload], [data-billing-checkout], [data-billing-portal]');
+  if (!t) return false;
+  const toast = (msg, tone) => (window.OpticAuth && window.OpticAuth.toast ? window.OpticAuth.toast(msg, tone) : null);
+  if (t.matches('[data-bk-reload]')) { loadBrokerage(true); return true; }
+  if (t.matches('[data-bk-disarm]')) { BROKER.armed = null; renderBrokerage(); return true; }
+  if (t.matches('[data-billing-checkout], [data-billing-portal]')) {
+    const portal = t.matches('[data-billing-portal]');
+    t.disabled = true;
+    const r = await brokerFetch('POST', portal ? '/api/billing/portal' : '/api/billing/checkout', {});
+    t.disabled = false;
+    if (r.ok && r.data.url) { location.assign(r.data.url); return true; }
+    toast((r.data && r.data.detail) || 'Billing is not available right now.', 'bad');
+    return true;
+  }
+  if (t.matches('[data-bk-connect], [data-bk-reconnect]')) {
+    t.disabled = true;
+    const body = t.dataset.bkReconnect ? { reconnect: t.dataset.bkReconnect } : {};
+    const r = await brokerFetch('POST', '/api/brokerage/connect', body);
+    t.disabled = false;
+    // Fetched at the click because the provider's link expires in five minutes.
+    if (r.ok && r.data.url) { location.assign(r.data.url); return true; }
+    toast((r.data && r.data.detail) || 'Could not start the connection.', 'bad');
+    return true;
+  }
+  if (t.matches('[data-bk-sync]')) {
+    t.disabled = true;
+    t.textContent = 'Syncing...';
+    const r = await brokerFetch('POST', `/api/brokerage/connections/${encodeURIComponent(t.dataset.bkSync)}/sync`, {});
+    const words = { ok: 'Synced.', partial: 'Synced, but some data did not arrive.', expired: 'Your broker needs you to reconnect.',
+      outage: 'The provider did not respond. Showing the last good data.', busy: 'A sync is already running.',
+      paused: 'Syncing is paused because the plan ended.', unsupported: 'This account is not supported.', error: 'The sync failed.' };
+    toast(r.ok ? (words[r.data.result] || 'Done.') : ((r.data && r.data.detail) || 'Sync failed.'), r.ok && ['ok', 'partial'].includes(r.data.result) ? 'good' : 'bad');
+    loadBrokerage(true);
+    return true;
+  }
+  if (t.matches('[data-bk-disconnect]')) {
+    const id = t.dataset.bkDisconnect;
+    if (!t.dataset.confirm) { BROKER.armed = id; renderBrokerage(); return true; }
+    t.disabled = true;
+    const r = await brokerFetch('POST', `/api/brokerage/connections/${encodeURIComponent(id)}/disconnect`, {});
+    BROKER.armed = null;
+    toast(r.ok ? (r.data.provider_removal_queued
+      ? 'Disconnected and deleted from Optic. The provider did not answer, so Optic will keep asking it to remove the connection.'
+      : 'Disconnected. Optic\'s copy of that data is deleted.') : ((r.data && r.data.detail) || 'Could not disconnect.'), r.ok ? 'good' : 'bad');
+    loadBrokerage(true);
+    return true;
+  }
+  if (t.matches('[data-bk-delete-all]')) {
+    if (t.dataset.bkDeleteAll !== 'confirm') { BROKER.armed = 'all'; renderBrokerage(); return true; }
+    t.disabled = true;
+    const r = await brokerFetch('POST', '/api/brokerage/delete-data', {});
+    BROKER.armed = null;
+    toast(r.ok ? 'All brokerage data deleted.' : ((r.data && r.data.detail) || 'Could not delete.'), r.ok ? 'good' : 'bad');
+    loadBrokerage(true);
+    return true;
+  }
+  return false;
+}
+
+async function brokerageSelect(evt) {
+  const box = evt.target.closest && evt.target.closest('[data-bk-select]');
+  if (!box) return false;
+  box.disabled = true;
+  const r = await brokerFetch('PATCH', `/api/brokerage/accounts/${encodeURIComponent(box.dataset.bkSelect)}`, { selected: box.checked });
+  box.disabled = false;
+  if (!r.ok) {
+    box.checked = !box.checked;
+    if (window.OpticAuth && window.OpticAuth.toast) window.OpticAuth.toast((r.data && r.data.detail) || 'Could not change that.', 'bad');
+    return true;
+  }
+  loadBrokerage(true);
+  return true;
+}
+
+if (typeof document !== 'undefined' && document.addEventListener) {
+  document.addEventListener('click', (evt) => { brokerageAction(evt); });
+  document.addEventListener('change', (evt) => { brokerageSelect(evt); });
+}
+
 const NAV_GROUPS = [
   { id: 'home', label: 'Home', views: ['home'] },
   /* The security workspace: everything that is about one company, under one
@@ -46116,6 +46672,7 @@ const SUB_LABELS = {
   explore: 'Explore', scan: 'Scan', insiders: 'Insiders', analysts: 'Analysts',
   reports: 'Problem Reports', usage: 'Claude usage', accounts: 'Accounts',
   tracker: "Optic Portfolio", paper: 'Paper Desk', roth: 'Retirement',
+  brokerage: 'Brokerage',
 };
 
 const SUB_TITLES = {
@@ -46143,6 +46700,7 @@ const SUB_TITLES = {
   scan: 'Scan. Named screens over the ranked universe',
   tracker: "Optic Portfolio. The terminal's own paper-traded record",
   roth: 'Retirement. A rules-based model allocation to compare your own against',
+  brokerage: 'Brokerage. Your linked accounts, read-only, and the portfolio they add up to',
 };
 
 /** Which group a view belongs to. */
@@ -46186,7 +46744,7 @@ const ROUTE_SLUGS = {
   explore: 'explore', scan: 'scan', insiders: 'insiders', analysts: 'analysts',
   tracker: 'portfolio', paper: 'paper', roth: 'retirement',
   watchlist: 'watchlist', alerts: 'alerts', settings: 'settings',
-  reports: 'reports', usage: 'usage', accounts: 'accounts',
+  reports: 'reports', usage: 'usage', accounts: 'accounts', brokerage: 'brokerage',
 };
 const ROUTE_VIEWS = Object.fromEntries(
   Object.entries(ROUTE_SLUGS).map(([view, slug]) => [slug, view]));
@@ -47169,6 +47727,7 @@ const VIEW_NAMES = {
   home: 'Home', swing: 'Options', earnings: 'Earnings',
   market: 'Macro', indices: 'Indices', long: 'Investing', roth: 'Retirement',
   tracker: "Optic Portfolio", settings: 'Settings', brief: "Optic's Read",
+  brokerage: 'Brokerage',
 };
 
 // The logo goes home, the way it does on essentially every site. It was a plain
@@ -50512,6 +51071,9 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') checkForNewBuild();
 });
 setInterval(checkForNewBuild, 10 * 60 * 1000);
+// Asks once whether brokerage linking is live here; the Positions menu only
+// gains its Brokerage row if so.
+brokerageProbe();
 
 /** After a reload from the notice, back to the view and symbol it was on. */
 function restoreReloadPlace() {
