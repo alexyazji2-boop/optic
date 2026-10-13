@@ -12451,6 +12451,495 @@ function renderOptionsPlain(d) {
   </section>`;
 }
 
+/* ============================================== Options research (2026-10-13)
+ *
+ * Summary first, evidence second, the machinery on demand. The tab answered
+ * none of the questions a reader brings to an options page directly ("which
+ * contracts fit my timeframe?", "is this one liquid enough?", "what happens if
+ * the price or the volatility moves?"): it opened on one example trade the
+ * rules had picked. This adds three things, all from the corrected chain
+ * (app/analytics/vol_surface.py, liquidity.py, contracts.py, position.py):
+ *
+ *  1. What options are pricing: the 30-day IV and its rank, the term
+ *     structure, the skew and the moves priced for each expiry, with the time
+ *     and the rate they were measured at.
+ *  2. A contract table the reader filters (expiry, calls or puts, a delta
+ *     range, the widest spread and the least open interest they accept), with
+ *     each contract's cost, breakeven, decay, volatility exposure, the model's
+ *     chance of finishing in the money and a liquidity grade with its reasons.
+ *     No row is called best.
+ *  3. A position builder: legs from the table or a template, priced at the
+ *     mid, at the natural price and with slippage and fees, with the payoff at
+ *     expiry drawn apart from the model's value before it, breakevens, the
+ *     maximum loss or the fact that there is none, aggregate greeks, and a
+ *     price x volatility grid.
+ *
+ * Nothing here is sent to Milo unless the reader asks Milo; what is on screen
+ * is added to Milo's context as `options_research`. */
+const OPT_FILTER_KEY = 'optic.options.filters.v1';
+const OPT_DELTAS = [
+  { id: 'any', label: 'Any delta', lo: 0, hi: 1 },
+  { id: 'far', label: '0.10 to 0.30', lo: 0.10, hi: 0.30 },
+  { id: 'mid', label: '0.30 to 0.50', lo: 0.30, hi: 0.50 },
+  { id: 'atm', label: '0.40 to 0.60', lo: 0.40, hi: 0.60 },
+  { id: 'deep', label: '0.60 to 0.90', lo: 0.60, hi: 0.90 },
+];
+const OPT = {
+  sym: null, expiry: null, side: 'call', delta: 'any', maxSpread: 25, minOi: 0, unquoted: false,
+  data: null, loading: false, error: null, more: null,
+  legs: [], analysis: null, analyzing: false, analyzeError: null,
+  slippage: 0.25, fee: 0.65, days: null, scenWhen: 0,
+  rowsCache: {},
+};
+try {
+  const saved = JSON.parse(localStorage.getItem(OPT_FILTER_KEY) || 'null');
+  if (saved && typeof saved === 'object') {
+    ['side', 'delta', 'maxSpread', 'minOi', 'unquoted', 'slippage', 'fee'].forEach((k) => {
+      if (saved[k] !== undefined) OPT[k] = saved[k];
+    });
+  }
+} catch (e) { /* private mode */ }
+
+function optSaveFilters() {
+  try {
+    localStorage.setItem(OPT_FILTER_KEY, JSON.stringify({ side: OPT.side, delta: OPT.delta,
+      maxSpread: OPT.maxSpread, minOi: OPT.minOi, unquoted: OPT.unquoted, slippage: OPT.slippage, fee: OPT.fee }));
+  } catch (e) { /* private mode */ }
+}
+
+function optMoney(v, digits = 2) {
+  if (v === null || v === undefined || !Number.isFinite(Number(v))) return '—';
+  const n = Number(v);
+  return (n < 0 ? '-' : '') + '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+/* 1. What options are pricing ------------------------------------------- */
+function renderOptionsPricing(d) {
+  const vs = d.vol_surface || {};
+  if (!vs.available) return '';
+  const rank = d.iv_rank || {};
+  const rows = vs.expiries || [];
+  const iv30 = vs.iv30 || {};
+  const term = vs.term || {};
+  const ev = vs.event || {};
+  const month = rows.filter((r) => r.atm_iv_pct).reduce((best, r) => (!best
+    || Math.abs(r.dte - 30) < Math.abs(best.dte - 30) ? r : best), null);
+  const items = [];
+  if (iv30.available) {
+    let rankText = '';
+    if (rank.available) {
+      rankText = ` That is a rank of ${fmt(rank.rank, 0)} and a percentile of ${fmt(rank.percentile, 0)} over ${fmt(rank.days, 0)} trading days of ${rank.source === 'vol_index' ? `the ${esc(rank.index || '')}` : 'Optic’s own readings'}.`;
+    }
+    items.push({ text: `Options are priced for about ${fmt(iv30.iv_pct, 1)}% a year of movement over the next 30 days (implied volatility).`,
+      why: `${rankText ? rankText.trim() + ' ' : ''}${rank.available ? esc(rank.note || '') : esc(rank.reason || '')}`,
+      gloss: 'iv rank' });
+  }
+  if (month && month.straddle_move_pct) {
+    items.push({ text: `By ${shortDate(month.expiry)} (${month.dte} days) the at-the-money straddle is priced for a move of about ±${fmt(month.straddle_move_pct, 1)}%.`,
+      why: `A one-standard-deviation move on the same implied volatility is ±${fmt(month.one_sd_move_pct, 1)}%. These are what options cost, not limits on the price: under the model a move larger than one standard deviation happens about a third of the time.` });
+  }
+  if (term.available) items.push({ text: term.text, why: term.method });
+  if (month && Number.isFinite(month.rr25_pts)) {
+    items.push({ text: month.rr25_pts > 0.5
+      ? `Downside protection costs more than upside: puts at 0.25 delta carry ${fmt(month.rr25_pts, 1)} vol points more than calls (${shortDate(month.expiry)}).`
+      : month.rr25_pts < -0.5
+        ? `Upside calls carry more implied volatility than equivalent puts, by ${fmt(-month.rr25_pts, 1)} vol points (${shortDate(month.expiry)}).`
+        : `Puts and calls at 0.25 delta are priced about the same (${shortDate(month.expiry)}).`,
+    why: 'The 25-delta risk reversal. Most stocks and indices carry some put premium most of the time; it describes demand for protection, not a forecast.' });
+  }
+  if (ev.available && ev.move_pct) items.push({ text: ev.text, why: ev.method || '' });
+  const rate = d.rate || {};
+  const asOf = (d.gex && d.gex.fetched_at) || d.generated_at;
+  return `<section class="ov-sec op-pricing span-all" aria-labelledby="op-pricing-h">
+    <h2 class="ov-q" id="op-pricing-h">What options are pricing</h2>
+    <ul class="ov-list">${items.map((x) => `<li><span class="ov-f-text">${x.text}</span>${x.why ? `<span class="ov-f-why">${x.why}</span>` : ''}</li>`).join('')}</ul>
+    <details class="ov-ev op-exp"><summary>Compare expiries</summary>
+      <div class="table-scroll"><table class="data op-exp-table">
+        <thead><tr><th>Expiry</th><th class="num">Days</th><th class="num">ATM IV</th><th class="num">Straddle move</th><th class="num">1-SD move</th><th class="num">Put skew (pts)</th><th class="num">Quoted</th><th>Event</th></tr></thead>
+        <tbody>${rows.map((r) => `<tr>
+          <td>${esc(shortDate(r.expiry))}</td><td class="num">${fmt(r.dte, 0)}</td>
+          <td class="num">${r.atm_iv_pct ? fmt(r.atm_iv_pct, 1) + '%' : '—'}</td>
+          <td class="num">${r.straddle_move_pct ? '±' + fmt(r.straddle_move_pct, 1) + '%' : '—'}</td>
+          <td class="num">${r.one_sd_move_pct ? '±' + fmt(r.one_sd_move_pct, 1) + '%' : '—'}</td>
+          <td class="num">${Number.isFinite(r.rr25_pts) ? fmt(r.rr25_pts, 1) : '—'}</td>
+          <td class="num">${fmt(r.two_sided, 0)} of ${fmt(r.contracts, 0)}</td>
+          <td>${r.contains_event ? 'Report inside' : ''}</td></tr>`).join('')}</tbody>
+      </table></div>
+      <p class="ov-fine">${esc((vs.notes || []).join(' '))}</p>
+    </details>
+    <p class="ov-fine">Measured ${asOf ? esc(agoWords(asOf) || '') : ''} from the delayed chain. ${esc(vs.clock || '')}. Rate ${esc(rate.label || '')}. ${esc(vs.iv_method || '')}</p>
+  </section>`;
+}
+
+/* 2. Contract research --------------------------------------------------- */
+function optResearchShellHTML() {
+  return `<section class="panel span-all op-research" id="op-research" aria-labelledby="op-research-h">
+    <h2 id="op-research-h">${hg('Research contracts')}</h2>
+    <p class="sub">Narrow the chain to the contracts that fit your timeframe and idea. Nothing here is ranked best:
+      each row shows what the choice costs and depends on.</p>
+    <div id="op-research-body">${loadingHTML('the option chain for research')}</div>
+  </section>
+  <section class="panel span-all op-position" id="op-position" aria-labelledby="op-position-h">
+    <h2 id="op-position-h">${hg('Position builder')}</h2>
+    <p class="sub">Add contracts from the table or start from a template, then see what the position does at expiry and before it.
+      A research illustration priced from delayed quotes, not an order.</p>
+    <div id="op-position-body">${optPositionHTML()}</div>
+  </section>`;
+}
+
+function optDeltaRange() {
+  return OPT_DELTAS.find((x) => x.id === OPT.delta) || OPT_DELTAS[0];
+}
+
+async function loadOptResearch(force) {
+  const sym = STATE.ticker;
+  if (!sym) return;
+  if (OPT.sym !== sym) {
+    OPT.sym = sym; OPT.expiry = null; OPT.legs = []; OPT.analysis = null; OPT.rowsCache = {};
+  }
+  const dr = optDeltaRange();
+  const qs = new URLSearchParams({ side: OPT.side, delta_lo: dr.lo, delta_hi: dr.hi, min_oi: OPT.minOi || 0,
+    include_unquoted: OPT.unquoted ? 'true' : 'false' });
+  if (OPT.expiry) qs.set('expiry', OPT.expiry);
+  if (OPT.maxSpread) qs.set('max_spread', OPT.maxSpread);
+  OPT.loading = true; OPT.error = null;
+  paintOptResearch();
+  try {
+    const data = await getJSON(`/api/options/${encodeURIComponent(sym)}/research?${qs}`);
+    if (STATE.ticker !== sym) return;
+    OPT.data = data; OPT.expiry = data.expiry;
+  } catch (err) {
+    OPT.error = err.message;
+  } finally {
+    OPT.loading = false;
+    paintOptResearch();
+    updateChatContext && updateChatContext();
+  }
+}
+
+function paintOptResearch() {
+  const host = document.getElementById('op-research-body');
+  if (host) host.innerHTML = optResearchHTML();
+}
+
+function optResearchHTML() {
+  const d = OPT.data;
+  if (OPT.error && !d) return `<div class="callout bad">${esc(OPT.error)}</div>`;
+  if (!d) return loadingHTML('the option chain for research');
+  const exps = d.listed_expiries || [];
+  const t = d.table || {};
+  const rows = t.rows || [];
+  const out = t.filtered_out || {};
+  const s = d.summary || {};
+  const controls = `<form class="op-controls" data-op-form>
+    <label class="op-field"><span>Expiry</span>
+      <select id="op-expiry" data-op-set="expiry">${exps.map((e) => `<option value="${esc(e.expiry)}"${e.expiry === d.expiry ? ' selected' : ''}>${esc(shortDate(e.expiry))} · ${e.dte}d${e.monthly ? ' · monthly' : ''}</option>`).join('')}</select></label>
+    <div class="op-field"><span id="op-side-l">Type</span>
+      <div class="seg" role="group" aria-labelledby="op-side-l">
+        <button type="button" data-op-side="call" aria-pressed="${OPT.side === 'call'}">Calls</button>
+        <button type="button" data-op-side="put" aria-pressed="${OPT.side === 'put'}">Puts</button></div></div>
+    <label class="op-field"><span>Delta</span>
+      <select id="op-delta" data-op-set="delta">${OPT_DELTAS.map((x) => `<option value="${x.id}"${x.id === OPT.delta ? ' selected' : ''}>${x.label}</option>`).join('')}</select></label>
+    <label class="op-field"><span>Widest spread</span>
+      <select id="op-spread" data-op-set="maxSpread">${[[0, 'Any'], [5, '5% of mid'], [10, '10%'], [25, '25%']].map(([v, l]) => `<option value="${v}"${Number(OPT.maxSpread || 0) === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+    <label class="op-field"><span>Least open interest</span>
+      <select id="op-oi" data-op-set="minOi">${[0, 100, 500, 1000].map((v) => `<option value="${v}"${Number(OPT.minOi || 0) === v ? ' selected' : ''}>${v ? v.toLocaleString() : 'Any'}</option>`).join('')}</select></label>
+    <label class="op-check"><input type="checkbox" id="op-unquoted" data-op-set="unquoted"${OPT.unquoted ? ' checked' : ''}> Show contracts without a two-sided quote</label>
+  </form>`;
+  const sum = s.expiry ? `<p class="op-sum">${esc(shortDate(s.expiry))}: ${s.dte} days, at-the-money IV ${s.atm_iv_pct ? fmt(s.atm_iv_pct, 1) + '%' : 'not available'}${s.straddle_move_pct ? `, straddle priced for ±${fmt(s.straddle_move_pct, 1)}%` : ''}. Price ${usd(d.spot)}.</p>` : '';
+  const evs = (d.events || []).map((e) => `<li class="op-event is-${esc(e.kind)}">${esc(e.text)}</li>`).join('');
+  const dropped = Object.entries(out).filter(([, n]) => n > 0).map(([k, n]) => `${n} by ${k.replace('_', ' ')}`).join(', ');
+  const more = OPT.more === null ? knowledgeLevel() >= 2 : OPT.more;
+  const toggle = `<button type="button" class="ov-linkbtn op-more" data-op-more aria-pressed="${more}">${more
+    ? 'Fewer columns' : 'More columns: decay, volatility exposure, model chance, open interest'}</button>`;
+  const table = rows.length ? `${toggle}<div class="table-scroll"><table class="data op-table${more ? ' is-more' : ''}">
+    <thead><tr><th class="num">Strike</th><th class="num">Delta</th><th class="num">Bid / ask</th><th>Spread</th>
+      <th class="num">IV</th><th class="num">Breakeven</th><th class="num">Cost</th><th class="num op-adv">Decay / day</th>
+      <th class="num op-adv">Per vol pt</th><th class="num op-adv">ITM (model)</th><th class="num op-adv">OI / vol</th><th></th></tr></thead>
+    <tbody>${rows.map((r) => `<tr>
+      <td class="num"><strong>${fmt(r.strike, r.strike % 1 ? 2 : 0)}</strong><div class="caption">${fmtPct(r.moneyness_pct, 1)}</div></td>
+      <td class="num">${fmt(r.delta, 2)}</td>
+      <td class="num">${r.bid !== null ? usd(r.bid) : '—'} / ${r.ask !== null ? usd(r.ask) : '—'}${r.mid ? `<div class="caption">mid ${usd(r.mid)}</div>` : ''}</td>
+      <td><span class="op-liq is-${esc(r.liquidity.grade)}" title="${esc((r.liquidity.reasons || []).join(' '))}">${esc(r.liquidity.label)}</span>${r.spread_pct !== null ? `<div class="caption">${fmt(r.spread_pct, 1)}%</div>` : ''}</td>
+      <td class="num">${fmt(r.iv_pct, 1)}%${r.iv_source === 'feed' || r.iv_source === 'filled' ? '<div class="caption">feed</div>' : ''}</td>
+      <td class="num">${r.breakeven_ask ? usd(r.breakeven_ask) : '—'}${r.breakeven_move_pct !== null ? `<div class="caption">${fmtPct(r.breakeven_move_pct, 1)} away</div>` : ''}</td>
+      <td class="num">${r.cost_ask_contract ? optMoney(r.cost_ask_contract, 0) : '—'}<div class="caption">at the ask</div></td>
+      <td class="num op-adv">${optMoney(r.theta_per_contract)}</td>
+      <td class="num op-adv">${optMoney(r.vega_per_contract)}</td>
+      <td class="num op-adv">${r.p_itm_model !== null ? fmt(r.p_itm_model * 100, 0) + '%' : '—'}</td>
+      <td class="num op-adv">${fmt(r.open_interest, 0)} / ${fmt(r.volume, 0)}</td>
+      <td>${r.mid ? `<button type="button" class="btn sm" data-op-add="${esc(r.contract || '')}" data-op-strike="${r.strike}" data-op-type="${r.type}" data-op-exp="${esc(r.expiry)}"
+        aria-label="Add the ${fmt(r.strike, 2)} ${r.type} to the position builder">Add</button>` : ''}</td>
+    </tr>`).join('')}</tbody></table></div>`
+    : `<p class="ov-none">No contract on this expiry passes these filters${dropped ? ` (${esc(dropped)} left out)` : ''}. Widen the delta range or the spread.</p>`;
+  return `${controls}${sum}${evs ? `<ul class="op-events">${evs}</ul>` : ''}${table}
+    <p class="ov-fine">${fmt(t.shown || 0, 0)} of ${fmt(t.total || 0, 0)} ${OPT.side}s shown${dropped ? `; left out: ${esc(dropped)}` : ''}.
+      Cost is one contract (100 shares) at the ask, before fees. Breakeven at expiry is the strike ${OPT.side === 'call' ? 'plus' : 'minus'} the ask.
+      Decay is the model's dollars lost per day with nothing else changing; per vol pt is the dollar change for a one-point move in implied volatility.
+      ITM (model) is N(d2), the risk-neutral chance of finishing in the money: not a forecast, and not a chance of profit.
+      ${esc(((d.liquidity_method || {}).text) || '')} ${esc(((d.liquidity_method || {}).mid_note) || '')}</p>
+    ${OPT.loading ? '<p class="caption" role="status">Updating…</p>' : ''}`;
+}
+
+/* 3. Position builder ---------------------------------------------------- */
+const OPT_TEMPLATES = [
+  { id: 'long_call', label: 'Long call' }, { id: 'long_put', label: 'Long put' },
+  { id: 'bull_call', label: 'Bull call spread' }, { id: 'bear_put', label: 'Bear put spread' },
+  { id: 'covered_call', label: 'Covered call' }, { id: 'csp', label: 'Cash-secured put' },
+  { id: 'straddle', label: 'Straddle' }, { id: 'strangle', label: 'Strangle' },
+  { id: 'iron_condor', label: 'Iron condor' }, { id: 'calendar', label: 'Call calendar' },
+];
+
+async function optRows(expiry, side) {
+  const key = `${OPT.sym}|${expiry}|${side}`;
+  if (OPT.rowsCache[key]) return OPT.rowsCache[key];
+  const qs = new URLSearchParams({ side, expiry, delta_lo: 0, delta_hi: 1 });
+  const data = await getJSON(`/api/options/${encodeURIComponent(OPT.sym)}/research?${qs}`);
+  OPT.rowsCache[key] = (data.table || {}).rows || [];
+  return OPT.rowsCache[key];
+}
+
+function optNearestDelta(rows, target) {
+  return rows.filter((r) => r.mid).reduce((best, r) => (!best
+    || Math.abs(Math.abs(r.delta) - target) < Math.abs(Math.abs(best.delta) - target) ? r : best), null);
+}
+
+async function optTemplate(id) {
+  const exp = OPT.expiry;
+  if (!exp || !OPT.sym) return;
+  OPT.analyzeError = null;
+  try {
+    const calls = await optRows(exp, 'call');
+    const puts = await optRows(exp, 'put');
+    const L = (r, side, qty = 1) => (r ? { type: r.type, side, qty, strike: r.strike, expiry: r.expiry } : null);
+    const c = (t) => optNearestDelta(calls, t);
+    const p = (t) => optNearestDelta(puts, t);
+    let legs = [];
+    if (id === 'long_call') legs = [L(c(0.5), 'long')];
+    else if (id === 'long_put') legs = [L(p(0.5), 'long')];
+    else if (id === 'bull_call') legs = [L(c(0.5), 'long'), L(c(0.3), 'short')];
+    else if (id === 'bear_put') legs = [L(p(0.5), 'long'), L(p(0.3), 'short')];
+    else if (id === 'covered_call') legs = [{ type: 'stock', side: 'long', qty: 100 }, L(c(0.3), 'short')];
+    else if (id === 'csp') legs = [L(p(0.3), 'short')];
+    else if (id === 'straddle') { const k = c(0.5); legs = [L(k, 'long'), L(puts.find((r) => r.strike === (k || {}).strike), 'long')]; }
+    else if (id === 'strangle') legs = [L(c(0.25), 'long'), L(p(0.25), 'long')];
+    else if (id === 'iron_condor') legs = [L(p(0.10), 'long'), L(p(0.20), 'short'), L(c(0.20), 'short'), L(c(0.10), 'long')];
+    else if (id === 'calendar') {
+      const later = ((OPT.data || {}).listed_expiries || []).find((e) => e.dte >= ((OPT.data.summary || {}).dte || 0) + 20);
+      if (!later) throw new Error('No later expiry 20 or more days after this one for a calendar.');
+      const back = await optRows(later.expiry, 'call');
+      const k = c(0.5);
+      legs = [L(k, 'short'), L(back.find((r) => r.strike === (k || {}).strike) || optNearestDelta(back, 0.5), 'long')];
+    }
+    if (legs.some((l) => !l)) throw new Error('This expiry has no quoted contract near the deltas the template needs.');
+    OPT.legs = legs;
+    OPT.template = id;
+    await optAnalyze();
+  } catch (err) {
+    OPT.analyzeError = err.message;
+    paintOptPosition();
+  }
+}
+
+async function optAnalyze() {
+  if (!OPT.legs.length) { OPT.analysis = null; paintOptPosition(); return; }
+  OPT.analyzing = true; OPT.analyzeError = null;
+  paintOptPosition();
+  try {
+    OPT.analysis = await postJSON(`/api/options/${encodeURIComponent(OPT.sym)}/analyze`, {
+      legs: OPT.legs, slippage: OPT.slippage, fee_per_contract: OPT.fee,
+      days_forward: OPT.days,
+    });
+  } catch (err) {
+    OPT.analysis = null; OPT.analyzeError = err.message;
+  } finally {
+    OPT.analyzing = false;
+    paintOptPosition();
+    updateChatContext && updateChatContext();
+  }
+}
+
+function paintOptPosition() {
+  const host = document.getElementById('op-position-body');
+  if (host) host.innerHTML = optPositionHTML();
+}
+
+function optLegLabel(l) {
+  if (l.type === 'stock') return `${l.side === 'long' ? 'Long' : 'Short'} ${l.qty} shares`;
+  return `${l.side === 'long' ? 'Buy' : 'Sell'} ${l.qty} × ${fmt(l.strike, l.strike % 1 ? 2 : 0)} ${l.type} ${shortDate(l.expiry)}`;
+}
+
+function optPayoffSVG(a) {
+  const c = a.curves || {};
+  const xs = c.price || [];
+  if (xs.length < 2) return '';
+  const spot = a.spot;
+  const lo = spot * 0.75; const hi = spot * 1.25;
+  const idx = xs.map((x, i) => i).filter((i) => xs[i] >= lo && xs[i] <= hi);
+  const pick = (arr) => idx.map((i) => arr[i]);
+  const X = pick(xs); const E = pick(c.at_expiry || []); const T = pick(c.today || []); const H = pick(c.halfway || []);
+  const all = E.concat(T, H).filter(Number.isFinite);
+  let ymin = Math.min(0, ...all); let ymax = Math.max(0, ...all);
+  if (ymax - ymin < 1) { ymax += 1; ymin -= 1; }
+  const pad = (ymax - ymin) * 0.08; ymin -= pad; ymax += pad;
+  const W = 640; const Hh = 260; const L = 56; const R = 12; const Tp = 12; const B = 30;
+  const sx = (x) => L + (x - X[0]) / (X[X.length - 1] - X[0]) * (W - L - R);
+  const sy = (y) => Tp + (ymax - y) / (ymax - ymin) * (Hh - Tp - B);
+  const path = (Y) => Y.map((y, i) => `${i ? 'L' : 'M'}${sx(X[i]).toFixed(1)},${sy(y).toFixed(1)}`).join(' ');
+  const ticks = [ymin + pad, 0, ymax - pad].map((v) => Math.round(v));
+  const xt = [X[0], spot, X[X.length - 1]];
+  const bes = (a.breakevens_at_expiry || []).filter((b) => b >= X[0] && b <= X[X.length - 1]);
+  return `<figure class="op-payoff"><svg viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Profit and loss by price: at expiry, today and halfway. Breakevens ${bes.map((b) => usd(b)).join(' and ') || 'none in range'}.">
+    <line x1="${L}" x2="${W - R}" y1="${sy(0)}" y2="${sy(0)}" class="op-zero"/>
+    <line x1="${sx(spot)}" x2="${sx(spot)}" y1="${Tp}" y2="${Hh - B}" class="op-spot"/>
+    ${ticks.map((v) => `<text x="${L - 6}" y="${sy(v) + 4}" text-anchor="end" class="op-ax">${optMoney(v, 0)}</text>`).join('')}
+    ${xt.map((v) => `<text x="${sx(v)}" y="${Hh - 10}" text-anchor="middle" class="op-ax">${usd(v, 0)}</text>`).join('')}
+    <path d="${path(H)}" class="op-l-half" fill="none"/>
+    <path d="${path(T)}" class="op-l-today" fill="none"/>
+    <path d="${path(E)}" class="op-l-exp" fill="none"/>
+    ${bes.map((b) => `<circle cx="${sx(b)}" cy="${sy(0)}" r="4" class="op-be"/>`).join('')}
+  </svg>
+  <figcaption class="op-legend"><span class="k exp"></span>At expiry (exact, from the entry price)
+    <span class="k today"></span>Today (model) <span class="k half"></span>Halfway (model)
+    <span class="k spot"></span>Price now</figcaption></figure>`;
+}
+
+function optPositionHTML() {
+  const a = OPT.analysis;
+  const tpl = `<div class="op-tpl" role="group" aria-label="Start from a template">${OPT_TEMPLATES.map((t) => `<button type="button" class="pulse-mode" data-op-tpl="${t.id}">${esc(t.label)}</button>`).join('')}</div>
+    <p class="ov-fine">Templates pick strikes by delta at the selected expiry, for illustration. Change any leg below.</p>`;
+  const legs = OPT.legs.length ? `<ul class="op-legs">${OPT.legs.map((l, i) => `<li>
+      <span>${esc(optLegLabel(l))}</span>
+      <span class="op-leg-ctl">
+        <button type="button" class="btn sm" data-op-flip="${i}" aria-label="Switch leg ${i + 1} between buy and sell">${l.side === 'long' ? 'Make it a sale' : 'Make it a buy'}</button>
+        <label class="op-qty"><span class="sr-only">Quantity for leg ${i + 1}</span><input type="number" min="1" max="${l.type === 'stock' ? 100000 : 100}" value="${l.qty}" data-op-qty="${i}"></label>
+        <button type="button" class="btn sm" data-op-del="${i}" aria-label="Remove leg ${i + 1}">Remove</button>
+      </span></li>`).join('')}</ul>` : '<p class="ov-none">No legs yet. Press Add on a contract above, or pick a template.</p>';
+  const costs = `<div class="op-costs">
+    <label class="op-field"><span>Slippage (share of half-spread)</span><input type="number" step="0.05" min="0" max="1" value="${OPT.slippage}" data-op-num="slippage"></label>
+    <label class="op-field"><span>Fee per contract</span><input type="number" step="0.05" min="0" max="10" value="${OPT.fee}" data-op-num="fee"></label>
+    <label class="op-field"><span>Days from now for the grid</span><input type="number" step="1" min="0" placeholder="halfway" value="${OPT.days === null ? '' : OPT.days}" data-op-num="days"></label>
+  </div>`;
+  let body = '';
+  if (OPT.analyzeError) body = `<div class="callout bad">${esc(OPT.analyzeError)}</div>`;
+  else if (OPT.analyzing) body = loadingHTML('the position');
+  else if (a && a.available) {
+    const e = a.entry || {};
+    const paid = (v) => (v >= 0 ? `${optMoney(v)} paid` : `${optMoney(-v)} received`);
+    const maxP = a.max_profit_unbounded ? 'No cap (it rises with the price)' : optMoney(a.max_profit);
+    const maxL = a.max_loss_unbounded ? 'No limit (a short call has no ceiling)' : optMoney(a.max_loss);
+    const scen = a.scenarios || {};
+    const whens = [...new Set((scen.rows || []).map((r) => r.when))];
+    const when = whens[OPT.scenWhen] || whens[0];
+    body = `<div class="op-tiles">
+      <div class="op-tile"><span class="lab">Entry at the mid</span><strong>${paid(e.mid)}</strong><span class="caption">Crossing the spread (buy at the ask, sell at the bid): ${paid(e.natural)}. With your slippage and fees: ${paid(e.with_slippage_and_fees)}.</span></div>
+      <div class="op-tile"><span class="lab">Most it can make at expiry</span><strong>${esc(maxP)}</strong></div>
+      <div class="op-tile"><span class="lab">Most it can lose at expiry</span><strong>${esc(maxL)}</strong><span class="caption">Not your broker's margin requirement.</span></div>
+      <div class="op-tile"><span class="lab">Breakeven at expiry</span><strong>${(a.breakevens_at_expiry || []).map((b) => usd(b)).join(' and ') || 'None in range'}</strong></div>
+    </div>
+    ${optPayoffSVG(a)}
+    <div class="op-greeks"><span>Delta ${fmt(a.greeks.delta_shares, 0)} shares</span><span>Gamma ${fmt(a.greeks.gamma_per_dollar, 2)} per $1</span>
+      <span>Decay ${optMoney(a.greeks.theta_per_day)} a day</span><span>${optMoney(a.greeks.vega_per_vol_pt)} per vol point</span></div>
+    <h3>If the price and the volatility change</h3>
+    <div class="seg" role="group" aria-label="When">${whens.map((w, i) => `<button type="button" data-op-when="${i}" aria-pressed="${w === when}">${esc(cap(w))}</button>`).join('')}</div>
+    <div class="table-scroll"><table class="data op-scen"><thead><tr><th>Volatility</th>${(scen.moves_pct || []).map((m) => `<th class="num">${m > 0 ? '+' : ''}${m}%</th>`).join('')}</tr></thead>
+      <tbody>${(scen.rows || []).filter((r) => r.when === when).map((r) => `<tr><td>${r.iv_shift_pts > 0 ? '+' : ''}${r.iv_shift_pts} pts</td>${r.pnl.map((v) => `<td class="num ${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${optMoney(v, 0)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+    ${(a.flags || []).length ? `<ul class="op-events">${a.flags.map((f) => `<li class="op-event is-flag">${esc(f)}</li>`).join('')}</ul>` : ''}
+    ${(a.events || []).length ? `<ul class="op-events">${a.events.map((x) => `<li class="op-event is-${esc(x.kind)}">${esc(x.text)}</li>`).join('')}</ul>` : ''}
+    <ul class="op-liqs">${(a.leg_liquidity || []).map((l) => `<li><span class="op-liq is-${esc(l.grade)}">${esc(l.label)}</span> ${fmt(l.strike, l.strike % 1 ? 2 : 0)} ${esc(l.type)} ${esc(shortDate(l.expiry))}${(l.reasons || []).length ? `: ${esc(l.reasons.join(' '))}` : ''}</li>`).join('')}</ul>
+    ${a.multi_leg_note ? `<p class="ov-fine">${esc(a.multi_leg_note)}</p>` : ''}
+    <p class="ov-fine">${esc((a.assumptions || []).join(' '))} ${esc(e.note || '')} ${esc((a.rate || {}).label ? 'Rate ' + a.rate.label + '.' : '')}</p>
+    <p class="ov-fine"><button type="button" class="ov-linkbtn" data-op-ask>Ask Milo about this position</button></p>`;
+  }
+  return `${tpl}${legs}${OPT.legs.length ? costs : ''}${body}`;
+}
+
+/* Events ------------------------------------------------------------------ */
+document.addEventListener('click', (evt) => {
+  const t = evt.target && evt.target.closest ? evt.target : null;
+  if (!t) return;
+  if (t.closest('[data-op-more]')) {
+    const cur = OPT.more === null ? knowledgeLevel() >= 2 : OPT.more;
+    OPT.more = !cur; paintOptResearch(); return;
+  }
+  const side = t.closest('[data-op-side]');
+  if (side) { OPT.side = side.dataset.opSide; optSaveFilters(); loadOptResearch(); return; }
+  const add = t.closest('[data-op-add]');
+  if (add) {
+    if (OPT.legs.filter((l) => l.type !== 'stock').length >= 4) {
+      OPT.analyzeError = 'Up to four option legs.'; paintOptPosition(); return;
+    }
+    OPT.legs.push({ type: add.dataset.opType, side: 'long', qty: 1, strike: Number(add.dataset.opStrike), expiry: add.dataset.opExp });
+    optAnalyze();
+    const box = document.getElementById('op-position');
+    if (box && box.scrollIntoView) box.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    return;
+  }
+  const tpl = t.closest('[data-op-tpl]');
+  if (tpl) { optTemplate(tpl.dataset.opTpl); return; }
+  const flip = t.closest('[data-op-flip]');
+  if (flip) { const l = OPT.legs[Number(flip.dataset.opFlip)]; if (l) l.side = l.side === 'long' ? 'short' : 'long'; optAnalyze(); return; }
+  const del = t.closest('[data-op-del]');
+  if (del) { OPT.legs.splice(Number(del.dataset.opDel), 1); optAnalyze(); return; }
+  const when = t.closest('[data-op-when]');
+  if (when) { OPT.scenWhen = Number(when.dataset.opWhen); paintOptPosition(); return; }
+  if (t.closest('[data-op-ask]')) {
+    const a = OPT.analysis || {};
+    openPulseWithText(`Explain this ${OPT.sym} position in plain English: ${OPT.legs.map(optLegLabel).join('; ')}. `
+      + 'What does it need to work, what are the main risks I might be missing (liquidity, the events before expiry, volatility), '
+      + `and how would it react to a ${'5%'} drop with implied volatility up 10 points?`);
+  }
+});
+
+document.addEventListener('change', (evt) => {
+  const el = evt.target;
+  if (!el || !el.dataset) return;
+  if (el.dataset.opSet) {
+    const k = el.dataset.opSet;
+    OPT[k] = el.type === 'checkbox' ? el.checked : (k === 'maxSpread' || k === 'minOi' ? Number(el.value) : el.value);
+    if (k === 'expiry') OPT.expiry = el.value;
+    optSaveFilters();
+    loadOptResearch();
+    return;
+  }
+  if (el.dataset.opQty !== undefined) {
+    const l = OPT.legs[Number(el.dataset.opQty)];
+    if (l) l.qty = Math.max(1, Math.round(Number(el.value) || 1));
+    optAnalyze();
+    return;
+  }
+  if (el.dataset.opNum) {
+    const k = el.dataset.opNum;
+    const v = el.value === '' ? null : Number(el.value);
+    if (k === 'days') OPT.days = v;
+    else if (Number.isFinite(v)) OPT[k] = v;
+    optSaveFilters();
+    optAnalyze();
+  }
+});
+
+/* What Milo sees of this, when asked: the filters, the rows on screen (the
+ * first twenty), and the position with its analysis. */
+function optionsResearchContext() {
+  if (!OPT.data || OPT.sym !== STATE.ticker) return null;
+  const d = OPT.data;
+  const a = OPT.analysis;
+  return {
+    source: 'the contract table and position builder on the Options tab, from the delayed chain',
+    expiry: d.expiry, side: d.side, filters: d.filters, summary: d.summary, events: d.events,
+    rate: d.rate, fetched_at: d.fetched_at,
+    rows: ((d.table || {}).rows || []).slice(0, 20).map((r) => ({ strike: r.strike, delta: r.delta, bid: r.bid, ask: r.ask,
+      mid: r.mid, spread_pct: r.spread_pct, liquidity: r.liquidity.label, iv_pct: r.iv_pct, breakeven_ask: r.breakeven_ask,
+      theta_per_contract: r.theta_per_contract, vega_per_contract: r.vega_per_contract, p_itm_model: r.p_itm_model,
+      open_interest: r.open_interest, volume: r.volume })),
+    position: OPT.legs.length ? { legs: OPT.legs, analysis: a && a.available ? {
+      entry: a.entry, max_profit: a.max_profit, max_profit_unbounded: a.max_profit_unbounded,
+      max_loss: a.max_loss, max_loss_unbounded: a.max_loss_unbounded, breakevens: a.breakevens_at_expiry,
+      greeks: a.greeks, scenarios: a.scenarios, flags: a.flags, assumptions: a.assumptions,
+      leg_liquidity: a.leg_liquidity } : null } : null,
+  };
+}
+
 /* A group of specialist blocks behind one labelled bar: open at the Advanced
  * and Professional levels, folded below them. A <details>, so it needs no
  * script and is reachable by keyboard, touch and screen reader. */
@@ -12567,8 +13056,10 @@ function renderSwing(d) {
    * are saying, then the levels and the inputs. */
   const html = `
   ${renderPriceHead(d, extQ)}
+  ${renderOptionsPricing(d)}
   ${renderOptionsPlain(d)}
   ${renderPulseLine(d)}
+  ${(d.gex || {}).error ? '' : optResearchShellHTML()}
   ${advBlock('Trade setup, options readings and price levels',
     'An example option trade, put/call activity, skew, the levels to watch and what is pulling the reading',
     `${renderSetup(d)}
@@ -13051,8 +13542,11 @@ function renderSwing(d) {
       <h2>${hg('Options positioning: dealer gamma (GEX)')}${askPulse('gex')}</h2>
       <p class="sub">Net ${(gex.totals || {}).net_gex >= 0 ? '+' : ''}${usdCompact((gex.totals || {}).net_gex)} of dealer delta per 1% move.
         Regime: <strong>${esc((gex.regime || {}).state || '')}</strong>.
-        ${(gex.regime || {}).flip_point ? `Gamma flip at <strong>${fmt(gex.regime.flip_point, 2)}</strong> (${fmtPct((gex.regime || {}).flip_distance_pct, 2)} away).` : ''}</p>
-      <div class="callout info">${gloss((gex.regime || {}).note || '')}<br><br><strong>For swings:</strong> ${gloss((gex.regime || {}).swing_implication || '')}</div>
+        ${(gex.regime || {}).flip_point ? `Gamma flip near <strong>${fmt(gex.regime.flip_point, 2)}</strong> (${fmtPct((gex.regime || {}).flip_distance_pct, 2)} away)${
+  (gex.regime || {}).flip_zone ? `, within a zone of ${usd(gex.regime.flip_zone.low)} to ${usd(gex.regime.flip_zone.high)} where the model's net gamma is close to zero` : ''}.` : ''}</p>
+      <div class="callout info">${gloss((gex.regime || {}).note || '')}<br><br><strong>Walls:</strong> ${gloss((gex.regime || {}).swing_implication || '')}</div>
+      ${(gex.regime || {}).sign_note ? `<p class="caveat">${esc(gex.regime.sign_note)}</p>` : ''}
+      ${(gex.expiries_used || []).length ? `<p class="caveat">From the ${gex.expiries_used.length} expiries read (${gex.expiries_used.map((e) => esc(shortDate(e))).join(', ')}): adding or dropping an expiry changes the total, and same-day positions are missing because open interest is the previous session's. Rate ${esc(((gex.inputs || {}).rate_pct ?? '') + '%')}; ${esc((gex.inputs || {}).iv || '')}</p>` : ''}
 
       <div class="grid c2" style="margin-top:var(--space-3)">
         <div>
@@ -13093,15 +13587,15 @@ function renderSwing(d) {
     <div class="panel">
       <h2>${hg('Call vs put flow')}${askPulse('flow')}</h2>
       <p class="sub">${toneChip(flow.stance)} score ${flow.flow_score > 0 ? '+' : ''}${fmt(flow.flow_score, 0)}</p>
-      ${vizBlock('viz-opt-split', callPutTitle(flow), 'Calls against puts in today\'s volume, the open interest, the time value bought, and the time value on positions opened today.',
+      ${vizBlock('viz-opt-split', callPutTitle(flow), 'Calls against puts in today\'s volume, the open interest, the time value traded, and the time value where volume exceeded open interest.',
     legendHtml([{ name: 'Calls', color: C.pos, shape: 'box' }, { name: 'Puts', color: C.neg, shape: 'box' }]))}
       ${exactFigures(kv([
     ['Call volume', fmtCompact((flow.volume || {}).calls)],
     ['Put volume', fmtCompact((flow.volume || {}).puts)],
     ['Put/call volume ratio', fmt((flow.volume || {}).put_call_ratio, 2)],
     ['Put/call OI ratio', fmt((flow.open_interest || {}).put_call_ratio, 2)],
-    ['Call time value bought', usdCompact((flow.premium || {}).calls)],
-    ['Put time value bought', usdCompact((flow.premium || {}).puts)],
+    ['Call time value traded', usdCompact((flow.premium || {}).calls)],
+    ['Put time value traded', usdCompact((flow.premium || {}).puts)],
     ['Call share of time value', `${fmt((flow.premium || {}).call_share_pct, 1)}%`],
     ['New-position time value (calls)', usdCompact((flow.new_positions || {}).call_premium)],
     ['New-position time value (puts)', usdCompact((flow.new_positions || {}).put_premium)],
@@ -13117,27 +13611,29 @@ function renderSwing(d) {
            whole price let a $10 call on a $180 stock, which is the stock
            bought another way, lead "where today's money went". */''}
       <p class="sub">Calls positive, puts negative. Where today's option money went${(flow.by_strike || []).length
-    ? `: the ${fmt(flow.by_strike.length, 0)} strikes with the most time value bought${chainScope(d) ? `, from ${chainScope(d)}` : ''}` : ''}.
+    ? `: the ${fmt(flow.by_strike.length, 0)} strikes with the most time value traded${chainScope(d) ? `, from ${chainScope(d)}` : ''}` : ''}.
         Time value is what was paid above a contract's intrinsic value, so a deep in-the-money
         contract, priced mostly as the stock itself, adds little here.</p>
       ${(flow.by_strike || []).length ? '' : '<p class="viz-none">No premium traded at any strike today.</p>'}
       <div id="legend-flow"></div>
       <div id="chart-flow"></div>
-      <h3>${hg('Notable contracts')}</h3>
+      <h3>${hg('Most active contracts')}</h3>
       <div class="scroll-y">
       <table class="data" data-defs="unusual-flow">
         <thead><tr><th>Contract</th><th>Type</th><th>Strike ($)</th><th>Days left</th><th>Volume today</th><th>Open interest</th><th>Volume ÷ OI</th><th>Premium ($)</th><th>Implied vol</th></tr></thead>
         <tbody>${(flow.unusual || []).map((r) => `<tr>
-          <td class="name">${esc(r.moneyness)}${r.is_new_position ? ' · new' : ''}</td>
+          <td class="name">${esc(r.moneyness)}${r.volume_above_oi || r.is_new_position ? ' · volume above OI' : ''}</td>
           <td class="name" style="color:${r.type === 'CALL' ? 'var(--pos)' : 'var(--neg)'}">${esc(r.type)}</td>
           <td>${fmt(r.strike, 1)}</td><td>${fmt(r.dte, 0)}</td>
           <td>${fmtCompact(r.volume)}</td><td>${fmtCompact(r.open_interest)}</td>
           <td>${fmt(r.vol_oi_ratio, 1)}</td><td>$${fmtCompact(r.premium_total ?? r.premium)}</td>
           <td>${fmt((r.iv || 0) * 100, 1)}%</td>
-        </tr>`).join('') || '<tr><td colspan="9" class="muted">No unusual activity above the volume and premium thresholds.</td></tr>'}</tbody>
+        </tr>`).join('') || '<tr><td colspan="9" class="muted">No contract above the activity thresholds.</td></tr>'}</tbody>
       </table></div>
-      <p class="caveat">Chosen and ordered by the time value bought, at least $25K of it on 50 or
-        more contracts. Premium is the whole price paid, intrinsic value included.</p>
+      <p class="caveat">${esc(((flow.activity_screen || {}).rule) || 'At least $25K of time value on 50 or more contracts.')}
+        Ordered by time value traded. Premium is the whole price, intrinsic value included. Volume above open
+        interest can be new positions or the same contracts traded back and forth within the day. A snapshot
+        cannot show ${esc((((flow.activity_screen || {}).cannot_show) || ['who bought and who sold']).join(', '))}.</p>
     </div>
   </div>
 
@@ -13186,6 +13682,12 @@ function renderSwing(d) {
     + keyStatsHTML(d.quote, { view: 'swing', short: (d.company || {}).short_interest }) + html;
   orderAssetPageForPhone();
   watchPriceCardForStrip();
+  // The research table and position builder have their own requests; a
+  // repaint of the tab repaints them from what is already held.
+  if (document.getElementById('op-research')) {
+    if (OPT.data && OPT.sym === STATE.ticker) { paintOptResearch(); paintOptPosition(); }
+    else loadOptResearch();
+  }
 
   // ---- charts
   /* A 0-100 score (a level's strength) runs up from zero against 100, as its
@@ -13411,7 +13913,7 @@ function renderSwing(d) {
         ],
       })),
       format: (x) => usdCompact(x),
-      axisLabel: 'net time value bought today',
+      axisLabel: 'net time value traded today',
     }));
   }
   mountOptionsVisuals(d);
@@ -13986,8 +14488,13 @@ function renderEntryPlan(p, d) {
         && hv.hv_fast_vs_slow_pct !== undefined
         ? `· 10-day sits ${fmt(Math.abs(hv.hv_fast_vs_slow_pct), 0)}% ${
             hv.hv_fast_vs_slow_pct >= 0 ? 'above' : 'below'} the 60-day` : ''}`] : null,
+  /* A real IV rank where one exists (a Cboe volatility index, or Optic's own
+     daily readings); the realised-range figure under its own name, which
+     was shown as "IV rank (proxy)" with a true IV rank's definition. */
+  ((STATE.swing || {}).iv_rank || {}).available
+    ? ['IV rank', `${fmt(STATE.swing.iv_rank.rank, 0)} out of 100 (percentile ${fmt(STATE.swing.iv_rank.percentile, 0)}), over ${fmt(STATE.swing.iv_rank.days, 0)} days of ${esc(STATE.swing.iv_rank.label || '')}`] : null,
   iv.iv_rank_proxy !== null && iv.iv_rank_proxy !== undefined
-    ? ['IV rank (proxy)', fmt(iv.iv_rank_proxy, 0) + ' out of 100. Where today sits in the past year'] : null,
+    ? ['IV against the realised range', fmt(iv.iv_rank_proxy, 0) + ' out of 100: today\'s implied vol placed in the past year\'s range of 20-day realised vol. Not an IV rank'] : null,
   iv.realised_vol_rank_pct !== null && iv.realised_vol_rank_pct !== undefined
     ? ['Realized vol rank', fmt(iv.realised_vol_rank_pct, 0) + ' out of 100 across the last 52 weeks'] : null,
   iv.realised_vol_percentile_pct !== null && iv.realised_vol_percentile_pct !== undefined
@@ -40918,6 +41425,14 @@ function chatContextPayload() {
        * bear evidence, "what has been moving it", the dates ahead, Optic's
        * read and the sector comparison. Asked about the page, Milo was
        * answering from the panels behind it (audit, 2026-10-12). */
+      // The corrected volatility surface, the IV rank and the rate, and the
+      // contract table and position the reader has on screen (Options audit,
+      // 2026-10-13).
+      ctx.vol_surface = s.vol_surface;
+      ctx.iv_rank = s.iv_rank;
+      ctx.rate = s.rate;
+      const optCtx = optionsResearchContext();
+      if (optCtx) ctx.options_research = optCtx;
       ctx.cases = s.cases;
       ctx.why = s.why;
       ctx.whats_next = s.whats_next;
@@ -42686,6 +43201,9 @@ const PULSE_SOURCES = {
   reader_holdings: ['Paper book', 'paper'],
   reader_watchlist: ['Watchlist', 'watchlist'],
   market: ['The Read', 'brief'],
+  vol_surface: ['Options pricing', 'swing'],
+  iv_rank: ['IV rank', 'swing'],
+  options_research: ['Options research', 'swing'],
 };
 const PULSE_SRC_RE = /\s?\[\[src ([a-z_]{2,20})\]\]/g;
 
@@ -46692,7 +47210,10 @@ const PANELS_OPEN_BY_DEFAULT = {
   /* 'swing setups' opens: it is a table of what is live now, short by
      default (this symbol, live and just-ended setups), and the one panel here
      somebody came to the tab to use rather than to read. */
-  swing: ['swing verdict', 'price, moving averages', 'swing setups'],
+  /* 'research contracts' and 'position builder' open too (Options audit,
+     2026-10-13): they are the tab's workflow, a table to narrow and a
+     position to test, used rather than read. */
+  swing: ['swing verdict', 'price, moving averages', 'swing setups', 'research contracts', 'position builder'],
   /* 'earnings verdict' named no panel on this tab or any other -- the same
      dead-key trap as the tracker's 'the record' and the brief's 'morning
      desk'. What it was reaching for is the written read, which now sits under

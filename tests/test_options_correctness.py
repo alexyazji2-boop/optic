@@ -248,3 +248,29 @@ def test_iv_rank_and_percentile_are_defined_and_need_history(monkeypatch, tmp_pa
     assert out["rank"] == pytest.approx((40 - 20) / (44 - 20) * 100, abs=0.1)
     assert out["percentile"] == pytest.approx(20 / 25 * 100, abs=0.1)
     assert "not a full year" in out["note"]
+
+
+# --------------------------------------------------------------- the page
+
+def test_the_tab_leads_with_pricing_and_offers_research_not_a_pick():
+    from pathlib import Path
+    app_js = Path(__file__).resolve().parent.parent.joinpath("static", "app.js").read_text()
+    swing = app_js[app_js.index("function renderSwing(d) {"):]
+    order = [swing.index(x) for x in ("renderPriceHead(d, extQ)", "renderOptionsPricing(d)", "optResearchShellHTML()")]
+    assert order == sorted(order)
+    shell = app_js[app_js.index("function optResearchShellHTML()"):]
+    assert "Nothing here is ranked best" in shell[:1200]
+    assert "['IV rank (proxy)'" not in app_js
+    assert "No unusual activity" not in app_js
+    assert "'Notable contracts'" not in app_js
+    ctx = app_js[app_js.index("function chatContextPayload()"):]
+    assert "ctx.options_research = optCtx" in ctx[:6000] and "ctx.vol_surface = s.vol_surface" in ctx[:6000]
+
+
+def test_milo_is_told_how_to_read_the_options_research():
+    from app import ai
+    flat = " ".join(ai.SYSTEM_PROMPT.lower().split())
+    for phrase in ("`p_itm_model`, n(d2), risk-neutral", "not limits on the price",
+                   "maximum loss is not the broker's margin", "never call one contract the best",
+                   "`sign_note`"):
+        assert phrase in flat, phrase

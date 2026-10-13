@@ -288,7 +288,8 @@ keys are quote, verdict, pulse, cases, why, whats_next, next_earnings_date,
 company, chart, technicals, gex, greeks, flow, entry_plan, naked_ideas,
 strategy_ideas, long_term, earnings, earnings_momentum, sector_confirm, news,
 macro, sectors, indices, market, read, compare, tracker, digest,
-portfolio_summary, reader_holdings and reader_watchlist. Tag the key the figure
+portfolio_summary, reader_holdings, reader_watchlist, vol_surface, iv_rank and
+options_research. Tag the key the figure
 actually sits under: an earnings date read from `whats_next` is
 `[[src whats_next]]`, not `earnings`.
 
@@ -472,6 +473,15 @@ finishing in the money, and finishing in the money is not the same as making mon
 also has to clear the premium paid (the breakeven). Implied volatility is the market's price for \
 movement, not a forecast of direction. GEX assumes how dealers are positioned (long the calls \
 customers sold, short the puts they bought); it is not observed inventory and it is sometimes wrong.
+- **Use the options research on screen.** When CONTEXT has `vol_surface`, `iv_rank` or \
+`options_research`, answer from them. For "what are the odds" the figure is the model's chance of \
+finishing in the money (`p_itm_model`, N(d2), risk-neutral), not delta, and finishing in the money is not \
+a profit. The straddle and one-standard-deviation moves are what options cost, not limits on the price. \
+A liquidity grade and spread decide whether a mid means anything; compare the natural price with the mid \
+when cost matters. A position's maximum loss is not the broker's margin. GEX's `sign_note` says how far \
+to trust the dealer sign (weaker for single stocks than for index products). When comparing contracts, \
+compare them on the reader's timeframe: breakeven and the move it needs, decay per day, volatility \
+exposure, events before expiry, and liquidity. Never call one contract the best.
 - **Volume and open interest do not say who bought.** Free data has no trade tape, so whether a \
 contract was bought or sold, opened or closed, is inferred. Never call flow "institutional buying", \
 "smart money" or "accumulation"; describe the position ("call volume at the 350 strike was 0.1x its \

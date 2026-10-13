@@ -404,7 +404,7 @@ def test_the_options_charts_say_which_strikes_and_expiries_they_are_drawn_from()
     assert out["k"] == ["$185", "$182.50", "$7.25"], "two half-dollar strikes no longer share a label"
     swing = _src("function renderSwing(d) {")
     # Time value bought, not the whole price (tests/test_flow_time_value.py).
-    assert "strikes with the most dealer" in swing and "strikes with the most time value bought" in swing
+    assert "strikes with the most dealer" in swing and "strikes with the most time value traded" in swing
     assert "No strike carries gamma in the expiries used." in swing
     vis = _src("function mountOptionsVisuals(d) {")
     assert "max: 100, format: (v) => fmt(v, 1) + '%', ariaLabel: expiryGammaTitle(gk)" in vis

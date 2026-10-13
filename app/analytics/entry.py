@@ -246,10 +246,10 @@ def iv_context(
         "term_structure": term,
         "rank_guidance": rank_guidance,
         **rank_block,
-        "method": "IV rank needs a historical IV series, which free data does not provide. "
-        "'IV / realized' compares ATM implied vol to actual (realized) 20-day volatility. "
-        "'IV rank (proxy)' and 'realized vol rank' benchmark today's IV and realized vol against this "
-        "stock's own trailing-year realized-vol range, standing in for a true IV-history rank.",
+        "method": "'IV / realised' compares at-the-money implied vol to the stock's actual 20-day "
+        "volatility. 'IV against the realised range' places today's implied vol inside the "
+        "past year's range of 20-day realised volatility: a different quantity from an IV rank, "
+        "which needs a history of implied vol (shown separately where one exists).",
     }
 
 
@@ -1049,7 +1049,7 @@ def build_plan(
                 _strike_label(best["strike"]),
                 "call" if bullish else "put",
                 best["expiry"],
-                _f(mid_px, 2),
+                "{:.2f}".format(mid_px) if mid_px else "?",
                 " ({} for one contract, which covers 100 shares)".format(
                     _usd(mid_px * 100.0, 0)) if mid_px else "",
             )

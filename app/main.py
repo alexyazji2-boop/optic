@@ -87,6 +87,8 @@ from . import rates as rates_mod
 from . import iv_history as iv_history_mod
 from .analytics import vol_surface as vol_surface_mod
 from .analytics import liquidity as liquidity_mod
+from .analytics import contracts as contracts_mod
+from .analytics import position as position_mod
 from . import watch_runner
 from . import signal_history
 from . import briefing as briefing_mod
@@ -658,6 +660,15 @@ def _swing_snapshot(
             exposure, spot, call, tech, gex_read, news_read, rate=rate, div=div,
             history=hist, budget=budget,
         )
+        # The term structure in the plan's IV block was the median IV of every
+        # strike on an expiry ("inverted, earnings bid" for AAPL when at the
+        # money it was flat): the surface's ATM reading replaces it.
+        ivc = entry_plan.get("iv_context") if isinstance(entry_plan, dict) else None
+        term = (surface or {}).get("term") or {}
+        if isinstance(ivc, dict) and term.get("available"):
+            ivc["term_structure"] = term.get("text")
+            ivc["front_iv_pct"] = term.get("front_iv_pct")
+            ivc["back_iv_pct"] = term.get("back_iv_pct")
 
     # Same argument as earnings_momentum below, and it was missed here because
     # this block is one call rather than three. Measured: fundamentals.analyse
@@ -1068,6 +1079,43 @@ async def earnings_brief(ticker: str) -> Dict[str, Any]:
     return await _run(build)
 
 
+def _options_frame(ticker: str, expiries: Optional[List[str]], max_expiries: int):
+    """Quote, rate and a chain on the corrected inputs (clock, quotes, IV,
+    greeks), shared by the raw chain and the research endpoints so all three
+    read one set of numbers."""
+    quote = PROVIDER.quote(ticker)
+    spot = quote.get("price")
+    if spot is None:
+        raise HTTPException(status_code=404, detail="No quote for '{}'.".format(ticker))
+    chain = PROVIDER.options_chain(ticker, expiries=expiries, max_expiries=max_expiries)
+    if chain is None or chain.empty:
+        raise HTTPException(status_code=404, detail="No options chain for '{}'.".format(ticker))
+    div = quote.get("dividend_yield") or 0.0
+    rate_info = rates_mod.risk_free(YF_PROVIDER)
+    chain = vol_surface_mod.apply_clock(chain)
+    chain = vol_surface_mod.apply_quotes(chain)
+    chain = vol_surface_mod.resolve_surface(chain, spot, rate_info["rate"], div)
+    frame = gex_mod.compute_exposure(chain, spot, rate=rate_info["rate"], div=div, ticker=ticker)
+    frame.attrs.update(chain.attrs)
+    return quote, float(spot), float(div), rate_info, frame
+
+
+def _ex_dividend(ticker: str) -> Optional[str]:
+    """The next ex-dividend date the feed knows, or None."""
+    try:
+        info = YF_PROVIDER._info(ticker) or {}
+    except Exception:                                             # noqa: BLE001
+        return None
+    raw = info.get("exDividendDate")
+    if not raw:
+        return None
+    try:
+        day = datetime.fromtimestamp(float(raw), tz=timezone.utc).date()
+    except (TypeError, ValueError, OSError):
+        return None
+    return day.isoformat()
+
+
 @app.get("/api/chain/{ticker}")
 async def raw_chain(
     ticker: str,
@@ -1078,26 +1126,212 @@ async def raw_chain(
     wanted = [e.strip() for e in expiries.split(",") if e.strip()] if expiries else None
 
     def build() -> Dict[str, Any]:
-        quote = PROVIDER.quote(ticker.upper())
-        spot = quote.get("price")
-        if spot is None:
-            raise HTTPException(status_code=404, detail="No quote for '{}'.".format(ticker))
-        chain = PROVIDER.options_chain(ticker.upper(), expiries=wanted, max_expiries=max_expiries)
-        if chain is None or chain.empty:
-            raise HTTPException(status_code=404, detail="No options chain for '{}'.".format(ticker))
-        frame = gex_mod.compute_exposure(chain, spot, rate=_rate(), div=quote.get("dividend_yield") or 0.0)
+        quote, spot, div, rate_info, frame = _options_frame(ticker.upper(), wanted, max_expiries)
         cols = [
             "contract", "expiry", "dte", "strike", "is_call", "bid", "ask", "mid", "last",
             "volume", "open_interest", "iv", "delta", "gamma", "vega", "theta", "gex", "dex",
-            "spread_pct",
+            "spread_pct", "quote_state", "mark_source", "iv_source", "iv_feed",
         ]
         present = [c for c in cols if c in frame.columns]
         table = frame[present].replace({float("nan"): None})
         return {
             "ticker": ticker.upper(),
             "spot": spot,
+            "rate": rate_info,
             "rows": table.to_dict(orient="records"),
         }
+
+    return await _run(build)
+
+
+def _listed_expiries(ticker: str) -> List[str]:
+    got = PROVIDER.expirations(ticker)
+    if isinstance(got, dict):
+        got = got.get("available") or []
+    return sorted(str(e) for e in (got or []))
+
+
+def _default_expiry(listed: List[str], target_days: int = 30) -> Optional[str]:
+    """The listed expiry nearest a month out, at least a week away when one is."""
+    if not listed:
+        return None
+    dated = [(e, vol_surface_mod.expiry_dte(e)) for e in listed]
+    usable = [x for x in dated if x[1] >= 7] or dated
+    return min(usable, key=lambda x: abs(x[1] - target_days))[0]
+
+
+@app.get("/api/options/{ticker}/research")
+async def options_research(
+    ticker: str,
+    expiry: Optional[str] = Query(None),
+    side: str = Query("call", pattern="^(call|put)$"),
+    delta_lo: float = Query(0.0, ge=0.0, le=1.0),
+    delta_hi: float = Query(1.0, ge=0.0, le=1.0),
+    max_spread: Optional[float] = Query(None, ge=0.0, le=500.0),
+    min_oi: float = Query(0.0, ge=0.0),
+    include_unquoted: bool = Query(False),
+) -> Dict[str, Any]:
+    """Contracts for one expiry and side, filtered the way the reader asks.
+
+    No ranking and no pick: a table with each contract's cost, breakeven,
+    decay, volatility exposure, model chance of finishing in the money and
+    liquidity grade, plus what happens before the expiry (Options audit,
+    2026-10-13). See app/analytics/contracts.py."""
+    sym = ticker.upper().strip()
+
+    def build() -> Dict[str, Any]:
+        listed = _listed_expiries(sym)
+        if not listed:
+            raise HTTPException(status_code=404, detail="No listed options for '{}'.".format(sym))
+        exp = expiry if expiry in listed else _default_expiry(listed)
+        quote, spot, div, rate_info, frame = _options_frame(sym, [exp], 1)
+        partial = _chain_unusable(frame, spot)
+        tbl = contracts_mod.table(frame, spot, rate_info["rate"], div, side=side, expiry=exp,
+                                  delta_lo=min(delta_lo, delta_hi), delta_hi=max(delta_lo, delta_hi),
+                                  max_spread_pct=max_spread, min_oi=min_oi,
+                                  include_unquoted=include_unquoted)
+        summary = vol_surface_mod.expiry_rows(frame, spot, rate_info["rate"], div)
+        earn = None
+        try:
+            earn = YF_PROVIDER.earnings_date(sym)
+        except Exception:                                         # noqa: BLE001
+            earn = None
+        today = datetime.now(timezone.utc).astimezone(session_mod.ET).date()
+        return {
+            "ticker": sym,
+            "spot": spot,
+            "expiry": exp,
+            "side": side,
+            "listed_expiries": [{"expiry": e, "dte": vol_surface_mod.expiry_dte(e),
+                                 "monthly": contracts_mod.is_monthly(e)} for e in listed],
+            "filters": {"delta_lo": delta_lo, "delta_hi": delta_hi, "max_spread": max_spread,
+                        "min_oi": min_oi, "include_unquoted": include_unquoted},
+            "unusable": partial,
+            "summary": summary[0] if summary else None,
+            "events": contracts_mod.events(exp, today, earn, None, _ex_dividend(sym),
+                                           index_like=sym in gex_mod.INDEX_LIKE),
+            "table": tbl,
+            "rate": rate_info,
+            "clock": frame.attrs.get("clock"),
+            "iv_method": frame.attrs.get("iv_method"),
+            "liquidity_method": liquidity_mod.method(),
+            "fetched_at": str(frame["fetched_at"].iloc[0]) if "fetched_at" in frame and len(frame) else None,
+            "notes": [
+                "The model's chance of finishing in the money is N(d2) under risk-neutral pricing, not a "
+                "forecast, and finishing in the money is not the same as a profit: a bought option has to "
+                "clear its premium.",
+                "Delta is how much the option's price moves for a $1 move in the stock, per share. It "
+                "changes as the stock moves (gamma) and is not a probability.",
+                "Costs per contract are 100 shares: the ask x 100 is what one contract costs to buy at the "
+                "quoted price, before fees.",
+            ],
+        }
+
+    return await _run(build)
+
+
+MAX_LEGS = 4
+
+
+@app.post("/api/options/{ticker}/analyze")
+async def options_analyze(ticker: str, payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    """Payoff, model values, breakevens, max P/L, greeks and scenarios for up
+    to four option legs (plus optional stock), priced from the chain. A
+    research illustration, not an order (app/analytics/position.py)."""
+    sym = ticker.upper().strip()
+    raw_legs = payload.get("legs") or []
+    if not isinstance(raw_legs, list) or not raw_legs:
+        raise HTTPException(status_code=400, detail="Add at least one leg.")
+    opt_legs = [l for l in raw_legs if isinstance(l, dict) and l.get("type") in ("call", "put")]
+    stock_legs = [l for l in raw_legs if isinstance(l, dict) and l.get("type") == "stock"]
+    if len(opt_legs) > MAX_LEGS or len(stock_legs) > 1:
+        raise HTTPException(status_code=400, detail="Up to four option legs and one stock leg.")
+
+    def num(v, lo, hi, default):
+        try:
+            x = float(v)
+        except (TypeError, ValueError):
+            return default
+        return min(max(x, lo), hi)
+
+    slippage = num(payload.get("slippage"), 0.0, 1.0, 0.25)
+    fee = num(payload.get("fee_per_contract"), 0.0, 10.0, 0.65)
+    days_forward = payload.get("days_forward")
+    days_forward = None if days_forward in (None, "") else num(days_forward, 0.0, 3650.0, None)
+
+    def build() -> Dict[str, Any]:
+        wanted = sorted({str(l.get("expiry")) for l in opt_legs})
+        quote, spot, div, rate_info, frame = _options_frame(sym, wanted or None, max(len(wanted), 1))
+        legs: List[Dict[str, Any]] = []
+        problems: List[str] = []
+        for l in opt_legs:
+            side = "short" if l.get("side") == "short" else "long"
+            qty = int(num(l.get("qty"), 1, 100, 1))
+            try:
+                k = float(l.get("strike"))
+            except (TypeError, ValueError):
+                problems.append("A leg has no strike.")
+                continue
+            m = frame[(frame["expiry"] == l.get("expiry")) & (frame["strike"] == k)
+                      & (frame["is_call"] == (l["type"] == "call"))]
+            if m.empty:
+                problems.append("No {} {} {} on the chain.".format(l.get("expiry"), k, l["type"]))
+                continue
+            r = m.iloc[0]
+            if r["quote_state"] != "two_sided":
+                problems.append("The {} {} {} has no two-sided quote ({}), so it cannot be priced.".format(
+                    l.get("expiry"), k, l["type"], str(r["quote_state"]).replace("_", " ")))
+                continue
+            g = liquidity_mod.grade_row(r.to_dict())
+            legs.append({"type": l["type"], "side": side, "qty": qty, "strike": k, "expiry": r["expiry"],
+                         "tau": float(r["tau"]), "iv": float(r["iv"]), "mid": float(r["quote_mid"]),
+                         "bid": float(r["bid"]), "ask": float(r["ask"]), "contract": r.get("contract"),
+                         "liquidity": g, "delta": float(r["delta"])})
+        for l in stock_legs:
+            legs.append({"type": "stock", "side": "short" if l.get("side") == "short" else "long",
+                         "qty": int(num(l.get("qty"), 1, 100000, 100)), "strike": None, "expiry": None,
+                         "tau": 0.0, "iv": None, "mid": spot, "bid": spot, "ask": spot})
+        if problems:
+            raise HTTPException(status_code=422, detail=" ".join(problems))
+        out = position_mod.analyse(legs, spot, rate_info["rate"], div, days_forward=days_forward,
+                                   slippage=slippage, fee_per_contract=fee)
+        flags: List[str] = []
+        exd = _ex_dividend(sym)
+        first_exp = min((l["expiry"] for l in legs if l["type"] != "stock"), default=None)
+        for l in legs:
+            if l["type"] == "stock" or l["side"] != "short":
+                continue
+            itm = (spot > l["strike"]) if l["type"] == "call" else (spot < l["strike"])
+            if l["type"] == "call" and itm and exd and exd <= l["expiry"]:
+                flags.append("The short {:g} call is in the money with an ex-dividend date ({}) before it "
+                             "expires: early assignment is a real possibility the day before.".format(l["strike"], exd))
+            if l["type"] == "put" and l["delta"] < -0.8:
+                flags.append("The short {:g} put is deep in the money: an American put like this can be "
+                             "assigned early.".format(l["strike"]))
+            if abs(l["strike"] / spot - 1) < 0.01:
+                flags.append("The short {:g} {} is within 1% of the price: if it finishes near the strike, "
+                             "whether it is assigned is uncertain until after the close (pin risk).".format(
+                                 l["strike"], l["type"]))
+        today = datetime.now(timezone.utc).astimezone(session_mod.ET).date()
+        earn = None
+        try:
+            earn = YF_PROVIDER.earnings_date(sym)
+        except Exception:                                         # noqa: BLE001
+            earn = None
+        out.update({
+            "ticker": sym,
+            "rate": rate_info,
+            "leg_liquidity": [{"strike": l.get("strike"), "type": l["type"], "expiry": l.get("expiry"),
+                               **(l.get("liquidity") or {})} for l in legs if l["type"] != "stock"],
+            "flags": flags,
+            "events": contracts_mod.events(first_exp, today, earn, None, exd,
+                                           index_like=sym in gex_mod.INDEX_LIKE) if first_exp else [],
+            "multi_leg_note": ("The legs' quoted spreads add up to ${:,.2f} for the position. On an exchange's "
+                               "complex order book a spread order can fill inside that; nothing here can see "
+                               "that book.".format(out["entry"]["legs_full_spread"]))
+            if len([l for l in legs if l["type"] != "stock"]) > 1 else None,
+        })
+        return out
 
     return await _run(build)
 
