@@ -91,3 +91,13 @@ def test_milo_on_a_phone_opens_without_the_keyboard_and_fits_above_it():
     assert "body.chat-open aside#chat { height: var(--chat-vvh, 100dvh); top: var(--chat-vvtop, 0); }" in CSS
     short = _media("(max-width: 640px) and (max-height: 720px)")
     assert "#chat .chat-body > #chat-persona { order: 3; }" in short
+
+
+def test_milo_covers_the_whole_phone_including_under_safaris_toolbar():
+    """Reported from an iPhone: the page showed below Milo, under Safari's
+    floating toolbar. Safari does not paint a fixed panel past the area it
+    shows, so the page behind is hidden and takes the panel's colour."""
+    block = CSS[CSS.index("body.chat-open aside#chat { height: var(--chat-vvh, 100dvh);"):]
+    block = block[:block.index("\n}\n")]
+    assert "body.chat-open main#main, body.chat-open footer.legal { visibility: hidden; }" in block
+    assert "html:has(> body.chat-open), body.chat-open { background: var(--surface); }" in block

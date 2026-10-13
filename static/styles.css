@@ -6288,6 +6288,16 @@ aside#chat { height: 100vh; }
    publishes while Milo is open. Without it the panel ran under the keyboard. */
 @media (max-width: 640px) {
   body.chat-open aside#chat { height: var(--chat-vvh, 100dvh); top: var(--chat-vvtop, 0); }
+  /* Milo covers the whole phone (reported from an iPhone, 2026-10-12): the
+     page showed under Safari's floating toolbar, below the panel. Safari does
+     not paint a fixed panel past the area it shows, so the page behind is
+     hidden instead and takes the panel's colour: what shows under the toolbar
+     is Milo's surface. Hidden, not just covered, so a screen reader stays in
+     the panel too. The panel itself stays sized to the visible area, which
+     keeps Send above the toolbar. */
+  body.chat-open header.topbar, body.chat-open #sessionbar,
+  body.chat-open main#main, body.chat-open footer.legal { visibility: hidden; }
+  html:has(> body.chat-open), body.chat-open { background: var(--surface); }
 }
 
 /* The correlation column is the point of the overnight panel, so the two states
