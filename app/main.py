@@ -484,6 +484,67 @@ def _chain_unusable(chain: Optional[pd.DataFrame], spot: Optional[float]) -> Opt
 
 
 
+NEAR_TERM_MAX_DTE = 5
+NEAR_TERM_MAX_EXPIRIES = 3
+
+
+def _near_expiries(listed: Any) -> List[str]:
+    """Listed expiries 0 to NEAR_TERM_MAX_DTE days out, nearest first."""
+    if isinstance(listed, dict):
+        listed = listed.get("available") or []
+    return [e for e in sorted(str(x) for x in (listed or []))
+            if 0 <= vol_surface_mod.expiry_dte(e) <= NEAR_TERM_MAX_DTE][:NEAR_TERM_MAX_EXPIRIES]
+
+
+def _near_term_gex(ticker: str, chain: Optional[pd.DataFrame], swing_chain: Optional[pd.DataFrame],
+                   spot: float, rate: float, div: float, main_read: Dict[str, Any]) -> Dict[str, Any]:
+    """Dealer gamma in the 0-5 day expiries the swing read leaves out.
+
+    Same model, same assumption, same inputs; reported beside the main total
+    rather than folded into it. Open interest is the previous session's, so a
+    same-day (0DTE) position opened today is in none of it: for SPX-family
+    products that is most of the day's volume (Cboe), which is why the share
+    shown is of open positions, not of trading."""
+    used = set(swing_chain["expiry"].astype(str).unique()) if (
+        swing_chain is not None and not swing_chain.empty and "expiry" in swing_chain) else set()
+    if chain is not None and not chain.empty and "expiry" in chain:
+        chain = chain[~chain["expiry"].astype(str).isin(used)]
+    near = sorted(chain["expiry"].astype(str).unique()) if chain is not None and not chain.empty else []
+    if not near:
+        return {"available": False, "reason": "no listed expiry 0 to {} days out beyond those already read".format(
+            NEAR_TERM_MAX_DTE)}
+    unusable = _chain_unusable(chain, spot)
+    if unusable:
+        return {"available": False, "reason": unusable}
+    chain = vol_surface_mod.apply_clock(chain)
+    chain = vol_surface_mod.apply_quotes(chain)
+    chain = vol_surface_mod.resolve_surface(chain, spot, rate, div)
+    read = gex_mod.analyse(chain, spot, rate=rate, div=div, ticker=ticker)
+    read.pop("_exposure_frame", None)
+    if "error" in read:
+        return {"available": False, "reason": read["error"]}
+    near_gross = float((read.get("totals") or {}).get("gross_gex") or 0.0)
+    main_gross = float((main_read.get("totals") or {}).get("gross_gex") or 0.0)
+    share = round(near_gross / (near_gross + main_gross) * 100.0, 1) if near_gross + main_gross > 0 else None
+    near_net = float((read.get("totals") or {}).get("net_gex") or 0.0)
+    main_net = float((main_read.get("totals") or {}).get("net_gex") or 0.0)
+    return {
+        "available": True,
+        "expiries": near,
+        "net_gex": near_net,
+        "gross_gex": near_gross,
+        "share_of_gross_pct": share,
+        "combined_net_gex": main_net + near_net,
+        "regime": (read.get("regime") or {}).get("state"),
+        "flip_point": (read.get("regime") or {}).get("flip_point"),
+        "levels": read.get("levels"),
+        "by_strike": (read.get("by_strike") or [])[:8],
+        "note": ("Expiries 0 to {} days out, read separately from the main total. Open interest is the "
+                 "previous session's, so positions opened and closed today, most of the day's 0DTE "
+                 "trading in index options, are in none of it.").format(NEAR_TERM_MAX_DTE),
+    }
+
+
 def _swing_snapshot(
     ticker: str,
     expiries: Optional[List[str]],
@@ -578,6 +639,15 @@ def _swing_snapshot(
     news_read = legs.get("news")
 
     available_expiries = legs.get("expiries")
+    near_list: List[str] = []
+    # Only on the tab's own read (parallel): scans and watch checks never show
+    # it, and a scan spending a fetch per index name is the rate-limit cost
+    # _Legs exists to avoid.
+    if parallel and ticker in gex_mod.INDEX_LIKE:
+        near_list = _near_expiries(available_expiries)
+        if near_list:
+            legs.start("near_chain", PROVIDER.options_chain, ticker, expiries=near_list,
+                       max_expiries=len(near_list))
     chain = legs.get("chain")
 
     gex_read: Dict[str, Any] = {}
@@ -630,6 +700,18 @@ def _swing_snapshot(
         totals = gex_read.get("totals") if isinstance(gex_read, dict) else None
         if isinstance(totals, dict) and adv > 0:
             totals["pct_of_avg_dollar_volume"] = round(abs(totals.get("net_gex") or 0) / adv * 100.0, 2)
+        # O1 (Options audit): the swing expiries start a week out, and on index
+        # products most of the gamma sits in the 0-5 day expiries the read
+        # skipped. They are read here as well, separately, so the main total
+        # keeps its meaning and the short-dated share is visible.
+        if near_list and isinstance(gex_read, dict) and "error" not in gex_read:
+            try:
+                gex_read["near_term"] = _near_term_gex(
+                    ticker, legs.get("near_chain"), chain, spot, rate, div, gex_read)
+            except Exception as exc:                              # noqa: BLE001
+                gex_read["near_term"] = {"available": False,
+                                         "reason": "the short-dated chain could not be read ({})".format(
+                                             type(exc).__name__)}
         exposure = gex_read.pop("_exposure_frame", None)
         if exposure is not None:
             greeks_read = greeks_panel.analyse(exposure, spot)

@@ -12959,6 +12959,23 @@ function advBlock(title, sub, inner) {
   </details>`;
 }
 
+
+// O1 (Options audit): on index products most gamma sits in the 0-5 day
+// expiries the swing read skips. They come back read separately, so the main
+// total keeps its meaning; this line says how much of the open gamma they hold.
+function gexNearTermHTML(nt) {
+  if (!nt) return '';
+  if (!nt.available) return nt.reason ? `<p class="caveat">Expiries 0 to 5 days out: not read (${esc(nt.reason)}).</p>` : '';
+  const sign = (v) => (v >= 0 ? '+' : '') + usdCompact(v);
+  const share = Number.isFinite(nt.share_of_gross_pct) ? `, ${fmt(nt.share_of_gross_pct, 0)}% of the open gamma across both reads` : '';
+  const wall = (nt.levels || {}).call_wall, pwall = (nt.levels || {}).put_wall;
+  const walls = [wall && wall.strike ? `largest call-side strike ${usd(wall.strike)}` : '',
+    pwall && pwall.strike ? `put-side ${usd(pwall.strike)}` : ''].filter(Boolean).join(', ');
+  return `<div class="op-near"><p class="sub"><strong>Short-dated expiries</strong> (${(nt.expiries || []).map((e) => esc(shortDate(e))).join(', ')}):
+    net ${sign(nt.net_gex)} per 1% move${share}${walls ? '; ' + walls : ''}. With them, the model's net is ${sign(nt.combined_net_gex)}.</p>
+    <p class="caveat">${esc(nt.note || '')}</p></div>`;
+}
+
 function renderSwing(d) {
   /* An intraday range with no payload for this symbol has to ask for one.
    *
@@ -13555,6 +13572,7 @@ function renderSwing(d) {
   (gex.regime || {}).flip_zone ? `, within a zone of ${usd(gex.regime.flip_zone.low)} to ${usd(gex.regime.flip_zone.high)} where the model's net gamma is close to zero` : ''}.` : ''}</p>
       <div class="callout info">${gloss((gex.regime || {}).note || '')}<br><br><strong>Walls:</strong> ${gloss((gex.regime || {}).swing_implication || '')}</div>
       ${(gex.regime || {}).sign_note ? `<p class="caveat">${esc(gex.regime.sign_note)}</p>` : ''}
+      ${gexNearTermHTML(gex.near_term)}
       ${(gex.expiries_used || []).length ? `<p class="caveat">From the ${gex.expiries_used.length} expiries read (${gex.expiries_used.map((e) => esc(shortDate(e))).join(', ')}): adding or dropping an expiry changes the total, and same-day positions are missing because open interest is the previous session's. Rate ${esc(((gex.inputs || {}).rate_pct ?? '') + '%')}; ${esc((gex.inputs || {}).iv || '')}</p>` : ''}
 
       <div class="grid c2" style="margin-top:var(--space-3)">
