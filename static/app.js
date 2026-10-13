@@ -13947,9 +13947,9 @@ function secActionsHTML(sym) {
       title="Set a condition Optic checks for ${esc(sym)}"
       ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2H4.5Z"/><path d="M10 21h4"/></svg
       ><span class="sec-act-label">Alert</span></button>
-    <button type="button" class="btn sm primary sec-act" data-sec-pulse="${esc(sym)}"
+    <button type="button" class="btn sm milo-btn sec-act" data-sec-pulse="${esc(sym)}"
       title="Open Milo with ${esc(sym)} as the context"
-      >${pulseMarkHTML('pulse-glyph-sm')}<span class="sec-act-label">Ask Milo</span></button>
+      ><span class="sec-act-label">Ask Milo</span></button>
   </div>`;
 }
 
@@ -38219,7 +38219,7 @@ function scanAskHTML() {
         placeholder="Strong stocks on the 200-day average right now">${esc(ask.text || '')}</textarea>
       <div class="sc-ask-actions">
         <button type="submit" class="btn primary">Find symbols now</button>
-        <button type="button" class="btn" data-sc-ask-pulse
+        <button type="button" class="btn milo-btn" data-sc-ask-pulse
           title="Put the request and its matches in Milo's box, to edit and send">Ask Milo</button>
       </div>
     </form>

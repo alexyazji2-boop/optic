@@ -831,6 +831,20 @@ header.topbar {
               color 0.12s ease;
 }
 .btn:hover { background: var(--sys-fill-hover); border-color: color-mix(in srgb, var(--ink) 26%, transparent); }
+/* "Ask Milo", the quiet outline (asked for 2026-10-12 with a design card:
+   "subtle gold outline, premium and minimal"): no fill, a thin logo-gold edge,
+   the label in ink. The top bar's keeps the snowman; the rest show none. The
+   gold is the resting look; hover only lifts the fill and keeps the same edge,
+   so nothing outside the sidebar gains a gold outline on hover. */
+.btn.milo-btn {
+  background: transparent;
+  color: var(--ink);
+  border: 1.5px solid var(--asset-brand);
+  border-radius: var(--r-lg);
+  font-weight: 600;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+.btn.milo-btn:hover { background: var(--sys-fill-hover); border-color: var(--asset-brand); }
 .btn:active { background: var(--sys-fill-active); filter: brightness(0.94); }
 /* .btn.primary is defined once, further down with the other button rules.
    It used to be declared here too, as var(--s1) with white text, and again
