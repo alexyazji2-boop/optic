@@ -1192,21 +1192,28 @@ CONTEXT_SECTION_CAP = 14_000
 _ORDER_BASE = [
     "portfolio_summary", "reader_holdings", "auto_loaded", "auto_loaded_note", "screen_candidates",
     "market", "compare", "ticker", "quote", "pulse", "verdict", "cases", "why", "digest",
-    "whats_next", "next_earnings_date", "reader_watchlist", "active_view", "chart", "technicals",
+    "whats_next", "next_earnings_date", "options_research", "vol_surface", "iv_rank", "rate",
+    "reader_watchlist", "active_view", "chart", "technicals",
     "company", "long_term", "earnings", "news", "macro", "sector_confirm", "earnings_momentum",
     "gex", "flow", "greeks", "options_brief", "strategy_ideas", "read", "sectors", "indices",
     "watchlist_digest", "tracker", "roth", "naked_ideas", "entry_plan",
 ]
 _OPTIONS_WORDS = re.compile(r"\b(option|options|call|calls|put|puts|strike|expir\w*|gamma|gex|"
                             r"delta|theta|vega|vanna|iv|implied|skew|flow|open interest|0dte|"
-                            r"premium|straddle|spread)\b", re.I)
+                            r"premium|straddle|strangle|condor|spread|exposure|expected move)\b", re.I)
 _MARKET_WORDS = re.compile(r"\b(market|the tape|index|indices|s&p|spx|spy|nasdaq|qqq|dow|"
                            r"russell|macro|fed|rates|yields?|cpi|inflation|vix|sector|"
                            r"rotation|breadth|futures)\b", re.I)
 
 
-def _section_order(question: str, horizon: str) -> List[str]:
-    """The base order, with what this question is about moved up."""
+def _section_order(question: str, horizon: str, view: Optional[str] = None) -> List[str]:
+    """The base order, with what this question is about moved up.
+
+    On the Options tab, or for an options question, the reader's contract
+    table and position, the volatility surface and the rate come straight
+    after the quote: the capture of seven Options-tab questions (2026-10-13)
+    found the budget had spent itself on technicals and dropped exactly
+    those, because they were not in the order at all."""
     order = list(_ORDER_BASE)
 
     def lift(keys: List[str], after: str) -> None:
@@ -1216,8 +1223,9 @@ def _section_order(question: str, horizon: str) -> List[str]:
                 order.insert(order.index(after) + 1, key)
 
     q = question or ""
-    if _OPTIONS_WORDS.search(q):
-        lift(["gex", "flow", "greeks", "options_brief", "strategy_ideas"], "quote")
+    if _OPTIONS_WORDS.search(q) or view == "swing":
+        lift(["options_research", "vol_surface", "iv_rank", "rate", "gex", "flow", "greeks",
+              "options_brief", "strategy_ideas"], "quote")
     if horizon == "long":
         lift(["long_term", "company"], "quote")
         for key in ("gex", "flow", "greeks", "options_brief", "naked_ideas", "entry_plan"):
@@ -1292,7 +1300,8 @@ def budget_context(snapshot: Dict[str, Any], question: str = "", horizon: str = 
     """The CONTEXT JSON body and a record of what was kept, slimmed and left out."""
     pruned = _prune(_compact_market({k: v for k, v in snapshot.items()
                                      if k not in ("focus", "data_as_of")}))
-    order = _section_order(question, horizon)
+    view = snapshot.get("active_view") or ((snapshot.get("focus") or {}).get("view"))
+    order = _section_order(question, horizon, view if isinstance(view, str) else None)
     keys = [k for k in order if k in pruned] + [k for k in pruned if k not in order]
     parts: List[str] = []
     kept: List[str] = []

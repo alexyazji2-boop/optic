@@ -12538,7 +12538,11 @@ function renderOptionsPricing(d) {
     items.push({ text: `By ${shortDate(month.expiry)} (${month.dte} days) the at-the-money straddle is priced for a move of about ±${fmt(month.straddle_move_pct, 1)}%.`,
       why: `A one-standard-deviation move on the same implied volatility is ±${fmt(month.one_sd_move_pct, 1)}%. These are what options cost, not limits on the price: under the model a move larger than one standard deviation happens about a third of the time.` });
   }
-  if (term.available) items.push({ text: term.text, why: term.method });
+  const adv = knowledgeLevel() >= 2;
+  if (term.available) {
+    items.push({ text: term.text, why: adv ? term.method
+      : 'Each expiry\u2019s implied volatility at the money. Higher near-dated volatility usually means an event is close.' });
+  }
   if (month && Number.isFinite(month.rr25_pts)) {
     items.push({ text: month.rr25_pts > 0.5
       ? `Downside protection costs more than upside: puts at 0.25 delta carry ${fmt(month.rr25_pts, 1)} vol points more than calls (${shortDate(month.expiry)}).`
@@ -12547,7 +12551,10 @@ function renderOptionsPricing(d) {
         : `Puts and calls at 0.25 delta are priced about the same (${shortDate(month.expiry)}).`,
     why: 'The 25-delta risk reversal. Most stocks and indices carry some put premium most of the time; it describes demand for protection, not a forecast.' });
   }
-  if (ev.available && ev.move_pct) items.push({ text: ev.text, why: ev.method || '' });
+  if (ev.available && ev.move_pct) {
+    items.push({ text: ev.text, why: adv ? (ev.method || '')
+      : 'Worked out from how much more volatility the expiry spanning the report carries. What options charge for the report, not a forecast of it.' });
+  }
   const rate = d.rate || {};
   const asOf = (d.gex && d.gex.fetched_at) || d.generated_at;
   return `<section class="ov-sec op-pricing span-all" aria-labelledby="op-pricing-h">
@@ -12567,7 +12574,8 @@ function renderOptionsPricing(d) {
       </table></div>
       <p class="ov-fine">${esc((vs.notes || []).join(' '))}</p>
     </details>
-    <p class="ov-fine">Measured ${asOf ? esc(agoWords(asOf) || '') : ''} from the delayed chain. ${esc(vs.clock || '')}. Rate ${esc(rate.label || '')}. ${esc(vs.iv_method || '')}</p>
+    <p class="ov-fine">Worked out ${asOf ? esc(agoWords(asOf) || '') : ''} from the option chain. Quotes are delayed about 15 minutes during the session, and outside it they are the last session's.
+      Rate ${esc(rate.label || '')}.${adv ? ` ${esc(vs.clock || '')}. ${esc(vs.iv_method || '')}` : ''}</p>
   </section>`;
 }
 
@@ -13540,7 +13548,8 @@ function renderSwing(d) {
   <div class="grid c2 gap">
     <div class="panel span2">
       <h2>${hg('Options positioning: dealer gamma (GEX)')}${askPulse('gex')}</h2>
-      <p class="sub">Net ${(gex.totals || {}).net_gex >= 0 ? '+' : ''}${usdCompact((gex.totals || {}).net_gex)} of dealer delta per 1% move.
+      <p class="sub">Net ${(gex.totals || {}).net_gex >= 0 ? '+' : ''}${usdCompact((gex.totals || {}).net_gex)} of dealer delta per 1% move${
+  Number.isFinite((gex.totals || {}).pct_of_avg_dollar_volume) ? `, about ${fmt(gex.totals.pct_of_avg_dollar_volume, 1)}% of an average day's dollar volume in the stock` : ''}.
         Regime: <strong>${esc((gex.regime || {}).state || '')}</strong>.
         ${(gex.regime || {}).flip_point ? `Gamma flip near <strong>${fmt(gex.regime.flip_point, 2)}</strong> (${fmtPct((gex.regime || {}).flip_distance_pct, 2)} away)${
   (gex.regime || {}).flip_zone ? `, within a zone of ${usd(gex.regime.flip_zone.low)} to ${usd(gex.regime.flip_zone.high)} where the model's net gamma is close to zero` : ''}.` : ''}</p>

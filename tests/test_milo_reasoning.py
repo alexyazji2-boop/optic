@@ -204,3 +204,16 @@ def test_the_eval_lessons_are_in_the_prompt():
     assert "third friday of the month" in SYSTEM
     assert "a recap, a preview or a ranking is not the event itself" in SYSTEM
     assert "(composite + 100) / 2" in SYSTEM
+
+
+def test_on_the_options_tab_the_research_on_screen_reaches_the_model():
+    """Seven Options-tab questions (2026-10-13) lost options_research, iv_rank
+    and rate to the budget: they were not in the order at all."""
+    ctx = page(options_research={"rows": [{"strike": 340, "ask": 9.75}], "position": {"legs": [1, 2]}},
+               vol_surface={"iv30": {"iv_pct": 27.1}}, iv_rank={"available": False}, rate={"rate": 0.0405},
+               active_view="swing")
+    _, meta = ask("thoughts?", context=ctx)
+    kept = meta["context"]["kept"]
+    for key in ("options_research", "vol_surface", "iv_rank", "rate"):
+        assert key in kept, key
+    assert kept.index("options_research") < kept.index("technicals")

@@ -622,6 +622,14 @@ def _swing_snapshot(
         iv_rank = iv_history_mod.rank_for(ticker, iv30, YF_PROVIDER)
     if chain is not None and not chain.empty and not partial:
         gex_read = gex_mod.analyse(chain, spot, rate=rate, div=div, ticker=ticker)
+        # Scaled to the stock's own trading: the hedge a 1% move would ask
+        # for, as a share of an average day's dollar volume. A $1B GEX means
+        # little for SPY and a great deal for a mid cap (the normalisation
+        # Ni, Pearson, Poteshman & White and Baltussen et al. motivate).
+        adv = (quote.get("avg_volume") or 0) * spot
+        totals = gex_read.get("totals") if isinstance(gex_read, dict) else None
+        if isinstance(totals, dict) and adv > 0:
+            totals["pct_of_avg_dollar_volume"] = round(abs(totals.get("net_gex") or 0) / adv * 100.0, 2)
         exposure = gex_read.pop("_exposure_frame", None)
         if exposure is not None:
             greeks_read = greeks_panel.analyse(exposure, spot)

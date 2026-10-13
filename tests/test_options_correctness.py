@@ -117,7 +117,7 @@ def test_term_structure_names_an_event_only_when_one_is_inside():
     assert term["front"] == "2026-10-30", "a 4-day weekly is not the front"
     assert "2026-11-13" in term["text"]
     move = vs.event_move(rows, "2026-11-02")
-    want = np.sqrt(0.27 ** 2 * 32 / 365 - 0.24 ** 2 * 32 / 365) * 100
+    want = np.sqrt(0.27 ** 2 * 32 / 365 - 0.24 ** 2 * 31 / 365) * 100
     assert move["move_pct"] == pytest.approx(want, abs=0.01)
 
 

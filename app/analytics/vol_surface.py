@@ -358,7 +358,7 @@ def event_move(rows: List[Dict[str, Any]], event_date: Optional[str]) -> Dict[st
 
     Total variance of the first expiry after the report, minus what that same
     span would carry at the IV of the last expiry before it:
-    move = sqrt(max(0, IV_after^2 x T_after - IV_before^2 x T_after)). It assumes
+    move = sqrt(max(0, IV_after^2 x T_after - IV_before^2 x (T_after - 1 day))). It assumes
     the non-event days are priced at the earlier expiry's IV; when that
     expiry is only days out, weekend and calendar effects move the answer."""
     if not event_date:
@@ -370,7 +370,11 @@ def event_move(rows: List[Dict[str, Any]], event_date: Optional[str]) -> Dict[st
         return {"available": False, "reason": "needs a quoted expiry on each side of the report"}
     b = before[-1]
     ta = after["tau_years"]
-    var = (after["atm_iv_pct"] / 100) ** 2 * ta - (b["atm_iv_pct"] / 100) ** 2 * ta
+    # Total variance = the ordinary days at the earlier expiry's rate + the
+    # report day's own variance, so the report day is left out of the first
+    # term (one calendar day, in the same calendar-year units as tau).
+    day = 1.0 / 365.0
+    var = (after["atm_iv_pct"] / 100) ** 2 * ta - (b["atm_iv_pct"] / 100) ** 2 * max(ta - day, 0.0)
     if var <= 0:
         return {"available": True, "move_pct": 0.0, "after": after["expiry"], "before": b["expiry"],
                 "text": "The expiry that spans the report carries no more implied volatility than the "
@@ -379,9 +383,9 @@ def event_move(rows: List[Dict[str, Any]], event_date: Optional[str]) -> Dict[st
     return {"available": True, "move_pct": _f(move, 2), "after": after["expiry"], "before": b["expiry"],
             "text": "About {:.1f}% priced for the report day itself, from the {} expiry's IV against "
                     "the {} expiry's.".format(move, after["expiry"], b["expiry"]),
-            "method": "sqrt(IV_after^2 x T_after - IV_before^2 x T_after): the variance the later "
-                      "expiry carries beyond the earlier one's rate. A model reading of what is "
-                      "priced, not a forecast of the move."}
+            "method": "sqrt(IV_after^2 x T_after - IV_before^2 x (T_after - 1 day)): the variance the "
+                      "later expiry carries beyond the earlier one's rate on the ordinary days. A model "
+                      "reading of what is priced, not a forecast of the move."}
 
 
 def build(chain: pd.DataFrame, spot: float, rate: float, div: float,
