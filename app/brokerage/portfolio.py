@@ -13,8 +13,9 @@ Three layers, kept apart all the way to the screen and to Milo:
 **Nothing incomplete is presented as precise.** A total that leaves out a
 position says so and says how much it leaves out. Unrealised gain is summed
 only over positions with a cost basis and reports its coverage beside it.
-Options are valued at contracts x price x multiplier with the multiplier
-assumed (100, or 10 for a mini), because no aggregator supplies it. ETFs are
+Options are valued at contracts x price x multiplier, using the provider's
+multiplier (SnapTrade's positions/all sends one) and assuming 100, or 10 for a
+mini, only where it is missing. ETFs are
 not looked through, so a sector chart says "ETFs and funds" rather than
 pretending to know what is inside them. Currencies are not added together
 unless an exchange rate was available, and a converted total says it is
@@ -88,6 +89,7 @@ def build(accounts: List[Dict[str, Any]],
     unsupported: List[Dict[str, Any]] = []
     cash_by_ccy: Dict[str, float] = {}
     sync_times: List[str] = []
+    broker_times: List[str] = []
     counted = 0
 
     def rate(ccy: Optional[str]) -> Optional[float]:
@@ -112,6 +114,8 @@ def build(accounts: List[Dict[str, Any]],
         counted += 1
         if a.get("last_sync_at"):
             sync_times.append(a["last_sync_at"])
+        if a.get("broker_as_of"):
+            broker_times.append(a["broker_as_of"])
         acct_ccy = (a.get("currency") or "USD").upper()
         acct_sum = 0.0
         acct_sum_ok = True
@@ -418,8 +422,12 @@ def build(accounts: List[Dict[str, Any]],
     return {
         "accounts": acct_out,
         "accounts_counted": counted,
+        # The broker's own time where the provider gave one; on a once-a-day
+        # plan it can be a day older than when Optic fetched it (review M4).
         "as_of": {"oldest_sync": min(sync_times) if sync_times else None,
-                  "newest_sync": max(sync_times) if sync_times else None},
+                  "newest_sync": max(sync_times) if sync_times else None,
+                  "oldest_broker": min(broker_times) if broker_times else None,
+                  "broker_complete": bool(broker_times) and len(broker_times) == counted},
         "totals": {"by_currency": by_ccy, "combined_usd": combined},
         "holdings": holdings,
         "options": options,

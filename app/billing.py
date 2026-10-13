@@ -49,6 +49,7 @@ router = APIRouter(prefix="/api/billing", tags=["billing"])
 API = "https://api.stripe.com/v1"
 TOLERANCE = 300
 PAID_PLAN = "pro"
+TERMINAL = ("canceled", "incomplete_expired")
 
 
 def _key() -> str:
@@ -127,9 +128,14 @@ async def checkout(request: Request) -> Dict[str, Any]:
     if not st["available"]:
         raise HTTPException(status_code=503, detail=st["reason"])
     sub = auth_store.subscription(user["id"])
-    if sub["plan"] == PAID_PLAN:
-        raise HTTPException(status_code=409, detail="You are already on Pro. Use Manage billing to "
-                                                    "change or cancel it.")
+    row = _sub_row(user["id"]) or {}
+    open_sub = row.get("provider_subscription_id") and row.get("provider_status") not in TERMINAL
+    if sub["plan"] == PAID_PLAN or open_sub:
+        # Also refused while a subscription exists that has not ended, even
+        # before its webhook made the plan Pro: two quick checkouts used to be
+        # two subscriptions on one account (review M6).
+        raise HTTPException(status_code=409, detail="You already have a Pro subscription. Use Manage billing "
+                                                    "to change or cancel it.")
     base = runtime.base_url()
     data: Dict[str, Any] = {
         "mode": "subscription",
@@ -142,7 +148,6 @@ async def checkout(request: Request) -> Dict[str, Any]:
         "cancel_url": base + "/?billing=cancel#/settings",
         "allow_promotion_codes": "true",
     }
-    row = _sub_row(user["id"]) or {}
     if row.get("provider_customer_id"):
         data["customer"] = row["provider_customer_id"]
     else:
@@ -286,6 +291,15 @@ def apply_event(event: Dict[str, Any]) -> str:
         if not uid:
             return "no-user"
         stripe_status = "canceled" if etype == "customer.subscription.deleted" else str(obj.get("status") or "")
+        row = _sub_row(uid) or {}
+        stored = row.get("provider_subscription_id")
+        if stored and stored != obj.get("id") and row.get("provider_status") in auth_store.ENTITLED_STATUSES:
+            # A second subscription while the stored one is live. Applying it
+            # would let cancelling either one end Pro while the other keeps
+            # billing. Logged for a refund by hand.
+            log.error("stripe: second subscription %s for a user who already has %s; not applied",
+                      obj.get("id"), stored)
+            return "second-subscription"
         ours = _has_our_price(obj)
         entitled = ours and stripe_status in auth_store.ENTITLED_STATUSES
         wrote = _write(uid, created,

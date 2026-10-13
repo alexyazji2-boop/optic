@@ -215,11 +215,15 @@ def recent_snapshots(user_id: str, limit: int = 2) -> List[Dict[str, Any]]:
 LINK_STATE_TTL = 600
 
 
-def new_link_state(user_id: str, reconnect_id: Optional[str]) -> str:
+def new_link_state(user_id: str, reconnect_id: Optional[str], known_ids: List[str]) -> str:
+    """`known_ids` is every connection the provider already had for this
+    reader when the link started. The callback imports only something new
+    since then (or the connection being repaired), so a portal link handed to
+    someone else cannot later be swept in by an unrelated callback."""
     token = tokens.new_token()
-    db.execute("INSERT INTO brokerage_link_states (token_hash, user_id, reconnect_id, expires_at) "
-               "VALUES (?,?,?,?)", (tokens.token_hash(token), user_id, reconnect_id,
-                                    db.in_seconds(LINK_STATE_TTL)))
+    db.execute("INSERT INTO brokerage_link_states (token_hash, user_id, reconnect_id, known_ids, expires_at) "
+               "VALUES (?,?,?,?,?)", (tokens.token_hash(token), user_id, reconnect_id,
+                                      json.dumps(sorted(known_ids)), db.in_seconds(LINK_STATE_TTL)))
     return token
 
 
@@ -261,8 +265,15 @@ def queue_purge(provider: str, provider_user_id: str, provider_connection_id: Op
                (db.new_id(), provider, provider_user_id, provider_connection_id, error[:300], db.utcnow()))
 
 
+PURGE_MAX_ATTEMPTS = 12
+
+
 def pending_purges(limit: int = 20) -> List[Dict[str, Any]]:
-    return db.rows("SELECT * FROM brokerage_purges ORDER BY created_at LIMIT ?", (limit,))
+    """Fewest attempts first, so one deletion that keeps failing cannot starve
+    the rest; after PURGE_MAX_ATTEMPTS a row stops being retried and is left
+    for the operator (logged by the caller)."""
+    return db.rows("SELECT * FROM brokerage_purges WHERE attempts < ? ORDER BY attempts, created_at LIMIT ?",
+                   (PURGE_MAX_ATTEMPTS, limit))
 
 
 def purge_done(purge_id: str) -> None:
@@ -272,6 +283,26 @@ def purge_done(purge_id: str) -> None:
 def purge_failed(purge_id: str, error: str) -> None:
     db.execute("UPDATE brokerage_purges SET attempts = attempts + 1, last_error = ? WHERE id = ?",
                (error[:300], purge_id))
+
+
+# ----------------------------------------------------------------- consent
+
+
+def has_consent(user_id: str, version: str) -> bool:
+    return bool(db.row("SELECT 1 FROM brokerage_consents WHERE user_id = ? AND terms_version = ?",
+                       (user_id, version)))
+
+
+def record_consent(user_id: str, version: str, ip_hash: Optional[str]) -> None:
+    if has_consent(user_id, version):
+        return
+    db.execute("INSERT INTO brokerage_consents (id, user_id, terms_version, accepted_at, ip_hash) "
+               "VALUES (?,?,?,?,?)", (db.new_id(), user_id, version, db.utcnow(), ip_hash))
+
+
+def consent_row(user_id: str, version: str) -> Optional[Dict[str, Any]]:
+    return db.row("SELECT terms_version, accepted_at FROM brokerage_consents WHERE user_id = ? AND "
+                  "terms_version = ?", (user_id, version))
 
 
 # ----------------------------------------------------------------- webhooks

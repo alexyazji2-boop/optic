@@ -45,6 +45,11 @@ class UnsupportedBroker(ProviderError):
     """The broker, or this account type at the broker, is not available."""
 
 
+class NotFoundAtProvider(ProviderError):
+    """The user or connection is already gone at the provider. For a
+    deletion that is success, not a failure to retry."""
+
+
 class WebhookRejected(ProviderError):
     """A webhook whose signature or freshness did not verify."""
 
@@ -55,6 +60,10 @@ class Connection:
     institution: str
     disabled: bool = False
     disabled_reason: Optional[str] = None
+    # True only when the provider says the connection is read-only. Optic
+    # refuses anything else, even though it asks for read-only, because the
+    # reader can change the type in the provider's portal.
+    read_only: Optional[bool] = None
 
 
 @dataclass
@@ -238,13 +247,22 @@ class SandboxProvider(Provider):
             user = self._user(provider_user_id)
             return [Connection(id=cid, institution="Sandbox Brokerage ({})".format(self._scenario(cid)),
                                disabled=bool(c["disabled"]),
-                               disabled_reason="Authorisation expired" if c["disabled"] else None)
+                               disabled_reason="Authorisation expired" if c["disabled"] else None,
+                               read_only=c.get("type", "read") == "read")
                     for cid, c in user["connections"].items()]
 
     def remove_connection(self, provider_user_id, secret, connection_id) -> None:
         with self._lock:
             user = self._user(provider_user_id)
             user["connections"].pop(connection_id, None)
+
+    @staticmethod
+    def _broker_time() -> str:
+        # A broker report six hours before the fetch, so the page has a
+        # broker "as of" that differs from Optic's fetch time, as on a real
+        # once-a-day plan.
+        from datetime import datetime, timedelta, timezone
+        return (datetime.now(timezone.utc) - timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def list_accounts(self, provider_user_id, secret) -> List[Account]:
         # One sync calls this once, so this is where the sync count moves.
@@ -261,19 +279,20 @@ class SandboxProvider(Provider):
             if scenario == "edge":
                 out.append(Account(id=conn.id + ":tfsa", connection_id=conn.id, name="TFSA",
                                    number_mask="..{}".format(tag[:2] + "21"), institution=conn.institution,
-                                   account_type="TFSA", currency="CAD", total_value=None))
+                                   account_type="TFSA", currency="CAD", total_value=None, broker_as_of=self._broker_time()))
                 out.append(Account(id=conn.id + ":margin", connection_id=conn.id, name="Margin",
                                    number_mask="..{}".format(tag[:2] + "88"), institution=conn.institution,
-                                   account_type="Margin", currency="USD", total_value=None))
+                                   account_type="Margin", currency="USD", total_value=None, broker_as_of=self._broker_time()))
             else:
                 out.append(Account(id=conn.id + ":ind", connection_id=conn.id, name="Individual",
                                    number_mask="..{}".format(tag[:2] + "04"), institution=conn.institution,
-                                   account_type="Individual", currency="USD"))
+                                   account_type="Individual", currency="USD",
+                                   broker_as_of=self._broker_time()))
                 if scenario == "standard":
                     out.append(Account(id=conn.id + ":roth", connection_id=conn.id, name="Roth IRA",
                                        number_mask="..{}".format(tag[:2] + "57"),
                                        institution=conn.institution, account_type="Roth IRA",
-                                       currency="USD"))
+                                       currency="USD", broker_as_of=self._broker_time()))
         return out
 
     def holdings(self, provider_user_id, secret, account_id) -> Holdings:

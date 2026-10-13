@@ -36,9 +36,9 @@ def test_not_in_the_menu_until_the_server_says_so():
 
 def test_every_control_has_a_handler():
     for attr in ("data-bk-connect", "data-bk-reconnect", "data-bk-sync", "data-bk-disconnect",
-                 "data-bk-disarm", "data-bk-delete-all", "data-bk-reload", "data-bk-select",
+                 "data-bk-disarm", "data-bk-delete-all", "data-bk-reload", "data-bk-select", "data-bk-consent",
                  "data-billing-checkout", "data-billing-portal"):
-        rendered = len(re.findall(attr + r'[=>\s"]', APP))
+        rendered = len(re.findall(attr + r'[=>\s"$]', APP))
         handled = APP.count("[{}]".format(attr))
         assert rendered and handled, attr
 

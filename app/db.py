@@ -760,9 +760,23 @@ MIGRATION_12 = [
         token_hash   TEXT PRIMARY KEY,
         user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         reconnect_id TEXT,
+        known_ids    TEXT NOT NULL DEFAULT '[]',
         expires_at   TEXT NOT NULL
     )
     """,
+    # What the reader agreed to before linking, and when. A link is refused
+    # without a row for the current terms version, so changing the terms
+    # means asking again rather than assuming the old yes still covers them.
+    """
+    CREATE TABLE IF NOT EXISTS brokerage_consents (
+        id            TEXT PRIMARY KEY,
+        user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        terms_version TEXT NOT NULL,
+        accepted_at   TEXT NOT NULL,
+        ip_hash       TEXT
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_bcons_user ON brokerage_consents(user_id, terms_version)",
     """
     CREATE TABLE IF NOT EXISTS brokerage_purges (
         id                     TEXT PRIMARY KEY,
@@ -887,10 +901,21 @@ def sweep() -> Dict[str, int]:
             cur = conn.execute(
                 "DELETE FROM {} WHERE {} < ?".format(table, column), (now,))
             counts[table] = cur.rowcount or 0
-        # Attempts older than a day can no longer affect any window.
-        cur = conn.execute("DELETE FROM auth_attempts WHERE created_at < ?",
+        # Attempts older than a day can no longer affect any window, except
+        # the paid plan's 30-day Milo allowance, which counts these same rows
+        # over 30 days. Sweeping those at a day left the monthly cap counting
+        # one day and never binding (review of 25e1194, H3).
+        cur = conn.execute("DELETE FROM auth_attempts WHERE kind != 'ai_month' AND created_at < ?",
                            (in_seconds(-86400),))
         counts["auth_attempts"] = cur.rowcount or 0
+        cur = conn.execute("DELETE FROM auth_attempts WHERE kind = 'ai_month' AND created_at < ?",
+                           (in_seconds(-31 * 86400),))
+        counts["auth_attempts"] += cur.rowcount or 0
+        # Webhook ids only need to outlive the providers' retry windows
+        # (Stripe: 3 days in live mode; SnapTrade: hours).
+        cur = conn.execute("DELETE FROM webhook_events WHERE received_at < ?",
+                           (in_seconds(-30 * 86400),))
+        counts["webhook_events"] = cur.rowcount or 0
     return counts
 
 

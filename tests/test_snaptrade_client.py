@@ -21,7 +21,8 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 from app.brokerage import snaptrade
-from app.brokerage.providers import AuthExpired, ProviderError, ProviderOutage, WebhookRejected
+from app.brokerage.providers import (AuthExpired, NotFoundAtProvider, ProviderError, ProviderOutage,
+                                     WebhookRejected)
 
 
 class Resp:
@@ -103,8 +104,11 @@ def test_partial_when_balances_fail():
 
 
 @pytest.mark.parametrize("status,body,err", [
-    (402, {"code": "x"}, AuthExpired),
-    (400, {"code": "1076"}, AuthExpired),
+    # 402 can mean Optic's own SnapTrade plan; expiry comes from
+    # authorizations[].disabled, never a guessed code (review M8).
+    (402, {"code": "x"}, ProviderError),
+    (400, {"code": "1076"}, ProviderError),
+    (404, {}, NotFoundAtProvider),
     (429, {}, ProviderOutage),
     (503, {}, ProviderOutage),
     (401, {}, ProviderError),
@@ -157,7 +161,21 @@ def test_webhook_verification():
     bad_headers, _ = _webhook(body, key="wrong")
     with pytest.raises(WebhookRejected):
         p.verify_webhook(bad_headers, raw)
-    old = dict(body, eventTimestamp=datetime.fromtimestamp(time.time() - 900, timezone.utc).isoformat())
+    # SnapTrade's first retry is 30 minutes late, so that must still verify
+    # (review H1); a day old does not.
+    late = dict(body, eventTimestamp=datetime.fromtimestamp(time.time() - 3 * 3600, timezone.utc).isoformat())
+    h1, raw1 = _webhook(late)
+    assert p.verify_webhook(h1, raw1)["eventType"] == "CONNECTION_BROKEN"
+    old = dict(body, eventTimestamp=datetime.fromtimestamp(time.time() - 25 * 3600, timezone.utc).isoformat())
     h2, raw2 = _webhook(old)
     with pytest.raises(WebhookRejected):
         p.verify_webhook(h2, raw2)
+
+
+def test_list_connections_reports_whether_each_is_read_only():
+    p, _ = client({("GET", "/authorizations"): (200, [
+        {"id": "a", "brokerage": {"name": "X"}, "type": "read"},
+        {"id": "b", "brokerage": {"name": "Y"}, "type": "trade"},
+        {"id": "c", "brokerage": {"name": "Z"}},
+    ])})
+    assert [c.read_only for c in p.list_connections("u", "s")] == [True, False, None]

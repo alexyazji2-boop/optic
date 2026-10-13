@@ -32,6 +32,7 @@ from .valuation import store as valuation_store
 from . import billing as billing_mod
 from .brokerage import routes as brokerage_routes
 from .brokerage import service as brokerage_service
+from .brokerage import store as brokerage_store
 from . import db as accounts_db
 from .auth import admin as auth_admin
 from .auth import deps as auth_deps
@@ -6993,10 +6994,13 @@ def _milo_toolbox(request: Request) -> milo_tools.Toolbox:
     })
 
 
+# Narrowed after review (M5): a bare "earnings" or "sync" sent a reader's
+# holdings to the model for questions that were about a company, not them.
+# Earnings counts only alongside "my", "I own/hold" or "holdings".
 _LINKED_WORDS = re.compile(
-    r"\b(portfolio|positions?|holdings?|exposure|concentrat\w*|diversif\w*|allocation|"
-    r"my (?:account|accounts|brokerage|stocks|shares|options|book|cash)|what do i (?:own|hold)|"
-    r"earnings|last sync|since (?:my|the) last|sync(?:ed)?)\b", re.I)
+    r"\b(portfolio|positions?|holdings?|exposure|exposed|concentrat\w*|diversif\w*|allocation|"
+    r"my (?:account|accounts|brokerage|stocks|shares|options|book|cash|money)|what do i (?:own|hold)|"
+    r"i (?:own|hold)|last sync|since (?:my|the) last)\b", re.I)
 
 
 async def _with_linked_portfolio(request: Request, history: List[Dict[str, Any]],
@@ -7009,11 +7013,11 @@ async def _with_linked_portfolio(request: Request, history: List[Dict[str, Any]]
     context dict because `build_context` truncates at 90K characters from the
     end, and the portfolio is the part of a portfolio question that must
     survive."""
-    if isinstance(context, dict) and "brokerage_portfolio" in context:
+    if isinstance(context, dict) and ("brokerage_portfolio" in context or "brokerage_linked" in context):
         # Only the server writes this key. A browser that sends one is
         # either stale or forging, and the model trusts this block as the
         # reader's real accounts.
-        context = {k: v for k, v in context.items() if k != "brokerage_portfolio"}
+        context = {k: v for k, v in context.items() if k not in ("brokerage_portfolio", "brokerage_linked")}
     focus = (context or {}).get("focus") if isinstance((context or {}).get("focus"), dict) else {}
     if focus.get("scope") in ("none", "market"):
         return context
@@ -7025,8 +7029,16 @@ async def _with_linked_portfolio(request: Request, history: List[Dict[str, Any]]
         return context
     last = next((t for t in reversed(history or []) if t.get("role") != "assistant"), None)
     asked = bool(last and _LINKED_WORDS.search(str(last.get("content") or "")))
-    if not asked and focus.get("view") != "brokerage":
+    try:
+        linked = bool(brokerage_store.link(user["id"]) and brokerage_store.accounts(user["id"]))
+    except (sqlite3.Error, OSError):
         return context
+    if not linked:
+        return context
+    if not asked and focus.get("view") != "brokerage":
+        # Say that something is linked without sending it, so Milo does not
+        # tell a linked reader they have nothing linked.
+        return dict({"brokerage_linked": True}, **(context or {}))
     try:
         block = await _run(brokerage_service.milo_context, user, **brokerage_routes.LOOKUPS)
     except Exception as exc:                                      # noqa: BLE001
@@ -7034,8 +7046,8 @@ async def _with_linked_portfolio(request: Request, history: List[Dict[str, Any]]
                                                    type(exc).__name__)
         return context
     if not block:
-        return context
-    return dict({"brokerage_portfolio": block}, **(context or {}))
+        return dict({"brokerage_linked": True}, **(context or {}))
+    return dict({"brokerage_portfolio": block, "brokerage_linked": True}, **(context or {}))
 
 
 @app.post("/api/chat")

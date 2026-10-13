@@ -13354,6 +13354,12 @@ body.auth-open { overflow: hidden; }
 .bk-flash.bad { border-color: color-mix(in srgb, var(--neg) 50%, var(--border)); }
 .bk-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
 .bk-head h2 { margin: 0; }
+.bk-consent {
+  display: flex; align-items: flex-start; gap: var(--space-2); margin: var(--space-3) 0;
+  padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--r-md);
+  font-size: var(--t-small); line-height: 1.5; cursor: pointer;
+}
+.bk-consent input { width: 18px; height: 18px; margin-top: 2px; flex: 0 0 auto; }
 .bk-conn { padding: var(--space-3) 0; border-top: 1px solid var(--border); }
 .bk-conn:first-of-type { border-top: 0; }
 .bk-conn-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }

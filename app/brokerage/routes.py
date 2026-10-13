@@ -19,7 +19,7 @@ import html
 import logging
 from typing import Any, Callable, Dict, Optional
 
-from fastapi import APIRouter, Body, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.concurrency import run_in_threadpool
 
@@ -43,7 +43,8 @@ PERMISSIONS = [
     "You sign in to your broker on the broker's or SnapTrade's own page. Optic never sees or stores "
     "your brokerage password.",
     "You choose which accounts count towards your Optic portfolio, and can change that at any time.",
-    "Holdings are stored encrypted. Milo reads them only when you ask it a question while signed in.",
+    "Holdings are stored encrypted. When you ask Milo about your portfolio, your holdings are sent with "
+    "that question to Anthropic, the AI provider that runs Milo, to write the answer.",
     "Disconnect removes the connection at the provider and deletes Optic's copy of that connection's "
     "data straight away. Delete all brokerage data also deletes the encryption key, so backups "
     "cannot be read either.",
@@ -62,6 +63,8 @@ def _http(exc: Exception) -> HTTPException:
         return HTTPException(status_code=503, detail=str(exc))
     if isinstance(exc, service.NotEntitled):
         return HTTPException(status_code=402, detail=str(exc))
+    if isinstance(exc, service.NeedsConsent):
+        return HTTPException(status_code=428, detail=str(exc))
     if isinstance(exc, LookupError):
         return HTTPException(status_code=404, detail=str(exc).strip("'\"") or "Not found.")
     if isinstance(exc, ProviderError):
@@ -82,6 +85,7 @@ async def brokerage_status(request: Request) -> Dict[str, Any]:
         return out
     out["signed_in"] = True
     out["entitlement"] = service.entitlement(user)
+    out["consent"] = service.consent_state(user["id"])
     # What upgrading would give, so the page's offer is built from the same
     # numbers the server enforces rather than from copy that can drift.
     out["paid_limits"] = {k: v for k, v in auth_store.PLANS["pro"].items() if k != "label"}
@@ -98,9 +102,11 @@ async def connect(request: Request, payload: Dict[str, Any] = Body(default={})) 
     deps.csrf_guard(request)
     auth_ratelimit.spend("brokerage_connect", auth_ratelimit.key_bucket(user["id"]), 10, 3600,
                          "That is a lot of connection attempts in an hour. Wait a while and try again.")
+    ip_hash = auth_ratelimit.key_bucket(auth_ratelimit.client_ip(request))
     try:
         url = await run_in_threadpool(service.start_link, user, runtime.base_url(),
-                                      (payload or {}).get("reconnect") or None)
+                                      (payload or {}).get("reconnect") or None,
+                                      (payload or {}).get("consent_version") or None, ip_hash)
     except Exception as exc:                                    # noqa: BLE001
         raise _http(exc)
     return {"url": url}
@@ -122,11 +128,12 @@ async def callback(request: Request, state: str = "", status: str = "") -> Redir
         code = "unsupported" if "UNSUPPORTED" in reason else "error"
         return RedirectResponse("/?brokerage={}#/brokerage".format(code), status_code=303)
     try:
-        result = await run_in_threadpool(service.finish_link, user)
+        result = await run_in_threadpool(service.finish_link, user, taken)
     except Exception as exc:                                    # noqa: BLE001
         log.warning("brokerage callback failed: %s", type(exc).__name__)
         return RedirectResponse("/?brokerage=error#/brokerage", status_code=303)
-    code = "limit" if result["over_limit"] else "linked"
+    code = ("notreadonly" if result["refused"] else "limit" if result["over_limit"]
+            else "linked" if result["imported"] or result["synced"] else "nothing")
     return RedirectResponse("/?brokerage={}#/brokerage".format(code), status_code=303)
 
 
@@ -143,15 +150,18 @@ async def sync_now(connection_id: str, request: Request) -> Dict[str, Any]:
                                                     "is still here, and you can disconnect at any time.")
     if conn["status"] in ("expired", "closed"):
         raise HTTPException(status_code=409, detail="This connection needs to be reconnected first.")
-    auth_ratelimit.spend("brokerage_sync", auth_ratelimit.key_bucket(user["id"]),
-                         ent["manual_syncs_per_day"], 86400,
-                         "Your plan includes {} manual syncs a day. Accounts also sync on their own once "
-                         "a day.".format(ent["manual_syncs_per_day"]))
+    bucket = auth_ratelimit.key_bucket(user["id"])
+    if auth_ratelimit.allowance("brokerage_sync", bucket, ent["manual_syncs_per_day"], 86400)["left"] <= 0:
+        raise HTTPException(status_code=429, detail="Your plan includes {} manual sync{} a day. Accounts also "
+                            "sync on their own once a day.".format(
+                                ent["manual_syncs_per_day"], "" if ent["manual_syncs_per_day"] == 1 else "s"))
     try:
-        service.require_available()
-        result = await run_in_threadpool(service.sync_connection, user, conn, None, None, True)
+        result = await run_in_threadpool(service.request_refresh, user, conn)
     except Exception as exc:                                    # noqa: BLE001
         raise _http(exc)
+    # Spent only once the provider accepted the request: a refused refresh
+    # bought nothing and costs the reader nothing (review M3).
+    auth_ratelimit.record("brokerage_sync", bucket)
     return result
 
 
@@ -199,7 +209,7 @@ async def portfolio(request: Request) -> Dict[str, Any]:
 
 
 @router.post("/webhook")
-async def webhook(request: Request) -> Dict[str, Any]:
+async def webhook(request: Request, background: BackgroundTasks) -> Dict[str, Any]:
     body = await request.body()
     st = service.status()
     if not st["enabled"]:
@@ -215,13 +225,19 @@ async def webhook(request: Request) -> Dict[str, Any]:
     if not store.first_delivery(prov.name, eid, kind):
         return {"ok": True, "duplicate": True}
     event.setdefault("type", kind)
+    # Acknowledged now, handled after the response: a sync is several provider
+    # calls, and a slow one timing out the delivery made SnapTrade retry
+    # (review M2). A failure un-records the id so the retry is processed.
+    background.add_task(_handle_event, prov.name, eid, kind, event)
+    return {"ok": True, "queued": True}
+
+
+async def _handle_event(provider_name: str, eid: str, kind: str, event: Dict[str, Any]) -> None:
     try:
-        result = await run_in_threadpool(service.handle_webhook, event)
+        await run_in_threadpool(service.handle_webhook, event)
     except Exception:                                           # noqa: BLE001
-        store.forget_delivery(prov.name, eid)
+        store.forget_delivery(provider_name, eid)
         log.exception("brokerage webhook %s failed", kind)
-        raise HTTPException(status_code=500, detail="Not processed; retry.")
-    return {"ok": True, "result": result}
 
 
 # --------------------------------------------------------------- sandbox portal

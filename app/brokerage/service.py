@@ -36,8 +36,8 @@ from .. import db, runtime, vault
 from ..auth import admin as auth_admin
 from ..auth import store as auth_store
 from . import portfolio, store
-from .providers import (AuthExpired, Provider, ProviderError, ProviderOutage, SandboxProvider,
-                        UnsupportedBroker)
+from .providers import (AuthExpired, NotFoundAtProvider, Provider, ProviderError, ProviderOutage,
+                        SandboxProvider, UnsupportedBroker)
 
 log = logging.getLogger("optic.brokerage")
 
@@ -57,6 +57,38 @@ class NotAvailable(RuntimeError):
 
 class NotEntitled(RuntimeError):
     pass
+
+
+class NeedsConsent(RuntimeError):
+    pass
+
+
+# ------------------------------------------------------------------- consent
+#
+# The reader ticks an unticked box agreeing to Optic's terms and privacy
+# policy and the provider's end-user terms before the first link, and again
+# whenever the version changes. The documents themselves are the owner's (and
+# counsel's) to write; their URLs and version are configuration, and the
+# SnapTrade provider will not switch on without them.
+
+
+def terms() -> Dict[str, Optional[str]]:
+    return {
+        # Defaults name the drafts in ~/Optic/work/legal (not yet reviewed or
+        # published). Set BROKERAGE_TERMS_VERSION to the final ids when the
+        # reviewed documents go live, and every reader is asked again.
+        "version": (os.environ.get("BROKERAGE_TERMS_VERSION")
+                    or "terms-draft-2026-10-12+privacy-draft-2026-10-12").strip(),
+        "terms_url": (os.environ.get("TERMS_URL") or "").strip() or None,
+        "privacy_url": (os.environ.get("PRIVACY_URL") or "").strip() or None,
+        "provider_terms_url": (os.environ.get("SNAPTRADE_TERMS_URL") or "").strip() or None,
+    }
+
+
+def consent_state(user_id: str) -> Dict[str, Any]:
+    t = terms()
+    row = store.consent_row(user_id, t["version"])
+    return dict(t, accepted=bool(row), accepted_at=(row or {}).get("accepted_at"))
 
 
 # ------------------------------------------------------------- configuration
@@ -82,6 +114,12 @@ def status() -> Dict[str, Any]:
         return {"enabled": False, "reason": runtime.for_reader(
             "Brokerage linking is not available right now.",
             "Set SNAPTRADE_CLIENT_ID and SNAPTRADE_CONSUMER_KEY.")}
+    if choice == "snaptrade" and not all(terms()[k] for k in ("terms_url", "privacy_url", "provider_terms_url")):
+        # Real holdings are not linked under terms nobody has published.
+        return {"enabled": False, "reason": runtime.for_reader(
+            "Brokerage linking is not available right now.",
+            "Set TERMS_URL, PRIVACY_URL and SNAPTRADE_TERMS_URL (published, reviewed documents) "
+            "before enabling SnapTrade.")}
     if choice not in ("sandbox", "snaptrade"):
         return {"enabled": False, "reason": "Unknown BROKERAGE_PROVIDER: {}".format(choice)}
     prov = provider()
@@ -154,19 +192,27 @@ def ensure_link(user_id: str, prov: Provider) -> Dict[str, str]:
         return {"provider_user_id": row["provider_user_id"], "secret": store.secret(user_id, row)}
     if row:
         # A link closed at the provider (plan lapse) or made with another
-        # provider: start over. Local rows go; the old provider user was
-        # already deleted or is queued for deletion.
+        # provider: start over. Local rows go; an old provider user that was
+        # not already deleted is queued for deletion.
+        if not row.get("provider_removed_at"):
+            store.queue_purge(row["provider"], row["provider_user_id"], None, "replaced by a new link")
         store.purge_local(user_id)
     made = prov.register_user()
     store.create_link(user_id, prov.name, made["user_id"], made["secret"])
     return {"provider_user_id": made["user_id"], "secret": made["secret"]}
 
 
-def start_link(user: Dict[str, Any], redirect_base: str, reconnect_id: Optional[str] = None) -> str:
+def start_link(user: Dict[str, Any], redirect_base: str, reconnect_id: Optional[str] = None,
+               consent_version: Optional[str] = None, ip_hash: Optional[str] = None) -> str:
     prov = require_available()
     ent = entitlement(user)
     if not ent["can_link"]:
         raise NotEntitled("Linking a brokerage is part of the paid plan.")
+    version = terms()["version"]
+    if not store.has_consent(user["id"], version):
+        if consent_version != version:
+            raise NeedsConsent("Agree to the terms first. Tick the box above Connect.")
+        store.record_consent(user["id"], version, ip_hash)
     current = [c for c in store.connections(user["id"]) if c["status"] != "disconnected"]
     reconnect_provider_id = None
     if reconnect_id:
@@ -178,42 +224,79 @@ def start_link(user: Dict[str, Any], redirect_base: str, reconnect_id: Optional[
         raise NotEntitled("Your plan links up to {} brokerage connection{}. Disconnect one first."
                           .format(ent["max_connections"], "" if ent["max_connections"] == 1 else "s"))
     creds = ensure_link(user["id"], prov)
-    state = store.new_link_state(user["id"], reconnect_id)
+    known = [c.id for c in prov.list_connections(creds["provider_user_id"], creds["secret"])]
+    state = store.new_link_state(user["id"], reconnect_id, known)
     redirect = "{}/api/brokerage/callback?state={}".format(redirect_base.rstrip("/"), state)
     return prov.portal_url(creds["provider_user_id"], creds["secret"], redirect,
                            reconnect=reconnect_provider_id)
 
 
-def finish_link(user: Dict[str, Any]) -> Dict[str, Any]:
-    """Import every connection the provider has for this reader, then sync the
-    new or repaired ones. Called after the portal hands the browser back."""
+def finish_link(user: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, Any]:
+    """Import what this link created, then sync it. Called after the portal
+    hands the browser back with a state token this reader started.
+
+    Only one connection is imported per state: the one that did not exist
+    when the link started, or the connection being repaired. Anything else
+    the provider holds for this reader that Optic does not know about is
+    removed at the provider, so a portal link someone else completed cannot
+    be swept into this account later and is not billed (review M1). A
+    connection that is not read-only is refused and removed (review H4)."""
     prov = require_available()
     creds = _credentials(user["id"])
     if not creds:
         raise LookupError("No brokerage link was started for this account.")
     ent = entitlement(user)
+    import json as _json
+    known_at_start = set(_json.loads(state.get("known_ids") or "[]"))
+    repairing = store.connection(user["id"], state["reconnect_id"]) if state.get("reconnect_id") else None
+    ours = {c["provider_connection_id"]: c for c in store.connections(user["id"])}
     found = prov.list_connections(creds["provider_user_id"], creds["secret"])
-    synced, over_limit = [], []
-    known = {c["provider_connection_id"]: c for c in store.connections(user["id"])}
+    new = [c for c in found if c.id not in known_at_start and c.id not in ours]
+    target = None
+    if repairing:
+        target = next((c for c in found if c.id == repairing["provider_connection_id"]), None)
+    elif len(new) == 1:
+        target = new[0]
+    synced, refused, over_limit = [], [], []
     for conn in found:
-        existing = known.get(conn.id)
-        if existing is None and len([c for c in store.connections(user["id"])
-                                     if c["status"] != "disconnected"]) >= ent["max_connections"]:
-            # Over the plan's limit: remove it at the provider straight away so
-            # it is not billed, and say so.
-            try:
-                prov.remove_connection(creds["provider_user_id"], creds["secret"], conn.id)
-            except ProviderError as exc:
-                store.queue_purge(prov.name, creds["provider_user_id"], conn.id, str(exc))
-            over_limit.append(conn.institution)
+        if conn.id in ours and (target is None or conn.id != target.id):
+            continue                                    # already Optic's; untouched here
+        if target is not None and conn.id == target.id:
             continue
-        row = store.upsert_connection(user["id"], prov.name, conn.id, conn.institution,
-                                      "expired" if conn.disabled else "active",
-                                      conn.disabled_reason)
-        if not conn.disabled and (existing is None or existing["status"] != "active"):
-            synced.append(sync_connection(user, row, prov=prov, creds=creds))
+        # Not Optic's and not this link's: remove it at the provider.
+        try:
+            prov.remove_connection(creds["provider_user_id"], creds["secret"], conn.id)
+        except NotFoundAtProvider:
+            pass
+        except ProviderError as exc:
+            store.queue_purge(prov.name, creds["provider_user_id"], conn.id, _safe(exc))
+    if target is not None:
+        existing = ours.get(target.id)
+        active = [c for c in store.connections(user["id"]) if c["status"] != "disconnected"]
+        if target.read_only is not True:
+            try:
+                prov.remove_connection(creds["provider_user_id"], creds["secret"], target.id)
+            except NotFoundAtProvider:
+                pass
+            except ProviderError as exc:
+                store.queue_purge(prov.name, creds["provider_user_id"], target.id, _safe(exc))
+            if existing:
+                store.delete_connection(user["id"], existing["id"])
+            refused.append(target.institution)
+        elif existing is None and len(active) >= ent["max_connections"]:
+            try:
+                prov.remove_connection(creds["provider_user_id"], creds["secret"], target.id)
+            except ProviderError as exc:
+                store.queue_purge(prov.name, creds["provider_user_id"], target.id, _safe(exc))
+            over_limit.append(target.institution)
+        else:
+            row = store.upsert_connection(user["id"], prov.name, target.id, target.institution,
+                                          "expired" if target.disabled else "active", target.disabled_reason)
+            if not target.disabled:
+                synced.append(sync_connection(user, row, prov=prov, creds=creds))
     db.execute("UPDATE brokerage_users SET paused_at = NULL WHERE user_id = ?", (user["id"],))
-    return {"synced": synced, "over_limit": over_limit}
+    return {"synced": synced, "over_limit": over_limit, "refused": refused,
+            "imported": target.institution if target is not None and not refused and not over_limit else None}
 
 
 # ------------------------------------------------------------------- syncing
@@ -232,7 +315,8 @@ def _payload(h, acct) -> Dict[str, Any]:
 
 
 def sync_connection(user: Dict[str, Any], conn: Dict[str, Any], prov: Optional[Provider] = None,
-                    creds: Optional[Dict[str, str]] = None, refresh: bool = False) -> Dict[str, Any]:
+                    creds: Optional[Dict[str, str]] = None, refresh: bool = False,
+                    only_account: Optional[str] = None) -> Dict[str, Any]:
     """Pull every account under one connection. Never raises for a provider
     problem: it records it on the connection and returns what happened."""
     uid = user["id"]
@@ -249,12 +333,6 @@ def sync_connection(user: Dict[str, Any], conn: Dict[str, Any], prov: Optional[P
         if not creds:
             return {"connection_id": conn["id"], "result": "error", "message": "Not linked."}
         store.set_connection(uid, conn["id"], last_attempt_at=db.utcnow())
-        if refresh and hasattr(prov, "refresh_connection"):
-            try:
-                prov.refresh_connection(creds["provider_user_id"], creds["secret"],
-                                        conn["provider_connection_id"])
-            except ProviderError as exc:
-                log.info("brokerage refresh request failed: %s", type(exc).__name__)
         try:
             # The connection itself first. Without this, a connection removed
             # or broken at the provider came back as zero accounts, every
@@ -270,6 +348,8 @@ def sync_connection(user: Dict[str, Any], conn: Dict[str, Any], prov: Optional[P
                 raise AuthExpired(here.disabled_reason or "disabled")
             accts = [a for a in prov.list_accounts(creds["provider_user_id"], creds["secret"])
                      if a.connection_id == conn["provider_connection_id"]]
+            if only_account:
+                accts = [a for a in accts if a.id == only_account] or accts
         except AuthExpired:
             store.set_connection(uid, conn["id"], status="expired",
                                  status_reason="The broker needs you to sign in again.")
@@ -314,7 +394,7 @@ def sync_connection(user: Dict[str, Any], conn: Dict[str, Any], prov: Optional[P
                     "The broker is still sending this account's first data." if state == "pending" else None)
             store.save_payload(uid, row["id"], _payload(h, acct), state, note, acct.broker_as_of)
             states.append(state)
-        for gone in store.accounts(uid, conn["id"]):
+        for gone in ([] if only_account else store.accounts(uid, conn["id"])):
             if gone["id"] not in seen:
                 store.set_account_state(uid, gone["id"], "missing",
                                         "The broker no longer reports this account through the connection.")
@@ -341,6 +421,36 @@ def sync_connection(user: Dict[str, Any], conn: Dict[str, Any], prov: Optional[P
         return {"connection_id": conn["id"], "result": result, "accounts": len(seen)}
     finally:
         lock.release()
+
+
+def request_refresh(user: Dict[str, Any], conn: Dict[str, Any]) -> Dict[str, Any]:
+    """"Sync now". Where the provider refreshes asynchronously (SnapTrade's
+    paid refresh), ask for it and let the ACCOUNT_HOLDINGS_UPDATED webhook do
+    the pull: reading straight after the request returned yesterday's data
+    under a "Synced" message (review M3). A provider with no refresh call
+    (the sandbox) is read now."""
+    prov = require_available()
+    if not hasattr(prov, "refresh_connection"):
+        return sync_connection(user, conn, prov=prov)
+    creds = _credentials(user["id"])
+    if not creds:
+        return {"connection_id": conn["id"], "result": "error", "message": "Not linked."}
+    prov.refresh_connection(creds["provider_user_id"], creds["secret"], conn["provider_connection_id"])
+    store.set_connection(user["id"], conn["id"], last_attempt_at=db.utcnow())
+    return {"connection_id": conn["id"], "result": "requested"}
+
+
+BACKGROUND_PULLS_PER_DAY = 4    # SnapTrade's launch guide: at most 4 background pulls per user a day
+
+
+def background_pull_allowed(user_id: str) -> bool:
+    from ..auth import ratelimit as auth_ratelimit
+    state = auth_ratelimit.allowance("brokerage_bg", auth_ratelimit.key_bucket(user_id),
+                                     BACKGROUND_PULLS_PER_DAY, 86400)
+    if state["left"] <= 0:
+        return False
+    auth_ratelimit.record("brokerage_bg", auth_ratelimit.key_bucket(user_id))
+    return True
 
 
 def _safe(exc: Exception) -> str:
@@ -391,6 +501,8 @@ def disconnect(user: Dict[str, Any], connection_id: str) -> Dict[str, Any]:
         try:
             provider().remove_connection(creds["provider_user_id"], creds["secret"],
                                          conn["provider_connection_id"])
+        except NotFoundAtProvider:
+            pass
         except ProviderError as exc:
             store.queue_purge(conn["provider"], creds["provider_user_id"], conn["provider_connection_id"],
                               _safe(exc))
@@ -453,8 +565,14 @@ def process_purges() -> int:
                 prov.delete_user(p["provider_user_id"])
             store.purge_done(p["id"])
             done += 1
+        except NotFoundAtProvider:
+            store.purge_done(p["id"])               # already gone there: that is the goal
+            done += 1
         except ProviderError as exc:
             store.purge_failed(p["id"], _safe(exc))
+            if p["attempts"] + 1 >= store.PURGE_MAX_ATTEMPTS:
+                log.error("brokerage purge %s gave up after %s attempts; delete it at the provider by hand",
+                          p["id"], p["attempts"] + 1)
     return done
 
 
@@ -556,9 +674,14 @@ def handle_webhook(event: Dict[str, Any]) -> str:
     if kind == "USER_DELETED":
         store.purge_local(uid)
         return "user-deleted"
-    if kind in ("ACCOUNT_HOLDINGS_UPDATED", "CONNECTION_ADDED", "NEW_ACCOUNT_AVAILABLE",
-                "ACCOUNT_TRANSACTIONS_INITIAL_UPDATE") and user and conn and entitlement(user)["can_link"]:
-        sync_connection(user, conn)
+    if kind in ("ACCOUNT_HOLDINGS_UPDATED", "NEW_ACCOUNT_AVAILABLE") and user and conn \
+            and entitlement(user)["can_link"]:
+        # Fires per account, daily and after every refresh. Pull only the
+        # named account, and at most BACKGROUND_PULLS_PER_DAY a day per reader
+        # (review M2); the daily job covers anything skipped.
+        if not background_pull_allowed(uid):
+            return "capped"
+        sync_connection(user, conn, only_account=str(event.get("accountId") or "") or None)
         return "synced"
     return "ignored"
 
@@ -611,7 +734,7 @@ def milo_context(user: Dict[str, Any], **lookups: Callable) -> Optional[Dict[str
                          "last_sync_at": c["last_sync_at"]} for c in conns],
         "facts": {
             "accounts": [{k: a.get(k) for k in ("name", "institution", "account_type", "currency",
-                                                "sync_state", "last_sync_at", "broker_total")}
+                                                "sync_state", "broker_as_of", "last_sync_at", "broker_total")}
                          for a in full["accounts"] if a["selected"]],
             "holdings": [{k: h.get(k) for k in ("symbol", "description", "kind", "currency", "quantity",
                                                 "price", "accounts")} for h in full["holdings"][:60]],
@@ -633,6 +756,7 @@ def milo_context(user: Dict[str, Any], **lookups: Callable) -> Optional[Dict[str
             "price_checks": full["price_checks"],
         },
         "caveats": full["notes"],
-        "not_supplied": "No transactions, realised gains, dividends, tax lots, greeks, option "
-                        "multipliers or live prices come through this connection.",
+        "not_supplied": "No transactions, realised gains, dividends, tax lots, greeks or live prices "
+                        "come through this connection. broker_as_of is when the broker last reported; "
+                        "last_sync_at is when Optic fetched it.",
     }

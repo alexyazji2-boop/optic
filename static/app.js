@@ -2515,7 +2515,7 @@ function saveTimezone() {
 const LEGAL = {
   full: [
     'Optic Terminal is an independent research tool. It is not financial, investment, tax or legal advice, and nothing in it is a recommendation, solicitation or offer to buy or sell any security, option or other instrument. It is provided for informational and educational purposes only.',
-    'The operator is not a broker-dealer, not a registered investment adviser, and not licensed to give investment advice. No output here is personalised: the tool knows nothing about your finances, tax position, time horizon, obligations or risk tolerance, and cannot take them into account.',
+    'The operator is not a broker-dealer, not a registered investment adviser, and not licensed to give investment advice. No output here is personalised advice. If you link a brokerage account, Optic shows and describes those holdings read-only, but it does not know or assess your wider finances, tax position, time horizon, obligations or risk tolerance, and cannot take them into account.',
     'Every figure is generated from third-party data that may be delayed, incomplete or wrong, and from models whose assumptions are stated but not guaranteed. Verify anything you intend to act on against primary sources.',
     'Trading involves substantial risk of loss and is not suitable for everyone. Options carry additional risks and can expire worthless, losing the entire premium; short positions can lose more than the amount invested. Past performance does not predict future results. You may lose some or all of your capital.',
     'Consult a licensed financial professional before making any investment decision. The operator accepts no liability for any loss arising from use of this tool.',
@@ -2523,7 +2523,7 @@ const LEGAL = {
   // Per-view notice, naming the specific way that view's output could be taken
   // for advice. Generic boilerplate gets skimmed; a specific sentence doesn't.
   areas: {
-    pulse: '<strong>Not financial advice.</strong> Milo states which way the <em>data</em> leans and how strongly. That is a reading of numbers on this screen, not a recommendation for you: it knows nothing about your horizon, capital, tax position or other holdings, and cannot judge whether any of this suits you. It can be confidently wrong. The inputs are delayed, several are labelled proxies, and a lean is not a forecast.',
+    pulse: '<strong>Not financial advice.</strong> Milo states which way the <em>data</em> leans and how strongly. That is a reading of numbers on this screen, not a recommendation for you: it does not know your horizon, capital or tax position, and even with a linked brokerage it describes your holdings rather than judging whether any of this suits you. It can be confidently wrong. The inputs are delayed, several are labelled proxies, and a lean is not a forecast.',
     swing: '<strong>Not a recommendation.</strong> The strikes, limit prices, stops and targets on this tab are model output, not advice to place any trade. Options can expire worthless and lose the entire premium.',
     long: '<strong>Not a recommendation.</strong> A conviction score summarises historical data. It says nothing about whether this holding suits your horizon, taxes or existing exposure.',
     roth: '<strong>Not retirement or tax advice.</strong> A rules-based illustration to compare against your own plan. It is not tailored to your income, tax situation, other accounts or goals, and contribution limits and eligibility change. Confirm current rules with the IRS and a licensed professional.',
@@ -46029,7 +46029,16 @@ async function fillBillingRow() {
   if (row) row.hidden = !(g && g.views.includes('brokerage'));
 }
 
-const BROKER = { status: null, portfolio: null, billing: null, loading: false, error: null, armed: null, flash: null };
+const BROKER = { status: null, portfolio: null, billing: null, loading: false, error: null, armed: null, flash: null, agreed: false };
+
+/* Only the provider's own pages and Stripe's are followed. The URL comes from
+ * Optic's server, but a check here costs nothing and means a compromised or
+ * misconfigured response cannot send a reader to a look-alike sign-in page. */
+function bkSafeExternal(url) {
+  if (typeof url !== 'string') return false;
+  if (url.startsWith('/api/brokerage/sandbox/')) return true;
+  return /^https:\/\/([a-z0-9-]+\.)*(snaptrade\.com|stripe\.com)\//i.test(url);
+}
 
 const BROKER_FLASH = {
   linked: ['good', 'Connected. Your accounts are synced below.'],
@@ -46038,6 +46047,8 @@ const BROKER_FLASH = {
   unsupported: ['bad', 'That broker or account type is not supported by the provider yet. Nothing was linked.'],
   error: ['bad', 'The provider could not finish the connection. Nothing was linked; try again in a few minutes.'],
   limit: ['bad', 'That connection would go over your plan\'s limit, so it was removed straight away.'],
+  notreadonly: ['bad', 'That connection allowed trading, so Optic removed it. Connect again and choose read-only access.'],
+  nothing: ['', 'No new connection came back from the provider. If you finished signing in, wait a minute and press Connect again.'],
 };
 
 const BROKER_STATUS = {
@@ -46230,7 +46241,9 @@ function renderBrokerage() {
   }
 
   parts.push(`<div class="panel span2"><div class="bk-head"><h2>${hg('Connections')}</h2>
-      ${canAdd ? '<button type="button" class="btn primary" data-bk-connect>Connect a brokerage</button>' : ''}</div>
+      ${canAdd ? `<button type="button" class="btn primary" data-bk-connect${
+    (st.consent && !st.consent.accepted && !BROKER.agreed) ? ' disabled aria-disabled="true"' : ''}>Connect a brokerage</button>` : ''}</div>
+    ${ent.can_link && canAdd ? bkConsentHtml(st.consent || {}) : ''}
     <p class="sub">${ent.can_link ? `Your plan links up to ${ent.max_connections} connection${ent.max_connections === 1 ? '' : 's'} and ${ent.max_accounts} accounts.
       Accounts sync on their own once a day; Sync now is limited to ${ent.manual_syncs_per_day} a day.`
     : 'Linking and syncing are part of the paid plan. Your stored data stays until you delete it or the retention period ends.'}</p>
@@ -46249,6 +46262,22 @@ function renderBrokerage() {
   }
   host.innerHTML = parts.join('');
   if (typeof revealPanels === 'function') revealPanels(host);
+}
+
+/** The agreement a reader gives before the first link, and again when the
+ *  terms version changes. Unticked by default; Connect stays disabled until
+ *  it is ticked, and the server refuses a link without it either way. */
+function bkConsentHtml(c) {
+  if (c.accepted) {
+    return `<p class="set-row-note">You agreed to the linking terms (version ${esc(c.version || '')}) on ${
+      esc(new Date(c.accepted_at).toLocaleDateString())}.</p>`;
+  }
+  const link = (url, text) => (url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(text)}</a>` : esc(text));
+  const missing = !c.terms_url || !c.privacy_url || !c.provider_terms_url;
+  return `<label class="bk-consent"><input type="checkbox" id="bk-consent-box" data-bk-consent${BROKER.agreed ? ' checked' : ''}>
+    <span>I agree to Optic's ${link(c.terms_url, 'Terms')} and ${link(c.privacy_url, 'Privacy Policy')} and to
+      SnapTrade's ${link(c.provider_terms_url, 'End User Terms')}. I understand Optic gets read-only access and that holdings
+      I ask Milo about are sent to Anthropic to answer.${missing ? ' <em>(Draft: the documents are not published yet; sandbox only.)</em>' : ''}</span></label>`;
 }
 
 function bkUpgradeCard(ent) {
@@ -46333,7 +46362,9 @@ function bkPortfolioHtml(p, conns) {
   const perf = p.performance || {};
   const upl = perf.unrealized_pl_by_currency || {};
   const conc = p.concentration || {};
-  const asOf = (p.as_of || {}).oldest_sync;
+  const asOfObj = p.as_of || {};
+  const asOf = asOfObj.oldest_broker || asOfObj.oldest_sync;
+  const asOfLabel = asOfObj.oldest_broker ? 'Broker data as of' : 'Fetched from your broker';
   const totalTile = combined
     ? `${esc(bkMoney(combined.value, 'USD'))}${combined.approximate ? ' <small>approx.</small>' : ''}`
     : Object.entries(by).map(([c, b]) => esc(bkMoney(b.total, c))).join('<br>');
@@ -46341,7 +46372,7 @@ function bkPortfolioHtml(p, conns) {
   const uplTile = Object.keys(upl).length ? Object.entries(upl).map(([c, v]) => bkSigned(v, c)).join('<br>') : 'Not supplied';
   const out = [];
   out.push(`<div class="panel span2"><div class="bk-head"><h2>${hg('Your portfolio')}</h2>
-      <span class="set-row-note">Broker data as of ${esc(bkWhen(asOf))}. Not live.</span></div>
+      <span class="set-row-note">${asOfLabel} ${esc(bkWhen(asOf))}. Not live.</span></div>
     <div class="bk-tiles">
       <div class="bk-tile"><span class="bk-k">Total value</span><span class="bk-v">${totalTile}</span>
         <span class="bk-n">Optic's arithmetic on your broker's numbers</span></div>
@@ -46439,17 +46470,20 @@ async function brokerageAction(evt) {
     t.disabled = true;
     const r = await brokerFetch('POST', portal ? '/api/billing/portal' : '/api/billing/checkout', {});
     t.disabled = false;
-    if (r.ok && r.data.url) { location.assign(r.data.url); return true; }
+    if (r.ok && bkSafeExternal(r.data.url)) { location.assign(r.data.url); return true; }
     toast((r.data && r.data.detail) || 'Billing is not available right now.', 'bad');
     return true;
   }
   if (t.matches('[data-bk-connect], [data-bk-reconnect]')) {
     t.disabled = true;
     const body = t.dataset.bkReconnect ? { reconnect: t.dataset.bkReconnect } : {};
+    const consent = (BROKER.status && BROKER.status.consent) || {};
+    if (!consent.accepted && BROKER.agreed) body.consent_version = consent.version;
     const r = await brokerFetch('POST', '/api/brokerage/connect', body);
     t.disabled = false;
     // Fetched at the click because the provider's link expires in five minutes.
-    if (r.ok && r.data.url) { location.assign(r.data.url); return true; }
+    if (r.ok && bkSafeExternal(r.data.url)) { location.assign(r.data.url); return true; }
+    if (r.ok) { toast('The connection link did not point at the provider, so Optic did not follow it.', 'bad'); return true; }
     toast((r.data && r.data.detail) || 'Could not start the connection.', 'bad');
     return true;
   }
@@ -46457,10 +46491,11 @@ async function brokerageAction(evt) {
     t.disabled = true;
     t.textContent = 'Syncing...';
     const r = await brokerFetch('POST', `/api/brokerage/connections/${encodeURIComponent(t.dataset.bkSync)}/sync`, {});
-    const words = { ok: 'Synced.', partial: 'Synced, but some data did not arrive.', expired: 'Your broker needs you to reconnect.',
+    const words = { requested: 'Refresh requested. Your broker\'s data usually arrives within a few minutes; this page updates when it does.',
+      ok: 'Synced.', partial: 'Synced, but some data did not arrive.', expired: 'Your broker needs you to reconnect.',
       outage: 'The provider did not respond. Showing the last good data.', busy: 'A sync is already running.',
       paused: 'Syncing is paused because the plan ended.', unsupported: 'This account is not supported.', error: 'The sync failed.' };
-    toast(r.ok ? (words[r.data.result] || 'Done.') : ((r.data && r.data.detail) || 'Sync failed.'), r.ok && ['ok', 'partial'].includes(r.data.result) ? 'good' : 'bad');
+    toast(r.ok ? (words[r.data.result] || 'Done.') : ((r.data && r.data.detail) || 'Sync failed.'), r.ok && ['ok', 'partial', 'requested'].includes(r.data.result) ? 'good' : 'bad');
     loadBrokerage(true);
     return true;
   }
@@ -46489,6 +46524,13 @@ async function brokerageAction(evt) {
 }
 
 async function brokerageSelect(evt) {
+  const agree = evt.target.closest && evt.target.closest('[data-bk-consent]');
+  if (agree) {
+    BROKER.agreed = agree.checked;
+    const btn = document.querySelector('[data-bk-connect]');
+    if (btn) { btn.disabled = !agree.checked; btn.setAttribute('aria-disabled', String(!agree.checked)); }
+    return true;
+  }
   const box = evt.target.closest && evt.target.closest('[data-bk-select]');
   if (!box) return false;
   box.disabled = true;

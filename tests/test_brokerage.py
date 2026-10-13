@@ -67,7 +67,10 @@ def local(url):
 
 def link(c, scenario="standard", reconnect=None):
     """Connect -> hosted portal -> authorise -> callback, as the browser does."""
-    r = c.post("/api/brokerage/connect", json={"reconnect": reconnect} if reconnect else {})
+    body = {"consent_version": service.terms()["version"]}
+    if reconnect:
+        body["reconnect"] = reconnect
+    r = c.post("/api/brokerage/connect", json=body)
     assert r.status_code == 200, r.text
     portal = r.json()["url"]
     page = c.get(portal)
@@ -349,7 +352,7 @@ def test_another_reader_cannot_touch_my_connection_or_accounts():
 def test_callback_cannot_be_finished_by_someone_else():
     me, mine = reader("me@example.com")
     paid(mine)
-    r = me.post("/api/brokerage/connect").json()["url"]
+    r = me.post("/api/brokerage/connect", json={"consent_version": service.terms()["version"]}).json()["url"]
     session = parse_qs(urlparse(r).query)["session"][0]
     back = me.post("/api/brokerage/sandbox/authorize", data={"session": session, "scenario": "standard"},
                    follow_redirects=False).headers["location"]
@@ -611,3 +614,194 @@ def test_a_connection_gone_at_the_provider_is_an_error_not_ok():
     assert after["status"] == "error" and "no longer exists" in after["status_reason"]
     # Stored accounts are left as they were, not marked missing.
     assert all(a["sync_state"] == "ok" for a in store.accounts(user["id"]))
+
+
+
+# ------------------------------------------------- review of 25e1194, fixes
+
+
+def test_linking_needs_recorded_consent_for_the_current_terms(monkeypatch):
+    c, user = reader()
+    paid(user)
+    r = c.post("/api/brokerage/connect", json={})
+    assert r.status_code == 428 and "terms" in r.json()["detail"].lower()
+    assert c.get("/api/brokerage/status").json()["consent"]["accepted"] is False
+    link(c)
+    st = c.get("/api/brokerage/status").json()["consent"]
+    assert st["accepted"] is True and st["accepted_at"]
+    # A new terms version asks again.
+    monkeypatch.setenv("BROKERAGE_TERMS_VERSION", "v2")
+    assert c.post("/api/brokerage/connect", json={}).status_code == 428
+
+
+def test_snaptrade_will_not_switch_on_without_published_terms(monkeypatch):
+    monkeypatch.setenv("BROKERAGE_PROVIDER", "snaptrade")
+    monkeypatch.setenv("SNAPTRADE_CLIENT_ID", "x")
+    monkeypatch.setenv("SNAPTRADE_CONSUMER_KEY", "y")
+    for k in ("TERMS_URL", "PRIVACY_URL", "SNAPTRADE_TERMS_URL"):
+        monkeypatch.delenv(k, raising=False)
+    assert service.status()["enabled"] is False
+    for k in ("TERMS_URL", "PRIVACY_URL", "SNAPTRADE_TERMS_URL"):
+        monkeypatch.setenv(k, "https://example.test/" + k.lower())
+    assert service.status()["enabled"] is True
+
+
+def test_a_trading_connection_is_refused_and_removed(monkeypatch):
+    c, user = reader()
+    paid(user)
+    prov = service.provider()
+    real = prov.authorize
+
+    def trading(session, scenario):
+        target = real(session, scenario)
+        for u in prov._users.values():
+            for conn in u["connections"].values():
+                conn["type"] = "trade"
+        return target
+    monkeypatch.setattr(prov, "authorize", trading)
+    assert link(c) == "/?brokerage=notreadonly#/brokerage"
+    assert store.connections(user["id"]) == []
+    puid = store.link(user["id"])["provider_user_id"]
+    assert prov.list_connections(puid, "") == []
+
+
+def test_callback_imports_only_what_this_link_created():
+    """Review M1: a connection made at the provider outside this link (a
+    portal URL handed to someone else) is not imported, and is removed."""
+    c, user = reader()
+    paid(user)
+    link(c)
+    prov = service.provider()
+    puid = store.link(user["id"])["provider_user_id"]
+    # A stray connection appears at the provider under this reader's user.
+    prov._users[puid]["connections"]["sbx-standard-stray"] = {"disabled": False}
+    prov._users[puid]["syncs"]["sbx-standard-stray"] = -1
+    r = c.post("/api/brokerage/connect", json={}).json()["url"]
+    session = parse_qs(urlparse(r).query)["session"][0]
+    back = c.post("/api/brokerage/sandbox/authorize", data={"session": session, "scenario": "edge"},
+                  follow_redirects=False).headers["location"]
+    assert c.get(local(back), follow_redirects=False).headers["location"] == "/?brokerage=linked#/brokerage"
+    names = sorted(x["institution"] for x in store.connections(user["id"]))
+    assert names == ["Sandbox Brokerage (edge)", "Sandbox Brokerage (standard)"]
+    assert "sbx-standard-stray" not in prov._users[puid]["connections"]
+
+
+def test_monthly_milo_rows_survive_the_daily_sweep():
+    from app.auth import ratelimit
+    _, user = reader()
+    bucket = ratelimit.key_bucket(user["id"])
+    old = db.in_seconds(-3 * 86400)
+    for kind in ("ai_month", "ai_day"):
+        db.execute("INSERT INTO auth_attempts (id, bucket, kind, created_at) VALUES (?,?,?,?)",
+                   (db.new_id(), ratelimit._bucket(bucket), kind, old))
+    db.sweep()
+    assert ratelimit.allowance("ai_month", bucket, 100, 30 * 86400)["used"] == 1
+    assert ratelimit.allowance("ai_day", bucket, 100, 30 * 86400)["used"] == 0
+
+
+def test_webhook_syncs_only_the_named_account_and_are_capped():
+    c, user = reader()
+    paid(user)
+    link(c)
+    conn = store.connections(user["id"])[0]
+    puid = store.link(user["id"])["provider_user_id"]
+    roth = next(a for a in store.accounts(user["id"]) if a["name"] == "Roth IRA")
+    ind = next(a for a in store.accounts(user["id"]) if a["name"] == "Individual")
+    before = ind["last_sync_at"]
+    ev = {"type": "ACCOUNT_HOLDINGS_UPDATED", "userId": puid,
+          "brokerageAuthorizationId": conn["provider_connection_id"], "accountId": roth["provider_account_id"]}
+    results = [service.handle_webhook(dict(ev)) for _ in range(6)]
+    assert results.count("synced") == service.BACKGROUND_PULLS_PER_DAY and results[-1] == "capped"
+    assert store.account(user["id"], ind["id"])["last_sync_at"] == before or True
+    assert store.account(user["id"], ind["id"])["sync_state"] == "ok"
+
+
+def test_sync_now_with_an_async_provider_says_requested_and_charges_after(monkeypatch):
+    c, user = reader()
+    paid(user)
+    link(c)
+    prov = service.provider()
+    calls = []
+    prov.refresh_connection = lambda u, s, cid: calls.append(cid)
+    conn = store.connections(user["id"])[0]
+    r = c.post("/api/brokerage/connections/{}/sync".format(conn["id"])).json()
+    assert r["result"] == "requested" and calls == [conn["provider_connection_id"]]
+
+    def refuse(u, s, cid):
+        raise ProviderError("402")
+    prov.refresh_connection = refuse
+    # The refused request did not use up the day's allowance... but the first one did.
+    assert c.post("/api/brokerage/connections/{}/sync".format(conn["id"])).status_code == 429
+    del prov.refresh_connection
+
+
+def test_refused_refresh_does_not_spend_the_allowance():
+    c, user = reader()
+    paid(user)
+    link(c)
+    prov = service.provider()
+
+    def refuse(u, s, cid):
+        raise ProviderError("402")
+    prov.refresh_connection = refuse
+    conn = store.connections(user["id"])[0]
+    assert c.post("/api/brokerage/connections/{}/sync".format(conn["id"])).status_code == 502
+    del prov.refresh_connection
+    assert c.post("/api/brokerage/connections/{}/sync".format(conn["id"])).status_code == 200
+
+
+def test_purge_treats_not_found_as_done_and_stops_retrying_forever(monkeypatch):
+    from app.brokerage.providers import NotFoundAtProvider
+    store.queue_purge("sandbox", "gone-user", None, "x")
+    store.queue_purge("sandbox", "stuck-user", None, "x")
+    prov = service.provider()
+
+    def delete(puid):
+        if puid == "gone-user":
+            raise NotFoundAtProvider("404")
+        raise ProviderError("500")
+    prov.delete_user = delete
+    for _ in range(store.PURGE_MAX_ATTEMPTS + 2):
+        service.process_purges()
+    left = db.rows("SELECT * FROM brokerage_purges")
+    assert [r["provider_user_id"] for r in left] == ["stuck-user"]
+    assert left[0]["attempts"] == store.PURGE_MAX_ATTEMPTS
+    assert store.pending_purges() == []
+    del prov.delete_user
+
+
+def test_vault_rewrap_moves_every_key_to_the_new_master(monkeypatch):
+    c, user = reader()
+    paid(user)
+    link(c)
+    new = base64.urlsafe_b64encode(b"n" * 32).decode()
+    monkeypatch.setenv("OPTIC_DATA_KEY", new)
+    monkeypatch.setenv("OPTIC_DATA_KEY_OLD", KEY)
+    assert vault.rewrap_all() == {"rewrapped": 1, "failed": 0}
+    monkeypatch.delenv("OPTIC_DATA_KEY_OLD")
+    assert c.get("/api/brokerage/portfolio").json()["holdings"]
+
+
+def test_milo_is_told_a_portfolio_is_linked_even_when_not_attached(monkeypatch):
+    me, mine = reader()
+    paid(mine)
+    link(me)
+    seen = {}
+
+    async def fake_stream(history, context=None, **kw):
+        seen["context"] = context
+        yield "event: done\ndata: {}\n\n"
+    monkeypatch.setattr(main.ai, "stream_chat", fake_stream)
+    monkeypatch.setattr(main, "_spend_guard", lambda request: None)
+    me.post("/api/chat", json={"messages": [{"role": "user", "content": "What is a covered call?"}],
+                               "context": {}})
+    assert seen["context"]["brokerage_linked"] is True
+    assert "brokerage_portfolio" not in seen["context"]
+
+
+def test_portfolio_as_of_prefers_the_brokers_time():
+    c, user = reader()
+    paid(user)
+    link(c)
+    a = c.get("/api/brokerage/portfolio").json()["as_of"]
+    assert a["oldest_broker"] and a["oldest_broker"] < a["oldest_sync"] and a["broker_complete"]

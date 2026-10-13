@@ -46,12 +46,17 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-from .providers import (Account, AuthExpired, Cash, Connection, Holdings, OptionPosition, Position,
-                        Provider, ProviderError, ProviderOutage, UnsupportedBroker, WebhookRejected)
+from .providers import (Account, AuthExpired, Cash, Connection, Holdings, NotFoundAtProvider, OptionPosition,
+                        Position, Provider, ProviderError, ProviderOutage, UnsupportedBroker, WebhookRejected)
 
 BASE_URL = "https://api.snaptrade.com"
 TIMEOUT = 20
-WEBHOOK_MAX_AGE = 300
+# SnapTrade retries a failed delivery after 30 minutes with backoff, up to
+# three times. A five-minute window (their docs' sample) rejected every retry,
+# so USER_DELETED or CONNECTION_BROKEN missed once was missed for good (review
+# H1). Replays are harmless: every event only prompts a re-read, and the
+# webhookId is de-duplicated.
+WEBHOOK_MAX_AGE = 24 * 3600
 
 KIND_MAP = {"stock": "equity", "adr": "equity", "etf": "etf", "mutualfund": "fund", "cef": "fund",
             "bond": "bond", "crypto": "crypto"}
@@ -127,12 +132,16 @@ class SnapTradeProvider(Provider):
         code = self._error_code(resp)
         if resp.status_code in (429,) or resp.status_code >= 500:
             raise ProviderOutage("SnapTrade returned {}".format(resp.status_code))
-        if resp.status_code == 402 or code in ("1076", "3003") or "disabled" in code.lower():
-            raise AuthExpired("The broker connection needs to be re-authorised.")
+        # Expiry is read from `authorizations[].disabled`, which is documented,
+        # not guessed from status codes. 402 is documented for a refresh on a
+        # disabled connection but can also mean Optic's own SnapTrade plan, so
+        # it is a provider-side error, never "sign in again" for every reader.
+        if resp.status_code == 402:
+            raise ProviderError("SnapTrade refused the request (402): refresh or plan not available")
         if resp.status_code == 401:
             raise ProviderError("SnapTrade rejected Optic's credentials (401)")
         if resp.status_code == 404:
-            raise ProviderError("SnapTrade could not find that resource (404)")
+            raise NotFoundAtProvider("SnapTrade could not find that resource (404)")
         raise ProviderError("SnapTrade returned {}{}".format(resp.status_code,
                                                              " ({})".format(code) if code else ""))
 
@@ -184,7 +193,8 @@ class SnapTradeProvider(Provider):
                                   or "Brokerage",
                                   disabled=bool(a.get("disabled")),
                                   disabled_reason="The broker needs you to sign in again."
-                                  if a.get("disabled") else None))
+                                  if a.get("disabled") else None,
+                                  read_only=(str(a.get("type")).lower() == "read") if a.get("type") else None))
         return out
 
     def remove_connection(self, provider_user_id, secret, connection_id) -> None:

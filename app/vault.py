@@ -22,9 +22,13 @@ to another's, fails authentication instead of decrypting as someone else's
 portfolio. That is the property an `UPDATE ... SET payload = (SELECT ...)` slip
 or a confused restore would otherwise break silently.
 
-Key rotation: the ciphertext carries a one-byte version, and `OPTIC_DATA_KEY_OLD`
-is tried for unwrapping when the current key fails, so a key can be rotated by
-setting the new one, keeping the old one for a release, and rewrapping on read.
+Key rotation: set the new key as `OPTIC_DATA_KEY` and the previous one as
+`OPTIC_DATA_KEY_OLD` (both are tried when unwrapping), deploy, then run
+`python -m app.vault rewrap`, which re-wraps every user's data key with the
+current master key. Only after it reports zero failures may
+`OPTIC_DATA_KEY_OLD` be removed: a data key still wrapped by the old master
+key would otherwise never open again. Payloads do not change, because they are
+sealed with the data keys, not the master key.
 """
 
 from __future__ import annotations
@@ -108,5 +112,25 @@ def open_(dek: bytes, blob: bytes, aad: str) -> str:
     return _open(dek, blob, aad).decode("utf-8")
 
 
-if __name__ == "__main__":                      # python -m app.vault
-    print(new_master_key())
+def rewrap_all() -> dict:
+    """Re-wrap every stored data key with the current master key."""
+    from . import db
+    done = failed = 0
+    for row in db.rows("SELECT user_id, dek FROM brokerage_users"):
+        try:
+            dek = unwrap_dek(row["user_id"], row["dek"])
+            current = _decode(os.environ.get("OPTIC_DATA_KEY", ""))
+            db.execute("UPDATE brokerage_users SET dek = ? WHERE user_id = ?",
+                       (_seal(current, dek, "dek:" + row["user_id"]), row["user_id"]))
+            done += 1
+        except VaultUnavailable:
+            failed += 1
+    return {"rewrapped": done, "failed": failed}
+
+
+if __name__ == "__main__":                      # python -m app.vault [rewrap]
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "rewrap":
+        print(rewrap_all())
+    else:
+        print(new_master_key())
