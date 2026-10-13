@@ -100,3 +100,12 @@ def test_every_source_key_milo_is_told_about_becomes_a_chip():
     block = APP[APP.index("const PULSE_SOURCES = {"):APP.index("const PULSE_SRC_RE")]
     chips = set(re.findall(r"^\s+([a-z_]+): \[", block, re.M))
     assert keys - {"the", "keys", "are"} <= chips, sorted(keys - chips)
+
+
+def test_the_next_report_survives_a_news_read_without_it():
+    """news.earnings_date came back null on one server and Nov 2 on another
+    for the same symbol (2026-10-13); the Overview dropped the risk card."""
+    nxt = body("ovEarningsNext")
+    assert "earnings_history" in nxt and "upcoming" in nxt
+    for fn in ("ovFactors", "ovNextSteps", "ovEvents"):
+        assert "ovEarningsNext(d)" in body(fn), fn

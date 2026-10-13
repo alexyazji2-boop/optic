@@ -16299,6 +16299,25 @@ function ovValuationRead() {
     source: "Each fiscal year's diluted EPS against that year's average closing price, from the company's statements via Yahoo Finance. Trailing only." };
 }
 
+/* The next earnings date and days to it: the news block's, or the earnings
+ * history's upcoming report when the news read came back without one. Seen
+ * 2026-10-13: the same AAPL payload had news.earnings_date null on one server
+ * and Nov 2 on another, and the Overview dropped its biggest scheduled risk. */
+function ovEarningsNext(d) {
+  const news = d.news || {};
+  if (news.earnings_date && Number.isFinite(news.days_to_earnings)) {
+    return { date: news.earnings_date, days: news.days_to_earnings };
+  }
+  const up = ((((d.company || {}).earnings_history) || {}).upcoming || [])[0];
+  if (!up || !up.date) return null;
+  const m = String(up.date).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const then = Date.UTC(+m[1], +m[2] - 1, +m[3]);
+  const now = new Date();
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return { date: up.date.slice(0, 10), days: Math.round((then - today) / 86400000) };
+}
+
 /* What is working for the company and against it. Only what the payload
  * shows, never a ranking of importance. */
 function ovFactors(d) {
@@ -16333,9 +16352,10 @@ function ovFactors(d) {
     pos.push({ text: `Ahead of its sector over the last ${fmt(sc.window_sessions || 21, 0)} sessions` });
   }
 
-  const days = news.days_to_earnings;
-  if (news.earnings_date && Number.isFinite(days) && days >= 0 && days <= 45) {
-    neg.push({ text: `Earnings report on ${shortDate(news.earnings_date)}, in ${days} day${days === 1 ? '' : 's'}`,
+  const nextEarn = ovEarningsNext(d);
+  const days = nextEarn ? nextEarn.days : null;
+  if (nextEarn && Number.isFinite(days) && days >= 0 && days <= 45) {
+    neg.push({ text: `Earnings report on ${shortDate(nextEarn.date)}, in ${days} day${days === 1 ? '' : 's'}`,
       why: 'Results and guidance can move the price sharply in either direction.', view: 'earnings' });
   }
   // The price against its own history, once per page and not beside a star
@@ -16397,9 +16417,10 @@ function ovEvents(d, advanced) {
   const out = [];
   const news = d.news || {};
   const up = ((((d.company || {}).earnings_history) || {}).upcoming || [])[0];
+  const nextEarn = ovEarningsNext(d);
   const date = news.earnings_date || (up && up.date);
   if (date) {
-    const days = news.days_to_earnings;
+    const days = nextEarn ? nextEarn.days : news.days_to_earnings;
     out.push({ date, label: 'Earnings report', detail: [Number.isFinite(days) && days >= 0 ? `in ${days} day${days === 1 ? '' : 's'}` : '',
       up && reportTiming(up.timing) ? reportTiming(up.timing) : '',
       up && Number.isFinite(up.eps_estimate) ? `analysts expect EPS of ${fmt(up.eps_estimate, 2)}` : ''].filter(Boolean).join(', '),
@@ -16422,9 +16443,9 @@ function ovNextSteps(d, factors) {
   const news = d.news || {};
   const fund = symbolIsFund(sym);
   const steps = [];
-  const days = news.days_to_earnings;
-  if (news.earnings_date && Number.isFinite(days) && days >= 0 && days <= 45) {
-    steps.push({ text: `Review past results before the report on ${shortDate(news.earnings_date)}`, view: 'earnings' });
+  const nextEarn = ovEarningsNext(d);
+  if (nextEarn && Number.isFinite(nextEarn.days) && nextEarn.days >= 0 && nextEarn.days <= 45) {
+    steps.push({ text: `Review past results before the report on ${shortDate(nextEarn.date)}`, view: 'earnings' });
   }
   if (!fund) steps.push({ text: factors.neg.some((f) => f.view === 'financials') ? 'Check the statements behind the weaker figures' : 'Read the full financial statements', view: 'financials' });
   steps.push({ text: 'See how the price compares with its own valuation history', view: 'long' });
