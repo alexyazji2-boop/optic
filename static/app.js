@@ -41574,10 +41574,13 @@ function renderPersonaPicker() {
 function miloHorizonHTML() {
   const cur = MILO_HORIZONS.find((h) => h.id === miloHorizon) || MILO_HORIZONS[0];
   const short = { auto: 'Auto', day: 'Day', swing: 'Swing', long: 'Long term' };
-  return `<div class="hz-row" role="radiogroup" aria-label="Timeframe Milo answers for">
+  /* Toggle buttons (aria-pressed), the house .seg pattern: every one is a tab
+     stop and Space/Enter picks it, where role="radio" would promise arrow-key
+     movement this row does not implement. */
+  return `<div class="hz-row" role="group" aria-labelledby="hz-lab">
     <span class="hz-lab" id="hz-lab">Timeframe</span>
-    <div class="seg hz-seg">${MILO_HORIZONS.map((h) => `<button type="button" role="radio"
-      class="hz-opt${h.id === cur.id ? ' on' : ''}" aria-checked="${h.id === cur.id}"
+    <div class="seg hz-seg">${MILO_HORIZONS.map((h) => `<button type="button"
+      class="hz-opt${h.id === cur.id ? ' on' : ''}" aria-pressed="${h.id === cur.id}"
       data-hz-pick="${esc(h.id)}" title="${esc(h.blurb || '')}">${esc(short[h.id] || h.label)}</button>`).join('')}</div>
     <span class="hz-blurb">${esc(cur.blurb || '')}</span>
   </div>`;

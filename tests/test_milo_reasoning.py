@@ -192,3 +192,15 @@ def test_the_level_ladder_still_owns_the_wording():
     """The base prompt points at the level block rather than fixing a register."""
     assert "a level block says how much to explain" in SYSTEM
     assert knowledge.prompt_for("simple") in [knowledge.MODES["simple"]["prompt"]]
+
+
+def test_the_eval_lessons_are_in_the_prompt():
+    """From the blinded review of the eval answers (2026-10-13): the new
+    prompt's answers said "CONTEXT" to the reader in 11 of 21, ran 22% longer
+    and lost the short questions on padding, misnamed a weekly expiry as the
+    monthly, and passed on a recap headline tagged as an earnings catalyst."""
+    assert "never write \"context\", a key name" in SYSTEM
+    assert "length follows the question" in SYSTEM and "60 to 150 words" in SYSTEM
+    assert "third friday of the month" in SYSTEM
+    assert "a recap, a preview or a ranking is not the event itself" in SYSTEM
+    assert "(composite + 100) / 2" in SYSTEM
