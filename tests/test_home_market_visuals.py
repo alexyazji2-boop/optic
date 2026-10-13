@@ -111,11 +111,15 @@ def _fill_sparks_source():
     return app[start:app.index("\n}\n", start) + 2]
 
 
-def test_a_narrow_row_gives_the_line_its_own_line():
+def test_a_narrow_row_gives_the_line_its_own_track():
     narrow = CSS[CSS.index("@container (max-width: 559px) {\n  .wv-cols { display: none; }"):]
     narrow = narrow[:narrow.index("\n}\n")]
-    assert "'sym price chg go' 'sym changed changed go' 'sym trend signal go'" in narrow
-    assert "'sym . price . chg . go' 'sym . changed . signal . go' 'sym . trend trend trend . go'" in CSS
+    # Two lines: the line has a track of its own between the signal and the
+    # price on the first, and the reason runs under it on the second.
+    assert "'sym signal trend price go' 'changed changed changed chg go'" in narrow
+    assert ".wl-trend { grid-area: trend; }" in narrow
+    # Centred on the first line by the base rule further down the file.
+    assert ".wl-trend { align-self: center; min-width: 0; }" in CSS
 
 
 # ------------------------------------------------------------ the week ahead
