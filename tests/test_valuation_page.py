@@ -181,4 +181,34 @@ def test_a_bank_shows_the_method_that_fits_and_its_sensitivity(monkeypatch):
     assert "does not suit" in html and "residual income" in html
     assert "The methods that fit, side by side" in html and "Starting return on equity" in html
     assert "capital spending" not in html and "return on equity does BNK" in html
+    assert 'data-dcf-field="ri.roe_start"' in html and "Cost of equity</legend>" in html
+    assert 'data-dcf-field="wacc.beta_raw"' in html and "Residual income, bear to bull" in html
     assert "undefined" not in html and "NaN" not in html
+
+
+def test_amounts_accept_suffixes():
+    out = _run("R.v = [V._parseAmount('24.4B'), V._parseAmount('1,250m'), V._parseAmount('7000'), V._parseAmount('lots')];")
+    assert out["v"] == [24.4e9, 1.25e9, 7000, None]
+
+
+def test_a_saved_model_is_compared_field_by_field(real_payload):
+    saved = json.loads(json.dumps(real_payload))
+    saved["assumptions"]["drivers"]["capex_pct"]["target"] = 0.30
+    snap = {"snapshot": {"assumptions": saved["assumptions"], "result": {"per_share": 12.0},
+                         "inputs": dict(saved["inputs_digest"], price=15.0)}}
+    out = _run("""
+      V._state.data.SYN = %s;
+      R.c = V._compareModel(%s, V._state.data.SYN);
+    """ % (json.dumps(real_payload), json.dumps(snap)))["c"]
+    assert [r["label"] for r in out["rows"]] == ["Capex it settles at"]
+    assert out["rows"][0]["saved"] == "30.00%" and out["savedValue"] == 12.0
+    assert any("Price $15.0 then" in n for n in out["notes"])
+
+
+def test_a_negative_value_reads_as_a_sentence():
+    out = _run("""
+      var d = V._state.data.SYN; d.dcf.per_share = -5;
+      R.lede = V._lede(d);
+    """)["lede"]
+    assert "leaves nothing for Synthetic Co's shareholders" in out and "a share a share" not in out
+    assert "nothing per share a share" not in out

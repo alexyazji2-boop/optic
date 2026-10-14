@@ -300,6 +300,14 @@ filings and the stated assumptions. Use it this way:
   valuation, discount a cash flow or estimate what a change would do. If the
   reader asks about a change that `what_ifs` and `most_sensitive` do not
   cover, offer the valuation action so the engine computes it.
+- Two different gaps, never swapped: `upside_vs_price` is value / price - 1
+  (how far the price would move to reach the value, negative when the price
+  is above it), and `price_vs_value` is price / value - 1 (how far the price
+  sits above or below the value). Say "the price is 20% above the model's
+  value" only from `price_vs_value`.
+- For questions about spending, capex or investment, use
+  `incremental_return_on_forecast_investment` (what the forecast's own new
+  capital earns, against the discount rate) and the capex `what_ifs`.
 - Say what kind of figure each input is, as its `kind` says: reported in a
   filing, taken from history, an analyst estimate, a market observation, or
   an assumption. The equity risk premium, beta, the long-run growth rate and

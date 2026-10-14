@@ -248,3 +248,96 @@ def test_equity_stakes_count_once():
     googl = filings({"OtherLongTermInvestments": (USD, [fact(131.5, D, form="10-Q")]),
                      "EquitySecuritiesWithoutReadilyDeterminableFairValueAmount": (USD, [fact(124.3, D, form="10-Q")])})
     assert inputs.investments_on(googl, D)["value"] == pytest.approx(131.5)
+
+
+def _q(val, start, end, accn="0000000001-26-000009"):
+    return fact(val, end, start, form="10-Q", filed="2026-08-01", fp="Q2", accn=accn)
+
+
+def test_trailing_year_is_fiscal_year_plus_ytd_less_prior_ytd():
+    fl = filings({"Revenues": (USD, [fact(400.0, "2025-12-31", "2025-01-01"),
+                                     _q(220.0, "2026-01-01", "2026-06-30"),
+                                     _q(190.0, "2025-01-01", "2025-06-30", accn="0000000001-25-000009")]),
+                  "Assets": (USD, [fact(1.0, "2025-12-31"), fact(1.0, "2026-06-30", form="10-Q")])})
+    hist = inputs.history(fl, fl.fiscal_year_ends())
+    t = inputs.trailing(fl, hist, "2026-06-30")
+    assert t["available"] and t["values"]["revenue"]["value"] == pytest.approx(430.0)
+    assert t["revenue_change_vs_fy0"] == pytest.approx(0.075)
+    assert t["values"]["operating_income"]["value"] is None
+
+
+def test_no_quarter_since_the_annual_report_means_no_separate_trailing_year():
+    fl = filings({"Revenues": (USD, [fact(400.0, "2025-12-31", "2025-01-01")])})
+    hist = inputs.history(fl, fl.fiscal_year_ends())
+    assert not inputs.trailing(fl, hist, "2025-12-31")["available"]
+
+
+def test_unusual_items_take_the_larger_of_the_total_and_its_parts():
+    y = "2025-12-31", "2025-01-01"
+    fl = filings({"Revenues": (USD, [fact(1000.0, *y)]), "OperatingIncomeLoss": (USD, [fact(200.0, *y)]),
+                  "AssetImpairmentCharges": (USD, [fact(50.0, *y)]),
+                  "GoodwillImpairmentLoss": (USD, [fact(30.0, *y)]),
+                  "ImpairmentOfIntangibleAssetsExcludingGoodwill": (USD, [fact(10.0, *y)]),
+                  "RestructuringCharges": (USD, [fact(20.0, *y)])})
+    d = inputs.history(fl, fl.fiscal_year_ends())[0]["derived"]
+    assert d["unusual_items"] == pytest.approx(70.0)          # max(50, 30 + 10) + 20
+    assert d["ebit_margin_normalized"] == pytest.approx(0.27)
+    assert d["ebit_margin"] == pytest.approx(0.20)
+
+
+INSTANCE = """<?xml version="1.0"?>
+<xbrl xmlns="http://www.xbrl.org/2003/instance" xmlns:us-gaap="http://fasb.org/us-gaap/2025"
+      xmlns:nee="http://www.nee.com/20251231" xmlns:xbrldi="http://xbrl.org/2006/xbrldi">
+  <context id="c-1"><entity><identifier scheme="x">1</identifier></entity>
+    <period><startDate>2025-01-01</startDate><endDate>2025-12-31</endDate></period></context>
+  <context id="c-seg"><entity><identifier scheme="x">1</identifier><segment>
+    <xbrldi:explicitMember dimension="dei:LegalEntityAxis">nee:FPLMember</xbrldi:explicitMember></segment></entity>
+    <period><startDate>2025-01-01</startDate><endDate>2025-12-31</endDate></period></context>
+  <context id="c-old"><entity><identifier scheme="x">1</identifier></entity>
+    <period><startDate>2024-01-01</startDate><endDate>2024-12-31</endDate></period></context>
+  <nee:CapitalExpendituresTotal contextRef="c-1" unitRef="usd">24606000000</nee:CapitalExpendituresTotal>
+  <nee:CapitalExpendituresOfFPL contextRef="c-1" unitRef="usd">8719000000</nee:CapitalExpendituresOfFPL>
+  <nee:CapitalExpendituresTotal contextRef="c-seg" unitRef="usd">9000000000</nee:CapitalExpendituresTotal>
+  <nee:CapitalExpendituresTotal contextRef="c-old" unitRef="usd">24729000000</nee:CapitalExpendituresTotal>
+  <nee:CapitalExpendituresIncurredButNotYetPaid contextRef="c-1" unitRef="usd">7645000000</nee:CapitalExpendituresIncurredButNotYetPaid>
+  <us-gaap:PaymentsToAcquirePropertyPlantAndEquipment contextRef="c-1" unitRef="usd">1</us-gaap:PaymentsToAcquirePropertyPlantAndEquipment>
+</xbrl>"""
+
+
+def test_extension_candidates_read_consolidated_fiscal_year_extension_elements(monkeypatch):
+    from app import feeds
+    from app.analytics import segments
+    monkeypatch.setattr(segments, "filings", lambda t, force=False: {"available": True, "rows": [
+        {"form": "10-K", "report_date": "2025-12-31", "accession": "0000000001-26-000001",
+         "instance_url": "https://example.test/x.xml"}]})
+    monkeypatch.setattr(feeds, "fetch_text", lambda *a, **k: INSTANCE)
+    out = inputs.extension_candidates("NEE", "capex", "2025-01-01", "2025-12-31")
+    assert out["available"]
+    assert [(c["element"], c["value"]) for c in out["candidates"]] == [
+        ("CapitalExpendituresTotal", 24606000000.0), ("CapitalExpendituresOfFPL", 8719000000.0)]
+
+
+def test_a_filer_reporting_in_another_currency_is_named_not_mistranslated(monkeypatch):
+    fl = filings({"Revenues": ("EUR", [fact(400.0, "2025-12-31", "2025-01-01")])})
+    monkeypatch.setattr(inputs, "load_filings", lambda t, force=False: (fl, "1", None))
+    out = inputs.gather(Quote(), "XEU")
+    assert not out["available"] and "EUR" in out["reason"] and "does not convert" in out["reason"]
+
+
+def test_a_price_in_another_currency_is_warned_about(monkeypatch):
+    class Q(Quote):
+        def quote(self, t):
+            return dict(super().quote(t), currency="CAD", market_cap=100.0)
+
+        def short_interest(self, t):
+            return {}
+
+        def estimates(self, t):
+            return {}
+    y = "2025-12-31", "2025-01-01"
+    fl = filings({"Revenues": (USD, [fact(400.0, *y)]), "Assets": (USD, [fact(1.0, "2025-12-31")])})
+    monkeypatch.setattr(inputs, "load_filings", lambda t, force=False: (fl, "1", None))
+    monkeypatch.setattr(inputs, "submissions", lambda cik: {})
+    monkeypatch.setattr(inputs, "risk_free", lambda p: {"value": 0.04})
+    out = inputs.gather(Q(), "XCA")
+    assert any("price is in CAD" in w for w in out["warnings"])

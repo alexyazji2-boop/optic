@@ -513,10 +513,21 @@ def build(ticker: str, force: bool = False, budget: int = PARSE_BUDGET,
                 body.append({"member": labels[s]["member"], "values": values})
             if not body:
                 continue
+            # Full fiscal years as the 10-Ks report them, beside the quarters.
+            # Read by the fair-value model's sum of the parts, which needs a
+            # whole year and should not depend on four quarters all having
+            # been parsed (app/valuation/service.py, sotp_model).
+            year_ends = sorted({k[2] for k in cells if k[1] == "year" and k[0] in series})
+            annual = []
+            for s in sorted(series, key=lambda x: labels[x]["member"]):
+                vals = [cells.get((s, "year", e)) for e in year_ends]
+                if any(v is not None for v in vals):
+                    annual.append({"member": labels[s]["member"], "values": vals})
             tables.append({
                 "axis": axis["id"], "axis_label": axis["label"],
                 "metric": metric["id"], "metric_label": metric["label"],
                 "rows": body,
+                "annual": {"ends": year_ends, "rows": annual},
             })
 
     return {

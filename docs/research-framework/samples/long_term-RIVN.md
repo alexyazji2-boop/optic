@@ -1,6 +1,6 @@
 # Long-term investment, negative earnings: Rivian (2026-10-14)
 
-Generated 2026-10-14T17:20:54+00:00 with method research-1.0 and policy policy-2026-10-14. Regular session; the feed gave no price time, so its exact age is unknown (normally about 15 minutes delayed).
+Generated 2026-10-14T22:07:46+00:00 with method research-1.0 and policy policy-2026-10-14. Market after hours: the price is the last regular close or an extended-hours print.
 
 ## Long term: Not Investable
 
@@ -8,7 +8,7 @@ Business quality grades F: the measured economics (returns, cash, balance sheet)
 
 **Business quality: F.** Business quality F (0.78 of 4 across 7 measures). Strongest: revenue growth; weakest: returns on capital.
 
-- Returns on capital (F): Return on capital averaged -27.7% over the last 3 years against a 9.9% cost of capital (-37.6 points). ([10-K 2025-12-31 filed 2026-02-12](https://www.sec.gov/Archives/edgar/data/1874178/000187417826000008/))
+- Returns on capital (F): Return on capital averaged -27.7% over the last 3 years against a 9.8% cost of capital (-37.6 points). ([10-K 2025-12-31 filed 2026-02-12](https://www.sec.gov/Archives/edgar/data/1874178/000187417826000008/))
 - Profitability and margins (F): Operating margin was -66.5% in FY2025, with a 347.0-point range over 4 years. ([10-K 2025-12-31 filed 2026-02-12](https://www.sec.gov/Archives/edgar/data/1874178/000187417826000008/))
 - Revenue growth (A): Revenue compounded 214.6% a year from FY2021 to FY2025, up in 4 of 4 years. ([10-K 2025-12-31 filed 2026-02-12](https://www.sec.gov/Archives/edgar/data/1874178/000187417826000008/))
 - Cash generation and earnings quality (F): Cumulative net income over 3 years was not positive; free cash flow was -11,238,000,000. ([10-K 2025-12-31 filed 2026-02-12](https://www.sec.gov/Archives/edgar/data/1874178/000187417826000008/))
@@ -26,9 +26,9 @@ Business quality grades F: the measured economics (returns, cash, balance sheet)
 
 **The chart, as context.** Below the 40- and 200-week averages: the long-term trend is down. Over the last 26 weeks, volume on up weeks was 0.53x volume on down weeks, a pattern consistent with distribution. This is an interpretation of volume, not evidence of who traded.
 
-**Bull case.** Growth above the base path, higher margins, lighter capex (the DCF bull case). Model value 31.35.
+**Bull case.** Growth above the base path, higher margins, lighter capex (the DCF bull case). Model value -0.70.
 
-**Bear case.** Growth below the base path, lower margins, heavier capex (the DCF bear case). Model value -4.04.
+**Bear case.** Growth below the base path, lower margins, heavier capex (the DCF bear case). Model value -9.34.
 
 **Two ways this could lose money over three years.**
 

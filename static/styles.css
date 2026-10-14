@@ -18085,7 +18085,8 @@ table.data.ss-table tr.ss-row > td:nth-child(6) { white-space: normal; min-width
 .dcf-fit { font-size: var(--t-caption); color: var(--ink-muted); white-space: nowrap; }
 .dcf-rev, .dcf-notes, .dcf-methods { margin: var(--space-1) 0; padding-left: 1.1em; display: grid; gap: var(--space-1); font-size: var(--t-small); color: var(--ink-2); }
 .dcf-rev .muted, .dcf-notes .muted { display: block; font-size: var(--t-caption); }
-.dcf-methods { list-style: none; padding: 0; }
+.dcf-methods { list-style: none; padding: 0; grid-template-columns: minmax(0, 1fr); }
+.dcf-methods li, .dcf-m-out, .dcf-sec, .dcf-more-body { min-width: 0; }
 .dcf-methods li { border-left: 3px solid var(--border-strong); padding: var(--space-1) var(--space-2); }
 .dcf-methods li.dcf-m-primary { border-left-color: var(--s1); }
 .dcf-methods li.dcf-m-not_applicable { opacity: 0.75; }
@@ -18103,7 +18104,9 @@ table.data.ss-table tr.ss-row > td:nth-child(6) { white-space: normal; min-width
 .dcf-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; }
 .dcf-swatch[data-side="above"] { background: color-mix(in srgb, var(--s1) 38%, transparent); }
 .dcf-swatch[data-side="below"] { background: color-mix(in srgb, var(--s2) 38%, transparent); }
-.dcf-sc td, .dcf-fc td, .dcf-bridge td:nth-child(2) { font-variant-numeric: tabular-nums; }
+.dcf-sc td, .dcf-fc td, .dcf-bridge td:nth-child(2), .dcf-sotp td { font-variant-numeric: tabular-nums; }
+.dcf-sotp td { white-space: nowrap; }
+.dcf-sotp thead th, .dcf-sotp tbody th { white-space: normal; }
 .dcf-sc td, .dcf-fc td { text-align: right; white-space: nowrap; }
 .dcf-fc tr.is-total th, .dcf-fc tr.is-total td, .dcf-bridge tr.is-total th, .dcf-bridge tr.is-total td { border-top: 1px solid var(--border-strong); color: var(--ink); }
 .dcf-fc tr.dcf-sub th { text-align: left; color: var(--ink-muted); font-size: var(--t-caption); font-weight: 600; padding-top: var(--space-2); }
@@ -18133,6 +18136,8 @@ table.data.ss-table tr.ss-row > td:nth-child(6) { white-space: normal; min-width
 .dcf-save-name { width: 16em; }
 .dcf-save-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-4); }
 .dcf-status { font-size: var(--t-small); color: var(--ink-2); }
+.dcf-compare { display: grid; gap: var(--space-1); margin-top: var(--space-1); }
+.dcf-missing { display: grid; gap: var(--space-2); justify-items: start; margin-bottom: var(--space-3); }
 .dcf-ask { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); margin-top: var(--space-4); }
 .dcf-ask .chip { cursor: pointer; }
 .dcf-foot { margin-top: var(--space-3); }

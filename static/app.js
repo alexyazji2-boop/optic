@@ -41540,6 +41540,10 @@ async function loadLong(force, opts = {}) {
     if (window.OpticValuation) window.OpticValuation.load();
     return;
   }
+  // The fair-value model needs nothing from the price history, so it starts
+  // now rather than waiting for it (static/valuation.js paints when its
+  // panel exists).
+  if (window.OpticValuation) window.OpticValuation.load();
   if (!silent) beginLoad(views.long, `10-year history for ${STATE.ticker} and the major indices`);
   try {
     const data = await getJSON(`/api/longterm/${encodeURIComponent(STATE.ticker)}?indices=false`);
@@ -41558,7 +41562,16 @@ async function loadLong(force, opts = {}) {
     updateStatus();
     updateChatContext();
   } catch (err) {
-    if (!silent) { endLoad(views.long); views.long.innerHTML = errorHTML(err.message); }
+    if (!silent) {
+      endLoad(views.long);
+      views.long.innerHTML = errorHTML(err.message);
+      // The fair-value model reads filings, not the price history, so it is
+      // still shown when the history fails (static/valuation.js).
+      if (window.OpticValuation) {
+        views.long.insertAdjacentHTML('beforeend', `<div id="dcf-host" class="span-all">${window.OpticValuation.hostHTML()}</div>`);
+        window.OpticValuation.load();
+      }
+    }
     else console.warn('Silent long-term refresh failed:', err.message);
   }
 }
