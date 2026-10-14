@@ -87,11 +87,16 @@ TAGS: Dict[str, Tuple[str, ...]] = {
     "liabilities_current": ("LiabilitiesCurrent",),
     "cash": ("CashAndCashEquivalentsAtCarryingValue",
              "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents", "Cash"),
+    # DebtSecuritiesCurrent last: Nvidia moved its marketable securities to
+    # it after October 2025, and without it $34bn of cash-like holdings read
+    # as "not reported" and as working capital.
     "short_term_investments": ("ShortTermInvestments", "MarketableSecuritiesCurrent",
-                               "AvailableForSaleSecuritiesDebtSecuritiesCurrent"),
+                               "AvailableForSaleSecuritiesDebtSecuritiesCurrent", "DebtSecuritiesCurrent"),
     "long_term_investments": ("LongTermInvestments", "MarketableSecuritiesNoncurrent",
                               "AvailableForSaleSecuritiesDebtSecuritiesNoncurrent"),
     "other_long_term_investments": ("OtherLongTermInvestments",),
+    "equity_securities_fv": ("EquitySecuritiesFvNi",),
+    "equity_securities_nonmarketable": ("EquitySecuritiesWithoutReadilyDeterminableFairValueAmount",),
     "equity_method": ("EquityMethodInvestments",),
     "ltd_and_leases_total": ("LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities",),
     "ltd_and_leases_noncurrent": ("LongTermDebtAndCapitalLeaseObligations",),
@@ -466,11 +471,19 @@ def investments_on(fl: Filings, on: str) -> Dict[str, Any]:
         return lti
     eq = fl.instant("equity_method", on)
     other = fl.instant("other_long_term_investments", on)
-    if lti or eq or other:
-        return _derived("long_term_investments", (_v(lti) or 0.0) + (_v(eq) or 0.0) + (_v(other) or 0.0),
-                        [lti, eq, other], "marketable securities + equity-method + other long-term investments",
+    # Equity stakes tagged on their own (Nvidia's listed and non-marketable
+    # holdings) count only when no other-investments total is tagged: where
+    # one is (Alphabet), the stakes are already inside it.
+    stakes: List[Optional[Dict[str, Any]]] = []
+    if other is None:
+        stakes = [fl.instant("equity_securities_fv", on), fl.instant("equity_securities_nonmarketable", on)]
+    parts = [lti, eq, other] + stakes
+    if any(parts):
+        return _derived("long_term_investments", sum(_v(p) or 0.0 for p in parts), parts,
+                        "marketable securities + equity-method + other long-term investments + equity stakes",
                         "Book values. A stake in a listed or recently funded company can be worth far "
-                        "more or less than its carrying amount.")
+                        "more or less than its carrying amount. Equity securities are assumed non-current "
+                        "unless a current-investments tag shows otherwise.")
     return _zero("long_term_investments", on, "No long-term investments tagged; treated as none.")
 
 

@@ -227,3 +227,24 @@ def test_a_missing_beta_is_computed_from_prices_and_labelled():
     assert b["value"] == pytest.approx(1.5) and b["kind"] == "derived" and "Computed by Optic" in b["source"]
     short = inputs.regression_beta(Prices(months=20), "X")
     assert short["value"] is None and "36 months" in short["reason"]
+
+
+def test_debt_securities_current_count_as_short_term_investments():
+    """Regression (Nvidia, 2026): DebtSecuritiesCurrent replaced
+    MarketableSecuritiesCurrent and was read as not reported."""
+    fl = filings({"DebtSecuritiesCurrent": (USD, [fact(34.1, D, form="10-Q")]),
+                  "CashAndCashEquivalentsAtCarryingValue": (USD, [fact(22.4, D, form="10-Q")]),
+                  "AssetsCurrent": (USD, [fact(197.4, D, form="10-Q")]),
+                  "LiabilitiesCurrent": (USD, [fact(60.0, D, form="10-Q")])})
+    bs = inputs.balance_sheet(fl, D)
+    assert bs["short_term_investments"]["value"] == 34.1
+    assert bs["nwc"]["value"] == pytest.approx((197.4 - 22.4 - 34.1) - 60.0)
+
+
+def test_equity_stakes_count_once():
+    nvda = filings({"EquitySecuritiesFvNi": (USD, [fact(42.8, D, form="10-Q")]),
+                    "EquitySecuritiesWithoutReadilyDeterminableFairValueAmount": (USD, [fact(47.9, D, form="10-Q")])})
+    assert inputs.investments_on(nvda, D)["value"] == pytest.approx(90.7)
+    googl = filings({"OtherLongTermInvestments": (USD, [fact(131.5, D, form="10-Q")]),
+                     "EquitySecuritiesWithoutReadilyDeterminableFairValueAmount": (USD, [fact(124.3, D, form="10-Q")])})
+    assert inputs.investments_on(googl, D)["value"] == pytest.approx(131.5)
