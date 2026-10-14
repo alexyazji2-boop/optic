@@ -488,11 +488,13 @@ def agreement(out: Dict[str, Any]) -> Dict[str, Any]:
         verdict = ("They agree: the business, the price and the chart all lean the same way. Agreement is not "
                    "extra certainty; each still has its own way of being wrong.")
     elif lt_good and not sw_good:
+        why = (sw.get("most_damaging") or {}).get("text", "").rstrip(".")
+        why = (why[0].lower() + why[1:]) if why else ""
+        trade = ("only a viable trade, not a strong one" if grade == "B" else
+                 "a poor trade right now" if grade == "Avoid" else "not a trade right now")
         verdict = ("They disagree, and that is normal. The long-term view is about years of cash flows at today's "
                    "valuation; the swing grade is about the next few weeks' reward against risk at today's price. A "
-                   "good company can be a poor trade right now{}.".format(
-                       " because " + (sw.get("most_damaging") or {}).get("text", "").rstrip(".").lower()
-                       if sw.get("most_damaging") else ""))
+                   "good company can be {}{}.".format(trade, ": " + why if why else ""))
     elif sw_good and not lt_good:
         verdict = ("A tradeable setup in a business the framework would not hold for years ({}). The trade rests on "
                    "price behaviour, so its stop matters more than the business case, and a weak report could break "

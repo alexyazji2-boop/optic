@@ -1,6 +1,6 @@
 # Combined: NVIDIA (2026-10-14)
 
-Generated 2026-10-14T17:21:15+00:00 with method research-1.0 and policy policy-2026-10-14. Regular session; the feed gave no price time, so its exact age is unknown (normally about 15 minutes delayed).
+Generated 2026-10-14T17:43:54+00:00 with method research-1.0 and policy policy-2026-10-14. Regular session; the feed gave no price time, so its exact age is unknown (normally about 15 minutes delayed).
 
 **Where the assessments land.**
 
@@ -8,7 +8,7 @@ Generated 2026-10-14T17:21:15+00:00 with method research-1.0 and policy policy-2
 - Swing: B. Viable but materially flawed; an S would also need reward-to-risk of 2.5 or more.
 - Earnings (2026-11-17): My best-supported pre-earnings view is that $NVDA reports results better than expected, guidance is likely to support estimates, and the reaction is two-sided, because beat EPS consensus in 100% of 8 quarters, by +5.8% on average; and estimates are rising into the release (+14.4% over 90 days), which tends to precede results above them.
 
-**Agreement.** They disagree, and that is normal. The long-term view is about years of cash flows at today's valuation; the swing grade is about the next few weeks' reward against risk at today's price. A good company can be a poor trade right now because reward-to-risk is only 1.50 to the first target.
+**Agreement.** They disagree, and that is normal. The long-term view is about years of cash flows at today's valuation; the swing grade is about the next few weeks' reward against risk at today's price. A good company can be only a viable trade, not a strong one: reward-to-risk is only 1.50 to the first target.
 
 ## Long term: Constructive
 
@@ -27,15 +27,15 @@ Business quality B and a fair valuation; High Conviction needs an A.
 
 **Valuation: Fair.** Valuation fair (2.67 of 4, where 4 is cheapest, across 3 measures).
 
-- Intrinsic value: not graded (The base case is +226% from the price, a gap wider than the model's own reliability: it reflects the assumptions (growth and margins held for years) more than a mispricing, so it is shown and not graded. The fair-value workspace shows which assumption drives it.)
+- Intrinsic value: not graded (The base case is +227% from the price, a gap wider than the model's own reliability: it reflects the assumptions (growth and margins held for years) more than a mispricing, so it is shown and not graded. The fair-value workspace shows which assumption drives it.)
 - Against its own history: The P/E sits at the 0th percentile of its five-year range.
 - Cash yield: Free cash flow yields 1.8% on the market value, against a 5.2% 10-year Treasury.
 - What the price assumes: The price implies about 24.5% revenue growth a year, against 79.4% from analysts' revenue growth for the next 2 years.
-- Against peers: no data (Peer multiples were not read.)
+- Against peers: no data (Not read for this view: peers take a quote lookup each, so they are read for a long-term question to Milo and in the fair-value workspace on Investing.)
 
 **The chart, as context.** Above the 40- and 200-week averages: the long-term uptrend is intact. Over the last 26 weeks, volume on up weeks was 1.38x volume on down weeks, a pattern consistent with accumulation. This is an interpretation of volume, not evidence of who traded.
 
-**Bull case.** Growth above the base path, higher margins, lighter capex (the DCF bull case). Model value 1,876.58.
+**Bull case.** Growth above the base path, higher margins, lighter capex (the DCF bull case). Model value 1,876.64.
 
 **Bear case.** Growth below the base path, lower margins, heavier capex (the DCF bear case). Model value 251.23.
 
@@ -46,9 +46,9 @@ Business quality B and a fair valuation; High Conviction needs an A.
 
 **Levels to reassess at (conditional).**
 
-- 203.31 (40-week average, -8.5%)
-- 187.14 (weekly support (2 touches), -15.8%)
-- 167.23 (weekly support (4 touches), -24.8%)
+- 203.29 (40-week average, -8.2%)
+- 187.14 (weekly support (2 touches), -15.5%)
+- 167.23 (weekly support (4 touches), -24.5%)
 
 Zones are conditional: they are levels to reassess at, if the business evidence still holds when price gets there (the next results confirming the cash generation and earnings quality measure has not deteriorated). They are not targets, and no allocation is implied without your portfolio's context.
 
@@ -115,23 +115,23 @@ Expectations look balanced: 3 signals point to a high bar and 2 to a low one.
 
 **What options are priced for.** 9.8% to the 2026-11-20 expiry (37 days). At-the-money straddle on the first expiry after the release, divided by the price: the breakeven move to that expiry (37 days). It covers every day to expiry, not the release alone. The release's own move is not isolated (needs a quoted expiry on each side of the report), so the figure above is the whole expiry's move, not an earnings-only one.
 
-Priced range: 200.41 to 244.11 (straddle breakeven to expiry). What options are priced for, one way or the other. Not a forecast, not a limit: moves beyond it happen, and the direction is not priced.
+Priced range: 199.72 to 243.07 (straddle breakeven to expiry). What options are priced for, one way or the other. Not a forecast, not a limit: moves beyond it happen, and the direction is not priced.
 
 **News since the last report** (one story counted once, labelled by kind):
 
 - Stock Market Today: Tech Hit Amid Hot Inflation Data; Nvidia Among The Losers (Live Coverage) (reporting; neither, on its face; 1 outlet(s))
 - NVIDIA and Semiconductor Leaders Advance AI Across Chip Design and Manufacturing for AI-Defined Fabs (reporting; neither, on its face; 1 outlet(s))
 - ChipAgents Collaborates With NVIDIA to Launch Build-A-Chip-Bench for Autonomous Chip Design and Implementation (reporting; could affect the financial outlook; 1 outlet(s))
-- Not Nvidia. Not Micron. This Under-the-Radar Artificial Intelligence (AI) Chip Stock Could Be the Biggest Winner in 2027. (rumour or unconfirmed; neither, on its face; 1 outlet(s))
 - Is Nvidia Still the Best AI Stock to Buy in 2026, or Is This Challenger? (reporting; neither, on its face; 1 outlet(s))
 - Honeywell Stock Rises 2% as Nvidia and Dell Team Up on New AI Platform (reporting; neither, on its face; 1 outlet(s))
+- LITEON Showcases NVIDIA 800 VDC Architecture and Thermal Management Portfolio at OCP Global Summit 2026 (reporting; neither, on its face; 1 outlet(s))
 
 **The arithmetic behind the cases.**
 
 - EPS if the average surprise repeats: 2.62 (consensus 2.47 adjusted by the +5.8% average surprise over 8 quarters; calculated from the record, not a forecast).
 - Revenue growth the consensus implies: 91.2 (consensus 108.98bn against 57.01bn in the quarter to 2025-10-26; calculated).
 
-**Base case.** Results better than expected; guidance likely to support estimates; a move inside the 9.8% options price either way (200.41 to 244.11).
+**Base case.** Results better than expected; guidance likely to support estimates; a move inside the 9.8% options price either way (199.72 to 243.07).
 
 **Bull case.** A clear beat on revenue and EPS plus guidance above the next-quarter consensus (2.75): the move could exceed the priced range on the upside.
 
@@ -148,13 +148,13 @@ Priced range: 200.41 to 244.11 (straddle breakeven to expiry). What options are 
 
 - An EPS surprise below zero, against an average of +5.8%.
 - Guidance below the next-quarter consensus.
-- A first reaction beyond 200.41 or 244.11, the edge of the priced move, against the lean.
+- A first reaction beyond 199.72 or 243.07, the edge of the priced move, against the lean.
 
 *Being right about direction is not the same as an options trade making money. A bought option pays for the expected move (9.8%) up front and loses value when volatility drops after the release, so it needs a move larger than that, in the right direction, before expiry. No probabilities: the forecasts have not been scored against outcomes yet, so a percentage would claim a calibration the method does not have.*
 
 *Not in the data: company guidance text, call transcripts, segment and operating-metric consensus, whisper numbers, investor positioning.*
 
-*Forecast snapshot: saved 2026-10-14T17:21:20.520745+00:00.*
+*Forecast snapshot: duplicate.*
 
 ## Sources and limits
 

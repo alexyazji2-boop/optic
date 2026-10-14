@@ -1,6 +1,6 @@
 # Swing trade: Exxon Mobil (2026-10-14)
 
-Generated 2026-10-14T17:21:01+00:00 with method research-1.0 and policy policy-2026-10-14. Regular session; the feed gave no price time, so its exact age is unknown (normally about 15 minutes delayed).
+Generated 2026-10-14T17:43:53+00:00 with method research-1.0 and policy policy-2026-10-14. Regular session; the feed gave no price time, so its exact age is unknown (normally about 15 minutes delayed).
 
 ## Swing: B
 
@@ -11,7 +11,7 @@ Generated 2026-10-14T17:21:01+00:00 with method research-1.0 and policy policy-2
 - RSI 72 is stretched; momentum readings at that level often pause.
 - Volume today is 0.89x its average: a breakout without volume is unconfirmed.
 
-**Grade.** Viable but materially flawed: An earnings release inside the holding window caps an ordinary swing grade at B. An event trade would need its own evaluation (options pricing, the expected move), which this grade is not.
+**Grade.** Viable but materially flawed: an earnings release inside the holding window caps an ordinary swing grade at B. An event trade would need its own evaluation (options pricing, the expected move), which this grade is not.
 
 - Rule applied: An earnings release inside the holding window caps an ordinary swing grade at B. An event trade would need its own evaluation (options pricing, the expected move), which this grade is not. (earnings_in_window_cap).
 

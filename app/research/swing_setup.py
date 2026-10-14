@@ -524,7 +524,8 @@ def _grade_why(grade: str, criteria: Dict[str, bool], meaningful: List[Dict[str,
         return rules[0]["text"] if rules else "Fails the framework's minimum requirements."
     base = {"A": "A strong setup with one meaningful caveat", "B": "Viable but materially flawed"}[grade]
     if rules:
-        return "{}: {}".format(base, rules[-1]["text"])
+        t = rules[-1]["text"]
+        return "{}: {}".format(base, t[0].lower() + t[1:])
     return "{}{}.".format(base, "; an S would also need " + ", ".join(missing) if missing else "")
 
 
