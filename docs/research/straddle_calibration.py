@@ -60,7 +60,7 @@ def fetch(syms, out_path):
 
 
 def summarise(jsonl_path, out_path):
-    """straddles.jsonl -> app/data/straddle_calibration.json.
+    """straddles.jsonl -> app/analytics/straddle_calibration.json.
 
     Samples a week apart on a ~25-day horizon overlap about four times, so the
     95% interval on the mean ratio uses a quarter of the count."""
@@ -90,7 +90,7 @@ def summarise(jsonl_path, out_path):
 
 if __name__ == "__main__":
     # python straddle_calibration.py fetch SPY,QQQ out.jsonl
-    # python straddle_calibration.py summarise out.jsonl app/data/straddle_calibration.json
+    # python straddle_calibration.py summarise out.jsonl app/analytics/straddle_calibration.json
     if sys.argv[1] == "fetch":
         fetch(sys.argv[2].split(","), sys.argv[3])
     else:

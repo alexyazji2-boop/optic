@@ -28,4 +28,4 @@ The intervals use a quarter of the samples: weekly samples on a 25-day horizon o
 - SPY and NVDA lean dear and AAPL leans cheap, but no single name's interval excludes 1. Two years of monthly options cannot tell one stock's straddles from fair.
 - The Options tab says exactly that, per name, beside the straddle.
 
-**In the product** (`app/analytics/straddle_calibration.py`, data in `app/data/straddle_calibration.json`, behind `OPTIC_DOLTHUB` with attribution). A lean is stated only when the interval clears 1.
+**In the product** (`app/analytics/straddle_calibration.py`, data in `app/analytics/straddle_calibration.json`, behind `OPTIC_DOLTHUB` with attribution). A lean is stated only when the interval clears 1.

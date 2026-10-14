@@ -7,7 +7,7 @@ question the chain cannot answer; its history can. From DoltHub's
 21 to 50 days out and the strike nearest the close; the straddle's mid against
 the move the stock actually made to that expiry
 (`docs/research/straddle-calibration-2026-10-14.md`, built by
-`docs/research/straddle_calibration.py` into app/data/straddle_calibration.json).
+`docs/research/straddle_calibration.py` into app/analytics/straddle_calibration.json).
 
 **Reading it.** An at-the-money straddle costs about the average absolute
 move (under the model, E|S_T - K|). So a fair price shows a mean ratio of
@@ -27,7 +27,8 @@ import json
 import os
 from typing import Any, Dict, Optional
 
-PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "straddle_calibration.json")
+# Beside this module, not under app/data: `data/` is the runtime folder and git ignores it.
+PATH = os.path.join(os.path.dirname(__file__), "straddle_calibration.json")
 MIN_SAMPLES = 40
 FAIR_EXCEED_PCT = 42.5
 _cache: Dict[str, Any] = {}
