@@ -1,8 +1,8 @@
 {
 "slot": "close",
 "date": "2026-10-13",
-"gathered_at": "2026-10-13T21:52:04+00:00",
-"cutoff": "2026-10-13T21:53:58+00:00",
+"gathered_at": "2026-10-13T22:21:50+00:00",
+"cutoff": "2026-10-13T22:24:13+00:00",
 "session": {
 "phase": "after",
 "label": "After hours",
@@ -18,7 +18,7 @@
 "unit": "%",
 "period": "session of 2026-10-13 (close to close)",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/SPY",
 "method": "Close-to-close change from daily bars; during an open session the last bar is still forming.",
@@ -54,7 +54,7 @@
 "unit": "%",
 "period": "session of 2026-10-13 (close to close)",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/QQQ",
 "method": "Close-to-close change from daily bars; during an open session the last bar is still forming.",
@@ -90,7 +90,7 @@
 "unit": "%",
 "period": "session of 2026-10-13 (close to close)",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/IWM",
 "method": "Close-to-close change from daily bars; during an open session the last bar is still forming.",
@@ -126,7 +126,7 @@
 "unit": "%",
 "period": "session of 2026-10-13 (close to close)",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/DIA",
 "method": "Close-to-close change from daily bars; during an open session the last bar is still forming.",
@@ -162,7 +162,7 @@
 "unit": "%",
 "period": "session of 2026-10-13 (close to close)",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/RSP",
 "method": "Close-to-close change from daily bars; during an open session the last bar is still forming.",
@@ -198,7 +198,7 @@
 "unit": "%",
 "period": "session of 2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/XLK",
 "method": "Close-to-close change of the sector ETF.",
@@ -231,7 +231,7 @@
 "unit": "%",
 "period": "session of 2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/XLF",
 "method": "Close-to-close change of the sector ETF.",
@@ -264,7 +264,7 @@
 "unit": "%",
 "period": "session of 2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/XLV",
 "method": "Close-to-close change of the sector ETF.",
@@ -297,7 +297,7 @@
 "unit": "%",
 "period": "session of 2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/XLY",
 "method": "Close-to-close change of the sector ETF.",
@@ -330,7 +330,7 @@
 "unit": "%",
 "period": "session of 2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/XLP",
 "method": "Close-to-close change of the sector ETF.",
@@ -363,7 +363,7 @@
 "unit": "%",
 "period": "session of 2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/XLE",
 "method": "Close-to-close change of the sector ETF.",
@@ -396,7 +396,7 @@
 "unit": "%",
 "period": "session of 2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/XLI",
 "method": "Close-to-close change of the sector ETF.",
@@ -429,7 +429,7 @@
 "unit": "%",
 "period": "session of 2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/XLB",
 "method": "Close-to-close change of the sector ETF.",
@@ -462,7 +462,7 @@
 "unit": "%",
 "period": "session of 2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/XLU",
 "method": "Close-to-close change of the sector ETF.",
@@ -495,7 +495,7 @@
 "unit": "%",
 "period": "session of 2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/XLRE",
 "method": "Close-to-close change of the sector ETF.",
@@ -528,7 +528,7 @@
 "unit": "%",
 "period": "session of 2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/XLC",
 "method": "Close-to-close change of the sector ETF.",
@@ -561,7 +561,7 @@
 "unit": "%",
 "period": "session of 2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/SMH",
 "method": "Close-to-close change of the sector ETF.",
@@ -594,7 +594,7 @@
 "unit": "%",
 "period": "session of 2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/XBI",
 "method": "Close-to-close change of the sector ETF.",
@@ -627,7 +627,7 @@
 "unit": "%",
 "period": "session of 2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/KRE",
 "method": "Close-to-close change of the sector ETF.",
@@ -660,7 +660,7 @@
 "unit": "%",
 "period": "session of 2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/XRT",
 "method": "Close-to-close change of the sector ETF.",
@@ -693,7 +693,7 @@
 "unit": "%",
 "period": "session of 2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/ITB",
 "method": "Close-to-close change of the sector ETF.",
@@ -726,7 +726,7 @@
 "unit": "%",
 "period": "session of 2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/GDX",
 "method": "Close-to-close change of the sector ETF.",
@@ -759,7 +759,7 @@
 "unit": "%",
 "period": "session of 2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/JETS",
 "method": "Close-to-close change of the sector ETF.",
@@ -792,7 +792,7 @@
 "unit": "%",
 "period": "session of 2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/IGV",
 "method": "Close-to-close change of the sector ETF.",
@@ -825,7 +825,7 @@
 "unit": "%",
 "period": "session of 2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/XOP",
 "method": "Close-to-close change of the sector ETF.",
@@ -858,7 +858,7 @@
 "unit": "%",
 "period": "session of 2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "url": "https://finance.yahoo.com/quote/ARKK",
 "method": "Close-to-close change of the sector ETF.",
@@ -890,7 +890,7 @@
 "value": 5.0,
 "unit": "of 11",
 "period": "session of 2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "method": "Count of the 11 SPDR sector ETFs that closed above their previous close.",
 "detail": {
@@ -907,7 +907,7 @@
 "value": 0.6,
 "unit": "pp",
 "period": "five sessions to 2026-10-13",
-"as_of": "2026-10-13T21:52:05+00:00",
+"as_of": "2026-10-13T22:21:51+00:00",
 "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
 "method": "RSP five-session change minus SPY five-session change. Positive means the average stock beat the index's largest names.",
 "detail": {
@@ -924,7 +924,7 @@
 "value": 5.217,
 "unit": "%",
 "period": "latest quote",
-"as_of": "2026-10-13T21:52:07.117971+00:00",
+"as_of": "2026-10-13T22:21:51.814241+00:00",
 "source": "Yahoo Finance quote for ^TNX",
 "url": "https://finance.yahoo.com/quote/^TNX",
 "method": "Change in basis points from the previous close (one basis point is 0.01 percentage point).",
@@ -938,7 +938,7 @@
 "detail": {
 "chg_5d_pct_of_yield": -0.987,
 "pct_from_52w_high": -1.77,
-"typical_abs_1d": 7.44
+"typical_abs_1d": 3.76
 },
 "sources_in_cluster": 1,
 "stale": false
@@ -950,7 +950,7 @@
 "value": 5.007,
 "unit": "%",
 "period": "latest quote",
-"as_of": "2026-10-13T21:52:07.117971+00:00",
+"as_of": "2026-10-13T22:21:51.814241+00:00",
 "source": "Yahoo Finance quote for ^FVX",
 "url": "https://finance.yahoo.com/quote/^FVX",
 "method": "Change in basis points from the previous close (one basis point is 0.01 percentage point).",
@@ -964,7 +964,7 @@
 "detail": {
 "chg_5d_pct_of_yield": -0.418,
 "pct_from_52w_high": -1.61,
-"typical_abs_1d": 7.79
+"typical_abs_1d": 3.67
 },
 "sources_in_cluster": 1,
 "stale": false
@@ -976,7 +976,7 @@
 "value": 4.057,
 "unit": "%",
 "period": "latest quote",
-"as_of": "2026-10-13T21:52:07.117971+00:00",
+"as_of": "2026-10-13T22:21:51.814241+00:00",
 "source": "Yahoo Finance quote for ^IRX",
 "url": "https://finance.yahoo.com/quote/^IRX",
 "method": "Change in basis points from the previous close (one basis point is 0.01 percentage point).",
@@ -990,7 +990,7 @@
 "detail": {
 "chg_5d_pct_of_yield": 0.495,
 "pct_from_52w_high": -0.32,
-"typical_abs_1d": 2.66
+"typical_abs_1d": 1.57
 },
 "sources_in_cluster": 1,
 "stale": false
@@ -999,24 +999,24 @@
 "id": "X1",
 "kind": "fx",
 "label": "US dollar index (DXY)",
-"value": -0.38,
+"value": -0.36,
 "unit": "%",
 "period": "day, latest quote",
-"as_of": "2026-10-13T21:52:07.117971+00:00",
+"as_of": "2026-10-13T22:21:51.814241+00:00",
 "source": "Yahoo Finance quote for DX-Y.NYB",
 "url": "https://finance.yahoo.com/quote/DX-Y.NYB",
 "method": "Percentage change from the previous close.",
 "compare": {
 "base": "previous close",
 "value": 102.589,
-"level": 102.199
+"level": 102.215
 },
 "symbol": "DX-Y.NYB",
 "detail": {
-"level": 102.199,
-"chg_5d": 0.362,
-"chg_20d": 2.558,
-"typical_abs_1d": 0.473
+"level": 102.215,
+"chg_5d": 0.378,
+"chg_20d": 2.574,
+"typical_abs_1d": 0.263
 },
 "sources_in_cluster": 1,
 "stale": false
@@ -1025,24 +1025,24 @@
 "id": "C1",
 "kind": "commodity",
 "label": "WTI crude oil",
-"value": 0.69,
+"value": 1.06,
 "unit": "%",
 "period": "day, latest quote",
-"as_of": "2026-10-13T21:52:07.117971+00:00",
+"as_of": "2026-10-13T22:21:51.814241+00:00",
 "source": "Yahoo Finance quote for CL=F",
 "url": "https://finance.yahoo.com/quote/CL=F",
 "method": "Percentage change from the previous close.",
 "compare": {
 "base": "previous close",
-"value": 94.14,
-"level": 94.79
+"value": 93.74,
+"level": 94.73
 },
 "symbol": "CL=F",
 "detail": {
-"level": 94.79,
-"chg_5d": 5.982,
-"chg_20d": -10.432,
-"typical_abs_1d": 4.458
+"level": 94.73,
+"chg_5d": 5.915,
+"chg_20d": -10.489,
+"typical_abs_1d": 1.917
 },
 "sources_in_cluster": 1,
 "stale": false
@@ -1051,24 +1051,24 @@
 "id": "C2",
 "kind": "commodity",
 "label": "Gold",
-"value": 0.17,
+"value": 0.16,
 "unit": "%",
 "period": "day, latest quote",
-"as_of": "2026-10-13T21:52:07.117971+00:00",
+"as_of": "2026-10-13T22:21:51.814241+00:00",
 "source": "Yahoo Finance quote for GC=F",
 "url": "https://finance.yahoo.com/quote/GC=F",
 "method": "Percentage change from the previous close.",
 "compare": {
 "base": "previous close",
 "value": 4177.3,
-"level": 4184.2002
+"level": 4183.7998
 },
 "symbol": "GC=F",
 "detail": {
-"level": 4184.2002,
-"chg_5d": -0.069,
-"chg_20d": -3.43,
-"typical_abs_1d": 2.028
+"level": 4183.7998,
+"chg_5d": -0.079,
+"chg_20d": -3.439,
+"typical_abs_1d": 0.77
 },
 "sources_in_cluster": 1,
 "stale": false
@@ -1077,24 +1077,24 @@
 "id": "C3",
 "kind": "commodity",
 "label": "Copper",
-"value": 0.01,
+"value": 0.05,
 "unit": "%",
 "period": "day, latest quote",
-"as_of": "2026-10-13T21:52:07.117971+00:00",
+"as_of": "2026-10-13T22:21:51.814241+00:00",
 "source": "Yahoo Finance quote for HG=F",
 "url": "https://finance.yahoo.com/quote/HG=F",
 "method": "Percentage change from the previous close.",
 "compare": {
 "base": "previous close",
 "value": 6.726,
-"level": 6.727
+"level": 6.7295
 },
 "symbol": "HG=F",
 "detail": {
-"level": 6.727,
-"chg_5d": 2.009,
-"chg_20d": 5.629,
-"typical_abs_1d": 1.329
+"level": 6.7295,
+"chg_5d": 2.047,
+"chg_20d": 5.669,
+"typical_abs_1d": 0.899
 },
 "sources_in_cluster": 1,
 "stale": false
@@ -1106,7 +1106,7 @@
 "value": -0.26,
 "unit": "%",
 "period": "day, latest quote",
-"as_of": "2026-10-13T21:52:07.117971+00:00",
+"as_of": "2026-10-13T22:21:51.814241+00:00",
 "source": "Yahoo Finance quote for HYG",
 "url": "https://finance.yahoo.com/quote/HYG",
 "method": "Percentage change from the previous close.",
@@ -1120,7 +1120,7 @@
 "level": 77.09,
 "chg_5d": -0.233,
 "chg_20d": -1.646,
-"typical_abs_1d": 0.397
+"typical_abs_1d": 0.213
 },
 "sources_in_cluster": 1,
 "stale": false
@@ -1132,7 +1132,7 @@
 "value": 15.27,
 "unit": "index",
 "period": "latest quote",
-"as_of": "2026-10-13T21:52:07.117971+00:00",
+"as_of": "2026-10-13T22:21:51.814241+00:00",
 "source": "Yahoo Finance quote for ^VIX (Cboe)",
 "url": "https://finance.yahoo.com/quote/%5EVIX",
 "method": "The VIX is the 30-day implied volatility of S&P 500 options, in annualised percent.",
@@ -1144,7 +1144,7 @@
 },
 "symbol": "^VIX",
 "detail": {
-"typical_abs_1d": 1.1,
+"typical_abs_1d": 0.56,
 "pct_from_52w_high": -50.82
 },
 "sources_in_cluster": 1,
@@ -1154,24 +1154,24 @@
 "id": "I6",
 "kind": "index",
 "label": "S&P 500 futures",
-"value": -0.03,
+"value": -0.05,
 "unit": "%",
 "period": "day, latest quote",
-"as_of": "2026-10-13T21:52:07.117971+00:00",
+"as_of": "2026-10-13T22:21:51.814241+00:00",
 "source": "Yahoo Finance quote for ES=F",
 "url": "https://finance.yahoo.com/quote/ES=F",
 "method": "Percentage change from the previous close.",
 "compare": {
 "base": "previous close",
 "value": 7858.0,
-"level": 7855.5
+"level": 7853.75
 },
 "symbol": "ES=F",
 "detail": {
-"level": 7855.5,
-"chg_5d": -0.235,
-"chg_20d": 3.508,
-"typical_abs_1d": 0.898
+"level": 7853.75,
+"chg_5d": -0.257,
+"chg_20d": 3.485,
+"typical_abs_1d": 0.496
 },
 "sources_in_cluster": 1,
 "stale": false
@@ -1180,24 +1180,24 @@
 "id": "I7",
 "kind": "index",
 "label": "Nasdaq 100 futures",
-"value": -0.03,
+"value": -0.4,
 "unit": "%",
 "period": "day, latest quote",
-"as_of": "2026-10-13T21:52:07.117971+00:00",
+"as_of": "2026-10-13T22:21:51.814241+00:00",
 "source": "Yahoo Finance quote for NQ=F",
 "url": "https://finance.yahoo.com/quote/NQ=F",
 "method": "Percentage change from the previous close.",
 "compare": {
 "base": "previous close",
-"value": 30791.5,
-"level": 30782.0
+"value": 30898.25,
+"level": 30774.0
 },
 "symbol": "NQ=F",
 "detail": {
-"level": 30782.0,
-"chg_5d": -2.227,
-"chg_20d": 6.31,
-"typical_abs_1d": 1.461
+"level": 30774.0,
+"chg_5d": -2.253,
+"chg_20d": 6.282,
+"typical_abs_1d": 0.772
 },
 "sources_in_cluster": 1,
 "stale": false
@@ -1210,7 +1210,7 @@
 "unit": "%",
 "period": "2026-10-09",
 "event_at": "2026-10-09",
-"as_of": "2026-10-13T21:52:08+00:00",
+"as_of": "2026-10-13T22:21:53+00:00",
 "source": "FRED (St. Louis Fed): DGS2",
 "url": "https://fred.stlouisfed.org/series/DGS2",
 "method": "level; as published by the agency and redistributed by FRED.",
@@ -1235,7 +1235,7 @@
 "unit": "%",
 "period": "2026-10-09",
 "event_at": "2026-10-09",
-"as_of": "2026-10-13T21:52:08+00:00",
+"as_of": "2026-10-13T22:21:55+00:00",
 "source": "FRED (St. Louis Fed): DGS10",
 "url": "https://fred.stlouisfed.org/series/DGS10",
 "method": "level; as published by the agency and redistributed by FRED.",
@@ -1260,7 +1260,7 @@
 "unit": "%",
 "period": "2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:08+00:00",
+"as_of": "2026-10-13T22:21:57+00:00",
 "source": "FRED (St. Louis Fed): T10Y2Y",
 "url": "https://fred.stlouisfed.org/series/T10Y2Y",
 "method": "level; as published by the agency and redistributed by FRED.",
@@ -1285,7 +1285,7 @@
 "unit": "%",
 "period": "2026-10-12",
 "event_at": "2026-10-12",
-"as_of": "2026-10-13T21:52:08+00:00",
+"as_of": "2026-10-13T22:21:58+00:00",
 "source": "FRED (St. Louis Fed): DFF",
 "url": "https://fred.stlouisfed.org/series/DFF",
 "method": "level; as published by the agency and redistributed by FRED.",
@@ -1310,7 +1310,7 @@
 "unit": "%",
 "period": "2026-08-01",
 "event_at": "2026-08-01",
-"as_of": "2026-10-13T21:52:08+00:00",
+"as_of": "2026-10-13T22:21:58+00:00",
 "source": "FRED (St. Louis Fed): CPIAUCSL",
 "url": "https://fred.stlouisfed.org/series/CPIAUCSL",
 "method": "year over year; as published by the agency and redistributed by FRED.",
@@ -1335,7 +1335,7 @@
 "unit": "%",
 "period": "2026-08-01",
 "event_at": "2026-08-01",
-"as_of": "2026-10-13T21:52:08+00:00",
+"as_of": "2026-10-13T22:21:59+00:00",
 "source": "FRED (St. Louis Fed): PCEPILFE",
 "url": "https://fred.stlouisfed.org/series/PCEPILFE",
 "method": "year over year; as published by the agency and redistributed by FRED.",
@@ -1360,7 +1360,7 @@
 "unit": "%",
 "period": "2026-09-01",
 "event_at": "2026-09-01",
-"as_of": "2026-10-13T21:52:08+00:00",
+"as_of": "2026-10-13T22:22:00+00:00",
 "source": "FRED (St. Louis Fed): UNRATE",
 "url": "https://fred.stlouisfed.org/series/UNRATE",
 "method": "level; as published by the agency and redistributed by FRED.",
@@ -1385,7 +1385,7 @@
 "unit": "k",
 "period": "2026-09-01",
 "event_at": "2026-09-01",
-"as_of": "2026-10-13T21:52:08+00:00",
+"as_of": "2026-10-13T22:22:01+00:00",
 "source": "FRED (St. Louis Fed): PAYEMS",
 "url": "https://fred.stlouisfed.org/series/PAYEMS",
 "method": "change on the period; as published by the agency and redistributed by FRED.",
@@ -1410,7 +1410,7 @@
 "unit": "k",
 "period": "2026-10-03",
 "event_at": "2026-10-03",
-"as_of": "2026-10-13T21:52:08+00:00",
+"as_of": "2026-10-13T22:22:02+00:00",
 "source": "FRED (St. Louis Fed): ICSA",
 "url": "https://fred.stlouisfed.org/series/ICSA",
 "method": "level; as published by the agency and redistributed by FRED.",
@@ -1435,7 +1435,7 @@
 "unit": "%",
 "period": "2026-10-12",
 "event_at": "2026-10-12",
-"as_of": "2026-10-13T21:52:08+00:00",
+"as_of": "2026-10-13T22:22:02+00:00",
 "source": "FRED (St. Louis Fed): BAMLH0A0HYM2",
 "url": "https://fred.stlouisfed.org/series/BAMLH0A0HYM2",
 "method": "level; as published by the agency and redistributed by FRED.",
@@ -1460,7 +1460,7 @@
 "unit": "%",
 "period": "2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:52:08+00:00",
+"as_of": "2026-10-13T22:22:03+00:00",
 "source": "FRED (St. Louis Fed): T10YIE",
 "url": "https://fred.stlouisfed.org/series/T10YIE",
 "method": "level; as published by the agency and redistributed by FRED.",
@@ -1485,7 +1485,7 @@
 "unit": "%",
 "period": "2026-10-08",
 "event_at": "2026-10-08",
-"as_of": "2026-10-13T21:52:08+00:00",
+"as_of": "2026-10-13T22:22:03+00:00",
 "source": "FRED (St. Louis Fed): MORTGAGE30US",
 "url": "https://fred.stlouisfed.org/series/MORTGAGE30US",
 "method": "level; as published by the agency and redistributed by FRED.",
@@ -1509,7 +1509,7 @@
 "unit": "%",
 "published_at": "2026-09-11T11:50:40.968000+00:00",
 "event_at": "2026-10-14T08:30:00-04:00",
-"as_of": "2026-10-13T21:52:08+00:00",
+"as_of": "2026-10-13T22:22:05+00:00",
 "source": "Official release schedule (BLS, Federal Reserve)",
 "url": "https://www.bls.gov/news.release/archives/cpi_09112026.htm",
 "method": "No consensus forecast: Optic does not carry surveyed expectations, so a release is compared with its own previous reading.",
@@ -1533,7 +1533,7 @@
 "kind": "calendar",
 "label": "Real Earnings",
 "event_at": "2026-10-14T08:30:00-04:00",
-"as_of": "2026-10-13T21:52:08+00:00",
+"as_of": "2026-10-13T22:22:05+00:00",
 "source": "Official release schedule (BLS, Federal Reserve)",
 "method": "No consensus forecast: Optic does not carry surveyed expectations, so a release is compared with its own previous reading.",
 "compare": {
@@ -1558,7 +1558,7 @@
 "unit": "%",
 "published_at": "2026-09-10T11:50:35.512000+00:00",
 "event_at": "2026-10-15T08:30:00-04:00",
-"as_of": "2026-10-13T21:52:08+00:00",
+"as_of": "2026-10-13T22:22:05+00:00",
 "source": "Official release schedule (BLS, Federal Reserve)",
 "url": "https://www.bls.gov/news.release/archives/ppi_09102026.htm",
 "method": "No consensus forecast: Optic does not carry surveyed expectations, so a release is compared with its own previous reading.",
@@ -1583,7 +1583,7 @@
 "label": "U.S. Import and Export Price Indexes",
 "unit": "%",
 "event_at": "2026-10-16T08:30:00-04:00",
-"as_of": "2026-10-13T21:52:08+00:00",
+"as_of": "2026-10-13T22:22:05+00:00",
 "source": "Official release schedule (BLS, Federal Reserve)",
 "method": "No consensus forecast: Optic does not carry surveyed expectations, so a release is compared with its own previous reading.",
 "compare": {
@@ -1606,7 +1606,7 @@
 "kind": "calendar",
 "label": "CFTC Commitments of Traders",
 "event_at": "2026-10-16T15:30:00-04:00",
-"as_of": "2026-10-13T21:52:08+00:00",
+"as_of": "2026-10-13T22:22:05+00:00",
 "source": "Official release schedule (BLS, Federal Reserve)",
 "method": "No consensus forecast: Optic does not carry surveyed expectations, so a release is compared with its own previous reading.",
 "compare": {
@@ -1629,7 +1629,7 @@
 "kind": "calendar",
 "label": "Monthly options expiry",
 "event_at": "2026-10-16T16:00:00-04:00",
-"as_of": "2026-10-13T21:52:08+00:00",
+"as_of": "2026-10-13T22:22:05+00:00",
 "source": "Official release schedule (BLS, Federal Reserve)",
 "method": "No consensus forecast: Optic does not carry surveyed expectations, so a release is compared with its own previous reading.",
 "compare": {
@@ -1652,7 +1652,7 @@
 "kind": "calendar",
 "label": "State Employment and Unemployment (Monthly)",
 "event_at": "2026-10-20T10:00:00-04:00",
-"as_of": "2026-10-13T21:52:08+00:00",
+"as_of": "2026-10-13T22:22:05+00:00",
 "source": "Official release schedule (BLS, Federal Reserve)",
 "method": "No consensus forecast: Optic does not carry surveyed expectations, so a release is compared with its own previous reading.",
 "compare": {
@@ -1675,7 +1675,7 @@
 "kind": "calendar",
 "label": "VIX futures and options settlement",
 "event_at": "2026-10-21T09:30:00-04:00",
-"as_of": "2026-10-13T21:52:08+00:00",
+"as_of": "2026-10-13T22:22:05+00:00",
 "source": "Official release schedule (BLS, Federal Reserve)",
 "method": "No consensus forecast: Optic does not carry surveyed expectations, so a release is compared with its own previous reading.",
 "compare": {
@@ -1698,7 +1698,7 @@
 "kind": "calendar",
 "label": "Usual Weekly Earnings of Wage and Salary Workers",
 "event_at": "2026-10-21T10:00:00-04:00",
-"as_of": "2026-10-13T21:52:08+00:00",
+"as_of": "2026-10-13T22:22:05+00:00",
 "source": "Official release schedule (BLS, Federal Reserve)",
 "method": "No consensus forecast: Optic does not carry surveyed expectations, so a release is compared with its own previous reading.",
 "compare": {
@@ -1723,7 +1723,7 @@
 "value": 5.5,
 "unit": "bp",
 "period": "November 2026",
-"as_of": "2026-10-13T21:52:10+00:00",
+"as_of": "2026-10-13T22:22:08+00:00",
 "source": "CME 30-day fed funds futures (ZQ=F) via Yahoo; Optic's arithmetic",
 "method": "No meeting falls inside November, the delivery month of the front contract, so this is the move priced into that month's average rather than the odds on a decision.",
 "sources_in_cluster": 1,
@@ -1737,7 +1737,7 @@
 "unit": "%",
 "period": "quarter reported 2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:53:27+00:00",
+"as_of": "2026-10-13T22:23:25+00:00",
 "source": "Yahoo Finance earnings history (reported vs consensus EPS)",
 "url": "https://finance.yahoo.com/quote/JPM/analysis",
 "method": "Surprise = (reported EPS - consensus EPS) / |consensus EPS|. Revenue against its estimate is not in the free feed.",
@@ -1760,7 +1760,7 @@
 "surprise_pct": -3.24,
 "timing": "before_open",
 "reaction_pct": -0.86,
-"reaction_as_of": "2026-10-13T21:53:24.390748+00:00",
+"reaction_as_of": "2026-10-13T22:23:23.596632+00:00",
 "consensus_conflict": {
 "calendar": 5.715,
 "history": 5.94,
@@ -1778,7 +1778,7 @@
 "unit": "%",
 "period": "quarter reported 2026-10-13",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:53:29+00:00",
+"as_of": "2026-10-13T22:23:26+00:00",
 "source": "Yahoo Finance earnings history (reported vs consensus EPS)",
 "url": "https://finance.yahoo.com/quote/UNH/analysis",
 "method": "Surprise = (reported EPS - consensus EPS) / |consensus EPS|. Revenue against its estimate is not in the free feed.",
@@ -1801,7 +1801,7 @@
 "surprise_pct": 13.26,
 "timing": "before_open",
 "reaction_pct": -0.2,
-"reaction_as_of": "2026-10-13T21:53:24.390748+00:00",
+"reaction_as_of": "2026-10-13T22:23:23.596632+00:00",
 "consensus_conflict": {
 "calendar": 2.171,
 "history": 4.14,
@@ -1819,7 +1819,7 @@
 "unit": "$ EPS consensus",
 "period": "quarter to be reported 2026-10-14",
 "event_at": "2026-10-14",
-"as_of": "2026-10-13T21:53:29+00:00",
+"as_of": "2026-10-13T22:23:26+00:00",
 "source": "Yahoo Finance earnings calendar (consensus EPS and revenue)",
 "url": "https://finance.yahoo.com/quote/BAC/analysis",
 "method": "Consensus as carried by the free feed; the number of analysts is not shown.",
@@ -1844,7 +1844,7 @@
 "unit": "$ EPS consensus",
 "period": "quarter to be reported 2026-10-15",
 "event_at": "2026-10-15",
-"as_of": "2026-10-13T21:53:29+00:00",
+"as_of": "2026-10-13T22:23:26+00:00",
 "source": "Yahoo Finance earnings calendar (consensus EPS and revenue)",
 "url": "https://finance.yahoo.com/quote/TSM/analysis",
 "method": "Consensus as carried by the free feed; the number of analysts is not shown.",
@@ -1866,7 +1866,7 @@
 "kind": "news",
 "label": "Oil Climbs as Fighting Flares in Middle East, Ukraine",
 "published_at": "2026-10-12T20:15:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/finance/stocks/oil-climbs-as-fighting-flares-in-middle-east-ukraine-62ac534c?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -1889,7 +1889,7 @@
 "kind": "news",
 "label": "Retirement Savers Sue Dodgers Owner Mark Walter Saying His Insurers Misled Them",
 "published_at": "2026-10-12T20:39:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/finance/retirement-savers-sue-dodgers-owner-mark-walter-saying-his-insurers-misled-them-f987d06a?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -1912,7 +1912,7 @@
 "kind": "news",
 "label": "Why Trump\u2019s Diesel-Supply Deal With Russia Won\u2019t Ease Fuel Prices Much",
 "published_at": "2026-10-12T21:03:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/business/energy-oil/why-trumps-diesel-supply-deal-with-russia-wont-ease-fuel-prices-much-a8b0b3f5?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -1935,7 +1935,7 @@
 "kind": "news",
 "label": "Elon Musk gives $276 million to Republican groups, becomes biggest known 2026 midterm donor",
 "published_at": "2026-10-12T21:17:58+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/12/elon-musk-republican-donations-2026-midterm-election.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -1959,7 +1959,7 @@
 "kind": "news",
 "label": "WSJ Dollar Index Rises 0.21% to 97.58",
 "published_at": "2026-10-12T21:24:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/finance/currencies/asian-currencies-consolidate-but-mideast-tensions-could-weigh-9ec0bb96?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -1982,7 +1982,7 @@
 "kind": "news",
 "label": "Frenzied Stock-Options Trading Shows Individual Investors Are Still Hungry for Risk",
 "published_at": "2026-10-12T21:30:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/finance/stocks/frenzied-stock-options-trading-shows-individual-investors-are-still-hungry-for-risk-89ed24e5?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2005,7 +2005,7 @@
 "kind": "news",
 "label": "Individual Investors Are Trading at Meme-Stock Levels",
 "published_at": "2026-10-12T21:32:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/business/whats-news-newsletter-10-12-2026-56359fe0?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2028,7 +2028,7 @@
 "kind": "news",
 "label": "Two Americans win Nobel for economics",
 "published_at": "2026-10-12T21:43:46+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "NPR",
 "url": "https://www.npr.org/2026/10/12/nx-s1-5998739/two-americans-win-nobel-for-economics",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2051,7 +2051,7 @@
 "kind": "news",
 "label": "Crew searching for Amelia Earhart arrives at crab-infested island",
 "published_at": "2026-10-12T22:01:43+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/c6pvgryp8yv0o?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2074,7 +2074,7 @@
 "kind": "news",
 "label": "Jim Cramer says the bull market's remarkable 4-year run offers a crucial lesson for investors",
 "published_at": "2026-10-12T22:16:12+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/12/cramer-sp-500-bull-market-stay-invested.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2097,7 +2097,7 @@
 "kind": "news",
 "label": "The island where locals say data centres are taking their water",
 "published_at": "2026-10-12T22:30:55+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/cqj6j7wlxd5eo?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2120,7 +2120,7 @@
 "kind": "news",
 "label": "Heating oil customers face tough winter despite shake-up promise",
 "published_at": "2026-10-12T23:02:24+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/cxnv0z09r882o?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2141,32 +2141,9 @@
 {
 "id": "N13",
 "kind": "news",
-"label": "Boardroom feud tests trusted Indian business empire",
-"published_at": "2026-10-12T23:10:32+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
-"source": "BBC News",
-"url": "https://www.bbc.co.uk/news/articles/c54g1mp7lz7zo?at_medium=RSS&at_campaign=rss",
-"method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
-"detail": {
-"outlets": [
-"BBC News"
-],
-"copies": 1,
-"access": "open",
-"sector": "world",
-"desks": [
-"world"
-]
-},
-"sources_in_cluster": 1,
-"stale": false
-},
-{
-"id": "N14",
-"kind": "news",
 "label": "Publicly owned rail is popular. But is it making the trains run on time?",
 "published_at": "2026-10-12T23:37:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/ck5yn0n14r8do?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2185,11 +2162,11 @@
 "stale": false
 },
 {
-"id": "N15",
+"id": "N14",
 "kind": "news",
 "label": "'Boring is not bad': CEO of Southeast Asia's largest bank pitches Singapore as a haven amid global turmoil",
 "published_at": "2026-10-13T01:26:41+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/singapore-war-geopolitics-dbs-bank-ceo.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2208,11 +2185,11 @@
 "stale": false
 },
 {
-"id": "N16",
+"id": "N15",
 "kind": "news",
 "label": "Higher rates could be needed to avoid 'inflationary mindset' taking hold, says Fed's Hammack",
 "published_at": "2026-10-13T02:58:11+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/12/beth-hammack-fed-inflation-policy.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2231,11 +2208,11 @@
 "stale": false
 },
 {
-"id": "N17",
+"id": "N16",
 "kind": "news",
 "label": "IMF sees milder global slowdown as AI boom offsets war hit \u2014 warns resilience is nearing limits",
 "published_at": "2026-10-13T04:10:49+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/12/imf-world-bank-annual-meetings-october-bangkok-asia-.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2254,11 +2231,11 @@
 "stale": false
 },
 {
-"id": "N18",
+"id": "N17",
 "kind": "news",
 "label": "BBC's Orla Guerin travels with Yemen's southern national security forces through desert battlefield",
 "published_at": "2026-10-13T04:27:22+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/videos/cqx298yx4k48o?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2277,11 +2254,11 @@
 "stale": false
 },
 {
-"id": "N19",
+"id": "N18",
 "kind": "news",
 "label": "IMF warns bond yields could see a 'disorderly' spike as debt, inflation risks worsen",
 "published_at": "2026-10-13T04:54:07+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/treasury-yields-imf-debt-inflation-.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2301,11 +2278,11 @@
 "stale": false
 },
 {
-"id": "N20",
+"id": "N19",
 "kind": "news",
 "label": "Russia's offensive ability is broken, Kyiv's former top general tells BBC",
 "published_at": "2026-10-13T05:02:34+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/c9y7lgg2vdggo?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2324,57 +2301,11 @@
 "stale": false
 },
 {
-"id": "N21",
-"kind": "news",
-"label": "Where the US midterm elections will be won and lost",
-"published_at": "2026-10-13T05:02:44+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
-"source": "BBC News",
-"url": "https://www.bbc.co.uk/news/articles/cr20wlp09gn3o?at_medium=RSS&at_campaign=rss",
-"method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
-"detail": {
-"outlets": [
-"BBC News"
-],
-"copies": 1,
-"access": "open",
-"sector": "world",
-"desks": [
-"world"
-]
-},
-"sources_in_cluster": 1,
-"stale": false
-},
-{
-"id": "N22",
-"kind": "news",
-"label": "Death threats and isolation - the cost of fighting sexual violence in Iraq",
-"published_at": "2026-10-13T05:02:57+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
-"source": "BBC News",
-"url": "https://www.bbc.co.uk/news/articles/cqd089r55vp3o?at_medium=RSS&at_campaign=rss",
-"method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
-"detail": {
-"outlets": [
-"BBC News"
-],
-"copies": 1,
-"access": "open",
-"sector": "world",
-"desks": [
-"world"
-]
-},
-"sources_in_cluster": 1,
-"stale": false
-},
-{
-"id": "N23",
+"id": "N20",
 "kind": "news",
 "label": "Red squirrel project opens \u00a3250k community grant",
 "published_at": "2026-10-13T05:08:27+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/cr86zp8qn0w5o?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2393,11 +2324,11 @@
 "stale": false
 },
 {
-"id": "N24",
+"id": "N21",
 "kind": "news",
 "label": "Fly-tippers face \u00a35k fine in new crackdown",
 "published_at": "2026-10-13T05:23:07+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/cqn064027d2xo?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2416,11 +2347,11 @@
 "stale": false
 },
 {
-"id": "N25",
+"id": "N22",
 "kind": "news",
 "label": "Cost of living struggles inspire 'social supermarket'",
 "published_at": "2026-10-13T05:32:23+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/cq4g1enm58npo?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2439,11 +2370,11 @@
 "stale": false
 },
 {
-"id": "N26",
+"id": "N23",
 "kind": "news",
 "label": "AI may change the price of your Big Mac and groceries \u2014 what this means for shoppers",
 "published_at": "2026-10-13T05:38:49+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/11/ai-dynamic-pricing-shoppers-groceries.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2462,11 +2393,11 @@
 "stale": false
 },
 {
-"id": "N27",
+"id": "N24",
 "kind": "news",
 "label": "Asia Stocks Battered as Semiconductor Stocks Dive",
 "published_at": "2026-10-13T05:50:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/finance/stocks/asian-stocks-battered-as-geopolitical-tensions-sap-risk-appetite-5b3ebd81?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2485,11 +2416,11 @@
 "stale": false
 },
 {
-"id": "N28",
+"id": "N25",
 "kind": "news",
 "label": "Visa gets Beijing's green light for bank card business after 40 years of working with China",
 "published_at": "2026-10-13T06:20:55+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/visa-china-green-light-bank-card-business-.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2508,11 +2439,11 @@
 "stale": false
 },
 {
-"id": "N29",
+"id": "N26",
 "kind": "news",
 "label": "European Indexes Largely Rise, Though AI Stocks Fall",
 "published_at": "2026-10-13T07:24:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/finance/stocks/nikkei-falls-2-0-amid-geopolitical-tensions-d5b509de?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2531,11 +2462,11 @@
 "stale": false
 },
 {
-"id": "N30",
+"id": "N27",
 "kind": "news",
 "label": "Breaking Bad actor RJ Mitte dies aged 34",
 "published_at": "2026-10-13T08:03:34+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/cmn045en7d88o?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2554,11 +2485,11 @@
 "stale": false
 },
 {
-"id": "N31",
+"id": "N28",
 "kind": "news",
 "label": "Stock Market Today: Stocks Slip Despite Solid Wall Street Results",
 "published_at": "2026-10-13T08:14:38+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/livecoverage/stock-market-today-bank-earnings-10-13-2026?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2577,11 +2508,11 @@
 "stale": false
 },
 {
-"id": "N32",
+"id": "N29",
 "kind": "news",
 "label": "Anthropic warns AI models could soon copy themselves across home devices",
 "published_at": "2026-10-13T08:27:20+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/anthropic-ai-models-self-replication-smart-devices.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2600,11 +2531,11 @@
 "stale": false
 },
 {
-"id": "N33",
+"id": "N30",
 "kind": "news",
 "label": "SpaceX agrees to testify to NYC Council about AI safety after receiving subpoena",
 "published_at": "2026-10-13T09:00:01+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/spacex-agrees-to-testify-to-nyc-council-about-ai-safety-.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2623,11 +2554,11 @@
 "stale": false
 },
 {
-"id": "N34",
+"id": "N31",
 "kind": "news",
 "label": "Trump 'not happy' with Kimberly Guilfoyle, weighs firing her as ambassador to Greece",
 "published_at": "2026-10-13T09:23:53+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/12/trump-kimberly-guilfoyle-ambassador.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2648,11 +2579,11 @@
 "stale": false
 },
 {
-"id": "N35",
+"id": "N32",
 "kind": "news",
 "label": "Gulf Hurricane Not Big Enough to Reset Insurance Market",
 "published_at": "2026-10-13T09:30:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/finance/gulf-hurricane-not-big-enough-to-reset-insurance-market-024deafa?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2671,11 +2602,11 @@
 "stale": false
 },
 {
-"id": "N36",
+"id": "N33",
 "kind": "news",
 "label": "Phase Eight and Hobbs owner hit by cyber-attack, as H&M probes separate hack claim",
 "published_at": "2026-10-13T09:34:43+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/cwly38gjkejko?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2695,11 +2626,11 @@
 "stale": false
 },
 {
-"id": "N37",
+"id": "N34",
 "kind": "news",
 "label": "UK growth forecast upgraded but higher energy prices to hit economy next year",
 "published_at": "2026-10-13T09:38:54+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/cmglw0r21zexo?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2719,11 +2650,11 @@
 "stale": false
 },
 {
-"id": "N38",
+"id": "N35",
 "kind": "news",
 "label": "What ice cream has to do with this year's Nobel Prize in economics",
 "published_at": "2026-10-13T10:30:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "NPR",
 "url": "https://www.npr.org/sections/planet-money/2026/10/13/g-s1-147816/what-ice-cream-has-to-do-with-this-years-nobel-prize-in-economics",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2742,11 +2673,11 @@
 "stale": false
 },
 {
-"id": "N39",
+"id": "N36",
 "kind": "news",
 "label": "Indexed Annuities Boost Private Credit",
 "published_at": "2026-10-13T10:32:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/finance/investing/indexed-annuities-boost-private-credit-33942931?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2765,11 +2696,11 @@
 "stale": false
 },
 {
-"id": "N40",
+"id": "N37",
 "kind": "news",
 "label": "This Investing Strategy Is So Good You Can\u2019t Handle It",
 "published_at": "2026-10-13T10:35:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/finance/investing/this-investing-strategy-is-so-good-you-cant-handle-it-66a2fb16?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2788,11 +2719,11 @@
 "stale": false
 },
 {
-"id": "N41",
+"id": "N38",
 "kind": "news",
 "label": "Can a video game really help zoos?",
 "published_at": "2026-10-13T10:40:13+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/videos/cwg7x2jj4050o?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2811,11 +2742,11 @@
 "stale": false
 },
 {
-"id": "N42",
+"id": "N39",
 "kind": "news",
 "label": "The stock market is at a critical juncture. Wall Street is convinced it will resolve in the bulls' favor",
 "published_at": "2026-10-13T10:59:35+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/santoli-the-stock-market-is-at-a-critical-juncture.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2834,11 +2765,11 @@
 "stale": false
 },
 {
-"id": "N43",
+"id": "N40",
 "kind": "news",
 "label": "Children asked to name Ealing's new beavers",
 "published_at": "2026-10-13T10:59:38+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/c81dwrxkl0vyo?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2857,11 +2788,11 @@
 "stale": false
 },
 {
-"id": "N44",
+"id": "N41",
 "kind": "news",
 "label": "Super El Ni\u00f1o sets another record as it strengthens to 'unprecedented levels'",
 "published_at": "2026-10-13T11:18:44+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/weather/articles/cmlye0d7q7zno?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2880,11 +2811,11 @@
 "stale": false
 },
 {
-"id": "N45",
+"id": "N42",
 "kind": "news",
 "label": "Owls ringed to measure benefits of wildlife farming",
 "published_at": "2026-10-13T11:22:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/ck1wvd3xyyjpo?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2903,11 +2834,11 @@
 "stale": false
 },
 {
-"id": "N46",
+"id": "N43",
 "kind": "news",
 "label": "The Morning Risk Report: Trump\u2019s Diesel Deal With Russia Faces Questions From Lawmakers on Legality",
 "published_at": "2026-10-13T11:30:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/risk-compliance-journal/the-morning-risk-report-trumps-diesel-deal-with-russia-faces-questions-from-lawmakers-on-legality-8394b1c2?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2926,11 +2857,11 @@
 "stale": false
 },
 {
-"id": "N47",
+"id": "N44",
 "kind": "news",
 "label": "Europe Heads Into Winter With Low Gas Reserves, Uncertain Gulf Supplies",
 "published_at": "2026-10-13T11:43:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/finance/commodities-futures/europe-heads-into-winter-with-low-gas-reserves-uncertain-gulf-supplies-78cd3507?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2949,11 +2880,11 @@
 "stale": false
 },
 {
-"id": "N48",
+"id": "N45",
 "kind": "news",
 "label": "BA flight forced to turn back over cracked window",
 "published_at": "2026-10-13T11:48:07+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/cj1dwrxq1wndo?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2972,11 +2903,11 @@
 "stale": false
 },
 {
-"id": "N49",
+"id": "N46",
 "kind": "news",
 "label": "Three things we've learnt about the UK economy from the IMF",
 "published_at": "2026-10-13T11:58:43+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/cmly05l1g15yo?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -2995,11 +2926,11 @@
 "stale": false
 },
 {
-"id": "N50",
+"id": "N47",
 "kind": "news",
 "label": "FTC, States Ask Federal Court to Hold Martin Shkreli in Contempt for Allegedly Violating Lifetime Ban from Pharmaceutical Industry",
 "published_at": "2026-10-13T12:00:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "FTC",
 "url": "https://www.ftc.gov/news-events/news/press-releases/2026/10/ftc-states-ask-federal-court-hold-martin-shkreli-contempt-allegedly-violating-lifetime",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3021,11 +2952,11 @@
 "stale": false
 },
 {
-"id": "N51",
+"id": "N48",
 "kind": "news",
 "label": "Watch: Emergency calls from botched Christa Pike execution released",
 "published_at": "2026-10-13T12:03:51+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/videos/cqpvgrkp0xpyo?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3044,11 +2975,11 @@
 "stale": false
 },
 {
-"id": "N52",
+"id": "N49",
 "kind": "news",
 "label": "BBC FM radio transmissions suspended in Afghanistan",
 "published_at": "2026-10-13T12:13:57+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/cm8ezp4g7p6po?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3067,11 +2998,11 @@
 "stale": false
 },
 {
-"id": "N53",
+"id": "N50",
 "kind": "news",
 "label": "Poundland in rescue talks as owners seek buyer",
 "published_at": "2026-10-13T12:17:17+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/ckr5ydvvln0mo?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3090,11 +3021,11 @@
 "stale": false
 },
 {
-"id": "N54",
+"id": "N51",
 "kind": "news",
 "label": "BlackRock and Baillie Gifford bet big on Icon 3D printed homes",
 "published_at": "2026-10-13T12:18:44+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/blackrock-baillie-gifford-bet-big-on-icon-3d-printed-homes.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3113,11 +3044,11 @@
 "stale": false
 },
 {
-"id": "N55",
+"id": "N52",
 "kind": "news",
 "label": "French supermarket fridges get hacked, heating to 122\u00b0F and sparking fires",
 "published_at": "2026-10-13T12:22:59+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/france-supermarket-hack-cyberattack-fridges-fires.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3137,11 +3068,11 @@
 "stale": false
 },
 {
-"id": "N56",
+"id": "N53",
 "kind": "news",
 "label": "Car finance compensation payments delayed until next year",
 "published_at": "2026-10-13T12:27:36+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/c2l9vvj097lo?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3160,34 +3091,11 @@
 "stale": false
 },
 {
-"id": "N57",
-"kind": "news",
-"label": "Pakistan Faces $1 Billion LNG Bill This Winter",
-"published_at": "2026-10-13T12:30:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
-"source": "OilPrice",
-"url": "https://oilprice.com/Latest-Energy-News/World-News/Pakistan-Faces-1-Billion-LNG-Bill-This-Winter.html",
-"method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
-"detail": {
-"outlets": [
-"OilPrice"
-],
-"copies": 1,
-"access": "open",
-"sector": "energy",
-"desks": [
-"energy"
-]
-},
-"sources_in_cluster": 1,
-"stale": false
-},
-{
-"id": "N58",
+"id": "N54",
 "kind": "news",
 "label": "JPMorgan's earnings miss, Delta delays Riyadh route, McDonald's chicken plans and more in Morning Squawk",
 "published_at": "2026-10-13T12:42:33+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/5-things-to-know-before-the-stock-market-opens.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3206,11 +3114,11 @@
 "stale": false
 },
 {
-"id": "N59",
+"id": "N55",
 "kind": "news",
 "label": "JPMorgan, Goldman Profit Jumps as Banks Kick Off Earnings",
 "published_at": "2026-10-13T12:43:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/finance/banking/jpmorgan-goldman-profit-jumps-as-banks-kick-off-earnings-3e78b37d?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3229,11 +3137,11 @@
 "stale": false
 },
 {
-"id": "N60",
+"id": "N56",
 "kind": "news",
 "label": "World Bank jobs council urges 'crisis-era' employment support measures as IMF warns of AI \u2018tsunami\u2019",
 "published_at": "2026-10-13T13:09:55+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/12/imf-world-bank-ai-jobs-inflation-.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3253,11 +3161,11 @@
 "stale": false
 },
 {
-"id": "N61",
+"id": "N57",
 "kind": "news",
 "label": "11 of the Best Financial Advisor Companies: Well-Known Fiduciary Investment Firms to Consider",
 "published_at": "2026-10-13T13:15:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/buyside/personal-finance/financial-advisors/best-financial-advisors?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3276,11 +3184,11 @@
 "stale": false
 },
 {
-"id": "N62",
+"id": "N58",
 "kind": "news",
 "label": "Is Zelensky right to say data centre strikes have taken down Russian bots?",
 "published_at": "2026-10-13T13:27:31+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/c9y7l0pm8jkko?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3299,11 +3207,11 @@
 "stale": false
 },
 {
-"id": "N63",
+"id": "N59",
 "kind": "news",
 "label": "Super El Ni\u00f1o Could Ease Asia\u2019s LNG Supply Concerns",
 "published_at": "2026-10-13T13:30:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "OilPrice",
 "url": "https://oilprice.com/Latest-Energy-News/World-News/Super-El-Nio-Could-Ease-Asias-LNG-Supply-Concerns.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3322,11 +3230,11 @@
 "stale": false
 },
 {
-"id": "N64",
+"id": "N60",
 "kind": "news",
 "label": "Thousands of homeowners face adjustable-rate mortgage resets \u2014 and much higher payments",
 "published_at": "2026-10-13T13:35:01+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/arm-mortgage-borrowers-rate-adjustment.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3345,11 +3253,11 @@
 "stale": false
 },
 {
-"id": "N65",
+"id": "N61",
 "kind": "news",
 "label": "Trump Defends Russian Diesel Deal as Energy Ceasefire Claims Unravel",
 "published_at": "2026-10-13T14:00:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "OilPrice",
 "url": "https://oilprice.com/Energy/Energy-General/Trump-Defends-Russian-Diesel-Deal-as-Energy-Ceasefire-Claims-Unravel.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3368,11 +3276,11 @@
 "stale": false
 },
 {
-"id": "N66",
+"id": "N62",
 "kind": "news",
 "label": "Japanese Refiners Buy Middle East Crude Through Ship-to-Ship Transfers",
 "published_at": "2026-10-13T14:30:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "OilPrice",
 "url": "https://oilprice.com/Latest-Energy-News/World-News/Japanese-Refiners-Buy-Middle-East-Crude-Through-Ship-to-Ship-Transfers.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3391,11 +3299,11 @@
 "stale": false
 },
 {
-"id": "N67",
+"id": "N63",
 "kind": "news",
 "label": "VC Firm Antares Ventures Raises Over $50 Million for Deep-Tech Investments",
 "published_at": "2026-10-13T14:44:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/pro/venture-capital/vc-firm-antares-ventures-raises-over-50-million-for-deep-tech-investments-76ba087a?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3414,11 +3322,11 @@
 "stale": false
 },
 {
-"id": "N68",
+"id": "N64",
 "kind": "news",
 "label": "Bulgaria summons Russian ambassador after ship sinks in Black Sea drone attack",
 "published_at": "2026-10-13T14:51:59+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/cmn06w5x9g25o?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3437,11 +3345,11 @@
 "stale": false
 },
 {
-"id": "N69",
+"id": "N65",
 "kind": "news",
 "label": "For Stocks, the Future Ain\u2019t What It Used to Be",
 "published_at": "2026-10-13T14:55:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/finance/investing/for-stocks-the-future-aint-what-it-used-to-be-5b210467?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3460,11 +3368,11 @@
 "stale": false
 },
 {
-"id": "N70",
+"id": "N66",
 "kind": "news",
 "label": "Saudi Arabia Becomes the Oil Market\u2019s Biggest Wild Card",
 "published_at": "2026-10-13T15:00:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "OilPrice",
 "url": "https://oilprice.com/Energy/Crude-Oil/Saudi-Arabia-Becomes-the-Oil-Markets-Biggest-Wild-Card.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3483,11 +3391,11 @@
 "stale": false
 },
 {
-"id": "N71",
+"id": "N67",
 "kind": "news",
 "label": "UnitedHealth Group tops estimates, hikes profit outlook as insurer manages high medical costs",
 "published_at": "2026-10-13T15:04:35+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/unitedhealth-group-unh-earnings-q3-2026.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3506,11 +3414,11 @@
 "stale": false
 },
 {
-"id": "N72",
+"id": "N68",
 "kind": "news",
 "label": "The Sabrina Carpenter clip which helped a 22-year-old make \u00a3120,000 a year",
 "published_at": "2026-10-13T15:12:38+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/c84g12v3lk20o?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3529,11 +3437,11 @@
 "stale": false
 },
 {
-"id": "N73",
+"id": "N69",
 "kind": "news",
 "label": "India's 97 GW Coal Expansion Plan Looks Too Small, Senior Official Says",
 "published_at": "2026-10-13T15:30:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "OilPrice",
 "url": "https://oilprice.com/Latest-Energy-News/World-News/Indias-97-GW-Coal-Expansion-Plan-Looks-Too-Small-Senior-Official-Says.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3552,11 +3460,11 @@
 "stale": false
 },
 {
-"id": "N74",
+"id": "N70",
 "kind": "news",
 "label": "NI company in talks to save Poundland from administration",
 "published_at": "2026-10-13T15:44:45+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/videos/c962yg36mk66o?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3575,11 +3483,11 @@
 "stale": false
 },
 {
-"id": "N75",
+"id": "N71",
 "kind": "news",
 "label": "Paul Tudor Jones is bullish on oil, says it could rally another $20-$25 because of Iran conflict",
 "published_at": "2026-10-13T15:52:09+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/paul-tudor-jones-oil-iran.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3598,11 +3506,11 @@
 "stale": false
 },
 {
-"id": "N76",
+"id": "N72",
 "kind": "news",
 "label": "MI5 chief warns of threats to UK from Russia, Iran and AI",
 "published_at": "2026-10-13T15:52:15+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/c60rl5vwpk02o?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3621,11 +3529,11 @@
 "stale": false
 },
 {
-"id": "N77",
+"id": "N73",
 "kind": "news",
 "label": "In charts: How one of the world's biggest economies got trapped by debt",
 "published_at": "2026-10-13T15:52:24+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/france-2027-budget-debt.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3645,11 +3553,11 @@
 "stale": false
 },
 {
-"id": "N78",
+"id": "N74",
 "kind": "news",
 "label": "Iran reportedly fortifies nuclear sites as it prepares for possible U.S. strikes after midterms",
 "published_at": "2026-10-13T15:57:46+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/iran-us-war-houthis-saudi-arabia-airport.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3670,11 +3578,11 @@
 "stale": false
 },
 {
-"id": "N79",
+"id": "N75",
 "kind": "news",
 "label": "Bumble bought for $1.3bn in 'bet on the future of humanity'",
 "published_at": "2026-10-13T15:59:07+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/cm9qzwjgnjxlo?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3694,11 +3602,11 @@
 "stale": false
 },
 {
-"id": "N80",
+"id": "N76",
 "kind": "news",
 "label": "Why Diesel Prices Are So Much Higher Than Gasoline",
 "published_at": "2026-10-13T16:00:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "OilPrice",
 "url": "https://oilprice.com/Energy/Energy-General/Why-Diesel-Prices-Are-So-Much-Higher-Than-Gasoline.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3717,11 +3625,11 @@
 "stale": false
 },
 {
-"id": "N81",
+"id": "N77",
 "kind": "news",
 "label": "AI companion startup Character.ai files for Chapter 11 bankruptcy, citing costs and litigation",
 "published_at": "2026-10-13T16:13:38+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/character-ai-chapter-11-disney-bid.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3740,11 +3648,11 @@
 "stale": false
 },
 {
-"id": "N82",
+"id": "N78",
 "kind": "news",
 "label": "White House asks US envoy to Greece Kimberly Guilfoyle to resign",
 "published_at": "2026-10-13T16:16:58+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "Financial Times",
 "url": "https://www.ft.com/content/87a1a5a1-4942-47dd-856a-d9a694f7d2fd?syn-25a6b1a6=1",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3766,11 +3674,11 @@
 "stale": false
 },
 {
-"id": "N83",
+"id": "N79",
 "kind": "news",
 "label": "Dangote Swings to $4.7 Billion Profit Ahead of Africa\u2019s Biggest IPO",
 "published_at": "2026-10-13T16:30:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "OilPrice",
 "url": "https://oilprice.com/Latest-Energy-News/World-News/Dangote-Swings-to-47-Billion-Profit-Ahead-of-Africas-Biggest-IPO.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3789,11 +3697,11 @@
 "stale": false
 },
 {
-"id": "N84",
+"id": "N80",
 "kind": "news",
 "label": "The AI trade is cracking. Here's how to profit",
 "published_at": "2026-10-13T16:44:21+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/the-ai-trade-is-cracking-heres-how-to-profit.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3812,11 +3720,11 @@
 "stale": false
 },
 {
-"id": "N85",
+"id": "N81",
 "kind": "news",
 "label": "Trump's diesel deal with Russia equals less than two weeks of U.S. demand",
 "published_at": "2026-10-13T16:53:43+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/trump-putin-zelenskyy-russia-ukraine-diesel-oil-price.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3835,11 +3743,11 @@
 "stale": false
 },
 {
-"id": "N86",
+"id": "N82",
 "kind": "news",
 "label": "China\u2019s $3 Billion Qatar LNG Deal Raises an Awkward Question",
 "published_at": "2026-10-13T17:00:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "OilPrice",
 "url": "https://oilprice.com/Energy/Natural-Gas/Chinas-3-Billion-Qatar-LNG-Deal-Raises-an-Awkward-Question.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3858,11 +3766,11 @@
 "stale": false
 },
 {
-"id": "N87",
+"id": "N83",
 "kind": "news",
 "label": "Inside Katie Zacharia's very brief White House briefing",
 "published_at": "2026-10-13T17:04:37+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/videos/cxm235y4l54lo?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3881,11 +3789,11 @@
 "stale": false
 },
 {
-"id": "N88",
+"id": "N84",
 "kind": "news",
 "label": "Horrified witnesses recount fatal rollercoaster incident at Six Flags",
 "published_at": "2026-10-13T17:10:50+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/c6n4ejx8x1z7o?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3904,11 +3812,11 @@
 "stale": false
 },
 {
-"id": "N89",
+"id": "N85",
 "kind": "news",
 "label": "Higher Rates Are Coming for Private Equity\u2014and Smaller Firms Are Already Hurting",
 "published_at": "2026-10-13T17:30:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/finance/investing/higher-rates-are-coming-for-private-equityand-smaller-firms-are-already-hurting-754ada6c?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3927,11 +3835,11 @@
 "stale": false
 },
 {
-"id": "N90",
+"id": "N86",
 "kind": "news",
 "label": "Argentina Takes Falklands Oil Fight to International Tribunal",
 "published_at": "2026-10-13T17:30:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "OilPrice",
 "url": "https://oilprice.com/Latest-Energy-News/World-News/Argentina-Takes-Falklands-Oil-Fight-to-International-Tribunal.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3950,11 +3858,11 @@
 "stale": false
 },
 {
-"id": "N91",
+"id": "N87",
 "kind": "news",
 "label": "Argentina targets UK in legal claim over Falklands oil exploration",
 "published_at": "2026-10-13T17:36:43+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/cmp3g14p3z2ko?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3974,11 +3882,11 @@
 "stale": false
 },
 {
-"id": "N92",
+"id": "N88",
 "kind": "news",
 "label": "Municipal Bond Investors Face Elevated Risks From Rising Costs of Natural Disasters",
 "published_at": "2026-10-13T17:58:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/finance/investing/municipal-bond-investors-face-elevated-risks-from-rising-costs-of-natural-disasters-66404839?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -3997,11 +3905,11 @@
 "stale": false
 },
 {
-"id": "N93",
+"id": "N89",
 "kind": "news",
 "label": "Trump's Middle Corridor Plans Face Russian and Iranian Roadblocks",
 "published_at": "2026-10-13T18:00:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "OilPrice",
 "url": "https://oilprice.com/Geopolitics/Asia/Trumps-Middle-Corridor-Plans-Face-Russian-and-Iranian-Roadblocks.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4020,11 +3928,11 @@
 "stale": false
 },
 {
-"id": "N94",
+"id": "N90",
 "kind": "news",
 "label": "The latest inflation data is expected to show price increases are accelerating",
 "published_at": "2026-10-13T18:05:57+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/september-consumer-price-index-inflation.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4044,11 +3952,11 @@
 "stale": false
 },
 {
-"id": "N95",
+"id": "N91",
 "kind": "news",
 "label": "Gold Futures Slip Ahead of U.S. CPI Data",
 "published_at": "2026-10-13T18:18:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/finance/commodities-futures/gold-falls-as-markets-focus-on-u-s-data-bb4eb024?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4067,11 +3975,11 @@
 "stale": false
 },
 {
-"id": "N96",
+"id": "N92",
 "kind": "news",
 "label": "More Republicans come out against Trump's diesel deal with Putin",
 "published_at": "2026-10-13T18:19:42+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/trump-russia-diesel-republicans.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4092,11 +4000,11 @@
 "stale": false
 },
 {
-"id": "N97",
+"id": "N93",
 "kind": "news",
 "label": "'If we don't scream, they won't listen to us': Student protesters speak to BBC in Paris",
 "published_at": "2026-10-13T18:23:22+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/videos/ckg5jqg1npd7o?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4115,11 +4023,11 @@
 "stale": false
 },
 {
-"id": "N98",
+"id": "N94",
 "kind": "news",
 "label": "Cornell bans all fraternity parties over gang sex assault allegations",
 "published_at": "2026-10-13T18:25:28+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/cw8dzg094zd9o?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4138,11 +4046,11 @@
 "stale": false
 },
 {
-"id": "N99",
+"id": "N95",
 "kind": "news",
 "label": "Airport attacks put aviation in crosshairs of geopolitical conflicts",
 "published_at": "2026-10-13T18:33:42+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/riyadh-airport-attacks-aviation.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4161,11 +4069,11 @@
 "stale": false
 },
 {
-"id": "N100",
+"id": "N96",
 "kind": "news",
 "label": "'Jellyfish' effect lights up US sky after SpaceX launch",
 "published_at": "2026-10-13T18:35:34+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/videos/cr86zjv5plp5o?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4184,11 +4092,11 @@
 "stale": false
 },
 {
-"id": "N101",
+"id": "N97",
 "kind": "news",
 "label": "Treasury, Eurozone Yields Decline as Markets Look to U.S. Inflation Data",
 "published_at": "2026-10-13T18:47:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/economy/central-banking/treasury-eurozone-yields-fall-as-markets-look-to-u-s-inflation-data-412d95a4?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4207,11 +4115,11 @@
 "stale": false
 },
 {
-"id": "N102",
+"id": "N98",
 "kind": "news",
 "label": "Social Security cost-of-living adjustment for 2027 may be above average. Some say it's not enough",
 "published_at": "2026-10-13T18:51:08+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/social-security-cola-2027.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4230,11 +4138,11 @@
 "stale": false
 },
 {
-"id": "N103",
+"id": "N99",
 "kind": "news",
 "label": "Guyana Oil Exports Set to Surpass 1 Million Barrels per Day for First Time",
 "published_at": "2026-10-13T19:00:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "OilPrice",
 "url": "https://oilprice.com/Energy/Crude-Oil/Guyana-Oil-Exports-Set-to-Surpass-1-Million-Barrels-per-Day-for-First-Time.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4253,11 +4161,11 @@
 "stale": false
 },
 {
-"id": "N104",
+"id": "N100",
 "kind": "news",
 "label": "Michael Dell says AI needs safeguards and controls, and government has a role to play",
 "published_at": "2026-10-13T19:08:28+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/michael-dell-ai-safeguards-government.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4277,11 +4185,11 @@
 "stale": false
 },
 {
-"id": "N105",
+"id": "N101",
 "kind": "news",
 "label": "Paul Tudor Jones says 2027 could be a really challenging year for the stock market",
 "published_at": "2026-10-13T19:21:27+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/paul-tudor-jones-2027-really-challenging-year.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4300,11 +4208,11 @@
 "stale": false
 },
 {
-"id": "N106",
+"id": "N102",
 "kind": "news",
 "label": "Apple releases HomeView smart home hub with screen as showcase for Siri AI",
 "published_at": "2026-10-13T19:23:39+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/apple-homeview-smart-home-siri-ai.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4324,11 +4232,11 @@
 "stale": false
 },
 {
-"id": "N107",
+"id": "N103",
 "kind": "news",
 "label": "Oil prices mixed as traders assess Russian diesel supply prospects and Saudi-Houthi conflict",
 "published_at": "2026-10-13T19:35:50+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/oil-prices-today-brent-wti-hormuz.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4347,11 +4255,11 @@
 "stale": false
 },
 {
-"id": "N108",
+"id": "N104",
 "kind": "news",
 "label": "U.S. Natural Gas Futures Gain on Storage Views",
 "published_at": "2026-10-13T19:37:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/finance/commodities-futures/european-gas-prices-at-highest-since-late-2022-on-winter-supply-concerns-08c3ad4d?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4370,11 +4278,11 @@
 "stale": false
 },
 {
-"id": "N109",
+"id": "N105",
 "kind": "news",
 "label": "Tech Life",
 "published_at": "2026-10-13T19:45:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/sounds/play/w3ct8jyk?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4393,11 +4301,11 @@
 "stale": false
 },
 {
-"id": "N110",
+"id": "N106",
 "kind": "news",
 "label": "Williams says Fed may not have to hike rates in 2027, at odds with traders",
 "published_at": "2026-10-13T19:46:12+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/john-williams-fed-rate-hikes-2027.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4417,11 +4325,11 @@
 "stale": false
 },
 {
-"id": "N111",
+"id": "N107",
 "kind": "news",
 "label": "We're upgrading our rating on Wells Fargo as the stock's pullback offers a nice entry point",
 "published_at": "2026-10-13T19:51:06+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/investingclub/2026/10/13/were-upgrading-our-rating-on-wells-fargo-as-the-stocks-pullback-offers-a-nice-entry-point.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4440,11 +4348,11 @@
 "stale": false
 },
 {
-"id": "N112",
+"id": "N108",
 "kind": "news",
 "label": "Ex-gang boss sentenced to 40 years for orchestrating Tupac Shakur's murder",
 "published_at": "2026-10-13T19:51:14+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/c60rln2jvv2zo?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4463,11 +4371,11 @@
 "stale": false
 },
 {
-"id": "N113",
+"id": "N109",
 "kind": "news",
 "label": "Princeton Researchers Find a Lower-Energy Route to Fusion Ignition",
 "published_at": "2026-10-13T20:00:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "OilPrice",
 "url": "https://oilprice.com/Alternative-Energy/Nuclear-Power/Princeton-Researchers-Find-a-Lower-Energy-Route-to-Fusion-Ignition.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4486,11 +4394,11 @@
 "stale": false
 },
 {
-"id": "N114",
+"id": "N110",
 "kind": "news",
 "label": "Bank of America fined $1.2bn over money laundering failures",
 "published_at": "2026-10-13T20:00:06+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "Financial Times",
 "url": "https://www.ft.com/content/c08dd4a1-74a4-49f2-90f7-0857c6e87868?syn-25a6b1a6=1",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4513,11 +4421,11 @@
 "stale": false
 },
 {
-"id": "N115",
+"id": "N111",
 "kind": "news",
 "label": "Missiles intercepted near Riyadh after Saudi coalition hits Yemen fuel depot",
 "published_at": "2026-10-13T20:02:15+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/crx2d60y1py3o?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4536,11 +4444,11 @@
 "stale": false
 },
 {
-"id": "N116",
+"id": "N112",
 "kind": "news",
 "label": "Older Americans are struggling with food affordability",
 "published_at": "2026-10-13T20:03:30+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "NPR",
 "url": "https://www.npr.org/2026/10/13/nx-s1-5963595/older-americans-are-struggling-with-food-affordability",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4559,11 +4467,11 @@
 "stale": false
 },
 {
-"id": "N117",
+"id": "N113",
 "kind": "news",
 "label": "Why this little known Chinese chipmaker has caused a global stock rout",
 "published_at": "2026-10-13T20:05:58+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/cxmt-memory-chip-stock-rout.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4583,11 +4491,11 @@
 "stale": false
 },
 {
-"id": "N118",
+"id": "N114",
 "kind": "news",
 "label": "Oil Futures Settle Mixed as Diesel\u2019s Rise Helps Lift WTI",
 "published_at": "2026-10-13T20:07:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/finance/commodities-futures/oil-futures-decline-on-possible-technical-correction-a4fa2f4b?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4606,11 +4514,11 @@
 "stale": false
 },
 {
-"id": "N119",
+"id": "N115",
 "kind": "news",
 "label": "Micron sinks, other memory-linked names dip for a second day",
 "published_at": "2026-10-13T20:12:36+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/sk-hynix-softbank-samsung-electronics-shares-tech-stocks-fall.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4630,11 +4538,11 @@
 "stale": false
 },
 {
-"id": "N120",
+"id": "N116",
 "kind": "news",
 "label": "Bank Earnings Look Strong, But Markets Shrug",
 "published_at": "2026-10-13T20:15:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/finance/stocks/bank-earnings-look-strong-but-markets-shrug-26533199?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4653,11 +4561,11 @@
 "stale": false
 },
 {
-"id": "N121",
+"id": "N117",
 "kind": "news",
 "label": "My sister moved in with our mother, 78, and now says she deserves the $925,000 family home. Is she right?",
 "published_at": "2026-10-13T20:16:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "MarketWatch",
 "url": "https://www.marketwatch.com/story/my-sister-moved-in-with-our-widowed-mother-78-and-says-she-deserves-the-family-home-is-she-right-7981835d?mod=mw_rss_topstories",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4676,11 +4584,11 @@
 "stale": false
 },
 {
-"id": "N122",
+"id": "N118",
 "kind": "news",
 "label": "Micron\u2019s stock extends declines as China competition heats up",
 "published_at": "2026-10-13T20:25:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "MarketWatch",
 "url": "https://www.marketwatch.com/story/microns-stock-extends-declines-as-china-competition-heats-up-b8ec25f0?mod=mw_rss_topstories",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4699,11 +4607,11 @@
 "stale": false
 },
 {
-"id": "N123",
+"id": "N119",
 "kind": "news",
 "label": "Was Broadcom CEO bullish or bearish on AI? \u2018Gamblers\u2019 comment creates storm.",
 "published_at": "2026-10-13T20:27:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "MarketWatch",
 "url": "https://www.marketwatch.com/story/was-broadcom-ceo-bullish-or-bearish-on-ai-gamblers-comment-creates-storm-33f11787?mod=mw_rss_topstories",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4722,11 +4630,11 @@
 "stale": false
 },
 {
-"id": "N124",
+"id": "N120",
 "kind": "news",
 "label": "UnitedHealth keeps medical costs under control \u2014 and raises its outlook again",
 "published_at": "2026-10-13T20:29:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "MarketWatch",
 "url": "https://www.marketwatch.com/story/unitedhealth-keeps-medical-costs-under-control-and-raises-its-outlook-again-71abc99c?mod=mw_rss_topstories",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4745,11 +4653,11 @@
 "stale": false
 },
 {
-"id": "N125",
+"id": "N121",
 "kind": "news",
 "label": "Walmart to cover some GLP-1s, inhalers and insulin for employees at no cost as it expands benefits",
 "published_at": "2026-10-13T20:29:06+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/walmart-glp-1s-inhalers-insulin-employee-benefits.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4768,11 +4676,11 @@
 "stale": false
 },
 {
-"id": "N126",
+"id": "N122",
 "kind": "news",
 "label": "My wife says we can\u2019t afford to retire, yet she wants to take an $8,000 trip to Italy. We have $4 million. Do I keep working?",
 "published_at": "2026-10-13T20:30:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "MarketWatch",
 "url": "https://www.marketwatch.com/story/my-wife-says-we-cant-afford-to-retire-we-have-4-million-do-i-just-keep-working-f1b6b085?mod=mw_rss_topstories",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4791,11 +4699,11 @@
 "stale": false
 },
 {
-"id": "N127",
+"id": "N123",
 "kind": "news",
 "label": "AST SpaceMobile\u2019s stock is feeling the heat from SpaceX\u2019s wireless plans",
 "published_at": "2026-10-13T20:32:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "MarketWatch",
 "url": "https://www.marketwatch.com/story/ast-spacemobiles-stock-is-feeling-the-heat-from-spacexs-wireless-plans-7e2fafb4?mod=mw_rss_topstories",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4814,11 +4722,11 @@
 "stale": false
 },
 {
-"id": "N128",
+"id": "N124",
 "kind": "news",
 "label": "Six Flags\u2019 stock slumps near 17-year low after fatal incident",
 "published_at": "2026-10-13T20:41:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "MarketWatch",
 "url": "https://www.marketwatch.com/story/six-flags-stock-slumps-near-52-week-lows-after-fatal-accident-3f938112?mod=mw_rss_topstories",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4837,11 +4745,11 @@
 "stale": false
 },
 {
-"id": "N129",
+"id": "N125",
 "kind": "news",
 "label": "Rising Interest Rates Threaten to Spoil the Party for Big Banks",
 "published_at": "2026-10-13T20:42:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/finance/banking/rising-interest-rates-threaten-to-spoil-the-party-for-big-banks-0ef3e7c0?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4860,11 +4768,11 @@
 "stale": false
 },
 {
-"id": "N130",
+"id": "N126",
 "kind": "news",
 "label": "The SpaceX threat could loom over AT&T\u2019s stock for a prolonged stretch, analyst cautions",
 "published_at": "2026-10-13T20:42:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "MarketWatch",
 "url": "https://www.marketwatch.com/story/the-spacex-threat-could-loom-over-at-ts-stock-for-a-prolonged-stretch-analyst-cautions-71436853?mod=mw_rss_topstories",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4883,11 +4791,11 @@
 "stale": false
 },
 {
-"id": "N131",
+"id": "N127",
 "kind": "news",
 "label": "Pope diagnosed with lung cancer but had successful surgery, Vatican says",
 "published_at": "2026-10-13T20:46:06+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/ck1wvd9dvv22o?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4906,11 +4814,11 @@
 "stale": false
 },
 {
-"id": "N132",
+"id": "N128",
 "kind": "news",
 "label": "JPMorgan Chase blocks outside AI agents like Muse, Instinct from directly accessing accounts",
 "published_at": "2026-10-13T20:48:37+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/jpmorgan-ai-agents-account-access.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4930,11 +4838,11 @@
 "stale": false
 },
 {
-"id": "N133",
+"id": "N129",
 "kind": "news",
 "label": "Don't let inflation bite \u2014 how to hedge with TIPS, commodities and infrastructure funds",
 "published_at": "2026-10-13T20:52:22+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/inflation-hedge-tips-commodities-infrastructure.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4953,11 +4861,11 @@
 "stale": false
 },
 {
-"id": "N134",
+"id": "N130",
 "kind": "news",
 "label": "US indicts Saudi employee of OpenAI for allegedly bugging its offices",
 "published_at": "2026-10-13T20:54:58+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "Financial Times",
 "url": "https://www.ft.com/content/2c3b583a-3ddc-4920-a350-9698c119435c?syn-25a6b1a6=1",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -4979,11 +4887,11 @@
 "stale": false
 },
 {
-"id": "N135",
+"id": "N131",
 "kind": "news",
 "label": "Financial Services Roundup: Market Talk",
 "published_at": "2026-10-13T20:57:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/business/financial-services-roundup-market-talk-51c2b458?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -5002,11 +4910,11 @@
 "stale": false
 },
 {
-"id": "N136",
+"id": "N132",
 "kind": "news",
 "label": "Five Shale Stocks to Watch Before Third-Quarter Earnings",
 "published_at": "2026-10-13T21:00:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "OilPrice",
 "url": "https://oilprice.com/Energy/Energy-General/Five-Shale-Stocks-to-Watch-Before-Third-Quarter-Earnings.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -5025,11 +4933,11 @@
 "stale": false
 },
 {
-"id": "N137",
+"id": "N133",
 "kind": "news",
 "label": "\u2018I am a pretty cautious person\u2019: My financial adviser wants me to invest $350,000 in a UAE data center. Is this risky?",
 "published_at": "2026-10-13T21:01:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "MarketWatch",
 "url": "https://www.marketwatch.com/story/the-prospectus-looks-impressive-my-financial-adviser-wants-me-to-invest-350-000-in-a-uae-data-center-is-this-risky-d5d3747c?mod=mw_rss_topstories",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -5048,11 +4956,11 @@
 "stale": false
 },
 {
-"id": "N138",
+"id": "N134",
 "kind": "news",
 "label": "Chip stocks suffer worst stretch in 16 months as AI fatigue grips the market",
 "published_at": "2026-10-13T21:02:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "MarketWatch",
 "url": "https://www.marketwatch.com/story/ai-fatigue-is-gripping-the-market-and-driving-chip-stocks-toward-their-worst-stretch-in-16-months-6dc78ece?mod=mw_rss_topstories",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -5071,11 +4979,11 @@
 "stale": false
 },
 {
-"id": "N139",
+"id": "N135",
 "kind": "news",
 "label": "Anthropic to disclose new revenue numbers as AI lab financials become central to tech trade",
 "published_at": "2026-10-13T21:02:52+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/anthropic-q3-financials-ipo.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -5095,11 +5003,11 @@
 "stale": false
 },
 {
-"id": "N140",
+"id": "N136",
 "kind": "news",
 "label": "U.S. Stocks Tick Down as Bank Earnings Don\u2019t Excite",
 "published_at": "2026-10-13T21:07:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/finance/stocks/u-s-stocks-tick-down-as-bank-earnings-dont-excite-40b1934e?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -5118,11 +5026,11 @@
 "stale": false
 },
 {
-"id": "N141",
+"id": "N137",
 "kind": "news",
 "label": "Judge says Musk engaged in intimidation of ex-FEMA CFO Mary Comans, clears her name",
 "published_at": "2026-10-13T21:15:32+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/judge-says-elon-musk-engaged-intimidation-of-ex-fema-cfo-mary-comans.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -5142,11 +5050,11 @@
 "stale": false
 },
 {
-"id": "N142",
+"id": "N138",
 "kind": "news",
 "label": "Six Flags shares decline following deadly roller coaster incident",
 "published_at": "2026-10-13T21:18:03+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "CNBC",
 "url": "https://www.cnbc.com/2026/10/13/six-flags-shares-plunge-after-hours-deadly-roller-coaster-incident-goliath-georgia.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -5165,11 +5073,11 @@
 "stale": false
 },
 {
-"id": "N143",
+"id": "N139",
 "kind": "news",
 "label": "OPEC Sees Oil Demand Growth Surging to 2.6 Million Bpd in 2027",
 "published_at": "2026-10-13T21:30:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "OilPrice",
 "url": "https://oilprice.com/Latest-Energy-News/World-News/OPEC-Sees-Oil-Demand-Growth-Surging-to-26-Million-Bpd-in-2027.html",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -5188,11 +5096,11 @@
 "stale": false
 },
 {
-"id": "N144",
+"id": "N140",
 "kind": "news",
 "label": "WSJ Dollar Index Falls 0.25% to 97.34",
 "published_at": "2026-10-13T21:39:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "WSJ",
 "url": "https://www.wsj.com/finance/currencies/asian-currencies-consolidate-but-may-be-weighed-by-safe-haven-demand-for-greenback-c51874b4?mod=rss_markets_main",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -5211,11 +5119,11 @@
 "stale": false
 },
 {
-"id": "N145",
+"id": "N141",
 "kind": "news",
 "label": "Saudi man charged with planting 'sophisticated' recording device in OpenAI office",
 "published_at": "2026-10-13T21:42:49+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "BBC News",
 "url": "https://www.bbc.co.uk/news/articles/cwg5jq4vlddzo?at_medium=RSS&at_campaign=rss",
 "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
@@ -5235,11 +5143,172 @@
 "stale": false
 },
 {
+"id": "N142",
+"kind": "news",
+"label": "More tea? How Scotland's crops of the future could be set to change",
+"published_at": "2026-10-13T21:57:25+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
+"source": "BBC News",
+"url": "https://www.bbc.co.uk/news/articles/cxdd80z9yjpqo?at_medium=RSS&at_campaign=rss",
+"method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
+"detail": {
+"outlets": [
+"BBC News"
+],
+"copies": 2,
+"access": "open",
+"sector": "world",
+"desks": [
+"world"
+]
+},
+"sources_in_cluster": 1,
+"stale": false
+},
+{
+"id": "N143",
+"kind": "news",
+"label": "Stranded Middle East LNG Supply Upends Gas Markets",
+"published_at": "2026-10-13T22:00:00+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
+"source": "OilPrice",
+"url": "https://oilprice.com/Energy/Natural-Gas/Stranded-Middle-East-LNG-Supply-Upends-Gas-Markets.html",
+"method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
+"detail": {
+"outlets": [
+"OilPrice"
+],
+"copies": 1,
+"access": "open",
+"sector": "energy",
+"desks": [
+"energy"
+]
+},
+"sources_in_cluster": 1,
+"stale": false
+},
+{
+"id": "N144",
+"kind": "news",
+"label": "Why the lonely in China are hiring 'temporary children'",
+"published_at": "2026-10-13T22:00:20+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
+"source": "BBC News",
+"url": "https://www.bbc.co.uk/news/videos/cm8xkxn8lqkeo?at_medium=RSS&at_campaign=rss",
+"method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
+"detail": {
+"outlets": [
+"BBC News"
+],
+"copies": 1,
+"access": "open",
+"sector": "world",
+"desks": [
+"world"
+]
+},
+"sources_in_cluster": 1,
+"stale": false
+},
+{
+"id": "N145",
+"kind": "news",
+"label": "Who's to blame for the toxic smog choking South East Asia?",
+"published_at": "2026-10-13T22:01:43+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
+"source": "BBC News",
+"url": "https://www.bbc.co.uk/news/articles/ckreyq9re0n0o?at_medium=RSS&at_campaign=rss",
+"method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
+"detail": {
+"outlets": [
+"BBC News"
+],
+"copies": 1,
+"access": "open",
+"sector": "world",
+"desks": [
+"world"
+]
+},
+"sources_in_cluster": 1,
+"stale": false
+},
+{
 "id": "N146",
+"kind": "news",
+"label": "'I'd talk to the TV': The paid companions bringing warmth to China's lonely",
+"published_at": "2026-10-13T22:02:09+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
+"source": "BBC News",
+"url": "https://www.bbc.co.uk/news/articles/cm5ynwpzkgk1o?at_medium=RSS&at_campaign=rss",
+"method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
+"detail": {
+"outlets": [
+"BBC News"
+],
+"copies": 1,
+"access": "open",
+"sector": "world",
+"desks": [
+"world"
+]
+},
+"sources_in_cluster": 1,
+"stale": false
+},
+{
+"id": "N147",
+"kind": "news",
+"label": "Pakistan has locked down Imran Khan's stronghold - but it could backfire",
+"published_at": "2026-10-13T22:07:40+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
+"source": "BBC News",
+"url": "https://www.bbc.co.uk/news/articles/crgqwv4vl24jo?at_medium=RSS&at_campaign=rss",
+"method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
+"detail": {
+"outlets": [
+"BBC News"
+],
+"copies": 1,
+"access": "open",
+"sector": "world",
+"desks": [
+"world"
+]
+},
+"sources_in_cluster": 1,
+"stale": false
+},
+{
+"id": "N148",
+"kind": "news",
+"label": "Jim Cramer isn't giving up on semiconductor stocks despite the sell off. Here's why",
+"published_at": "2026-10-13T22:19:29+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
+"source": "CNBC",
+"url": "https://www.cnbc.com/2026/10/13/jim-cramer-semiconductor-stocks-sell-off.html",
+"method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
+"detail": {
+"outlets": [
+"CNBC"
+],
+"copies": 1,
+"access": "metered",
+"sector": "tech",
+"desks": [
+"tech"
+]
+},
+"sources_in_cluster": 1,
+"stale": false
+},
+{
+"id": "N149",
 "kind": "news",
 "label": "H.R. 9530, Quiet Skies Act",
 "published_at": "2026-10-13T20:47:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "Congressional Budget Office",
 "url": "https://www.cbo.gov/publication/62851",
 "method": "Official release from the agency's own feed.",
@@ -5251,11 +5320,11 @@
 "stale": false
 },
 {
-"id": "N147",
+"id": "N150",
 "kind": "news",
 "label": "H.R. 9772, Foreign Funding Transparency Act",
 "published_at": "2026-10-13T20:47:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "Congressional Budget Office",
 "url": "https://www.cbo.gov/publication/62852",
 "method": "Official release from the agency's own feed.",
@@ -5267,11 +5336,11 @@
 "stale": false
 },
 {
-"id": "N148",
+"id": "N151",
 "kind": "news",
 "label": "H.R. 2592, Aviation Medication Transparency Act of 2026",
 "published_at": "2026-10-13T20:46:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "Congressional Budget Office",
 "url": "https://www.cbo.gov/publication/62850",
 "method": "Official release from the agency's own feed.",
@@ -5283,11 +5352,11 @@
 "stale": false
 },
 {
-"id": "N149",
+"id": "N152",
 "kind": "news",
 "label": "Philip R. Lane: The AI opportunity for Europe",
 "published_at": "2026-10-13T18:30:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "European Central Bank",
 "url": "https://www.ecb.europa.eu//press/key/date/2026/html/ecb.sp261013~9db9bf4fd6.en.html",
 "method": "Official release from the agency's own feed.",
@@ -5299,11 +5368,11 @@
 "stale": false
 },
 {
-"id": "N150",
+"id": "N153",
 "kind": "news",
 "label": "Minutes of the Board's discount rate meetings on August 17, September 9, and September 16, 2026",
 "published_at": "2026-10-13T18:00:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "Federal Reserve",
 "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261013a.htm",
 "method": "Official release from the agency's own feed.",
@@ -5315,11 +5384,11 @@
 "stale": false
 },
 {
-"id": "N151",
+"id": "N154",
 "kind": "news",
 "label": "Minutes of the Board's discount rate meetings on August 17, September 9, and September 16, 2026",
 "published_at": "2026-10-13T18:00:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "Federal Reserve",
 "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261013a.htm",
 "method": "Official release from the agency's own feed.",
@@ -5331,11 +5400,11 @@
 "stale": false
 },
 {
-"id": "N152",
+"id": "N155",
 "kind": "news",
 "label": "H.R. 7257, SECURE Grid Act",
 "published_at": "2026-10-13T15:59:00+00:00",
-"as_of": "2026-10-13T21:53:53+00:00",
+"as_of": "2026-10-13T22:24:10+00:00",
 "source": "Congressional Budget Office",
 "url": "https://www.cbo.gov/publication/62849",
 "method": "Official release from the agency's own feed.",
@@ -5354,7 +5423,7 @@
 "unit": "%",
 "period": "session of 2026-10-13 (close to close)",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:53:55+00:00",
+"as_of": "2026-10-13T22:24:11+00:00",
 "source": "Yahoo Finance daily bars",
 "url": "https://finance.yahoo.com/quote/V",
 "method": "Close-to-close change from daily bars.",
@@ -5386,7 +5455,7 @@
 "unit": "%",
 "period": "session of 2026-10-13 (close to close)",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:53:55+00:00",
+"as_of": "2026-10-13T22:24:11+00:00",
 "source": "Yahoo Finance daily bars",
 "url": "https://finance.yahoo.com/quote/JPM",
 "method": "Close-to-close change from daily bars.",
@@ -5418,7 +5487,7 @@
 "unit": "%",
 "period": "session of 2026-10-13 (close to close)",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:53:55+00:00",
+"as_of": "2026-10-13T22:24:11+00:00",
 "source": "Yahoo Finance daily bars",
 "url": "https://finance.yahoo.com/quote/GS",
 "method": "Close-to-close change from daily bars.",
@@ -5450,7 +5519,7 @@
 "unit": "%",
 "period": "session of 2026-10-13 (close to close)",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:53:55+00:00",
+"as_of": "2026-10-13T22:24:11+00:00",
 "source": "Yahoo Finance daily bars",
 "url": "https://finance.yahoo.com/quote/UNH",
 "method": "Close-to-close change from daily bars.",
@@ -5482,7 +5551,7 @@
 "unit": "%",
 "period": "session of 2026-10-13 (close to close)",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:53:55+00:00",
+"as_of": "2026-10-13T22:24:11+00:00",
 "source": "Yahoo Finance daily bars",
 "url": "https://finance.yahoo.com/quote/AAPL",
 "method": "Close-to-close change from daily bars.",
@@ -5514,7 +5583,7 @@
 "unit": "%",
 "period": "session of 2026-10-13 (close to close)",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:53:55+00:00",
+"as_of": "2026-10-13T22:24:11+00:00",
 "source": "Yahoo Finance daily bars",
 "url": "https://finance.yahoo.com/quote/WFC",
 "method": "Close-to-close change from daily bars.",
@@ -5546,7 +5615,7 @@
 "unit": "%",
 "period": "session of 2026-10-13 (close to close)",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:53:55+00:00",
+"as_of": "2026-10-13T22:24:11+00:00",
 "source": "Yahoo Finance daily bars",
 "url": "https://finance.yahoo.com/quote/BAC",
 "method": "Close-to-close change from daily bars.",
@@ -5578,7 +5647,7 @@
 "unit": "%",
 "period": "session of 2026-10-13 (close to close)",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:53:55+00:00",
+"as_of": "2026-10-13T22:24:11+00:00",
 "source": "Yahoo Finance daily bars",
 "url": "https://finance.yahoo.com/quote/MU",
 "method": "Close-to-close change from daily bars.",
@@ -5610,7 +5679,7 @@
 "unit": "%",
 "period": "session of 2026-10-13 (close to close)",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:53:55+00:00",
+"as_of": "2026-10-13T22:24:11+00:00",
 "source": "Yahoo Finance daily bars",
 "url": "https://finance.yahoo.com/quote/AVGO",
 "method": "Close-to-close change from daily bars.",
@@ -5642,7 +5711,7 @@
 "unit": "%",
 "period": "session of 2026-10-13 (close to close)",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:53:55+00:00",
+"as_of": "2026-10-13T22:24:11+00:00",
 "source": "Yahoo Finance daily bars",
 "url": "https://finance.yahoo.com/quote/WMT",
 "method": "Close-to-close change from daily bars.",
@@ -5674,7 +5743,7 @@
 "unit": "%",
 "period": "session of 2026-10-13 (close to close)",
 "event_at": "2026-10-13",
-"as_of": "2026-10-13T21:53:55+00:00",
+"as_of": "2026-10-13T22:24:11+00:00",
 "source": "Yahoo Finance daily bars",
 "url": "https://finance.yahoo.com/quote/TSM",
 "method": "Close-to-close change from daily bars.",
@@ -5705,12 +5774,13 @@
 "value": 0.52,
 "unit": "% (+/-)",
 "period": "to the 2026-10-14 expiry (1 days)",
-"as_of": "2026-10-13T21:53:58+00:00",
+"as_of": "2026-10-13T22:24:12+00:00",
 "source": "Optic's options surface from the Yahoo chain (about 15 minutes delayed)",
+"url": "https://finance.yahoo.com/quote/SPY/options",
 "method": "At-the-money straddle mid divided by the price: roughly the average absolute move options are priced for over the whole period to that expiry, not a forecast and not an event-only move.",
 "symbol": "SPY",
 "detail": {
-"atm_iv_pct": 12.37,
+"atm_iv_pct": 12.51,
 "one_sd_pct": 0.62,
 "rr25_pts": 0.27,
 "expiry": "2026-10-14",
@@ -5726,13 +5796,14 @@
 "value": 2.88,
 "unit": "% (+/-)",
 "period": "to the 2026-11-13 expiry (31 days)",
-"as_of": "2026-10-13T21:53:58+00:00",
+"as_of": "2026-10-13T22:24:12+00:00",
 "source": "Optic's options surface from the Yahoo chain (about 15 minutes delayed)",
+"url": "https://finance.yahoo.com/quote/SPY/options",
 "method": "At-the-money straddle mid divided by the price: roughly the average absolute move options are priced for over the whole period to that expiry, not a forecast and not an event-only move.",
 "symbol": "SPY",
 "detail": {
 "atm_iv_pct": 11.8,
-"one_sd_pct": 3.44,
+"one_sd_pct": 3.43,
 "rr25_pts": 3.16,
 "expiry": "2026-11-13",
 "dte": 31
@@ -5747,8 +5818,9 @@
 "value": 11.8,
 "unit": "%",
 "period": "30-day constant maturity",
-"as_of": "2026-10-13T21:53:58+00:00",
+"as_of": "2026-10-13T22:24:12+00:00",
 "source": "Optic's options surface from the Yahoo chain",
+"url": "https://finance.yahoo.com/quote/SPY/options",
 "method": "Total variance interpolated between the expiries either side of 30 days.",
 "symbol": "SPY",
 "detail": {
@@ -5764,12 +5836,13 @@
 "value": 0.86,
 "unit": "% (+/-)",
 "period": "to the 2026-10-14 expiry (1 days)",
-"as_of": "2026-10-13T21:53:58+00:00",
+"as_of": "2026-10-13T22:24:13+00:00",
 "source": "Optic's options surface from the Yahoo chain (about 15 minutes delayed)",
+"url": "https://finance.yahoo.com/quote/QQQ/options",
 "method": "At-the-money straddle mid divided by the price: roughly the average absolute move options are priced for over the whole period to that expiry, not a forecast and not an event-only move.",
 "symbol": "QQQ",
 "detail": {
-"atm_iv_pct": 21.78,
+"atm_iv_pct": 22.03,
 "one_sd_pct": 1.09,
 "rr25_pts": 1.04,
 "expiry": "2026-10-14",
@@ -5785,8 +5858,9 @@
 "value": 4.29,
 "unit": "% (+/-)",
 "period": "to the 2026-11-13 expiry (31 days)",
-"as_of": "2026-10-13T21:53:58+00:00",
+"as_of": "2026-10-13T22:24:13+00:00",
 "source": "Optic's options surface from the Yahoo chain (about 15 minutes delayed)",
+"url": "https://finance.yahoo.com/quote/QQQ/options",
 "method": "At-the-money straddle mid divided by the price: roughly the average absolute move options are priced for over the whole period to that expiry, not a forecast and not an event-only move.",
 "symbol": "QQQ",
 "detail": {
@@ -5803,11 +5877,12 @@
 "id": "O6",
 "kind": "options",
 "label": "QQQ 30-day implied volatility",
-"value": 18.6,
+"value": 18.7,
 "unit": "%",
 "period": "30-day constant maturity",
-"as_of": "2026-10-13T21:53:58+00:00",
+"as_of": "2026-10-13T22:24:13+00:00",
 "source": "Optic's options surface from the Yahoo chain",
+"url": "https://finance.yahoo.com/quote/QQQ/options",
 "method": "Total variance interpolated between the expiries either side of 30 days.",
 "symbol": "QQQ",
 "detail": {
@@ -5821,12 +5896,12 @@
 {
 "leg": "prices",
 "ok": true,
-"ms": 1220
+"ms": 1008
 },
 {
 "leg": "macro",
 "ok": true,
-"ms": 2696
+"ms": 1711
 },
 {
 "leg": "macro_tape",
@@ -5836,12 +5911,12 @@
 {
 "leg": "fred",
 "ok": true,
-"ms": 135
+"ms": 11124
 },
 {
 "leg": "calendar",
 "ok": true,
-"ms": 9
+"ms": 1992
 },
 {
 "leg": "calendar_rows",
@@ -5851,47 +5926,47 @@
 {
 "leg": "rate_path",
 "ok": true,
-"ms": 1966
+"ms": 2491
 },
 {
 "leg": "earnings_week",
 "ok": true,
-"ms": 74221
+"ms": 74990
 },
 {
 "leg": "earnings_quotes",
 "ok": true,
-"ms": 1577
+"ms": 736
 },
 {
 "leg": "earnings",
 "ok": true,
-"ms": 3192
+"ms": 1916
 },
 {
 "leg": "wires",
 "ok": true,
-"ms": 23764
+"ms": 33307
 },
 {
 "leg": "official",
 "ok": true,
-"ms": 0
+"ms": 10306
 },
 {
 "leg": "news",
 "ok": true,
-"ms": 634
+"ms": 668
 },
 {
 "leg": "companies",
 "ok": true,
-"ms": 1639
+"ms": 586
 },
 {
 "leg": "options",
 "ok": true,
-"ms": 3531
+"ms": 2017
 }
 ],
 "news_since": "2026-10-12T16:00:00-04:00"

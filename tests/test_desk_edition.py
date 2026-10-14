@@ -458,3 +458,21 @@ def test_milo_is_told_how_to_use_the_research():
     assert order.index("desk_section") < order.index("quote") and order.index("research") < order.index("quote")
     src = (ROOT / "app/main.py").read_text()
     assert "context = await _with_research(history, context, horizon)" in src
+
+
+
+def test_figures_written_out_in_full_or_quoted_from_a_cited_headline():
+    """False positives on the first written sample (2026-10-13): claims kept
+    as 197.0k were written "197,000", and OPEC's "2.6 million bpd" came from
+    the headline the paragraph cites. Both are supported."""
+    o = outline.build(BUNDLE)
+    claims = _ev(BUNDLE, symbol="ICSA")
+    opec = next(e for e in BUNDLE["evidence"] if e["kind"] == "news" and "OPEC" in e["label"])
+    d = assemble.build(BUNDLE, o)
+    d["sections"][0]["paragraphs"] = [
+        {"text": "Initial jobless claims were 197,000 in the week to 3 October.", "cites": [claims["id"]]},
+        {"text": "OPEC sees demand growth of 2.6 million barrels a day in 2027, CNBC and others noted.",
+         "cites": [opec["id"]]}]
+    assert check.run(d, BUNDLE, o)["ok"], check.run(d, BUNDLE, o)["errors"]
+    d["sections"][0]["paragraphs"] = [{"text": "Initial jobless claims were 210,000.", "cites": [claims["id"]]}]
+    assert not check.run(d, BUNDLE, o)["ok"]

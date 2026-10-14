@@ -32,7 +32,7 @@ SECTION_IDS = ("opening", "numbers", "why", "balance", "focus", "structure", "wa
 ALLOWED_CAPS = set("""CPI PPI PCE FOMC GDP ETF ETFS EPS OPEC IMF WTI VIX VVIX DXY USD SEC FTC DOJ AI US USA UK EU
 ECB BOJ FDA IPO CEO CFO NYSE NASDAQ S&P HY OAS ATM IV FX GLP-1 YOY MOM TSMC ASML NATO OECD API EIA BLS BEA FRED
 ISM PMI JOLTS COT ADR ETF. Q1 Q2 Q3 Q4 FY CFTC CBOE CME NYMEX COMEX FINRA FDIC OCC IRS GAAP EBIT EBITDA SPDR
-OPEX VWAP""".split())
+OPEX VWAP CNBC NPR BBC AFP""".split())
 
 _GENERIC_HEADLINES = re.compile(r"^(markets? (mixed|update|wrap|today)|stocks? (move|mixed)|daily (update|briefing)|"
                                 r"what happened today|market recap)\b", re.I)
@@ -90,6 +90,17 @@ def _candidates(ev: Dict[str, Any]) -> List[Tuple[float, str]]:
 
     u = ev.get("unit") or ""
     add(ev.get("value"), u)
+    # A figure kept in thousands, millions or billions may be written out in
+    # full: claims of 197.0k are "197,000".
+    mult = {"k": 1e3, "m": 1e6, "$bn": 1e9, "bn": 1e9}.get(u)
+    if mult:
+        for key in ("value",):
+            if isinstance(ev.get(key), (int, float)):
+                add(ev[key] * mult, u + "*")
+        comp0 = ev.get("compare") or {}
+        for key in ("value", "change"):
+            if isinstance(comp0.get(key), (int, float)):
+                add(comp0[key] * mult, u + "*")
     comp = ev.get("compare") or {}
     add(comp.get("value"), u)
     add(comp.get("reported"), u)
@@ -221,6 +232,15 @@ def check_number(n: Dict[str, Any], cited: List[Dict[str, Any]]) -> Optional[str
         break
     if ok_any:
         return None
+    # A figure quoted from a cited report's own headline ("OPEC sees demand
+    # growth of 2.6 million bpd"): supported by that report, as attributed.
+    for e in cited:
+        if e.get("kind") in ("news", "filing", "calendar"):
+            hay = " ".join(str(e.get(k) or "") for k in ("label", "text")) + " " + str(
+                (e.get("compare") or {}).get("headline") or "")
+            bare = n["raw"].lstrip("+-\u2212$").split()[0].rstrip("%")
+            if bare and re.search(r"(?<![\d.]){}(?![\d])".format(re.escape(bare)), hay):
+                return None
     return unit_conflict or "{} is not a figure in the cited evidence ({})".format(
         n["raw"], ", ".join(e["id"] for e in cited) or "nothing cited")
 

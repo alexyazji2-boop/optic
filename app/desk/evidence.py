@@ -240,7 +240,17 @@ def gather_macro_tape(g: Gatherer, macro: Dict[str, Any]) -> None:
         if not r or r.get("last") is None:
             continue
         last, prev = _f(r.get("last")), _f(r.get("prev_close"))
-        atr = _f(r.get("atr_pct"))
+        # The typical day, close to close, from the strip's own closes. Not the
+        # ATR: that is the average high-to-low range, larger than a close-to-
+        # close move (gold's ATR read 2.0% on 2026-10-13), and the first
+        # written sample called it "gold's typical daily swing".
+        closes = [float(x) for x in (r.get("series") or []) if isinstance(x, (int, float))]
+        diffs = [closes[i] - closes[i - 1] for i in range(max(1, len(closes) - 20), len(closes))]
+        pcts = [abs(closes[i] / closes[i - 1] - 1) * 100 for i in range(max(1, len(closes) - 20), len(closes))
+                if closes[i - 1]]
+        typical_pct = _f(sum(pcts) / len(pcts), 3) if len(pcts) >= 10 else None
+        typical_bp = _f(sum(abs(d) for d in diffs) / len(diffs) * 100, 2) if len(diffs) >= 10 else None
+        typical_pts = _f(sum(abs(d) for d in diffs) / len(diffs), 2) if len(diffs) >= 10 else None
         if unit == "bp":
             # ^TNX quotes the yield in percent (5.217 is 5.217%).
             change = _f((last - prev) * 100, 1) if (last is not None and prev is not None) else None
@@ -250,8 +260,7 @@ def gather_macro_tape(g: Gatherer, macro: Dict[str, Any]) -> None:
                   compare={"base": "previous close", "value": prev, "change": change, "change_unit": "bp"},
                   method="Change in basis points from the previous close (one basis point is 0.01 percentage point).",
                   detail={"chg_5d_pct_of_yield": r.get("chg_5d"), "pct_from_52w_high": r.get("pct_from_52w_high"),
-                          # ATR as a share of the yield, in basis points.
-                          "typical_abs_1d": _f(atr / 100 * last * 100, 2) if (atr and last) else None})
+                          "typical_abs_1d": typical_bp})
         elif unit == "pts":
             change = _f(last - prev, 2) if (last is not None and prev is not None) else None
             g.add(kind=kind, label=label, symbol=sym, value=last, unit="index", period="latest quote",
@@ -259,8 +268,7 @@ def gather_macro_tape(g: Gatherer, macro: Dict[str, Any]) -> None:
                   url="https://finance.yahoo.com/quote/%5EVIX",
                   compare={"base": "previous close", "value": prev, "change": change, "change_unit": "pts"},
                   method="The VIX is the 30-day implied volatility of S&P 500 options, in annualised percent.",
-                  detail={"typical_abs_1d": _f(atr / 100 * last, 2) if (atr and last) else None,
-                          "pct_from_52w_high": r.get("pct_from_52w_high")})
+                  detail={"typical_abs_1d": typical_pts, "pct_from_52w_high": r.get("pct_from_52w_high")})
         else:
             g.add(kind=kind, label=label, symbol=sym, value=_f(r.get("chg_1d"), 2), unit="%", period="day, latest quote",
                   as_of=r.get("quote_as_of"), source="Yahoo Finance quote for {}".format(sym),
@@ -268,7 +276,7 @@ def gather_macro_tape(g: Gatherer, macro: Dict[str, Any]) -> None:
                   compare={"base": "previous close", "value": prev, "level": last},
                   method="Percentage change from the previous close.",
                   detail={"level": last, "chg_5d": r.get("chg_5d"), "chg_20d": r.get("chg_20d"),
-                          "typical_abs_1d": atr})
+                          "typical_abs_1d": typical_pct})
 
 
 def gather_fred(g: Gatherer, series_fn: Callable[[str], Dict[str, Any]], today: date) -> None:
