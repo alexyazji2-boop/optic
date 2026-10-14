@@ -74,6 +74,23 @@ class MarketDataProvider:
                            "as_of": quote.get("as_of")}
         return out
 
+    def session_quotes(self, tickers: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Regular and extended-hours prints for many symbols, in `quote()`'s shape.
+
+        `{symbol: {price, change_pct, regular_market_time, pre_market_price,
+        pre_market_change_pct, pre_market_time, post_market_price,
+        post_market_change_pct, post_market_time, delayed_minutes}}`, every
+        time an ISO instant. What `session.price_view` reads, for a board of
+        ETFs that has to know which session each price came from.
+
+        Empty by default, and empty means "no extended-hours print known",
+        which the sector board answers with the last close and says so.
+        Looping `quote()` instead would be a request per symbol (three, for
+        Yahoo's `.info`); an adapter that can ask for many at once overrides
+        this.
+        """
+        return {}
+
     def intraday_history(
         self, ticker: str, period: str = "5d", interval: str = "1m", prepost: bool = False
     ) -> pd.DataFrame:

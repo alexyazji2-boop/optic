@@ -49,6 +49,9 @@ REQUIRED = [
     # market command centre
     "marketStripHTML", "stripInstrument", "whatMattersNow", "marketQuestions",
     "homeMovers", "openPulseWithText",
+    # the index and sector trend board, on Home and on the two boards' tabs
+    "homeTrendsHTML", "homeTrendsInner", "homeTrendsPayload", "loadHomeTrends",
+    "trendCardHTML", "trendBasisLine", "renderIndexBoard", "renderSectorBoard",
 ]
 
 

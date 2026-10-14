@@ -4148,6 +4148,22 @@ async def index_board_panel() -> Dict[str, Any]:
     return await _run(build)
 
 
+@app.get("/api/trends/board")
+async def trends_board_panel() -> Dict[str, Any]:
+    """Home's index and sector cards: the two boards above, read together."""
+    def build() -> Dict[str, Any]:
+        try:
+            out = sector_board_mod.trends(YF_PROVIDER)
+        except Exception as exc:                                # noqa: BLE001
+            # The block says what is missing rather than taking Home with it.
+            logging.getLogger("uvicorn.error").warning("trend board unavailable: %s", exc)
+            out = {"available": False,
+                   "reason": "The trend board could not be built: {}".format(type(exc).__name__)}
+        out["generated_at"] = datetime.now(timezone.utc).isoformat()
+        return out
+    return await _run(build)
+
+
 @app.get("/api/sectors/{symbol}/read")
 async def sector_read(symbol: str) -> Dict[str, Any]:
     """A written read on one sector or index ETF.

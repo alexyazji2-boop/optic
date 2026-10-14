@@ -511,14 +511,21 @@ def state(now: Optional[datetime] = None) -> Dict[str, Any]:
     }
 
 
-def price_view(quote: Dict[str, Any], now: Optional[datetime] = None) -> Dict[str, Any]:
+def price_view(quote: Dict[str, Any], now: Optional[datetime] = None,
+               sess: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Close versus current, labelled by which session each came from.
 
     The pairing is the point: outside regular hours, one number is the settled
     close everyone quotes and the other is where it's actually trading. Showing
     only one of them is how an after-hours gap goes unnoticed.
+
+    `sess` is `state(now)` when the caller already has it. The sector board
+    reads fifteen quotes at one instant, and `state` walks the clock forward a
+    minute at a time to find the next change: 2.9ms on a weekday and 12.9ms on
+    a Saturday, measured, so fifteen calls were up to 0.2s of a board that is
+    otherwise arithmetic.
     """
-    sess = state(now)
+    sess = sess if sess is not None else state(now)
     phase = sess["phase"]
 
     regular_close = quote.get("price")
