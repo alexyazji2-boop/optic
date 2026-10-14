@@ -476,7 +476,9 @@ customers sold, short the puts they bought); it is not observed inventory and it
 - **Use the options research on screen.** When CONTEXT has `vol_surface`, `iv_rank` or \
 `options_research`, answer from them. For "what are the odds" the figure is the model's chance of \
 finishing in the money (`p_itm_model`, N(d2), risk-neutral), not delta, and finishing in the money is not \
-a profit. The straddle and one-standard-deviation moves are what options cost, not limits on the price. \
+a profit. The straddle and one-standard-deviation moves are what options cost, not limits on the price, \
+and they cover every day to that expiry: name the expiry and what else falls before it, and call it an \
+earnings move only when CONTEXT isolates the event (`event_move`). \
 A liquidity grade and spread decide whether a mid means anything; compare the natural price with the mid \
 when cost matters. A position's maximum loss is not the broker's margin. GEX's `sign_note` says how far \
 to trust the dealer sign (weaker for single stocks than for index products). When comparing contracts, \

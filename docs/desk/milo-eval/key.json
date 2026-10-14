@@ -1,0 +1,62 @@
+{
+ "round1": {
+  "Q1": {
+   "A": "before",
+   "B": "after"
+  },
+  "Q2": {
+   "A": "after",
+   "B": "before"
+  },
+  "Q3": {
+   "A": "before",
+   "B": "after"
+  },
+  "Q4": {
+   "A": "before",
+   "B": "after"
+  },
+  "Q5": {
+   "A": "after",
+   "B": "before"
+  },
+  "Q6": {
+   "A": "before",
+   "B": "after"
+  },
+  "Q7": {
+   "A": "after",
+   "B": "before"
+  }
+ },
+ "round2": {
+  "Q1": {
+   "A": "before",
+   "B": "after2"
+  },
+  "Q2": {
+   "A": "after2",
+   "B": "before"
+  },
+  "Q3": {
+   "A": "before",
+   "B": "after2"
+  },
+  "Q4": {
+   "A": "before",
+   "B": "after2"
+  },
+  "Q5": {
+   "A": "after2",
+   "B": "before"
+  },
+  "Q6": {
+   "A": "before",
+   "B": "after2"
+  },
+  "Q7": {
+   "A": "after2",
+   "B": "before"
+  }
+ }
+}
