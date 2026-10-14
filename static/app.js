@@ -22300,7 +22300,7 @@ function renderChartWorkspace(d) {
   tickerMark(STATE.chartSymbol, 26)}<strong>${esc(STATE.chartSymbol)}</strong></button>
         <span class="ws-head-tf" id="ws-head-tf">${wsHeadFrame(ps)}</span>
         <span class="ws-head-name">${esc((d.profile || {}).name || '')}</span>
-        <span class="ws-ohlc" id="ws-ohlc">${wsOhlcRow(bar)}</span>
+        <span class="ws-ohlc" id="ws-ohlc">${wsOhlcRow(bar, wsOhlcFit(ps))}</span>
         <span class="${signClass(q.change_pct)}" id="ws-chg">${fmtPct(q.change_pct, 2)}</span>
         <span class="stage-chip" id="stage-ws" hidden></span>
         <span class="ws-head-state">${esc(cap(marketSessionET()))}</span>
@@ -22369,19 +22369,45 @@ function wsSyncHead() {
  * Extracted so the hover handler and the initial render produce the same markup
  * — when they were separate the hovered version quietly lost the sign colouring
  * on the close, and the two drifted every time one was edited. */
-function wsOhlcRow(bar, dateLabel) {
+/** How wide each figure in the readout can get on this chart, in ch.
+ *
+ * The row changed width as the cursor moved: a figure gained a digit, the
+ * volume went from "980.12K" to "4.64M", and the hovered row added the bar's
+ * timestamp, 116px on an hourly chart. Where the header was one line with
+ * little to spare, that wrapped Explain chart onto a second line and dropped
+ * the plot under a cursor that had not moved; the cursor was then on the
+ * header, the readout went back to the last bar, the header unwrapped, and the
+ * O/H/L flickered at the top of the chart (reported 2026-10-13). Sized to the
+ * widest value in the series, the row is one width for every bar. The date
+ * stays in the tooltip, at the cursor, where it costs the header nothing. */
+function wsOhlcFit(ps) {
+  const top = (arr) => {
+    let m = null;
+    for (const v of arr || []) if (v !== null && v !== undefined && isFinite(v) && (m === null || v > m)) m = v;
+    return m;
+  };
+  // A higher price never prints shorter, so the highest high is the widest.
+  const price = Math.max(4, ...[ps.high, ps.open, ps.close, ps.low].map((a) => fmt(top(a), 2).length));
+  let vol = 0;
+  for (const v of ps.volume || []) if (v !== null && v !== undefined) vol = Math.max(vol, fmtCompact(v, 2).length);
+  // Half a ch over, because K, M and B are wider than a digit.
+  return { price, volume: vol ? vol + 0.5 : 0 };
+}
+
+function wsOhlcRow(bar, fit) {
   const chg = (bar.close !== null && bar.open !== null) ? bar.close - bar.open : null;
+  const w = (n) => (fit && n ? ` style="min-width:${n}ch"` : '');
+  const p = w(fit && fit.price);
   return [
-    dateLabel ? `<span class="ws-ohlc-date">${esc(dateLabel)}</span>` : '',
-    `<span>O <b>${fmt(bar.open, 2)}</b></span>`,
-    `<span>H <b>${fmt(bar.high, 2)}</b></span>`,
-    `<span>L <b>${fmt(bar.low, 2)}</b></span>`,
-    `<span>C <b class="${signClass(chg)}">${fmt(bar.close, 2)}</b></span>`,
+    `<span>O <b${p}>${fmt(bar.open, 2)}</b></span>`,
+    `<span>H <b${p}>${fmt(bar.high, 2)}</b></span>`,
+    `<span>L <b${p}>${fmt(bar.low, 2)}</b></span>`,
+    `<span>C <b class="${signClass(chg)}"${p}>${fmt(bar.close, 2)}</b></span>`,
     /* Compact, with the exact count on hover. "V 7,160,248" was 30px wider
      * than "V 7.16M", which is what pushed Explain chart onto a second header
      * line at 1440px and took 47px from the plot. */
     bar.volume !== null && bar.volume !== undefined
-      ? `<span title="${Math.round(bar.volume).toLocaleString()} shares">V <b>${
+      ? `<span title="${Math.round(bar.volume).toLocaleString()} shares">V <b${w(fit && fit.volume)}>${
         fmtCompact(bar.volume, 2)}</b></span>` : '',
   ].join('');
 }
@@ -22406,12 +22432,14 @@ function wsHoverReadout(i) {
   // a live tick calls it to refresh the day change.
   if (i !== null && i !== undefined && i === wsHoverLast) return;
   wsHoverLast = i;
-  const ps = wsHoverSeries && wsHoverSeries.data === d ? wsHoverSeries.ps : wsSeries(d);
+  const cached = wsHoverSeries && wsHoverSeries.data === d;
+  const ps = cached ? wsHoverSeries.ps : wsSeries(d);
+  const fit = cached ? wsHoverSeries.fit : wsOhlcFit(ps);
   const chg = document.getElementById('ws-chg');
 
   if (i === null || i === undefined) {
     const bar = wsLastBar(ps);
-    row.innerHTML = wsOhlcRow(bar);
+    row.innerHTML = wsOhlcRow(bar, fit);
     if (chg) {
       const pct = (d.quote || {}).change_pct;
       chg.className = signClass(pct);
@@ -22428,7 +22456,7 @@ function wsHoverReadout(i) {
     open: at(ps.open), high: at(ps.high), low: at(ps.low),
     close: at(ps.close), volume: at(ps.volume),
   };
-  row.innerHTML = wsOhlcRow(bar, at(ps.dates));
+  row.innerHTML = wsOhlcRow(bar, fit);
 
   // The percentage beside it becomes the hovered bar's own move, not the
   // quote's day change — leaving the day change there next to another bar's
@@ -26405,7 +26433,7 @@ function wsMountChart() {
   if (!d || d === 'loading' || d.error) return;
   const ps = wsSeries(d);
   // The bars this draw is of, for the hover readout (see wsHoverReadout).
-  wsHoverSeries = { data: d, ps };
+  wsHoverSeries = { data: d, ps, fit: wsOhlcFit(ps) };
   wsHoverLast = undefined;
   const styleOf = (id) => overlayStyle(id);
   const intraday = !!ps.intraday;
