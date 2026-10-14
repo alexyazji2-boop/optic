@@ -8187,7 +8187,10 @@ body[data-view="chart"] main { padding-top: var(--space-2); }
   .ws-head .stage-name, .ws-head .stage-tag { display: none; }
 }
 @container ws-head (max-width: 860px) {
-  .ws-head .ws-head-name, .ws-head .ws-head-state, .ws-head .stage-chip { display: none; }
+  /* The stage chip's own Explain goes with it: left behind it was a 57px
+     "Explain" beside nothing, the widest item on the phone's one-line header. */
+  .ws-head .ws-head-name, .ws-head .ws-head-state, .ws-head .stage-chip,
+  .ws-head .stage-explain { display: none; }
 }
 /* Measured at 1100x760 with the rail in two columns: 8px short of one line,
    and the Pulse mark was the item that wrapped. */
@@ -8200,7 +8203,13 @@ body[data-view="chart"] main { padding-top: var(--space-2); }
 /* Touch-only zoom, in the chart header before Explain chart (wsZoomButtons). */
 .ws-zoom-btns { display: none; }
 @media (pointer: coarse) {
-  .ws-zoom-btns { display: flex; gap: var(--space-1); margin-left: auto; flex: none; }
+  /* Bottom-left of the plot, above the time axis: the oldest bars are the ones
+     a reader zooming in is leaving behind, and the right side holds the price
+     axis and the latest bars. */
+  .ws-zoom-btns {
+    display: flex; gap: var(--space-1);
+    position: absolute; left: var(--space-2); bottom: calc(var(--space-7) * 2); z-index: 3;
+  }
   .ws-zoom-btn {
     width: 36px; height: 36px; padding: 0; display: grid; place-items: center;
     border: 1px solid var(--border-strong); border-radius: var(--r-md);
@@ -8806,6 +8815,16 @@ table.data.pr-facts td.name { width: 40%; overflow-wrap: normal; }
   .ws-toolbar .pill { flex: none; }
 }
 .ws-chart { min-height: 0; min-width: 0; }
+/* A finger held still on a chart that pans reads its bars (chartTouch in
+   app.js). Mobile Safari took the same hold as a text selection: held 1.3s on
+   the Charting tab's plot, it selected the "14:00" axis label and drew its
+   blue handles over the chart, and the callout is the same press. Every chart
+   that registers for pan and zoom, by its host. */
+#ws-chart, #chart-price, #chart-weekly {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
 /* Over the chart, same box. `pointer-events: none` on the wrapper and `auto` on
    the SVG inside it, so the chart's own crosshair still works everywhere the
    drawing layer has nothing — otherwise a transparent sheet would swallow every

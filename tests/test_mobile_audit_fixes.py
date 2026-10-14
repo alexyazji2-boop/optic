@@ -68,13 +68,19 @@ def test_touch_screens_get_chart_zoom_buttons_beside_explain_chart():
     Chromium touch emulation at 402px: + took 78 bars to 52, - back to 78, and
     the buttons sit clear of Explain chart and full screen."""
     app = (ROOT / "static/app.js").read_text()
-    assert "${wsZoomButtons()}\n        ${chartPulse(STATE.chartSymbol)}" in app
+    # On the plot since 2026-10-14: in the one-line phone header the pair had
+    # grown 26px past its edge at 402px, so "+" sat under the full-screen
+    # button. Outside #ws-chart, so a tap is never read as a chart gesture.
+    plot = app[app.index('<div id="ws-draw" class="ws-draw"></div>'):]
+    assert "${wsZoomButtons()}" in plot[:600], "the zoom pair follows the drawing layer inside .ws-plot"
+    assert "${wsZoomButtons()}\n        ${chartPulse(STATE.chartSymbol)}" not in app
     step = app[app.index("function wsZoomStep(dir) {"):]
     step = step[:step.index("\n}\n")]
     assert "CHART_ZOOM.get('ws-chart')" in step and "zoomedWindow(cur, Math.max(0, span - 1), want)" in step
     assert "Math.max(WS_MIN_BARS, Math.min(cur.total," in step
     assert ".ws-zoom-btns { display: none; }" in CSS
-    assert ".ws-zoom-btns { display: flex;" in _media("(pointer: coarse)")
+    coarse = _media("(pointer: coarse)")
+    assert ".ws-zoom-btns {" in coarse and "position: absolute;" in coarse
 
 
 def test_milo_on_a_phone_opens_without_the_keyboard_and_fits_above_it():
