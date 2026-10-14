@@ -91,6 +91,7 @@ CREATE INDEX IF NOT EXISTS calls_at ON calls (at);
 FEATURES: Dict[str, str] = {
     "read": "Optic's Read",
     "desk": "Optic Desk (home)",
+    "edition": "Optic Desk daily edition",
     "earnings": "Earnings briefs",
     "sector": "Sector and index reads",
     "catalyst_read": "Catalyst mode read",

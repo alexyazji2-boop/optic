@@ -1,0 +1,42 @@
+"""Seven questions, one per kind the brief names, plus two about the Desk.
+
+Asked after the close on Tuesday 2026-10-13 (CPI and Bank of America's results
+the next morning), each with what a good answer must do."""
+
+CASES = [
+    {"id": "Q1", "ticker": "MU", "view": "overview", "view_label": "Overview", "mode": "literate", "horizon": "long",
+     "q": "Is Micron a good long-term investment at today's price?",
+     "checks": ["leads with a clear assessment", "business quality from fundamentals (growth, margins)",
+                "capex against free cash flow, or dilution/debt", "valuation as a separate question from the business",
+                "opposing evidence and what would change the view", "does not lean on chart indicators"]},
+    {"id": "Q2", "ticker": "BAC", "view": "earnings", "view_label": "Earnings", "mode": "literate", "horizon": None,
+     "q": "What should I watch in Bank of America's earnings tomorrow?",
+     "checks": ["the date and the consensus EPS/revenue", "estimate revisions or the surprise record",
+                "says guidance text / management commentary is not available rather than inventing it",
+                "event volatility from options if in context, named as a price not a forecast",
+                "does not generalise one bank to the economy", "what would change the read"]},
+    {"id": "Q3", "ticker": "NVDA", "view": "chart", "view_label": "Chart", "mode": "advanced", "horizon": "day",
+     "q": "Is NVDA worth day trading tomorrow, and what matters intraday?",
+     "checks": ["says how fresh the quote is / the market is closed now", "liquidity (volume vs average)",
+                "catalysts in the window (CPI 8:30 ET)", "intraday reference levels (VWAP, range) with timeframe",
+                "no instruction to trade", "conditions, not predictions"]},
+    {"id": "Q4", "ticker": "AAPL", "view": "swing", "view_label": "Options", "mode": "literate", "horizon": "swing",
+     "q": "Does a swing long in AAPL make sense over the next few weeks?",
+     "checks": ["price structure with its timeframe", "events inside the window (CPI, earnings date)",
+                "market backdrop", "an invalidation level or condition", "opposing evidence",
+                "no instruction to trade"]},
+    {"id": "Q5", "ticker": None, "view": "home", "view_label": "Home", "mode": "simple", "horizon": None,
+     "q": "What does tomorrow's CPI mean for my tech stocks?",
+     "checks": ["the previous reading with its period (August)", "the mechanism: yields and long-duration valuations",
+                "conditions in both directions", "today's evidence on whether the mechanism is at work",
+                "plain language for a beginner", "no forecast of the print"]},
+    {"id": "Q6", "ticker": None, "view": "brief", "view_label": "Read", "mode": "literate", "horizon": None,
+     "desk": "why", "q": "Is the Desk right that recent softness has sat in the biggest names?",
+     "checks": ["explains the claim from its evidence (equal-weight vs cap-weight, breadth)",
+                "tests it: does the evidence support it, and how strongly", "gives the counter-case",
+                "says what would change the view", "notes any figures that moved since publication"]},
+    {"id": "Q7", "ticker": None, "view": "brief", "view_label": "Read", "mode": "simple", "horizon": None,
+     "desk": "opening", "q": "Why won't the Desk say whether JPMorgan beat? Did it?",
+     "checks": ["explains the two consensus figures and why they differ", "gives the reported figure",
+                "does not call a beat or miss without the caveat", "plain language", "names what would settle it"]},
+]

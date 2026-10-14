@@ -44,9 +44,23 @@ QUESTIONS = [
 ]
 
 
-def test_it_is_every_reply_and_the_same_for_the_same_question():
-    assert all(ai.flavour_for(i % 4 + 1, q) == ai.FLAVOUR_PROMPT for i, q in enumerate(QUESTIONS))
+def test_it_is_occasional_and_the_same_for_the_same_question():
+    """About one reply in two since the strategy brief asked for "occasional
+    light humor" (2026-10-12); FLAVOUR_ONE_IN = 1 would restore every reply."""
+    got = [ai.flavour_for(i % 4 + 1, q) for i, q in enumerate(QUESTIONS)]
+    assert all(g in ("", ai.FLAVOUR_PROMPT) for g in got)
+    assert 0.25 <= sum(1 for g in got if g) / len(got) <= 0.75
     assert ai.flavour_for(3, QUESTIONS[0].upper() + "  ") == ai.flavour_for(3, QUESTIONS[0])
+
+
+def test_the_gate_reads_the_question_not_the_page_data():
+    """It ran on the turn with CONTEXT prepended, so "stop loss" in the entry
+    plan matched the loss filter and it was off on 20 of 21 eval questions."""
+    ctx = {"entry_plan": {"note": "stop loss below the 50-day, detailed plan"}, "quote": {"price": 1}}
+    asked = [q for q in QUESTIONS if ai.flavour_for(1, q)]
+    assert asked
+    _, meta = ai.build_chat_request([{"role": "user", "content": asked[0]}], context=ctx)
+    assert meta["humour"] is True
 
 
 def test_only_the_neutral_analyst_gets_it():
@@ -70,7 +84,7 @@ def test_the_block_borrows_the_tone_and_keeps_the_limits():
                    "no slurs or their stand-ins (\"regard\")",
                    "no jokes about anybody's partner, job, intelligence or money",
                    "no calling anybody poor, dumb or a loser",
-                   "never a rocket, a fire or an emoji",
+                   "never a rocket, a fire or an emoji", "no forced slang",
                    "a joke is not a finding", "no \"i like the play\"", "no \"i'd buy these\"",
                    "no \"ride it\"", "no \"swing those calls\"", "no \"take the profit\"",
                    "the caveat stays one clause", "if the reader is down on a position",

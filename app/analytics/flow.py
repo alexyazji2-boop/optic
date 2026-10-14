@@ -91,8 +91,17 @@ def analyse(chain: pd.DataFrame, spot: float, top_n: int = 12) -> Dict[str, Any]
     otm_call_prem = float(otm_calls["premium"].sum())
     otm_put_prem = float(otm_puts["premium"].sum())
 
-    # --- unusual activity: high volume relative to its own OI and big premium
-    unusual = df[(df["volume"] >= 50) & (df["premium"] >= 25_000)].copy()
+    # --- activity concentration: where the session's trading was heaviest.
+    #
+    # It was a fixed $25,000 of premium and 50 contracts for every symbol, so
+    # SPY and a small cap were judged alike. Now the bar scales with the chain:
+    # at least 1% of the chain's traded time value as well as the fixed floor.
+    # Called concentration, not "unusual flow": a snapshot of volume and the
+    # previous session's open interest cannot show who bought or sold, whether
+    # a trade opened or closed a position, a sweep, a block, or a leg of a
+    # spread (Options audit research, 2026-10-13).
+    prem_floor = max(25_000.0, 0.01 * float(df["premium"].sum() or 0.0))
+    unusual = df[(df["volume"] >= 50) & (df["premium"] >= prem_floor)].copy()
     unusual["vol_oi_ratio"] = unusual["volume"] / unusual["open_interest"].replace(0.0, np.nan)
     unusual = unusual.sort_values("premium", ascending=False).head(top_n)
 
@@ -153,10 +162,10 @@ def analyse(chain: pd.DataFrame, spot: float, top_n: int = 12) -> Dict[str, Any]
     if prem_share is not None:
         if prem_share > 0.65:
             score += 25
-            notes.append("{:.0f}% of the time value bought went on calls".format(prem_share * 100))
+            notes.append("{:.0f}% of the time value traded was in calls (bought or sold: the feed has no side)".format(prem_share * 100))
         elif prem_share < 0.35:
             score -= 25
-            notes.append("{:.0f}% of the time value bought went on puts".format((1 - prem_share) * 100))
+            notes.append("{:.0f}% of the time value traded was in puts (bought or sold: the feed has no side)".format((1 - prem_share) * 100))
 
     new_total = new_call_prem + new_put_prem
     if new_total > 0:
@@ -255,6 +264,14 @@ def analyse(chain: pd.DataFrame, spot: float, top_n: int = 12) -> Dict[str, Any]
             }
             for _, r in top_strikes.iterrows()
         ],
+        "activity_screen": {
+            "label": "Most active contracts",
+            "premium_floor": round(prem_floor, 0),
+            "rule": "At least 50 contracts traded and time-value premium of at least ${:,.0f} "
+                    "(the larger of $25,000 and 1% of this chain's traded premium).".format(prem_floor),
+            "cannot_show": ["who bought and who sold", "whether a trade opened or closed a position",
+                            "sweeps, blocks or legs of a spread", "today's open interest (the feed has the previous session's)"],
+        },
         "unusual": [
             {
                 "contract": r.get("contract"),
@@ -268,7 +285,11 @@ def analyse(chain: pd.DataFrame, spot: float, top_n: int = 12) -> Dict[str, Any]
                 "premium": _f(r["premium"]),
                 "premium_total": _f(r["premium_total"]),
                 "iv": _f(r["iv"]),
+                # Kept for readers of the old key. Volume above the previous
+                # session's open interest can be opening trades, or the same
+                # contracts bought and sold again within the day.
                 "is_new_position": bool(r["volume"] > r["open_interest"]),
+                "volume_above_oi": bool(r["volume"] > r["open_interest"]),
                 "moneyness": "OTM"
                 if (r["is_call"] and r["strike"] > spot) or ((not r["is_call"]) and r["strike"] < spot)
                 else "ITM",

@@ -183,23 +183,22 @@ def iv_context(
         if premium_ratio >= 1.35:
             verdict = "rich"
             guidance = (
-                "Implied vol is {:.0f}% of realized. Options are pricing more movement than the stock "
-                "has been delivering. Prefer spreads or credit structures over outright long premium.".format(premium_ratio * 100)
+                "Implied vol is {:.0f}% of realised. Options are priced for more movement than the stock "
+                "has been delivering lately; implied usually runs above realised, and this is more than usual.".format(premium_ratio * 100)
             )
         elif premium_ratio >= 1.1:
             verdict = "slightly rich"
             guidance = (
-                "Implied vol runs modestly above realized, which is normal. Long premium is workable; "
-                "spreads still reduce the vol risk."
+                "Implied vol runs modestly above realised, which is the usual relationship."
             )
         elif premium_ratio >= 0.9:
             verdict = "fair"
-            guidance = "Implied and realized vol are aligned. No vol edge either way; trade the direction."
+            guidance = "Implied and realised vol are about the same."
         else:
             verdict = "cheap"
             guidance = (
-                "Implied vol sits below realized. The market is underpricing recent movement. "
-                "This favors buying premium outright over selling it."
+                "Implied vol sits below realised: options are priced for less movement than the stock "
+                "has recently shown. Recent movement is not a forecast of the next month's."
             )
 
     term = None
@@ -224,16 +223,16 @@ def iv_context(
     if proxy_rank is not None:
         if proxy_rank >= 70:
             rank_guidance = (
-                "IV rank (proxy) {:.0f}. Implied vol is high versus this stock's own trailing-year vol range. "
-                "Selling premium is more favourably priced than buying it right now.".format(proxy_rank)
+                "Today's implied vol sits near the top ({:.0f} of 100) of the range this stock's 20-day "
+                "realised volatility covered over the past year. Realised, not implied, history: not an IV rank.".format(proxy_rank)
             )
         elif proxy_rank <= 30:
             rank_guidance = (
-                "IV rank (proxy) {:.0f}. Implied vol is low versus this stock's own trailing-year vol range. "
-                "Buying premium is relatively cheap right now.".format(proxy_rank)
+                "Today's implied vol sits near the bottom ({:.0f} of 100) of the range this stock's 20-day "
+                "realised volatility covered over the past year. Realised, not implied, history: not an IV rank.".format(proxy_rank)
             )
         else:
-            rank_guidance = "IV rank (proxy) {:.0f}. Implied vol sits mid-range versus this stock's own trailing-year vol history.".format(proxy_rank)
+            rank_guidance = "Today's implied vol sits mid-range ({:.0f} of 100) against the past year of this stock's 20-day realised volatility. Not an IV rank.".format(proxy_rank)
 
     return {
         "available": True,
@@ -247,10 +246,10 @@ def iv_context(
         "term_structure": term,
         "rank_guidance": rank_guidance,
         **rank_block,
-        "method": "IV rank needs a historical IV series, which free data does not provide. "
-        "'IV / realized' compares ATM implied vol to actual (realized) 20-day volatility. "
-        "'IV rank (proxy)' and 'realized vol rank' benchmark today's IV and realized vol against this "
-        "stock's own trailing-year realized-vol range, standing in for a true IV-history rank.",
+        "method": "'IV / realised' compares at-the-money implied vol to the stock's actual 20-day "
+        "volatility. 'IV against the realised range' places today's implied vol inside the "
+        "past year's range of 20-day realised volatility: a different quantity from an IV rank, "
+        "which needs a history of implied vol (shown separately where one exists).",
     }
 
 
@@ -346,8 +345,10 @@ def project_target(
             {"price": _f(c["price"], 2), "source": c["source"], "move_pct": _f((c["price"] / spot - 1.0) * 100.0, 2)}
             for c in candidates
         ],
-        "method": "Target is the nearest structural level in the trade's direction; the timeline assumes "
-        "roughly 0.6 ATR of net daily progress, then adds 40% for weekends and chop.",
+        "method": "Target is the nearest structural level in the trade's direction, not a forecast; the "
+        "timeline assumes progress grows with the square root of time: trading days = "
+        "(distance / ATR)^2 x 1.5, kept between 5 and 90, then x 1.4 for calendar days. A rule "
+        "of thumb, not tested.",
     }
 
 
@@ -887,11 +888,11 @@ def build_plan(
     if zone_lo and zone_hi:
         entries.append(
             {
-                "style": "Pullback entry (preferred)",
+                "style": "Pullback setup",
                 "zone": [zone_lo, zone_hi],
-                "detail": "Wait for the stock to come back into {} – {}, where {} sit. Buying "
-                "into support means a closer stop and a cheaper option than chasing the "
-                "move.{}".format(
+                "detail": "The setup a pullback describes: the stock back in {} – {}, where {} sit. "
+                "A level that close gives a nearer invalidation and a cheaper option than the "
+                "price now, if the pullback comes at all.{}".format(
                     _usd(zone_lo), _usd(zone_hi), _join(z["label"] for z in zone_used),
                     (" Not part of this zone: {}, {} away.".format(
                         _join(z["label"] for z in zone_dropped),
@@ -908,25 +909,19 @@ def build_plan(
     if breakout_level:
         entries.append(
             {
-                "style": "Breakout entry",
+                "style": "Breakout setup",
                 "zone": [_f(breakout_level, 2), _f(breakout_level + (atr * 0.5 if bullish else -atr * 0.5), 2)],
-                "detail": "A daily close {} {} on heavier-than-usual volume confirms the move is "
-                "continuing. This pays more premium and needs a wider stop, but it doesn't depend "
-                "on a pullback that may never come.".format(
+                "detail": "The setup a breakout describes: a daily close {} {} on heavier-than-usual "
+                "volume. It would cost more premium and sit further from its invalidation, and it "
+                "does not depend on a pullback that may never come.".format(
                     "above" if bullish else "below", _usd(breakout_level)
                 ),
-                "confirmation": "Daily close beyond the level, not just an intraday poke through it.",
+                "confirmation": "A daily close beyond the level, not an intraday poke through it.",
             }
         )
-    entries.append(
-        {
-            "style": "Scale-in",
-            "zone": None,
-            "detail": "Half size now, half on the pullback or the breakout confirmation above. "
-            "Guarantees partial participation without committing to one entry read.",
-            "confirmation": "Predefine both fills before entering so the second tranche is mechanical.",
-        }
-    )
+    # A "Scale-in" row used to follow ("Half size now, half on the pullback"):
+    # sizing instructions, which this tool does not give (Options audit,
+    # 2026-10-13).
 
     # ------------------------------------------------------ order guidance
     order: Dict[str, Any] = {}
@@ -946,14 +941,14 @@ def build_plan(
         order = {
             "limit_price": limit,
             "never_pay_more_than": ceiling,
-            "note": "Place a limit order at {}, {} the mid price of {}: the midpoint "
-            "between the best bid and the best ask, an estimate rather than a price anybody "
-            "has offered. The bid/ask spread is {}% of that mid, which is {}".format(
-                _usd(limit), "just above" if limit > mid else "at", _usd(mid),
+            "note": "The mid is {}: the midpoint between the bid and the ask, an estimate "
+            "rather than a price anybody has offered. A quarter of the way toward the ask is "
+            "{}; the ask itself is {}. The spread is {}% of the mid, which is {}".format(
+                _usd(mid), _usd(limit), _usd(ask),
                 _f(best["spread_pct"], 1),
-                "wide enough that paying the ask outright can cost more than a whole day's "
-                "time decay." if (best["spread_pct"] or 0) > 5
-                else "tight enough to fill close to the mid without losing much to the spread.",
+                "wide enough that crossing it can cost more than a whole day's time decay."
+                if (best["spread_pct"] or 0) > 5
+                else "narrow, so the mid and the ask are close.",
             ),
             "capital_per_contract": best["capital_per_contract"],
         }
@@ -963,15 +958,16 @@ def build_plan(
     days_to_earnings = (news or {}).get("days_to_earnings")
     if days_to_earnings is not None and 0 <= days_to_earnings <= 10:
         warnings.append(
-            "Earnings in {} day{}. Buying premium now means paying event vol and eating the post-print crush. "
-            "Either size for a binary event or wait until after the report.".format(
+            "Earnings in {} day{}. Premium bought now includes the market's price for the report, "
+            "and implied volatility usually falls once it is out, whichever way the stock moves.".format(
                 days_to_earnings, "" if days_to_earnings == 1 else "s"
             )
         )
     if ivc.get("verdict") == "rich":
         warnings.append(
-            "IV is rich versus realized: a debit spread or a lower-delta long caps the vol risk that an "
-            "outright long option carries here."
+            "Implied volatility is well above the stock's recent realised volatility, so an outright long "
+            "option carries more volatility risk than usual: if implied volatility falls, the option loses value "
+            "even with the stock unchanged."
         )
 
     # A resolved catalyst changes what this plan is built on, twice over.
@@ -994,9 +990,9 @@ def build_plan(
     if upcoming.get("pending"):
         warnings.append(
             "A {} event is still ahead: \u201c{}\u201d. Nothing in this plan "
-            "predicts which way it resolves, so size it as a binary or wait for "
-            "the outcome. Long premium held through it pays event vol both "
-            "ways.".format(" and ".join(upcoming["kinds"]),
+            "predicts which way it resolves, and premium held through it "
+            "includes the market's price for that event either "
+            "way.".format(" and ".join(upcoming["kinds"]),
                            (upcoming.get("headline") or "").strip()[:90]))
 
     catalyst = material_catalyst(news)
@@ -1021,18 +1017,18 @@ def build_plan(
         near_flip = abs(spot / flip - 1.0) * 100.0
         if near_flip < 1.0:
             warnings.append(
-                "Spot is within {:.1f}% of the gamma flip at {}. The hedging regime can invert on a small "
-                "move, so expect whipsaw around this level.".format(near_flip, _f(flip, 2))
+                "Spot is within {:.1f}% of the model's gamma flip at {}, so under the dealer-positioning "
+                "assumption a small move changes which way hedging would lean.".format(near_flip, _f(flip, 2))
             )
     if best and best["dte"] and best["dte"] < 21:
         warnings.append(
-            "The best-scoring contract has only {} days left; gamma is high but so is theta. "
-            "Do not hold it through a stall.".format(best["dte"])
+            "The example contract has {} days left: its value moves fast with the stock (high gamma) "
+            "and loses more to each day that passes (high theta).".format(best["dte"])
         )
     if regime == "negative" and bullish:
         warnings.append(
-            "Negative gamma regime cuts both ways: it will extend the move if you are right and "
-            "accelerate the drawdown if you are wrong. Respect the stop."
+            "In the model's negative-gamma reading, hedging would add to moves in either direction, "
+            "which widens the range of outcomes both ways."
         )
 
     stop = (
@@ -1047,23 +1043,25 @@ def build_plan(
     if best:
         limit = order.get("limit_price")
         per_contract = limit * 100.0 if limit else None
+        mid_px = best.get("entry_mid")
         headline_parts.append(
-            "Buy the ${} {} expiring {} for about ${} per share{}".format(
+            "An example contract for this setup: the ${} {} expiring {}, about ${} a share at the mid{}".format(
                 _strike_label(best["strike"]),
                 "call" if bullish else "put",
                 best["expiry"],
-                _f(limit, 2),
-                " ({} for one contract, since an option covers 100 shares)".format(
-                    _usd(per_contract, 0)) if per_contract else "",
+                "{:.2f}".format(mid_px) if mid_px else "?",
+                " ({} for one contract, which covers 100 shares)".format(
+                    _usd(mid_px * 100.0, 0)) if mid_px else "",
             )
         )
         if zone_lo and zone_hi:
             headline_parts.append(
-                "but only on a pullback in the stock to {} – {}".format(_usd(zone_lo), _usd(zone_hi)))
+                "for a setup that assumes a pullback in the stock to {} – {}".format(_usd(zone_lo), _usd(zone_hi)))
         elif breakout_level:
-            headline_parts.append("but only on a daily close {} {}".format(
+            headline_parts.append("for a setup that assumes a daily close {} {}".format(
                 "above" if bullish else "below", _usd(breakout_level)))
-    headline = (", ".join(headline_parts) + ".") if headline_parts else "Directional setup identified."
+    headline = ((", ".join(headline_parts) + ". Picked by Optic's rules from the chain, not a "
+                 "recommendation to trade.")) if headline_parts else "Directional setup identified."
     if not best:
         # The trigger clause qualifies a contract, and with none it printed on
         # its own: "but only on a pullback in the stock to $719.56 – $725.05."
@@ -1082,7 +1080,10 @@ def build_plan(
         "conviction": conviction,
         "direction": "long" if bullish else "short",
         "headline": headline,
+        # "recommended" kept as the key the client and the budget tests read;
+        # it is an example the rules picked, and "example" says so.
         "recommended": best,
+        "example": best,
         "candidates": candidates,
         "liquidity": {k: v for k, v in liquidity.items() if k != "notes"},
         "liquidity_notes": liquidity.get("notes") or [quotes.NOT_A_FILL, quotes.OI_CAVEAT],

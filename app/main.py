@@ -85,8 +85,22 @@ from .analytics import pulse as pulse_mod
 from .analytics import watchlist as watchlist_mod
 from .analytics import setups as setups_mod
 from . import knowledge as knowledge_mod
+from . import horizon as horizon_mod
+from . import rates as rates_mod
+from . import iv_history as iv_history_mod
+from . import dolthub_vol as dolthub_vol_mod
+from .analytics import dispersion as dispersion_mod
+from .analytics import straddle_calibration as straddle_cal_mod
+from .analytics import iv_cheapness as iv_cheap_mod
+from .analytics import vol_surface as vol_surface_mod
+from .analytics import liquidity as liquidity_mod
+from .analytics import contracts as contracts_mod
+from .analytics import position as position_mod
 from . import watch_runner
 from . import signal_history
+from . import signal_archive
+from .desk import edition as desk_edition_mod
+from .desk import research as desk_research_mod
 from . import briefing as briefing_mod
 from .analytics import watches as watches_mod
 from . import events as events_mod
@@ -239,6 +253,13 @@ async def _warn_if_open_and_paid() -> None:
 # greeks is smaller than the bid/ask spread, and hard-coding a stale rate would
 # be worse than being explicit about the simplification.
 RISK_FREE = float(os.environ.get("RISK_FREE_RATE", "0.0"))
+
+
+def _rate() -> float:
+    """The rate every option price here uses: the setting, else the 13-week
+    bill yield, else 0 (app/rates.py). RISK_FREE stays for callers that read
+    the bare setting; it was the 0% every greek used until 2026-10-13."""
+    return rates_mod.risk_free(YF_PROVIDER)["rate"]
 
 # PROVIDER serves the "currently loaded ticker" — quote, chain, expirations,
 # history — the calls that actually benefit from being real-time. It becomes
@@ -473,6 +494,68 @@ def _chain_unusable(chain: Optional[pd.DataFrame], spot: Optional[float]) -> Opt
 
 
 
+NEAR_TERM_MAX_DTE = 5
+NEAR_TERM_MAX_EXPIRIES = 3
+
+
+def _near_expiries(listed: Any) -> List[str]:
+    """Listed expiries 0 to NEAR_TERM_MAX_DTE days out, nearest first."""
+    if isinstance(listed, dict):
+        listed = listed.get("available") or []
+    return [e for e in sorted(str(x) for x in (listed or []))
+            if 0 <= vol_surface_mod.expiry_dte(e) <= NEAR_TERM_MAX_DTE][:NEAR_TERM_MAX_EXPIRIES]
+
+
+def _near_term_gex(ticker: str, chain: Optional[pd.DataFrame], swing_chain: Optional[pd.DataFrame],
+                   spot: float, rate: float, div: float, main_read: Dict[str, Any]) -> Dict[str, Any]:
+    """Dealer gamma in the 0-5 day expiries the swing read leaves out.
+
+    Same model, same assumption, same inputs; reported beside the main total
+    rather than folded into it. Open interest is the previous session's, so a
+    same-day (0DTE) position opened today is in none of it: for SPX-family
+    products that is most of the day's volume (Cboe), which is why the share
+    shown is of open positions, not of trading."""
+    used = set(swing_chain["expiry"].astype(str).unique()) if (
+        swing_chain is not None and not swing_chain.empty and "expiry" in swing_chain) else set()
+    if chain is not None and not chain.empty and "expiry" in chain:
+        chain = chain[~chain["expiry"].astype(str).isin(used)]
+    near = sorted(chain["expiry"].astype(str).unique()) if chain is not None and not chain.empty else []
+    if not near:
+        return {"available": False, "reason": "no listed expiry 0 to {} days out beyond those already read".format(
+            NEAR_TERM_MAX_DTE)}
+    unusable = _chain_unusable(chain, spot)
+    if unusable:
+        return {"available": False, "reason": unusable}
+    chain = vol_surface_mod.apply_clock(chain)
+    chain = vol_surface_mod.apply_quotes(chain)
+    chain = vol_surface_mod.resolve_surface(chain, spot, rate, div,
+                                            american=vol_surface_mod.is_american(ticker))
+    read = gex_mod.analyse(chain, spot, rate=rate, div=div, ticker=ticker)
+    read.pop("_exposure_frame", None)
+    if "error" in read:
+        return {"available": False, "reason": read["error"]}
+    near_gross = float((read.get("totals") or {}).get("gross_gex") or 0.0)
+    main_gross = float((main_read.get("totals") or {}).get("gross_gex") or 0.0)
+    share = round(near_gross / (near_gross + main_gross) * 100.0, 1) if near_gross + main_gross > 0 else None
+    near_net = float((read.get("totals") or {}).get("net_gex") or 0.0)
+    main_net = float((main_read.get("totals") or {}).get("net_gex") or 0.0)
+    return {
+        "available": True,
+        "expiries": near,
+        "net_gex": near_net,
+        "gross_gex": near_gross,
+        "share_of_gross_pct": share,
+        "combined_net_gex": main_net + near_net,
+        "regime": (read.get("regime") or {}).get("state"),
+        "flip_point": (read.get("regime") or {}).get("flip_point"),
+        "levels": read.get("levels"),
+        "by_strike": (read.get("by_strike") or [])[:8],
+        "note": ("Expiries 0 to {} days out, read separately from the main total. Open interest is the "
+                 "previous session's, so positions opened and closed today, most of the day's 0DTE "
+                 "trading in index options, are in none of it.").format(NEAR_TERM_MAX_DTE),
+    }
+
+
 def _swing_snapshot(
     ticker: str,
     expiries: Optional[List[str]],
@@ -567,6 +650,15 @@ def _swing_snapshot(
     news_read = legs.get("news")
 
     available_expiries = legs.get("expiries")
+    near_list: List[str] = []
+    # Only on the tab's own read (parallel): scans and watch checks never show
+    # it, and a scan spending a fetch per index name is the rate-limit cost
+    # _Legs exists to avoid.
+    if parallel and ticker in gex_mod.INDEX_LIKE:
+        near_list = _near_expiries(available_expiries)
+        if near_list:
+            legs.start("near_chain", PROVIDER.options_chain, ticker, expiries=near_list,
+                       max_expiries=len(near_list))
     chain = legs.get("chain")
 
     gex_read: Dict[str, Any] = {}
@@ -589,8 +681,55 @@ def _swing_snapshot(
                 "It often does this outside market hours; the options readings come back "
                 "when it answers."
             ).format(len(listed), ticker)
+    # The rate, the clock, the quotes and the volatility, before anything is
+    # built on them (Options audit, 2026-10-13; see app/rates.py and
+    # app/analytics/vol_surface.py for what each corrects).
+    rate_info = rates_mod.risk_free(YF_PROVIDER)
+    rate = rate_info["rate"]
+    surface: Dict[str, Any] = {"available": False}
+    iv_rank: Dict[str, Any] = {"available": False}
+    event_date = None
     if chain is not None and not chain.empty and not partial:
-        gex_read = gex_mod.analyse(chain, spot, rate=RISK_FREE, div=div, ticker=ticker)
+        try:
+            event_date = legs.get("earnings_date")
+        except Exception:                                         # noqa: BLE001
+            event_date = None
+        chain = vol_surface_mod.apply_clock(chain)
+        chain = vol_surface_mod.apply_quotes(chain)
+        chain = vol_surface_mod.resolve_surface(chain, spot, rate, div,
+                                                american=vol_surface_mod.is_american(ticker))
+        surface = vol_surface_mod.build(chain, spot, rate, div, event_date=event_date)
+        iv30 = (surface.get("iv30") or {}).get("iv_pct")
+        iv_history_mod.record(ticker, iv30)
+        iv_rank = iv_history_mod.rank_for(ticker, iv30, YF_PROVIDER)
+    # Implied against realised volatility over the year (DoltHub, when on).
+    iv_hv = dolthub_vol_mod.iv_hv(ticker) if dolthub_vol_mod.enabled() else {"available": False}
+    straddle_cal = straddle_cal_mod.for_symbol(ticker)
+    # Whether today's options look cheap or dear, against what followed such
+    # days across the DoltHub sample (derived from it, so behind its flag).
+    iv_cheap = iv_cheap_mod.read(iv_rank, iv_hv) if dolthub_vol_mod.enabled() else {"available": False}
+    if chain is not None and not chain.empty and not partial:
+        gex_read = gex_mod.analyse(chain, spot, rate=rate, div=div, ticker=ticker)
+        # Scaled to the stock's own trading: the hedge a 1% move would ask
+        # for, as a share of an average day's dollar volume. A $1B GEX means
+        # little for SPY and a great deal for a mid cap (the normalisation
+        # Ni, Pearson, Poteshman & White and Baltussen et al. motivate).
+        adv = (quote.get("avg_volume") or 0) * spot
+        totals = gex_read.get("totals") if isinstance(gex_read, dict) else None
+        if isinstance(totals, dict) and adv > 0:
+            totals["pct_of_avg_dollar_volume"] = round(abs(totals.get("net_gex") or 0) / adv * 100.0, 2)
+        # O1 (Options audit): the swing expiries start a week out, and on index
+        # products most of the gamma sits in the 0-5 day expiries the read
+        # skipped. They are read here as well, separately, so the main total
+        # keeps its meaning and the short-dated share is visible.
+        if near_list and isinstance(gex_read, dict) and "error" not in gex_read:
+            try:
+                gex_read["near_term"] = _near_term_gex(
+                    ticker, legs.get("near_chain"), chain, spot, rate, div, gex_read)
+            except Exception as exc:                              # noqa: BLE001
+                gex_read["near_term"] = {"available": False,
+                                         "reason": "the short-dated chain could not be read ({})".format(
+                                             type(exc).__name__)}
         exposure = gex_read.pop("_exposure_frame", None)
         if exposure is not None:
             greeks_read = greeks_panel.analyse(exposure, spot)
@@ -610,6 +749,16 @@ def _swing_snapshot(
             macro_read = {"error": "macro panel unavailable: {}".format(exc)}
 
     call = swing.verdict(tech, gex_read, flow_read, news_read, macro_read, spot)
+    # O3 (Options audit): the read as it stood, kept once per symbol per
+    # session day so whether it predicts anything can be measured later.
+    try:
+        signal_archive.record(
+            ticker, spot, call, gex_read,
+            strikes=(chain["strike"].tolist() if chain is not None and not chain.empty and not partial else ()),
+            iv30=(surface.get("iv30") or {}).get("iv_pct") if isinstance(surface, dict) else None,
+            macro_included=bool(include_macro), index_like=ticker in gex_mod.INDEX_LIKE)
+    except Exception as exc:                                      # noqa: BLE001
+        logging.getLogger("uvicorn.error").warning("signal archive: %s", exc)
 
     # The reason rides with the headline, so the Setup block can say why there
     # is no setup (a frozen overnight chain) rather than only that there is none.
@@ -626,9 +775,18 @@ def _swing_snapshot(
             budget=budget,
         )
         entry_plan = entry_mod.build_plan(
-            exposure, spot, call, tech, gex_read, news_read, rate=RISK_FREE, div=div,
+            exposure, spot, call, tech, gex_read, news_read, rate=rate, div=div,
             history=hist, budget=budget,
         )
+        # The term structure in the plan's IV block was the median IV of every
+        # strike on an expiry ("inverted, earnings bid" for AAPL when at the
+        # money it was flat): the surface's ATM reading replaces it.
+        ivc = entry_plan.get("iv_context") if isinstance(entry_plan, dict) else None
+        term = (surface or {}).get("term") or {}
+        if isinstance(ivc, dict) and term.get("available"):
+            ivc["term_structure"] = term.get("text")
+            ivc["front_iv_pct"] = term.get("front_iv_pct")
+            ivc["back_iv_pct"] = term.get("back_iv_pct")
 
     # Same argument as earnings_momentum below, and it was missed here because
     # this block is one call rather than three. Measured: fundamentals.analyse
@@ -659,13 +817,13 @@ def _swing_snapshot(
     if PROVIDER.name == "tradier":
         data_caveat = (
             "Quote and options chain are real-time via Tradier. Greeks are computed locally via "
-            "Black-Scholes with a {:.2%} risk-free rate. Company fundamentals and news still come "
-            "from yfinance and are not real-time.".format(RISK_FREE)
+            "Black-Scholes with a {} risk-free rate. Company fundamentals and news still come "
+            "from yfinance and are not real-time.".format(rate_info["label"])
         )
     else:
         data_caveat = (
             "Quotes are delayed ~15 minutes. Greeks are computed locally via "
-            "Black-Scholes with a {:.2%} risk-free rate.".format(RISK_FREE)
+            "Black-Scholes with a {} risk-free rate.".format(rate_info["label"])
         )
 
     payload = {
@@ -682,6 +840,13 @@ def _swing_snapshot(
         # vanishes at the close.
         "patterns": patterns_mod.analyse(hist, spot=spot),
         "gex": gex_read,
+        "vol_surface": surface,
+        "iv_rank": iv_rank,
+        "iv_hv": iv_hv,
+        "straddle_calibration": straddle_cal,
+        "iv_cheapness": iv_cheap,
+        "rate": rate_info,
+        "liquidity_method": liquidity_mod.method(),
         "greeks": greeks_read,
         "flow": flow_read,
         "news": news_read,
@@ -968,7 +1133,7 @@ async def earnings_panel(ticker: str) -> Dict[str, Any]:
     def build() -> Dict[str, Any]:
         ticker_u = ticker.upper().strip()
         quote = PROVIDER.quote(ticker_u)
-        result = earnings_mod.analyse(PROVIDER, YF_PROVIDER, ticker_u, quote, rate=RISK_FREE)
+        result = earnings_mod.analyse(PROVIDER, YF_PROVIDER, ticker_u, quote, rate=_rate())
         result["generated_at"] = datetime.now(timezone.utc).isoformat()
         return result
 
@@ -990,7 +1155,7 @@ async def earnings_brief(ticker: str) -> Dict[str, Any]:
     def build() -> Dict[str, Any]:
         ticker_u = ticker.upper().strip()
         quote = PROVIDER.quote(ticker_u)
-        facts = earnings_mod.analyse(PROVIDER, YF_PROVIDER, ticker_u, quote, rate=RISK_FREE)
+        facts = earnings_mod.analyse(PROVIDER, YF_PROVIDER, ticker_u, quote, rate=_rate())
 
         # What the company has actually filed. This is the only source here for
         # corporate events, and it is a primary one — an 8-K item code is the
@@ -1035,6 +1200,44 @@ async def earnings_brief(ticker: str) -> Dict[str, Any]:
     return await _run(build)
 
 
+def _options_frame(ticker: str, expiries: Optional[List[str]], max_expiries: int):
+    """Quote, rate and a chain on the corrected inputs (clock, quotes, IV,
+    greeks), shared by the raw chain and the research endpoints so all three
+    read one set of numbers."""
+    quote = PROVIDER.quote(ticker)
+    spot = quote.get("price")
+    if spot is None:
+        raise HTTPException(status_code=404, detail="No quote for '{}'.".format(ticker))
+    chain = PROVIDER.options_chain(ticker, expiries=expiries, max_expiries=max_expiries)
+    if chain is None or chain.empty:
+        raise HTTPException(status_code=404, detail="No options chain for '{}'.".format(ticker))
+    div = quote.get("dividend_yield") or 0.0
+    rate_info = rates_mod.risk_free(YF_PROVIDER)
+    chain = vol_surface_mod.apply_clock(chain)
+    chain = vol_surface_mod.apply_quotes(chain)
+    chain = vol_surface_mod.resolve_surface(chain, spot, rate_info["rate"], div,
+                                            american=vol_surface_mod.is_american(ticker))
+    frame = gex_mod.compute_exposure(chain, spot, rate=rate_info["rate"], div=div, ticker=ticker)
+    frame.attrs.update(chain.attrs)
+    return quote, float(spot), float(div), rate_info, frame
+
+
+def _ex_dividend(ticker: str) -> Optional[str]:
+    """The next ex-dividend date the feed knows, or None."""
+    try:
+        info = YF_PROVIDER._info(ticker) or {}
+    except Exception:                                             # noqa: BLE001
+        return None
+    raw = info.get("exDividendDate")
+    if not raw:
+        return None
+    try:
+        day = datetime.fromtimestamp(float(raw), tz=timezone.utc).date()
+    except (TypeError, ValueError, OSError):
+        return None
+    return day.isoformat()
+
+
 @app.get("/api/chain/{ticker}")
 async def raw_chain(
     ticker: str,
@@ -1045,26 +1248,214 @@ async def raw_chain(
     wanted = [e.strip() for e in expiries.split(",") if e.strip()] if expiries else None
 
     def build() -> Dict[str, Any]:
-        quote = PROVIDER.quote(ticker.upper())
-        spot = quote.get("price")
-        if spot is None:
-            raise HTTPException(status_code=404, detail="No quote for '{}'.".format(ticker))
-        chain = PROVIDER.options_chain(ticker.upper(), expiries=wanted, max_expiries=max_expiries)
-        if chain is None or chain.empty:
-            raise HTTPException(status_code=404, detail="No options chain for '{}'.".format(ticker))
-        frame = gex_mod.compute_exposure(chain, spot, rate=RISK_FREE, div=quote.get("dividend_yield") or 0.0)
+        quote, spot, div, rate_info, frame = _options_frame(ticker.upper(), wanted, max_expiries)
         cols = [
             "contract", "expiry", "dte", "strike", "is_call", "bid", "ask", "mid", "last",
             "volume", "open_interest", "iv", "delta", "gamma", "vega", "theta", "gex", "dex",
-            "spread_pct",
+            "spread_pct", "quote_state", "mark_source", "iv_source", "iv_feed",
         ]
         present = [c for c in cols if c in frame.columns]
         table = frame[present].replace({float("nan"): None})
         return {
             "ticker": ticker.upper(),
             "spot": spot,
+            "rate": rate_info,
             "rows": table.to_dict(orient="records"),
         }
+
+    return await _run(build)
+
+
+def _listed_expiries(ticker: str) -> List[str]:
+    got = PROVIDER.expirations(ticker)
+    if isinstance(got, dict):
+        got = got.get("available") or []
+    return sorted(str(e) for e in (got or []))
+
+
+def _default_expiry(listed: List[str], target_days: int = 30) -> Optional[str]:
+    """The listed expiry nearest a month out, at least a week away when one is."""
+    if not listed:
+        return None
+    dated = [(e, vol_surface_mod.expiry_dte(e)) for e in listed]
+    usable = [x for x in dated if x[1] >= 7] or dated
+    return min(usable, key=lambda x: abs(x[1] - target_days))[0]
+
+
+@app.get("/api/options/{ticker}/research")
+async def options_research(
+    ticker: str,
+    expiry: Optional[str] = Query(None),
+    side: str = Query("call", pattern="^(call|put)$"),
+    delta_lo: float = Query(0.0, ge=0.0, le=1.0),
+    delta_hi: float = Query(1.0, ge=0.0, le=1.0),
+    max_spread: Optional[float] = Query(None, ge=0.0, le=500.0),
+    min_oi: float = Query(0.0, ge=0.0),
+    include_unquoted: bool = Query(False),
+) -> Dict[str, Any]:
+    """Contracts for one expiry and side, filtered the way the reader asks.
+
+    No ranking and no pick: a table with each contract's cost, breakeven,
+    decay, volatility exposure, model chance of finishing in the money and
+    liquidity grade, plus what happens before the expiry (Options audit,
+    2026-10-13). See app/analytics/contracts.py."""
+    sym = ticker.upper().strip()
+
+    def build() -> Dict[str, Any]:
+        listed = _listed_expiries(sym)
+        if not listed:
+            raise HTTPException(status_code=404, detail="No listed options for '{}'.".format(sym))
+        exp = expiry if expiry in listed else _default_expiry(listed)
+        quote, spot, div, rate_info, frame = _options_frame(sym, [exp], 1)
+        partial = _chain_unusable(frame, spot)
+        tbl = contracts_mod.table(frame, spot, rate_info["rate"], div, side=side, expiry=exp,
+                                  delta_lo=min(delta_lo, delta_hi), delta_hi=max(delta_lo, delta_hi),
+                                  max_spread_pct=max_spread, min_oi=min_oi,
+                                  include_unquoted=include_unquoted,
+                                  american=vol_surface_mod.is_american(sym))
+        summary = vol_surface_mod.expiry_rows(frame, spot, rate_info["rate"], div)
+        earn = None
+        try:
+            earn = YF_PROVIDER.earnings_date(sym)
+        except Exception:                                         # noqa: BLE001
+            earn = None
+        today = datetime.now(timezone.utc).astimezone(session_mod.ET).date()
+        return {
+            "ticker": sym,
+            "spot": spot,
+            "expiry": exp,
+            "side": side,
+            "listed_expiries": [{"expiry": e, "dte": vol_surface_mod.expiry_dte(e),
+                                 "monthly": contracts_mod.is_monthly(e)} for e in listed],
+            "filters": {"delta_lo": delta_lo, "delta_hi": delta_hi, "max_spread": max_spread,
+                        "min_oi": min_oi, "include_unquoted": include_unquoted},
+            "unusable": partial,
+            "summary": summary[0] if summary else None,
+            "events": contracts_mod.events(exp, today, earn, None, _ex_dividend(sym),
+                                           index_like=sym in gex_mod.INDEX_LIKE),
+            "table": tbl,
+            "rate": rate_info,
+            "clock": frame.attrs.get("clock"),
+            "iv_method": frame.attrs.get("iv_method"),
+            "liquidity_method": liquidity_mod.method(),
+            "fetched_at": str(frame["fetched_at"].iloc[0]) if "fetched_at" in frame and len(frame) else None,
+            "notes": [
+                "The model's chance of finishing in the money is N(d2) under risk-neutral pricing, not a "
+                "forecast, and finishing in the money is not the same as a profit: a bought option has to "
+                "clear its premium.",
+                "Delta is how much the option's price moves for a $1 move in the stock, per share. It "
+                "changes as the stock moves (gamma) and is not a probability.",
+                "Costs per contract are 100 shares: the ask x 100 is what one contract costs to buy at the "
+                "quoted price, before fees.",
+            ],
+        }
+
+    return await _run(build)
+
+
+MAX_LEGS = 4
+
+
+@app.post("/api/options/{ticker}/analyze")
+async def options_analyze(ticker: str, payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    """Payoff, model values, breakevens, max P/L, greeks and scenarios for up
+    to four option legs (plus optional stock), priced from the chain. A
+    research illustration, not an order (app/analytics/position.py)."""
+    sym = ticker.upper().strip()
+    raw_legs = payload.get("legs") or []
+    if not isinstance(raw_legs, list) or not raw_legs:
+        raise HTTPException(status_code=400, detail="Add at least one leg.")
+    opt_legs = [l for l in raw_legs if isinstance(l, dict) and l.get("type") in ("call", "put")]
+    stock_legs = [l for l in raw_legs if isinstance(l, dict) and l.get("type") == "stock"]
+    if len(opt_legs) > MAX_LEGS or len(stock_legs) > 1:
+        raise HTTPException(status_code=400, detail="Up to four option legs and one stock leg.")
+
+    def num(v, lo, hi, default):
+        try:
+            x = float(v)
+        except (TypeError, ValueError):
+            return default
+        return min(max(x, lo), hi)
+
+    slippage = num(payload.get("slippage"), 0.0, 1.0, 0.25)
+    fee = num(payload.get("fee_per_contract"), 0.0, 10.0, 0.65)
+    days_forward = payload.get("days_forward")
+    days_forward = None if days_forward in (None, "") else num(days_forward, 0.0, 3650.0, None)
+
+    def build() -> Dict[str, Any]:
+        wanted = sorted({str(l.get("expiry")) for l in opt_legs})
+        quote, spot, div, rate_info, frame = _options_frame(sym, wanted or None, max(len(wanted), 1))
+        legs: List[Dict[str, Any]] = []
+        problems: List[str] = []
+        for l in opt_legs:
+            side = "short" if l.get("side") == "short" else "long"
+            qty = int(num(l.get("qty"), 1, 100, 1))
+            try:
+                k = float(l.get("strike"))
+            except (TypeError, ValueError):
+                problems.append("A leg has no strike.")
+                continue
+            m = frame[(frame["expiry"] == l.get("expiry")) & (frame["strike"] == k)
+                      & (frame["is_call"] == (l["type"] == "call"))]
+            if m.empty:
+                problems.append("No {} {} {} on the chain.".format(l.get("expiry"), k, l["type"]))
+                continue
+            r = m.iloc[0]
+            if r["quote_state"] != "two_sided":
+                problems.append("The {} {} {} has no two-sided quote ({}), so it cannot be priced.".format(
+                    l.get("expiry"), k, l["type"], str(r["quote_state"]).replace("_", " ")))
+                continue
+            g = liquidity_mod.grade_row(r.to_dict())
+            legs.append({"type": l["type"], "side": side, "qty": qty, "strike": k, "expiry": r["expiry"],
+                         "tau": float(r["tau"]), "iv": float(r["iv"]), "mid": float(r["quote_mid"]),
+                         "bid": float(r["bid"]), "ask": float(r["ask"]), "contract": r.get("contract"),
+                         "liquidity": g, "delta": float(r["delta"])})
+        for l in stock_legs:
+            legs.append({"type": "stock", "side": "short" if l.get("side") == "short" else "long",
+                         "qty": int(num(l.get("qty"), 1, 100000, 100)), "strike": None, "expiry": None,
+                         "tau": 0.0, "iv": None, "mid": spot, "bid": spot, "ask": spot})
+        if problems:
+            raise HTTPException(status_code=422, detail=" ".join(problems))
+        out = position_mod.analyse(legs, spot, rate_info["rate"], div, days_forward=days_forward,
+                                   slippage=slippage, fee_per_contract=fee,
+                                   american=vol_surface_mod.is_american(sym))
+        flags: List[str] = []
+        exd = _ex_dividend(sym)
+        first_exp = min((l["expiry"] for l in legs if l["type"] != "stock"), default=None)
+        for l in legs:
+            if l["type"] == "stock" or l["side"] != "short":
+                continue
+            itm = (spot > l["strike"]) if l["type"] == "call" else (spot < l["strike"])
+            if l["type"] == "call" and itm and exd and exd <= l["expiry"]:
+                flags.append("The short {:g} call is in the money with an ex-dividend date ({}) before it "
+                             "expires: early assignment is a real possibility the day before.".format(l["strike"], exd))
+            if l["type"] == "put" and l["delta"] < -0.8:
+                flags.append("The short {:g} put is deep in the money: an American put like this can be "
+                             "assigned early.".format(l["strike"]))
+            if abs(l["strike"] / spot - 1) < 0.01:
+                flags.append("The short {:g} {} is within 1% of the price: if it finishes near the strike, "
+                             "whether it is assigned is uncertain until after the close (pin risk).".format(
+                                 l["strike"], l["type"]))
+        today = datetime.now(timezone.utc).astimezone(session_mod.ET).date()
+        earn = None
+        try:
+            earn = YF_PROVIDER.earnings_date(sym)
+        except Exception:                                         # noqa: BLE001
+            earn = None
+        out.update({
+            "ticker": sym,
+            "rate": rate_info,
+            "leg_liquidity": [{"strike": l.get("strike"), "type": l["type"], "expiry": l.get("expiry"),
+                               **(l.get("liquidity") or {})} for l in legs if l["type"] != "stock"],
+            "flags": flags,
+            "events": contracts_mod.events(first_exp, today, earn, None, exd,
+                                           index_like=sym in gex_mod.INDEX_LIKE) if first_exp else [],
+            "multi_leg_note": ("The legs' quoted spreads add up to ${:,.2f} for the position. On an exchange's "
+                               "complex order book a spread order can fill inside that; nothing here can see "
+                               "that book.".format(out["entry"]["legs_full_spread"]))
+            if len([l for l in legs if l["type"] != "stock"]) > 1 else None,
+        })
+        return out
 
     return await _run(build)
 
@@ -1416,6 +1807,66 @@ async def list_digest(body: Dict[str, Any] = Body(default={})) -> Dict[str, Any]
     return await _run(build)
 
 
+VALIDATION_TTL = 6 * 3600
+_VALIDATION: Dict[str, Any] = {"at": 0.0, "body": None}
+
+
+def _setup_observations() -> List[Dict[str, Any]]:
+    """Every daily setup trigger's observed closes, once per trigger however
+    many readers were alerted to it. No reader's identity leaves this."""
+    try:
+        got = accounts_db.rows(
+            "SELECT s.symbol, s.strategy, s.direction, s.trigger_at, e.label, e.data_as_of, e.change_pct "
+            "FROM signals s JOIN signal_events e ON e.signal_id = s.id "
+            "WHERE e.kind = 'observation' AND s.timeframe = 'daily' AND e.change_pct IS NOT NULL")
+    except Exception:                                             # noqa: BLE001
+        return []
+    seen, out = set(), []
+    for r in got:
+        key = (r["symbol"], r["strategy"], r["direction"], r["trigger_at"], r["label"])
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            h = int(str(r["label"]).split()[1])
+        except (IndexError, ValueError):
+            continue
+        out.append({"direction": r["direction"], "horizon": h, "trigger_day": str(r["trigger_at"])[:10],
+                    "observed_day": str(r["data_as_of"])[:10], "change_pct": float(r["change_pct"])})
+    return out
+
+
+def _validation_bars(symbols: List[str]) -> Dict[str, pd.DataFrame]:
+    out: Dict[str, pd.DataFrame] = {}
+    for sym in symbols:
+        try:
+            df = PROVIDER.history(sym, period="1y", interval="1d")
+        except Exception:                                         # noqa: BLE001
+            continue
+        if df is not None and not df.empty:
+            out[sym] = df
+    return out
+
+
+@app.get("/api/validation")
+async def validation() -> Dict[str, Any]:
+    """Whether the composite score, the gamma regime, the walls and the swing
+    setups have predicted anything (Options audit O3; app/signal_archive.py).
+    Each claim says "collecting" with its counts until it has enough
+    observations to test against its baseline."""
+    now = time.time()
+    if _VALIDATION["body"] is not None and now - _VALIDATION["at"] < VALIDATION_TTL:
+        return _VALIDATION["body"]
+
+    def build() -> Dict[str, Any]:
+        return signal_archive.evaluate(signal_archive.reads(), _validation_bars, _setup_observations())
+
+    body = await _run(build)
+    body["as_of"] = datetime.now(timezone.utc).isoformat()
+    _VALIDATION.update(at=now, body=body)
+    return body
+
+
 @app.get("/api/signals")
 async def signals_list(
     request: Request,
@@ -1764,7 +2215,7 @@ async def setups_options(
         chain = PROVIDER.options_chain(sym, max_expiries=6)
         frame = None
         if chain is not None and not chain.empty and spot:
-            frame = gex_mod.compute_exposure(chain, spot, rate=RISK_FREE,
+            frame = gex_mod.compute_exposure(chain, spot, rate=_rate(),
                                              div=quote.get("dividend_yield") or 0.0)
         try:
             earnings = YF_PROVIDER.earnings_date(sym)
@@ -1965,7 +2416,7 @@ async def paper_book_mark(payload: Dict[str, Any] = Body(default={})) -> Dict[st
     """
     def build() -> Dict[str, Any]:
         out = papertrade_mod.mark_book(
-            YF_PROVIDER, payload.get("positions") or [], rate=RISK_FREE)
+            YF_PROVIDER, payload.get("positions") or [], rate=_rate())
         out["generated_at"] = datetime.now(timezone.utc).isoformat()
         return out
 
@@ -2213,6 +2664,82 @@ def _desk_moved(then: Dict[str, Optional[float]], now: Dict[str, Optional[float]
     return False
 
 
+def _rate_path_for(events_out: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """What fed funds futures price for the next decision, by the arithmetic in
+    `morning_desk.rate_path`. Shared by the Desk card and the daily edition so
+    the two cannot disagree."""
+    try:
+        quotes = YF_PROVIDER.batch_quote([morning_desk_mod.RATE_SYMBOL])
+        month = YF_PROVIDER.contract_month(morning_desk_mod.RATE_SYMBOL)
+        dff = econ_mod.series("DFF", years=1)
+        effective = ((dff or {}).get("latest") or {}).get("value")
+        meeting = None
+        for row in ((events_out or {}).get("events") or []):
+            title = (row.get("title") or "").lower()
+            # The decision, not its minutes three weeks later: both say FOMC.
+            if ("fomc" in title or "federal open market" in title) and "minutes" not in title:
+                meeting = row.get("at")
+                break
+        return morning_desk_mod.rate_path(
+            quotes.get(morning_desk_mod.RATE_SYMBOL), effective, month, meeting)
+    except Exception as exc:                                    # noqa: BLE001
+        logging.getLogger("uvicorn.error").warning(
+            "morning desk: rate path unavailable: %s", exc)
+        return {"available": False, "reason": "The rate path could not be built."}
+
+
+def _desk_index_surface(sym: str) -> Optional[Dict[str, Any]]:
+    """An index ETF's corrected options surface for the daily edition: the
+    nearest expiry a day or more out, the one nearest a week and the one nearest
+    a month, on the same clock, quotes and IV solve as the Options tab."""
+    listed = _listed_expiries(sym) or []
+    pick: List[str] = []
+    for target in (1, 7, 30):
+        cands = [e for e in listed if vol_surface_mod.expiry_dte(e) >= 1 and e not in pick]
+        if cands:
+            pick.append(min(cands, key=lambda e: abs(vol_surface_mod.expiry_dte(e) - target)))
+    if not pick:
+        return {"available": False, "reason": "no listed expiries"}
+    quote = PROVIDER.quote(sym) or {}
+    spot = quote.get("price")
+    chain = PROVIDER.options_chain(sym, expiries=sorted(pick), max_expiries=len(pick))
+    unusable = _chain_unusable(chain, spot)
+    if chain is None or chain.empty or unusable or not spot:
+        return {"available": False, "reason": unusable or "no chain"}
+    rate = _rate()
+    div = quote.get("dividend_yield") or 0.0
+    chain = vol_surface_mod.apply_clock(chain)
+    chain = vol_surface_mod.apply_quotes(chain)
+    chain = vol_surface_mod.resolve_surface(chain, spot, rate, div,
+                                            american=vol_surface_mod.is_american(sym))
+    return vol_surface_mod.build(chain, spot, rate, div)
+
+
+def _desk_sources() -> "desk_edition_mod.Sources":
+    from .analytics.sectors import SECTORS, THEMES
+
+    def wires() -> List[Dict[str, Any]]:
+        return feeds_mod.load_kind("wire")[0]
+
+    def official() -> List[Dict[str, Any]]:
+        return feeds_mod.load_kind("macro")[0]
+
+    return desk_edition_mod.Sources(
+        provider=YF_PROVIDER,
+        macro=lambda: macro_mod.analyse(YF_PROVIDER),
+        fred_series=lambda code: econ_mod.series(code, years=2),
+        events=lambda: events_mod.upcoming(earlier_today=True),
+        earnings_week=lambda: earnings_week_mod.build(YF_PROVIDER, offset=0),
+        wires=wires, official=official,
+        rate_path=_rate_path_for,
+        index_surface=_desk_index_surface,
+        quotes=lambda syms: YF_PROVIDER.batch_quote(syms),
+        session_mod=session_mod, sectors=SECTORS, themes=THEMES,
+        dispersion=lambda: dispersion_mod.build(YF_PROVIDER),
+        index_gex=lambda sym: (_swing_snapshot(sym, None, 4, False, include_earnings=False,
+                                               include_company=False) or {}).get("gex") or {})
+
+
 def _morning_desk(macro: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """Today's desk, from panels already built plus the rate path.
 
@@ -2230,24 +2757,7 @@ def _morning_desk(macro: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         logging.getLogger("uvicorn.error").warning(
             "morning desk: calendar unavailable: %s", exc)
 
-    rate = {"available": False, "reason": "The rate path could not be built."}
-    try:
-        quotes = YF_PROVIDER.batch_quote([morning_desk_mod.RATE_SYMBOL])
-        month = YF_PROVIDER.contract_month(morning_desk_mod.RATE_SYMBOL)
-        dff = econ_mod.series("DFF", years=1)
-        effective = ((dff or {}).get("latest") or {}).get("value")
-        meeting = None
-        for row in ((events_out or {}).get("events") or []):
-            title = (row.get("title") or "").lower()
-            # The decision, not its minutes three weeks later: both say FOMC.
-            if ("fomc" in title or "federal open market" in title) and "minutes" not in title:
-                meeting = row.get("at")
-                break
-        rate = morning_desk_mod.rate_path(
-            quotes.get(morning_desk_mod.RATE_SYMBOL), effective, month, meeting)
-    except Exception as exc:                                    # noqa: BLE001
-        logging.getLogger("uvicorn.error").warning(
-            "morning desk: rate path unavailable: %s", exc)
+    rate = _rate_path_for(events_out)
 
     stories = None
     try:
@@ -2256,8 +2766,12 @@ def _morning_desk(macro: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     except Exception:                                           # noqa: BLE001
         stories = None
 
+    # The desk's date is New York's. `build` defaulted to date.today(), the
+    # server's own date, which on a UTC host turns over at 8pm Eastern and
+    # filed the evening's desk under tomorrow.
     desk = morning_desk_mod.build(macro=macro, events=events_out, rate=rate,
-                                  stories=stories)
+                                  stories=stories,
+                                  today=datetime.now(timezone.utc).astimezone(session_mod.ET).date())
 
     # The prose is an overlay, never a replacement. Every figure in `desk` stays
     # exactly as assembled, so the note and the strip above it cannot disagree,
@@ -2284,6 +2798,20 @@ def _morning_desk(macro: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         for key in ("scenarios", "note", "overall"):
             if prose.get(key):
                 desk[key] = prose[key]
+    # The daily edition's headline and summary, when one is kept: the card
+    # leads with it and links to the whole edition on the Read page. Read from
+    # the store only; the home page never writes an edition.
+    try:
+        served = desk_edition_mod.served(datetime.now(timezone.utc), session_mod)
+        if served.get("available"):
+            ed = served["edition"]
+            desk["edition"] = {"key": ed.get("key"), "date": ed.get("date"), "slot": ed.get("slot"),
+                               "slot_label": ed.get("slot_label"), "headline": ed.get("headline"),
+                               "summary": (ed.get("summary") or {}).get("text"), "is_today": served.get("is_today"),
+                               "freshness": served.get("freshness"), "voice": ed.get("voice"),
+                               "test_edition": ed.get("test_edition")}
+    except Exception as exc:                                    # noqa: BLE001
+        logging.getLogger("uvicorn.error").warning("desk edition summary: %s", exc)
     return desk
 
 
@@ -2430,6 +2958,37 @@ async def news_panel(ticker: str, limit: int = Query(12, ge=1, le=30)) -> Dict[s
 # search. Building is cheap (~1s warm) because the feed layer caches per source
 # and the overview reuses a single batched history call.
 
+@app.get("/api/desk/edition")
+async def desk_edition() -> Dict[str, Any]:
+    """The edition a reader should see now. Reads what is kept and never
+    writes one: a page load cannot trigger a generation."""
+    return desk_edition_mod.served(datetime.now(timezone.utc), session_mod)
+
+
+@app.get("/api/desk/editions")
+async def desk_editions(limit: int = Query(30, ge=1, le=120)) -> Dict[str, Any]:
+    return {"editions": desk_edition_mod.archive(limit)}
+
+
+@app.get("/api/desk/edition/{key}")
+async def desk_edition_by_key(key: str) -> Dict[str, Any]:
+    ed = desk_edition_mod.load(key)
+    if not ed:
+        raise HTTPException(status_code=404, detail="No edition {}.".format(key))
+    return {"available": True, "edition": ed}
+
+
+@app.post("/api/desk/edition/publish")
+async def desk_edition_publish(request: Request, body: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Write an edition now (admin). `slot` defaults to the one due; `force`
+    replaces a kept edition; `test_label` marks it as a test edition."""
+    _write_guard(request)
+    slot = body.get("slot") or desk_edition_mod.due_slot(datetime.now(timezone.utc), session_mod) or "closed"
+    if slot not in desk_edition_mod.SLOT_LABELS:
+        raise HTTPException(status_code=422, detail="Unknown slot.")
+    return await _run(_publish_edition, slot, bool(body.get("force")), body.get("test_label"))
+
+
 @app.get("/api/brief")
 async def daily_brief(
     day: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
@@ -2505,7 +3064,7 @@ async def tracker_mark(request: Request) -> Dict[str, Any]:
             raise _cooldown_refusal("A refresh", since, wait)
     _PUBLIC_LAST["mark"] = time.time()
     async with _SCAN_LOCK:
-        return await _run(paper.mark_open_positions, PROVIDER, RISK_FREE)
+        return await _run(paper.mark_open_positions, PROVIDER, _rate())
 
 
 async def _do_scan(tickers: Optional[List[str]], trigger: str) -> Dict[str, Any]:
@@ -2513,7 +3072,7 @@ async def _do_scan(tickers: Optional[List[str]], trigger: str) -> Dict[str, Any]
     _BACKGROUND_JOB.set(True)
     async with _SCAN_LOCK:
         result = await _run(
-            paper.run_scan, _tracker_snapshot, PROVIDER, tickers, trigger, RISK_FREE
+            paper.run_scan, _tracker_snapshot, PROVIDER, tickers, trigger, _rate()
         )
     _raise_scan_alerts(result)
     return result
@@ -2810,7 +3369,7 @@ async def _tracker_loop() -> None:
             async with _SCAN_LOCK:
                 if due_for_scan:
                     result = await _run(
-                        paper.run_scan, _tracker_snapshot, PROVIDER, None, "scheduled", RISK_FREE
+                        paper.run_scan, _tracker_snapshot, PROVIDER, None, "scheduled", _rate()
                     )
                     last_scan = now
                     _raise_scan_alerts(result)
@@ -2819,7 +3378,7 @@ async def _tracker_loop() -> None:
                         result["considered"], result["opened"], result["closed"],
                     )
                 else:
-                    await _run(paper.mark_open_positions, PROVIDER, RISK_FREE)
+                    await _run(paper.mark_open_positions, PROVIDER, _rate())
                     if just_closed:
                         log.info("tracker: marked final closing prices")
 
@@ -3112,6 +3671,62 @@ async def _flush_feedback() -> None:
         log.info("feedback flush skipped: %s", exc)
 
 
+# The daily Optic Desk edition (app/desk/). Off unless DESK_EDITION_AUTO is
+# set, because each written edition is a paid call (about 15,000 input and up
+# to 8,000 output tokens on Opus, roughly $0.15 to $0.25, plus at most one
+# repair). Checked every five minutes; a slot is written once, claimed on disk,
+# so a deploy or a second process cannot write it again.
+DESK_EDITION_AUTO = os.environ.get("DESK_EDITION_AUTO", "false").strip().lower() in ("1", "true", "yes", "on")
+DESK_EDITION_POLL_SECONDS = 300
+
+
+def _edition_writer():
+    return ai.write_edition if ai.available().get("enabled") is True else None
+
+
+def _publish_edition(slot: str, force: bool = False, test_label: Optional[str] = None) -> Dict[str, Any]:
+    return desk_edition_mod.publish(
+        _desk_sources(), slot, writer=_edition_writer(), force=force, test_label=test_label,
+        claim=lambda key: ai_store.claim("edition", key, desk_edition_mod.MAX_ATTEMPTS,
+                                         desk_edition_mod.RETRY_SECONDS))
+
+
+async def _edition_loop() -> None:
+    await asyncio.sleep(30)
+    while True:
+        try:
+            slot = desk_edition_mod.due_slot(datetime.now(timezone.utc), session_mod)
+            if slot:
+                key = desk_edition_mod.edition_key(
+                    datetime.now(timezone.utc).astimezone(session_mod.ET).date(), slot)
+                if not desk_edition_mod.load(key):
+                    await _run(_publish_edition, slot)
+        except Exception as exc:                                # noqa: BLE001
+            logging.getLogger("uvicorn.error").warning("desk edition loop: %s", exc)
+        await asyncio.sleep(DESK_EDITION_POLL_SECONDS)
+
+
+# DoltHub's daily volatility history (app/dolthub_vol.py). Off unless
+# OPTIC_DOLTHUB is set: the data is CC BY-SA 4.0, and showing it publicly is
+# the owner's decision. A first run backfills two years in the background
+# (about a thousand small requests); after that, a few requests a day.
+DOLTHUB_SYNC_SECONDS = 6 * 3600
+
+
+async def _dolthub_loop() -> None:
+    await asyncio.sleep(60)
+    while True:
+        try:
+            res = await asyncio.to_thread(dolthub_vol_mod.sync)
+            logging.getLogger("uvicorn.error").info("dolthub sync: %s", res)
+            if res.get("pending"):
+                await asyncio.sleep(120)        # stopped on an error; try the rest soon
+                continue
+        except Exception as exc:                                # noqa: BLE001
+            logging.getLogger("uvicorn.error").warning("dolthub loop: %s", exc)
+        await asyncio.sleep(DOLTHUB_SYNC_SECONDS)
+
+
 @app.on_event("startup")
 async def _start_tracker() -> None:
     paper.init_db()
@@ -3128,6 +3743,12 @@ async def _start_tracker() -> None:
     if TRACKER_AUTO:
         # Held on the app so the reference isn't garbage-collected mid-flight.
         app.state.tracker_task = asyncio.create_task(_tracker_loop())
+    if DESK_EDITION_AUTO:
+        app.state.edition_task = asyncio.create_task(_edition_loop())
+    # OPTIC_DOLTHUB_SYNC=false reads the store without filling it (a second
+    # process beside one that already is).
+    if dolthub_vol_mod.enabled() and os.environ.get("OPTIC_DOLTHUB_SYNC", "true").strip().lower() != "false":
+        app.state.dolthub_task = asyncio.create_task(_dolthub_loop())
 
 
 @app.on_event("shutdown")
@@ -3137,7 +3758,7 @@ async def _stop_tracker() -> None:
     # "task was destroyed but it is pending" on the way out, and the feedback
     # flush sleeps fifteen times longer than that.
     for name in ("tracker_task", "warm_task", "feedback_task", "catalyst_task",
-                 "keepwarm_task"):
+                 "keepwarm_task", "edition_task", "congress_task", "analysts_task", "dolthub_task"):
         task = getattr(app.state, name, None)
         if task:
             task.cancel()
@@ -3787,6 +4408,17 @@ async def evaluate_signal(force: bool = False) -> Dict[str, Any]:
         out["universe_total"] = len(symbols)
         out["generated_at"] = datetime.now(timezone.utc).isoformat()
         _EVAL_CACHE["result"] = out
+        return out
+    return await _run(build)
+
+
+@app.get("/api/dispersion")
+async def dispersion_panel() -> Dict[str, Any]:
+    """The average stock's implied vol against the index's (Cboe VIXEQ, VIX,
+    COR1M, DSPX), with what the gap has and has not preceded."""
+    def build() -> Dict[str, Any]:
+        out = dispersion_mod.build(YF_PROVIDER)
+        out["generated_at"] = datetime.now(timezone.utc).isoformat()
         return out
     return await _run(build)
 
@@ -5426,6 +6058,59 @@ def _portfolio_summary(positions: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def _research_deps() -> "desk_research_mod.Deps":
+    from .analytics import business as business_mod
+    return desk_research_mod.Deps(
+        provider=YF_PROVIDER,
+        filings=filings_mod.recent,
+        business=lambda t: business_mod.latest(t),
+        news=lambda t: news_mod.analyse(YF_PROVIDER, t),
+        fred_series=lambda code: econ_mod.series(code, years=2),
+        events=lambda: events_mod.upcoming(earlier_today=True),
+        rate_path=_rate_path_for,
+        desk_load=desk_edition_mod.load,
+        ex_dividend=_ex_dividend,
+        session_state=lambda: session_mod.state())
+
+
+def _research_ticker(context: Optional[Dict[str, Any]]) -> Optional[str]:
+    """The company the question is about: the focus, else the one the server
+    auto-loaded, else the open ticker."""
+    ctx = context or {}
+    focus = ctx.get("focus") if isinstance(ctx.get("focus"), dict) else {}
+    if focus.get("ticker"):
+        return str(focus["ticker"]).upper()
+    auto = ctx.get("auto_loaded")
+    if isinstance(auto, dict) and auto:
+        return str(next(iter(auto))).upper()
+    t = ctx.get("ticker")
+    return str(t).upper() if isinstance(t, str) and t else None
+
+
+async def _with_research(history: List[Dict[str, Any]], context: Optional[Dict[str, Any]],
+                         horizon: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Milo's research pack (app/desk/research.py): the underlying sources the
+    question turns on, retrieved by the server and bounded in time."""
+    last = next((t for t in reversed(history or []) if t.get("role") != "assistant"), None)
+    if not last:
+        return context
+    ctx = dict(context or {})
+    sec = ctx.get("desk_section") if isinstance(ctx.get("desk_section"), dict) else None
+    try:
+        hz_id = horizon_mod.resolve(horizon, last.get("content") or "")[0]
+    except Exception:                                           # noqa: BLE001
+        hz_id = horizon
+    try:
+        pack = await _run(desk_research_mod.build, last.get("content") or "", _research_ticker(ctx),
+                          _research_deps(), horizon=hz_id, desk_section=sec)
+    except Exception as exc:                                    # noqa: BLE001
+        logging.getLogger("uvicorn.error").warning("milo research pack skipped: %s", exc)
+        return context
+    if pack.get("items") or pack.get("not_available"):
+        ctx["research"] = pack
+    return ctx
+
+
 async def _augment_chat_context(history: List[Dict[str, Any]],
                                 context: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """The reader's scope first, then what the question is about.
@@ -5528,6 +6213,9 @@ async def personas() -> Dict[str, Any]:
         # knowledge catalogue's, because the menu is now the same menu.
         "changes": ai.PERSONA_CHANGES,
         "never_changes": ai.PERSONA_NEVER_CHANGES,
+        # The horizon menu rides here rather than on an endpoint of its own:
+        # it renders in the same header, beside the same two controls.
+        "horizons": horizon_mod.catalogue(),
     }
 
 
@@ -5924,10 +6612,16 @@ async def chat(request: Request,
     # normalised rather than trusted: they come from localStorage, which the
     # reader can edit, and an unknown value has to answer with something.
     mode = knowledge_mod.normalise(payload.get("mode"))
+    # The third axis (2026-10-12): the timeframe the reader is deciding about.
+    # Normalised the same way; words in the question override it per answer.
+    horizon = horizon_mod.normalise(payload.get("horizon"))
     context = await _augment_chat_context(history, context)
+    if ((context or {}).get("focus") or {}).get("scope") != "none":
+        context = await _with_research(history, context, horizon)
     return StreamingResponse(
         ai.stream_chat(history, context=context, use_web=use_web,
-                       attachments=attachments, persona=persona, mode=mode),
+                       attachments=attachments, persona=persona, mode=mode,
+                       horizon=horizon),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

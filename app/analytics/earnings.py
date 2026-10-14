@@ -536,7 +536,7 @@ def _growth(financials: Dict[str, Any], est: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _implied_move(provider, ticker: str, spot: Optional[float], report_date: Optional[str],
-                  rate: float) -> Dict[str, Any]:
+                  rate: float, timing: Optional[str] = None) -> Dict[str, Any]:
     """What the options market charges for the earnings event.
 
     The at-the-money straddle at the first expiry after the report is the market's
@@ -556,7 +556,13 @@ def _implied_move(provider, ticker: str, spot: Optional[float], report_date: Opt
         return out
 
     stamp = pd.Timestamp(report_date)
-    after = [e for e in expiries if pd.Timestamp(e) >= stamp]
+    # An expiry on the report date itself spans the report only when the
+    # report comes before the open. After the close, or at an unknown time,
+    # that expiry stops trading first, and its straddle prices none of it.
+    if timing == "before_open":
+        after = [e for e in expiries if pd.Timestamp(e) >= stamp]
+    else:
+        after = [e for e in expiries if pd.Timestamp(e) > stamp]
     if not after:
         out["reason"] = "No listed expiry falls after the next report date."
         return out
@@ -663,7 +669,20 @@ def _event_pricing(implied: Dict[str, Any], surprise: Dict[str, Any],
     # earnings-day reaction is the right yardstick (and the market convention). A
     # month-dated straddle is mostly ordinary volatility, so it has to be measured
     # against the stock's realized move over that same holding period.
-    if dte <= 7 and event_day:
+    #
+    # Both baselines used to leave half the straddle out (2026-10-11 analysis):
+    # a straddle spanning the report prices the report AND the ordinary days
+    # around it, so comparing it with the report day alone, or with ordinary
+    # windows alone, tilts every reading toward "expensive". The baseline now
+    # adds them the way variances add: sqrt(event^2 + ordinary^2), with the
+    # ordinary part over the sessions other than the report day.
+    ordinary = _realised_move_over(hist, max(sessions - 1, 1)) if sessions > 1 else 0.0
+    if event_day and ordinary is not None:
+        baseline = float(np.sqrt(event_day ** 2 + ordinary ** 2))
+        kind = "event-plus-ordinary"
+        window = (f"the average report-day move ({surprise.get('quarters', 0)} quarters) combined "
+                  f"with a typical {max(sessions - 1, 1)}-session move over the past two years")
+    elif dte <= 7 and event_day:
         baseline, kind = event_day, "event-day"
         window = f"the single session after past reports ({surprise.get('quarters', 0)} quarters)"
     else:
@@ -680,13 +699,16 @@ def _event_pricing(implied: Dict[str, Any], surprise: Dict[str, Any],
 
     if ratio >= 1.25:
         stance = "expensive"
-        tail = "Options are carrying event premium, which favors selling structures over buying outright."
+        tail = ("Options are priced for a larger move than this comparison's history. That is a description "
+                "of the price, not an edge: studies of earnings options (Gao, Xing and Zhang 2018) found "
+                "straddles bought before reports earned positive average returns.")
     elif ratio <= 0.85:
         stance = "cheap"
-        tail = "Long premium has the edge here, if you accept the binary risk of the print."
+        tail = ("Options are priced for a smaller move than this comparison's history. A description of the "
+                "price, not a forecast of the report.")
     else:
         stance = "fair"
-        tail = "No volatility edge either way; trade the direction or stay out."
+        tail = "Options are priced about in line with this comparison's history."
 
     note = (
         f"The {dte}-day straddle prices a {imp:.1f}% move, against {baseline:.1f}% actual on average "
@@ -975,7 +997,8 @@ def analyse(provider, yf_provider, ticker: str, quote: Dict[str, Any], rate: flo
     latest = _latest_result(surprise, extended)
     revisions = _revisions(est)
     growth = _growth(financials, est)
-    implied = _implied_move(provider, ticker, spot, next_report.get("date"), rate)
+    implied = _implied_move(provider, ticker, spot, next_report.get("date"), rate,
+                            next_report.get("timing"))
     pricing = _event_pricing(implied, surprise, hist)
     # Straddle pricing is a statement about an event that hasn't happened. Once
     # the print is out it describes nothing actionable, so it's marked stale

@@ -649,7 +649,7 @@ def test_the_entry_plan_warns_about_an_unresolved_binary():
     plan = _plan([_pending("FDA sets PDUFA date for the peptide therapy")])
     joined = " ".join(plan.get("warnings") or [])
     assert "still ahead" in joined
-    assert "size it as a binary or wait" in joined
+    assert "includes the market's price for that event" in joined
 
 
 def test_the_overview_shows_pending_separately_from_resolved():

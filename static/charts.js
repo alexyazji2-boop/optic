@@ -1034,6 +1034,8 @@ function lineChart(opts) {
     // genuinely belongs on the price scale — it answers "how much traded here",
     // and the answer is only meaningful next to the level it refers to.
     volumeProfile = null,
+    // Dealer gamma by strike: [{price, value}], value signed. See below.
+    gexProfile = null,
     // Share of the plot width the profile may occupy. Kept small: it is context
     // behind the price, not a second chart competing with it.
     profileShare = 0.16,
@@ -1356,6 +1358,28 @@ function lineChart(opts) {
         x: m.l + plotW - w, y: Y(b.price) - barH / 2, width: w, height: barH,
         // The point-of-control bucket is the one worth finding at a glance.
         fill: b.poc ? C.s4 : C.ink2, opacity: b.poc ? 0.34 : 0.16,
+      }));
+    });
+  }
+  /* Dealer gamma by strike, against the LEFT edge on the price axis: the volume
+   * profile owns the right, and the two are read together. Signed, so the
+   * colour carries the sign (long gamma green, short red) and the length the
+   * size; background, like the volume profile, under the price. */
+  if (gexProfile && gexProfile.length) {
+    const gxLayer = s('g', { class: 'gex-profile', 'data-fade': animating ? DRAW_MS * 0.4 : null });
+    root.appendChild(clipped(gxLayer));
+    const maxAbs = Math.max(...gexProfile.map((b) => Math.abs(b.value) || 0), 1);
+    const maxW = plotW * 0.18;
+    const prices = gexProfile.map((b) => b.price).filter(isFinite).sort((a, b) => a - b);
+    const gaps = prices.slice(1).map((v, i) => v - prices[i]).filter((d) => d > 0);
+    const step = gaps.length ? Math.min(...gaps) : (hi - lo) / 20;
+    const barH = Math.max(1, Math.min(10, Math.abs(Y(lo) - Y(lo + step)) - 1));
+    gexProfile.forEach((b) => {
+      if (!isFinite(b.price) || !isFinite(b.value) || b.price < lo || b.price > hi) return;
+      const w = Math.max(1, (Math.abs(b.value) / maxAbs) * maxW);
+      gxLayer.appendChild(s('rect', {
+        x: m.l, y: Y(b.price) - barH / 2, width: w, height: barH,
+        fill: b.value > 0 ? C.pos : C.neg, opacity: 0.34,
       }));
     });
   }

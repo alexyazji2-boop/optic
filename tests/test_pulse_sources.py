@@ -60,7 +60,18 @@ def test_a_known_tag_becomes_a_chip_and_an_unknown_one_vanishes():
 def test_every_source_is_a_key_the_terminal_sends_and_a_view_it_has():
     keys = re.findall(r"^  ([a-z_]+): \['", APP[APP.index("const PULSE_SOURCES = {"):APP.index("const PULSE_SRC_RE")], re.M)
     payload = _fn("function chatContextPayload() {")
+    # Two are added by the server for the question rather than sent by the
+    # browser (main._augment_chat_context): the paper-book summary and the
+    # market block. Asserted there instead.
+    # The research pack (app/desk/research.py) is the third, retrieved for the
+    # question in main._with_research.
+    server_added = {"portfolio_summary": 'out["portfolio_summary"]', "market": 'out["market"] = market',
+                    "research": 'ctx["research"] = pack'}
+    main_src = open("app/main.py", encoding="utf-8").read()
     for key in keys:
+        if key in server_added:
+            assert server_added[key] in main_src, key
+            continue
         assert ("ctx.%s = " % key) in payload, key
     views = set(re.findall(r"\['[^']+', '([a-z]+)'\]", APP[APP.index("const PULSE_SOURCES = {"):APP.index("const PULSE_SRC_RE")]))
     for view in views:

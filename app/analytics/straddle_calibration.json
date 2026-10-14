@@ -1,0 +1,148 @@
+{
+ "built": "2026-10-14",
+ "source": "Derived from DoltHub post-no-preference/options option_chain, CC BY-SA 4.0",
+ "source_url": "https://www.dolthub.com/repositories/post-no-preference/options",
+ "method": "Each Monday: the first expiry 21 to 50 days out, the strike nearest the close, the straddle's mid as a share of the price, against the absolute move to that expiry's close. Mean ratio of realised to implied with a 95% interval on a quarter of the samples (they overlap).",
+ "symbols": {
+  "AAPL": {
+   "n": 100,
+   "from": "2024-10-07",
+   "to": "2026-08-31",
+   "mean_ratio": 1.179,
+   "ci95": [
+    0.897,
+    1.462
+   ],
+   "median_ratio": 1.04,
+   "exceed_pct": 56.0,
+   "implied_median_pct": 5.56,
+   "days_median": 25
+  },
+  "AMZN": {
+   "n": 99,
+   "from": "2024-10-07",
+   "to": "2026-08-31",
+   "mean_ratio": 0.975,
+   "ci95": [
+    0.688,
+    1.261
+   ],
+   "median_ratio": 0.897,
+   "exceed_pct": 45.5,
+   "implied_median_pct": 6.82,
+   "days_median": 25
+  },
+  "JPM": {
+   "n": 99,
+   "from": "2024-10-07",
+   "to": "2026-08-31",
+   "mean_ratio": 0.946,
+   "ci95": [
+    0.673,
+    1.22
+   ],
+   "median_ratio": 0.848,
+   "exceed_pct": 42.4,
+   "implied_median_pct": 5.1,
+   "days_median": 25
+  },
+  "KO": {
+   "n": 100,
+   "from": "2024-10-07",
+   "to": "2026-08-31",
+   "mean_ratio": 0.917,
+   "ci95": [
+    0.592,
+    1.242
+   ],
+   "median_ratio": 0.692,
+   "exceed_pct": 35.0,
+   "implied_median_pct": 3.93,
+   "days_median": 25
+  },
+  "META": {
+   "n": 100,
+   "from": "2024-10-07",
+   "to": "2026-08-31",
+   "mean_ratio": 1.014,
+   "ci95": [
+    0.721,
+    1.307
+   ],
+   "median_ratio": 0.915,
+   "exceed_pct": 43.0,
+   "implied_median_pct": 7.32,
+   "days_median": 25
+  },
+  "NVDA": {
+   "n": 99,
+   "from": "2024-10-07",
+   "to": "2026-08-31",
+   "mean_ratio": 0.799,
+   "ci95": [
+    0.532,
+    1.067
+   ],
+   "median_ratio": 0.63,
+   "exceed_pct": 31.3,
+   "implied_median_pct": 9.04,
+   "days_median": 25
+  },
+  "PLTR": {
+   "n": 99,
+   "from": "2024-10-07",
+   "to": "2026-08-31",
+   "mean_ratio": 1.069,
+   "ci95": [
+    0.701,
+    1.437
+   ],
+   "median_ratio": 0.864,
+   "exceed_pct": 42.4,
+   "implied_median_pct": 12.04,
+   "days_median": 25
+  },
+  "SPY": {
+   "n": 99,
+   "from": "2024-10-07",
+   "to": "2026-08-31",
+   "mean_ratio": 0.808,
+   "ci95": [
+    0.554,
+    1.061
+   ],
+   "median_ratio": 0.712,
+   "exceed_pct": 39.4,
+   "implied_median_pct": 3.15,
+   "days_median": 25
+  },
+  "TSLA": {
+   "n": 100,
+   "from": "2024-10-07",
+   "to": "2026-08-31",
+   "mean_ratio": 1.031,
+   "ci95": [
+    0.676,
+    1.386
+   ],
+   "median_ratio": 0.797,
+   "exceed_pct": 42.0,
+   "implied_median_pct": 11.19,
+   "days_median": 25
+  },
+  "XOM": {
+   "n": 99,
+   "from": "2024-10-07",
+   "to": "2026-08-31",
+   "mean_ratio": 0.944,
+   "ci95": [
+    0.626,
+    1.263
+   ],
+   "median_ratio": 0.832,
+   "exceed_pct": 40.4,
+   "implied_median_pct": 5.13,
+   "days_median": 25
+  }
+ }
+}

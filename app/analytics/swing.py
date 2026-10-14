@@ -294,6 +294,27 @@ def _for_one(idea: Dict[str, Any], budget: Optional[float]) -> Dict[str, Any]:
             return None
         return _f(float(value) * 100.0, 0)
 
+    # What crossing every leg's spread costs: buy at the ask, sell at the bid,
+    # for one set of legs. Ideas are priced at the mid, which is an estimate;
+    # retail-favoured short-dated options average about a 12.6% quoted spread
+    # (Bryzgalova, Pavlova & Sikorskaya 2023), so the gap is part of the idea.
+    natural = 0.0
+    priced = True
+    for leg in idea.get("legs") or []:
+        bid, ask = leg.get("bid"), leg.get("ask")
+        if not isinstance(bid, (int, float)) or not isinstance(ask, (int, float)) or ask <= 0:
+            priced = False
+            break
+        natural += ask if leg.get("action") == "BUY" else -bid
+    idea["natural_for_one"] = _f(natural * 100.0, 0) if priced and idea.get("legs") else None
+    if idea["natural_for_one"] is not None:
+        mid_cash = abs(float(idea.get("net_debit") or idea.get("net_credit") or 0)) * 100
+        paid = ("${:,.0f} paid".format(natural * 100) if natural >= 0
+                else "${:,.0f} received".format(-natural * 100))
+        idea["natural_note"] = ("{} at the natural price (each leg's ask if bought, bid if sold), "
+                                "against ${:,.0f} at the mid.".format(paid, mid_cash))
+    else:
+        idea["natural_note"] = None
     idea["cost_for_one"] = dollars(idea.get("net_debit"))
     idea["credit_for_one"] = dollars(idea.get("net_credit"))
     idea["risk_for_one"] = dollars(idea.get("max_loss"))

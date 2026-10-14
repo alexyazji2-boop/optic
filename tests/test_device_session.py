@@ -496,13 +496,17 @@ SETTINGS = {
     "optic.notices.dismissed", "optic.session.desc", "optic.session.detail.v1",
     "optic.chat.width.v1", "optic.chat.width.v2",
     "optic.knowledge.v1", "optic.knowledge.asked.v1", "optic.knowledge.basic.v1", "optic.pulse.persona.v1",
+    # The timeframe Milo answers for: a preference like the level and the lens.
+    "optic.milo.horizon.v1",
+    # The Options tab's research filters and cost assumptions: tool settings.
+    "optic.options.filters.v1",
     "optic.indicators.v2", "optic.ws.panes", "optic.chart.backtest.v1", "optic.chart.pairs.v1",
     "optic.lt.mode", "optic.lt.range", "optic.lt.interval",
     "optic.chart.style.v1", "optic.chart.colors.v1", "optic.chart.mode", "optic.chart.range",
     "optic.chart.interval", "optic.chart.session", "optic.chart.hidden.v1",
     "optic.chart.legend.v1", "optic.chart.dock.v1", "optic.chart.sessions.v1",
     "optic.chart.stages.v1", "optic.chart.matrend.v1", "optic.chart.trends.v1", "optic.chart.earnmarks.v1",
-    "optic.chart.accum.v1", "optic.chart.cloud921.v1", "optic.chart.cloud2150.v1",
+    "optic.chart.accum.v1", "optic.chart.gex.v1", "optic.chart.cloud921.v1", "optic.chart.cloud2150.v1",
     "optic.chart.zones.v2", "optic.chart.vol.v2", "optic.chart.vbp.v2", "optic.chart.sr.v2",
     "optic.chart.ma.v2", "optic.chart.ema.v2", "optic.chart.fib.v2", "optic.chart.insiders.v2",
     # Whether drawing points snap to a candle's O/H/L/C. A preference about the
