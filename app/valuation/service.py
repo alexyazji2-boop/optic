@@ -55,7 +55,7 @@ def gathered(provider, ticker: str, force: bool = False) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 LIMITS = {
-    "growth.y1": (-0.6, 2.0), "growth.y2": (-0.6, 2.0),
+    "growth.y1": (-0.6, 2.0), "growth.y2": (-0.6, 2.0), "growth.fade_years": (1, 15),
     "margin.start": (-2.0, 0.95), "margin.target": (-1.0, 0.95), "margin.years": (1, 15),
     "capex_pct.start": (0.0, 1.5), "capex_pct.target": (0.0, 1.5), "capex_pct.years": (1, 15),
     "dep_rate": (0.0, 1.0), "da_pct": (0.0, 1.0), "nwc_pct": (-1.0, 1.0),
@@ -136,12 +136,14 @@ LABELS = {
     "dep_rate": "Depreciation rate", "da_pct": "D&A share of revenue", "nwc_pct": "Working capital share",
     "tax.start": "Tax rate, first year", "tax.terminal": "Long-run tax rate", "tax.years": "Years to the long-run tax rate",
     "terminal.growth": "Growth after the forecast", "terminal.ronic": "Return on new capital",
+    "growth.fade_years": "Years for growth to fade",
     "exit_multiple": "Exit multiple", "horizon": "Forecast years", "wacc.risk_free": "Risk-free rate",
     "wacc.beta_raw": "Beta", "wacc.erp": "Equity risk premium", "wacc.extra_premium": "Extra premium",
     "wacc.pre_tax_cost_debt": "Pre-tax cost of debt", "wacc.marginal_tax": "Tax rate for the interest shield",
     "wacc.override": "Discount rate", "wacc.debt_weight": "Debt weight",
 }
-PLAIN_NUMBERS = {"margin.years", "capex_pct.years", "tax.years", "horizon", "exit_multiple", "wacc.beta_raw"}
+PLAIN_NUMBERS = {"margin.years", "capex_pct.years", "tax.years", "horizon", "exit_multiple", "wacc.beta_raw",
+                 "growth.fade_years"}
 
 
 def _bounds(key: str, lo: float, hi: float) -> str:
@@ -189,13 +191,13 @@ def merge(default_drivers: Dict[str, Any], default_wacc: Dict[str, Any],
             if head not in d_in:
                 continue
             raw = d_in[head]
-        if raw is None and key in ("growth.y2", "exit_multiple", "da_pct", "dep_rate", "tax.years"):
+        if raw is None and key in ("growth.y2", "growth.fade_years", "exit_multiple", "da_pct", "dep_rate", "tax.years"):
             val = None
         else:
             val = _check(key, raw, errors)
             if val is None:
                 continue
-        if key in ("horizon", "margin.years", "capex_pct.years", "tax.years") and val is not None:
+        if key in ("horizon", "margin.years", "capex_pct.years", "tax.years", "growth.fade_years") and val is not None:
             val = int(round(val))
         before = drivers[head].get(tail) if tail else drivers.get(head)
         if tail:
@@ -297,7 +299,8 @@ def ddm_model(data: Dict[str, Any], drivers: Dict[str, Any], ke: float, fit: Dic
     if not df["has_dividend"]:
         return {"available": False, "fit": fit, "reason": "No dividend to discount."}
     g_path = engine.growth_path(drivers["growth"]["y1"], drivers["terminal"]["growth"],
-                                int(drivers["horizon"]), drivers["growth"].get("y2"))
+                                int(drivers["horizon"]), drivers["growth"].get("y2"),
+                                drivers["growth"].get("fade_years"))
     g1 = mean(g_path[:5])
     roe = _hist_avg(data["history"], "roe", 3, -1.0, 2.0)
     sustainable = roe * (1 - df["payout_ratio"]) if (roe is not None and df["payout_ratio"] is not None

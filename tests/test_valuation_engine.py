@@ -431,3 +431,17 @@ def test_incremental_return_measures_what_new_capital_earns():
     assert inc < 0.045
     assert any(c["code"] == "low_incremental_return" for c in r["checks"])
     assert engine.incremental_return(engine.run_dcf(base_case(), drivers_case(), 0.09)["rows"]) is None
+
+
+def test_growth_can_fade_faster_than_the_forecast():
+    p = engine.growth_path(0.60, 0.02, 10, None, 6)
+    assert p[0] == approx(0.60) and p[5] == approx(0.60 + (0.02 - 0.60) * 5 / 6)
+    assert p[6:] == approx([0.02] * 4)
+    assert engine.growth_path(0.2, 0.02, 4) == engine.growth_path(0.2, 0.02, 4, None, None)
+
+
+def test_revenue_multiplying_is_flagged():
+    d = drivers_case(g=0.03, n=10)
+    d["growth"]["y1"] = 0.6
+    r = engine.run_dcf(base_case(), d, 0.12)
+    assert any(c["code"] == "revenue_multiplies" for c in r["checks"])

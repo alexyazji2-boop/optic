@@ -34,6 +34,7 @@ MARGINAL_TAX_WHY = ("US federal statutory 21% plus roughly 4% state tax, the rat
 TERMINAL_GROWTH = 0.025
 UNPROFITABLE_TARGET_MARGIN = 0.08
 UNPROFITABLE_TARGET_CAPEX = 0.08
+HIGH_GROWTH, HIGH_GROWTH_FADE = 0.25, 6
 BLUME = (0.67, 0.33)
 HORIZON = 10
 
@@ -226,9 +227,16 @@ def default_drivers(data: Dict[str, Any], base: Dict[str, Any], kind: str,
     else:
         g1, g2 = g_term, None
         note("growth.y1", g1, "assumption", "Too little history to measure growth, so the long-run rate.")
-    note("growth.fade", None, "assumption", "Growth then falls in equal steps to the terminal rate, "
-         "because high growth rarely lasts and a forecast that ends at a high rate inflates the "
-         "terminal value.")
+    fade_years = HIGH_GROWTH_FADE if g1 > HIGH_GROWTH else None
+    if fade_years:
+        note("growth.fade_years", fade_years, "assumption", "Starting growth above {:.0%} fades to the long-run "
+             "rate by year {}, not over the whole forecast: very high growth rarely persists more than a few "
+             "years (Chan, Karceski and Lakonishok, 'The Level and Persistence of Growth Rates', Journal of "
+             "Finance, 2003).".format(HIGH_GROWTH, fade_years + 1))
+    else:
+        note("growth.fade_years", None, "assumption", "Growth then falls in equal steps to the terminal rate over "
+             "the forecast, because high growth rarely lasts and a forecast that ends at a high rate inflates "
+             "the terminal value.")
 
     margins = [x.get("ebit_margin") for x in d]
     m0 = margins[0] if margins and margins[0] is not None else None
@@ -342,7 +350,7 @@ def default_drivers(data: Dict[str, Any], base: Dict[str, Any], kind: str,
 
     drivers = {
         "horizon": HORIZON, "convention": "mid_year",
-        "growth": {"y1": g1, "y2": g2},
+        "growth": {"y1": g1, "y2": g2, "fade_years": fade_years},
         "margin": {"start": m_start, "target": m_target, "years": m_years},
         "capex_pct": {"start": c0, "target": c_target, "years": c_years},
         "dep_rate": dep, "da_pct": None if dep is not None else base.get("da_pct"),

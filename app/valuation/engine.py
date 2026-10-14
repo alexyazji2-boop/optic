@@ -83,17 +83,23 @@ def linear_path(start: float, target: float, n: int, reach: Optional[int] = None
     return out
 
 
-def growth_path(g1: float, g_terminal: float, n: int, g2: Optional[float] = None) -> List[float]:
+def growth_path(g1: float, g_terminal: float, n: int, g2: Optional[float] = None,
+                fade_years: Optional[int] = None) -> List[float]:
     """Revenue growth by year: g1 in year 1 (and g2 in year 2 when given),
-    then equal steps toward the terminal growth rate, which the year *after*
-    the forecast reaches. So the last forecast year still sits a step above
-    terminal growth rather than jumping to it."""
-    if g2 is None or n < 2:
-        return [g1 + (g_terminal - g1) * (t - 1) / n for t in range(1, n + 1)]
+    then equal steps toward the terminal growth rate, reached in the year
+    after `fade_years` (default: the year after the forecast, so the last
+    forecast year still sits a step above terminal growth rather than
+    jumping to it). Years after the fade grow at the terminal rate."""
+    k = n if fade_years is None else max(1, min(int(fade_years), n))
+    out: List[float] = []
+    if g2 is None or k < 2:
+        for t in range(1, n + 1):
+            out.append(g1 + (g_terminal - g1) * (t - 1) / k if t <= k else g_terminal)
+        return out
     out = [g1, g2]
-    steps = n - 1
+    steps = k - 1
     for t in range(3, n + 1):
-        out.append(g2 + (g_terminal - g2) * (t - 2) / steps)
+        out.append(g2 + (g_terminal - g2) * (t - 2) / steps if t <= k else g_terminal)
     return out[:n]
 
 
@@ -224,7 +230,7 @@ def expand_drivers(drivers: Dict[str, Any]) -> Dict[str, List[float]]:
     tx = drivers["tax"]
     ov = drivers.get("overrides") or {}
     paths = {
-        "revenue_growth": growth_path(g["y1"], t["growth"], n, g.get("y2")),
+        "revenue_growth": growth_path(g["y1"], t["growth"], n, g.get("y2"), g.get("fade_years")),
         "ebit_margin": linear_path(m["start"], m["target"], n, m.get("years")),
         "capex_pct": linear_path(c["start"], c["target"], n, c.get("years")),
         "tax_rate": linear_path(tx["start"], tx["terminal"], n, tx.get("years")),
@@ -573,6 +579,11 @@ def checks(base: Dict[str, Any], drivers: Dict[str, Any], rate: float, rows: Lis
         add("warn", "low_incremental_return", "The forecast's new investment earns {:.1%} a year (extra operating "
             "profit by the last year, over the capital put in), against a {:.1%} cost of capital. {} Check that "
             "the capex, margin and growth assumptions describe the same plan.".format(inc, rate, why))
+    multiple = rows[-1]["revenue"] / float(base["revenue"]) if base.get("revenue") else None
+    if multiple and multiple > 5.0:
+        add("warn", "revenue_multiplies", "Revenue grows {:.1f}x over the forecast. Very high growth rarely lasts "
+            "more than a few years, and the value depends heavily on it; check the growth path and how long "
+            "it takes to fade.".format(multiple))
     if any(r["capex"] < r["da"] * 0.8 for r in rows[-3:]) and g > 0:
         add("warn", "capex_below_da", "Capex runs well below depreciation in the last forecast years "
             "while revenue still grows: the asset base is shrinking under a growing business.")

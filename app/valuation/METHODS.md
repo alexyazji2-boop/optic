@@ -135,7 +135,12 @@ kind.
 
 * **Growth:** analysts' average revenue estimates for the current and next
   fiscal years (Yahoo), used only when their base year matches the filings'
-  FY0 within 3%. Otherwise the three-year revenue CAGR. Fades to terminal.
+  FY0 within 3%. Otherwise the three-year revenue CAGR. Fades in equal steps
+  to the terminal rate over the forecast; when starting growth is above 25%,
+  by year 7 instead (Chan, Karceski and Lakonishok, "The Level and
+  Persistence of Growth Rates", *Journal of Finance*, 2003: very high growth
+  rarely persists). The fade length is editable. Revenue rising more than
+  5x over the forecast is flagged.
 * **Terminal growth:** 2.5%, kept at least 0.5 points below the risk-free rate.
 * **Margin:** starts at FY0's EBIT margin and reverts to the three-year average
   over five years. For cyclicals, halfway between FY0 and the five-year

@@ -135,6 +135,7 @@
   const FIELDS = [
     { group: 'Growth', key: 'growth.y1', label: 'Revenue growth, first year', unit: '%', why: 'growth.y1' },
     { group: 'Growth', key: 'growth.y2', label: 'Revenue growth, second year', unit: '%', why: 'growth.y2', blank: 'fades from year 1' },
+    { group: 'Growth', key: 'growth.fade_years', label: 'Years for growth to fade to the long run', unit: 'yrs', step: 1, why: 'growth.fade_years', blank: 'the whole forecast' },
     { group: 'Growth', key: 'terminal.growth', label: 'Growth after the forecast, forever', unit: '%', why: 'terminal.growth' },
     { group: 'Growth', key: 'horizon', label: 'Forecast years', unit: 'yrs', step: 1 },
     { group: 'Profitability', key: 'margin.start', label: 'Operating margin, first year', unit: '%', why: 'margin.start' },
