@@ -1,0 +1,30 @@
+{
+ "Q1": {
+  "A": "before",
+  "B": "after"
+ },
+ "Q2": {
+  "A": "after",
+  "B": "before"
+ },
+ "Q3": {
+  "A": "before",
+  "B": "after"
+ },
+ "Q4": {
+  "A": "before",
+  "B": "after"
+ },
+ "Q5": {
+  "A": "before",
+  "B": "after"
+ },
+ "Q6": {
+  "A": "after",
+  "B": "before"
+ },
+ "Q7": {
+  "A": "after",
+  "B": "before"
+ }
+}
