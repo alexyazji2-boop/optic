@@ -371,6 +371,9 @@ def test_the_read_page_and_home_carry_the_edition():
 
 def test_milo_picks_evidence_by_the_kind_of_question():
     assert research.intent("Is Micron a good long-term investment at this price?", None, "MU") == "long_term"
+    # The first comparison's misroute: "today's price" is not a day trade.
+    assert research.intent("Is Micron a good long-term investment at today's price?", "long", "MU") == "long_term"
+    assert research.intent("Is NVDA worth day trading tomorrow?", "day", "NVDA") == "day_trade"
     assert research.intent("What should I watch in JPM's earnings on Tuesday?", None, "JPM") == "pre_earnings"
     assert research.intent("Is NVDA worth trading intraday right now?", None, "NVDA") == "day_trade"
     assert research.intent("Does the AAPL setup hold for a swing?", None, "AAPL") == "swing"

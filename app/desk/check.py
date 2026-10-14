@@ -354,9 +354,12 @@ def run(edition: Dict[str, Any], bundle: Dict[str, Any], outline: Dict[str, Any]
                     path, macro[0]["id"], month.title(), ", ".join(n.title() for n in named)))
 
     lo, hi = outline.get("target_words") or [700, 1100]
-    if words > 1300:
-        errors.append("length: {} words, over 1,300".format(words))
-    elif words > hi * 1.15:
+    # "Roughly 700 to 1,100": a hundred words of give, then the draft is
+    # sent back. The first written sample ran to 1,263 and passed a 15% margin.
+    if words > hi + 100:
+        errors.append("length: {} words, over the {} to {} target; cut to {} or fewer without losing a section's "
+                      "point".format(words, lo, hi, hi))
+    elif words > hi:
         warnings.append("length: {} words, above the {} to {} target".format(words, lo, hi))
     if words < lo * 0.6:
         warnings.append("length: {} words, short for the day".format(words))

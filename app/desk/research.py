@@ -45,7 +45,9 @@ log = logging.getLogger(__name__)
 TIME_BUDGET_SECONDS = 8.0
 
 _EARN = re.compile(r"\b(earnings|report(s|ing)?|results|guidance|quarter|eps|beat|miss|whisper|ahead of (the )?print)\b", re.I)
-_DAY = re.compile(r"\b(day ?trad\w*|intraday|scalp\w*|today|this morning|right now|at the open|vwap|0 ?dte|premarket|pre-market)\b", re.I)
+# "today" alone is not a day trade: "a good long-term investment at today's
+# price" was routed to intraday data in the first comparison (2026-10-13).
+_DAY = re.compile(r"\b(day ?trad\w*|intraday|scalp\w*|at the open|into the close|vwap|0 ?dte|premarket|pre-market)\b", re.I)
 _SWING = re.compile(r"\b(swing|next (few|couple of) weeks|setup|entry|stop|breakout|pullback|support|resistance|invalidat\w*)\b", re.I)
 _LONG = re.compile(r"\b(long[- ]term|invest\w*|hold(ing)? (it|for)|valuation|moat|business|years|fundamental\w*|dividend|"
                    r"undervalued|overvalued|cheap|expensive|quality|balance sheet|free cash|cash flow|capex|dilution|margin\w*)\b", re.I)
@@ -61,12 +63,14 @@ def intent(question: str, horizon: Optional[str] = None, ticker: Optional[str] =
         return "desk"
     if ticker and _EARN.search(q):
         return "pre_earnings"
+    explicit_long = re.search(r"\b(long[- ]term|for years|invest(ing|ment)?|retire\w*)\b", q, re.I)
+    if explicit_long and not _DAY.search(q):
+        return "long_term" if ticker else "macro"
     if horizon == "day" or _DAY.search(q):
         return "day_trade" if ticker else "macro" if _MACRO.search(q) else "day_trade"
-    # Swing words before long-term ones: "does the setup hold for a swing"
-    # says "hold for", and is not a question about owning the business.
-    explicit_long = re.search(r"\b(long[- ]term|for years|invest(ing|ment)?|retire\w*)\b", q, re.I)
-    if horizon == "swing" or (_SWING.search(q) and not explicit_long):
+    # Swing words before the looser long-term ones: "does the setup hold for a
+    # swing" says "hold for", and is not a question about owning the business.
+    if horizon == "swing" or _SWING.search(q):
         return "swing"
     if horizon == "long" or _LONG.search(q):
         return "long_term" if ticker else "macro"
