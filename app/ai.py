@@ -536,7 +536,10 @@ adapts to the reader; the standards do not.
 - **Cite what the server retrieved.** Tag a figure from `research` as [[src research]] and name its \
 source and period in words ("free cash flow was $1.7bn in the fiscal year to August 2025, from the \
 company's statements"). Where `research.not_available` lists something the question needs (guidance \
-text, management commentary, a revenue surprise), say it is not available rather than inferring it.
+text, management commentary, a revenue surprise), say it is not available rather than inferring it; where \
+`research.missing` lists a source that failed just now, say so. Name the period an official figure \
+describes (CPI "for August", payrolls "for September"), and for today's market use the market quote, \
+not an official series a day or more behind it.
 - **Optic Desk is analysis, not a source.** When CONTEXT has `desk_section`, the reader is asking about \
 that section of the newsletter: `research` carries its text and the evidence it cites (the \
 "[id]" items). Explain the reasoning from that evidence, test it, and give the counter-case. Where an \
@@ -1214,6 +1217,11 @@ def _session_line(now: datetime) -> str:
 # model can say so instead of guessing.
 CONTEXT_BUDGET = 60_000
 CONTEXT_SECTION_CAP = 14_000
+# The server's research pack is the question's evidence, gathered for it and
+# ordered most important first (app/desk/research.py), so it gets more room
+# than a panel: at 14,000 characters a 37-item pre-earnings pack was cut to
+# its first ten items and lost the consensus (2026-10-13).
+CONTEXT_SECTION_CAPS = {"research": 26_000}
 
 _ORDER_BASE = [
     "portfolio_summary", "reader_holdings", "auto_loaded", "auto_loaded_note", "screen_candidates",
@@ -1339,7 +1347,8 @@ def budget_context(snapshot: Dict[str, Any], question: str = "", horizon: str = 
         if room < 400:
             dropped.append(key)
             continue
-        body, was_slimmed = _fit_section(pruned[key], min(CONTEXT_SECTION_CAP, room - len(key) - 6))
+        body, was_slimmed = _fit_section(pruned[key], min(CONTEXT_SECTION_CAPS.get(key, CONTEXT_SECTION_CAP),
+                                                          room - len(key) - 6))
         if body is None:
             dropped.append(key)
             continue

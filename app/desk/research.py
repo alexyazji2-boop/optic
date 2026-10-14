@@ -81,7 +81,7 @@ def intent(question: str, horizon: Optional[str] = None, ticker: Optional[str] =
 
 @dataclass
 class Deps:
-    provider: Any
+    provider: Any  # quote, batch_quote, financials, earnings_calendar, estimates, earnings_history, ...
     sec_history: Optional[Callable[[str], Dict[str, Any]]] = None
     filings: Optional[Callable[[str], Dict[str, Any]]] = None
     business: Optional[Callable[[str], Optional[Dict[str, Any]]]] = None
@@ -104,7 +104,26 @@ def _f(x: Any, d: int = 2) -> Optional[float]:
 
 
 class Pack:
+    """Items in the plan's order, most important first. Each step writes to its
+    own list (`step`), merged in plan order at the end, because the steps run in
+    parallel and finish in any order: completion order put a pre-earnings
+    pack's consensus last, where the context budget cut it."""
+
+    def step(self, name: str) -> "Pack":
+        sub = Pack(self.kind, self.ticker)
+        sub.missing, sub.not_available = self.missing, self.not_available
+        self._steps.append((name, sub))
+        return sub
+
+    def merged(self) -> None:
+        for _, sub in self._steps:
+            self.items.extend(sub.items)
+        for i, it in enumerate(self.items):
+            it["id"] = "R{}".format(i + 1)
+        self._steps = []
+
     def __init__(self, kind: str, ticker: Optional[str]) -> None:
+        self._steps: List[Any] = []
         self.kind, self.ticker = kind, ticker
         self.items: List[Dict[str, Any]] = []
         self.missing: List[str] = []
@@ -311,11 +330,18 @@ def earnings(p: Pack, d: Deps, t: str) -> None:
     cal = d.provider.earnings_calendar(t) or {}
     src = "Yahoo Finance earnings calendar and estimates"
     url = "https://finance.yahoo.com/quote/{}/analysis".format(t)
-    if cal.get("date") or cal.get("earnings_date"):
-        p.add("Next report", text=str(cal.get("date") or cal.get("earnings_date")), source=src, url=url,
-              group="expectations")
+    # The free feed answers {} when it is throttled (HTTP 401 on 2026-10-13),
+    # and that was dropped without a word: Milo answered a pre-earnings
+    # question with no consensus and no record of why.
+    if not cal.get("eps_avg") and not cal.get("dates"):
+        p.missing.append("earnings calendar (the feed returned nothing just now)")
+    when = (cal.get("dates") or [None])[0] or cal.get("date")
+    if when:
+        p.add("Next report", text="{}{}".format(when, " (confirmed)" if cal.get("confirmed") else ""), source=src,
+              url=url, group="expectations")
     for label, key, unit in (("Consensus EPS", "eps_avg", "$"), ("Consensus EPS, low", "eps_low", "$"),
-                             ("Consensus EPS, high", "eps_high", "$"), ("Consensus revenue", "revenue_avg", "$bn")):
+                             ("Consensus EPS, high", "eps_high", "$"), ("Consensus revenue", "revenue_avg", "$bn"),
+                             ("Consensus revenue, low", "revenue_low", "$bn"), ("Consensus revenue, high", "revenue_high", "$bn")):
         v = cal.get(key)
         if v is None:
             continue
@@ -331,6 +357,8 @@ def earnings(p: Pack, d: Deps, t: str) -> None:
               period="estimate revisions over 90 days", source=src, url=url, group="expectations",
               text="Rising estimates into a report raise the bar the result has to clear.")
     hist = d.provider.earnings_history(t) or []
+    if not hist:
+        p.missing.append("earnings history (the feed returned nothing just now)")
     for h in hist[:4]:
         if h.get("eps_reported") is None:
             continue
@@ -452,6 +480,32 @@ def macro(p: Pack, d: Deps) -> None:
              ("PCEPILFE", "Core PCE inflation, year over year"), ("UNRATE", "Unemployment rate"),
              ("PAYEMS", "Payrolls, change on the month"), ("ICSA", "Initial jobless claims"),
              ("BAMLH0A0HYM2", "High-yield credit spread")]
+    # The market's own quotes first: FRED's daily yields arrive a day or more
+    # late (DGS10 was dated 9 October on the evening of the 13th), and the
+    # first comparison's CPI answer leaned on that stale 10-year figure.
+    live = {"^TNX": ("10-year Treasury yield (market quote)", "bp"), "^FVX": ("5-year Treasury yield (market quote)", "bp"),
+            "^IRX": ("13-week bill yield (market quote)", "bp"), "DX-Y.NYB": ("US dollar index", "%"),
+            "CL=F": ("WTI crude oil", "%"), "^VIX": ("VIX", "pts"), "QQQ": ("Nasdaq 100 fund (QQQ)", "%"),
+            "SPY": ("S&P 500 fund (SPY)", "%")}
+    try:
+        qs = d.provider.batch_quote(list(live)) or {}
+    except Exception:                                              # noqa: BLE001
+        qs = {}
+        p.missing.append("market quotes")
+    for sym, (label, kind) in live.items():
+        q = qs.get(sym) or {}
+        last, prev = q.get("last"), q.get("prev_close")
+        if last is None or prev is None:
+            continue
+        if kind == "bp":
+            ch, unit = _f((last - prev) * 100, 1), "bp"
+        elif kind == "pts":
+            ch, unit = _f(last - prev, 2), "pts"
+        else:
+            ch, unit = _f((last / prev - 1) * 100, 2) if prev else None, "%"
+        p.add(label, _f(last, 3), unit="%" if kind == "bp" else "", period="latest quote; change {:+} {} from the previous close".format(
+            ch, unit), as_of=q.get("as_of"), source="Yahoo Finance quote for {}".format(sym),
+              url="https://finance.yahoo.com/quote/{}".format(sym), group="market")
     if not d.fred_series:
         return
     for code, label in codes:
@@ -463,7 +517,8 @@ def macro(p: Pack, d: Deps) -> None:
         v = latest["value"] / 1000 if (s.get("unit") == "k" and abs(latest["value"]) >= 10000) else latest["value"]
         p.add(label, _f(v, 3), unit=s.get("unit") or "", period=str(latest.get("date")),
               source="FRED (St. Louis Fed): {}".format(code), url="https://fred.stlouisfed.org/series/{}".format(code),
-              group="macro")
+              group="macro", text="Official series; the period is the observation date{}.".format(
+                  ", a day or more behind the market quote" if code in ("DGS2", "DGS10", "T10Y2Y", "DFF") else ""))
     if d.rate_path and d.events:
         r = d.rate_path(d.events() or {}) or {}
         if r.get("available"):
@@ -508,9 +563,13 @@ def desk(p: Pack, d: Deps, sec: Dict[str, Any]) -> None:
         if q.get("last") and q.get("prev_close"):
             text = (text + " Now: {:+.2f}% on the day as of {}.".format((q["last"] / q["prev_close"] - 1) * 100,
                                                                          q.get("as_of"))).strip()
+        figures = {k: v for k, v in (e.get("detail") or {}).items()
+                   if isinstance(v, (int, float)) and not isinstance(v, bool)}
+        if figures:
+            text = (text + " Figures: " + ", ".join("{} {}".format(k, v) for k, v in list(figures.items())[:10]) + ".").strip()
         p.add("[{}] {}".format(c, e.get("label")), e.get("value"), unit=e.get("unit") or "", period=e.get("period") or "",
               source=e.get("source") or "", url=e.get("url"), as_of=e.get("published_at") or e.get("as_of"),
-              text=text[:400], group="desk evidence")
+              text=text[:600], group="desk evidence")
 
 
 # --------------------------------------------------------------- the pack
@@ -531,37 +590,48 @@ def build(question: str, ticker: Optional[str], deps: Deps, *, horizon: Optional
     p = Pack(k, ticker)
     t = (ticker or "").upper() or None
     jobs: Dict[str, Callable[[], None]] = {}
+    root = p
     for step in PLANS.get(k, []):
+        p = root.step(step)
         if step == "fundamentals" and t:
-            jobs[step] = lambda: fundamentals(p, deps, t)
+            jobs[step] = lambda p=p: fundamentals(p, deps, t)
         elif step == "valuation" and t:
-            jobs[step] = lambda: valuation(p, deps, t)
+            jobs[step] = lambda p=p: valuation(p, deps, t)
         elif step == "describe" and t:
-            jobs[step] = lambda: describe(p, deps, t)
+            jobs[step] = lambda p=p: describe(p, deps, t)
         elif step == "filings" and t:
-            jobs[step] = lambda: filings(p, deps, t)
+            jobs[step] = lambda p=p: filings(p, deps, t)
         elif step == "filings_results" and t:
-            jobs[step] = lambda: filings(p, deps, t, items={"2.02", "7.01", "8.01"})
+            jobs[step] = lambda p=p: filings(p, deps, t, items={"2.02", "7.01", "8.01"})
         elif step == "filings_today" and t:
-            jobs[step] = lambda: filings(p, deps, t, limit=2)
+            jobs[step] = lambda p=p: filings(p, deps, t, limit=2)
         elif step == "earnings" and t:
-            jobs[step] = lambda: earnings(p, deps, t)
+            jobs[step] = lambda p=p: earnings(p, deps, t)
         elif step == "tape" and t:
-            jobs[step] = lambda: tape(p, deps, t)
+            jobs[step] = lambda p=p: tape(p, deps, t)
         elif step == "news" and t:
-            jobs[step] = lambda: recent_news(p, deps, t)
+            jobs[step] = lambda p=p: recent_news(p, deps, t)
         elif step == "news_fresh" and t:
-            jobs[step] = lambda: recent_news(p, deps, t, hours=18)
+            jobs[step] = lambda p=p: recent_news(p, deps, t, hours=18)
         elif step in ("upcoming", "upcoming_short", "upcoming_market"):
-            jobs[step] = lambda s=step: upcoming(p, deps, t if s != "upcoming_market" else None,
+            jobs[step] = lambda s=step, p=p: upcoming(p, deps, t if s != "upcoming_market" else None,
                                                  days=5 if s == "upcoming_short" else 21)
         elif step == "structure" and t:
-            jobs[step] = lambda: structure(p, deps, t)
+            jobs[step] = lambda p=p: structure(p, deps, t)
         elif step == "macro":
-            jobs[step] = lambda: macro(p, deps)
+            jobs[step] = lambda p=p: macro(p, deps)
         elif step == "desk":
-            jobs[step] = lambda: desk(p, deps, desk_section or {})
+            jobs[step] = lambda p=p: desk(p, deps, desk_section or {})
+    p = root
+    # The section a Desk question is about leads the pack: run it first (one
+    # local read and a quote), then the rest in parallel.
+    if "desk" in jobs:
+        try:
+            jobs.pop("desk")()
+        except Exception as exc:                                   # noqa: BLE001
+            p.missing.append("desk ({})".format(type(exc).__name__))
     if not jobs:
+        p.merged()
         return p.out()
     pool = cf.ThreadPoolExecutor(max_workers=min(6, len(jobs)), thread_name_prefix="milo-research")
     futs = {pool.submit(fn): name for name, fn in jobs.items()}
@@ -573,4 +643,7 @@ def build(question: str, ticker: Optional[str], deps: Deps, *, horizon: Optional
     for f in pending:
         p.missing.append("{} (slower than {:.0f}s, skipped)".format(futs[f], TIME_BUDGET_SECONDS))
     pool.shutdown(wait=False, cancel_futures=True)
+    # A step still running past the budget keeps writing to its own list, not
+    # to the merged one, so the answer's evidence cannot change under it.
+    p.merged()
     return p.out()

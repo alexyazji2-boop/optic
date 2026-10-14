@@ -495,3 +495,46 @@ def test_trailing_quarters_when_the_annual_statements_are_old():
     assert got["Revenue, trailing four quarters"]["value"] == pytest.approx(90.27, abs=0.01)
     assert got["Revenue, trailing four quarters"]["period"] == "four quarters to 2026-05-31"
     assert got["Latest quarter's revenue growth on the same quarter a year earlier"]["value"] == pytest.approx(345.7, abs=0.1)
+
+
+def test_the_pack_is_in_plan_order_whatever_finishes_first(monkeypatch):
+    """Steps run in parallel; the pack must come back in the plan's order, so
+    a pre-earnings question's expectations lead even when they arrive last."""
+    import time as _t
+
+    class P(_Fin):
+        def earnings_calendar(self, t):
+            _t.sleep(0.3)
+            return {"dates": ["2026-10-14"], "eps_avg": 1.10, "eps_low": 1.01, "eps_high": 1.25}
+
+        def estimates(self, t):
+            return {}
+
+        def earnings_history(self, t):
+            return [{"date": "2026-07-14", "eps_reported": 1.21, "eps_estimate": 1.12, "surprise_pct": 7.74}]
+
+    p = research.build("BAC earnings tomorrow", "BAC", research.Deps(provider=P()), kind="pre_earnings")
+    groups = [i["group"] for i in p["items"]]
+    assert groups[0] == "expectations", groups
+    assert [i["id"] for i in p["items"]] == ["R{}".format(n + 1) for n in range(len(p["items"]))]
+    labels = {i["label"]: i.get("value") for i in p["items"]}
+    assert labels["Consensus EPS, low"] == 1.01 and labels["Consensus EPS, high"] == 1.25
+
+
+def test_an_empty_earnings_feed_is_named_not_swallowed():
+    class P(_Fin):
+        def earnings_calendar(self, t):
+            return {}
+
+        def estimates(self, t):
+            return {}
+
+        def earnings_history(self, t):
+            return []
+    p = research.build("earnings?", "BAC", research.Deps(provider=P()), kind="pre_earnings")
+    assert any("earnings calendar" in m for m in p["missing"]) and any("earnings history" in m for m in p["missing"])
+
+
+def test_the_research_pack_gets_more_room_than_a_panel():
+    from app import ai
+    assert ai.CONTEXT_SECTION_CAPS["research"] > ai.CONTEXT_SECTION_CAP
