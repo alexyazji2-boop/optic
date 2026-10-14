@@ -160,6 +160,9 @@ def pre(p: Dict[str, Any]) -> str:
                 _bul(["{} ({}; {}; {} outlet(s))".format(s["title"], s["kind"], s["bears_on"], s["outlet_count"])
                       for s in news[:6]])]
     c = view.get("cases") or {}
+    if view.get("figures"):
+        out += ["**The arithmetic behind the cases.**", "",
+                _bul(["{}: {} ({}; {}).".format(f["label"], f["value"], f["calc"], f["kind"]) for f in view["figures"]])]
     out += ["**Base case.** {}".format(c.get("base")), "", "**Bull case.** {}".format(c.get("bull")), "",
             "**Bear case.** {}".format(c.get("bear")), "", "**What will decide it.**", "", _bul(view.get("deciders") or []),
             "**What would prove the view wrong.**", "", _bul(view.get("invalidators") or []),

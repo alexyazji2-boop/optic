@@ -207,7 +207,18 @@ def test_an_earnings_question_without_tense_reads_the_calendar():
 
 def test_short_questions_get_a_short_answer():
     assert modes.resolve("What's the stop on NVDA?", "NVDA", today=TODAY)["depth"] == "quick"
+    assert modes.resolve("Where's the stop on the XOM setup?", "XOM", today=TODAY)["depth"] == "quick"
+    assert modes.resolve("What's the EPS consensus for AAPL?", "AAPL", today=TODAY)["depth"] == "quick"
     assert modes.resolve("Give me a full analysis of NVDA", "NVDA", today=TODAY)["depth"] == "full"
+    # A judgement is a full read, however short the question.
+    for q in ("Is NVDA a good long-term investment at today's price?", "Is there a swing setup on XOM?",
+              "How did JPM's earnings go?", "What should I expect from AAPL's earnings?"):
+        assert modes.resolve(q, "NVDA", today=TODAY)["depth"] == "full", q
+
+
+def test_what_should_i_expect_is_pre_earnings():
+    assert modes.resolve("What should I expect from AAPL's earnings this month?", "AAPL",
+                         today=TODAY)["mode"] == "pre_earnings"
 
 
 def test_explicit_mode_and_saved_horizon():

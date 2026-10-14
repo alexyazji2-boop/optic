@@ -494,6 +494,24 @@ def best_view(ticker: str, results: Dict[str, Any], guidance: Dict[str, Any], re
                 "expectations {}, the stock could fall even on a headline beat.".format(
                     _pct(sur.get("avg_surprise_pct"), signed=True), hurdle.get("state")),
     }
+    # Transparent arithmetic, not a forecast: what the consensus becomes if
+    # the company's average surprise repeats, and the growth the revenue
+    # consensus already assumes. Shown with their inputs so a reader can redo them.
+    figures: List[Dict[str, Any]] = []
+    eps_c, avg_s = nr.get("eps_consensus"), sur.get("avg_surprise_pct")
+    if eps_c is not None and avg_s is not None and (sur.get("quarters") or 0) >= 4:
+        figures.append({"label": "EPS if the average surprise repeats",
+                        "value": _f(eps_c * (1 + avg_s / 100.0) if eps_c >= 0 else eps_c + abs(eps_c) * avg_s / 100.0),
+                        "calc": "consensus {:.2f} adjusted by the {} average surprise over {} quarters".format(
+                            eps_c, _pct(avg_s, signed=True), sur.get("quarters")),
+                        "kind": "calculated from the record, not a forecast"})
+    cg = hurdle.get("consensus_growth")
+    if cg:
+        figures.append({"label": "Revenue growth the consensus implies",
+                        "value": cg["implied_yoy_pct"],
+                        "calc": "consensus {:.2f}bn against {:.2f}bn in the quarter to {}".format(
+                            cg["consensus_revenue"] / 1e9, cg["year_ago_revenue"] / 1e9, cg["year_ago_period"]),
+                        "kind": "calculated"})
     deciders = ["Revenue against the {} consensus{}".format(
                     nr.get("revenue_consensus_label") or "revenue",
                     " (implying {} growth on the year-ago quarter)".format(
@@ -513,7 +531,7 @@ def best_view(ticker: str, results: Dict[str, Any], guidance: Dict[str, Any], re
     if rng:
         invalidators.append("A first reaction beyond {:.2f} or {:.2f}, the edge of the priced move, against the "
                             "lean.".format(rng["low"], rng["high"]))
-    return {"headline": head, "cases": cases, "deciders": deciders, "invalidators": invalidators,
+    return {"headline": head, "cases": cases, "figures": figures, "deciders": deciders, "invalidators": invalidators,
             "confidence": {"results": results["confidence"], "guidance": guidance["confidence"],
                            "reaction": reaction["confidence"]},
             "probabilities": None,

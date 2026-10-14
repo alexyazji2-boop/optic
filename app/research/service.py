@@ -169,8 +169,12 @@ def build(provider, yf, ticker: str, mode: str = "combined", *, rate: float = 0.
         if need["swing"] or need["earnings"]:
             g.start("daily", yf.history, sym, period="2y", interval="1d")
             g.start("spy", yf.history, "SPY", period="2y", interval="1d")
-        if need["earnings"] or need["swing"]:
+        if need["earnings"]:
             g.start("earnings", d["earnings"], provider, yf, sym, rate)
+        elif need["swing"]:
+            # A swing read needs only the date and its timing, not the chain:
+            # the calendar and the surprise table are cached feed reads.
+            g.start("earnings", d["earnings_dates"], yf, sym)
         if need["earnings"]:
             g.start("sec", d["sec"], sym)
             g.start("financials", yf.financials, sym)
@@ -282,7 +286,14 @@ def _deps(deps: Optional[Dict[str, Callable[..., Any]]]) -> Dict[str, Callable[.
         quote = provider.quote(sym)
         return earnings.analyse(provider, yf, sym, quote, rate=rate)
 
-    out.update({"longterm": lazy_longterm, "valuation": lazy_valuation, "gathered": lazy_gathered,
+    def lazy_dates(yf, sym):
+        from ..analytics import earnings
+        hist = yf.earnings_history(sym, limit=16) or []
+        cal = yf.earnings_calendar(sym) or {}
+        reported = {str(r.get("date")) for r in hist if r.get("eps_reported") is not None}
+        return {"next_report": earnings._next_report(hist, cal, reported)}
+
+    out.update({"earnings_dates": lazy_dates, "longterm": lazy_longterm, "valuation": lazy_valuation, "gathered": lazy_gathered,
                 "comps": lazy_comps, "sec": lazy_sec, "news": lazy_news, "earnings": lazy_earnings})
     out.update(deps or {})
     return out

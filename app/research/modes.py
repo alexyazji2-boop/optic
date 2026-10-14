@@ -36,6 +36,7 @@ _POST = re.compile(
     r"(earnings|results|report|print) (yesterday|last night|this morning|today)|the quarter they just)\b", re.I)
 _PRE = re.compile(
     r"\b(ahead of (the )?(earnings|report|results|print)|into (the )?(earnings|report|print)|"
+    r"what (should|do|can|would) (i|we|you) expect|expect(ations)? (from|for|into) .{0,20}(earnings|report|results|quarter)|"
     r"before (the |its )?(earnings|report|results|print)|pre[- ]?earnings|what to expect|preview|"
     r"will (they|it) (beat|miss)|(upcoming|next) (earnings|report|quarter|print)|expected move|"
     r"earnings (next week|this week|on|date))\b", re.I)
@@ -44,8 +45,17 @@ _COMBINED = re.compile(
     r"(trade|trading) (and|or) (invest|hold)\w*|(invest|hold)\w* (and|or) (trade|swing)\w*|"
     r"short[- ]term and long[- ]term|long[- ]term and short[- ]term|both (the )?(trade|swing|long)|"
     r"every angle|whole thing|full analysis|full report)\b", re.I)
-_FULL = re.compile(r"\b(analy[sz]\w*|breakdown|report|deep|full|thorough|walk me through|in depth|detailed|"
-                   r"comprehensive|case for|bull case|bear case)\b", re.I)
+# "Quick" is for a narrow ask about one figure or level ("where's the stop",
+# "what's the consensus"). A judgement ("is it a good investment", "is there a
+# setup", "how did earnings go") is a full read even when it is short: the
+# first capture (2026-10-14) marked four of seven judgement questions quick,
+# which would have answered "is NVDA a good long-term investment" in three
+# sentences.
+_NARROW = re.compile(r"^\s*(what'?s|what is|what are|where'?s|where is|where are|when'?s|when is|which|how much|"
+                     r"how many|how far)\b.{0,60}\b(stop|target|entry|level|levels|support|resistance|date|price|"
+                     r"ratio|grade|score|eps|consensus|estimate|move|invalidation|atr|rsi|yield|multiple|p/?e)\b", re.I)
+_JUDGE = re.compile(r"\b(should|good|worth|expect|think|go|went|is there|any (?:good )?(?:setup|trade)|buy|sell|"
+                    r"invest\w*|why|analy[sz]\w*|picture|case|view|outlook|opinion|thoughts?)\b", re.I)
 _LONG_EXPLICIT = re.compile(r"\b(long[- ]term|for years|invest(ing|ment|or)?|retire\w*|own (it|the stock|shares)|"
                             r"moat|business quality|valuation|undervalued|overvalued|intrinsic)\b", re.I)
 _AMBIG = re.compile(r"\b(buy|sell|good (stock|investment|entry)|worth (it|buying)|should i)\b", re.I)
@@ -66,7 +76,7 @@ def resolve(question: str, ticker: Optional[str], *, next_report: Optional[str] 
     today = today or date.today()
     q = question or ""
     words = len(q.split())
-    depth = "full" if (_FULL.search(q) or words > 28) else "quick"
+    depth = "quick" if (_NARROW.search(q) and not _JUDGE.search(q) and words <= 20) else "full"
     nxt, last = _days(next_report, today), _days(last_report, today)
     timing = {"next_report": next_report, "days_to_next": nxt, "last_report": last_report,
               "days_since_last": -last if last is not None else None}

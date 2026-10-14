@@ -26,7 +26,9 @@ COMMON = (
 DEPTH = {
     "quick": "This is a short question: answer it in a few sentences from the part of `framework` it asks about, "
              "not as a report.",
-    "full": "",
+    "full": "Cover the mode's parts in that order, a sentence or two each, in about 450 words at most; the reader "
+            "can ask for more on any part. Shortening never drops the main thing against the view or what would "
+            "change it.",
 }
 
 MODES: Dict[str, str] = {

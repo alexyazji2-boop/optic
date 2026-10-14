@@ -243,3 +243,11 @@ def test_unknown_timing_reads_the_session_with_the_volume_spike():
     assert r["reaction_day"] == "2026-10-14" and "heavier volume" in r["timing_inferred"]
     r = E.reaction(_reaction_bars(), None, "2026-10-14", None, {}, "after", today=date(2026, 10, 16))
     assert r["reaction_day"] == "2026-10-15"
+
+
+def test_scenario_arithmetic_is_shown_with_its_inputs():
+    pre = E.pre_earnings("XYZ", ea_fixture(), sec=sec_fixture())
+    figs = {f["label"]: f for f in pre["view"]["figures"]}
+    f = figs["EPS if the average surprise repeats"]
+    assert f["value"] == pytest.approx(1.50 * 1.045, abs=0.01) and "not a forecast" in f["kind"]
+    assert "Revenue growth the consensus implies" in figs
