@@ -460,7 +460,9 @@ def test_milo_is_told_how_to_use_the_research():
     order = ai._ORDER_BASE
     assert order.index("desk_section") < order.index("quote") and order.index("research") < order.index("quote")
     src = (ROOT / "app/main.py").read_text()
-    assert "context = await _with_research(history, context, horizon)" in src
+    # The chat route awaits it beside the research framework's hook
+    # (asyncio.gather, 2026-10-14), so the call is checked, not its statement.
+    assert "_with_research(history, context, horizon)" in src
 
 
 

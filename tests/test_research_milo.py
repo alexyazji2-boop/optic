@@ -159,3 +159,34 @@ def test_framework_routes_are_open_and_validate(monkeypatch):
     q = c.get("/api/framework-quality").json()
     assert q["by_prediction"]["results"]["status"] == "collecting"
     assert c.get("/api/framework/NVDA/forecasts").json()["forecasts"] == []
+
+
+@pytest.mark.framework_live
+def test_the_chat_route_runs_research_and_framework_side_by_side(monkeypatch):
+    import time
+    from fastapi.testclient import TestClient
+
+    async def slow_research(history, context, horizon=None):
+        await asyncio.sleep(0.6)
+        return dict(context or {}, research={"items": [1]})
+
+    async def slow_framework(history, context, horizon=None, attachments=None):
+        await asyncio.sleep(0.6)
+        return dict(context or {}, framework={"routing": {"mode": "swing"}})
+
+    seen = {}
+
+    async def fake_stream(history, context=None, **kw):
+        seen.update(context or {})
+        yield "data: {}\n\n"
+
+    monkeypatch.setattr(m, "_with_research", slow_research)
+    monkeypatch.setattr(m, "_with_framework", slow_framework)
+    monkeypatch.setattr(m.ai, "stream_chat", fake_stream)
+    monkeypatch.setattr(m, "_spend_guard", lambda request: None)
+    t0 = time.time()
+    r = TestClient(m.app).post("/api/chat", json={"messages": [{"role": "user", "content": "setup?"}],
+                                                  "context": {"ticker": "NVDA"}})
+    assert r.status_code == 200
+    assert time.time() - t0 < 1.1                     # not 1.2s in sequence
+    assert seen["research"] == {"items": [1]} and seen["framework"]["routing"]["mode"] == "swing"

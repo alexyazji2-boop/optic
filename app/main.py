@@ -6788,8 +6788,15 @@ async def chat(request: Request,
     horizon = horizon_mod.normalise(payload.get("horizon"))
     context = await _augment_chat_context(history, context)
     if ((context or {}).get("focus") or {}).get("scope") != "none":
-        context = await _with_research(history, context, horizon)
-        context = await _with_framework(history, context, horizon, attachments)
+        # Side by side: the research pack and the framework read different
+        # sources and neither needs the other's answer, so the slower of the
+        # two (not their sum) is what the reader waits for.
+        researched, framed = await asyncio.gather(
+            _with_research(history, context, horizon),
+            _with_framework(history, context, horizon, attachments))
+        context = researched
+        if isinstance(framed, dict) and "framework" in framed:
+            context = dict(context or {}, framework=framed["framework"])
     return StreamingResponse(
         ai.stream_chat(history, context=context, use_web=use_web,
                        attachments=attachments, persona=persona, mode=mode,
