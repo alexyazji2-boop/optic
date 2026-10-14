@@ -27,6 +27,8 @@ from fastapi.staticfiles import StaticFiles
 from . import (ai, brief as brief_mod, feeds as feeds_mod, legal,
                news as news_mod, paper, session as session_mod)
 from . import account as account_mod
+from .valuation import service as valuation_service
+from .valuation import store as valuation_store
 from . import db as accounts_db
 from .auth import admin as auth_admin
 from .auth import deps as auth_deps
@@ -4068,6 +4070,72 @@ async def fair_value_panel(ticker: str) -> Dict[str, Any]:
     return await _run(fair_value_mod.build, YF_PROVIDER, ticker)
 
 
+@app.get("/api/valuation/{ticker}")
+async def valuation_workspace(ticker: str, refresh: bool = False) -> Dict[str, Any]:
+    """The fair-value workspace: a sourced, deterministic DCF with scenarios,
+    sensitivities, a reverse DCF and the complementary models that fit this
+    kind of business. See app/valuation/METHODS.md."""
+    sym = (_setup_symbols(ticker, 1) or [None])[0]
+    if not sym:
+        raise HTTPException(status_code=400, detail="That does not look like a symbol.")
+    return await _run(lambda: valuation_service.clean(valuation_service.build(YF_PROVIDER, sym, force=refresh)))
+
+
+@app.post("/api/valuation/{ticker}/run")
+async def valuation_run(ticker: str, payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """The same workspace for the reader's edited assumptions. Stateless: it
+    computes and returns, and saves nothing."""
+    sym = (_setup_symbols(ticker, 1) or [None])[0]
+    if not sym:
+        raise HTTPException(status_code=400, detail="That does not look like a symbol.")
+    edits = payload if isinstance(payload, dict) else {}
+    out = await _run(lambda: valuation_service.clean(valuation_service.build(
+        YF_PROVIDER, sym, edits=edits, light=bool(edits.get("light")))))
+    if out.get("input_errors"):
+        raise HTTPException(status_code=400, detail="; ".join(out["input_errors"]))
+    return out
+
+
+@app.post("/api/valuation/{ticker}/sotp")
+async def valuation_sotp(ticker: str, payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Sum of the parts from reported segment operating income, at the
+    reader's multiples (or the DCF's implied one until they choose)."""
+    sym = (_setup_symbols(ticker, 1) or [None])[0]
+    if not sym:
+        raise HTTPException(status_code=400, detail="That does not look like a symbol.")
+    body = payload if isinstance(payload, dict) else {}
+    mults = body.get("multiples") if isinstance(body.get("multiples"), dict) else {}
+    clean: Dict[str, float] = {}
+    for name, raw in list(mults.items())[:40]:
+        if raw in (None, ""):
+            continue
+        try:
+            x = float(raw)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="A segment multiple is not a number.")
+        if not (0.0 <= x <= 200.0) or x != x:
+            raise HTTPException(status_code=400, detail="Segment multiples must be between 0 and 200.")
+        clean[str(name)[:120]] = x
+    um = body.get("unallocated_multiple")
+    try:
+        um = None if um in (None, "") else float(um)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="The unallocated multiple is not a number.")
+    if um is not None and not (0.0 <= um <= 200.0):
+        raise HTTPException(status_code=400, detail="The unallocated multiple must be between 0 and 200.")
+    return await _run(lambda: valuation_service.clean(valuation_service.sotp_model(YF_PROVIDER, sym, clean, um)))
+
+
+@app.get("/api/valuation/{ticker}/comps")
+async def valuation_comps(ticker: str, peers: str = "") -> Dict[str, Any]:
+    """Peer multiples and what they imply, market-relative and labelled so."""
+    sym = (_setup_symbols(ticker, 1) or [None])[0]
+    if not sym:
+        raise HTTPException(status_code=400, detail="That does not look like a symbol.")
+    chosen = _setup_symbols(peers, valuation_service.MAX_PEERS) if peers else []
+    return await _run(lambda: valuation_service.clean(valuation_service.comps(YF_PROVIDER, sym, chosen)))
+
+
 def _bars_body(sym: str, df, digits: int) -> Dict[str, Any]:
     """A frame of bars as the charts read them: one array per column."""
     df = df.dropna(subset=["Close"])
@@ -5828,6 +5896,7 @@ async def research(request: Request,
 # after it, so a router added below that line answers nothing at all.
 app.include_router(auth_routes.router)
 app.include_router(account_mod.router)
+app.include_router(valuation_store.router)
 
 
 @app.on_event("startup")
@@ -5889,7 +5958,7 @@ def _asset_version() -> str:
     looking at it is the bookmarks bar.
     """
     stamp = 0
-    for name in ("app.js", "auth.js", "charts.js", "styles.css",
+    for name in ("app.js", "auth.js", "charts.js", "valuation.js", "styles.css",
                  "icon.svg", "icon-192.png", "icon-512.png",
                  "apple-touch-icon.png", "site.webmanifest"):
         try:

@@ -676,6 +676,29 @@ MIGRATION_11 = [
 ]
 
 
+# Saved fair-value models: an immutable snapshot of one DCF, the reported
+# base it was run on, the reader's assumptions and the result, so the same
+# numbers can be reproduced later even after new filings arrive. Rows are
+# never edited: saving again makes a new row. Version 13 rather than 12 so it
+# cannot collide with the brokerage branch's pending migration 12; versions
+# are applied by membership, not by sequence.
+MIGRATION_13 = [
+    """
+    CREATE TABLE IF NOT EXISTS valuation_models (
+        id             TEXT PRIMARY KEY,
+        user_id        TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        symbol         TEXT NOT NULL,
+        name           TEXT NOT NULL DEFAULT '',
+        note           TEXT NOT NULL DEFAULT '',
+        model_version  TEXT NOT NULL,
+        snapshot       TEXT NOT NULL,
+        created_at     TEXT NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_valuation_models_user ON valuation_models(user_id, symbol, created_at)",
+]
+
+
 MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (1, "accounts", MIGRATION_1),
     (2, "oauth_pkce", MIGRATION_2),
@@ -688,6 +711,7 @@ MIGRATIONS: List[Tuple[int, str, List[str]]] = [
     (9, "remember_me", MIGRATION_9),
     (10, "signals", MIGRATION_10),
     (11, "valuations", MIGRATION_11),
+    (13, "valuation_models", MIGRATION_13),
 ]
 
 
