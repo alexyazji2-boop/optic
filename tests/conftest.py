@@ -60,6 +60,7 @@ from app import db as accounts_db
 from app import feeds
 from app import iv_history
 from app import signal_archive
+from app.research import forecasts as research_forecasts
 from app import live_mirror
 from app import paper
 from app import segment_store
@@ -125,6 +126,10 @@ def _real_data_out_of_the_way(tmp_path_factory):
         # The point-in-time archive of Optic's own reads (Options audit O3).
         patch.setattr(signal_archive, "DB_PATH",
                       str(tmp_path_factory.mktemp("signal_archive") / "signal_archive.db"))
+        # The research framework's immutable pre-earnings forecasts. A test
+        # that writes one gives it a file of its own: rows cannot be deleted.
+        patch.setattr(research_forecasts, "DB_PATH",
+                      str(tmp_path_factory.mktemp("research_forecasts") / "research_forecasts.db"))
         # And the two file caches, which are data/ as much as the databases are.
         # Neither was moved, and with the network open a full run in a fresh
         # worktree left a 9.1MB data/feed_cache.json holding SEC's ticker

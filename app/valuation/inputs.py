@@ -49,6 +49,11 @@ TAGS: Dict[str, Tuple[str, ...]] = {
                 "RevenueFromContractWithCustomerIncludingAssessedTax", "SalesRevenueGoodsNet",
                 "SalesRevenueServicesNet"),
     "operating_income": ("OperatingIncomeLoss",),
+    # Read by the research framework's margin-driver check (app/research/quality.py),
+    # not by any valuation model: whether a change in operating margin came from
+    # pricing and mix (gross margin) or from spending (the operating cost ratio).
+    "gross_profit": ("GrossProfit",),
+    "cost_of_revenue": ("CostOfRevenue", "CostOfGoodsAndServicesSold"),
     "pretax_income": ("IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
                       "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments"),
     "income_tax": ("IncomeTaxExpenseBenefit",),
@@ -120,7 +125,7 @@ TAGS: Dict[str, Tuple[str, ...]] = {
     "shares_outstanding": ("CommonStockSharesOutstanding",),
     "real_estate_net": ("RealEstateInvestmentPropertyNet",),
 }
-FLOWS = {"revenue", "operating_income", "pretax_income", "income_tax", "net_income", "net_income_common",
+FLOWS = {"revenue", "operating_income", "gross_profit", "cost_of_revenue", "pretax_income", "income_tax", "net_income", "net_income_common",
          "da", "depreciation", "amortization", "capex", "cfo", "sbc", "interest_expense", "interest_income",
          "dividends_paid", "dps", "buybacks", "diluted_shares_avg", "basic_shares_avg",
          "eps_diluted", "gain_real_estate", "impairment_real_estate"}
