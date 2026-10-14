@@ -266,3 +266,19 @@ def test_two_consensus_figures_that_disagree_leave_the_verdict_unresolved():
     post = E.post_earnings("JPM", ea, 1.0, calendar={"dates": ["2026-10-13"], "eps_avg": 5.90},
                            today=date(2026, 10, 14))
     assert post["headline_audit"]["eps"]["state"] == "miss"
+
+
+def test_post_earnings_counts_only_the_reported_quarters_figures():
+    # Release on 13 October for the September quarter; SEC's newest is June.
+    sec = sec_fixture()
+    sec["revenue_yoy"] = [r for r in sec["revenue_yoy"] if r["period_end"] <= "2026-06-30"]
+    sec["eps_quarters"] = [{"period_end": "2025-06-30", "value": 5.0}, {"period_end": "2026-06-30", "value": 7.7}]
+    ea = ea_fixture(latest_result={"available": True, "date": "2026-10-13", "age_days": 1,
+                                   "eps_reported": 5.75, "eps_estimate": 5.94})
+    post = E.post_earnings("JPM", ea, 1.0, sec=sec, today=date(2026, 10, 14))
+    a = post["headline_audit"]
+    assert a["eps_gaap"] is None and "not in SEC's data yet" in " ".join(a["pending"])
+    crit = post["quality"]["criteria"]
+    assert crit["growth_trend"] is None and crit["eps_growth"] is None
+    assert post["quality"]["status"] == "insufficient"           # only EPS is known for this quarter
+    assert "not the one just reported" in post["trajectory"]["revenue_trend_text"]

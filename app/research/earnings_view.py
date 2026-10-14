@@ -553,6 +553,21 @@ def best_view(ticker: str, results: Dict[str, Any], guidance: Dict[str, Any], re
                                                                           "the priced move"))}
 
 
+def _this_quarter(period_end: Any, release: Optional[date]) -> bool:
+    """Whether a period is the quarter this release reports: one ending within
+    about three months before the release date. Filed figures arrive with the
+    10-Q weeks after the release, so on the day after JPM reported its
+    September quarter (2026-10-14) the newest SEC quarter was June's, and the
+    first version graded the report on June's growth and June's GAAP EPS."""
+    if release is None:
+        return False
+    try:
+        lag = (release - date.fromisoformat(str(period_end)[:10])).days
+    except (TypeError, ValueError):
+        return False
+    return 0 <= lag <= 100
+
+
 def _year_ago(rows: List[Dict[str, Any]], row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """The quarter about a year before `row`, matched by period end (within 20
     days), because filed series have holes and an index four back can be a
@@ -764,7 +779,7 @@ def reaction(daily: Optional[pd.DataFrame], bench: Optional[pd.DataFrame], relea
                         _pct(day - spy_day, 1, True) if spy_day is not None else "n/a",
                         _f(rvol, 1) if rvol else "n/a",
                         " (a partial session, so volume will rise)" if in_progress else "",
-                        "" if after is None else "; {} over the next sessions".format(_pct(after, 1, True))),
+                        "" if after is None else "; {} since, to the latest bar".format(_pct(after, 1, True))),
             "caveat": "Price and volume say how the market responded, not who bought or sold."}
 
 
@@ -847,24 +862,37 @@ def post_earnings(ticker: str, ea: Dict[str, Any], band_pct: float, *, sec: Opti
     # GAAP against adjusted: the consensus is on the Street's adjusted basis;
     # the filed diluted EPS is GAAP and arrives with the 10-Q.
     gaap = None
+    pending: List[str] = []
     if sec and sec.get("available"):
         q = (sec.get("eps_quarters") or [])
-        if q:
+        if q and _this_quarter(q[-1].get("period_end"), rel):
             gaap = {"value": q[-1].get("value"), "period_end": q[-1].get("period_end"), "basis": "GAAP diluted (SEC)"}
+        elif q:
+            pending.append("GAAP EPS and the filed revenue for this quarter are not in SEC's data yet (the newest "
+                           "filed quarter ended {}); they arrive with the 10-Q.".format(q[-1].get("period_end")))
+    # Only figures for the quarter this release reports count toward its
+    # grade; an older filed quarter is context, labelled with its period.
+    ry = traj.get("revenue_yoy") or []
+    trend_now = bool(ry) and _this_quarter(ry[-1].get("period_end"), rel)
+    om = traj.get("operating_margin") or {}
+    margin_now = bool(om) and _this_quarter(om.get("latest_period"), rel)
     crit: Dict[str, Optional[int]] = {
         # "unresolved" maps to no score: the criterion is unknown, not zero.
         "eps": {"beat": 1, "in line": 0, "miss": -1}.get(eps["state"]),
         "revenue": {"beat": 1, "in line": 0, "miss": -1}.get(rev_vs.get("state")),
-        "growth_trend": {"accelerating": 1, "steady": 0, "decelerating": -1}.get(traj.get("revenue_trend") or ""),
+        "growth_trend": ({"accelerating": 1, "steady": 0, "decelerating": -1}.get(traj.get("revenue_trend") or "")
+                         if trend_now else None),
         "eps_growth": None, "margin": None, "guidance": None,
     }
     eq = (sec or {}).get("eps_quarters") or []
-    ago = _year_ago(eq, eq[-1]) if eq else None
+    ago = _year_ago(eq, eq[-1]) if eq and _this_quarter(eq[-1].get("period_end"), rel) else None
     if ago is not None and eq[-1].get("value") is not None and ago.get("value") is not None:
         crit["eps_growth"] = 1 if eq[-1]["value"] > ago["value"] else -1 if eq[-1]["value"] < ago["value"] else 0
-    om = traj.get("operating_margin") or {}
-    if om.get("change_pts") is not None:
+    if margin_now and om.get("change_pts") is not None:
         crit["margin"] = 1 if om["change_pts"] >= 1 else -1 if om["change_pts"] <= -1 else 0
+    if ry and not trend_now:
+        traj = dict(traj, revenue_trend_text="In the last filed quarter (to {}), not the one just reported: {}".format(
+            ry[-1].get("period_end"), traj.get("revenue_trend_text") or ""))
     quality = earnings_quality(crit)
     rx = reaction(daily, bench, lr["date"], timing, quote, phase, today=today)
     positives = [t for k, t in (("eps", "EPS {} consensus by {}".format(eps["state"], _pct(eps.get("surprise_pct"), 1, True))),
@@ -895,6 +923,7 @@ def post_earnings(ticker: str, ea: Dict[str, Any], band_pct: float, *, sec: Opti
                 "guidance": {"available": False, "reason": "Guidance text is not in Optic's data; it is in the "
                                                           "release and on the call."},
                 "basis_warning": basis,
+                "pending": pending,
                 "reconcile_note": "Consensus is on an adjusted basis; GAAP diluted EPS from the 10-Q can differ by "
                                   "stock pay, amortisation and one-off items. Compare like with like.",
             },

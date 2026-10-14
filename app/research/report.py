@@ -186,10 +186,11 @@ def post(p: Dict[str, Any]) -> str:
                                                        "{:+.2f}% surprise; ".format(eps["surprise_pct"])
                                                        if eps.get("surprise_pct") is not None else "", eps.get("basis")),
                  eps.get("resolution") or "",
+                 " ".join(a.get("pending") or []),
                  "GAAP diluted EPS: {} for {} (SEC).".format(_n((a.get("eps_gaap") or {}).get("value")),
                                                            (a.get("eps_gaap") or {}).get("period_end"))
                  if a.get("eps_gaap") else "",
-                 "Revenue: {}.".format(a["revenue"].get("reason") or "{} ({})".format(
+                 "Revenue: {}.".format((a["revenue"].get("reason") or "").rstrip(".") or "{} ({})".format(
                      _n((a["revenue"].get("actual") or 0) / 1e9) + "bn", a["revenue"].get("state"))),
                  "Guidance: {}".format(a["guidance"].get("reason")), a.get("basis_warning") or "",
                  a.get("reconcile_note")]),
