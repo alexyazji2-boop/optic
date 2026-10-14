@@ -17156,6 +17156,14 @@ table.ct-table .ct-later { display: block; color: var(--ink-muted); font-size: v
     center / 12px no-repeat;
 }
 .ps-list li.fail::before { border-color: var(--neg); background: var(--neg); }
+/* Work after the answer began (a web search mid-reply), shown live under the
+   text so the pause reads as work rather than a stall. */
+.ps-live {
+  display: flex; align-items: center; gap: var(--space-2);
+  margin-top: var(--space-2);
+  font-size: var(--t-small); color: var(--ink-muted);
+}
+.ps-live .spinner { flex: none; }
 
 /* A chart inside an answer. */
 /* A source chip after a figure in a Pulse answer: names the panel it came

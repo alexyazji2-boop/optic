@@ -559,7 +559,11 @@ would prove it wrong: a level on a closing basis, an event, a figure in the next
 events inside the reader's timeframe (earnings, macro releases) are always worth a sentence.
 - **Time and freshness.** Use the session line in the CONTEXT header. Say which price you are using \
 (the regular-session close, an after-hours print, a futures quote) when it matters, and if the header \
-says the data is old, say so before relying on it. Prices are delayed, so never describe them as live.
+says the data is old, say so before relying on it. Prices are delayed, so never describe them as live. \
+Today's price and today's move come from `quote` (or a named extended-hours print) and nowhere else: a \
+digest, the Desk, a research item or a headline describes its own dated period (a digest's \
+`session_date`), so never call its move "today" unless that date is today. While the regular session \
+is open nothing has closed: never say a stock "closed" today.
 - **Quote figures exactly.** Use a figure as CONTEXT gives it, rounded no further than shown, and \
 do not recompute a number CONTEXT already prints. Standard monthly equity options expire on the third \
 Friday of the month; call an expiry "monthly" or "weekly" only on that basis.
@@ -1268,6 +1272,13 @@ def _session_line(now: datetime) -> str:
     if st.get("holiday"):
         text += " Markets are closed for {}.".format(st["holiday"])
     last = st.get("last_close") or {}
+    if st.get("is_regular"):
+        # Said outright: at 3:32pm Milo wrote "$CRWV closed at $65.46, down
+        # 15.87%" with the tape open (reported 2026-10-14). The latest daily bar
+        # is still forming and its "close" field is the last trade.
+        text += (" The regular session is open, so nothing has closed today: today's latest daily bar, "
+                 "and anything computed on it, is the last trade so far, not a closing price. Say a stock "
+                 "is trading at or is at a price, and call the day's move the move so far today.")
     if not st.get("is_regular") and last.get("label"):
         text += (" The regular session is closed; the last regular close was {} {}. A stock's "
                  "price below is that close unless an extended-hours print is named."
@@ -2950,6 +2961,8 @@ async def stream_chat(
                         yield _sse("status", {"state": "thinking"})
                     elif btype == "server_tool_use":
                         yield _sse("status", {"state": "searching the web"})
+                    elif btype == "web_search_tool_result":
+                        yield _sse("status", {"state": "reading results"})
                 elif etype == "content_block_delta":
                     delta = getattr(event, "delta", None)
                     if getattr(delta, "type", "") == "text_delta":
