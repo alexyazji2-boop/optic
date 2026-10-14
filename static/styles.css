@@ -19681,6 +19681,9 @@ footer.legal > .legal-full {
 .rf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-4); }
 .rf-tile { padding: var(--space-3) var(--space-4); background: var(--raised); border: 1px solid var(--border); border-radius: var(--r-md); min-width: 0; }
 .rf-value { margin: var(--space-1) 0 0; font: 600 var(--t-title)/1.2 var(--display); color: var(--ink); }
+/* A missing answer is quieter than a real one, so four "Insufficient Data"
+   tiles do not shout louder than the one grade that loaded. */
+.rf-value.is-none { color: var(--ink-muted); font-size: var(--t-lead); }
 .rf-sub { margin: var(--space-1) 0 0; font-size: var(--t-small); line-height: 1.5; color: var(--ink-2); }
 .rf-more { margin-top: var(--space-2); }
 .rf-more > summary { cursor: pointer; font-size: var(--t-small); font-weight: 600; color: var(--ink-2); }
@@ -19695,9 +19698,15 @@ footer.legal > .legal-full {
 .rf-p { margin: var(--space-1) 0 0; font-size: var(--t-small); line-height: 1.5; color: var(--ink-2); }
 .rf-verdict { margin: var(--space-4) 0 0; max-width: 80ch; font-size: var(--t-base); line-height: 1.55; color: var(--ink); }
 .rf .ov-h3 { margin-top: var(--space-3); }
+/* On a phone the three columns left about 100px for the sentence, so each row
+   stacks: the measure and its grade on one line, the reading below. */
 @media (max-width: 559px) {
   .rf-grid { grid-template-columns: 1fr; }
-  .rf-table th { white-space: normal; }
+  .rf-table, .rf-table tbody, .rf-table tr { display: block; }
+  .rf-table tr { padding: var(--space-2) 0; border-top: 1px solid var(--border); }
+  .rf-table th, .rf-table td { display: inline; padding: 0; border-top: 0; white-space: normal; }
+  .rf-table .rf-g { margin-left: var(--space-2); }
+  .rf-table td:last-child { display: block; margin-top: var(--space-1); }
 }
 
 /* Strategy pass (2026-10-12): the thesis check on the Overview. Folded to one

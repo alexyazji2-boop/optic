@@ -37,15 +37,22 @@
   function tile(id, label, value, sub, more) {
     return `<div class="rf-tile" data-rf="${id}">
       <p class="osc-label">${esc(label)}</p>
-      <p class="rf-value">${esc(value)}</p>
+      <p class="rf-value${/^Insufficient|not graded/i.test(value) ? ' is-none' : ''}">${esc(value)}</p>
       <p class="rf-sub">${esc(sub || '')}</p>
       ${more ? `<details class="rf-more"><summary>Why</summary><div class="rf-more-body">${more}</div></details>` : ''}
     </div>`;
   }
 
-  function componentRows(cs) {
+  /* Valuation measures read as words, not letters: a letter beside "cash
+   * yield" read as a quality grade ("Cash yield F"), when 4 of 4 there means
+   * cheapest. */
+  const PRICE_WORDS = ['very rich', 'rich', 'full', 'reasonable', 'cheap'];
+
+  function componentRows(cs, kind) {
     return (cs || []).map((c) => {
-      const grade = c.status === 'scored' ? (c.grade || (has(c.score) ? Number(c.score).toFixed(1) : ''))
+      const scored = c.status === 'scored' && has(c.score);
+      const grade = scored ? (kind === 'price' ? PRICE_WORDS[Math.max(0, Math.min(4, Math.round(c.score)))]
+        : (c.grade || Number(c.score).toFixed(1)))
         : c.status === 'not_applicable' ? 'n/a' : 'no data';
       const says = c.status === 'scored' ? c.headline : c.reason;
       return `<tr><th scope="row">${esc(c.label)}</th><td class="rf-g">${esc(grade)}</td><td>${esc(says || '')}</td></tr>`;
@@ -54,8 +61,13 @@
 
   function businessTile(lt) {
     if (!lt || !lt.available) {
-      const why = ((lt || {}).conviction || {}).why || 'The filings could not be read.';
-      return tile('business', 'Is it a strong business?', 'Insufficient Data', why, '');
+      /* The reason is the filings reader's own, and it is technical ("This
+       * registrant has no annual US-GAAP figures yet ... CIK"): one plain line
+       * on the tile, the exact reason a click away. */
+      const why = ((lt || {}).conviction || {}).why || '';
+      return tile('business', 'Is it a strong business?', 'Insufficient Data',
+        'Its annual filings could not be read here, so the business is not graded. That is missing evidence, not a bad grade.',
+        why ? `<p class="rf-p">${esc(why)}</p>` : '');
     }
     const q = lt.quality || {};
     const conv = lt.conviction || {};
@@ -78,7 +90,7 @@
     const lead = (v.components || []).find((c) => c.status === 'scored');
     const sub = v.status === 'scored' ? (lead ? lead.headline : v.summary) : (v.reason || '');
     const chart = lt.chart || {};
-    const more = `<table class="rf-table"><tbody>${componentRows(v.components)}</tbody></table>
+    const more = `<table class="rf-table"><tbody>${componentRows(v.components, 'price')}</tbody></table>
       ${chart.text ? `<p class="ov-h3">The chart, as context</p><p class="rf-p">${esc(chart.text)}</p>` : ''}
       ${chart.volume ? `<p class="ov-fine">${esc(chart.volume.text)}</p>` : ''}
       <p class="ov-fine">Graded on its own, separately from the business: 4 of 4 is cheapest. A strong business

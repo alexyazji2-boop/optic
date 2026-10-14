@@ -842,7 +842,9 @@ def valuation_grade(val: Dict[str, Any], data: Dict[str, Any], lt: Dict[str, Any
                                   reason="Fewer than three peers with a positive multiple."))
     else:
         out.append(_component("peers", "Against peers", "insufficient",
-                              reason=(comps or {}).get("reason") or "Peer multiples were not read."))
+                              reason=(comps or {}).get("reason") or (
+                                  "Not read for this view: peers take a quote lookup each, so they are read for a "
+                                  "long-term question to Milo and in the fair-value workspace on Investing.")))
     scored = [c for c in out if c["status"] == "scored"]
     if len(scored) < 2:
         return {"status": "insufficient", "label": "Insufficient Data", "score": None, "components": out,
