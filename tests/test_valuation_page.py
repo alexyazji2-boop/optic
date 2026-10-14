@@ -182,3 +182,8 @@ def test_a_bank_shows_the_method_that_fits_and_its_sensitivity(monkeypatch):
     assert "The methods that fit, side by side" in html and "Starting return on equity" in html
     assert "capital spending" not in html and "return on equity does BNK" in html
     assert "undefined" not in html and "NaN" not in html
+
+
+def test_amounts_accept_suffixes():
+    out = _run("R.v = [V._parseAmount('24.4B'), V._parseAmount('1,250m'), V._parseAmount('7000'), V._parseAmount('lots')];")
+    assert out["v"] == [24.4e9, 1.25e9, 7000, None]

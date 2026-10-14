@@ -58,7 +58,8 @@
   function rememberEdits(sym) {
     const s = readStore();
     const e = VAL.edits[sym];
-    if (e && (Object.keys(e.drivers || {}).length || Object.keys(e.wacc || {}).length)) s.edits[sym] = e;
+    if (e && (Object.keys(e.drivers || {}).length || Object.keys(e.wacc || {}).length
+      || Object.keys(e.base || {}).length)) s.edits[sym] = e;
     else delete s.edits[sym];
     writeStore(s);
   }
@@ -240,7 +241,7 @@
     VAL.loading[sym] = true;
     paint(sym);
     const e = editsFor(sym);
-    const edited = Object.keys(e.drivers).length || Object.keys(e.wacc).length;
+    const edited = Object.keys(e.drivers).length || Object.keys(e.wacc).length || Object.keys(e.base || {}).length;
     try {
       const fresh = await getJSON(`/api/valuation/${encodeURIComponent(sym)}${force ? '?refresh=true' : ''}`);
       VAL.defaults[sym] = fresh;
@@ -302,7 +303,7 @@
     try {
       const res = await fetch(`/api/valuation/${encodeURIComponent(sym)}/run`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-        body: JSON.stringify({ drivers: e.drivers, wacc: e.wacc }),
+        body: JSON.stringify({ drivers: e.drivers, wacc: e.wacc, base: e.base || {} }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
@@ -353,6 +354,9 @@
         : `<p class="dcf-lede">The model could not run yet: ${esc(dcf.reason || '')}
           ${dcf.needs_input ? 'Open the assumptions below and enter it; nothing is filled in with a guess.' : ''}</p>`;
     }
+    if (!dcf.available && (dcf.missing || []).length && fitsDcf !== 'not_applicable') {
+      return `<p class="dcf-lede">The model could not run: ${esc(dcf.reason || '')}</p>${missingForm(d)}`;
+    }
     if (!dcf.available) {
       const alt = d.residual_income && d.residual_income.available ? d.residual_income
         : d.reit && d.reit.available ? null : null;
@@ -383,6 +387,40 @@
     }
     return `<p class="dcf-lede">Under these assumptions, this model estimates ${name} is worth
       <strong>${about(v)}</strong> a share.${rng}${vs}</p>`;
+  }
+
+  /* A line the SEC facts do not carry (a filer's own extension tag) can be
+   * typed in from the filing. It is labelled as the reader's, and only lines
+   * that are genuinely missing are offered. */
+  function missingForm(d) {
+    const dcf = d.dcf || {};
+    const e = editsFor(d.ticker);
+    const labels = dcf.missing_labels || {};
+    return `<div class="dcf-missing">
+      <p class="dcf-note">Read ${(dcf.missing || []).map((k) => esc(labels[k] || k)).join(' and ')} for the fiscal year to
+        ${esc(day(dcf.fy0_end))} from the company's 10-K${dcf.filing_url ? ` (<a href="${esc(dcf.filing_url)}" target="_blank" rel="noopener">filing</a>)` : ''}
+        and enter it here. It will be marked as entered by you. Amounts accept B, M or K, for example 24.4B.</p>
+      ${(dcf.missing || []).map((k) => `<label class="dcf-field"><span class="dcf-flabel">${esc(labels[k] || k)}</span>
+        <span class="dcf-finput"><input type="text" inputmode="decimal" class="dcf-save-name" data-dcf-base="${esc(k)}"
+          value="${esc(has((e.base || {})[k]) ? String(e.base[k]) : '')}" placeholder="e.g. 24.4B"></span></label>
+        ${suggestHTML(k, (dcf.suggestions || {})[k])}`).join('')}
+      <button type="button" class="btn primary" data-dcf-base-run>Run the model</button></div>`;
+  }
+
+  function suggestHTML(k, sg) {
+    if (!sg || !sg.available || !(sg.candidates || []).length) return '';
+    return `<p class="dcf-note">The 10-K reports these under the company's own labels, which the SEC's standard data
+      leaves out. Pick the one that is the whole year's total (the model does not choose for you):</p>
+      <div class="dcf-ask">${sg.candidates.map((c) => `<button type="button" class="chip" data-dcf-suggest="${esc(k)}"
+        data-value="${esc(String(c.value))}">${esc(bigMoney(c.value))} · ${esc(c.element)}</button>`).join('')}</div>`;
+  }
+
+  function parseAmount(text) {
+    const m = /^\s*(-?[0-9][0-9,]*\.?[0-9]*)\s*([kmbt])?\s*$/i.exec(String(text || ''));
+    if (!m) return null;
+    const n = Number(m[1].replace(/,/g, ''));
+    const mult = { k: 1e3, m: 1e6, b: 1e9, t: 1e12 }[(m[2] || '').toLowerCase()] || 1;
+    return Number.isFinite(n) ? n * mult : null;
   }
 
   function confidenceNote(d) {
@@ -661,6 +699,10 @@
       Discounting: ${dcf.timing.convention === 'mid_year' ? 'mid-year (each year’s cash arrives at its middle)' : 'end of year'}, at ${pct(dcf.discount_rate, 2)}.
       D&A ${dcf.da_method === 'ppe' ? 'follows net PP&E (depreciation rate × last year’s PP&E)' : 'is a share of revenue'}.</p>
       ${trailingNote(d)}
+      ${has(dcf.incremental_return) ? `<p class="dcf-note"><strong>What the forecast's own investment earns:</strong>
+        ${pct(dcf.incremental_return)} a year (operating profit after tax added by the last year, over the net capital
+        invested on the way), against a ${pct(dcf.discount_rate, 1)} cost of capital. Below the cost of capital, extra
+        capex lowers the value unless the margin or growth it buys is raised too.</p>` : ''}
       <div class="dcf-scroll"><table class="data dcf-fc">
         <thead><tr><th scope="col">Year</th>${r.map((y) => `<th scope="col">${esc(String(y.fiscal_year_end).slice(0, 4))}</th>`).join('')}</tr></thead>
         <tbody>
@@ -1080,7 +1122,8 @@
   function snapshot(sym, name) {
     const d = VAL.data[sym];
     return { symbol: sym, name, base: d.base, assumptions: d.assumptions, model_version: d.model_version,
-      inputs: d.inputs_digest, result: { per_share: d.dcf.per_share, wacc: d.dcf.wacc.wacc,
+      inputs: { ...(d.inputs_digest || {}), supplied: (editsFor(sym).base || {}) },
+      result: { per_share: d.dcf.per_share, wacc: d.dcf.wacc.wacc,
         terminal_share: d.dcf.terminal_share, bear: ((d.scenarios || {}).bear || {}).per_share,
         bull: ((d.scenarios || {}).bull || {}).per_share } };
   }
@@ -1139,7 +1182,8 @@
     const m = await modelById(sym, id);
     if (!m || !m.snapshot) return;
     const a = m.snapshot.assumptions || {};
-    VAL.edits[sym] = { drivers: JSON.parse(JSON.stringify(a.drivers || {})), wacc: JSON.parse(JSON.stringify(a.wacc || {})) };
+    VAL.edits[sym] = { drivers: JSON.parse(JSON.stringify(a.drivers || {})), wacc: JSON.parse(JSON.stringify(a.wacc || {})),
+      base: JSON.parse(JSON.stringify(((m.snapshot.inputs || {}).supplied) || {})) };
     delete VAL.edits[sym].drivers._deltas;
     await runNow(sym);
     paint(sym);
@@ -1233,7 +1277,7 @@
     const tab = t.closest('[data-dcf-tab]');
     if (tab) { VAL.tab = tab.getAttribute('data-dcf-tab'); paintResults(sym); return; }
     if (t.closest('[data-dcf-reset]')) {
-      VAL.edits[sym] = { drivers: {}, wacc: {} };
+      VAL.edits[sym] = { drivers: {}, wacc: {}, base: {} };
       rememberEdits(sym);
       VAL.data[sym] = VAL.defaults[sym] || VAL.data[sym];
       VAL.errors[sym] = '';
@@ -1241,6 +1285,26 @@
       return;
     }
     if (t.closest('[data-dcf-save]')) { save(sym); return; }
+    const sug = t.closest('[data-dcf-suggest]');
+    if (sug) {
+      const box = document.querySelector(`[data-dcf-base="${sug.getAttribute('data-dcf-suggest')}"]`);
+      if (box) { box.value = sug.getAttribute('data-value'); box.focus(); }
+      return;
+    }
+    if (t.closest('[data-dcf-base-run]')) {
+      const e = editsFor(sym);
+      e.base = {};
+      let bad = '';
+      document.querySelectorAll('[data-dcf-base]').forEach((el) => {
+        if (!el.value.trim()) return;
+        const v = parseAmount(el.value);
+        if (v === null) bad = `${el.value} is not an amount.`;
+        else e.base[el.getAttribute('data-dcf-base')] = v;
+      });
+      if (bad) { VAL.errors[sym] = bad; paint(sym); return; }
+      runNow(sym).then(() => paint(sym));
+      return;
+    }
     if (t.closest('[data-dcf-comps]')) { loadComps(sym); return; }
     if (t.closest('[data-dcf-sotp]')) { loadSotp(sym, false); return; }
     if (t.closest('[data-dcf-sotp-run]')) { loadSotp(sym, true); return; }
@@ -1294,6 +1358,7 @@
       out.base_case = { value_per_share: r2(dcf.per_share), enterprise_value: dcf.enterprise_value, equity_value: dcf.equity_value,
         upside_vs_price: r4(dcf.upside), margin_of_safety: r4(dcf.margin_of_safety),
         terminal_value_share_of_ev: r4(dcf.terminal_share), pv_forecast_years: dcf.pv_forecast, pv_terminal: (dcf.terminal || {}).pv,
+        incremental_return_on_forecast_investment: r4(dcf.incremental_return),
         terminal: { method: (dcf.terminal || {}).method, growth: r4((dcf.terminal || {}).growth), ronic: r4((dcf.terminal || {}).ronic),
           implied_exit_ev_ebitda: r2((dcf.terminal || {}).implied_exit_ev_ebitda) },
         exit_multiple_check: dcf.exit_check ? { multiple: r2(dcf.exit_check.multiple), value_per_share: r2(dcf.exit_check.per_share),
@@ -1436,5 +1501,6 @@
     }
   }
 
-  window.OpticValuation = { hostHTML, load, context, parseAction, actionCard, _state: VAL, _lede: lede };
+  window.OpticValuation = { hostHTML, load, context, parseAction, actionCard, _state: VAL, _lede: lede,
+    _parseAmount: parseAmount };
 }());

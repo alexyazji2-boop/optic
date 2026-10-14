@@ -93,6 +93,8 @@ def synthetic(monkeypatch):
     monkeypatch.setattr(inputs, "risk_free", lambda p: {"value": 0.04, "as_of": "2026-10-10", "kind": "reported",
                                                        "source": "test"})
     monkeypatch.setattr(service, "_CACHE", {})
+    monkeypatch.setattr(inputs, "extension_candidates", lambda *a, **k: {
+        "available": True, "candidates": [{"element": "CapitalExpendituresOwnTag", "value": 60.0}]})
     return holder
 
 
@@ -394,3 +396,19 @@ def test_growth_bought_through_acquisitions_is_flagged(synthetic):
     synthetic["blob"] = blob
     out = service.build(Provider(), "SYN")
     assert any("Acquisitions cost" in w and "2024" in w for w in out["warnings"])
+
+
+def test_a_line_the_filings_lack_can_be_supplied_and_is_labelled(synthetic):
+    blob = company_blob()
+    del blob["facts"]["us-gaap"]["PaymentsToAcquirePropertyPlantAndEquipment"]
+    synthetic["blob"] = blob
+    out = service.build(Provider(), "SYN")
+    assert not out["dcf"]["available"] and out["dcf"]["missing"] == ["capex"]
+    assert out["dcf"]["suggestions"]["capex"]["candidates"][0]["element"] == "CapitalExpendituresOwnTag"
+    fixed = service.build(Provider(), "SYN", edits={"base": {"capex": 60.0}})
+    assert fixed["dcf"]["available"] and fixed["supplied"] == ["capex"]
+    cap = fixed["inputs"]["history"][0]["facts"]["capex"]
+    assert cap["kind"] == "reader" and cap["value"] == 60.0
+    assert fixed["defaults"]["drivers"]["capex_pct"]["start"] == pytest.approx(0.06)
+    refused = service.build(Provider(), "SYN", edits={"base": {"da": 1.0}})
+    assert "already in the filings" in refused["input_errors"][0]

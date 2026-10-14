@@ -492,11 +492,24 @@ def run_dcf(base: Dict[str, Any], drivers: Dict[str, Any], rate: float) -> Dict[
     return {
         "rows": rows, "timing": tm, "da_method": fc["da_method"], "nol_left": fc["nol_left"],
         "pv_forecast": pv_sum, "terminal": tv, "enterprise_value": ev,
+        "incremental_return": incremental_return(rows),
         "terminal_share": (tv["pv"] / ev) if ev > 0 else None,
         "bridge": br, "equity_value": br["equity_value"], "shares": shares,
         "per_share": per_share, "discount_rate": rate, "exit_check": exit_check,
         "checks": checks(base, drivers, rate, rows, tv, ev),
     }
+
+
+def incremental_return(rows: List[Dict[str, Any]]) -> Optional[float]:
+    """Return on the capital the forecast itself invests: the rise in NOPAT
+    from the first to the last forecast year over the net reinvestment made
+    in between. None when there is no net reinvestment to measure against."""
+    if len(rows) < 2:
+        return None
+    invested = sum(r["net_reinvestment"] for r in rows[:-1])
+    if invested <= 0:
+        return None
+    return (rows[-1]["nopat"] - rows[0]["nopat"]) / invested
 
 
 def checks(base: Dict[str, Any], drivers: Dict[str, Any], rate: float, rows: List[Dict[str, Any]],
@@ -551,6 +564,12 @@ def checks(base: Dict[str, Any], drivers: Dict[str, Any], rate: float, rows: Lis
             add("warn", "roic_extreme", "Forecast return on invested capital exceeds 100% in year "
                 "{}; book invested capital may understate the real asset base (brands, R&D).".format(r["year"]))
             break
+    inc = incremental_return(rows)
+    if inc is not None and inc < 0.5 * rate:
+        add("warn", "low_incremental_return", "The forecast's new investment earns {:.1%} a year (extra operating "
+            "profit by the last year, over the capital put in), against a {:.1%} cost of capital. It spends on "
+            "growth it does not deliver: either raise the margin or growth the spending should buy, or lower "
+            "the capex.".format(inc, rate))
     if any(r["capex"] < r["da"] * 0.8 for r in rows[-3:]) and g > 0:
         add("warn", "capex_below_da", "Capex runs well below depreciation in the last forecast years "
             "while revenue still grows: the asset base is shrinking under a growing business.")

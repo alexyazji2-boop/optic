@@ -601,6 +601,14 @@ def history(fl: Filings, fy_ends: List[str]) -> List[Dict[str, Any]]:
                 "non-operating items (equity-method income, gains) remain inside it.")
         bs = balance_sheet(fl, end)
         years.append({"fy_end": end, "flows": f, "balance": bs})
+    derive(years)
+    return years[:HISTORY_YEARS]
+
+
+def derive(years: List[Dict[str, Any]]) -> None:
+    """Ratios computed from each year's facts (and the prior year's), in
+    place. Separate from history() so that a figure the reader supplies for a
+    line the filings lack can be put in and the ratios recomputed."""
     # Derived ratios, needing the prior year for changes and averages.
     for i, y in enumerate(years):
         f, bs = y["flows"], y["balance"]
@@ -660,7 +668,6 @@ def history(fl: Filings, fy_ends: List[str]) -> List[Dict[str, Any]]:
         acq = _v(f["acquisitions"])
         derived["acquisitions_pct"] = (acq / rev) if (acq is not None and rev) else None
         y["derived"] = derived
-    return years[:HISTORY_YEARS]
 
 
 def _ytd(fl: Filings, concept: str, start: str, end: str, tol: int = 3,
@@ -972,3 +979,65 @@ def gather(provider, ticker: str, today: Optional[date] = None, force: bool = Fa
         "source_note": ("Statements: SEC EDGAR XBRL company facts (us-gaap), each figure linked to its "
                         "filing. Price, beta and analyst estimates: Yahoo Finance. Risk-free rate: FRED."),
     }
+
+
+EXTENSION_PATTERNS = {
+    "capex": r"CapitalExpenditure|PaymentsToAcquire.*(Property|Plant|Productive|Capital)",
+    "da": r"Depreciation",
+    "operating_income": r"OperatingIncome",
+}
+
+
+def extension_candidates(ticker: str, concept: str, fy_start: str, fy_end: str, limit: int = 6) -> Dict[str, Any]:
+    """Figures the company's 10-K reports under its own extension elements
+    (which the SEC facts API leaves out) for a line the model is missing:
+    consolidated contexts only, the base fiscal year's exact period, element
+    names matching the line. Offered to the reader as suggestions with their
+    names; never applied by the model, because which extension is the right
+    one is a judgement about the company's own presentation."""
+    import re as _re
+    import xml.etree.ElementTree as _ET
+    from ..analytics import segments as _seg
+    pat = EXTENSION_PATTERNS.get(concept)
+    if not pat:
+        return {"available": False, "reason": "No search defined for this line."}
+    try:
+        listed = _seg.filings(ticker)
+    except Exception as exc:                                                               # noqa: BLE001
+        return {"available": False, "reason": "The filing list did not answer ({}).".format(type(exc).__name__)}
+    k = next((r for r in (listed.get("rows") or []) if r.get("form") == "10-K"
+              and _near(r.get("report_date") or r.get("period") or fy_end, fy_end, 10)), None)
+    if not k:
+        return {"available": False, "reason": "The base year's 10-K is not in the filing list."}
+    try:
+        body = feeds.fetch_text(k["instance_url"], 30 * 86400, key="val:ext:" + k["accession"], store=False)
+        root = _ET.fromstring(body.encode("utf-8", "replace"))
+    except Exception as exc:                                                               # noqa: BLE001
+        return {"available": False, "reason": "The 10-K's XBRL document could not be read ({}).".format(
+            type(exc).__name__)}
+    X = "{http://www.xbrl.org/2003/instance}"
+    plain = set()
+    for ctx in root.findall(X + "context"):
+        ent = ctx.find(X + "entity")
+        dims = (ent is not None and ent.find(X + "segment") is not None) or ctx.find(X + "scenario") is not None
+        per = ctx.find(X + "period")
+        if dims or per is None:
+            continue
+        if _near(per.findtext(X + "startDate") or "", fy_start, 7) and _near(per.findtext(X + "endDate") or "", fy_end, 7):
+            plain.add(ctx.get("id"))
+    found: Dict[str, float] = {}
+    for el in root:
+        m = _re.match(r"\{([^}]+)\}(.+)", el.tag)
+        if not m or "fasb.org/us-gaap" in m.group(1) or el.get("contextRef") not in plain:
+            continue
+        name = m.group(2)
+        if not _re.search(pat, name) or _re.search(r"Proceeds|Incurred|NotYetPaid|Commitment|Planned", name):
+            continue
+        val = _num(el.text)
+        if val is not None and name not in found:
+            found[name] = val
+    cands = sorted(({"element": n, "value": v} for n, v in found.items()), key=lambda c: -abs(c["value"]))[:limit]
+    return {"available": bool(cands), "candidates": cands, "accession": k["accession"],
+            "url": filing_url(k.get("cik") or "", k["accession"]) if k.get("cik") else None,
+            "instance_url": k["instance_url"],
+            "reason": None if cands else "The 10-K has no extension element for this line either."}

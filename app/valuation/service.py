@@ -457,11 +457,66 @@ def _defaults_for(data: Dict[str, Any]) -> Dict[str, Any]:
     return {"base": base, "missing": missing, "kind": kind, "fit": fit, "parts": parts, "dividends": df}
 
 
+# Base-year lines a reader may supply when the SEC facts lack them (a filer
+# that tags them with its own extension, as NextEra does capex). Each is
+# labelled as the reader's and links to the filing to read it from.
+SUPPLIABLE = {"operating_income": "Operating income (EBIT)", "capex": "Capital expenditure",
+              "da": "Depreciation and amortization"}
+
+
+def supply_missing(data: Dict[str, Any], given: Optional[Dict[str, Any]]) -> Tuple[Dict[str, Any], List[str]]:
+    """Put reader-supplied base-year figures into a copy of the inputs, only
+    for lines the filings do not report, and recompute the ratios."""
+    if not isinstance(given, dict) or not given or not data.get("history"):
+        return data, []
+    errors: List[str] = []
+    out = copy.deepcopy(data)
+    fy0 = out["history"][0]
+    used = []
+    for key, raw in given.items():
+        if key not in SUPPLIABLE or raw in (None, ""):
+            continue
+        if _v(fy0["flows"].get(key)) is not None:
+            errors.append("{} is already in the filings, so it is not replaced.".format(SUPPLIABLE[key]))
+            continue
+        try:
+            x = float(raw)
+        except (TypeError, ValueError):
+            errors.append("{} is not a number.".format(SUPPLIABLE[key]))
+            continue
+        if x != x or (key != "operating_income" and x < 0) or abs(x) > 1e14:
+            errors.append("{} is out of range.".format(SUPPLIABLE[key]))
+            continue
+        fy0["flows"][key] = {"concept": key, "value": x, "kind": "reader", "end": fy0["fy_end"],
+                             "note": "Entered by the reader from the filing; the SEC facts do not carry it."}
+        used.append(key)
+    if errors:
+        raise InputError(errors)
+    inputs.derive(out["history"])
+    return out, used
+
+
+def suggestions(data: Dict[str, Any], concept: str) -> Dict[str, Any]:
+    fy0 = data["history"][0]
+    start = next((f.get("start") for f in fy0["flows"].values() if f and f.get("start") and f.get("tag")), None)
+    if not start:
+        return {"available": False, "reason": "The fiscal year's start date is not known."}
+    try:
+        return inputs.extension_candidates(data["ticker"], concept, start, fy0["fy_end"])
+    except Exception as exc:                                                               # noqa: BLE001
+        return {"available": False, "reason": "Could not read the filing ({}).".format(type(exc).__name__)}
+
+
 def build(provider, ticker: str, edits: Optional[Dict[str, Any]] = None,
           force: bool = False, light: bool = False) -> Dict[str, Any]:
     data = gathered(provider, ticker, force=force)
     if not data.get("available"):
         return {"available": False, "ticker": ticker.upper(), "reason": data.get("reason"),
+                "model_version": MODEL_VERSION}
+    try:
+        data, supplied = supply_missing(data, (edits or {}).get("base"))
+    except InputError as exc:
+        return {"available": False, "input_errors": exc.errors, "ticker": data["ticker"],
                 "model_version": MODEL_VERSION}
     prep = _defaults_for(data)
     base, kind, fit, parts0 = prep["base"], prep["kind"], prep["fit"], prep["parts"]
@@ -496,11 +551,17 @@ def build(provider, ticker: str, edits: Optional[Dict[str, Any]] = None,
                           "risk_free_as_of": (data.get("risk_free") or {}).get("as_of"),
                           "valuation_date": data["valuation_date"]},
     }
+    out["supplied"] = supplied
     if prep["missing"] and kind not in ("bank", "insurer"):
+        fy0 = data["history"][0]
+        can_supply = [k for k in SUPPLIABLE if _v(fy0["flows"].get(k)) is None]
         out["dcf"] = {"available": False, "reason": "The filings are missing: {}. Nothing is filled in "
                       "with a guess, so the DCF is not run.{}".format(
                           ", ".join(prep["missing"]),
-                          " " + fit["models"]["dcf"]["why"] if kind == "reit" else "")}
+                          " " + fit["models"]["dcf"]["why"] if kind == "reit" else ""),
+                      "missing": can_supply, "missing_labels": {k: SUPPLIABLE[k] for k in can_supply},
+                      "suggestions": {k: suggestions(data, k) for k in can_supply} if not light else {},
+                      "filing_url": (fy0["flows"].get("revenue") or {}).get("url"), "fy0_end": fy0["fy_end"]}
     # Discount-rate defaults first: RONIC and scenarios depend on it.
     try:
         w0 = defaults.compute_wacc(parts0, base)
