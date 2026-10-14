@@ -22872,11 +22872,12 @@ const WS_MAX_ICONS = {
   leave: 'M6 2v4H2M10 2v4h4M10 14v-4h4M6 14v-4H2',
 };
 
-/* Zoom buttons for touch screens (2026-10-12 audit): only Safari pinches a
- * chart (gesturechange below); on Android a pinch did nothing to the chart or
- * the page, and two fingers draw the measure. Shown under pointer: coarse
- * only, beside full screen, and zooming about the latest bar through the same
- * adapter and window maths as the pinch. */
+/* Zoom buttons for touch screens (2026-10-12 audit): then only Safari pinched
+ * a chart, and only by one step (see chartTouch); on Android a pinch did
+ * nothing. Kept now that a pinch works everywhere, for the hand holding the
+ * phone, which has one thumb free. Shown under pointer: coarse only, beside
+ * full screen, and zooming about the latest bar through the same adapter and
+ * window maths as the pinch. */
 function wsZoomButtons() {
   return `<div class="ws-zoom-btns" role="group" aria-label="Zoom the chart">
     <button type="button" class="ws-zoom-btn" data-ws-zoom="out" aria-label="Zoom out">&minus;</button>
@@ -27169,7 +27170,7 @@ document.addEventListener('pointerup', () => {
  * A chart with nothing to pan, its whole history on screen, measures on a
  * plain drag: this handler arms a host with `data-pan-armed` only when it can
  * move it. The trackpad's sideways swipe, shift and the wheel, and the
- * navigator strip pan too, and two fingers on a touch screen measure.
+ * navigator strip pan too. A finger has its own rules: see chartTouch.
  */
 function wsBarUnderCursor(evt) {
   const host = document.getElementById('ws-chart');
@@ -27552,8 +27553,15 @@ document.addEventListener('wheel', (evt) => {
  * `scale` measured from the start of the pinch, and no ctrl+wheel, so without
  * these the browser zoomed the whole page. Non-standard, so the listeners are
  * simply never called elsewhere. The window is recomputed from the one the
- * pinch began on, so scale is not applied twice. */
+ * pinch began on, so scale is not applied twice.
+ *
+ * A trackpad's pinch, now. An iPhone sends the same events for a pinch of two
+ * fingers, and a pinch begun with a finger on a chart is the touch handler's
+ * (`chartTouch`, below), which sees both fingers in every browser. Both
+ * applying it would zoom twice a move, so these stand aside for it and keep
+ * only the preventDefault. */
 document.addEventListener('gesturestart', (evt) => {
+  if (chartTouch) { evt.preventDefault(); return; }
   const target = chartZoomTarget(evt, { wheel: true });
   if (!target) return;
   const bar = chartBarUnderCursor(target, evt);
@@ -27564,7 +27572,7 @@ document.addEventListener('gesturestart', (evt) => {
 
 document.addEventListener('gesturechange', (evt) => {
   const g = chartGesture;
-  if (!g) return;
+  if (!g) { if (chartTouch) evt.preventDefault(); return; }
   evt.preventDefault();
   const scale = Number(evt.scale);
   if (!Number.isFinite(scale) || scale <= 0) return;
@@ -27580,10 +27588,236 @@ document.addEventListener('gesturechange', (evt) => {
 }, { passive: false });
 
 document.addEventListener('gestureend', (evt) => {
-  if (!chartGesture) return;
+  if (!chartGesture) { if (chartTouch) evt.preventDefault(); return; }
   evt.preventDefault();
   chartGesture = null;
 }, { passive: false });
+
+/* A finger on a chart that pans and zooms, the way a phone's chart apps take it.
+ *
+ * Reported 2026-10-14: "zooming in and out on the phone version for charting
+ * does not work, as well as dragging it left and right". Measured in Mobile
+ * Safari (iPhone 17 simulator, iOS 27) on the Charting tab before this:
+ *  - a one-finger drag across the plot moved nothing. The pan below declined
+ *    every touch, and the finger scrubbed the readout instead;
+ *  - fingers spread to three times their distance zoomed one step, 78 bars
+ *    to 62, and stopped. Safari's gesturechange fired once, the chart redrew,
+ *    and the redraw replaced the SVG under the fingers: every later touch,
+ *    pointer and gesture event went to that detached node and never reached
+ *    a document listener again, the second finger's release included. And
+ *    Android sends no gesture events, so there a pinch did nothing at all.
+ * After it, on the same simulator: that pinch 78 bars to 26, a 100px drag 14
+ * bars, a vertical swipe 269px of page with the window unchanged, and the
+ * page's own zoom (visualViewport.scale) 1 throughout.
+ *
+ * So, with Pointer Events, which every phone browser sends:
+ *  - one finger, sideways first, pans: it becomes the mouse's pan (`wsPan`),
+ *    the same record, maths and once-a-frame redraw. Up or down first, it is
+ *    the page's, and the browser scrolls natively because the plot keeps
+ *    `touch-action: pan-y`. Which, is decided over the first TOUCH_LOCK_PX.
+ *    With every bar on screen there is nothing to pan, and a sideways drag
+ *    reads the bars as it always did;
+ *  - held still for TOUCH_HOLD_MS, the drag reads the bars and the page holds
+ *    still. A tap still shows the bar it landed on, for as long as it is down;
+ *  - two fingers pinch about their midpoint, and moving both pans;
+ *  - held, then a second finger: measures between the two.
+ * The host carries the state as `data-chart-touch`, so the chart's own
+ * listeners (charts.js) know a move is not their readout's. And each pointer
+ * is captured on the host, which outlives every redraw, the moment the chart
+ * starts redrawing under it.
+ *
+ * Ahead of the mouse pan's listeners on purpose: the move that decides a drag
+ * is sideways hands it to the pan, which then moves the chart in that same
+ * event rather than the next. */
+const TOUCH_LOCK_PX = 8;       // Android's own touch slop (ViewConfiguration), 8dp
+const TOUCH_HOLD_MS = 300;     // HOLD_MS in charts.js: the mouse's hold, too
+let chartTouch = null;
+
+/* Which way a finger has gone once it has gone `slop` pixels: 'x', 'y', or null
+ * while it has not. A tie is the page's, because pan-y hands a diagonal to the
+ * browser's scroll and both must not answer one finger. */
+function touchLock(dx, dy, slop) {
+  const ax = Math.abs(dx);
+  const ay = Math.abs(dy);
+  if (ax < slop && ay < slop) return null;
+  return ax > ay ? 'x' : 'y';
+}
+
+/* How far apart two fingers are now against where they began. Above 1 they
+ * spread, which zooms in. */
+function pinchScale(a0, b0, a1, b1) {
+  const d0 = Math.hypot(b0.x - a0.x, b0.y - a0.y);
+  const d1 = Math.hypot(b1.x - a1.x, b1.y - a1.y);
+  return d0 > 0 && d1 > 0 ? d1 / d0 : 1;
+}
+
+/* The window a pinch asks for, from the window it began on, so scale is not
+ * applied twice. `abs` is the bar that was under the midpoint at the start,
+ * held under the midpoint where it is now (`fx` across the plot): the same
+ * zoomedWindowAt the wheel uses, and moving both fingers sideways pans. */
+function pinchedWindow(start, abs, fx, scale) {
+  const span = start.to - start.from;
+  const want = Math.max(WS_MIN_BARS, Math.min(start.total, Math.round(span / scale)));
+  return zoomedWindowAt(abs, fx, want);
+}
+
+function chartTouchMode(g, mode) {
+  g.mode = mode;
+  g.host.dataset.chartTouch = mode;
+}
+
+/* The chart a touch began on, with the frame on screen now: a redraw has
+ * replaced the one the touch landed on. */
+function chartTouchTarget(g) {
+  const svg = g.host.querySelector('svg.chart');
+  const frame = svg && svg.chartFrame;
+  return frame ? { host: g.host, svg, frame, adapter: g.adapter } : null;
+}
+
+/* The readout off, once the bars are about to move out from under it. */
+function chartTouchQuiet(g) {
+  const t = chartTouchTarget(g);
+  if (t && t.frame.clearReadout) t.frame.clearReadout();
+}
+
+function chartTouchCapture(g) {
+  g.pointers.forEach((p, id) => {
+    try { g.host.setPointerCapture(id); } catch (e) { /* no longer active */ }
+  });
+}
+
+function chartTouchEnd() {
+  const g = chartTouch;
+  if (!g) return;
+  clearTimeout(g.hold);
+  delete g.host.dataset.chartTouch;
+  chartTouch = null;
+}
+
+/* Hand one finger to the mouse's pan, from `x`. */
+function chartTouchPan(g, x) {
+  const target = chartTouchTarget(g);
+  const barsPerPx = target && chartBarsPerPixel(target);
+  if (!barsPerPx) return;
+  const win = g.adapter.window();
+  // A pinch out to the whole history leaves nothing for the last finger.
+  if (win.to - win.from >= win.total) return;
+  chartTouchCapture(g);
+  wsPan = { x, from: win.from, to: win.to, barsPerPx, moved: false,
+            adapter: g.adapter, host: g.host };
+}
+
+function chartTouchPinch(g) {
+  const ids = [...g.pointers.keys()];
+  const a = g.pointers.get(ids[0]);
+  const b = g.pointers.get(ids[1]);
+  const target = chartTouchTarget(g);
+  const fx = target && chartPointerFraction(target, { clientX: (a.x + b.x) / 2 }, { clamp: true });
+  if (fx === null || fx === undefined) return;
+  const start = g.adapter.window();
+  g.pinch = { ids, a: { ...a }, b: { ...b }, start,
+              abs: start.from + fx * Math.max(0, start.to - start.from - 1) };
+  chartTouchMode(g, 'pinch');
+  chartTouchCapture(g);
+}
+
+function chartTouchPinchMove(g) {
+  const p = g.pinch;
+  const a = g.pointers.get(p.ids[0]);
+  const b = g.pointers.get(p.ids[1]);
+  const target = chartTouchTarget(g);
+  if (!a || !b || !target) return;
+  const fx = chartPointerFraction(target, { clientX: (a.x + b.x) / 2 }, { clamp: true });
+  if (fx === null) return;
+  g.next = pinchedWindow(p.start, p.abs, fx, pinchScale(p.a, p.b, a, b));
+  // Once a frame, like the pan and the wheel. Held on the gesture rather than
+  // read back from `chartTouch`, so a release before the frame still lands.
+  if (!g.frame) {
+    g.frame = requestAnimationFrame(() => {
+      g.frame = 0;
+      if (g.next && g.adapter.apply(g.next)) interactiveRedraw(g.adapter);
+    });
+  }
+}
+
+document.addEventListener('pointerdown', (evt) => {
+  if (evt.pointerType !== 'touch') return;
+  // A first finger is a new gesture, whatever a lost release left behind.
+  if (evt.isPrimary) chartTouchEnd();
+  const at = { x: evt.clientX, y: evt.clientY };
+  const g = chartTouch;
+  if (g) {
+    if (g.pointers.size !== 1 || g.pointers.has(evt.pointerId) || g.mode === 'page') return;
+    const over = chartZoomHost(evt, { wheel: true });
+    if (!over || over.host !== g.host) return;
+    g.pointers.set(evt.pointerId, at);
+    clearTimeout(g.hold);
+    wsEndPan();
+    chartTouchQuiet(g);
+    if (g.held) chartTouchMode(g, 'measure');
+    else chartTouchPinch(g);
+    return;
+  }
+  // A pinch whose first finger landed off the chart stays Safari's, above.
+  if (!evt.isPrimary) return;
+  const target = chartZoomTarget(evt);
+  if (!target) return;
+  const win = target.adapter.window();
+  const t = { host: target.host, adapter: target.adapter,
+              pointers: new Map([[evt.pointerId, at]]),
+              x0: at.x, y0: at.y, locked: false, held: false, hold: 0, mode: '' };
+  chartTouch = t;
+  /* A finger on the price scale stretches it (onYZoom in charts.js), and is
+   * followed here only so that a second finger still makes a pinch. The first
+   * pinch-in tried on the simulator began there and did nothing. */
+  if (evt.target.closest && evt.target.closest('[data-price-scale]')) {
+    chartTouchMode(t, 'scale');
+    return;
+  }
+  chartTouchMode(t, win.to - win.from < win.total ? 'wait' : 'scrub');
+  // Cleared by the move that locks a direction, a second finger and the end.
+  t.hold = setTimeout(() => {
+    if (chartTouch !== t) return;
+    t.held = true;
+    chartTouchMode(t, 'hold');
+  }, TOUCH_HOLD_MS);
+});
+
+document.addEventListener('pointermove', (evt) => {
+  const g = chartTouch;
+  if (!g || evt.pointerType !== 'touch' || !g.pointers.has(evt.pointerId)) return;
+  g.pointers.set(evt.pointerId, { x: evt.clientX, y: evt.clientY });
+  if (!g.locked && (g.mode === 'wait' || g.mode === 'scrub')) {
+    const lock = touchLock(evt.clientX - g.x0, evt.clientY - g.y0, TOUCH_LOCK_PX);
+    if (!lock) return;
+    g.locked = true;
+    clearTimeout(g.hold);
+    // Nothing to pan: sideways reads the bars, as it always did.
+    if (g.mode === 'scrub') return;
+    chartTouchQuiet(g);
+    if (lock === 'y') { chartTouchMode(g, 'page'); return; }
+    chartTouchMode(g, 'pan');
+    // From the press, as the mouse's pan is, so the bar under the finger
+    // stays under it.
+    chartTouchPan(g, g.x0);
+    return;
+  }
+  // The finger left over from a pinch pans from where it is.
+  if (g.mode === 'pan' && !wsPan) chartTouchPan(g, evt.clientX);
+  else if (g.mode === 'pinch') chartTouchPinchMove(g);
+});
+
+function chartTouchLift(evt) {
+  const g = chartTouch;
+  if (!g || evt.pointerType !== 'touch' || !g.pointers.has(evt.pointerId)) return;
+  g.pointers.delete(evt.pointerId);
+  // A cancel is the browser taking the gesture over: none of it is ours now.
+  if (!g.pointers.size || evt.type === 'pointercancel') { chartTouchEnd(); return; }
+  if (g.mode === 'pinch') { g.pinch = null; chartTouchMode(g, 'pan'); }
+  else if (g.mode === 'measure') chartTouchMode(g, 'hold');
+}
+document.addEventListener('pointerup', chartTouchLift);
+document.addEventListener('pointercancel', chartTouchLift);
 
 /* Dragging the plot.
  *
@@ -27611,10 +27845,10 @@ document.addEventListener('pointerdown', (evt) => {
   if (evt.button !== 0) return;
   /* Mouse and pen only.
    *
-   * A finger dragged across a chart is scrolling the page, and moving the
-   * chart under it as well would be two gestures at once. Touch keeps the
-   * two-finger measurement it already had, and the navigator strip is still
-   * there to move the window. */
+   * A finger is `chartTouch`'s, above, which has to tell a pan from the page's
+   * scroll and from a held press first, and hands a sideways drag to this pan
+   * once it has. Taking it here, at the press, would move the chart under a
+   * finger that was scrolling the page. */
   if (evt.pointerType && evt.pointerType !== 'mouse' && evt.pointerType !== 'pen') return;
   // Shift measures, which each chart's own mousedown answers, and an armed
   // drawing tool draws, which each adapter reports through `enabled`.
@@ -41891,7 +42125,10 @@ function updateStatus() {
           : wsFit ? `${shown} · newest ${wsFit.shown} of ${wsFit.total} candles, scroll for more`
             : `${shown} · ${chartWindowLabel()}`,
         `${wsDrawings().length} drawing${wsDrawings().length === 1 ? '' : 's'}`,
-        'Drag to pan, hold then drag to measure, scroll to zoom']
+        // A finger has no wheel, and its hold reads the bars (chartTouch).
+        window.matchMedia && window.matchMedia('(pointer: coarse)').matches
+          ? 'Drag to pan, pinch to zoom, hold then drag to read'
+          : 'Drag to pan, hold then drag to measure, scroll to zoom']
       : ['Chart. Pick a symbol to begin.']);
     return;
   }

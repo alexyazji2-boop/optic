@@ -2493,12 +2493,41 @@ function lineChart(opts) {
     style: 'cursor:crosshair',
   });
 
-  // Two fingers measures directly, one endpoint per finger. Handled before the
-  // scrub binding so a pinch never reaches the single-point crosshair, and
-  // preventDefault is scoped to the two-finger case so one finger still scrolls.
+  /* What a finger on a chart that pans is doing, as the page's touch handler
+   * decided it: `data-chart-touch` on the host (chartTouch in app.js). Null on
+   * every other chart, and before that handler has seen the press.
+   *
+   * A chart redrawn out from under the finger is detached, and its overlay
+   * still receives the rest of that finger's touch events: a touch keeps the
+   * target it began on. Only a pan or a pinch redraws, so a detached chart is
+   * in the middle of one. */
+  const touchMode = () => {
+    if (!panDrag) return null;
+    if (root.isConnected === false) return 'pan';
+    const host = root.closest ? root.closest('[data-chart-touch]') : null;
+    return host ? host.dataset.chartTouch : null;
+  };
+
+  /* Two fingers measure directly, one endpoint per finger, on a chart that
+   * does not pan. Handled before the scrub binding so they never reach the
+   * single-point crosshair, and preventDefault is scoped to the two-finger
+   * case so one finger still scrolls.
+   *
+   * On a chart that pans, two fingers pinch, and measuring takes a held finger
+   * and then a second. A pan, a pinch and a held drag keep the page still, so
+   * the browser does not scroll it from under the fingers (a pinch's midpoint
+   * drifts up or down, and pan-y lets the page follow it) and cancel them. */
   overlay.addEventListener('touchmove', (evt) => {
-    if (evt.touches.length < 2) return;
-    evt.preventDefault();
+    const mode = touchMode();
+    if (mode !== null) {
+      if (mode === 'pan' || mode === 'pinch' || mode === 'hold' || mode === 'measure') {
+        evt.preventDefault();
+      }
+      if (mode !== 'measure' || evt.touches.length < 2) return;
+    } else {
+      if (evt.touches.length < 2) return;
+      evt.preventDefault();
+    }
     hideTip();
     drawMeasure(indexFromClientX(evt.touches[0].clientX),
                 indexFromClientX(evt.touches[1].clientX));
@@ -2701,6 +2730,15 @@ function lineChart(opts) {
     if (onHover) onHover(null);
   };
   bindScrub(overlay, (evt) => {
+    /* A finger on a chart that pans reads the bars once held, or straight
+     * away when there is nothing to pan. Until then its move may be a pan, a
+     * pinch or the page's scroll, and the readout stays on the bar it was
+     * pressed on (the press itself reads at once, before the page's handler
+     * has decided anything, so a tap still shows its bar). */
+    if (evt.pointerType === 'touch') {
+      const mode = touchMode();
+      if (mode && mode !== 'scrub' && mode !== 'hold') return;
+    }
     const box = root.getBoundingClientRect();
     const scale = W / box.width;
     const localX = (evt.clientX - box.left) * scale;
@@ -2764,19 +2802,30 @@ function lineChart(opts) {
       + 'Double-click to fit it to the bars on screen.'));
     grip.addEventListener('pointerdown', (evt) => {
       if (evt.button !== 0) return;
+      /* One finger's gesture. A second finger, on the scale or off it, makes a
+       * pinch, which the page's touch handler owns (chartTouch in app.js): the
+       * gutter is 74px of a 365px chart on an iPhone 17, a fifth of it, and
+       * the first pinch-in tried on the simulator put a finger there. A finger
+       * already down on this chart says so on the host, and then this one
+       * never starts a stretch. */
+      if (evt.pointerType === 'touch' && touchMode()) return;
       evt.preventDefault();
       hideTip();
       const startY = evt.clientY;
       const from = yZoom;
       const move = (e) => onYZoom(from * Math.exp((startY - e.clientY) / Y_ZOOM_PX));
+      // And a second finger landing after this one ends the stretch.
+      const other = (e) => { if (e.pointerId !== evt.pointerId) end(); };
       const end = () => {
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', end);
         window.removeEventListener('pointercancel', end);
+        window.removeEventListener('pointerdown', other);
       };
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', end);
       window.addEventListener('pointercancel', end);
+      window.addEventListener('pointerdown', other);
     });
     grip.addEventListener('dblclick', (evt) => {
       evt.preventDefault();
@@ -2811,6 +2860,10 @@ function lineChart(opts) {
     // and snapping is the reader's choice rather than this function's.
     indexAtExact: (px) => (n <= 1 ? 0 : ((px - m.l) / plotW) * (n - 1)),
     priceAt: (py) => hi - ((py - m.t) / priceH) * (hi - lo),
+    // The crosshair, dots, tooltip and header readout off: for a finger whose
+    // press read a bar and which has since become a pan or a pinch, moving the
+    // bars out from under that reading. See chartTouch in app.js.
+    clearReadout: clearBar,
   };
 
   return root;

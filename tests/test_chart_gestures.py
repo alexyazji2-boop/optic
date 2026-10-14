@@ -95,11 +95,16 @@ def test_panning_yields_to_every_more_specific_gesture():
     assert "if (wheel && adapter.overlay && evt.target.closest(adapter.overlay))" in resolver
 
 
-def test_panning_declines_touch_so_the_page_can_still_scroll():
-    """A finger dragged across a chart is scrolling the page. Panning it too
-    would move two things under one finger."""
+def test_the_mouse_pan_leaves_a_finger_to_the_touch_handler():
+    """A finger may be scrolling the page, so the pan does not take it at the
+    press. `chartTouch` does, decides over the first few pixels whether it is
+    sideways, and only then hands it to this same pan (tests/test_chart_touch.py
+    drives that). Before 2026-10-14 nothing took it, and a finger never panned."""
     handler = _block(APP, "let wsPan = null;\n\ndocument.addEventListener('pointerdown'", "\n});")
     assert "evt.pointerType !== 'mouse' && evt.pointerType !== 'pen'" in handler
+    touch = _block(APP, "const TOUCH_LOCK_PX = 8;", "document.addEventListener('pointercancel', chartTouchLift);")
+    assert "if (evt.pointerType !== 'touch') return;" in touch
+    assert "wsPan = { x, from: win.from, to: win.to, barsPerPx, moved: false," in touch
 
 
 def test_panning_does_nothing_when_there_is_nothing_to_pan():
