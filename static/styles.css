@@ -8539,6 +8539,17 @@ ul.bt-fine { padding-left: var(--space-4); }
 .bt-side { color: var(--neg); font-weight: 600; }
 /* The stop check's two columns, yours and buffered, side by side. */
 .sc-table td.name { white-space: normal; }
+/* The pair's spread in standard deviations, with the entry lines. */
+.pr-z { width: 100%; height: auto; display: block; margin-top: var(--space-2); }
+.pr-z .pr-line { fill: none; stroke: var(--accent); stroke-width: 1.4; }
+.pr-z .pr-zero { stroke: var(--ink-muted); stroke-width: 0.6; }
+.pr-z .pr-band { stroke: var(--neg); stroke-width: 0.8; stroke-dasharray: 3 3; }
+.pr-sugg .tkr { margin-right: 2px; }
+/* Sentences, not figures: they wrap rather than run under the dock's edge. */
+.pr-facts { table-layout: fixed; width: 100%; }
+/* table.data td sets nowrap at (0,1,2); this has to outrank it. */
+table.data.pr-facts td { white-space: normal; overflow-wrap: anywhere; vertical-align: top; }
+table.data.pr-facts td.name { width: 40%; overflow-wrap: normal; }
 .bt-ask { margin: var(--space-2) 0; }
 
 /* Widget internals. Kept tight — a 260px column has no room for the panel

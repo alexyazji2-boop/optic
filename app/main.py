@@ -73,6 +73,7 @@ from .analytics import portfolio_risk as portfolio_risk_mod
 from .analytics import evaluate as evaluate_mod
 from .analytics import backtest as backtest_mod
 from .analytics import stops as stops_mod
+from .analytics import pairs as pairs_mod
 from .analytics import expiries as expiries_mod
 from .analytics import scanners as scanners_mod
 from .analytics import series_stats as series_stats_mod
@@ -4633,6 +4634,57 @@ async def stop_check(ticker: str,
         out = stops_mod.check(entry or last, stop, a, buffer, account, risk_pct)
         out.update(ticker=sym, last_close=round(last, 4), atr_as_of=str(df.index[-1])[:10])
         return out
+
+    return await _run(build)
+
+
+@app.get("/api/pairs/{ticker}/peers")
+async def pair_peers(ticker: str) -> Dict[str, Any]:
+    """Candidates to pair with: names in the same sector fund as this one (or
+    the whole 143-name universe if it is in none), ranked by how closely their
+    daily returns moved with its over the last year."""
+    sym = ticker.upper().strip()
+
+    def build() -> Dict[str, Any]:
+        import numpy as np
+        import pandas as pd
+        from .analytics.stockmaps import SECTOR_HOLDINGS
+        names = {h["symbol"]: h.get("name") for rows in SECTOR_HOLDINGS.values() for h in rows}
+        funds = [f for f, rows in SECTOR_HOLDINGS.items() if any(h["symbol"] == sym for h in rows)]
+        pool = sorted({h["symbol"] for f in funds for h in SECTOR_HOLDINGS[f]} - {sym}) if funds else sorted(set(names) - {sym})
+        closes = relperf_mod._peer_closes(YF_PROVIDER)
+        mine = YF_PROVIDER.history(sym, period="1y", interval="1d")
+        if mine is None or mine.empty or closes is None or closes.empty:
+            return {"available": False, "reason": "No price history to compare."}
+        s = mine["Close"].astype(float)
+        s.index = pd.to_datetime(s.index).tz_localize(None).normalize()
+        r = np.log(s).diff()
+        cols = [c for c in pool if c in closes.columns]
+        other = np.log(closes[cols].copy())
+        other.index = pd.to_datetime(other.index).normalize()
+        rr = other.diff()
+        joined = rr.join(r.rename("__me__"), how="inner").dropna(subset=["__me__"])
+        corr = joined.drop(columns="__me__").corrwith(joined["__me__"]).dropna().sort_values(ascending=False)
+        return {"available": True, "ticker": sym, "sector_funds": funds,
+                "peers": [{"symbol": k, "name": names.get(k), "corr": round(float(v), 2)} for k, v in corr.head(8).items()],
+                "method": "Correlation of daily log returns over the last year, against names in the same sector "
+                          "fund{}. Correlated returns are where a pair starts, not proof of one: the pair test "
+                          "checks whether the spread comes back.".format("" if funds else " (none found; the whole universe)")}
+
+    return await _run(build)
+
+
+@app.get("/api/pairs/{ticker}")
+async def pair_test(ticker: str, request: Request, b: str = Query(..., min_length=1, max_length=12)) -> Dict[str, Any]:
+    """Two stocks' spread now, and the pairs rule walked forward out of sample
+    (app/analytics/pairs.py). Rule parameters ride as entry_z, exit_z, stop_z."""
+    a_sym, b_sym = ticker.upper().strip(), b.upper().strip()
+    raw = {k: v for k, v in request.query_params.items() if k in {p["id"] for p in pairs_mod.PARAMS}}
+
+    def build() -> Dict[str, Any]:
+        fa = YF_PROVIDER.history(a_sym, period="max", interval="1d")
+        fb = YF_PROVIDER.history(b_sym, period="max", interval="1d")
+        return pairs_mod.run(a_sym, b_sym, fa, fb, raw)
 
     return await _run(build)
 

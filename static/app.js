@@ -790,6 +790,7 @@ const HEADER_DEFS = {
   'fair value': 'What the stock would be worth at the price-to-earnings multiples the market has usually paid for it: trailing earnings times the 25th percentile, median and 75th percentile of its own five-year P/E. It is a range to read the price against, not a target, and it cannot tell whether the business has changed.',
   'morningstar rating': "Morningstar's star rating for this fund, from one to five, based on its past returns after costs and adjusted for risk against funds of the same kind. It looks backward, and it is Morningstar's view, not Optic's.",
   'off-exchange short volume': "The share of each day's off-exchange trading, through dark pools and wholesalers, that was reported as short sales, from FINRA's daily files. Market makers sell short routinely to fill buy orders, so the level runs high for every stock, and a change against its own average says more than the level does.",
+  'pairs': "Two related stocks priced against each other: how far apart they have drifted, in standard deviations of their usual gap, and whether betting on the gap closing has worked in years the pair was not fitted to. A pair is only one if the gap keeps coming back, which the cointegration test checks and which often stops being true.",
   'stop check': "Whether a stop sits at a round number, where stop orders bunch up, and where it would sit a buffer past one. Moving a stop further from the price makes a sweep less likely to take it and costs more when it is hit, so the panel shows both, with how often moves through a round number went that far in a sample of large stocks.",
   'backtest': "A rule tested on this stock's own history: when it would have bought and sold, and how the trades added up. Shown beside buying and holding over the same years and beside random entries with the same number of trades, because a rule on a stock that rose looks good whether or not the rule adds anything.",
   'seasonality': "Whether this stock's returns have followed the calendar: by month, by weekday and around the turn of each month, from its own history. Each effect is tested for statistical significance, because averages split by calendar always show some pattern by chance.",
@@ -22105,6 +22106,7 @@ function wsToggleWidget(id, on) {
   if (on && id === 'seasonality') loadSeasonality(false, STATE.chartSymbol);
   if (on && id === 'backtest') loadBacktest(STATE.chartSymbol);
   if (on && id === 'stopcheck') loadStopCheck(STATE.chartSymbol);
+  if (on && id === 'pairs') loadPairs(STATE.chartSymbol);
   if (on && id === 'analysts') loadAnalystActions(false, STATE.chartSymbol);
   if (on && id === 'trading' && !STATE.tracker) wsLoadTracker();
   if (on && id === 'alerts') loadAlerts(true);
@@ -23502,6 +23504,8 @@ const WS_WIDGETS = [
     icon: '<path d="M9 6.5h11M9 12h11M9 17.5h11"/><path d="M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01" stroke-width="2.6"/>' },
   { id: 'patterns', label: 'Patterns',    // two candles
     icon: '<path d="M7 3.5v3M7 15.5v5"/><rect x="5" y="6.5" width="4" height="9" rx="0.8"/><path d="M17 5v4M17 16v3.5"/><rect x="15" y="9" width="4" height="7" rx="0.8"/>' },
+  { id: 'pairs', label: 'Pairs',          // two lines that part and meet again
+    icon: '<path d="M3.5 9c3 0 4.5 3 8.5 3s5.5-5 8.5-5"/><path d="M3.5 15c3 0 4.5-3 8.5-3s5.5 5 8.5 5"/>' },
   { id: 'backtest', label: 'Backtest',    // a rule's equity curve stepping up
     icon: '<path d="M3.5 19.5h17"/><path d="M4.5 16.5 9 12l3 2.5 3.5-5 4 2.5"/><circle cx="19.5" cy="12" r="1.2"/>' },
   { id: 'trading', label: 'Trading',      // a buy and a sell
@@ -24059,6 +24063,126 @@ function btOnChange(evt) {
   return false;
 }
 
+/* ----------------------------------------------------------------- pairs
+ *
+ * Two related stocks' spread: how stretched it is now, and whether trading it
+ * back has worked on years the pair was not fitted to (app/analytics/pairs.py,
+ * /api/pairs). From a post selling "buy the loser, short the leader" as what
+ * hedge funds do; the panel's job is to show when a pair is one, and how often
+ * that held.
+ */
+const PR_KEY = 'optic.chart.pairs.v1';
+const PR = { peer: {}, result: null, resultKey: null, peers: null, peersFor: null, loading: false, error: null, reqId: 0 };
+try {
+  const saved = JSON.parse(localStorage.getItem(PR_KEY) || 'null');
+  if (saved && typeof saved === 'object' && saved.peer && typeof saved.peer === 'object') PR.peer = saved.peer;
+} catch (e) { /* defaults */ }
+function prSave() {
+  try { localStorage.setItem(PR_KEY, JSON.stringify({ peer: PR.peer })); } catch (e) { /* private mode */ }
+}
+async function loadPairs(symbol) {
+  const sym = String(symbol || STATE.chartSymbol || '').toUpperCase();
+  if (!sym) return;
+  if (PR.peersFor !== sym) {
+    PR.peersFor = sym; PR.peers = null;
+    getJSON(`/api/pairs/${encodeURIComponent(sym)}/peers`)
+      .then((r) => { if (PR.peersFor === sym) { PR.peers = r; wsRepaintWidget('pairs'); } })
+      .catch(() => { if (PR.peersFor === sym) { PR.peers = { available: false }; wsRepaintWidget('pairs'); } });
+  }
+  const b = PR.peer[sym];
+  if (!b) { wsRepaintWidget('pairs'); return; }
+  const want = `${sym}/${b}`;
+  if (PR.result && PR.resultKey === want) { wsRepaintWidget('pairs'); return; }
+  const id = ++PR.reqId;
+  PR.loading = true; PR.error = null;
+  wsRepaintWidget('pairs');
+  try {
+    const r = await getJSON(`/api/pairs/${encodeURIComponent(sym)}?b=${encodeURIComponent(b)}`);
+    if (id !== PR.reqId) return;
+    PR.result = r; PR.resultKey = want;
+  } catch (err) {
+    if (id !== PR.reqId) return;
+    PR.error = err.message;
+  } finally {
+    if (id === PR.reqId) { PR.loading = false; wsRepaintWidget('pairs'); }
+  }
+}
+/* The spread's z-score over the formation year, with the entry lines. */
+function prZSVG(rows, entry) {
+  if (!rows || rows.length < 2) return '';
+  const W = 236, H = 80, pad = 4;
+  const vals = rows.map((r) => r.z);
+  const top = Math.max(entry + 0.5, ...vals.map(Math.abs));
+  const x = (i) => pad + (i / (rows.length - 1)) * (W - 2 * pad);
+  const y = (v) => H / 2 - (v / top) * (H / 2 - pad);
+  const path = rows.map((r, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(r.z).toFixed(1)}`).join('');
+  const line = (v, cls) => `<line x1="${pad}" x2="${W - pad}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" class="${cls}"/>`;
+  return `<svg class="pr-z" viewBox="0 0 ${W} ${H}" role="img" aria-label="Spread z-score over the last year, now ${fmt(vals[vals.length - 1], 1)}">
+    ${line(0, 'pr-zero')}${line(entry, 'pr-band')}${line(-entry, 'pr-band')}
+    <path d="${path}" class="pr-line"/></svg>`;
+}
+function wsPairsHTML() {
+  const sym = STATE.chartSymbol || '';
+  if (!sym) return '<p class="ws-none">Load a symbol.</p>';
+  const b = PR.peer[sym] || '';
+  const sugg = PR.peers && PR.peers.available && PR.peersFor === sym ? PR.peers.peers || [] : [];
+  const controls = `<div class="bt-controls">
+    <label class="bt-field bt-wide"><span>Pair ${esc(sym)} with</span><input type="text" data-pr-peer value="${esc(b)}"
+      placeholder="Symbol" autocapitalize="characters" spellcheck="false" maxlength="12"></label>
+  </div>
+  ${sugg.length ? `<p class="bt-fine pr-sugg">Moved most alike: ${sugg.slice(0, 6).map((p) => `<button type="button" class="tkr${p.symbol === b ? ' on' : ''}"
+    data-pr-pick="${esc(p.symbol)}" title="${esc(p.name || p.symbol)}: correlation ${fmt(p.corr, 2)}">${esc(p.symbol)}</button>`).join(' ')}</p>` : ''}`;
+  if (!b) return controls + '<p class="ws-none">Pick a second stock: one with the same products, customers or market.</p>';
+  const r = PR.result;
+  if (PR.loading) return controls + '<p class="ws-none" role="status">Testing the pair…</p>';
+  if (PR.error) return controls + `<p class="ws-none">${esc(PR.error)}</p>`;
+  if (!r || r.a !== sym || r.b !== b) return controls;
+  if (r.available === false) return controls + `<p class="ws-none">${esc(r.reason || 'No result.')}</p>`;
+  const now = r.now || {}, wf = r.walk_forward || {}, al = wf.all || {}, ct = wf.coint_only || {};
+  const lvl = now.coint_level;
+  const tile = (val, cls, lab, sub) => `<div class="bt-tile"><span class="bt-val ${cls}">${val}</span><span class="bt-lab">${esc(lab)}</span><span class="bt-sub">${sub}</span></div>`;
+  const book = (bk, lab) => tile(btSigned(bk.total_return_pct, 0), signClass(bk.total_return_pct), lab,
+    `${fmt(bk.trades || 0, 0)} trades${bk.win_rate_pct !== null && bk.win_rate_pct !== undefined ? `, ${fmt(bk.win_rate_pct, 0)}% won` : ''}${
+      bk.beats_random_pct !== null && bk.beats_random_pct !== undefined ? `, beat ${fmt(bk.beats_random_pct, 0)}% of random` : ''}`);
+  return controls + `<p class="bt-head"><strong>${esc(sym)} / ${esc(b)}</strong> · spread ${now.z === null || now.z === undefined ? '—' : `${now.z > 0 ? '+' : ''}${fmt(now.z, 1)}σ`}</p>
+    <p class="bt-summary">${esc(now.stance || '')}</p>
+    ${prZSVG(r.z_history, (r.params || {}).entry_z || 2)}
+    <p class="bt-legend">Spread in standard deviations, last year · lines at ±${fmt((r.params || {}).entry_z || 2, 1)}, where the rule enters</p>
+    <table class="data narrow pr-facts"><tbody>
+      <tr><td class="name">A pair?</td><td>${lvl ? `Cointegrated at ${fmt(lvl * 100, 0)}% over the last year` : 'Not cointegrated over the last year (no evidence the gap comes back)'}</td></tr>
+      <tr><td class="name">Hedge</td><td>${now.beta > 0 ? `${fmt(now.beta, 2)} of ${esc(b)} for each 1 of ${esc(sym)}` : `None: the ratio is ${fmt(now.beta, 2)}, the two moved apart`}</td></tr>
+      <tr><td class="name">Half-life</td><td>${now.half_life ? `${fmt(now.half_life, 0)} sessions for a gap to halve` : '—'}</td></tr>
+      <tr><td class="name">Correlation</td><td>${now.corr === null || now.corr === undefined ? '—' : fmt(now.corr, 2)} (daily returns)</td></tr>
+    </tbody></table>
+    <h4 class="ws-sub-h">Out of sample, ${fmt(wf.years_traded || 0, 0)} years</h4>
+    <div class="bt-tiles">
+      ${book(al, 'Every window')}
+      ${book(ct, 'Only when it tested as a pair')}
+    </div>
+    <p class="bt-verdict">${esc(r.verdict || '')}</p>
+    <p class="bt-fine">Tested as a pair in ${fmt(wf.coint_share_pct || 0, 0)}% of formation years${wf.stayed_coint_pct !== null && wf.stayed_coint_pct !== undefined ? `, and still did in the next half-year ${fmt(wf.stayed_coint_pct, 0)}% of the time` : ''}.</p>
+    <button type="button" class="ask-pulse bt-ask" data-ask-text="${esc(`Explain the pairs test of ${sym} and ${b}: the spread is ${now.z} standard deviations from its average, ${lvl ? 'cointegrated at ' + lvl * 100 + '%' : 'not cointegrated'} over the last year; out of sample, every window ${al.trades} trades ${btSigned(al.total_return_pct, 0)}, only when cointegrated ${ct.trades} trades ${btSigned(ct.total_return_pct, 0)}. Is this a real pair, and what would make me trust the trade?`)}">Ask Milo about this pair</button>
+    <details class="ind-explain bt-method"><summary>How this is tested<i class="cal-caret" aria-hidden="true"></i></summary>
+      <p class="bt-fine">${esc(r.method || '')} Enter at |z| ${fmt((r.params || {}).entry_z, 1)}, exit at ${fmt((r.params || {}).exit_z, 1)}, stop at ${fmt((r.params || {}).stop_z, 1)}, give up after three half-lives.</p>
+      <ul class="bt-fine">${(r.caveats || []).map((c) => `<li>${esc(c)}</li>`).join('')}</ul>
+    </details>`;
+}
+document.addEventListener('change', (evt) => {
+  const el = evt.target;
+  if (!el || !el.matches || !el.matches('[data-pr-peer]')) return;
+  const sym = STATE.chartSymbol || '';
+  const v = String(el.value || '').toUpperCase().trim().replace(/[^A-Z0-9.^=-]/g, '');
+  if (v) PR.peer[sym] = v; else delete PR.peer[sym];
+  prSave(); loadPairs(sym);
+});
+document.addEventListener('click', (evt) => {
+  const pick = evt.target && evt.target.closest && evt.target.closest('[data-pr-pick]');
+  if (!pick) return;
+  const sym = STATE.chartSymbol || '';
+  PR.peer[sym] = pick.dataset.prPick;
+  prSave(); loadPairs(sym);
+});
+
 /* ------------------------------------------------------------ stop check
  *
  * Whether a stop sits at a round number, where a buffered one would go and
@@ -24308,6 +24432,7 @@ function wsWidgetBody(id) {
 
   if (id === 'backtest') return wsBacktestHTML();
   if (id === 'stopcheck') return wsStopCheckHTML();
+  if (id === 'pairs') return wsPairsHTML();
 
   if (id === 'seasonality') {
     if (!STATE.seasonality || STATE.seasonalityFor !== sym) return loadingHTML('seasonality');
@@ -26895,6 +27020,7 @@ async function loadChartWorkspace(symbol, force) {
   if (wsDockOpen.includes('seasonality')) loadSeasonality(false, sym);
   if (wsDockOpen.includes('backtest')) loadBacktest(sym);
   if (wsDockOpen.includes('stopcheck')) loadStopCheck(sym);
+  if (wsDockOpen.includes('pairs')) loadPairs(sym);
   if (wsDockOpen.includes('analysts')) loadAnalystActions(false, sym);
   if (showTrends) loadTrendlines(sym);
   // Same rule: only if the overlay is on, and only when the symbol changes.
@@ -41045,6 +41171,14 @@ function chatContextPayload() {
       benchmark: r.benchmark, verdict: r.verdict, caveats: r.caveats, recent_trades: (r.trades || []).slice(-8),
       open_trade: r.open_trade };
   }
+  if (PR.result && PR.result.available === true && PR.result.a === STATE.chartSymbol) {
+    const r = PR.result;
+    ctx.pairs = { a: r.a, b: r.b, now: r.now, params: r.params, verdict: r.verdict, how_tested: r.method,
+      walk_forward: { years_traded: r.walk_forward.years_traded, all: r.walk_forward.all,
+        coint_only: r.walk_forward.coint_only, coint_share_pct: r.walk_forward.coint_share_pct,
+        stayed_coint_pct: r.walk_forward.stayed_coint_pct, recent_trades: (r.walk_forward.trades || []).slice(-8) },
+      caveats: r.caveats };
+  }
   if (SC.result && SC.result.available === true && SC.result.ticker === STATE.chartSymbol) {
     const r = SC.result;
     ctx.stop_check = { ticker: r.ticker, side: r.side, entry: r.entry, stop: r.stop, atr: r.atr,
@@ -42693,6 +42827,7 @@ const PULSE_SOURCES = {
   chart: ['Chart', 'chart'],
   backtest: ['Backtest', 'chart'],
   stop_check: ['Stop check', 'chart'],
+  pairs: ['Pairs', 'chart'],
   technicals: ['Technicals', 'swing'],
   gex: ['Dealer gamma', 'swing'],
   greeks: ['Greeks', 'swing'],
