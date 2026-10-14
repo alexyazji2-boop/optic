@@ -26,7 +26,11 @@ from .. import session as session_mod
 log = logging.getLogger(__name__)
 ET = ZoneInfo("America/New_York")
 
-FETCH_BUDGET_SECONDS = 20.0
+# The page waits for the panel, so it gets time for a cold cache: the first
+# read of a ticker on a fresh server queued behind the page's own load (the
+# feed serialises its requests) and every source missed a 20s budget
+# (NVDA, 2026-10-14). Milo's hook has its own, shorter limit in main.py.
+FETCH_BUDGET_SECONDS = 45.0
 CACHE_TTL = 600.0
 _CACHE: Dict[str, Any] = {}
 _LOCK = threading.Lock()
@@ -133,8 +137,9 @@ def _needs(mode: str) -> Dict[str, bool]:
 
 def build(provider, yf, ticker: str, mode: str = "combined", *, rate: float = 0.0,
           vol_event: Optional[Dict[str, Any]] = None, now: Optional[datetime] = None,
-          save_forecast: bool = True, with_comps: bool = True, overrides: Optional[Dict[str, Any]] = None,
-          deps: Optional[Dict[str, Callable[..., Any]]] = None) -> Dict[str, Any]:
+          save_forecast: bool = True, with_comps: Optional[bool] = None, overrides: Optional[Dict[str, Any]] = None,
+          deps: Optional[Dict[str, Callable[..., Any]]] = None,
+          budget: float = FETCH_BUDGET_SECONDS) -> Dict[str, Any]:
     """The research framework's output for one ticker.
 
     `mode` is long_term, swing, pre_earnings, post_earnings, earnings (pre or
@@ -149,11 +154,16 @@ def build(provider, yf, ticker: str, mode: str = "combined", *, rate: float = 0.
             hit = _CACHE.get(key)
         if hit and time.time() - hit[0] < CACHE_TTL:
             return hit[1]
+    # Peers cost one quote-feed lookup each (eight), so they are read for a
+    # long-term question and left out of the Overview's combined read, which
+    # runs on every visit; the fair-value workspace has them on request.
+    if with_comps is None:
+        with_comps = mode == "long_term"
     pol = policy_mod.current(overrides)
     vals = pol["values"]
     d = _deps(deps)
     need = _needs(mode)
-    g = _Gather(FETCH_BUDGET_SECONDS)
+    g = _Gather(budget)
     try:
         g.start("quote", provider.quote, sym)
         if need["swing"] or need["earnings"]:
@@ -192,21 +202,35 @@ def build(provider, yf, ticker: str, mode: str = "combined", *, rate: float = 0.
         spy = completed_bars(spy_raw, fresh.get("phase"), now)
         if need["long_term"]:
             out["long_term"] = _long_term(g, lt, vals)
+            if not out["long_term"].get("available") and _missed(g, "gathered", "valuation"):
+                out["long_term"]["conviction"]["why"] = ("The company's filings did not load in time ({}). Try "
+                                                         "again in a moment.".format(_missed(g, "gathered", "valuation")))
         if need["swing"]:
             out["swing"] = _swing(yf, daily, spy, ea, fresh, quote, vals)
         if need["earnings"]:
             out["earnings"] = _earnings(sym, mode, ea, g, daily, spy, lt, quote, fresh, vol_event, vals, pol,
                                         save_forecast, now, daily_raw=daily_raw, spy_raw=spy_raw)
+            if ea is None and _missed(g, "earnings"):
+                out["earnings"] = {"available": False,
+                                   "reason": "Earnings data did not load in time ({}). Try again in a moment.".format(
+                                       _missed(g, "earnings"))}
         if mode == "combined":
             out["combined"] = agreement(out)
         out["data"] = {"gaps": g.gaps, "sources": SOURCES}
         out["limitations"] = LIMITATIONS
     finally:
         g.close()
-    if now is None and not overrides:
+    # A read with a missing source is never cached: the next request should
+    # try again rather than serve the gap for ten minutes.
+    if now is None and not overrides and not out["data"]["gaps"]:
         with _LOCK:
             _CACHE[key] = (time.time(), out)
     return out
+
+
+def _missed(g: "_Gather", *names: str) -> str:
+    hits = [gap for gap in g.gaps if any(gap.startswith(n + " ") for n in names)]
+    return "; ".join(hits)
 
 
 SOURCES = {
@@ -420,6 +444,13 @@ def agreement(out: Dict[str, Any]) -> Dict[str, Any]:
         lines.append("Earnings just reported ({}): report quality {}; {}".format(
             post["release"]["date"], qg or "not graded", (post.get("reaction") or {}).get("text") or ""))
     lt_good, sw_good = conv in FAVOURABLE_LT, grade in FAVOURABLE_SW
+    missing = [name for name, ok in (("the long-term view", lt.get("available") is not False and conv != "Insufficient Data"),
+                                     ("the swing setup", grade != "Insufficient Data")) if not ok]
+    if missing:
+        return {"lines": lines,
+                "verdict": "{} could not be graded here, so there is no agreement to report; each assessment that "
+                           "did load stands on its own.".format(" and ".join(missing).capitalize()),
+                "note": "Each assessment answers its own question; none is averaged into the others."}
     if lt_good and sw_good:
         verdict = ("They agree: the business, the price and the chart all lean the same way. Agreement is not "
                    "extra certainty; each still has its own way of being wrong.")

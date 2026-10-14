@@ -65,8 +65,9 @@ def test_every_source_is_a_key_the_terminal_sends_and_a_view_it_has():
     # market block. Asserted there instead.
     # The research pack (app/desk/research.py) is the third, retrieved for the
     # question in main._with_research.
+    # The research framework's assessment is the fourth (main._with_framework).
     server_added = {"portfolio_summary": 'out["portfolio_summary"]', "market": 'out["market"] = market',
-                    "research": 'ctx["research"] = pack'}
+                    "research": 'ctx["research"] = pack', "framework": 'ctx["framework"] = '}
     main_src = open("app/main.py", encoding="utf-8").read()
     for key in keys:
         if key in server_added:

@@ -1,0 +1,1380 @@
+{
+ "available": true,
+ "ticker": "NVDA",
+ "name": "NVIDIA Corporation",
+ "mode": "combined",
+ "method_version": "research-1.0",
+ "policy": {
+  "version": "policy-2026-10-14",
+  "changed": [],
+  "ignored": []
+ },
+ "generated_at": "2026-10-14T16:48:02+00:00",
+ "price": 222.195,
+ "freshness": {
+  "phase": "regular",
+  "session_label": "Regular session",
+  "market_time": null,
+  "last_completed_bar": "2026-10-14",
+  "state": "unknown",
+  "text": "The feed gave no price time, so freshness cannot be checked."
+ },
+ "long_term": {
+  "available": true,
+  "business_type": "operating",
+  "business_type_label": "Operating company",
+  "quality": {
+   "status": "scored",
+   "grade": "B",
+   "score": 3.27,
+   "components": [
+    {
+     "id": "returns",
+     "label": "Returns on capital",
+     "status": "scored",
+     "score": 4.0,
+     "grade": "A",
+     "headline": "Return on capital averaged 116.0% over the last 3 years against a 12.9% cost of capital (+103.1 points).",
+     "evidence": [
+      "FY2026 return on capital 126.1%",
+      "FY2025 return on capital 134.1%",
+      "FY2024 return on capital 87.8%",
+      "FY2023 return on capital 11.2%",
+      "Measured on total capital: invested capital net of cash is near zero or negative here, so the usual ratio would be meaningless."
+     ],
+     "figures": {
+      "roic_avg_3y": 1.1598074182667824,
+      "wacc": 0.12862698140149434,
+      "spread": 1.031180436865288,
+      "years_above": 3,
+      "years": 4,
+      "method": "after-tax operating income / prior-year total capital (equity + debt), cash included; used because invested capital net of cash is near zero or negative for this company",
+      "total_capital_basis": true
+     },
+     "sources": [
+      {
+       "label": "operating income",
+       "period": "2026-01-25",
+       "form": "10-K",
+       "filed": "2026-02-25",
+       "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/",
+       "tag": "OperatingIncomeLoss"
+      },
+      {
+       "label": "equity",
+       "period": "2026-01-25",
+       "form": "10-Q",
+       "filed": "2026-08-26",
+       "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/",
+       "tag": "StockholdersEquity"
+      },
+      {
+       "label": "debt",
+       "period": "2026-01-25",
+       "form": null,
+       "filed": "2026-08-26",
+       "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/",
+       "tag": null
+      }
+     ],
+     "reason": "",
+     "rubric": "Average return on invested capital over the last three fiscal years minus the cost of capital (WACC): 4 at +10 points or more, 3 at +4, 2 at 0, 1 at -4, else 0. Banks and insurers use return on equity against the cost of equity."
+    },
+    {
+     "id": "margins",
+     "label": "Profitability and margins",
+     "status": "scored",
+     "score": 3.0,
+     "grade": "B",
+     "headline": "Operating margin was 60.4% in FY2026, with a 46.8-point range over 5 years.",
+     "evidence": [
+      "FY2026 operating margin 60.4%",
+      "FY2025 operating margin 62.4%",
+      "FY2024 operating margin 54.1%",
+      "FY2023 operating margin 15.7%",
+      "FY2022 operating margin 37.3%",
+      "Operating margin ranged 46.8 points across these years, so one point is taken off: a margin that swings this much is a poor guide to the next one.",
+      "Operating margin rose from FY2022 to FY2026; gross margin added 6.1 points and operating costs fell by 16.9 points of revenue; stock-based pay went from 7.4% to 3.0% of revenue."
+     ],
+     "figures": {
+      "ebit_margin_latest": 0.6038168363141272,
+      "ebit_margin_range": 0.46758002853636815,
+      "years": 5,
+      "drivers": {
+       "from": "FY2022",
+       "to": "FY2026",
+       "ebit_margin_change": 0.2307396274265594,
+       "gross_margin_change": 0.06139051140633944,
+       "cost_ratio_change": -0.16934911602021996,
+       "sbc_pct_change": -0.04488608571727809,
+       "text": "Operating margin rose from FY2022 to FY2026; gross margin added 6.1 points and operating costs fell by 16.9 points of revenue; stock-based pay went from 7.4% to 3.0% of revenue."
+      }
+     },
+     "sources": [
+      {
+       "label": "operating income",
+       "period": "2026-01-25",
+       "form": "10-K",
+       "filed": "2026-02-25",
+       "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/",
+       "tag": "OperatingIncomeLoss"
+      },
+      {
+       "label": "revenue",
+       "period": "2026-01-25",
+       "form": "10-K",
+       "filed": "2026-02-25",
+       "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/",
+       "tag": "Revenues"
+      }
+     ],
+     "reason": "",
+     "rubric": "Latest operating margin: 4 at 25% or more, 3 at 15%, 2 at 8%, 1 at 0%, else 0; one point off when the margin has ranged more than 8 points across the years read."
+    },
+    {
+     "id": "growth",
+     "label": "Revenue growth",
+     "status": "scored",
+     "score": 4.0,
+     "grade": "A",
+     "headline": "Revenue compounded 68.3% a year from FY2022 to FY2026, up in 4 of 4 years.",
+     "evidence": [
+      "FY2026 revenue 215,938,000,000",
+      "FY2025 revenue 130,497,000,000",
+      "FY2024 revenue 60,922,000,000",
+      "FY2023 revenue 26,974,000,000",
+      "FY2022 revenue 26,914,000,000"
+     ],
+     "figures": {
+      "revenue_cagr": 0.6830139148028267,
+      "years": 4,
+      "years_up": 4,
+      "latest_growth": 0.6547353579009478
+     },
+     "sources": [
+      {
+       "label": "revenue",
+       "period": "2026-01-25",
+       "form": "10-K",
+       "filed": "2026-02-25",
+       "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/",
+       "tag": "Revenues"
+      },
+      {
+       "label": "revenue",
+       "period": "2022-01-30",
+       "form": "10-K",
+       "filed": "2024-02-21",
+       "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/",
+       "tag": "Revenues"
+      }
+     ],
+     "reason": "",
+     "rubric": "Revenue growth a year, compounded over the years read: 4 at 15% or more, 3 at 8%, 2 at 3%, 1 at 0%, else 0."
+    },
+    {
+     "id": "cash",
+     "label": "Cash generation and earnings quality",
+     "status": "scored",
+     "score": 2.0,
+     "grade": "C",
+     "headline": "Over 3 years operating cash flow was 0.88x net income and free cash flow 45.3% of revenue.",
+     "evidence": [
+      "After stock-based pay (3.6% of revenue), free cash flow was 41.7% of revenue: stock pay is a real cost that cash flow adds back."
+     ],
+     "figures": {
+      "cfo_to_net_income": 0.8751274095560535,
+      "fcf_margin": 0.4530424173390908,
+      "fcf": 184550000000.0,
+      "fcf_after_sbc_margin": 0.4170248700771068,
+      "years": 3,
+      "years_cash_below_profit": 0
+     },
+     "sources": [
+      {
+       "label": "operating cash flow",
+       "period": "2026-01-25",
+       "form": "10-K",
+       "filed": "2026-02-25",
+       "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/",
+       "tag": "NetCashProvidedByUsedInOperatingActivities"
+      },
+      {
+       "label": "capex",
+       "period": "2026-01-25",
+       "form": "10-K",
+       "filed": "2026-02-25",
+       "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/",
+       "tag": "PaymentsToAcquireProductiveAssets"
+      },
+      {
+       "label": "net income",
+       "period": "2026-01-25",
+       "form": "10-K",
+       "filed": "2026-02-25",
+       "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/",
+       "tag": "NetIncomeLoss"
+      }
+     ],
+     "reason": "",
+     "rubric": "Over the policy's cash-conversion window: operating cash flow against net income, and free cash flow (operating cash flow minus capex) against revenue. 4 when conversion is at least 1.0 and the free-cash-flow margin at least 15%; 3 at 0.9 and 8%; 2 at 0.7 with positive free cash flow; 1 with positive free cash flow; else 0."
+    },
+    {
+     "id": "health",
+     "label": "Balance sheet and liquidity",
+     "status": "scored",
+     "score": 4.0,
+     "grade": "A",
+     "headline": "Net debt is 0.1x EBITDA, interest covered 503.4x.",
+     "evidence": [
+      "Net debt 10,923,000,000 (0.1x) against EBITDA 133,230,000,000.",
+      "Operating income covers interest 503.4x.",
+      "Current ratio 4.59 (current assets over current liabilities).",
+      "Debt due within a year: 1,000,000,000, against cash and short-term investments of 22,443,000,000.",
+      "Maturities beyond the next year are not read from the filings; the debt footnote has the ladder."
+     ],
+     "figures": {
+      "net_debt": 10923000000.0,
+      "ebitda": 133230000000.0,
+      "net_debt_to_ebitda": 0.08198603918036479,
+      "interest_coverage": 503.42471042471044,
+      "current_ratio": 4.588949069016016,
+      "debt_due_1y": 1000000000.0,
+      "limits": {
+       "max_net_debt_ebitda": 3.0,
+       "min_coverage": 4.0
+      }
+     },
+     "sources": [
+      {
+       "label": "debt",
+       "period": "2026-07-26",
+       "form": null,
+       "filed": "2026-08-26",
+       "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/",
+       "tag": null
+      },
+      {
+       "label": "cash",
+       "period": "2026-07-26",
+       "form": "10-Q",
+       "filed": "2026-08-26",
+       "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/",
+       "tag": "CashAndCashEquivalentsAtCarryingValue"
+      },
+      {
+       "label": "interest expense",
+       "period": "2026-01-25",
+       "form": "10-K",
+       "filed": "2026-02-25",
+       "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/",
+       "tag": "InterestExpenseNonoperating"
+      }
+     ],
+     "reason": "",
+     "rubric": "Net debt against EBITDA and operating income against interest. 4 with net cash, or net debt at most 1x EBITDA with interest covered 8x; 3 at 2x and 5x; 2 within the policy limits (leverage_max_net_debt_ebitda, coverage_min_ebit_interest); 1 outside them; 0 when interest is covered less than 1.5x or EBITDA is negative with net debt."
+    },
+    {
+     "id": "dilution",
+     "label": "Dilution and stock-based pay",
+     "status": "scored",
+     "score": 4.0,
+     "grade": "A",
+     "headline": "Diluted shares fell 0.8% a year over 4 years; stock-based pay was 3.0% of revenue in FY2026.",
+     "evidence": [
+      "FY2026 diluted shares 24,514,000,000",
+      "FY2025 diluted shares 24,804,000,000",
+      "FY2024 diluted shares 24,940,000,000",
+      "FY2023 diluted shares 25,070,000,000",
+      "FY2022 diluted shares 25,350,000,000",
+      "Share counts are restated for stock splits dated after each filing, so years compare like for like."
+     ],
+     "figures": {
+      "share_change_a_year": -0.008348542516496638,
+      "sbc_pct": 0.029573303448211987,
+      "years": 4,
+      "split_adjusted": true
+     },
+     "sources": [
+      {
+       "label": "diluted shares",
+       "period": "2026-01-25",
+       "form": "10-K",
+       "filed": "2026-02-25",
+       "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/",
+       "tag": "WeightedAverageNumberOfDilutedSharesOutstanding"
+      },
+      {
+       "label": "stock-based pay",
+       "period": "2026-01-25",
+       "form": "10-K",
+       "filed": "2026-02-25",
+       "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/",
+       "tag": "ShareBasedCompensation"
+      }
+     ],
+     "reason": "",
+     "rubric": "Diluted share count change a year and stock-based pay as a share of revenue: 4 when shares fall and stock pay is under 3%; 3 when shares rise no more than 1% a year and stock pay is under 5%; 2 at up to 3% a year with stock pay under 10%; 1 at up to 6% a year; else 0."
+    },
+    {
+     "id": "durability",
+     "label": "Durability (moat evidence)",
+     "status": "scored",
+     "score": 2.0,
+     "grade": "C",
+     "headline": "2 of 4 measurable moat tests passed.",
+     "evidence": [
+      "Returns above the cost of capital in at least 80% of years: not passed (3 of 4 years)",
+      "Operating margin range within 6 points: not passed (46.8-point range over 5 years)",
+      "Pricing power (gross margin of 40% or more): passed (gross margin 71.1%)",
+      "Revenue up in at least 75% of years without the margin falling more than 3 points: passed (up in 4 of 4 years)",
+      "These tests find the traces a durable advantage leaves in the accounts. They do not say what the advantage is (brand, network, switching costs, scale, licences); that needs the annual report and reporting, cited."
+     ],
+     "figures": {
+      "tests": [
+       {
+        "test": "Returns above the cost of capital in at least 80% of years",
+        "passed": false,
+        "detail": "3 of 4 years"
+       },
+       {
+        "test": "Operating margin range within 6 points",
+        "passed": false,
+        "detail": "46.8-point range over 5 years"
+       },
+       {
+        "test": "Pricing power (gross margin of 40% or more)",
+        "passed": true,
+        "detail": "gross margin 71.1%"
+       },
+       {
+        "test": "Revenue up in at least 75% of years without the margin falling more than 3 points",
+        "passed": true,
+        "detail": "up in 4 of 4 years"
+       }
+      ]
+     },
+     "sources": [],
+     "reason": "",
+     "rubric": "Moat evidence, four measurable tests, one point each: returns above the cost of capital in at least 80% of the years read; operating margin range within 6 points; gross margin of 40% or more (operating margin of 20% where gross profit is not reported); revenue up in at least 75% of years without the operating margin falling more than 3 points. Needs three tests with data. These are the traces a durable advantage leaves in the accounts; they do not say what the advantage is."
+    }
+   ],
+   "rule_of_40": {
+    "applies": true,
+    "available": true,
+    "growth": 0.6547353579009478,
+    "fcf_margin": 0.44770258129648327,
+    "total": 110.2437939197431,
+    "passes": true,
+    "text": "Revenue growth 65.5% plus free-cash-flow margin 44.8% = 110, at or above 40."
+   },
+   "weights": {
+    "returns": 22,
+    "cash": 18,
+    "health": 14,
+    "margins": 13,
+    "growth": 13,
+    "durability": 12,
+    "dilution": 8
+   },
+   "strongest": "returns",
+   "weakest": "cash",
+   "unscored": [],
+   "summary": "Business quality B (3.27 of 4 across 7 measures). Strongest: returns on capital; weakest: cash generation and earnings quality."
+  },
+  "valuation": {
+   "status": "scored",
+   "label": "Attractive",
+   "score": 3.2,
+   "components": [
+    {
+     "id": "intrinsic",
+     "label": "Intrinsic value",
+     "status": "scored",
+     "score": 4.0,
+     "grade": "A",
+     "headline": "The base-case model value is +226% from the price.",
+     "evidence": [
+      "Enterprise DCF (free cash flow to the firm) base case 723.52 a share against 222.19 (+226%).",
+      "Bear to bull scenarios: 251.23 to 1876.58."
+     ],
+     "figures": {
+      "per_share": 723.5159613644839,
+      "upside": 2.2562207131775422,
+      "scenarios": {
+       "bear": 251.2258423629933,
+       "base": 723.5159613644839,
+       "bull": 1876.5844301742559
+      },
+      "model": "dcf",
+      "model_version": "dcf-1.0"
+     },
+     "sources": [],
+     "reason": "",
+     "rubric": "Base-case value per share from the model that fits this business (the DCF, or residual income for a bank) against the price: 4 at 30% upside or more, 3 at +10%, 2 within 10%, 1 down to -30%, else 0. Scored only when the model is the primary fit at normal confidence."
+    },
+    {
+     "id": "own_history",
+     "label": "Against its own history",
+     "status": "scored",
+     "score": 4.0,
+     "grade": "A",
+     "headline": "The P/E sits at the 0th percentile of its five-year range.",
+     "evidence": [
+      "cheap versus its own history",
+      "Median P/E 36.2; premium to median -22%."
+     ],
+     "figures": {
+      "percentile": 0.0,
+      "median_pe": 36.2,
+      "premium_to_median_pct": -22.4
+     },
+     "sources": [],
+     "reason": "",
+     "rubric": "Today's P/E against the company's own five-year range: 4 in the bottom fifth, 3 below the 40th percentile, 2 below the 60th, 1 below the 80th, else 0."
+    },
+    {
+     "id": "cash_yield",
+     "label": "Cash yield",
+     "status": "scored",
+     "score": 0.0,
+     "grade": "F",
+     "headline": "Free cash flow yields 1.8% on the market value, against a 5.2% 10-year Treasury.",
+     "evidence": [
+      "Free cash flow (operating cash flow minus capex, FY2026) over market capitalisation: 1.8%.",
+      "Free cash flow to the firm over enterprise value: 0.8%.",
+      "A yield below the Treasury's is a bet on growth; it is not wrong, but it needs the growth."
+     ],
+     "figures": {
+      "fcfe_yield": 0.0180186068261926,
+      "fcff_yield": 0.007891424385166436,
+      "risk_free": 0.0524,
+      "spread": -0.0343813931738074,
+      "enterprise_value": 5376265666752.0
+     },
+     "sources": [
+      {
+       "label": "operating cash flow",
+       "period": "2026-01-25",
+       "form": "10-K",
+       "filed": "2026-02-25",
+       "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/",
+       "tag": "NetCashProvidedByUsedInOperatingActivities"
+      },
+      {
+       "label": "capex",
+       "period": "2026-01-25",
+       "form": "10-K",
+       "filed": "2026-02-25",
+       "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/",
+       "tag": "PaymentsToAcquireProductiveAssets"
+      }
+     ],
+     "reason": "",
+     "rubric": "Free cash flow to equity over market value (an equity measure over an equity value), against the 10-year Treasury yield: 4 at 2 points above or more, 3 at or above it, 2 down to 1.5 below, 1 down to 3 below, else 0. Free cash flow to the firm over enterprise value is reported beside it."
+    },
+    {
+     "id": "implied_growth",
+     "label": "What the price assumes",
+     "status": "scored",
+     "score": 4.0,
+     "grade": "A",
+     "headline": "The price implies about 24.5% revenue growth a year, against 68.3% in the record.",
+     "evidence": [
+      "Reverse DCF holding the other base-case assumptions fixed."
+     ],
+     "figures": {
+      "implied_cagr": 0.24504009840305052,
+      "historical_cagr": 0.6830139148028267,
+      "gap": -0.4379738163997762
+     },
+     "sources": [],
+     "reason": "",
+     "rubric": "Growth the price implies (reverse DCF) against the company's own revenue record: 4 when it implies 5 points a year less or more than 5 below, 3 at or below the record, 2 up to 5 above, 1 up to 10 above, else 0."
+    },
+    {
+     "id": "peers",
+     "label": "Against peers",
+     "status": "scored",
+     "score": 4.0,
+     "grade": "A",
+     "headline": "P/E 28.1 against a peer median of 43.6 (0.64x).",
+     "evidence": [
+      "Peers: AVGO, SKHY, MU, AMD, TXN, MRVL, ADI.",
+      "Market-relative: what the company would be worth at its peers' multiples. If the whole group is mispriced, so is this."
+     ],
+     "figures": {
+      "multiple": "pe",
+      "own": 28.090393,
+      "peer_median": 43.603996,
+      "relative": 0.6442160255220645,
+      "peer_source": "industry"
+     },
+     "sources": [],
+     "reason": "",
+     "rubric": "Trailing P/E (EV/EBITDA when earnings are negative) against the median of the peer group: 4 at 0.75x or less, 3 at 0.95x, 2 at 1.1x, 1 at 1.4x, else 0."
+    }
+   ],
+   "summary": "Valuation attractive (3.20 of 4, where 4 is cheapest, across 5 measures)."
+  },
+  "chart": {
+   "state": "intact",
+   "text": "Above the 40- and 200-week averages: the long-term uptrend is intact.",
+   "phase": "secular uptrend",
+   "vs_40w_pct": 9.29,
+   "vs_200w_pct": 84.97,
+   "slope_40w_pct_3m": 6.02,
+   "weekly_rsi": 54.9,
+   "drawdown_pct": -7.12,
+   "volume": {
+    "up_down_volume_ratio": 1.38,
+    "weeks": 26,
+    "interpretation": "accumulation",
+    "text": "Over the last 26 weeks, volume on up weeks was 1.38x volume on down weeks, a pattern consistent with accumulation. This is an interpretation of volume, not evidence of who traded."
+   }
+  },
+  "conviction": {
+   "label": "Constructive",
+   "rules": [],
+   "why": "Business quality B and an attractive valuation; High Conviction needs an A."
+  },
+  "accumulation": {
+   "offered": true,
+   "zones": [
+    {
+     "price": 203.31,
+     "basis": "40-week average",
+     "distance_pct": -8.5
+    },
+    {
+     "price": 187.14,
+     "basis": "weekly support (2 touches)",
+     "distance_pct": -15.8
+    },
+    {
+     "price": 167.23,
+     "basis": "weekly support (4 touches)",
+     "distance_pct": -24.7
+    }
+   ],
+   "condition": "Zones are conditional: they are levels to reassess at, if the business evidence still holds when price gets there (the next results confirming the cash generation and earnings quality measure has not deteriorated). They are not targets, and no allocation is implied without your portfolio's context."
+  },
+  "scenarios": {
+   "bull": {
+    "per_share": 1876.5844301742559,
+    "text": "Growth above the base path, higher margins, lighter capex (the DCF bull case)."
+   },
+   "bear": {
+    "per_share": 251.2258423629933,
+    "text": "Growth below the base path, lower margins, heavier capex (the DCF bear case)."
+   }
+  },
+  "loss_paths": [
+   {
+    "risk": "Cyclical earnings",
+    "text": "Operating margin has ranged 47 points: buying on peak earnings is the classic way a cyclical loses money."
+   },
+   {
+    "risk": "Market drawdown",
+    "text": "The stock's worst fall in the history read was -66% (to 2022-10-14). A broad bear market takes good businesses down with it, and three years is short enough to end inside one."
+   }
+  ],
+  "policy_note": "Business quality below B caps conviction at Neutral: a configurable rule (quality_cap_grade), not a finding.",
+  "separation_note": "Business quality and valuation are graded separately: a strong business can be an expensive stock, and the chart's weakness is not by itself a failed business thesis.",
+  "sources": {
+   "filings": "Statements: SEC EDGAR XBRL company facts (us-gaap), each figure linked to its filing. Price, beta and analyst estimates: Yahoo Finance. Risk-free rate: FRED.",
+   "valuation_model": "dcf-1.0",
+   "fy_ends": [
+    "2026-01-25",
+    "2025-01-26",
+    "2024-01-28",
+    "2023-01-29",
+    "2022-01-30"
+   ],
+   "warnings": [
+    "Debt on 2026-07-26 (33,366,000,000) differs from the last annual report (8,468,000,000) by +294%. Check whether the quarter's filing tags debt differently before relying on the bridge.",
+    "Restated in a later filing (the latest figures are used): basic_shares_avg, diluted_shares_avg, dps, eps_diluted."
+   ]
+  }
+ },
+ "swing": {
+  "grade": "B",
+  "readings": {
+   "spot": 228.52,
+   "as_of": "2026-10-13",
+   "ema20": 228.46,
+   "ema50": 222.65,
+   "sma200": 202.54,
+   "ema20_slope_5d_pct": 0.44,
+   "sma200_slope_20d_pct": 2.4,
+   "rsi14": 52.0,
+   "macd": 2.89,
+   "macd_signal": 3.549,
+   "macd_hist": -0.659,
+   "macd_hist_rising": false,
+   "atr14": 5.593,
+   "atr_pct": 2.45,
+   "relative_volume": 0.79,
+   "high_20d": 243.37,
+   "low_20d": 212.5,
+   "low_10d": 223.06,
+   "high_10d": 243.37,
+   "low_5d": 223.06,
+   "high_5d": 239.08,
+   "high_252": 243.37,
+   "low_252": 164.27,
+   "daily_trend": "up",
+   "weekly_trend": "up",
+   "weekly_close": 229.28,
+   "weekly_sma10": 224.06,
+   "weekly_sma40": 202.38,
+   "weekly_as_of": "2026-10-09",
+   "aligned": true,
+   "relative_strength": {
+    "SPY_1m": {
+     "stock": 8.32,
+     "benchmark": 2.25,
+     "excess_pct": 6.07
+    },
+    "SPY_3m": {
+     "stock": 7.54,
+     "benchmark": 3.07,
+     "excess_pct": 4.47
+    },
+    "XLK_1m": {
+     "stock": 8.32,
+     "benchmark": 6.51,
+     "excess_pct": 1.81
+    },
+    "XLK_3m": {
+     "stock": 7.54,
+     "benchmark": 8.1,
+     "excess_pct": -0.56
+    }
+   },
+   "benchmark": {
+    "symbol": "SPY",
+    "close": 778.01,
+    "sma50": 768.6,
+    "sma200": 723.82,
+    "state": "risk-on",
+    "as_of": "2026-10-13"
+   },
+   "levels": [
+    {
+     "price": 189.77,
+     "touches": 7,
+     "role": "support",
+     "distance_pct": -16.96,
+     "strength": 67.6,
+     "rejection_pct": 39.0,
+     "volume_share_pct": 12.2,
+     "last_touch_bars_ago": 53,
+     "origin": "both",
+     "band_low": 188.09,
+     "band_high": 191.45
+    },
+    {
+     "price": 195.67,
+     "touches": 8,
+     "role": "support",
+     "distance_pct": -14.38,
+     "strength": 64.9,
+     "rejection_pct": 41.0,
+     "volume_share_pct": 9.4,
+     "last_touch_bars_ago": 61,
+     "origin": "both",
+     "band_low": 193.99,
+     "band_high": 197.35
+    },
+    {
+     "price": 177.14,
+     "touches": 7,
+     "role": "support",
+     "distance_pct": -22.49,
+     "strength": 60.9,
+     "rejection_pct": 30.0,
+     "volume_share_pct": 13.5,
+     "last_touch_bars_ago": 151,
+     "origin": "swing low",
+     "band_low": 175.46,
+     "band_high": 178.81
+    },
+    {
+     "price": 214.57,
+     "touches": 6,
+     "role": "support",
+     "distance_pct": -6.11,
+     "strength": 60.2,
+     "rejection_pct": 27.0,
+     "volume_share_pct": 5.7,
+     "last_touch_bars_ago": 44,
+     "origin": "both",
+     "band_low": 212.89,
+     "band_high": 216.25
+    },
+    {
+     "price": 208.32,
+     "touches": 3,
+     "role": "support",
+     "distance_pct": -8.84,
+     "strength": 51.7,
+     "rejection_pct": 46.0,
+     "volume_share_pct": 10.6,
+     "last_touch_bars_ago": 21,
+     "origin": "swing low",
+     "band_low": 206.64,
+     "band_high": 210.0
+    },
+    {
+     "price": 230.22,
+     "touches": 3,
+     "role": "resistance",
+     "distance_pct": 0.75,
+     "strength": 45.4,
+     "rejection_pct": 45.0,
+     "volume_share_pct": 4.8,
+     "last_touch_bars_ago": 32,
+     "origin": "swing high",
+     "band_low": 228.55,
+     "band_high": 231.9
+    },
+    {
+     "price": 235.65,
+     "touches": 2,
+     "role": "resistance",
+     "distance_pct": 3.12,
+     "strength": 35.8,
+     "rejection_pct": 41.0,
+     "volume_share_pct": 1.4,
+     "last_touch_bars_ago": 26,
+     "origin": "swing high",
+     "band_low": 233.97,
+     "band_high": 237.33
+    },
+    {
+     "price": 170.3,
+     "touches": 3,
+     "role": "support",
+     "distance_pct": -25.48,
+     "strength": 30.7,
+     "rejection_pct": 29.0,
+     "volume_share_pct": 1.8,
+     "last_touch_bars_ago": 172,
+     "origin": "swing low",
+     "band_low": 168.62,
+     "band_high": 171.97
+    }
+   ]
+  },
+  "setup": {
+   "kind": "breakout",
+   "side": "long",
+   "level": 230.22,
+   "why": "Price is testing a 3-touch resistance at 230.22."
+  },
+  "plan": {
+   "side": "long",
+   "kind": "breakout",
+   "entry": 230.78,
+   "entry_zone": [
+    230.22,
+    232.18
+   ],
+   "confirmation": "A daily close above 230.22 on volume at least 1.5x its 20-day average. A close back under the level the next session voids it.",
+   "invalidation": {
+    "price": 222.39,
+    "structural": 227.42,
+    "basis": "atr",
+    "widened": true,
+    "structure": "a close back below the 230.22 level, inside the base",
+    "note": "Structure sits inside 1.5 daily ATRs of entry, inside ordinary noise, so the stop was widened to that distance. It was not tightened.",
+    "atr_floor": 222.39
+   },
+   "targets": [
+    243.37
+   ],
+   "target_basis": "the next meaningful resistance levels at least one ATR away",
+   "target_detail": [
+    {
+     "price": 243.37,
+     "basis": "the 52-week high"
+    }
+   ],
+   "obstacles": [
+    235.65
+   ],
+   "reward_to_risk": 1.5,
+   "reward_to_risk_t2": null,
+   "rr_formula": "(target - entry) / (entry - stop)",
+   "sensitivity": {
+    "representative": 1.5,
+    "low": 1.14,
+    "high": 1.68,
+    "cases": [
+     {
+      "case": "best fill in the entry zone",
+      "entry": 230.22,
+      "rr": 1.68
+     },
+     {
+      "case": "worst fill in the entry zone",
+      "entry": 232.18,
+      "rr": 1.14
+     },
+     {
+      "case": "after spread and 10bp slippage each way",
+      "entry": 231.01,
+      "rr": 1.37
+     }
+    ]
+   },
+   "holding": {
+    "days": 6,
+    "distance_atr": 2.251153227248346,
+    "pace_atr_per_day": 0.4,
+    "basis": "The target is 2.3 daily ATRs away; at about 0.4 ATR of net progress a day that is roughly 6 trading days, capped at 20. A pace estimate, not a forecast."
+   },
+   "earnings": {
+    "known": true,
+    "date": "2026-11-17",
+    "confirmed": true,
+    "timing": "before_open",
+    "in_window": false,
+    "window_end": "2026-10-23",
+    "text": "Earnings are 2026-11-17 (confirmed), outside the holding window to 2026-10-23."
+   },
+   "reassess": "If neither the first target nor the stop has been reached within about 6 trading days, reassess: the setup assumed a move at roughly that pace, and a trade that goes nowhere ties up risk.",
+   "sizing_example": {
+    "available": true,
+    "account": 10000.0,
+    "risk_pct": 1.0,
+    "risk_budget": 100.0,
+    "risk_per_share": 8.389499999999998,
+    "shares": 11,
+    "position_value": 2538.5723000000003,
+    "planned_loss": 92.28449999999998,
+    "gap_price": 216.79680000000002,
+    "gap_loss": 153.80749999999986,
+    "gap_note": "A stop is an order, not a guarantee. If the stock opens at 216.80, beyond the stop, the loss is about 154 rather than the planned 92.",
+    "label": "Illustration only: a 10,000 account risking 1%. Your own account size and risk tolerance replace both numbers."
+   }
+  },
+  "objections": [
+   {
+    "text": "Reward-to-risk is only 1.50 to the first target.",
+    "severity": 2,
+    "kind": "rr"
+   },
+   {
+    "text": "A resistance at 235.65 sits less than one ATR beyond entry, so the trade starts into it.",
+    "severity": 1,
+    "kind": "levels"
+   },
+   {
+    "text": "MACD momentum is fading against the trade.",
+    "severity": 1,
+    "kind": "momentum"
+   },
+   {
+    "text": "Volume today is 0.79x its average: a breakout without volume is unconfirmed.",
+    "severity": 1,
+    "kind": "volume"
+   }
+  ],
+  "most_damaging": {
+   "text": "Reward-to-risk is only 1.50 to the first target.",
+   "severity": 2,
+   "kind": "rr"
+  },
+  "criteria": {
+   "daily_weekly_aligned": true,
+   "reward_to_risk_ok": false,
+   "no_earnings_in_window": true,
+   "clear_invalidation": true,
+   "outperforms_benchmark": true,
+   "sufficient_data": true
+  },
+  "rules": [],
+  "why": "Viable but materially flawed; an S would also need reward-to-risk of 2.5 or more.",
+  "framework_note": "Grades follow this framework's stated rules (S needs aligned timeframes, reward-to-risk of 2.5 or more, no earnings in the window, a clear invalidation and outperformance of the market). They are not probabilities and have not been shown to predict returns."
+ },
+ "earnings": {
+  "which": "pre_earnings",
+  "pre": {
+   "available": true,
+   "mode": "pre_earnings",
+   "release": {
+    "date": "2026-11-17",
+    "timing": "before_open",
+    "days_away": 34,
+    "confirmed": true,
+    "date_status": "confirmed",
+    "cutoff_utc": "2026-11-17T11:00:00+00:00",
+    "period": "the quarter ending about 2026-10"
+   },
+   "consensus": {
+    "eps": 2.47325,
+    "eps_low": 2.34,
+    "eps_high": 2.7,
+    "revenue": 108976837760.0,
+    "revenue_low": 104937000000.0,
+    "revenue_high": 116251000000.0,
+    "dispersion_pct": 14.6,
+    "basis": "Analyst consensus (Yahoo Finance), adjusted EPS as the Street reports it; company guidance is a different thing and is not in this data.",
+    "retrieved_at": "2026-10-14T16:48:04+00:00",
+    "timestamp_note": "The feed does not timestamp individual estimates; revisions over 7, 30 and 90 days come from its estimate-trend table."
+   },
+   "revisions": {
+    "available": true,
+    "rows": [
+     {
+      "period": "0q",
+      "label": "Current quarter",
+      "current": 2.47,
+      "chg_30d_pct": 0.02,
+      "chg_90d_pct": 5.71,
+      "analysts_up_30d": 0,
+      "analysts_down_30d": 1
+     },
+     {
+      "period": "+1q",
+      "label": "Next quarter",
+      "current": 2.75,
+      "chg_30d_pct": 0.11,
+      "chg_90d_pct": 3.61,
+      "analysts_up_30d": 0,
+      "analysts_down_30d": 1
+     },
+     {
+      "period": "0y",
+      "label": "Current fiscal year",
+      "current": 9.31,
+      "chg_30d_pct": 0.08,
+      "chg_90d_pct": 4.08,
+      "analysts_up_30d": 2,
+      "analysts_down_30d": 0
+     },
+     {
+      "period": "+1y",
+      "label": "Next fiscal year",
+      "current": 15.91,
+      "chg_30d_pct": 2.23,
+      "chg_90d_pct": 24.69,
+      "analysts_up_30d": 7,
+      "analysts_down_30d": 0
+     }
+    ],
+    "direction": "rising",
+    "drift_90d_pct": 14.39,
+    "analysts_up_30d": 9,
+    "analysts_down_30d": null,
+    "note": "Analysts have raised full-year EPS estimates +14.4% over 90 days . The direction of travel is positive, which usually reflects upbeat guidance.",
+    "caveat": "Company guidance text isn't available in free data. This is the analyst estimate-revision trend, which moves in response to guidance. A proxy, not the guidance itself."
+   },
+   "surprise_history": {
+    "quarters": 8,
+    "beat_rate_pct": 100.0,
+    "avg_surprise_pct": 5.8,
+    "avg_abs_move_pct": 4.02,
+    "avg_move_on_beat_pct": -0.89,
+    "avg_move_on_miss_pct": null
+   },
+   "trajectory": {
+    "available": true,
+    "source": "SEC XBRL companyfacts (CIK 0001045810)",
+    "revenue_yoy": [
+     {
+      "period_end": "2025-04-27",
+      "yoy_pct": 69.2,
+      "available_from": "2025-05-28"
+     },
+     {
+      "period_end": "2025-07-27",
+      "yoy_pct": 55.6,
+      "available_from": "2025-08-27"
+     },
+     {
+      "period_end": "2025-10-26",
+      "yoy_pct": 62.5,
+      "available_from": "2025-11-19"
+     },
+     {
+      "period_end": "2026-01-25",
+      "yoy_pct": 73.2,
+      "available_from": "2026-02-25"
+     },
+     {
+      "period_end": "2026-04-26",
+      "yoy_pct": 85.2,
+      "available_from": "2026-05-20"
+     },
+     {
+      "period_end": "2026-07-26",
+      "yoy_pct": 105.9,
+      "available_from": "2026-08-26"
+     }
+    ],
+    "revenue_trend": "accelerating",
+    "revenue_trend_text": "Revenue grew +105.9% against the same quarter a year earlier in the latest quarter, against an average of +79.2% over the two before: accelerating.",
+    "operating_margin": {
+     "latest_period": "2026-07-31",
+     "latest_pct": 66.2,
+     "year_ago_period": "2025-07-31",
+     "year_ago_pct": 60.8,
+     "change_pts": 5.4,
+     "source": "Yahoo Finance quarterly income statement"
+    }
+   },
+   "run_up": {
+    "stock_pct": 8.3,
+    "spy_pct": 2.3,
+    "excess_pct": 6.1,
+    "sessions": 21
+   },
+   "hurdle": {
+    "state": "balanced",
+    "text": "Expectations look balanced: 3 signals point to a high bar and 2 to a low one.",
+    "points": [
+     {
+      "push": 1,
+      "text": "The stock is +6.1% ahead of the S&P 500 over the last month (+8.3% against +2.3%): good news is partly in the price.",
+      "kind": "run_up"
+     },
+     {
+      "push": -1,
+      "text": "The P/E is in the bottom fifth of its five-year range: the multiple assumes little.",
+      "kind": "valuation"
+     },
+     {
+      "push": 1,
+      "text": "Analysts raised full-year estimates +14.4% over 90 days: the bar has moved up.",
+      "kind": "revisions"
+     },
+     {
+      "push": 1,
+      "text": "The company beat EPS consensus in 100% of the last 8 quarters, so a beat is the base case, not news.",
+      "kind": "beat_rate"
+     },
+     {
+      "push": -1,
+      "text": "Consensus revenue implies +91.2% growth on the year-ago quarter, slower than the +105.9% just reported: the forecast already assumes a slowdown.",
+      "kind": "implied_growth"
+     }
+    ],
+    "consensus_growth": {
+     "implied_yoy_pct": 91.2,
+     "year_ago_period": "2025-10-26",
+     "year_ago_revenue": 57006000000.0,
+     "consensus_revenue": 108976837760.0
+    },
+    "whisper_note": "No whisper number or positioning data is used: neither is in Optic's data, and a number without a source would be invented."
+   },
+   "options": {
+    "available": true,
+    "expiry": "2026-11-20",
+    "dte": 37,
+    "straddle": 21.75,
+    "strike": 220.0,
+    "atm_iv_pct": 37.3,
+    "expiry_move_pct": 9.79,
+    "expiry_move_method": "At-the-money straddle on the first expiry after the release, divided by the price: the breakeven move to that expiry (37 days). It covers every day to expiry, not the release alone.",
+    "pricing_vs_history": {
+     "stance": "fair",
+     "ratio": 1.04,
+     "baseline_pct": 9.456955112508465,
+     "baseline_kind": "event-plus-ordinary",
+     "note": "The 37-day straddle prices a 9.8% move, against 9.5% actual on average across the average report-day move (8 quarters) combined with a typical 25-session move over the past two years, about 1.0x. Options are priced about in line with this comparison's history."
+    },
+    "event_isolated": false,
+    "event_note": "The release's own move is not isolated (needs a quoted expiry on each side of the report), so the figure above is the whole expiry's move, not an earnings-only one.",
+    "range": {
+     "low": 200.44,
+     "high": 243.95,
+     "move_pct": 9.79,
+     "basis": "straddle breakeven to expiry",
+     "note": "What options are priced for, one way or the other. Not a forecast, not a limit: moves beyond it happen, and the direction is not priced."
+    },
+    "caveats": [
+     "Implied volatility usually collapses once the result is out, so an option bought for the release loses value even when the stock moves the expected amount in the expected direction.",
+     "Unusual options volume is a reason to look closer, not evidence of an informed bet: it can be a hedge, one leg of a spread, a roll or a closing trade, and free data cannot tell which side was the buyer."
+    ]
+   },
+   "news": {
+    "stories": [
+     {
+      "title": "NVIDIA and Semiconductor Leaders Advance AI Across Chip Design and Manufacturing for AI-Defined Fabs",
+      "publisher": "GlobeNewswire",
+      "published": "2026-10-14T16:10:00+00:00",
+      "url": "https://finance.yahoo.com/technology/ai/articles/nvidia-semiconductor-leaders-advance-ai-161000004.html",
+      "kind": "reporting",
+      "bears_on": "neither, on its face",
+      "outlets": [
+       "GlobeNewswire"
+      ],
+      "catalysts": [
+       "policy / supply chain"
+      ],
+      "outlet_count": 1
+     },
+     {
+      "title": "ChipAgents Collaborates With NVIDIA to Launch Build-A-Chip-Bench for Autonomous Chip Design and Implementation",
+      "publisher": "Business Wire",
+      "published": "2026-10-14T16:10:00+00:00",
+      "url": "https://finance.yahoo.com/technology/ai/articles/chipagents-collaborates-nvidia-launch-build-161000214.html",
+      "kind": "reporting",
+      "bears_on": "could affect the financial outlook",
+      "outlets": [
+       "Business Wire"
+      ],
+      "catalysts": [
+       "product news",
+       "policy / supply chain"
+      ],
+      "outlet_count": 1
+     },
+     {
+      "title": "Not Nvidia. Not Micron. This Under-the-Radar Artificial Intelligence (AI) Chip Stock Could Be the Biggest Winner in 2027.",
+      "publisher": "Motley Fool",
+      "published": "2026-10-14T14:50:00+00:00",
+      "url": "https://finance.yahoo.com/technology/ai/articles/not-nvidia-not-micron-under-145000144.html",
+      "kind": "rumour or unconfirmed",
+      "bears_on": "neither, on its face",
+      "outlets": [
+       "Motley Fool"
+      ],
+      "catalysts": [
+       "policy / supply chain"
+      ],
+      "outlet_count": 1
+     },
+     {
+      "title": "Can Navitas Semiconductor (NVTS) Turn NVIDIA-Aligned 800V AI Power Designs Into Durable Competitive Advantage?",
+      "publisher": "Simply Wall St.",
+      "published": "2026-10-14T14:20:34+00:00",
+      "url": "https://finance.yahoo.com/technology/ai/articles/navitas-semiconductor-nvts-turn-nvidia-142034941.html",
+      "kind": "reporting",
+      "bears_on": "neither, on its face",
+      "outlets": [
+       "Simply Wall St."
+      ],
+      "catalysts": [
+       "policy / supply chain"
+      ],
+      "outlet_count": 1
+     },
+     {
+      "title": "Is Nvidia Still the Best AI Stock to Buy in 2026, or Is This Challenger?",
+      "publisher": "Motley Fool",
+      "published": "2026-10-14T16:25:01+00:00",
+      "url": "https://finance.yahoo.com/markets/stocks/articles/nvidia-still-best-ai-stock-162501812.html",
+      "kind": "reporting",
+      "bears_on": "neither, on its face",
+      "outlets": [
+       "Motley Fool"
+      ],
+      "catalysts": [],
+      "outlet_count": 1
+     },
+     {
+      "title": "Honeywell Stock Rises 2% as Nvidia and Dell Team Up on New AI Platform",
+      "publisher": "GuruFocus.com",
+      "published": "2026-10-14T16:02:13+00:00",
+      "url": "https://finance.yahoo.com/technology/ai/articles/honeywell-stock-rises-2-nvidia-160213334.html",
+      "kind": "reporting",
+      "bears_on": "neither, on its face",
+      "outlets": [
+       "GuruFocus.com"
+      ],
+      "catalysts": [],
+      "outlet_count": 1
+     },
+     {
+      "title": "LITEON Showcases NVIDIA 800 VDC Architecture and Thermal Management Portfolio at OCP Global Summit 2026",
+      "publisher": "PR Newswire",
+      "published": "2026-10-14T16:00:00+00:00",
+      "url": "https://finance.yahoo.com/technology/ai/articles/liteon-showcases-nvidia-800-vdc-160000697.html",
+      "kind": "reporting",
+      "bears_on": "neither, on its face",
+      "outlets": [
+       "PR Newswire"
+      ],
+      "catalysts": [],
+      "outlet_count": 1
+     },
+     {
+      "title": "Broadcom vs. Nvidia: If I Could Only Own One for the Next 5 Years, It Would Be This One",
+      "publisher": "Motley Fool",
+      "published": "2026-10-14T15:20:00+00:00",
+      "url": "https://finance.yahoo.com/markets/stocks/articles/broadcom-vs-nvidia-could-only-152000486.html",
+      "kind": "reporting",
+      "bears_on": "neither, on its face",
+      "outlets": [
+       "Motley Fool"
+      ],
+      "catalysts": [],
+      "outlet_count": 1
+     },
+     {
+      "title": "Nvidia Splashes the Cash as It Takes AI Safety Case Global",
+      "publisher": "Barrons.com",
+      "published": "2026-10-14T14:02:00+00:00",
+      "url": "https://finance.yahoo.com/m/77b6740d-7e85-3ab0-adbb-dc293c99e629/nvidia-splashes-the-cash-as.html",
+      "kind": "reporting",
+      "bears_on": "neither, on its face",
+      "outlets": [
+       "Barrons.com"
+      ],
+      "catalysts": [],
+      "outlet_count": 1
+     },
+     {
+      "title": "Here\u2019s the Bull Case for NVIDIA, Micron, and SanDisk for 2027",
+      "publisher": "24/7 Wall St.",
+      "published": "2026-10-14T14:00:52+00:00",
+      "url": "https://finance.yahoo.com/markets/stocks/articles/bull-case-nvidia-micron-sandisk-140052405.html",
+      "kind": "reporting",
+      "bears_on": "neither, on its face",
+      "outlets": [
+       "24/7 Wall St."
+      ],
+      "catalysts": [],
+      "outlet_count": 1
+     }
+    ],
+    "count": 10,
+    "since": "2026-08-26",
+    "note": "Grouped so one story carried by several outlets counts once. The kind and 'bears on' labels are a word-list sort for reading, not a finding that the story changes anything."
+   },
+   "predictions": {
+    "results": {
+     "lean": "better than expected",
+     "confidence": "moderate",
+     "score": 4,
+     "basis_warning": null,
+     "evidence": [
+      {
+       "push": 1,
+       "text": "Beat EPS consensus in 100% of 8 quarters, by +5.8% on average."
+      },
+      {
+       "push": 1,
+       "text": "Estimates are rising into the release (+14.4% over 90 days), which tends to precede results above them."
+      },
+      {
+       "push": 1,
+       "text": "Consensus revenue implies +91.2% growth against +105.9% last quarter."
+      },
+      {
+       "push": 1,
+       "text": "Revenue grew +105.9% against the same quarter a year earlier in the latest quarter, against an average of +79.2% over the two before: accelerating."
+      }
+     ],
+     "gaps": [],
+     "text": "Results lean better than expected on 4 of 4 signals."
+    },
+    "guidance": {
+     "lean": "likely to support estimates",
+     "confidence": "low",
+     "evidence": [
+      {
+       "push": 1,
+       "text": "Operating margin was 5.4 points above a year earlier last quarter, which management usually addresses in the outlook."
+      }
+     ],
+     "gaps": [
+      "Company guidance text is not in Optic's data. What management said last quarter, and whether it beat its own guide, is in the prior release and call transcript (investor relations)."
+     ],
+     "text": "Guidance is the least observable of the three: the lean rests on analyst revisions and margins, not on anything management has said.",
+     "next_quarter_consensus": 2.75
+    },
+    "reaction": {
+     "lean": "two-sided",
+     "confidence": "low",
+     "evidence": [
+      {
+       "push": -1,
+       "text": "After past beats the stock moved -0.9% on average in the reacting session."
+      },
+      {
+       "push": 0,
+       "text": "The market backdrop is supportive (SPY above its 50- and 200-day averages)."
+      }
+     ],
+     "size": "Options price about 9.8% either way (straddle breakeven to expiry).",
+     "text": "The reaction is the hardest of the three to call: it depends on what was already expected and priced, so even a correct read on the results says little about the direction.",
+     "reasons_beat_is_not_bullish": "A beat is only bullish if it is larger than what the price and the options already assume, and if guidance does not undercut it."
+    }
+   },
+   "view": {
+    "headline": "My best-supported pre-earnings view is that $NVDA reports results better than expected, guidance is likely to support estimates, and the reaction is two-sided, because beat EPS consensus in 100% of 8 quarters, by +5.8% on average; and estimates are rising into the release (+14.4% over 90 days), which tends to precede results above them.",
+    "cases": {
+     "base": "Results better than expected; guidance likely to support estimates; a move inside the 9.8% priced either way (200.44 to 243.95).",
+     "bull": "A clear beat on revenue and EPS plus guidance above the next-quarter consensus (2.75): the move could exceed the priced range on the upside.",
+     "bear": "A beat that is smaller than usual (the average beat is +5.8%) or a guide below consensus: with expectations balanced, the stock could fall even on a headline beat."
+    },
+    "deciders": [
+     "Revenue against the $109.0B consensus (implying +91.2% growth on the year-ago quarter)",
+     "EPS against 2.47",
+     "Next-quarter guidance against the 2.75 consensus",
+     "The segment or operating metric the growth story rests on (not in Optic's structured data; in the release)"
+    ],
+    "invalidators": [
+     "An EPS surprise below zero, against an average of +5.8%.",
+     "Guidance below the next-quarter consensus.",
+     "A first reaction beyond 200.44 or 243.95, the edge of the priced move, against the lean."
+    ],
+    "confidence": {
+     "results": "moderate",
+     "guidance": "low",
+     "reaction": "low"
+    },
+    "probabilities": null,
+    "probabilities_note": "No probabilities: the forecasts have not been scored against outcomes yet, so a percentage would claim a calibration the method does not have.",
+    "thesis_vs_trade": "Being right about direction is not the same as an options trade making money. A bought option pays for the expected move (9.8%) up front and loses value when volatility drops after the release, so it needs a move larger than that, in the right direction, before expiry."
+   },
+   "not_available": [
+    "company guidance text",
+    "call transcripts",
+    "segment and operating-metric consensus",
+    "whisper numbers",
+    "investor positioning"
+   ],
+   "saved": {
+    "saved": false,
+    "reason": "duplicate"
+   }
+  },
+  "next_report": {
+   "date": "2026-11-17",
+   "confirmed": true,
+   "timing": "before_open"
+  }
+ },
+ "combined": {
+  "lines": [
+   "Long term: Constructive (business quality B, valuation attractive).",
+   "Swing: B. Viable but materially flawed; an S would also need reward-to-risk of 2.5 or more.",
+   "Earnings (2026-11-17): My best-supported pre-earnings view is that $NVDA reports results better than expected, guidance is likely to support estimates, and the reaction is two-sided, because beat EPS consensus in 100% of 8 quarters, by +5.8% on average; and estimates are rising into the release (+14.4% over 90 days), which tends to precede results above them."
+  ],
+  "verdict": "They disagree, and that is normal. The long-term view is about years of cash flows at today's valuation; the swing grade is about the next few weeks' reward against risk at today's price. A good company can be a poor trade right now because reward-to-risk is only 1.50 to the first target.",
+  "note": "Each assessment answers its own question; none is averaged into the others."
+ },
+ "data": {
+  "gaps": [],
+  "sources": {
+   "statements": "SEC EDGAR XBRL company facts (us-gaap), each figure linked to its filing",
+   "prices": "Yahoo Finance daily bars and quote (delayed about 15 minutes in session)",
+   "estimates": "Yahoo Finance analyst consensus, estimate trend and surprise history",
+   "options": "The options chain's at-the-money straddle on the first expiry after the release",
+   "risk_free": "10-year US Treasury yield (FRED) for the valuation; 13-week bill for options",
+   "news": "Yahoo Finance headlines, word-list tagged"
+  }
+ },
+ "limitations": [
+  "No company guidance text, call transcripts or segment-level consensus: those are in the release and the call.",
+  "Moat evidence is measured from the accounts; what the advantage is needs the annual report.",
+  "Grades and conviction labels follow stated framework rules; none has been shown to predict returns.",
+  "Debt maturities beyond the next year are not read from the filings."
+ ]
+}

@@ -16,7 +16,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 from fastapi import Body, FastAPI, HTTPException, Query, Request
@@ -103,6 +103,11 @@ from . import signal_history
 from . import signal_archive
 from .desk import edition as desk_edition_mod
 from .desk import research as desk_research_mod
+from .research import forecasts as research_forecasts
+from .research import milo as research_milo
+from .research import modes as research_modes
+from .research import policy as research_policy
+from .research import service as research_service
 from . import briefing as briefing_mod
 from .analytics import watches as watches_mod
 from . import events as events_mod
@@ -1140,6 +1145,50 @@ async def earnings_panel(ticker: str) -> Dict[str, Any]:
         return result
 
     return await _run(build)
+
+
+# ------------------------------------------------------- research framework
+#
+# Four separate conclusions about one company (app/research/): business
+# quality and valuation for the long term, the swing setup, and the earnings
+# view before or after a release, plus where they agree. Deterministic, no
+# model call, so nothing here spends credit. A pre-earnings read stores an
+# immutable forecast (one per ticker, release and day), which is how the
+# forecasts can be scored later without hindsight.
+_FRAMEWORK_MODES = ("combined", "long_term", "swing", "pre_earnings", "post_earnings", "earnings")
+
+
+@app.get("/api/framework/{ticker}")
+async def framework_panel(ticker: str, mode: str = "combined") -> Dict[str, Any]:
+    sym = ticker.upper().strip()
+    if not re.fullmatch(r"[A-Z0-9.\-^=]{1,12}", sym):
+        raise HTTPException(status_code=400, detail="Not a ticker symbol.")
+    if mode not in _FRAMEWORK_MODES:
+        raise HTTPException(status_code=400, detail="mode must be one of " + ", ".join(_FRAMEWORK_MODES))
+    return await _run(research_service.build, PROVIDER, YF_PROVIDER, sym, mode, rate=_rate())
+
+
+@app.get("/api/framework/{ticker}/forecasts")
+async def framework_forecasts(ticker: str) -> Dict[str, Any]:
+    """The saved pre-earnings forecasts for one ticker, oldest reasoning
+    untouched, with any recorded outcome beside it."""
+    rows = await _run(research_forecasts.history, ticker.upper().strip(), 20)
+    return {"ticker": ticker.upper().strip(), "forecasts": rows,
+            "note": "Saved before each release's cutoff and never edited; outcomes are separate records."}
+
+
+@app.get("/api/framework-quality")
+async def framework_quality() -> Dict[str, Any]:
+    """How the saved forecasts have done, each prediction type separately."""
+    return await _run(research_forecasts.quality)
+
+
+@app.get("/api/framework-policy")
+async def framework_policy() -> Dict[str, Any]:
+    """Every rule the framework grades with, its value, and what kind of claim it is."""
+    cur = research_policy.current()
+    return {"version": cur["version"], "changed": cur["changed"], "ignored": cur["ignored"],
+            "rules": [research_policy.describe(k, cur["values"]) for k in research_policy.RULES]}
 
 
 @app.get("/api/earnings/{ticker}/brief")
@@ -6179,6 +6228,60 @@ async def _with_research(history: List[Dict[str, Any]], context: Optional[Dict[s
     return ctx
 
 
+# The research framework (app/research/): the assessment for the question's
+# mode, computed server-side like the research pack. Bounded: a slow build is
+# skipped and the answer goes out without it rather than waiting.
+FRAMEWORK_CHAT_SECONDS = 14.0
+
+
+def _framework_timing(ctx: Dict[str, Any], ticker: str) -> Tuple[Optional[str], Optional[str]]:
+    """(next report, last report) from what the page already sent, so routing
+    an earnings question costs no extra fetch."""
+    nxt = ctx.get("next_earnings_date") if isinstance(ctx.get("next_earnings_date"), str) else None
+    last = None
+    earn = ctx.get("earnings") if isinstance(ctx.get("earnings"), dict) else {}
+    if str(earn.get("ticker") or "").upper() == ticker:
+        nxt = nxt or ((earn.get("next_report") or {}).get("date"))
+        last = (earn.get("latest_result") or {}).get("date")
+    return nxt, last
+
+
+async def _with_framework(history: List[Dict[str, Any]], context: Optional[Dict[str, Any]],
+                          horizon: Optional[str] = None, attachments: Any = None) -> Optional[Dict[str, Any]]:
+    last = next((t for t in reversed(history or []) if t.get("role") != "assistant"), None)
+    if not last:
+        return context
+    ctx = dict(context or {})
+    ticker = _research_ticker(ctx)
+    question = last.get("content") if isinstance(last.get("content"), str) else ""
+    nxt, prev = _framework_timing(ctx, ticker or "")
+    routing = research_modes.resolve(question, ticker, next_report=nxt, last_report=prev,
+                                     saved_horizon=horizon)
+    mode = routing.get("mode")
+    if mode is None:
+        return context
+    if mode == "unclear":
+        ctx["framework"] = {"routing": routing}
+        return ctx
+    svc_mode = mode
+    if mode in ("pre_earnings", "post_earnings") and routing.get("source") == "timing" and not (nxt or prev):
+        svc_mode = "earnings"        # the service reads the calendar itself
+    vs = ctx.get("vol_surface") if isinstance(ctx.get("vol_surface"), dict) else {}
+    vol_event = vs.get("event") if str(ctx.get("ticker") or "").upper() == ticker else None
+    try:
+        out = await asyncio.wait_for(
+            _run(research_service.build, PROVIDER, YF_PROVIDER, ticker, svc_mode, rate=_rate(),
+                 vol_event=vol_event, budget=FRAMEWORK_CHAT_SECONDS - 2.0),
+            timeout=FRAMEWORK_CHAT_SECONDS)
+    except Exception as exc:                                    # noqa: BLE001 - includes the timeout
+        logging.getLogger("uvicorn.error").warning("milo framework skipped: %s", exc)
+        ctx["framework"] = {"routing": routing, "available": False,
+                            "reason": "The framework's assessment did not finish in time; answer from the rest."}
+        return ctx
+    ctx["framework"] = research_milo.compact(out, routing)
+    return ctx
+
+
 async def _augment_chat_context(history: List[Dict[str, Any]],
                                 context: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """The reader's scope first, then what the question is about.
@@ -6686,6 +6789,7 @@ async def chat(request: Request,
     context = await _augment_chat_context(history, context)
     if ((context or {}).get("focus") or {}).get("scope") != "none":
         context = await _with_research(history, context, horizon)
+        context = await _with_framework(history, context, horizon, attachments)
     return StreamingResponse(
         ai.stream_chat(history, context=context, use_web=use_web,
                        attachments=attachments, persona=persona, mode=mode,
@@ -6781,7 +6885,7 @@ def _asset_version() -> str:
     looking at it is the bookmarks bar.
     """
     stamp = 0
-    for name in ("app.js", "auth.js", "charts.js", "valuation.js", "styles.css",
+    for name in ("app.js", "auth.js", "charts.js", "valuation.js", "research.js", "styles.css",
                  "icon.svg", "icon-192.png", "icon-512.png",
                  "apple-touch-icon.png", "site.webmanifest"):
         try:

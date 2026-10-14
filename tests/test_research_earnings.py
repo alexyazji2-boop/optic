@@ -233,3 +233,13 @@ def test_the_review_quotes_what_was_said_without_rewriting_it(store):
     review = E.review_forecast(f, {"state": "miss"}, {"state": "unknown"}, {"available": True, "day_pct": 9.0})
     assert review["scores"]["reaction"]["said"] == said
     assert store.for_release("XYZ", "2026-10-29")["forecast"] == f["forecast"]
+
+
+def test_unknown_timing_reads_the_session_with_the_volume_spike():
+    bars = _reaction_bars()
+    i = list(bars.index.date).index(date(2026, 10, 14))
+    bars.iloc[i, bars.columns.get_loc("Volume")] = 5e6          # release-day spike (a before-the-open bank)
+    r = E.reaction(bars, None, "2026-10-14", None, {}, "after", today=date(2026, 10, 16))
+    assert r["reaction_day"] == "2026-10-14" and "heavier volume" in r["timing_inferred"]
+    r = E.reaction(_reaction_bars(), None, "2026-10-14", None, {}, "after", today=date(2026, 10, 16))
+    assert r["reaction_day"] == "2026-10-15"

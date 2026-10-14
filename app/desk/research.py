@@ -352,8 +352,12 @@ def earnings(p: Pack, d: Deps, t: str) -> None:
     trend = est.get("eps_trend") or {}
     cur = trend.get("0q") or trend.get("current_quarter") or {}
     if cur.get("current") is not None and cur.get("90daysAgo") is not None:
+        # Against the size of the old estimate, not its sign, as in
+        # analytics/earnings._revisions: current / past - 1 read an estimate
+        # improving from -0.50 to -0.40 as a 20% cut.
         p.add("Current-quarter EPS estimate now vs 90 days ago",
-              _f((cur["current"] / cur["90daysAgo"] - 1) * 100, 1) if cur["90daysAgo"] else None, unit="%",
+              _f((cur["current"] - cur["90daysAgo"]) / abs(cur["90daysAgo"]) * 100, 1) if cur["90daysAgo"] else None,
+              unit="%",
               period="estimate revisions over 90 days", source=src, url=url, group="expectations",
               text="Rising estimates into a report raise the bar the result has to clear.")
     hist = d.provider.earnings_history(t) or []

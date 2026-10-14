@@ -17643,6 +17643,7 @@ function renderOverviewView() {
     <div id="ov-digest"></div>
     <div id="ov-takeaways">${ovTakeawaysHTML(d, biz, price, factors)}</div>
     ${d.verdict ? ovScoreHTML(d) : ''}
+    ${window.OpticFramework && !symbolIsFund(STATE.ticker) ? window.OpticFramework.hostHTML() : ''}
     ${!biz && (fin.note || fin.notes) ? `<p class="caveat">${esc(fin.note || fin.notes)}</p>` : ''}
     ${overviewChartHTML(d)}
     ${ess ? `<section class="ov-sec" aria-labelledby="ov-ess-h">
@@ -17701,6 +17702,10 @@ function renderOverviewView() {
   ovFitAbout();
   loadFairValue();
   loadOverviewLongScore();
+  /* The four separate conclusions (static/research.js). Fetched apart from the
+   * rest of the Overview: the filings and the chain make it the slowest read on
+   * the page, and nothing else waits for it. */
+  if (window.OpticFramework && !symbolIsFund(STATE.ticker)) window.OpticFramework.load(STATE.ticker);
   paintOvDigest(STATE.ticker);
 }
 
@@ -34501,7 +34506,7 @@ function ltMonthYear(iso) {
  * server's signed score is unchanged and still drives every label; this only
  * re-reads it for the headline: the worst possible maps to 0, the best to 100
  * and zero, no edge either way, to 50. Each side is scaled to its own limit
- * because the long-term model's limits are not symmetric (-86 to +97). */
+ * because the long-term model's limits are not symmetric (-78 to +97). */
 function score100(score, min, max) {
   if (score === null || score === undefined || !Number.isFinite(Number(score))) return null;
   const lo = Number.isFinite(min) && min < 0 ? min : -100;
@@ -44418,6 +44423,7 @@ const PULSE_SOURCES = {
   strategy_ideas: ['Options ideas', 'swing'],
   long_term: ['Investing', 'long'],
   valuation: ['Fair-value model', 'long'],
+  framework: ['Research framework', 'overview'],
   earnings: ['Earnings', 'earnings'],
   news: ['News', 'news'],
   macro: ['Macro', 'market'],

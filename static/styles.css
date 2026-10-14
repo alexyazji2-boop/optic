@@ -19674,6 +19674,32 @@ footer.legal > .legal-full {
 .osc-basis { margin: var(--space-2) 0 0; font-size: var(--t-small); line-height: 1.5; color: var(--ink-muted); }
 .osc .lt-conflict { margin-top: var(--space-4); }
 
+/* Research framework (2026-10-14): four separate conclusions on the Overview,
+   one tile each, the answer in a word first and the evidence folded. No
+   directional colour: a grade is not a price move, and --pos/--neg mean up and
+   down everywhere else in the terminal. */
+.rf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-4); }
+.rf-tile { padding: var(--space-3) var(--space-4); background: var(--raised); border: 1px solid var(--border); border-radius: var(--r-md); min-width: 0; }
+.rf-value { margin: var(--space-1) 0 0; font: 600 var(--t-title)/1.2 var(--display); color: var(--ink); }
+.rf-sub { margin: var(--space-1) 0 0; font-size: var(--t-small); line-height: 1.5; color: var(--ink-2); }
+.rf-more { margin-top: var(--space-2); }
+.rf-more > summary { cursor: pointer; font-size: var(--t-small); font-weight: 600; color: var(--ink-2); }
+.rf-more > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-xs); }
+.rf-more-body { margin-top: var(--space-2); }
+.rf-table { width: 100%; border-collapse: collapse; font-size: var(--t-small); }
+.rf-table th, .rf-table td { padding: var(--space-1) var(--space-2) var(--space-1) 0; text-align: left; vertical-align: top; border-top: 1px solid var(--border); line-height: 1.45; }
+.rf-table th { font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.rf-table td { color: var(--ink-2); }
+.rf-table .rf-g { font-weight: 600; color: var(--ink); white-space: nowrap; }
+.rf-list { margin: var(--space-1) 0 0; padding-left: var(--space-4); font-size: var(--t-small); line-height: 1.5; color: var(--ink-2); }
+.rf-p { margin: var(--space-1) 0 0; font-size: var(--t-small); line-height: 1.5; color: var(--ink-2); }
+.rf-verdict { margin: var(--space-4) 0 0; max-width: 80ch; font-size: var(--t-base); line-height: 1.55; color: var(--ink); }
+.rf .ov-h3 { margin-top: var(--space-3); }
+@media (max-width: 559px) {
+  .rf-grid { grid-template-columns: 1fr; }
+  .rf-table th { white-space: normal; }
+}
+
 /* Strategy pass (2026-10-12): the thesis check on the Overview. Folded to one
    line until opened; once saved, a short list of the reader's conditions with
    a mark, the reading now and what changed since it was written. Colour only

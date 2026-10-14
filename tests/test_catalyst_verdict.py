@@ -327,7 +327,10 @@ def test_the_scale_admits_the_new_factor():
     out = _holding([_article()])
     scale = out["conviction_scale"]
     assert scale["max_possible"] == 97
-    assert scale["min_possible"] == -86
+    # -25 - 8 - 15 - 10 - 8 - 12: the worst case of every factor that subtracts.
+    assert scale["min_possible"] == -78
+    # The thresholds published with the score are the ones the labels use.
+    assert scale["thresholds"] == {"high": 40, "moderate": 12, "cautious": -12, "low": -40}
 
 
 def test_both_tabs_share_one_detector():

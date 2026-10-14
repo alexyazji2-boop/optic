@@ -572,8 +572,14 @@ def analyse_holding(provider, ticker: str,
             # printing it against ±100 overstates how close to "perfect" a result is.
             # 85 before the catalyst factor, which can add or remove 12.
             "max_possible": 97,
-            "min_possible": -86,
-            "thresholds": {"high": 40, "moderate": 15, "cautious": -15, "low": -40},
+            # The worst case of every factor that can subtract: -25 (200-week),
+            # -8 (40-week), -15 (five-year record), -10 (risk), -8 (valuation),
+            # -12 (catalyst). It said -86 until 2026-10-14, and the thresholds
+            # below said 15 and -15 while the labels above cut at 12 and -12,
+            # so the Investing tab's "moderate at" caption and the 0-100 scale
+            # were drawn on numbers the model does not use.
+            "min_possible": -78,
+            "thresholds": {"high": 40, "moderate": 12, "cautious": -12, "low": -40},
         },
         "plan": plan,
         "reasons": reasons,

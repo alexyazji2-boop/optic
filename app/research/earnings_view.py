@@ -653,9 +653,35 @@ def reaction(daily: Optional[pd.DataFrame], bench: Optional[pd.DataFrame], relea
         return out
     idx = [d.date() for d in daily.index]
     react_day = rd if timing == "before_open" else None
+    inferred = None
     if react_day is None:
         later = [d for d in idx if d > rd]
         react_day = later[0] if later else None
+        # Timing unknown: the release day or the session after it. The
+        # reaction session is the one carrying the volume spike, which is an
+        # observation rather than a guess about the clock. JPM, 2026-10-14:
+        # no timing in the feed, a before-the-open bank, and the default read
+        # the day after as the reaction.
+        if timing not in ("after_close",) and react_day is not None and rd in idx:
+            vol = daily["Volume"].astype(float)
+
+            def rvol(day: date) -> Optional[float]:
+                i = idx.index(day)
+                base = float(vol.iloc[max(0, i - 21):i - 1].mean()) if i > 2 else 0.0
+                return float(vol.iloc[i]) / base if base else None
+
+            a, b = rvol(rd), rvol(react_day)
+            if a is not None and b is not None:
+                # The later session may still be trading: compare it on a full
+                # day's footing only when it is complete.
+                partial = react_day == today and phase == "regular"
+                if a >= b or partial and a >= 1.3:
+                    inferred = ("The release time is not in the feed; the release day carried the heavier volume "
+                                "({:.1f}x against {:.1f}x), so it is read as the reaction session.".format(a, b))
+                    react_day = rd
+                else:
+                    inferred = ("The release time is not in the feed; the next session carried the heavier volume "
+                                "({:.1f}x against {:.1f}x), so it is read as the reaction session.".format(b, a))
     if react_day is None or react_day not in idx:
         q = quote or {}
         ext = q.get("post_market_change_pct") if q.get("post_market_change_pct") is not None else q.get("pre_market_change_pct")
@@ -696,7 +722,7 @@ def reaction(daily: Optional[pd.DataFrame], bench: Optional[pd.DataFrame], relea
         held = "extended"
     else:
         held = "held"
-    return {"available": True, "reaction_day": react_day.isoformat(),
+    return {"available": True, "reaction_day": react_day.isoformat(), "timing_inferred": inferred,
             "observation": "intraday, session in progress" if in_progress else "completed session",
             "gap_pct": _f(gap, 2), "day_pct": _f(day, 2), "open_to_close_pct": _f(cont, 2),
             "relative_volume": _f(rvol, 2), "spy_day_pct": _f(spy_day, 2),

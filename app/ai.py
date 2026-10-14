@@ -26,6 +26,7 @@ from datetime import date, datetime, timezone
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 from . import ai_store, horizon as horizon_mod, knowledge, weekly_store
+from .research import milo as research_milo
 from .runtime import for_reader, is_hosted
 
 import logging
@@ -326,7 +327,7 @@ for example "Net GEX is **-$412m** per 1% [[src gex]]". The terminal turns the
 tag into a chip naming that panel, which the reader can press to open it. The
 keys are quote, verdict, pulse, cases, why, whats_next, next_earnings_date,
 company, chart, technicals, gex, greeks, flow, entry_plan, naked_ideas,
-strategy_ideas, long_term, valuation, earnings, earnings_momentum, sector_confirm, news,
+strategy_ideas, long_term, valuation, framework, earnings, earnings_momentum, sector_confirm, news,
 macro, sectors, indices, market, read, compare, tracker, digest,
 portfolio_summary, reader_holdings, reader_watchlist, vol_surface, iv_rank, iv_hv, iv_cheapness, straddle_calibration, dispersion,
 options_research, track_record, research, desk_edition, desk_section, backtest, stop_check
@@ -584,6 +585,12 @@ business or the economy from chart indicators.
 - **Lead with the assessment.** Open with a clear answer in a sentence or two. Then the strongest \
 evidence for it, then the strongest evidence against it, then what would change the view. Depth \
 adapts to the reader; the standards do not.
+- **Five judgments, kept apart.** Business quality, valuation, a swing setup, earnings expectations and \
+event risk are different questions with different evidence. Answer the one asked; when a question spans \
+several, give each its own conclusion and say in plain English why they agree or not. A strong company \
+is not automatically a good price, a good price is not a trade, and a likely earnings beat is not a \
+forecast that the stock rises. No conclusion is bullish by default, and none comes from chart \
+indicators when the question is about the business.
 - **Cite what the server retrieved.** Tag a figure from `research` as [[src research]] and name its \
 source and period in words ("free cash flow was $1.7bn in the fiscal year to August 2025, from the \
 company's statements"). Where `research.not_available` lists something the question needs (guidance \
@@ -666,7 +673,7 @@ $META's Overview, the first thing worth knowing is..." beats an answer written f
 valued".
 - Own your read in the first person: "my ranking", "the cleanest one of these", "the part I keep \
 coming back to".
-- Say what you actually looked at. "The least clownish setup of the names I checked" tells the reader \
+- Say what you actually looked at. "The cleanest setup of the six names I checked" tells the reader \
 the size of the pool, which a bare superlative hides.
 - Open with the answer or a hook. Never a summary of what you are about to say.
 - Explain *why*, especially when the data is counterintuitive. If flow leans bullish while the chart \
@@ -1287,11 +1294,13 @@ CONTEXT_SECTION_CAP = 14_000
 # ordered most important first (app/desk/research.py), so it gets more room
 # than a panel: at 14,000 characters a 37-item pre-earnings pack was cut to
 # its first ten items and lost the consensus (2026-10-13).
-CONTEXT_SECTION_CAPS = {"research": 26_000}
+# The research framework's assessment is the answer's spine when a mode is
+# resolved, so it gets room comparable to the research pack's.
+CONTEXT_SECTION_CAPS = {"research": 26_000, "framework": 18_000}
 
 _ORDER_BASE = [
     "portfolio_summary", "reader_holdings", "auto_loaded", "auto_loaded_note", "screen_candidates",
-    "desk_section", "research", "market", "compare", "ticker", "quote", "pulse", "verdict", "track_record", "cases", "why", "digest",
+    "desk_section", "research", "framework", "market", "compare", "ticker", "quote", "pulse", "verdict", "track_record", "cases", "why", "digest",
     "whats_next", "next_earnings_date", "options_research", "vol_surface", "iv_rank", "iv_hv", "rate",
     "reader_watchlist", "active_view", "chart", "technicals",
     "company", "long_term", "earnings", "news", "macro", "sector_confirm", "earnings_momentum",
@@ -2843,6 +2852,15 @@ def build_chat_request(
     level = knowledge.resolve_for_answer(mode, last_user)
     level_prompt = knowledge.prompt_for(level)
     horizon_prompt = horizon_mod.prompt_for(hz, hz_why)
+    # The research framework's block for this question's mode (app/research/
+    # milo.py), plus the screenshot rule when the reader sent a picture.
+    fw = (context or {}).get("framework") if isinstance((context or {}).get("framework"), dict) else None
+    has_image = any(b.get("type") == "image" for b in attach_blocks)
+    has_structured = bool(context) and any(k in (context or {}) for k in
+                                           ("quote", "technicals", "framework", "auto_loaded", "chart", "long_term"))
+    framework_prompt = research_milo.prompt((fw or {}).get("routing"), bool(fw and len(fw) > 1),
+                                            has_image=has_image, has_structured=has_structured)
+    meta["framework_mode"] = ((fw or {}).get("routing") or {}).get("mode")
     meta.update({"level": level, "persona": persona if persona in PERSONAS else DEFAULT_PERSONA})
     flavour_prompt = flavour_for(
         sum(1 for t in messages if t.get("role") == "user"), last_user, persona)
@@ -2868,6 +2886,7 @@ def build_chat_request(
              "cache_control": {"type": "ephemeral"}},
             {"type": "text", "text": level_prompt},
         ] + ([{"type": "text", "text": horizon_prompt}] if horizon_prompt else [])
+          + ([{"type": "text", "text": framework_prompt}] if framework_prompt else [])
           + ([{"type": "text", "text": persona_prompt}] if persona_prompt else [])
           + ([{"type": "text", "text": flavour_prompt}] if flavour_prompt else []),
         "messages": messages,

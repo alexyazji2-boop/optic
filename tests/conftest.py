@@ -270,3 +270,18 @@ def _no_research_retrieval(monkeypatch, request):
         return context
     monkeypatch.setattr(m, "_with_research", passthrough)
 
+
+@pytest.fixture(autouse=True)
+def _no_framework_build(monkeypatch, request):
+    """The research framework's chat hook (main._with_framework) fetches bars,
+    filings and estimates for the question's company. A pass-through for the
+    chat-route tests, like the research pack; tests/test_research_milo.py
+    marks its own tests `framework_live` and stubs the build instead."""
+    if request.node.get_closest_marker("framework_live"):
+        return
+    import app.main as m
+
+    async def passthrough(history, context, horizon=None, attachments=None):
+        return context
+    monkeypatch.setattr(m, "_with_framework", passthrough)
+
