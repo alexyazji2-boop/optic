@@ -22400,7 +22400,11 @@ function wsHoverReadout(i) {
   if (!row) return;
   const d = STATE.chartData;
   if (!d || d === 'loading') return;
-  const ps = wsSeries(d);
+  // The same bar again is nothing to redraw; "no bar" always redraws, since
+  // a live tick calls it to refresh the day change.
+  if (i !== null && i !== undefined && i === wsHoverLast) return;
+  wsHoverLast = i;
+  const ps = wsHoverSeries && wsHoverSeries.data === d ? wsHoverSeries.ps : wsSeries(d);
   const chg = document.getElementById('ws-chg');
 
   if (i === null || i === undefined) {
@@ -26183,12 +26187,23 @@ function wsSyncChromeHeight() {
 }
 
 let wsChartBuilder = null;
+/* The series the chart on screen was drawn from, kept for the hover readout.
+ * wsHoverReadout called wsSeries(d) on every pointer move, and on an intraday
+ * range that rebuilds the bars and recomputes RSI and MACD across all of them:
+ * reported as "a lot of UI lag and jitter when I move the cursor across the
+ * chart" on a 1-hour PLTR chart (2026-10-13). The draw computes it once; the
+ * readout reads the same object, and skips the DOM when the bar is unchanged. */
+let wsHoverSeries = null;
+let wsHoverLast;
 
 function wsMountChart() {
   wsSyncChromeHeight();
   const d = STATE.chartData;
   if (!d || d === 'loading' || d.error) return;
   const ps = wsSeries(d);
+  // The bars this draw is of, for the hover readout (see wsHoverReadout).
+  wsHoverSeries = { data: d, ps };
+  wsHoverLast = undefined;
   const styleOf = (id) => overlayStyle(id);
   const intraday = !!ps.intraday;
   // The payload's own symbol, not STATE.chartSymbol: the colours have to be
