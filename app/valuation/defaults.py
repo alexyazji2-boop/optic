@@ -250,9 +250,16 @@ def default_drivers(data: Dict[str, Any], base: Dict[str, Any], kind: str,
         m_start = m0
         m_target = _avg([m for m in margins if m is not None and m > 0], 3) or m0
         m_years = 5
+        norm = _avg([x.get("ebit_margin_normalized") for x in d[:3]], 3)
+        extra = ""
+        if norm is not None and abs(norm - m_target) > 0.005:
+            extra = (" Excluding the restructuring and impairment charges the filings tag (one-off items the "
+                     "company itself may call non-recurring), the same average is {:.1%}; that is offered "
+                     "as a what-if, not used, because untagged charges cannot be removed the same way."
+                     .format(norm))
         note("margin.target", m_target, "history", "Average operating margin over the last {} reported "
              "years. Reverting to the recent average, rather than extending the latest trend, avoids "
-             "building margin expansion into the base case.".format(min(3, len([m for m in margins if m]))))
+             "building margin expansion into the base case.".format(min(3, len([m for m in margins if m]))) + extra)
     note("margin.start", m_start, "reported", "The last fiscal year's operating margin.")
 
     capex = [x.get("capex_pct") for x in d]

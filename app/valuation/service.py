@@ -480,6 +480,8 @@ def build(provider, ticker: str, edits: Optional[Dict[str, Any]] = None,
             "operating_lease": _compact_fact(data["balance"].get("operating_lease")),
             "shares": {k: (_compact_fact(v) if isinstance(v, dict) else v) for k, v in data["shares"].items()},
             "risk_free": data["risk_free"], "consensus": data["consensus"], "quote": data["quote"],
+            "trailing": {k: (v if k != "values" else {c: _compact_fact(f) for c, f in v.items()})
+                         for k, v in (data.get("trailing") or {}).items()},
             "profile": data["profile"], "retrieved": data["retrieved"], "source_note": data["source_note"],
             "statement_currency": data["statement_currency"], "cik": data["cik"],
         },
@@ -557,7 +559,7 @@ def build(provider, ticker: str, edits: Optional[Dict[str, Any]] = None,
                     out["sensitivity"] = analysis.sensitivity(base, drivers, rate)
                     out["tornado"] = analysis.tornado(base, drivers, rate, res["per_share"])
                     out["reverse"] = analysis.reverse_dcf(base, drivers, rate)
-                    out["what_ifs"] = what_ifs(base, drivers, rate, res["per_share"])
+                    out["what_ifs"] = what_ifs(base, drivers, rate, res["per_share"], data)
                     out["fcfe"] = fcfe_model(base, drivers, res["wacc"], fit["models"]["fcfe"],
                                              base.get("price"))
                     out["three_statement"] = three_statement_model(base, drivers, res["wacc"], data)
@@ -812,7 +814,8 @@ def clean(obj: Any) -> Any:
     return obj
 
 
-def what_ifs(base: Dict[str, Any], drivers: Dict[str, Any], rate: float, center: float) -> List[Dict[str, Any]]:
+def what_ifs(base: Dict[str, Any], drivers: Dict[str, Any], rate: float, center: float,
+             data: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     """A few single-assumption alternatives the reader (and Milo) commonly
     ask about, each a full model run with only that change."""
     out: List[Dict[str, Any]] = []
@@ -833,6 +836,14 @@ def what_ifs(base: Dict[str, Any], drivers: Dict[str, Any], rate: float, center:
         d["margin"]["target"] = m["start"]
         add("margin_holds", "Operating margin holds at last year's {:.1%} instead of {:.1%}".format(
             m["start"], m["target"]), d)
+    if data:
+        norms = [y["derived"].get("ebit_margin_normalized") for y in data["history"][:3]]
+        norms = [x for x in norms if x is not None]
+        if norms and abs(mean(norms) - m["target"]) > 0.005:
+            d = copy.deepcopy(drivers)
+            d["margin"]["target"] = mean(norms)
+            add("margin_normalized", "Margins settle at the three-year average excluding tagged restructuring and "
+                "impairment charges ({:.1%})".format(mean(norms)), d)
     d = copy.deepcopy(drivers)
     d["terminal"]["ronic"] = rate
     add("no_excess_returns", "New investment after the forecast earns only the cost of capital", d)

@@ -385,3 +385,12 @@ def test_sector_peers_fill_in_when_the_industry_has_too_few_of_this_size(monkeyp
     origins = {r["symbol"]: r["origin"] for r in out["peers"]}
     assert origins["A"] == "industry" and len(out["peers"]) == 5
     assert all(o == "sector" for k, o in origins.items() if k != "A")
+
+
+def test_growth_bought_through_acquisitions_is_flagged(synthetic):
+    blob = company_blob()
+    blob["facts"]["us-gaap"]["PaymentsToAcquireBusinessesNetOfCashAcquired"] = {
+        "units": {"USD": [_flow(v, e) for v, e in zip([0.0, 0.0, 150.0, 20.0], YEARS)]}}
+    synthetic["blob"] = blob
+    out = service.build(Provider(), "SYN")
+    assert any("Acquisitions cost" in w and "2024" in w for w in out["warnings"])

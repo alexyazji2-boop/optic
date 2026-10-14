@@ -660,6 +660,7 @@
       ? `The first year counts ${pct(dcf.timing.stub_fraction, 0)} of its cash flow: the balance sheet is from ${esc(day(d.inputs.balance_date))}, so only the part after it is new.` : ''}
       Discounting: ${dcf.timing.convention === 'mid_year' ? 'mid-year (each year’s cash arrives at its middle)' : 'end of year'}, at ${pct(dcf.discount_rate, 2)}.
       D&A ${dcf.da_method === 'ppe' ? 'follows net PP&E (depreciation rate × last year’s PP&E)' : 'is a share of revenue'}.</p>
+      ${trailingNote(d)}
       <div class="dcf-scroll"><table class="data dcf-fc">
         <thead><tr><th scope="col">Year</th>${r.map((y) => `<th scope="col">${esc(String(y.fiscal_year_end).slice(0, 4))}</th>`).join('')}</tr></thead>
         <tbody>
@@ -688,6 +689,20 @@
         market multiple), the value would be ${money(dcf.exit_check.per_share)} a share${has(dcf.exit_check.implied_growth)
     ? `, which a perpetuity reaches only with ${pct(dcf.exit_check.implied_growth)} growth forever` : ''}. Using the market's own
         multiple is circular, which is why it is a check and not the answer.</p>` : ''}`;
+  }
+
+  /* The latest four quarters beside the base year, so a reader can see how
+   * the first forecast year is tracking. Built from reported figures only:
+   * fiscal year + this year to date - the same months a year earlier. */
+  function trailingNote(d) {
+    const t = (d.inputs || {}).trailing || {};
+    if (!t.available) return t.reason ? `<p class="dcf-note">Trailing year: ${esc(t.reason)}</p>` : '';
+    const v = t.values || {};
+    const g1 = (((d.assumptions || {}).drivers || {}).growth || {}).y1;
+    return `<p class="dcf-note"><strong>Trailing twelve months to ${esc(day(t.period_end))}:</strong> revenue ${bigMoney((v.revenue || {}).value)}
+      (${signedPct(t.revenue_change_vs_fy0, 1)} on the fiscal year to ${esc(day(t.fy0_end))}), operating margin ${pct(t.ebit_margin)}.
+      The forecast starts from the fiscal year and assumes ${pct(g1)} growth in the first year, so the two can be compared directly.
+      Built as the fiscal year + this year to date − the same months a year earlier, each from the filings.</p>`;
   }
 
   function waccHTML(d) {
@@ -890,7 +905,9 @@
       ['Dividends paid', 'dividends_paid'], ['Buybacks', 'buybacks']];
     const ratios = [['Revenue growth', 'revenue_growth'], ['Operating margin', 'ebit_margin'], ['Effective tax rate', 'effective_tax_rate'],
       ['Capex / revenue', 'capex_pct'], ['Working capital / revenue', 'nwc_pct'], ['Return on invested capital', 'roic'],
-      ['FCFF (rebuilt)', 'fcff', 'money'], ['Operating cash flow − capex', 'fcf_simple', 'money']];
+      ['FCFF (rebuilt)', 'fcff', 'money'], ['Operating cash flow − capex', 'fcf_simple', 'money'],
+      ['Tagged restructuring and impairment', 'unusual_items', 'money'], ['Operating margin excluding them', 'ebit_margin_normalized'],
+      ['Acquisitions / revenue', 'acquisitions_pct']];
     const cell = (f) => (f && has(f.value) ? `<td title="${esc([f.tag, f.form, f.filed && `filed ${f.filed}`].filter(Boolean).join(' · '))}">${f.url
       ? `<a href="${esc(f.url)}" target="_blank" rel="noopener">${bigMoney(f.value)}</a>` : bigMoney(f.value)}${f.restated ? '*' : ''}</td>` : '<td class="muted">not reported</td>');
     return `<p class="dcf-note">Fiscal years from the company's 10-K filings (SEC EDGAR, US-GAAP XBRL). Each figure links to its filing;
@@ -900,6 +917,8 @@
         <tr class="dcf-sub"><th colspan="${h.length + 1}">Derived (reported figures, same periods)</th></tr>
         ${ratios.map(([label, k, kind]) => `<tr><th scope="row">${esc(label)}</th>${h.map((y) => `<td>${kind === 'money' ? bigMoney(y.derived[k]) : pct(y.derived[k])}</td>`).join('')}</tr>`).join('')}
       </tbody></table></div>
+      <p class="caveat">Restructuring and impairment are only what the filings tag under standard names; a charge tagged
+        with the company's own label is not caught, so the normalised margin is a partial adjustment and never the default.</p>
       <p class="caveat">${esc((d.inputs || {}).source_note || '')} Rebuilt FCFF uses the reported working-capital change, which can swing with one-off items; the forecast holds working capital at a steady share of revenue instead.</p>`;
   }
 
@@ -1309,6 +1328,16 @@
       out.residual_income.roe_start = r4(d.residual_income.roe_start);
       out.residual_income.price_to_book = r2(d.residual_income.price_to_book);
     }
+    const tt = (d.inputs || {}).trailing || {};
+    if (tt.available) {
+      out.trailing_twelve_months = { period_end: tt.period_end, revenue: ((tt.values || {}).revenue || {}).value,
+        revenue_change_vs_fiscal_year: r4(tt.revenue_change_vs_fy0), operating_margin: r4(tt.ebit_margin),
+        how: 'fiscal year + this year to date - same months a year earlier, from the filings' };
+    }
+    out.history = ((d.inputs || {}).history || []).slice(0, 3).map((y) => ({ fiscal_year_end: y.fy_end,
+      revenue_growth: r4(y.derived.revenue_growth), operating_margin: r4(y.derived.ebit_margin),
+      operating_margin_excluding_tagged_charges: r4(y.derived.ebit_margin_normalized),
+      capex_share: r4(y.derived.capex_pct), roic: r4(y.derived.roic), acquisitions_share: r4(y.derived.acquisitions_pct) }));
     out.sources = 'Statements: SEC EDGAR XBRL (us-gaap), fiscal years ' + ((d.inputs || {}).fy_ends || []).slice(0, 3).join(', ')
       + '; balance sheet ' + ((d.inputs || {}).balance_date || '') + '. Price and beta: Yahoo Finance quote. Risk-free: FRED DGS10. ERP and credit spreads: Damodaran, January 2026.';
     return out;

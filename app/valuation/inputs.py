@@ -65,6 +65,14 @@ TAGS: Dict[str, Tuple[str, ...]] = {
     "interest_expense": ("InterestExpense", "InterestExpenseNonoperating", "InterestExpenseDebt",
                          "InterestAndDebtExpense"),
     "interest_income": ("InvestmentIncomeInterest", "InterestIncomeOther"),
+    # Items filers tag as unusual, for the normalised margin (never the default).
+    "restructuring": ("RestructuringCharges",),
+    "goodwill_impairment": ("GoodwillImpairmentLoss",),
+    "intangible_impairment": ("ImpairmentOfIntangibleAssetsExcludingGoodwill",
+                              "ImpairmentOfIntangibleAssetsIndefinitelivedExcludingGoodwill"),
+    "asset_impairment": ("AssetImpairmentCharges",),
+    "contingent_consideration": ("BusinessCombinationContingentConsiderationArrangementsChangeInAmountOfContingentConsiderationLiability1",),
+    "acquisitions": ("PaymentsToAcquireBusinessesNetOfCashAcquired",),
     "dividends_paid": ("PaymentsOfDividendsCommonStock", "PaymentsOfDividends"),
     "dps": ("CommonStockDividendsPerShareDeclared", "CommonStockDividendsPerShareCashPaid"),
     "buybacks": ("PaymentsForRepurchaseOfCommonStock",),
@@ -128,7 +136,9 @@ TAGS: Dict[str, Tuple[str, ...]] = {
 FLOWS = {"revenue", "operating_income", "pretax_income", "income_tax", "net_income", "net_income_common",
          "da", "depreciation", "amortization", "capex", "cfo", "sbc", "interest_expense", "interest_income",
          "dividends_paid", "dps", "buybacks", "diluted_shares_avg", "basic_shares_avg",
-         "eps_diluted", "gain_real_estate", "impairment_real_estate"}
+         "eps_diluted", "gain_real_estate", "impairment_real_estate", "restructuring",
+         "goodwill_impairment", "intangible_impairment", "asset_impairment", "contingent_consideration",
+         "acquisitions"}
 UNITS = {"dps": "USD/shares", "eps_diluted": "USD/shares", "diluted_shares_avg": "shares",
          "basic_shares_avg": "shares", "shares_outstanding": "shares"}
 
@@ -636,8 +646,82 @@ def history(fl: Filings, fy_ends: List[str]) -> List[Dict[str, Any]]:
         derived["payout_ratio"] = _ratio(div, ni_c) if (ni_c and ni_c > 0 and div is not None) else None
         bb = _v(f["buybacks"])
         derived["buyback_ratio"] = _ratio(bb, ni_c) if (ni_c and ni_c > 0 and bb is not None) else None
+        # Tagged unusual items, added back for a normalised margin. Impairment
+        # is the larger of the asset-impairment total and its goodwill and
+        # intangible parts, because some filers report the total and some the
+        # parts, and summing all three would count the parts twice.
+        imp_parts = (_v(f["goodwill_impairment"]) or 0.0) + (_v(f["intangible_impairment"]) or 0.0)
+        impairment = max(_v(f["asset_impairment"]) or 0.0, imp_parts)
+        unusual = impairment + (_v(f["restructuring"]) or 0.0) + max(0.0, _v(f["contingent_consideration"]) or 0.0)
+        derived["unusual_items"] = unusual if any(f[k] for k in ("restructuring", "goodwill_impairment",
+                                                                "intangible_impairment", "asset_impairment",
+                                                                "contingent_consideration")) else None
+        derived["ebit_margin_normalized"] = ((ebit + unusual) / rev) if (ebit is not None and rev and unusual) else derived["ebit_margin"]
+        acq = _v(f["acquisitions"])
+        derived["acquisitions_pct"] = (acq / rev) if (acq is not None and rev) else None
         y["derived"] = derived
     return years[:HISTORY_YEARS]
+
+
+def _ytd(fl: Filings, concept: str, start: str, end: str, tol: int = 3,
+         tag_only: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """A year-to-date total from a 10-Q: the period starting with the fiscal
+    year and ending on `end` (within `tol` days, for 52/53-week quarters)."""
+    unit = UNITS.get(concept, "USD")
+    for tag in ([tag_only] if tag_only else TAGS[concept]):
+        rows = [r for r in fl._rows(tag, unit)                                              # noqa: SLF001
+                if r.get("form") in ("10-Q", "10-Q/A") and r.get("start")
+                and _near(r["start"], start, 7) and _near(r["end"], end, tol) and _num(r.get("val")) is not None]
+        if rows:
+            return fl._fact(concept, tag, rows, unit)                                       # noqa: SLF001
+    return None
+
+
+TRAILING = ("revenue", "operating_income", "net_income", "capex", "da", "cfo")
+
+
+def trailing(fl: Filings, hist: List[Dict[str, Any]], bal_date: str) -> Dict[str, Any]:
+    """Trailing twelve months to the latest 10-Q, built the standard way:
+    last fiscal year + this year to date - the same months a year earlier.
+    Every part is a reported figure, so annual and quarterly periods are
+    combined only in this one documented way and never mixed silently."""
+    if not hist or not bal_date:
+        return {"available": False, "reason": "No fiscal year to start from."}
+    fy0 = hist[0]
+    if (_days(fy0["fy_end"], bal_date) or 0) < 60:
+        return {"available": False, "reason": "No quarter has been reported since the last annual report, so "
+                                              "the trailing year is the fiscal year itself."}
+    start = None
+    for c in ("revenue", "operating_income", "net_income"):
+        f = fy0["flows"].get(c)
+        if f and f.get("start") and f.get("tag"):
+            start = f["start"]
+            break
+    if start is None:
+        return {"available": False, "reason": "The fiscal year's start date is not in the filings."}
+    from datetime import timedelta as _td
+    cur_start = (date.fromisoformat(fy0["fy_end"]) + _td(days=1)).isoformat()
+    prior_end = (date.fromisoformat(bal_date[:10]) - _td(days=364)).isoformat()
+    out: Dict[str, Any] = {"available": True, "period_end": bal_date, "fy0_end": fy0["fy_end"], "values": {}}
+    for c in TRAILING:
+        fy = fy0["flows"].get(c)
+        if fy is None or not fy.get("tag"):
+            out["values"][c] = {"value": None, "reason": "not a single reported figure for the fiscal year"}
+            continue
+        # The same tag in all three parts, so one definition throughout.
+        cur = _ytd(fl, c, cur_start, bal_date, tag_only=fy["tag"])
+        # The comparable months a year earlier, from the fiscal year before.
+        prior = _ytd(fl, c, start, prior_end, tol=10, tag_only=fy["tag"]) if cur else None
+        if cur is None or prior is None:
+            out["values"][c] = {"value": None, "reason": "a year-to-date figure under the same tag is missing"}
+            continue
+        out["values"][c] = _derived(c, _v(fy) + _v(cur) - _v(prior), [fy, cur, prior],
+                                    "fiscal year + year to date - same period a year earlier")
+    rev_t, rev_0 = out["values"]["revenue"].get("value"), _v(fy0["flows"].get("revenue"))
+    out["revenue_change_vs_fy0"] = (rev_t / rev_0 - 1.0) if (rev_t and rev_0) else None
+    ebit_t = out["values"]["operating_income"].get("value")
+    out["ebit_margin"] = (ebit_t / rev_t) if (ebit_t is not None and rev_t) else None
+    return out
 
 
 def invested_capital(bs: Dict[str, Any]) -> Optional[float]:
@@ -816,6 +900,10 @@ def gather(provider, ticker: str, today: Optional[date] = None, force: bool = Fa
         short = provider.short_interest(sym) or {}
     except Exception:                                                                      # noqa: BLE001
         short = {}
+    ttm = trailing(fl, hist, bal_date)
+    acq3 = [y["derived"].get("acquisitions_pct") for y in hist[:3]]
+    big = [(y["fy_end"], y["derived"]["acquisitions_pct"]) for y in hist[:3]
+           if (y["derived"].get("acquisitions_pct") or 0) > 0.10]
     sh = shares(fl, quote, _num(short.get("shares_outstanding")))
     beta, beta_meta = _num(quote.get("beta")), {"source": "Yahoo Finance quote (5-year monthly regression)",
                                                   "kind": "market"}
@@ -844,6 +932,12 @@ def gather(provider, ticker: str, today: Optional[date] = None, force: bool = Fa
                         "the bridge.".format(bal_date, d_now, d_fy, d_now / d_fy - 1.0))
     if sh.get("cross_check"):
         warnings.append(sh["cross_check"])
+    if big or sum(a for a in acq3 if a) > 0.15:
+        warnings.append("Acquisitions cost {} of revenue over the last three years{}. Past revenue growth "
+                        "includes bought revenue, and the forecast does not pay for acquisitions, so growth "
+                        "carried forward from history may be too high for the capex assumed.".format(
+                            "{:.0%}".format(sum(a for a in acq3 if a)),
+                            " (more than 10% in " + ", ".join(e[:4] for e, _ in big) + ")" if big else ""))
     restated = sorted({c for y in hist[:3] for c, f in y["flows"].items() if f and f.get("restated")})
     if restated:
         warnings.append("Restated in a later filing (the latest figures are used): {}.".format(
@@ -867,6 +961,7 @@ def gather(provider, ticker: str, today: Optional[date] = None, force: bool = Fa
         "history": hist,
         "balance_date": bal_date,
         "balance": bal,
+        "trailing": ttm,
         "shares": sh,
         "risk_free": risk_free(provider),
         "consensus": consensus(provider, sym, _v(fy0["flows"]["revenue"])),
