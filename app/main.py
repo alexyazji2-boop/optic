@@ -4807,7 +4807,8 @@ async def valuation_sotp(ticker: str, payload: Dict[str, Any] = Body(default={})
         raise HTTPException(status_code=400, detail="The unallocated multiple is not a number.")
     if um is not None and not (0.0 <= um <= 200.0):
         raise HTTPException(status_code=400, detail="The unallocated multiple must be between 0 and 200.")
-    return await _run(lambda: valuation_service.clean(valuation_service.sotp_model(YF_PROVIDER, sym, clean, um)))
+    edits = {k: body.get(k) for k in ("drivers", "wacc", "base", "equity") if isinstance(body.get(k), dict)}
+    return await _run(lambda: valuation_service.clean(valuation_service.sotp_model(YF_PROVIDER, sym, clean, um, edits)))
 
 
 @app.get("/api/valuation/{ticker}/comps")
