@@ -20,7 +20,8 @@ COMMON = (
     "quality, valuation, the swing setup, earnings expectations and event risk are separate questions, and when "
     "two disagree, say in plain English why they can (different horizons, different things measured). Explain the "
     "mechanism behind a figure, not only the figure: why returns above the cost of capital matter, why cash "
-    "falling short of profit is a question, why a beat can still fall. Tag figures from it as [[src framework]]."
+    "falling short of profit is a question, why a beat can still fall. Its swing readings are on completed bars "
+    "(`readings.as_of`): today's price and move are in `quote`. Tag figures from it as [[src framework]]."
 )
 
 DEPTH = {
@@ -169,9 +170,15 @@ def compact(out: Dict[str, Any], routing: Dict[str, Any]) -> Dict[str, Any]:
             "objections": [{"severity": o["severity"], "text": o["text"]}
                            for o in sorted(sw.get("objections") or [], key=lambda o: -o["severity"])],
             "setup": _pick(sw.get("setup"), "kind", "side", "why"),
-            "readings": _pick(rd, "as_of", "spot", "ema20", "ema50", "sma200", "rsi14", "macd_hist",
-                              "macd_hist_rising", "atr14", "atr_pct", "relative_volume", "daily_trend",
-                              "weekly_trend", "aligned", "relative_strength", "benchmark", "high_252"),
+            # Completed bars only, so `spot` is the last completed session's
+            # close, not today's price: renamed so it cannot be quoted as one
+            # (the digest error of 2026-10-14, where Tuesday's close was
+            # reported as Wednesday's move).
+            "readings": dict(_pick(rd, "as_of", "ema20", "ema50", "sma200", "rsi14", "macd_hist",
+                                   "macd_hist_rising", "atr14", "atr_pct", "relative_volume", "daily_trend",
+                                   "weekly_trend", "aligned", "relative_strength", "benchmark", "high_252"),
+                             last_completed_close=rd.get("spot"),
+                             basis="completed daily bars to as_of; today's price is in quote"),
             "plan": dict(_pick(plan, "side", "kind", "entry", "entry_zone", "confirmation", "targets",
                                "target_basis", "obstacles", "reward_to_risk", "reward_to_risk_t2", "rr_formula",
                                "reassess"),

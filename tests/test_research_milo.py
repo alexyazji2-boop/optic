@@ -190,3 +190,13 @@ def test_the_chat_route_runs_research_and_framework_side_by_side(monkeypatch):
     assert r.status_code == 200
     assert time.time() - t0 < 1.1                     # not 1.2s in sequence
     assert seen["research"] == {"items": [1]} and seen["framework"]["routing"]["mode"] == "swing"
+
+
+def test_the_swing_readings_never_pose_as_todays_price():
+    out = _fake_out()
+    out["swing"]["readings"] = {"spot": 228.52, "as_of": "2026-10-13", "rsi14": 52}
+    c = milo.compact(out, _routing("swing"))
+    rd = c["swing"]["readings"]
+    assert "spot" not in rd and rd["last_completed_close"] == 228.52
+    assert "today's price is in quote" in rd["basis"]
+    assert "today's price and move are in `quote`" in milo.COMMON
