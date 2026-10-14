@@ -181,6 +181,8 @@ def test_a_bank_shows_the_method_that_fits_and_its_sensitivity(monkeypatch):
     assert "does not suit" in html and "residual income" in html
     assert "The methods that fit, side by side" in html and "Starting return on equity" in html
     assert "capital spending" not in html and "return on equity does BNK" in html
+    assert 'data-dcf-field="ri.roe_start"' in html and "Cost of equity</legend>" in html
+    assert 'data-dcf-field="wacc.beta_raw"' in html and "Residual income, bear to bull" in html
     assert "undefined" not in html and "NaN" not in html
 
 

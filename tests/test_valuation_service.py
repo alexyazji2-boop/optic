@@ -412,3 +412,27 @@ def test_a_line_the_filings_lack_can_be_supplied_and_is_labelled(synthetic):
     assert fixed["defaults"]["drivers"]["capex_pct"]["start"] == pytest.approx(0.06)
     refused = service.build(Provider(), "SYN", edits={"base": {"da": 1.0}})
     assert "already in the filings" in refused["input_errors"][0]
+
+
+def test_a_banks_equity_model_is_editable_and_has_scenarios(synthetic):
+    synthetic["blob"], synthetic["sic"] = company_blob("bank"), "6022"
+    p = Provider(industry="Banks - Regional")
+    base = service.build(p, "BNK")["residual_income"]
+    sc = base["scenarios"]
+    assert sc["bear"]["per_share"] < sc["base"]["per_share"] < sc["bull"]["per_share"]
+    assert sc["base"]["per_share"] == pytest.approx(base["per_share"])
+    lower = service.build(p, "BNK", edits={"equity": {"ri": {"roe_start": base["roe_start"] - 0.03}}})["residual_income"]
+    assert lower["per_share"] < base["per_share"] and lower["edited"] == ["roe_start"]
+    assert lower["defaults"]["roe_start"] == pytest.approx(base["roe_start"])
+    bad = service.build(p, "BNK", edits={"equity": {"ri": {"roe_start": 3.0}}})
+    assert bad["input_errors"] == ["Starting return on equity must be between -50% and 100%."]
+    beta = service.build(p, "BNK", edits={"wacc": {"beta_raw": 2.0}})["residual_income"]
+    assert beta["cost_equity"] > base["cost_equity"] and beta["per_share"] < base["per_share"]
+
+
+def test_dividend_model_takes_the_readers_growth(synthetic):
+    p = Provider()
+    base = service.build(p, "SYN")["ddm"]
+    mine = service.build(p, "SYN", edits={"equity": {"ddm": {"growth_high": 0.0, "years_high": 3}}})["ddm"]
+    assert mine["growth_high"] == 0.0 and mine["years_high"] == 3 and mine["per_share"] < base["per_share"]
+    assert mine["defaults"]["growth_high"] == pytest.approx(base["growth_high"])

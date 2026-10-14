@@ -59,7 +59,7 @@
     const s = readStore();
     const e = VAL.edits[sym];
     if (e && (Object.keys(e.drivers || {}).length || Object.keys(e.wacc || {}).length
-      || Object.keys(e.base || {}).length)) s.edits[sym] = e;
+      || Object.keys(e.base || {}).length || Object.keys(e.equity || {}).length)) s.edits[sym] = e;
     else delete s.edits[sym];
     writeStore(s);
   }
@@ -159,6 +159,38 @@
   ];
   const GROUPS = ['Growth', 'Profitability', 'Reinvestment', 'Taxes', 'Discount rate', 'Cross-check'];
 
+  /* The equity-side models' assumptions: residual income for banks and
+   * insurers, the dividend model, and a REIT's price-to-FFO. Same mechanics as
+   * the DCF form; kept in edits.equity. */
+  const EQ_FIELDS = [
+    { group: 'Residual income', model: 'residual_income', key: 'ri.roe_start', label: 'Starting return on equity', unit: '%' },
+    { group: 'Residual income', model: 'residual_income', key: 'ri.roe_terminal', label: 'Return on equity after ten years', unit: '%' },
+    { group: 'Residual income', model: 'residual_income', key: 'ri.book_growth_start', label: 'Book value growth, first year', unit: '%' },
+    { group: 'Residual income', model: 'residual_income', key: 'ri.growth_terminal', label: 'Growth after the forecast', unit: '%' },
+    { group: 'Dividend model', model: 'ddm', key: 'ddm.growth_high', label: 'Dividend growth, first years', unit: '%' },
+    { group: 'Dividend model', model: 'ddm', key: 'ddm.years_high', label: 'Years of that growth', unit: 'yrs' },
+    { group: 'Dividend model', model: 'ddm', key: 'ddm.growth_terminal', label: 'Dividend growth after that', unit: '%' },
+    { group: 'REIT', model: 'reit', key: 'reit.p_ffo', label: 'Price-to-FFO to value FFO at', unit: 'x' },
+  ];
+  const EQ_SOURCE = { 'ri.roe_start': 'roe_start', 'ri.roe_terminal': 'roe_terminal', 'ri.book_growth_start': 'book_growth_start',
+    'ri.growth_terminal': 'growth_terminal', 'ddm.growth_high': 'growth_high', 'ddm.years_high': 'years_high',
+    'ddm.growth_terminal': 'growth_terminal' };
+  const COST_FIELDS = ['wacc.risk_free', 'wacc.beta_raw', 'wacc.erp', 'wacc.extra_premium'];
+
+  function anyField(key) {
+    return FIELDS.find((x) => x.key === key) || EQ_FIELDS.find((x) => x.key === key);
+  }
+
+  function eqValue(d, f, which) {
+    const m = d[f.model];
+    if (!m || !m.available) return null;
+    if (f.key === 'reit.p_ffo') {
+      if (which === 'default') return (m.own_history || {}).median;
+      return (m.at_multiple || {}).multiple;
+    }
+    return which === 'default' ? (m.defaults || {})[EQ_SOURCE[f.key]] : m[EQ_SOURCE[f.key]];
+  }
+
   function getPath(obj, key) {
     return key.split('.').reduce((o, k) => (o && typeof o === 'object' ? o[k] : undefined), obj);
   }
@@ -193,6 +225,14 @@
       const n = Number(text.replace(/[,%x×]/g, ''));
       if (!Number.isFinite(n)) return `${f.label} needs a number.`;
       value = f.unit === '%' ? n / 100 : n;
+    }
+    if (f.model) {
+      const [model, field] = f.key.split('.');
+      e.equity = e.equity || {};
+      e.equity[model] = e.equity[model] || {};
+      if (value === undefined || value === null) delete e.equity[model][field]; else e.equity[model][field] = value;
+      if (!Object.keys(e.equity[model]).length) delete e.equity[model];
+      return null;
     }
     if (f.wacc) {
       const k = f.key.slice(5);
@@ -241,7 +281,8 @@
     VAL.loading[sym] = true;
     paint(sym);
     const e = editsFor(sym);
-    const edited = Object.keys(e.drivers).length || Object.keys(e.wacc).length || Object.keys(e.base || {}).length;
+    const edited = Object.keys(e.drivers).length || Object.keys(e.wacc).length || Object.keys(e.base || {}).length
+      || Object.keys(e.equity || {}).length;
     try {
       const fresh = await getJSON(`/api/valuation/${encodeURIComponent(sym)}${force ? '?refresh=true' : ''}`);
       VAL.defaults[sym] = fresh;
@@ -284,9 +325,10 @@
     const form = document.getElementById('dcf-form-status');
     if (form) form.innerHTML = formStatus(sym, d);
     document.querySelectorAll('[data-dcf-field]').forEach((el) => {
-      const f = FIELDS.find((x) => x.key === el.getAttribute('data-dcf-field'));
+      const f = anyField(el.getAttribute('data-dcf-field'));
       if (!f) return;
-      const changed = (d.assumptions && d.assumptions.changed || []).includes(f.key);
+      const changed = f.model ? ((d[f.model] || {}).edited || []).includes(f.key.split('.')[1])
+        : (d.assumptions && d.assumptions.changed || []).includes(f.key);
       const row = el.closest('.dcf-field');
       if (row) row.classList.toggle('is-edited', changed);
     });
@@ -303,7 +345,7 @@
     try {
       const res = await fetch(`/api/valuation/${encodeURIComponent(sym)}/run`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-        body: JSON.stringify({ drivers: e.drivers, wacc: e.wacc, base: e.base || {} }),
+        body: JSON.stringify({ drivers: e.drivers, wacc: e.wacc, base: e.base || {}, equity: e.equity || {} }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
@@ -333,6 +375,7 @@
     return `
       <div id="dcf-results">${renderResults(sym, d)}</div>
       ${renderForm(sym, d)}
+      ${renderEquityForm(sym, d)}
       ${renderSaved(sym)}
       <p class="caveat dcf-foot">Model ${esc(d.model_version)} · filings retrieved ${esc(day((d.inputs_digest || {}).filings_retrieved))}
         · balance sheet ${esc(day((d.inputs_digest || {}).balance_date))} · ${esc(priceWhen(d.market || {}))}.
@@ -564,7 +607,14 @@
     };
     one('fcfe', 'Equity DCF (FCFE)');
     one('ddm', 'Dividend discount');
-    one('residual_income', 'Residual income');
+    const ri = d.residual_income;
+    if (ri && ri.available && ri.scenarios && has((ri.scenarios.bear || {}).per_share)) {
+      rows.push({ label: 'Residual income, bear to bull', lo: ri.scenarios.bear.per_share, mid: ri.per_share,
+        hi: ri.scenarios.bull.per_share, fit: (ri.fit || {}).fit });
+    } else one('residual_income', 'Residual income');
+    if (d.reit && d.reit.available && d.reit.at_multiple && d.reit.at_multiple.source === 'reader') {
+      rows.push({ label: `FFO at your ${fmt(d.reit.at_multiple.multiple, 1)}×`, mid: d.reit.at_multiple.per_share, fit: 'primary' });
+    }
     if (d.reit && d.reit.available && d.reit.own_history) {
       const o = d.reit.own_history;
       rows.push({ label: 'P/FFO, its own history', lo: o.per_share_low, mid: o.per_share_mid, hi: o.per_share_high, fit: 'primary' });
@@ -1063,6 +1113,40 @@
       </div></details>`;
   }
 
+  function renderEquityForm(sym, d) {
+    const fields = EQ_FIELDS.filter((f) => d[f.model] && d[f.model].available && has(eqValue(d, f, 'default')));
+    if (!fields.length) return '';
+    const e = editsFor(sym);
+    const dcfOk = (d.dcf || {}).available;
+    const parts = d.equity_wacc_parts || {};
+    const defParts = d.wacc_parts_default || {};
+    const fmtv = (f, v) => (has(v) ? shown(f, v) + (f.unit === '%' ? '%' : f.unit === 'x' ? '×' : '') : 'none');
+    const field = (f, cur, def, typedRaw, edited) => `<label class="dcf-field${edited ? ' is-edited' : ''}">
+        <span class="dcf-flabel">${esc(f.label)}</span>
+        <span class="dcf-finput"><input type="text" inputmode="decimal" data-dcf-field="${esc(f.key)}"
+          value="${esc(typedRaw === undefined ? '' : shown(f, typedRaw))}" placeholder="${esc(has(cur) ? shown(f, cur) : '')}">
+          <span class="dcf-unit">${esc(f.unit === 'x' ? '×' : f.unit)}</span></span>
+        <span class="dcf-fwhy">Default ${esc(fmtv(f, def))}.</span></label>`;
+    const groups = [...new Set(fields.map((f) => f.group))];
+    const costs = dcfOk ? '' : `<fieldset class="dcf-group"><legend>Cost of equity</legend>${COST_FIELDS.map((k) => {
+      const f = FIELDS.find((x) => x.key === k);
+      const sub = k.slice(5);
+      return field(f, parts[sub], defParts[sub], e.wacc[sub], has(e.wacc[sub]));
+    }).join('')}</fieldset>`;
+    return `<details class="dcf-more" data-dcf-sec="equityform"${VAL.open.equityform || (!dcfOk && VAL.open.equityform !== false) ? ' open' : ''}>
+      <summary>${dcfOk ? 'Assumptions for the dividend model' : 'Assumptions: see the defaults, and change any of them'}</summary>
+      <div class="dcf-more-body">
+        <p class="dcf-note">Leave a box empty to use the default. Values recalculate as you type.</p>
+        ${groups.map((g) => `<fieldset class="dcf-group"><legend>${esc(g)}</legend>${fields.filter((f) => f.group === g).map((f) => {
+    const [model, sub] = f.key.split('.');
+    const typed = ((e.equity || {})[model] || {})[sub];
+    return field(f, eqValue(d, f, 'current'), eqValue(d, f, 'default'), typed, has(typed));
+  }).join('')}</fieldset>`).join('')}
+        ${costs}
+        <p class="dcf-status"><button type="button" class="auth-link" data-dcf-reset>Reset to defaults</button></p>
+      </div></details>`;
+  }
+
   const OVERRIDE_ROWS = [['revenue_growth', 'Revenue growth'], ['ebit_margin', 'Operating margin'], ['capex_pct', 'Capex / revenue']];
 
   function overridesHTML(sym, d) {
@@ -1226,7 +1310,7 @@
     if (!t || !t.matches) return;
     const sym = STATE.ticker;
     if (t.matches('[data-dcf-field]')) {
-      const f = FIELDS.find((x) => x.key === t.getAttribute('data-dcf-field'));
+      const f = anyField(t.getAttribute('data-dcf-field'));
       if (!f) return;
       const msg = setEdit(sym, f, t.value);
       t.setAttribute('aria-invalid', msg ? 'true' : 'false');
@@ -1277,7 +1361,7 @@
     const tab = t.closest('[data-dcf-tab]');
     if (tab) { VAL.tab = tab.getAttribute('data-dcf-tab'); paintResults(sym); return; }
     if (t.closest('[data-dcf-reset]')) {
-      VAL.edits[sym] = { drivers: {}, wacc: {}, base: {} };
+      VAL.edits[sym] = { drivers: {}, wacc: {}, base: {}, equity: {} };
       rememberEdits(sym);
       VAL.data[sym] = VAL.defaults[sym] || VAL.data[sym];
       VAL.errors[sym] = '';

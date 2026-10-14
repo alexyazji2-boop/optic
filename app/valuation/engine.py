@@ -566,10 +566,13 @@ def checks(base: Dict[str, Any], drivers: Dict[str, Any], rate: float, rows: Lis
             break
     inc = incremental_return(rows)
     if inc is not None and inc < 0.5 * rate:
+        m0, m1 = rows[0]["ebit_margin"], rows[-1]["ebit_margin"]
+        why = ("The operating margin falls from {:.1%} to {:.1%} over the forecast, which takes back profit the "
+               "investment adds.".format(m0, m1) if m1 < m0 - 0.005 else
+               "Revenue growth does not rise with the spending.")
         add("warn", "low_incremental_return", "The forecast's new investment earns {:.1%} a year (extra operating "
-            "profit by the last year, over the capital put in), against a {:.1%} cost of capital. It spends on "
-            "growth it does not deliver: either raise the margin or growth the spending should buy, or lower "
-            "the capex.".format(inc, rate))
+            "profit by the last year, over the capital put in), against a {:.1%} cost of capital. {} Check that "
+            "the capex, margin and growth assumptions describe the same plan.".format(inc, rate, why))
     if any(r["capex"] < r["da"] * 0.8 for r in rows[-3:]) and g > 0:
         add("warn", "capex_below_da", "Capex runs well below depreciation in the last forecast years "
             "while revenue still grows: the asset base is shrinking under a growing business.")

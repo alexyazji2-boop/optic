@@ -72,6 +72,43 @@ PATH_LIMITS = {"revenue_growth": (-0.9, 3.0), "ebit_margin": (-2.0, 0.95), "cape
 BRIDGE_KEYS = engine.BRIDGE_ADD + engine.BRIDGE_SUBTRACT
 
 
+EQUITY_LIMITS = {
+    "ri.roe_start": (-0.5, 1.0), "ri.roe_terminal": (-0.5, 1.0), "ri.book_growth_start": (-0.2, 0.5),
+    "ri.growth_terminal": (-0.05, 0.08), "ddm.growth_high": (-0.5, 1.0), "ddm.years_high": (1, 20),
+    "ddm.growth_terminal": (-0.05, 0.08), "reit.p_ffo": (0.5, 100.0),
+}
+LABELS_EQ = {"ri.roe_start": "Starting return on equity", "ri.roe_terminal": "Long-run return on equity",
+             "ri.book_growth_start": "Starting book value growth", "ri.growth_terminal": "Long-run growth",
+             "ddm.growth_high": "Dividend growth, first years", "ddm.years_high": "Years of that growth",
+             "ddm.growth_terminal": "Dividend growth after that", "reit.p_ffo": "Price-to-FFO multiple"}
+
+
+def equity_edits(edits: Optional[Dict[str, Any]]) -> Dict[str, Dict[str, float]]:
+    """The reader's changes to the equity-side models, range-checked."""
+    raw = (edits or {}).get("equity") if isinstance((edits or {}).get("equity"), dict) else {}
+    out: Dict[str, Dict[str, float]] = {}
+    errors: List[str] = []
+    for key, (lo, hi) in EQUITY_LIMITS.items():
+        model, field = key.split(".")
+        blk = raw.get(model) if isinstance(raw.get(model), dict) else {}
+        if field not in blk or blk[field] in (None, ""):
+            continue
+        try:
+            x = float(blk[field])
+        except (TypeError, ValueError):
+            errors.append("{} is not a number.".format(LABELS_EQ[key]))
+            continue
+        if x != x or not (lo <= x <= hi):
+            plain = key in ("ddm.years_high", "reit.p_ffo")
+            errors.append("{} must be between {}.".format(
+                LABELS_EQ[key], "{:g} and {:g}".format(lo, hi) if plain else "{:g}% and {:g}%".format(lo * 100, hi * 100)))
+            continue
+        out.setdefault(model, {})[field] = x
+    if errors:
+        raise InputError(errors)
+    return out
+
+
 class NeedsInput(engine.ModelError):
     """The model lacks a figure only the reader can now supply."""
 
@@ -254,7 +291,8 @@ def dividend_facts(data: Dict[str, Any]) -> Dict[str, Any]:
             "buyback_heavy": bool(bb is not None and payout is not None and bb > payout)}
 
 
-def ddm_model(data: Dict[str, Any], drivers: Dict[str, Any], ke: float, fit: Dict[str, Any]) -> Dict[str, Any]:
+def ddm_model(data: Dict[str, Any], drivers: Dict[str, Any], ke: float, fit: Dict[str, Any],
+              over: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
     df = dividend_facts(data)
     if not df["has_dividend"]:
         return {"available": False, "fit": fit, "reason": "No dividend to discount."}
@@ -269,18 +307,27 @@ def ddm_model(data: Dict[str, Any], drivers: Dict[str, Any], ke: float, fit: Dic
         g1 = max(sustainable, 0.0)
         note = ("Five years of dividend growth at the sustainable rate, return on equity x retention "
                 "({:.1%}), which is below revenue growth".format(sustainable))
+    over = over or {}
+    defaults_ddm = {"growth_high": g1, "years_high": 5, "growth_terminal": drivers["terminal"]["growth"]}
+    gh = over.get("growth_high", g1)
+    yh = int(round(over.get("years_high", 5)))
+    gt = over.get("growth_terminal", drivers["terminal"]["growth"])
+    if over:
+        note = "Your dividend growth path"
     try:
-        r = engine.run_ddm(df["dps0"], g1, 5, drivers["terminal"]["growth"], ke)
+        r = engine.run_ddm(df["dps0"], gh, yh, gt, ke)
     except engine.ModelError as exc:
-        return {"available": False, "fit": fit, "reason": str(exc)}
+        return {"available": False, "fit": fit, "reason": str(exc), "defaults": defaults_ddm}
     r.update({"available": True, "fit": fit, "dps0": df["dps0"], "dps_kind": df["dps_kind"],
-              "growth_high": g1, "years_high": 5, "growth_terminal": drivers["terminal"]["growth"],
+              "defaults": defaults_ddm, "edited": sorted(over),
+              "growth_high": gh, "years_high": yh, "growth_terminal": gt,
               "cost_equity": ke, "payout_ratio": df["payout_ratio"], "growth_note": note + ", then the "
               "terminal rate.", **analysis.versus_price(r["per_share"], data["quote"].get("price"))})
     return r
 
 
-def residual_income_model(data: Dict[str, Any], ke: float, g: float, fit: Dict[str, Any]) -> Dict[str, Any]:
+def residual_income_model(data: Dict[str, Any], ke: float, g: float, fit: Dict[str, Any],
+                          over: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
     hist = data["history"]
     bal = data["balance"]
     eq, pref = _v(bal.get("equity")), _v(bal.get("preferred")) or 0.0
@@ -300,17 +347,24 @@ def residual_income_model(data: Dict[str, Any], ke: float, g: float, fit: Dict[s
     if not roes:
         return {"available": False, "fit": fit, "reason": "Not enough years of earnings and equity for a "
                                                         "return on equity."}
-    roe = mean(roes)
-    roe_t = ke + 0.5 * (roe - ke)
+    roe_hist = mean(roes)
     df = dividend_facts(data)
     payout = min(1.0, max(0.0, (df["payout_ratio"] or 0.0) + (df["buyback_ratio"] or 0.0)))
+    over = over or {}
+    d_roe, d_roe_t = roe_hist, ke + 0.5 * (roe_hist - ke)
     # Book growth starts at what the company has been retaining (ROE x
     # (1 - payout)), capped at 15% a year, and fades to the long-run rate.
-    g0 = max(g, min(0.15, roe * (1.0 - payout)))
+    d_g0 = max(g, min(0.15, roe_hist * (1.0 - payout)))
+    defaults_ri = {"roe_start": d_roe, "roe_terminal": d_roe_t, "book_growth_start": d_g0, "growth_terminal": g}
+    roe = over.get("roe_start", d_roe)
+    roe_t = over.get("roe_terminal", d_roe_t if "roe_start" not in over else ke + 0.5 * (roe - ke))
+    g_t = over.get("growth_terminal", g)
+    g0 = over.get("book_growth_start", max(g_t, min(0.15, roe * (1.0 - payout))))
+    bv0 = common / shares
     try:
-        r = engine.run_residual_income(common / shares, roe, roe_t, ke, g0, g, 10)
+        r = engine.run_residual_income(bv0, roe, roe_t, ke, g0, g_t, 10)
     except engine.ModelError as exc:
-        return {"available": False, "fit": fit, "reason": str(exc)}
+        return {"available": False, "fit": fit, "reason": str(exc), "defaults": defaults_ri}
     # Sensitivity: cost of equity across, starting ROE down, every cell a run.
     ke_steps, roe_steps = [-0.01, -0.005, 0.0, 0.005, 0.01], [-0.04, -0.02, 0.0, 0.02, 0.04]
     table = []
@@ -319,26 +373,43 @@ def residual_income_model(data: Dict[str, Any], ke: float, g: float, fit: Dict[s
         for dk in ke_steps:
             try:
                 k2, r2 = ke + dk, roe + dr
-                line.append(engine.run_residual_income(common / shares, r2, k2 + 0.5 * (r2 - k2), k2,
-                                                       max(g, min(0.15, r2 * (1.0 - payout))), g, 10)["per_share"])
+                line.append(engine.run_residual_income(bv0, r2, k2 + 0.5 * (r2 - k2), k2,
+                                                       max(g_t, min(0.15, r2 * (1.0 - payout))), g_t, 10)["per_share"])
             except engine.ModelError:
                 line.append(None)
         table.append(line)
+    # Bear and bull move the starting ROE by the same amount each way; the
+    # bear's long run earns only the cost of equity, the bull's keeps the
+    # same excess again over it.
+    step = max(0.02, 0.15 * abs(roe))
+    scen = {}
+    for name, sign in (("bear", -1), ("base", 0), ("bull", 1)):
+        r_s = roe + sign * step
+        rt_s = roe_t if sign == 0 else (ke if sign < 0 else roe_t + max(roe_t - ke, 0.0))
+        g_s = g_t + sign * 0.005
+        try:
+            v = engine.run_residual_income(bv0, r_s, rt_s, ke, max(g_s, min(0.15, r_s * (1.0 - payout))) if sign else g0,
+                                           g_s, 10)["per_share"]
+        except engine.ModelError:
+            v = None
+        scen[name] = {"per_share": v, "roe_start": r_s, "roe_terminal": rt_s, "growth_terminal": g_s,
+                      **analysis.versus_price(v, data["quote"].get("price"))}
     price = data["quote"].get("price")
     flags = []
     if roe > 2.0 * ke:
         flags.append("Return on equity of {:.0%} is more than twice the cost of equity. In insurance and "
                      "lending that is often a cyclical peak (underwriting or credit cycles), so the three-year "
                      "average may overstate what lasts; try a lower starting ROE.".format(roe))
-    r.update({"available": True, "fit": fit, "roe_history": roes, "flags": flags,
+    r.update({"available": True, "fit": fit, "roe_history": roes, "flags": flags, "defaults": defaults_ri,
+              "edited": sorted(over), "scenarios": scen,
               "sensitivity": {"rows": [roe + x for x in roe_steps], "cols": [ke + x for x in ke_steps],
                               "row_label": "Starting return on equity", "col_label": "Cost of equity",
                               "values": table}, "roe_start": roe, "roe_terminal": roe_t,
-              "payout": payout, "cost_equity": ke, "growth_terminal": g, "book_growth_start": g0,
-              "common_equity": common, "price_to_book": (price / (common / shares)) if price else None,
-              "implied_roe": (g + (price / (common / shares)) * (ke - g)) if price else None,
-              "notes": ["Return on common equity, three-year average; it fades halfway to the cost of "
-                        "equity over ten years as competition and regulation narrow excess returns.",
+              "payout": payout, "cost_equity": ke, "growth_terminal": g_t, "book_growth_start": g0,
+              "common_equity": common, "price_to_book": (price / bv0) if price else None,
+              "implied_roe": (g_t + (price / bv0) * (ke - g_t)) if price else None,
+              "notes": ["Return on common equity, three-year average ({:.1%}); it fades halfway to the cost of "
+                        "equity over ten years as competition and regulation narrow excess returns.".format(roe_hist),
                         "Book value grows at what the company has been retaining (ROE x (1 - payout), "
                         "dividends and buybacks counted, at most 15% a year), fading to the long-run "
                         "rate; the payout each year is whatever that growth leaves (clean surplus).",
@@ -348,7 +419,8 @@ def residual_income_model(data: Dict[str, Any], ke: float, g: float, fit: Dict[s
     return r
 
 
-def reit_model(provider, data: Dict[str, Any], ke: float, drivers: Dict[str, Any], fit: Dict[str, Any]) -> Dict[str, Any]:
+def reit_model(provider, data: Dict[str, Any], ke: float, drivers: Dict[str, Any], fit: Dict[str, Any],
+               over: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
     """Funds from operations, approximately the NAREIT definition: net income
     to common + real-estate depreciation and amortization + impairments -
     gains on property sales. Reported D&A includes a small non-property part,
@@ -396,6 +468,13 @@ def reit_model(provider, data: Dict[str, Any], ke: float, drivers: Dict[str, Any
                                           "intrinsic.".format(len(hist_m))}
     except Exception:                                                                      # noqa: BLE001
         pass
+    # The reader's own price-to-FFO, or the REIT's own median by default.
+    mult = (over or {}).get("p_ffo") or (out.get("own_history") or {}).get("median")
+    if mult:
+        out["at_multiple"] = {"multiple": mult, "per_share": mult * ffo_ps,
+                              "source": "reader" if (over or {}).get("p_ffo") else "own_history_median",
+                              **analysis.versus_price(mult * ffo_ps, price)}
+    out["edited"] = sorted(over or {})
     return out
 
 
@@ -636,7 +715,20 @@ def build(provider, ticker: str, edits: Optional[Dict[str, Any]] = None,
     # only the cost of equity, which a bank has even when a blended rate
     # (and a synthetic credit rating from operating income) does not apply.
     try:
-        ke_parts = defaults.equity_cost((out.get("assumptions") or {}).get("wacc") or parts0)
+        eq_over = equity_edits(edits)
+    except InputError as exc:
+        return {"available": False, "input_errors": exc.errors, "ticker": data["ticker"],
+                "model_version": MODEL_VERSION}
+    eq_parts = (out.get("assumptions") or {}).get("wacc")
+    if eq_parts is None:
+        try:
+            _, eq_parts, _ = merge({}, parts0, {"wacc": (edits or {}).get("wacc") or {}})
+        except InputError as exc:
+            return {"available": False, "input_errors": exc.errors, "ticker": data["ticker"],
+                    "model_version": MODEL_VERSION}
+    out["equity_wacc_parts"] = eq_parts
+    try:
+        ke_parts = defaults.equity_cost(eq_parts)
     except engine.ModelError as exc:
         ke_parts = None
         out["cost_of_equity_error"] = str(exc)
@@ -645,16 +737,17 @@ def build(provider, ticker: str, edits: Optional[Dict[str, Any]] = None,
         out["cost_of_equity_parts"] = ke_parts
         g = (out.get("assumptions") or {}).get("drivers", {}).get("terminal", {}).get("growth", defaults.TERMINAL_GROWTH)
         if fit["models"]["residual_income"]["fit"] != "not_applicable":
-            out["residual_income"] = residual_income_model(data, ke, g, fit["models"]["residual_income"])
+            out["residual_income"] = residual_income_model(data, ke, g, fit["models"]["residual_income"],
+                                                           eq_over.get("ri"))
         if kind == "reit":
             drivers_for = (out.get("assumptions") or {}).get("drivers") or {
                 "growth": {"y1": 0.03, "y2": None}, "terminal": {"growth": g}, "horizon": 10}
-            out["reit"] = reit_model(provider, data, ke, drivers_for, fit["models"]["reit_ffo"])
+            out["reit"] = reit_model(provider, data, ke, drivers_for, fit["models"]["reit_ffo"], eq_over.get("reit"))
         if fit["models"]["ddm"]["fit"] != "not_applicable":
             drivers_for = (out.get("assumptions") or {}).get("drivers") or {
                 "growth": {"y1": defaults.TERMINAL_GROWTH + 0.01, "y2": None},
                 "terminal": {"growth": g}, "horizon": 10}
-            out["ddm"] = ddm_model(data, drivers_for, ke, fit["models"]["ddm"])
+            out["ddm"] = ddm_model(data, drivers_for, ke, fit["models"]["ddm"], eq_over.get("ddm"))
         out["cost_of_equity"] = ke
     return out
 

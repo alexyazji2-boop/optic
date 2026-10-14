@@ -887,6 +887,13 @@ def gather(provider, ticker: str, today: Optional[date] = None, force: bool = Fa
     if fl is None:
         return {"available": False, "ticker": sym, "reason": reason}
     fy_ends = fl.fiscal_year_ends()
+    other_units = sorted({u for c in ("revenue", "net_income") for t in TAGS[c]
+                          for u in ((fl.gaap.get(t) or {}).get("units") or {}) if u != "USD"})
+    if not fy_ends and other_units:
+        return {"available": False, "ticker": sym,
+                "reason": "The filings report in {} rather than US dollars. This model reads USD figures only and "
+                          "does not convert, because a per-share value in one currency against a price in another, "
+                          "at a rate chosen here, would mix two sources of error.".format(", ".join(other_units))}
     if not fy_ends:
         why = ("The filings are IFRS (a foreign issuer's 20-F); this model reads US-GAAP filings only."
                if fl.ifrs else

@@ -315,3 +315,29 @@ def test_extension_candidates_read_consolidated_fiscal_year_extension_elements(m
     assert out["available"]
     assert [(c["element"], c["value"]) for c in out["candidates"]] == [
         ("CapitalExpendituresTotal", 24606000000.0), ("CapitalExpendituresOfFPL", 8719000000.0)]
+
+
+def test_a_filer_reporting_in_another_currency_is_named_not_mistranslated(monkeypatch):
+    fl = filings({"Revenues": ("EUR", [fact(400.0, "2025-12-31", "2025-01-01")])})
+    monkeypatch.setattr(inputs, "load_filings", lambda t, force=False: (fl, "1", None))
+    out = inputs.gather(Quote(), "XEU")
+    assert not out["available"] and "EUR" in out["reason"] and "does not convert" in out["reason"]
+
+
+def test_a_price_in_another_currency_is_warned_about(monkeypatch):
+    class Q(Quote):
+        def quote(self, t):
+            return dict(super().quote(t), currency="CAD", market_cap=100.0)
+
+        def short_interest(self, t):
+            return {}
+
+        def estimates(self, t):
+            return {}
+    y = "2025-12-31", "2025-01-01"
+    fl = filings({"Revenues": (USD, [fact(400.0, *y)]), "Assets": (USD, [fact(1.0, "2025-12-31")])})
+    monkeypatch.setattr(inputs, "load_filings", lambda t, force=False: (fl, "1", None))
+    monkeypatch.setattr(inputs, "submissions", lambda cik: {})
+    monkeypatch.setattr(inputs, "risk_free", lambda p: {"value": 0.04})
+    out = inputs.gather(Q(), "XCA")
+    assert any("price is in CAD" in w for w in out["warnings"])
