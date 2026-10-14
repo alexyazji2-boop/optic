@@ -86,6 +86,7 @@ value per share = equity / diluted shares
 | Cash | All treated as surplus | Operating cash is not separable from the filings; slightly overstates value. |
 | Investments | Book value | Their income is below EBIT, so it is not in FCFF; a listed or recently funded stake's market value can differ a lot. |
 | Equity-method stakes | Assumed inside `LongTermInvestments` when that tag exists; otherwise added | Avoids counting them twice. |
+| Separately tagged equity securities | `EquitySecuritiesFvNi` and non-marketable equity added only when no `OtherLongTermInvestments` total is tagged | Alphabet reports its stakes inside that total; Nvidia reports them only on their own. |
 | Debt | Long-term incl. current maturities + short-term borrowings and commercial paper, at book | Tag rules A-D below; market value not in filings. |
 | Finance leases | Debt | Interest is below EBIT; principal is financing. Not added again when the company reports debt *with* finance leases. |
 | Operating leases | **Not** debt | Their cost is inside EBIT. Subtracting the liability too would charge them twice. |
@@ -236,6 +237,9 @@ tagged. Loss-makers get low confidence and the reverse DCF first.
 * **EBIT without an operating-income line** (some filers, e.g. Nucor) =
   pre-tax income + interest expense - interest income, labelled derived. It
   still contains other non-operating items.
+* **Short-term investments** include `DebtSecuritiesCurrent` (last in priority),
+  which some filers (Nvidia, from late 2025) use instead of
+  `MarketableSecuritiesCurrent`.
 * Every fact keeps its tag, unit, period, form, filing date, accession link and
   retrieval time. Composite figures keep their parts and rule. An item a
   filing does not report is "not reported" and treated as none, said so; a
