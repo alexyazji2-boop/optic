@@ -8968,7 +8968,7 @@ function watchRow(r, opts) {
       ${/* Its own track, always present so the grid lines up with or without
           * a line in it. Inside "what changed" it took the room that text
           * needs: at a phone's width the reason for the row was ellipsised. */''}
-      <span class="wl-trend">${sparkSlot(r.spark)}</span>
+      <span class="wl-trend">${sparkSlot(r.spark, 'wl-spark', 30, r.change_pct)}</span>
       ${/* "No change", not "quiet": at the width the home page gives this column
           * it rendered as "q..", which a reader took for a button. */''}
       <span class="wl-changed">${changed
@@ -8989,12 +8989,20 @@ function watchRow(r, opts) {
  * the row is on the page. Decorative to a screen reader, which the row's own
  * label already gives the price and the change. Coloured by the direction of
  * the 30 sessions, so it agrees with its own shape rather than with today. */
-function sparkSlot(values, cls = 'wl-spark', last = 30) {
+/* A line beside a day's change takes that change's colour (`dayChg`), so a
+ * red -1.09% never sits on a green line. Coloured by the 30-session direction
+ * instead, the Home strip drew the S&P 500, the Nasdaq 100 and bitcoin green on
+ * a day all three were down (reported 2026-10-14). The line still spans the
+ * sessions its title names; only the colour follows the figure beside it. With
+ * no day change to follow, the line's own direction decides, as before. */
+function sparkSlot(values, cls = 'wl-spark', last = 30, dayChg = null) {
   const v = (values || []).filter(Number.isFinite).slice(-last);
   if (v.length < 2) return '';
-  return `<span class="${cls}" aria-hidden="true" data-spark="${v.join(',')}" data-dir="${
-    v[v.length - 1] >= v[0] ? 'up' : 'down'}" title="Last ${v.length} sessions${
-    v[0] ? `, ${fmtPct((v[v.length - 1] / v[0] - 1) * 100, 1)}` : ''}"></span>`;
+  const day = Number.isFinite(Number(dayChg)) && dayChg !== null && dayChg !== '' ? Number(dayChg) : null;
+  const dir = day !== null ? (day >= 0 ? 'up' : 'down') : (v[v.length - 1] >= v[0] ? 'up' : 'down');
+  return `<span class="${cls}" aria-hidden="true" data-spark="${v.join(',')}" data-dir="${dir}" title="Last ${
+    v.length} sessions${v[0] ? `, ${fmtPct((v[v.length - 1] / v[0] - 1) * 100, 1)}` : ''}${
+    day !== null ? `; coloured by today's ${fmtPct(day, 2)}` : ''}"></span>`;
 }
 
 function fillSparks(root) {
@@ -9537,7 +9545,7 @@ function marketStripHTML(data) {
       <span class="ms-last">${fmt(inst.last, inst.last < 20 ? 2 : (inst.last > 1000 ? 0 : 2))}</span>
       ${chg === null || chg === undefined ? ''
     : `<span class="ms-chg ${signClass(chg)}">${esc(moveLabel(inst))}</span>`}
-      ${sparkSlot(inst.series, 'ms-spark')}
+      ${sparkSlot(inst.series, 'ms-spark', 30, inst.chg_1d)}
     </button>`;
   }).filter(Boolean).join('');
   if (!cells) return '';
@@ -9810,7 +9818,7 @@ function whatMattersNow(data) {
         data-instrument-label="${esc(inst.label)}">
         <span class="cc-move-name">${esc(inst.label)}</span>
         <span class="cc-move-chg ${signClass(inst.chg_1d)}">${esc(moveLabel(inst))}</span>
-        ${sparkSlot(inst.series, 'cc-spark')}
+        ${sparkSlot(inst.series, 'cc-spark', 30, inst.chg_1d)}
         ${/* The multiple is why the row is on the list at all, so it is shown
             * rather than left implicit. Without it "VVIX +6.4%" above
             * "Russell 2000 -1.3%" looks like the list is simply sorted by the
@@ -43890,7 +43898,40 @@ const PULSE_STEP_WORDS = {
   thinking: 'Thinking it through',
   'searching the web': 'Searching the web',
   'searching': 'Searching live sources',
+  'reading results': 'Reading what it found',
 };
+
+/* Work that starts after the answer has begun (a web search mid-reply).
+ *
+ * The step list closes on the first words of the answer, so a search Milo
+ * started after its opening paragraph landed in a folded box and the reply
+ * simply stopped for several seconds with nothing on screen: reported with a
+ * screenshot on 2026-10-14 ("show a loading or thinking under the chat when it
+ * is conducting a search"). The step is now shown live under the text, and
+ * recorded in the folded list so its count stays true; the next words of the
+ * answer clear it. */
+function pulseLiveStatus(node, label) {
+  const bubble = node.querySelector('.bubble');
+  let el = node.querySelector('.ps-live');
+  if (!label) { if (el) el.remove(); return; }
+  if (!el && bubble) {
+    el = document.createElement('div');
+    el.className = 'ps-live';
+    el.setAttribute('role', 'status');
+    bubble.insertAdjacentElement('afterend', el);
+  }
+  if (el) el.innerHTML = `<span class="spinner"></span><span>${esc(label)}\u2026</span>`;
+  const box = node.querySelector('.pulse-steps');
+  if (box && box.dataset.done && (node.pulseSteps || [])[node.pulseSteps.length - 1] !== label) {
+    const li = document.createElement('li');
+    li.className = 'done';
+    li.textContent = label;
+    box.querySelector('.ps-list').appendChild(li);
+    node.pulseSteps.push(label);
+    const n = node.pulseSteps.length;
+    box.querySelector('summary').innerHTML = `<span class="ps-title">Worked through ${n} step${n === 1 ? '' : 's'}</span>`;
+  }
+}
 
 function pulseStepsStart(node, first) {
   const host = node.querySelector('.status');
@@ -44914,6 +44955,7 @@ async function streamTo(url, body, node) {
 
       if (event === 'delta') {
         if (!acc) pulseScoutStreaming(node);
+        pulseLiveStatus(node, null);
         acc += payload.text || '';
         if (node.pulseSteps) pulseStepsDone(node); else statusEl.textContent = '';
         render.push(payload.text || '');
@@ -44929,17 +44971,21 @@ async function streamTo(url, body, node) {
         }
       } else if (event === 'status') {
         const state = String(payload.state || '');
-        if (node.pulseSteps) pulseStepAdd(node, PULSE_STEP_WORDS[state] || cap(state));
+        const words = PULSE_STEP_WORDS[state] || cap(state);
+        if (acc) pulseLiveStatus(node, words);
+        else if (node.pulseSteps) pulseStepAdd(node, words);
         else statusEl.innerHTML = `<span class="spinner"></span>${esc(state)}…`;
         pulseScoutStatus(node, state);
       } else if (event === 'error') {
         finished = true;
+        pulseLiveStatus(node, null);
         node.classList.add('err');
         if (node.pulseSteps) pulseStepsDone(node, true); else statusEl.textContent = '';
         render.flush();
         bubble.innerHTML = mdLite(payload.message || 'Unknown error.');
       } else if (event === 'done') {
         finished = true;
+        pulseLiveStatus(node, null);
         if (node.pulseSteps) pulseStepsDone(node); else statusEl.textContent = '';
         render.flush();
         const list = payload.sources || payload.citations || [];
@@ -44954,6 +45000,7 @@ async function streamTo(url, body, node) {
   // However the loop exited — normal end, aborted body, malformed tail — the
   // reader must not be left mid-reveal with text it already received.
   render.flush();
+  pulseLiveStatus(node, null);
   if (!finished && !node.dataset.ended) node.dataset.ended = 'cut';
   if (node.dataset.ended) {
     if (node.pulseSteps) pulseStepsDone(node, node.dataset.ended === 'cut');

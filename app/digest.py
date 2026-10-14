@@ -48,6 +48,17 @@ def _parse(ts: Any) -> Optional[datetime]:
     return when if when.tzinfo else when.replace(tzinfo=timezone.utc)
 
 
+def describes(per: Dict[str, Any]) -> str:
+    """The digest's period as a sentence a reader (or Milo) cannot misread as
+    today's trading."""
+    latest, previous = per.get("latest"), per.get("previous")
+    if not latest:
+        return "The period this digest covers is not known."
+    span = "from the close of {} to the close of {}".format(previous, latest) if previous else "to the close of {}".format(latest)
+    return ("A completed session, {}: each close and change here is that session's, not today's "
+            "trading. Today's price and move are in the quote.".format(span))
+
+
 def compose(symbol: str, briefing: Optional[Dict[str, Any]], news: Optional[Dict[str, Any]],
             now: Optional[datetime] = None) -> Dict[str, Any]:
     now = now or datetime.now(timezone.utc)
@@ -96,12 +107,20 @@ def compose(symbol: str, briefing: Optional[Dict[str, Any]], news: Optional[Dict
         look.append(news["held"].get("note") or "The headline feed was empty just now.")
 
     state = (name or {}).get("state") or ("unavailable" if not briefing.get("available") else "unknown")
+    per = briefing.get("period") or {}
     return {
         "available": bool(name) or bool(explanations),
         "symbol": symbol,
         "state": state,
         "as_of": now.isoformat(),
         "period": briefing.get("period"),
+        # Which session `close` and `change_pct` belong to, said in words. The
+        # digest is written once a session closes and served all the next
+        # day, and `as_of` is when it was served, so Milo read Tuesday's close
+        # and move ("rose 1% to $228.52") as Wednesday's while NVDA traded at
+        # $221 (reported 2026-10-14).
+        "session_date": per.get("latest"),
+        "describes": describes(per),
         "close": (name or {}).get("close"),
         "change_pct": move,
         "changed": facts,
@@ -122,6 +141,8 @@ def compose_list(symbols: List[str], briefing: Optional[Dict[str, Any]],
     rows = [compose(s, briefing, news_for.get(s), now) for s in symbols]
     order = {"changed": 0, "stale": 1, "missing": 2, "unchanged": 3}
     rows.sort(key=lambda r: (order.get(r["state"], 4), r["symbol"]))
+    per = (briefing or {}).get("period") or {}
     return {"available": bool(rows), "as_of": now.isoformat(),
-            "period": (briefing or {}).get("period"), "summary": (briefing or {}).get("summary"),
+            "period": per, "session_date": per.get("latest"), "describes": describes(per),
+            "summary": (briefing or {}).get("summary"),
             "names": rows, "method": METHOD}

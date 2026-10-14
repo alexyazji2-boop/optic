@@ -91,7 +91,11 @@ def test_pulse_is_told_how_and_when_to_place_one():
 
 def test_the_steps_are_the_servers_ticked_in_turn_and_folded_once_it_answers():
     stream = _fn("async function streamTo(url, body, node) {")
-    assert "if (node.pulseSteps) pulseStepAdd(node, PULSE_STEP_WORDS[state] || cap(state));" in stream
+    # Before the answer starts, a step goes to the list; after, to the live
+    # line under the text (2026-10-14: a mid-answer search showed nothing).
+    assert "const words = PULSE_STEP_WORDS[state] || cap(state);" in stream
+    assert "if (acc) pulseLiveStatus(node, words);" in stream
+    assert "else if (node.pulseSteps) pulseStepAdd(node, words);" in stream
     assert stream.count("if (node.pulseSteps) pulseStepsDone(node); else statusEl.textContent = '';") == 2, (
         "folded when the answer starts, and at the end if it never did")
     assert "if (node.pulseSteps) pulseStepsDone(node, true);" in stream

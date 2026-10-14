@@ -262,3 +262,21 @@ def test_the_curve_primitive():
     r = json.loads((out.stdout + out.stderr).split("RESULT:", 1)[1].split("\n")[0])
     assert "5.30%" in r["labels"] and "3 month" in r["labels"]
     assert r["marks"] == 6 and r["none"] is None
+
+
+def test_a_line_beside_a_day_change_takes_that_changes_colour():
+    """The Home strip drew green lines beside red days (2026-10-14): the line
+    was coloured by its 30-session direction while the figure beside it was
+    today's move."""
+    out = _app("""
+      R.up_month_down_day = sparkSlot([1, 2, 3], 'ms-spark', 30, -1.09);
+      R.down_month_up_day = sparkSlot([3, 2, 1], 'ms-spark', 30, 0.4);
+      R.no_day = sparkSlot([1, 2, 3], 'ms-spark');
+    """)
+    assert 'data-dir="down"' in out["up_month_down_day"]
+    assert 'data-dir="up"' in out["down_month_up_day"]
+    assert 'data-dir="up"' in out["no_day"]
+    for call in ("sparkSlot(inst.series, 'ms-spark', 30, inst.chg_1d)",
+                 "sparkSlot(inst.series, 'cc-spark', 30, inst.chg_1d)",
+                 "sparkSlot(r.spark, 'wl-spark', 30, r.change_pct)"):
+        assert call in (ROOT / "static/app.js").read_text(), call
