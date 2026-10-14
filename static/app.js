@@ -4638,6 +4638,9 @@ function renderHome() {
    * that is working. */
   loadWatchlist();
   moversPayload().catch(() => {});
+  // The trend board, for the same reason: it reads nothing from /api/home,
+  // and its block is drawn inside the market screen.
+  homeTrendsPayload().catch(() => {});
   // The market screen loads on its own; see loadHomeMarket.
   loadHomeMarket();
   /* And the digest on its own again, so neither waits for the other.
@@ -5014,6 +5017,220 @@ async function loadHomeToday() {
   live.hidden = !html;
 }
 
+/* ------------------------------------------- Index and sector trends ---
+ *
+ * The board the Indices and Macro tabs already draw, on Home: SPY, QQQ, IWM
+ * and the eleven SPDR sectors, each against the prior completed session's
+ * high and low, as cards. Asked for on 2026-10-14 with a screenshot of
+ * another product's board: the state, the price, how far it sits from the
+ * level that matters, and what would change the state.
+ *
+ * Its own request (/api/trends/board), started with Home's other head starts
+ * and awaited by nothing else. /api/home already measured 839ms cold without
+ * it, and the sector board is eleven downloads behind one cache, so the block
+ * draws a skeleton until it lands rather than holding the market screen back.
+ * One request for both boards, so the line over the cards counts the fourteen
+ * shown and not the Indices tab's DIA.
+ *
+ * Every word on a card is shared with the other two surfaces: the state name
+ * and colour from the two maps below, the distance line and the action from
+ * the server (`vs_level_text`, `action.text`). Three surfaces composing their
+ * own sentences about one row is how "Overnight Uptrend" on one tab would
+ * become "Bullish" on another.
+ */
+
+/* Declared here, beside the first function that reads them, rather than
+ * beside renderSectorBoard 16,000 lines down: a const read before its line
+ * has run is a temporal dead zone (PRI_IMPACT_CLASS above has the story),
+ * and the jsc harness stops part-way through this file on purpose. */
+const SECTOR_TREND_LABEL = {
+  uptrend: 'Overnight Uptrend', downtrend: 'Overnight Downtrend', neutral: 'Neutral',
+};
+const SECTOR_TREND_CLASS = { uptrend: 'up', downtrend: 'down', neutral: 'flat' };
+const SECTOR_TREND_ARROW = { uptrend: '\u2191', downtrend: '\u2193' };
+
+/* The server holds the quotes behind both boards for a minute
+ * (TTL_SESSION_QUOTES in app/providers/yf.py), so asking more often than
+ * that hands back the same prices. Home's twenty-second tick re-paints from
+ * what is held and asks again once this has passed. */
+const HOME_TRENDS_TTL_MS = 60 * 1000;
+const HOME_TRENDS = { data: null, at: 0, flight: null };
+
+/** The board, fetched at most once per burst and once a minute. */
+function homeTrendsPayload() {
+  if (HOME_TRENDS.data && Date.now() - HOME_TRENDS.at < HOME_TRENDS_TTL_MS) {
+    return Promise.resolve(HOME_TRENDS.data);
+  }
+  if (HOME_TRENDS.flight) return HOME_TRENDS.flight;
+  HOME_TRENDS.flight = getJSON('/api/trends/board')
+    .catch((err) => ({ available: false, reason: err.message }))
+    .then((board) => {
+      // A refresh that failed keeps the last good board on screen, rather than
+      // swapping fourteen cards for an error a minute after they drew.
+      if (board && board.available !== false) HOME_TRENDS.data = board;
+      else if (!(HOME_TRENDS.data && HOME_TRENDS.data.available)) HOME_TRENDS.data = board;
+      HOME_TRENDS.at = Date.now();
+      return HOME_TRENDS.data;
+    })
+    .finally(() => { HOME_TRENDS.flight = null; });
+  return HOME_TRENDS.flight;
+}
+
+/* "Levels: Tuesday's session. Price: regular session, as of 12:46 pm."
+ *
+ * The line every board prints over its rows, from the server's `basis`, so a
+ * reader knows which range and which print each card compares before reading
+ * one. Outside the session those are the two things that change: after the
+ * bell the levels are today's and the price an after-hours print, and where
+ * nothing has printed since the close the price is that close. Times are the
+ * reader's zone, like every other time in the app. */
+function trendBasisLine(basis) {
+  const s = basis || null;
+  if (!s || !s.levels_label) return '';
+  const zone = activeZone();
+  const kinds = s.price_kinds || {};
+  const total = Object.values(kinds).reduce((n, v) => n + (Number(v) || 0), 0);
+  /* The day as well as the time when a print is not from today in the
+   * reader's zone: at 8am "as of 7:40 pm" read as this evening, and it was
+   * last night's. A date key, not calendar logic; the client still knows no
+   * holidays (see marketSessionET). */
+  const dayKey = (d) => d.toLocaleDateString('en-CA', { timeZone: zone });
+  const at = (iso) => {
+    const clock = timeIn(iso, zone);
+    if (!clock) return '';
+    try {
+      const d = new Date(iso);
+      return dayKey(d) === dayKey(new Date())
+        ? clock : `${d.toLocaleDateString('en-US', { weekday: 'short', timeZone: zone })} ${clock}`;
+    } catch (e) { return clock; }
+  };
+  let price;
+  if (s.price_kind === 'last close') {
+    price = 'the last close, as nothing has printed since it. A close sits inside its own '
+      + "session's range, so those cards read neutral";
+  } else {
+    const to = at(s.price_as_of);
+    const from = at(s.price_as_of_from);
+    /* A span only where it says something. In the session the fourteen
+     * quotes are struck within a minute or two of each other ("between 1:20
+     * pm and 1:21 pm" was the first live reading); after hours SPY prints to
+     * 8pm and a thin fund's last trade can be 4:30, and one time would hide
+     * that. No time at all means the quotes did not answer and the price is
+     * today's daily bar, which the server holds for five minutes: said,
+     * rather than left looking like a quote with its time missing. */
+    const spanMs = Date.parse(s.price_as_of) - Date.parse(s.price_as_of_from);
+    const when = !to ? (s.price_kind === 'regular session' ? ", from today's daily bar" : '')
+      : (from && from !== to && spanMs > 5 * 60 * 1000
+        ? `, struck between ${from} and ${to}` : `, as of ${to}`);
+    price = `${s.price_kind}${when}`;
+  }
+  const parts = [`Levels: ${s.levels_label}.`, `Price: ${price}.`];
+  const closes = s.price_kind === 'last close' ? 0 : (Number(kinds['last close']) || 0);
+  if (closes) {
+    parts.push(`${closes} of ${total} have not traded since that close, so they show it and read neutral.`);
+  }
+  if (total - (Number(kinds[s.price_kind]) || 0) - closes > 0) {
+    parts.push('A card priced from another session says which.');
+  }
+  const late = (s.delayed || []).map((d) => `${d.symbol} ${d.minutes} minutes`);
+  if (late.length) parts.push(`Delayed by the feed: ${late.join(', ')}.`);
+  return parts.join(' ');
+}
+
+/* One instrument as a card: symbol and price, name, state, distance, action.
+ *
+ * The symbol and the price share the top row, which is the one line on the
+ * card that never wraps: five rows rather than six, on a block of fourteen.
+ * The whole card is the button, opening the ETF the way the boards' ticker
+ * buttons do (`data-analyse`), because a 150px card with a small link inside
+ * it is a large target that mostly does nothing. The state colour is on the
+ * card's edge and the distance line; the card's text stays ink, since a card
+ * of green type reads as an alert rather than a state (the Indices cards'
+ * own note). `mainKind` is the board's price kind: a card priced from another
+ * session says so on a line of its own, under the state.
+ *
+ * On a phone the same markup is a two-line list row: line 1 the symbol,
+ * name, price and state, line 2 the distance and the action. `tr-line2` is
+ * a wrapper for that alone (`display: contents` on a card, so the card's
+ * column is unchanged), and on the phone `tr-top` unboxes so its symbol and
+ * price take their own places on line 1. */
+function trendCardHTML(r, mainKind) {
+  if (!r) return '';
+  if (!r.available) {
+    return `<div class="tr-card is-missing">
+      <span class="tr-sym">${esc(r.symbol)}</span>
+      <span class="tr-name">${esc(r.name || '')}</span>
+      <span class="tr-line2"><span class="tr-act">${esc(r.reason || 'Unavailable')}</span></span>
+    </div>`;
+  }
+  const cls = SECTOR_TREND_CLASS[r.trend] || 'flat';
+  const arrow = SECTOR_TREND_ARROW[r.trend];
+  const kind = r.price_kind && r.price_kind !== mainKind ? r.price_kind : '';
+  /* The label's first word in a span of its own, so the phone row can keep
+   * it for a screen reader and drop it from view (.tr-ov): "Overnight" is
+   * 52px of a 294px line that also holds the symbol, name and price. The
+   * words are still the map's, and every other width shows them whole. */
+  const label = SECTOR_TREND_LABEL[r.trend] || r.trend;
+  const split = /^(Overnight )(.+)$/.exec(label);
+  const labelHTML = split ? `<span class="tr-ov">${esc(split[1])}</span>${esc(split[2])}` : esc(label);
+  const tip = [`Open ${r.symbol}`, r.price_venue ? `Overnight print on ${r.price_venue}` : '', r.note || '']
+    .filter(Boolean).join('. ');
+  return `<button type="button" class="tr-card is-${cls}" data-analyse="${esc(r.symbol)}"
+      title="${esc(tip)}">
+    <span class="tr-top"><span class="tr-sym">${esc(r.symbol)}</span><span class="tr-price"
+      >$${fmt(r.price, 2)}</span></span>
+    <span class="tr-name">${esc(r.name || '')}</span>
+    <span class="sec-trend ${cls}">${arrow ? `<span aria-hidden="true">${arrow}</span> ` : ''}${labelHTML}</span>
+    <span class="tr-line2">${kind ? `<span class="tr-kind">Price: ${esc(kind)}</span>` : ''}<span
+      class="tr-vs${cls === 'flat' ? '' : ` ${cls}`}">${esc(r.vs_level_text || '')}</span><span
+      class="tr-act">${esc((r.action || {}).text || r.summary || '')}</span></span>
+  </button>`;
+}
+
+/* The block's contents, from what is held: a skeleton before the first
+ * answer, the cards after it. Painted by loadHomeMarket inside the market
+ * screen and by loadHomeTrends into the same host when the boards land. */
+function homeTrendsInner() {
+  const head = `<div class="hm-block-head">
+      <h2 class="hm-h">Index and sector trends</h2>
+      <button type="button" class="hm-more" data-go-view="market">The full sector board &rarr;</button>
+    </div>`;
+  const d = HOME_TRENDS.data;
+  if (!d) return `${head}<div class="hm-skel tr-skel" aria-hidden="true"></div>`;
+  if (!d.available) {
+    return `${head}<p class="hm-none">The trend board is unavailable right now${
+      d.reason ? ` (${esc(d.reason)})` : ''}.</p>`;
+  }
+  const main = (d.basis || {}).price_kind;
+  const line = trendBasisLine(d.basis);
+  const group = (name, rows) => (rows && rows.length ? `<h3 class="tr-group">${name}</h3>
+    <div class="tr-grid">${rows.map((r) => trendCardHTML(r, main)).join('')}</div>` : '');
+  return `${head}
+    ${line ? `<p class="tr-basis">${esc(line)}</p>` : ''}
+    ${group('Indices', d.indices)}
+    ${group('Sectors', d.sectors)}
+    <p class="caveat">${gloss(d.method || '')}</p>`;
+}
+
+function homeTrendsHTML() {
+  return `<section class="hm-block hm-trends" id="hm-trends" aria-label="Index and sector trends">${
+    homeTrendsInner()}</section>`;
+}
+
+/* Fill the block once the board is in hand. The host is read after the
+ * await, for the reason loadHomeMarket's comment gives: renderHome may have
+ * replaced it while the request was out. */
+async function loadHomeTrends() {
+  try {
+    await homeTrendsPayload();
+  } catch (err) {
+    // homeTrendsPayload turns a failure into an answer; nothing to add.
+  }
+  const host = document.getElementById('hm-trends');
+  if (!host || STATE.view !== 'home') return;
+  host.innerHTML = homeTrendsInner();
+}
+
 async function loadHomeMarket(opts = {}) {
   /* The dedupe covers the fetch, not the render, and the difference was a bug.
    *
@@ -5100,6 +5317,18 @@ async function loadHomeMarket(opts = {}) {
          everything, which is what balances the two sides: main 945, rail 825.
       */''}
     <div class="hm-board">
+      ${/* The index and sector trends, as the board's first row, across both
+           columns. In the main column it measured 1,155px tall at 1440,
+           three cards a row, and took that column to 3,115px beside a rail
+           of 945: the hole the two-container layout below exists to prevent.
+           Across the board it is six cards a row.
+           A child of the board rather than of either column, so on a phone,
+           where the columns unbox, it takes its own place in the reading
+           order (#hm-trends in the one-column rules) after the market's
+           moves. Filled from its own request (loadHomeTrends) and painted
+           here from what is held, so the refresh tick redraws it without a
+           skeleton. */''}
+      ${homeTrendsHTML()}
       <div class="hm-main">
         ${morningDesk(data)}
         ${whatMattersNow(data)}
@@ -5151,6 +5380,7 @@ async function loadHomeMarket(opts = {}) {
   // this page and the rest of it is already useful without it.
   homeMovers();
   loadDailyChanges();
+  loadHomeTrends();
 }
 
 /* Watchlist and home navigation clicks. */
@@ -21645,6 +21875,7 @@ async function openSectorRead(symbol, host) {
  * instruments instead of eleven, so cards read better than a table. */
 function renderIndexBoard(b) {
   if (!b || !b.available) return '';
+  const main = (b.basis || {}).price_kind;
   const cards = (b.rows || []).filter((r) => r.available).map((r) => {
     const cls = SECTOR_TREND_CLASS[r.trend] || 'flat';
     return `<div class="idx-card ${cls}">
@@ -21660,15 +21891,22 @@ function renderIndexBoard(b) {
         <div><span class="idx-lbl">Bull above</span><span class="idx-val pos">$${fmt(r.bull_above, 2)}</span></div>
         <div><span class="idx-lbl">Bear below</span><span class="idx-val neg">$${fmt(r.bear_below, 2)}</span></div>
       </div>
-      <p class="idx-summary">${esc(r.summary || '')}</p>
+      ${/* The two lines Home's cards carry, from the same fields, so the
+           Indices tab and Home say the same sentence about SPY. */''}
+      ${r.vs_level_text ? `<p class="idx-vs ${cls}">${esc(r.vs_level_text)}${
+  r.price_kind && r.price_kind !== main ? ` \u00b7 ${esc(r.price_kind)}` : ''}</p>` : ''}
+      <p class="idx-summary">${esc((r.action || {}).text || r.summary || '')}</p>
+      ${r.note ? `<p class="caveat">${esc(r.note)}</p>` : ''}
       ${sectorReadButton(r.symbol, 'Index')}
     </div>`;
   }).join('');
   if (!cards) return '';
+  const line = trendBasisLine(b.basis);
   return `<div class="panel span2">
     <h2>${hg('Major ETFs')}${askPulse('sectorboard')}</h2>
     <p class="sub">Each index ETF against the prior session's high and low. The same two
       prices the sector board uses, asked of the market as a whole.</p>
+    ${line ? `<p class="tr-basis">${esc(line)}</p>` : ''}
     <div class="idx-cards">${cards}</div>
     <div id="index-read-host"></div>
     <p class="caveat">${gloss(b.method || '')}</p>
@@ -21690,15 +21928,15 @@ function renderIndexBoard(b) {
  * below it: that panel already carries RS over four windows, and repeating those
  * numbers would be two places to read the same thing and one place for them to
  * disagree. */
-const SECTOR_TREND_LABEL = {
-  uptrend: 'Overnight Uptrend', downtrend: 'Overnight Downtrend', neutral: 'Neutral',
-};
-const SECTOR_TREND_CLASS = { uptrend: 'up', downtrend: 'down', neutral: 'flat' };
+/* SECTOR_TREND_LABEL and SECTOR_TREND_CLASS are declared beside the Home
+ * trends board, which reads them first; see the note there. */
 const ROTATION_CLASS = { in: 'up', out: 'down', turning: 'warn', neutral: 'flat', unknown: 'flat' };
 
 function renderSectorBoard(b) {
   if (!b || !b.available) return '';
   const c = b.counts || {};
+  const main = (b.basis || {}).price_kind;
+  const line = trendBasisLine(b.basis);
   const rows = (b.rows || []).map((r) => {
     if (!r.available) {
       return `<tr><td class="name"><strong>${esc(r.symbol)}</strong></td>
@@ -21714,8 +21952,14 @@ function renderSectorBoard(b) {
       <td><span class="sec-trend ${tcls}">${esc(SECTOR_TREND_LABEL[r.trend] || r.trend)}</span>${
   r.trend === 'neutral' ? ''
     : r.intact ? '<span class="sec-note" title="Same state as the prior session. The trend has held">intact</span>'
-      : r.changed ? '<span class="sec-note flip" title="This state is new as of today; the prior session was different">new today</span>' : ''}</td>
-      <td class="num">$${fmt(r.price, 2)}</td>
+      : r.changed ? '<span class="sec-note flip" title="This state is new as of today; the prior session was different">new today</span>' : ''}${
+  /* Under the state it changes, not in a column of its own. Measured at
+     1440: a column was 192px and took the table from 1,155px to 1,346px in
+     a 1,127px box; here it wraps inside the width the chip already takes and
+     the table stays 1,155px. */''}${
+  (r.action || {}).text ? `<span class="sec-action">${esc(r.action.text)}</span>` : ''}</td>
+      <td class="num"${r.note ? ` title="${esc(r.note)}"` : ''}>$${fmt(r.price, 2)}${
+  r.price_kind && r.price_kind !== main ? `<span class="tr-kind">${esc(r.price_kind)}</span>` : ''}</td>
       <td class="num pos">$${fmt(r.bull_above, 2)}</td>
       <td class="num neg">$${fmt(r.bear_below, 2)}</td>
       <td class="num ${signClass(r.to_break_pct)}">${fmtPct(r.to_break_pct, 2)}</td>
@@ -21734,6 +21978,7 @@ function renderSectorBoard(b) {
         uptrend, below the low a downtrend, between them undecided.
         <strong>${c.uptrend || 0}</strong> up, <strong>${c.downtrend || 0}</strong> down,
         <strong>${c.neutral || 0}</strong> undecided.</p>
+      ${line ? `<p class="tr-basis">${esc(line)}</p>` : ''}
       <div class="table-scroll">
       <table class="data sector-board">
         <thead><tr>
