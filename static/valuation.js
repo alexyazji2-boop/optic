@@ -279,6 +279,7 @@
     const sym = STATE.ticker;
     if (!sym) return;
     if (VAL.data[sym] && !force) { paint(sym); return; }
+    if (VAL.loading[sym] && !force) { paint(sym); return; }   // already on its way; it paints when it lands
     VAL.loading[sym] = true;
     paint(sym);
     const e = editsFor(sym);
@@ -971,7 +972,8 @@
   }
 
   async function loadSotp(sym, withInputs) {
-    const body = {};
+    const e = editsFor(sym);
+    const body = { drivers: e.drivers, wacc: e.wacc, base: e.base || {}, equity: e.equity || {} };
     if (withInputs) {
       body.multiples = {};
       document.querySelectorAll('[data-dcf-sotp-m]').forEach((el) => { body.multiples[el.getAttribute('data-dcf-sotp-m')] = el.value.trim(); });
@@ -1492,6 +1494,8 @@
       const w = dcf.wacc || {};
       out.base_case = { value_per_share: r2(dcf.per_share), enterprise_value: dcf.enterprise_value, equity_value: dcf.equity_value,
         upside_vs_price: r4(dcf.upside), margin_of_safety: r4(dcf.margin_of_safety),
+        price_vs_value: has(dcf.per_share) && dcf.per_share > 0 && has((d.market || {}).price)
+          ? r4(d.market.price / dcf.per_share - 1) : null,
         terminal_value_share_of_ev: r4(dcf.terminal_share), pv_forecast_years: dcf.pv_forecast, pv_terminal: (dcf.terminal || {}).pv,
         incremental_return_on_forecast_investment: r4(dcf.incremental_return),
         terminal: { method: (dcf.terminal || {}).method, growth: r4((dcf.terminal || {}).growth), ronic: r4((dcf.terminal || {}).ronic),

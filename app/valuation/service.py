@@ -1024,7 +1024,8 @@ def _consecutive(quarters: List[str]) -> bool:
 
 
 def sotp_model(provider, ticker: str, multiples: Optional[Dict[str, Any]] = None,
-               unallocated_multiple: Optional[float] = None) -> Dict[str, Any]:
+               unallocated_multiple: Optional[float] = None,
+               edits: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Each reported segment's trailing-twelve-month operating income at a
     multiple the reader chooses, less capitalised unallocated costs, through
     the same bridge as the DCF.
@@ -1108,7 +1109,9 @@ def sotp_model(provider, ticker: str, multiples: Optional[Dict[str, Any]] = None
     if not any(r.get("operating_income") is not None for r in rows):
         return {"available": False, "reason": "No segment reports operating income for {}.".format(period["end"])}
     base, _ = defaults.build_base(data)
-    full = build(provider, sym, light=True)
+    # The reader's current assumptions, so the starting multiple is the one
+    # implied by the model on their screen, not the defaults.
+    full = build(provider, sym, edits=edits, light=True)
     dcf = full.get("dcf") or {}
     implied = (dcf["enterprise_value"] / base["ebit"]) if dcf.get("available") and base.get("ebit") else None
     m_in = multiples if isinstance(multiples, dict) else {}

@@ -39015,6 +39015,10 @@ async function loadLong(force, opts = {}) {
     if (window.OpticValuation) window.OpticValuation.load();
     return;
   }
+  // The fair-value model needs nothing from the price history, so it starts
+  // now rather than waiting for it (static/valuation.js paints when its
+  // panel exists).
+  if (window.OpticValuation) window.OpticValuation.load();
   if (!silent) beginLoad(views.long, `10-year history for ${STATE.ticker} and the major indices`);
   try {
     const data = await getJSON(`/api/longterm/${encodeURIComponent(STATE.ticker)}?indices=false`);

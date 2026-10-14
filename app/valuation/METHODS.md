@@ -263,3 +263,40 @@ edited, so saving again makes a new one. Signed-in readers get
 `/api/valuation-models` (per-user, CSRF-guarded); signed-out readers keep
 snapshots in `localStorage` (`optic.dcf.v1`), replayed by
 `/api/valuation-models/replay`.
+
+## 9. References for the conventions
+
+Each convention above follows a standard treatment. Where the model departs
+from it, the departure is stated.
+
+* **Value-driver continuing value, mid-year discounting, invested capital and
+  ROIC, operating leases inside EBIT, stock compensation as an expense:**
+  Koller, Goedhart and Wessels (McKinsey & Company), *Valuation: Measuring and
+  Managing the Value of Companies*, 7th edition (2020), the chapters on
+  continuing value, enterprise DCF and reorganizing the financial statements.
+  The continuing value is `NOPAT(t+1) x (1 - g / RONIC) / (WACC - g)`; with
+  RONIC = WACC it reduces to `NOPAT(t+1) / WACC`, which a test checks.
+* **Synthetic ratings and default spreads; implied equity risk premium; FCFE
+  with a target debt ratio; converging to the marginal tax rate; terminal
+  growth below the risk-free rate:** Damodaran, *Investment Valuation*, 3rd
+  edition (2012), and his data pages: ratings and spreads, January 2026
+  (pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/ratings.html), and
+  the implied ERP, January 2026 (4.23%). The model closes only half of the gap
+  to the marginal tax rate (section 3).
+* **Beta adjustment toward 1:** Blume, "On the Assessment of Risk", *Journal
+  of Finance* 26(1), 1971: 0.67 x raw + 0.33.
+* **Growing perpetuity and two-stage dividend discounting:** Gordon, *The
+  Investment, Financing, and Valuation of the Corporation* (1962).
+* **Residual income, clean surplus and justified price-to-book:** Ohlson,
+  "Earnings, Book Values, and Dividends in Equity Valuation", *Contemporary
+  Accounting Research* 11(2), 1995, as presented in the CFA Institute's
+  equity valuation curriculum: `P/B = (ROE - g) / (r - g)`.
+* **Funds from operations:** Nareit, *Funds From Operations White Paper*,
+  2018 restatement (reit.com). It defines FFO as net income excluding
+  real-estate depreciation and amortization, gains and losses on sales of
+  certain real estate and on changes in control, and impairments tied to
+  depreciable real estate. Departures here: total D&A is added back (the
+  filings do not split out real-estate D&A, so FFO runs slightly high), and
+  joint-venture and change-of-control adjustments are not made.
+* **Data:** SEC EDGAR XBRL APIs (companyfacts, submissions, filing instance
+  documents); FRED series DGS10.
