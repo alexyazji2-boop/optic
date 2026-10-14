@@ -789,6 +789,7 @@ const HEADER_DEFS = {
   'fair value': 'What the stock would be worth at the price-to-earnings multiples the market has usually paid for it: trailing earnings times the 25th percentile, median and 75th percentile of its own five-year P/E. It is a range to read the price against, not a target, and it cannot tell whether the business has changed.',
   'morningstar rating': "Morningstar's star rating for this fund, from one to five, based on its past returns after costs and adjusted for risk against funds of the same kind. It looks backward, and it is Morningstar's view, not Optic's.",
   'off-exchange short volume': "The share of each day's off-exchange trading, through dark pools and wholesalers, that was reported as short sales, from FINRA's daily files. Market makers sell short routinely to fill buy orders, so the level runs high for every stock, and a change against its own average says more than the level does.",
+  'backtest': "A rule tested on this stock's own history: when it would have bought and sold, and how the trades added up. Shown beside buying and holding over the same years and beside random entries with the same number of trades, because a rule on a stock that rose looks good whether or not the rule adds anything.",
   'seasonality': "Whether this stock's returns have followed the calendar: by month, by weekday and around the turn of each month, from its own history. Each effect is tested for statistical significance, because averages split by calendar always show some pattern by chance.",
   'sector rotation': 'Where each sector stands against the index on two measures centred on 100: relative strength, and relative momentum, which says whether that strength is rising or falling. Together they place each sector as leading, weakening, lagging or improving, and sectors tend to move through those in a clockwise loop.',
   'relative performance': "Where this stock's return ranks against a fixed universe of 143 liquid names spread across all eleven sectors, from 0 to 100 for each window. A rank of 97 means it has outrun 97 percent of them, and crossings through 80 and 20 mark a name starting to lead or to lag.",
@@ -22098,6 +22099,7 @@ function wsToggleWidget(id, on) {
   on = wsIsNarrow() ? wsNarrowWidget === id : wsDockOpen.includes(id);
   // Two widgets need data the page has not necessarily fetched yet.
   if (on && id === 'seasonality') loadSeasonality(false, STATE.chartSymbol);
+  if (on && id === 'backtest') loadBacktest(STATE.chartSymbol);
   if (on && id === 'analysts') loadAnalystActions(false, STATE.chartSymbol);
   if (on && id === 'trading' && !STATE.tracker) wsLoadTracker();
   if (on && id === 'alerts') loadAlerts(true);
@@ -23461,6 +23463,8 @@ const WS_WIDGETS = [
     icon: '<path d="M9 6.5h11M9 12h11M9 17.5h11"/><path d="M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01" stroke-width="2.6"/>' },
   { id: 'patterns', label: 'Patterns',    // two candles
     icon: '<path d="M7 3.5v3M7 15.5v5"/><rect x="5" y="6.5" width="4" height="9" rx="0.8"/><path d="M17 5v4M17 16v3.5"/><rect x="15" y="9" width="4" height="7" rx="0.8"/>' },
+  { id: 'backtest', label: 'Backtest',    // a rule's equity curve stepping up
+    icon: '<path d="M3.5 19.5h17"/><path d="M4.5 16.5 9 12l3 2.5 3.5-5 4 2.5"/><circle cx="19.5" cy="12" r="1.2"/>' },
   { id: 'trading', label: 'Trading',      // a buy and a sell
     icon: '<path d="M4 8.5h15l-3.5-3.5"/><path d="M20 15.5H5l3.5 3.5"/>' },
   { id: 'learn', label: 'Learn',          // a mortarboard
@@ -23778,6 +23782,203 @@ function insiderRow(t) {
   </li>`;
 }
 
+/* ==================================================== strategy backtest ===
+ *
+ * The Chart tab's Backtest widget (app/analytics/backtest.py). Asked for from
+ * a broker's email that showed one strategy's return on one stock; the same
+ * figures are here, but always beside buy and hold over the same window and
+ * random entries with the same exposure, because a long-only rule on a stock
+ * that rose looks good whether or not the rule adds anything. Trades can be
+ * drawn on the chart as markers at their entry and exit bars.
+ */
+const BT_KEY = 'optic.chart.backtest.v1';
+const BT = { catalogue: null, result: null, loading: false, error: null, reqId: 0,
+  strategy: 'macd_turn_below_zero', timeframe: '1d', years: 5, params: {}, show: true };
+try {
+  const saved = JSON.parse(localStorage.getItem(BT_KEY) || 'null');
+  if (saved && typeof saved === 'object') {
+    ['strategy', 'timeframe', 'years', 'params', 'show'].forEach((k) => { if (k in saved) BT[k] = saved[k]; });
+  }
+} catch (e) { /* defaults */ }
+
+function btSave() {
+  try {
+    localStorage.setItem(BT_KEY, JSON.stringify({ strategy: BT.strategy, timeframe: BT.timeframe,
+      years: BT.years, params: BT.params, show: BT.show }));
+  } catch (e) { /* private window */ }
+}
+
+function btStrategy() {
+  return ((BT.catalogue || {}).strategies || []).find((s) => s.id === BT.strategy) || null;
+}
+
+async function loadBacktest(symbol, force) {
+  const sym = String(symbol || STATE.chartSymbol || '').toUpperCase();
+  if (!sym) return;
+  if (!BT.catalogue) {
+    try { BT.catalogue = await getJSON('/api/backtest/strategies'); } catch (err) { BT.error = err.message; wsRepaintWidget('backtest'); return; }
+    if (!btStrategy()) BT.strategy = BT.catalogue.strategies[0].id;
+  }
+  const want = JSON.stringify([sym, BT.strategy, BT.timeframe, BT.years, BT.params[BT.strategy] || {}]);
+  if (!force && BT.result && BT.resultKey === want) { wsRepaintWidget('backtest'); return; }
+  const id = ++BT.reqId;
+  BT.loading = true; BT.error = null;
+  wsRepaintWidget('backtest');
+  const qs = new URLSearchParams({ strategy: BT.strategy, timeframe: BT.timeframe });
+  if (BT.years) qs.set('years', BT.years);
+  Object.entries(BT.params[BT.strategy] || {}).forEach(([k, v]) => qs.set(k, v));
+  try {
+    const r = await getJSON(`/api/backtest/${encodeURIComponent(sym)}?${qs}`);
+    if (id !== BT.reqId) return;
+    BT.result = r; BT.resultKey = want;
+  } catch (err) {
+    if (id !== BT.reqId) return;
+    BT.error = err.message;
+  } finally {
+    if (id === BT.reqId) {
+      BT.loading = false;
+      wsRepaintWidget('backtest');
+      if (BT.show) wsRedrawChart();
+    }
+  }
+}
+
+/* Entries and exits as markers on the price chart: the bar each fill came on,
+ * snapped to the chart's bars by date (an intraday test on a daily chart lands
+ * on the day). Only the current symbol's test, and only while "show" is on. */
+function backtestMarkers(ps, symbol) {
+  const r = BT.result;
+  if (!BT.show || !r || r.available !== true || r.ticker !== symbol) return [];
+  const keys = (ps.dates || []).map((d) => String(d).slice(0, 10));
+  if (!keys.length) return [];
+  const out = [];
+  const add = (iso, color, label, detail) => {
+    const i = barIndexForDate(keys, String(iso).slice(0, 10));
+    if (i !== undefined) out.push({ index: i, color, label, detail });
+  };
+  (r.trades || []).forEach((t) => {
+    add(t.entry_date, C.pos, 'B', `Bought ${t.entry_date} at ${fmt(t.entry_price, 2)}: ${t.entry_reason}`);
+    add(t.exit_date, t.return_pct >= 0 ? C.pos : C.neg, 'S',
+      `Sold ${t.exit_date} at ${fmt(t.exit_price, 2)}, ${t.return_pct >= 0 ? '+' : ''}${fmt(t.return_pct, 1)}% after ${t.bars} candles: ${t.exit_reason}`);
+  });
+  if (r.open_trade) add(r.open_trade.entry_date, C.pos, 'B', `Bought ${r.open_trade.entry_date}, still held: ${r.open_trade.entry_reason}`);
+  return out;
+}
+
+/* The equity curve against buy and hold, on a log scale so a tenfold move and
+ * a doubling read as what they are relative to each other. */
+function btCurveSVG(rows) {
+  if (!rows || rows.length < 2) return '';
+  const W = 236, H = 92, pad = 4;
+  const vals = rows.flatMap((r) => [r.strategy, r.buy_hold]).filter((v) => v > 0);
+  const lo = Math.log(Math.min(...vals)), hi = Math.log(Math.max(...vals));
+  const y = (v) => H - pad - ((Math.log(v) - lo) / ((hi - lo) || 1)) * (H - 2 * pad);
+  const x = (i) => pad + (i / (rows.length - 1)) * (W - 2 * pad);
+  const path = (k) => rows.map((r, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(r[k]).toFixed(1)}`).join('');
+  const base = y(1);
+  return `<svg class="bt-curve" viewBox="0 0 ${W} ${H}" role="img" aria-label="Growth of 1 dollar: strategy against buy and hold, log scale">
+    <line x1="${pad}" x2="${W - pad}" y1="${base.toFixed(1)}" y2="${base.toFixed(1)}" class="bt-base"/>
+    <path d="${path('buy_hold')}" class="bt-bh"/>
+    <path d="${path('strategy')}" class="bt-st"/>
+  </svg>`;
+}
+
+function btParamsHTML(s) {
+  const cur = BT.params[s.id] || {};
+  return s.params.map((p) => {
+    const v = cur[p.id] !== undefined ? cur[p.id] : p.default;
+    if (p.kind === 'bool') {
+      return `<label class="bt-check"><input type="checkbox" id="bt-p-${esc(p.id)}" data-bt-param="${esc(p.id)}"${v ? ' checked' : ''}> ${esc(p.label)}</label>`;
+    }
+    return `<label class="bt-field"><span>${esc(p.label)}</span><input type="number" id="bt-p-${esc(p.id)}" data-bt-param="${esc(p.id)}"
+      value="${esc(v)}" min="${esc(p.min)}" max="${esc(p.max)}" step="1" inputmode="numeric"></label>`;
+  }).join('');
+}
+
+function btSigned(v, d = 1) {
+  return Number.isFinite(v) ? `${v > 0 ? '+' : ''}${fmt(v, d)}%` : '—';
+}
+
+function wsBacktestHTML() {
+  const sym = STATE.chartSymbol || '';
+  if (!sym) return '<p class="ws-none">Load a symbol.</p>';
+  if (!BT.catalogue) return BT.error ? `<p class="ws-none">${esc(BT.error)}</p>` : loadingHTML('strategies');
+  const s = btStrategy();
+  const tfs = (BT.catalogue || {}).timeframes || {};
+  const yearsOpts = BT.timeframe === '1d' ? [[1, '1 year'], [2, '2 years'], [5, '5 years'], [10, '10 years'], [0, 'All history']]
+    : [[1, '1 year'], [2, '2 years'], [0, 'All available (about 3 years)']];
+  const controls = `<div class="bt-controls">
+    <label class="bt-field bt-wide"><span>Strategy</span><select id="bt-strategy" data-bt-set="strategy">
+      ${BT.catalogue.strategies.map((x) => `<option value="${esc(x.id)}"${x.id === BT.strategy ? ' selected' : ''}>${esc(x.label)}</option>`).join('')}</select></label>
+    <label class="bt-field"><span>Bars</span><select id="bt-timeframe" data-bt-set="timeframe">
+      ${Object.entries(tfs).map(([k, t]) => `<option value="${esc(k)}"${k === BT.timeframe ? ' selected' : ''}>${esc(t.label)}</option>`).join('')}</select></label>
+    <label class="bt-field"><span>Period</span><select id="bt-years" data-bt-set="years">
+      ${yearsOpts.map(([v, l]) => `<option value="${v}"${Number(BT.years || 0) === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+  </div>
+  ${s ? `<p class="bt-summary">${esc(s.summary)}</p>
+  <details class="ind-explain bt-rules"><summary>Rules<i class="cal-caret" aria-hidden="true"></i></summary>
+    <div class="bt-params">${btParamsHTML(s)}</div>
+    <button type="button" class="btn sm" data-bt-run>Run again</button></details>` : ''}`;
+  const r = BT.result;
+  let body = '';
+  if (BT.loading) body = '<p class="ws-none" role="status">Testing…</p>';
+  else if (BT.error) body = `<p class="ws-none">${esc(BT.error)}</p>`;
+  else if (r && r.available === false) body = `<p class="ws-none">${esc(r.reason || 'No result.')}</p>`;
+  else if (r && r.ticker === sym) {
+    const st = r.stats || {}, bm = r.benchmark || {}, w = r.window || {};
+    const tile = (val, cls, lab, sub) => `<div class="bt-tile"><span class="bt-val ${cls}">${val}</span><span class="bt-lab">${esc(lab)}</span><span class="bt-sub">${sub}</span></div>`;
+    body = `<p class="bt-head"><strong>${esc(r.ticker)}</strong> · ${fmt(st.trades || 0, 0)} trades over ${fmt(w.years || 0, 1)} years · ${esc(w.timeframe_label || '')}</p>
+    <div class="bt-tiles">
+      ${tile(btSigned(st.total_return_pct, 0), signClass(st.total_return_pct), 'Return', `Buy and hold ${btSigned(bm.buy_hold_return_pct, 0)}`)}
+      ${tile(st.win_rate_pct === null || st.win_rate_pct === undefined ? '—' : fmt(st.win_rate_pct, 0) + '%', '', 'Win rate',
+        (st.win_rate_ci95 || [])[0] !== null && (st.win_rate_ci95 || [])[0] !== undefined ? `95% range ${fmt(st.win_rate_ci95[0], 0)} to ${fmt(st.win_rate_ci95[1], 0)}%` : '')}
+      ${tile(st.reward_risk ? fmt(st.reward_risk, 2) : '—', '', 'Reward / risk', `Avg win ${btSigned(st.avg_win_pct)}, loss ${btSigned(st.avg_loss_pct)}`)}
+      ${tile(btSigned(st.max_drawdown_pct, 0), 'down', 'Max drawdown', `Buy and hold ${btSigned(bm.buy_hold_max_drawdown_pct, 0)}`)}
+    </div>
+    <p class="bt-verdict">${esc(r.verdict || '')}</p>
+    ${bm.beats_random_pct !== null && bm.beats_random_pct !== undefined ? `<p class="bt-fine">Beat ${fmt(bm.beats_random_pct, 0)}% of ${fmt(bm.random_runs, 0)} random-entry books with the same number of trades and holding periods (median ${btSigned(bm.random_median_pct, 0)}).</p>` : ''}
+    ${btCurveSVG(r.equity)}
+    <p class="bt-legend"><span class="bt-key st"></span>Strategy <span class="bt-key bh"></span>Buy and hold · growth of $1, log scale · ${esc(w.from || '')} to ${esc(w.to || '')}</p>
+    <label class="bt-check"><input type="checkbox" id="bt-show" data-bt-show${BT.show ? ' checked' : ''}> Show trades on the chart</label>
+    ${(r.trades || []).length ? `<table class="data narrow bt-trades"><thead><tr><th>Bought</th><th>Sold</th><th class="num">Return</th></tr></thead><tbody>
+      ${r.open_trade ? `<tr><td>${esc(String(r.open_trade.entry_date).slice(0, 10))}</td><td>open</td><td class="num ${signClass(r.open_trade.unrealised_pct)}">${btSigned(r.open_trade.unrealised_pct)}</td></tr>` : ''}
+      ${r.trades.slice(-6).reverse().map((t) => `<tr title="${esc(t.exit_reason)}"><td>${esc(String(t.entry_date).slice(0, 10))}</td><td>${esc(String(t.exit_date).slice(0, 10))}</td><td class="num ${signClass(t.return_pct)}">${btSigned(t.return_pct)}</td></tr>`).join('')}
+    </tbody></table>` : ''}
+    <button type="button" class="ask-pulse bt-ask" data-ask-text="${esc(`Explain this backtest of ${s ? s.label : 'the strategy'} on ${r.ticker} (${w.timeframe_label}, ${w.from} to ${w.to}): ${st.trades} trades, ${btSigned(st.total_return_pct, 0)} against buy and hold ${btSigned(bm.buy_hold_return_pct, 0)}, win rate ${fmt(st.win_rate_pct || 0, 0)}%, max drawdown ${btSigned(st.max_drawdown_pct, 0)}, beat ${fmt(bm.beats_random_pct || 0, 0)}% of random-entry books. Is the rule adding anything, and what would make the result more convincing?`)}">Ask Milo about this test</button>
+    <details class="ind-explain bt-method"><summary>How this is tested<i class="cal-caret" aria-hidden="true"></i></summary>
+      <p class="bt-fine">${esc(r.fill || '')} Long only, fully invested, returns compounded, ${fmt(r.cost_bps || 0, 0)} basis points a side for costs. ${esc(w.timeframe_note || '')} ${esc(bm.random_method || '')}</p>
+      <ul class="bt-fine">${(r.caveats || []).map((c) => `<li>${esc(c)}</li>`).join('')}</ul>
+    </details>`;
+  }
+  return controls + body;
+}
+
+function btOnChange(evt) {
+  const el = evt.target;
+  if (el.matches('[data-bt-set]')) {
+    const k = el.dataset.btSet;
+    BT[k] = k === 'years' ? Number(el.value) : el.value;
+    if (k === 'timeframe' && BT.timeframe !== '1d' && (BT.years || 0) > 2) BT.years = 0;
+    btSave(); loadBacktest(STATE.chartSymbol); return true;
+  }
+  if (el.matches('[data-bt-param]')) {
+    const cur = BT.params[BT.strategy] = BT.params[BT.strategy] || {};
+    cur[el.dataset.btParam] = el.type === 'checkbox' ? el.checked : el.value;
+    btSave(); return true;
+  }
+  if (el.matches('[data-bt-show]')) {
+    BT.show = el.checked; btSave(); wsRedrawChart(); return true;
+  }
+  return false;
+}
+
+document.addEventListener('change', (evt) => {
+  if (evt.target && evt.target.closest && evt.target.closest('#ws-w-backtest')) btOnChange(evt);
+});
+document.addEventListener('click', (evt) => {
+  const run = evt.target && evt.target.closest && evt.target.closest('[data-bt-run]');
+  if (run) loadBacktest(STATE.chartSymbol, true);
+});
 function wsWidgetBody(id) {
   const d = STATE.chartData && STATE.chartData !== 'loading' ? STATE.chartData : null;
   const sym = STATE.chartSymbol || '';
@@ -23867,6 +24068,8 @@ function wsWidgetBody(id) {
       sentiment, not as a level.</p>` : ''}
     ${latest}`;
   }
+
+  if (id === 'backtest') return wsBacktestHTML();
 
   if (id === 'seasonality') {
     if (!STATE.seasonality || STATE.seasonalityFor !== sym) return loadingHTML('seasonality');
@@ -26338,7 +26541,8 @@ function wsMountChart() {
       // A marker opens the Insiders page on this symbol. See openInsidersFor.
       onEventClick: showInsiders ? () => openInsidersFor(d.ticker) : null,
       eventHint: showInsiders ? insiderClickHint(d.ticker) : '',
-      vMarkers: earningsMarkersFor(ps, STATE.chartSymbol),
+      // The Backtest widget's trades, as B and S markers at their fills.
+      vMarkers: earningsMarkersFor(ps, STATE.chartSymbol).concat(backtestMarkers(ps, d.ticker || STATE.chartSymbol)),
       volumeProfile: showVbp ? volumeByPrice(ps) : null,
       // Drop a level that sits outside the plotted price range rather than
       // letting it compress the actual price action into a band in the middle.
@@ -26438,6 +26642,7 @@ async function loadChartWorkspace(symbol, force) {
   // The dock's seasonality widget needs its own request; not awaited so the
   // chart is usable while it lands.
   if (wsDockOpen.includes('seasonality')) loadSeasonality(false, sym);
+  if (wsDockOpen.includes('backtest')) loadBacktest(sym);
   if (wsDockOpen.includes('analysts')) loadAnalystActions(false, sym);
   if (showTrends) loadTrendlines(sym);
   // Same rule: only if the overlay is on, and only when the symbol changes.
@@ -40579,6 +40784,15 @@ function chatContextPayload() {
       calendar: STATE.brief.calendar,
     };
   }
+  /* The Backtest widget's result, without the equity curve's points: what was
+   * tested, the window, the figures and the baselines, so Milo can judge it. */
+  if (BT.result && BT.result.available === true) {
+    const r = BT.result;
+    ctx.backtest = { ticker: r.ticker, strategy: (r.strategy || {}).label, rules: (r.strategy || {}).summary,
+      params: r.params, window: r.window, fill: r.fill, cost_bps: r.cost_bps, stats: r.stats,
+      benchmark: r.benchmark, verdict: r.verdict, caveats: r.caveats, recent_trades: (r.trades || []).slice(-8),
+      open_trade: r.open_trade };
+  }
   if (STATE.long) ctx.long_term = STATE.long;
   /* The comparison, once one has been run: its scores, ranks, the basis of
    * each horizon and the take, about 4KB for two names. It was never in here,
@@ -42217,6 +42431,7 @@ const PULSE_SOURCES = {
   verdict: ["Optic's read", 'overview'],
   company: ['Company', 'overview'],
   chart: ['Chart', 'chart'],
+  backtest: ['Backtest', 'chart'],
   technicals: ['Technicals', 'swing'],
   gex: ['Dealer gamma', 'swing'],
   greeks: ['Greeks', 'swing'],

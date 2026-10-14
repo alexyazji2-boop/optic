@@ -71,6 +71,7 @@ from .analytics import valuation_inputs as valuation_inputs_mod
 from .analytics import pattern_stats as pattern_stats_mod
 from .analytics import portfolio_risk as portfolio_risk_mod
 from .analytics import evaluate as evaluate_mod
+from .analytics import backtest as backtest_mod
 from .analytics import expiries as expiries_mod
 from .analytics import scanners as scanners_mod
 from .analytics import series_stats as series_stats_mod
@@ -4557,6 +4558,47 @@ async def rotation_panel(tail: int = Query(8, ge=2, le=20)) -> Dict[str, Any]:
         out = rotation_mod.build(YF_PROVIDER, tail=tail)
         out["generated_at"] = datetime.now(timezone.utc).isoformat()
         return out
+    return await _run(build)
+
+
+@app.get("/api/backtest/strategies")
+async def backtest_strategies() -> Dict[str, Any]:
+    """The rule sets the Chart tab's Backtest widget can test, with their
+    parameters and defaults (app/analytics/backtest.py)."""
+    return {"strategies": backtest_mod.catalogue(), "timeframes": backtest_mod.TIMEFRAMES,
+            "cost_bps": backtest_mod.COST_BPS}
+
+
+@app.get("/api/backtest/{ticker}")
+async def backtest(ticker: str, request: Request,
+                   strategy: str = Query("macd_turn_below_zero"),
+                   timeframe: str = Query("1d"),
+                   years: Optional[float] = Query(None, ge=0.25, le=20)) -> Dict[str, Any]:
+    """One strategy on one symbol's history, beside buy and hold and random
+    entries with the same exposure. Strategy parameters ride as query
+    arguments named as in the catalogue (fast=12&max_bars=35...)."""
+    sym = ticker.upper().strip()
+    if strategy not in backtest_mod.BY_ID:
+        raise HTTPException(status_code=422, detail="Unknown strategy.")
+    if timeframe not in backtest_mod.TIMEFRAMES:
+        raise HTTPException(status_code=422, detail="Unknown timeframe.")
+    known = {p["id"] for p in backtest_mod.BY_ID[strategy]["params"]}
+    raw = {k: v for k, v in request.query_params.items() if k in known}
+
+    def build() -> Dict[str, Any]:
+        if timeframe == "1d":
+            frame = YF_PROVIDER.history(sym, period="max", interval="1d")
+        else:
+            bars = YF_PROVIDER.intraday_history(sym, period="730d", interval="60m")
+            try:
+                splits = YF_PROVIDER.splits(sym)
+            except Exception:                                   # noqa: BLE001
+                splits = []
+            frame = backtest_mod.intraday_frame(bars, splits, four_hour=(timeframe == "4h"))
+        out = backtest_mod.run(frame, strategy, raw, years=years, timeframe=timeframe)
+        out["ticker"] = sym
+        return out
+
     return await _run(build)
 
 
