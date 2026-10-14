@@ -36,6 +36,7 @@
     comps: {},       // symbol -> comps answer
     sotp: {},        // symbol -> sum-of-the-parts answer
     replays: {},     // model id -> replay answer
+    compares: {},    // model id -> comparison with the assumptions on screen
   };
   const STORE_KEY = 'optic.dcf.v1';
   const MAX_LOCAL_MODELS = 40;
@@ -1195,12 +1196,60 @@
         <td>${esc(day((m.inputs || {}).balance_date))} balance sheet, price ${money((m.inputs || {}).price)}</td>
         <td>${(m.changed || []).length ? esc(m.changed.join(', ')) : 'defaults'}</td>
         <td><button type="button" class="auth-link" data-dcf-replay="${esc(m.id)}">Rerun exactly</button>
+          <button type="button" class="auth-link" data-dcf-compare="${esc(m.id)}">Compare with now</button>
           <button type="button" class="auth-link" data-dcf-use="${esc(m.id)}">Use these assumptions</button>
           <button type="button" class="auth-link" data-dcf-del="${esc(m.id)}">Delete</button>
-          ${rp ? `<div class="muted">${rp.error ? esc(rp.error) : `${money(rp.per_share)} ${rp.matches ? '✓ the same as when saved' : '(differs from the saved result)'}${rp.version_changed ? `; the engine has moved from ${esc(rp.saved_version)} to ${esc(rp.engine_version)}` : ''}`}</div>` : ''}</td></tr>`;
+          ${rp ? `<div class="muted">${rp.error ? esc(rp.error) : `${money(rp.per_share)} ${rp.matches ? '✓ the same as when saved' : '(differs from the saved result)'}${rp.version_changed ? `; the engine has moved from ${esc(rp.saved_version)} to ${esc(rp.engine_version)}` : ''}`}</div>` : ''}
+          ${VAL.compares[m.id] ? compareHTML(VAL.compares[m.id]) : ''}</td></tr>`;
   }).join('')}</tbody></table>
       <p class="caveat">"Rerun exactly" uses the reported figures stored with the snapshot. "Use these assumptions" applies them to today's figures.</p>
       </div></details></div>`;
+  }
+
+  /* Saved assumptions against the ones on screen, field by field. Only
+   * formatting happens here: both sides are the server's numbers. */
+  function compareModel(m, d) {
+    const a = (m.snapshot || {}).assumptions || {};
+    const rows = [];
+    FIELDS.forEach((f) => {
+      const saved = f.wacc ? getPath(a.wacc || {}, f.key.slice(5)) : getPath(a.drivers || {}, f.key);
+      const now = fieldValue(d, f, 'current');
+      const same = (!has(saved) && !has(now)) || (has(saved) && has(now) && Math.abs(saved - now) < 1e-9);
+      if (!same) rows.push({ label: f.label, saved: fmtField(f, saved), now: fmtField(f, now) });
+    });
+    const inp = (m.snapshot || {}).inputs || {};
+    const cur = d.inputs_digest || {};
+    const notes = [];
+    if (inp.balance_date && cur.balance_date && inp.balance_date !== cur.balance_date) {
+      notes.push(`Newer filings since then: balance sheet ${day(inp.balance_date)} then, ${day(cur.balance_date)} now.`);
+    }
+    if (has(inp.price) && has(cur.price) && Math.abs(inp.price - cur.price) > 0.005) {
+      notes.push(`Price ${money(inp.price)} then, ${money(cur.price)} now.`);
+    }
+    return { rows, notes, savedValue: ((m.snapshot || {}).result || {}).per_share, nowValue: (d.dcf || {}).per_share };
+  }
+
+  function fmtField(f, v) {
+    if (!has(v)) return f.blank || 'none';
+    if (f.unit === '%') return pct(v, 2);
+    if (f.unit === 'x') return `${fmt(v, 2)}\u00d7`;
+    return fmt(v, f.step === 1 ? 0 : 2);
+  }
+
+  function compareHTML(c) {
+    if (c.error) return `<div class="muted">${esc(c.error)}</div>`;
+    return `<div class="dcf-compare"><strong>Then ${money(c.savedValue)}, now ${money(c.nowValue)}.</strong>
+      ${c.rows.length ? `<table class="data narrow"><thead><tr><th>Assumption</th><th>Saved</th><th>Now</th></tr></thead><tbody>
+      ${c.rows.map((r) => `<tr><th scope="row">${esc(r.label)}</th><td>${esc(r.saved)}</td><td>${esc(r.now)}</td></tr>`).join('')}
+      </tbody></table>` : '<p class="muted">Every assumption is the same.</p>'}
+      ${c.notes.map((n) => `<p class="muted">${esc(n)}</p>`).join('')}</div>`;
+  }
+
+  async function compare(sym, id) {
+    const m = await modelById(sym, id);
+    const d = VAL.data[sym];
+    VAL.compares[id] = (!m || !m.snapshot || !d || !d.available) ? { error: 'That model could not be read.' } : compareModel(m, d);
+    paint(sym);
   }
 
   function snapshot(sym, name) {
@@ -1394,6 +1443,8 @@
     if (t.closest('[data-dcf-sotp-run]')) { loadSotp(sym, true); return; }
     const rp = t.closest('[data-dcf-replay]');
     if (rp) { replay(sym, rp.getAttribute('data-dcf-replay')); return; }
+    const cmp = t.closest('[data-dcf-compare]');
+    if (cmp) { compare(sym, cmp.getAttribute('data-dcf-compare')); return; }
     const use = t.closest('[data-dcf-use]');
     if (use) { useModel(sym, use.getAttribute('data-dcf-use')); return; }
     const dl = t.closest('[data-dcf-del]');
@@ -1586,5 +1637,5 @@
   }
 
   window.OpticValuation = { hostHTML, load, context, parseAction, actionCard, _state: VAL, _lede: lede,
-    _parseAmount: parseAmount };
+    _parseAmount: parseAmount, _compareModel: compareModel };
 }());
