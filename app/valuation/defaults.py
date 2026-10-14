@@ -238,14 +238,21 @@ def default_drivers(data: Dict[str, Any], base: Dict[str, Any], kind: str,
         note("margin.target", m_target, "assumption", "Placeholder, not an estimate: the company has no "
              "profitable record to anchor on. The value depends mostly on this number; the reverse DCF "
              "shows what margin the price already assumes.")
+    elif kind == "cyclical":
+        m_start = m0
+        avg5 = _avg([m for m in margins if m is not None and m > 0], 5) or m0
+        m_target, m_years = (m0 + avg5) / 2.0, 3
+        note("margin.target", m_target, "assumption", "Halfway between the last year's margin and the "
+             "average of the last {} reported years ({:.1%}). A cyclical business's single year is a poor "
+             "guide, but five years may not span a full cycle either, so neither is taken whole.".format(
+                 min(5, len([m for m in margins if m])), avg5))
     else:
         m_start = m0
-        n_avg = 5 if kind == "cyclical" else 3
-        m_target = _avg([m for m in margins if m is not None and m > 0], n_avg) or m0
-        m_years = 3 if kind == "cyclical" else 5
+        m_target = _avg([m for m in margins if m is not None and m > 0], 3) or m0
+        m_years = 5
         note("margin.target", m_target, "history", "Average operating margin over the last {} reported "
              "years. Reverting to the recent average, rather than extending the latest trend, avoids "
-             "building margin expansion into the base case.".format(min(n_avg, len([m for m in margins if m]))))
+             "building margin expansion into the base case.".format(min(3, len([m for m in margins if m]))))
     note("margin.start", m_start, "reported", "The last fiscal year's operating margin.")
 
     capex = [x.get("capex_pct") for x in d]

@@ -137,7 +137,8 @@ kind.
   FY0 within 3%. Otherwise the three-year revenue CAGR. Fades to terminal.
 * **Terminal growth:** 2.5%, kept at least 0.5 points below the risk-free rate.
 * **Margin:** starts at FY0's EBIT margin and reverts to the three-year average
-  (five for cyclicals) over five years (three for cyclicals). For a company
+  over five years. For cyclicals, halfway between FY0 and the five-year
+  average over three years (five years may not span a cycle). For a company
   without operating profit, a labelled 8% placeholder over seven years.
 * **Capex:** halfway from FY0's share of revenue to the three-year average,
   over five years, the same rule in both directions. For a loss-maker spending

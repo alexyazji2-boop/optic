@@ -290,3 +290,13 @@ def test_sum_of_the_parts_refuses_a_year_with_a_missing_quarter(synthetic, monke
     monkeypatch.setattr(segments_mod, "build", lambda t, force=False: _segments(q))
     out = service.sotp_model(Provider(), "SYN")
     assert not out["available"] and "not consecutive" in out["reason"]
+
+
+def test_a_cyclical_margin_moves_only_halfway_to_its_average(synthetic):
+    synthetic["sic"] = "3312"
+    out = service.build(Provider(industry="Steel"), "STL")
+    assert out["classification"]["business_type"] == "cyclical"
+    m = out["defaults"]["drivers"]["margin"]
+    assert m["target"] == pytest.approx(m["start"])        # synthetic margins are flat at 20%
+    why = next(r for r in out["defaults"]["rationale"] if r["key"] == "margin.target")
+    assert "Halfway" in why["why"] and why["kind"] == "assumption"
