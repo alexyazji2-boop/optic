@@ -973,7 +973,7 @@
       : r.reconciles === false ? `The parts add up to ${bigMoney(r.segments_ttm_total)} against operating income of ${bigMoney(r.company_ebit_fy0)}, so a line is missing or counted twice; treat the result with care.` : '';
     return `<p class="muted">${esc(r.note)} ${esc(r.period_note || '')} ${rec}
       ${per.kind === 'trailing_four_quarters' && r.q4_derived ? 'A fourth quarter is derived as the year less the first three.' : ''}</p>
-      <table class="data narrow dcf-sotp"><thead><tr><th>${esc(r.axis_label || 'Segment')}</th><th>Operating income, ${per.kind === 'fiscal_year' ? `fiscal year to ${esc(day(per.end))}` : 'last 4 quarters'}</th><th>EV / EBIT</th><th>Value</th></tr></thead><tbody>
+      <div class="dcf-scroll"><table class="data narrow dcf-sotp"><thead><tr><th>${esc(r.axis_label || 'Segment')}</th><th>Operating income, ${per.kind === 'fiscal_year' ? `fiscal year to ${esc(day(per.end))}` : 'last 4 quarters'}</th><th>EV / EBIT</th><th>Value</th></tr></thead><tbody>
       ${r.segments.map((g) => `<tr><th scope="row">${esc(g.name)}</th><td>${bigMoney(g.operating_income)}</td>
         <td>${has(g.operating_income) ? `<input type="text" inputmode="decimal" class="dcf-ovin" data-dcf-sotp-m="${esc(g.name)}" value="${has(g.multiple) ? fmt(g.multiple, 1) : ''}" aria-label="${esc(`EV/EBIT for ${g.name}`)}">×` : esc(g.note || '')}</td>
         <td>${bigMoney(g.value)}</td></tr>`).join('')}
@@ -982,7 +982,9 @@
         <td>${bigMoney(r.unallocated_value)}</td></tr>
       <tr class="is-total"><th scope="row">Enterprise value</th><td>${bigMoney(r.segments_ttm_total)}</td><td></td><td>${bigMoney(r.enterprise_value)}</td></tr>
       <tr class="is-total"><th scope="row">Value per share (same bridge as the DCF)</th><td></td><td></td><td><strong>${money(r.per_share)}</strong></td></tr>
-      </tbody></table>
+      </tbody></table></div>
+      <p class="dcf-note"><strong>Sum of the parts: ${money(r.per_share)} a share</strong> (enterprise value ${bigMoney(r.enterprise_value)},
+        ${signedPct(r.upside, 0)} against the price).</p>
       <p class="muted">Multiples start at the DCF's implied ${fmt(r.dcf_implied_ev_ebit, 1)}× EV/EBIT, which reproduces the whole; change the segments you think are worth more or less.
         <button type="button" class="btn" data-dcf-sotp-run>Recalculate</button></p>`;
   }
