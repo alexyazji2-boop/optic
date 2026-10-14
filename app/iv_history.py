@@ -137,6 +137,13 @@ def rank_for(symbol: str, iv30_pct: Optional[float], provider: Any = None) -> Di
                                     "not this ETF chain's: close, not identical."})
                 return out
     history = stored(sym)
+    # A full year of Optic's own readings is the first choice; short of that,
+    # DoltHub's daily history where it is switched on (app/dolthub_vol.py),
+    # which has two years for most optionable names from the first visit.
+    if len(history) < FULL_WINDOW:
+        dolt = _dolthub_rank(sym, iv30_pct)
+        if dolt:
+            return dolt
     if iv30_pct is not None and len(history) >= MIN_DAYS_TO_SHOW:
         out = _rank(history, float(iv30_pct))
         out.update({"available": True, "source": "optic_daily", "today": round(float(iv30_pct), 2),
@@ -149,3 +156,29 @@ def rank_for(symbol: str, iv30_pct: Optional[float], provider: Any = None) -> Di
             "reason": ("No implied-volatility history yet. Optic stores one reading a trading day; "
                        "a rank appears after {} more, and a full-year rank after {}.".format(
                            max(need, 0), FULL_WINDOW - len(history)))}
+
+
+DOLTHUB_MIN_DAYS = 120
+
+
+def _dolthub_rank(sym: str, iv30_pct: Optional[float]) -> Optional[Dict[str, Any]]:
+    """Rank and percentile over DoltHub's daily 30-day ATM IV, today being its
+    own latest reading (a session behind) so the rank compares like with like;
+    Optic's live reading is carried beside it, not mixed in."""
+    from . import dolthub_vol
+    if not dolthub_vol.enabled():
+        return None
+    rows = [r for r in dolthub_vol.series(sym, FULL_WINDOW) if r["iv"]]
+    if len(rows) < DOLTHUB_MIN_DAYS:
+        return None
+    vals = [r["iv"] * 100 for r in rows]
+    out = _rank(vals, vals[-1])
+    out.update({"available": True, "source": "dolthub", "today": round(vals[-1], 2), "as_of": rows[-1]["day"],
+                "optic_today": None if iv30_pct is None else round(float(iv30_pct), 2),
+                "label": "daily 30-day at-the-money IV from DoltHub",
+                "attribution": dolthub_vol.ATTRIBUTION, "source_url": dolthub_vol.SOURCE_URL,
+                "note": ("Over {} trading days to {}, a session behind; DoltHub's own reading, so like is "
+                         "compared with like. Optic's live 30-day IV beside it: {}.".format(
+                             len(vals), rows[-1]["day"],
+                             "{:.1f}%".format(iv30_pct) if iv30_pct is not None else "not read"))})
+    return out

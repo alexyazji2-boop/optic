@@ -288,7 +288,7 @@ keys are quote, verdict, pulse, cases, why, whats_next, next_earnings_date,
 company, chart, technicals, gex, greeks, flow, entry_plan, naked_ideas,
 strategy_ideas, long_term, earnings, earnings_momentum, sector_confirm, news,
 macro, sectors, indices, market, read, compare, tracker, digest,
-portfolio_summary, reader_holdings, reader_watchlist, vol_surface, iv_rank,
+portfolio_summary, reader_holdings, reader_watchlist, vol_surface, iv_rank, iv_hv,
 options_research, track_record, research, desk_edition and desk_section. Tag the key the figure
 actually sits under: an earnings date read from `whats_next` is
 `[[src whats_next]]`, not `earnings`.
@@ -1228,7 +1228,7 @@ CONTEXT_SECTION_CAPS = {"research": 26_000}
 _ORDER_BASE = [
     "portfolio_summary", "reader_holdings", "auto_loaded", "auto_loaded_note", "screen_candidates",
     "desk_section", "research", "market", "compare", "ticker", "quote", "pulse", "verdict", "track_record", "cases", "why", "digest",
-    "whats_next", "next_earnings_date", "options_research", "vol_surface", "iv_rank", "rate",
+    "whats_next", "next_earnings_date", "options_research", "vol_surface", "iv_rank", "iv_hv", "rate",
     "reader_watchlist", "active_view", "chart", "technicals",
     "company", "long_term", "earnings", "news", "macro", "sector_confirm", "earnings_momentum",
     "gex", "flow", "greeks", "options_brief", "strategy_ideas", "read", "sectors", "indices",
@@ -1260,7 +1260,7 @@ def _section_order(question: str, horizon: str, view: Optional[str] = None) -> L
 
     q = question or ""
     if _OPTIONS_WORDS.search(q) or view == "swing":
-        lift(["options_research", "vol_surface", "iv_rank", "rate", "gex", "flow", "greeks",
+        lift(["options_research", "vol_surface", "iv_rank", "iv_hv", "rate", "gex", "flow", "greeks",
               "options_brief", "strategy_ideas"], "quote")
     if horizon == "long":
         lift(["long_term", "company"], "quote")

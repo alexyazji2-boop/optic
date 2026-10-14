@@ -12633,11 +12633,21 @@ function renderOptionsPricing(d) {
   if (iv30.available) {
     let rankText = '';
     if (rank.available) {
-      rankText = ` That is a rank of ${fmt(rank.rank, 0)} and a percentile of ${fmt(rank.percentile, 0)} over ${fmt(rank.days, 0)} trading days of ${rank.source === 'vol_index' ? `the ${esc(rank.index || '')}` : 'Optic’s own readings'}.`;
+      rankText = ` That is a rank of ${fmt(rank.rank, 0)} and a percentile of ${fmt(rank.percentile, 0)} over ${fmt(rank.days, 0)} trading days of ${rank.source === 'vol_index' ? `the ${esc(rank.index || '')}`
+        : rank.source === 'dolthub' ? `daily 30-day IV to ${esc(rank.as_of || '')} (${fmt(rank.today, 1)}% that day)` : 'Optic’s own readings'}.`;
     }
+    // Credit where the history came from, as its licence asks.
+    const credit = rank.available && rank.attribution
+      ? ` <span class="ov-fine">${esc(rank.attribution)} (<a href="${esc(rank.source_url || '')}" target="_blank" rel="noopener">Source</a>).</span>` : '';
     items.push({ text: `Options are priced for about ${fmt(iv30.iv_pct, 1)}% a year of movement over the next 30 days (implied volatility).`,
-      why: `${rankText ? rankText.trim() + ' ' : ''}${rank.available ? esc(rank.note || '') : esc(rank.reason || '')}`,
+      why: `${rankText ? rankText.trim() + ' ' : ''}${rank.available ? esc(rank.note || '') : esc(rank.reason || '')}${credit}`,
       gloss: 'iv rank' });
+  }
+  const ivhv = d.iv_hv || {};
+  if (ivhv.available) {
+    items.push({ text: `Options price ${fmt(ivhv.iv30, 1)}% a year of movement; over the past 30 days the stock actually moved at ${fmt(ivhv.hv30, 1)}% (${ivhv.gap >= 0 ? 'implied above realised' : 'implied below realised'} by ${fmt(Math.abs(ivhv.gap), 1)} points, as of ${esc(ivhv.as_of || '')}).`,
+      why: `Implied was above realised on ${fmt(ivhv.iv_above_hv_pct, 0)}% of the past ${fmt(ivhv.days, 0)} days, and today's gap is wider than ${fmt(ivhv.gap_percentile, 0)}% of them. ${esc(ivhv.note || '')} <span class="ov-fine">${esc(ivhv.source || '')} (<a href="${esc(ivhv.source_url || '')}" target="_blank" rel="noopener">Source</a>).</span>`,
+      gloss: 'implied volatility' });
   }
   if (month && month.straddle_move_pct) {
     items.push({ text: `By ${shortDate(month.expiry)} (${month.dte} days) the at-the-money straddle is priced for a move of about ±${fmt(month.straddle_move_pct, 1)}%.`,
@@ -41760,6 +41770,10 @@ function chatContextPayload() {
       // 2026-10-13).
       ctx.vol_surface = s.vol_surface;
       ctx.iv_rank = s.iv_rank;
+      if (s.iv_hv && s.iv_hv.available) {
+        const { history, ...rest } = s.iv_hv;
+        ctx.iv_hv = rest;
+      }
       ctx.rate = s.rate;
       const optCtx = optionsResearchContext();
       if (optCtx) ctx.options_research = optCtx;
@@ -43537,6 +43551,7 @@ const PULSE_SOURCES = {
   market: ['The Read', 'brief'],
   vol_surface: ['Options pricing', 'swing'],
   iv_rank: ['IV rank', 'swing'],
+  iv_hv: ['Implied against realised', 'swing'],
   options_research: ['Options research', 'swing'],
   desk_edition: ['Optic Desk', 'brief'],
   desk_section: ['Optic Desk', 'brief'],

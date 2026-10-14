@@ -85,6 +85,7 @@ from . import knowledge as knowledge_mod
 from . import horizon as horizon_mod
 from . import rates as rates_mod
 from . import iv_history as iv_history_mod
+from . import dolthub_vol as dolthub_vol_mod
 from .analytics import vol_surface as vol_surface_mod
 from .analytics import liquidity as liquidity_mod
 from .analytics import contracts as contracts_mod
@@ -695,6 +696,8 @@ def _swing_snapshot(
         iv30 = (surface.get("iv30") or {}).get("iv_pct")
         iv_history_mod.record(ticker, iv30)
         iv_rank = iv_history_mod.rank_for(ticker, iv30, YF_PROVIDER)
+    # Implied against realised volatility over the year (DoltHub, when on).
+    iv_hv = dolthub_vol_mod.iv_hv(ticker) if dolthub_vol_mod.enabled() else {"available": False}
     if chain is not None and not chain.empty and not partial:
         gex_read = gex_mod.analyse(chain, spot, rate=rate, div=div, ticker=ticker)
         # Scaled to the stock's own trading: the hedge a 1% move would ask
@@ -829,6 +832,7 @@ def _swing_snapshot(
         "gex": gex_read,
         "vol_surface": surface,
         "iv_rank": iv_rank,
+        "iv_hv": iv_hv,
         "rate": rate_info,
         "liquidity_method": liquidity_mod.method(),
         "greeks": greeks_read,
@@ -3687,6 +3691,27 @@ async def _edition_loop() -> None:
         await asyncio.sleep(DESK_EDITION_POLL_SECONDS)
 
 
+# DoltHub's daily volatility history (app/dolthub_vol.py). Off unless
+# OPTIC_DOLTHUB is set: the data is CC BY-SA 4.0, and showing it publicly is
+# the owner's decision. A first run backfills two years in the background
+# (about a thousand small requests); after that, a few requests a day.
+DOLTHUB_SYNC_SECONDS = 6 * 3600
+
+
+async def _dolthub_loop() -> None:
+    await asyncio.sleep(60)
+    while True:
+        try:
+            res = await asyncio.to_thread(dolthub_vol_mod.sync)
+            logging.getLogger("uvicorn.error").info("dolthub sync: %s", res)
+            if res.get("pending"):
+                await asyncio.sleep(120)        # stopped on an error; try the rest soon
+                continue
+        except Exception as exc:                                # noqa: BLE001
+            logging.getLogger("uvicorn.error").warning("dolthub loop: %s", exc)
+        await asyncio.sleep(DOLTHUB_SYNC_SECONDS)
+
+
 @app.on_event("startup")
 async def _start_tracker() -> None:
     paper.init_db()
@@ -3705,6 +3730,8 @@ async def _start_tracker() -> None:
         app.state.tracker_task = asyncio.create_task(_tracker_loop())
     if DESK_EDITION_AUTO:
         app.state.edition_task = asyncio.create_task(_edition_loop())
+    if dolthub_vol_mod.enabled():
+        app.state.dolthub_task = asyncio.create_task(_dolthub_loop())
 
 
 @app.on_event("shutdown")
@@ -3714,7 +3741,7 @@ async def _stop_tracker() -> None:
     # "task was destroyed but it is pending" on the way out, and the feedback
     # flush sleeps fifteen times longer than that.
     for name in ("tracker_task", "warm_task", "feedback_task", "catalyst_task",
-                 "keepwarm_task", "edition_task", "congress_task", "analysts_task"):
+                 "keepwarm_task", "edition_task", "congress_task", "analysts_task", "dolthub_task"):
         task = getattr(app.state, name, None)
         if task:
             task.cancel()
