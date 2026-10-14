@@ -12625,6 +12625,136 @@ function optMoney(v, digits = 2) {
   return (n < 0 ? '-' : '') + '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
+/* ------------------------------------------- how an option's value moves
+ *
+ * Teaching, not a quote: Black-Scholes on this stock's price, its 30-day
+ * implied volatility and the risk-free rate, with everything held still but
+ * the one thing each chart varies. From a reel on theta decay and delta and
+ * gamma; the numbers are this stock's, so the lesson is about something the
+ * reader is looking at. Prices here are the model's, not the chain's: the
+ * contract table above has the market's.
+ */
+const GL = { kind: 'call', dte: 30, iv: null, sym: null };
+function glCdf(x) {
+  // Abramowitz and Stegun 26.2.17; error under 7.5e-8.
+  const t = 1 / (1 + 0.2316419 * Math.abs(x));
+  const d = 0.3989422804014327 * Math.exp(-x * x / 2);
+  const p = d * t * (0.31938153 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+  return x >= 0 ? 1 - p : p;
+}
+/* Value, delta and gamma of a European option; T in years, v and r decimals. */
+function glBS(S, K, T, v, r, call) {
+  if (!(T > 0) || !(v > 0)) {
+    const intr = call ? Math.max(0, S - K) : Math.max(0, K - S);
+    return { price: intr, delta: call ? (S > K ? 1 : 0) : (S < K ? -1 : 0), gamma: 0 };
+  }
+  const sq = v * Math.sqrt(T);
+  const d1 = (Math.log(S / K) + (r + v * v / 2) * T) / sq;
+  const d2 = d1 - sq;
+  const disc = Math.exp(-r * T);
+  const price = call ? S * glCdf(d1) - K * disc * glCdf(d2) : K * disc * glCdf(-d2) - S * glCdf(-d1);
+  const pdf = Math.exp(-d1 * d1 / 2) / Math.sqrt(2 * Math.PI);
+  return { price, delta: call ? glCdf(d1) : glCdf(d1) - 1, gamma: pdf / (S * sq) };
+}
+function glInputs(d) {
+  const q = d.quote || {};
+  const S = Number(q.price);
+  const vs = d.vol_surface || {};
+  const ivDefault = ((vs.iv30 || {}).iv_pct) || ((d.iv_hv || {}).iv30) || 30;
+  if (GL.sym !== d.ticker) { GL.sym = d.ticker; GL.iv = Math.round(ivDefault * 10) / 10; }
+  const r = Number((d.rate || {}).rate);
+  const step = S >= 200 ? 5 : S >= 50 ? 1 : S >= 10 ? 0.5 : 0.1;
+  const atm = Math.round(S / step) * step;
+  const call = GL.kind === 'call';
+  const away = (pct) => Math.round((S * (1 + pct)) / step) * step;
+  return { S, v: GL.iv / 100, r: Number.isFinite(r) ? r : 0.04, call, step,
+    strikes: [{ id: 'itm', label: 'In the money', K: away(call ? -0.05 : 0.05) },
+      { id: 'atm', label: 'At the money', K: atm },
+      { id: 'otm', label: 'Out of the money', K: away(call ? 0.05 : -0.05) }] };
+}
+function glLineSVG(series, xs, opts) {
+  const W = 300, H = 130, padL = 34, padB = 16, padT = 6;
+  const all = series.flatMap((s) => s.ys).filter(Number.isFinite);
+  const lo = opts.lo !== undefined ? opts.lo : Math.min(...all), hi = opts.hi !== undefined ? opts.hi : Math.max(...all);
+  const X = (i) => padL + (i / (xs.length - 1)) * (W - padL - 4);
+  const Y = (v) => padT + (1 - (v - lo) / ((hi - lo) || 1)) * (H - padT - padB);
+  const paths = series.map((s) => `<path class="gl-line ${s.cls}" d="${s.ys.map((v, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join('')}"/>`).join('');
+  // Mark labels along the top, clear of the axis labels at the bottom corners.
+  const marks = (opts.marks || []).map((m) => `<line class="gl-mark" x1="${X(m.i).toFixed(1)}" x2="${X(m.i).toFixed(1)}" y1="${padT + 8}" y2="${H - padB}"/><text class="gl-tick" x="${X(m.i).toFixed(1)}" y="${padT + 5}" text-anchor="middle">${esc(m.label)}</text>`).join('');
+  return `<svg class="gl-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.aria)}">
+    <text class="gl-tick" x="${padL - 4}" y="${Y(hi) + 4}" text-anchor="end">${esc(opts.fmtY(hi))}</text>
+    <text class="gl-tick" x="${padL - 4}" y="${Y(lo)}" text-anchor="end">${esc(opts.fmtY(lo))}</text>
+    <text class="gl-tick" x="${padL}" y="${H - 3}">${esc(opts.left)}</text>
+    <text class="gl-tick" x="${W - 4}" y="${H - 3}" text-anchor="end">${esc(opts.right)}</text>
+    ${marks}${paths}</svg>`;
+}
+function renderGreeksLab(d) {
+  const q = d.quote || {};
+  if (!Number.isFinite(Number(q.price)) || !(q.price > 0)) return '';
+  const g = glInputs(d);
+  const { S, v, r, call } = g;
+  const kind = call ? 'call' : 'put';
+  // Chart 1: value against days left, 60 to 0, for the three strikes.
+  const days = Array.from({ length: 61 }, (_, i) => 60 - i);
+  const val = (K, dd) => glBS(S, K, dd / 365, v, r, call).price;
+  const decay = g.strikes.map((k) => ({ cls: k.id, ys: days.map((dd) => val(k.K, dd)) }));
+  const atm = g.strikes[1].K;
+  const now = val(atm, GL.dte);
+  const intr = call ? Math.max(0, S - atm) : Math.max(0, atm - S);
+  const perDay = (dd) => val(atm, dd) - val(atm, dd - 1);
+  const timeNow = now - intr;
+  const lastWeek = GL.dte > 7 ? (val(atm, 7) - intr) : timeNow;
+  const shareLastWeek = timeNow > 0 ? lastWeek / timeNow * 100 : null;
+  // Chart 2: delta against price, at the chosen days and at 5.
+  const prices = Array.from({ length: 61 }, (_, i) => S * (0.85 + i * 0.005));
+  const delta = (dd) => prices.map((p) => glBS(p, atm, dd / 365, v, r, call).delta);
+  const gNow = glBS(S, atm, GL.dte / 365, v, r, call).gamma;
+  const g5 = glBS(S, atm, 5 / 365, v, r, call).gamma;
+  const money = (x) => optMoney(x, 2);
+  const ctl = `<div class="bt-controls gl-controls">
+    <label class="bt-field"><span>Option</span><select data-gl-set="kind">
+      <option value="call"${call ? ' selected' : ''}>Call</option><option value="put"${call ? '' : ' selected'}>Put</option></select></label>
+    <label class="bt-field"><span>Days to expiry</span><select data-gl-set="dte">
+      ${[7, 14, 30, 45, 60].map((n) => `<option value="${n}"${GL.dte === n ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
+    <label class="bt-field"><span>Implied volatility (%)</span><input type="number" min="5" max="200" step="1" inputmode="decimal" data-gl-set="iv" value="${esc(GL.iv)}"></label>
+  </div>`;
+  return `<section class="ov-sec gl-lab span-all" aria-labelledby="gl-h">
+    <h2 class="ov-q" id="gl-h">How an option's value moves</h2>
+    <p class="ov-fine">Model values on ${esc(d.ticker)} at ${money(S)}, ${fmt(GL.iv, 1)}% implied volatility and a ${fmt(r * 100, 2)}% rate, with nothing else changing. A lesson, not a quote: the contract table has the market's prices.</p>
+    ${ctl}
+    <div class="gl-pair">
+      <figure class="gl-fig">
+        <figcaption><strong>Time decay (theta).</strong> Value of a ${kind} as expiry nears, the price standing still.</figcaption>
+        ${glLineSVG(decay, days, { aria: `Value of three ${kind}s from 60 days to expiry`, fmtY: (x) => money(x), left: '60 days', right: 'expiry',
+          marks: [{ i: 60 - GL.dte, label: `${GL.dte}d` }, { i: 53, label: '7d' }] })}
+        <p class="gl-key"><span class="gl-sw itm"></span>${money(g.strikes[0].K)} <span class="gl-sw atm"></span>${money(atm)} <span class="gl-sw otm"></span>${money(g.strikes[2].K)}</p>
+        <p class="ov-f-text">The ${money(atm)} ${kind} with ${GL.dte} days left is worth about ${money(now)}. It loses about ${money(perDay(GL.dte))} a day now${GL.dte > 7 ? `, and about ${money(perDay(7))} a day with a week left` : ''}${shareLastWeek !== null && GL.dte > 7 ? `; the last 7 days take ${fmt(shareLastWeek, 0)}% of the time value it has today` : ''}.</p>
+        <p class="ov-f-why">Time value shrinks with the square root of the time left, so decay is slow far out and fast near the end, fastest at the money. An out-of-the-money option is all time value and goes to nothing unless the stock gets there.</p>
+      </figure>
+      <figure class="gl-fig">
+        <figcaption><strong>Delta and gamma.</strong> How much the ${kind} moves per $1 in the stock, across prices.</figcaption>
+        ${glLineSVG([{ cls: 'atm', ys: delta(GL.dte) }, { cls: 'near', ys: delta(5) }], prices, { aria: `Delta of the ${money(atm)} ${kind} across prices, ${GL.dte} and 5 days out`,
+          fmtY: (x) => fmt(x, 1), lo: call ? 0 : -1, hi: call ? 1 : 0, left: money(prices[0]), right: money(prices[prices.length - 1]),
+          marks: [{ i: 30, label: 'now' }] })}
+        <p class="gl-key"><span class="gl-sw atm"></span>${GL.dte} days left <span class="gl-sw near"></span>5 days left</p>
+        <p class="ov-f-text">At the money with ${GL.dte} days left, delta is about ${fmt(glBS(S, atm, GL.dte / 365, v, r, call).delta, 2)}: the option moves about ${money(Math.abs(glBS(S, atm, GL.dte / 365, v, r, call).delta))} for each $1 in the stock. Gamma, how fast delta itself changes, is ${fmt(gNow, 3)} a dollar; with 5 days left it is ${fmt(g5, 3)}, about ${fmt(gNow > 0 ? g5 / gNow : 0, 1)} times as much.</p>
+        <p class="ov-f-why">Near expiry the curve steepens: a small move takes an at-the-money option from nearly worthless to moving like the stock, which is why short-dated options swing so hard, and why selling them is short that gamma.</p>
+      </figure>
+    </div>
+  </section>`;
+}
+document.addEventListener('change', (evt) => {
+  const el = evt.target;
+  if (!el || !el.matches || !el.matches('[data-gl-set]')) return;
+  const k = el.dataset.glSet;
+  if (k === 'kind') GL.kind = el.value === 'put' ? 'put' : 'call';
+  else if (k === 'dte') GL.dte = Math.max(7, Math.min(60, Number(el.value) || 30));
+  else if (k === 'iv') GL.iv = Math.max(5, Math.min(200, Number(el.value) || GL.iv));
+  const host = document.querySelector('.gl-lab');
+  const d = STATE.swing;
+  if (host && d) host.outerHTML = renderGreeksLab(d);
+});
+
 /* 1. What options are pricing ------------------------------------------- */
 function renderOptionsPricing(d) {
   const vs = d.vol_surface || {};
@@ -13211,6 +13341,7 @@ function renderSwing(d) {
   ${renderOptionsPlain(d)}
   ${renderPulseLine(d)}
   ${(d.gex || {}).error ? '' : optResearchShellHTML()}
+  ${renderGreeksLab(d)}
   ${advBlock('Trade setup, options readings and price levels',
     'An example option trade, put/call activity, skew, the levels to watch and what is pulling the reading',
     `${renderSetup(d)}

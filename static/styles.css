@@ -4935,7 +4935,26 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   background: var(--surface-2);
-}/* The VIXEQ - VIX gap over the last year, in the Dispersion panel. */
+}/* How an option's value moves (renderGreeksLab): two small charts side by
+   side, stacked on a phone. */
+.gl-controls { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-2); }
+.gl-controls .bt-field { display: flex; flex-direction: column; gap: 2px; font-size: var(--t-small); color: var(--ink-2); }
+.gl-controls select, .gl-controls input { min-width: 6.5em; }
+.gl-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-4); margin-top: var(--space-3); }
+.gl-fig { margin: 0; min-width: 0; }
+.gl-fig figcaption { font-size: var(--t-small); color: var(--ink-2); margin-bottom: var(--space-1); }
+.gl-chart { width: 100%; height: auto; display: block; overflow: visible; }
+.gl-chart .gl-line { fill: none; stroke-width: 1.6; }
+.gl-chart .gl-line.atm { stroke: var(--ink); }
+.gl-chart .gl-line.itm { stroke: var(--pos); }
+.gl-chart .gl-line.otm { stroke: var(--neg); }
+.gl-chart .gl-line.near { stroke: var(--neg); stroke-dasharray: 4 3; }
+.gl-chart .gl-mark { stroke: var(--ink-muted); stroke-width: 0.6; stroke-dasharray: 2 3; }
+.gl-chart .gl-tick { fill: var(--ink-muted); font-size: 9px; font-variant-numeric: tabular-nums; }
+.gl-key { font-size: var(--t-micro); color: var(--ink-2); margin: var(--space-1) 0; }
+.gl-sw { display: inline-block; width: 12px; height: 2px; vertical-align: middle; margin: 0 4px 0 8px; background: var(--ink); }
+.gl-sw.itm { background: var(--pos); } .gl-sw.otm, .gl-sw.near { background: var(--neg); }
+/* The VIXEQ - VIX gap over the last year, in the Dispersion panel. */
 .disp-spark { display: block; width: 100%; max-width: 420px; height: auto; margin-top: var(--space-2); }
 .disp-spark path { fill: none; stroke: var(--accent); stroke-width: 1.4; }
 
