@@ -143,6 +143,7 @@ const PERSONAL_KEYS = [
   'optic.chart.drawings.v2',     // drawings as times; see WS_DRAW_KEY_V2
   'optic.chart.notes.v1',
   'optic.chart.checks.v1',       // the pre-trade checklist, ticked per symbol
+  'optic.chart.stopcheck.v1',    // stops and entries per symbol, and the account size for sizing
   'optic.paper.v1',              // paper trades
   'optic.roth.inputs',           // holdings and contributions
   'optic.snapshots.v1',          // how a symbol's read has changed
@@ -789,6 +790,9 @@ const HEADER_DEFS = {
   'fair value': 'What the stock would be worth at the price-to-earnings multiples the market has usually paid for it: trailing earnings times the 25th percentile, median and 75th percentile of its own five-year P/E. It is a range to read the price against, not a target, and it cannot tell whether the business has changed.',
   'morningstar rating': "Morningstar's star rating for this fund, from one to five, based on its past returns after costs and adjusted for risk against funds of the same kind. It looks backward, and it is Morningstar's view, not Optic's.",
   'off-exchange short volume': "The share of each day's off-exchange trading, through dark pools and wholesalers, that was reported as short sales, from FINRA's daily files. Market makers sell short routinely to fill buy orders, so the level runs high for every stock, and a change against its own average says more than the level does.",
+  'pairs': "Two related stocks priced against each other: how far apart they have drifted, in standard deviations of their usual gap, and whether betting on the gap closing has worked in years the pair was not fitted to. A pair is only one if the gap keeps coming back, which the cointegration test checks and which often stops being true.",
+  'stop check': "Whether a stop sits at a round number, where stop orders bunch up, and where it would sit a buffer past one. Moving a stop further from the price makes a sweep less likely to take it and costs more when it is hit, so the panel shows both, with how often moves through a round number went that far in a sample of large stocks.",
+  'backtest': "A rule tested on this stock's own history: when it would have bought and sold, and how the trades added up. Shown beside buying and holding over the same years and beside random entries with the same number of trades, because a rule on a stock that rose looks good whether or not the rule adds anything.",
   'seasonality': "Whether this stock's returns have followed the calendar: by month, by weekday and around the turn of each month, from its own history. Each effect is tested for statistical significance, because averages split by calendar always show some pattern by chance.",
   'sector rotation': 'Where each sector stands against the index on two measures centred on 100: relative strength, and relative momentum, which says whether that strength is rising or falling. Together they place each sector as leading, weakening, lagging or improving, and sectors tend to move through those in a clockwise loop.',
   'relative performance': "Where this stock's return ranks against a fixed universe of 143 liquid names spread across all eleven sectors, from 0 to 100 for each window. A rank of 97 means it has outrun 97 percent of them, and crossings through 80 and 20 mark a name starting to lead or to lag.",
@@ -22096,8 +22100,13 @@ function wsToggleWidget(id, on) {
   if (dock && had !== !!dock.innerHTML.trim()) wsRedrawChart();
   // `on` is only meaningful in wide mode; narrow mode toggles, so re-read it.
   on = wsIsNarrow() ? wsNarrowWidget === id : wsDockOpen.includes(id);
+  // These two draw on the price chart, and their marks close with them.
+  if (!on && (id === 'backtest' || id === 'stopcheck')) wsRedrawChart();
   // Two widgets need data the page has not necessarily fetched yet.
   if (on && id === 'seasonality') loadSeasonality(false, STATE.chartSymbol);
+  if (on && id === 'backtest') loadBacktest(STATE.chartSymbol);
+  if (on && id === 'stopcheck') loadStopCheck(STATE.chartSymbol);
+  if (on && id === 'pairs') loadPairs(STATE.chartSymbol);
   if (on && id === 'analysts') loadAnalystActions(false, STATE.chartSymbol);
   if (on && id === 'trading' && !STATE.tracker) wsLoadTracker();
   if (on && id === 'alerts') loadAlerts(true);
@@ -23484,6 +23493,8 @@ const WS_WIDGETS = [
     icon: '<path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7Z"/><path d="M14 3v4h4"/><path d="M9.5 17v-3M12 17v-5M14.5 17v-2"/>' },
   { id: 'checklist', label: 'Checklist',  // two ticked rows
     icon: '<path d="m4 7 2 2 3.5-3.5"/><path d="M12.5 7.5H20"/><path d="m4 15 2 2 3.5-3.5"/><path d="M12.5 15.5H20"/>' },
+  { id: 'stopcheck', label: 'Stop check', short: 'Stop',   // a stop line just past a level
+    icon: '<path d="M3.5 9h17"/><path d="M3.5 14.5h17" stroke-dasharray="2.5 2"/><path d="m12 4.5 0 3M12 16v3.5"/>' },
   { id: 'options', label: 'Options',      // a call's payoff: flat, then up
     icon: '<path d="M3.5 15.5h7.5l9.5-9.5"/><path d="M3.5 19.5h17"/>' },
   // `short` for the rail: "Key levels" is two lines in 54px at the micro size.
@@ -23493,6 +23504,10 @@ const WS_WIDGETS = [
     icon: '<path d="M9 6.5h11M9 12h11M9 17.5h11"/><path d="M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01" stroke-width="2.6"/>' },
   { id: 'patterns', label: 'Patterns',    // two candles
     icon: '<path d="M7 3.5v3M7 15.5v5"/><rect x="5" y="6.5" width="4" height="9" rx="0.8"/><path d="M17 5v4M17 16v3.5"/><rect x="15" y="9" width="4" height="7" rx="0.8"/>' },
+  { id: 'pairs', label: 'Pairs',          // two lines that part and meet again
+    icon: '<path d="M3.5 9c3 0 4.5 3 8.5 3s5.5-5 8.5-5"/><path d="M3.5 15c3 0 4.5-3 8.5-3s5.5 5 8.5 5"/>' },
+  { id: 'backtest', label: 'Backtest',    // a rule's equity curve stepping up
+    icon: '<path d="M3.5 19.5h17"/><path d="M4.5 16.5 9 12l3 2.5 3.5-5 4 2.5"/><circle cx="19.5" cy="12" r="1.2"/>' },
   { id: 'trading', label: 'Trading',      // a buy and a sell
     icon: '<path d="M4 8.5h15l-3.5-3.5"/><path d="M20 15.5H5l3.5 3.5"/>' },
   { id: 'learn', label: 'Learn',          // a mortarboard
@@ -23810,6 +23825,521 @@ function insiderRow(t) {
   </li>`;
 }
 
+/* ==================================================== strategy backtest ===
+ *
+ * The Chart tab's Backtest widget (app/analytics/backtest.py). Asked for from
+ * a broker's email that showed one strategy's return on one stock; the same
+ * figures are here, but always beside buy and hold over the same window and
+ * random entries with the same exposure, because a long-only rule on a stock
+ * that rose looks good whether or not the rule adds anything. Trades can be
+ * drawn on the chart as markers at their entry and exit bars.
+ */
+const BT_KEY = 'optic.chart.backtest.v1';
+const BT = { catalogue: null, result: null, loading: false, error: null, reqId: 0,
+  strategy: 'macd_turn_below_zero', timeframe: '1d', years: 5, params: {}, show: true };
+try {
+  const saved = JSON.parse(localStorage.getItem(BT_KEY) || 'null');
+  if (saved && typeof saved === 'object') {
+    ['strategy', 'timeframe', 'years', 'params', 'show'].forEach((k) => { if (k in saved) BT[k] = saved[k]; });
+  }
+} catch (e) { /* defaults */ }
+
+function btSave() {
+  try {
+    localStorage.setItem(BT_KEY, JSON.stringify({ strategy: BT.strategy, timeframe: BT.timeframe,
+      years: BT.years, params: BT.params, show: BT.show }));
+  } catch (e) { /* private window */ }
+}
+
+function btStrategy() {
+  return ((BT.catalogue || {}).strategies || []).find((s) => s.id === BT.strategy) || null;
+}
+/* Each rule says which bars it runs on: the opening-range rule needs five-minute
+ * bars and the daily rules have no meaning on them. Switching rule moves the
+ * bar size to one the new rule takes, rather than asking for a test the server
+ * will refuse. */
+function btTimeframes(s) {
+  return (s && Array.isArray(s.timeframes) && s.timeframes.length) ? s.timeframes : ['1d', '4h', '1h'];
+}
+function btFixTimeframe() {
+  const tfs = btTimeframes(btStrategy());
+  if (!tfs.includes(BT.timeframe)) BT.timeframe = tfs[0];
+}
+/* A trade's time as the table and the markers show it: the date for daily
+ * bars, the date and time for intraday ones. */
+function btWhen(stamp, intraday) {
+  const raw = String(stamp || '');
+  return intraday ? raw.slice(5, 16) : raw.slice(0, 10);
+}
+
+async function loadBacktest(symbol, force) {
+  const sym = String(symbol || STATE.chartSymbol || '').toUpperCase();
+  if (!sym) return;
+  if (!BT.catalogue) {
+    try { BT.catalogue = await getJSON('/api/backtest/strategies'); } catch (err) { BT.error = err.message; wsRepaintWidget('backtest'); return; }
+    if (!btStrategy()) BT.strategy = BT.catalogue.strategies[0].id;
+  }
+  btFixTimeframe();
+  const want = JSON.stringify([sym, BT.strategy, BT.timeframe, BT.years, BT.params[BT.strategy] || {}]);
+  if (!force && BT.result && BT.resultKey === want) { wsRepaintWidget('backtest'); return; }
+  const id = ++BT.reqId;
+  BT.loading = true; BT.error = null;
+  wsRepaintWidget('backtest');
+  const qs = new URLSearchParams({ strategy: BT.strategy, timeframe: BT.timeframe });
+  if (BT.years) qs.set('years', BT.years);
+  Object.entries(BT.params[BT.strategy] || {}).forEach(([k, v]) => qs.set(k, v));
+  try {
+    const r = await getJSON(`/api/backtest/${encodeURIComponent(sym)}?${qs}`);
+    if (id !== BT.reqId) return;
+    BT.result = r; BT.resultKey = want;
+  } catch (err) {
+    if (id !== BT.reqId) return;
+    BT.error = err.message;
+  } finally {
+    if (id === BT.reqId) {
+      BT.loading = false;
+      wsRepaintWidget('backtest');
+      if (BT.show) wsRedrawChart();
+    }
+  }
+}
+
+/* Entries and exits as markers on the price chart: the bar each fill came on,
+ * snapped to the chart's bars by date (an intraday test on a daily chart lands
+ * on the day). Only the current symbol's test, and only while "show" is on. */
+/* Whether a dock widget is on screen: open in the dock, or the one widget a
+ * narrow window shows. What a widget draws on the chart goes with it; the
+ * backtest's trades stayed on the price after its panel was closed. */
+function wsWidgetShown(id) {
+  return wsIsNarrow() ? wsNarrowWidget === id : wsDockOpen.includes(id);
+}
+function backtestMarkers(ps, symbol) {
+  const r = BT.result;
+  if (!BT.show || !wsWidgetShown('backtest') || !r || r.available !== true || r.ticker !== symbol) return [];
+  /* To the minute. Keyed by date alone, every trade on an intraday chart
+   * landed on its day's last bar, and an opening-range trade taken at 10:25
+   * and closed at 10:35 drew both letters at 15:55. A daily trade on an
+   * intraday chart goes to its day's first bar, where its open fill was. */
+  const keys = (ps.dates || []).map((d) => String(d).replace('T', ' ').slice(0, 16));
+  if (!keys.length) return [];
+  const out = [];
+  const at = (iso) => {
+    const k = String(iso || '').replace('T', ' ').slice(0, 16);
+    if (k.length === 10 && keys[0].length > 10) {
+      const i = keys.findIndex((x) => x.slice(0, 10) === k);
+      return i < 0 ? undefined : i;
+    }
+    return barIndexForDate(keys, k);
+  };
+  const add = (iso, color, label, detail) => {
+    const i = at(iso);
+    if (i !== undefined) out.push({ index: i, color, label, detail });
+  };
+  (r.trades || []).forEach((t) => {
+    const short = t.side === 'short';
+    add(t.entry_date, short ? C.neg : C.pos, short ? 'S' : 'B',
+      `${short ? 'Sold short' : 'Bought'} ${t.entry_date} at ${fmt(t.entry_price, 2)}: ${t.entry_reason}`);
+    add(t.exit_date, t.return_pct >= 0 ? C.pos : C.neg, short ? 'B' : 'S',
+      `${short ? 'Bought back' : 'Sold'} ${t.exit_date} at ${fmt(t.exit_price, 2)}, ${t.return_pct >= 0 ? '+' : ''}${fmt(t.return_pct, 1)}% after ${t.bars} candles: ${t.exit_reason}`);
+  });
+  if (r.open_trade) add(r.open_trade.entry_date, C.pos, 'B', `Bought ${r.open_trade.entry_date}, still held: ${r.open_trade.entry_reason}`);
+  return out;
+}
+
+/* The equity curve against buy and hold, on a log scale so a tenfold move and
+ * a doubling read as what they are relative to each other. */
+function btCurveSVG(rows) {
+  if (!rows || rows.length < 2) return '';
+  const W = 236, H = 92, pad = 4;
+  const vals = rows.flatMap((r) => [r.strategy, r.buy_hold]).filter((v) => v > 0);
+  const lo = Math.log(Math.min(...vals)), hi = Math.log(Math.max(...vals));
+  const y = (v) => H - pad - ((Math.log(v) - lo) / ((hi - lo) || 1)) * (H - 2 * pad);
+  const x = (i) => pad + (i / (rows.length - 1)) * (W - 2 * pad);
+  const path = (k) => rows.map((r, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(r[k]).toFixed(1)}`).join('');
+  const base = y(1);
+  return `<svg class="bt-curve" viewBox="0 0 ${W} ${H}" role="img" aria-label="Growth of 1 dollar: strategy against buy and hold, log scale">
+    <line x1="${pad}" x2="${W - pad}" y1="${base.toFixed(1)}" y2="${base.toFixed(1)}" class="bt-base"/>
+    <path d="${path('buy_hold')}" class="bt-bh"/>
+    <path d="${path('strategy')}" class="bt-st"/>
+  </svg>`;
+}
+
+function btParamsHTML(s) {
+  const cur = BT.params[s.id] || {};
+  return s.params.map((p) => {
+    const v = cur[p.id] !== undefined ? cur[p.id] : p.default;
+    if (p.kind === 'bool') {
+      return `<label class="bt-check"><input type="checkbox" id="bt-p-${esc(p.id)}" data-bt-param="${esc(p.id)}"${v ? ' checked' : ''}> ${esc(p.label)}</label>`;
+    }
+    const float = p.kind === 'float';
+    return `<label class="bt-field"><span>${esc(p.label)}</span><input type="number" id="bt-p-${esc(p.id)}" data-bt-param="${esc(p.id)}"
+      value="${esc(v)}" min="${esc(p.min)}" max="${esc(p.max)}" step="${esc(float ? (p.step || 0.1) : 1)}" inputmode="${float ? 'decimal' : 'numeric'}"></label>`;
+  }).join('');
+}
+
+function btSigned(v, d = 1) {
+  return Number.isFinite(v) ? `${v > 0 ? '+' : ''}${fmt(v, d)}%` : '—';
+}
+
+function wsBacktestHTML() {
+  const sym = STATE.chartSymbol || '';
+  if (!sym) return '<p class="ws-none">Load a symbol.</p>';
+  if (!BT.catalogue) return BT.error ? `<p class="ws-none">${esc(BT.error)}</p>` : loadingHTML('strategies');
+  const s = btStrategy();
+  const allTfs = (BT.catalogue || {}).timeframes || {};
+  const tfs = Object.fromEntries(btTimeframes(s).filter((k) => allTfs[k]).map((k) => [k, allTfs[k]]));
+  const yearsOpts = BT.timeframe === '1d' ? [[1, '1 year'], [2, '2 years'], [5, '5 years'], [10, '10 years'], [0, 'All history']]
+    : BT.timeframe === '5m' ? [[0, 'Last 60 sessions']]
+    : [[1, '1 year'], [2, '2 years'], [0, 'All available (about 3 years)']];
+  const controls = `<div class="bt-controls">
+    <label class="bt-field bt-wide"><span>Strategy</span><select id="bt-strategy" data-bt-set="strategy">
+      ${BT.catalogue.strategies.map((x) => `<option value="${esc(x.id)}"${x.id === BT.strategy ? ' selected' : ''}>${esc(x.label)}</option>`).join('')}</select></label>
+    <label class="bt-field"><span>Bars</span><select id="bt-timeframe" data-bt-set="timeframe">
+      ${Object.entries(tfs).map(([k, t]) => `<option value="${esc(k)}"${k === BT.timeframe ? ' selected' : ''}>${esc(t.label)}</option>`).join('')}</select></label>
+    <label class="bt-field"><span>Period</span><select id="bt-years" data-bt-set="years">
+      ${yearsOpts.map(([v, l]) => `<option value="${v}"${Number(BT.years || 0) === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+  </div>
+  ${s ? `<p class="bt-summary">${esc(s.summary)}</p>
+  <details class="ind-explain bt-rules"><summary>Rules<i class="cal-caret" aria-hidden="true"></i></summary>
+    <div class="bt-params">${btParamsHTML(s)}</div>
+    <button type="button" class="btn sm" data-bt-run>Run again</button></details>` : ''}`;
+  const r = BT.result;
+  let body = '';
+  if (BT.loading) body = '<p class="ws-none" role="status">Testing…</p>';
+  else if (BT.error) body = `<p class="ws-none">${esc(BT.error)}</p>`;
+  else if (r && r.available === false) body = `<p class="ws-none">${esc(r.reason || 'No result.')}</p>`;
+  else if (r && r.ticker === sym) {
+    const st = r.stats || {}, bm = r.benchmark || {}, w = r.window || {};
+    const session = r.engine === 'session';
+    const intraday = (w.timeframe || '1d') !== '1d';
+    const span = session ? `in ${fmt(w.sessions || 0, 0)} sessions` : `over ${fmt(w.years || 0, 1)} years`;
+    const pb = bm.plain_break || null;
+    const tile = (val, cls, lab, sub) => `<div class="bt-tile"><span class="bt-val ${cls}">${val}</span><span class="bt-lab">${esc(lab)}</span><span class="bt-sub">${sub}</span></div>`;
+    body = `<p class="bt-head"><strong>${esc(r.ticker)}</strong> · ${fmt(st.trades || 0, 0)} trades ${span} · ${esc(w.timeframe_label || '')}</p>
+    <div class="bt-tiles">
+      ${tile(btSigned(st.total_return_pct, 0), signClass(st.total_return_pct), 'Return', `Buy and hold ${btSigned(bm.buy_hold_return_pct, 0)}`)}
+      ${tile(st.win_rate_pct === null || st.win_rate_pct === undefined ? '—' : fmt(st.win_rate_pct, 0) + '%', '', 'Win rate',
+        (st.win_rate_ci95 || [])[0] !== null && (st.win_rate_ci95 || [])[0] !== undefined ? `95% range ${fmt(st.win_rate_ci95[0], 0)} to ${fmt(st.win_rate_ci95[1], 0)}%` : '')}
+      ${tile(st.reward_risk ? fmt(st.reward_risk, 2) : '—', '', 'Reward / risk', `Avg win ${btSigned(st.avg_win_pct)}, loss ${btSigned(st.avg_loss_pct)}`)}
+      ${tile(btSigned(st.max_drawdown_pct, 0), 'down', 'Max drawdown', `Buy and hold ${btSigned(bm.buy_hold_max_drawdown_pct, 0)}`)}
+    </div>
+    <p class="bt-verdict">${esc(r.verdict || '')}</p>
+    ${bm.beats_random_pct !== null && bm.beats_random_pct !== undefined ? `<p class="bt-fine">Beat ${fmt(bm.beats_random_pct, 0)}% of ${fmt(bm.random_runs, 0)} ${session
+      ? 'books with the same trades entered at random times on the same days' : 'random-entry books with the same number of trades and holding periods'} (median ${btSigned(bm.random_median_pct, session ? 1 : 0)}).</p>` : ''}
+    ${pb ? `<p class="bt-fine">The plain break, entering on the first close outside the range with the same exits: ${fmt(pb.trades || 0, 0)} trades, ${btSigned(pb.total_return_pct)}${pb.win_rate_pct !== null && pb.win_rate_pct !== undefined ? `, ${fmt(pb.win_rate_pct, 0)}% winners` : ''}.</p>` : ''}
+    ${btCurveSVG(r.equity)}
+    <p class="bt-legend"><span class="bt-key st"></span>Strategy <span class="bt-key bh"></span>Buy and hold · growth of $1, log scale · ${esc(w.from || '')} to ${esc(w.to || '')}</p>
+    <label class="bt-check"><input type="checkbox" id="bt-show" data-bt-show${BT.show ? ' checked' : ''}> Show trades on the chart</label>
+    ${(r.trades || []).length ? `<table class="data narrow bt-trades"><thead><tr><th>${session ? 'In' : 'Bought'}</th><th>${session ? 'Out' : 'Sold'}</th><th class="num">Return</th></tr></thead><tbody>
+      ${r.open_trade ? `<tr><td>${esc(btWhen(r.open_trade.entry_date, intraday))}</td><td>open</td><td class="num ${signClass(r.open_trade.unrealised_pct)}">${btSigned(r.open_trade.unrealised_pct)}</td></tr>` : ''}
+      ${r.trades.slice(-6).reverse().map((t) => `<tr title="${esc(t.exit_reason)}"><td>${t.side === 'short' ? '<span class="bt-side">Short</span> ' : ''}${esc(btWhen(t.entry_date, intraday))}</td><td>${esc(session ? String(t.exit_date).slice(11, 16) : btWhen(t.exit_date, intraday))}</td><td class="num ${signClass(t.return_pct)}">${btSigned(t.return_pct)}</td></tr>`).join('')}
+    </tbody></table>` : ''}
+    <button type="button" class="ask-pulse bt-ask" data-ask-text="${esc(`Explain this backtest of ${s ? s.label : 'the strategy'} on ${r.ticker} (${w.timeframe_label}, ${w.from} to ${w.to}): ${st.trades} trades ${span}, ${btSigned(st.total_return_pct, 0)} against buy and hold ${btSigned(bm.buy_hold_return_pct, 0)}, win rate ${fmt(st.win_rate_pct || 0, 0)}%, max drawdown ${btSigned(st.max_drawdown_pct, 0)}, beat ${fmt(bm.beats_random_pct || 0, 0)}% of random-entry books. Is the rule adding anything, and what would make the result more convincing?`)}">Ask Milo about this test</button>
+    <details class="ind-explain bt-method"><summary>How this is tested<i class="cal-caret" aria-hidden="true"></i></summary>
+      <p class="bt-fine">${esc(r.fill || '')} ${session ? `${esc(cap(r.sides || 'long and short'))}, one trade a session` : 'Long only'}, fully invested, returns compounded, ${fmt(r.cost_bps || 0, 0)} basis points a side for costs. ${esc(w.timeframe_note || '')} ${esc(bm.random_method || '')}</p>
+      <ul class="bt-fine">${(r.caveats || []).map((c) => `<li>${esc(c)}</li>`).join('')}</ul>
+    </details>`;
+  }
+  return controls + body;
+}
+
+function btOnChange(evt) {
+  const el = evt.target;
+  if (el.matches('[data-bt-set]')) {
+    const k = el.dataset.btSet;
+    BT[k] = k === 'years' ? Number(el.value) : el.value;
+    if (k === 'strategy') btFixTimeframe();
+    if (k === 'timeframe' && BT.timeframe !== '1d' && (BT.years || 0) > 2) BT.years = 0;
+    btSave(); loadBacktest(STATE.chartSymbol); return true;
+  }
+  if (el.matches('[data-bt-param]')) {
+    const cur = BT.params[BT.strategy] = BT.params[BT.strategy] || {};
+    cur[el.dataset.btParam] = el.type === 'checkbox' ? el.checked : el.value;
+    btSave(); return true;
+  }
+  if (el.matches('[data-bt-show]')) {
+    BT.show = el.checked; btSave(); wsRedrawChart(); return true;
+  }
+  return false;
+}
+
+/* ----------------------------------------------------------------- pairs
+ *
+ * Two related stocks' spread: how stretched it is now, and whether trading it
+ * back has worked on years the pair was not fitted to (app/analytics/pairs.py,
+ * /api/pairs). From a post selling "buy the loser, short the leader" as what
+ * hedge funds do; the panel's job is to show when a pair is one, and how often
+ * that held.
+ */
+const PR_KEY = 'optic.chart.pairs.v1';
+const PR = { peer: {}, result: null, resultKey: null, peers: null, peersFor: null, loading: false, error: null, reqId: 0 };
+try {
+  const saved = JSON.parse(localStorage.getItem(PR_KEY) || 'null');
+  if (saved && typeof saved === 'object' && saved.peer && typeof saved.peer === 'object') PR.peer = saved.peer;
+} catch (e) { /* defaults */ }
+function prSave() {
+  try { localStorage.setItem(PR_KEY, JSON.stringify({ peer: PR.peer })); } catch (e) { /* private mode */ }
+}
+async function loadPairs(symbol) {
+  const sym = String(symbol || STATE.chartSymbol || '').toUpperCase();
+  if (!sym) return;
+  if (PR.peersFor !== sym) {
+    PR.peersFor = sym; PR.peers = null;
+    getJSON(`/api/pairs/${encodeURIComponent(sym)}/peers`)
+      .then((r) => { if (PR.peersFor === sym) { PR.peers = r; wsRepaintWidget('pairs'); } })
+      .catch(() => { if (PR.peersFor === sym) { PR.peers = { available: false }; wsRepaintWidget('pairs'); } });
+  }
+  const b = PR.peer[sym];
+  if (!b) { wsRepaintWidget('pairs'); return; }
+  const want = `${sym}/${b}`;
+  if (PR.result && PR.resultKey === want) { wsRepaintWidget('pairs'); return; }
+  const id = ++PR.reqId;
+  PR.loading = true; PR.error = null;
+  wsRepaintWidget('pairs');
+  try {
+    const r = await getJSON(`/api/pairs/${encodeURIComponent(sym)}?b=${encodeURIComponent(b)}`);
+    if (id !== PR.reqId) return;
+    PR.result = r; PR.resultKey = want;
+  } catch (err) {
+    if (id !== PR.reqId) return;
+    PR.error = err.message;
+  } finally {
+    if (id === PR.reqId) { PR.loading = false; wsRepaintWidget('pairs'); }
+  }
+}
+/* The spread's z-score over the formation year, with the entry lines. */
+function prZSVG(rows, entry) {
+  if (!rows || rows.length < 2) return '';
+  const W = 236, H = 80, pad = 4;
+  const vals = rows.map((r) => r.z);
+  const top = Math.max(entry + 0.5, ...vals.map(Math.abs));
+  const x = (i) => pad + (i / (rows.length - 1)) * (W - 2 * pad);
+  const y = (v) => H / 2 - (v / top) * (H / 2 - pad);
+  const path = rows.map((r, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(r.z).toFixed(1)}`).join('');
+  const line = (v, cls) => `<line x1="${pad}" x2="${W - pad}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" class="${cls}"/>`;
+  return `<svg class="pr-z" viewBox="0 0 ${W} ${H}" role="img" aria-label="Spread z-score over the last year, now ${fmt(vals[vals.length - 1], 1)}">
+    ${line(0, 'pr-zero')}${line(entry, 'pr-band')}${line(-entry, 'pr-band')}
+    <path d="${path}" class="pr-line"/></svg>`;
+}
+function wsPairsHTML() {
+  const sym = STATE.chartSymbol || '';
+  if (!sym) return '<p class="ws-none">Load a symbol.</p>';
+  const b = PR.peer[sym] || '';
+  const sugg = PR.peers && PR.peers.available && PR.peersFor === sym ? PR.peers.peers || [] : [];
+  const controls = `<div class="bt-controls">
+    <label class="bt-field bt-wide"><span>Pair ${esc(sym)} with</span><input type="text" data-pr-peer value="${esc(b)}"
+      placeholder="Symbol" autocapitalize="characters" spellcheck="false" maxlength="12"></label>
+  </div>
+  ${sugg.length ? `<p class="bt-fine pr-sugg">Moved most alike: ${sugg.slice(0, 6).map((p) => `<button type="button" class="tkr${p.symbol === b ? ' on' : ''}"
+    data-pr-pick="${esc(p.symbol)}" title="${esc(p.name || p.symbol)}: correlation ${fmt(p.corr, 2)}">${esc(p.symbol)}</button>`).join(' ')}</p>` : ''}`;
+  if (!b) return controls + '<p class="ws-none">Pick a second stock: one with the same products, customers or market.</p>';
+  const r = PR.result;
+  if (PR.loading) return controls + '<p class="ws-none" role="status">Testing the pair…</p>';
+  if (PR.error) return controls + `<p class="ws-none">${esc(PR.error)}</p>`;
+  if (!r || r.a !== sym || r.b !== b) return controls;
+  if (r.available === false) return controls + `<p class="ws-none">${esc(r.reason || 'No result.')}</p>`;
+  const now = r.now || {}, wf = r.walk_forward || {}, al = wf.all || {}, ct = wf.coint_only || {};
+  const lvl = now.coint_level;
+  const tile = (val, cls, lab, sub) => `<div class="bt-tile"><span class="bt-val ${cls}">${val}</span><span class="bt-lab">${esc(lab)}</span><span class="bt-sub">${sub}</span></div>`;
+  const book = (bk, lab) => tile(btSigned(bk.total_return_pct, 0), signClass(bk.total_return_pct), lab,
+    `${fmt(bk.trades || 0, 0)} trades${bk.win_rate_pct !== null && bk.win_rate_pct !== undefined ? `, ${fmt(bk.win_rate_pct, 0)}% won` : ''}${
+      bk.beats_random_pct !== null && bk.beats_random_pct !== undefined ? `, beat ${fmt(bk.beats_random_pct, 0)}% of random` : ''}`);
+  return controls + `<p class="bt-head"><strong>${esc(sym)} / ${esc(b)}</strong> · spread ${now.z === null || now.z === undefined ? '—' : `${now.z > 0 ? '+' : ''}${fmt(now.z, 1)}σ`}</p>
+    <p class="bt-summary">${esc(now.stance || '')}</p>
+    ${prZSVG(r.z_history, (r.params || {}).entry_z || 2)}
+    <p class="bt-legend">Spread in standard deviations, last year · lines at ±${fmt((r.params || {}).entry_z || 2, 1)}, where the rule enters</p>
+    <table class="data narrow pr-facts"><tbody>
+      <tr><td class="name">A pair?</td><td>${lvl ? `Cointegrated at ${fmt(lvl * 100, 0)}% over the last year` : 'Not cointegrated over the last year (no evidence the gap comes back)'}</td></tr>
+      <tr><td class="name">Hedge</td><td>${now.beta > 0 ? `${fmt(now.beta, 2)} of ${esc(b)} for each 1 of ${esc(sym)}` : `None: the ratio is ${fmt(now.beta, 2)}, the two moved apart`}</td></tr>
+      <tr><td class="name">Half-life</td><td>${now.half_life ? `${fmt(now.half_life, 0)} sessions for a gap to halve` : '—'}</td></tr>
+      <tr><td class="name">Correlation</td><td>${now.corr === null || now.corr === undefined ? '—' : fmt(now.corr, 2)} (daily returns)</td></tr>
+    </tbody></table>
+    <h4 class="ws-sub-h">Out of sample, ${fmt(wf.years_traded || 0, 0)} years</h4>
+    <div class="bt-tiles">
+      ${book(al, 'Every window')}
+      ${book(ct, 'Only when it tested as a pair')}
+    </div>
+    <p class="bt-verdict">${esc(r.verdict || '')}</p>
+    <p class="bt-fine">Tested as a pair in ${fmt(wf.coint_share_pct || 0, 0)}% of formation years${wf.stayed_coint_pct !== null && wf.stayed_coint_pct !== undefined ? `, and still did in the next half-year ${fmt(wf.stayed_coint_pct, 0)}% of the time` : ''}.</p>
+    <button type="button" class="ask-pulse bt-ask" data-ask-text="${esc(`Explain the pairs test of ${sym} and ${b}: the spread is ${now.z} standard deviations from its average, ${lvl ? 'cointegrated at ' + lvl * 100 + '%' : 'not cointegrated'} over the last year; out of sample, every window ${al.trades} trades ${btSigned(al.total_return_pct, 0)}, only when cointegrated ${ct.trades} trades ${btSigned(ct.total_return_pct, 0)}. Is this a real pair, and what would make me trust the trade?`)}">Ask Milo about this pair</button>
+    <details class="ind-explain bt-method"><summary>How this is tested<i class="cal-caret" aria-hidden="true"></i></summary>
+      <p class="bt-fine">${esc(r.method || '')} Enter at |z| ${fmt((r.params || {}).entry_z, 1)}, exit at ${fmt((r.params || {}).exit_z, 1)}, stop at ${fmt((r.params || {}).stop_z, 1)}, give up after three half-lives.</p>
+      <ul class="bt-fine">${(r.caveats || []).map((c) => `<li>${esc(c)}</li>`).join('')}</ul>
+    </details>`;
+}
+document.addEventListener('change', (evt) => {
+  const el = evt.target;
+  if (!el || !el.matches || !el.matches('[data-pr-peer]')) return;
+  const sym = STATE.chartSymbol || '';
+  const v = String(el.value || '').toUpperCase().trim().replace(/[^A-Z0-9.^=-]/g, '');
+  if (v) PR.peer[sym] = v; else delete PR.peer[sym];
+  prSave(); loadPairs(sym);
+});
+document.addEventListener('click', (evt) => {
+  const pick = evt.target && evt.target.closest && evt.target.closest('[data-pr-pick]');
+  if (!pick) return;
+  const sym = STATE.chartSymbol || '';
+  PR.peer[sym] = pick.dataset.prPick;
+  prSave(); loadPairs(sym);
+});
+
+/* ------------------------------------------------------------ stop check
+ *
+ * Whether a stop sits at a round number, where a buffered one would go and
+ * what moving it costs (app/analytics/stops.py, /api/stop-check). From a post
+ * on why stops get swept a few cents past a round number and then reversed;
+ * measured on stocks before it was believed, and the panel shows that
+ * measurement rather than the post's "the results are unbelievable".
+ *
+ * Entry and stop are per symbol and per device. The stop starts from the entry
+ * plan's when there is one, since that is the stop this app already proposes.
+ */
+const SC_KEY = 'optic.chart.stopcheck.v1';
+const SC = { result: null, resultKey: null, loading: false, error: null, reqId: 0,
+  entry: {}, stop: {}, buffer: 0.25, account: '', riskPct: 1, show: true };
+try {
+  const saved = JSON.parse(localStorage.getItem(SC_KEY) || 'null');
+  if (saved && typeof saved === 'object') {
+    ['entry', 'stop', 'buffer', 'account', 'riskPct', 'show'].forEach((k) => { if (k in saved) SC[k] = saved[k]; });
+  }
+} catch (e) { /* defaults */ }
+function scSave() {
+  try {
+    localStorage.setItem(SC_KEY, JSON.stringify({ entry: SC.entry, stop: SC.stop, buffer: SC.buffer,
+      account: SC.account, riskPct: SC.riskPct, show: SC.show }));
+  } catch (e) { /* private mode */ }
+}
+function scPlanStop(sym) {
+  const d = STATE.chartData && STATE.chartData !== 'loading' ? STATE.chartData : null;
+  const plan = (d && d.ticker === sym && d.entry_plan) || (STATE.swing && STATE.swing.ticker === sym && STATE.swing.entry_plan) || null;
+  const v = plan && plan.risk && plan.risk.underlying_stop;
+  return Number.isFinite(v) ? v : null;
+}
+function scInputs(sym) {
+  const d = STATE.chartData && STATE.chartData !== 'loading' ? STATE.chartData : null;
+  const last = d && d.quote && Number.isFinite(d.quote.price) ? d.quote.price : null;
+  const entry = Number(SC.entry[sym]) > 0 ? Number(SC.entry[sym]) : last;
+  const stop = Number(SC.stop[sym]) > 0 ? Number(SC.stop[sym]) : scPlanStop(sym);
+  return { entry, stop, fromPlan: !(Number(SC.stop[sym]) > 0) && stop !== null };
+}
+async function loadStopCheck(symbol) {
+  const sym = String(symbol || STATE.chartSymbol || '').toUpperCase();
+  if (!sym) return;
+  const { entry, stop } = scInputs(sym);
+  if (!(stop > 0)) { SC.result = null; SC.error = null; wsRepaintWidget('stopcheck'); return; }
+  const qs = new URLSearchParams({ stop: String(stop), buffer: String(SC.buffer) });
+  if (entry > 0) qs.set('entry', String(entry));
+  if (Number(SC.account) > 0) { qs.set('account', String(SC.account)); qs.set('risk_pct', String(SC.riskPct || 1)); }
+  const want = `${sym}?${qs}`;
+  if (SC.result && SC.resultKey === want) { wsRepaintWidget('stopcheck'); return; }
+  const id = ++SC.reqId;
+  SC.loading = true; SC.error = null;
+  wsRepaintWidget('stopcheck');
+  try {
+    const r = await getJSON(`/api/stop-check/${encodeURIComponent(sym)}?${qs}`);
+    if (id !== SC.reqId) return;
+    SC.result = r; SC.resultKey = want;
+  } catch (err) {
+    if (id !== SC.reqId) return;
+    SC.error = err.message;
+  } finally {
+    if (id === SC.reqId) {
+      SC.loading = false;
+      wsRepaintWidget('stopcheck');
+      if (SC.show) wsRedrawChart();
+    }
+  }
+}
+/* The stop and the buffered stop, as lines on the price chart. */
+function stopCheckLines(symbol) {
+  const r = SC.result;
+  if (!SC.show || !wsWidgetShown('stopcheck') || !r || r.available !== true || r.ticker !== symbol) return [];
+  const out = [{ value: r.stop, color: C.neg, dash: true, label: `Stop ${fmt(r.stop, 2)}`,
+    detail: [['Stop', fmt(r.stop, 2)], ['Risk a share', fmt(r.risk_per_share, 2)]] }];
+  if (r.moved) {
+    out.push({ value: r.adjusted_stop, color: C.neg, emphasis: true, label: `Buffered ${fmt(r.adjusted_stop, 2)}`,
+      detail: [['Buffered stop', fmt(r.adjusted_stop, 2)], ['Past', fmt(r.round_level.price, 2)],
+        ['Risk a share', fmt(r.risk_per_share_adjusted, 2)]] });
+  }
+  if (r.round_level) {
+    out.push({ value: r.round_level.price, color: C.refFib, dim: true, dash: false,
+      label: `Round ${fmt(r.round_level.price, 0)}`, detail: [['Round number', fmt(r.round_level.price, 2)]] });
+  }
+  return out;
+}
+function wsStopCheckHTML() {
+  const sym = STATE.chartSymbol || '';
+  if (!sym) return '<p class="ws-none">Load a symbol.</p>';
+  const { entry, stop, fromPlan } = scInputs(sym);
+  const num = (v) => (Number.isFinite(v) ? String(Math.round(v * 100) / 100) : '');
+  const controls = `<div class="bt-controls">
+    <label class="bt-field"><span>Entry</span><input type="number" step="0.01" min="0" inputmode="decimal" data-sc-set="entry" value="${esc(num(entry))}"></label>
+    <label class="bt-field"><span>Stop</span><input type="number" step="0.01" min="0" inputmode="decimal" data-sc-set="stop" value="${esc(num(stop))}" placeholder="Your stop"></label>
+    <label class="bt-field"><span>Buffer past the level</span><select data-sc-set="buffer">
+      ${[[0.1, '0.1 ATR'], [0.25, '0.25 ATR'], [0.5, '0.5 ATR']].map(([v, l]) => `<option value="${v}"${Number(SC.buffer) === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+    <label class="bt-field"><span>Account (optional)</span><input type="number" step="100" min="0" inputmode="numeric" data-sc-set="account" value="${esc(SC.account || '')}" placeholder="For sizing"></label>
+  </div>
+  ${fromPlan ? '<p class="bt-fine">Stop from the entry plan (1.5 ATR from the price). Type your own to check it.</p>' : ''}`;
+  if (!(stop > 0)) return controls + '<p class="ws-none">Enter a stop to check it against round numbers.</p>';
+  const r = SC.result;
+  if (SC.loading) return controls + '<p class="ws-none" role="status">Checking…</p>';
+  if (SC.error) return controls + `<p class="ws-none">${esc(SC.error)}</p>`;
+  if (!r || r.ticker !== sym) return controls;
+  if (r.available === false) return controls + `<p class="ws-none">${esc(r.reason || 'No result.')}</p>`;
+  const share = (v) => (v === null || v === undefined ? '—' : `${fmt(v, 0)}%`);
+  const sized = Number(SC.account) > 0;
+  // How far the stop sits beyond the level, away from the price; negative is
+  // between the price and the level, where every cross of it reaches the stop.
+  const pastBefore = r.round_level
+    ? (r.side === 'long' ? r.round_level.price - r.stop : r.stop - r.round_level.price) / r.atr : null;
+  const rows = [
+    ['Stop', fmt(r.stop, 2), r.moved ? fmt(r.adjusted_stop, 2) : '—'],
+    ['Past the round number', pastBefore === null ? '—' : pastBefore <= 0 ? `inside it by ${fmt(-pastBefore, 2)} ATR` : `${fmt(pastBefore, 2)} ATR`,
+      r.moved ? `${fmt(r.past_level_atr, 2)} ATR` : '—'],
+    ['Crosses that went further', share(r.swept_share_pct_before), r.moved ? share(r.swept_share_pct) : '—'],
+    ['Risk a share', fmt(r.risk_per_share, 2), r.moved ? fmt(r.risk_per_share_adjusted, 2) : '—'],
+    sized ? [`Shares at ${fmt(r.risk_pct, 0)}% risk`, fmt(r.shares_for_risk, 0), r.moved ? fmt(r.shares_for_risk_adjusted, 0) : '—'] : null,
+  ].filter(Boolean);
+  const ev = r.evidence || {};
+  const dir = r.side === 'long' ? 'down' : 'up';
+  const evRows = (ev.buffers_atr || []).map((b, k) => `<tr><td>${fmt(b, 2)} ATR</td><td class="num">${fmt(ev['round_' + dir][k], 0)}%</td><td class="num">${fmt(ev['control_' + dir][k], 0)}%</td></tr>`).join('');
+  return controls + `<p class="bt-verdict">${esc(r.text)}</p>
+    <table class="data narrow bt-trades sc-table"><thead><tr><th></th><th class="num">Yours</th><th class="num">Buffered</th></tr></thead><tbody>
+      ${rows.map(([k, a, b]) => `<tr><td class="name">${esc(k)}</td><td class="num">${a}</td><td class="num">${b}</td></tr>`).join('')}
+    </tbody></table>
+    <p class="bt-fine">ATR ${fmt(r.atr, 2)} (14-day, to ${esc(r.atr_as_of || '')}). Round numbers every $${fmt(r.step, r.step < 1 ? 1 : 0)} at this price. "Crosses that went further": of the times a ${r.side === 'long' ? 'fall' : 'rise'} crossed a round number in the study, the share that went past where this stop sits.</p>
+    <label class="bt-check"><input type="checkbox" data-sc-show${SC.show ? ' checked' : ''}> Show on the chart</label>
+    <details class="ind-explain bt-method"><summary>What this rests on<i class="cal-caret" aria-hidden="true"></i></summary>
+      <p class="bt-fine">${esc(ev.sample || '')}: how far a ${r.side === 'long' ? 'fall' : 'rise'} through a level went before a five-minute close back, for round numbers and for arbitrary prices at the same spacing.</p>
+      <table class="data narrow bt-trades"><thead><tr><th>Past by more than</th><th class="num">Round</th><th class="num">Other</th></tr></thead><tbody>${evRows}</tbody></table>
+      <p class="bt-fine">Round numbers draw a little more overshoot on the way down, and none to speak of on the way up. The bigger finding holds at any level: most crosses came back within the session, so a stop sitting right at a level is the one a sweep takes. The post's research is on currencies (Osler, New York Fed, 2003); this is the check on stocks.</p>
+      <p class="bt-fine">${esc(r.method || '')}</p>
+      <ul class="bt-fine">${(r.caveats || []).map((c) => `<li>${esc(c)}</li>`).join('')}</ul>
+    </details>`;
+}
+function scOnChange(evt) {
+  const el = evt.target;
+  const sym = STATE.chartSymbol || '';
+  if (el.matches('[data-sc-set]')) {
+    const k = el.dataset.scSet;
+    if (k === 'entry' || k === 'stop') SC[k][sym] = el.value === '' ? '' : Number(el.value);
+    else if (k === 'buffer') SC.buffer = Number(el.value);
+    else if (k === 'account') SC.account = el.value === '' ? '' : Number(el.value);
+    scSave(); loadStopCheck(sym); return;
+  }
+  if (el.matches('[data-sc-show]')) { SC.show = el.checked; scSave(); wsRedrawChart(); }
+}
+document.addEventListener('change', (evt) => {
+  if (evt.target && evt.target.closest && evt.target.closest('#ws-w-stopcheck')) scOnChange(evt);
+});
+
+document.addEventListener('change', (evt) => {
+  if (evt.target && evt.target.closest && evt.target.closest('#ws-w-backtest')) btOnChange(evt);
+});
+document.addEventListener('click', (evt) => {
+  const run = evt.target && evt.target.closest && evt.target.closest('[data-bt-run]');
+  if (run) loadBacktest(STATE.chartSymbol, true);
+});
 function wsWidgetBody(id) {
   const d = STATE.chartData && STATE.chartData !== 'loading' ? STATE.chartData : null;
   const sym = STATE.chartSymbol || '';
@@ -23899,6 +24429,10 @@ function wsWidgetBody(id) {
       sentiment, not as a level.</p>` : ''}
     ${latest}`;
   }
+
+  if (id === 'backtest') return wsBacktestHTML();
+  if (id === 'stopcheck') return wsStopCheckHTML();
+  if (id === 'pairs') return wsPairsHTML();
 
   if (id === 'seasonality') {
     if (!STATE.seasonality || STATE.seasonalityFor !== sym) return loadingHTML('seasonality');
@@ -26301,6 +26835,8 @@ function wsMountChart() {
         // drawn whoever they belonged to, so the last stock's levels showed on
         // the new chart while its own loaded.
         ...(showAccum ? accumLines(STATE.accumZonesFor === (d.ticker || STATE.chartSymbol) ? STATE.accumZones : null) : []),
+        // The Stop check widget's stop and buffered stop, for this symbol only.
+        ...stopCheckLines(d.ticker || STATE.chartSymbol),
       ],
       bands: [
         ...(showSR ? (intraday ? srBands(ps.sr || [], ps.atr, ps.spot)
@@ -26381,7 +26917,8 @@ function wsMountChart() {
       // A marker opens the Insiders page on this symbol. See openInsidersFor.
       onEventClick: showInsiders ? () => openInsidersFor(d.ticker) : null,
       eventHint: showInsiders ? insiderClickHint(d.ticker) : '',
-      vMarkers: earningsMarkersFor(ps, STATE.chartSymbol),
+      // The Backtest widget's trades, as B and S markers at their fills.
+      vMarkers: earningsMarkersFor(ps, STATE.chartSymbol).concat(backtestMarkers(ps, d.ticker || STATE.chartSymbol)),
       volumeProfile: showVbp ? volumeByPrice(ps) : null,
       // Drop a level that sits outside the plotted price range rather than
       // letting it compress the actual price action into a band in the middle.
@@ -26481,6 +27018,9 @@ async function loadChartWorkspace(symbol, force) {
   // The dock's seasonality widget needs its own request; not awaited so the
   // chart is usable while it lands.
   if (wsDockOpen.includes('seasonality')) loadSeasonality(false, sym);
+  if (wsDockOpen.includes('backtest')) loadBacktest(sym);
+  if (wsDockOpen.includes('stopcheck')) loadStopCheck(sym);
+  if (wsDockOpen.includes('pairs')) loadPairs(sym);
   if (wsDockOpen.includes('analysts')) loadAnalystActions(false, sym);
   if (showTrends) loadTrendlines(sym);
   // Same rule: only if the overlay is on, and only when the symbol changes.
@@ -40622,6 +41162,31 @@ function chatContextPayload() {
       calendar: STATE.brief.calendar,
     };
   }
+  /* The Backtest widget's result, without the equity curve's points: what was
+   * tested, the window, the figures and the baselines, so Milo can judge it. */
+  if (BT.result && BT.result.available === true) {
+    const r = BT.result;
+    ctx.backtest = { ticker: r.ticker, strategy: (r.strategy || {}).label, rules: (r.strategy || {}).summary,
+      params: r.params, window: r.window, fill: r.fill, cost_bps: r.cost_bps, sides: r.sides || 'long only', stats: r.stats,
+      benchmark: r.benchmark, verdict: r.verdict, caveats: r.caveats, recent_trades: (r.trades || []).slice(-8),
+      open_trade: r.open_trade };
+  }
+  if (PR.result && PR.result.available === true && PR.result.a === STATE.chartSymbol) {
+    const r = PR.result;
+    ctx.pairs = { a: r.a, b: r.b, now: r.now, params: r.params, verdict: r.verdict, how_tested: r.method,
+      walk_forward: { years_traded: r.walk_forward.years_traded, all: r.walk_forward.all,
+        coint_only: r.walk_forward.coint_only, coint_share_pct: r.walk_forward.coint_share_pct,
+        stayed_coint_pct: r.walk_forward.stayed_coint_pct, recent_trades: (r.walk_forward.trades || []).slice(-8) },
+      caveats: r.caveats };
+  }
+  if (SC.result && SC.result.available === true && SC.result.ticker === STATE.chartSymbol) {
+    const r = SC.result;
+    ctx.stop_check = { ticker: r.ticker, side: r.side, entry: r.entry, stop: r.stop, atr: r.atr,
+      round_level: r.round_level, adjusted_stop: r.adjusted_stop, moved: r.moved, text: r.text,
+      swept_share_pct_before: r.swept_share_pct_before, swept_share_pct: r.swept_share_pct,
+      risk_per_share: r.risk_per_share, risk_per_share_adjusted: r.risk_per_share_adjusted,
+      sample: (r.evidence || {}).sample, caveats: r.caveats };
+  }
   if (STATE.long) ctx.long_term = STATE.long;
   /* The comparison, once one has been run: its scores, ranks, the basis of
    * each horizon and the take, about 4KB for two names. It was never in here,
@@ -42260,6 +42825,9 @@ const PULSE_SOURCES = {
   verdict: ["Optic's read", 'overview'],
   company: ['Company', 'overview'],
   chart: ['Chart', 'chart'],
+  backtest: ['Backtest', 'chart'],
+  stop_check: ['Stop check', 'chart'],
+  pairs: ['Pairs', 'chart'],
   technicals: ['Technicals', 'swing'],
   gex: ['Dealer gamma', 'swing'],
   greeks: ['Greeks', 'swing'],

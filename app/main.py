@@ -71,6 +71,9 @@ from .analytics import valuation_inputs as valuation_inputs_mod
 from .analytics import pattern_stats as pattern_stats_mod
 from .analytics import portfolio_risk as portfolio_risk_mod
 from .analytics import evaluate as evaluate_mod
+from .analytics import backtest as backtest_mod
+from .analytics import stops as stops_mod
+from .analytics import pairs as pairs_mod
 from .analytics import expiries as expiries_mod
 from .analytics import scanners as scanners_mod
 from .analytics import series_stats as series_stats_mod
@@ -4557,6 +4560,132 @@ async def rotation_panel(tail: int = Query(8, ge=2, le=20)) -> Dict[str, Any]:
         out = rotation_mod.build(YF_PROVIDER, tail=tail)
         out["generated_at"] = datetime.now(timezone.utc).isoformat()
         return out
+    return await _run(build)
+
+
+@app.get("/api/backtest/strategies")
+async def backtest_strategies() -> Dict[str, Any]:
+    """The rule sets the Chart tab's Backtest widget can test, with their
+    parameters and defaults (app/analytics/backtest.py)."""
+    return {"strategies": backtest_mod.catalogue(), "timeframes": backtest_mod.TIMEFRAMES,
+            "cost_bps": backtest_mod.COST_BPS}
+
+
+@app.get("/api/backtest/{ticker}")
+async def backtest(ticker: str, request: Request,
+                   strategy: str = Query("macd_turn_below_zero"),
+                   timeframe: str = Query("1d"),
+                   years: Optional[float] = Query(None, ge=0.25, le=20)) -> Dict[str, Any]:
+    """One strategy on one symbol's history, beside buy and hold and random
+    entries with the same exposure. Strategy parameters ride as query
+    arguments named as in the catalogue (fast=12&max_bars=35...)."""
+    sym = ticker.upper().strip()
+    if strategy not in backtest_mod.BY_ID:
+        raise HTTPException(status_code=422, detail="Unknown strategy.")
+    if timeframe not in backtest_mod.TIMEFRAMES:
+        raise HTTPException(status_code=422, detail="Unknown timeframe.")
+    known = {p["id"] for p in backtest_mod.BY_ID[strategy]["params"]}
+    raw = {k: v for k, v in request.query_params.items() if k in known}
+
+    def build() -> Dict[str, Any]:
+        if timeframe == "1d":
+            frame = YF_PROVIDER.history(sym, period="max", interval="1d")
+        elif timeframe == "5m":
+            # Sixty sessions is the free feed's limit for five-minute bars.
+            bars = YF_PROVIDER.intraday_history(sym, period="60d", interval="5m")
+            try:
+                splits = YF_PROVIDER.splits(sym)
+            except Exception:                                   # noqa: BLE001
+                splits = []
+            frame = backtest_mod.intraday_frame(bars, splits)
+        else:
+            bars = YF_PROVIDER.intraday_history(sym, period="730d", interval="60m")
+            try:
+                splits = YF_PROVIDER.splits(sym)
+            except Exception:                                   # noqa: BLE001
+                splits = []
+            frame = backtest_mod.intraday_frame(bars, splits, four_hour=(timeframe == "4h"))
+        out = backtest_mod.run(frame, strategy, raw, years=years, timeframe=timeframe)
+        out["ticker"] = sym
+        return out
+
+    return await _run(build)
+
+
+@app.get("/api/stop-check/{ticker}")
+async def stop_check(ticker: str,
+                     stop: float = Query(..., gt=0),
+                     entry: Optional[float] = Query(None, gt=0),
+                     buffer: float = Query(stops_mod.DEFAULT_BUFFER_ATR, ge=0, le=2),
+                     account: Optional[float] = Query(None, gt=0),
+                     risk_pct: float = Query(1.0, gt=0, le=10)) -> Dict[str, Any]:
+    """Whether a stop sits at a round number, where a buffered one would go and
+    what it costs (app/analytics/stops.py). The entry defaults to the last
+    close; ATR is the 14-day average true range of daily bars."""
+    sym = ticker.upper().strip()
+
+    def build() -> Dict[str, Any]:
+        from .analytics import technicals as tech_mod
+        df = YF_PROVIDER.history(sym, period="6mo", interval="1d")
+        if df is None or df.empty or len(df) < 20:
+            return {"available": False, "reason": "Not enough daily history for an ATR."}
+        a = float(tech_mod.atr(df).iloc[-1])
+        last = float(df["Close"].iloc[-1])
+        out = stops_mod.check(entry or last, stop, a, buffer, account, risk_pct)
+        out.update(ticker=sym, last_close=round(last, 4), atr_as_of=str(df.index[-1])[:10])
+        return out
+
+    return await _run(build)
+
+
+@app.get("/api/pairs/{ticker}/peers")
+async def pair_peers(ticker: str) -> Dict[str, Any]:
+    """Candidates to pair with: names in the same sector fund as this one (or
+    the whole 143-name universe if it is in none), ranked by how closely their
+    daily returns moved with its over the last year."""
+    sym = ticker.upper().strip()
+
+    def build() -> Dict[str, Any]:
+        import numpy as np
+        import pandas as pd
+        from .analytics.stockmaps import SECTOR_HOLDINGS
+        names = {h["symbol"]: h.get("name") for rows in SECTOR_HOLDINGS.values() for h in rows}
+        funds = [f for f, rows in SECTOR_HOLDINGS.items() if any(h["symbol"] == sym for h in rows)]
+        pool = sorted({h["symbol"] for f in funds for h in SECTOR_HOLDINGS[f]} - {sym}) if funds else sorted(set(names) - {sym})
+        closes = relperf_mod._peer_closes(YF_PROVIDER)
+        mine = YF_PROVIDER.history(sym, period="1y", interval="1d")
+        if mine is None or mine.empty or closes is None or closes.empty:
+            return {"available": False, "reason": "No price history to compare."}
+        s = mine["Close"].astype(float)
+        s.index = pd.to_datetime(s.index).tz_localize(None).normalize()
+        r = np.log(s).diff()
+        cols = [c for c in pool if c in closes.columns]
+        other = np.log(closes[cols].copy())
+        other.index = pd.to_datetime(other.index).normalize()
+        rr = other.diff()
+        joined = rr.join(r.rename("__me__"), how="inner").dropna(subset=["__me__"])
+        corr = joined.drop(columns="__me__").corrwith(joined["__me__"]).dropna().sort_values(ascending=False)
+        return {"available": True, "ticker": sym, "sector_funds": funds,
+                "peers": [{"symbol": k, "name": names.get(k), "corr": round(float(v), 2)} for k, v in corr.head(8).items()],
+                "method": "Correlation of daily log returns over the last year, against names in the same sector "
+                          "fund{}. Correlated returns are where a pair starts, not proof of one: the pair test "
+                          "checks whether the spread comes back.".format("" if funds else " (none found; the whole universe)")}
+
+    return await _run(build)
+
+
+@app.get("/api/pairs/{ticker}")
+async def pair_test(ticker: str, request: Request, b: str = Query(..., min_length=1, max_length=12)) -> Dict[str, Any]:
+    """Two stocks' spread now, and the pairs rule walked forward out of sample
+    (app/analytics/pairs.py). Rule parameters ride as entry_z, exit_z, stop_z."""
+    a_sym, b_sym = ticker.upper().strip(), b.upper().strip()
+    raw = {k: v for k, v in request.query_params.items() if k in {p["id"] for p in pairs_mod.PARAMS}}
+
+    def build() -> Dict[str, Any]:
+        fa = YF_PROVIDER.history(a_sym, period="max", interval="1d")
+        fb = YF_PROVIDER.history(b_sym, period="max", interval="1d")
+        return pairs_mod.run(a_sym, b_sym, fa, fb, raw)
+
     return await _run(build)
 
 
