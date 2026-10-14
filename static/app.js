@@ -752,6 +752,7 @@ const HEADER_DEFS = {
   'moving averages': 'Average prices over various periods, used to define the trend and act as moving support or resistance.',
   'rotation': 'Which sectors money is moving into and out of right now. The shift beneath a flat-looking index.',
   'equal-weight vs cap-weight (rsp / spy)': 'Whether the average stock is keeping up with the megacaps. When it is not, the index is being carried by a few names and the rally is narrower than it looks.',
+  'dealer gamma (gex)': "How much stock option dealers would need to buy or sell for each 1% move, by strike, if they are positioned the way GEX assumes. Green bars are strikes where dealers would trade against the move (damping it), red where with it (extending it). The flip is where the total changes sign. Modelled from open interest, not seen.",
   'accumulation zones': 'Price areas where long-term buyers have historically stepped in. Useful for staging purchases rather than buying all at once.',
   'headlines': 'Recent news articles, each scored for tone.',
   'catalyst types detected': 'The kinds of events the headlines mention. Earnings, guidance, product news, legal, or M&A.',
@@ -3482,6 +3483,10 @@ let showZones = false;
  * for: `/api/longterm` computes twelve years of weekly structure and most
  * sessions on the charting tab never want it. See loadAccumZones. */
 let showAccum = false;
+/* Dealer gamma by strike along the price axis, with the flip and the walls.
+ * Off by default; it reads the GEX already in the chart payload, so turning it
+ * on costs no request. Workspace chart only. See gexProfileBars and gexLines. */
+let showGex = false;
 let showEMA = false;
 /* EMA clouds: the space between a pair of averages, filled and tinted by which
  * one is on top.
@@ -3803,6 +3808,7 @@ const SHOW_INS_KEY = 'optic.chart.insiders.v2';
 const SHOW_EARN_KEY = 'optic.chart.earnmarks.v1';
 const SHOW_ZONES_KEY = 'optic.chart.zones.v2';
 const SHOW_ACCUM_KEY = 'optic.chart.accum.v1';
+const SHOW_GEX_KEY = 'optic.chart.gex.v1';
 const SHOW_EMA_KEY = 'optic.chart.ema.v2';
 try {
   chartMode = chartStyleMode(localStorage.getItem(CHART_MODE_KEY));
@@ -3841,6 +3847,7 @@ try {
   showEarnMarks = localStorage.getItem(SHOW_EARN_KEY) === 'on';
   showZones = localStorage.getItem(SHOW_ZONES_KEY) === 'on';
   showAccum = localStorage.getItem(SHOW_ACCUM_KEY) === 'on';
+  showGex = localStorage.getItem(SHOW_GEX_KEY) === 'on';
   showEMA = localStorage.getItem(SHOW_EMA_KEY) === 'on';
   showCloudFast = localStorage.getItem(SHOW_CLOUD_FAST_KEY) === 'on';
   showCloudSlow = localStorage.getItem(SHOW_CLOUD_SLOW_KEY) === 'on';
@@ -19245,6 +19252,10 @@ const OVERLAY_DEFS = [
    * retracements of the multi-year range. A chart that offers both says what
    * horizon each belongs to, which is why they are two overlays and not one. */
   { id: 'accum', label: 'Accumulation zones', group: 'Levels', color: 'refSR', width: 1 },
+  /* Two colours by sign, so there is no colour to choose. */
+  { id: 'gex', label: 'Dealer gamma (GEX)', group: 'Levels', color: 'pos', width: 1,
+    fixed: 'Bars by strike from the left edge: green where dealers are modelled long gamma, red where short. '
+      + 'Lines mark the gamma flip and the call and put walls.' },
   /* Stages colour the price rather than draw a line on it. `fixed` is the
    * style dialog's cue that there is no colour or width to choose, for the
    * reason the clouds give: the colours are the reading. */
@@ -21719,7 +21730,7 @@ const WS_MENUS = [
    * menu holding the other four, two controls for the one question the
    * comment above names; OVERLAY_DEFS already groups all five as `Levels`.
    * Merged when the toolbar was asked to carry fewer buttons. */
-  { id: 'levels', label: 'Levels', items: ['fib', 'trends', 'sr', 'zones', 'accum'] },
+  { id: 'levels', label: 'Levels', items: ['fib', 'trends', 'sr', 'zones', 'accum', 'gex'] },
   // One item, so it renders as a toggle button rather than a menu.
   { id: 'stages', label: 'Stages', items: ['stages'] },
   { id: 'indicators',
@@ -21766,6 +21777,7 @@ function wsPresetsHTML() {
 const WS_FLAGS = {
   fib: () => showFib, sr: () => showSR, zones: () => showZones,
   accum: () => showAccum,
+  gex: () => showGex,
   vbp: () => showVbp, vol: () => showVol, insiders: () => showInsiders,
   earnmarks: () => showEarnMarks,
   sma20: () => seriesShown('sma20'), sma50: () => seriesShown('sma50'),
@@ -23102,6 +23114,7 @@ const WS_SETTERS = {
     // weekly structure is a separate request the chart payload does not carry.
     if (on) loadAccumZones(STATE.view === 'chart' ? STATE.chartSymbol : STATE.ticker);
   },
+  gex: (on) => { showGex = on; storeFlag(SHOW_GEX_KEY, on); },
   // Each average has its own switch now. See setSeriesFlag: it also keeps the
   // family flag in step, so anything asking "are moving averages on?" still
   // gets a true answer.
@@ -25340,6 +25353,39 @@ function accumLines(holding) {
   ];
 }
 
+/* Dealer gamma along the price axis (the GEX already in the ticker payload).
+ * Net gamma per strike as bars from the chart's left edge, so they never sit
+ * under the volume profile on the right. Under GEX's assumption about who is
+ * long and short, which the flip's tooltip repeats: it is modelled, not
+ * observed inventory. */
+function gexProfileBars(d) {
+  const g = (d && d.gex) || {};
+  const rows = (g.profile_strikes || []).filter((r) => Number.isFinite(r.net_gex) && r.net_gex !== 0);
+  return rows.length >= 3 ? rows.map((r) => ({ price: r.strike, value: r.net_gex })) : null;
+}
+function gexLines(d) {
+  const g = (d && d.gex) || {};
+  const reg = g.regime || {};
+  const lv = g.levels || {};
+  const spot = g.spot || null;
+  const from = (v) => (spot ? ['From here', fmtPct(((v - spot) / spot) * 100, 1)] : null);
+  const untested = ['Record', 'Optic has kept these daily since 2026-10-13 and will test them against nearby strikes before calling them support or resistance.'];
+  const out = [];
+  if (Number.isFinite(reg.flip_point)) {
+    out.push({ value: reg.flip_point, color: C.ink2, dash: true, label: `Gamma flip ${fmt(reg.flip_point, 2)}`,
+      detail: [['Gamma flip', fmt(reg.flip_point, 2)], from(reg.flip_point),
+        ['Means', 'Where modelled dealer gamma changes sign: above it hedging tends to damp moves, below it to extend them.'],
+        ['Assumption', String(g.assumption || '').slice(0, 160)]].filter(Boolean) });
+  }
+  [['call_wall', 'Call wall', C.pos], ['put_wall', 'Put wall', C.neg]].forEach(([k, name, color]) => {
+    const w = lv[k];
+    if (!w || !Number.isFinite(w.strike)) return;
+    out.push({ value: w.strike, color, dash: false, dim: true, label: `${name} ${fmt(w.strike, 0)}`,
+      detail: [[name, fmt(w.strike, 2)], from(w.strike), untested].filter(Boolean) });
+  });
+  return out;
+}
+
 async function loadTrendlines(symbol, force) {
   const sym = symbol || STATE.chartSymbol || STATE.ticker;
   if (!sym) return;
@@ -27328,6 +27374,7 @@ function wsMountChart() {
         // drawn whoever they belonged to, so the last stock's levels showed on
         // the new chart while its own loaded.
         ...(showAccum ? accumLines(STATE.accumZonesFor === (d.ticker || STATE.chartSymbol) ? STATE.accumZones : null) : []),
+        ...(showGex ? gexLines(d) : []),
       ],
       bands: [
         ...(showSR ? (intraday ? srBands(ps.sr || [], ps.atr, ps.spot)
@@ -27410,6 +27457,7 @@ function wsMountChart() {
       eventHint: showInsiders ? insiderClickHint(d.ticker) : '',
       vMarkers: earningsMarkersFor(ps, STATE.chartSymbol),
       volumeProfile: showVbp ? volumeByPrice(ps) : null,
+      gexProfile: showGex ? gexProfileBars(d) : null,
       // Drop a level that sits outside the plotted price range rather than
       // letting it compress the actual price action into a band in the middle.
       refLineFit: 'clip',

@@ -2724,7 +2724,9 @@ def _desk_sources() -> "desk_edition_mod.Sources":
         index_surface=_desk_index_surface,
         quotes=lambda syms: YF_PROVIDER.batch_quote(syms),
         session_mod=session_mod, sectors=SECTORS, themes=THEMES,
-        dispersion=lambda: dispersion_mod.build(YF_PROVIDER))
+        dispersion=lambda: dispersion_mod.build(YF_PROVIDER),
+        index_gex=lambda sym: (_swing_snapshot(sym, None, 4, False, include_earnings=False,
+                                               include_company=False) or {}).get("gex") or {})
 
 
 def _morning_desk(macro: Optional[Dict[str, Any]]) -> Dict[str, Any]:

@@ -499,6 +499,33 @@ def gather_dispersion(g: Gatherer, d: Dict[str, Any]) -> None:
                   "dspx_percentile": d.get("dspx_percentile")})
 
 
+def gather_gamma(g: Gatherer, sym: str, gx: Dict[str, Any]) -> None:
+    """The index's modelled dealer gamma: the regime, the flip and the walls,
+    with the model's assumption and the fact that none of it has been tested
+    in Optic's own record yet (app/signal_archive.py, from 2026-10-13)."""
+    if not gx or gx.get("error") or not gx.get("totals"):
+        g.coverage.append({"leg": "gamma_rows", "ok": False, "reason": (gx or {}).get("error") or "no GEX read"})
+        return
+    t, reg, lv = gx.get("totals") or {}, gx.get("regime") or {}, gx.get("levels") or {}
+    near = gx.get("near_term") or {}
+    caveat = ("Modelled, not observed: {} Whether the regime or the walls predict anything is being recorded "
+              "daily since 2026-10-13 and has not been tested; describe them as positioning, not as support, "
+              "resistance or a forecast.".format(gx.get("assumption") or ""))
+    g.add(kind="options", label="{} dealer gamma (modelled), per 1% move".format(sym), symbol=sym,
+          value=_f(t.get("net_gex_per_1pct_millions"), 1), unit="$m per 1%",
+          period="open interest as of the previous session",
+          source="Optic's GEX read from the Yahoo chain", url="https://finance.yahoo.com/quote/{}/options".format(sym),
+          compare={"base": "regime", "value": reg.get("state")},
+          method=caveat,
+          detail={"flip_point": reg.get("flip_point"), "flip_distance_pct": reg.get("flip_distance_pct"),
+                  "above_flip": reg.get("above_flip"),
+                  "call_wall": (lv.get("call_wall") or {}).get("strike"),
+                  "put_wall": (lv.get("put_wall") or {}).get("strike"),
+                  "pct_of_avg_dollar_volume": t.get("pct_of_avg_dollar_volume"),
+                  "near_term_share_of_gross_pct": near.get("share_of_gross_pct") if near.get("available") else None,
+                  "expiries_used": gx.get("expiries_used")})
+
+
 # ------------------------------------------------------------------- bundle
 
 def news_window_start(now: datetime, slot: str, session_mod) -> datetime:

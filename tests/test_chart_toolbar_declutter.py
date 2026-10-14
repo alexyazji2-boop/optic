@@ -158,7 +158,7 @@ def test_the_menu_reuses_the_pills_so_they_are_handled_as_before():
 def test_every_level_is_on_one_menu():
     menus = APP[APP.index("const WS_MENUS = ["):]
     menus = menus[:menus.index("\n];")]
-    assert "{ id: 'levels', label: 'Levels', items: ['fib', 'trends', 'sr', 'zones', 'accum'] }," in menus
+    assert "{ id: 'levels', label: 'Levels', items: ['fib', 'trends', 'sr', 'zones', 'accum', 'gex'] }," in menus
     assert "id: 'fibs'" not in menus and "id: 'trends'" not in menus
 
 

@@ -506,7 +506,7 @@ SETTINGS = {
     "optic.chart.interval", "optic.chart.session", "optic.chart.hidden.v1",
     "optic.chart.legend.v1", "optic.chart.dock.v1", "optic.chart.sessions.v1",
     "optic.chart.stages.v1", "optic.chart.matrend.v1", "optic.chart.trends.v1", "optic.chart.earnmarks.v1",
-    "optic.chart.accum.v1", "optic.chart.cloud921.v1", "optic.chart.cloud2150.v1",
+    "optic.chart.accum.v1", "optic.chart.gex.v1", "optic.chart.cloud921.v1", "optic.chart.cloud2150.v1",
     "optic.chart.zones.v2", "optic.chart.vol.v2", "optic.chart.vbp.v2", "optic.chart.sr.v2",
     "optic.chart.ma.v2", "optic.chart.ema.v2", "optic.chart.fib.v2", "optic.chart.insiders.v2",
     # Whether drawing points snap to a candle's O/H/L/C. A preference about the

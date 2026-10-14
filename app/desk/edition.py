@@ -207,6 +207,8 @@ class Sources:
     themes: List[Dict[str, str]]
     # Cboe's dispersion readings (app/analytics/dispersion.py); optional.
     dispersion: Optional[Callable[[], Dict[str, Any]]] = None
+    # An index ETF's GEX read, as the Swing tab computes it; optional.
+    index_gex: Optional[Callable[[str], Dict[str, Any]]] = None
 
 
 def gather(src: Sources, slot: str, now: Optional[datetime] = None) -> Dict[str, Any]:
@@ -243,6 +245,9 @@ def gather(src: Sources, slot: str, now: Optional[datetime] = None) -> Dict[str,
     if src.dispersion is not None:
         disp = g.leg("dispersion", src.dispersion) or {}
         g.leg("dispersion_rows", lambda: ev_mod.gather_dispersion(g, disp))
+    if src.index_gex is not None:
+        spy_gex = g.leg("gamma", lambda: src.index_gex("SPY")) or {}
+        g.leg("gamma_rows", lambda: ev_mod.gather_gamma(g, "SPY", spy_gex))
     try:
         session = src.session_mod.state(now)
     except Exception:                                              # noqa: BLE001

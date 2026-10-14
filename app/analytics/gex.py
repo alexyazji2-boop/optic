@@ -100,6 +100,10 @@ CONVENTION = {
 }
 
 
+PROFILE_BAND = 0.12      # strikes within 12% of the price
+PROFILE_MAX = 90
+
+
 def _f(value: Any) -> Optional[float]:
     if value is None:
         return None
@@ -443,6 +447,20 @@ def analyse(
                 "put_vol": _f(r["put_vol"]),
             }
             for _, r in top.iterrows()
+        ],
+        # Every strike near the price, for a profile drawn along the chart's
+        # price axis; `by_strike` keeps only the largest. Net is the dealers'
+        # gamma per 1% move, in dollars, under ASSUMPTION.
+        "profile_strikes": [
+            {"strike": float(r["strike"]), "net_gex": _f(r["net_gex"]), "call_gex": _f(r["call_gex"]),
+             "put_gex": _f(r["put_gex"])}
+            # The nearest PROFILE_MAX to the price, then in strike order: a
+            # $1 grid has more strikes in the band than that, and the lowest
+            # ninety would be a profile of the downside only.
+            for _, r in by_strike[(by_strike["strike"] >= spot * (1 - PROFILE_BAND))
+                                  & (by_strike["strike"] <= spot * (1 + PROFILE_BAND))]
+            .assign(_d=lambda f: (f["strike"] - spot).abs()).nsmallest(PROFILE_MAX, "_d")
+            .sort_values("strike").iterrows()
         ],
         "_exposure_frame": df,
     }
