@@ -72,6 +72,7 @@ from .analytics import pattern_stats as pattern_stats_mod
 from .analytics import portfolio_risk as portfolio_risk_mod
 from .analytics import evaluate as evaluate_mod
 from .analytics import backtest as backtest_mod
+from .analytics import stops as stops_mod
 from .analytics import expiries as expiries_mod
 from .analytics import scanners as scanners_mod
 from .analytics import series_stats as series_stats_mod
@@ -4605,6 +4606,32 @@ async def backtest(ticker: str, request: Request,
             frame = backtest_mod.intraday_frame(bars, splits, four_hour=(timeframe == "4h"))
         out = backtest_mod.run(frame, strategy, raw, years=years, timeframe=timeframe)
         out["ticker"] = sym
+        return out
+
+    return await _run(build)
+
+
+@app.get("/api/stop-check/{ticker}")
+async def stop_check(ticker: str,
+                     stop: float = Query(..., gt=0),
+                     entry: Optional[float] = Query(None, gt=0),
+                     buffer: float = Query(stops_mod.DEFAULT_BUFFER_ATR, ge=0, le=2),
+                     account: Optional[float] = Query(None, gt=0),
+                     risk_pct: float = Query(1.0, gt=0, le=10)) -> Dict[str, Any]:
+    """Whether a stop sits at a round number, where a buffered one would go and
+    what it costs (app/analytics/stops.py). The entry defaults to the last
+    close; ATR is the 14-day average true range of daily bars."""
+    sym = ticker.upper().strip()
+
+    def build() -> Dict[str, Any]:
+        from .analytics import technicals as tech_mod
+        df = YF_PROVIDER.history(sym, period="6mo", interval="1d")
+        if df is None or df.empty or len(df) < 20:
+            return {"available": False, "reason": "Not enough daily history for an ATR."}
+        a = float(tech_mod.atr(df).iloc[-1])
+        last = float(df["Close"].iloc[-1])
+        out = stops_mod.check(entry or last, stop, a, buffer, account, risk_pct)
+        out.update(ticker=sym, last_close=round(last, 4), atr_as_of=str(df.index[-1])[:10])
         return out
 
     return await _run(build)

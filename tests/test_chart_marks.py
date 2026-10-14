@@ -38,7 +38,7 @@ def test_every_widget_wears_a_mark_of_its_own():
     icons = re.findall(r"icon: '([^']+)'", widgets)
     ids = re.findall(r"\{ id: '([a-z]+)'", widgets)
     # Sixteen with the Backtest widget (2026-10-13).
-    assert len(icons) == len(ids) == 16
+    assert len(icons) == len(ids) == 17
     assert len(set(icons)) == len(icons), "two widgets share a mark"
     assert "&#" not in widgets, "a Unicode glyph is back"
     assert all("<path" in i or "<circle" in i or "<rect" in i for i in icons)

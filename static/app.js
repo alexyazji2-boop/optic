@@ -143,6 +143,7 @@ const PERSONAL_KEYS = [
   'optic.chart.drawings.v2',     // drawings as times; see WS_DRAW_KEY_V2
   'optic.chart.notes.v1',
   'optic.chart.checks.v1',       // the pre-trade checklist, ticked per symbol
+  'optic.chart.stopcheck.v1',    // stops and entries per symbol, and the account size for sizing
   'optic.paper.v1',              // paper trades
   'optic.roth.inputs',           // holdings and contributions
   'optic.snapshots.v1',          // how a symbol's read has changed
@@ -789,6 +790,7 @@ const HEADER_DEFS = {
   'fair value': 'What the stock would be worth at the price-to-earnings multiples the market has usually paid for it: trailing earnings times the 25th percentile, median and 75th percentile of its own five-year P/E. It is a range to read the price against, not a target, and it cannot tell whether the business has changed.',
   'morningstar rating': "Morningstar's star rating for this fund, from one to five, based on its past returns after costs and adjusted for risk against funds of the same kind. It looks backward, and it is Morningstar's view, not Optic's.",
   'off-exchange short volume': "The share of each day's off-exchange trading, through dark pools and wholesalers, that was reported as short sales, from FINRA's daily files. Market makers sell short routinely to fill buy orders, so the level runs high for every stock, and a change against its own average says more than the level does.",
+  'stop check': "Whether a stop sits at a round number, where stop orders bunch up, and where it would sit a buffer past one. Moving a stop further from the price makes a sweep less likely to take it and costs more when it is hit, so the panel shows both, with how often moves through a round number went that far in a sample of large stocks.",
   'backtest': "A rule tested on this stock's own history: when it would have bought and sold, and how the trades added up. Shown beside buying and holding over the same years and beside random entries with the same number of trades, because a rule on a stock that rose looks good whether or not the rule adds anything.",
   'seasonality': "Whether this stock's returns have followed the calendar: by month, by weekday and around the turn of each month, from its own history. Each effect is tested for statistical significance, because averages split by calendar always show some pattern by chance.",
   'sector rotation': 'Where each sector stands against the index on two measures centred on 100: relative strength, and relative momentum, which says whether that strength is rising or falling. Together they place each sector as leading, weakening, lagging or improving, and sectors tend to move through those in a clockwise loop.',
@@ -22097,9 +22099,12 @@ function wsToggleWidget(id, on) {
   if (dock && had !== !!dock.innerHTML.trim()) wsRedrawChart();
   // `on` is only meaningful in wide mode; narrow mode toggles, so re-read it.
   on = wsIsNarrow() ? wsNarrowWidget === id : wsDockOpen.includes(id);
+  // These two draw on the price chart, and their marks close with them.
+  if (!on && (id === 'backtest' || id === 'stopcheck')) wsRedrawChart();
   // Two widgets need data the page has not necessarily fetched yet.
   if (on && id === 'seasonality') loadSeasonality(false, STATE.chartSymbol);
   if (on && id === 'backtest') loadBacktest(STATE.chartSymbol);
+  if (on && id === 'stopcheck') loadStopCheck(STATE.chartSymbol);
   if (on && id === 'analysts') loadAnalystActions(false, STATE.chartSymbol);
   if (on && id === 'trading' && !STATE.tracker) wsLoadTracker();
   if (on && id === 'alerts') loadAlerts(true);
@@ -23486,6 +23491,8 @@ const WS_WIDGETS = [
     icon: '<path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7Z"/><path d="M14 3v4h4"/><path d="M9.5 17v-3M12 17v-5M14.5 17v-2"/>' },
   { id: 'checklist', label: 'Checklist',  // two ticked rows
     icon: '<path d="m4 7 2 2 3.5-3.5"/><path d="M12.5 7.5H20"/><path d="m4 15 2 2 3.5-3.5"/><path d="M12.5 15.5H20"/>' },
+  { id: 'stopcheck', label: 'Stop check', short: 'Stop',   // a stop line just past a level
+    icon: '<path d="M3.5 9h17"/><path d="M3.5 14.5h17" stroke-dasharray="2.5 2"/><path d="m12 4.5 0 3M12 16v3.5"/>' },
   { id: 'options', label: 'Options',      // a call's payoff: flat, then up
     icon: '<path d="M3.5 15.5h7.5l9.5-9.5"/><path d="M3.5 19.5h17"/>' },
   // `short` for the rail: "Key levels" is two lines in 54px at the micro size.
@@ -23896,9 +23903,15 @@ async function loadBacktest(symbol, force) {
 /* Entries and exits as markers on the price chart: the bar each fill came on,
  * snapped to the chart's bars by date (an intraday test on a daily chart lands
  * on the day). Only the current symbol's test, and only while "show" is on. */
+/* Whether a dock widget is on screen: open in the dock, or the one widget a
+ * narrow window shows. What a widget draws on the chart goes with it; the
+ * backtest's trades stayed on the price after its panel was closed. */
+function wsWidgetShown(id) {
+  return wsIsNarrow() ? wsNarrowWidget === id : wsDockOpen.includes(id);
+}
 function backtestMarkers(ps, symbol) {
   const r = BT.result;
-  if (!BT.show || !r || r.available !== true || r.ticker !== symbol) return [];
+  if (!BT.show || !wsWidgetShown('backtest') || !r || r.available !== true || r.ticker !== symbol) return [];
   /* To the minute. Keyed by date alone, every trade on an intraday chart
    * landed on its day's last bar, and an opening-range trade taken at 10:25
    * and closed at 10:35 drew both letters at 15:55. A daily trade on an
@@ -24046,6 +24059,156 @@ function btOnChange(evt) {
   return false;
 }
 
+/* ------------------------------------------------------------ stop check
+ *
+ * Whether a stop sits at a round number, where a buffered one would go and
+ * what moving it costs (app/analytics/stops.py, /api/stop-check). From a post
+ * on why stops get swept a few cents past a round number and then reversed;
+ * measured on stocks before it was believed, and the panel shows that
+ * measurement rather than the post's "the results are unbelievable".
+ *
+ * Entry and stop are per symbol and per device. The stop starts from the entry
+ * plan's when there is one, since that is the stop this app already proposes.
+ */
+const SC_KEY = 'optic.chart.stopcheck.v1';
+const SC = { result: null, resultKey: null, loading: false, error: null, reqId: 0,
+  entry: {}, stop: {}, buffer: 0.25, account: '', riskPct: 1, show: true };
+try {
+  const saved = JSON.parse(localStorage.getItem(SC_KEY) || 'null');
+  if (saved && typeof saved === 'object') {
+    ['entry', 'stop', 'buffer', 'account', 'riskPct', 'show'].forEach((k) => { if (k in saved) SC[k] = saved[k]; });
+  }
+} catch (e) { /* defaults */ }
+function scSave() {
+  try {
+    localStorage.setItem(SC_KEY, JSON.stringify({ entry: SC.entry, stop: SC.stop, buffer: SC.buffer,
+      account: SC.account, riskPct: SC.riskPct, show: SC.show }));
+  } catch (e) { /* private mode */ }
+}
+function scPlanStop(sym) {
+  const d = STATE.chartData && STATE.chartData !== 'loading' ? STATE.chartData : null;
+  const plan = (d && d.ticker === sym && d.entry_plan) || (STATE.swing && STATE.swing.ticker === sym && STATE.swing.entry_plan) || null;
+  const v = plan && plan.risk && plan.risk.underlying_stop;
+  return Number.isFinite(v) ? v : null;
+}
+function scInputs(sym) {
+  const d = STATE.chartData && STATE.chartData !== 'loading' ? STATE.chartData : null;
+  const last = d && d.quote && Number.isFinite(d.quote.price) ? d.quote.price : null;
+  const entry = Number(SC.entry[sym]) > 0 ? Number(SC.entry[sym]) : last;
+  const stop = Number(SC.stop[sym]) > 0 ? Number(SC.stop[sym]) : scPlanStop(sym);
+  return { entry, stop, fromPlan: !(Number(SC.stop[sym]) > 0) && stop !== null };
+}
+async function loadStopCheck(symbol) {
+  const sym = String(symbol || STATE.chartSymbol || '').toUpperCase();
+  if (!sym) return;
+  const { entry, stop } = scInputs(sym);
+  if (!(stop > 0)) { SC.result = null; SC.error = null; wsRepaintWidget('stopcheck'); return; }
+  const qs = new URLSearchParams({ stop: String(stop), buffer: String(SC.buffer) });
+  if (entry > 0) qs.set('entry', String(entry));
+  if (Number(SC.account) > 0) { qs.set('account', String(SC.account)); qs.set('risk_pct', String(SC.riskPct || 1)); }
+  const want = `${sym}?${qs}`;
+  if (SC.result && SC.resultKey === want) { wsRepaintWidget('stopcheck'); return; }
+  const id = ++SC.reqId;
+  SC.loading = true; SC.error = null;
+  wsRepaintWidget('stopcheck');
+  try {
+    const r = await getJSON(`/api/stop-check/${encodeURIComponent(sym)}?${qs}`);
+    if (id !== SC.reqId) return;
+    SC.result = r; SC.resultKey = want;
+  } catch (err) {
+    if (id !== SC.reqId) return;
+    SC.error = err.message;
+  } finally {
+    if (id === SC.reqId) {
+      SC.loading = false;
+      wsRepaintWidget('stopcheck');
+      if (SC.show) wsRedrawChart();
+    }
+  }
+}
+/* The stop and the buffered stop, as lines on the price chart. */
+function stopCheckLines(symbol) {
+  const r = SC.result;
+  if (!SC.show || !wsWidgetShown('stopcheck') || !r || r.available !== true || r.ticker !== symbol) return [];
+  const out = [{ value: r.stop, color: C.neg, dash: true, label: `Stop ${fmt(r.stop, 2)}`,
+    detail: [['Stop', fmt(r.stop, 2)], ['Risk a share', fmt(r.risk_per_share, 2)]] }];
+  if (r.moved) {
+    out.push({ value: r.adjusted_stop, color: C.neg, emphasis: true, label: `Buffered ${fmt(r.adjusted_stop, 2)}`,
+      detail: [['Buffered stop', fmt(r.adjusted_stop, 2)], ['Past', fmt(r.round_level.price, 2)],
+        ['Risk a share', fmt(r.risk_per_share_adjusted, 2)]] });
+  }
+  if (r.round_level) {
+    out.push({ value: r.round_level.price, color: C.refFib, dim: true, dash: false,
+      label: `Round ${fmt(r.round_level.price, 0)}`, detail: [['Round number', fmt(r.round_level.price, 2)]] });
+  }
+  return out;
+}
+function wsStopCheckHTML() {
+  const sym = STATE.chartSymbol || '';
+  if (!sym) return '<p class="ws-none">Load a symbol.</p>';
+  const { entry, stop, fromPlan } = scInputs(sym);
+  const num = (v) => (Number.isFinite(v) ? String(Math.round(v * 100) / 100) : '');
+  const controls = `<div class="bt-controls">
+    <label class="bt-field"><span>Entry</span><input type="number" step="0.01" min="0" inputmode="decimal" data-sc-set="entry" value="${esc(num(entry))}"></label>
+    <label class="bt-field"><span>Stop</span><input type="number" step="0.01" min="0" inputmode="decimal" data-sc-set="stop" value="${esc(num(stop))}" placeholder="Your stop"></label>
+    <label class="bt-field"><span>Buffer past the level</span><select data-sc-set="buffer">
+      ${[[0.1, '0.1 ATR'], [0.25, '0.25 ATR'], [0.5, '0.5 ATR']].map(([v, l]) => `<option value="${v}"${Number(SC.buffer) === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+    <label class="bt-field"><span>Account (optional)</span><input type="number" step="100" min="0" inputmode="numeric" data-sc-set="account" value="${esc(SC.account || '')}" placeholder="For sizing"></label>
+  </div>
+  ${fromPlan ? '<p class="bt-fine">Stop from the entry plan (1.5 ATR from the price). Type your own to check it.</p>' : ''}`;
+  if (!(stop > 0)) return controls + '<p class="ws-none">Enter a stop to check it against round numbers.</p>';
+  const r = SC.result;
+  if (SC.loading) return controls + '<p class="ws-none" role="status">Checking…</p>';
+  if (SC.error) return controls + `<p class="ws-none">${esc(SC.error)}</p>`;
+  if (!r || r.ticker !== sym) return controls;
+  if (r.available === false) return controls + `<p class="ws-none">${esc(r.reason || 'No result.')}</p>`;
+  const share = (v) => (v === null || v === undefined ? '—' : `${fmt(v, 0)}%`);
+  const sized = Number(SC.account) > 0;
+  // How far the stop sits beyond the level, away from the price; negative is
+  // between the price and the level, where every cross of it reaches the stop.
+  const pastBefore = r.round_level
+    ? (r.side === 'long' ? r.round_level.price - r.stop : r.stop - r.round_level.price) / r.atr : null;
+  const rows = [
+    ['Stop', fmt(r.stop, 2), r.moved ? fmt(r.adjusted_stop, 2) : '—'],
+    ['Past the round number', pastBefore === null ? '—' : pastBefore <= 0 ? `inside it by ${fmt(-pastBefore, 2)} ATR` : `${fmt(pastBefore, 2)} ATR`,
+      r.moved ? `${fmt(r.past_level_atr, 2)} ATR` : '—'],
+    ['Crosses that went further', share(r.swept_share_pct_before), r.moved ? share(r.swept_share_pct) : '—'],
+    ['Risk a share', fmt(r.risk_per_share, 2), r.moved ? fmt(r.risk_per_share_adjusted, 2) : '—'],
+    sized ? [`Shares at ${fmt(r.risk_pct, 0)}% risk`, fmt(r.shares_for_risk, 0), r.moved ? fmt(r.shares_for_risk_adjusted, 0) : '—'] : null,
+  ].filter(Boolean);
+  const ev = r.evidence || {};
+  const dir = r.side === 'long' ? 'down' : 'up';
+  const evRows = (ev.buffers_atr || []).map((b, k) => `<tr><td>${fmt(b, 2)} ATR</td><td class="num">${fmt(ev['round_' + dir][k], 0)}%</td><td class="num">${fmt(ev['control_' + dir][k], 0)}%</td></tr>`).join('');
+  return controls + `<p class="bt-verdict">${esc(r.text)}</p>
+    <table class="data narrow bt-trades sc-table"><thead><tr><th></th><th class="num">Yours</th><th class="num">Buffered</th></tr></thead><tbody>
+      ${rows.map(([k, a, b]) => `<tr><td class="name">${esc(k)}</td><td class="num">${a}</td><td class="num">${b}</td></tr>`).join('')}
+    </tbody></table>
+    <p class="bt-fine">ATR ${fmt(r.atr, 2)} (14-day, to ${esc(r.atr_as_of || '')}). Round numbers every $${fmt(r.step, r.step < 1 ? 1 : 0)} at this price. "Crosses that went further": of the times a ${r.side === 'long' ? 'fall' : 'rise'} crossed a round number in the study, the share that went past where this stop sits.</p>
+    <label class="bt-check"><input type="checkbox" data-sc-show${SC.show ? ' checked' : ''}> Show on the chart</label>
+    <details class="ind-explain bt-method"><summary>What this rests on<i class="cal-caret" aria-hidden="true"></i></summary>
+      <p class="bt-fine">${esc(ev.sample || '')}: how far a ${r.side === 'long' ? 'fall' : 'rise'} through a level went before a five-minute close back, for round numbers and for arbitrary prices at the same spacing.</p>
+      <table class="data narrow bt-trades"><thead><tr><th>Past by more than</th><th class="num">Round</th><th class="num">Other</th></tr></thead><tbody>${evRows}</tbody></table>
+      <p class="bt-fine">Round numbers draw a little more overshoot on the way down, and none to speak of on the way up. The bigger finding holds at any level: most crosses came back within the session, so a stop sitting right at a level is the one a sweep takes. The post's research is on currencies (Osler, New York Fed, 2003); this is the check on stocks.</p>
+      <p class="bt-fine">${esc(r.method || '')}</p>
+      <ul class="bt-fine">${(r.caveats || []).map((c) => `<li>${esc(c)}</li>`).join('')}</ul>
+    </details>`;
+}
+function scOnChange(evt) {
+  const el = evt.target;
+  const sym = STATE.chartSymbol || '';
+  if (el.matches('[data-sc-set]')) {
+    const k = el.dataset.scSet;
+    if (k === 'entry' || k === 'stop') SC[k][sym] = el.value === '' ? '' : Number(el.value);
+    else if (k === 'buffer') SC.buffer = Number(el.value);
+    else if (k === 'account') SC.account = el.value === '' ? '' : Number(el.value);
+    scSave(); loadStopCheck(sym); return;
+  }
+  if (el.matches('[data-sc-show]')) { SC.show = el.checked; scSave(); wsRedrawChart(); }
+}
+document.addEventListener('change', (evt) => {
+  if (evt.target && evt.target.closest && evt.target.closest('#ws-w-stopcheck')) scOnChange(evt);
+});
+
 document.addEventListener('change', (evt) => {
   if (evt.target && evt.target.closest && evt.target.closest('#ws-w-backtest')) btOnChange(evt);
 });
@@ -24144,6 +24307,7 @@ function wsWidgetBody(id) {
   }
 
   if (id === 'backtest') return wsBacktestHTML();
+  if (id === 'stopcheck') return wsStopCheckHTML();
 
   if (id === 'seasonality') {
     if (!STATE.seasonality || STATE.seasonalityFor !== sym) return loadingHTML('seasonality');
@@ -26546,6 +26710,8 @@ function wsMountChart() {
         // drawn whoever they belonged to, so the last stock's levels showed on
         // the new chart while its own loaded.
         ...(showAccum ? accumLines(STATE.accumZonesFor === (d.ticker || STATE.chartSymbol) ? STATE.accumZones : null) : []),
+        // The Stop check widget's stop and buffered stop, for this symbol only.
+        ...stopCheckLines(d.ticker || STATE.chartSymbol),
       ],
       bands: [
         ...(showSR ? (intraday ? srBands(ps.sr || [], ps.atr, ps.spot)
@@ -26728,6 +26894,7 @@ async function loadChartWorkspace(symbol, force) {
   // chart is usable while it lands.
   if (wsDockOpen.includes('seasonality')) loadSeasonality(false, sym);
   if (wsDockOpen.includes('backtest')) loadBacktest(sym);
+  if (wsDockOpen.includes('stopcheck')) loadStopCheck(sym);
   if (wsDockOpen.includes('analysts')) loadAnalystActions(false, sym);
   if (showTrends) loadTrendlines(sym);
   // Same rule: only if the overlay is on, and only when the symbol changes.
@@ -40878,6 +41045,14 @@ function chatContextPayload() {
       benchmark: r.benchmark, verdict: r.verdict, caveats: r.caveats, recent_trades: (r.trades || []).slice(-8),
       open_trade: r.open_trade };
   }
+  if (SC.result && SC.result.available === true && SC.result.ticker === STATE.chartSymbol) {
+    const r = SC.result;
+    ctx.stop_check = { ticker: r.ticker, side: r.side, entry: r.entry, stop: r.stop, atr: r.atr,
+      round_level: r.round_level, adjusted_stop: r.adjusted_stop, moved: r.moved, text: r.text,
+      swept_share_pct_before: r.swept_share_pct_before, swept_share_pct: r.swept_share_pct,
+      risk_per_share: r.risk_per_share, risk_per_share_adjusted: r.risk_per_share_adjusted,
+      sample: (r.evidence || {}).sample, caveats: r.caveats };
+  }
   if (STATE.long) ctx.long_term = STATE.long;
   /* The comparison, once one has been run: its scores, ranks, the basis of
    * each horizon and the take, about 4KB for two names. It was never in here,
@@ -42517,6 +42692,7 @@ const PULSE_SOURCES = {
   company: ['Company', 'overview'],
   chart: ['Chart', 'chart'],
   backtest: ['Backtest', 'chart'],
+  stop_check: ['Stop check', 'chart'],
   technicals: ['Technicals', 'swing'],
   gex: ['Dealer gamma', 'swing'],
   greeks: ['Greeks', 'swing'],
