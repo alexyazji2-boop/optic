@@ -4588,6 +4588,14 @@ async def backtest(ticker: str, request: Request,
     def build() -> Dict[str, Any]:
         if timeframe == "1d":
             frame = YF_PROVIDER.history(sym, period="max", interval="1d")
+        elif timeframe == "5m":
+            # Sixty sessions is the free feed's limit for five-minute bars.
+            bars = YF_PROVIDER.intraday_history(sym, period="60d", interval="5m")
+            try:
+                splits = YF_PROVIDER.splits(sym)
+            except Exception:                                   # noqa: BLE001
+                splits = []
+            frame = backtest_mod.intraday_frame(bars, splits)
         else:
             bars = YF_PROVIDER.intraday_history(sym, period="730d", interval="60m")
             try:

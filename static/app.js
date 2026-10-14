@@ -23843,6 +23843,23 @@ function btSave() {
 function btStrategy() {
   return ((BT.catalogue || {}).strategies || []).find((s) => s.id === BT.strategy) || null;
 }
+/* Each rule says which bars it runs on: the opening-range rule needs five-minute
+ * bars and the daily rules have no meaning on them. Switching rule moves the
+ * bar size to one the new rule takes, rather than asking for a test the server
+ * will refuse. */
+function btTimeframes(s) {
+  return (s && Array.isArray(s.timeframes) && s.timeframes.length) ? s.timeframes : ['1d', '4h', '1h'];
+}
+function btFixTimeframe() {
+  const tfs = btTimeframes(btStrategy());
+  if (!tfs.includes(BT.timeframe)) BT.timeframe = tfs[0];
+}
+/* A trade's time as the table and the markers show it: the date for daily
+ * bars, the date and time for intraday ones. */
+function btWhen(stamp, intraday) {
+  const raw = String(stamp || '');
+  return intraday ? raw.slice(5, 16) : raw.slice(0, 10);
+}
 
 async function loadBacktest(symbol, force) {
   const sym = String(symbol || STATE.chartSymbol || '').toUpperCase();
@@ -23851,6 +23868,7 @@ async function loadBacktest(symbol, force) {
     try { BT.catalogue = await getJSON('/api/backtest/strategies'); } catch (err) { BT.error = err.message; wsRepaintWidget('backtest'); return; }
     if (!btStrategy()) BT.strategy = BT.catalogue.strategies[0].id;
   }
+  btFixTimeframe();
   const want = JSON.stringify([sym, BT.strategy, BT.timeframe, BT.years, BT.params[BT.strategy] || {}]);
   if (!force && BT.result && BT.resultKey === want) { wsRepaintWidget('backtest'); return; }
   const id = ++BT.reqId;
@@ -23881,17 +23899,31 @@ async function loadBacktest(symbol, force) {
 function backtestMarkers(ps, symbol) {
   const r = BT.result;
   if (!BT.show || !r || r.available !== true || r.ticker !== symbol) return [];
-  const keys = (ps.dates || []).map((d) => String(d).slice(0, 10));
+  /* To the minute. Keyed by date alone, every trade on an intraday chart
+   * landed on its day's last bar, and an opening-range trade taken at 10:25
+   * and closed at 10:35 drew both letters at 15:55. A daily trade on an
+   * intraday chart goes to its day's first bar, where its open fill was. */
+  const keys = (ps.dates || []).map((d) => String(d).replace('T', ' ').slice(0, 16));
   if (!keys.length) return [];
   const out = [];
+  const at = (iso) => {
+    const k = String(iso || '').replace('T', ' ').slice(0, 16);
+    if (k.length === 10 && keys[0].length > 10) {
+      const i = keys.findIndex((x) => x.slice(0, 10) === k);
+      return i < 0 ? undefined : i;
+    }
+    return barIndexForDate(keys, k);
+  };
   const add = (iso, color, label, detail) => {
-    const i = barIndexForDate(keys, String(iso).slice(0, 10));
+    const i = at(iso);
     if (i !== undefined) out.push({ index: i, color, label, detail });
   };
   (r.trades || []).forEach((t) => {
-    add(t.entry_date, C.pos, 'B', `Bought ${t.entry_date} at ${fmt(t.entry_price, 2)}: ${t.entry_reason}`);
-    add(t.exit_date, t.return_pct >= 0 ? C.pos : C.neg, 'S',
-      `Sold ${t.exit_date} at ${fmt(t.exit_price, 2)}, ${t.return_pct >= 0 ? '+' : ''}${fmt(t.return_pct, 1)}% after ${t.bars} candles: ${t.exit_reason}`);
+    const short = t.side === 'short';
+    add(t.entry_date, short ? C.neg : C.pos, short ? 'S' : 'B',
+      `${short ? 'Sold short' : 'Bought'} ${t.entry_date} at ${fmt(t.entry_price, 2)}: ${t.entry_reason}`);
+    add(t.exit_date, t.return_pct >= 0 ? C.pos : C.neg, short ? 'B' : 'S',
+      `${short ? 'Bought back' : 'Sold'} ${t.exit_date} at ${fmt(t.exit_price, 2)}, ${t.return_pct >= 0 ? '+' : ''}${fmt(t.return_pct, 1)}% after ${t.bars} candles: ${t.exit_reason}`);
   });
   if (r.open_trade) add(r.open_trade.entry_date, C.pos, 'B', `Bought ${r.open_trade.entry_date}, still held: ${r.open_trade.entry_reason}`);
   return out;
@@ -23922,8 +23954,9 @@ function btParamsHTML(s) {
     if (p.kind === 'bool') {
       return `<label class="bt-check"><input type="checkbox" id="bt-p-${esc(p.id)}" data-bt-param="${esc(p.id)}"${v ? ' checked' : ''}> ${esc(p.label)}</label>`;
     }
+    const float = p.kind === 'float';
     return `<label class="bt-field"><span>${esc(p.label)}</span><input type="number" id="bt-p-${esc(p.id)}" data-bt-param="${esc(p.id)}"
-      value="${esc(v)}" min="${esc(p.min)}" max="${esc(p.max)}" step="1" inputmode="numeric"></label>`;
+      value="${esc(v)}" min="${esc(p.min)}" max="${esc(p.max)}" step="${esc(float ? (p.step || 0.1) : 1)}" inputmode="${float ? 'decimal' : 'numeric'}"></label>`;
   }).join('');
 }
 
@@ -23936,8 +23969,10 @@ function wsBacktestHTML() {
   if (!sym) return '<p class="ws-none">Load a symbol.</p>';
   if (!BT.catalogue) return BT.error ? `<p class="ws-none">${esc(BT.error)}</p>` : loadingHTML('strategies');
   const s = btStrategy();
-  const tfs = (BT.catalogue || {}).timeframes || {};
+  const allTfs = (BT.catalogue || {}).timeframes || {};
+  const tfs = Object.fromEntries(btTimeframes(s).filter((k) => allTfs[k]).map((k) => [k, allTfs[k]]));
   const yearsOpts = BT.timeframe === '1d' ? [[1, '1 year'], [2, '2 years'], [5, '5 years'], [10, '10 years'], [0, 'All history']]
+    : BT.timeframe === '5m' ? [[0, 'Last 60 sessions']]
     : [[1, '1 year'], [2, '2 years'], [0, 'All available (about 3 years)']];
   const controls = `<div class="bt-controls">
     <label class="bt-field bt-wide"><span>Strategy</span><select id="bt-strategy" data-bt-set="strategy">
@@ -23958,8 +23993,12 @@ function wsBacktestHTML() {
   else if (r && r.available === false) body = `<p class="ws-none">${esc(r.reason || 'No result.')}</p>`;
   else if (r && r.ticker === sym) {
     const st = r.stats || {}, bm = r.benchmark || {}, w = r.window || {};
+    const session = r.engine === 'session';
+    const intraday = (w.timeframe || '1d') !== '1d';
+    const span = session ? `in ${fmt(w.sessions || 0, 0)} sessions` : `over ${fmt(w.years || 0, 1)} years`;
+    const pb = bm.plain_break || null;
     const tile = (val, cls, lab, sub) => `<div class="bt-tile"><span class="bt-val ${cls}">${val}</span><span class="bt-lab">${esc(lab)}</span><span class="bt-sub">${sub}</span></div>`;
-    body = `<p class="bt-head"><strong>${esc(r.ticker)}</strong> · ${fmt(st.trades || 0, 0)} trades over ${fmt(w.years || 0, 1)} years · ${esc(w.timeframe_label || '')}</p>
+    body = `<p class="bt-head"><strong>${esc(r.ticker)}</strong> · ${fmt(st.trades || 0, 0)} trades ${span} · ${esc(w.timeframe_label || '')}</p>
     <div class="bt-tiles">
       ${tile(btSigned(st.total_return_pct, 0), signClass(st.total_return_pct), 'Return', `Buy and hold ${btSigned(bm.buy_hold_return_pct, 0)}`)}
       ${tile(st.win_rate_pct === null || st.win_rate_pct === undefined ? '—' : fmt(st.win_rate_pct, 0) + '%', '', 'Win rate',
@@ -23968,17 +24007,19 @@ function wsBacktestHTML() {
       ${tile(btSigned(st.max_drawdown_pct, 0), 'down', 'Max drawdown', `Buy and hold ${btSigned(bm.buy_hold_max_drawdown_pct, 0)}`)}
     </div>
     <p class="bt-verdict">${esc(r.verdict || '')}</p>
-    ${bm.beats_random_pct !== null && bm.beats_random_pct !== undefined ? `<p class="bt-fine">Beat ${fmt(bm.beats_random_pct, 0)}% of ${fmt(bm.random_runs, 0)} random-entry books with the same number of trades and holding periods (median ${btSigned(bm.random_median_pct, 0)}).</p>` : ''}
+    ${bm.beats_random_pct !== null && bm.beats_random_pct !== undefined ? `<p class="bt-fine">Beat ${fmt(bm.beats_random_pct, 0)}% of ${fmt(bm.random_runs, 0)} ${session
+      ? 'books with the same trades entered at random times on the same days' : 'random-entry books with the same number of trades and holding periods'} (median ${btSigned(bm.random_median_pct, session ? 1 : 0)}).</p>` : ''}
+    ${pb ? `<p class="bt-fine">The plain break, entering on the first close outside the range with the same exits: ${fmt(pb.trades || 0, 0)} trades, ${btSigned(pb.total_return_pct)}${pb.win_rate_pct !== null && pb.win_rate_pct !== undefined ? `, ${fmt(pb.win_rate_pct, 0)}% winners` : ''}.</p>` : ''}
     ${btCurveSVG(r.equity)}
     <p class="bt-legend"><span class="bt-key st"></span>Strategy <span class="bt-key bh"></span>Buy and hold · growth of $1, log scale · ${esc(w.from || '')} to ${esc(w.to || '')}</p>
     <label class="bt-check"><input type="checkbox" id="bt-show" data-bt-show${BT.show ? ' checked' : ''}> Show trades on the chart</label>
-    ${(r.trades || []).length ? `<table class="data narrow bt-trades"><thead><tr><th>Bought</th><th>Sold</th><th class="num">Return</th></tr></thead><tbody>
-      ${r.open_trade ? `<tr><td>${esc(String(r.open_trade.entry_date).slice(0, 10))}</td><td>open</td><td class="num ${signClass(r.open_trade.unrealised_pct)}">${btSigned(r.open_trade.unrealised_pct)}</td></tr>` : ''}
-      ${r.trades.slice(-6).reverse().map((t) => `<tr title="${esc(t.exit_reason)}"><td>${esc(String(t.entry_date).slice(0, 10))}</td><td>${esc(String(t.exit_date).slice(0, 10))}</td><td class="num ${signClass(t.return_pct)}">${btSigned(t.return_pct)}</td></tr>`).join('')}
+    ${(r.trades || []).length ? `<table class="data narrow bt-trades"><thead><tr><th>${session ? 'In' : 'Bought'}</th><th>${session ? 'Out' : 'Sold'}</th><th class="num">Return</th></tr></thead><tbody>
+      ${r.open_trade ? `<tr><td>${esc(btWhen(r.open_trade.entry_date, intraday))}</td><td>open</td><td class="num ${signClass(r.open_trade.unrealised_pct)}">${btSigned(r.open_trade.unrealised_pct)}</td></tr>` : ''}
+      ${r.trades.slice(-6).reverse().map((t) => `<tr title="${esc(t.exit_reason)}"><td>${t.side === 'short' ? '<span class="bt-side">Short</span> ' : ''}${esc(btWhen(t.entry_date, intraday))}</td><td>${esc(session ? String(t.exit_date).slice(11, 16) : btWhen(t.exit_date, intraday))}</td><td class="num ${signClass(t.return_pct)}">${btSigned(t.return_pct)}</td></tr>`).join('')}
     </tbody></table>` : ''}
-    <button type="button" class="ask-pulse bt-ask" data-ask-text="${esc(`Explain this backtest of ${s ? s.label : 'the strategy'} on ${r.ticker} (${w.timeframe_label}, ${w.from} to ${w.to}): ${st.trades} trades, ${btSigned(st.total_return_pct, 0)} against buy and hold ${btSigned(bm.buy_hold_return_pct, 0)}, win rate ${fmt(st.win_rate_pct || 0, 0)}%, max drawdown ${btSigned(st.max_drawdown_pct, 0)}, beat ${fmt(bm.beats_random_pct || 0, 0)}% of random-entry books. Is the rule adding anything, and what would make the result more convincing?`)}">Ask Milo about this test</button>
+    <button type="button" class="ask-pulse bt-ask" data-ask-text="${esc(`Explain this backtest of ${s ? s.label : 'the strategy'} on ${r.ticker} (${w.timeframe_label}, ${w.from} to ${w.to}): ${st.trades} trades ${span}, ${btSigned(st.total_return_pct, 0)} against buy and hold ${btSigned(bm.buy_hold_return_pct, 0)}, win rate ${fmt(st.win_rate_pct || 0, 0)}%, max drawdown ${btSigned(st.max_drawdown_pct, 0)}, beat ${fmt(bm.beats_random_pct || 0, 0)}% of random-entry books. Is the rule adding anything, and what would make the result more convincing?`)}">Ask Milo about this test</button>
     <details class="ind-explain bt-method"><summary>How this is tested<i class="cal-caret" aria-hidden="true"></i></summary>
-      <p class="bt-fine">${esc(r.fill || '')} Long only, fully invested, returns compounded, ${fmt(r.cost_bps || 0, 0)} basis points a side for costs. ${esc(w.timeframe_note || '')} ${esc(bm.random_method || '')}</p>
+      <p class="bt-fine">${esc(r.fill || '')} ${session ? `${esc(cap(r.sides || 'long and short'))}, one trade a session` : 'Long only'}, fully invested, returns compounded, ${fmt(r.cost_bps || 0, 0)} basis points a side for costs. ${esc(w.timeframe_note || '')} ${esc(bm.random_method || '')}</p>
       <ul class="bt-fine">${(r.caveats || []).map((c) => `<li>${esc(c)}</li>`).join('')}</ul>
     </details>`;
   }
@@ -23990,6 +24031,7 @@ function btOnChange(evt) {
   if (el.matches('[data-bt-set]')) {
     const k = el.dataset.btSet;
     BT[k] = k === 'years' ? Number(el.value) : el.value;
+    if (k === 'strategy') btFixTimeframe();
     if (k === 'timeframe' && BT.timeframe !== '1d' && (BT.years || 0) > 2) BT.years = 0;
     btSave(); loadBacktest(STATE.chartSymbol); return true;
   }
@@ -40832,7 +40874,7 @@ function chatContextPayload() {
   if (BT.result && BT.result.available === true) {
     const r = BT.result;
     ctx.backtest = { ticker: r.ticker, strategy: (r.strategy || {}).label, rules: (r.strategy || {}).summary,
-      params: r.params, window: r.window, fill: r.fill, cost_bps: r.cost_bps, stats: r.stats,
+      params: r.params, window: r.window, fill: r.fill, cost_bps: r.cost_bps, sides: r.sides || 'long only', stats: r.stats,
       benchmark: r.benchmark, verdict: r.verdict, caveats: r.caveats, recent_trades: (r.trades || []).slice(-8),
       open_trade: r.open_trade };
   }

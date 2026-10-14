@@ -8535,6 +8535,8 @@ ul.bt-fine { padding-left: var(--space-4); }
 .bt-key.bh { background: var(--ink-muted); }
 .bt-trades { margin-top: var(--space-2); width: 100%; table-layout: fixed; font-size: var(--t-micro); font-variant-numeric: tabular-nums; }
 .bt-trades th, .bt-trades td { padding-left: 2px; padding-right: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A short, in the intraday rule's table: the one row that reads the other way. */
+.bt-side { color: var(--neg); font-weight: 600; }
 .bt-ask { margin: var(--space-2) 0; }
 
 /* Widget internals. Kept tight — a 260px column has no room for the panel

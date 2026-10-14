@@ -192,6 +192,19 @@ STRATEGIES: List[Dict[str, Any]] = [
      "params": [_p("entry_days", "Breakout window (days)", "int", 55, 5, 250), _p("exit_days", "Exit window (days)", "int", 20, 2, 250)],
      "build": _donchian},
 ]
+# Rules that live inside one session (app/analytics/session_rules.py): their
+# own simulator, on five-minute bars only.
+from . import session_rules  # noqa: E402
+
+STRATEGIES.append({
+    "id": "orb_vwap_retest", "label": "Opening-range break, VWAP retest",
+    "summary": "A day trade. Waits for a break of the opening range that runs at least a range width without "
+               "closing back through VWAP, then enters on the first touch of VWAP. Exits at a stop, a target or "
+               "the close; long and short.",
+    "params": session_rules.ORB_PARAMS, "engine": "session", "timeframes": ["5m"],
+})
+for _s in STRATEGIES:
+    _s.setdefault("timeframes", ["1d", "4h", "1h"])
 BY_ID = {s["id"]: s for s in STRATEGIES}
 
 
@@ -200,6 +213,8 @@ def catalogue() -> List[Dict[str, Any]]:
 
 
 def params_for(sid: str, raw: Dict[str, Any]) -> Dict[str, Any]:
+    if BY_ID[sid].get("engine") == "session":
+        return session_rules.params_for(raw)
     out = {}
     for p in BY_ID[sid]["params"]:
         v = raw.get(p["id"], p["default"])
@@ -324,6 +339,7 @@ TIMEFRAMES = {
     "4h": {"label": "4 hours", "note": "Two bars a session (9:30 to 13:30 and 13:30 to 16:00 ET) built from hourly "
                                        "bars; about the last three years, which is all the free feed keeps."},
     "1h": {"label": "1 hour", "note": "Regular-session hourly bars; about the last three years."},
+    "5m": {"label": "5 minutes", "note": "Regular-session five-minute bars; the free feed keeps the last 60 sessions."},
 }
 
 
@@ -371,6 +387,14 @@ def run(frame, sid: str, raw_params: Optional[Dict[str, Any]] = None, years: Opt
         return {"available": False, "reason": "Unknown strategy."}
     if frame is None or getattr(frame, "empty", True):
         return {"available": False, "reason": "No price history."}
+    if timeframe not in BY_ID[sid]["timeframes"]:
+        return {"available": False, "reason": "{} runs on {} bars.".format(
+            BY_ID[sid]["label"], " or ".join(TIMEFRAMES[t]["label"].lower() for t in BY_ID[sid]["timeframes"]))}
+    if BY_ID[sid].get("engine") == "session":
+        out = session_rules.run(frame, raw_params, cost_bps)
+        if out.get("available"):
+            out["strategy"] = {k: v for k, v in BY_ID[sid].items() if k != "build"}
+        return out
     df = frame.dropna(subset=["Open", "High", "Low", "Close"])
     prm = params_for(sid, raw_params or {})
     import pandas as pd
