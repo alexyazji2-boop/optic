@@ -12786,9 +12786,15 @@ function renderOptionsPricing(d) {
       why: `Implied was above realised on ${fmt(ivhv.iv_above_hv_pct, 0)}% of the past ${fmt(ivhv.days, 0)} days, and today's gap is wider than ${fmt(ivhv.gap_percentile, 0)}% of them. ${esc(ivhv.note || '')} <span class="ov-fine">${esc(ivhv.source || '')} (<a href="${esc(ivhv.source_url || '')}" target="_blank" rel="noopener">Source</a>).</span>`,
       gloss: 'implied volatility' });
   }
+  const cheap = d.iv_cheapness || {};
+  if (cheap.available) {
+    items.push({ text: `Cheap or dear? ${esc(cheap.text)}`,
+      why: `${esc(cheap.finding)} Measured on ${esc(cheap.sample)}.`, gloss: 'iv rank' });
+  }
   if (month && month.straddle_move_pct) {
     items.push({ text: `By ${shortDate(month.expiry)} (${month.dte} days) the at-the-money straddle is priced for a move of about ±${fmt(month.straddle_move_pct, 1)}%.`,
-      why: `A one-standard-deviation move on the same implied volatility is ±${fmt(month.one_sd_move_pct, 1)}%. These are what options cost, not limits on the price: under the model a move larger than one standard deviation happens about a third of the time.` });
+      why: `A one-standard-deviation move on the same implied volatility is ±${fmt(month.one_sd_move_pct, 1)}%. These are what options cost, not limits on the price: under the model a move larger than one standard deviation happens about a third of the time.${
+        (d.straddle_calibration || {}).available ? ` ${esc(d.straddle_calibration.text)} <span class="ov-fine">${esc(d.straddle_calibration.source || '')} (<a href="${esc(d.straddle_calibration.source_url || '')}" target="_blank" rel="noopener">Source</a>).</span>` : ''}` });
   }
   const adv = knowledgeLevel() >= 2;
   if (term.available) {
@@ -42010,6 +42016,8 @@ function chatContextPayload() {
       // 2026-10-13).
       ctx.vol_surface = s.vol_surface;
       ctx.iv_rank = s.iv_rank;
+      if (s.straddle_calibration && s.straddle_calibration.available) ctx.straddle_calibration = s.straddle_calibration;
+      if (s.iv_cheapness && s.iv_cheapness.available) ctx.iv_cheapness = s.iv_cheapness;
       if (s.iv_hv && s.iv_hv.available) {
         const { history, ...rest } = s.iv_hv;
         ctx.iv_hv = rest;
@@ -43796,6 +43804,8 @@ const PULSE_SOURCES = {
   vol_surface: ['Options pricing', 'swing'],
   iv_rank: ['IV rank', 'swing'],
   iv_hv: ['Implied against realised', 'swing'],
+  iv_cheapness: ['Cheap or dear', 'swing'],
+  straddle_calibration: ['Straddle record', 'swing'],
   dispersion: ['Dispersion', 'market'],
   options_research: ['Options research', 'swing'],
   desk_edition: ['Optic Desk', 'brief'],

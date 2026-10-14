@@ -87,6 +87,8 @@ from . import rates as rates_mod
 from . import iv_history as iv_history_mod
 from . import dolthub_vol as dolthub_vol_mod
 from .analytics import dispersion as dispersion_mod
+from .analytics import straddle_calibration as straddle_cal_mod
+from .analytics import iv_cheapness as iv_cheap_mod
 from .analytics import vol_surface as vol_surface_mod
 from .analytics import liquidity as liquidity_mod
 from .analytics import contracts as contracts_mod
@@ -699,6 +701,10 @@ def _swing_snapshot(
         iv_rank = iv_history_mod.rank_for(ticker, iv30, YF_PROVIDER)
     # Implied against realised volatility over the year (DoltHub, when on).
     iv_hv = dolthub_vol_mod.iv_hv(ticker) if dolthub_vol_mod.enabled() else {"available": False}
+    straddle_cal = straddle_cal_mod.for_symbol(ticker)
+    # Whether today's options look cheap or dear, against what followed such
+    # days across the DoltHub sample (derived from it, so behind its flag).
+    iv_cheap = iv_cheap_mod.read(iv_rank, iv_hv) if dolthub_vol_mod.enabled() else {"available": False}
     if chain is not None and not chain.empty and not partial:
         gex_read = gex_mod.analyse(chain, spot, rate=rate, div=div, ticker=ticker)
         # Scaled to the stock's own trading: the hedge a 1% move would ask
@@ -834,6 +840,8 @@ def _swing_snapshot(
         "vol_surface": surface,
         "iv_rank": iv_rank,
         "iv_hv": iv_hv,
+        "straddle_calibration": straddle_cal,
+        "iv_cheapness": iv_cheap,
         "rate": rate_info,
         "liquidity_method": liquidity_mod.method(),
         "greeks": greeks_read,

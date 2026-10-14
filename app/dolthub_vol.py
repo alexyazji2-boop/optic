@@ -177,12 +177,17 @@ def iv_hv(symbol: str, limit: int = 252) -> Dict[str, Any]:
     gaps = [(r["iv"] - r["hv"]) * 100 for r in rows]
     last = rows[-1]
     gap = gaps[-1]
+    # This stock's own record: how often implied beat the volatility that
+    # followed. hv 21 sessions on is the realised vol of the 30 days after.
+    after = [(rows[k]["iv"], rows[k + 21]["hv"]) for k in range(len(rows) - 21)]
+    beat = round(sum(1 for iv, rv in after if iv > rv) / len(after) * 100, 1) if len(after) >= 60 else None
     return {
         "available": True, "as_of": last["day"], "days": len(rows),
         "iv30": round(last["iv"] * 100, 2), "hv30": round(last["hv"] * 100, 2), "gap": round(gap, 2),
         "ratio": round(last["iv"] / last["hv"], 2),
         "gap_percentile": round(sum(1 for g in gaps if g < gap) / len(gaps) * 100, 1),
         "iv_above_hv_pct": round(sum(1 for g in gaps if g > 0) / len(gaps) * 100, 1),
+        "iv_above_next_rv_pct": beat, "next_rv_days": len(after),
         "history": [{"day": r["day"], "iv": round(r["iv"] * 100, 2), "hv": round(r["hv"] * 100, 2)}
                     for r in rows[:: max(1, len(rows) // 120)]],
         "source": ATTRIBUTION, "source_url": SOURCE_URL,
