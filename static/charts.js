@@ -284,9 +284,18 @@ function niceTicks(min, max, count = 4) {
 
 function showTip(html, evt) {
   const tip = TIP();
-  tip.innerHTML = html;
-  tip.classList.add('on');
-  const rect = tip.getBoundingClientRect();
+  // Rewritten and measured only when the readout changes. Moving across one
+  // bar repositions the same box, and measuring it after every write forced a
+  // layout per pointer move.
+  let rect = tip._optRect;
+  if (tip._optHtml !== html || !tip._optOn || !rect) {
+    tip.innerHTML = html;
+    tip.classList.add('on');
+    rect = tip.getBoundingClientRect();
+    tip._optHtml = html;
+    tip._optOn = true;
+    tip._optRect = { width: rect.width, height: rect.height };
+  }
   const edge = 8;
   const touch = evt.pointerType && evt.pointerType !== 'mouse';
 
@@ -313,7 +322,7 @@ function showTip(html, evt) {
   tip.style.top = y + 'px';
 }
 
-function hideTip() { TIP().classList.remove('on'); }
+function hideTip() { const tip = TIP(); tip.classList.remove('on'); tip._optOn = false; }
 
 /* Bind chart scrubbing for mouse *and* touch.
  *
@@ -332,10 +341,19 @@ function hideTip() { TIP().classList.remove('on'); }
  */
 function bindScrub(el, onMove, onEnd) {
   el.style.touchAction = 'pan-y';
+  /* One readout per frame. A mouse reports 120 to 1,000 moves a second and
+   * each one rebuilt the tooltip and the crosshair, more times than the
+   * screen can show: the lag and jitter reported on 2026-10-13. The newest
+   * event wins; anything between two frames is never drawn anyway. */
+  let pending = null;
+  let frame = 0;
+  const flush = () => { frame = 0; const e = pending; pending = null; if (e) onMove(e); };
   el.addEventListener('pointermove', (evt) => {
     // A touch that isn't pressed is a stray hover event from a hybrid device.
     if (evt.pointerType !== 'mouse' && evt.pressure === 0 && evt.buttons === 0) return;
-    onMove(evt);
+    if (typeof requestAnimationFrame !== 'function') { onMove(evt); return; }
+    pending = evt;
+    if (!frame) frame = requestAnimationFrame(flush);
   });
   el.addEventListener('pointerdown', (evt) => {
     // Report immediately on tap rather than waiting for the first movement.
@@ -349,6 +367,10 @@ function bindScrub(el, onMove, onEnd) {
     el.addEventListener(type, (evt) => {
       // A mouse leaving means "stop"; a mouse button release does not.
       if (type === 'pointerup' && evt.pointerType === 'mouse') return;
+      // A move still waiting for its frame would redraw the readout after
+      // the pointer has gone.
+      if (frame && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(frame);
+      frame = 0; pending = null;
       onEnd();
     });
   });
@@ -2567,7 +2589,10 @@ function lineChart(opts) {
 
   /* One bar's readout: the crosshair, the dots and the tooltip, for the
    * pointer and for the keyboard alike. Returns the readout in words. */
+  // The last bar read, so a pointer moving within one bar only moves the box.
+  let readI = -1, readHtml = '', readSaid = '';
   const readBar = (i, evt) => {
+    if (i === readI && readHtml) { showTip(readHtml, evt); return readSaid; }
     cross.setAttribute('x1', X(i));
     cross.setAttribute('x2', X(i));
     cross.setAttribute('opacity', 0.45);
@@ -2630,16 +2655,20 @@ function lineChart(opts) {
     });
     if (traded.length > 4) rows.push(['', `${traded.length - 4} more insider trades`]);
     if (traded.length && eventHint) rows.push([`<span class="t-hint">${escapeText(eventHint)}</span>`, '']);
-    showTip(tipRows(barLabelText(labels[i]) || `#${i + 1}`, rows), evt);
+    readHtml = tipRows(barLabelText(labels[i]) || `#${i + 1}`, rows);
+    showTip(readHtml, evt);
     // Tell the caller which bar is under the cursor, so a header or legend can
     // track it. Index only: this function knows nothing about what the caller
     // wants to display, and passing the bar would mean guessing.
     if (onHover) onHover(i);
     const said = series.filter((se) => isFinite(se.values[i]) && se.values[i] !== null)
       .map((se) => `${se.name} ${(valueFormat || yFormat)(se.values[i])}`);
-    return `${barLabelText(labels[i]) || `Point ${i + 1}`}: ${said.join(', ') || 'no value'}`;
+    readI = i;
+    readSaid = `${barLabelText(labels[i]) || `Point ${i + 1}`}: ${said.join(', ') || 'no value'}`;
+    return readSaid;
   };
   const clearBar = () => {
+    readI = -1; readHtml = '';
     hideTip();
     cross.setAttribute('opacity', 0);
     dots.forEach((d) => d.setAttribute('opacity', 0));
