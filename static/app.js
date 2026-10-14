@@ -23532,7 +23532,6 @@ function renderChartWorkspace(d) {
         <span class="${signClass(q.change_pct)}" id="ws-chg">${fmtPct(q.change_pct, 2)}</span>
         <span class="stage-chip" id="stage-ws" hidden></span>
         <span class="ws-head-state">${esc(cap(marketSessionET()))}</span>
-        ${wsZoomButtons()}
         ${chartPulse(STATE.chartSymbol)}
       </div>
       ${wsLegend(ps)}
@@ -23542,6 +23541,11 @@ function renderChartWorkspace(d) {
              chart is rebuilt on every redraw and drawings have to survive that,
              and dragging one should cost a setAttribute, not a chart rebuild. -->
         <div id="ws-draw" class="ws-draw"></div>
+        ${/* On the plot, not in the header: the phone header is one clipped
+             line, and at 402px the pair overran it by 26px, so "+" sat under the
+             full-screen button and could not be pressed (2026-10-14). Outside
+             #ws-chart, so a tap on them is never taken for a pan or a pinch. */''}
+        ${wsZoomButtons()}
       </div>
       ${/* Oscillator panes, under the price plot and above the navigator.
            Inside .ws-canvas so they sit in the same column as the chart and
