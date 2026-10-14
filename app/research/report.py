@@ -185,6 +185,7 @@ def post(p: Dict[str, Any]) -> str:
            _bul(["EPS {} against {}: {} ({}{}).".format(_n(eps.get("actual")), _n(eps.get("consensus")), eps.get("state"),
                                                        "{:+.2f}% surprise; ".format(eps["surprise_pct"])
                                                        if eps.get("surprise_pct") is not None else "", eps.get("basis")),
+                 eps.get("resolution") or "",
                  "GAAP diluted EPS: {} for {} (SEC).".format(_n((a.get("eps_gaap") or {}).get("value")),
                                                            (a.get("eps_gaap") or {}).get("period_end"))
                  if a.get("eps_gaap") else "",

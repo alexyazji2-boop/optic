@@ -251,3 +251,18 @@ def test_scenario_arithmetic_is_shown_with_its_inputs():
     f = figs["EPS if the average surprise repeats"]
     assert f["value"] == pytest.approx(1.50 * 1.045, abs=0.01) and "not a forecast" in f["kind"]
     assert "Revenue growth the consensus implies" in figs
+
+
+def test_two_consensus_figures_that_disagree_leave_the_verdict_unresolved():
+    ea = ea_fixture(latest_result={"available": True, "date": "2026-10-13", "age_days": 1,
+                                   "eps_reported": 5.75, "eps_estimate": 5.94})
+    post = E.post_earnings("JPM", ea, 1.0, calendar={"dates": ["2026-10-13"], "eps_avg": 5.715},
+                           today=date(2026, 10, 14))
+    eps = post["headline_audit"]["eps"]
+    assert eps["state"] == "unresolved" and "two consensus figures" in eps["resolution"]
+    assert post["headline_audit"]["eps_alternate"]["state"] == "in line"   # +0.6%, inside the band
+    assert post["quality"]["criteria"]["eps"] is None
+    # When both sources agree, the verdict stands.
+    post = E.post_earnings("JPM", ea, 1.0, calendar={"dates": ["2026-10-13"], "eps_avg": 5.90},
+                           today=date(2026, 10, 14))
+    assert post["headline_audit"]["eps"]["state"] == "miss"

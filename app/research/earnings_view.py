@@ -268,7 +268,13 @@ def options_read(ea: Dict[str, Any], vol_event: Optional[Dict[str, Any]], spot: 
     pr = ea.get("pricing") or {}
     out: Dict[str, Any] = {"available": bool(imp.get("available"))}
     if not imp.get("available"):
-        out["reason"] = imp.get("reason") or "No event-spanning straddle could be read."
+        reason = imp.get("reason") or "No event-spanning straddle could be read."
+        # An empty expiry list is what a listed stock returns when the feed
+        # refuses (Yahoo's throttle, 2026-10-14: AAPL "has no listed options").
+        if "no listed options" in reason:
+            reason = ("The options feed returned no expiries: either there are no listed options, or the feed did "
+                      "not answer just now.")
+        out["reason"] = reason
         return out
     move = imp.get("implied_move_pct")
     out.update({
@@ -483,10 +489,13 @@ def best_view(ticker: str, results: Dict[str, Any], guidance: Dict[str, Any], re
                 ", because " + "; and ".join(b[0].lower() + b[1:] for b in because) if because else ""))
     rng = opts.get("range") or {}
     cases = {
-        "base": "Results {}; guidance {}; a move inside the {} priced either way{}.".format(
+        "base": "Results {}; guidance {}; {}.".format(
             results["lean"], guidance["lean"] if guidance["lean"] != "no clear lean" else "roughly in line",
-            _pct(rng.get("move_pct")) if rng else "move options price",
-            " ({:.2f} to {:.2f})".format(rng["low"], rng["high"]) if rng else ""),
+            "a move inside the {} options price either way ({:.2f} to {:.2f})".format(
+                _pct(rng.get("move_pct")), rng["low"], rng["high"]) if rng else
+            "a move of ordinary size for this company's releases (the average reaction is {})".format(
+                _pct(sur.get("avg_abs_move_pct"))) if sur.get("avg_abs_move_pct") is not None else
+            "a move of ordinary size for a release"),
         "bull": "A clear beat on revenue and EPS plus guidance above the next-quarter consensus{}: the move "
                 "could exceed the priced range on the upside.".format(
                     " ({:.2f})".format(guidance["next_quarter_consensus"]) if guidance.get("next_quarter_consensus") else ""),
@@ -785,7 +794,8 @@ def post_earnings(ticker: str, ea: Dict[str, Any], band_pct: float, *, sec: Opti
                   fin_q: Optional[Dict[str, Any]] = None, daily: Optional[pd.DataFrame] = None,
                   bench: Optional[pd.DataFrame] = None, quote: Optional[Dict[str, Any]] = None,
                   phase: Optional[str] = None, forecast: Optional[Dict[str, Any]] = None,
-                  today: Optional[date] = None, industry: Optional[str] = None) -> Dict[str, Any]:
+                  today: Optional[date] = None, industry: Optional[str] = None,
+                  calendar: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     lr = (ea or {}).get("latest_result") or {}
     if not lr.get("available"):
         return {"available": False, "reason": "No reported quarter in the feed."}
@@ -793,6 +803,27 @@ def post_earnings(ticker: str, ea: Dict[str, Any], band_pct: float, *, sec: Opti
     timing = next((r.get("timing") for r in rows if r.get("date") == lr.get("date")), None)
     eps = classify_vs(lr.get("eps_reported"), lr.get("eps_estimate"), band_pct)
     basis = basis_warning(ea.get("surprise") or {}, industry)
+    # Two consensus figures for the same release. The feed's calendar can keep
+    # the quarter's average after the surprise table has its own estimate, and
+    # they need not agree: JPM on 2026-10-14 had 5.94 in the table and 5.715 in
+    # the calendar, a miss on one and a beat on the other. When the verdict
+    # depends on which, it is reported as unresolved rather than picked.
+    alt = None
+    cal = calendar or {}
+    try:
+        cal_dates = [date.fromisoformat(str(d)[:10]) for d in (cal.get("dates") or [])]
+        rel = date.fromisoformat(str(lr.get("date"))[:10])
+    except (TypeError, ValueError):
+        cal_dates, rel = [], None
+    if rel and cal.get("eps_avg") is not None and any(abs((d - rel).days) <= 3 for d in cal_dates):
+        other = classify_vs(lr.get("eps_reported"), cal.get("eps_avg"), band_pct)
+        alt = {"consensus": cal.get("eps_avg"), "source": "the feed's earnings calendar", **other}
+        if other.get("state") != eps.get("state"):
+            eps = dict(eps, state="unresolved", resolution=(
+                "{} against the surprise table's {:.2f}, {} against the calendar's {:.2f}: the feed carries two "
+                "consensus figures and the verdict depends on which. Check the company's release and a named "
+                "estimate source.".format(eps.get("state"), lr.get("eps_estimate") or 0, other.get("state"),
+                                          cal.get("eps_avg"))))
     traj = quarterly_trajectory(sec, fin_q)
     # Revenue actual: the quarterly statement when its latest period follows
     # the previous one filed, which is how a fresh release shows up there.
@@ -821,6 +852,7 @@ def post_earnings(ticker: str, ea: Dict[str, Any], band_pct: float, *, sec: Opti
         if q:
             gaap = {"value": q[-1].get("value"), "period_end": q[-1].get("period_end"), "basis": "GAAP diluted (SEC)"}
     crit: Dict[str, Optional[int]] = {
+        # "unresolved" maps to no score: the criterion is unknown, not zero.
         "eps": {"beat": 1, "in line": 0, "miss": -1}.get(eps["state"]),
         "revenue": {"beat": 1, "in line": 0, "miss": -1}.get(rev_vs.get("state")),
         "growth_trend": {"accelerating": 1, "steady": 0, "decelerating": -1}.get(traj.get("revenue_trend") or ""),
@@ -854,7 +886,9 @@ def post_earnings(ticker: str, ea: Dict[str, Any], band_pct: float, *, sec: Opti
             "release": {"date": lr.get("date"), "timing": timing or "unknown", "age_days": lr.get("age_days")},
             "headline_audit": {
                 "eps": {"actual": lr.get("eps_reported"), "consensus": lr.get("eps_estimate"), **eps,
+                        "consensus_source": "the feed's surprise table",
                         "basis": "Adjusted EPS as the Street reports it (Yahoo Finance)"},
+                "eps_alternate": alt,
                 "eps_gaap": gaap,
                 "revenue": {"actual": rev_actual, "period": rev_period, "consensus": saved_cons.get("revenue"), **rev_vs,
                             "source": "Yahoo Finance quarterly income statement"},

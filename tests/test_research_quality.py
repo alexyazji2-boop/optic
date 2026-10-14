@@ -193,3 +193,25 @@ def test_two_loss_paths_with_numbers():
     paths = quality.loss_paths(data, {"components": []}, {"components": []}, lt)
     assert len(paths) == 2 and paths[0]["risk"] == "Multiple compression"
     assert "29%" in paths[0]["text"]                            # 1 - 1/1.4
+
+
+def test_an_implausible_model_gap_is_shown_not_graded():
+    val = {"market": {"price": 100.0}, "classification": {"models": {"dcf": {"fit": "primary", "name": "DCF"}},
+                                                           "confidence": "normal"},
+           "dcf": {"per_share": 326.0}, "scenarios": {}, "reverse": {"solves": []}}
+    out = quality.valuation_grade(val, strong_company(), {}, None, "operating", 0.1)
+    ids = {c["id"]: c for c in out["components"]}
+    assert ids["intrinsic"]["status"] == "not_applicable" and "+226%" in ids["intrinsic"]["reason"]
+
+
+def test_implied_growth_is_judged_against_forward_estimates_not_a_boom_record():
+    val = {"market": {"price": 100.0}, "classification": {"models": {"dcf": {"fit": "primary"}}, "confidence": "normal"},
+           "dcf": {"per_share": 120.0}, "reverse": {"solves": [{"implied_cagr": 0.245}]}}
+    data = dict(strong_company(), consensus={"available": True, "growth_y1": 0.30, "growth_y2": 0.20})
+    ids = {c["id"]: c for c in quality.valuation_grade(val, data, {}, None, "operating", 0.683)["components"]}
+    f = ids["implied_growth"]["figures"]
+    assert f["yardstick"] == pytest.approx(0.25) and "analysts'" in f["yardstick_basis"]
+    assert ids["implied_growth"]["score"] == 3                 # 24.5% against 25%: about what is forecast
+    # No forecast and a record too fast to extrapolate: not graded.
+    ids = {c["id"]: c for c in quality.valuation_grade(val, strong_company(), {}, None, "operating", 0.683)["components"]}
+    assert ids["implied_growth"]["status"] == "insufficient" and "too fast" in ids["implied_growth"]["reason"]

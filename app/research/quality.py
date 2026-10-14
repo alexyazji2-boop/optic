@@ -707,7 +707,19 @@ def valuation_grade(val: Dict[str, Any], data: Dict[str, Any], lt: Dict[str, Any
             (models.get(model_id) or {}).get("name") or model_id, per_share, price, upside)]
         if rng.get("bear") is not None and rng.get("bull") is not None:
             ev.append("Bear to bull scenarios: {:.2f} to {:.2f}.".format(rng["bear"], rng["bull"]))
-        if primary:
+        # A model value more than double the price, or under 40% of it, says
+        # more about the assumptions than about the price: NVIDIA's base case
+        # came out 226% above the price on 2026-10-14, which would have graded
+        # the stock cheap on the strength of a growth path, not a measurement.
+        implausible = upside > 1.0 or upside < -0.6
+        if primary and implausible:
+            out.append(_component("intrinsic", "Intrinsic value", "not_applicable",
+                                  reason="The base case is {:+.0%} from the price, a gap wider than the model's own "
+                                         "reliability: it reflects the assumptions (growth and margins held for "
+                                         "years) more than a mispricing, so it is shown and not graded. The "
+                                         "fair-value workspace shows which assumption drives it.".format(upside),
+                                  evidence=ev, figures={"per_share": per_share, "upside": upside, "scenarios": rng}))
+        elif primary:
             out.append(_component("intrinsic", "Intrinsic value", "scored",
                                   _band(upside, [(0.30, 4), (0.10, 3), (-0.10, 2), (-0.30, 1)]),
                                   "The base-case model value is {:+.0%} from the price.".format(upside), ev,
@@ -775,18 +787,35 @@ def valuation_grade(val: Dict[str, Any], data: Dict[str, Any], lt: Dict[str, Any
     # 4. What the price implies.
     rev_solves = ((val.get("reverse") or {}).get("solves") or [])
     implied = _v(rev_solves[0].get("implied_cagr")) if rev_solves else None
-    if implied is not None and revenue_cagr is not None and fit_level == "primary":
-        gap = implied - revenue_cagr
+    # The yardstick is analysts' growth for the next two years when the feed
+    # has it, and the company's own record only when that record is a fair
+    # guide: a five-year CAGR of 68% (NVIDIA through the AI build-out) made an
+    # implied 24.5% look cheap against a pace nobody forecasts to continue.
+    cons = (data.get("consensus") or {})
+    fwd = [g for g in (_v(cons.get("growth_y1")), _v(cons.get("growth_y2"))) if g is not None] if cons.get("available") else []
+    if fwd:
+        yard, yard_label = mean(fwd), "analysts' revenue growth for the next {} year{}".format(len(fwd), "s" if len(fwd) > 1 else "")
+    elif revenue_cagr is not None and revenue_cagr <= 0.30:
+        yard, yard_label = revenue_cagr, "the company's own revenue record"
+    else:
+        yard, yard_label = None, None
+    if implied is not None and yard is not None and fit_level == "primary":
+        gap = implied - yard
         out.append(_component(
             "implied_growth", "What the price assumes", "scored",
             4 if gap <= -0.05 else 3 if gap <= 0 else 2 if gap <= 0.05 else 1 if gap <= 0.10 else 0,
-            "The price implies about {} revenue growth a year, against {} in the record.".format(
-                _pct(implied), _pct(revenue_cagr)),
-            ["Reverse DCF holding the other base-case assumptions fixed."],
-            {"implied_cagr": implied, "historical_cagr": revenue_cagr, "gap": gap}))
+            "The price implies about {} revenue growth a year, against {} from {}.".format(
+                _pct(implied), _pct(yard), yard_label),
+            ["Reverse DCF holding the other base-case assumptions fixed.",
+             "Revenue record for comparison: {}.".format(_pct(revenue_cagr))],
+            {"implied_cagr": implied, "yardstick": yard, "yardstick_basis": yard_label,
+             "historical_cagr": revenue_cagr, "gap": gap}))
     else:
         out.append(_component("implied_growth", "What the price assumes", "insufficient",
-                              reason="Needs a reverse DCF on a primary-fit model and a revenue record."))
+                              reason=("The revenue record ({}) is too fast to be a yardstick and no analyst growth "
+                                      "estimate matched the filings.".format(_pct(revenue_cagr))
+                                      if implied is not None and fit_level == "primary" else
+                                      "Needs a reverse DCF on a primary-fit model and a growth yardstick.")))
     # 5. Peers.
     if comps and comps.get("available"):
         key = "pe"
@@ -997,10 +1026,10 @@ def loss_paths(data: Dict[str, Any], quality: Dict[str, Any], val: Dict[str, Any
         if c["id"] == "implied_growth" and c["status"] == "scored" and (c["figures"].get("gap") or 0) > 0.02:
             cands.append({"risk": "Growth the price needs",
                           "size": c["figures"]["gap"] * 3,
-                          "text": "The price assumes about {} revenue growth a year against {} delivered. "
-                                  "Growing at the historical rate instead would leave the price needing to "
-                                  "fall to match.".format(_pct(c["figures"]["implied_cagr"]),
-                                                          _pct(c["figures"]["historical_cagr"]))})
+                          "text": "The price assumes about {} revenue growth a year against {} from {}. "
+                                  "Growing at that slower rate instead would leave the price needing to fall to "
+                                  "match.".format(_pct(c["figures"]["implied_cagr"]), _pct(c["figures"]["yardstick"]),
+                                                  c["figures"]["yardstick_basis"])})
     for c in quality.get("components") or []:
         f = c.get("figures") or {}
         if c["id"] == "health" and c["status"] == "scored" and (f.get("net_debt_to_ebitda") or 0) > 2.5:

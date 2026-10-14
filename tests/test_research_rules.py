@@ -235,8 +235,10 @@ def test_stale_quote_in_session_is_flagged():
     assert f["phase"] == "regular" and f["state"] == "stale" and f["age_minutes"] == 70
     f = service.quote_freshness({"market_time": "1:15PM EDT"}, "2026-10-13", 30, now)
     assert f["state"] == "delayed"
-    f = service.quote_freshness({}, None, 30, now)
-    assert f["state"] == "unknown"
+    f = service.quote_freshness({}, "2026-10-14", 30, now)
+    assert f["state"] == "delayed" and "exact age is unknown" in f["text"]
+    f = service.quote_freshness({}, "2026-10-13", 30, now)
+    assert f["state"] == "stale" and "stop at 2026-10-13" in f["text"]
 
 
 def test_closed_session_is_labelled_not_called_stale():

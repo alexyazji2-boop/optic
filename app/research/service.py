@@ -69,7 +69,16 @@ def quote_freshness(quote: Dict[str, Any], last_bar: Optional[str], stale_minute
         return out
     m = _MT.match(mt or "")
     if not m:
-        out.update({"state": "unknown", "text": "The feed gave no price time, so freshness cannot be checked."})
+        # No price time (the feed's quote-summary path, which carries it, is
+        # the one Yahoo throttles first). The bars still say whether today has
+        # traded in the data at all.
+        today = now.astimezone(ET).date().isoformat()
+        if last_bar and last_bar < today:
+            out.update({"state": "stale", "text": "Regular session, but the daily bars stop at {}: today's trading "
+                                                   "is not in the data yet.".format(last_bar)})
+        else:
+            out.update({"state": "delayed", "text": "Regular session; the feed gave no price time, so its exact "
+                                                     "age is unknown (normally about 15 minutes delayed)."})
         return out
     h, mi, ap = int(m.group(1)) % 12, int(m.group(2)), m.group(3).upper()
     h += 12 if ap == "PM" else 0
@@ -164,6 +173,7 @@ def build(provider, yf, ticker: str, mode: str = "combined", *, rate: float = 0.
     d = _deps(deps)
     need = _needs(mode)
     g = _Gather(budget)
+    g.yf = yf
     try:
         g.start("quote", provider.quote, sym)
         if need["swing"] or need["earnings"]:
@@ -230,6 +240,18 @@ def build(provider, yf, ticker: str, mode: str = "combined", *, rate: float = 0.
         with _LOCK:
             _CACHE[key] = (time.time(), out)
     return out
+
+
+def _calendar(g: "_Gather", sym: str) -> Optional[Dict[str, Any]]:
+    """The feed's earnings calendar (a cached read), for the second consensus
+    figure a post-earnings audit has to reconcile."""
+    yf = getattr(g, "yf", None)
+    if yf is None or not hasattr(yf, "earnings_calendar"):
+        return None
+    try:
+        return yf.earnings_calendar(sym)
+    except Exception:                                                              # noqa: BLE001
+        return None
 
 
 def _missed(g: "_Gather", *names: str) -> str:
@@ -418,7 +440,7 @@ def _earnings(sym, mode, ea, g, daily, spy, lt, quote, fresh, vol_event, vals, p
                                            daily=daily_raw if daily_raw is not None else daily,
                                            bench=spy_raw if spy_raw is not None else spy, quote=quote,
                                            phase=fresh.get("phase"), forecast=saved, today=today,
-                                           industry=(quote or {}).get("industry"))
+                                           industry=(quote or {}).get("industry"), calendar=_calendar(g, sym))
         rx = post.get("reaction") or {}
         rv = post.get("forecast_review") or {}
         if saved and rx.get("observation") == "completed session" and rv.get("available"):

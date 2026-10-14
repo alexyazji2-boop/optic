@@ -153,6 +153,7 @@
         <tr><th scope="row">Revenue</th><td class="rf-g">${esc((a.revenue || {}).state || '')}</td><td>${esc((a.revenue || {}).reason || '')}</td></tr>
         <tr><th scope="row">Guidance</th><td class="rf-g">n/a</td><td>${esc((a.guidance || {}).reason || '')}</td></tr>
       </tbody></table>
+      ${(a.eps || {}).resolution ? `<p class="ov-fine">${esc(a.eps.resolution)}</p>` : ''}
       ${a.basis_warning ? `<p class="ov-fine">${esc(a.basis_warning)}</p>` : ''}
       <p class="ov-h3">The reaction</p><p class="rf-p">${esc((post.reaction || {}).text || '')} ${esc((post.reaction || {}).caveat || '')}</p>
       ${list((post.positives || []).map((t) => 'Positive: ' + t))}${list((post.weaknesses || []).map((t) => 'Weakness: ' + t))}
