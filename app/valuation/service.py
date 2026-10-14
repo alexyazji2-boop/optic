@@ -644,20 +644,36 @@ COMPS_MULTIPLES = (
 MAX_PEERS = 8
 
 
-def default_peers(provider, sym: str) -> List[str]:
-    """The largest companies in the same Yahoo industry, by market weight."""
+def default_peers(provider, sym: str, n: int = 25, level: str = "industry") -> List[str]:
+    """The largest companies in the same Yahoo industry (or sector), by
+    market weight."""
     try:
         info = provider._info(sym) or {}                                                  # noqa: SLF001
-        key = info.get("industryKey")
+        key = info.get("industryKey" if level == "industry" else "sectorKey")
         if not key:
             return []
         import yfinance as yf
-        top = yf.Industry(key).top_companies
+        top = (yf.Industry(key) if level == "industry" else yf.Sector(key)).top_companies
         if top is None or top.empty:
             return []
-        return [str(s).upper() for s in top.index if str(s).upper() != sym][:MAX_PEERS]
+        return [str(s).upper() for s in top.index if str(s).upper() != sym][:n]
     except Exception:                                                                      # noqa: BLE001
         return []
+
+
+SIZE_BAND = 25.0          # default peers within 25x of the company's market value, either way
+DISPERSION_FLAG = 2.0     # 75th / 25th percentile multiple above this: peers disagree widely
+
+
+def _fences(values: List[float]) -> Tuple[float, float]:
+    """Tukey fences on the log of the multiples: a multiple far outside the
+    middle half (a company priced on hope, or on a collapsed year) is set
+    aside rather than allowed to set the median's neighbours."""
+    import math as _m
+    logs = sorted(_m.log(v) for v in values)
+    q1, q3 = engine.percentile(logs, 0.25), engine.percentile(logs, 0.75)
+    iqr = q3 - q1
+    return _m.exp(q1 - 1.5 * iqr), _m.exp(q3 + 1.5 * iqr)
 
 
 def comps(provider, ticker: str, peers: Optional[List[str]] = None) -> Dict[str, Any]:
@@ -665,18 +681,30 @@ def comps(provider, ticker: str, peers: Optional[List[str]] = None) -> Dict[str,
 
     Peers and target are read from one source (Yahoo Finance trailing twelve
     months), so a multiple and the metric it is applied to are defined the
-    same way. An enterprise multiple becomes equity value using the same
-    source's own net debt (its enterprise value less market value), not the
-    SEC bridge, for the same reason. Market-relative: this says what the
-    company would be worth priced like its peers, not what its cash flows are
-    worth."""
+    same way. An enterprise multiple becomes equity value using that source's
+    own net debt (its enterprise value less market value), not the SEC
+    bridge, for the same reason.
+
+    Default peers are the industry's largest companies within a size band of
+    this one, the eight closest in size. For each multiple only peers with a
+    positive figure count, and outliers beyond Tukey fences are set aside and
+    named. When the peers' 25th and 75th percentiles are more than 2x apart,
+    the comparison is flagged: it then says more about which peers were chosen
+    than about this company. Market-relative throughout."""
     from concurrent.futures import ThreadPoolExecutor
+    import math as _m
     sym = ticker.upper().strip()
     chosen = [p.upper().strip() for p in (peers or []) if p and p.strip()][:MAX_PEERS]
     source = "reader" if chosen else "industry"
+    candidates = chosen or default_peers(provider, sym)
+    sector: List[str] = []
     if not chosen:
-        chosen = default_peers(provider, sym)
-    if not chosen:
+        # A company that dominates its own industry (Microsoft is most of
+        # Yahoo's "software infrastructure") has few peers of its size there;
+        # the sector's largest fill in, labelled as sector peers.
+        sector = [p for p in default_peers(provider, sym, level="sector") if p not in candidates]
+        candidates = candidates + sector
+    if not candidates:
         return {"available": False, "reason": "No peer list: the quote feed gives no industry for {}, "
                                               "and none was entered.".format(sym)}
 
@@ -686,37 +714,80 @@ def comps(provider, ticker: str, peers: Optional[List[str]] = None) -> Dict[str,
         except Exception:                                                                  # noqa: BLE001
             return {}
     with ThreadPoolExecutor(max_workers=6) as pool:
-        infos = dict(zip([sym] + chosen, pool.map(info, [sym] + chosen)))
+        infos = dict(zip([sym] + candidates, pool.map(info, [sym] + candidates)))
     me = infos.get(sym) or {}
     price = _num(me.get("currentPrice") or me.get("regularMarketPrice"))
     mcap, ev = _num(me.get("marketCap")), _num(me.get("enterpriseValue"))
-    shares = (mcap / price) if (mcap and price) else None
-    net_debt = (ev - mcap) if (ev is not None and mcap is not None) else None
-    rows = []
-    for p in chosen:
+    if not (price and mcap):
+        return {"available": False, "reason": "The quote feed returned no price or market value for {} "
+                                              "just now, so its multiples cannot be compared.".format(sym)}
+    shares = mcap / price
+    net_debt = (ev - mcap) if ev is not None else None
+    rows, excluded = [], []
+    for p in candidates:
         i = infos.get(p) or {}
-        rows.append({"symbol": p, "name": i.get("shortName") or i.get("longName"),
-                     "market_cap": _num(i.get("marketCap")),
-                     **{k: _num(i.get(field)) for k, _, field, _, _ in COMPS_MULTIPLES}})
-    implied = []
+        pm = _num(i.get("marketCap"))
+        row = {"symbol": p, "name": i.get("shortName") or i.get("longName"), "market_cap": pm,
+               "origin": "reader" if chosen else ("sector" if p in sector else "industry"),
+               **{k: _num(i.get(field)) for k, _, field, _, _ in COMPS_MULTIPLES}}
+        if not pm:
+            excluded.append(dict(row, why="no market value in the feed"))
+        elif source == "industry" and not (mcap / SIZE_BAND <= pm <= mcap * SIZE_BAND):
+            if row["origin"] == "industry":
+                excluded.append(dict(row, why="outside {:g}x of {}'s size".format(SIZE_BAND, sym)))
+        else:
+            rows.append(row)
+    if source == "industry":
+        # Industry peers first, nearest in size; sector peers only to bring
+        # the set up to five, and never past eight.
+        ind = sorted([r for r in rows if r["origin"] == "industry"], key=lambda r: abs(_m.log(r["market_cap"] / mcap)))
+        sec = sorted([r for r in rows if r["origin"] == "sector"], key=lambda r: abs(_m.log(r["market_cap"] / mcap)))
+        keep = ind[:MAX_PEERS]
+        if len(keep) < 5:
+            keep = keep + sec[:5 - len(keep)]
+        kept_ids = {r["symbol"] for r in keep}
+        for r in rows:
+            if r["symbol"] not in kept_ids and r["origin"] == "industry":
+                excluded.append(dict(r, why="further in size than the eight closest"))
+        rows = keep
+        source = "industry" if not any(r["origin"] == "sector" for r in rows) else "industry_and_sector"
+    implied, flags = [], []
     for key, label, field, metric_field, equity in COMPS_MULTIPLES:
         metric = _num(me.get(metric_field))
-        mults = [r[key] for r in rows if r[key] is not None and r[key] > 0]
-        if equity:
-            val = engine.comps_value(metric, mults, True, {}, 1.0)
-        elif net_debt is not None and shares:
-            val = engine.comps_value(metric, mults, True, {}, 1.0)
-            if val:
+        positive = [(r["symbol"], r[key]) for r in rows if r[key] is not None and r[key] > 0]
+        outliers: List[str] = []
+        if len(positive) >= 4:
+            lo, hi = _fences([v for _, v in positive])
+            outliers = [s for s, v in positive if not (lo <= v <= hi)]
+            positive = [(s, v) for s, v in positive if lo <= v <= hi]
+        mults = [v for _, v in positive]
+        val = engine.comps_value(metric, mults, True, {}, 1.0)
+        if val and not equity:
+            if net_debt is None:
+                val = None
+            else:
                 for lvl in ("low", "mid", "high"):
                     val[lvl]["per_share"] = (val[lvl]["per_share"] - net_debt) / shares
-        else:
-            val = None
-        implied.append({"key": key, "label": label, "metric": metric, "own_multiple": _num(me.get(field)),
-                        "peers_with_value": len(mults), "implied": val,
-                        "reason": None if val else ("Fewer than three peers have a positive {}, or the company's "
-                                                    "own figure is missing or negative.".format(label))})
-    return {"available": True, "ticker": sym, "peers": rows, "peer_source": source, "implied": implied,
-            "price": price, "net_debt": net_debt, "shares": shares,
+        spread = (val["high"]["multiple"] / val["low"]["multiple"]) if val and val["low"]["multiple"] > 0 else None
+        wide = bool(spread and spread > DISPERSION_FLAG)
+        own = _num(me.get(field))
+        note = None
+        if val and own and own > 0:
+            ratio = own / val["mid"]["multiple"]
+            if ratio < 0.5 or ratio > 2.0:
+                note = ("{} trades at {:.1f}x against a peer median of {:.1f}x. A gap that large usually means the "
+                        "peers are priced for different growth or margins, so the implied value mostly reflects "
+                        "the peer choice.".format(sym, own, val["mid"]["multiple"]))
+        implied.append({"key": key, "label": label, "metric": metric, "own_multiple": own,
+                        "peers_with_value": len(mults), "outliers": outliers, "implied": val,
+                        "spread": spread, "wide": wide, "note": note,
+                        "reason": None if val else ("Fewer than three peers have a positive {}, or {}'s own "
+                                                    "figure is missing or negative.".format(label, sym))})
+        if wide:
+            flags.append("{}: peers' 25th and 75th percentiles are {:.1f}x apart.".format(label, spread))
+    return {"available": True, "ticker": sym, "peers": rows, "excluded": excluded, "peer_source": source,
+            "implied": implied, "flags": flags, "price": price, "net_debt": net_debt, "shares": shares,
+            "market_cap": mcap,
             "source": "Yahoo Finance, trailing twelve months, for the company and each peer",
             "note": ("Market-relative: what the company would be worth at its peers' multiples. If the "
                      "whole group is mispriced, so is this.")}
@@ -808,27 +879,69 @@ def sotp_model(provider, ticker: str, multiples: Optional[Dict[str, Any]] = None
     if not table:
         return {"available": False, "reason": "The filings report revenue by segment but not operating income, "
                                               "so segments cannot be valued on earnings."}
-    quarters = list(seg.get("quarters") or [])
-    if len(quarters) < 4 or not _consecutive(quarters[-4:]):
-        return {"available": False, "reason": "The last four reported quarters are not consecutive ({}); a "
-                "trailing year needs all four, and one quarter is not annualised because segments are "
-                "seasonal.".format(", ".join(quarters[-4:])),
-                "quarters": quarters, "filings_unread": seg.get("filings_unread")}
-    rows, unallocated = [], 0.0
-    for r in table.get("rows") or []:
-        vals = (r.get("values") or [])[-4:]
-        if len(vals) < 4 or any(v is None for v in vals):
-            rows.append({"name": r.get("member"), "operating_income": None, "note": "a quarter is missing"})
-            continue
-        ttm = float(sum(vals))
-        name = str(r.get("member") or "")
-        if any(w in name.lower() for w in UNALLOCATED_WORDS):
-            unallocated += ttm
-            continue
-        rows.append({"name": name, "operating_income": ttm})
     data = gathered(provider, sym)
     if not data.get("available"):
         return {"available": False, "reason": data.get("reason")}
+    fy0 = data["fy_ends"][0] if data.get("fy_ends") else None
+    # The fiscal year the DCF starts from, as the 10-K reports it by segment:
+    # same period as the company's EBIT, so the parts reconcile to the whole.
+    # Four consecutive quarters are the fallback when that 10-K is not read.
+    annual = table.get("annual") or {}
+    ends = list(annual.get("ends") or [])
+    col = None
+    if fy0:
+        for i, e in enumerate(ends):
+            if abs((date.fromisoformat(e[:10]) - date.fromisoformat(fy0[:10])).days) <= 10:
+                col = i
+    period_note = None
+    if col is not None:
+        picked = [(r.get("member"), (r.get("values") or [None] * len(ends))[col]) for r in annual.get("rows") or []]
+        period = {"kind": "fiscal_year", "end": ends[col]}
+    else:
+        quarters = list(seg.get("quarters") or [])
+        if len(quarters) < 4 or not _consecutive(quarters[-4:]):
+            return {"available": False, "reason": "Neither the fiscal year the model starts from ({}) nor four "
+                    "consecutive quarters of segment operating income have been read from the filings yet "
+                    "(quarters read: {}). One quarter is not annualised, because segments are seasonal."
+                    .format(fy0, ", ".join(quarters[-4:]) or "none"),
+                    "quarters": quarters, "filings_unread": seg.get("filings_unread")}
+        picked = []
+        for r in table.get("rows") or []:
+            vals = (r.get("values") or [])[-4:]
+            picked.append((r.get("member"), None if len(vals) < 4 or any(v is None for v in vals) else float(sum(vals))))
+        period = {"kind": "trailing_four_quarters", "end": quarters[-1], "quarters": quarters[-4:]}
+        period_note = "The base fiscal year's 10-K has not been read by segment yet, so the last four quarters are used."
+    # A subtotal or total tagged as a member (Coca-Cola's "Material
+    # Reconciling Items" equals the sum of its segments) is dropped: added in,
+    # it doubles the parts.
+    seg_vals = [float(v) for n, v in picked if v is not None
+                and not any(w in str(n or "").lower() for w in UNALLOCATED_WORDS)]
+    ebit_fy0 = (data["history"][0]["flows"].get("operating_income") or {}).get("value")
+    dropped = []
+    kept_rows = []
+    for name, value in picked:
+        if value is not None and seg_vals:
+            others = sum(seg_vals) - (float(value) if value in seg_vals else 0.0)
+            is_total = (abs(float(value) - others) <= 0.005 * max(abs(others), 1.0) and others != 0) or (
+                ebit_fy0 and period["kind"] == "fiscal_year" and abs(float(value) - ebit_fy0) <= 0.005 * abs(ebit_fy0)
+                and len(picked) > 2)
+            if is_total:
+                dropped.append(str(name))
+                continue
+        kept_rows.append((name, value))
+    picked = kept_rows
+    rows, unallocated = [], 0.0
+    for name, value in picked:
+        name = str(name or "")
+        if value is None:
+            rows.append({"name": name, "operating_income": None, "note": "not reported for this period"})
+            continue
+        if any(w in name.lower() for w in UNALLOCATED_WORDS):
+            unallocated += float(value)
+            continue
+        rows.append({"name": name, "operating_income": float(value)})
+    if not any(r.get("operating_income") is not None for r in rows):
+        return {"available": False, "reason": "No segment reports operating income for {}.".format(period["end"])}
     base, _ = defaults.build_base(data)
     full = build(provider, sym, light=True)
     dcf = full.get("dcf") or {}
@@ -847,14 +960,20 @@ def sotp_model(provider, ticker: str, multiples: Optional[Dict[str, Any]] = None
                                               "multiple for each segment."}
     res = engine.sotp(rows, unallocated, float(um), base["bridge"], base["shares"])
     seg_sum = sum(r["operating_income"] for r in rows if r.get("operating_income") is not None) + unallocated
-    res.update({"available": True, "quarters": quarters[-4:], "axis_label": table.get("axis_label"),
+    if dropped:
+        period_note = ((period_note + " ") if period_note else "") + (
+            "Dropped as a total rather than a part: {}.".format(", ".join(dropped)))
+    res.update({"available": True, "period": period, "period_note": period_note,
+                "quarters": period.get("quarters"), "axis_label": table.get("axis_label"),
                 "dcf_implied_ev_ebit": implied, "segments_ttm_total": seg_sum,
                 "company_ebit_fy0": base.get("ebit"), "q4_derived": seg.get("q4_derived"),
                 "price": data["quote"].get("price"),
                 **analysis.versus_price(res.get("per_share"), data["quote"].get("price")),
-                "source": "Segment operating income from each filing's XBRL instance (SEC EDGAR), last four quarters",
-                "note": ("Operating income by segment as the company reports it, summed over the last four "
-                         "quarters. Corporate costs and eliminations are valued at the unallocated multiple, as a "
-                         "negative. The company total is its fiscal-year EBIT, a different period, shown to check "
-                         "the parts are roughly complete.")})
+                "source": "Segment operating income from the filings' XBRL instances (SEC EDGAR)",
+                "reconciles": (abs(seg_sum / base["ebit"] - 1.0) <= 0.02) if (base.get("ebit") and period["kind"] == "fiscal_year") else None,
+                "note": ("Operating income by segment as the company reports it for {}. Corporate costs and "
+                         "eliminations are valued at the unallocated multiple, as a negative. The segments plus "
+                         "those items should add up to the company's operating income for the same year."
+                         .format("the fiscal year ended " + period["end"] if period["kind"] == "fiscal_year"
+                                 else "the four quarters to " + period["end"]))})
     return res

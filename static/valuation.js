@@ -533,7 +533,7 @@
     }
     const comps = VAL.comps[d.ticker];
     if (comps && comps.available) {
-      (comps.implied || []).filter((c) => c.implied && c.key !== 'pb').forEach((c) => rows.push({
+      (comps.implied || []).filter((c) => c.implied && c.key !== 'pb' && !c.wide).forEach((c) => rows.push({
         label: `Peers' ${c.label}`, lo: c.implied.low.per_share, mid: c.implied.mid.per_share,
         hi: c.implied.high.per_share, fit: 'supporting' }));
     }
@@ -810,20 +810,31 @@
 
   function compsHTML(sym) {
     const c = VAL.comps[sym];
-    if (!c) {
-      return `<button type="button" class="btn" data-dcf-comps>Compare with peers</button>
-        <span class="muted">Reads the largest companies in the same industry. Optional peers:
-        <input type="text" class="dcf-peers" id="dcf-peers" placeholder="e.g. ORCL, ADBE, CRM" aria-label="Peer tickers"></span>`;
-    }
+    const ask = `<button type="button" class="btn" data-dcf-comps>${c && c.available ? 'Compare again' : 'Compare with peers'}</button>
+      <span class="muted">Peers (optional, comma-separated):
+      <input type="text" class="dcf-peers" id="dcf-peers" placeholder="e.g. ORCL, ADBE, CRM" aria-label="Peer tickers"
+        value="${esc(c && c.peer_source === 'reader' ? (c.peers || []).map((p) => p.symbol).join(', ') : '')}"></span>`;
+    if (!c) return `${ask}<p class="muted">Without a list, the largest companies in the same industry within 25× of its size, the eight closest.</p>`;
     if (c.loading) return loadingHTML('peer multiples');
-    if (!c.available) return esc(c.reason || 'No peers.');
-    return `<p class="muted">${esc(c.note)} Source: ${esc(c.source)}. Peers (${esc(c.peer_source === 'reader' ? 'yours' : 'largest in the industry')}):
-      ${c.peers.map((p) => esc(p.symbol)).join(', ')}.</p>
-      <table class="data narrow"><thead><tr><th>Multiple</th><th>This company</th><th>Peers: 25th / median / 75th</th><th>Implied per share</th></tr></thead><tbody>
-      ${c.implied.map((i) => `<tr><th scope="row">${esc(i.label)}</th><td>${has(i.own_multiple) ? fmt(i.own_multiple, 1) + '×' : '—'}</td>
-        <td>${i.implied ? `${fmt(i.implied.low.multiple, 1)}× / ${fmt(i.implied.mid.multiple, 1)}× / ${fmt(i.implied.high.multiple, 1)}×` : '—'}</td>
-        <td>${i.implied ? `${money(i.implied.low.per_share)} – <strong>${money(i.implied.mid.per_share)}</strong> – ${money(i.implied.high.per_share)}` : esc(i.reason || '')}</td></tr>`).join('')}
-      </tbody></table>`;
+    if (!c.available) return `${ask}<p>${esc(c.reason || 'No peers.')}</p>`;
+    const mult = (v) => (has(v) && v > 0 ? `${fmt(v, 1)}×` : '—');
+    return `${ask}
+      <p class="muted">${esc(c.note)} Source: ${esc(c.source)}. Peers: ${esc(c.peer_source === 'reader' ? 'yours' : c.peer_source === 'industry_and_sector'
+  ? 'the industry’s largest within the size band, with the sector’s largest added because the industry has too few of this size'
+  : 'the industry’s largest within the size band')}.</p>
+      ${(c.flags || []).length ? `<p class="callout info"><strong>Peers disagree widely.</strong> ${c.flags.map(esc).join(' ')} Read these values as a range, not an answer, or enter peers you consider comparable above.</p>` : ''}
+      <div class="dcf-scroll"><table class="data"><thead><tr><th>Multiple</th><th>${esc(sym)}</th><th>Peers: 25th / median / 75th</th><th>Implied per share</th></tr></thead><tbody>
+      ${c.implied.map((i) => `<tr><th scope="row">${esc(i.label)}</th><td>${mult(i.own_multiple)}</td>
+        <td>${i.implied ? `${mult(i.implied.low.multiple)} / ${mult(i.implied.mid.multiple)} / ${mult(i.implied.high.multiple)}` : '—'}
+          <span class="muted">${esc(String(i.peers_with_value))} peers${(i.outliers || []).length ? `; set aside as outliers: ${esc(i.outliers.join(', '))}` : ''}</span></td>
+        <td>${i.implied ? `${money(i.implied.low.per_share)} – <strong>${money(i.implied.mid.per_share)}</strong> – ${money(i.implied.high.per_share)}` : esc(i.reason || '')}
+          ${i.note ? `<span class="muted">${esc(i.note)}</span>` : ''}</td></tr>`).join('')}
+      </tbody></table></div>
+      <div class="dcf-scroll"><table class="data"><thead><tr><th>Peer</th><th>Market value</th><th>EV / EBITDA</th><th>EV / revenue</th><th>P / E</th><th>P / B</th></tr></thead><tbody>
+      ${c.peers.map((p) => `<tr><th scope="row">${esc(p.symbol)} <span class="muted">${esc(p.name || '')}${p.origin === 'sector' ? ' · sector peer' : ''}</span></th><td>${bigMoney(p.market_cap)}</td>
+        <td>${mult(p.ev_ebitda)}</td><td>${mult(p.ev_revenue)}</td><td>${mult(p.pe)}</td><td>${mult(p.pb)}</td></tr>`).join('')}
+      ${(c.excluded || []).map((p) => `<tr class="is-off"><th scope="row">${esc(p.symbol)}</th><td colspan="5" class="muted">Not used: ${esc(p.why)}</td></tr>`).join('')}
+      </tbody></table></div>`;
   }
 
   function sotpHTML(sym) {
@@ -832,8 +843,12 @@
       <span class="muted">Reads segment operating income from the last four quarterly filings.</span>`;
     if (r.loading) return loadingHTML('segment filings');
     if (!r.available) return esc(r.reason || 'Not available.');
-    return `<p class="muted">${esc(r.note)} Quarters: ${esc((r.quarters || []).join(', '))}. ${r.q4_derived ? 'A fourth quarter is derived as the year less the first three.' : ''}</p>
-      <table class="data narrow dcf-sotp"><thead><tr><th>${esc(r.axis_label || 'Segment')}</th><th>Operating income, last 4 quarters</th><th>EV / EBIT</th><th>Value</th></tr></thead><tbody>
+    const per = r.period || {};
+    const rec = r.reconciles === true ? `The parts add up to the company's operating income for the same year (${bigMoney(r.company_ebit_fy0)}).`
+      : r.reconciles === false ? `The parts add up to ${bigMoney(r.segments_ttm_total)} against operating income of ${bigMoney(r.company_ebit_fy0)}, so a line is missing or counted twice; treat the result with care.` : '';
+    return `<p class="muted">${esc(r.note)} ${esc(r.period_note || '')} ${rec}
+      ${per.kind === 'trailing_four_quarters' && r.q4_derived ? 'A fourth quarter is derived as the year less the first three.' : ''}</p>
+      <table class="data narrow dcf-sotp"><thead><tr><th>${esc(r.axis_label || 'Segment')}</th><th>Operating income, ${per.kind === 'fiscal_year' ? `fiscal year to ${esc(day(per.end))}` : 'last 4 quarters'}</th><th>EV / EBIT</th><th>Value</th></tr></thead><tbody>
       ${r.segments.map((g) => `<tr><th scope="row">${esc(g.name)}</th><td>${bigMoney(g.operating_income)}</td>
         <td>${has(g.operating_income) ? `<input type="text" inputmode="decimal" class="dcf-ovin" data-dcf-sotp-m="${esc(g.name)}" value="${has(g.multiple) ? fmt(g.multiple, 1) : ''}" aria-label="${esc(`EV/EBIT for ${g.name}`)}">×` : esc(g.note || '')}</td>
         <td>${bigMoney(g.value)}</td></tr>`).join('')}
@@ -843,8 +858,7 @@
       <tr class="is-total"><th scope="row">Enterprise value</th><td>${bigMoney(r.segments_ttm_total)}</td><td></td><td>${bigMoney(r.enterprise_value)}</td></tr>
       <tr class="is-total"><th scope="row">Value per share (same bridge as the DCF)</th><td></td><td></td><td><strong>${money(r.per_share)}</strong></td></tr>
       </tbody></table>
-      <p class="muted">Segments total ${bigMoney(r.segments_ttm_total)} against fiscal-year EBIT of ${bigMoney(r.company_ebit_fy0)} (different periods).
-        Multiples start at the DCF's implied ${fmt(r.dcf_implied_ev_ebit, 1)}× EV/EBIT, which reproduces the whole; change the segments you think are worth more or less.
+      <p class="muted">Multiples start at the DCF's implied ${fmt(r.dcf_implied_ev_ebit, 1)}× EV/EBIT, which reproduces the whole; change the segments you think are worth more or less.
         <button type="button" class="btn" data-dcf-sotp-run>Recalculate</button></p>`;
   }
 

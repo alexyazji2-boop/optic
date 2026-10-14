@@ -289,7 +289,7 @@ def test_sum_of_the_parts_refuses_a_year_with_a_missing_quarter(synthetic, monke
     q = ["2025-06-30", "2025-12-31", "2026-03-31", "2026-06-30"]
     monkeypatch.setattr(segments_mod, "build", lambda t, force=False: _segments(q))
     out = service.sotp_model(Provider(), "SYN")
-    assert not out["available"] and "not consecutive" in out["reason"]
+    assert not out["available"] and "consecutive quarters" in out["reason"] and "not annualised" in out["reason"]
 
 
 def test_a_cyclical_margin_moves_only_halfway_to_its_average(synthetic):
@@ -300,3 +300,88 @@ def test_a_cyclical_margin_moves_only_halfway_to_its_average(synthetic):
     assert m["target"] == pytest.approx(m["start"])        # synthetic margins are flat at 20%
     why = next(r for r in out["defaults"]["rationale"] if r["key"] == "margin.target")
     assert "Halfway" in why["why"] and why["kind"] == "assumption"
+
+
+def test_sum_of_the_parts_prefers_the_base_fiscal_year_and_reconciles(synthetic, monkeypatch):
+    """The 10-K's full-year segments for FY0 are used even when quarters have
+    gaps, and they add up to the company's EBIT for the same year."""
+    from app.analytics import segments as segments_mod
+    seg = _segments(["2025-06-30", "2025-12-31", "2026-03-31", "2026-06-30"])
+    # FY2025 EBIT in the synthetic filings is 1000 x 20% = 200.
+    seg["tables"][0]["annual"] = {"ends": ["2024-12-31", "2025-12-31"], "rows": [
+        {"member": "Machines", "values": [100.0, 130.0]},
+        {"member": "Services", "values": [80.0, 90.0]},
+        {"member": "Corporate Non Segment", "values": [-15.0, -20.0]}]}
+    monkeypatch.setattr(segments_mod, "build", lambda t, force=False: seg)
+    out = service.sotp_model(Provider(), "SYN")
+    assert out["available"] and out["period"] == {"kind": "fiscal_year", "end": "2025-12-31"}
+    assert out["segments_ttm_total"] == pytest.approx(200.0) and out["reconciles"] is True
+    assert {r["name"]: r["operating_income"] for r in out["segments"]} == {"Machines": 130.0, "Services": 90.0}
+
+
+def test_a_subtotal_tagged_as_a_member_is_not_counted_twice(synthetic, monkeypatch):
+    from app.analytics import segments as segments_mod
+    seg = _segments(["2025-06-30", "2025-12-31", "2026-03-31", "2026-06-30"])
+    seg["tables"][0]["annual"] = {"ends": ["2025-12-31"], "rows": [
+        {"member": "Machines", "values": [130.0]}, {"member": "Services", "values": [90.0]},
+        {"member": "Material Reconciling Items", "values": [220.0]},
+        {"member": "Corporate Non Segment", "values": [-20.0]}]}
+    monkeypatch.setattr(segments_mod, "build", lambda t, force=False: seg)
+    out = service.sotp_model(Provider(), "SYN")
+    assert out["segments_ttm_total"] == pytest.approx(200.0) and out["reconciles"]
+    assert "Material Reconciling Items" in out["period_note"]
+
+
+class CompsProvider(Provider):
+    INFO = {
+        "SYN": {"currentPrice": 20.0, "marketCap": 2000.0, "enterpriseValue": 2100.0, "ebitda": 150.0,
+                "totalRevenue": 1000.0, "trailingEps": 1.2, "bookValue": 7.0, "enterpriseToEbitda": 14.0,
+                "industryKey": "x"},
+        "A": {"marketCap": 1800.0, "enterpriseToEbitda": 12.0, "enterpriseToRevenue": 2.0, "trailingPE": 18.0, "priceToBook": 3.0},
+        "B": {"marketCap": 2500.0, "enterpriseToEbitda": 14.0, "enterpriseToRevenue": 2.5, "trailingPE": 20.0, "priceToBook": 3.5},
+        "C": {"marketCap": 3000.0, "enterpriseToEbitda": 16.0, "enterpriseToRevenue": 3.0, "trailingPE": 22.0, "priceToBook": 4.0},
+        "D": {"marketCap": 1500.0, "enterpriseToEbitda": 15.0, "enterpriseToRevenue": 2.8, "trailingPE": -5.0, "priceToBook": 3.2},
+        "HYPE": {"marketCap": 2200.0, "enterpriseToEbitda": 400.0, "enterpriseToRevenue": 60.0, "trailingPE": 900.0, "priceToBook": 40.0},
+        "TINY": {"marketCap": 10.0, "enterpriseToEbitda": 5.0, "enterpriseToRevenue": 0.5, "trailingPE": 6.0, "priceToBook": 1.0},
+    }
+
+    def _info(self, t):
+        return self.INFO.get(t, {})
+
+
+def test_comps_filter_size_profitability_and_outliers(monkeypatch):
+    monkeypatch.setattr(service, "default_peers", lambda p, s, n=25, level="industry": ["A", "B", "C", "D", "HYPE", "TINY"] if level == "industry" else [])
+    out = service.comps(CompsProvider(), "SYN")
+    assert out["available"]
+    assert {e["symbol"]: e["why"] for e in out["excluded"]}["TINY"].startswith("outside 25x")
+    ev = next(i for i in out["implied"] if i["key"] == "ev_ebitda")
+    assert ev["outliers"] == ["HYPE"] and ev["peers_with_value"] == 4
+    # Median of 12, 14, 15, 16 = 14.5; EV 14.5 x 150 = 2175, less net debt 100, over 100 shares.
+    assert ev["implied"]["mid"]["multiple"] == pytest.approx(14.5)
+    assert ev["implied"]["mid"]["per_share"] == pytest.approx((14.5 * 150 - 100) / 100)
+    pe = next(i for i in out["implied"] if i["key"] == "pe")
+    assert "D" not in pe["outliers"] and pe["peers_with_value"] == 3        # negative P/E left out
+
+
+def test_comps_flag_peers_that_disagree(monkeypatch):
+    base = CompsProvider.INFO
+
+    class Wide(CompsProvider):
+        INFO = dict(base, A=dict(base["A"], enterpriseToEbitda=6.0), B=dict(base["B"], enterpriseToEbitda=9.0),
+                    C=dict(base["C"], enterpriseToEbitda=14.0), D=dict(base["D"], enterpriseToEbitda=24.0),
+                    E=dict(base["B"], enterpriseToEbitda=36.0))
+    monkeypatch.setattr(service, "default_peers", lambda p, s, n=25, level="industry": ["A", "B", "C", "D", "E"] if level == "industry" else [])
+    out = service.comps(Wide(), "SYN")
+    ev = next(i for i in out["implied"] if i["key"] == "ev_ebitda")
+    assert ev["wide"] and any("EV / EBITDA" in f for f in out["flags"])
+
+
+def test_sector_peers_fill_in_when_the_industry_has_too_few_of_this_size(monkeypatch):
+    def peers(p, s, n=25, level="industry"):
+        return ["A", "TINY"] if level == "industry" else ["B", "C", "D", "HYPE"]
+    monkeypatch.setattr(service, "default_peers", peers)
+    out = service.comps(CompsProvider(), "SYN")
+    assert out["peer_source"] == "industry_and_sector"
+    origins = {r["symbol"]: r["origin"] for r in out["peers"]}
+    assert origins["A"] == "industry" and len(out["peers"]) == 5
+    assert all(o == "sector" for k, o in origins.items() if k != "A")
