@@ -172,7 +172,13 @@ because its uncertainty is shown separately in the sensitivity tables.
 * **Upside** = value / price - 1. **Margin of safety** = 1 - price / value
   (defined only for a positive value; shown as none when the price is above).
 * **What-ifs:** capex staying at FY0's level, margins holding at FY0's level,
-  RONIC = WACC, WACC +1 pt.
+  margins at the three-year average excluding tagged one-off charges, RONIC =
+  WACC, WACC +1 pt.
+* **Return on the forecast's own investment** = (NOPAT in the last forecast
+  year - NOPAT in the first) / net reinvestment in between. Below half the
+  cost of capital, a check warns that capex, margin and growth do not
+  describe one plan, and names the cause (a falling margin, or growth that
+  does not rise with spending).
 
 ## 5. Other methods (shown side by side, never averaged)
 
@@ -200,18 +206,36 @@ because its uncertainty is shown separately in the sensitivity tables.
   range. D&A includes some non-property D&A. AFFO is not computed: it needs
   maintenance capex and straight-line rent, which are not consistently
   tagged.
-* **Comparable companies:** the largest companies in the same Yahoo industry
-  (or the reader's list). EV/EBITDA, EV/revenue, P/E and P/B at the peers'
-  25th, median and 75th percentile, applied to the company's own trailing
-  metric from the same source. Enterprise multiples go through that source's
-  net debt. Market-relative.
+* **Comparable companies:** the reader's list, or by default the largest
+  companies in the same Yahoo industry within 25x of the company's market
+  value, the eight nearest in size. When fewer than five qualify, the
+  sector's largest fill in, labelled as sector peers. For each multiple
+  (EV/EBITDA, EV/revenue, P/E, P/B), only peers with a positive figure count,
+  and outliers beyond Tukey fences on the log of the multiple are set aside
+  and named. The 25th, median and 75th percentiles are applied to the
+  company's own trailing metric from the same source (Yahoo TTM).
+  Enterprise multiples go through that source's net debt. Peers whose 25th
+  and 75th percentiles are more than 2x apart are flagged and kept off the
+  summary chart, and a company far from the peer median gets a note.
+  Market-relative throughout.
 * **Sum of the parts** (on request): each reported segment's operating income
-  over the last four consecutive quarters (from the filings' XBRL instances,
-  `app/analytics/segments.py`) x the reader's EV/EBIT. Corporate costs and
-  eliminations are valued as a negative at the unallocated multiple, and the
-  result goes through the same bridge. Multiples start at the DCF's implied
-  EV/EBIT, which reproduces the whole. Non-consecutive quarters are refused,
-  not annualised.
+  for the base fiscal year, as the 10-K's XBRL instance reports it
+  (`segments.build`'s `annual` block), x the reader's EV/EBIT. Same period
+  as the DCF's EBIT, so the parts should add up to it, and the page says
+  whether they do. Four consecutive quarters are the fallback; one quarter
+  is never annualised. A member equal to the sum of the segments, or to the
+  company's EBIT, is a tagged total (Coca-Cola's "Material Reconciling
+  Items") and is dropped. Corporate costs and eliminations are valued as a
+  negative at the unallocated multiple, and the result goes through the same
+  bridge. Multiples start at the EV/EBIT implied by the reader's current DCF,
+  which reproduces the whole.
+* **Editable equity models:** residual income (starting and long-run ROE,
+  book growth, long-run growth), the dividend model (growth, its length,
+  growth after) and a REIT's price-to-FFO, each with its default shown.
+  Residual income has bear/base/bull cases: starting ROE moves by
+  max(2 pts, 15%) each way, the bear's long-run ROE equals the cost of
+  equity, and long-run growth moves 0.5 pts. The cost-of-equity parts
+  (risk-free, beta, premium) are editable for companies without a DCF.
 * **Linked three-statement forecast (condensed):** income statement, balance
   sheet and cash flow, with cash as the plug and a balance check every year.
   Its FCFF equals the DCF's when taxes are linear. Payouts give way (buybacks,
@@ -225,7 +249,10 @@ The SEC SIC code first, then Yahoo's industry: REIT (6798), bank or lender
 (49xx), cyclical (mining, oil, metals, chemicals, shipping), not yet
 profitable (latest EBIT <= 0, or two of the last three years). Banks and
 insurers get no FCFF DCF. REITs get FFO first and a DCF only if EBIT is
-tagged. Loss-makers get low confidence and the reverse DCF first.
+tagged. Utilities get the dividend model first and the DCF as support,
+because capex builds a regulated rate base whose allowed return the FCFF
+forecast does not see. Loss-makers get low confidence and the reverse DCF
+first.
 
 ## 7. Inputs and provenance
 
@@ -249,8 +276,29 @@ tagged. Loss-makers get low confidence and the reverse DCF first.
   short-term borrowings); D, separately tagged notes, secured, unsecured and
   credit-line debt summed (REITs), flagged. A quarter-end debt figure more
   than 40% from the last 10-K's is flagged.
+* **Trailing twelve months** to the latest 10-Q, shown beside the base year:
+  fiscal year + this year to date - the same months a year earlier, all
+  under the same tag, with 10 days' tolerance for 52/53-week quarters. The
+  forecast still starts from the fiscal year.
+* **Tagged one-off charges:** restructuring, impairment (the larger of the
+  asset-impairment total and its goodwill and intangible parts) and
+  contingent-consideration remeasurement. Shown per year, with a margin
+  excluding them as a what-if, never the default, because charges tagged
+  with a company's own label cannot be removed the same way.
+* **Acquisitions:** a warning when acquisition spending exceeds 10% of
+  revenue in a year or 15% over three, since past growth then includes bought
+  revenue that the forecast does not pay for.
+* **A line the SEC facts lack** (a filer's own extension tag, such as
+  NextEra's capex) can be entered by the reader, labelled as theirs and kept
+  with saved snapshots. The base 10-K's own extension elements for that line
+  (consolidated, base-year contexts only, standard tags excluded) are
+  offered as suggestions and never applied by the model. Yahoo's statements
+  were checked as a fallback and rejected: they put NextEra's 2025 capex at
+  $9.3bn against the 10-K's $24.6bn.
 * US-GAAP filers only. IFRS (20-F) filers and new registrants without annual
-  history are reported as not covered.
+  history are reported as not covered. A filer reporting in another currency
+  is named, and the model does not convert; a price quoted in another
+  currency is warned about.
 * Data quality is checked and stated: restated years, stale annual reports,
   currency mismatch, share count vs market value, and debt jumps.
 
