@@ -5147,19 +5147,32 @@ function trendBasisLine(basis) {
  * card's edge and the distance line; the card's text stays ink, since a card
  * of green type reads as an alert rather than a state (the Indices cards'
  * own note). `mainKind` is the board's price kind: a card priced from another
- * session says so on a line of its own, under the state. */
+ * session says so on a line of its own, under the state.
+ *
+ * On a phone the same markup is a two-line list row: line 1 the symbol,
+ * name, price and state, line 2 the distance and the action. `tr-line2` is
+ * a wrapper for that alone (`display: contents` on a card, so the card's
+ * column is unchanged), and on the phone `tr-top` unboxes so its symbol and
+ * price take their own places on line 1. */
 function trendCardHTML(r, mainKind) {
   if (!r) return '';
   if (!r.available) {
     return `<div class="tr-card is-missing">
       <span class="tr-sym">${esc(r.symbol)}</span>
       <span class="tr-name">${esc(r.name || '')}</span>
-      <span class="tr-act">${esc(r.reason || 'Unavailable')}</span>
+      <span class="tr-line2"><span class="tr-act">${esc(r.reason || 'Unavailable')}</span></span>
     </div>`;
   }
   const cls = SECTOR_TREND_CLASS[r.trend] || 'flat';
   const arrow = SECTOR_TREND_ARROW[r.trend];
   const kind = r.price_kind && r.price_kind !== mainKind ? r.price_kind : '';
+  /* The label's first word in a span of its own, so the phone row can keep
+   * it for a screen reader and drop it from view (.tr-ov): "Overnight" is
+   * 52px of a 294px line that also holds the symbol, name and price. The
+   * words are still the map's, and every other width shows them whole. */
+  const label = SECTOR_TREND_LABEL[r.trend] || r.trend;
+  const split = /^(Overnight )(.+)$/.exec(label);
+  const labelHTML = split ? `<span class="tr-ov">${esc(split[1])}</span>${esc(split[2])}` : esc(label);
   const tip = [`Open ${r.symbol}`, r.price_venue ? `Overnight print on ${r.price_venue}` : '', r.note || '']
     .filter(Boolean).join('. ');
   return `<button type="button" class="tr-card is-${cls}" data-analyse="${esc(r.symbol)}"
@@ -5167,11 +5180,10 @@ function trendCardHTML(r, mainKind) {
     <span class="tr-top"><span class="tr-sym">${esc(r.symbol)}</span><span class="tr-price"
       >$${fmt(r.price, 2)}</span></span>
     <span class="tr-name">${esc(r.name || '')}</span>
-    <span class="sec-trend ${cls}">${arrow ? `<span aria-hidden="true">${arrow}</span> ` : ''}${
-  esc(SECTOR_TREND_LABEL[r.trend] || r.trend)}</span>
-    ${kind ? `<span class="tr-kind">Price: ${esc(kind)}</span>` : ''}
-    <span class="tr-vs${cls === 'flat' ? '' : ` ${cls}`}">${esc(r.vs_level_text || '')}</span>
-    <span class="tr-act">${esc((r.action || {}).text || r.summary || '')}</span>
+    <span class="sec-trend ${cls}">${arrow ? `<span aria-hidden="true">${arrow}</span> ` : ''}${labelHTML}</span>
+    <span class="tr-line2">${kind ? `<span class="tr-kind">Price: ${esc(kind)}</span>` : ''}<span
+      class="tr-vs${cls === 'flat' ? '' : ` ${cls}`}">${esc(r.vs_level_text || '')}</span><span
+      class="tr-act">${esc((r.action || {}).text || r.summary || '')}</span></span>
   </button>`;
 }
 

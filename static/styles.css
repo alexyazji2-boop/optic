@@ -11447,22 +11447,64 @@ body.cp-open { overflow: hidden; }
 .tr-name { font-size: var(--t-caption); color: var(--ink-muted); }
 .tr-card .sec-trend { margin: var(--space-1) 0; }
 .tr-kind { font-size: var(--t-caption); color: var(--ink-2); }
+/* Layout only: on a card its children are the card's own rows. */
+.tr-line2 { display: contents; }
+.tr-line2[hidden] { display: none; }
 .tr-vs { font-size: var(--t-small); font-variant-numeric: tabular-nums; color: var(--ink-muted); }
 .tr-act { font-size: var(--t-small); line-height: 1.45; color: var(--ink-2); }
 .tr-skel { height: calc(240px * var(--ui-scale)); }
 
-/* Two across on a phone, where one 150px track would leave a single column
-   of fourteen cards. Measured at 375x812: each card is 143px, and the
-   "Overnight Downtrend" chip is 146px on its own, so it overflowed nine of
-   the fourteen cards. It wraps here, with a radius that suits two lines,
-   rather than losing a word the other two surfaces print; the name keeps one
-   line so "Consumer Discretionary" does not make its whole row taller. */
+/* A list on a phone, not cards. Two cards a row at 375x812 made the block
+   1,861px tall, with IWM alone on the index row; one row per ETF (symbol,
+   name, price and state; then the distance and the action as one sentence)
+   measured 1,211px, rows of 65px. The sentence is 314px to 410px at the
+   default text size against 281px of row, so it takes two lines; a shorter
+   block would mean cutting it. The state keeps its colour on the chip, the
+   distance and a 2px left edge, and the row is still the button. */
 @media (max-width: 559px) {
-  .tr-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .tr-card { padding: var(--space-2); }
-  .tr-card .sec-trend { white-space: normal; border-radius: var(--r-md); }
-  .tr-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tr-vs, .tr-act { font-size: var(--t-caption); }
+  .tr-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .tr-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center;
+    column-gap: var(--space-1);
+    row-gap: var(--space-0);
+    padding: var(--space-1) 0 var(--space-1) var(--space-2);
+    line-height: 1.25;
+    border: 0;
+    border-left: 2px solid var(--ws-line);
+    border-bottom: 1px solid var(--ws-line);
+    border-radius: 0;
+    background: transparent;
+  }
+  .tr-card.is-up { border-left-color: color-mix(in srgb, var(--pos) 70%, transparent); }
+  .tr-card.is-down { border-left-color: color-mix(in srgb, var(--neg) 70%, transparent); }
+  .tr-top { display: contents; }
+  .tr-sym { grid-area: 1 / 1; }
+  .tr-name {
+    grid-area: 1 / 2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tr-price { grid-area: 1 / 3; }
+  .tr-card .sec-trend { grid-area: 1 / 4; margin: 0; }
+  /* Read, not shown: the visually-hidden pattern of .sr-only, since
+     display: none would take the word from a screen reader too. */
+  .tr-card .tr-ov {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    overflow: hidden; white-space: nowrap; border: 0;
+    clip: rect(0, 0, 0, 0); clip-path: inset(50%);
+  }
+  .tr-line2 {
+    display: block;
+    grid-area: 2 / 1 / 3 / -1;
+    font-size: var(--t-caption);
+    line-height: 1.35;
+  }
+  .tr-line2 > span { font-size: inherit; line-height: inherit; }
+  /* Two spaces: the first one after a hex escape ends the escape. */
+  .tr-line2 > span + span::before { content: " \00b7  "; color: var(--ink-muted); }
 }
 
 /* ============================================================== watchlist ===

@@ -186,7 +186,12 @@ def _vs_level(trend: str, to_break_pct: float, to_breakdown_pct: float) -> Tuple
     a downtrend from the low it broke, an uptrend from the high it cleared, an
     undecided name from the high it has yet to clear. One figure per state
     rather than both on every card, because the second answers a question the
-    state has already answered."""
+    state has already answered.
+
+    A price that rounds onto its level printed "-0.00% to prior high" (XLF
+    after hours on 2026-10-14, $54.52 against a $54.52 high): a signed zero,
+    which reads as below the level. Adding 0.0 turns -0.0 into 0.0."""
+    to_break_pct, to_breakdown_pct = to_break_pct + 0.0, to_breakdown_pct + 0.0
     if trend == "downtrend":
         return to_breakdown_pct, "{:+.2f}% vs prior session low".format(to_breakdown_pct)
     if trend == "uptrend":

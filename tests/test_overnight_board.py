@@ -370,6 +370,10 @@ def test_each_state_is_measured_from_its_own_level(trend, text):
     assert pct == float(text.split("%")[0])
 
 
+def test_a_price_on_its_level_is_not_a_signed_zero():
+    assert sb._vs_level("neutral", -0.0, 0.5)[1] == "+0.00% to prior high"
+
+
 def test_every_row_carries_the_new_fields():
     r = row(board(TO_WED, MON_TUE + [(999.0, 1.0, 98.0)], et(2026, 10, 14, 12, 40)))
     for key in ("vs_level_pct", "vs_level_text", "action", "levels_session", "price_kind",
@@ -629,7 +633,9 @@ def test_a_card_renders_a_real_row_under_javascriptcore():
     out = subprocess.run([exe, "-e", src], capture_output=True, text=True, timeout=30)
     got = json.loads(out.stdout.strip().splitlines()[-1])
     card = got["card"]
-    assert "Overnight Downtrend" in card and "tr-card is-down" in card
+    words = re.sub(r"<[^>]+>", "", card)
+    assert "Overnight Downtrend" in words and "tr-card is-down" in card
+    assert '<span class="tr-ov">Overnight </span>Downtrend' in card, "the phone hides it from view only"
     assert "Reclaim $99.00 to turn neutral" in card
     assert "vs prior session low" in card and "$98.50" in card
     assert 'data-analyse="XLK"' in card
@@ -640,3 +646,23 @@ def test_a_card_renders_a_real_row_under_javascriptcore():
     # The weekday appears when the print is not from the day the test runs.
     assert re.fullmatch(r"Levels: Tuesday's session\. Price: regular session, as of "
                         r"(?:Wed )?12:39 pm\.", got["line"]), got["line"]
+
+
+def test_a_phone_gets_a_two_line_list_and_the_desktop_keeps_its_cards():
+    """Two cards a row at 375px made the block 1,861px tall with IWM alone on
+    the index row. Below 560px each ETF is one row: symbol, name, price and
+    state, then the distance and the action. Above it nothing changes: the
+    line-two wrapper is `display: contents` on a card."""
+    block = _trend_css()
+    phone = block[block.index("@media (max-width: 559px)"):]
+    assert "\n.tr-line2 { display: contents; }" in block
+    assert ".tr-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }" in phone
+    assert "display: grid;" in phone[phone.index(".tr-card {"):]
+    assert ".tr-top { display: contents; }" in phone
+    assert "grid-area: 2 / 1 / 3 / -1;" in phone
+    ov = phone[phone.index(".tr-card .tr-ov {"):]
+    ov = ov[:ov.index("}")]
+    assert "clip-path: inset(50%)" in ov and "display: none" not in ov, \
+        "the word stays for a screen reader"
+    card = _fn("trendCardHTML")
+    assert '<span class="tr-line2">' in card and "labelHTML" in card
