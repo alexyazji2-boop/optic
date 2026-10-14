@@ -136,8 +136,35 @@ def _statement(raw: Dict[str, Any], table: str, row: str) -> List[Optional[float
 _BANKLIKE = re.compile(r"\b(bank|banks|capital markets|insurance|credit services|asset management|mortgage)\b", re.I)
 
 
+def trailing(p: Pack, raw: Dict[str, Any], t: str) -> None:
+    """The last four quarters, because annual statements can be most of a year
+    old: on 2026-10-13 Micron's latest fiscal year ended August 2025 while its
+    quarters ran to May 2026, and Milo had to say the annual figures were stale."""
+    qt = raw.get("income_quarterly") or {}
+    periods = qt.get("periods") or []
+    rev = _statement(raw, "income_quarterly", "Total Revenue")
+    ni = _statement(raw, "income_quarterly", "Net Income")
+    src = "Company quarterly statements via Yahoo Finance"
+    url = "https://finance.yahoo.com/quote/{}/financials".format(t)
+    if len(rev) >= 4 and all(v is not None for v in rev[:4]) and periods:
+        ttm = sum(rev[:4])
+        span = "four quarters to {}".format(periods[0])
+        p.add("Revenue, trailing four quarters", _f(ttm / 1e9, 2), unit="$bn", period=span, source=src, url=url,
+              group="business")
+        if len(ni) >= 4 and all(v is not None for v in ni[:4]):
+            p.add("Net income, trailing four quarters", _f(sum(ni[:4]) / 1e9, 2), unit="$bn", period=span,
+                  source=src, url=url, group="business")
+            p.add("Net margin, trailing four quarters", _f(sum(ni[:4]) / ttm * 100, 1), unit="%", period=span,
+                  source=src, url=url, group="business")
+    if len(rev) >= 5 and rev[0] and rev[4]:
+        p.add("Latest quarter's revenue growth on the same quarter a year earlier", _f((rev[0] / rev[4] - 1) * 100, 1),
+              unit="%", period="quarter to {} vs quarter to {}".format(periods[0], periods[4]), source=src, url=url,
+              group="business")
+
+
 def fundamentals(p: Pack, d: Deps, t: str) -> None:
     raw = d.provider.financials(t) or {}
+    trailing(p, raw, t)
     q = d.provider.quote(t) or {}
     # A bank's operating cash flow moves with deposits, loans and trading
     # balances, so "free cash flow" and capex intensity mean nothing there:

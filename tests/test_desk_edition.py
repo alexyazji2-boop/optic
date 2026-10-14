@@ -479,3 +479,19 @@ def test_figures_written_out_in_full_or_quoted_from_a_cited_headline():
     assert check.run(d, BUNDLE, o)["ok"], check.run(d, BUNDLE, o)["errors"]
     d["sections"][0]["paragraphs"] = [{"text": "Initial jobless claims were 210,000.", "cites": [claims["id"]]}]
     assert not check.run(d, BUNDLE, o)["ok"]
+
+
+
+def test_trailing_quarters_when_the_annual_statements_are_old():
+    class Q(_Fin):
+        def financials(self, t):
+            out = super().financials(t)
+            out["income_quarterly"] = {"periods": ["2026-05-31", "2026-02-28", "2025-11-30", "2025-08-31", "2025-05-31"],
+                                       "rows": {"Total Revenue": [41.456e9, 23.86e9, 13.643e9, 11.315e9, 9.301e9],
+                                                "Net Income": [28.243e9, 13.785e9, 5.24e9, 3.201e9, 1.885e9]}}
+            return out
+    p = research.build("long term", "MU", research.Deps(provider=Q()), kind="long_term")
+    got = {i["label"]: i for i in p["items"]}
+    assert got["Revenue, trailing four quarters"]["value"] == pytest.approx(90.27, abs=0.01)
+    assert got["Revenue, trailing four quarters"]["period"] == "four quarters to 2026-05-31"
+    assert got["Latest quarter's revenue growth on the same quarter a year earlier"]["value"] == pytest.approx(345.7, abs=0.1)
