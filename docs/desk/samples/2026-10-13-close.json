@@ -1,0 +1,2293 @@
+{
+ "date": "2026-10-13",
+ "slot": "close",
+ "slot_label": "After the close",
+ "timezone": "America/New_York (ET)",
+ "cutoff": "2026-10-13T22:24:13+00:00",
+ "gathered_at": "2026-10-13T22:21:50+00:00",
+ "news_since": "2026-10-12T16:00:00-04:00",
+ "session": {
+  "phase": "after",
+  "label": "After hours",
+  "holiday": null,
+  "early_close": null
+ },
+ "voice": "written",
+ "headline": "WFC drops 3.1% and health care slides as JPMorgan's results leave stocks flat before CPI",
+ "headline_cites": [
+  "P6",
+  "S3",
+  "Q1",
+  "I1",
+  "E1"
+ ],
+ "summary": {
+  "text": "SPY finished 0.01% lower on the first big-bank earnings day, while WFC fell 3.1% and health care lost 1.35%. JPMorgan's and UnitedHealth's results cannot be called beats or misses because the free data's two consensus figures differ. Tomorrow's CPI, set against August's 0.4% rise, is the open question.",
+  "cites": [
+   "I1",
+   "P6",
+   "S3",
+   "Q1",
+   "Q2",
+   "E1"
+  ]
+ },
+ "sections": [
+  {
+   "id": "opening",
+   "paragraphs": [
+    {
+     "text": "Big-bank earnings got under way and the S&P 500 barely moved, with SPY closing 0.01% lower. JPMorgan Chase reported earnings per share of $5.75 and its shares fell 0.86%. The feed carries two consensus figures, $5.715 and $5.94, so Optic does not call that a beat or a miss.",
+     "cites": [
+      "I1",
+      "Q1"
+     ]
+    },
+    {
+     "text": "The sharper moves were underneath. WFC dropped 3.1% on 1.74 times its usual volume, and the health care fund (XLV) lost 1.35% even though UnitedHealth, which also reported, slipped only 0.2%. The data shows these moves, not their causes.",
+     "cites": [
+      "P6",
+      "S3",
+      "Q2"
+     ]
+    },
+    {
+     "text": "The tension is tomorrow at 8:30 a.m. Eastern, when the next consumer price index arrives. The last reading, for August and published in September, showed prices up 0.4% on the month. WSJ wrote that bank results failed to quash worries about inflation and Fed rate hikes, which puts the weight on that print.",
+     "cites": [
+      "E1",
+      "N136"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "numbers",
+   "title": "The numbers that matter",
+   "items": [
+    {
+     "evidence": "P6",
+     "label": "WFC shares, 13 October session",
+     "figure": "-3.1%",
+     "text": "From $83.32, against a typical daily move of 1.18%. Nothing in the evidence explains it.",
+     "cites": [
+      "P6"
+     ]
+    },
+    {
+     "evidence": "S3",
+     "label": "Health care (XLV), 13 October session",
+     "figure": "-1.35%",
+     "text": "Against a typical 0.58% day. UNH fell only 0.2%, so the drop came from elsewhere; biotech (XBI) fell 3.04%.",
+     "cites": [
+      "S3",
+      "Q2",
+      "S13"
+     ]
+    },
+    {
+     "evidence": "X1",
+     "label": "US dollar index, day",
+     "figure": "-0.36%, to 102.215",
+     "text": "Bigger than its typical 0.26% day. Gold edged up 0.16%, small beside its typical 0.77%, so the dollar-gold link is mixed.",
+     "cites": [
+      "X1",
+      "C2"
+     ]
+    },
+    {
+     "evidence": "K1",
+     "label": "High-yield bonds (HYG), day",
+     "figure": "-0.26%",
+     "text": "Beyond its typical 0.21% day while stocks were flat. Junk bonds are repaid only if companies stay solvent, so credit leaned more cautious than shares; the relationship is mixed.",
+     "cites": [
+      "K1",
+      "I1"
+     ]
+    },
+    {
+     "evidence": "Q1",
+     "label": "JPM EPS, quarter reported 13 October",
+     "figure": "$5.75",
+     "text": "Consensus figures of $5.715 and $5.94 differ, so no call. Revenue and guidance are not in the free data.",
+     "cites": [
+      "Q1"
+     ]
+    },
+    {
+     "evidence": "Q2",
+     "label": "UNH EPS, quarter reported 13 October",
+     "figure": "$4.69",
+     "text": "Consensus figures of $2.17 and $4.14 are far apart, so no call.",
+     "cites": [
+      "Q2"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "why",
+   "title": "Why this matters",
+   "paragraphs": [
+    {
+     "text": "Bank results reflect the households and businesses banks lend to, but one bank's EPS is thin evidence. The labour cross-check disagrees with itself: jobless claims were a low 197,000 in the week to 3 October, while September payrolls grew only 29,000, against 133,000 in August, and unemployment rose to 4.2%.",
+     "cites": [
+      "Q1",
+      "M5",
+      "M4",
+      "M3"
+     ]
+    },
+    {
+     "text": "Rates are why CPI carries weight. The 10-year yield eased 2.3 basis points to 5.217%. WSJ tied the retreat partly to lower Brent crude, though WTI rose 1.06%. New York Fed President John Williams sees one more hike in 2026 and none in 2027, which CNBC called at odds with traders, while the IMF warned yields could spike in a disorderly way.",
+     "cites": [
+      "R1",
+      "N97",
+      "C1",
+      "N106",
+      "N18"
+     ]
+    },
+    {
+     "text": "Oil is the relationship today's figures fit: WTI rose 1.06% and the energy fund (XLE) 1.8%, as you would expect when oil is producers' revenue. Consistent, not proof. Breadth was split, with 5 of 11 sector funds up, but over five sessions the equal-weight S&P 500 has beaten the cap-weighted index by 0.6 percentage points, so recent softness has sat in the biggest names.",
+     "cites": [
+      "C1",
+      "S6",
+      "B1",
+      "B2"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "balance",
+   "title": "The good, the bad and the unresolved",
+   "good": [
+    {
+     "text": "Energy led, with oil and gas producers (XOP) up 2.85%. OPEC's 2.6 million barrels a day of projected 2027 demand growth is a forecast, not a demonstrated cause.",
+     "cites": [
+      "S20",
+      "N139"
+     ]
+    },
+    {
+     "text": "The average stock held up: RSP rose 0.05%.",
+     "cites": [
+      "I5"
+     ]
+    }
+   ],
+   "bad": [
+    {
+     "text": "MU fell 3.62% and is down 8.83% over five sessions; MarketWatch described chips' worst stretch in 16 months.",
+     "cites": [
+      "P8",
+      "N134"
+     ]
+    },
+    {
+     "text": "Small caps (IWM) fell 0.43% and sit 4.82% below their 50-day average.",
+     "cites": [
+      "I3"
+     ]
+    }
+   ],
+   "unresolved": [
+    {
+     "text": "Gold miners (GDX) fell 1.46% while gold rose 0.16%.",
+     "cites": [
+      "S17",
+      "C2"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "focus",
+   "title": "Companies and sectors in focus",
+   "items": [
+    {
+     "text": "Bank of America reports tomorrow against a $1.10 EPS consensus, after the Financial Times reported a $1.2bn fine over money-laundering failures. CNBC and WSJ carried the same story: wider coverage, not independent confirmation.",
+     "cites": [
+      "Q3",
+      "N110"
+     ]
+    },
+    {
+     "text": "V rose 1.74% to $396.06, above its 20-day high of $391.81.",
+     "cites": [
+      "P1"
+     ]
+    },
+    {
+     "text": "MU, at $953.19, is still 34.52% above its 200-day average, so the long trend and the recent selling tell different stories.",
+     "cites": [
+      "P8"
+     ]
+    },
+    {
+     "text": "Homebuilders (ITB) rose 0.77% on 2.42 times normal volume but sit 12.63% below their 200-day average, with the 30-year mortgage rate at 7.4% in the week of 8 October.",
+     "cites": [
+      "S16",
+      "R8"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "structure",
+   "title": "Market structure and options context",
+   "paragraphs": [
+    {
+     "text": "On daily bars to 13 October, SPY closed at 778.01, above its 50-day average of 768.6 and inside its 20-day range of 749.6 to 781.62, on 0.58 times normal volume. QQQ closed at 743.57, below its 20-day high of 762.86.",
+     "cites": [
+      "I1",
+      "I2"
+     ]
+    },
+    {
+     "text": "The VIX rose 0.43 points to 15.27. SPY's at-the-money straddle prices about 0.52% either way to the 14 October expiry, which covers CPI day, close to SPY's typical 0.48% day; it is a price, not a forecast. QQQ prices 0.86% to that expiry. To the 13 November expiry, SPY prices 2.88% and QQQ 4.29%. These are Optic's estimates from delayed quotes.",
+     "cites": [
+      "V1",
+      "O1",
+      "I1",
+      "E1",
+      "O4",
+      "O2",
+      "O5"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "watch",
+   "title": "What to watch next",
+   "items": [
+    {
+     "when": "2026-10-14",
+     "what": "Consumer Price Index",
+     "text": "If hotter than August's 0.4%, the case for rates staying high strengthens, and yields would show it first; if cooler, pressure on yields eases, and watch whether the dollar falls with them.",
+     "cites": [
+      "E1"
+     ]
+    },
+    {
+     "when": "2026-10-14",
+     "what": "Bank of America results",
+     "text": "Above the $1.10 consensus would give JPM's ambiguous read company; below, watch whether bank shares extend WFC's weakness.",
+     "cites": [
+      "Q3",
+      "Q1",
+      "P6"
+     ]
+    },
+    {
+     "when": "2026-10-15",
+     "what": "Producer Price Index and TSM results",
+     "text": "PPI hotter than August's 0.4% would add to yield pressure; cooler would ease it. TSM above its $4.52 consensus would test the AI-fatigue story; below would fit chips' recent weakness.",
+     "cites": [
+      "E3",
+      "Q4",
+      "N134"
+     ]
+    },
+    {
+     "when": "2026-10-16",
+     "what": "Import prices and monthly options expiry",
+     "text": "Import prices hotter than the previous 0.67% would lean on yields; cooler would ease them. At expiry, strike-related hedging ends: a pinned index may loosen, a trending one may barely notice.",
+     "cites": [
+      "E4",
+      "E6"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "takeaways",
+   "title": "Key takeaways",
+   "items": [
+    {
+     "text": "Read CPI against August's 0.4% and watch the 10-year yield for the first reaction.",
+     "cites": [
+      "E1",
+      "R1"
+     ]
+    },
+    {
+     "text": "Treat bank results as evidence about their own customers; BAC adds a second data point.",
+     "cites": [
+      "Q3"
+     ]
+    },
+    {
+     "text": "Track whether WFC's drop and health care's slide extend or fade.",
+     "cites": [
+      "P6",
+      "S3"
+     ]
+    },
+    {
+     "text": "Watch whether credit keeps leaning more cautious than stocks, and whether TSM on Thursday steadies chips.",
+     "cites": [
+      "K1",
+      "Q4"
+     ]
+    }
+   ]
+  }
+ ],
+ "written_by": "a development stand-in (Claude Opus via Claude Code)",
+ "outline": {
+  "lead_theme": "companies",
+  "theme_scores": {
+   "companies": 2.62,
+   "earnings": 2.43,
+   "sectors": 2.34,
+   "dollar": 1.37,
+   "credit": 1.22,
+   "volatility": 0.77,
+   "equities": 0.73,
+   "rates": 0.61,
+   "oil": 0.55,
+   "other": 0.21
+  },
+  "quiet": false,
+  "relationships": [
+   {
+    "id": "dollar_gold",
+    "claim": "A stronger dollar usually weighs on gold, which is priced in dollars",
+    "mechanism": "Gold costs more in other currencies when the dollar rises, which can reduce demand.",
+    "evidence": [
+     "X1",
+     "C2"
+    ],
+    "status": "mixed",
+    "note": "Dollar -0.36%, gold +0.16%. Real yields, central-bank buying and safe-haven demand also move gold."
+   },
+   {
+    "id": "oil_energy",
+    "claim": "Oil prices feed into inflation expectations and energy company profits",
+    "mechanism": "Energy is a direct input cost across the economy and the revenue line of producers.",
+    "evidence": [
+     "C1",
+     "S6"
+    ],
+    "status": "consistent",
+    "note": "WTI +1.06%, energy shares (XLE) +1.80%."
+   },
+   {
+    "id": "credit_equity",
+    "claim": "Credit and stocks usually agree about risk",
+    "mechanism": "High-yield bonds are paid only if companies stay solvent, so they react to the same worries as shares.",
+    "evidence": [
+     "K1",
+     "I1"
+    ],
+    "status": "mixed",
+    "note": "High-yield bonds (HYG) -0.26%, S&P 500 -0.01%."
+   },
+   {
+    "id": "breadth",
+    "claim": "A move carried by most sectors says more than one carried by a few",
+    "mechanism": "When the index moves on a handful of large companies, the average stock can be doing something different.",
+    "evidence": [
+     "B1",
+     "I1"
+    ],
+    "status": "insufficient",
+    "note": "5 of 11 sector funds rose while the S&P 500 moved -0.01%."
+   },
+   {
+    "id": "banks_consumer",
+    "claim": "Bank results are evidence about their own customers' borrowing and repayment",
+    "mechanism": "Loan growth, card spending and credit losses at large banks reflect households and businesses they lend to.",
+    "evidence": [
+     "Q1",
+     "M5",
+     "M3"
+    ],
+    "status": "insufficient",
+    "note": "1 large bank reported. A few banks do not establish the state of the whole economy; jobless claims and unemployment are the broader cross-check."
+   }
+  ],
+  "conflicts": [
+   {
+    "evidence": "Q1",
+    "calendar": 5.715,
+    "history": 5.94,
+    "note": "The feed's two consensus EPS figures differ; the surprise depends on which is used."
+   },
+   {
+    "evidence": "Q2",
+    "calendar": 2.171,
+    "history": 4.14,
+    "note": "The feed's two consensus EPS figures differ; the surprise depends on which is used."
+   }
+  ],
+  "limits": [
+   "Economic releases are compared with their own previous reading: Optic carries no consensus forecasts for them.",
+   "Company results are EPS against the feed's consensus; reported revenue against its estimate and the text of guidance are not in the free data.",
+   "Prices are about 15 minutes delayed during the session; close-to-close changes use the last daily bar.",
+   "Options figures are Optic's estimates from delayed quotes; open interest is the previous session's.",
+   "For JPM, UNH the feed's two consensus figures disagree, so a beat or miss is not called."
+  ],
+  "target_words": [
+   700,
+   1100
+  ],
+  "watch": [
+   {
+    "evidence": "Q3",
+    "when": "2026-10-14",
+    "what": "BAC reports Wednesday 14 October",
+    "previous": null,
+    "if_up": null,
+    "if_down": null
+   },
+   {
+    "evidence": "E1",
+    "when": "2026-10-14T08:30:00-04:00",
+    "what": "Consumer Price Index",
+    "previous": 0.4,
+    "previous_headline": "CPI for all items increases 0.4% in August; gasoline rises",
+    "if_up": "If it comes in hotter than the previous reading, that would strengthen the case for interest rates staying high for longer, which yields would show first.",
+    "if_down": "If it comes in cooler than the previous reading, that would ease pressure on yields; watch whether the dollar falls with them."
+   },
+   {
+    "evidence": "Q4",
+    "when": "2026-10-15",
+    "what": "TSM reports Thursday 15 October",
+    "previous": null,
+    "if_up": null,
+    "if_down": null
+   },
+   {
+    "evidence": "E3",
+    "when": "2026-10-15T08:30:00-04:00",
+    "what": "Producer Price Index",
+    "previous": 0.4,
+    "previous_headline": "PPI for final demand moves up 0.4% in August; goods advance 1.1%, services rise 0.1%",
+    "if_up": "If it comes in hotter than the previous reading, that would strengthen the case for interest rates staying high for longer, which yields would show first.",
+    "if_down": "If it comes in cooler than the previous reading, that would ease pressure on yields; watch whether the dollar falls with them."
+   },
+   {
+    "evidence": "E4",
+    "when": "2026-10-16T08:30:00-04:00",
+    "what": "U.S. Import and Export Price Indexes",
+    "previous": 0.67,
+    "previous_headline": null,
+    "if_up": "If it comes in hotter than the previous reading, that would strengthen the case for interest rates staying high for longer, which yields would show first.",
+    "if_down": "If it comes in cooler than the previous reading, that would ease pressure on yields; watch whether the dollar falls with them."
+   },
+   {
+    "evidence": "E5",
+    "when": "2026-10-16T15:30:00-04:00",
+    "what": "CFTC Commitments of Traders",
+    "previous": null,
+    "previous_headline": null,
+    "if_up": null,
+    "if_down": null
+   },
+   {
+    "evidence": "E6",
+    "when": "2026-10-16T16:00:00-04:00",
+    "what": "Monthly options expiry",
+    "previous": null,
+    "previous_headline": null,
+    "if_up": null,
+    "if_down": null
+   },
+   {
+    "evidence": "E8",
+    "when": "2026-10-21T09:30:00-04:00",
+    "what": "VIX futures and options settlement",
+    "previous": null,
+    "previous_headline": null,
+    "if_up": null,
+    "if_down": null
+   }
+  ]
+ },
+ "evidence": [
+  {
+   "id": "I1",
+   "kind": "index",
+   "label": "S&P 500 (SPY)",
+   "value": -0.01,
+   "unit": "%",
+   "period": "session of 2026-10-13 (close to close)",
+   "event_at": "2026-10-13",
+   "as_of": "2026-10-13T22:21:51+00:00",
+   "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
+   "url": "https://finance.yahoo.com/quote/SPY",
+   "method": "Close-to-close change from daily bars; during an open session the last bar is still forming.",
+   "compare": {
+    "base": "previous close",
+    "value": 778.1
+   },
+   "symbol": "SPY",
+   "detail": {
+    "last": 778.01,
+    "prev": 778.1,
+    "date": "2026-10-13",
+    "typical_abs_1d": 0.483,
+    "chg_1d": -0.01,
+    "chg_5d": -0.14,
+    "chg_21d": 2.25,
+    "vs_sma50_pct": 1.22,
+    "vs_sma200_pct": 7.49,
+    "sma50": 768.6,
+    "sma200": 723.82,
+    "high_20d": 781.62,
+    "low_20d": 749.6,
+    "volume_vs_20d": 0.58
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "I2",
+   "kind": "index",
+   "label": "Nasdaq 100 (QQQ)",
+   "value": -0.33,
+   "unit": "%",
+   "period": "session of 2026-10-13 (close to close)",
+   "event_at": "2026-10-13",
+   "as_of": "2026-10-13T22:21:51+00:00",
+   "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
+   "url": "https://finance.yahoo.com/quote/QQQ",
+   "method": "Close-to-close change from daily bars; during an open session the last bar is still forming.",
+   "compare": {
+    "base": "previous close",
+    "value": 746.04
+   },
+   "symbol": "QQQ",
+   "detail": {
+    "last": 743.57,
+    "prev": 746.04,
+    "date": "2026-10-13",
+    "typical_abs_1d": 0.745,
+    "chg_1d": -0.33,
+    "chg_5d": -2.12,
+    "chg_21d": 4.85,
+    "vs_sma50_pct": 2.34,
+    "vs_sma200_pct": 10.42,
+    "sma50": 726.55,
+    "sma200": 673.4,
+    "high_20d": 762.86,
+    "low_20d": 700.0,
+    "volume_vs_20d": 0.85
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "I3",
+   "kind": "index",
+   "label": "Russell 2000 (IWM)",
+   "value": -0.43,
+   "unit": "%",
+   "period": "session of 2026-10-13 (close to close)",
+   "event_at": "2026-10-13",
+   "as_of": "2026-10-13T22:21:51+00:00",
+   "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
+   "url": "https://finance.yahoo.com/quote/IWM",
+   "method": "Close-to-close change from daily bars; during an open session the last bar is still forming.",
+   "compare": {
+    "base": "previous close",
+    "value": 277.9
+   },
+   "symbol": "IWM",
+   "detail": {
+    "last": 276.7,
+    "prev": 277.9,
+    "date": "2026-10-13",
+    "typical_abs_1d": 0.593,
+    "chg_1d": -0.43,
+    "chg_5d": -1.65,
+    "chg_21d": -3.89,
+    "vs_sma50_pct": -4.82,
+    "vs_sma200_pct": -0.22,
+    "sma50": 290.73,
+    "sma200": 277.31,
+    "high_20d": 288.94,
+    "low_20d": 274.52,
+    "volume_vs_20d": 1.11
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "I4",
+   "kind": "index",
+   "label": "Dow 30 (DIA)",
+   "value": -0.33,
+   "unit": "%",
+   "period": "session of 2026-10-13 (close to close)",
+   "event_at": "2026-10-13",
+   "as_of": "2026-10-13T22:21:51+00:00",
+   "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
+   "url": "https://finance.yahoo.com/quote/DIA",
+   "method": "Close-to-close change from daily bars; during an open session the last bar is still forming.",
+   "compare": {
+    "base": "previous close",
+    "value": 517.91
+   },
+   "symbol": "DIA",
+   "detail": {
+    "last": 516.21,
+    "prev": 517.91,
+    "date": "2026-10-13",
+    "typical_abs_1d": 0.544,
+    "chg_1d": -0.33,
+    "chg_5d": 0.32,
+    "chg_21d": -1.58,
+    "vs_sma50_pct": -1.77,
+    "vs_sma200_pct": 2.46,
+    "sma50": 525.51,
+    "sma200": 503.82,
+    "high_20d": 523.64,
+    "low_20d": 504.7,
+    "volume_vs_20d": 0.96
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "I5",
+   "kind": "index",
+   "label": "S&P 500 equal weight (RSP)",
+   "value": 0.05,
+   "unit": "%",
+   "period": "session of 2026-10-13 (close to close)",
+   "event_at": "2026-10-13",
+   "as_of": "2026-10-13T22:21:51+00:00",
+   "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
+   "url": "https://finance.yahoo.com/quote/RSP",
+   "method": "Close-to-close change from daily bars; during an open session the last bar is still forming.",
+   "compare": {
+    "base": "previous close",
+    "value": 213.19
+   },
+   "symbol": "RSP",
+   "detail": {
+    "last": 213.3,
+    "prev": 213.19,
+    "date": "2026-10-13",
+    "typical_abs_1d": 0.482,
+    "chg_1d": 0.05,
+    "chg_5d": 0.46,
+    "chg_21d": -0.8,
+    "vs_sma50_pct": -1.33,
+    "vs_sma200_pct": 3.33,
+    "sma50": 216.18,
+    "sma200": 206.42,
+    "high_20d": 214.85,
+    "low_20d": 207.16,
+    "volume_vs_20d": 0.97
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "S3",
+   "kind": "sector",
+   "label": "Health Care (XLV)",
+   "value": -1.35,
+   "unit": "%",
+   "period": "session of 2026-10-13",
+   "event_at": "2026-10-13",
+   "as_of": "2026-10-13T22:21:51+00:00",
+   "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
+   "url": "https://finance.yahoo.com/quote/XLV",
+   "method": "Close-to-close change of the sector ETF.",
+   "symbol": "XLV",
+   "detail": {
+    "last": 169.66,
+    "prev": 171.99,
+    "date": "2026-10-13",
+    "typical_abs_1d": 0.576,
+    "chg_1d": -1.35,
+    "chg_5d": 1.54,
+    "chg_21d": 1.14,
+    "vs_sma50_pct": 0.24,
+    "vs_sma200_pct": 7.92,
+    "sma50": 169.25,
+    "sma200": 157.21,
+    "high_20d": 172.03,
+    "low_20d": 165.19,
+    "volume_vs_20d": 1.09,
+    "group": "sector"
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "S6",
+   "kind": "sector",
+   "label": "Energy (XLE)",
+   "value": 1.8,
+   "unit": "%",
+   "period": "session of 2026-10-13",
+   "event_at": "2026-10-13",
+   "as_of": "2026-10-13T22:21:51+00:00",
+   "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
+   "url": "https://finance.yahoo.com/quote/XLE",
+   "method": "Close-to-close change of the sector ETF.",
+   "symbol": "XLE",
+   "detail": {
+    "last": 67.2,
+    "prev": 66.01,
+    "date": "2026-10-13",
+    "typical_abs_1d": 1.107,
+    "chg_1d": 1.8,
+    "chg_5d": 5.41,
+    "chg_21d": 4.14,
+    "vs_sma50_pct": 6.72,
+    "vs_sma200_pct": 17.33,
+    "sma50": 62.97,
+    "sma200": 57.27,
+    "high_20d": 66.42,
+    "low_20d": 60.95,
+    "volume_vs_20d": 0.8,
+    "group": "sector"
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "S13",
+   "kind": "sector",
+   "label": "Biotech (XBI)",
+   "value": -3.04,
+   "unit": "%",
+   "period": "session of 2026-10-13",
+   "event_at": "2026-10-13",
+   "as_of": "2026-10-13T22:21:51+00:00",
+   "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
+   "url": "https://finance.yahoo.com/quote/XBI",
+   "method": "Close-to-close change of the sector ETF.",
+   "symbol": "XBI",
+   "detail": {
+    "last": 146.8,
+    "prev": 151.4,
+    "date": "2026-10-13",
+    "typical_abs_1d": 1.423,
+    "chg_1d": -3.04,
+    "chg_5d": -2.72,
+    "chg_21d": -6.85,
+    "vs_sma50_pct": -7.28,
+    "vs_sma200_pct": 5.0,
+    "sma50": 158.33,
+    "sma200": 139.8,
+    "high_20d": 162.68,
+    "low_20d": 146.01,
+    "volume_vs_20d": 0.98,
+    "group": "theme"
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "S16",
+   "kind": "sector",
+   "label": "Homebuilders (ITB)",
+   "value": 0.77,
+   "unit": "%",
+   "period": "session of 2026-10-13",
+   "event_at": "2026-10-13",
+   "as_of": "2026-10-13T22:21:51+00:00",
+   "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
+   "url": "https://finance.yahoo.com/quote/ITB",
+   "method": "Close-to-close change of the sector ETF.",
+   "symbol": "ITB",
+   "detail": {
+    "last": 84.64,
+    "prev": 83.99,
+    "date": "2026-10-13",
+    "typical_abs_1d": 1.263,
+    "chg_1d": 0.77,
+    "chg_5d": -2.66,
+    "chg_21d": -6.01,
+    "vs_sma50_pct": -8.37,
+    "vs_sma200_pct": -12.63,
+    "sma50": 92.37,
+    "sma200": 96.88,
+    "high_20d": 91.26,
+    "low_20d": 83.69,
+    "volume_vs_20d": 2.42,
+    "group": "theme"
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "S17",
+   "kind": "sector",
+   "label": "Gold Miners (GDX)",
+   "value": -1.46,
+   "unit": "%",
+   "period": "session of 2026-10-13",
+   "event_at": "2026-10-13",
+   "as_of": "2026-10-13T22:21:51+00:00",
+   "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
+   "url": "https://finance.yahoo.com/quote/GDX",
+   "method": "Close-to-close change of the sector ETF.",
+   "symbol": "GDX",
+   "detail": {
+    "last": 87.24,
+    "prev": 88.53,
+    "date": "2026-10-13",
+    "typical_abs_1d": 1.821,
+    "chg_1d": -1.46,
+    "chg_5d": -1.11,
+    "chg_21d": -7.33,
+    "vs_sma50_pct": -6.38,
+    "vs_sma200_pct": -4.22,
+    "sma50": 93.18,
+    "sma200": 91.08,
+    "high_20d": 98.37,
+    "low_20d": 84.36,
+    "volume_vs_20d": 0.76,
+    "group": "theme"
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "S20",
+   "kind": "sector",
+   "label": "Oil & Gas E&P (XOP)",
+   "value": 2.85,
+   "unit": "%",
+   "period": "session of 2026-10-13",
+   "event_at": "2026-10-13",
+   "as_of": "2026-10-13T22:21:51+00:00",
+   "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
+   "url": "https://finance.yahoo.com/quote/XOP",
+   "method": "Close-to-close change of the sector ETF.",
+   "symbol": "XOP",
+   "detail": {
+    "last": 199.82,
+    "prev": 194.29,
+    "date": "2026-10-13",
+    "typical_abs_1d": 1.424,
+    "chg_1d": 2.85,
+    "chg_5d": 6.03,
+    "chg_21d": 3.28,
+    "vs_sma50_pct": 7.53,
+    "vs_sma200_pct": 20.39,
+    "sma50": 185.83,
+    "sma200": 165.97,
+    "high_20d": 200.89,
+    "low_20d": 176.47,
+    "volume_vs_20d": 0.88,
+    "group": "theme"
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "B1",
+   "kind": "breadth",
+   "label": "Sector ETFs higher on the day",
+   "value": 5.0,
+   "unit": "of 11",
+   "period": "session of 2026-10-13",
+   "as_of": "2026-10-13T22:21:51+00:00",
+   "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
+   "method": "Count of the 11 SPDR sector ETFs that closed above their previous close.",
+   "detail": {
+    "up": 5,
+    "total": 11
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "B2",
+   "kind": "breadth",
+   "label": "Equal-weight minus cap-weight S&P 500, five sessions",
+   "value": 0.6,
+   "unit": "pp",
+   "period": "five sessions to 2026-10-13",
+   "as_of": "2026-10-13T22:21:51+00:00",
+   "source": "Yahoo Finance daily bars (about 15 minutes delayed in session)",
+   "method": "RSP five-session change minus SPY five-session change. Positive means the average stock beat the index's largest names.",
+   "detail": {
+    "rsp_5d": 0.46,
+    "spy_5d": -0.14
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "R1",
+   "kind": "rates",
+   "label": "10-year Treasury yield (market)",
+   "value": 5.217,
+   "unit": "%",
+   "period": "latest quote",
+   "as_of": "2026-10-13T22:21:51.814241+00:00",
+   "source": "Yahoo Finance quote for ^TNX",
+   "url": "https://finance.yahoo.com/quote/^TNX",
+   "method": "Change in basis points from the previous close (one basis point is 0.01 percentage point).",
+   "compare": {
+    "base": "previous close",
+    "value": 5.24,
+    "change": -2.3,
+    "change_unit": "bp"
+   },
+   "symbol": "^TNX",
+   "detail": {
+    "chg_5d_pct_of_yield": -0.987,
+    "pct_from_52w_high": -1.77,
+    "typical_abs_1d": 3.76
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "R2",
+   "kind": "rates",
+   "label": "5-year Treasury yield (market)",
+   "value": 5.007,
+   "unit": "%",
+   "period": "latest quote",
+   "as_of": "2026-10-13T22:21:51.814241+00:00",
+   "source": "Yahoo Finance quote for ^FVX",
+   "url": "https://finance.yahoo.com/quote/^FVX",
+   "method": "Change in basis points from the previous close (one basis point is 0.01 percentage point).",
+   "compare": {
+    "base": "previous close",
+    "value": 5.019,
+    "change": -1.2,
+    "change_unit": "bp"
+   },
+   "symbol": "^FVX",
+   "detail": {
+    "chg_5d_pct_of_yield": -0.418,
+    "pct_from_52w_high": -1.61,
+    "typical_abs_1d": 3.67
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "R3",
+   "kind": "rates",
+   "label": "13-week Treasury bill yield",
+   "value": 4.057,
+   "unit": "%",
+   "period": "latest quote",
+   "as_of": "2026-10-13T22:21:51.814241+00:00",
+   "source": "Yahoo Finance quote for ^IRX",
+   "url": "https://finance.yahoo.com/quote/^IRX",
+   "method": "Change in basis points from the previous close (one basis point is 0.01 percentage point).",
+   "compare": {
+    "base": "previous close",
+    "value": 4.05,
+    "change": 0.7,
+    "change_unit": "bp"
+   },
+   "symbol": "^IRX",
+   "detail": {
+    "chg_5d_pct_of_yield": 0.495,
+    "pct_from_52w_high": -0.32,
+    "typical_abs_1d": 1.57
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "X1",
+   "kind": "fx",
+   "label": "US dollar index (DXY)",
+   "value": -0.36,
+   "unit": "%",
+   "period": "day, latest quote",
+   "as_of": "2026-10-13T22:21:51.814241+00:00",
+   "source": "Yahoo Finance quote for DX-Y.NYB",
+   "url": "https://finance.yahoo.com/quote/DX-Y.NYB",
+   "method": "Percentage change from the previous close.",
+   "compare": {
+    "base": "previous close",
+    "value": 102.589,
+    "level": 102.215
+   },
+   "symbol": "DX-Y.NYB",
+   "detail": {
+    "level": 102.215,
+    "chg_5d": 0.378,
+    "chg_20d": 2.574,
+    "typical_abs_1d": 0.263
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "C1",
+   "kind": "commodity",
+   "label": "WTI crude oil",
+   "value": 1.06,
+   "unit": "%",
+   "period": "day, latest quote",
+   "as_of": "2026-10-13T22:21:51.814241+00:00",
+   "source": "Yahoo Finance quote for CL=F",
+   "url": "https://finance.yahoo.com/quote/CL=F",
+   "method": "Percentage change from the previous close.",
+   "compare": {
+    "base": "previous close",
+    "value": 93.74,
+    "level": 94.73
+   },
+   "symbol": "CL=F",
+   "detail": {
+    "level": 94.73,
+    "chg_5d": 5.915,
+    "chg_20d": -10.489,
+    "typical_abs_1d": 1.917
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "C2",
+   "kind": "commodity",
+   "label": "Gold",
+   "value": 0.16,
+   "unit": "%",
+   "period": "day, latest quote",
+   "as_of": "2026-10-13T22:21:51.814241+00:00",
+   "source": "Yahoo Finance quote for GC=F",
+   "url": "https://finance.yahoo.com/quote/GC=F",
+   "method": "Percentage change from the previous close.",
+   "compare": {
+    "base": "previous close",
+    "value": 4177.3,
+    "level": 4183.7998
+   },
+   "symbol": "GC=F",
+   "detail": {
+    "level": 4183.7998,
+    "chg_5d": -0.079,
+    "chg_20d": -3.439,
+    "typical_abs_1d": 0.77
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "C3",
+   "kind": "commodity",
+   "label": "Copper",
+   "value": 0.05,
+   "unit": "%",
+   "period": "day, latest quote",
+   "as_of": "2026-10-13T22:21:51.814241+00:00",
+   "source": "Yahoo Finance quote for HG=F",
+   "url": "https://finance.yahoo.com/quote/HG=F",
+   "method": "Percentage change from the previous close.",
+   "compare": {
+    "base": "previous close",
+    "value": 6.726,
+    "level": 6.7295
+   },
+   "symbol": "HG=F",
+   "detail": {
+    "level": 6.7295,
+    "chg_5d": 2.047,
+    "chg_20d": 5.669,
+    "typical_abs_1d": 0.899
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "K1",
+   "kind": "credit",
+   "label": "High-yield bond ETF (HYG)",
+   "value": -0.26,
+   "unit": "%",
+   "period": "day, latest quote",
+   "as_of": "2026-10-13T22:21:51.814241+00:00",
+   "source": "Yahoo Finance quote for HYG",
+   "url": "https://finance.yahoo.com/quote/HYG",
+   "method": "Percentage change from the previous close.",
+   "compare": {
+    "base": "previous close",
+    "value": 77.29,
+    "level": 77.09
+   },
+   "symbol": "HYG",
+   "detail": {
+    "level": 77.09,
+    "chg_5d": -0.233,
+    "chg_20d": -1.646,
+    "typical_abs_1d": 0.213
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "V1",
+   "kind": "volatility",
+   "label": "VIX",
+   "value": 15.27,
+   "unit": "index",
+   "period": "latest quote",
+   "as_of": "2026-10-13T22:21:51.814241+00:00",
+   "source": "Yahoo Finance quote for ^VIX (Cboe)",
+   "url": "https://finance.yahoo.com/quote/%5EVIX",
+   "method": "The VIX is the 30-day implied volatility of S&P 500 options, in annualised percent.",
+   "compare": {
+    "base": "previous close",
+    "value": 14.84,
+    "change": 0.43,
+    "change_unit": "pts"
+   },
+   "symbol": "^VIX",
+   "detail": {
+    "typical_abs_1d": 0.56,
+    "pct_from_52w_high": -50.82
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "I6",
+   "kind": "index",
+   "label": "S&P 500 futures",
+   "value": -0.05,
+   "unit": "%",
+   "period": "day, latest quote",
+   "as_of": "2026-10-13T22:21:51.814241+00:00",
+   "source": "Yahoo Finance quote for ES=F",
+   "url": "https://finance.yahoo.com/quote/ES=F",
+   "method": "Percentage change from the previous close.",
+   "compare": {
+    "base": "previous close",
+    "value": 7858.0,
+    "level": 7853.75
+   },
+   "symbol": "ES=F",
+   "detail": {
+    "level": 7853.75,
+    "chg_5d": -0.257,
+    "chg_20d": 3.485,
+    "typical_abs_1d": 0.496
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "I7",
+   "kind": "index",
+   "label": "Nasdaq 100 futures",
+   "value": -0.4,
+   "unit": "%",
+   "period": "day, latest quote",
+   "as_of": "2026-10-13T22:21:51.814241+00:00",
+   "source": "Yahoo Finance quote for NQ=F",
+   "url": "https://finance.yahoo.com/quote/NQ=F",
+   "method": "Percentage change from the previous close.",
+   "compare": {
+    "base": "previous close",
+    "value": 30898.25,
+    "level": 30774.0
+   },
+   "symbol": "NQ=F",
+   "detail": {
+    "level": 30774.0,
+    "chg_5d": -2.253,
+    "chg_20d": 6.282,
+    "typical_abs_1d": 0.772
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "R4",
+   "kind": "rates",
+   "label": "2-year Treasury yield",
+   "value": 4.8,
+   "unit": "%",
+   "period": "2026-10-09",
+   "event_at": "2026-10-09",
+   "as_of": "2026-10-13T22:21:53+00:00",
+   "source": "FRED (St. Louis Fed): DGS2",
+   "url": "https://fred.stlouisfed.org/series/DGS2",
+   "method": "level; as published by the agency and redistributed by FRED.",
+   "compare": {
+    "base": "previous observation (2026-10-08)",
+    "value": 4.75,
+    "change": 0.05,
+    "change_unit": "pp"
+   },
+   "symbol": "DGS2",
+   "detail": {
+    "form": "level"
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "R5",
+   "kind": "rates",
+   "label": "10-year Treasury yield",
+   "value": 5.24,
+   "unit": "%",
+   "period": "2026-10-09",
+   "event_at": "2026-10-09",
+   "as_of": "2026-10-13T22:21:55+00:00",
+   "source": "FRED (St. Louis Fed): DGS10",
+   "url": "https://fred.stlouisfed.org/series/DGS10",
+   "method": "level; as published by the agency and redistributed by FRED.",
+   "compare": {
+    "base": "previous observation (2026-10-08)",
+    "value": 5.22,
+    "change": 0.02,
+    "change_unit": "pp"
+   },
+   "symbol": "DGS10",
+   "detail": {
+    "form": "level"
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "R6",
+   "kind": "rates",
+   "label": "10-year minus 2-year Treasury spread",
+   "value": 0.42,
+   "unit": "%",
+   "period": "2026-10-13",
+   "event_at": "2026-10-13",
+   "as_of": "2026-10-13T22:21:57+00:00",
+   "source": "FRED (St. Louis Fed): T10Y2Y",
+   "url": "https://fred.stlouisfed.org/series/T10Y2Y",
+   "method": "level; as published by the agency and redistributed by FRED.",
+   "compare": {
+    "base": "previous observation (2026-10-09)",
+    "value": 0.44,
+    "change": -0.02,
+    "change_unit": "pp"
+   },
+   "symbol": "T10Y2Y",
+   "detail": {
+    "form": "level"
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "R7",
+   "kind": "policy",
+   "label": "Effective federal funds rate",
+   "value": 3.88,
+   "unit": "%",
+   "period": "2026-10-12",
+   "event_at": "2026-10-12",
+   "as_of": "2026-10-13T22:21:58+00:00",
+   "source": "FRED (St. Louis Fed): DFF",
+   "url": "https://fred.stlouisfed.org/series/DFF",
+   "method": "level; as published by the agency and redistributed by FRED.",
+   "compare": {
+    "base": "previous observation (2026-10-11)",
+    "value": 3.88,
+    "change": 0.0,
+    "change_unit": "pp"
+   },
+   "symbol": "DFF",
+   "detail": {
+    "form": "level"
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "M1",
+   "kind": "macro",
+   "label": "CPI inflation, all items, year over year",
+   "value": 3.71,
+   "unit": "%",
+   "period": "2026-08-01",
+   "event_at": "2026-08-01",
+   "as_of": "2026-10-13T22:21:58+00:00",
+   "source": "FRED (St. Louis Fed): CPIAUCSL",
+   "url": "https://fred.stlouisfed.org/series/CPIAUCSL",
+   "method": "year over year; as published by the agency and redistributed by FRED.",
+   "compare": {
+    "base": "previous observation (2026-07-01)",
+    "value": 3.54,
+    "change": 0.17,
+    "change_unit": "pp"
+   },
+   "symbol": "CPIAUCSL",
+   "detail": {
+    "form": "yoy"
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "M2",
+   "kind": "macro",
+   "label": "Core PCE inflation, year over year",
+   "value": 3.01,
+   "unit": "%",
+   "period": "2026-08-01",
+   "event_at": "2026-08-01",
+   "as_of": "2026-10-13T22:21:59+00:00",
+   "source": "FRED (St. Louis Fed): PCEPILFE",
+   "url": "https://fred.stlouisfed.org/series/PCEPILFE",
+   "method": "year over year; as published by the agency and redistributed by FRED.",
+   "compare": {
+    "base": "previous observation (2026-07-01)",
+    "value": 2.98,
+    "change": 0.03,
+    "change_unit": "pp"
+   },
+   "symbol": "PCEPILFE",
+   "detail": {
+    "form": "yoy"
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "M3",
+   "kind": "macro",
+   "label": "Unemployment rate",
+   "value": 4.2,
+   "unit": "%",
+   "period": "2026-09-01",
+   "event_at": "2026-09-01",
+   "as_of": "2026-10-13T22:22:00+00:00",
+   "source": "FRED (St. Louis Fed): UNRATE",
+   "url": "https://fred.stlouisfed.org/series/UNRATE",
+   "method": "level; as published by the agency and redistributed by FRED.",
+   "compare": {
+    "base": "previous observation (2026-08-01)",
+    "value": 4.1,
+    "change": 0.1,
+    "change_unit": "pp"
+   },
+   "symbol": "UNRATE",
+   "detail": {
+    "form": "level"
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "M4",
+   "kind": "macro",
+   "label": "Nonfarm payrolls, change on the month",
+   "value": 29.0,
+   "unit": "k",
+   "period": "2026-09-01",
+   "event_at": "2026-09-01",
+   "as_of": "2026-10-13T22:22:01+00:00",
+   "source": "FRED (St. Louis Fed): PAYEMS",
+   "url": "https://fred.stlouisfed.org/series/PAYEMS",
+   "method": "change on the period; as published by the agency and redistributed by FRED.",
+   "compare": {
+    "base": "previous observation (2026-08-01)",
+    "value": 133.0,
+    "change": -104.0,
+    "change_unit": "k"
+   },
+   "symbol": "PAYEMS",
+   "detail": {
+    "form": "diff"
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "M5",
+   "kind": "macro",
+   "label": "Initial jobless claims, weekly",
+   "value": 197.0,
+   "unit": "k",
+   "period": "2026-10-03",
+   "event_at": "2026-10-03",
+   "as_of": "2026-10-13T22:22:02+00:00",
+   "source": "FRED (St. Louis Fed): ICSA",
+   "url": "https://fred.stlouisfed.org/series/ICSA",
+   "method": "level; as published by the agency and redistributed by FRED.",
+   "compare": {
+    "base": "previous observation (2026-09-26)",
+    "value": 199.0,
+    "change": -2.0,
+    "change_unit": "k"
+   },
+   "symbol": "ICSA",
+   "detail": {
+    "form": "level"
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "K2",
+   "kind": "credit",
+   "label": "High-yield bond spread over Treasuries",
+   "value": 3.11,
+   "unit": "%",
+   "period": "2026-10-12",
+   "event_at": "2026-10-12",
+   "as_of": "2026-10-13T22:22:02+00:00",
+   "source": "FRED (St. Louis Fed): BAMLH0A0HYM2",
+   "url": "https://fred.stlouisfed.org/series/BAMLH0A0HYM2",
+   "method": "level; as published by the agency and redistributed by FRED.",
+   "compare": {
+    "base": "previous observation (2026-10-09)",
+    "value": 3.11,
+    "change": 0.0,
+    "change_unit": "pp"
+   },
+   "symbol": "BAMLH0A0HYM2",
+   "detail": {
+    "form": "level"
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "R8",
+   "kind": "rates",
+   "label": "30-year mortgage rate",
+   "value": 7.4,
+   "unit": "%",
+   "period": "2026-10-08",
+   "event_at": "2026-10-08",
+   "as_of": "2026-10-13T22:22:03+00:00",
+   "source": "FRED (St. Louis Fed): MORTGAGE30US",
+   "url": "https://fred.stlouisfed.org/series/MORTGAGE30US",
+   "method": "level; as published by the agency and redistributed by FRED.",
+   "compare": {
+    "base": "previous observation (2026-10-01)",
+    "value": 7.28,
+    "change": 0.12,
+    "change_unit": "pp"
+   },
+   "symbol": "MORTGAGE30US",
+   "detail": {
+    "form": "level"
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "E1",
+   "kind": "calendar",
+   "label": "Consumer Price Index",
+   "unit": "%",
+   "published_at": "2026-09-11T11:50:40.968000+00:00",
+   "event_at": "2026-10-14T08:30:00-04:00",
+   "as_of": "2026-10-13T22:22:05+00:00",
+   "source": "Official release schedule (BLS, Federal Reserve)",
+   "url": "https://www.bls.gov/news.release/archives/cpi_09112026.htm",
+   "method": "No consensus forecast: Optic does not carry surveyed expectations, so a release is compared with its own previous reading.",
+   "compare": {
+    "base": "previous reading",
+    "value": 0.4,
+    "headline": "CPI for all items increases 0.4% in August; gasoline rises"
+   },
+   "text": "The inflation print the Fed's 2% mandate is written against. Rate expectations for the next two meetings usually reset within seconds of the release, which is why it moves the whole index and not just rate-sensitive sectors. Core (stripping food and energy) is what gets traded; the headline number is noisier because of petrol.",
+   "detail": {
+    "impact": "high",
+    "category": "inflation",
+    "released": false,
+    "days_away": 1
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "E3",
+   "kind": "calendar",
+   "label": "Producer Price Index",
+   "unit": "%",
+   "published_at": "2026-09-10T11:50:35.512000+00:00",
+   "event_at": "2026-10-15T08:30:00-04:00",
+   "as_of": "2026-10-13T22:22:05+00:00",
+   "source": "Official release schedule (BLS, Federal Reserve)",
+   "url": "https://www.bls.gov/news.release/archives/ppi_09102026.htm",
+   "method": "No consensus forecast: Optic does not carry surveyed expectations, so a release is compared with its own previous reading.",
+   "compare": {
+    "base": "previous reading",
+    "value": 0.4,
+    "headline": "PPI for final demand moves up 0.4% in August; goods advance 1.1%, services rise 0.1%"
+   },
+   "text": "Prices at the factory gate, before anything reaches a shop shelf. Read as a leading indicator for CPI and as a direct read on margins: a producer absorbing higher input costs is a producer with a thinner margin next quarter.",
+   "detail": {
+    "impact": "high",
+    "category": "inflation",
+    "released": false,
+    "days_away": 2
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "E4",
+   "kind": "calendar",
+   "label": "U.S. Import and Export Price Indexes",
+   "unit": "%",
+   "event_at": "2026-10-16T08:30:00-04:00",
+   "as_of": "2026-10-13T22:22:05+00:00",
+   "source": "Official release schedule (BLS, Federal Reserve)",
+   "method": "No consensus forecast: Optic does not carry surveyed expectations, so a release is compared with its own previous reading.",
+   "compare": {
+    "base": "previous reading",
+    "value": 0.67,
+    "headline": null
+   },
+   "text": "Traded-goods prices, which is where the dollar shows up in inflation. A strong dollar makes imports cheaper and quietly does some of the Fed's work; a weak one does the opposite. Mostly a second-order read on CPI.",
+   "detail": {
+    "impact": "medium",
+    "category": "inflation",
+    "released": false,
+    "days_away": 3
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "E5",
+   "kind": "calendar",
+   "label": "CFTC Commitments of Traders",
+   "event_at": "2026-10-16T15:30:00-04:00",
+   "as_of": "2026-10-13T22:22:05+00:00",
+   "source": "Official release schedule (BLS, Federal Reserve)",
+   "method": "No consensus forecast: Optic does not carry surveyed expectations, so a release is compared with its own previous reading.",
+   "compare": {
+    "base": "previous reading",
+    "value": null,
+    "headline": null
+   },
+   "text": "Weekly positioning: how large speculators and commercial hedgers are actually placed across futures. It is a Tuesday snapshot published on Friday, so it is history, not a signal. Its use is spotting a crowded trade, where an extreme reading means the marginal buyer has already bought.",
+   "detail": {
+    "impact": "medium",
+    "category": "positioning",
+    "released": false,
+    "days_away": 3
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "E6",
+   "kind": "calendar",
+   "label": "Monthly options expiry",
+   "event_at": "2026-10-16T16:00:00-04:00",
+   "as_of": "2026-10-13T22:22:05+00:00",
+   "source": "Official release schedule (BLS, Federal Reserve)",
+   "method": "No consensus forecast: Optic does not carry surveyed expectations, so a release is compared with its own previous reading.",
+   "compare": {
+    "base": "previous reading",
+    "value": null,
+    "headline": null
+   },
+   "text": "Standard equity and index options expire. The dealer hedging tied to those strikes stops existing at the close, so levels that have been acting like a magnet or a ceiling all month simply stop doing so.",
+   "detail": {
+    "impact": "medium",
+    "category": "positioning",
+    "released": false,
+    "days_away": 3
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "E8",
+   "kind": "calendar",
+   "label": "VIX futures and options settlement",
+   "event_at": "2026-10-21T09:30:00-04:00",
+   "as_of": "2026-10-13T22:22:05+00:00",
+   "source": "Official release schedule (BLS, Federal Reserve)",
+   "method": "No consensus forecast: Optic does not carry surveyed expectations, so a release is compared with its own previous reading.",
+   "compare": {
+    "base": "previous reading",
+    "value": null,
+    "headline": null
+   },
+   "text": "VIX settles against a special opening auction of SPX options, not against a close, and it lands on a Wednesday rather than with equity opex. A distinction routinely missed. Hedges rolled around this date can move implied volatility without the index itself doing much.",
+   "detail": {
+    "impact": "medium",
+    "category": "positioning",
+    "released": false,
+    "days_away": 8
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "R9",
+   "kind": "policy",
+   "label": "Fed funds futures: change priced over November 2026",
+   "value": 5.5,
+   "unit": "bp",
+   "period": "November 2026",
+   "as_of": "2026-10-13T22:22:08+00:00",
+   "source": "CME 30-day fed funds futures (ZQ=F) via Yahoo; Optic's arithmetic",
+   "method": "No meeting falls inside November, the delivery month of the front contract, so this is the move priced into that month's average rather than the odds on a decision.",
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "Q1",
+   "kind": "earnings",
+   "label": "JPM reported EPS against the consensus",
+   "value": -3.24,
+   "unit": "%",
+   "period": "quarter reported 2026-10-13",
+   "event_at": "2026-10-13",
+   "as_of": "2026-10-13T22:23:25+00:00",
+   "source": "Yahoo Finance earnings history (reported vs consensus EPS)",
+   "url": "https://finance.yahoo.com/quote/JPM/analysis",
+   "method": "Surprise = (reported EPS - consensus EPS) / |consensus EPS|. Revenue against its estimate is not in the free feed.",
+   "compare": {
+    "base": "consensus EPS",
+    "value": 5.94,
+    "reported": 5.75
+   },
+   "symbol": "JPM",
+   "detail": {
+    "name": "JPMorgan Chase & Co.",
+    "sector": "Financial Services",
+    "eps_consensus": 5.715,
+    "eps_low": 5.65,
+    "eps_high": 5.78,
+    "revenue_consensus": 51570515340.0,
+    "report_date": "2026-10-13",
+    "eps_reported": 5.75,
+    "eps_estimate": 5.94,
+    "surprise_pct": -3.24,
+    "timing": "before_open",
+    "reaction_pct": -0.86,
+    "reaction_as_of": "2026-10-13T22:23:23.596632+00:00",
+    "consensus_conflict": {
+     "calendar": 5.715,
+     "history": 5.94,
+     "note": "The feed's two consensus EPS figures differ; the surprise depends on which is used."
+    }
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "Q2",
+   "kind": "earnings",
+   "label": "UNH reported EPS against the consensus",
+   "value": 13.26,
+   "unit": "%",
+   "period": "quarter reported 2026-10-13",
+   "event_at": "2026-10-13",
+   "as_of": "2026-10-13T22:23:26+00:00",
+   "source": "Yahoo Finance earnings history (reported vs consensus EPS)",
+   "url": "https://finance.yahoo.com/quote/UNH/analysis",
+   "method": "Surprise = (reported EPS - consensus EPS) / |consensus EPS|. Revenue against its estimate is not in the free feed.",
+   "compare": {
+    "base": "consensus EPS",
+    "value": 4.14,
+    "reported": 4.69
+   },
+   "symbol": "UNH",
+   "detail": {
+    "name": "UnitedHealth Group Incorporated",
+    "sector": "Healthcare",
+    "eps_consensus": 2.17083,
+    "eps_low": 1.64,
+    "eps_high": 2.53,
+    "revenue_consensus": 111184428840.0,
+    "report_date": "2026-10-13",
+    "eps_reported": 4.69,
+    "eps_estimate": 4.14,
+    "surprise_pct": 13.26,
+    "timing": "before_open",
+    "reaction_pct": -0.2,
+    "reaction_as_of": "2026-10-13T22:23:23.596632+00:00",
+    "consensus_conflict": {
+     "calendar": 2.171,
+     "history": 4.14,
+     "note": "The feed's two consensus EPS figures differ; the surprise depends on which is used."
+    }
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "Q3",
+   "kind": "earnings",
+   "label": "BAC reports Wednesday 14 October",
+   "value": 1.102,
+   "unit": "$ EPS consensus",
+   "period": "quarter to be reported 2026-10-14",
+   "event_at": "2026-10-14",
+   "as_of": "2026-10-13T22:23:26+00:00",
+   "source": "Yahoo Finance earnings calendar (consensus EPS and revenue)",
+   "url": "https://finance.yahoo.com/quote/BAC/analysis",
+   "method": "Consensus as carried by the free feed; the number of analysts is not shown.",
+   "symbol": "BAC",
+   "detail": {
+    "name": "Bank of America Corporation",
+    "sector": "Financial Services",
+    "eps_consensus": 1.10222,
+    "eps_low": 1.01,
+    "eps_high": 1.25,
+    "revenue_consensus": 30539526940.0,
+    "report_date": "2026-10-14"
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "Q4",
+   "kind": "earnings",
+   "label": "TSM reports Thursday 15 October",
+   "value": 4.524,
+   "unit": "$ EPS consensus",
+   "period": "quarter to be reported 2026-10-15",
+   "event_at": "2026-10-15",
+   "as_of": "2026-10-13T22:23:26+00:00",
+   "source": "Yahoo Finance earnings calendar (consensus EPS and revenue)",
+   "url": "https://finance.yahoo.com/quote/TSM/analysis",
+   "method": "Consensus as carried by the free feed; the number of analysts is not shown.",
+   "symbol": "TSM",
+   "detail": {
+    "name": "Taiwan Semiconductor Manufacturing Company Limited",
+    "sector": "Technology",
+    "eps_consensus": 4.52449,
+    "eps_low": 4.26,
+    "eps_high": 4.85,
+    "revenue_consensus": 1460392943930.0,
+    "report_date": "2026-10-15"
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "N18",
+   "kind": "news",
+   "label": "IMF warns bond yields could see a 'disorderly' spike as debt, inflation risks worsen",
+   "published_at": "2026-10-13T04:54:07+00:00",
+   "as_of": "2026-10-13T22:24:10+00:00",
+   "source": "CNBC",
+   "url": "https://www.cnbc.com/2026/10/13/treasury-yields-imf-debt-inflation-.html",
+   "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
+   "text": "The IMF says risks in the government bond market have worsened and that yields could jump sharply and disorderly.",
+   "detail": {
+    "outlets": [
+     "CNBC"
+    ],
+    "copies": 2,
+    "access": "metered",
+    "sector": "economy",
+    "desks": [
+     "economy",
+     "tech"
+    ]
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "N28",
+   "kind": "news",
+   "label": "Stock Market Today: Stocks Slip Despite Solid Wall Street Results",
+   "published_at": "2026-10-13T08:14:38+00:00",
+   "as_of": "2026-10-13T22:24:10+00:00",
+   "source": "WSJ",
+   "url": "https://www.wsj.com/livecoverage/stock-market-today-bank-earnings-10-13-2026?mod=rss_markets_main",
+   "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
+   "text": "AI jitters hit chip shares, with Micron falling 3.6%",
+   "detail": {
+    "outlets": [
+     "WSJ"
+    ],
+    "copies": 1,
+    "access": "paid",
+    "sector": "markets",
+    "desks": [
+     "markets"
+    ]
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "N56",
+   "kind": "news",
+   "label": "World Bank jobs council urges 'crisis-era' employment support measures as IMF warns of AI \u2018tsunami\u2019",
+   "published_at": "2026-10-13T13:09:55+00:00",
+   "as_of": "2026-10-13T22:24:10+00:00",
+   "source": "CNBC",
+   "url": "https://www.cnbc.com/2026/10/12/imf-world-bank-ai-jobs-inflation-.html",
+   "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
+   "text": "IMF Chief Kristalina Georgieva warned AI is hitting the global labor market like a \u201cslow-moving tsunami,\u201d with young workers entering the job market the most exposed.",
+   "detail": {
+    "outlets": [
+     "CNBC"
+    ],
+    "copies": 2,
+    "access": "metered",
+    "sector": "economy",
+    "desks": [
+     "economy",
+     "tech"
+    ]
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "N60",
+   "kind": "news",
+   "label": "Thousands of homeowners face adjustable-rate mortgage resets \u2014 and much higher payments",
+   "published_at": "2026-10-13T13:35:01+00:00",
+   "as_of": "2026-10-13T22:24:10+00:00",
+   "source": "CNBC",
+   "url": "https://www.cnbc.com/2026/10/13/arm-mortgage-borrowers-rate-adjustment.html",
+   "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
+   "text": "Adjustable-rate mortgages with low introductory interest rates are facing their first adjustment at a time when rates are much higher, according to new data.",
+   "detail": {
+    "outlets": [
+     "CNBC"
+    ],
+    "copies": 1,
+    "access": "metered",
+    "sector": "markets",
+    "desks": [
+     "markets"
+    ]
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "N79",
+   "kind": "news",
+   "label": "Dangote Swings to $4.7 Billion Profit Ahead of Africa\u2019s Biggest IPO",
+   "published_at": "2026-10-13T16:30:00+00:00",
+   "as_of": "2026-10-13T22:24:10+00:00",
+   "source": "OilPrice",
+   "url": "https://oilprice.com/Latest-Energy-News/World-News/Dangote-Swings-to-47-Billion-Profit-Ahead-of-Africas-Biggest-IPO.html",
+   "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
+   "text": "Nigeria\u2019s Dangote refinery has gone from losing money to posting a $4.73 billion profit in less than a year, just as it asks investors for $1.6 billion in what would be Africa\u2019s largest IPO. Dangote Petroleum Refinery reported net profit of $4.73 billion for the first nine months",
+   "detail": {
+    "outlets": [
+     "OilPrice"
+    ],
+    "copies": 1,
+    "access": "open",
+    "sector": "energy",
+    "desks": [
+     "energy"
+    ]
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "N91",
+   "kind": "news",
+   "label": "Gold Futures Slip Ahead of U.S. CPI Data",
+   "published_at": "2026-10-13T18:18:00+00:00",
+   "as_of": "2026-10-13T22:24:10+00:00",
+   "source": "WSJ",
+   "url": "https://www.wsj.com/finance/commodities-futures/gold-falls-as-markets-focus-on-u-s-data-bb4eb024?mod=rss_markets_main",
+   "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
+   "text": "Gold futures slipped in rangebound trade as the market awaits Wednesday\u2019s U.S. consumer price inflation data and its implications for Fed interest-rate policy.",
+   "detail": {
+    "outlets": [
+     "WSJ"
+    ],
+    "copies": 1,
+    "access": "paid",
+    "sector": "markets",
+    "desks": [
+     "markets"
+    ]
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "N97",
+   "kind": "news",
+   "label": "Treasury, Eurozone Yields Decline as Markets Look to U.S. Inflation Data",
+   "published_at": "2026-10-13T18:47:00+00:00",
+   "as_of": "2026-10-13T22:24:10+00:00",
+   "source": "WSJ",
+   "url": "https://www.wsj.com/economy/central-banking/treasury-eurozone-yields-fall-as-markets-look-to-u-s-inflation-data-412d95a4?mod=rss_markets_main",
+   "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
+   "text": "U.S. Treasury and eurozone government bond yields retreated, helped by a drop in Brent crude prices and a pullback in artificial intelligence stocks.",
+   "detail": {
+    "outlets": [
+     "WSJ"
+    ],
+    "copies": 1,
+    "access": "paid",
+    "sector": "markets",
+    "desks": [
+     "markets"
+    ]
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "N106",
+   "kind": "news",
+   "label": "Williams says Fed may not have to hike rates in 2027, at odds with traders",
+   "published_at": "2026-10-13T19:46:12+00:00",
+   "as_of": "2026-10-13T22:24:10+00:00",
+   "source": "CNBC",
+   "url": "https://www.cnbc.com/2026/10/13/john-williams-fed-rate-hikes-2027.html",
+   "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
+   "text": "New York Fed President John Williams sees one more rate hike in 2026 but no additional increase in 2027 as inflation pressures ease.",
+   "detail": {
+    "outlets": [
+     "CNBC"
+    ],
+    "copies": 2,
+    "access": "metered",
+    "sector": "markets",
+    "desks": [
+     "markets",
+     "economy"
+    ]
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "N110",
+   "kind": "news",
+   "label": "Bank of America fined $1.2bn over money laundering failures",
+   "published_at": "2026-10-13T20:00:06+00:00",
+   "as_of": "2026-10-13T22:24:10+00:00",
+   "source": "Financial Times",
+   "url": "https://www.ft.com/content/c08dd4a1-74a4-49f2-90f7-0857c6e87868?syn-25a6b1a6=1",
+   "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
+   "text": "US bank failed to flag $5bn in suspicious transactions linked to suspected illicit finance from China and the southern US border",
+   "detail": {
+    "outlets": [
+     "Financial Times",
+     "CNBC",
+     "WSJ"
+    ],
+    "copies": 4,
+    "access": "paid",
+    "sector": "analysis",
+    "desks": [
+     "analysis",
+     "markets",
+     "politics"
+    ]
+   },
+   "sources_in_cluster": 3,
+   "stale": false
+  },
+  {
+   "id": "N134",
+   "kind": "news",
+   "label": "Chip stocks suffer worst stretch in 16 months as AI fatigue grips the market",
+   "published_at": "2026-10-13T21:02:00+00:00",
+   "as_of": "2026-10-13T22:24:10+00:00",
+   "source": "MarketWatch",
+   "url": "https://www.marketwatch.com/story/ai-fatigue-is-gripping-the-market-and-driving-chip-stocks-toward-their-worst-stretch-in-16-months-6dc78ece?mod=mw_rss_topstories",
+   "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
+   "text": "Anticipation is building for Anthropic\u2019s investor day, as Wall Street grows less patient with heavy AI spending.",
+   "detail": {
+    "outlets": [
+     "MarketWatch"
+    ],
+    "copies": 1,
+    "access": "metered",
+    "sector": "markets",
+    "desks": [
+     "markets"
+    ]
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "N136",
+   "kind": "news",
+   "label": "U.S. Stocks Tick Down as Bank Earnings Don\u2019t Excite",
+   "published_at": "2026-10-13T21:07:00+00:00",
+   "as_of": "2026-10-13T22:24:10+00:00",
+   "source": "WSJ",
+   "url": "https://www.wsj.com/finance/stocks/u-s-stocks-tick-down-as-bank-earnings-dont-excite-40b1934e?mod=rss_markets_main",
+   "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
+   "text": "It was a sluggish day for U.S. stock movements, as early bank earnings failed to quash broader concerns about inflation and Fed rate hikes.",
+   "detail": {
+    "outlets": [
+     "WSJ"
+    ],
+    "copies": 1,
+    "access": "paid",
+    "sector": "markets",
+    "desks": [
+     "markets"
+    ]
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "N139",
+   "kind": "news",
+   "label": "OPEC Sees Oil Demand Growth Surging to 2.6 Million Bpd in 2027",
+   "published_at": "2026-10-13T21:30:00+00:00",
+   "as_of": "2026-10-13T22:24:10+00:00",
+   "source": "OilPrice",
+   "url": "https://oilprice.com/Latest-Energy-News/World-News/OPEC-Sees-Oil-Demand-Growth-Surging-to-26-Million-Bpd-in-2027.html",
+   "method": "Clustered by headline and link: outlets counts distinct sites carrying the same story, which is coverage, not independent confirmation.",
+   "text": "OPEC just put a very large number on next year\u2019s oil market: global demand growth of 2.6 million barrels per day in 2027, after growth of just 200,000 bpd this year. That would push average world oil demand from 105.7 million bpd in 2026 to 108.3 million bpd next year. OPEC also ",
+   "detail": {
+    "outlets": [
+     "OilPrice"
+    ],
+    "copies": 1,
+    "access": "open",
+    "sector": "energy",
+    "desks": [
+     "energy"
+    ]
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "P1",
+   "kind": "company",
+   "label": "V shares",
+   "value": 1.74,
+   "unit": "%",
+   "period": "session of 2026-10-13 (close to close)",
+   "event_at": "2026-10-13",
+   "as_of": "2026-10-13T22:24:11+00:00",
+   "source": "Yahoo Finance daily bars",
+   "url": "https://finance.yahoo.com/quote/V",
+   "method": "Close-to-close change from daily bars.",
+   "symbol": "V",
+   "detail": {
+    "last": 396.06,
+    "prev": 389.27,
+    "date": "2026-10-13",
+    "typical_abs_1d": 0.86,
+    "chg_1d": 1.74,
+    "chg_5d": 6.86,
+    "chg_21d": 5.54,
+    "vs_sma50_pct": 6.81,
+    "vs_sma200_pct": 16.99,
+    "sma50": 370.8,
+    "sma200": 338.53,
+    "high_20d": 391.81,
+    "low_20d": 356.75,
+    "volume_vs_20d": 1.19
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "P6",
+   "kind": "company",
+   "label": "WFC shares",
+   "value": -3.1,
+   "unit": "%",
+   "period": "session of 2026-10-13 (close to close)",
+   "event_at": "2026-10-13",
+   "as_of": "2026-10-13T22:24:11+00:00",
+   "source": "Yahoo Finance daily bars",
+   "url": "https://finance.yahoo.com/quote/WFC",
+   "method": "Close-to-close change from daily bars.",
+   "symbol": "WFC",
+   "detail": {
+    "last": 80.74,
+    "prev": 83.32,
+    "date": "2026-10-13",
+    "typical_abs_1d": 1.181,
+    "chg_1d": -3.1,
+    "chg_5d": -0.94,
+    "chg_21d": -8.98,
+    "vs_sma50_pct": -5.62,
+    "vs_sma200_pct": -4.28,
+    "sma50": 85.55,
+    "sma200": 84.35,
+    "high_20d": 91.99,
+    "low_20d": 78.0,
+    "volume_vs_20d": 1.74
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "P8",
+   "kind": "company",
+   "label": "MU shares",
+   "value": -3.62,
+   "unit": "%",
+   "period": "session of 2026-10-13 (close to close)",
+   "event_at": "2026-10-13",
+   "as_of": "2026-10-13T22:24:11+00:00",
+   "source": "Yahoo Finance daily bars",
+   "url": "https://finance.yahoo.com/quote/MU",
+   "method": "Close-to-close change from daily bars.",
+   "symbol": "MU",
+   "detail": {
+    "last": 953.19,
+    "prev": 989.04,
+    "date": "2026-10-13",
+    "typical_abs_1d": 2.288,
+    "chg_1d": -3.62,
+    "chg_5d": -8.83,
+    "chg_21d": 3.16,
+    "vs_sma50_pct": -2.93,
+    "vs_sma200_pct": 34.52,
+    "sma50": 981.98,
+    "sma200": 708.58,
+    "high_20d": 1108.72,
+    "low_20d": 917.64,
+    "volume_vs_20d": 1.13
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "O1",
+   "kind": "options",
+   "label": "SPY options: expected move to 2026-10-14 expiry (nearest weekly)",
+   "value": 0.52,
+   "unit": "% (+/-)",
+   "period": "to the 2026-10-14 expiry (1 days)",
+   "as_of": "2026-10-13T22:24:12+00:00",
+   "source": "Optic's options surface from the Yahoo chain (about 15 minutes delayed)",
+   "url": "https://finance.yahoo.com/quote/SPY/options",
+   "method": "At-the-money straddle mid divided by the price: roughly the average absolute move options are priced for over the whole period to that expiry, not a forecast and not an event-only move.",
+   "symbol": "SPY",
+   "detail": {
+    "atm_iv_pct": 12.51,
+    "one_sd_pct": 0.62,
+    "rr25_pts": 0.27,
+    "expiry": "2026-10-14",
+    "dte": 1
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "O2",
+   "kind": "options",
+   "label": "SPY options: expected move to 2026-11-13 expiry (about a month out)",
+   "value": 2.88,
+   "unit": "% (+/-)",
+   "period": "to the 2026-11-13 expiry (31 days)",
+   "as_of": "2026-10-13T22:24:12+00:00",
+   "source": "Optic's options surface from the Yahoo chain (about 15 minutes delayed)",
+   "url": "https://finance.yahoo.com/quote/SPY/options",
+   "method": "At-the-money straddle mid divided by the price: roughly the average absolute move options are priced for over the whole period to that expiry, not a forecast and not an event-only move.",
+   "symbol": "SPY",
+   "detail": {
+    "atm_iv_pct": 11.8,
+    "one_sd_pct": 3.43,
+    "rr25_pts": 3.16,
+    "expiry": "2026-11-13",
+    "dte": 31
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "O3",
+   "kind": "options",
+   "label": "SPY 30-day implied volatility",
+   "value": 11.8,
+   "unit": "%",
+   "period": "30-day constant maturity",
+   "as_of": "2026-10-13T22:24:12+00:00",
+   "source": "Optic's options surface from the Yahoo chain",
+   "url": "https://finance.yahoo.com/quote/SPY/options",
+   "method": "Total variance interpolated between the expiries either side of 30 days.",
+   "symbol": "SPY",
+   "detail": {
+    "term": null
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "O4",
+   "kind": "options",
+   "label": "QQQ options: expected move to 2026-10-14 expiry (nearest weekly)",
+   "value": 0.86,
+   "unit": "% (+/-)",
+   "period": "to the 2026-10-14 expiry (1 days)",
+   "as_of": "2026-10-13T22:24:13+00:00",
+   "source": "Optic's options surface from the Yahoo chain (about 15 minutes delayed)",
+   "url": "https://finance.yahoo.com/quote/QQQ/options",
+   "method": "At-the-money straddle mid divided by the price: roughly the average absolute move options are priced for over the whole period to that expiry, not a forecast and not an event-only move.",
+   "symbol": "QQQ",
+   "detail": {
+    "atm_iv_pct": 22.03,
+    "one_sd_pct": 1.09,
+    "rr25_pts": 1.04,
+    "expiry": "2026-10-14",
+    "dte": 1
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "O5",
+   "kind": "options",
+   "label": "QQQ options: expected move to 2026-11-13 expiry (about a month out)",
+   "value": 4.29,
+   "unit": "% (+/-)",
+   "period": "to the 2026-11-13 expiry (31 days)",
+   "as_of": "2026-10-13T22:24:13+00:00",
+   "source": "Optic's options surface from the Yahoo chain (about 15 minutes delayed)",
+   "url": "https://finance.yahoo.com/quote/QQQ/options",
+   "method": "At-the-money straddle mid divided by the price: roughly the average absolute move options are priced for over the whole period to that expiry, not a forecast and not an event-only move.",
+   "symbol": "QQQ",
+   "detail": {
+    "atm_iv_pct": 18.68,
+    "one_sd_pct": 5.44,
+    "rr25_pts": 4.71,
+    "expiry": "2026-11-13",
+    "dte": 31
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  },
+  {
+   "id": "O6",
+   "kind": "options",
+   "label": "QQQ 30-day implied volatility",
+   "value": 18.7,
+   "unit": "%",
+   "period": "30-day constant maturity",
+   "as_of": "2026-10-13T22:24:13+00:00",
+   "source": "Optic's options surface from the Yahoo chain",
+   "url": "https://finance.yahoo.com/quote/QQQ/options",
+   "method": "Total variance interpolated between the expiries either side of 30 days.",
+   "symbol": "QQQ",
+   "detail": {
+    "term": null
+   },
+   "sources_in_cluster": 1,
+   "stale": false
+  }
+ ],
+ "test_edition": "Sample edition: written by a development stand-in model from live evidence; not published",
+ "key": "2026-10-13:close",
+ "status": "written",
+ "generated_at": "2026-10-14T02:37:14+00:00"
+}
