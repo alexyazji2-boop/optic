@@ -20459,7 +20459,7 @@ function renderPeHistory(p) {
     <div class="pe-tiles" style="margin-top:var(--space-4)">
       <div class="tile"><span class="label">${hg('Trailing P/E now')}</span>
         <span class="value">${fmt(p.pe_current, 1)}</span>
-        <span class="note">${fmt(p.pe_percentile, 0)}th percentile of its own last
+        <span class="note">${ordinal(p.pe_percentile)} percentile of its own last
           ${fmt(Math.round((p.band_weeks || 0) / 52), 0)} years</span></div>
       <div class="tile"><span class="label">${hg('Its own median')}</span>
         <span class="value">${fmt(p.pe_median, 1)}</span>
@@ -21048,6 +21048,66 @@ function renderCorrelation(c) {
   </div>`;
 }
 
+/* Dispersion: the average stock's implied volatility against the index's,
+ * from Cboe's own indices (app/analytics/dispersion.py). Beside Optic's own
+ * implied-correlation estimate above it: that one is computed here from a
+ * dozen chains; these are Cboe's published readings. The panel says what the
+ * gap did not predict as plainly as what it describes. */
+/* 1st, 2nd, 3rd, 11th, 22nd: "1th percentile" read on a percentile of 1. */
+function ordinal(v) {
+  const n = Math.round(Number(v));
+  if (!Number.isFinite(n)) return '—';
+  const t = n % 100;
+  const suf = t >= 11 && t <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th');
+  return `${n}${suf}`;
+}
+async function loadDispersion() {
+  if (STATE.dispersion) return;
+  try {
+    STATE.dispersion = stampFetched(await getJSON('/api/dispersion'));
+  } catch (err) {
+    STATE.dispersion = { available: false, reason: err.message };
+  }
+  if (STATE.market) renderMarket(STATE.market);
+}
+function dispersionSpark(rows) {
+  if (!rows || rows.length < 10) return '';
+  const W = 260, H = 54, pad = 3;
+  const vals = rows.map((r) => r.gap);
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  const x = (i) => pad + (i / (rows.length - 1)) * (W - 2 * pad);
+  const y = (v) => H - pad - ((v - lo) / ((hi - lo) || 1)) * (H - 2 * pad);
+  const path = rows.map((r, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(r.gap).toFixed(1)}`).join('');
+  return `<svg class="disp-spark" viewBox="0 0 ${W} ${H}" role="img" aria-label="VIXEQ minus VIX over the last ${rows.length} sessions, from ${fmt(vals[0], 1)} to ${fmt(vals[vals.length - 1], 1)} points"><path d="${path}"/></svg>`;
+}
+function renderDispersion(dd) {
+  if (!dd) return '';
+  if (!dd.available) {
+    return `<div class="panel span2"><h2>${hg('Dispersion')}</h2><p class="sub">${esc(dd.reason || 'Unavailable.')}</p></div>`;
+  }
+  const pct = (v) => (v === null || v === undefined ? 'history building' : `${ordinal(v)} percentile`);
+  const ev = dd.evidence || {};
+  return `<div class="panel span2">
+    <h2>${hg('Dispersion')}</h2>
+    <p class="sub">How much the average stock is expected to move, against the index. Cboe's readings, ${esc(dd.as_of || '')}.</p>
+    <div class="fg-hist-row" style="margin-top:var(--space-2)">
+      <div class="fg-hbox"><div class="fg-hl">VIXEQ (average stock)</div><div class="fg-hv">${fmt(dd.vixeq, 1)}</div></div>
+      <div class="fg-hbox"><div class="fg-hl">VIX (index)</div><div class="fg-hv">${fmt(dd.vix, 1)}</div></div>
+      <div class="fg-hbox"><div class="fg-hl">Gap</div><div class="fg-hv">${fmt(dd.gap, 1)}</div><div class="fg-hl">${pct(dd.gap_percentile)}</div></div>
+      ${dd.cor1m !== null && dd.cor1m !== undefined ? `<div class="fg-hbox"><div class="fg-hl">COR1M (implied correlation)</div><div class="fg-hv">${fmt(dd.cor1m, 1)}</div><div class="fg-hl">${pct(dd.cor1m_percentile)}</div></div>` : ''}
+      ${dd.dspx !== null && dd.dspx !== undefined ? `<div class="fg-hbox"><div class="fg-hl">DSPX (dispersion)</div><div class="fg-hv">${fmt(dd.dspx, 1)}</div><div class="fg-hl">${pct(dd.dspx_percentile)}</div></div>` : ''}
+    </div>
+    ${dispersionSpark(dd.history)}
+    <p class="sc-note">${esc(dd.text || '')}</p>
+    <p class="caveat"><strong>What it has not done:</strong> ${esc(ev.finding || '')}</p>
+    <details class="eval-h"><summary>How this is read<i class="cal-caret" aria-hidden="true"></i></summary>
+      <p class="caveat">${esc(dd.method || '')} Gap percentile over ${fmt(dd.gap_history_days || 0, 0)} days of ${esc(dd.gap_history_source || '')}${dd.gap_history_from ? ` from ${esc(dd.gap_history_from)}` : ''}.</p>
+      <p class="caveat">${esc(ev.sample || '')}.</p>
+      <p class="caveat">${esc((dd.sources || []).join('; '))}.</p>
+    </details>
+    ${fetchedLine(dd)}
+  </div>`;
+}
 async function loadCorrelation() {
   if (STATE.correlation) return;
   try {
@@ -28966,7 +29026,7 @@ function renderMarket(d) {
     </div>
   </div>
 
-  <div class="grid c2 gap">${renderCorrelation(STATE.correlation)}</div>
+  <div class="grid c2 gap">${renderCorrelation(STATE.correlation)}${renderDispersion(STATE.dispersion)}</div>
 
   ${renderSectorBoard(STATE.sectorBoard)}
 
@@ -40175,7 +40235,7 @@ function macroFactors(m) {
 async function loadMarket(force, opts = {}) {
   const silent = !!opts.silent;
   if (STATE.market && STATE.market.sectors && !force) {
-    sweepCharts(() => renderMarket(STATE.market)); revealPanels(views.market); loadSectorBoard(); loadCorrelation(); return;
+    sweepCharts(() => renderMarket(STATE.market)); revealPanels(views.market); loadSectorBoard(); loadCorrelation(); loadDispersion(); return;
   }
   if (!silent) beginLoad(views.market, 'macro and sector data (this pulls ~40 symbols)');
   try {
@@ -40187,6 +40247,7 @@ async function loadMarket(force, opts = {}) {
     // Not awaited: one extra request each, and the rest of the tab should not wait.
     loadSectorBoard();
     loadCorrelation();
+    loadDispersion();
     loadRotation();
     loadForex();
     loadStockMap();
@@ -41790,6 +41851,10 @@ function chatContextPayload() {
   if (STATE.market) {
     ctx.macro = STATE.market.macro;
     ctx.sectors = STATE.market.sectors;
+  }
+  if (STATE.dispersion && STATE.dispersion.available) {
+    const { history, ...rest } = STATE.dispersion;
+    ctx.dispersion = rest;
   }
   if (STATE.earnings) ctx.earnings = STATE.earnings;
   if (STATE.indices) ctx.indices = STATE.indices;
@@ -43552,6 +43617,7 @@ const PULSE_SOURCES = {
   vol_surface: ['Options pricing', 'swing'],
   iv_rank: ['IV rank', 'swing'],
   iv_hv: ['Implied against realised', 'swing'],
+  dispersion: ['Dispersion', 'market'],
   options_research: ['Options research', 'swing'],
   desk_edition: ['Optic Desk', 'brief'],
   desk_section: ['Optic Desk', 'brief'],

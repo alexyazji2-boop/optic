@@ -205,6 +205,8 @@ class Sources:
     session_mod: Any
     sectors: List[Dict[str, str]]
     themes: List[Dict[str, str]]
+    # Cboe's dispersion readings (app/analytics/dispersion.py); optional.
+    dispersion: Optional[Callable[[], Dict[str, Any]]] = None
 
 
 def gather(src: Sources, slot: str, now: Optional[datetime] = None) -> Dict[str, Any]:
@@ -238,6 +240,9 @@ def gather(src: Sources, slot: str, now: Optional[datetime] = None) -> Dict[str,
             named.append(sym)
     g.leg("companies", lambda: ev_mod.gather_companies(g, src.provider, named[:24]))
     g.leg("options", lambda: ev_mod.gather_options(g, src.index_surface))
+    if src.dispersion is not None:
+        disp = g.leg("dispersion", src.dispersion) or {}
+        g.leg("dispersion_rows", lambda: ev_mod.gather_dispersion(g, disp))
     try:
         session = src.session_mod.state(now)
     except Exception:                                              # noqa: BLE001

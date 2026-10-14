@@ -86,6 +86,7 @@ from . import horizon as horizon_mod
 from . import rates as rates_mod
 from . import iv_history as iv_history_mod
 from . import dolthub_vol as dolthub_vol_mod
+from .analytics import dispersion as dispersion_mod
 from .analytics import vol_surface as vol_surface_mod
 from .analytics import liquidity as liquidity_mod
 from .analytics import contracts as contracts_mod
@@ -2722,7 +2723,8 @@ def _desk_sources() -> "desk_edition_mod.Sources":
         rate_path=_rate_path_for,
         index_surface=_desk_index_surface,
         quotes=lambda syms: YF_PROVIDER.batch_quote(syms),
-        session_mod=session_mod, sectors=SECTORS, themes=THEMES)
+        session_mod=session_mod, sectors=SECTORS, themes=THEMES,
+        dispersion=lambda: dispersion_mod.build(YF_PROVIDER))
 
 
 def _morning_desk(macro: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -3730,7 +3732,9 @@ async def _start_tracker() -> None:
         app.state.tracker_task = asyncio.create_task(_tracker_loop())
     if DESK_EDITION_AUTO:
         app.state.edition_task = asyncio.create_task(_edition_loop())
-    if dolthub_vol_mod.enabled():
+    # OPTIC_DOLTHUB_SYNC=false reads the store without filling it (a second
+    # process beside one that already is).
+    if dolthub_vol_mod.enabled() and os.environ.get("OPTIC_DOLTHUB_SYNC", "true").strip().lower() != "false":
         app.state.dolthub_task = asyncio.create_task(_dolthub_loop())
 
 
@@ -4391,6 +4395,17 @@ async def evaluate_signal(force: bool = False) -> Dict[str, Any]:
         out["universe_total"] = len(symbols)
         out["generated_at"] = datetime.now(timezone.utc).isoformat()
         _EVAL_CACHE["result"] = out
+        return out
+    return await _run(build)
+
+
+@app.get("/api/dispersion")
+async def dispersion_panel() -> Dict[str, Any]:
+    """The average stock's implied vol against the index's (Cboe VIXEQ, VIX,
+    COR1M, DSPX), with what the gap has and has not preceded."""
+    def build() -> Dict[str, Any]:
+        out = dispersion_mod.build(YF_PROVIDER)
+        out["generated_at"] = datetime.now(timezone.utc).isoformat()
         return out
     return await _run(build)
 

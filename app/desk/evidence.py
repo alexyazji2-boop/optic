@@ -478,6 +478,27 @@ def gather_options(g: Gatherer, read_index: Callable[[str], Optional[Dict[str, A
                   detail={"term": (s.get("term") or {}).get("label") if isinstance(s.get("term"), dict) else s.get("term")})
 
 
+def gather_dispersion(g: Gatherer, d: Dict[str, Any]) -> None:
+    """The VIXEQ - VIX gap with its percentile, and what it has not predicted,
+    so the edition can describe dispersion without calling it a warning."""
+    if not d or not d.get("available"):
+        g.coverage.append({"leg": "dispersion_rows", "ok": False, "reason": (d or {}).get("reason") or "no reading"})
+        return
+    pct = d.get("gap_percentile")
+    g.add(kind="volatility", label="Dispersion: VIXEQ (average stock's implied vol) minus VIX", symbol="^VIXEQ",
+          value=_f(d.get("gap"), 2), unit="pts", period="close of {}".format(d.get("as_of")),
+          as_of=d.get("as_of"), source="Cboe VIXEQ and VIX, via Yahoo Finance quotes",
+          url="https://www.cboe.com/us/indices/dashboard/vixeq/",
+          compare={"base": "percentile of the gap since {}".format(d.get("gap_history_from")), "value": pct}
+          if pct is not None else None,
+          method=("VIXEQ is the 30-day implied volatility of the average large US stock, VIX the S&P 500's; the gap "
+                  "is mostly low implied correlation. Tested 2014-2026: it did not predict drawdowns beyond what the "
+                  "VIX itself did, and a rising gap predicted nothing. Describe it; do not call it a warning."),
+          detail={"vixeq": d.get("vixeq"), "vix": d.get("vix"), "cor1m": d.get("cor1m"),
+                  "cor1m_percentile": d.get("cor1m_percentile"), "dspx": d.get("dspx"),
+                  "dspx_percentile": d.get("dspx_percentile")})
+
+
 # ------------------------------------------------------------------- bundle
 
 def news_window_start(now: datetime, slot: str, session_mod) -> datetime:

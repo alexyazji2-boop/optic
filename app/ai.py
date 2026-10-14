@@ -288,7 +288,7 @@ keys are quote, verdict, pulse, cases, why, whats_next, next_earnings_date,
 company, chart, technicals, gex, greeks, flow, entry_plan, naked_ideas,
 strategy_ideas, long_term, earnings, earnings_momentum, sector_confirm, news,
 macro, sectors, indices, market, read, compare, tracker, digest,
-portfolio_summary, reader_holdings, reader_watchlist, vol_surface, iv_rank, iv_hv,
+portfolio_summary, reader_holdings, reader_watchlist, vol_surface, iv_rank, iv_hv, dispersion,
 options_research, track_record, research, desk_edition and desk_section. Tag the key the figure
 actually sits under: an earnings date read from `whats_next` is
 `[[src whats_next]]`, not `earnings`.
@@ -473,6 +473,10 @@ finishing in the money, and finishing in the money is not the same as making mon
 also has to clear the premium paid (the breakeven). Implied volatility is the market's price for \
 movement, not a forecast of direction. GEX assumes how dealers are positioned (long the calls \
 customers sold, short the puts they bought); it is not observed inventory and it is sometimes wrong.
+- `dispersion` in CONTEXT is Cboe's VIXEQ (the average large stock's implied vol) against the VIX, with \
+implied correlation (COR1M) and DSPX. Describe it: a wide gap means stocks are expected to move a lot but not \
+together. Do not present it as a crash or stress warning; `evidence.finding` says it did not predict drawdowns \
+beyond what the VIX itself did.
 - **Use the options research on screen.** When CONTEXT has `vol_surface`, `iv_rank` or \
 `options_research`, answer from them. For "what are the odds" the figure is the model's chance of \
 finishing in the money (`p_itm_model`, N(d2), risk-neutral), not delta, and finishing in the money is not \
