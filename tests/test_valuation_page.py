@@ -203,3 +203,12 @@ def test_a_saved_model_is_compared_field_by_field(real_payload):
     assert [r["label"] for r in out["rows"]] == ["Capex it settles at"]
     assert out["rows"][0]["saved"] == "30.00%" and out["savedValue"] == 12.0
     assert any("Price $15.0 then" in n for n in out["notes"])
+
+
+def test_a_negative_value_reads_as_a_sentence():
+    out = _run("""
+      var d = V._state.data.SYN; d.dcf.per_share = -5;
+      R.lede = V._lede(d);
+    """)["lede"]
+    assert "leaves nothing for Synthetic Co's shareholders" in out and "a share a share" not in out
+    assert "nothing per share a share" not in out

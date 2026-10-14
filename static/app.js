@@ -39037,7 +39037,16 @@ async function loadLong(force, opts = {}) {
     updateStatus();
     updateChatContext();
   } catch (err) {
-    if (!silent) { endLoad(views.long); views.long.innerHTML = errorHTML(err.message); }
+    if (!silent) {
+      endLoad(views.long);
+      views.long.innerHTML = errorHTML(err.message);
+      // The fair-value model reads filings, not the price history, so it is
+      // still shown when the history fails (static/valuation.js).
+      if (window.OpticValuation) {
+        views.long.insertAdjacentHTML('beforeend', `<div id="dcf-host" class="span-all">${window.OpticValuation.hostHTML()}</div>`);
+        window.OpticValuation.load();
+      }
+    }
     else console.warn('Silent long-term refresh failed:', err.message);
   }
 }

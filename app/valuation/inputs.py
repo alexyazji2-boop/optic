@@ -961,7 +961,7 @@ def gather(provider, ticker: str, today: Optional[date] = None, force: bool = Fa
         "available": True, "ticker": sym, "cik": cik,
         # The quote's name, unless the feed fell back to the bare symbol.
         "name": (quote.get("name") if quote.get("name") and quote.get("name") != sym else None)
-                or (fl.name.title() if fl.name and fl.name.isupper() else fl.name) or sym,
+                or fl.name or sym,      # as filed: title-casing made "JPMORGAN" read "Jpmorgan"
         "quote": {
             "price": _num(quote.get("price")), "as_of": quote.get("as_of"), "market_time": quote.get("market_time"),
             "currency": price_ccy, "market_cap": _num(quote.get("market_cap")), "beta": beta,

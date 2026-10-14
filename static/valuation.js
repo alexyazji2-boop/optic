@@ -289,7 +289,9 @@
       const fresh = await getJSON(`/api/valuation/${encodeURIComponent(sym)}${force ? '?refresh=true' : ''}`);
       VAL.defaults[sym] = fresh;
       VAL.data[sym] = fresh;
-      if (edited && fresh.available && fresh.dcf && fresh.dcf.available) await runNow(sym);
+      // Remembered edits are applied even when the defaults alone cannot run
+      // (a supplied capex figure is what lets them run).
+      if (edited && fresh.available) await runNow(sym);
     } catch (err) {
       VAL.data[sym] = { available: false, reason: err.message };
     }
@@ -418,7 +420,23 @@
       }
       return `<p class="dcf-lede">${text}</p>`;
     }
+    // When another method leads for this kind of business (a utility's
+    // dividend model), the sentence starts there and the DCF follows.
+    if (cls.primary === 'ddm' && d.ddm && d.ddm.available) {
+      const dv = d.ddm.per_share;
+      const dcfLine = has(dcf.per_share) ? (dcf.per_share > 0
+        ? ` The cash-flow model, which suits it less well, gives ${about(dcf.per_share)} a share.`
+        : ` The cash-flow model, which suits it less well, leaves nothing for shareholders under these assumptions${
+          has(dcf.incremental_return) ? `: its new capital earns ${pct(dcf.incremental_return)} against a ${pct(dcf.discount_rate, 1)} cost of capital` : ''}.`) : '';
+      return `<p class="dcf-lede">For ${name}, the dividend model leads: under these assumptions it estimates <strong>${about(dv)}</strong> a share,
+        against a price of <strong>${money(m.price, m.currency)}</strong> (${esc(priceWhen(m))}).${dcfLine}</p>`;
+    }
     const v = dcf.per_share;
+    if (has(v) && v <= 0) {
+      return `<p class="dcf-lede">Under these assumptions, this model leaves nothing for ${name}'s shareholders: the debts and
+        other claims are worth more than the operations. That says more about the assumptions than about the stock, which trades at
+        ${money(m.price, m.currency)} (${esc(priceWhen(m))}).</p>`;
+    }
     const rng = has((sc.bear || {}).per_share) && has((sc.bull || {}).per_share)
       ? ` Its bear and bull cases span ${money(sc.bear.per_share)} to ${money(sc.bull.per_share)}.` : '';
     let vs = '';
@@ -426,9 +444,6 @@
       const gap = m.price / v - 1;
       vs = ` The stock last traded at <strong>${money(m.price, m.currency)}</strong> (${esc(priceWhen(m))}), ${
         Math.abs(gap) < 0.05 ? 'close to that estimate' : `${pct(Math.abs(gap), 0)} ${gap > 0 ? 'above' : 'below'} it`}.`;
-    } else if (has(v) && v <= 0) {
-      vs = ` Under these assumptions the debts and other claims are worth more than the operations, so the model
-        leaves nothing for shareholders. That says more about the assumptions than about the stock, which trades at ${money(m.price, m.currency)}.`;
     }
     return `<p class="dcf-lede">Under these assumptions, this model estimates ${name} is worth
       <strong>${about(v)}</strong> a share.${rng}${vs}</p>`;
@@ -1639,6 +1654,12 @@
       btn.insertAdjacentHTML('afterend', '<button type="button" class="btn" data-milo-val-undo>Undo</button>');
     }
   }
+
+  // A page opened straight onto the Investing tab started loading it before
+  // this file ran, so app.js's call found nothing; start here instead.
+  setTimeout(() => {
+    try { if (STATE.view === 'long' && STATE.ticker) load(); } catch (e) { /* not ready: app.js calls load() itself */ }
+  }, 0);
 
   window.OpticValuation = { hostHTML, load, context, parseAction, actionCard, _state: VAL, _lede: lede,
     _parseAmount: parseAmount, _compareModel: compareModel };
