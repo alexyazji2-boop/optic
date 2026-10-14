@@ -1396,15 +1396,9 @@ body:not([data-view="home"]) .brand-mark-dot {
  * colours. */
 .home-title span { font-weight: 400; }
 
-/* The hovered bar's date, shown in the chart header only while scrubbing.
-   Tabular figures so the row does not jitter as the digits change under the
+/* Tabular figures so the row does not jitter as the digits change under the
    cursor — the whole point is to read it while moving, and a header that
-   reflows on every bar is unreadable. */
-.ws-ohlc-date {
-  color: var(--ink-muted);
-  font-variant-numeric: tabular-nums;
-  margin-right: var(--space-1);
-}
+   reflows on every bar is unreadable. See wsOhlcFit for the widths. */
 .ws-ohlc { font-variant-numeric: tabular-nums; }
 
 
@@ -8203,7 +8197,10 @@ body[data-view="chart"] main { padding-top: var(--space-2); }
   border-color: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 .ws-ohlc { display: flex; gap: var(--space-2); font-variant-numeric: tabular-nums; }
-.ws-ohlc b { color: var(--ink); font-weight: 500; }
+.ws-ohlc b { color: var(--ink); font-weight: 500; display: inline-block; text-align: right; }
+/* The hovered bar's own move, or nothing on the first bar: one width either
+   way, so the stage chip and Explain beside it hold still. */
+#ws-chg { min-width: 7.5ch; font-variant-numeric: tabular-nums; }
 
 /* The legend sits over the chart rather than above it, the way the reference
    does — the top-left of a price plot is almost always empty space, and putting
