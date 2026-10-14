@@ -17861,6 +17861,110 @@ table.data.ss-table tr.ss-row > td:nth-child(6) { white-space: normal; min-width
   .vs-fact-src, .vs-fact .vs-field { grid-column: 1 / -1; }
 }
 
+/* --------------------------------------------- fair-value model (DCF)
+ *
+ * static/valuation.js. The sentence and four tiles first, then the two charts
+ * side by side, then sections that open on request. Chart colours are the
+ * first two categorical slots: blue for a step up (or a value above the
+ * price), orange for a step down (or below). Every bar and cell also prints
+ * its number, so colour is never the only cue. */
+[id="dcf-host"], .dcf-panel, .dcf-panel .panel-body, [id="dcf-inner"] { min-width: 0; max-width: 100%; }
+.dcf-panel td, .dcf-panel th, .dcf-notes li, .dcf-methods li { overflow-wrap: anywhere; }
+.dcf-panel .dcf-lede { font-size: var(--t-body); line-height: 1.55; color: var(--ink); margin: 0 0 var(--space-3); max-width: 72ch; }
+.dcf-panel .dcf-lede strong { font-variant-numeric: tabular-nums; }
+.dcf-tiles { margin-bottom: var(--space-2); }
+.dcf-note { font-size: var(--t-small); color: var(--ink-2); margin: 0 0 var(--space-2); line-height: 1.45; max-width: 80ch; }
+.dcf-tv { font-size: var(--t-small); color: var(--ink-2); margin: 0 0 var(--space-3); }
+.dcf-checks .callout { margin: var(--space-1) 0; }
+.dcf-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.dcf-sec { margin-top: var(--space-4); min-width: 0; }
+.dcf-sec h3 { margin: 0 0 var(--space-1); font-size: var(--t-body); font-weight: 600; color: var(--ink); }
+.dcf-sec h4 { margin: var(--space-3) 0 var(--space-1); font-size: var(--t-small); font-weight: 600; color: var(--ink-2); }
+.dcf-legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); font-size: var(--t-caption); color: var(--ink-2); margin: var(--space-1) 0 var(--space-2); }
+.dcf-key { display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+.dcf-key.is-down { background: var(--s2); }
+.dcf-key.is-up { background: var(--s1); }
+.dcf-key.is-center, .dcf-key.is-price { width: 2px; height: 12px; background: var(--ink); border-radius: 0; }
+.dcf-key.is-price { background: var(--ink-muted); }
+.dcf-key.is-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink); }
+.dcf-key.is-bar { background: color-mix(in srgb, var(--s1) 45%, transparent); }
+.dcf-tornado, .dcf-range { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.dcf-trow, .dcf-rrow { display: grid; grid-template-columns: minmax(7.5em, 34%) minmax(0, 1fr); gap: 2px var(--space-2); align-items: center; }
+.dcf-tlabel, .dcf-rlabel { font-size: var(--t-small); color: var(--ink-2); }
+.dcf-ttrack, .dcf-rtrack { position: relative; height: 14px; background: var(--raised); border-radius: var(--r-xs); }
+.dcf-tbar { position: absolute; top: 2px; bottom: 2px; border-radius: var(--r-xs); }
+.dcf-tbar.is-down { background: var(--s2); }
+.dcf-tbar.is-up { background: var(--s1); }
+.dcf-tcenter { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: var(--ink); }
+.dcf-tvals { grid-column: 2; display: flex; justify-content: space-between; gap: var(--space-2); font-size: var(--t-caption); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.dcf-rbar { position: absolute; top: 3px; bottom: 3px; border-radius: var(--r-xs); background: color-mix(in srgb, var(--s1) 45%, transparent); }
+.dcf-rdot { position: absolute; top: 50%; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 2px var(--surface); }
+.dcf-rprice { position: absolute; top: -3px; bottom: -3px; width: 0; border-left: 2px dashed var(--ink-muted); margin-left: -1px; }
+.dcf-rval { grid-column: 2; font-size: var(--t-caption); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.dcf-fit { font-size: var(--t-caption); color: var(--ink-muted); white-space: nowrap; }
+.dcf-rev, .dcf-notes, .dcf-methods { margin: var(--space-1) 0; padding-left: 1.1em; display: grid; gap: var(--space-1); font-size: var(--t-small); color: var(--ink-2); }
+.dcf-rev .muted, .dcf-notes .muted { display: block; font-size: var(--t-caption); }
+.dcf-methods { list-style: none; padding: 0; }
+.dcf-methods li { border-left: 3px solid var(--border-strong); padding: var(--space-1) var(--space-2); }
+.dcf-methods li.dcf-m-primary { border-left-color: var(--s1); }
+.dcf-methods li.dcf-m-not_applicable { opacity: 0.75; }
+.dcf-m-out { margin-top: 2px; color: var(--ink); }
+.dcf-tabs { display: flex; flex-wrap: wrap; gap: var(--space-1); margin: var(--space-1) 0 var(--space-2); }
+.dcf-tab { font-size: var(--t-small); padding: 4px 10px; border-radius: var(--r-pill); border: 1px solid var(--border-strong); background: transparent; color: var(--ink-2); cursor: pointer; }
+.dcf-tab.is-on { color: var(--ink); border-color: var(--ink-muted); background: var(--raised); }
+.dcf-heat-wrap, .dcf-scroll { overflow-x: auto; max-width: 100%; }
+.dcf-heat { --dcf-heat: 0; }
+.dcf-heat td, .dcf-heat th { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dcf-heat td[data-side="above"] { background: color-mix(in srgb, var(--s1) calc(var(--dcf-heat, 0) * 38%), transparent); }
+.dcf-heat td[data-side="below"] { background: color-mix(in srgb, var(--s2) calc(var(--dcf-heat, 0) * 38%), transparent); }
+.dcf-heat td.is-centre { outline: 2px solid var(--ink); outline-offset: -2px; font-weight: 600; }
+.dcf-heat th.is-base { color: var(--ink); }
+.dcf-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; }
+.dcf-swatch[data-side="above"] { background: color-mix(in srgb, var(--s1) 38%, transparent); }
+.dcf-swatch[data-side="below"] { background: color-mix(in srgb, var(--s2) 38%, transparent); }
+.dcf-sc td, .dcf-fc td, .dcf-bridge td:nth-child(2) { font-variant-numeric: tabular-nums; }
+.dcf-sc td, .dcf-fc td { text-align: right; white-space: nowrap; }
+.dcf-fc tr.is-total th, .dcf-fc tr.is-total td, .dcf-bridge tr.is-total th, .dcf-bridge tr.is-total td { border-top: 1px solid var(--border-strong); color: var(--ink); }
+.dcf-fc tr.dcf-sub th { text-align: left; color: var(--ink-muted); font-size: var(--t-caption); font-weight: 600; padding-top: var(--space-2); }
+.dcf-bridge tr.is-off td:nth-child(2) { text-decoration: line-through; color: var(--ink-muted); }
+.dcf-bridge td:last-child { font-size: var(--t-caption); color: var(--ink-2); }
+.dcf-inc { margin-left: var(--space-2); white-space: nowrap; }
+.dcf-more { margin-top: var(--space-3); border-top: 1px solid var(--border); padding-top: var(--space-2); }
+.dcf-more > summary { cursor: pointer; font-weight: 600; font-size: var(--t-body); color: var(--ink); min-height: 32px; display: flex; align-items: center; }
+.dcf-more-body { padding-top: var(--space-2); }
+.dcf-kind { display: inline-block; font-size: var(--t-caption); font-weight: 500; padding: 0 6px; border-radius: var(--r-pill); border: 1px solid var(--border-strong); color: var(--ink-2); vertical-align: 1px; }
+.dcf-kind-external_estimate { border-color: color-mix(in srgb, var(--s1) 60%, transparent); }
+.dcf-kind-assumption { border-style: dashed; }
+.dcf-group { border: 0; margin: var(--space-3) 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-2) var(--space-4); }
+.dcf-group legend { font-weight: 600; font-size: var(--t-small); color: var(--ink); padding: 0; margin-bottom: var(--space-1); }
+.dcf-field { display: grid; gap: 2px; }
+.dcf-flabel { font-size: var(--t-small); color: var(--ink-2); }
+.dcf-finput { display: flex; align-items: center; gap: 4px; }
+.dcf-finput input, .dcf-ovin, .dcf-peers, .dcf-save-name { width: 7.5em; min-height: 32px; padding: 4px 8px; border-radius: var(--r-sm); border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--ink); font: inherit; font-variant-numeric: tabular-nums; }
+.dcf-field select { min-height: 32px; border-radius: var(--r-sm); border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--ink); font: inherit; }
+.dcf-finput input[aria-invalid="true"] { border-color: var(--critical); }
+.dcf-unit { font-size: var(--t-caption); color: var(--ink-muted); }
+.dcf-fwhy { font-size: var(--t-caption); color: var(--ink-muted); line-height: 1.4; }
+.dcf-field.is-edited .dcf-flabel::after { content: " \00b7 edited"; color: var(--ink); }
+.dcf-field.is-edited input { border-color: var(--ink-muted); }
+.dcf-ovin { width: 4.5em; }
+.dcf-peers { width: 14em; }
+.dcf-save-name { width: 16em; }
+.dcf-save-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-4); }
+.dcf-status { font-size: var(--t-small); color: var(--ink-2); }
+.dcf-ask { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); margin-top: var(--space-4); }
+.dcf-ask .chip { cursor: pointer; }
+.dcf-foot { margin-top: var(--space-3); }
+.milo-val-out { font-size: var(--t-small); color: var(--ink); margin: var(--space-1) 0; }
+@media (max-width: 900px) {
+  .dcf-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+}
+@media (max-width: 640px) {
+  .dcf-trow, .dcf-rrow { grid-template-columns: minmax(0, 1fr); }
+  .dcf-tvals, .dcf-rval { grid-column: 1; }
+  .dcf-group { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* --------------------------------------------- what changed since yesterday
  *
  * One line per change with the panel it opens, then the evidence and why it

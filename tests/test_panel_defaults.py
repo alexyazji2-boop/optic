@@ -31,12 +31,21 @@ how all four of these were found.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 APP = open("static/app.js", encoding="utf-8").read()
 
 
 def _code():
     src = re.sub(r"/\*.*?\*/", " ", APP, flags=re.S)
+    return re.sub(r"(?m)^\s*//.*$", " ", src)
+
+
+def _all_code():
+    """app.js and the panels other files render into its views: the
+    fair-value model's panel is drawn by static/valuation.js."""
+    extra = (Path(__file__).resolve().parent.parent / "static/valuation.js").read_text(encoding="utf-8")
+    src = re.sub(r"/\*.*?\*/", " ", APP + "\n" + extra, flags=re.S)
     return re.sub(r"(?m)^\s*//.*$", " ", src)
 
 
@@ -61,7 +70,7 @@ def _headings():
     Two shapes: `hg('Name')`, the glossary-wrapping helper most panels use, and
     a bare `<h2>Name` for the handful that do not. Lowercased once here so the
     comparison matches the runtime's own `includes` on a lowercased title."""
-    code = _code()
+    code = _all_code()
     # Quote-aware, for the same reason the key reader is: `hg("Today's
     # priority")` is double-quoted around an apostrophe, and a pattern whose
     # character class excludes both quote marks stops dead at the apostrophe

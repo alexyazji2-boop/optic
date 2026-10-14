@@ -139,6 +139,7 @@ const PERSONAL_KEYS = [
   'optic.signals.v1',            // swing-setup signals that fired, signed out
   'optic.thesis.v1',             // theses, and their backing copy signed in
   'optic.valuation.v1',          // valuation scenarios, signed out or unsaved
+  'optic.dcf.v1',                // fair-value model edits and snapshots, signed out
   'optic.chart.drawings.v1',     // drawings as bar indices, until migrated
   'optic.chart.drawings.v2',     // drawings as times; see WS_DRAW_KEY_V2
   'optic.chart.notes.v1',
@@ -34684,6 +34685,8 @@ function renderLong(d) {
 
     <div id="pe-host" class="span-all">${renderPeHistory(peHistoryForTicker())}</div>
 
+    <div id="dcf-host" class="span-all">${window.OpticValuation ? window.OpticValuation.hostHTML() : ''}</div>
+
     <div id="fv-host" class="span-all">${STATE.fairValueFor === STATE.ticker
     ? renderFairValue(STATE.fairValue) : ''}</div>
 
@@ -41037,7 +41040,9 @@ async function loadMarket(force, opts = {}) {
 async function loadLong(force, opts = {}) {
   const silent = !!opts.silent;
   if (STATE.long && STATE.long.ticker === STATE.ticker && !force) {
-    sweepCharts(() => renderLong(STATE.long)); revealPanels(views.long); loadValuationInputs(); return;
+    sweepCharts(() => renderLong(STATE.long)); revealPanels(views.long); loadValuationInputs();
+    if (window.OpticValuation) window.OpticValuation.load();
+    return;
   }
   if (!silent) beginLoad(views.long, `10-year history for ${STATE.ticker} and the major indices`);
   try {
@@ -41052,6 +41057,8 @@ async function loadLong(force, opts = {}) {
     loadPeHistory();
     loadFairValue();
     loadValuationInputs();
+    // The fair-value model (static/valuation.js), a separate request.
+    if (window.OpticValuation) window.OpticValuation.load();
     updateStatus();
     updateChatContext();
   } catch (err) {
@@ -42668,6 +42675,11 @@ function chatContextPayload() {
   if (STATE.deskAsk) ctx.desk_section = STATE.deskAsk;
   if (STATE.long) ctx.long_term = STATE.long;
   else if (STATE.ovLongData && STATE.ovLongData.ticker === STATE.ticker) ctx.long_term = STATE.ovLongData;
+  // The fair-value model on screen, compacted by static/valuation.js.
+  if (window.OpticValuation && STATE.ticker) {
+    const v = window.OpticValuation.context(STATE.ticker);
+    if (v) ctx.valuation = v;
+  }
   /* The comparison, once one has been run: its scores, ranks, the basis of
    * each horizon and the take, about 4KB for two names. It was never in here,
    * so a question asked from the Compare page went out with whatever else was
@@ -42795,6 +42807,15 @@ function chatContextPayload() {
     };
   }
   if (STATE.swing && STATE.swing.generated_at) ctx.data_as_of = STATE.swing.generated_at;
+  /* On the Investing tab the fair-value model goes straight after the quote.
+   * The server keeps the first 90,000 characters of the context, and in key
+   * order the model sat behind the options and macro blocks, past the cut. */
+  if (ctx.valuation && STATE.view === 'long') {
+    const lead = { ticker: ctx.ticker, quote: ctx.quote, valuation: ctx.valuation };
+    Object.keys(ctx).forEach((k) => { if (!(k in lead)) lead[k] = ctx[k]; });
+    Object.keys(lead).forEach((k) => { if (lead[k] === undefined) delete lead[k]; });
+    return lead;
+  }
   return ctx;
 }
 
@@ -44139,6 +44160,10 @@ function miloParseAction(kind, args) {
     if (q.length < 8) return { bad: 'there was no question to save' };
     return { kind, question: q, label: 'Save this question to Research' };
   }
+  if (kind === 'valuation') {
+    return window.OpticValuation ? window.OpticValuation.parseAction(args)
+      : { bad: 'the valuation model is not loaded' };
+  }
   if (kind === 'level') {
     const price = Number(String(args[0] || '').replace(/[$,]/g, ''));
     const label = String(args[1] || 'Level').trim().slice(0, 40);
@@ -44172,6 +44197,7 @@ function miloActionCard(a) {
   if (a.bad) {
     return `<div class="milo-act milo-act-off" role="note">Not available: ${esc(a.bad)}.</div>`;
   }
+  if (a.kind === 'valuation' && window.OpticValuation) return window.OpticValuation.actionCard(a);
   const persists = MILO_PERSISTS.has(a.kind);
   const sub = a.kind === 'watch' ? 'Changes your watchlist. Nothing changes until you confirm.'
     : a.kind === 'save' ? 'Keeps the question in Research. Nothing is saved until you confirm.'
@@ -44391,6 +44417,7 @@ const PULSE_SOURCES = {
   naked_ideas: ['Options ideas', 'swing'],
   strategy_ideas: ['Options ideas', 'swing'],
   long_term: ['Investing', 'long'],
+  valuation: ['Fair-value model', 'long'],
   earnings: ['Earnings', 'earnings'],
   news: ['News', 'news'],
   macro: ['Macro', 'market'],
@@ -48451,7 +48478,9 @@ const PANELS_OPEN_BY_DEFAULT = {
   /* 'close defence' is a panel on the Options tab, not this one, so on
      Investing it opened nothing. `return & risk` is the half of the lead the
      conviction score does not carry, and it is here. */
-  long: ['long-term view', 'return & risk', 'valuation vs its own history'],
+  /* 'fair-value model' opens: it leads with one sentence and four figures,
+     and its detail is already folded inside it (static/valuation.js). */
+  long: ['long-term view', 'return & risk', 'valuation vs its own history', 'fair-value model'],
   /* 'equal-weight vs cap-weight' is the second panel of the Macro tab's right
      column, under breadth. Opened, its chart fills the column beside the regime
      panel; shut by default it was a heading over empty space. */
