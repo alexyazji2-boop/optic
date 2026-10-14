@@ -4463,6 +4463,19 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
 .table-scroll { overflow-x: auto; }
 .sector-board td, .sector-board th { white-space: nowrap; }
 .sector-board .num { font-variant-numeric: tabular-nums; }
+/* The action under the trend chip. A sentence, so it wraps, capped so its
+   longest form ("Above $49.92 turns bullish, below $49.35 bearish") takes
+   two lines rather than setting the Trend column's width. */
+.sector-board .sec-action {
+  display: block;
+  max-width: 26ch;
+  margin-top: var(--space-1);
+  white-space: normal;
+  font-size: var(--t-caption);
+  color: var(--ink-2);
+}
+.sector-board .sec-action[hidden] { display: none; }
+.sector-board .tr-kind { margin-left: var(--space-2); }
 
 /* Trend and rotation both read as words first. Colour reinforces; it never
  * carries the meaning on its own. */
@@ -4554,6 +4567,13 @@ h3 .ask-pulse { font-size: var(--t-micro); padding: var(--space-0) var(--space-2
 .idx-val.pos { color: var(--pos); }
 .idx-val.neg { color: var(--neg); }
 
+.idx-vs {
+  margin: var(--space-3) 0 0;
+  font-size: var(--t-small);
+  font-variant-numeric: tabular-nums;
+}
+.idx-vs.flat { color: var(--ink-muted); }
+.idx-vs + .idx-summary { margin-top: var(--space-1); }
 .idx-summary {
   margin: var(--space-3) 0 var(--space-3);
   font-size: var(--t-micro);
@@ -11353,6 +11373,98 @@ body.cp-open { overflow: hidden; }
 .hm-alert-sym { flex: none; width: 5ch; font-weight: 600; font-size: var(--t-small); }
 .hm-alert-text { font-size: var(--t-small); color: var(--ink-2); }
 
+/* ------------------------------------------- Home: index and sector trends
+ *
+ * Fourteen cards in two groups, symbol over name over state over price, the
+ * order the reference board reads in. One grid track size for both groups,
+ * so the three index cards sit over the first three sector cards instead of
+ * stretching to a third of the row each. 150px at the reader's text size
+ * holds "Overnight Downtrend" in its chip with the card's padding either
+ * side: the chip measured 146px at 1.15 scale (127px at 1.0) and the padding
+ * is 24px. At 176px the main column at 1440 took three cards a row and the
+ * block ran 1,284px tall; at 150 it takes four. */
+.tr-basis {
+  margin: 0 0 var(--space-3);
+  font-size: var(--t-small);
+  line-height: 1.5;
+  color: var(--ink-2);
+  max-width: 80ch;
+}
+.tr-group {
+  margin: var(--space-4) 0 var(--space-2);
+  font-family: var(--label-face);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+.tr-basis + .tr-group { margin-top: 0; }
+.tr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(150px * var(--ui-scale)), 1fr));
+  gap: var(--space-2);
+}
+.tr-grid[hidden] { display: none; }
+/* Across both of the board's columns; see the comment where it is drawn. */
+.hm-board > .hm-trends { grid-column: 1 / -1; }
+/* The edge carries the state and the type stays ink, as on the Indices
+   cards: a card of green type reads as an alert rather than a state. */
+.tr-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-0);
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--r-md);
+  background: var(--ws-inset);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-ui) var(--ease-ui);
+}
+.tr-card[hidden] { display: none; }
+.tr-card.is-up { border-color: color-mix(in srgb, var(--pos) 50%, transparent); }
+.tr-card.is-down { border-color: color-mix(in srgb, var(--neg) 50%, transparent); }
+.tr-card.is-missing { cursor: default; }
+@media (hover: hover) {
+  .tr-card:not(.is-missing):hover { background: color-mix(in srgb, var(--ink) 7%, var(--surface)); }
+}
+.tr-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.tr-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  align-self: stretch;
+}
+.tr-top[hidden] { display: none; }
+.tr-sym { font-family: var(--label-face); font-size: var(--t-base); font-weight: 600; }
+.tr-price { font-size: var(--t-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+.tr-name { font-size: var(--t-caption); color: var(--ink-muted); }
+.tr-card .sec-trend { margin: var(--space-1) 0; }
+.tr-kind { font-size: var(--t-caption); color: var(--ink-2); }
+.tr-vs { font-size: var(--t-small); font-variant-numeric: tabular-nums; color: var(--ink-muted); }
+.tr-act { font-size: var(--t-small); line-height: 1.45; color: var(--ink-2); }
+.tr-skel { height: calc(240px * var(--ui-scale)); }
+
+/* Two across on a phone, where one 150px track would leave a single column
+   of fourteen cards. Measured at 375x812: each card is 143px, and the
+   "Overnight Downtrend" chip is 146px on its own, so it overflowed nine of
+   the fourteen cards. It wraps here, with a radius that suits two lines,
+   rather than losing a word the other two surfaces print; the name keeps one
+   line so "Consumer Discretionary" does not make its whole row taller. */
+@media (max-width: 559px) {
+  .tr-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tr-card { padding: var(--space-2); }
+  .tr-card .sec-trend { white-space: normal; border-radius: var(--r-md); }
+  .tr-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tr-vs, .tr-act { font-size: var(--t-caption); }
+}
+
 /* ============================================================== watchlist ===
  *
  * Rows, not cards. A card per symbol would put ten borders on screen for ten
@@ -18127,18 +18239,20 @@ table.heat td.name { text-align: left; font-weight: 500; }
  * now, what changed and the month's movers: y=5168 of a 6300px page at
  * 375x812, measured 2026-10-06. Unboxed, the blocks take the order a daily
  * brief reads in: the day's read, your names and what changed on them, then
- * the market's moves, the month's movers, the written brief and the
- * questions. Two columns keep their own order above this. */
+ * the market's moves and where the indices and sectors sit against their
+ * prior session (#hm-trends, 2026-10-14), the month's movers, the written
+ * brief and the questions. Two columns keep their own order above this. */
 @container hm-market (max-width: 671px) {
   .hm-board > .hm-main, .hm-board > .hm-rail { display: contents; }
   .hm-board .md { order: 1; }
   .hm-board .hm-block:has(#hm-watch) { order: 2; }
   .hm-board #hm-changes { order: 3; }
   .hm-board .cc-now { order: 4; }
-  .hm-board .hm-block:has(#cc-movers) { order: 5; }
-  .hm-board .hm-block:has(.hm-alerts) { order: 6; }
-  .hm-board .hm-block:has([data-go-view="brief"]) { order: 7; }
-  .hm-board .hm-block:has(.cc-qs) { order: 8; }
+  .hm-board #hm-trends { order: 5; }
+  .hm-board .hm-block:has(#cc-movers) { order: 6; }
+  .hm-board .hm-block:has(.hm-alerts) { order: 7; }
+  .hm-board .hm-block:has([data-go-view="brief"]) { order: 8; }
+  .hm-board .hm-block:has(.cc-qs) { order: 9; }
 }
 
 /* The first-visit question on a phone: each answer one row, not a card.

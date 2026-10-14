@@ -26,6 +26,11 @@ warnings.filterwarnings("ignore")
 
 import yfinance as yf  # noqa: E402
 
+try:                                    # private in yfinance, so not relied on
+    from yfinance.const import _QUERY1_URL_ as _QUERY1  # noqa: E402
+except Exception:                       # noqa: BLE001
+    _QUERY1 = "https://query1.finance.yahoo.com"
+
 from .base import MarketDataProvider
 from .common import clean_iv, pick_swing_expiries
 
@@ -1033,6 +1038,69 @@ class YFinanceProvider(MarketDataProvider):
             if hit and quote:
                 out[sym] = quote
         return out
+
+    # How long the board's session quotes are kept. A minute rather than the
+    # quote's thirty seconds: Home asks for /api/home every twenty seconds and
+    # its index leg reads these, so thirty seconds paid the request (0.32s for
+    # fifteen ETFs, measured 2026-10-14) on every other refresh. The board says
+    # which side of yesterday's range price is on, and the price it replaced
+    # was the daily bar's, held for TTL_HISTORY's five minutes.
+    TTL_SESSION_QUOTES = 60
+
+    def session_quotes(self, tickers: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Regular and extended-hours prints for many symbols, in one request.
+
+        Yahoo's v7 quote takes a comma-separated list, which is what yfinance
+        sends one symbol of for `.info`. One request answered all fifteen
+        sector and index ETFs in 0.32s (2026-10-14), where `quote()` would be
+        three requests each. Through yfinance's own session, so the cookie and
+        crumb are its, and the limiter's gate like every other fetch here.
+
+        Failure is `{}`: the board treats a missing quote as "no print known"
+        and says so, which is what it could say before this existed."""
+        wanted = sorted({str(t or "").strip().upper() for t in tickers or [] if t})
+        if not wanted:
+            return {}
+
+        def build() -> Dict[str, Dict[str, Any]]:
+            try:
+                data = yf.Ticker(wanted[0])._data
+                doc = data.get_raw_json(_QUERY1 + "/v7/finance/quote",
+                                        params={"symbols": ",".join(wanted),
+                                                "formatted": "false"},
+                                        timeout=10)
+            except Exception as exc:                            # noqa: BLE001
+                return _failed({}, exc)
+            out: Dict[str, Dict[str, Any]] = {}
+            for row in ((doc or {}).get("quoteResponse") or {}).get("result") or []:
+                sym = str((row or {}).get("symbol") or "").upper()
+                if not sym or sym not in wanted:
+                    continue
+                out[sym] = {
+                    "ticker": sym,
+                    "price": _f(row.get("regularMarketPrice")),
+                    "prev_close": _f(row.get("regularMarketPreviousClose")),
+                    "change_pct": _f(row.get("regularMarketChangePercent")),
+                    # An instant, unlike quote()'s `market_time` ("10:07AM EDT"),
+                    # because the board compares it with the session's open.
+                    "regular_market_time": _iso_from_epoch(row.get("regularMarketTime")),
+                    "post_market_price": _f(row.get("postMarketPrice")),
+                    "post_market_change_pct": _f(row.get("postMarketChangePercent")),
+                    "post_market_time": _iso_from_epoch(row.get("postMarketTime")),
+                    "pre_market_price": _f(row.get("preMarketPrice")),
+                    "pre_market_change_pct": _f(row.get("preMarketChangePercent")),
+                    "pre_market_time": _iso_from_epoch(row.get("preMarketTime")),
+                    "market_state": row.get("marketState"),
+                    # Yahoo's own statement of the feed's delay, in minutes. 0
+                    # for the Arca-listed ETFs here on 2026-10-14, so the board
+                    # names the print's time rather than a delay it assumed.
+                    "delayed_minutes": _f(row.get("exchangeDataDelayedBy")),
+                }
+            # Nothing usable is a failure, so the next request asks again
+            # rather than reading an empty answer for a minute.
+            return out if out else _Failed({})
+
+        return _cached("sessq:" + ",".join(wanted), self.TTL_SESSION_QUOTES, build)
 
     def contract_month(self, ticker: str) -> Optional[str]:
         """The delivery month of a continuous futures symbol, as `YYYY-MM-01`.
