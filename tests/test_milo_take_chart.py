@@ -115,9 +115,9 @@ def test_milo_is_told_the_take_shape():
                    "a business you would want to own for years, as your own read with the reason",
                    "When a well-known peer suits the long-term case better, name it with the business reason",
                    "One closing line, in your own words, that splits the timeframes",
-                   "About 200 words and never more than 250, even when a framework block allows more",
+                   "About 150 to 180 words and never more than 200, even when a framework block allows more",
                    "no more than six numbers in all",
-                   "not \"No Setup\" or \"Insufficient Data\"",
+                   "never write a grade's label, not even in quotation marks",
                    "No disclaimer line such as \"not advice\"",
                    "never an instruction about the reader's money"):
         assert phrase in sp, phrase
