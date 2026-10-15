@@ -44,7 +44,21 @@ _COMBINED = re.compile(
     r"\b(full picture|big picture|overall|everything|all angles|complete (analysis|picture|view)|"
     r"(trade|trading) (and|or) (invest|hold)\w*|(invest|hold)\w* (and|or) (trade|swing)\w*|"
     r"short[- ]term and long[- ]term|long[- ]term and short[- ]term|both (the )?(trade|swing|long)|"
-    r"every angle|whole thing|full analysis|full report)\b", re.I)
+    r"every angle|whole thing|full analysis|full report|"
+    # Two horizons named together, or asked to be reconciled: "why do the
+    # long-term and swing reads disagree on Alphabet" routed to long term only,
+    # so Milo could not see the swing read it was asked to explain (found by
+    # the Milo eval session, 2026-10-15).
+    r"(long[- ]term|invest\w*|hold\w*) (and|vs\.?|versus|or) (the |a |an )?(swing|trade|trading|short[- ]term)|"
+    r"(swing|trade|trading|short[- ]term) (and|vs\.?|versus|or) (the |a |an )?(long[- ]term|invest\w*|hold\w*)|"
+    r"(disagree|conflict|contradict)\w*|(reads|views|grades|signals) (don'?t|do not) (agree|match))\b", re.I)
+# A request for a definition is about the term, not the company on screen:
+# "What's a dividend yield?" with KO open pulled KO's whole long-term
+# assessment. Not a definition when it asks for a judgement or a level.
+_DEFINE = re.compile(r"^\s*(what(?:'s| is| are) (?:a|an)\b|what does .{1,40}\bmean\b|define\b|definition of|"
+                     r"meaning of|explain what (?:a|an)\b)", re.I)
+_NOT_DEFINE = re.compile(r"\b(good|best|reasonable|fair|sensible|right|safe|smart|stop|entry|target|setup|"
+                         r"trade|level|this|here|now|today|their|its)\b", re.I)
 # "Quick" is for a narrow ask about one figure or level ("where's the stop",
 # "what's the consensus"). A judgement ("is it a good investment", "is there a
 # setup", "how did earnings go") is a full read even when it is short: the
@@ -86,9 +100,12 @@ def resolve(question: str, ticker: Optional[str], *, next_report: Optional[str] 
     if not ticker:
         return {"mode": None, "source": "none", "depth": depth, "why": "No single company in the question.",
                 "timing": timing}
+    if _DEFINE.search(q) and not _NOT_DEFINE.search(q):
+        return {"mode": None, "source": "definition", "depth": "quick",
+                "why": "A question about what a term means, not about this company.", "timing": timing}
     if _COMBINED.search(q):
         return {"mode": "combined", "source": "question", "depth": "full",
-                "why": "The question asks for more than one horizon.", "timing": timing}
+                "why": "The question asks for more than one horizon, or why they differ.", "timing": timing}
     stated = horizon_mod.stated_in(q)
     intent = desk_research.intent(q, horizon=None, ticker=ticker)
     if _POST.search(q):

@@ -266,3 +266,16 @@ def test_a_fund_has_no_earnings_in_the_window_and_a_missing_date_stays_unknown()
     stock = service._earn_dates({"next_report": {}}, {"quote_type": "EQUITY"})
     assert "not_applicable" not in stock
     assert swing_setup._earnings_exposure(stock, "2025-03-03", 10)["in_window"] is None
+
+
+@pytest.mark.parametrize("q,expected", [
+    ("Why do the long-term and swing reads disagree on Alphabet?", "combined"),
+    ("Is GOOGL a long-term hold or a swing trade?", "combined"),
+    ("The signals don't agree on GOOGL, why?", "combined"),
+    ("What's a dividend yield?", None),
+    ("What does EBITDA mean?", None),
+    ("What's a good entry on KO?", "swing"),
+    ("What's a reasonable stop here?", "swing"),
+])
+def test_routing_misses_found_by_the_milo_eval(q, expected):
+    assert modes.resolve(q, "GOOGL", today=TODAY)["mode"] == expected, q
