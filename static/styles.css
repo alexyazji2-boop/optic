@@ -6420,9 +6420,18 @@ aside#chat { height: 100vh; }
   font: inherit;
   min-width: 0;
 }
-.ph-title {
+/* Scoped to the history list (2026-10-15): the page header's title, defined
+   further down, is also .ph-title, and as the later rule it gave each saved
+   conversation the page title's display face at --t-title. The owner's
+   screenshot showed "Hey Milo, attached is my ..." at headline size. */
+.pulse-history .ph-title {
   display: block;
+  margin: 0;
+  font-family: inherit;
   font-size: var(--t-small);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.35;
   color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
