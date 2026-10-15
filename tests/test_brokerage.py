@@ -501,7 +501,10 @@ def test_milo_gets_my_portfolio_server_side_and_never_someone_elses(monkeypatch)
     me.post("/api/chat", json={"messages": [{"role": "user", "content": "Where is my portfolio concentrated?"}],
                                "context": {}})
     block = seen["context"]["brokerage_portfolio"]
-    assert list(seen["context"])[0] == "brokerage_portfolio"
+    # The context budget, not dict order, decides what reaches the model, and
+    # the linked accounts lead it (ai._ORDER_BASE).
+    kept = main.ai.budget_context(seen["context"], "Where is my portfolio concentrated?")[1]["kept"]
+    assert kept[:2] == ["brokerage_linked", "brokerage_portfolio"]
     assert {"facts", "calculated", "caveats", "not_supplied"} <= set(block)
     assert any(h["symbol"] == "AAPL" for h in block["facts"]["holdings"])
 
@@ -526,6 +529,15 @@ def test_client_cannot_inject_a_brokerage_block(monkeypatch):
     them.post("/api/chat", json={"messages": [{"role": "user", "content": "hello"}],
                                  "context": {"brokerage_portfolio": {"facts": "forged"}}})
     assert "brokerage_portfolio" not in (seen["context"] or {})
+
+    # Deep research takes a browser context too, and is never about the reader's accounts.
+    async def fake_research(ticker, question=None, context=None):
+        seen["research"] = context
+        yield "event: done\ndata: {}\n\n"
+    monkeypatch.setattr(main.ai, "deep_research", fake_research)
+    them.post("/api/research", json={"ticker": "AAPL", "context": {
+        "quote": {"price": 1}, "brokerage_portfolio": {"facts": "forged"}, "brokerage_linked": True}})
+    assert seen["research"] == {"quote": {"price": 1}}
 
 
 def test_milo_context_skipped_when_reader_cleared_context(monkeypatch):
@@ -805,3 +817,236 @@ def test_portfolio_as_of_prefers_the_brokers_time():
     link(c)
     a = c.get("/api/brokerage/portfolio").json()["as_of"]
     assert a["oldest_broker"] and a["oldest_broker"] < a["oldest_sync"] and a["broker_complete"]
+
+
+# ------------------------------------- owner-only mode (shipping it dark), 2026-10-15
+
+OWNER = "owner@example.com"
+STATUS = "/api/brokerage/status"
+
+
+def owner():
+    """The deployment's owner: ADMIN_EMAILS names the address and it is confirmed."""
+    c, user = reader(OWNER)
+    auth_store.mark_verified(user["id"])
+    return c, auth_store.get_user_by_email(OWNER)
+
+
+def snaptrade_with_only_its_own_terms(monkeypatch):
+    """SnapTrade switched on with only SNAPTRADE_TERMS_URL published, and the
+    sandbox's provider behind the switch so a link runs end to end offline."""
+    monkeypatch.setenv("BROKERAGE_PROVIDER", "snaptrade")
+    monkeypatch.setenv("SNAPTRADE_CLIENT_ID", "x")
+    monkeypatch.setenv("SNAPTRADE_CONSUMER_KEY", "y")
+    monkeypatch.delenv("TERMS_URL", raising=False)
+    monkeypatch.delenv("PRIVACY_URL", raising=False)
+    monkeypatch.setenv("SNAPTRADE_TERMS_URL", "https://example.test/snaptrade-terms")
+    prov = SandboxProvider()
+    monkeypatch.setattr(service, "provider", lambda: prov)
+    return prov
+
+
+def test_owner_only_everyone_else_gets_exactly_the_switched_off_answers(monkeypatch):
+    monkeypatch.setenv("BROKERAGE_OWNER_ONLY", "true")
+    monkeypatch.setenv("ADMIN_EMAILS", OWNER)
+    assert service.status()["enabled"] is True
+    c, user = reader()
+    paid(user)
+    # Typing the owner's address at signup is not owning the deployment.
+    pretender, _ = reader(OWNER)
+    guest = TestClient(main.app)
+    seen = {}
+
+    async def fake_stream(history, context=None, **kw):
+        seen["context"] = context
+        yield "event: done\ndata: {}\n\n"
+    monkeypatch.setattr(main.ai, "stream_chat", fake_stream)
+    monkeypatch.setattr(main, "_spend_guard", lambda request: None)
+
+    def answers():
+        connect = c.post("/api/brokerage/connect", json={"consent_version": service.terms()["version"]})
+        c.post("/api/chat", json={"messages": [{"role": "user", "content": "what is my exposure?"}],
+                                  "context": {}})
+        return {"status": c.get(STATUS).json(), "pretender": pretender.get(STATUS).json(),
+                "guest": guest.get(STATUS).json(), "connect": (connect.status_code, connect.json()),
+                "portfolio": c.get("/api/brokerage/portfolio").json(),
+                "milo": sorted(k for k in (seen["context"] or {}) if k.startswith("brokerage"))}
+    dark = answers()
+    assert dark["status"]["available"] is False and "not switched on" in dark["status"]["reason"]
+    assert dark["connect"][0] == 503
+    monkeypatch.delenv("BROKERAGE_PROVIDER")
+    assert dark == answers()
+    assert store.link(user["id"]) is None
+
+
+def test_owner_only_lets_the_owner_link_with_only_snaptrades_terms(monkeypatch):
+    monkeypatch.setenv("BROKERAGE_OWNER_ONLY", "true")
+    monkeypatch.setenv("ADMIN_EMAILS", OWNER)
+    prov = snaptrade_with_only_its_own_terms(monkeypatch)
+    me, admin = owner()
+    st = me.get(STATUS).json()
+    assert st["available"] is True and st["owner_only"] is True
+    consent = st["consent"]
+    assert consent["provider_terms_url"] and not consent["terms_url"] and not consent["privacy_url"]
+    # The recorded version says which documents were shown.
+    assert consent["version"].endswith("|shown:snaptrade-terms")
+    # The box still has to be ticked, and the agreement is recorded.
+    assert me.post("/api/brokerage/connect", json={}).status_code == 428
+    assert link(me) == "/?brokerage=linked#/brokerage"
+    assert db.row("SELECT terms_version FROM brokerage_consents WHERE user_id = ?",
+                  (admin["id"],))["terms_version"] == consent["version"]
+    assert me.get("/api/brokerage/portfolio").json()["available"] is True
+
+    # The signature-verified webhook is not a reader and keeps working.
+    conn = store.connections(admin["id"])[0]
+    puid = store.link(admin["id"])["provider_user_id"]
+    monkeypatch.setattr(prov, "verify_webhook", lambda headers, body: json.loads(body), raising=False)
+    event = {"eventType": "ACCOUNT_HOLDINGS_UPDATED", "webhookId": "w1", "userId": puid,
+             "brokerageAuthorizationId": conn["provider_connection_id"]}
+    hook = TestClient(main.app).post("/api/brokerage/webhook", content=json.dumps(event).encode())
+    assert hook.status_code == 200 and hook.json() == {"ok": True, "queued": True}
+    assert service.handle_webhook(dict(event, type="ACCOUNT_HOLDINGS_UPDATED")) == "synced"
+
+    # Anyone else on the same deployment: switched off.
+    them, other = reader("them@example.com")
+    paid(other)
+    assert them.get(STATUS).json()["available"] is False
+    assert them.post("/api/brokerage/connect", json={"consent_version": consent["version"]}).status_code == 503
+
+    # Publishing Optic's own documents later asks the owner again.
+    monkeypatch.setenv("TERMS_URL", "https://example.test/terms")
+    monkeypatch.setenv("PRIVACY_URL", "https://example.test/privacy")
+    assert me.get(STATUS).json()["consent"]["accepted"] is False
+
+
+def test_without_owner_only_snaptrade_still_needs_all_three_documents(monkeypatch):
+    monkeypatch.setenv("ADMIN_EMAILS", OWNER)
+    snaptrade_with_only_its_own_terms(monkeypatch)
+    me, _ = owner()
+    for flag in (None, "", "false", "0"):
+        if flag is None:
+            monkeypatch.delenv("BROKERAGE_OWNER_ONLY", raising=False)
+        else:
+            monkeypatch.setenv("BROKERAGE_OWNER_ONLY", flag)
+        assert service.status()["enabled"] is False, flag
+        assert me.get(STATUS).json()["available"] is False, flag      # not even for the owner
+    monkeypatch.setenv("TERMS_URL", "https://example.test/terms")
+    monkeypatch.setenv("PRIVACY_URL", "https://example.test/privacy")
+    assert service.status()["enabled"] is True
+    assert "|shown:" not in service.terms()["version"]
+    # Owner-only waives Optic's documents, never SnapTrade's.
+    monkeypatch.setenv("BROKERAGE_OWNER_ONLY", "true")
+    monkeypatch.delenv("SNAPTRADE_TERMS_URL")
+    assert service.status()["enabled"] is False
+
+
+def test_owner_only_still_lets_anyone_with_data_leave(monkeypatch):
+    """Nobody but the owner can link once it is on, but a reader who linked
+    before it was switched on must still be able to disconnect and delete."""
+    c, user = reader()
+    paid(user)
+    link(c)
+    conn = store.connections(user["id"])[0]
+    db.execute("UPDATE brokerage_connections SET last_attempt_at = ? WHERE id = ?",
+               (db.in_seconds(-2 * 86400), conn["id"]))
+    monkeypatch.setenv("BROKERAGE_OWNER_ONLY", "true")
+    monkeypatch.setenv("ADMIN_EMAILS", OWNER)
+    assert c.get(STATUS).json()["available"] is False
+    assert c.get("/api/brokerage/portfolio").json()["available"] is False
+    assert c.post("/api/brokerage/connections/{}/sync".format(conn["id"])).status_code == 503
+    assert service.auto_sync_due() == 0
+    assert service.handle_webhook({"type": "ACCOUNT_HOLDINGS_UPDATED", "userId": store.link(user["id"])[
+        "provider_user_id"], "brokerageAuthorizationId": conn["provider_connection_id"]}) == "ignored"
+    seen = {}
+
+    async def fake_stream(history, context=None, **kw):
+        seen["context"] = context
+        yield "event: done\ndata: {}\n\n"
+    monkeypatch.setattr(main.ai, "stream_chat", fake_stream)
+    monkeypatch.setattr(main, "_spend_guard", lambda request: None)
+    c.post("/api/chat", json={"messages": [{"role": "user", "content": "Where is my portfolio concentrated?"}],
+                              "context": {}})
+    assert not [k for k in (seen["context"] or {}) if k.startswith("brokerage")]
+    assert c.post("/api/brokerage/connections/{}/disconnect".format(conn["id"])).status_code == 200
+    assert c.post("/api/brokerage/delete-data").status_code == 200
+    assert store.link(user["id"]) is None and store.connections(user["id"]) == []
+
+
+# ------------------------------------------- Milo on main's chat path, 2026-10-15
+
+
+def test_the_linked_portfolio_reaches_every_round_of_milos_tool_loop(monkeypatch):
+    """main's Milo answers in a loop of tool calls (ai.stream_chat). The
+    portfolio rides on the CONTEXT turn, so it must still be there in the
+    round after a tool ran, and a forged block must be in neither."""
+    import types
+    from app import ai_store
+    me, mine = reader()
+    paid(mine)
+    link(me)
+    monkeypatch.setattr(ai_store, "record", lambda *a, **k: None)
+    monkeypatch.setattr(main, "_spend_guard", lambda request: None)
+    usage = types.SimpleNamespace(input_tokens=1, output_tokens=1, cache_read_input_tokens=0)
+    rounds = [
+        types.SimpleNamespace(model="m", stop_reason="tool_use", usage=usage, content=[
+            types.SimpleNamespace(type="tool_use", id="t1", name="get_my_watchlists", input={})]),
+        types.SimpleNamespace(model="m", stop_reason="end_turn", usage=usage, content=[
+            types.SimpleNamespace(type="text", text="Concentrated in technology.")]),
+    ]
+    sent = []
+
+    class Stream:
+        def __init__(self, final):
+            self.final = final
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        def __aiter__(self):
+            async def none():
+                for e in ():
+                    yield e
+            return none()
+
+        async def get_final_message(self):
+            return self.final
+
+    def stream(**kw):
+        sent.append(kw)
+        return Stream(rounds[len(sent) - 1])
+    client = types.SimpleNamespace(beta=types.SimpleNamespace(messages=types.SimpleNamespace(stream=stream)))
+    monkeypatch.setattr(main.ai, "_client", lambda: client)
+    r = me.post("/api/chat", json={"messages": [{"role": "user", "content": "Where is my portfolio concentrated?"}],
+                                   "context": {"brokerage_portfolio": {"facts": "forged"}}})
+    assert r.status_code == 200 and "event: done" in r.text
+    assert len(sent) == 2
+    assert sent[1]["messages"][-1]["content"][0]["tool_use_id"] == "t1"
+    for kw in sent:
+        turn = kw["messages"][0]["content"]
+        assert '"brokerage_portfolio"' in turn and '"symbol":"AAPL"' in turn and "forged" not in turn
+
+
+def test_the_context_budget_keeps_every_linked_holding():
+    """`_prune` cut the block's lists to 10 rows, unmarked (measured 10 of 40
+    holdings sent), and the 14,000 default cap slims a full 60-holding block."""
+    syms = ["S%02d" % i for i in range(60)]
+    block = {"facts": {"holdings": [{"symbol": s, "description": "Example Holdings Corporation Class A",
+                                     "kind": "equity", "currency": "USD", "quantity": 120.5, "price": 187.42,
+                                     "accounts": ["Individual"]} for s in syms]},
+             "calculated": {"weights": [{"symbol": s, "weight_pct": 2.5, "market_value": 6250.0,
+                                         "unrealized_pl": 312.5, "sector": "Technology"} for s in syms]}}
+    crowded = {"brokerage_portfolio": block, "brokerage_linked": True,
+               "research": {"items": [{"x": "y" * 500}] * 40}, "auto_loaded": {"AMD": {"z": "q" * 20000}},
+               "market": {"z": "m" * 13000}, "compare": {"z": "c" * 13000}}
+    kw, meta = main.ai.build_chat_request([{"role": "user", "content": "Where is my portfolio concentrated?"}],
+                                          context=crowded)
+    sent = kw["messages"][-1]["content"]
+    assert len(json.dumps(block, separators=(",", ":"))) > main.ai.CONTEXT_SECTION_CAP
+    assert meta["context"]["kept"][:2] == ["brokerage_linked", "brokerage_portfolio"]
+    assert "brokerage_portfolio" not in meta["context"]["slimmed"]
+    assert all('"symbol":"{}","description"'.format(s) in sent for s in syms)
+    assert all('"symbol":"{}","weight_pct"'.format(s) in sent for s in syms)
+

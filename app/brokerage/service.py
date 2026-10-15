@@ -8,6 +8,10 @@ the owner sets the keys. The sandbox refuses to run on a hosting platform unless
 on the live site would read as somebody's real money. Both need
 `OPTIC_DATA_KEY`: without a master key nothing is stored at all.
 
+**Owner only, when asked.** `BROKERAGE_OWNER_ONLY` keeps it switched off for
+everyone but the deployment's owner (`open_to`, `status_for`), so it can run
+on production for the owner's own account first.
+
 **Paid plans link; everyone can leave.** Linking and syncing need a plan with
 `brokerage_connections` above zero. Disconnecting and deleting never check the
 plan: a reader whose subscription ended still owns their data.
@@ -69,11 +73,15 @@ class NeedsConsent(RuntimeError):
 # policy and the provider's end-user terms before the first link, and again
 # whenever the version changes. The documents themselves are the owner's (and
 # counsel's) to write; their URLs and version are configuration, and the
-# SnapTrade provider will not switch on without them.
+# SnapTrade provider will not switch on without them (owner-only mode needs
+# only SnapTrade's, see `status`).
+
+# Which document each URL is, in the order the agreement names them.
+_DOCUMENTS = (("terms_url", "terms"), ("privacy_url", "privacy"), ("provider_terms_url", "snaptrade-terms"))
 
 
 def terms() -> Dict[str, Optional[str]]:
-    return {
+    out = {
         # Defaults name the drafts in ~/Optic/work/legal (not yet reviewed or
         # published). Set BROKERAGE_TERMS_VERSION to the final ids when the
         # reviewed documents go live, and every reader is asked again.
@@ -83,6 +91,15 @@ def terms() -> Dict[str, Optional[str]]:
         "privacy_url": (os.environ.get("PRIVACY_URL") or "").strip() or None,
         "provider_terms_url": (os.environ.get("SNAPTRADE_TERMS_URL") or "").strip() or None,
     }
+    # The agreement shows only the documents that have a URL, so the recorded
+    # version says which ones those were. Owner-only mode links before Optic's
+    # own terms are published (2026-10-15); a consent row naming them would
+    # claim an agreement to documents nobody was shown, and publishing them
+    # later changes the version, so the owner is asked again.
+    shown = [name for key, name in _DOCUMENTS if out[key]]
+    if len(shown) < len(_DOCUMENTS):
+        out["version"] += "|shown:" + ("+".join(shown) or "none")
+    return out
 
 
 def consent_state(user_id: str) -> Dict[str, Any]:
@@ -98,11 +115,42 @@ def _env_flag(name: str) -> bool:
     return (os.environ.get(name) or "").strip().lower() in ("1", "true", "yes", "on")
 
 
+NOT_SWITCHED_ON = "Brokerage linking is not switched on for this deployment."
+
+
+def owner_only() -> bool:
+    """`BROKERAGE_OWNER_ONLY`: linking runs for the deployment's owner alone.
+
+    For shipping the feature dark (2026-10-15): the owner links their own
+    account on production before the legal documents are published or the
+    plan is on sale, and every other reader sees exactly what a deployment
+    without brokerage shows. The owner is `app.auth.admin.is_admin`, which
+    needs ADMIN_EMAILS and a confirmed address, never a row anyone can write."""
+    return _env_flag("BROKERAGE_OWNER_ONLY")
+
+
+def open_to(user: Optional[Dict[str, Any]]) -> bool:
+    """Whether this reader may link, sync and see linked data. Everyone, unless
+    owner-only mode is on. Leaving (disconnect, delete) never asks this."""
+    return not owner_only() or auth_admin.is_admin(user)
+
+
+def status_for(user: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """`status()` as one reader sees it. In owner-only mode anyone but the
+    owner, guests included, gets the switched-off answer word for word, so
+    nothing about the page, the menu or the refusals tells them it exists."""
+    st = status()
+    if st["enabled"] and not open_to(user):
+        return {"enabled": False, "reason": NOT_SWITCHED_ON}
+    return st
+
+
 def status() -> Dict[str, Any]:
-    """Whether brokerage linking can run here, and if not, the sentence why."""
+    """Whether brokerage linking can run on this deployment, and if not, the
+    sentence why. Per-reader availability is `status_for`."""
     choice = (os.environ.get("BROKERAGE_PROVIDER") or "").strip().lower()
     if not choice:
-        return {"enabled": False, "reason": "Brokerage linking is not switched on for this deployment."}
+        return {"enabled": False, "reason": NOT_SWITCHED_ON}
     if not vault.available():
         return {"enabled": False, "reason": runtime.for_reader(
             "Brokerage linking is not available right now.",
@@ -114,7 +162,15 @@ def status() -> Dict[str, Any]:
         return {"enabled": False, "reason": runtime.for_reader(
             "Brokerage linking is not available right now.",
             "Set SNAPTRADE_CLIENT_ID and SNAPTRADE_CONSUMER_KEY.")}
-    if choice == "snaptrade" and not all(terms()[k] for k in ("terms_url", "privacy_url", "provider_terms_url")):
+    if choice == "snaptrade" and owner_only() and not terms()["provider_terms_url"]:
+        # Owner-only: the owner is Optic, so Optic's own terms and privacy
+        # policy can wait for counsel; SnapTrade's end-user terms are a third
+        # party's and still have to be agreed to.
+        return {"enabled": False, "reason": runtime.for_reader(
+            "Brokerage linking is not available right now.",
+            "Set SNAPTRADE_TERMS_URL before enabling SnapTrade, even with BROKERAGE_OWNER_ONLY.")}
+    if choice == "snaptrade" and not owner_only() \
+            and not all(terms()[k] for k in ("terms_url", "privacy_url", "provider_terms_url")):
         # Real holdings are not linked under terms nobody has published.
         return {"enabled": False, "reason": runtime.for_reader(
             "Brokerage linking is not available right now.",
@@ -137,13 +193,13 @@ def provider() -> Provider:
     elif choice == "sandbox":
         _provider = SandboxProvider()
     else:
-        raise NotAvailable("Brokerage linking is not switched on for this deployment.")
+        raise NotAvailable(NOT_SWITCHED_ON)
     _provider_key = choice
     return _provider
 
 
-def require_available() -> Provider:
-    s = status()
+def require_available(user: Optional[Dict[str, Any]]) -> Provider:
+    s = status_for(user)
     if not s["enabled"]:
         raise NotAvailable(s["reason"])
     return provider()
@@ -204,7 +260,7 @@ def ensure_link(user_id: str, prov: Provider) -> Dict[str, str]:
 
 def start_link(user: Dict[str, Any], redirect_base: str, reconnect_id: Optional[str] = None,
                consent_version: Optional[str] = None, ip_hash: Optional[str] = None) -> str:
-    prov = require_available()
+    prov = require_available(user)
     ent = entitlement(user)
     if not ent["can_link"]:
         raise NotEntitled("Linking a brokerage is part of the paid plan.")
@@ -241,7 +297,7 @@ def finish_link(user: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, Any]:
     removed at the provider, so a portal link someone else completed cannot
     be swept into this account later and is not billed (review M1). A
     connection that is not read-only is refused and removed (review H4)."""
-    prov = require_available()
+    prov = require_available(user)
     creds = _credentials(user["id"])
     if not creds:
         raise LookupError("No brokerage link was started for this account.")
@@ -320,7 +376,7 @@ def sync_connection(user: Dict[str, Any], conn: Dict[str, Any], prov: Optional[P
     """Pull every account under one connection. Never raises for a provider
     problem: it records it on the connection and returns what happened."""
     uid = user["id"]
-    prov = prov or require_available()
+    prov = prov or require_available(user)
     lock = _lock_for(uid)
     if not lock.acquire(blocking=False):
         return {"connection_id": conn["id"], "result": "busy",
@@ -429,7 +485,7 @@ def request_refresh(user: Dict[str, Any], conn: Dict[str, Any]) -> Dict[str, Any
     the pull: reading straight after the request returned yesterday's data
     under a "Synced" message (review M3). A provider with no refresh call
     (the sandbox) is read now."""
-    prov = require_available()
+    prov = require_available(user)
     if not hasattr(prov, "refresh_connection"):
         return sync_connection(user, conn, prov=prov)
     creds = _credentials(user["id"])
@@ -637,7 +693,7 @@ def auto_sync_due(limit: int = 10) -> int:
     n = 0
     for conn in due:
         user = auth_store.get_user(conn["user_id"])
-        if user and entitlement(user)["can_link"]:
+        if user and open_to(user) and entitlement(user)["can_link"]:
             sync_connection(user, conn)
             n += 1
     return n
@@ -675,7 +731,7 @@ def handle_webhook(event: Dict[str, Any]) -> str:
         store.purge_local(uid)
         return "user-deleted"
     if kind in ("ACCOUNT_HOLDINGS_UPDATED", "NEW_ACCOUNT_AVAILABLE") and user and conn \
-            and entitlement(user)["can_link"]:
+            and open_to(user) and entitlement(user)["can_link"]:
         # Fires per account, daily and after every refresh. Pull only the
         # named account, and at most BACKGROUND_PULLS_PER_DAY a day per reader
         # (review M2); the daily job covers anything skipped.

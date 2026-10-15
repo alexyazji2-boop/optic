@@ -6181,8 +6181,9 @@ def _portfolio_summary(positions: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     Weights are notional at entry (price x quantity, x100 for an option), said
     so in the note: current prices are not part of this, and the sector comes
-    from each symbol's cached profile. Paper trades only; Optic has no brokerage
-    connection (2026-10-12, portfolio-aware research)."""
+    from each symbol's cached profile. Paper trades only (2026-10-12,
+    portfolio-aware research); a linked brokerage reaches Milo separately, as
+    `brokerage_portfolio` (_with_linked_portfolio)."""
     rows = []
     for p in positions[:40]:
         if not isinstance(p, dict):
@@ -7002,6 +7003,18 @@ _LINKED_WORDS = re.compile(
     r"my (?:account|accounts|brokerage|stocks|shares|options|book|cash|money)|what do i (?:own|hold)|"
     r"i (?:own|hold)|last sync|since (?:my|the) last)\b", re.I)
 
+# Context keys only the server writes: the reader's linked brokerage, read from
+# their own session. The model trusts `brokerage_portfolio` as the reader's real
+# accounts, so a browser-sent copy (stale or forged) is dropped before anything
+# reads the context.
+_LINKED_KEYS = ("brokerage_portfolio", "brokerage_linked")
+
+
+def _without_linked_keys(context: Any) -> Any:
+    if isinstance(context, dict) and any(k in context for k in _LINKED_KEYS):
+        return {k: v for k, v in context.items() if k not in _LINKED_KEYS}
+    return context
+
 
 async def _with_linked_portfolio(request: Request, history: List[Dict[str, Any]],
                                  context: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -7009,15 +7022,12 @@ async def _with_linked_portfolio(request: Request, history: List[Dict[str, Any]]
     about it or they asked from the Brokerage page.
 
     Built on the server from the caller's own session: the browser cannot send
-    a portfolio, name another reader's, or widen this. Put first in the
-    context dict because `build_context` truncates at 90K characters from the
-    end, and the portfolio is the part of a portfolio question that must
-    survive."""
-    if isinstance(context, dict) and ("brokerage_portfolio" in context or "brokerage_linked" in context):
-        # Only the server writes this key. A browser that sends one is
-        # either stale or forging, and the model trusts this block as the
-        # reader's real accounts.
-        context = {k: v for k, v in context.items() if k not in ("brokerage_portfolio", "brokerage_linked")}
+    a portfolio, name another reader's, or widen this. It reaches Milo through
+    the CONTEXT turn, which stays first in the thread through every round of
+    the tool loop (ai.stream_chat); no tool fetches it, so the model cannot
+    pull holdings into a question that was not about them. The context budget
+    keeps it ahead of everything else (ai._ORDER_BASE)."""
+    context = _without_linked_keys(context)
     focus = (context or {}).get("focus") if isinstance((context or {}).get("focus"), dict) else {}
     if focus.get("scope") in ("none", "market"):
         return context
@@ -7025,7 +7035,7 @@ async def _with_linked_portfolio(request: Request, history: List[Dict[str, Any]]
         user = auth_deps.current_user(request)
     except (sqlite3.Error, OSError):
         return context
-    if not user:
+    if not user or not brokerage_service.open_to(user):
         return context
     last = next((t for t in reversed(history or []) if t.get("role") != "assistant"), None)
     asked = bool(last and _LINKED_WORDS.search(str(last.get("content") or "")))
@@ -7072,21 +7082,24 @@ async def chat(request: Request,
     # The third axis (2026-10-12): the timeframe the reader is deciding about.
     # Normalised the same way; words in the question override it per answer.
     horizon = horizon_mod.normalise(payload.get("horizon"))
-    context = await _augment_chat_context(history, context)
-    context = await _with_linked_portfolio(request, history, context)
+    context = await _augment_chat_context(history, _without_linked_keys(context))
     if ((context or {}).get("focus") or {}).get("scope") != "none":
         # Side by side: the research pack and the framework read different
         # sources and neither needs the other's answer, so the slower of the
-        # two (not their sum) is what the reader waits for.
-        researched, framed, levelled = await asyncio.gather(
+        # two (not their sum) is what the reader waits for. The linked
+        # portfolio too: its sector and earnings lookups run per holding.
+        researched, framed, levelled, linked = await asyncio.gather(
             _with_research(history, context, horizon),
             _with_framework(history, context, horizon, attachments),
-            _with_take_levels(history, context, horizon))
+            _with_take_levels(history, context, horizon),
+            _with_linked_portfolio(request, history, context))
         context = researched
         if isinstance(framed, dict) and "framework" in framed:
             context = dict(context or {}, framework=framed["framework"])
         if isinstance(levelled, dict) and "chart_levels" in levelled:
             context = dict(context or {}, chart_levels=levelled["chart_levels"])
+        if isinstance(linked, dict):
+            context = dict(context or {}, **{k: linked[k] for k in _LINKED_KEYS if k in linked})
     return StreamingResponse(
         ai.stream_chat(history, context=context, use_web=use_web,
                        attachments=attachments, persona=persona, mode=mode,
@@ -7103,7 +7116,8 @@ async def research(request: Request,
     _spend_guard(request)
     ticker = (payload.get("ticker") or "").upper()
     question = payload.get("question")
-    context = payload.get("context")
+    # Research is about a company or the market, never the reader's accounts.
+    context = _without_linked_keys(payload.get("context"))
     if not ticker and not question:
         raise HTTPException(status_code=400, detail="Provide a ticker or a question.")
     return StreamingResponse(

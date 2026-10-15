@@ -69,7 +69,9 @@ def test_every_source_is_a_key_the_terminal_sends_and_a_view_it_has():
     server_added = {"portfolio_summary": 'out["portfolio_summary"]', "market": 'out["market"] = market',
                     "research": 'ctx["research"] = pack', "framework": 'ctx["framework"] = ',
                     # The take chart's levels (main._with_take_levels), 2026-10-15.
-                    "chart_levels": 'chart_levels=levelled["chart_levels"]'}
+                    "chart_levels": 'chart_levels=levelled["chart_levels"]',
+                    # The reader's linked brokerage, from their session only (main._with_linked_portfolio).
+                    "brokerage_portfolio": 'dict({"brokerage_portfolio": block'}
     main_src = open("app/main.py", encoding="utf-8").read()
     # `retrieved` is not a CONTEXT key: it tags a figure from Milo's own lookups (app/milo_tools.py).
     assert "retrieved" in keys and "for a figure from one of your tools' results" in " ".join(ai.FORMAT_PROMPT.split())

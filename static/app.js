@@ -45036,6 +45036,8 @@ const PULSE_SOURCES = {
   retrieved: ['Data Milo retrieved', 'sources'],
   chart_levels: ['Levels', 'chart'],
   track_record: ['Track record', 'swing'],
+  // The reader's linked accounts (read-only), added by the server only.
+  brokerage_portfolio: ['Your brokerage', 'brokerage'],
 };
 const PULSE_SRC_RE = /\s?\[\[src ([a-z_]{2,20})\]\]/g;
 
@@ -46272,12 +46274,21 @@ function bkConsentHtml(c) {
     return `<p class="set-row-note">You agreed to the linking terms (version ${esc(c.version || '')}) on ${
       esc(new Date(c.accepted_at).toLocaleDateString())}.</p>`;
   }
-  const link = (url, text) => (url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(text)}</a>` : esc(text));
-  const missing = !c.terms_url || !c.privacy_url || !c.provider_terms_url;
+  /* Only the documents that have a URL are named: the server records the
+   * agreement under a version that says which ones were shown (owner-only
+   * mode links before Optic's own terms are published, 2026-10-15). */
+  const link = (url, text) => `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(text)}</a>`;
+  const optic = [c.terms_url && link(c.terms_url, 'Terms'), c.privacy_url && link(c.privacy_url, 'Privacy Policy')].filter(Boolean);
+  const docs = [optic.length ? `Optic's ${optic.join(' and ')}` : '',
+    c.provider_terms_url ? `SnapTrade's ${link(c.provider_terms_url, 'End User Terms')}` : ''].filter(Boolean);
+  const st = BROKER.status || {};
+  const unpublished = [!c.terms_url && 'Terms', !c.privacy_url && 'Privacy Policy'].filter(Boolean);
+  const note = st.mode === 'sandbox' && (unpublished.length || !c.provider_terms_url) ? ' <em>(Sandbox: the documents are not published yet.)</em>'
+    : st.owner_only && unpublished.length ? ` <em>(Owner only: Optic's ${unpublished.join(' and ')} ${
+      unpublished[0] === 'Terms' ? 'are' : 'is'} not published yet.)</em>` : '';
   return `<label class="bk-consent"><input type="checkbox" id="bk-consent-box" data-bk-consent${BROKER.agreed ? ' checked' : ''}>
-    <span>I agree to Optic's ${link(c.terms_url, 'Terms')} and ${link(c.privacy_url, 'Privacy Policy')} and to
-      SnapTrade's ${link(c.provider_terms_url, 'End User Terms')}. I understand Optic gets read-only access and that holdings
-      I ask Milo about are sent to Anthropic to answer.${missing ? ' <em>(Draft: the documents are not published yet; sandbox only.)</em>' : ''}</span></label>`;
+    <span>${docs.length ? `I agree to ${docs.join(' and to ')}. ` : ''}I understand Optic gets read-only access and that holdings
+      I ask Milo about are sent to Anthropic to answer.${note}</span></label>`;
 }
 
 function bkUpgradeCard(ent) {
@@ -46626,11 +46637,12 @@ const NAV_GROUPS = [
   /* The group is "Positions"; the view inside it keeps the name "Optic's
    * Positions". Both are deliberate.
    *
-   * "Portfolio" implies holdings you own. This terminal has no brokerage
-   * connection -- app/ai.py says so in the assistant's own system prompt --
-   * so a tab called Portfolio would be promising an integration that does not
-   * exist. The ledger keeps its full name wherever it is named, which is the
-   * panel heading, the status line and paper.py.
+   * "Portfolio" implies holdings you own. This terminal had no brokerage
+   * connection when the group was named, so a tab called Portfolio would have
+   * promised an integration that did not exist. Read-only linking now joins
+   * this group as its own Brokerage row, and only where the server says it is
+   * switched on (brokerageNavJoin). The ledger keeps its full name wherever it
+   * is named, which is the panel heading, the status line and paper.py.
    *
    * The group needed a shorter word than the view because it now holds two:
    * the terminal's simulated record, and the reader's own retirement plan.

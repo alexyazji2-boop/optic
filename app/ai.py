@@ -341,9 +341,9 @@ keys are quote, verdict, pulse, cases, why, whats_next, next_earnings_date,
 company, chart, technicals, gex, greeks, flow, entry_plan, naked_ideas,
 strategy_ideas, long_term, valuation, framework, earnings, earnings_momentum, sector_confirm, news,
 macro, sectors, indices, market, read, compare, tracker, digest,
-portfolio_summary, reader_holdings, reader_watchlist, vol_surface, iv_rank, iv_hv, iv_cheapness, straddle_calibration, dispersion,
-options_research, track_record, research, desk_edition, desk_section, backtest, stop_check,
-chart_levels, brokerage_portfolio, retrieved and pairs. Tag the key the figure
+portfolio_summary, reader_holdings, reader_watchlist, brokerage_portfolio, vol_surface, iv_rank, iv_hv, iv_cheapness,
+straddle_calibration, dispersion, options_research, track_record, research, desk_edition, desk_section, backtest,
+stop_check, chart_levels, retrieved and pairs. Tag the key the figure
 actually sits under: an earnings date read from `whats_next` is
 `[[src whats_next]]`, not `earnings`. `retrieved` is not a CONTEXT key: it is
 for a figure from one of your tools' results, `[[src retrieved]]`.
@@ -373,11 +373,11 @@ layers visibly apart in the answer:
 Repeat any `caveats` that change the answer. Never claim what `not_supplied`
 lists (transactions, realised gains, dividends, greeks, live prices), and do
 not compute a return: there are no cash flows to compute one from. If the
-block and `brokerage_linked` are both absent, the reader has no linked account
-or did not sign in; say so rather than guessing at their holdings. If `brokerage_linked` is true but the
+block and `brokerage_linked` are both absent, you have no view of the reader's
+real accounts; say so rather than guessing at their holdings. If `brokerage_linked` is true but the
 block is absent, the reader has linked accounts that were not attached to this
-question: say you can include them if they ask about their portfolio, rather
-than saying they have nothing linked.
+question, and no tool fetches them: say you can include them if they ask about
+their portfolio, rather than saying they have nothing linked.
 
 Tag a source once per paragraph, at the first figure taken from it, not after
 every number. Never tag a figure that is not in CONTEXT: general knowledge and
@@ -710,8 +710,8 @@ buy", no targets beyond the levels in `chart_levels`.
 Discuss trades as conditional scenarios built from CONTEXT levels and events: "if it holds 336 on a \
 closing basis the trend read stands; a close under 326 (the 50-day) breaks it." Never invent an entry, \
 a target, a stop, a position size, a confidence percentage or a win rate. A level CONTEXT computed is \
-not a target you set. You cannot see the reader's brokerage account, place orders, or watch the market \
-for them; never imply that you can or will.
+not a target you set. You cannot place orders, move money or watch the market for them, and a linked \
+`brokerage_portfolio` is read-only; never imply that you can or will act on it.
 
 - `backtest` in CONTEXT is one rule replayed on this symbol's past. Read its return against \
 `benchmark.buy_hold_return_pct` and `benchmark.beats_random_pct` (random entries with the same number of \
@@ -1417,9 +1417,21 @@ CONTEXT_SECTION_CAP = 14_000
 CONTEXT_SECTION_CAPS = {"research": 26_000, "framework": 18_000,
                         # A named ticker's summary (main._augment_chat_context_lookups, 22,000 for all
                         # symbols together): over 14,000 it used to be dropped whole.
-                        "auto_loaded": 24_000}
+                        "auto_loaded": 24_000,
+                        # The reader's linked portfolio, attached only to a question about it
+                        # (main._with_linked_portfolio) and already capped where it is built (60
+                        # holdings, 30 options; app/brokerage/service.milo_context): 60 holdings
+                        # measured 17,200 characters, over the 14,000 default.
+                        "brokerage_portfolio": 30_000}
+# Sections built compact on the server that `_prune` must not cut again. Its 10-row limit at this
+# depth sent Milo 10 of 25, 40 or 60 holdings, unmarked, so it could not say the rest existed
+# (measured 2026-10-15 on the rebased brokerage branch).
+_UNPRUNED = ("brokerage_portfolio",)
 
 _ORDER_BASE = [
+    # The reader's linked accounts lead: when attached, the question is about them. They were in no
+    # order at all, so they went last, where a crowded budget drops first.
+    "brokerage_linked", "brokerage_portfolio",
     "portfolio_summary", "reader_holdings", "auto_loaded", "auto_loaded_note", "screen_candidates",
     "desk_section", "research", "framework", "market", "compare", "ticker", "quote", "chart_levels", "pulse", "verdict", "track_record", "cases", "why", "digest",
     "whats_next", "next_earnings_date", "options_research", "vol_surface", "iv_rank", "iv_hv", "rate",
@@ -1550,7 +1562,8 @@ def budget_context(snapshot: Dict[str, Any], question: str = "", horizon: str = 
                    budget: int = CONTEXT_BUDGET) -> Tuple[str, Dict[str, Any]]:
     """The CONTEXT JSON body and a record of what was kept, slimmed and left out."""
     pruned = _prune(_compact_market({k: v for k, v in snapshot.items()
-                                     if k not in ("focus", "data_as_of")}))
+                                     if k not in ("focus", "data_as_of") + _UNPRUNED}))
+    pruned.update({k: snapshot[k] for k in _UNPRUNED if k in snapshot})
     view = snapshot.get("active_view") or ((snapshot.get("focus") or {}).get("view"))
     order = _section_order(question, horizon, view if isinstance(view, str) else None)
     keys = [k for k in order if k in pruned] + [k for k in pruned if k not in order]

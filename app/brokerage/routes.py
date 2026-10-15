@@ -75,15 +75,20 @@ def _http(exc: Exception) -> HTTPException:
 
 @router.get("/status")
 async def brokerage_status(request: Request) -> Dict[str, Any]:
-    st = service.status()
+    user = deps.current_user(request)
+    # Per reader: in owner-only mode everyone else gets the switched-off answer.
+    st = service.status_for(user)
     out: Dict[str, Any] = {"available": st["enabled"], "reason": st.get("reason"),
                            "provider": st.get("label"), "mode": st.get("mode"),
                            "permissions": PERMISSIONS}
-    user = deps.current_user(request)
     if not user:
         out["signed_in"] = False
         return out
     out["signed_in"] = True
+    if st["enabled"] and service.owner_only():
+        # Only the owner ever sees this: the page says why Optic's own
+        # documents may be missing from the agreement.
+        out["owner_only"] = True
     out["entitlement"] = service.entitlement(user)
     out["consent"] = service.consent_state(user["id"])
     # What upgrading would give, so the page's offer is built from the same
@@ -199,6 +204,11 @@ async def portfolio(request: Request) -> Dict[str, Any]:
     user = deps.require_user(request)
     if not store.link(user["id"]):
         return {"available": False, "reason": "No brokerage is linked to this account."}
+    if not service.open_to(user):
+        # Owner-only mode: nobody else can have linked anything, and if a row
+        # predates the switch it is not shown here (disconnect and delete
+        # still work on it).
+        return {"available": False, "reason": service.NOT_SWITCHED_ON}
     try:
         out = await run_in_threadpool(service.overview, user, **LOOKUPS)
     except Exception as exc:                                    # noqa: BLE001
