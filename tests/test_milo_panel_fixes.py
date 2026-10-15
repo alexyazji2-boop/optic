@@ -107,7 +107,7 @@ def test_the_chip_opens_the_list_and_never_an_empty_panel():
     assert "research: ['Sources Milo read', 'sources']," in APP
     handler = APP[APP.index("const src = evt.target.closest('[data-src-view]');"):]
     handler = handler[:handler.index("\n});\n")]
-    assert "if (view === 'sources') {" in handler and "box.open = true;" in handler
+    assert "if (view === 'sources') {" in handler and "boxes.forEach((b) => { b.open = true; });" in handler
     assert "if (SECURITY_VIEWS.includes(view) && view !== 'earnings' && !STATE.ticker) {" in handler
     # The empty-panel guard runs before any navigation.
     assert handler.index("!STATE.ticker") < handler.index("switchView(view);")

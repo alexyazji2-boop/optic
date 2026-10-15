@@ -71,7 +71,11 @@ def test_every_source_is_a_key_the_terminal_sends_and_a_view_it_has():
                     # The take chart's levels (main._with_take_levels), 2026-10-15.
                     "chart_levels": 'chart_levels=levelled["chart_levels"]'}
     main_src = open("app/main.py", encoding="utf-8").read()
+    # `retrieved` is not a CONTEXT key: it tags a figure from Milo's own lookups (app/milo_tools.py).
+    assert "retrieved" in keys and "for a figure from one of your tools' results" in " ".join(ai.FORMAT_PROMPT.split())
     for key in keys:
+        if key == "retrieved":
+            continue
         if key in server_added:
             assert server_added[key] in main_src, key
             continue

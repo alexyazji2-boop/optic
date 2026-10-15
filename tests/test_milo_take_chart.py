@@ -123,7 +123,7 @@ def test_milo_is_told_the_take_shape():
         assert phrase in sp, phrase
     fmt = " ".join(ai.FORMAT_PROMPT.split())
     assert "one of 1m, 3m, 6m, 1y, 2y or 5y" in fmt and "use its `chart_tag` exactly" in fmt
-    assert "stop_check, chart_levels and pairs" in fmt
+    assert "stop_check, chart_levels, retrieved and pairs" in fmt
     assert "—" not in ai.SYSTEM_PROMPT and "—" not in ai.FORMAT_PROMPT
 
 

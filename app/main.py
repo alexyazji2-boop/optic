@@ -116,6 +116,7 @@ from .analytics import rotation as rotation_mod
 from .analytics import stockmaps as stockmaps_mod
 from .analytics import trendlines as trendlines_mod
 from .analytics import take_chart as take_chart_mod
+from . import milo_tools
 from .analytics import seasonality as seasonality_mod
 from .analytics import sector_board as sector_board_mod
 from .analytics import sector_confirm as sector_confirm_mod
@@ -4708,34 +4709,36 @@ async def compare_tickers(
     tickers: str = Query(..., description="Comma-separated, 2 to 4 symbols"),
 ) -> Dict[str, Any]:
     """Side-by-side comparison across swing, position and long-term horizons."""
-    def build() -> Dict[str, Any]:
-        wanted = [t for t in (tickers or "").replace(" ", "").split(",") if t]
+    wanted = [t for t in (tickers or "").replace(" ", "").split(",") if t]
+    return await _run(_compare_payload, wanted)
 
-        def snapshot(sym: str) -> Dict[str, Any]:
-            # The same snapshot the Swing tab uses, minus the option chain: the
-            # comparison needs technicals and structure, and pulling four chains
-            # would triple the wait for numbers it never reads.
-            return _swing_snapshot(sym, None, 1, False, include_earnings=False)
 
-        def longterm_for(sym: str) -> Dict[str, Any]:
-            # analyse_holding(provider, ticker) — and the module is imported as
-            # `longterm`, not `longterm_mod`. Both wrong first time, and a bare
-            # except would have hidden it as "no long-term data" forever.
-            try:
-                return {"holding": longterm.analyse_holding(PROVIDER, sym)}
-            except Exception as exc:
-                logging.getLogger("uvicorn.error").warning(
-                    "compare: long-term unavailable for %s: %s", sym, exc)
-                return {}
+def _compare_payload(wanted: List[str]) -> Dict[str, Any]:
+    """The comparison itself: the endpoint above and Milo's compare tool read the same one."""
+    def snapshot(sym: str) -> Dict[str, Any]:
+        # The same snapshot the Swing tab uses, minus the option chain: the
+        # comparison needs technicals and structure, and pulling four chains
+        # would triple the wait for numbers it never reads.
+        return _swing_snapshot(sym, None, 1, False, include_earnings=False)
 
-        out = compare_mod.build(snapshot, longterm_for, wanted)
-        # The read across the comparison. The tab's own subtitle said the
-        # disagreement between horizons "is the useful part" and then left the
-        # reader to find it by eye across twenty-six rows.
-        out["take"] = compare_mod.take(out)
-        out["generated_at"] = datetime.now(timezone.utc).isoformat()
-        return out
-    return await _run(build)
+    def longterm_for(sym: str) -> Dict[str, Any]:
+        # analyse_holding(provider, ticker) — and the module is imported as
+        # `longterm`, not `longterm_mod`. Both wrong first time, and a bare
+        # except would have hidden it as "no long-term data" forever.
+        try:
+            return {"holding": longterm.analyse_holding(PROVIDER, sym)}
+        except Exception as exc:
+            logging.getLogger("uvicorn.error").warning(
+                "compare: long-term unavailable for %s: %s", sym, exc)
+            return {}
+
+    out = compare_mod.build(snapshot, longterm_for, wanted)
+    # The read across the comparison. The tab's own subtitle said the
+    # disagreement between horizons "is the useful part" and then left the
+    # reader to find it by eye across twenty-six rows.
+    out["take"] = compare_mod.take(out)
+    out["generated_at"] = datetime.now(timezone.utc).isoformat()
+    return out
 
 
 @app.get("/api/pe-history/{ticker}")
@@ -6127,6 +6130,11 @@ async def _market_context() -> Optional[Dict[str, Any]]:
     except Exception as exc:
         logging.getLogger("uvicorn.error").warning("market context failed: %s", exc)
         return None
+    return _market_block(brief)
+
+
+def _market_block(brief: Any) -> Optional[Dict[str, Any]]:
+    """The market block from a built daily brief (Milo's context step and its get_market tool)."""
     if not isinstance(brief, dict):
         return None
 
@@ -6157,6 +6165,7 @@ async def _market_context() -> Optional[Dict[str, Any]]:
     )
     return out
 
+_AUTO_LOADED_CHARS = 22_000
 _PORTFOLIO_WORDS = re.compile(
     r"\b(portfolio|positions?|holdings?|exposure|concentrat\w*|diversif\w*|my (?:book|trades|paper)|"
     r"paper trades?|allocation|sector mix|what do i (?:own|hold))\b", re.I)
@@ -6411,17 +6420,25 @@ async def _augment_chat_context_lookups(history: List[Dict[str, Any]],
 
     out = dict(context or {})
     fetched: Dict[str, Any] = {}
-    for symbol in wanted[:_CHAT_MAX_LOOKUPS]:
+    picked = wanted[:_CHAT_MAX_LOOKUPS]
+    for symbol in picked:
         try:
-            fetched[symbol] = await _run(_swing_snapshot, symbol, None, 2, True)
+            snap = await _run(_swing_snapshot, symbol, None, 4, True)   # the Options tab's four expiries
         except Exception as exc:                       # a bad symbol must not 500 the chat
             logging.getLogger("uvicorn.error").warning(
                 "chat auto-load failed for %s: %s", symbol, exc)
+            continue
+        # Summarised, not whole. The whole snapshot is about 260,000 characters, which the
+        # context budget's 14,000-character section cap dropped entirely: the reader asked
+        # for AMD's flow, walls and gamma from Home and Milo was sent only this note saying
+        # the data had been fetched (2026-10-15). Each symbol now gets its share of the room.
+        fetched[symbol] = milo_tools.compact_snapshot(snap, text, limit=_AUTO_LOADED_CHARS // len(picked))
     if fetched:
         out["auto_loaded"] = fetched
         out["auto_loaded_note"] = (
             "Fetched by the server because the question named these symbols and they "
-            "were not open in the reader's browser. Same data the tabs would show."
+            "were not open in the reader's browser: the same data the tabs show, summarised. "
+            "Milo's tools can fetch more."
         )
     return out
 
@@ -6826,6 +6843,135 @@ async def knowledge_modes() -> Dict[str, Any]:
     return knowledge_mod.catalogue()
 
 
+# ------------------------------------------------------------- Milo's tools
+#
+# What Milo can look up itself (app/milo_tools.py): each runner calls the same builder the terminal's
+# own view uses, so a figure Milo quotes is the figure the tab shows for the same symbol and moment.
+# Reads only. The one reader-specific tool reads the asking reader's own stored lists from their
+# session, by their id; there is no input that names a reader.
+_LEVEL_SPANS = {"day": "3m", "swing": "6m", "long": "2y", "both": "2y"}
+
+
+def _tool_quote(ticker: str) -> Dict[str, Any]:
+    q = PROVIDER.quote(ticker)
+    if not isinstance(q, dict) or q.get("price") is None:
+        return {"status": "not_found", "error": "No quote for {}: not a symbol the feed knows, or the feed "
+                                                "returned nothing.".format(ticker)}
+    return milo_tools.compact_quote(q)
+
+
+def _tool_options(ticker: str, expiries: Optional[List[str]] = None) -> Dict[str, Any]:
+    # Four expiries, as the Options tab asks for them (loadSwing: max_expiries=4), so the gamma, walls
+    # and flow Milo quotes are the tab's for the same moment.
+    snap = _swing_snapshot(ticker, expiries, 4, False)
+    if not isinstance(snap, dict) or not (snap.get("quote") or {}).get("price"):
+        return {"status": "not_found", "error": "No quote or chain for {}.".format(ticker)}
+    return milo_tools.compact_options(snap)
+
+
+def _tool_levels(ticker: str, timeframe: str) -> Dict[str, Any]:
+    df = YF_PROVIDER.history(ticker, period="5y", interval="1d")
+    if df is None or len(df) == 0:
+        return {"status": "not_found", "error": "No daily history for {}.".format(ticker)}
+    block = take_chart_mod.for_context(take_chart_mod.build(df, _LEVEL_SPANS[timeframe]), ticker)
+    tech = technicals.analyse(df.tail(320))
+    keep = {k: v for k, v in (tech or {}).items()
+            if k in ("trend", "moving_averages", "rsi", "macd", "atr", "atr_pct", "relative_volume", "summary")}
+    return milo_tools.compact_levels(block, keep or None)
+
+
+def _tool_fundamentals(ticker: str) -> Dict[str, Any]:
+    try:
+        news_read = news_mod.analyse(YF_PROVIDER, ticker)
+    except Exception:                                               # noqa: BLE001 - best effort, as the tab
+        news_read = None
+    holding = longterm.analyse_holding(PROVIDER, ticker, news_read)
+    return milo_tools.compact_generic(
+        "Optic's long-term model (Yahoo Finance prices and statements, SEC filings)",
+        {"holding": holding, "close_defence": defence_mod.for_longterm(holding)},
+        datetime.now(timezone.utc).isoformat())
+
+
+def _tool_valuation(ticker: str) -> Dict[str, Any]:
+    out = valuation_service.clean(valuation_service.build(YF_PROVIDER, ticker))
+    if not out.get("available", True):
+        return {"status": "unavailable", "error": out.get("reason") or "The fair-value model does not run for "
+                                                                    "{} (missing filings).".format(ticker)}
+    return milo_tools.compact_valuation(out)
+
+
+def _tool_earnings(ticker: str) -> Dict[str, Any]:
+    quote = PROVIDER.quote(ticker)
+    out = earnings_mod.analyse(PROVIDER, YF_PROVIDER, ticker, quote, rate=_rate())
+    return milo_tools.compact_generic(
+        "Optic's earnings panel (Yahoo Finance estimates and history, the delayed option chain)", out,
+        datetime.now(timezone.utc).isoformat())
+
+
+def _tool_news(ticker: str) -> Dict[str, Any]:
+    return milo_tools.compact_news(news_mod.analyse(YF_PROVIDER, ticker, 12))
+
+
+def _tool_market() -> Dict[str, Any]:
+    block = _market_block(brief_mod.state(YF_PROVIDER, None, False))
+    if not block:
+        return {"status": "unavailable", "error": "The daily brief is not built yet."}
+    return milo_tools.compact_generic("Optic's daily brief (Yahoo Finance index, sector and macro data)", block,
+                                      block.get("as_of"))
+
+
+def _tool_compare(tickers: List[str]) -> Dict[str, Any]:
+    return milo_tools.compact_generic("Optic's Compare view", _compare_payload(tickers))
+
+
+def _tool_assessment(ticker: str, mode: str) -> Dict[str, Any]:
+    out = research_service.build(PROVIDER, YF_PROVIDER, ticker, mode, rate=_rate())
+    routing = {"mode": mode, "source": "tool", "depth": "full", "why": "Looked up by Milo for this question."}
+    return milo_tools.compact_generic("Optic's research framework (deterministic rules, no model call)",
+                                      research_milo.compact(out, routing))
+
+
+def _tool_screen(request: str) -> Dict[str, Any]:
+    # The screen's own reading only: the paid fallback the Scan box uses for leftover words is skipped,
+    # and those words are named instead.
+    reading = scan_request_mod.read(request)
+    filters, states = reading.get("filters") or [], reading.get("states") or []
+    if not filters and not states:
+        return {"status": "ok", "understood": [], "unread": reading.get("leftover"),
+                "note": "None of the request could be read as one of the screener's filters."}
+    res = screener_mod.run(_cached_ranking(), filters=filters, states=states,
+                           sort=reading.get("sort") or "score", direction=reading.get("direction") or "desc")
+    return milo_tools.compact_generic("Optic's screener over its ranked universe", {
+        "understood": reading.get("understood"), "unread": reading.get("leftover"), "result": res})
+
+
+def _milo_toolbox(request: Request) -> milo_tools.Toolbox:
+    """The tools for one answer, bound to the asking reader for the one tool that is theirs."""
+    try:
+        user = auth_deps.current_user(request)
+    except Exception as exc:                                        # noqa: BLE001 - as _spend_guard
+        # The accounts database being unavailable must not take the answer with it: the reader is a
+        # guest for this one tool, and every other tool works.
+        logging.getLogger("uvicorn.error").warning("milo tools: no account lookup: %s", type(exc).__name__)
+        user = None
+
+    def watchlists() -> Dict[str, Any]:
+        if not user:
+            return {"status": "ok", "signed_in": False,
+                    "note": "The reader is not signed in, so no watchlists are stored for them; any list in "
+                            "this browser arrives with the question."}
+        lists = [account_mod._list_payload(w) for w in account_mod._lists_for(user["id"])]
+        return {"status": "ok", "signed_in": True, "source": "The reader's saved watchlists",
+                "watchlists": [{"name": w.get("name"), "symbols": w.get("symbols") or []} for w in lists]}
+
+    return milo_tools.Toolbox(runners={
+        "get_quote": _tool_quote, "get_options": _tool_options, "get_chart_levels": _tool_levels,
+        "get_fundamentals": _tool_fundamentals, "get_valuation": _tool_valuation, "get_earnings": _tool_earnings,
+        "get_news": _tool_news, "get_market": _tool_market, "compare": _tool_compare,
+        "get_assessment": _tool_assessment, "screen_stocks": _tool_screen, "get_my_watchlists": watchlists,
+    })
+
+
 @app.post("/api/chat")
 async def chat(request: Request,
                payload: Dict[str, Any] = Body(...)) -> StreamingResponse:
@@ -6865,7 +7011,7 @@ async def chat(request: Request,
     return StreamingResponse(
         ai.stream_chat(history, context=context, use_web=use_web,
                        attachments=attachments, persona=persona, mode=mode,
-                       horizon=horizon),
+                       horizon=horizon, toolbox=_milo_toolbox(request)),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

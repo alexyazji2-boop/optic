@@ -71,8 +71,10 @@ def test_the_chip_explains_itself():
     fn = _strip(APP)[_strip(APP).index("function updateChatContext()"):]
     fn = fn[:fn.index("\n}\n")]
     assert "chip.title =" in fn
-    assert "It cannot see anything not listed here" in fn, \
-        "the other half: what Pulse does not have"
+    # The other half, since Milo looks things up itself (2026-10-15): what is attached from the page,
+    # and that anything else the question needs is fetched rather than unavailable.
+    assert "Milo looks up anything else your question needs" in fn
+    assert "No page context attached. Milo still looks up" in fn
 
 
 def test_options_is_spelled_out_as_the_whole_analysis():
@@ -90,7 +92,7 @@ def test_the_new_copy_carries_no_em_dash():
     em dash in code that predates this change -- a test about new copy has to
     be bounded by the new copy."""
     start = APP.index("const CTX_MEANS = {")
-    end = APP.index("'is on, the web; naming a ticker lets it look one up. Press to change.';", start)
+    end = APP.index("+ 'that your question needs, and the web if Web search is on. Press to change.';", start)
     assert chr(0x2014) not in APP[start:end + 60]
 
 

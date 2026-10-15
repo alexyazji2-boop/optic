@@ -54,6 +54,21 @@ _LONG = re.compile(r"\b(long[- ]term|invest\w*|hold(ing)? (it|for)|valuation|moa
 _MACRO = re.compile(r"\b(fed|rates?|inflation|cpi|ppi|pce|yields?|treasur\w*|dollar|economy|recession|jobs|payrolls|"
                     r"unemployment|gdp|soft landing|credit spreads?)\b", re.I)
 _DESK = re.compile(r"\b(optic desk|the desk|newsletter|this edition|today's edition)\b", re.I)
+# A question about the contract, not the business. Without a plan of its own it fell through to
+# "long_term" and pulled the 10-K, margins and valuation into "will gamma pin AAPL into Friday"
+# (Milo eval, 2026-10-15). Not "premium" or "spread": both are also valuation and credit words.
+_OPTIONS = re.compile(
+    r"\b(options?|straddles?|strangles?|iron condors?|leaps|weeklies|0 ?dte|implied vol\w*|iv|iv rank|iv crush|"
+    r"greeks?|gamma|gex|vanna|theta|vega|deltas|open interest|skew|expiry|expiries|expiration|strike prices?|"
+    r"calls|puts|put[/-]call|call[/-]put|walls?|"
+    r"(?:a|the|buy|buying|sell|selling|long|short|covered|naked|cash[- ]secured|\d+[- ]day|weekly|monthly) "
+    r"(?:calls?|puts?)|"
+    r"(?:call|put) (?:options?|volume|spread|side|wall|skew|premium|contracts?|strikes?|deltas?)|"
+    r"\d+(?:\.\d+)? strike|(?:the|a|low|high|\d*\.\d+)[ -]delta|delta (?:of|hedg\w*|neutral))\b", re.I)
+# Words that look like options and are not: the earnings call, a margin call, "what are my options".
+_NOT_OPTIONS = re.compile(r"\b((?:earnings|conference|investor|analysts?'?|margin) calls?|(?:on|from|during|in) the call|"
+                          r"what (?:are|r) (?:my|our|the|your) options|(?:other|best|few|many|more) options|"
+                          r"patents?|lease|lock-?up|great wall|wall street)\b", re.I)
 
 
 def intent(question: str, horizon: Optional[str] = None, ticker: Optional[str] = None,
@@ -72,6 +87,8 @@ def intent(question: str, horizon: Optional[str] = None, ticker: Optional[str] =
     # swing" says "hold for", and is not a question about owning the business.
     if horizon == "swing" or _SWING.search(q):
         return "swing"
+    if ticker and _OPTIONS.search(q) and not _NOT_OPTIONS.search(q):
+        return "options"
     if horizon == "long" or _LONG.search(q):
         return "long_term" if ticker else "macro"
     if not ticker and _MACRO.search(q):
@@ -583,6 +600,9 @@ PLANS: Dict[str, List[str]] = {
     "pre_earnings": ["earnings", "fundamentals", "filings_results", "news", "upcoming"],
     "day_trade": ["tape", "news_fresh", "filings_today", "upcoming_short"],
     "swing": ["structure", "upcoming", "news", "valuation"],
+    # The chain itself comes from the Options analytics (Milo's get_options); what the pack adds is
+    # what can move it inside the expiry: the events ahead and the latest news.
+    "options": ["upcoming", "news"],
     "macro": ["macro", "upcoming_market"],
     "desk": ["desk", "macro"],
 }

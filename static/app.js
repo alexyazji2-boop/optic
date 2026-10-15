@@ -43340,7 +43340,7 @@ let chatScope = 'auto';
 const CHAT_SCOPES = {
   auto: 'This page',
   market: 'Market only',
-  none: 'No context',
+  none: 'No page context',
 };
 const CHAT_VIEW_LABELS = {
   overview: 'Overview', swing: 'Options', long: 'Investing', earnings: 'Earnings',
@@ -43394,7 +43394,7 @@ function chatCtxMenuHTML() {
   const opts = [
     ['auto', `This page (${here})`, 'Everything loaded, led by what is on screen'],
     ['market', 'Market only', 'Macro, sectors, indices and the daily read; no company data'],
-    ['none', 'No context', 'Only your question; web search still applies if it is on'],
+    ['none', 'No page context', 'Nothing from this page; Milo still looks up what your question needs'],
   ];
   return `<div class="chat-ctx-menu" id="chat-ctx-menu" role="menu" aria-label="What Milo reads">
     ${opts.map(([id, label, sub]) => `<button type="button" role="menuitemradio" aria-checked="${chatScope === id}"
@@ -43451,7 +43451,7 @@ function updateChatContext() {
   const lit = chatScope === 'none' ? false : (chatScope === 'market' || bits.length > 0);
   chip.className = 'chip ' + (lit ? 'bull' : 'neutral');
   chip.innerHTML = `<span class="dot"></span><span>${
-    esc(scoped || (bits.length ? cap(bits.join(' · ')) : 'No context'))}</span>`;
+    esc(scoped || (bits.length ? cap(bits.join(' · ')) : 'No page context'))}</span>`;
   chip.setAttribute('aria-label', `What Milo reads: ${scoped || (bits.length ? bits.join(', ') : 'nothing loaded')}. Press to change.`);
   /* What the chip means, said on the chip.
    *
@@ -43477,14 +43477,15 @@ function updateChatContext() {
     return CTX_MEANS[b] || b;
   });
   chip.title = chatScope === 'none'
-    ? 'Cleared: Milo gets only your question, plus the web if Web search is on. Press to change.'
+    ? 'Nothing from this page is attached. Milo still looks up Optic\'s data for any company or the market '
+      + 'that your question needs, and the web if Web search is on. Press to change.'
     : chatScope === 'market'
       ? 'Market only: the macro regime, sectors, indices and the daily read. No company data. Press to change.'
       : bits.length
-        ? 'What Milo reads with every question: ' + meant.join('; ')
-          + '. It cannot see anything not listed here. Press to change.'
-        : 'Nothing is loaded. Milo has your question, general knowledge and, if Web search '
-          + 'is on, the web; naming a ticker lets it look one up. Press to change.';
+        ? 'Attached from this page: ' + meant.join('; ')
+          + '. Milo looks up anything else your question needs. Press to change.'
+        : 'No page context attached. Milo still looks up Optic\'s data for any company or the market '
+          + 'that your question needs, and the web if Web search is on. Press to change.';
 
   /* The chip row above the input is now only for follow-ups on a loaded
    * symbol. The empty-state starter cards cover the "what can I ask" job
@@ -45004,6 +45005,9 @@ const PULSE_SOURCES = {
   // Overview, which never shows these items, and from Home that landed on
   // "No symbol loaded" (2026-10-15).
   research: ['Sources Milo read', 'sources'],
+  // A figure from one of Milo's own lookups (app/milo_tools.py): the chip opens the
+  // list of what was retrieved, under its answer.
+  retrieved: ['Data Milo retrieved', 'sources'],
   chart_levels: ['Levels', 'chart'],
   track_record: ['Track record', 'swing'],
 };
@@ -45162,9 +45166,10 @@ document.addEventListener('click', (evt) => {
     const say = (msg) => { if (window.OpticAuth && window.OpticAuth.toast) window.OpticAuth.toast(msg); };
     if (view === 'sources') {
       const msg = src.closest('.msg');
-      const box = msg && msg.querySelector('.milo-read');
+      const boxes = msg ? [...msg.querySelectorAll('.milo-read')] : [];
+      const box = boxes[0];
       if (box) {
-        box.open = true;
+        boxes.forEach((b) => { b.open = true; });
         box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       } else {
         say('The list of sources is not kept when a conversation is reopened.');
@@ -45188,6 +45193,16 @@ document.addEventListener('click', (evt) => {
  * after the context budget (app/ai.py sources_read): one line per source and
  * link, with what was read from it. Collapsed, under the answer; the "Sources
  * Milo read" chip opens it. */
+/* What Milo looked up itself for one answer (app/milo_tools.py): which data, from where, and how
+ * fresh the source says it is. Collapsed beside "Sources Milo read"; same chip opens both. */
+function pulseRetrievedHTML(got) {
+  return `<details class="milo-read milo-got"><summary>Data Milo retrieved (${got.length})</summary><ul>${got.map((r) => {
+    const when = r.as_of ? `as of ${timeIn(r.as_of, activeZone())}` : '';
+    const what = [r.source, when, r.ok === false ? 'could not be retrieved' : ''].filter(Boolean).join(' \u00b7 ');
+    return `<li>${esc(r.label || '')}${what ? `<span class="mr-what">${esc(what)}</span>` : ''}</li>`;
+  }).join('')}</ul></details>`;
+}
+
 function pulseReadHTML(read) {
   return `<details class="milo-read"><summary>Sources Milo read (${read.length})</summary><ul>${read.map((r) => {
     const name = r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.source)}</a>` : esc(r.source);
@@ -45612,6 +45627,9 @@ async function streamTo(url, body, node) {
         }
         if (Array.isArray(payload.read) && payload.read.length) {
           sourcesEl.insertAdjacentHTML('beforeend', pulseReadHTML(payload.read));
+        }
+        if (Array.isArray(payload.retrieved) && payload.retrieved.length) {
+          sourcesEl.insertAdjacentHTML('beforeend', pulseRetrievedHTML(payload.retrieved));
         }
       }
       followStream(logEl, pinned);

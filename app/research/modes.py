@@ -150,6 +150,13 @@ def resolve(question: str, ticker: Optional[str], *, next_report: Optional[str] 
                 "why": "The question is about a trade over days to weeks." if stated != "day" else
                        "An intraday question: the swing framework's levels apply, at a shorter horizon.",
                 "timing": timing}
+    # A question about the options themselves: "options are cheap" read as valuation and sent the
+    # long-term assessment, "if I buy a call" read as buy-or-sell (Milo eval, 2026-10-15). A stated
+    # horizon or a coming report still decides first.
+    if intent == "options":
+        return {"mode": None, "source": "options", "depth": depth,
+                "why": "A question about the options, not the company: the framework assesses the stock.",
+                "timing": timing}
     # The research pack falls back to "long_term" for any company question, so
     # its intent counts here only when one of its long-term words matched.
     if desk_research._LONG.search(q) and not _AMBIG.search(q):
