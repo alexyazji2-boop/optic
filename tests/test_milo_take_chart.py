@@ -71,6 +71,7 @@ def test_milo_gets_the_levels_without_the_bars_and_the_tag_that_draws_them():
     assert ctx["chart_tag"] == "[[chart HOOD 6m]]"
     assert "_window" not in ctx and "chart" not in ctx
     assert all("start_index" not in ln for ln in ctx["trend_lines"])
+    assert len(ctx["trend_lines"]) <= 2 and "drawn" not in ctx, "only the lines the chart draws"
     assert take_chart.for_context(take_chart.build(_bars(30), "6m"), "HOOD")["available"] is False
     assert take_chart.build(None, "2y")["available"] is False
 
@@ -113,8 +114,11 @@ def test_milo_is_told_the_take_shape():
                    "as plain prices from `chart_levels`",
                    "a business you would want to own for years, as your own read with the reason",
                    "When a well-known peer suits the long-term case better, name it with the business reason",
-                   "One closing line that splits the timeframes",
-                   "About 150 to 250 words, even when a framework block allows more",
+                   "One closing line, in your own words, that splits the timeframes",
+                   "About 200 words and never more than 250, even when a framework block allows more",
+                   "no more than six numbers in all",
+                   "not \"No Setup\" or \"Insufficient Data\"",
+                   "No disclaimer line such as \"not advice\"",
                    "never an instruction about the reader's money"):
         assert phrase in sp, phrase
     fmt = " ".join(ai.FORMAT_PROMPT.split())

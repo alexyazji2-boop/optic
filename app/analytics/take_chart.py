@@ -118,7 +118,8 @@ def for_context(out: Dict[str, Any], ticker: str) -> Dict[str, Any]:
     if not out.get("available"):
         return {"available": False, "span": out.get("span"), "reason": out.get("reason")}
     body = {k: v for k, v in out.items() if not k.startswith("_")}
-    body["lines_for_milo"] = [{k: v for k, v in ln.items() if k != "start_index"} for ln in body.pop("trend_lines")]
-    body["trend_lines"] = body.pop("lines_for_milo")
+    # Only the lines the chart draws, so a line Milo names is a line the reader can see.
+    body.pop("trend_lines")
+    body["trend_lines"] = [{k: v for k, v in ln.items() if k != "start_index"} for ln in body.pop("drawn")]
     body["chart_tag"] = "[[chart {} {}]]".format(ticker, out["span"])
     return body
