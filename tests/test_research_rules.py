@@ -253,3 +253,16 @@ def test_forming_bar_is_dropped_in_session_only():
     now = datetime(2026, 10, 14, 17, 30, tzinfo=timezone.utc)
     assert service.completed_bars(df, "regular", now).index[-1].date() == date(2026, 10, 13)
     assert service.completed_bars(df, "after", now).index[-1].date() == date(2026, 10, 14)
+
+
+def test_a_fund_has_no_earnings_in_the_window_and_a_missing_date_stays_unknown():
+    """Found by the historical validation replay (2026-10-14): with "no date"
+    read as unknown, an ETF could never reach S."""
+    exp = swing_setup._earnings_exposure({"not_applicable": True, "what": "an exchange-traded fund"}, "2025-03-03", 10)
+    assert exp["known"] is True and exp["in_window"] is False and "exchange-traded fund" in exp["text"]
+    assert service._earn_dates(None, {"quote_type": "ETF"})["not_applicable"] is True
+    assert service._earn_dates({"not_applicable": True}, {"quote_type": "EQUITY"})["not_applicable"] is True
+    # A company with no date in the feed is still unknown, so S stays out of reach.
+    stock = service._earn_dates({"next_report": {}}, {"quote_type": "EQUITY"})
+    assert "not_applicable" not in stock
+    assert swing_setup._earnings_exposure(stock, "2025-03-03", 10)["in_window"] is None

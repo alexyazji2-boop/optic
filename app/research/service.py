@@ -381,7 +381,15 @@ def _weekly_from_lt(lt: Optional[Dict[str, Any]]) -> Optional[pd.DataFrame]:
         return None
 
 
-def _earn_dates(ea: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+# Quote types that never report earnings.
+NO_EARNINGS_TYPES = {"ETF": "an exchange-traded fund", "INDEX": "an index", "MUTUALFUND": "a mutual fund",
+                     "CURRENCY": "a currency", "CRYPTOCURRENCY": "a cryptocurrency", "FUTURE": "a future"}
+
+
+def _earn_dates(ea: Optional[Dict[str, Any]], quote: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    qtype = str((quote or {}).get("quote_type") or "").upper()
+    if qtype in NO_EARNINGS_TYPES or (ea or {}).get("not_applicable"):
+        return {"not_applicable": True, "what": NO_EARNINGS_TYPES.get(qtype, "this instrument")}
     nr = (ea or {}).get("next_report") or {}
     return {"date": nr.get("date"), "confirmed": nr.get("confirmed"), "timing": nr.get("timing")}
 
@@ -394,7 +402,7 @@ def _swing(yf, daily, spy, ea, fresh, quote, vals) -> Dict[str, Any]:
             sector = completed_bars(yf.history(sector_sym, period="2y", interval="1d"), fresh.get("phase"))
         except Exception:                                                          # noqa: BLE001
             sector = None
-    return swing_setup.assess(daily, spy, vals, earnings=_earn_dates(ea), freshness=fresh,
+    return swing_setup.assess(daily, spy, vals, earnings=_earn_dates(ea, quote), freshness=fresh,
                               sector=sector, sector_symbol=sector_sym)
 
 

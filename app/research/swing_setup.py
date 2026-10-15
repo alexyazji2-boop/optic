@@ -234,6 +234,14 @@ def detect_setup(rd: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _earnings_exposure(earn: Dict[str, Any], as_of: str, hold_days: Optional[int]) -> Dict[str, Any]:
+    # A fund or an index has no report to fall inside the window, which is a
+    # known "no", not an unknown: treated as unknown, an ETF could never reach
+    # S (found by the historical validation replay, 2026-10-14). A company
+    # whose date is merely missing stays unknown on purpose.
+    if earn and earn.get("not_applicable"):
+        return {"known": True, "in_window": False, "not_applicable": True,
+                "text": "No earnings report: {} has none, so there is no release to fall inside the "
+                        "window.".format(earn.get("what") or "a fund")}
     d = earn.get("date") if earn else None
     if not d:
         return {"known": False, "in_window": None,
