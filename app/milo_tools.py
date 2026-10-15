@@ -292,12 +292,33 @@ DELAY_NOTE = ("Delayed quote: Yahoo Finance prices run about 15 minutes behind d
               "price is the last close or an extended-hours print.")
 
 
+def et(stamp: Any) -> Any:
+    """An ISO timestamp as Eastern time for the model ("Oct 15, 4:02 PM ET"). The feed's times are UTC, and
+    the live answer read a post-market time of 20:01+00:00 as "8:01 PM ET" at 4:20 PM (2026-10-15)."""
+    if not isinstance(stamp, str) or "T" not in stamp:
+        return stamp
+    try:
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        t = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        if t.tzinfo is None:
+            return stamp
+        local = t.astimezone(ZoneInfo("America/New_York"))
+        return local.strftime("%b %d, %I:%M %p ET").replace(" 0", " ")
+    except (ValueError, ImportError):
+        return stamp
+
+
 def compact_quote(q: Dict[str, Any]) -> Dict[str, Any]:
     body = _pick(q, "ticker", "name", "price", "change", "change_pct", "prev_close", "open", "day_high", "day_low",
                  "volume", "avg_volume", "market_state", "pre_market_price", "pre_market_change_pct",
                  "pre_market_time", "post_market_price", "post_market_change_pct", "post_market_time",
                  "fifty_two_high", "fifty_two_low", "market_cap", "trailing_pe", "forward_pe", "sector", "industry")
-    return {"source": "Yahoo Finance quote (delayed)", "as_of": q.get("as_of") or q.get("market_time"),
+    for key in ("pre_market_time", "post_market_time"):
+        if key in body:
+            body[key] = et(body[key])
+    stamp = q.get("as_of") or q.get("market_time")
+    return {"source": "Yahoo Finance quote (delayed)", "as_of": et(stamp), "as_of_utc": stamp,
             "freshness_note": DELAY_NOTE, "quote": body}
 
 
@@ -326,12 +347,14 @@ def compact_options(snap: Dict[str, Any], limit: int = RESULT_CHARS) -> Dict[str
     out = {
         "source": "Optic's Options-tab analytics, computed from the {} option chain".format(
             snap.get("data_source") or "delayed"),
-        "freshness": {"quote_as_of": q.get("as_of"), "analysis_built_at": snap.get("generated_at"),
+        "freshness": {"quote_time": et(q.get("as_of")), "quote_as_of_utc": q.get("as_of"),
+                      "analysis_built": et(snap.get("generated_at")),
                       "market_state": q.get("market_state"), "note": DELAY_NOTE + (
                           " The chain is as delayed as the quote; open interest is the exchange's count from "
                           "the previous session.")},
-        "underlying": _pick(q, "ticker", "price", "change_pct", "market_state", "post_market_price",
-                            "pre_market_price"),
+        "underlying": dict(_pick(q, "ticker", "price", "change_pct", "market_state", "post_market_price",
+                                 "pre_market_price"), **{k: et(q[k]) for k in ("post_market_time", "pre_market_time")
+                                                         if q.get(k)}),
         "expiries": {"analysed": exp.get("used"), "available": (exp.get("available") or [])[:12],
                      "available_count": len(exp.get("available") or []),
                      "default_rule": ("Without named expiries, the Options tab's default: up to four expiries, "
@@ -434,8 +457,8 @@ def compact_levels(block: Dict[str, Any], tech: Optional[Dict[str, Any]] = None)
 
 
 def compact_generic(source: str, payload: Any, as_of: Optional[str] = None) -> Dict[str, Any]:
-    return fit({"source": source, "as_of": as_of or (payload.get("generated_at") if isinstance(payload, dict) else None),
-                "data": payload})
+    stamp = as_of or (payload.get("generated_at") if isinstance(payload, dict) else None)
+    return fit({"source": source, "as_of": et(stamp), "as_of_utc": stamp, "data": payload})
 
 
 def compact_news(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -568,4 +591,4 @@ def _as_of(result: Any) -> Optional[str]:
     if not isinstance(result, dict):
         return None
     fr = result.get("freshness") if isinstance(result.get("freshness"), dict) else {}
-    return fr.get("quote_as_of") or result.get("as_of") or fr.get("analysis_built_at")
+    return fr.get("quote_as_of_utc") or result.get("as_of_utc") or result.get("as_of")

@@ -97,7 +97,8 @@ def test_a_result_carries_status_source_and_freshness_and_a_repeat_is_not_refetc
     content, err, args = run(box.run("get_options", {"ticker": "amd"}))
     body = json.loads(content)
     assert not err and args["ticker"] == "AMD" and body["status"] == "ok"
-    assert body["freshness"]["quote_as_of"] == "2026-10-15T19:15:37+00:00"
+    assert body["freshness"]["quote_as_of_utc"] == "2026-10-15T19:15:37+00:00"
+    assert body["freshness"]["quote_time"] == "Oct 15, 3:15 PM ET", "Eastern time for the model, not UTC"
     run(box.run("get_options", {"ticker": "AMD"}))
     assert calls == ["AMD"], "the same call in one answer is answered once"
     got = box.retrieved()
@@ -134,7 +135,7 @@ def test_the_limits_hold():
 # --------------------------------------------------------------------------------------- summaries
 def test_the_options_read_has_what_the_acceptance_case_needs():
     out = milo_tools.compact_options(snapshot())
-    assert out["underlying"]["price"] == 562.58 and out["freshness"]["quote_as_of"]
+    assert out["underlying"]["price"] == 562.58 and out["freshness"]["quote_time"] == "Oct 15, 3:15 PM ET"
     assert out["expiries"]["analysed"] == ["2026-10-21", "2026-11-06"] and out["expiries"]["default_rule"]
     fp = out["flow_proxy"]
     assert fp["volume"]["put_call_ratio"] == 1.03 and "does not observe who bought or sold" in fp["caveat"]
@@ -393,3 +394,15 @@ def test_a_named_ticker_beats_the_page(monkeypatch):
     page = {"ticker": "AMD", "swing": {"ticker": "AMD"}, "focus": {"scope": "auto", "ticker": "AMD"}}
     ctx = asyncio.run(m._augment_chat_context_lookups([{"role": "user", "content": "What's NVDA's gamma doing?"}], page))
     assert fetched == ["NVDA"] and list(ctx["auto_loaded"]) == ["NVDA"] and ctx["ticker"] == "AMD"
+
+
+def test_times_reach_the_model_in_eastern_time():
+    """Live, 2026-10-15: a post-market time of 20:01+00:00 was read as "8:01 PM ET" at 4:20 PM."""
+    q = {"ticker": "AMD", "price": 562.23, "as_of": "2026-10-15T20:02:39+00:00",
+         "post_market_price": 562.45, "post_market_time": "2026-10-15T20:01:35+00:00"}
+    out = milo_tools.compact_quote(q)
+    assert out["quote"]["post_market_time"] == "Oct 15, 4:01 PM ET" and out["as_of"] == "Oct 15, 4:02 PM ET"
+    assert out["as_of_utc"] == "2026-10-15T20:02:39+00:00"
+    snap = snapshot(quote=dict(snapshot()["quote"], post_market_time="2026-10-15T20:01:35+00:00"))
+    assert milo_tools.compact_options(snap)["underlying"]["post_market_time"] == "Oct 15, 4:01 PM ET"
+    assert milo_tools.et("not a time") == "not a time"
