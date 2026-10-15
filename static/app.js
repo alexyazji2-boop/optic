@@ -45075,24 +45075,42 @@ function mountPulseCharts(root) {
       const segments = (tc.drawn || []).filter((l) => Number.isInteger(l.start_index) && l.start_index < last)
         .map((l) => ({
           x1: l.start_index, y1: l.start_price, x2: last, y2: l.price_now,
-          color: l.kind === 'support' ? C.pos : C.neg, width: 1.8, opacity: 0.9,
-          label: `Trend ${l.touches}\u00d7`,
+          color: l.kind === 'support' ? C.pos : C.neg, width: 2, opacity: 0.9,
         }));
       // When the bars run to, said under the chart: they are fetched as it is
       // drawn, not as of when the answer was written.
       const cap = box.querySelector('.pc-cap');
       if (cap) {
-        cap.textContent = `${sym}, daily candles over ${tc.span_words}, through ${tc.as_of}. Support and resistance `
-          + 'are where price turned before; a trend line joins three or more swing points. Source: Yahoo Finance.';
+        const lines = (tc.drawn || []).map((l) => (l.kind === 'support'
+          ? `green, the rising trend line (${l.touches} touches)` : `red, the falling trend line (${l.touches} touches)`));
+        cap.textContent = `${sym}, daily candles over ${tc.span_words}, through ${tc.as_of}. Dashed: support and `
+          + `resistance, where price turned before${lines.length ? '; ' + lines.join('; ') : ''}. Source: Yahoo Finance.`;
       }
-      mount(plot.id, (w) => lineChart({
-        width: w, height: 260, labels: dates,
-        ariaLabel: `${sym} daily candles over ${tc.span_words}, with support, resistance and trend lines`,
-        series: [{ name: sym, values: bars.close, color: C.ink, hidden: true }],
-        candles: { open: bars.open, high: bars.high, low: bars.low, close: bars.close },
-        candleUp: chartColor('up'), candleDown: chartColor('down'),
-        volume: bars.volume, refLines, refLineFit: 'clip', refLabelSide: 'left', segments,
-      }));
+      /* As wide as its card, and taller as it widens: drawn once at the panel's width,
+       * the SVG kept its shape and sat small in the middle of a wide card (the
+       * owner's screenshot, 2026-10-15: "everything is too crammed"). So it redraws
+       * whenever the card's width changes, and its height follows the width. */
+      const draw = () => {
+        plot.dataset.drawnW = String(Math.round(plot.clientWidth));
+        mount(plot.id, (w) => lineChart({
+          width: w, height: Math.round(Math.min(440, Math.max(260, w * 0.46))), labels: dates,
+          ariaLabel: `${sym} daily candles over ${tc.span_words}, with support, resistance and trend lines`,
+          series: [{ name: sym, values: bars.close, color: C.ink, hidden: true }],
+          candles: { open: bars.open, high: bars.high, low: bars.low, close: bars.close },
+          candleUp: chartColor('up'), candleDown: chartColor('down'),
+          volume: bars.volume, volumeShare: 0.12, refLines, refLineFit: 'clip', refLineSlack: 0, refLabelSide: 'left',
+          segments,
+        }));
+      };
+      draw();
+      if (typeof ResizeObserver === 'function') {
+        const ro = new ResizeObserver(() => {
+          if (!document.body.contains(plot)) { ro.disconnect(); return; }
+          const w = Math.round(plot.clientWidth);
+          if (w && Math.abs(w - Number(plot.dataset.drawnW || 0)) > 24) draw();
+        });
+        ro.observe(plot);
+      }
     });
   });
 }
