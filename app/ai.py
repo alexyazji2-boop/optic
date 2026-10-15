@@ -2919,6 +2919,56 @@ def build_chat_request(
     return kwargs, meta
 
 
+_SENT_JSON = re.compile(r"```json\n(.*)\n```", re.S)
+
+
+def sources_read(kwargs: Optional[Dict[str, Any]], limit: int = 12) -> List[Dict[str, str]]:
+    """The research pack's sources as Milo was sent them, for the "Sources Milo read" list under an answer.
+
+    Read from the CONTEXT on the last turn, after the budget, so the list is what reached the model, not
+    everything the server fetched. One row per source and link, with what was read from it and the
+    period. Empty when no research reached the model. The chip of the same name used to open the
+    Overview, which never shows these items, and on Home it landed on "No symbol loaded" (2026-10-15).
+    """
+    try:
+        last = (kwargs or {})["messages"][-1]["content"]
+        text = last if isinstance(last, str) else " ".join(
+            b.get("text", "") for b in last if isinstance(b, dict))
+        m = _SENT_JSON.search(text)
+        sent = json.loads(m.group(1)) if m else {}
+    except (KeyError, IndexError, TypeError, ValueError):
+        return []
+    pack = sent.get("research") if isinstance(sent, dict) else None
+    items = pack.get("items") if isinstance(pack, dict) else None
+    rows: List[Dict[str, Any]] = []
+    index: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for it in items or []:
+        if not isinstance(it, dict):
+            continue
+        source = str(it.get("source") or "").strip()
+        url = str(it.get("url") or "").strip()
+        label = str(it.get("label") or "").strip()
+        if not (source or url):
+            continue
+        key = (source, url)
+        row = index.get(key)
+        if row is None:
+            if len(rows) >= limit:
+                continue
+            row = {"source": source or url, "url": url if url.startswith(("https://", "http://")) else "",
+                   "period": str(it.get("period") or it.get("as_of") or "").strip(), "labels": []}
+            index[key] = row
+            rows.append(row)
+        if label and label not in row["labels"]:
+            row["labels"].append(label)
+    out = []
+    for row in rows:
+        labels = row.pop("labels")
+        what = ", ".join(labels[:3]) + (" and {} more".format(len(labels) - 3) if len(labels) > 3 else "")
+        out.append(dict(row, what=what))
+    return out
+
+
 async def stream_chat(
     history: List[Dict[str, str]],
     context: Optional[Dict[str, Any]] = None,
@@ -3013,6 +3063,7 @@ async def stream_chat(
             {
                 "model": getattr(final, "model", PULSE_MODEL),
                 "citations": citations,
+                "read": sources_read(kwargs),
                 "usage": {
                     "input_tokens": getattr(usage, "input_tokens", None),
                     "output_tokens": getattr(usage, "output_tokens", None),

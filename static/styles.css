@@ -2447,6 +2447,16 @@ body.chat-resizing svg { pointer-events: none; }
 .msg .sources { margin-top: var(--space-2); font-size: var(--t-caption); }
 .msg .sources a { color: var(--s1); display: block; text-decoration: none; margin-bottom: var(--space-0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .msg .sources a:hover { text-decoration: underline; }
+/* What the research pack put in front of Milo (pulseReadHTML), collapsed under
+   the answer; the "Sources Milo read" chip opens it. */
+.msg .milo-read { margin-top: var(--space-1); color: var(--ink-muted); }
+.msg .milo-read summary { cursor: pointer; width: fit-content; transition: color var(--dur-ui) var(--ease-ui); }
+.msg .milo-read summary:hover,
+.msg .milo-read summary:focus-visible { color: var(--ink); }
+.msg .milo-read ul { list-style: none; margin: var(--space-1) 0 0; padding: 0; }
+.msg .milo-read li { margin-bottom: var(--space-1); line-height: 1.4; }
+.msg .milo-read li a { display: inline; white-space: normal; margin: 0; }
+.msg .milo-read .mr-what { display: block; color: var(--ink-muted); }
 .msg.err .bubble { color: var(--serious); }
 
 #chat .chat-foot { border-top: 1px solid var(--border); padding: var(--space-3) var(--space-3); }
@@ -9048,8 +9058,13 @@ table.data tr.fx-detail td,
   color: var(--ink-muted);
   font-family: var(--label-face);
 }
-.hz-seg { flex: 1 1 auto; display: flex; min-width: 0; }
-.hz-seg button { flex: 1 1 0; min-width: 0; padding-inline: var(--space-2); white-space: nowrap; }
+/* Each choice as wide as its word, the spare room shared out (flex-basis auto,
+   not 0): four equal quarters clipped "Long term" in the 520px panel while
+   "Day" had room to spare (2026-10-15). The control never shrinks below its
+   words; when the label beside it leaves too little room, the row wraps and
+   the control takes the next line whole. */
+.hz-seg { flex: 1 1 auto; display: flex; min-width: min-content; }
+.hz-seg button { flex: 1 1 auto; min-width: max-content; padding-inline: var(--space-2); white-space: nowrap; }
 .hz-seg button[aria-pressed="true"] {
   background: var(--ws-brand-tint);
   color: var(--ink);

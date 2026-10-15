@@ -44994,7 +44994,11 @@ const PULSE_SOURCES = {
   options_research: ['Options research', 'swing'],
   desk_edition: ['Optic Desk', 'brief'],
   desk_section: ['Optic Desk', 'brief'],
-  research: ['Sources Milo read', 'overview'],
+  // Not a panel: the research pack is shown nowhere else, so this chip opens
+  // the list under its own answer (pulseReadHTML). It used to open the
+  // Overview, which never shows these items, and from Home that landed on
+  // "No symbol loaded" (2026-10-15).
+  research: ['Sources Milo read', 'sources'],
   track_record: ['Track record', 'swing'],
 };
 const PULSE_SRC_RE = /\s?\[\[src ([a-z_]{2,20})\]\]/g;
@@ -45011,8 +45015,10 @@ function pulseSourcesIn(html) {
       const src = PULSE_SOURCES[key];
       if (!src || seen.has(src[0])) return '';
       seen.add(src[0]);
+      const tip = src[1] === 'sources' ? 'What Milo read for this answer. Show the list'
+        : `From ${src[0]}. Open it`;
       return ` <button type="button" class="pulse-src" data-src-view="${src[1]}"
-      title="From ${esc(src[0])}. Open it">${esc(src[0])}</button>`;
+      title="${esc(tip)}">${esc(src[0])}</button>`;
     });
   }).join('');
 }
@@ -45105,11 +45111,43 @@ document.addEventListener('click', (evt) => {
   // closes to show it; on a wider screen it stays open beside the panel.
   const src = evt.target.closest('[data-src-view]');
   if (src) {
+    const view = src.dataset.srcView;
+    const say = (msg) => { if (window.OpticAuth && window.OpticAuth.toast) window.OpticAuth.toast(msg); };
+    if (view === 'sources') {
+      const msg = src.closest('.msg');
+      const box = msg && msg.querySelector('.milo-read');
+      if (box) {
+        box.open = true;
+        box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      } else {
+        say('The list of sources is not kept when a conversation is reopened.');
+      }
+      return;
+    }
+    /* A panel about one symbol, with none loaded, would open on "No symbol
+     * loaded": an answer from Home reads its companies on the server, so there
+     * is nothing on that panel to show. Said, instead of the dead end. */
+    if (SECURITY_VIEWS.includes(view) && view !== 'earnings' && !STATE.ticker) {
+      say(`Nothing to open: ${src.textContent.trim()} needs a symbol loaded. Search for one to see it.`);
+      return;
+    }
     if (window.matchMedia('(max-width: 559px)').matches) $('#chat-close').click();
-    switchView(src.dataset.srcView);
+    switchView(view);
     return;
   }
 });
+
+/* The sources the server's research pack put in front of Milo for one answer,
+ * after the context budget (app/ai.py sources_read): one line per source and
+ * link, with what was read from it. Collapsed, under the answer; the "Sources
+ * Milo read" chip opens it. */
+function pulseReadHTML(read) {
+  return `<details class="milo-read"><summary>Sources Milo read (${read.length})</summary><ul>${read.map((r) => {
+    const name = r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.source)}</a>` : esc(r.source);
+    const what = [r.what, r.period].filter(Boolean).join(' \u00b7 ');
+    return `<li>${name}${what ? `<span class="mr-what">${esc(what)}</span>` : ''}</li>`;
+  }).join('')}</ul></details>`;
+}
 
 function splitFollowUps(text) {
   const lines = String(text || '').split('\n');
@@ -45524,6 +45562,9 @@ async function streamTo(url, body, node) {
         if (list.length) {
           sourcesEl.innerHTML = '<div style="color:var(--ink-muted);margin-bottom:var(--space-0)">Sources</div>'
             + list.map((sc) => `<a href="${esc(sc.url)}" target="_blank" rel="noopener">${esc(sc.title || sc.url)}</a>`).join('');
+        }
+        if (Array.isArray(payload.read) && payload.read.length) {
+          sourcesEl.insertAdjacentHTML('beforeend', pulseReadHTML(payload.read));
         }
       }
       followStream(logEl, pinned);

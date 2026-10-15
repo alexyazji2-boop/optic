@@ -75,7 +75,10 @@ def test_every_source_is_a_key_the_terminal_sends_and_a_view_it_has():
             continue
         assert ("ctx.%s = " % key) in payload, key
     views = set(re.findall(r"\['[^']+', '([a-z]+)'\]", APP[APP.index("const PULSE_SOURCES = {"):APP.index("const PULSE_SRC_RE")]))
-    for view in views:
+    # "sources" is not a view: the research pack's chip opens the list under its
+    # own answer (tests/test_milo_panel_fixes.py).
+    assert "if (view === 'sources') {" in APP
+    for view in views - {"sources"}:
         assert ("'%s'" % view) in APP[APP.index("const NAV_GROUPS = ["):] or view in (
             "overview", "chart", "swing", "long", "earnings", "news"), view
     fmt = " ".join(ai.FORMAT_PROMPT.split())
@@ -93,7 +96,7 @@ def test_pulse_is_told_when_to_tag_and_when_not_to():
 
 def test_chips_render_open_their_panel_and_leave_copy_readable():
     assert "return pulseSourcesIn(miloActionsIn(html).replace(PULSE_CHART_RE," in APP, "every reply path renders them"
-    assert "if (window.matchMedia('(max-width: 559px)').matches) $('#chat-close').click();\n    switchView(src.dataset.srcView);" in APP
+    assert "if (window.matchMedia('(max-width: 559px)').matches) $('#chat-close').click();\n    switchView(view);" in APP
     assert "pulseSourcesAsText(splitFollowUps(" in APP
     assert ".replace(/\\s?\\[\\[[^\\]\\n]*\\]\\]/g, '')" in APP, "no brackets flash past while streaming"
     assert ".pulse-src {" in CSS
