@@ -1334,6 +1334,11 @@ _OPTIONS_WORDS = re.compile(r"\b(option|options|call|calls|put|puts|strike|expir
 _VALUATION_WORDS = re.compile(r"\b(valuation|valued|fair value|intrinsic|dcf|discounted|worth|undervalued|"
                               r"overvalued|cheap|expensive|price target|multiple|p/?e|margin of safety|upside|"
                               r"reverse dcf|assumptions?|discount rate|terminal value)\b", re.I)
+# A question about whether Optic's own reads work. `track_record` answers it, and under a crowded budget
+# it could be cut (the valuation session's stress case, 2026-10-15: market, compare and pulse at about
+# 11K each dropped it), so such a question lifts it to the quote.
+_EVIDENCE_WORDS = re.compile(r"\b(?:(?:do|does)\b[^?.]{0,40}\bwork|reliab\w*|tested|backtest\w*|edge|evidence|"
+                             r"proven|track record|win rate|hit rate|accura\w*|predict\w*)\b", re.I)
 _MARKET_WORDS = re.compile(r"\b(market|the tape|index|indices|s&p|spx|spy|nasdaq|qqq|dow|"
                            r"russell|macro|fed|rates|yields?|cpi|inflation|vix|sector|"
                            r"rotation|breadth|futures)\b", re.I)
@@ -1373,6 +1378,8 @@ def _section_order(question: str, horizon: str, view: Optional[str] = None) -> L
     # lost it to the lift otherwise (MSFT, same measurement).
     if view == "long" or horizon == "long" or _VALUATION_WORDS.search(q):
         lift(["valuation", "long_term"], "quote")
+    if _EVIDENCE_WORDS.search(q):
+        lift(["track_record", "backtest"], "quote")
     if _MARKET_WORDS.search(q):
         lift(["market", "read", "macro", "sectors", "indices"], "compare")
     return order

@@ -58,3 +58,19 @@ def test_it_follows_the_quote_when_lifted_with_the_valuation_history_beside_it()
     order = ai._section_order("Is TSLA undervalued?", "auto", "overview")
     assert order.index("valuation") == order.index("quote") + 1
     assert order.index("long_term") == order.index("valuation") + 1
+
+
+def test_a_does_it_work_question_lifts_the_track_record():
+    """The same mechanism threatened `track_record` (the valuation session's stress case, 2026-10-15:
+    market, compare and pulse at about 11K each dropped it). A question about whether Optic's reads work
+    lifts it to the quote."""
+    order = ai._section_order("Do Optic's swing grades actually work?", "auto", "chart")
+    assert order.index("track_record") == order.index("quote") + 1
+    snap = _investing_snapshot()
+    snap["active_view"] = "chart"
+    snap["focus"]["view"] = "chart"
+    for k in ("market", "compare", "pulse"):
+        snap[k] = _filler(110, k)
+    snap["track_record"] = {"swing_grade": {"status": "tested", "verdict": "no reliable effect"}}
+    _, meta = ai.budget_context(snap, "Do Optic's swing grades actually work?", "auto")
+    assert meta["dropped"] and "track_record" in meta["kept"], meta
