@@ -171,8 +171,10 @@
       ${list((post.positives || []).map((t) => 'Positive: ' + t))}${list((post.weaknesses || []).map((t) => 'Weakness: ' + t))}
       <p class="ov-fine">Red flags: ${esc((post.red_flags || []).join(' '))} ${esc(post.separation_note || '')}</p>
       ${(post.forecast_review || {}).available ? `<p class="ov-fine">Saved forecast from ${esc(post.forecast_review.saved_at)} reviewed separately for results, guidance and reaction.</p>` : ''}`;
+      const rec = (post.release || {}).recency || {};
+      const lead = rec.state === 'probably_missing' ? `${rec.text} ` : '';
       return tile('earnings', 'What about earnings?', q.grade ? `Report quality ${q.grade}` : 'Report not graded',
-        `Reported ${post.release.date}. ${(post.reaction || {}).text || ''}`, more);
+        `${lead}Reported ${post.release.date}. ${(post.reaction || {}).text || ''}`, more);
     }
     const reason = (pre || post || {}).reason || er.reason || 'No earnings view.';
     return tile('earnings', 'What about earnings?', 'Insufficient Data', reason, '');

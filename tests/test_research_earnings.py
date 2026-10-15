@@ -303,3 +303,16 @@ def test_overnight_after_an_untimed_release_reads_the_spiked_release_day():
     r = E.reaction(quiet, None, "2026-10-14", None, {"post_market_change_pct": 0.18}, "overnight",
                    today=date(2026, 10, 15))
     assert r["observation"] == "after-hours"
+
+
+def test_an_old_newest_result_is_flagged_as_probably_not_the_latest():
+    """BAC the morning after its October release (2026-10-15): the live feed's
+    newest result was July's and the next report January's."""
+    rec = E.release_recency({"date": "2026-07-14"}, {"date": "2027-01-15"}, date(2026, 10, 15))
+    assert rec["state"] == "probably_missing" and "2026-07-14" in rec["text"] and "2027-01-15" in rec["text"]
+    assert E.release_recency({"date": "2026-10-14"}, {"date": "2027-01-15"}, date(2026, 10, 15))["state"] == "current"
+    ea = ea_fixture(latest_result={"available": True, "date": "2026-07-14", "age_days": 93,
+                                   "eps_reported": 0.9, "eps_estimate": 0.88})
+    ea["next_report"]["date"] = "2027-01-15"
+    post = E.post_earnings("BAC", ea, 1.0, today=date(2026, 10, 15))
+    assert post["release"]["recency"]["state"] == "probably_missing"

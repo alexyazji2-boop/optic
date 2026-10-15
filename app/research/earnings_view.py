@@ -669,6 +669,43 @@ def _period_after(quarters: Optional[List[Dict[str, Any]]]) -> Optional[str]:
 
 # ---------------------------------------------------------------- post
 
+# A quarter is about 91 days, so a newest result older than this is probably
+# not the latest release: the feed fills reported figures with a lag.
+STALE_RESULT_DAYS = 75
+
+
+def release_recency(lr: Dict[str, Any], nr: Dict[str, Any], today: Optional[date]) -> Dict[str, Any]:
+    """Whether the newest result on record is plausibly the latest release.
+
+    The morning after BAC reported (2026-10-15) the live feed's surprise table
+    still ended at July's quarter while its calendar had moved to January, so a
+    post-earnings read described July's results as "the" results. When the
+    newest result is a quarter old, or the next date is more than a quarter
+    after it, a release in between is probably missing, and the read says so
+    instead of passing the old quarter off as the latest."""
+    today = today or datetime.now(timezone.utc).date()
+    try:
+        last = date.fromisoformat(str(lr.get("date"))[:10])
+    except (TypeError, ValueError):
+        return {"state": "unknown"}
+    age = (today - last).days
+    gap = None
+    try:
+        nxt = date.fromisoformat(str(nr.get("date"))[:10]) if nr.get("date") else None
+        gap = (nxt - last).days if nxt else None
+    except (TypeError, ValueError):
+        nxt = None
+    if age > STALE_RESULT_DAYS or (gap is not None and gap > 120):
+        return {"state": "probably_missing", "age_days": age, "next_report": nr.get("date"),
+                "text": "The newest result in the feed is from {} ({} days ago){}. A more recent release is "
+                        "probably missing: the feed fills reported figures with a lag. This read describes the "
+                        "{} quarter, not necessarily the latest; check the company's release.".format(
+                            last.isoformat(), age,
+                            ", and the next report is listed for {}".format(nr.get("date")) if nr.get("date") else "",
+                            last.isoformat())}
+    return {"state": "current", "age_days": age}
+
+
 def classify_vs(actual: Optional[float], expected: Optional[float], band_pct: float) -> Dict[str, Any]:
     if actual is None or expected is None:
         return {"state": "unknown"}
@@ -929,8 +966,10 @@ def post_earnings(ticker: str, ea: Dict[str, Any], band_pct: float, *, sec: Opti
     review = review_forecast(forecast, eps, rev_vs, rx) if forecast else {
         "available": False, "reason": "No pre-release forecast was saved for this quarter, so there is nothing to "
                                       "score; one is saved automatically whenever a pre-earnings analysis runs."}
+    recency = release_recency(lr, (ea.get("next_report") or {}), today)
     return {"available": True, "mode": "post_earnings",
-            "release": {"date": lr.get("date"), "timing": timing or "unknown", "age_days": lr.get("age_days")},
+            "release": {"date": lr.get("date"), "timing": timing or "unknown", "age_days": lr.get("age_days"),
+                        "recency": recency},
             "headline_audit": {
                 "eps": {"actual": lr.get("eps_reported"), "consensus": lr.get("eps_estimate"), **eps,
                         "consensus_source": "the feed's surprise table",

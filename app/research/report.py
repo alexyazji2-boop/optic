@@ -179,7 +179,9 @@ def post(p: Dict[str, Any]) -> str:
         return "## After the release\n\n**Insufficient Data.** {}\n".format((p or {}).get("reason", ""))
     a, q, rx = p["headline_audit"], p.get("quality") or {}, p.get("reaction") or {}
     eps = a["eps"]
+    rec = (p.get("release") or {}).get("recency") or {}
     out = ["## After the release ({})".format(p["release"]["date"]), "",
+           ("**Check the date.** " + rec["text"] + "\n") if rec.get("state") == "probably_missing" else "",
            "**Report quality: {}.** {}".format(q.get("grade") or "not graded", q.get("note") or q.get("reason") or ""), "",
            "**Headline audit.**", "",
            _bul(["EPS {} against {}: {} ({}{}).".format(_n(eps.get("actual")), _n(eps.get("consensus")), eps.get("state"),
