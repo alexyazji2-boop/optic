@@ -680,6 +680,11 @@ def classify_vs(actual: Optional[float], expected: Optional[float], band_pct: fl
     return {"state": state, "surprise_pct": _f(s, 2)}
 
 
+# Relative volume that marks a session as the one a release landed in, when the
+# feed has no release time to say so. Ordinary sessions run about 0.7x to 1.3x.
+RELEASE_DAY_SPIKE = 1.5
+
+
 def reaction(daily: Optional[pd.DataFrame], bench: Optional[pd.DataFrame], release_day: str,
              timing: Optional[str], quote: Optional[Dict[str, Any]], phase: Optional[str],
              today: Optional[date] = None) -> Dict[str, Any]:
@@ -696,22 +701,36 @@ def reaction(daily: Optional[pd.DataFrame], bench: Optional[pd.DataFrame], relea
     idx = [d.date() for d in daily.index]
     react_day = rd if timing == "before_open" else None
     inferred = None
+    vol = daily["Volume"].astype(float) if "Volume" in daily else None
+
+    def rvol(day: date) -> Optional[float]:
+        if vol is None or day not in idx:
+            return None
+        i = idx.index(day)
+        base = float(vol.iloc[max(0, i - 21):i - 1].mean()) if i > 2 else 0.0
+        return float(vol.iloc[i]) / base if base else None
+
     if react_day is None:
         later = [d for d in idx if d > rd]
         react_day = later[0] if later else None
+        # Timing unknown and the next session not traded yet (overnight after
+        # the release day): the release day is the reaction if it carried a
+        # volume spike, as a before-the-open bank's does. Without this, BAC
+        # overnight on 2026-10-15, down 4.76% on its release day, read as
+        # "only an extended-hours move so far" (found by the Milo eval).
+        if react_day is None and timing not in ("after_close",) and rd in idx:
+            a = rvol(rd)
+            if a is not None and a >= RELEASE_DAY_SPIKE:
+                react_day = rd
+                inferred = ("The release time is not in the feed; the release day traded {:.1f}x its average "
+                            "volume, so it is read as the reaction session. If the report came after the close, "
+                            "the next session will carry the reaction instead.".format(a))
         # Timing unknown: the release day or the session after it. The
         # reaction session is the one carrying the volume spike, which is an
         # observation rather than a guess about the clock. JPM, 2026-10-14:
         # no timing in the feed, a before-the-open bank, and the default read
         # the day after as the reaction.
-        if timing not in ("after_close",) and react_day is not None and rd in idx:
-            vol = daily["Volume"].astype(float)
-
-            def rvol(day: date) -> Optional[float]:
-                i = idx.index(day)
-                base = float(vol.iloc[max(0, i - 21):i - 1].mean()) if i > 2 else 0.0
-                return float(vol.iloc[i]) / base if base else None
-
+        elif timing not in ("after_close",) and react_day is not None and rd in idx:
             a, b = rvol(rd), rvol(react_day)
             if a is not None and b is not None:
                 # The later session may still be trading: compare it on a full

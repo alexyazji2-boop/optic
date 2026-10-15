@@ -282,3 +282,24 @@ def test_post_earnings_counts_only_the_reported_quarters_figures():
     assert crit["growth_trend"] is None and crit["eps_growth"] is None
     assert post["quality"]["status"] == "insufficient"           # only EPS is known for this quarter
     assert "not the one just reported" in post["trajectory"]["revenue_trend_text"]
+
+
+def test_overnight_after_an_untimed_release_reads_the_spiked_release_day():
+    """BAC overnight on 2026-10-15 (found by the Milo eval): released on the
+    14th before the open, no timing in the feed, the 15th not traded yet; the
+    framework said the reaction was pending although the 14th fell 4.76%."""
+    bars = _reaction_bars().loc[:"2026-10-14"].copy()
+    i = len(bars) - 1
+    bars.iloc[i, bars.columns.get_loc("Volume")] = 3.2e6
+    bars.iloc[i, bars.columns.get_loc("Close")] = bars["Close"].iloc[i - 1] * 0.9524
+    r = E.reaction(bars, None, "2026-10-14", None, {"post_market_change_pct": 0.18}, "overnight",
+                   today=date(2026, 10, 15))
+    assert r["reaction_day"] == "2026-10-14" and r["observation"] == "completed session"
+    assert r["day_pct"] == pytest.approx(-4.76, abs=0.01)
+    assert "next session will carry the reaction instead" in r["timing_inferred"]
+    # No spike on the release day: it may have been after the close, so the
+    # extended-hours read stands.
+    quiet = _reaction_bars().loc[:"2026-10-14"]
+    r = E.reaction(quiet, None, "2026-10-14", None, {"post_market_change_pct": 0.18}, "overnight",
+                   today=date(2026, 10, 15))
+    assert r["observation"] == "after-hours"
