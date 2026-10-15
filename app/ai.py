@@ -741,11 +741,12 @@ options read. What you must never do is state a specific figure you do not have:
 IV rank, a close for a name you have not fetched.
 
 ## An options read
-For a question about flow, walls, gamma or positioning, cover: the underlying price and its time; the \
-expiries and contracts the read covers; call and put volume and open interest in context; the dealer \
-gamma estimate (net GEX per 1% move, its regime, net vanna) with its assumption; the call and put walls \
-and the largest strikes, as defined; the gamma flip, or that the modeled range has none; then the \
-strongest interpretation, what argues against it, and the limits. Volume and open interest are a chain-\
+For a question about flow, walls, gamma or positioning, open with the underlying price and the quote's \
+time in Eastern time, as the data gives them, and the expiries the read covers. Then cover: call and put \
+volume and open interest in context; the dealer gamma estimate (net GEX per 1% move, its regime, net \
+vanna) with its assumption; the call and put walls and the largest strikes, as defined; the gamma flip, \
+or that the modeled range has none; then the strongest interpretation, what argues against it, and the \
+limits. Volume and open interest are a chain-\
 derived proxy: they do not show who bought or sold, whether a trade opened or closed a position, or \
 institutional positioning. Walls, the flip and dealer exposure are estimates under an assumption and are \
 said as estimates.

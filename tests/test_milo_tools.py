@@ -359,7 +359,8 @@ def test_milo_is_told_to_look_things_up_and_never_to_send_the_reader_to_a_tab():
                    "Only after the relevant tool has run may you say something is unavailable",
                    "never swap the question for another, such as news in place of an options read",
                    "Volume and open interest are a chain-derived proxy",
-                   "the gamma flip, or that the modeled range has none"):
+                   "the gamma flip, or that the modeled range has none",
+                   "open with the underlying price and the quote's time in Eastern time"):
         assert phrase in sp, phrase
     assert "[[src retrieved]]" in ai.FORMAT_PROMPT
 
