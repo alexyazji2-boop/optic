@@ -78,8 +78,12 @@ MODES: Dict[str, str] = {
         "watch."
     ),
     "combined": (
-        "Combined mode. Each assessment on its own first, in a short paragraph (long term, swing, earnings), then "
-        "where they agree or disagree and why (`combined.verdict`), then the one thing most worth watching."
+        "Combined mode. When the reader asks for your take on the stock (thoughts on it, near or long term), write "
+        "it in the take shape of the base prompt (A take on a stock): the chart, the business, the near-term "
+        "levels, the long-term read, one line splitting them, in about 250 words, with these assessments as the "
+        "evidence and their grades said in plain words. Otherwise each assessment on its own first, in a short "
+        "paragraph (long term, swing, earnings), then where they agree or disagree and why (`combined.verdict`), "
+        "then the one thing most worth watching."
     ),
     "unclear": (
         "The question asks whether to buy or sell without a timeframe, and the answer differs for a trade and an "

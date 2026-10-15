@@ -115,6 +115,7 @@ from .analytics import extras as extras_mod
 from .analytics import rotation as rotation_mod
 from .analytics import stockmaps as stockmaps_mod
 from .analytics import trendlines as trendlines_mod
+from .analytics import take_chart as take_chart_mod
 from .analytics import seasonality as seasonality_mod
 from .analytics import sector_board as sector_board_mod
 from .analytics import sector_confirm as sector_confirm_mod
@@ -4952,6 +4953,24 @@ async def trendlines_panel(ticker: str,
     return await _run(build)
 
 
+@app.get("/api/take-chart/{ticker}")
+async def take_chart_panel(ticker: str, span: str = Query("1y", description="3m, 6m, 1y, 2y or 5y")) -> Dict[str, Any]:
+    """The chart inside a Milo take: daily candles over the span, the support and resistance levels and
+    the trend lines (app/analytics/take_chart.py). The same function gave Milo the levels it quoted
+    (CONTEXT `chart_levels`), so the chart draws what the answer says."""
+    sym = ticker.strip().upper()
+
+    def build() -> Dict[str, Any]:
+        df = YF_PROVIDER.history(sym, period="5y", interval="1d")
+        out = take_chart_mod.build(df, span)
+        out["ticker"] = sym
+        window = out.pop("_window", None)
+        if out.get("available") and window is not None:
+            out["chart"] = _bars_body(sym, window, 4)
+        return out
+    return await _run(build)
+
+
 @app.get("/api/forex")
 async def forex_panel(q: str = Query("", max_length=40)) -> Dict[str, Any]:
     """Currency pairs with their macro driver and what each one reads across to."""
@@ -6299,6 +6318,32 @@ async def _with_framework(history: List[Dict[str, Any]], context: Optional[Dict[
     return ctx
 
 
+async def _with_take_levels(history: List[Dict[str, Any]], context: Optional[Dict[str, Any]],
+                            horizon: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """The levels and trend lines for the question's timeframe (app/analytics/take_chart.py), so the
+    levels Milo quotes are the ones its inline chart draws. One company in scope, or nothing added."""
+    last = next((t for t in reversed(history or []) if t.get("role") != "assistant"), None)
+    ticker = _research_ticker(dict(context or {}))
+    if not last or not ticker:
+        return context
+    question = last.get("content") if isinstance(last.get("content"), str) else ""
+    try:
+        hz = horizon_mod.resolve(horizon, question)[0]
+    except Exception:                                           # noqa: BLE001
+        hz = horizon
+    span = take_chart_mod.span_for(hz, question)
+
+    def build() -> Dict[str, Any]:
+        df = YF_PROVIDER.history(ticker, period="5y", interval="1d")
+        return take_chart_mod.for_context(take_chart_mod.build(df, span), ticker)
+    try:
+        block = await asyncio.wait_for(_run(build), timeout=6.0)
+    except Exception as exc:                                    # noqa: BLE001 - includes the timeout
+        logging.getLogger("uvicorn.error").warning("milo take levels skipped: %s", exc)
+        return context
+    return dict(context or {}, chart_levels=block)
+
+
 async def _augment_chat_context(history: List[Dict[str, Any]],
                                 context: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """The reader's scope first, then what the question is about.
@@ -6808,12 +6853,15 @@ async def chat(request: Request,
         # Side by side: the research pack and the framework read different
         # sources and neither needs the other's answer, so the slower of the
         # two (not their sum) is what the reader waits for.
-        researched, framed = await asyncio.gather(
+        researched, framed, levelled = await asyncio.gather(
             _with_research(history, context, horizon),
-            _with_framework(history, context, horizon, attachments))
+            _with_framework(history, context, horizon, attachments),
+            _with_take_levels(history, context, horizon))
         context = researched
         if isinstance(framed, dict) and "framework" in framed:
             context = dict(context or {}, framework=framed["framework"])
+        if isinstance(levelled, dict) and "chart_levels" in levelled:
+            context = dict(context or {}, chart_levels=levelled["chart_levels"])
     return StreamingResponse(
         ai.stream_chat(history, context=context, use_web=use_web,
                        attachments=attachments, persona=persona, mode=mode,

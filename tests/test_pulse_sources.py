@@ -67,7 +67,9 @@ def test_every_source_is_a_key_the_terminal_sends_and_a_view_it_has():
     # question in main._with_research.
     # The research framework's assessment is the fourth (main._with_framework).
     server_added = {"portfolio_summary": 'out["portfolio_summary"]', "market": 'out["market"] = market',
-                    "research": 'ctx["research"] = pack', "framework": 'ctx["framework"] = '}
+                    "research": 'ctx["research"] = pack', "framework": 'ctx["framework"] = ',
+                    # The take chart's levels (main._with_take_levels), 2026-10-15.
+                    "chart_levels": 'chart_levels=levelled["chart_levels"]'}
     main_src = open("app/main.py", encoding="utf-8").read()
     for key in keys:
         if key in server_added:

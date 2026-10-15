@@ -108,9 +108,12 @@ def test_both_charts_get_the_same_colours():
     Three, not two, since the Swing setups row chart: it draws the same
     instrument's candles a few inches below the Swing chart, in the colours
     the reader chose for both. Four since the Investing chart: its candles
-    were the theme's s3/s8 whatever the reader had chosen."""
-    assert APP_JS.count("candleUp: chartColor('up')") == 4
-    assert APP_JS.count("candleDown: chartColor('down')") == 4
+    were the theme's s3/s8 whatever the reader had chosen. Five since the chart
+    inside a Milo take (2026-10-15): the same candles, a little smaller."""
+    assert APP_JS.count("candleUp: chartColor('up')") == 5
+    assert APP_JS.count("candleDown: chartColor('down')") == 5
+    assert "candleUp: chartColor('up'), candleDown: chartColor('down')," in \
+        APP_JS[APP_JS.index("function mountPulseCharts("):]
     assert "candleUp: chartColor('up'), candleDown: chartColor('down')," in \
         APP_JS[APP_JS.index("function setupChartNode("):]
     # Both `Close` series, by name. A global count of chartColor('line') was the

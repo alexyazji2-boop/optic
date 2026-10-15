@@ -44496,17 +44496,22 @@ function pulseStepsDone(node, failed) {
 /* A chart inside an answer.
  *
  * Pulse writes `[[chart SPY 3m]]` on a line of its own (FORMAT_PROMPT) and the
- * terminal draws the symbol's daily closes over that span from its own bars,
- * so the chart is the terminal's data and never the model's. */
-const PULSE_CHART_RE = /\[\[chart ([A-Z0-9.^=-]{1,12}) (1m|3m|6m|1y|5y)\]\]/g;
-const PULSE_CHART_BARS = { '1m': 21, '3m': 63, '6m': 126, '1y': 252, '5y': 1260 };
-const PULSE_CHART_WORDS = { '1m': 'month', '3m': '3 months', '6m': '6 months', '1y': 'year', '5y': '5 years' };
+ * terminal draws the symbol's daily candles over that span from its own bars,
+ * so the chart is the terminal's data and never the model's. Since the owner's
+ * reference for a take on a stock (2026-10-15) it also draws the support and
+ * resistance levels and the trend lines for the span, from /api/take-chart:
+ * the same function gave Milo the levels it quoted (CONTEXT chart_levels), so
+ * the lines on the chart are the numbers in the text. */
+const PULSE_CHART_RE = /\[\[chart ([A-Z0-9.^=-]{1,12}) (1m|3m|6m|1y|2y|5y)\]\]/g;
+const PULSE_CHART_BARS = { '1m': 21, '3m': 63, '6m': 126, '1y': 252, '2y': 504, '5y': 1260 };
+const PULSE_CHART_WORDS = { '1m': 'month', '3m': '3 months', '6m': '6 months', '1y': 'year', '2y': '2 years',
+  '5y': '5 years' };
 const pulseChartBars = new Map();
 let pulseChartSeq = 0;
 
 function pulseChartsIn(html) {
   return pulseSourcesIn(miloActionsIn(html).replace(PULSE_CHART_RE, (m, sym, span) => `<div class="pulse-chart" data-sym="${
-    sym}" data-span="${span}"><div class="pc-plot"></div><div class="pc-cap">${sym}, daily close over the last ${
+    sym}" data-span="${span}"><div class="pc-plot"></div><div class="pc-cap">${sym}, daily candles over the last ${
     PULSE_CHART_WORDS[span]}</div></div>`));
 }
 
@@ -44999,6 +45004,7 @@ const PULSE_SOURCES = {
   // Overview, which never shows these items, and from Home that landed on
   // "No symbol loaded" (2026-10-15).
   research: ['Sources Milo read', 'sources'],
+  chart_levels: ['Levels', 'chart'],
   track_record: ['Track record', 'swing'],
 };
 const PULSE_SRC_RE = /\s?\[\[src ([a-z_]{2,20})\]\]/g;
@@ -45043,26 +45049,49 @@ function mountPulseCharts(root) {
     const span = box.dataset.span;
     const plot = box.querySelector('.pc-plot');
     plot.id = 'pulse-chart-' + (++pulseChartSeq);
-    if (!pulseChartBars.has(sym)) {
-      pulseChartBars.set(sym, getJSON('/api/daily-bars/' + encodeURIComponent(sym)).catch(() => null));
+    const key = sym + ' ' + span;
+    if (!pulseChartBars.has(key)) {
+      pulseChartBars.set(key, getJSON(`/api/take-chart/${encodeURIComponent(sym)}?span=${encodeURIComponent(span)}`)
+        .catch(() => null));
     }
-    pulseChartBars.get(sym).then((bars) => {
+    pulseChartBars.get(key).then((tc) => {
       if (!document.getElementById(plot.id)) return;
-      if (!bars || !bars.available || !(bars.close || []).length) {
+      const bars = tc && tc.available ? tc.chart : null;
+      if (!bars || !(bars.close || []).length) {
         plot.innerHTML = '<p class="caveat">No price history for ' + esc(sym) + '.</p>';
         return;
       }
-      const n = PULSE_CHART_BARS[span] || 63;
-      const close = bars.close.slice(-n);
-      const dates = bars.dates.slice(-n);
+      const dates = bars.dates;
+      const last = dates.length - 1;
+      // The two supports and the nearest resistance: the lines a take names. The level price is
+      // sitting on (at_price) stays out, because the price tag already marks where it is.
+      const refLines = [
+        ...(tc.supports || []).slice(0, 2).map((l) => ({ value: l.price, label: `Support ${fmt(l.price, 2)}`,
+          color: C.refSR })),
+        ...(tc.resistances || []).slice(0, 1).map((l) => ({ value: l.price, label: `Resistance ${fmt(l.price, 2)}`,
+          color: C.refSR })),
+      ];
+      // The longest unbroken trend line each side, from its first touch to today.
+      const segments = (tc.drawn || []).filter((l) => Number.isInteger(l.start_index) && l.start_index < last)
+        .map((l) => ({
+          x1: l.start_index, y1: l.start_price, x2: last, y2: l.price_now,
+          color: l.kind === 'support' ? C.pos : C.neg, width: 1.8, opacity: 0.9,
+          label: `Trend ${l.touches}\u00d7`,
+        }));
       // When the bars run to, said under the chart: they are fetched as it is
       // drawn, not as of when the answer was written.
       const cap = box.querySelector('.pc-cap');
-      if (cap && dates.length) cap.textContent = `${cap.textContent}, through ${dates[dates.length - 1]}. Source: Yahoo Finance.`;
+      if (cap) {
+        cap.textContent = `${sym}, daily candles over ${tc.span_words}, through ${tc.as_of}. Support and resistance `
+          + 'are where price turned before; a trend line joins three or more swing points. Source: Yahoo Finance.';
+      }
       mount(plot.id, (w) => lineChart({
-        width: w, height: 190, valueTags: true, labels: dates,
-        ariaLabel: `${sym} daily close over the last ${PULSE_CHART_WORDS[span] || 'period'}`,
-        series: [{ name: sym, values: close, color: C.brand }],
+        width: w, height: 260, labels: dates,
+        ariaLabel: `${sym} daily candles over ${tc.span_words}, with support, resistance and trend lines`,
+        series: [{ name: sym, values: bars.close, color: C.ink, hidden: true }],
+        candles: { open: bars.open, high: bars.high, low: bars.low, close: bars.close },
+        candleUp: chartColor('up'), candleDown: chartColor('down'),
+        volume: bars.volume, refLines, refLineFit: 'clip', refLabelSide: 'left', segments,
       }));
     });
   });

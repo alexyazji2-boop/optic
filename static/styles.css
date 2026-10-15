@@ -17393,7 +17393,7 @@ table.ct-table .ct-later { display: block; color: var(--ink-muted); font-size: v
   background: var(--raised);
   white-space: normal;
 }
-.pulse-chart .pc-plot { min-height: 190px; }
+.pulse-chart .pc-plot { min-height: 260px; }
 .pulse-chart .pc-cap { color: var(--ink-muted); font-size: var(--t-caption); margin-top: var(--space-1); }
 
 /* Under an answer. */

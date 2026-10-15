@@ -52,6 +52,14 @@ _COMBINED = re.compile(
     r"(long[- ]term|invest\w*|hold\w*) (and|vs\.?|versus|or) (the |a |an )?(swing|trade|trading|short[- ]term)|"
     r"(swing|trade|trading|short[- ]term) (and|vs\.?|versus|or) (the |a |an )?(long[- ]term|invest\w*|hold\w*)|"
     r"(disagree|conflict|contradict)\w*|(reads|views|grades|signals) (don'?t|do not) (agree|match))\b", re.I)
+# A take on the stock, the owner's reference shape (2026-10-15): "Thoughts on HOOD in the near/long
+# term?" routed to long term only, so the near-term half had no swing read behind it. Both timeframes
+# named together in any wording, or a request for your take with none named, get both assessments.
+_BOTH_HORIZONS = re.compile(
+    r"\b(near|short)(?:[- ]?term)?\b.{0,40}\blong[- ]?term\b|\blong[- ]?term\b.{0,40}\b(near|short)[- ]?term\b|"
+    r"\bnext (?:few|couple of) (?:weeks|days)\b.{0,60}\b(?:for years|long[- ]?term|long run)\b", re.I)
+_TAKE = re.compile(r"\b(thoughts? (?:on|about)|(?:your )?take on|what do you (?:think|make) of|your view on|"
+                   r"opinion on|how do you feel about)\b", re.I)
 # A request for a definition is about the term, not the company on screen:
 # "What's a dividend yield?" with KO open pulled KO's whole long-term
 # assessment. Not a definition when it asks for a judgement or a level.
@@ -103,7 +111,11 @@ def resolve(question: str, ticker: Optional[str], *, next_report: Optional[str] 
     if _DEFINE.search(q) and not _NOT_DEFINE.search(q):
         return {"mode": None, "source": "definition", "depth": "quick",
                 "why": "A question about what a term means, not about this company.", "timing": timing}
-    if _COMBINED.search(q):
+    # A take with no timeframe named goes to both assessments only when the reader has not saved one:
+    # "thoughts on NVDA?" from a reader whose timeframe is swing is a swing question.
+    take_open = (_TAKE.search(q) and not horizon_mod.stated_in(q)
+                 and horizon_mod.normalise(saved_horizon) == horizon_mod.DEFAULT)
+    if _COMBINED.search(q) or _BOTH_HORIZONS.search(q) or take_open:
         return {"mode": "combined", "source": "question", "depth": "full",
                 "why": "The question asks for more than one horizon, or why they differ.", "timing": timing}
     stated = horizon_mod.stated_in(q)

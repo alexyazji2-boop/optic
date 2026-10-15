@@ -61,20 +61,23 @@ def test_a_chart_marker_becomes_a_chart_and_nothing_else_does():
     out = _run("""
       print('RESULT:' + JSON.stringify([
         pulseChartsIn('<p>see</p>\\n[[chart SPY 3m]]\\nmore'),
-        pulseChartsIn('[[chart BRK.B 5y]] and [[chart ^GSPC 1y]]'),
+        pulseChartsIn('[[chart BRK.B 5y]] and [[chart ^GSPC 1y]] and [[chart HOOD 2y]]'),
         pulseChartsIn('[[chart spy 3m]] [[chart SPY 2w]] [[chart <b>x</b> 1m]]')]));
     """)
     spy, two, none = out
     assert '<div class="pulse-chart" data-sym="SPY" data-span="3m">' in spy
-    assert "SPY, daily close over the last 3 months" in spy and "[[chart" not in spy
+    assert "SPY, daily candles over the last 3 months" in spy and "[[chart" not in spy
     assert 'data-sym="BRK.B" data-span="5y"' in two and 'data-sym="^GSPC" data-span="1y"' in two
+    assert 'data-sym="HOOD" data-span="2y"' in two, "two years, the span of a take on both timeframes"
     assert "pulse-chart" not in none, "a lower-case symbol, an unknown span or markup is left as text"
 
 
 def test_the_chart_is_drawn_from_the_terminals_bars_in_its_gold():
+    """Candles, levels and trend lines since the take chart (2026-10-15): from /api/take-chart, the same
+    function that gave Milo the levels it quoted (tests/test_milo_take_chart.py)."""
     mount = _fn("function mountPulseCharts(root) {")
-    assert "getJSON('/api/daily-bars/' + encodeURIComponent(sym))" in mount
-    assert "color: C.brand" in mount and "bars.close.slice(-n)" in mount
+    assert "getJSON(`/api/take-chart/${encodeURIComponent(sym)}?span=${encodeURIComponent(span)}`)" in mount
+    assert "candles: { open: bars.open, high: bars.high, low: bars.low, close: bars.close }" in mount
     assert "No price history for" in mount
     for at in ("bubble.innerHTML = pulseChartsIn(mdLite(body));\n  mountPulseCharts(bubble);",
                "settledEl.innerHTML = pulseChartsIn(mdLite(body));\n      mountPulseCharts(settledEl);"):
@@ -83,7 +86,7 @@ def test_the_chart_is_drawn_from_the_terminals_bars_in_its_gold():
 
 def test_pulse_is_told_how_and_when_to_place_one():
     fmt = " ".join(ai.FORMAT_PROMPT.split())
-    assert "`[[chart SYMBOL SPAN]]`" in fmt and "one of 1m, 3m, 6m, 1y or 5y" in fmt
+    assert "`[[chart SYMBOL SPAN]]`" in fmt and "one of 1m, 3m, 6m, 1y, 2y or 5y" in fmt
     assert "One chart per answer at most" in fmt
     assert "Never write the chart's numbers as if you had read them off it" in fmt
     assert "—" not in ai.FORMAT_PROMPT
