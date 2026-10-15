@@ -1322,13 +1322,18 @@ _ORDER_BASE = [
     "desk_section", "research", "framework", "market", "compare", "ticker", "quote", "pulse", "verdict", "track_record", "cases", "why", "digest",
     "whats_next", "next_earnings_date", "options_research", "vol_surface", "iv_rank", "iv_hv", "rate",
     "reader_watchlist", "active_view", "chart", "technicals",
-    "company", "long_term", "earnings", "news", "macro", "sector_confirm", "earnings_momentum",
+    "company", "long_term", "valuation", "earnings", "news", "macro", "sector_confirm", "earnings_momentum",
     "gex", "flow", "greeks", "options_brief", "strategy_ideas", "read", "sectors", "indices",
     "watchlist_digest", "tracker", "roth", "naked_ideas", "entry_plan", "desk_edition",
 ]
 _OPTIONS_WORDS = re.compile(r"\b(option|options|call|calls|put|puts|strike|expir\w*|gamma|gex|"
                             r"delta|theta|vega|vanna|iv|implied|skew|flow|open interest|0dte|"
                             r"premium|straddle|strangle|condor|spread|exposure|expected move)\b", re.I)
+# What a question about the fair-value model sounds like. Used only to order the context, so a loose
+# match costs a reorder, never a missing section.
+_VALUATION_WORDS = re.compile(r"\b(valuation|valued|fair value|intrinsic|dcf|discounted|worth|undervalued|"
+                              r"overvalued|cheap|expensive|price target|multiple|p/?e|margin of safety|upside|"
+                              r"reverse dcf|assumptions?|discount rate|terminal value)\b", re.I)
 _MARKET_WORDS = re.compile(r"\b(market|the tape|index|indices|s&p|spx|spy|nasdaq|qqq|dow|"
                            r"russell|macro|fed|rates|yields?|cpi|inflation|vix|sector|"
                            r"rotation|breadth|futures)\b", re.I)
@@ -1359,6 +1364,15 @@ def _section_order(question: str, horizon: str, view: Optional[str] = None) -> L
         for key in ("gex", "flow", "greeks", "options_brief", "naked_ideas", "entry_plan"):
             order.remove(key)
             order.append(key)
+    # The fair-value model the reader has on screen. It was in no order at all, so it went last and
+    # the budget dropped it on every loaded ticker: measured 2026-10-15 at c2abae3, TSLA, BAC, AAPL,
+    # KO and MSFT Investing-tab questions all reached the model without `valuation` (3,300 to 14,400
+    # characters), while the prompt's whole fair-value section told Milo to answer from it. On the
+    # Investing tab, for a long horizon, or when the question is about value, it follows the quote, with
+    # the long-term panel beside it: that is where the valuation history lives, and "is it expensive"
+    # lost it to the lift otherwise (MSFT, same measurement).
+    if view == "long" or horizon == "long" or _VALUATION_WORDS.search(q):
+        lift(["valuation", "long_term"], "quote")
     if _MARKET_WORDS.search(q):
         lift(["market", "read", "macro", "sectors", "indices"], "compare")
     return order
