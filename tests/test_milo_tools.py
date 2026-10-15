@@ -379,3 +379,17 @@ def test_the_panel_says_what_milo_can_do():
     assert "It cannot see anything not listed here" not in APP
     assert "function pulseRetrievedHTML(got) {" in APP and "retrieved: ['Data Milo retrieved', 'sources']," in APP
     assert "pulseRetrievedHTML(payload.retrieved)" in APP
+
+
+def test_a_named_ticker_beats_the_page(monkeypatch):
+    """Viewing AMD and asking about NVDA: NVDA is fetched, and AMD stays as the page's context."""
+    import app.main as m
+    fetched = []
+
+    def snap(sym, *a, **k):
+        fetched.append(sym)
+        return snapshot(ticker=sym, quote=dict(snapshot()["quote"], ticker=sym))
+    monkeypatch.setattr(m, "_swing_snapshot", snap)
+    page = {"ticker": "AMD", "swing": {"ticker": "AMD"}, "focus": {"scope": "auto", "ticker": "AMD"}}
+    ctx = asyncio.run(m._augment_chat_context_lookups([{"role": "user", "content": "What's NVDA's gamma doing?"}], page))
+    assert fetched == ["NVDA"] and list(ctx["auto_loaded"]) == ["NVDA"] and ctx["ticker"] == "AMD"
